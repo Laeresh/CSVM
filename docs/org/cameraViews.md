@@ -63,17 +63,27 @@ shared render-camera `FUN_0042ba70`. Only **modes `6` and `7` are first-person**
 | `2` | `FUN_0042c7f0` +flag | Chase variant (fixed-scale) | 60° | 46.8° | — | — |
 | `3` | `FUN_0042cb70` | Chase behind, turn-flippable (+side) | 60° | 46.8° | — | — |
 | `4` | `FUN_0042cb70` +flag | Chase, same base, −side offset | 60° | 46.8° | — | — |
-| `5` | `FUN_0042ce00` | Chase variant | 60° | 46.8° | — | — |
+| `5` | `FUN_0042ce00` | External — camera at the plane, aimed along the flight-velocity direction | 60° | 46.8° | — | — |
 | **`6`** | `FUN_0042d980` | **Cockpit** | **80°** | 64.4° | **drawn** | free-look |
 | **`7`** | `FUN_0042d980` | **Nose** | 60° | 46.8° | hidden | locked forward |
-| `8` | `FUN_0042cf10` | Chase variant | 60° | 46.8° | — | — |
-| `9` | `FUN_0042db40` | Chase variant | 60° | 46.8° | — | — |
+| `8` | `FUN_0042cf10` | External — camera at the plane, aim built from the plane's transform | 60° | 46.8° | — | — |
+| `9` | `FUN_0042db40` | External — camera at the plane, re-frames its aim on a distance trigger | 60° | 46.8° | — | — |
 
 The modes pair up around shared handlers: `(0,2)`, `(3,4)` and `(6,7)` share a placement
 function and differ only by the boolean flag each passes in — in `(6,7)`'s case the difference is
 the cockpit-vs-nose split below. Modes `1`, `5`, `8`, `9` each have a handler of their own. All of
 the non-first-person handlers read distance/eye geometry from the `camparam.json` chase table
 (`DAT_0064efd0`), so they are all chase/external poses rather than first-person ones.
+
+### The in-binary strings expose only `POSITION_1ST` / `POSITION_3RD`
+
+The executable holds **no friendly view names** for the modes (`Chase`, `Cockpit`, `Nose`, …).
+What the HUD initializer `FUN_00454e70` actually reads from the HUD data archive (`hud_v2.zrd`)
+are two **layout keys**: `POSITION_1ST` (`00624f28`) and `POSITION_3RD` (`00624f38`), used to
+place the gauges differently for the first-person and third-person HUD variants. So the *display*
+names of the views that a player sees come from the HUD/video-menu **data files**, not the ship
+binary — this page's mode numbers are therefore keyed to the dispatch map above, not to any string
+token.
 
 ### Modes 6 and 7 are the only first-person views
 
@@ -192,10 +202,13 @@ the cockpit view, hide the interior + lock the head + 60° for the nose view, an
 ## Not resolved
 
 - **The non-first-person modes (`1`, `2`, `3`, `4`, `5`, `8`, `9`) carry no friendly in-binary
-  name.** They map to distinct chase handlers but the *menu/HUD labels* (if any) behind them are
-  not decoded — rows above characterise them by handler, not by in-game name. Their exact poses
-  (offsets, whether any is a discrete look-behind or orbit) are only high-level reads of each
-  handler, not fully pinned.
+  name.** The exe only exposes HUD layout keys (`POSITION_1ST`/`POSITION_3RD`, read from
+  `hud_v2.zrd` by `FUN_00454e70`), not view names — the friendly labels a player sees live in the
+  HUD/video-menu **data files**, outside the ship binary. The rows above therefore characterise
+  each mode by its dispatch handler, not by an in-game name. Their exact poses (offsets, whether
+  any is a discrete look-behind, orbit or re-framing flyby) are only high-level reads of each
+  handler, not fully pinned — modes `5`, `8` and `9` in particular are confirmed "external
+  camera at the plane" but their exact identities are capture-gated to tell apart.
 - The `markers`/`dontmove` nodes' exact visual role (what mode 7 strips beyond the interior) —
   visible in-game, not traced to a named object.
 - The remaining `camparam.json` death and flyby geometries — capture-gated on `BL-260`.
