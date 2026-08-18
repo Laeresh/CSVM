@@ -95,7 +95,16 @@ internal / context camera modes (e.g. other aircraft, cut-scene or context poses
 `FUN_0042c210` rejects them. The controls data in `extracted/messages.json` names the two bindings
 as **"Access Chase View"** (`MSG_LOOK_FLYBY` → chase) and **"Cycle Cockpit Views"**
 (`MSG_LOOK_FORWARD` → cycles the 6/7 pair); the command dispatcher `FUN_0047e080` (case `0x3`,
-`MSG_LOOK_FLYBY`) forces mode `0` when the current mode is non-zero. The options menu labels the
+`MSG_LOOK_FLYBY`) forces mode `0` when the current mode is non-zero.
+
+"Access Chase View" is *not* a distinct cinematic or world-fixed camera — it selects the ordinary
+**following** chase. Mode `0`'s handler `FUN_0042c7f0` sizes the offset from `camparam.json`
+(`DAT_0064efd0`, clamped) and the plane's speed, reads the plane's orientation (`param_1+0x150`),
+then hands them to the shared follower `FUN_0042c670`, which each frame sets the camera position to
+`plane_world_pos + orientation_rotated_offset` (`DAT_0064ef20..28 = offset·dist + plane +0x204/208/20c`).
+The camera therefore tracks the plane; it is not anchored to a fixed point in the world. The name
+"flyby" (`MSG_LOOK_FLYBY`) is legacy — the binding's real effect is "switch to the standard chase"
+and it also clears the external-camera pan state (`DAT_0064ef60`/`64`). The options menu labels the
 positions "external" (`MSG_OPT_3RD_PERSON`), "cockpit" (`MSG_OPT_COCKPIT`) and "default view"
 (`MSG_OPT_DEF_VIEW`).
 
