@@ -75,12 +75,15 @@ public sealed class PlaneShake
 
     /// <summary>Per-tick overspeed drive: <paramref name="speedRatio"/> is speed over the
     /// plane's rated max, so the authored <c>min_speed</c> 1.0 gate reads "beyond rated max" —
-    /// the dive rattle. Quiet cruise matches the footage's motionless idle floor.</summary>
+    /// the dive rattle. Magnitude is the EXCESS over the gate <c>(speedRatio − gate)/quotient</c>,
+    /// not the whole ratio: zero at rated max, gentle ramp with overspeed, same order as the gun
+    /// buzz in a dive (a whole-ratio reading snapped on at <c>1.0/70</c> = 5× the buzz). Quiet
+    /// cruise matches the footage's motionless idle floor.</summary>
     public void SetSpeedRatio(float speedRatio)
     {
         _speed.Target = _speed.Src is { MinSpeed: { } gate, MagnitudeQuotient: > 0f } src
                         && speedRatio >= gate
-            ? speedRatio / src.MagnitudeQuotient!.Value
+            ? (speedRatio - gate) / src.MagnitudeQuotient!.Value
             : 0f;
     }
 

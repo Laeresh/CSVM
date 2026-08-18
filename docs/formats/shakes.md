@@ -45,8 +45,16 @@ it.
 **`high_speed`'s input reads as speed normalised by the plane's rated max** (`fd_speed`), so the
 `min_speed` 1.0 gate means "beyond rated max" — the overspeed/dive rattle. Level cruise in the
 firing clip shows a motionless idle floor (~0.01 px/frame), which an absolute-speed reading with
-a gate at 1.0 m/s could not produce. Unverified against a calibrated dive measurement; the
-overspeed audio layer (`prop_sound`) engages in the same regime.
+a gate at 1.0 m/s could not produce.
+
+**The magnitude is the EXCESS over the gate, `(speedRatio − min_speed)/magnitude_quotient`**, not
+the whole ratio (`PlaneShake.SetSpeedRatio`, decode correction 2026-08-18): the gate value is
+*subtracted* from the numerator, so the rattle is zero at rated max (speedRatio 1.0, `min_speed`)
+and ramps gently with overspeed, landing in the same order as the gun buzz in a dive. Reading it
+as the whole `speedRatio/quotient` instead — the earlier wiring — snapped on at `1.0/70` rad the
+moment you crossed rated max, 5× the entire 40-cal gun buzz, and barely ramped after (+27% over
+the envelope); that is what the whole-ratio read did wrong. The overspeed audio layer
+(`prop_sound`) engages in the same regime.
 
 ## Damage-shake animations
 

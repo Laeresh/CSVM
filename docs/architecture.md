@@ -1904,7 +1904,9 @@ model under. Engine-free on purpose (unit-tested); the pivot write is the contro
 Amplitude = `magnitude_factor × caliber` in radians of roll, **measured** off original footage
 (`analysis/gun-wobble-shake/`); a rocket hit stands in its armor damage (declared TUNE).
 `high_speed`'s input is speed over the plane's `fd_speed`, so the authored `min_speed` 1.0 gate
-means "beyond rated max" — the dive rattle; cruise stays silent like the footage's idle floor.
+means "beyond rated max" — the dive rattle whose magnitude is the EXCESS over the gate,
+`(speedRatio − min_speed)/quotient` (zero at rated max, gentle overspeed ramp); cruise stays
+silent like the footage's idle floor.
 
 ## src/Flight/FlightControllerBuild.cs
 The internal construction handoff from `FlightRoster` to `FlightController`. It contains one

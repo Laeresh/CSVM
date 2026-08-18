@@ -61,10 +61,13 @@ public class PlaneShakeTests
         shake.SetSpeedRatio(0.95f); // fast cruise, below the min_speed 1.0 gate
         Assert.Equal(0f, MaxAbsRollOver(shake, seconds: 1f));
 
+        shake.SetSpeedRatio(1.0f);  // exactly at the gate: EXCESS over it, so still zero
+        Assert.Equal(0f, MaxAbsRollOver(shake, seconds: 1f));
+
         shake.SetSpeedRatio(1.2f);  // overspeed dive
         float diving = MaxAbsRollOver(shake, seconds: 1f);
-        // envelope settles at ratio/quotient = 1.2/70 rad
-        float settle = 1.2f / 70f;
+        // envelope settles at EXCESS over the gate / quotient = (1.2-1.0)/70 rad
+        float settle = (1.2f - 1.0f) / 70f;
         Assert.InRange(diving, settle * 0.5f, settle * 1.001f);
 
         shake.SetSpeedRatio(0.5f);  // pull out: the same damp rate bleeds it off, no pop

@@ -2390,6 +2390,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     terminal — it enters imperceptibly, ramps with overspeed, and lands in the same order as the
     gun buzz instead of 5× above it. That is also why `min_speed` is authored as a gate *value*
     at all. Falsifiable against a calibrated dive.
+    **(d) landed 2026-08-18**: `PlaneShake.SetSpeedRatio` now computes the excess over the gate,
+    `(speedRatio − min_speed)/quotient` (zero at rated max, gentle ramp), the whole-ratio
+    version having snapped on at 5× the buzz. Test updated to assert zero at the gate 1.0 and
+    settle `(1.2−1.0)/70` at 1.2; unit suite green. A re-fly confirms the ramp; docs update:
+    `docs/formats/shakes.md`.
   - **The frequency is NOT to be tuned** (user suggested lowering it): 15 Hz / damp 12.5 /
     sawtooth 1 is authored data, identical to `fire_bullet`. Expect the "too buzzy" complaint to
     dissolve once the magnitude drops — a 15 Hz buzz at 0.0143 rad reads nothing like the same
@@ -2410,12 +2415,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     second amplitude measurement from `CAP-30` (whose row was extended for exactly this — as
     originally written it asks only about caliber and plane weight and **could not** have
     answered a uniform shortfall).
+    **(2026-08-18) the rate half of (B) is settled by decode, not analysis: the original fires
+    ONE round per fire-tick from a single selected gun group at the authored `FIRE_RATE`** —
+    `crimson.exe` keeps 4 gun groups under a single selection index `plane+0x604`; the fire-tick
+    `FUN_004881e0` reads exactly the one armed def (`+0x950`, set by `FUN_004b20b0`) and spawns
+    exactly ONE round per tick (one `0045e470` spawn, no salvo loop), gated by the group's
+    cooldown/magazine counter (`+0x138+12·group`, set in `FUN_004b2550`). The two barrel slots
+    per group (`+0x3a4+i·0x24`; `FUN_004b3e50` iterates 4×2) drive muzzle-flash/assist, NOT a
+    doubled rate. So the effective rounds/s equals `FIRE_RATE` (8.0 for wep_40 — the engine's
+    value), and the engine's one-slot-at-FIRE_RATE model is exactly right: it is NOT under-firing
+    by rate. The clip's "12–13/s" was a redraw-window artifact — the counter dropped 46 rounds at
+    8.0/s implies a ~5.75 s burst, but the motion-redraw window only captured ~4.5 s (so
+    46/4.5≈10.2, narrower windows higher), giving the inflated number. Removing the rate as a
+    suspect leaves the render/decay amplitude loss ((B)'s 60 fps pose-interpolation check) as the
+    only open amplitude avenue; recorded as [`docs/org/weaponFire.md`](org/weaponFire.md).
   - **Passing:** being-hit rocks read right — guns give a short rock, rockets read ok (user,
     2026-08-07, `--vs`).
   - **Unjudged:** (d) view coupling — the plane wobbling against the world in chase view cannot
     be seen while (a) is too small to see at all.
-  *Playtest after fix:* re-fly the `PT-44` sortie once the offset correction and (a)'s residual
-  land — the overspeed ramp, the gun-buzz magnitude, and the view-coupling check that (a)
+  *Playtest after fix:* re-fly the `PT-44` sortie once the remaining **(a)** residual lands —
+  the overspeed ramp (its offset landed 2026-08-18), the gun-buzz magnitude, and the
+  view-coupling check that (a)
   currently blocks.
   ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism — its sole carrier among all
   48 weapons is `wep_26` "FW", a zero-damage scripted fake weapon (a scripted detonation-shake
