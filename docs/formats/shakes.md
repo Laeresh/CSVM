@@ -43,8 +43,10 @@ factor, whose selector `*this == 0` takes the **`6.2832`** branch (not the 4.0 s
 so `fVar1 = mag × 2.0 × 6.2832 = 3.518e-2` and the per-shot input is
 `(rand01−0.5) × fVar1 × 1.2` — **Δroll uniform in ±2.11e-2 rad/shot** for wep40, an order larger
 than the raw law (see `analysis/gun-wobble-shake/FINDINGS.md`; the decode is closed-form from the
-binary — `FUN_0042be10` only kicks the `camera+0x24` accumulator, its render is a deeper untraced
-camera function; no live instrument needed). Whether `magnitude_factor` needs a ~3.5× decode
+binary — `FUN_0042be10` only kicks the `camera+0x24` accumulator, and the static trace of its
+consumer came back negative: the accumulators are not read by any camera mode driver, the transform-
+apply, or the orientation getter/setters — so they are either consumed in an untraced render-layer
+function or effectively dead; no live instrument needed). Whether `magnitude_factor` needs a ~3.5× decode
 correction to match the original is the clip/fidelity judgment, not the decode — see
 `analysis/gun-wobble-shake/FINDINGS.md`. Unmeasured residue: whether plane model/weight also
 enter (single-plane, single-gun clip — owed capture in `playtest.md`), and the impact sources'

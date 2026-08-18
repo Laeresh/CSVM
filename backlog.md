@@ -2473,8 +2473,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     `6.2832` sine-branch selector — corrected 2026-08-19.) ⚠ `FUN_0042be10` only *kicks* the
     `camera+0x24` accumulator (returns right after the three random adds — no decay/oscillation/
     render); the visible wobble is a deeper untraced camera function, still a static trace, no
-    live instrument needed. Next (optional, for the full render law): trace the `camera+0x24`
-    consumer to pin the decay before any amplitude correction.
+    live instrument needed. **Next (optional, for the full render law): trace the `camera+0x24`
+    consumer to pin the decay before any amplitude correction.**
+    **(2026-08-19) the `camera+0x24` consumer has been static-traced to a NEGATIVE — it is not in
+    the camera update/render path.** Mode dispatcher `FUN_0042c5c0`, all seven mode drivers
+    (`FUN_0042c7f0/0042ca50/0042cb70/0042ce00/0042d980/0042cf10/0042db40`), the post-mode driver
+    `FUN_0042ba70`, the transform-apply `FUN_0042c670`, and the z-class orientation
+    getters/setters (`FUN_004d2890/004d2490/004d2680`) were each disassembled and **none read
+    `camera+0x24`**; the committed camera orientation is the `camera+0x0c..+0x14` triplet, which
+    the traced path never folds `camera+0x24` into. The writer is confirmed
+    (`FUN_0042c070`: `this = camera + index*0x2c + 0x18`, so index-0 accumulators = `camera+0x24/
+    +0x28/+0x2c`). Byte-pattern sweeps for `fld [reg+0x24/+0x28/+0x2c]` find **no hit in the 0x0042
+    camera region** (only non-camera subsystems at `0x0041c4xx`/`0x004269xx`/`0x0053xxx`). So the
+    random-walk accumulators either are consumed in an untraced render-layer function (non-0x0042;
+    SIB-form loads not swept exhaustively) or are effectively **dead/near-unused** in this build.
+    Either way this reframes the gap as a **mechanism mismatch, not a render-pipeline gain loss**:
+    the original's fire-shake is a random-walk camera accumulator (per-shot Δroll uniform in
+    ±2.11e-2 rad for wep40); the remake renders a deterministic damped sawtooth (`PlaneShake.cs`,
+    no RNG) at ~40× smaller per-shot input. A faithful port replaces the damped sawtooth with a
+    random-walk accumulator — a design task, not a constant edit — and the session guardrail
+    (don't change `magnitude_factor` until the fidelity target is decided) still holds. No live
+    instrument needed for any of this.
   - **Passing:** being-hit rocks read right — guns give a short rock, rockets read ok (user,
     2026-08-07, `--vs`).
   - **Unjudged:** (d) view coupling — the plane wobbling against the world in chase view cannot

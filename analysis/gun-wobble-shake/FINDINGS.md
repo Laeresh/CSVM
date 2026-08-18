@@ -151,12 +151,30 @@ component* first, and the per-shot kick law is now closed-form and binary-derive
 is `(rand01−0.5) × 2.80e-3 × 2.0 × 6.2832 × 1.2` — an order of magnitude larger than the raw law.
 ⚠ `FUN_0042be10` only *kicks* the accumulator at `camera+0x24/+0x28/+0x2c` (random-delta walk,
 confirmed: it returns right after the three adds, with no decay/oscillation/render); the visible
-wobble is a separate, deeper camera function not yet traced. The two gangs of scalars (remake
-`PlaneShake` gain vs original camera-shake-component gain ×12.566) are **not yet reconciled**; the
-0.284/0.20-px figure is the remake's render of a `2.80e-3` kick, and comparing it to the original
-demands the original's true kick. Decode persisted: `.scratch/magnitude-factor-binary-decode.txt`.
-The one remaining static trace is the `camera+0x24` consumer (whose decay turns the random walk
-into the visible wobble) — no live instrument is required for the formula itself.
+wobble is a separate camera function. **That consumer has now been static-traced to a negative**
+(see below). The two gangs of scalars (remake `PlaneShake` gain vs original
+camera-shake-component gain ×12.566) are **not reconciled**; the 0.284/0.20-px figure is the
+remake's render of a `2.80e-3` kick, and comparing it to the original demands the original's true
+kick. Decode persisted: `.scratch/magnitude-factor-binary-decode.txt`.
+
+The remaining static trace — **the `camera+0x24` consumer** — is now conclusively *not* in the
+camera update/render path: mode dispatcher (`FUN_0042c5c0`), all seven mode drivers
+(`FUN_0042c7f0/0042ca50/0042cb70/0042ce00/0042d980/0042cf10/0042db40`), the post-mode driver
+`FUN_0042ba70`, transform-apply `FUN_0042c670`, and the z-class orientation getters/setters
+(`FUN_004d2890/004d2490/004d2680`) were each disassembled and **none read `camera+0x24`**. The
+committed camera orientation is the `camera+0x0c..+0x14` triplet, which the traced path never
+folds `camera+0x24` into (the writer, `FUN_0042c070`, is confirmed `this = camera + index*0x2c +
+0x18`, so index-0 accumulators are exactly `camera+0x24/+0x28/+0x2c`). Byte-pattern sweeps for
+`fld [reg+0x24/+0x28/+0x2c]` find **no hit in the 0x0042 camera region** (only non-camera
+subsystems at `0x0041c4xx`/`0x004269xx`/`0x0053xxx`).
+
+So the random-walk accumulators have no traced reader in the camera update path. Either a
+render-layer function (non-`0x0042`; SIB-form loads were not swept exhaustively) reads them, or
+they are effectively **dead/near-unused** in this build — the remake's actual gun-shake
+(`PlaneShake.cs`: deterministic damped sawtooth, no RNG) is a *different mechanism* from the
+original's random-walk camera accumulator. This strengthens the structural-mismatch view: the ~40×
+per-shot-kick gap is a mechanism difference (original random-walk accumulator vs remake damped
+sawtooth), not a render-pipeline gain loss.
 
 ⚠ **Neither the engine A/B nor the clip is consistent with the one model, and they disagree in
 opposite directions** — so the table's "2–4× under" is not a clean pipeline-loss claim:
@@ -202,5 +220,11 @@ look) is decided.
   component gain (×2.0) and waveform factor (×6.2832, the `*this==0` sine branch) in
   `FUN_0042be10`, giving a closed-form per-shot `Δroll` uniform in ±2.11e-2 rad (see the
   amplitude section). The remake's `PlaneShake.cs` (whose render this doc models) applies a
-  different gain, so remake-vs-original amplitude equality is an open question — still purely a
-  static trace of the `camera+0x24` consumer, no live instrument needed.
+  different gain, so remake-vs-original amplitude equality is an open question. The `camera+0x24`
+  consumer (decay/oscillator that turns the random walk into wobble) is **not in the traced camera
+  update/render path** — all mode drivers, the transform-apply, and the orientation getter/setters
+  are ruled out, and byte-pattern sweeps find no `fld [camera-region+0x24]` reader. The random-walk
+  accumulator is either consumed in an untraced render-layer function (non-0x0042) or is effectively
+  dead in this build; either way the original's fire-shake is a *different mechanism* from the
+  remake's deterministic damped sawtooth, not a pipeline gain the remake loses. No live instrument
+  is needed for any of this — every step is a static trace.
