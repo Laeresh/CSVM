@@ -1075,6 +1075,10 @@ are not visible from the byte format alone, each measured against this install.
   world-scope `cam_anim`/`mis_anim` defs; a consumer binding plane-scope defs must resolve by
   NAME (and note a plane subtree staged into a world scene mixes two index spaces that collide —
   world index 400 and plane index 400 are different nodes).
+  ⚠ **Do not add a "fireball leads the crash explosion sound" spec claim.** The authored
+  `player_crash_dirt` choreography puts the `Sound snd_exp_ground_a` event **before** the
+  `large_fireball` calls (which cascade at +0, +0.25, +0.25, +0.25), and `large_fireball` carries no
+  sound of its own — a lead in `FlightAudio.OnCrash` is a spec claim the shipped data contradicts.
 - **Event scheduling, confirmed against `crimson.exe`:** each event's optional `start` is
   `{offset, time}` with `offset` ∈ `Animation` (since the animation started, gated against
   `anim+0xb0`) / `Sequence` (since this sequence started, gated against `seq+0x24`) / `Event`

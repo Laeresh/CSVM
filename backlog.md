@@ -1905,18 +1905,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   passing plane. Treat Doppler on IA traffic as **unverified**, and measure it (same method: track a
   tonal component against the source WAV) before implementing it.
 
-- `BL-090` `[Feature]` **Small per-impact feedback gaps — items 1–4 landed (`docs/HISTORY.md`); one remains,
-  with the data already shipped.**
-  5. **`snd_dangerzone_camera` is a data-orphan with a ready trigger.** `dangerzone_camera.wav`,
-     SFX, non-3D; in no `SOUND_GROUPS` entry and named by no world data. `StuntMission.Complete` is
-     the obvious hook. ⚠ Confirm against the original that it is the zone-cleared cue and not a
-     replay-camera sting — the name argues for the latter.
-  ⚠ **Dropped from this group after checking — the "fireball leads the crash explosion by 0.5 s"
-  claim does not survive the data.** In `player-player_crash_dirt.json` the `Sound snd_exp_ground_a`
-  event is authored **before** the `large_fireball` calls (which cascade at +0, +0.25, +0.25,
-  +0.25), and `large_fireball` carries no sound of its own. A lead in `FlightAudio.OnCrash` is a
-  spec claim the shipped choreography contradicts — do not add one.
-
 - `BL-109` `[Bug]` **Engine pitch behavior in dives**: the original's engine drops ~12% through a dive and
   overshoots ~1.05 at pull-out — not reproducible by the throttle-only pitch curve (cap 1.0).
   **Playtest 2026-07-30 narrows this**: the user confirms the original's note modulates with **climb
@@ -2874,6 +2862,9 @@ usual.
   (`docs/HISTORY.md` 2026-08-01 "M3 Wave C C9"), and the constant's remaining roles are the `dzN`
   marker centre and, eventually, the trigger for a stunt screenshot feature. No design beyond
   this sentence exists yet — recorded so the constant's purpose and the feature intent survive.
+  The screenshot latch should also play `snd_dangerzone_camera` (`dangerzone_camera.wav`, a
+  data-orphan SFX named by no `SOUND_GROUPS` entry and no world data; the user confirms it is
+  the automatic-screenshot sting, not a zone-cleared cue — formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
 - `BL-361` `[Feature]` {CAMPAIGN} **Scripted-path vehicles: a second movement law, decoded, with
