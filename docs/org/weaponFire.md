@@ -73,12 +73,14 @@ narrower window). This is the same redraw-artifact trap `FINDINGS.md` already fl
 ## Implication for the gun-rattle amplitude (`BL-266`(a))
 
 With rate ruled out, BL-266's remaining amplitude avenue — the "(B) 60 fps pose-interpolation"
-loss — is now also ruled out: the shake pivot is written once per 60 Hz physics tick and Godot
-auto physics interpolation is OFF, so the 15 Hz sawtooth renders stepped (~3.5× above Nyquist)
-with no smoothing loss. The gap is instead a **law-derivation conflation**: the `7e-5 × caliber`
-law (kick amplitude 2.80e-3 rad) was matched to the clip's *rendered* RMS (2.80e-3 rad), but a
-kick of envelope `E` renders only ~0.25·E as RMS at 8/s, so the engine reads ~4× under the law's
-literal number by construction — not a pipeline loss. Whether the clip's 2.8e-3 RMS is itself
-inflated (it reads ~6.5× over the model) is unresolved and needs an engine ground truth
-(pivot-`Roll` log) before any `magnitude_factor` change. Full reconciliation:
+loss — is also ruled out and replaced by a **decode, clip-independent** finding: the shake pivot
+is written once per 60 Hz physics tick and Godot auto physics interpolation is OFF, so the 15 Hz
+sawtooth renders stepped with no smoothing loss. After that, what the engine renders is fully
+determined by decoded constants + the oscillator's own math: a kick of envelope `E` renders
+**~0.28× E as RMS** at 8/s (sawtooth duty × damp decay), so the law's literal number (2.80e-3
+kick) renders as **~8e-4 rad RMS = ~0.20 px/frame** at the ±205 px lever. The engine reads under
+the law's literal number **by construction**, not by a pipeline loss;
+`magnitude_factor` was decoded as a kick amplitude but the rendered output is always ~0.28× a
+kick. Whether the look should be ~3.5× stronger to match the original is the clip/fidelity
+judgment, not the decode. Full reconciliation:
 `analysis/gun-wobble-shake/FINDINGS.md`.
