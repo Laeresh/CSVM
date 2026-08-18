@@ -2993,17 +2993,6 @@ usual.
 
 ## Tooling, platform & docs
 
-- `BL-320` `[Bug]` **`RunTests.ps1` has no per-shot timeout, and the `viewer-bhawk` golden can hang
-  the suite forever** (found during PLAN-overcast-match B15, 2026-08-08, reproduced on two
-  consecutive runs, unrelated to that change — `--viewer` builds no chapter world). The shot
-  renders, prints its unchanged hash, then the process never exits; the golden stage blocks
-  until someone kills it by hand. Two halves: (a) diagnose why the `viewer-bhawk` launch fails
-  to quit after `--screenshot` completes; (b) give the golden loop a per-shot timeout that
-  fails the shot loudly instead of hanging the suite — a hung instrument that must be
-  hand-killed silently corrupts unattended runs.
-  *Workaround on record:* kill the lingering Godot process for that shot; the hash it printed
-  is still valid.
-
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled
   SDL (3.2.28 up to Godot 4.7.1) hard-freezes the engine when a >255-button DirectInput device
