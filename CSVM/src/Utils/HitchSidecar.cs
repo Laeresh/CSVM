@@ -22,13 +22,16 @@ public sealed class HitchSidecar
 {
     /// <summary>How many tripped records can queue before the oldest is dropped. TUNE: a hitch
     /// storm faster than this is itself worth knowing about (reported as a dropped count), not
-    /// something to buffer around indefinitely.</summary>
-    public const int QueueDepthDefault = 8;
+    /// something to buffer around indefinitely. 16 covers a compound storm at the BL-355/356 scale
+    /// (31 trips in ~7 s at the controls, frames 3373-4243) with ~2x margin while keeping the
+    /// dropped-count backstop honest.</summary>
+    public const int QueueDepthDefault = 16;
 
     /// <summary>How long a queued record waits before it is written, in seconds. TUNE: long enough
     /// that the frames right after a hitch — which may still be elevated — are not asked to do the
-    /// write work too.</summary>
-    public const float FlushSecondsDefault = 3f;
+    /// write work too. 2 s (down from 3) shrinks the crash/relaunch loss bound and drains a storm
+    /// sooner; still well past the write-off-the-hitching-frame intent.</summary>
+    public const float FlushSecondsDefault = 2f;
 
     private readonly HitchRecord[] _queue;
     private readonly int _queueDepth;

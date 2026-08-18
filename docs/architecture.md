@@ -2805,7 +2805,8 @@ and the build-time-preset blind spot: verification.md PERF-12/PERF-13/PERF-14.
 
 ## src/Utils/HitchSidecar.cs
 `HitchMonitor`'s write path: a tripped `HitchRecord` is copied — never
-referenced, since `Last` is overwritten on the next trip — into a small preallocated queue, then
+referenced, since `Last` is overwritten on the next trip — into a small preallocated queue (default depth 16,
+`hitchSidecar.queueDepth`, drained after a default 2 s, `hitchSidecar.flushSeconds` — both TUNE), then
 drained a few seconds later to one `[perf] hitch …` line (`ReportPerf`'s own flat key=value grammar,
 ms terms as-is, byte counts as MB) plus one JSON line in `.scratch/logs/<mode>-<stamp>.hitches.jsonl`,
 sharing the main log's stem. Both carry C8's attribution at the end: `samples=site:callsxms,…`
