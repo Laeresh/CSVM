@@ -170,9 +170,9 @@ public partial class GameSession : Node3D
     // the tree order Godot's physics tick would have used. Dropped by ReturnToMenu.
     private ProjectilePool? _projectiles;
     private IncomingFire? _incomingFire;   // --incoming: the near-miss test rig
-    // The AI actor seam: the spawner is built with the rigs; every AI aircraft it has
-    // spawned is stepped in DriveSimSteps after the player rigs and freed with the world.
-    private AiAircraftSpawner? _aiSpawner;
+    // The flight roster builds the human field and introduces AI aircraft later. Every AI it
+    // returns is stepped in DriveSimSteps after the player rigs and freed with the world.
+    private FlightRoster? _flightRoster;
     private AiSkills? _aiSkills; // ai_skill_parameters, loaded once on the first AI spawn
     private List<Maneuver>? _aiManeuvers; // the D13 library, loaded once for the D11 machines
     private bool _noAssistLogged; // the one-per-session --no-assist breadcrumb
@@ -322,7 +322,7 @@ public partial class GameSession : Node3D
         AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating, bool inert = false,
         bool shippedSkins = false)
     {
-        if (_aiSpawner == null)
+        if (_flightRoster == null)
         {
             GD.PushWarning($"ai: no spawner in this session mode — '{planeName}' not spawned");
             return null;
@@ -390,7 +390,8 @@ public partial class GameSession : Node3D
                 GD.PushWarning($"ai: no mode machine — cannot load skills/maneuvers: {e.Message}");
             }
         }
-        var ai = _aiSpawner.Spawn(planeName, pos, lookAt, pilot, scheme, team, inert, shippedSkins);
+        var ai = _flightRoster.SpawnAi(new AiSpawn(planeName, pos, lookAt, pilot, scheme, team,
+            inert, shippedSkins));
         _aiPlanes.Add(ai);
         // Mode transitions and reaction rolls, in the engine's own vocabulary — the D11
         // observability lines. Through Log (not GD.Print) so a play session's file sink
@@ -1538,7 +1539,7 @@ public partial class GameSession : Node3D
 
     // --fly (and --stunt): builds every rendered rig's aircraft (model, loadout, HUD, audio,
     // stunt/crash hookup) over the session-wide flight data loaded once above the per-player loop.
-    // The per-player body lives in its own FlightRigAssembler.
+    // The per-player body lives in its own HumanFlightAdapter.
     private void BuildFlightRigs(BuildState state)
     {
         long mark = StartupProfile.Mark();
@@ -1698,7 +1699,7 @@ public partial class GameSession : Node3D
                           $"{_spec.Chapter}/{_spec.Mission}, the mission type's own objective");
         }
 
-        // Dogfight (--vs): built here, before the rigs — same reason Race is (FlightRigAssembler
+        // Dogfight (--vs): built here, before the rigs — same reason Race is (HumanFlightAdapter
         // binds every pane's VersusHud to this one instance below); the score/respawn plumbing
         // that feeds it Downed reports only runs once every rig exists, further down.
         VersusMatch? versus = _spec.Versus
@@ -1721,7 +1722,7 @@ public partial class GameSession : Node3D
         IFlightStarts flightStarts = race != null && !_spec.Det
             ? new RaceGrid(_spawnPicker, GroundSampler())
             : _spawnPicker;
-        var rigInputs = new FlightRigAssembler.Inputs
+        var rigInputs = new HumanFlightAdapter.Inputs
         {
             Ambience = _ambience,
             PlanesGamez = planesGamez,
@@ -1768,16 +1769,11 @@ public partial class GameSession : Node3D
             SoundGroups = state.SoundGroups,
             DebugCollision = state.DebugCollision,
         };
-        var assembler = new FlightRigAssembler(_spec, _liveryResolver, flightStarts,
-            _worldEffectsFactory, _worldRoot!, rigInputs);
-        // ⚠ Assemble in ascending player order; the paint rng and the spawn index wrap are shared
-        // streams, so the draw order decides what each player gets.
-        for (int pi = 0; pi < _rigs.Count; pi++)
-        {
-            assembler.Assemble(pi, _rigs[pi]);
-        }
-        state.MeshInstances += assembler.MeshInstances;
-        state.What += assembler.WhatSuffix;
+        var flightRoster = new FlightRoster(_spec, _liveryResolver, _worldEffectsFactory, _worldRoot!,
+            rigInputs, flightStarts);
+        var rosterBuild = flightRoster.BuildPlayers(_rigs);
+        state.MeshInstances += rosterBuild.MeshInstances;
+        state.What += rosterBuild.SummarySuffix;
 
         // One shared PauseState on every rig: any human pauses everybody, and only the pauser may
         // resume. ⚠ Wire single player the same way, so there is one pause path and not two. The
@@ -1949,10 +1945,9 @@ public partial class GameSession : Node3D
                      (_spec.IncomingWeapon != null ? $" ({_spec.IncomingWeapon})" : " (their own gun)"));
         }
 
-        // The AI actor seam: the spawner shares the session data the rigs were built from, so
-        // SpawnAiAircraft works from here on, at build or at any later sim step.
-        _aiSpawner = new AiAircraftSpawner(_spec, _liveryResolver, _worldEffectsFactory,
-            _worldRoot!, rigInputs);
+        // The roster shares the session data the human field was built from, so SpawnAiAircraft
+        // works from here on, at build or at any later sim step.
+        _flightRoster = flightRoster;
         // The E16 voice dispatch, over B8's seam: needs the world's WorldSounds (prewarmed
         // above) and the sound defs. Built before the --ai loop so spawns can register; the
         // players register as damage sources only (WA-HighDmg's broadcast trigger).

@@ -272,7 +272,7 @@ public partial class FlightController : Node3D
 
     /// <summary>This pilot's target selection, or null for a seat that
     /// does no targeting (every AI rig, and the suites' bare rigs). Set by
-    /// <c>FlightRigAssembler</c> on each human pane; <see cref="StepTargeting"/> feeds it every
+    /// <c>HumanFlightAdapter</c> on each human pane; <see cref="StepTargeting"/> feeds it every
     /// frame. Read <c>Targeting.Current</c> for the selected target — that is the property the
     /// marker, Track Target's camera and any later AI-order consumer are meant to read.</summary>
     public TargetSelection? Targeting;
@@ -861,9 +861,7 @@ public partial class FlightController : Node3D
         ApplyPresence();
         _throttle = _spawnThrottle;
         _keyPitch = _keyRoll = _keyYaw = 0f;  // a fresh airframe spawns with the stick centred
-        // The start choreography (snd_propstart already re-fires from FlightAudio's own
-        // Null on the very first spawn (Setup runs before FlightRigAssembler builds this); that
-        // assembler plays "startprops" once more there for that one case.
+        // First setup precedes adapter construction, so the adapter replays startprops after attachment.
         CrashRuntime?.Play("startprops", PlaneModel, applyReset: false);
         // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → the spawn
         // throttle) must never itself read as a slam.
@@ -1172,10 +1170,8 @@ public partial class FlightController : Node3D
             var input = HoldSegments != null ? NextHoldInput(dt)
                 : Pilot != null ? NextPilotInput(dt)
                 : ReadKeyboard(dt);
-            // FUN_0048c220 does not merely make the post-drop response small: it is not called
-            // at all until +0xAC (the 1.5 s spawn grace) expires. Until +0xB4 (2.5 s), its
-            // two AI terms then run at 15%. Keep the probe off as well, so the verification
-            // log reflects an effective original-style response rather than an inert hit.
+            // The response is absent for 1.5 s, then AI terms run at 15% for 1 s.
+            // Keep the probe off too, so the log records response rather than an inert hit.
             bool groundBlowReady = IsHumanPiloted || _collisionGrace <= 0f;
             if (groundBlowReady)
                 ProbeGroundBlow(ref input);  // reads the pose this step ENTERED with, as the original does

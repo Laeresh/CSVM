@@ -41,7 +41,7 @@ internal static class AiTargetingAndZeppelinSuites
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-            var inputs = new FlightRigAssembler.Inputs
+            var inputs = new HumanFlightAdapter.Inputs
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
@@ -57,19 +57,19 @@ internal static class AiTargetingAndZeppelinSuites
             };
             // worldEffects null!: never dereferenced — CrashProgram/WorldScene stay null, so the
             // spawner's crash-runtime block (its only reader) is skipped.
-            var spawner = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+            var spawner = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
 
             // One scan origin, the control dead ahead on −Z, the subject 90° off it on +X, so a
             // scan aimed at either sits well outside the other's acceptance cone.
             var origin = new Vector3(0f, 500f, 0f);
             var controlPos = origin + new Vector3(0f, 0f, -300f);
             var subjectPos = origin + new Vector3(300f, 0f, 0f);
-            control = spawner.Spawn(ctx.PlaneName, controlPos, controlPos + Vector3.Forward,
+            control = spawner.SpawnAi(new AiSpawn(ctx.PlaneName, controlPos, controlPos + Vector3.Forward,
                 AiPilot.HoldingCourse(controlPos, controlPos + Vector3.Forward),
-                scheme: null, team: InstantActionRuntime.EnemyTeam);
-            subject = spawner.Spawn(ctx.PlaneName, subjectPos, subjectPos + Vector3.Forward,
+                Scheme: null, Team: InstantActionRuntime.EnemyTeam));
+            subject = spawner.SpawnAi(new AiSpawn(ctx.PlaneName, subjectPos, subjectPos + Vector3.Forward,
                 AiPilot.HoldingCourse(subjectPos, subjectPos + Vector3.Forward),
-                scheme: null, team: InstantActionRuntime.EnemyTeam, inert: true);
+                Scheme: null, Team: InstantActionRuntime.EnemyTeam, Inert: true));
             ctx.Check(control.Body != null && subject.Body != null && control.Damage != null
                       && subject.Damage != null,
                 $"both aircraft built a collision body and per-part damage");
@@ -109,7 +109,7 @@ internal static class AiTargetingAndZeppelinSuites
                        && ReferenceEquals(result.Source, rig);
             }
 
-            // The whole-vehicle pair, not a sum over zones: these aircraft come off AiAircraftSpawner and an
+            // The whole-vehicle pair, not a sum over zones: these aircraft come off FlightRoster and an
             // AI airframe is zone-less, so a parts sum reads a flat zero and no round could ever bite. It is
             // what the decoded death test reads either way.
             float Combined(FlightController rig) => rig.Damage!.WholeArmor + rig.Damage.WholeHealth;
@@ -754,7 +754,7 @@ internal static class AiTargetingAndZeppelinSuites
             }
 
             // The AI actor: an AiPilot ordered to hold the spawn course, a null camera, no HUD,
-            // no devices — exactly what AiAircraftSpawner builds, on the suite's own stage.
+            // no devices — exactly what FlightRoster builds, on the suite's own stage.
             var spawnPos = new Vector3(0f, 500f, 0f);
             var pilot = AiPilot.HoldingCourse(spawnPos, spawnPos + Vector3.Forward);
             var aiModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
@@ -763,7 +763,7 @@ internal static class AiTargetingAndZeppelinSuites
                 PlaneModel = aiModel,
                 Collider = PlaneCollider.Build(aiModel),
                 Damage = new PlaneDamage(stats.DestroyableParts),
-                PlayerIndex = AiAircraftSpawner.ShooterIdBase,
+                PlayerIndex = FlightRoster.ShooterIdBase,
                 IsHumanPiloted = false,
                 Pilot = pilot,
                 Projectiles = live,
@@ -838,7 +838,7 @@ internal static class AiTargetingAndZeppelinSuites
                 FireOne(8);
             }
             ctx.Check(ai.Crashed, $"sustained fire downs the AI plane rounds={fired}/{budget}");
-            ctx.Check(downedVictim == AiAircraftSpawner.ShooterIdBase,
+            ctx.Check(downedVictim == FlightRoster.ShooterIdBase,
                 $"Downed reports the AI's own shooter id victim={downedVictim?.ToString() ?? "-"}");
             ctx.Check(downedKiller == shooter.PlayerIndex,
                 $"…with the kill attributed to the human shooter killer={downedKiller?.ToString() ?? "-"}");
@@ -1761,7 +1761,7 @@ internal static class AiTargetingAndZeppelinSuites
                 {
                     PlaneModel = model,
                     Collider = PlaneCollider.Build(model),
-                    PlayerIndex = AiAircraftSpawner.ShooterIdBase + index,
+                    PlayerIndex = FlightRoster.ShooterIdBase + index,
                     IsHumanPiloted = false,
                     Pilot = AiPilot.HoldingCourse(pos, pos + Vector3.Forward),
                     Projectiles = live,
@@ -1958,7 +1958,7 @@ internal static class AiTargetingAndZeppelinSuites
                 PlaneModel = aiModel,
                 Collider = PlaneCollider.Build(aiModel),
                 Damage = new PlaneDamage(stats.DestroyableParts),
-                PlayerIndex = AiAircraftSpawner.ShooterIdBase,
+                PlayerIndex = FlightRoster.ShooterIdBase,
                 IsHumanPiloted = false,
                 Pilot = pilot,
                 Projectiles = live,
@@ -2118,7 +2118,7 @@ internal static class AiTargetingAndZeppelinSuites
             {
                 PlaneModel = rivalModel,
                 Collider = PlaneCollider.Build(rivalModel),
-                PlayerIndex = AiAircraftSpawner.ShooterIdBase + 1,
+                PlayerIndex = FlightRoster.ShooterIdBase + 1,
                 IsHumanPiloted = false,
                 Projectiles = live,
                 UseKeyboard = false,
@@ -2279,7 +2279,7 @@ internal static class AiTargetingAndZeppelinSuites
                 PlaneModel = aiModel,
                 Collider = PlaneCollider.Build(aiModel),
                 Damage = new PlaneDamage(stats.DestroyableParts),
-                PlayerIndex = AiAircraftSpawner.ShooterIdBase,
+                PlayerIndex = FlightRoster.ShooterIdBase,
                 IsHumanPiloted = false,
                 Pilot = pilot,
                 Projectiles = live,
@@ -2592,7 +2592,7 @@ internal static class AiTargetingAndZeppelinSuites
                 PlaneModel = aiModel,
                 Collider = PlaneCollider.Build(aiModel),
                 Damage = new PlaneDamage(stats.DestroyableParts),
-                PlayerIndex = AiAircraftSpawner.ShooterIdBase,
+                PlayerIndex = FlightRoster.ShooterIdBase,
                 IsHumanPiloted = false,
                 Pilot = new AiPilot(),
                 UseKeyboard = false,
@@ -2762,7 +2762,7 @@ internal static class AiTargetingAndZeppelinSuites
             {
                 PlaneModel = aiModel,
                 Collider = PlaneCollider.Build(aiModel),
-                PlayerIndex = AiAircraftSpawner.ShooterIdBase,
+                PlayerIndex = FlightRoster.ShooterIdBase,
                 IsHumanPiloted = false,
                 Pilot = pilot,
                 UseKeyboard = false,
@@ -3073,7 +3073,7 @@ internal static class AiTargetingAndZeppelinSuites
                 {
                     PlaneModel = model,
                     Collider = PlaneCollider.Build(model),
-                    PlayerIndex = AiAircraftSpawner.ShooterIdBase + spawned.Count,
+                    PlayerIndex = FlightRoster.ShooterIdBase + spawned.Count,
                     IsHumanPiloted = false,
                     Pilot = pilot,
                     UseKeyboard = false,

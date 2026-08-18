@@ -1072,7 +1072,7 @@ internal static class CombatSuites
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-            var inputs = new FlightRigAssembler.Inputs
+            var inputs = new HumanFlightAdapter.Inputs
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
@@ -1088,9 +1088,9 @@ internal static class CombatSuites
             };
 
             var start = new Vector3(0f, 500f, 0f);
-            var spawner = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
-            spawned = spawner.Spawn("player_fury", start, start + Vector3.Forward,
-                AiPilot.HoldingCourse(start, start + Vector3.Forward));
+            var spawner = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
+            spawned = spawner.SpawnAi(new AiSpawn("player_fury", start, start + Vector3.Forward,
+                AiPilot.HoldingCourse(start, start + Vector3.Forward)));
 
             // The regression that would otherwise arrive as "enemies are invulnerable": a zone-less
             // airframe passing a parts-only guard leaves Damage null and nothing can hurt it.
@@ -1121,7 +1121,7 @@ internal static class CombatSuites
         }
     }
 
-    // The per-spawn jitter where only a real spawn can show it: through AiAircraftSpawner, over the
+    // The per-spawn jitter where only a real spawn can show it: through FlightRoster, over the
     // session's shared per-airframe stats cache, read out as flown trajectory rather than as a field.
     // Two aircraft off one airframe, given the same pose and the same orders, must fly apart; the same
     // ordinal drawn again must fly the same line; and the cache must come out untouched, since every
@@ -1147,7 +1147,7 @@ internal static class CombatSuites
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
             // The one cache the real session holds: every aircraft below is built from THIS object.
             var shared = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-            var inputs = new FlightRigAssembler.Inputs
+            var inputs = new HumanFlightAdapter.Inputs
             {
                 PlanesGamez = planesGamez,
                 StatsFor = _ => shared,
@@ -1168,10 +1168,10 @@ internal static class CombatSuites
             // has to correct, so what separates two runs is the plant, not the pilot. Freed at the end of its
             // own run: every run flies the same pose, and two aircraft there would be measuring a collision.
             var start = new Vector3(0f, 500f, 0f);
-            Vector3 Fly(AiAircraftSpawner spawner)
+            Vector3 Fly(FlightRoster spawner)
             {
                 var pilot = AiPilot.HoldingCourse(start, start + Vector3.Forward);
-                var ai = spawner.Spawn(ctx.PlaneName, start, start + Vector3.Forward, pilot);
+                var ai = spawner.SpawnAi(new AiSpawn(ctx.PlaneName, start, start + Vector3.Forward, pilot));
                 flying = ai;
                 for (int i = 0; i < 240; i++)
                     ai.SimStep(1f / 60f);
@@ -1182,13 +1182,13 @@ internal static class CombatSuites
             }
 
             // Two ordinals off one spawner: two aeroplanes, same pose, same orders.
-            var spawner1 = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+            var spawner1 = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
             var first = Fly(spawner1);
             var second = Fly(spawner1);
 
             // A fresh spawner restarts at ordinal 0, and the draw is keyed by ordinal — so this is
             // the same aircraft as `first`, which is what a --det replay reproduces.
-            var spawner2 = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+            var spawner2 = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
             var replay = Fly(spawner2);
 
             float spread = (first - second).Length();
@@ -1841,8 +1841,8 @@ internal static class CombatSuites
             var wingPos = humanPos + new Vector3(200f, 0f, 0f);
             var enemyPos = humanPos + new Vector3(0f, 0f, -300f);
             human = BuildRig(0, humanPos, team: null); // the untouched default: TeamOfPilot(0)
-            wingman = BuildRig(AiAircraftSpawner.ShooterIdBase, wingPos, team: AimAssist.PlayerTeam);
-            enemy = BuildRig(AiAircraftSpawner.ShooterIdBase + 1, enemyPos, team: AimAssist.PlayerTeam + 1);
+            wingman = BuildRig(FlightRoster.ShooterIdBase, wingPos, team: AimAssist.PlayerTeam);
+            enemy = BuildRig(FlightRoster.ShooterIdBase + 1, enemyPos, team: AimAssist.PlayerTeam + 1);
             ctx.Check(human.Team == wingman.Team && human.Team != enemy.Team,
                 $"two distinct pilot indices share one explicit team, a third sits on another: human={human.Team} wingman={wingman.Team} enemy={enemy.Team}");
 

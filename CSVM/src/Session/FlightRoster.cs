@@ -1,0 +1,137 @@
+using System;
+using System.Collections.Generic;
+using CSVM.Flight;
+using CSVM.Mech3;
+using CSVM.Utils;
+using Godot;
+
+namespace CSVM.Session;
+
+/// <summary>The aggregate facts the initial human-field build adds to the session summary.</summary>
+public readonly record struct FlightRosterBuild(int MeshInstances, string SummarySuffix);
+
+/// <summary>One AI aircraft's authored identity and launch facts.</summary>
+public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector3 LookAt, AiPilot Pilot,
+    PaintScheme? Scheme = null, int? Team = null, bool Inert = false, bool ShippedSkins = false);
+
+/// <summary>The session's aircraft set: builds the human field in deterministic player order and
+/// introduces AI aircraft later for missions, waves, and generators. The roster is the assembly
+/// seam; callers receive finished controllers and never configure one piecemeal.</summary>
+public sealed class FlightRoster
+{
+    /// <summary>The first AI shooter id. Outside every human player index and the match roster.</summary>
+    public const int ShooterIdBase = 100;
+
+    private readonly HumanFlightAdapter _players;
+    private readonly SessionSpec _spec;
+    private readonly LiveryResolver _liveries;
+    private readonly WorldEffectsFactory _worldEffects;
+    private readonly Node3D _worldRoot;
+    private readonly HumanFlightAdapter.Inputs _in;
+    private int _spawned;
+
+    internal FlightRoster(SessionSpec spec, LiveryResolver liveries, WorldEffectsFactory worldEffects,
+        Node3D worldRoot, HumanFlightAdapter.Inputs inputs, IFlightStarts? starts = null)
+    {
+        _spec = spec;
+        _liveries = liveries;
+        _worldEffects = worldEffects;
+        _worldRoot = worldRoot;
+        _in = inputs;
+        _players = new HumanFlightAdapter(spec, liveries, starts ?? new SpawnPicker(spec), worldEffects,
+            worldRoot, inputs);
+    }
+
+    /// <summary>Builds every human aircraft in ascending player order. That order is part of the
+    /// interface: it fixes the shared livery stream and spawn-list wrap.</summary>
+    public FlightRosterBuild BuildPlayers(IReadOnlyList<PlayerRig> rigs)
+    {
+        for (int pi = 0; pi < rigs.Count; pi++)
+            _players.Assemble(pi, rigs[pi]);
+        return new FlightRosterBuild(_players.MeshInstances, _players.WhatSuffix);
+    }
+
+    /// <summary>Introduces one fully configured AI aircraft into the running session.</summary>
+    public FlightController SpawnAi(AiSpawn spawn)
+    {
+        int index = _spawned++;
+        var stats = _in.AiStatsFor(spawn.PlaneName).WithAiSpawnJitter(
+            Rng.NewSystemRandom(Rng.Spawn, index, 0));
+        if (spawn.Pilot.Machine is { } machine)
+        {
+            machine.AttackRange = stats.AiAttackRange;
+            machine.ReturnRange = stats.AiReturnRange;
+        }
+
+        FlightController controller;
+        Node3D planeModel;
+        using (PerfSample.Scope(PerfSite.AiSpawn))
+        {
+            var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
+                scheme: spawn.Scheme ?? _liveries.SchemeFor(_in.RigCount + index, _in.ZrdrPath,
+                    _in.PaintRng, _liveries.PatternsForPlane(_in.PlanesGamez, spawn.PlaneName),
+                    useDefaultPattern: !spawn.ShippedSkins),
+                patterns: _liveries.Patterns);
+            planeModel = planeBuilder.Build(spawn.PlaneName);
+
+            controller = new FlightController();
+            controller.Bind(new FlightControllerBuild
+            {
+                PlayerIndex = ShooterIdBase + index,
+                IsHumanPiloted = false,
+                Pilot = spawn.Pilot,
+                PlaneModel = planeModel,
+                Props = PropAnimator.Build(planeModel),
+                WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod),
+                Surfaces = ControlSurfaceAnimator.Build(planeModel),
+                Collider = PlaneCollider.Build(planeModel),
+                Damage = stats.DestroyableParts.Count > 0 || stats.VehicleHealth is > 0f
+                    ? PlaneDamage.For(stats) : null,
+                CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
+                GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
+                TouchdownDefs = _in.TouchdownDefs,
+                Projectiles = _in.Projectiles,
+                PadDevices = Array.Empty<int>(),
+                Inert = spawn.Inert,
+                Team = spawn.Team,
+                Shake = new PlaneShake(_in.Shakes),
+            });
+
+            if (_in.StockLoadouts.For(stats.DefName) is { } loadout)
+            {
+                try
+                {
+                    controller.Loadout = Loadout.Bind(loadout, planeModel, _in.WeaponDefs);
+                    controller.Destructibles = _in.WorldRuntime?.Destructibles;
+                    controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _in.Projectiles);
+                }
+                catch (Exception e)
+                {
+                    Log.Warn("weapons", $"ai: loadout bind failed for '{stats.DefName}' — this plane flies unarmed error={e.Message}");
+                }
+            }
+
+            controller.Setup(new FlightModel(stats, aiForcePath: true), null, new CamParams(),
+                spawn.Position, spawn.LookAt);
+            controller.ArmSpawnTimers();
+            controller.Name = $"ai{index + 1}_{spawn.PlaneName}";
+            _worldRoot.AddChild(controller);
+
+            if (_in.CrashProgram != null && _in.WorldScene != null)
+            {
+                _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, spawn.PlaneName, _in.Gamez,
+                    _in.WorldScene, _in.Textures, _in.CrashProgram, verbose: false);
+                controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
+            }
+        }
+
+        GD.Print($"ai: spawned '{spawn.PlaneName}' as {controller.Name} (shooter id " +
+                 $"{controller.PlayerIndex}) pos=({spawn.Position.X:0},{spawn.Position.Y:0},{spawn.Position.Z:0}) " +
+                 $"jitter=(fd {stats.FdSpeed:0.0} thrust {stats.EnginePower:0.000}) " +
+                 (spawn.Inert ? "INERT " : "") +
+                 (spawn.Pilot.Patrol is { } patrol
+                     ? $"net='{patrol.Net.Name}#{patrol.Net.Id}' ({patrol.Net.Nodes.Count} nodes)"
+                     : $"heading={spawn.Pilot.TargetHeadingDeg:0}° alt={spawn.Pilot.TargetAltitude:0} m"));
+        return controller;
+    }
+}

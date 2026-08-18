@@ -451,7 +451,7 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>The registered aircraft that fired a round carrying <paramref name="shooterId"/>, or
     /// null for an unowned round (<see cref="NoShooter"/>) or a plane no longer registered. Shooter
     /// ids ARE unique across a session (a human's is its pane index, an AI's is
-    /// <c>AiAircraftSpawner.ShooterIdBase + n</c>), so this resolves one plane, not a class of
+    /// <c>FlightRoster.ShooterIdBase + n</c>), so this resolves one plane, not a class of
     /// them.</summary>
     public FlightController? RigOfShooter(int shooterId)
     {

@@ -1,0 +1,73 @@
+using System;
+using CSVM.Mech3;
+using CSVM.Session;
+using Godot;
+
+namespace CSVM.Flight;
+
+/// <summary>The resolved construction state one assembly module gives a flight controller before
+/// it joins the tree. It is internal so callers cannot configure a live controller piecemeal.</summary>
+internal sealed class FlightControllerBuild
+{
+    public int PlayerIndex;
+    public bool IsHumanPiloted;
+    public AiPilot? Pilot;
+    public Node3D PlaneModel = null!;
+    public PropAnimator? Props;
+    public WingLightBlinker? WingLights;
+    public ControlSurfaceAnimator? Surfaces;
+    public PlaneCollider? Collider;
+    public PlaneDamage? Damage;
+    public Func<Node?, float, bool>? CollideDamageSink;
+    public Action<string, Vector3>? GrazeEffectSink;
+    public SurfaceDefTable? TouchdownDefs;
+    public ProjectilePool? Projectiles;
+    public int[] PadDevices = Array.Empty<int>();
+    public bool UseKeyboard;
+    public bool AllowPause;
+    public bool Inert;
+    public int? Team;
+    public PlaneShake Shake = null!;
+}
+
+#pragma warning disable SA1202 // This partial declares the controller's internal construction seam.
+public partial class FlightController
+{
+    private bool _constructionBound;
+
+    /// <summary>Consumes one complete assembly result before this controller joins the tree. A
+    /// second bind or a bind after attachment is a construction error.</summary>
+    internal void Bind(FlightControllerBuild build)
+    {
+        if (_constructionBound || IsInsideTree())
+            throw new InvalidOperationException("a flight controller must be bound once before tree attachment");
+
+        PlayerIndex = build.PlayerIndex;
+        IsHumanPiloted = build.IsHumanPiloted;
+        Pilot = build.Pilot;
+        PlaneModel = build.PlaneModel;
+        Props = build.Props;
+        WingLights = build.WingLights;
+        Surfaces = build.Surfaces;
+        Collider = build.Collider;
+        Damage = build.Damage;
+        CollideDamageSink = build.CollideDamageSink;
+        GrazeEffectSink = build.GrazeEffectSink;
+        TouchdownDefs = build.TouchdownDefs;
+        Projectiles = build.Projectiles;
+        UseKeyboard = build.UseKeyboard;
+        PadDevices = build.PadDevices;
+        AllowPause = build.AllowPause;
+        Inert = build.Inert;
+        if (build.Team is { } team)
+            Team = team;
+
+        Shake = build.Shake;
+        var shakePivot = new Node3D { Name = "ShakePivot" };
+        ShakePivot = shakePivot;
+        AddChild(shakePivot);
+        shakePivot.AddChild(build.PlaneModel);
+        _constructionBound = true;
+    }
+}
+#pragma warning restore SA1202

@@ -18,7 +18,7 @@ namespace CSVM.Session;
 /// shared projectile pool), then <see cref="Assemble"/>d once per rig, in player order.
 /// ⚠ <b>Player order is load-bearing:</b> the paint rng and the spawn index wrap are shared
 /// streams, so P1..P4 must draw in ascending order or every livery and spawn changes.</summary>
-public sealed class FlightRigAssembler
+internal sealed class HumanFlightAdapter
 {
     private readonly SessionSpec _spec;
     private readonly LiveryResolver _liveries;
@@ -30,7 +30,7 @@ public sealed class FlightRigAssembler
     // Every player's start, resolved in one call (see Assemble).
     private IReadOnlyList<FlightStart>? _starts;
 
-    public FlightRigAssembler(SessionSpec spec, LiveryResolver liveries, IFlightStarts spawns,
+    public HumanFlightAdapter(SessionSpec spec, LiveryResolver liveries, IFlightStarts spawns,
         WorldEffectsFactory worldEffects, Node3D worldRoot, Inputs inputs)
     {
         _spec = spec;
@@ -78,46 +78,31 @@ public sealed class FlightRigAssembler
             HoldSegments = _spec.HoldSets == null ? null
                 : _spec.HoldSets[Math.Min(pi, _spec.HoldSets.Length - 1)],
             DebugCollision = _in.DebugCollision,
-            // Set here, not in the stunt block below: the index is this
-            // pilot's identity for the rounds they fire, so free flight needs it too.
-            PlayerIndex = pi,
-            PlaneModel = planeModel,
-            Props = PropAnimator.Build(planeModel), // spin the propeller/rotor blur discs
-            WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod), // blink the wingtip flares
-            Surfaces = ControlSurfaceAnimator.Build(planeModel), // deflect ailerons/elevators/rudders
-            Collider = PlaneCollider.Build(planeModel), // swept airframe boxes (wingtip/tail collision)
-            // per-part HP from destroyable_parts — collisions below
-            // the crash threshold damage the struck part instead of crashing
-            Damage = stats.DestroyableParts.Count > 0 ? PlaneDamage.For(stats) : null,
-            // Flying into a WeaponOrCollideHit object (the 44 facades/windows/agyrobus)
-            // breaks it and passes through; every other collision stays solid.
-            CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
-            // A survivable scrape plays touchdown.zrd's per-surface reaction (sparks/dust/
-            // splash) at the contact point, through the same runtime a rocket impact uses.
-            GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
-            // The level's one touchdown vector (the original's global), not one per plane.
-            TouchdownDefs = _in.TouchdownDefs,
-            // splitscreen: this player's own device(s), own pane for the HUD. Start/P reads on
-            // every rig; GameSession wires every PauseState to one shared instance.
-            PadDevices = _in.PadAssignment?[pi],
-            UseKeyboard = pi == 0,
             PinnedView = _spec.View,
             HudParent = rig.Viewport,
-            AllowPause = true,
         };
         // Every human joins team 1 in an Instant Action mission, splitscreen included — the
         // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
         // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.
-        if (_in.InstantActionActive || _in.Coop)
-            controller.Team = AimAssist.PlayerTeam;
-        // The wobble pivot: the plane model and everything resolved inside it rides the shake,
-        // while the controller's own transform (physics, aim, chase camera) never sees it
-        // (docs/formats/shakes.md).
-        controller.Shake = new PlaneShake(_in.Shakes);
-        var shakePivot = new Node3D { Name = "ShakePivot" };
-        controller.ShakePivot = shakePivot;
-        controller.AddChild(shakePivot);
-        shakePivot.AddChild(planeModel);
+        controller.Bind(new FlightControllerBuild
+        {
+            PlayerIndex = pi,
+            IsHumanPiloted = true,
+            PlaneModel = planeModel,
+            Props = PropAnimator.Build(planeModel),
+            WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod),
+            Surfaces = ControlSurfaceAnimator.Build(planeModel),
+            Collider = PlaneCollider.Build(planeModel),
+            Damage = stats.DestroyableParts.Count > 0 ? PlaneDamage.For(stats) : null,
+            CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
+            GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
+            TouchdownDefs = _in.TouchdownDefs,
+            PadDevices = _in.PadAssignment?[pi] ?? Array.Empty<int>(),
+            UseKeyboard = pi == 0,
+            AllowPause = true,
+            Team = _in.InstantActionActive || _in.Coop ? AimAssist.PlayerTeam : null,
+            Shake = new PlaneShake(_in.Shakes),
+        });
 
         // Guns/hardpoints: bind this plane's stock loadout (or the --loadout override) to
         // its built model — resolves markers to muzzle nodes + weapons to WeaponDefs.

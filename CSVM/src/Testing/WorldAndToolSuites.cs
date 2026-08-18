@@ -1869,7 +1869,7 @@ internal static class WorldAndToolSuites
                 {
                     PlaneModel = aiModel,
                     Collider = PlaneCollider.Build(aiModel),
-                    PlayerIndex = AiAircraftSpawner.ShooterIdBase,
+                    PlayerIndex = FlightRoster.ShooterIdBase,
                     IsHumanPiloted = false,
                     Pilot = AiPilot.HoldingCourse(spawn, spawn + Vector3.Forward),
                     UseKeyboard = false,
@@ -1942,11 +1942,8 @@ internal static class WorldAndToolSuites
 
     // ---- the full effects sweep as suite verdicts ----------------------------------------------
 
-    // The whole --effects-test sweep, asserted instead of read: every EffectCatalogue.EffectAnimNames
-    // entry played through Probes.Effects on a full replica stage, so the census's sweep-wide verdicts
-    // fail a build instead of sitting in .scratch text nobody reads. The play point is a fixed spot
-    // ~180 m from the stage origin, so the distance column discriminates a template that failed to
-    // relocate. ⚠ The puffer and mesh tallies are golden counts under THIS suite's conditions, literal
-    // seed 1 and the counting factory, and are pinned separately from the probe's.
+    // Asserts every effects-test entry on a full replica stage so sweep verdicts fail the build.
+    // The fixed ~180 m play point detects a template that failed to relocate.
+    // ⚠ Puffer and mesh tallies are golden only for seed 1 with this counting factory.
 
 }

@@ -166,7 +166,7 @@ public static class SuiteCatalog
             "resolves to its gamez node and an unrecognised one resolves to null rather than a " +
             "guess, the ace's own spawn draw substitutes the LITERAL last index on a collision " +
             "with the player's (never a re-roll), a mixed ace_stats vector averages to one " +
-            "representative AI rating, AiAircraftSpawner.Spawn given an authored team/livery " +
+            "representative AI rating, FlightRoster.SpawnAi given an authored team/livery " +
             "wears them as-is (the ace lands on team 2 flying its configured airframe), the " +
             "wingman fan/escort-chain/accent-id table and the decision-8a flight-size clamp are " +
             "pure over their inputs, a real spawn census puts N wingmen on team 1 flying the " +
@@ -451,9 +451,6 @@ public static class SuiteCatalog
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------
 
-    // Kills a refuel* tank with a CountingEmitterFactory installed and asserts on its fire_n_smoke
-    // emitter, the def whose ACTIVE_STATE 1 carries no authored stop, so only instance retirement
-    // ever ends it. ⚠ Assert all three facts: the fake was reached, the emitter started, and it
-    // stopped without being forgotten (the row still present, Emitting false). A suite reading only
-    // "stopped" cannot tell a correct pause from a teardown by the wrong selector.
+    // Kills a refuel tank through a CountingEmitterFactory; only instance retirement ends its fire_n_smoke.
+    // ⚠ Assert factory reach, emitter start, and retained-but-stopped state; "stopped" alone can mean teardown.
 }

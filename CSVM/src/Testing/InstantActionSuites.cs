@@ -92,7 +92,7 @@ internal static class InstantActionSuites
         ctx.Check(InstantActionRuntime.FlownWingmen(2, humans: 2) == 2, $"below the cap: 2 humans/2 configured stays 2");
         ctx.Check(InstantActionRuntime.FlownWingmen(0, humans: 1) == 0, $"0 configured flies none");
 
-        // The actual spawn integration: AiAircraftSpawner.Spawn given an authored scheme/team
+        // The actual spawn integration: FlightRoster.SpawnAi given an authored scheme/team
         // (the C8 extension) wears them as-is — the ace lands on team 2 flying the configured
         // airframe, not a pilot-index-derived team.
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
@@ -111,7 +111,7 @@ internal static class InstantActionSuites
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-            var inputs = new FlightRigAssembler.Inputs
+            var inputs = new HumanFlightAdapter.Inputs
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
@@ -127,14 +127,14 @@ internal static class InstantActionSuites
             };
             // worldEffects null!: never dereferenced — Inputs.CrashProgram/WorldScene stay null,
             // so Spawn's crash-runtime block (the only reader) is skipped.
-            var spawner = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+            var spawner = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
 
             string aceNode = InstantAction.PlaneNodeFor("Warhawk")!;
             var aceLivery = new PaintScheme { Pattern = "cccp", Color1 = PaintScheme.FromBytes(200, 10, 10) };
             var pos = new Vector3(0f, 500f, 0f);
             var pilot = AiPilot.HoldingCourse(pos, pos + Vector3.Forward);
-            ace = spawner.Spawn(aceNode, pos, pos + Vector3.Forward, pilot,
-                scheme: aceLivery, team: InstantActionRuntime.EnemyTeam);
+            ace = spawner.SpawnAi(new AiSpawn(aceNode, pos, pos + Vector3.Forward, pilot,
+                Scheme: aceLivery, Team: InstantActionRuntime.EnemyTeam));
 
             ctx.Check(ace.Team == InstantActionRuntime.EnemyTeam,
                 $"the spawned ace carries the authored team, not a pilot-index default: team={ace.Team}");
@@ -142,15 +142,15 @@ internal static class InstantActionSuites
                 $"the ace flies its configured airframe: {ace.Name}");
 
             // The wingman census: N aircraft on team 1, since humans and wingmen share the player's side,
-            // flying the configured airframe. Spawned through the same AiAircraftSpawner.Spawn seam as the
+            // flying the configured airframe. Spawned through the same FlightRoster.SpawnAi seam as the
             // ace above, on AimAssist.PlayerTeam instead of the enemy team.
             string wingmanNode = InstantAction.PlaneNodeFor("Fury")!;
             for (int i = 0; i < 3; i++)
             {
                 var wPos = new Vector3(500f + i * 10f, 500f, 0f);
                 var wPilot = AiPilot.HoldingCourse(wPos, wPos + Vector3.Forward);
-                wingmen.Add(spawner.Spawn(wingmanNode, wPos, wPos + Vector3.Forward, wPilot,
-                    scheme: null, team: AimAssist.PlayerTeam));
+                wingmen.Add(spawner.SpawnAi(new AiSpawn(wingmanNode, wPos, wPos + Vector3.Forward, wPilot,
+                    Scheme: null, Team: AimAssist.PlayerTeam)));
             }
             ctx.Check(wingmen.Count == 3, $"3 wingmen spawned: {wingmen.Count}");
             ctx.Check(wingmen.All(w => w.Team == AimAssist.PlayerTeam),
@@ -164,8 +164,8 @@ internal static class InstantActionSuites
             var volPos = new Vector3(600f, 500f, 0f);
             var volPilot = AiPilot.HoldingCourse(volPos, volPos + Vector3.Forward);
             volPilot.Machine = new AiModeMachine(new System.Random(7));
-            wingmen.Add(spawner.Spawn(wingmanNode, volPos, volPos + Vector3.Forward, volPilot,
-                scheme: null, team: AimAssist.PlayerTeam));
+            wingmen.Add(spawner.SpawnAi(new AiSpawn(wingmanNode, volPos, volPos + Vector3.Forward, volPilot,
+                Scheme: null, Team: AimAssist.PlayerTeam)));
             var vol = volPilot.Machine;
             ctx.Check(Mathf.IsEqualApprox(vol.AttackRange, 2000f)
                 && Mathf.IsEqualApprox(vol.ReturnRange, 1200f),
@@ -199,8 +199,8 @@ internal static class InstantActionSuites
             {
                 var wmPos = wave1Pos + new Vector3(i * 10f, 0f, 0f);
                 var wmPilot = AiPilot.HoldingCourse(wmPos, wmPos + Vector3.Forward);
-                waveMembers.Add(spawner.Spawn(waveNode, wmPos, wmPos + Vector3.Forward, wmPilot,
-                    scheme: null, team: InstantActionRuntime.EnemyTeam));
+                waveMembers.Add(spawner.SpawnAi(new AiSpawn(waveNode, wmPos, wmPos + Vector3.Forward, wmPilot,
+                    Scheme: null, Team: InstantActionRuntime.EnemyTeam)));
             }
             var wave2Pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
             // Every Instant Action actor carries the chapter's first patrol net and an inert one still ticks,
@@ -218,8 +218,8 @@ internal static class InstantActionSuites
                 Edges = new[] { (0, 1) },
             };
             wave2Pilot.Patrol = new AiNetFollower(parkNet, new System.Random(3));
-            var wave2Member = spawner.Spawn(waveNode, Vector3.Zero, Vector3.Forward, wave2Pilot,
-                scheme: null, team: InstantActionRuntime.EnemyTeam, inert: true);
+            var wave2Member = spawner.SpawnAi(new AiSpawn(waveNode, Vector3.Zero, Vector3.Forward, wave2Pilot,
+                Scheme: null, Team: InstantActionRuntime.EnemyTeam, Inert: true));
             waveMembers.Add(wave2Member);
             wave2Pilot.Patrol.Update(Vector3.Zero);
             ctx.Check(wave2Pilot.Patrol.CurrentIndex == 0,
@@ -338,7 +338,7 @@ internal static class InstantActionSuites
             ctx.Host.AddChild(live);
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-            var inputs = new FlightRigAssembler.Inputs
+            var inputs = new HumanFlightAdapter.Inputs
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
@@ -352,7 +352,7 @@ internal static class InstantActionSuites
                 Projectiles = live,
                 Shakes = ShakeDefs.Load(ctx.ZrdrPath),
             };
-            var spawner = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+            var spawner = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
 
             // Both waves built INERT at the origin, which is what the original does on this one
             // mode for wave 1 as well ("even wave 1 is built deactivated at the origin").
@@ -363,8 +363,8 @@ internal static class InstantActionSuites
                 for (int i = 0; i < count; i++)
                 {
                     var pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
-                    built.Add(spawner.Spawn(waveNode, Vector3.Zero, Vector3.Forward, pilot,
-                        scheme: null, team: InstantActionRuntime.EnemyTeam, inert: true));
+                    built.Add(spawner.SpawnAi(new AiSpawn(waveNode, Vector3.Zero, Vector3.Forward, pilot,
+                        Scheme: null, Team: InstantActionRuntime.EnemyTeam, Inert: true)));
                 }
                 return built;
             }
@@ -597,7 +597,7 @@ internal static class InstantActionSuites
             ctx.Host.AddChild(live);
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-            var inputs = new FlightRigAssembler.Inputs
+            var inputs = new HumanFlightAdapter.Inputs
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
@@ -611,14 +611,14 @@ internal static class InstantActionSuites
                 Projectiles = live,
                 Shakes = ShakeDefs.Load(ctx.ZrdrPath),
             };
-            var spawner = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+            var spawner = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
             string enemyNode = InstantAction.PlaneNodeFor("Warhawk")!;
 
             FlightController SpawnAt(Vector3 pos, int team, bool inert = false)
             {
                 var pilot = AiPilot.HoldingCourse(pos, pos + Vector3.Forward);
-                var fc = spawner.Spawn(enemyNode, pos, pos + Vector3.Forward, pilot,
-                    scheme: null, team: team, inert: inert);
+                var fc = spawner.SpawnAi(new AiSpawn(enemyNode, pos, pos + Vector3.Forward, pilot,
+                    Scheme: null, Team: team, Inert: inert));
                 spawned.Add(fc);
                 return fc;
             }
@@ -935,7 +935,7 @@ internal static class InstantActionSuites
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-            var inputs = new FlightRigAssembler.Inputs
+            var inputs = new HumanFlightAdapter.Inputs
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
@@ -949,12 +949,12 @@ internal static class InstantActionSuites
                 Projectiles = live,
                 Shakes = ShakeDefs.Load(ctx.ZrdrPath),
             };
-            var spawner = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+            var spawner = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
 
             var pos = new Vector3(0f, 500f, 0f);
-            target = spawner.Spawn(ctx.PlaneName, pos, pos + Vector3.Forward,
+            target = spawner.SpawnAi(new AiSpawn(ctx.PlaneName, pos, pos + Vector3.Forward,
                 AiPilot.HoldingCourse(pos, pos + Vector3.Forward),
-                scheme: null, team: InstantActionRuntime.EnemyTeam);
+                Scheme: null, Team: InstantActionRuntime.EnemyTeam));
             ctx.Check(target?.Body != null, $"the target built a collision body");
             if (target?.Body == null)
                 return;
@@ -993,11 +993,8 @@ internal static class InstantActionSuites
         }
     }
 
-    // The inert state: an aircraft built complete and held out of the session until Activate.
-    // ⚠ Run every claim as ONE instrument over three subjects, a live control, the inert aircraft and
-    // that same aircraft activated, so each observation is watched flipping both ways. "Did not appear
-    // in the list" is exactly the check that passes for the wrong reason (METHOD-9/METHOD-10). The
-    // instruments are the real ones: a physics raycast, CollectAircraft into an AimAssist.Scan, a
-    // round fired through the pool, and FlightController.SimStep.
+    // The inert state: an aircraft built complete and held out until Activate.
+    // ⚠ Compare a live control, inert aircraft, and that aircraft activated with real physics, targeting,
+    // shots, and simulation; absence alone can pass for the wrong reason (METHOD-9/METHOD-10).
 
 }

@@ -207,7 +207,7 @@ public sealed class FlightModel
     /// <param name="aiForcePath">Which of the original's two force paths this instance flows — see
     /// <see cref="UsesAiForcePath"/>. ⚠ Optional, and it defaults to the PLAYER path, so a
     /// production construction site added later gets the player plant silently. Two sites pass it
-    /// today (<c>FlightRigAssembler</c>, <c>AiAircraftSpawner</c>); a third one must pass it too.
+    /// today (<c>HumanFlightAdapter</c>, <c>FlightRoster</c>); a third one must pass it too.
     /// The default exists for the ~18 test sites that construct a plant with no session around
     /// them, not as a statement about what a new caller wants.</param>
     public FlightModel(PlaneStats stats, bool aiForcePath = false)
@@ -406,10 +406,9 @@ public sealed class FlightModel
         if (!UsesAiForcePath)
             cmd += WeathervaneTorque() * s.RecInertia;
 
-        // The AI branch of FUN_0048c220 is unusual: it writes its fixed response directly into
-        // persistent angular velocity, rather than this frame's physics torque accumulator. It is
-        // per-tick, not dt-scaled; treating it as ordinary torque weakened recovery by the
-        // simulation rate (about 60x at 60 Hz). The player branch remains a command bias.
+        // The AI branch writes its fixed response into persistent angular velocity, not this tick's torque.
+        // It is per-tick, not dt-scaled; ordinary torque weakens recovery by the simulation rate.
+        // The player branch remains a command bias.
         Vector3 groundBlow = GroundBlowTerm(input, cmd, out float groundBlowSteer);
 
         // The original's order: accumulate this tick's torque first, then decay the whole result,
