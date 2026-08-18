@@ -46,7 +46,10 @@ than the raw law (see `analysis/gun-wobble-shake/FINDINGS.md`; the decode is clo
 binary — `FUN_0042be10` only kicks the `camera+0x24` accumulator, and the static trace of its
 consumer came back negative: the accumulators are not read by any camera mode driver, the transform-
 apply, or the orientation getter/setters — so they are either consumed in an untraced render-layer
-function or effectively dead; no live instrument needed). Whether `magnitude_factor` needs a ~3.5× decode
+function or effectively dead; no live instrument needed). ⚠ **That negative is the fire block only —
+see the `high_speed` note below: it drives the IDENTICAL `FUN_0042be10` random-walk accumulator (a
+second component, block index 4, at `camera+0xd4/+0xd8/+0xdc`) and visibly wobbles in the clips, so
+the mechanism is demonstrably live; `camera+0x24` is not the whole mechanism.** Whether `magnitude_factor` needs a ~3.5× decode
 correction to match the original is the clip/fidelity judgment, not the decode — see
 `analysis/gun-wobble-shake/FINDINGS.md`. Unmeasured residue: whether plane model/weight also
 enter (single-plane, single-gun clip — owed capture in `playtest.md`), and the impact sources'
@@ -61,6 +64,29 @@ authored half because the chase camera is not rigidly attached). The engine impl
 this: `PlaneShake` rolls a pivot the plane model hangs under; physics and the camera never see
 it.
 
+⚠**Where the wobble STATE lives vs. where it displaces** (2026-08-19): the random-walk
+accumulators are written **onto the camera object**, not the plane — `FUN_0048c470` / the gun
+path call `FUN_0042c070(block, mag)`, which kicks `camera`-relative component blocks (fire
+`+0x24/+0x28/+0x2c`, high_speed `+0xd4/+0xd8/+0xdc`, impact `+0x??`). The camera therefore holds
+several parallel shake blocks; the render apply multiplies them into the **plane node's** rendered
+rotation. Because the first-person placement `FUN_0042d980` (modes 6/7, `docs/org/cameraViews.md`)
+reads the plane's basis directly and adds **no** wobble of its own at attachment, a plane-mounted
+camera inherits that rocked rotation automatically — that is why cockpit/nose read as camera shake
+and the two cockpit views need no separate handling. The earlier `camera+0x24` "static-trace
+NEGATIVE" (`BL-266`, `7f8881a0`) is exactly this split: the reader of the fire block wasn't found
+because it runs in the untraced render layer, and the accumulator state being camera-side made a
+plane-basis search miss it.
+
+**Camera-attachment rule for our port**: mount the cockpit (mode 6) and nose (mode 7) cameras as
+children of the **plane model** (below `ShakePivot`) so they inherit the wobble for free — the
+original's 6/7 pair are the *same* `cockpit_camera` point and both ride the rocking plane, so the
+two first-person views are not handled differently from each other. The chase/fixed/external
+cameras stay **top-level**, steered from the controller's pose (`_renderPose` = controller
+attitude), *above* the pivot — they must never read `ShakePivot`, or the `damage_shakes`-style
+rock would rattle the 3rd-person view too. When the first-person views land, they go **below** the
+pivot (inherit); every current camera sits **above** it (opt out) — the same split `damage_shakes`
+carves between the plane-rocking `aishake` and the camera's own half.
+
 **`high_speed`'s input reads as speed normalised by the plane's rated max** (`fd_speed`), so the
 `min_speed` 1.0 gate means "beyond rated max" — the overspeed/dive rattle. Level cruise in the
 firing clip shows a motionless idle floor (~0.01 px/frame), which an absolute-speed reading with
@@ -74,6 +100,20 @@ as the whole `speedRatio/quotient` instead — the earlier wiring — snapped on
 moment you crossed rated max, 5× the entire 40-cal gun buzz, and barely ramped after (+27% over
 the envelope); that is what the whole-ratio read did wrong. The overspeed audio layer
 (`prop_sound`) engages in the same regime.
+
+**`high_speed` shares the SAME random-walk accumulator as the gun** (decode 2026-08-19, from
+`crimson.exe`: `FUN_0048c470`, the per-frame player updater, reads `camera+0xec` (`min_speed`) and
+`camera+0xf0` (`magnitude_quotient`), and when the gate trips calls `FUN_0042c070(4, mag)` — the
+exact same dispatcher/accumulator the `fire_bullet` path uses, just component index 4 instead of 0:
+`this = camera + 4·0x2c + 0x18`, kicking the three block-4 accumulators `camera+0xd4/+0xd8/+0xdc`
+roll/pitch/yaw per frame). So in the original both sources are the same 3-axis random-walk
+(`Δroll/pitch = (rand01−0.5)·fVar·1.2`, `Δyaw = …·2.5`); they differ only in block (0 vs 4),
+magnitude law (per-shot `magnitude_factor×CALIBER` vs per-frame
+`(speedRatio−min_speed)/magnitude_quotient`), and cadence (fire once per shot @8/s; `high_speed`
+every frame while over the gate). The engine's current `PlaneShake._speed` (deterministic damped
+sawtooth) is therefore a *different mechanism* from the original — the root cause of `BL-266(d)`'s
+"6× muted dive." The fidelity fix is a second random-walk accumulator (a `_fire` clone) fed by the
+existing excess-over-gate `SetSpeedRatio` law. Full trace: `analysis/gun-wobble-shake/FINDINGS.md`.
 
 ## Damage-shake animations
 

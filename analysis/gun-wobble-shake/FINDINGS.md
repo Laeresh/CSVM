@@ -176,6 +176,62 @@ original's random-walk camera accumulator. This strengthens the structural-misma
 per-shot-kick gap is a mechanism difference (original random-walk accumulator vs remake damped
 sawtooth), not a render-pipeline gain loss.
 
+## High-speed (`high_speed`) shares the SAME random-walk accumulator as the gun
+
+(2026-08-19.) The `camera+0x24` negative above is the **fire** component only. The `high_speed`
+oscillator writes a **different** component block, through the **identical** write function
+`FUN_0042be10` — so the two sources are the same random-walk mechanism, differing only by
+component index and magnitude law.
+
+The consumer is in `FUN_0048c470` (the per-frame player-plane updater; sole caller
+`FUN_0048e580`, the tick velocity/position integrator that also computes `plane[0x24d]` =
+SQRT of squared velocity). Inside the `plane == player` (`DAT_0071c298`) branch:
+
+```c
+min = *(camera+0xec) * plane[0x19a];      // min_speed (authored 1.0) × rated-max scale
+if (min < plane[0x24d]) {                  // overspeed gate: current speed > min_speed×max
+    mag = (plane[0x24d] − min)
+        / (*(camera+0xf0) * plane[0x19a]); // (speedRatio − min_speed)/magnitude_quotient (70.0)
+    FUN_0042c070(4, mag);                  // SAME random-walk accumulator as the gun
+}
+```
+
+- `camera+0xec` = `high_speed.min_speed`, `camera+0xf0` = `high_speed.magnitude_quotient`
+  (both loaded raw by the `shakes.zrd` parser `FUN_0042bc10`, camera = `DAT_0064ef78`).
+- `FUN_0042c070(4, mag)` is the exact dispatcher the fire path uses, with component index 4:
+  `this = camera + 4*0x2c + 0x18 = camera + 0xc8` (block layout from the camera ctor
+  `FUN_0042bab0`: `[0]=0` waveform → the `6.2832` sine branch, `[1]=2.0` gain).
+- `FUN_0042be10(camera+0xc8, mag)` then kicks the **block-4 accumulators at
+  `camera+0xd4/+0xd8/+0xdc`** (roll/pitch ×1.2, yaw ×2.5) — the same per-axis random walk as fire,
+  on all **three** axes (the user-visible high-speed wobble is multi-axis, matching observation,
+  not roll-only).
+- Fire (`FUN_0042c070(0, …)`) and high_speed (`FUN_0042c070(4, …)`) are thus the **same algorithm**;
+  the differences are only the component block (0 vs 4) and the magnitude law (`magnitude_factor×
+  CALIBER` per shot vs `(speedRatio−min_speed)/magnitude_quotient` per frame).
+
+**Consequences:**
+
+1. **The original's `high_speed` is a random-walk accumulator, NOT the remake's damped sawtooth.**
+   The remake's `PlaneShake._speed` path (deterministic `Target → Amp → sawtooth`) is a *different
+   mechanism* from the original — this is the root cause of `BL-266(d)`'s "overspeed rattle ~6×
+   muted." The fidelity fix is to drive `_speed` through a second `RandomWalkKick` accumulator (the
+   `_fire` clone), fed by the already-correct excess-over-gate `SetSpeedRatio` law.
+2. **High-speed re-kicks every frame** (the updater runs each physics tick) while fire kicks once
+   per shot at 8/s, so the visible dive walk is sustained accumulation — why terminal-dive wobble
+   "looks about the same" regardless of overspeed depth and reads at least as strong as the guns.
+3. **The `camera+0x24` negative does NOT generalise to high_speed.** The high_speed accumulator
+   lives at `camera+0xd4/+0xd8/+0xdc`, a different address than the searched `camera+0x24`. Since
+   high-speed visibly wobbles in the original clips through this exact `FUN_0042be10` writer, the
+   mechanism is demonstrably live — the earlier "near-dead" reading for `camera+0x24` is at minimum
+   unproven for the shared mechanism and the high_speed block's reader was never searched. (The
+   decoded high_speed accumulator offsets are recorded here so a future sweep can look for the
+   `camera+0xd4/+0xd8/+0xdc` reader.)
+
+No live instrument is required — every step above is a static trace from the open `crimson.exe`
+(project `CSVMCrimsonExe`): disasm of `FUN_0042c070` (index→block address math), `FUN_0048c470`
+(the high_speed consumer), `FUN_0048e580` (per-frame caller), and the camera ctor `FUN_0042bab0`
+(block initialisation).
+
 ⚠ **Neither the engine A/B nor the clip is consistent with the one model, and they disagree in
 opposite directions** — so the table's "2–4× under" is not a clean pipeline-loss claim:
 
@@ -223,8 +279,13 @@ look) is decided.
   different gain, so remake-vs-original amplitude equality is an open question. The `camera+0x24`
   consumer (decay/oscillator that turns the random walk into wobble) is **not in the traced camera
   update/render path** — all mode drivers, the transform-apply, and the orientation getter/setters
-  are ruled out, and byte-pattern sweeps find no `fld [camera-region+0x24]` reader. The random-walk
-  accumulator is either consumed in an untraced render-layer function (non-0x0042) or is effectively
-  dead in this build; either way the original's fire-shake is a *different mechanism* from the
-  remake's deterministic damped sawtooth, not a pipeline gain the remake loses. No live instrument
-  is needed for any of this — every step is a static trace.
+  are ruled out, and byte-pattern sweeps find no `fld [camera-region+0x24]` reader. ⚠ **That
+  negative is the fire block only. The new `high_speed` trace (see the section above) proves the
+  shared `FUN_0042be10` writer is LIVE** — the original's `high_speed` drives the identical random-walk
+  accumulator (component index 4, at `camera+0xd4/+0xd8/+0xdc`, not the searched `camera+0x24`) and
+  visibly wobbles in the clips, so the mechanism is demonstrably not dead; the `camera+0x24` negative
+  does not generalise and the high_speed block's reader was simply never searched. Either way the
+  original's shake is a random-walk accumulator (both sources), while the remake's `PlaneShake.cs`
+  `_speed` path (deterministic damped sawtooth, no RNG) is a *different mechanism* — that structural
+  mismatch is the root of `BL-266(d)`'s muted dive. No live instrument is needed for any of this —
+  every step is a static trace.

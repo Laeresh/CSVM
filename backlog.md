@@ -2380,9 +2380,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     = uniform ±7.54·(factor×caliber)/shot, wep40 ±2.11e-2 rad, decoded from `FUN_0042be10`; decayed
     by the authored `damp` τ≈80 ms). Merged to `main` (`eba69782`, branch experiment `bl266-random-walk`).
     **`GunBuzzKickScale` (default 1.0 = faithful) is the one tune knob — dial it, never
-    `magnitude_factor`.** The `camera+0x24` consumer traced NEGATIVE (2026-08-19): the original's
-    own accumulator is near-dead in its build, so the gap is a **mechanism mismatch, not a
-    render-pipeline loss** — this port is the first real feel of the kick law.
+    `magnitude_factor`.** The `camera+0x24` consumer traced NEGATIVE (2026-08-19) — that negative is
+    the FIRE block only; the high_speed finding below (same `FUN_0042be10` writer on block 4,
+    `camera+0xd4/+0xd8/+0xdc`) shows the mechanism is live, so the fire gap is a **mechanism/law
+    mismatch, not a render-pipeline loss** — this port is the first real feel of the kick law.
     (The old approach-(B) suspects are also settled: fire-rate is one round per tick at authored
     `FIRE_RATE` (8.0 for wep_40) — the "12–13/s" was a redraw-window artifact — and 60 fps
     pose-interpolated render loss tested NEGATIVE.)
@@ -2391,17 +2392,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     caliber, rockets use armor damage) — a being-hit capture pins them.
   - (c) the `ON_CALL` `small/medium/large` `damage_shakes` defs stay unwired — unknown caller,
     likely script/set-piece.
-  - **(d) high_speed — re-opened (too muted).** The 2026-08-18 excess-over-gate correction
-    (`(speedRatio − gate)/quotient`, `554edcee`) returned the dive rattle to ~zero at rated max,
-    but the ported gun buzz (~7× louder) exposes it as ~6× muted vs the original's dive.
-    Re-baseline `high_speed`'s magnitude — and likely give it the same random-walk accumulator as
-    the gun — once the gun-buzz feel is judged.
+  - **(d) high_speed shares the gun's random-walk accumulator — decoded, engine port now owed.**
+    The 2026-08-18 excess-over-gate correction (`(speedRatio − gate)/quotient`, `554edcee`) returned
+    the dive rattle to ~zero at rated max, but the ported gun buzz (~7× louder) exposes it as ~6× muted
+    vs the original's dive. **2026-08-19 the binary settled the open hypothesis: the original drives
+    `high_speed` through the SAME random-walk accumulator as the gun** — `FUN_0048c470` (per-frame
+    player updater) reads `camera+0xec/0xf0` (`min_speed`/`magnitude_quotient`) and calls
+    `FUN_0042c070(4, mag)` = the identical `FUN_0042be10` accumulator the `fire_bullet` path uses
+    (component index 4 vs 0, kicking 3-axis accumulators `camera+0xd4/+0xd8/+0xdc` per frame). So the
+    original is NOT the remake's damped sawtooth — it is a second random-walk accumulator fed by the
+    existing excess-over-gate `SetSpeedRatio` law. That mechanism mismatch (sawtooth vs random-walk) is
+    the root cause of the ~6× muted dive. Trace: `analysis/gun-wobble-shake/FINDINGS.md` (high_speed
+    section) and `docs/formats/shakes.md`. **Open/fidelity action:** port `PlaneShake`'s `_speed` path
+    to a `_fire`-style random-walk accumulator (tune `GunBuzzKickScale`-equivalent knob), then playtest
+    the dive against the original clip.
   - **(fidelity) judge the port, then dial.** Playtest owed: fly the merged build and judge
     `GunBuzzKickScale` (1.0 default = faithful step) against the original clip before touching it.
     Two honest caveats: the random-walk **decay model (τ≈80 ms) is an engineering guess, not a
-    decode** (the original's consumer is negative); and with the buzz now ~7× louder, the quiet
-    `554edcee` dive rattle reads ~6× softer than the gun — track whether `high_speed` needs the
-    same random-walk / re-baselined magnitude.
+    decode** (the original `camera+0x24` consumer is negative — but that negative is the FIRE block
+    only; `high_speed`'s accumulator is at `camera+0xd4/+0xd8/+0xdc`, a different block, see (d) above);
+    and with the buzz now ~7× louder, the quiet `554edcee` dive rattle reads ~6× softer than the gun
+    because the engine's `_speed` is a sawtooth where the original is a random-walk — track the (d)
+    engine-port + playtest.
   ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism — its sole carrier among all
   48 weapons is `wep_26` "FW", a zero-damage scripted fake weapon (a scripted detonation-shake
   marker); the fire path is the unflagged `fire_bullet` source. And the near-match trap: several

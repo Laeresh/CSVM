@@ -199,6 +199,16 @@ by the cockpit loader `FUN_00473480` from the `cockpit_camera` scene node (via `
 with a fallback of `DAT_0075d1b8/bc/c0` = `(0,0,0)` (the plane origin) when a plane has no such
 node.
 
+⚠ **No wobble is added at placement — the first-person camera inherits it from the plane.**
+`FUN_0042d980` reads the plane's raw orientation basis directly and applies zero shake of its own;
+the random-walk wobble state is written onto the **camera object** (component blocks via
+`FUN_0042c070`, e.g. high_speed block 4 at `camera+0xd4/+0xd8/+0xdc`) and consumed in the render
+layer to rock the **plane node's** rendered rotation. So both 6 and 7, being plane-mounted, inherit
+the wobble automatically and are not handled differently from each other — see
+`docs/formats/shakes.md`. The chase/3rd-person modes read the plane position/attitude but sit
+outside the rocking node, which is why `damage_shakes` gives the chase camera its own authored
+half.
+
 ### Per-plane `cockpit_camera` offsets (local body frame)
 
 Decoded from the plane scene graphs (`extracted/…/planes/nodes.json`). The marker sits on the
