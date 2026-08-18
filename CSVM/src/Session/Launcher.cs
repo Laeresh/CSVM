@@ -633,10 +633,8 @@ public partial class Launcher : Node3D
             _hitchSidecar.Enqueue(_hitchMonitor.Last);
         }
         _hitchSidecar.Tick(frameMs);
-        // Same raw frameMs and the same counters read HitchMonitor
-        // just judged, fed to the readout regardless of whether it is currently drawn — see
-        // PerfHud.Tick's own doc comment.
-        _perfHud.Tick(frameMs, counters);
+        // Early-quit probes do not construct the readout, but Godot may process one shutdown frame.
+        _perfHud?.Tick(frameMs, counters);
         if (_spec.Perf)
             ReportPerf(delta, counters);
 

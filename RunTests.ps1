@@ -138,6 +138,7 @@ $ProjectDir = Join-Path $RepoRoot "CSVM"
 $Sln        = Join-Path $ProjectDir "CSVM.sln"
 $ScratchDir = Join-Path $RepoRoot ".scratch"
 $Inv        = [System.Globalization.CultureInfo]::InvariantCulture
+$EngineTimeoutSec = 300
 
 # tools/ is git-ignored, so a git worktree checkout has no Godot. Fall back to the primary
 # tree named by CSVM_DATA_ROOT -- the same env var the engine and the unit tests read for
@@ -196,7 +197,10 @@ if (-not (Test-Path $ScratchDir)) {
 # SHELL-1: the argument string is re-split by the callee, and this repo's path contains a space, so
 # any argument carrying one is quoted here or Godot receives it split.
 function Invoke-Godot {
-    param([Parameter(Mandatory=$true)][string[]]$Arguments)
+    param(
+        [Parameter(Mandatory=$true)][string[]]$Arguments,
+        [int]$TimeoutSec = 0
+    )
     $quoted = @()
     foreach ($a in $Arguments) {
         if ($a -match '\s' -and $a -notmatch '^".*"$') {
@@ -221,7 +225,8 @@ function Invoke-Godot {
         $cmdLine = ('"{0}" {1}' -f $GodotExe, ($quoted -join " "))
         return Invoke-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
                                       -WorkingDirectory $RepoRoot `
-                                      -StdOut "$streamBase.out" -StdErr "$streamBase.err"
+                                      -StdOut "$streamBase.out" -StdErr "$streamBase.err" `
+                                      -TimeoutSec $TimeoutSec
     }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName               = $GodotExe
@@ -233,10 +238,16 @@ function Invoke-Godot {
     $p = [System.Diagnostics.Process]::Start($psi)
     $outRead = $p.StandardOutput.ReadToEndAsync()
     $errRead = $p.StandardError.ReadToEndAsync()
-    $p.WaitForExit()
+    if ($TimeoutSec -gt 0 -and -not $p.WaitForExit($TimeoutSec * 1000)) {
+        $p.Kill()
+        $p.WaitForExit()
+        $code = 124
+    } else {
+        $code = $p.ExitCode
+    }
     [System.IO.File]::WriteAllText("$streamBase.out", $outRead.Result)
     [System.IO.File]::WriteAllText("$streamBase.err", $errRead.Result)
-    return $p.ExitCode
+    return $code
 }
 
 $Stages   = New-Object System.Collections.ArrayList
@@ -428,8 +439,9 @@ if ($SkipEngine) {
     }
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $ErrorActionPreference = "Continue"
-    $engineCode = Invoke-Godot @("--path", $ProjectDir, "--log-file", $engineLog,
-                                 "res://scenes/Main.tscn", "--", $testArg)
+    $engineCode = Invoke-Godot -Arguments @("--path", $ProjectDir, "--log-file", $engineLog,
+                                             "res://scenes/Main.tscn", "--", $testArg) `
+                               -TimeoutSec $EngineTimeoutSec
     $ErrorActionPreference = "Stop"
     $watch.Stop()
 
@@ -466,7 +478,9 @@ if ($SkipEngine) {
             Write-Host "  could not read $report : $($_.Exception.Message)" -ForegroundColor Yellow
         }
     }
-    if ($ePassed -ge 0) {
+    if ($engineCode -eq 124) {
+        $detail = "Godot timed out after ${EngineTimeoutSec}s (exit 124); partial log at $engineLog"
+    } elseif ($ePassed -ge 0) {
         $detail = "$ePassed passed, $eFailed failed, $eSkipped skipped; $errorNote"
         if ($failedNames.Count -gt 0) {
             $detail = "$detail [$($failedNames -join ', ')]"
