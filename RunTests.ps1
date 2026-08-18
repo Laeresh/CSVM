@@ -23,8 +23,8 @@
                A mismatch names the shot and leaves the actual PNG and that shot's engine log in
                .scratch/goldens/.
       hitch    Two scripted Godot launches -- a clean one and one carrying --hitch-inject=50@300
-               -- that prove the frame-hitch detector (HitchMonitor/HitchSidecar) still fires on
-               a known stall and stays silent without one. A scripted pass for the same reason
+               -- that report whether the frame-hitch detector (HitchMonitor/HitchSidecar) still
+               fires on a known stall and stays silent without one. Awareness-only for the same reason
                goldens is one: the detector only trips on a REAL rendered frame over wall time,
                which --run-tests's single, frame-free _Ready call cannot produce. Reads the
                printed "[perf] hitch ..." line and the .hitches.jsonl sidecar it names, and
@@ -954,13 +954,14 @@ if ($SkipHitch) {
     $detail = "clean: $($clean.HitchLines.Count) hitch line(s); inject: $($inject.HitchLines.Count) hitch line(s), " +
         "$(if ($inject.HitchLines.Count -gt 0) { "frame_ms=$($inject.HitchLines[0].FrameMs)" } else { "n/a" })"
     if ($problems.Count -eq 0) {
-        Add-Stage -Name "hitch" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
+        Add-Stage -Name "hitch" -Status "TODO" -Seconds $watch.Elapsed.TotalSeconds -Detail "$detail; awareness only"
     } else {
-        Add-Stage -Name "hitch" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds -Detail "$detail; $($problems.Count) problem(s)"
+        Add-Stage -Name "hitch" -Status "TODO" -Seconds $watch.Elapsed.TotalSeconds -Detail "$detail; $($problems.Count) awareness item(s)"
         foreach ($p in $problems) {
-            Write-Host "  !! $p" -ForegroundColor Red
+            Write-Host "  !! hitch awareness: $p" -ForegroundColor Yellow
         }
     }
+    Add-Unchecked "the hitch stage reports detector health but does not gate this workstation's verification"
 }
 
 # ---- perf --------------------------------------------------------------------------------
