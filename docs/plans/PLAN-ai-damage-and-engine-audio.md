@@ -3,11 +3,11 @@
 **COMPLETE 2026-08-20** (written 2026-08-16). All 26 checklist items are ☑ or ❌, Waves A–D.
 Indexed in [`plans.md`](plans.md); read as history.
 
-⚠ Two things outlive the plan and are not closed by it. `BL-421` asks for a verdict on the engine
-audio B14 thinned, and was minted by this plan's own playtest. `BL-422` is a live defect the same
-playtest found, a firepuff that never despawns on the Bloodhawk and the Autogyro. Neither belongs
-to `BL-385`, which is why this closes with them open. D24 and D26 also each leave a fidelity
-question owed at the controls rather than a defect, recorded on the items themselves.
+⚠ Two things outlive the plan and are not closed by it, both minted by its own closing playtest and
+neither belonging to `BL-385`. `BL-421` asks for a verdict on the engine audio B14 thinned and is
+open. `BL-422`, the firepuff that never despawned, was closed on its own (`git log --grep=BL-422`).
+D24 and D26 also each leave a fidelity question owed at the controls rather than a defect, recorded
+on the items themselves.
 
 This plan closes `BL-385` (enemy and wingman aircraft show no damage at all, and their crash is
 silent) and absorbs `BL-384` item (3) (the one-way `_applied` latch), which cannot be separated from

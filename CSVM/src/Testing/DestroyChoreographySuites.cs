@@ -422,6 +422,11 @@ internal static class DestroyChoreographySuites
                 // its first step: a fall arm above it measures that teleport as 450 m of falling.
                 const float FallFrom = 1500f;
                 WreckFallsBeforeItIsHandedOver(ctx, spawner, FallFrom);
+                // Both airframes, because the reported split was between them: the immortal stage is
+                // pfsmoketrail at `prop1`, which every airframe carries, and the Bloodhawk's missing
+                // lft_elev/rt_elev belong to random_remote_damage, which ends on its own timeline.
+                StagedEffectsEndAtTheDeath(ctx, spawner, FallFrom, "player_fury", -3000f);
+                StagedEffectsEndAtTheDeath(ctx, spawner, FallFrom, "player_bhawk", -6000f);
                 WreckWithNoDestroyDefIsHiddenOnTheKill(ctx, spawner, FallFrom);
                 if (found)
                     WreckReachingTheGroundPlaysItsCrashDef(ctx, spawner, lowSpawn, lowAim);
@@ -714,6 +719,68 @@ internal static class DestroyChoreographySuites
         }
     }
 
+    // The stages the hull was wearing when it died. Both AI stage anims are LOOP −1 with no authored
+    // exit, so the only thing that can end them is the destroy def's own Callback 15; a stage left
+    // live keeps emitting at whatever node the dead hull left behind.
+    // ⚠ Balance STARTS against FINISHES, never a puffer count: an emitter with nothing left to emit
+    // reads as quiet for a while and then resumes.
+    private static void StagedEffectsEndAtTheDeath(TestContext ctx, FlightRoster spawner,
+        float fallFrom, string planeName, float lane)
+    {
+        const float Dt = 1f / 60f;
+        FlightController? ai = null;
+        try
+        {
+            var spawn = new Vector3(lane, fallFrom, 0f);
+            ai = spawner.SpawnAi(new AiSpawn(planeName, spawn, spawn + Vector3.Forward,
+                AiPilot.HoldingCourse(spawn, spawn + Vector3.Forward)));
+            if (ai.CrashRuntime is not { } rig || ai.Damage is not { } damage)
+            {
+                ctx.Check(false, $"the staged rig spawned with a crash runtime and a damage ledger");
+                return;
+            }
+
+            rig.ManualAdvance = true;
+            var live = new Dictionary<string, int>(System.StringComparer.OrdinalIgnoreCase);
+            rig.OnInstanceStarted += (def, _) =>
+            {
+                string n = def.AnimName ?? def.Name ?? "";
+                live[n] = live.TryGetValue(n, out var c) ? c + 1 : 1;
+            };
+            rig.OnInstanceFinished += (def, _) =>
+            {
+                string n = def.AnimName ?? def.Name ?? "";
+                live[n] = live.TryGetValue(n, out var c) ? c - 1 : -1;
+            };
+
+            // The ladder walked down through the production take-hit entry, as AiDamageStages does,
+            // so the aircraft is wearing both stage anims when the kill lands.
+            ai.TakeCollisionHit(damage.WholeArmor, 0f, ai.GlobalPosition, 0);
+            foreach (float frac in new[] { 0.9f, 0.7f, 0.55f, 0.47f, 0.42f, 0.3f, 0.2f })
+                SpendHullTo(ai, damage, frac);
+            int stagedAtKill = Count(live, "pfsmoketrail") + Count(live, "random_remote_damage");
+            ctx.Check(Count(live, "pfsmoketrail") > 0 && Count(live, "random_remote_damage") > 0,
+                $"{planeName}: the wounded hull is wearing {stagedAtKill} live stage instance(s) at the kill ({Count(live, "pfsmoketrail")} pfsmoketrail, {Count(live, "random_remote_damage")} random_remote_damage)");
+
+            float overkill = (damage.WholeHealthMax + damage.WholeArmorMax) * 4f;
+            ai.TakeCollisionHit(overkill, overkill, ai.GlobalPosition, 0);
+            for (float t = 0f; t < 5f; t += Dt)
+            {
+                ai.SimStep(Dt);
+                rig.Advance(Dt);
+            }
+            ctx.Check(!ai.WreckFalling,
+                $"…the fall ran past the def's 3.0 s gate, so Callback 15 has fired falling={ai.WreckFalling}");
+            int stagedAfter = Count(live, "pfsmoketrail") + Count(live, "random_remote_damage");
+            ctx.Same(0, stagedAfter,
+                $"…and Callback 15 ended every stage the dead hull was wearing: {stagedAfter} still live ({Count(live, "pfsmoketrail")} pfsmoketrail, {Count(live, "random_remote_damage")} random_remote_damage)");
+        }
+        finally
+        {
+            ai?.Free();
+        }
+    }
+
     // THE ABLE-TO-FAIL CONTROL, and the bug in one line: with no destroy def bound the airframe is
     // hidden on the death frame and never travels a metre. Every check in the arm above passes on
     // this rig too if it is written loosely enough, which is why it runs.
@@ -806,6 +873,24 @@ internal static class DestroyChoreographySuites
             }
 
             rig.ManualAdvance = true;
+            var live = new Dictionary<string, int>(System.StringComparer.OrdinalIgnoreCase);
+            rig.OnInstanceStarted += (def, _) =>
+            {
+                string n = def.AnimName ?? def.Name ?? "";
+                live[n] = live.TryGetValue(n, out var c) ? c + 1 : 1;
+            };
+            rig.OnInstanceFinished += (def, _) =>
+            {
+                string n = def.AnimName ?? def.Name ?? "";
+                live[n] = live.TryGetValue(n, out var c) ? c - 1 : -1;
+            };
+
+            // Wounded before it is killed, so the ground contact arrives with stages already
+            // burning: the order the ladder and the death run in is what this arm's last check is
+            // about.
+            ai.TakeCollisionHit(damage.WholeArmor, 0f, ai.GlobalPosition, 0);
+            foreach (float frac in new[] { 0.9f, 0.7f, 0.55f, 0.47f, 0.42f, 0.3f, 0.2f })
+                SpendHullTo(ai, damage, frac);
             float overkill = (damage.WholeHealthMax + damage.WholeArmorMax) * 4f;
             ai.TakeCollisionHit(overkill, overkill, ai.GlobalPosition, 0);
             ctx.Check(model.Visible && ai.LastCrashDef == null,
@@ -833,6 +918,18 @@ internal static class DestroyChoreographySuites
                 $"…which is what hides it, and only then: {visibleFramesBeforeLanding} visible frame(s) of flight, then model={model.Visible}");
             ctx.Check(!ai.WreckFalling,
                 $"…and the wreck stopped flying itself on that contact falling={ai.WreckFalling}");
+
+            // The landing does NOT cancel the destroy def, so its Callback 15 still arrives at the
+            // authored 3.0 s and the stages this hull was wearing end there — the ground reaching
+            // the wreck first must not cost it its stop (BL-422).
+            for (float t = landedAt; t < 4f; t += Dt)
+            {
+                ai.SimStep(Dt);
+                rig.Advance(Dt);
+            }
+            int stagedAfter = Count(live, "pfsmoketrail") + Count(live, "random_remote_damage");
+            ctx.Same(0, stagedAfter,
+                $"…and the stages it was wearing ended anyway: {stagedAfter} still live ({Count(live, "pfsmoketrail")} pfsmoketrail, {Count(live, "random_remote_damage")} random_remote_damage)");
         }
         finally
         {
