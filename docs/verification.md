@@ -330,6 +330,12 @@ and leave gaps when retiring old ones.
   before the run, and confirm the printed suite and golden counts are non-zero; a green with no
   golden line is a green that measured nothing.
 
+- **LOG-18** — **`--debug-anim`'s motion line prints a GLOBAL position and a LOCAL rotation.** Read
+  its `rot` as world attitude and every driven node under a moving parent reads wrong; it is world
+  attitude only for a placed template root, which the stage sets `TopLevel`. The parachute's line
+  read `rot (0.7, -92.2, -9.3)` while its wreck read `(39.5, 19.6, -118.3)`, two frames that only
+  looked comparable.
+
 ## WORLD — world data and runtime traps
 
 - **WORLD-8** — **Resolve objects by source identity, not normalized node names.**

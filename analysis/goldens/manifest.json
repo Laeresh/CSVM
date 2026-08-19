@@ -120,8 +120,8 @@
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "ff1ecb8f7f32c4551eb3ec56b4ae0b72",
-      "exercises": "a shot-down AI aircraft still in the air three seconds after the kill: its self-named destroy def's second fireball and trail at the handover, where randomdestseq takes the hull over; frame-sensitive 54.5 %.",
+      "hash": "d04dbc57d64b546e0bc4edce4eae7fd9",
+      "exercises": "a shot-down AI aircraft still in the air three seconds after the kill: the destroy def's second fireball and trail at the handover where randomdestseq takes the hull over, and the parachutist level under his canopy; frame-sensitive 54.5 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     }
   ]

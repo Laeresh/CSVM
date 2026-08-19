@@ -3292,10 +3292,14 @@ for the regression shape. The stage has **two** sources: the chapter gamez, then
 for a root it has none of, which is the only place the destroy def's parachute (`chuteman`) lives;
 both spawners pass it, and its own builder is cached here for the session.
 `LevelPlacedTemplateNames` is set beside
-`InheritedVelocityExempt`, once, from `EffectCatalogue.CrashSurfaceLevelAnimNames` (`BL-292`) — the
+`InheritedVelocityExempt`, once, from `EffectCatalogue.CrashSurfaceLevelAnimNames` (`BL-292`) plus
+`EffectCatalogue.BailoutAnimNames` — the
 named defs only ever play from within a crash sequence, so unlike `InheritedWorldVelocity` (set
 per-crash in `FlightController.Crash`, since it depends on the live impact speed/direction) this
-needs no per-crash toggle. `AnchorWarnAnimNames`/`AnchorWarnLabel` are injected the same way, from
+needs no per-crash toggle. The parachute is on that list for a different reason than the splashes:
+its template is authored at identity and lives in the planes gamez, so only this rig's staging (the
+copy hangs under the crash root) gives the placing call a rotated basis to freeze, and levelling
+restores the pose the original places it at. `AnchorWarnAnimNames`/`AnchorWarnLabel` are injected the same way, from
 `EffectCatalogue.DamageStageAnims` and the plane's own name: the stage defs are authored against one
 airframe and retarget onto whichever plane stages them, so an anchor they name may be absent, which
 is a soft failure (the call lands on the airframe root and still draws) that nothing else reports.

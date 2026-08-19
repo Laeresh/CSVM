@@ -185,7 +185,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ Evidence for the fall (findings (a) and (b) fixed, (c) disproven; `SHOT-29`'s objection
     re-measured and overturned for this subject, so the fall IS pinned by a golden)
 22. ☑ The bailed pilot must not inherit the wreck's velocity
-26. ☐ The bailed pilot hangs at the wreck's attitude instead of levelling under his canopy
+26. ☑ The bailed pilot hangs at the wreck's attitude instead of levelling under his canopy (a FROZEN
+    basis at placement, not a live inherited frame; the plan's mechanism was wrong)
 23. ☑ Decode `start: null` after a timed event (❌ disproven as the cause; the real mechanism is the
     dead vehicle flying itself until `Callback 15`), and convert the anim family off `GD.Print`
 24. ❌ A dead hull glides instead of dropping — **disproven**: the original changes nothing about a
@@ -923,11 +924,28 @@ to (0,0,0) over 4.0 s** — an absolute drive to a level basis, which is exactly
 report asks for. `FromToMotion.Channel` reads both endpoints and `HasAnyChannel` is true, so the
 tween IS built and does run; the local rotation therefore reaches zero.
 
-**The hypothesis to test first:** zero LOCAL rotation is not level in the world, because the staged
-copy hangs under the crash root, which is a child of the `FlightController` and so carries the
-wreck's live attitude as it falls and tumbles. `chuteman_sway` then keeps rocking
-`chutemanparent` about that inherited frame. The observed "stops rotating and hangs wrong" is what a
-completed 4 s drive to a wrong-framed zero looks like.
+**The hypothesis was half right and its MECHANISM was wrong.** It said the chute inherits the wreck's
+*live* attitude through the crash root. It does not track the wreck at all: the chute root is
+`TopLevel`, because the destroy def calls it `AtNode: destroyed` and `TemplateStage.PlaceAt` →
+`PlaceOn` → `PlaceNodeAt` sets `TopLevel = true` while writing `GlobalTransform` **keeping the root's
+current global basis**. Our staged copy hangs under the crash root, so the basis it keeps is the
+wreck's attitude at the instant of the 3.0 s call, **frozen** there for the whole descent. Measured:
+the chute held `rot (0.7, -92.2, -9.3)` unchanged while the wreck tumbled through
+`(39.5, 19.6, -118.3)`, `(56.6, 92.5, 161.4)`, `(18.5, 121.8, 43.3)`. "Stops rotating and hangs wrong"
+is a freeze, not a live parent.
+
+⚠ Two things this turned up. `--debug-anim`'s `rot` column is `Transform.Basis`, the **local**
+rotation, not the world one the hypothesis assumed (recorded as `LOG-18`); it reads as world here only
+because the chute root is `TopLevel`. And `rotate_chute1` has no visible effect either way:
+`deploy_pchute`, `rotate_chute2` and `chuteman_drop` drive the same `chuteman` node, and
+`MotionRuntime.Seek` rewrites `Target.Transform` every tick from a `_heldRot` captured at launch,
+overwriting the `FromToMotion` identity write in the same frame. Harmless once the placed basis is
+right, since then every writer agrees on identity.
+
+**What "level" means is settled by the data, not chosen:** `chuteman` and `chutemanparent` are
+`transform: "Initial"` (identity) in `extracted/planes/nodes.json`. In the original the template is a
+world node, so the placing call has no rotated basis to freeze. Levelling restores the original's
+pose rather than inventing one.
 
 **Approach.** Confirm the frame the rotation lands in before changing anything (the `--debug-anim`
 pose lines print world rotations; compare the chute's against the wreck's over the same seconds). If

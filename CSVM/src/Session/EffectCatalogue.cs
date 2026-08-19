@@ -101,8 +101,9 @@ public static class EffectCatalogue
     // The bailed pilot under his canopy. He leaves a wreck that is itself carrying the aircraft's
     // momentum, and the data cannot tell his launch from a thrown wreck piece, so without this he
     // is catapulted along the flight path instead of drifting down (judged at the controls).
-    // ⚠ Wired into `InheritedVelocityExempt` beside the ground splash, for the same reason: he is
-    // not a piece of the wreck, he is a man stepping out of it.
+    // ⚠ Wired into `InheritedVelocityExempt` and into `AnimRuntime.LevelPlacedTemplateNames`, for
+    // the same reason twice: he is not a piece of the wreck, he is a man stepping out of it, so he
+    // takes neither its momentum nor its attitude. His template is authored at identity.
     public static readonly string[] BailoutAnimNames = { "chuteman" };
 
     // The crash def's sub-effects meant to lie flat on the struck surface rather than co-rotate

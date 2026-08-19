@@ -11090,6 +11090,9 @@ public static class Suites
             };
             player.AddChild(planeModel);
             player.Setup(new FlightModel(stats), null, new CamParams(), spawn, spawn + Vector3.Forward);
+            // Dying banked, not level: the parachute is staged under this controller, so a level
+            // airframe cannot tell a chute that levels from one that copies the wreck.
+            player.Rotation = new Vector3(0.35f, 1.2f, -0.8f);
             ctx.Host.AddChild(player);
             factory.BuildFlightCrashRuntime(player, builder, planeName, world.Gamez,
                 world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
@@ -11171,6 +11174,12 @@ public static class Suites
                 $"{planeName}: the authored Callback 3 is counted, not invented (×{(rig.UnhandledEventCounts.TryGetValue("Callback(3)", out int n3) ? n3 : 0)})");
             ctx.Check(chuteman is { Visible: true },
                 $"{planeName}: the parachutist is out too, untimed here where the ten AI defs gate him at 3.0 s");
+            // He hangs level in the WORLD while the airframe he left is banked: his template is
+            // authored at identity, and only our staging could hand the placing call a wreck basis.
+            var chuteEuler = chuteman != null
+                ? chuteman.GlobalBasis.GetEuler() * (180f / Mathf.Pi) : Vector3.Zero;
+            ctx.Check(chuteman != null && chuteEuler.Length() < 1f,
+                $"{planeName}: the canopy hangs level, world rot ({chuteEuler.X:0.0}, {chuteEuler.Y:0.0}, {chuteEuler.Z:0.0}), under a wreck at ({player.GlobalRotationDegrees.X:0.0}, {player.GlobalRotationDegrees.Y:0.0}, {player.GlobalRotationDegrees.Z:0.0})");
             ctx.Note($"{planeName}: eject at t={ejectAt:0.00} s, breakup at t={breakupAt:0.00} s, seated pilot visible={(Find(planeModel, "pilot")?.Visible.ToString() ?? "-")}, chute pilot visible={(chuteman != null ? Find(chuteman, "pilot")?.Visible.ToString() ?? "-" : "-")}");
             ctx.Note($"{planeName}: unhandled event kinds [{string.Join(", ", rig.UnhandledEventCounts.Select(kv => $"{kv.Key}×{kv.Value}"))}]");
         }

@@ -173,10 +173,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>Named CALL_ANIMATION callees whose placed root levels to world axes instead of the
     /// inherited parent rotation (<see cref="TemplateStage{TNode}.PlaceOn"/>), keyed by
-    /// <c>AnimName ?? Name</c>. Set by <see cref="FlightController.Crash"/> for the crash def's
-    /// surface-hugging sub-effects only, and cleared by <c>Respawn</c>. ⚠ Never make it blanket:
-    /// leveling `fly_trail1-5` strips the co-rotation their debris scatter is authored in. The one
-    /// list is <c>EffectCatalogue.CrashSurfaceLevelAnimNames</c>; see docs/architecture.md.</summary>
+    /// <c>AnimName ?? Name</c>. Set once by the crash rig, for the crash def's surface-hugging
+    /// sub-effects and the parachute. ⚠ Never make it blanket: leveling `fly_trail1-5` strips the
+    /// co-rotation their debris scatter is authored in. The lists are
+    /// <c>EffectCatalogue.CrashSurfaceLevelAnimNames</c> + <c>BailoutAnimNames</c>, docs/architecture.md.</summary>
     public HashSet<string>? LevelPlacedTemplateNames;
 
     /// <summary>Callers whose unresolvable CALL_ANIMATION target is worth one warning each, keyed by

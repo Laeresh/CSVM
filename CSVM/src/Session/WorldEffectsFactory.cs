@@ -359,6 +359,10 @@ public sealed class WorldEffectsFactory
         // crash sequence, so no per-crash toggle is needed.
         crashRuntime.LevelPlacedTemplateNames =
             new HashSet<string>(EffectCatalogue.CrashSurfaceLevelAnimNames, StringComparer.OrdinalIgnoreCase);
+        // The parachute levels for a different reason: its template is authored at identity in the
+        // planes gamez, and only OUR staging hangs the copy under the crash root, so the placing
+        // call would freeze the tumbling wreck's attitude into a man under a canopy.
+        crashRuntime.LevelPlacedTemplateNames.UnionWith(EffectCatalogue.BailoutAnimNames);
         // A stage anchor this airframe lacks is a SOFT failure: the call lands on the airframe root
         // and still draws, so nothing else reports it (docs/org/vehicleDamage.md's anchor census).
         crashRuntime.AnchorWarnAnimNames =
