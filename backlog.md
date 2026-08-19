@@ -1052,20 +1052,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   name: the collision is structural and any future staged template carrying a common node name hits
   it. (c) The seated pilot exists on all eleven airframes, so a wrong fix is wrong everywhere at once.
 
-- `BL-416` `[Tuning]` **A player respawns before their own aircraft finishes coming apart.** The
-  player's destroy choreography gates its four-piece breakup behind the ejection's
-  `WAIT_FOR_COMPLETION`, measured at ~5.2 s (`player_bhawk`) and 6.0 s (`player_autogyro`), but
-  `FlightController`'s `AutoRespawnDelay` is **1.5 s** and its countdown starts at `Destroy`
-  regardless of whether the wreck is still flying. `--vs` arms `AutoRespawnAfter = 3 s`, still shorter
-  than the breakup, so a Dogfight pilot is back in the air before their old airframe breaks up behind
-  them. Interactive free flight is unaffected (manual `R` only). Verified headlessly: a scripted
-  `--hold` run respawned by frame 1250 against a kill at frame 1151.
-  ⚠ **Traps.** (a) This is a TUNING decision and the numbers are ours, not the original's — do not
-  "fix" it by shortening the authored choreography, which is decoded. (b) Respawn timing is a
-  multiplayer fairness question as much as a visual one; a longer wait is a real cost to the player
-  being shot at. (c) Whether the original even lets the wreck finish is undecoded; check before
-  assuming the answer is "make respawn wait".
-
 - `BL-414` `[Research]` **Untune the flight model: decode what is currently fitted.** `FlightModel.cs`
   carries **18 `TUNE` markers** and **11 `flightModel.*` config overrides**, and
   [`docs/org/flightModel.md`](docs/org/flightModel.md) already separates what was read out of
