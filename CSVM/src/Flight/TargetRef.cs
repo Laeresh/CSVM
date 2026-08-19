@@ -103,7 +103,7 @@ public readonly struct TargetRef
     /// <summary>World velocity, m/s.</summary>
     public Vector3 Velocity => Candidate.Velocity;
 
-    /// <summary>Engine-space team id (<see cref="AimAssist.NeutralTeam"/> is unaffiliated).</summary>
+    /// <summary>Team id (<see cref="AimAssist.NeutralTeam"/> is unaffiliated).</summary>
     public int Team => Candidate.Team;
 
     /// <summary>False once dead, the engine's vtable <c>+0x14</c> predicate. A dead target stays

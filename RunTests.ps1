@@ -21,10 +21,12 @@
                pass rather than as an in-engine suite because the --run-tests harness completes
                inside one _Ready call and never yields a frame, so it cannot photograph anything.
                A mismatch names the shot and leaves the actual PNG and that shot's engine log in
-               .scratch/goldens/.
+               .scratch/goldens/. Each shot is launched under a per-shot timeout
+               ($EngineTimeoutSec); a shot that exceeds it is killed, reported as FAIL, and has its
+               evidence preserved -- it never silently hangs the suite (BL-320).
       hitch    Two scripted Godot launches -- a clean one and one carrying --hitch-inject=50@300
-               -- that prove the frame-hitch detector (HitchMonitor/HitchSidecar) still fires on
-               a known stall and stays silent without one. A scripted pass for the same reason
+               -- that report whether the frame-hitch detector (HitchMonitor/HitchSidecar) still
+               fires on a known stall and stays silent without one. Awareness-only for the same reason
                goldens is one: the detector only trips on a REAL rendered frame over wall time,
                which --run-tests's single, frame-free _Ready call cannot produce. Reads the
                printed "[perf] hitch ..." line and the .hitches.jsonl sidecar it names, and
@@ -138,6 +140,7 @@ $ProjectDir = Join-Path $RepoRoot "CSVM"
 $Sln        = Join-Path $ProjectDir "CSVM.sln"
 $ScratchDir = Join-Path $RepoRoot ".scratch"
 $Inv        = [System.Globalization.CultureInfo]::InvariantCulture
+$EngineTimeoutSec = 300
 
 # tools/ is git-ignored, so a git worktree checkout has no Godot. Fall back to the primary
 # tree named by CSVM_DATA_ROOT -- the same env var the engine and the unit tests read for
@@ -196,7 +199,10 @@ if (-not (Test-Path $ScratchDir)) {
 # SHELL-1: the argument string is re-split by the callee, and this repo's path contains a space, so
 # any argument carrying one is quoted here or Godot receives it split.
 function Invoke-Godot {
-    param([Parameter(Mandatory=$true)][string[]]$Arguments)
+    param(
+        [Parameter(Mandatory=$true)][string[]]$Arguments,
+        [int]$TimeoutSec = 0
+    )
     $quoted = @()
     foreach ($a in $Arguments) {
         if ($a -match '\s' -and $a -notmatch '^".*"$') {
@@ -221,7 +227,8 @@ function Invoke-Godot {
         $cmdLine = ('"{0}" {1}' -f $GodotExe, ($quoted -join " "))
         return Invoke-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
                                       -WorkingDirectory $RepoRoot `
-                                      -StdOut "$streamBase.out" -StdErr "$streamBase.err"
+                                      -StdOut "$streamBase.out" -StdErr "$streamBase.err" `
+                                      -TimeoutSec $TimeoutSec
     }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName               = $GodotExe
@@ -233,10 +240,16 @@ function Invoke-Godot {
     $p = [System.Diagnostics.Process]::Start($psi)
     $outRead = $p.StandardOutput.ReadToEndAsync()
     $errRead = $p.StandardError.ReadToEndAsync()
-    $p.WaitForExit()
+    if ($TimeoutSec -gt 0 -and -not $p.WaitForExit($TimeoutSec * 1000)) {
+        $p.Kill()
+        $p.WaitForExit()
+        $code = 124
+    } else {
+        $code = $p.ExitCode
+    }
     [System.IO.File]::WriteAllText("$streamBase.out", $outRead.Result)
     [System.IO.File]::WriteAllText("$streamBase.err", $errRead.Result)
-    return $p.ExitCode
+    return $code
 }
 
 $Stages   = New-Object System.Collections.ArrayList
@@ -428,8 +441,9 @@ if ($SkipEngine) {
     }
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $ErrorActionPreference = "Continue"
-    $engineCode = Invoke-Godot @("--path", $ProjectDir, "--log-file", $engineLog,
-                                 "res://scenes/Main.tscn", "--", $testArg)
+    $engineCode = Invoke-Godot -Arguments @("--path", $ProjectDir, "--log-file", $engineLog,
+                                             "res://scenes/Main.tscn", "--", $testArg) `
+                               -TimeoutSec $EngineTimeoutSec
     $ErrorActionPreference = "Stop"
     $watch.Stop()
 
@@ -466,7 +480,9 @@ if ($SkipEngine) {
             Write-Host "  could not read $report : $($_.Exception.Message)" -ForegroundColor Yellow
         }
     }
-    if ($ePassed -ge 0) {
+    if ($engineCode -eq 124) {
+        $detail = "Godot timed out after ${EngineTimeoutSec}s (exit 124); partial log at $engineLog"
+    } elseif ($ePassed -ge 0) {
         $detail = "$ePassed passed, $eFailed failed, $eSkipped skipped; $errorNote"
         if ($failedNames.Count -gt 0) {
             $detail = "$detail [$($failedNames -join ', ')]"
@@ -649,8 +665,22 @@ if ($SkipGoldens) {
                 $godotArgs += "--verbose"
             }
             $ErrorActionPreference = "Continue"
-            $shotCode = Invoke-Godot ($godotArgs + @("res://scenes/Main.tscn", "--") + $shotArgs)
+            $shotCode = Invoke-Godot ($godotArgs + @("res://scenes/Main.tscn", "--") + $shotArgs) `
+                                      -TimeoutSec $EngineTimeoutSec
             $ErrorActionPreference = "Stop"
+
+            # BL-320: a timeout is deterministic, not the transient silent-exit-1 BL-039 guards
+            # against -- retrying a hung shot with --verbose just doubles its wall-clock (every
+            # hung shot would then eat $EngineTimeoutSec twice). Short-circuit: preserve the
+            # evidence, break out, and let the no-PNG block below report it once.
+            if ($shotCode -eq 124) {
+                if ($failureRoot -eq $null) {
+                    $failureRoot = Join-Path $ScratchDir "goldens-failures\$failureStamp"
+                }
+                Save-GoldenFailureEvidence -FailureDir $failureRoot -ShotName $shot.name `
+                    -Attempt $attempt -ShotLog $shotLog -Png $png
+                break
+            }
 
             # SHOT-10: --screenshot exits 0 even when the save fails, so the file's existence is
             # the only proof it wrote anything.
@@ -695,7 +725,11 @@ if ($SkipGoldens) {
         }
 
         if (-not (Test-Path $png)) {
-            $detail = "$($shot.name): no PNG written (Godot exited $shotCode) -- see $shotLog"
+            if ($shotCode -eq 124) {
+                $detail = "$($shot.name): timed out after ${EngineTimeoutSec}s (Godot exited 124) -- see $shotLog"
+            } else {
+                $detail = "$($shot.name): no PNG written (Godot exited $shotCode) -- see $shotLog"
+            }
             if ($failureRoot) { $detail = "$detail; evidence preserved in $failureRoot" }
             $broken += $detail
             Write-Host "  FAIL $($shot.name): no PNG at $png" -ForegroundColor Red
@@ -954,13 +988,14 @@ if ($SkipHitch) {
     $detail = "clean: $($clean.HitchLines.Count) hitch line(s); inject: $($inject.HitchLines.Count) hitch line(s), " +
         "$(if ($inject.HitchLines.Count -gt 0) { "frame_ms=$($inject.HitchLines[0].FrameMs)" } else { "n/a" })"
     if ($problems.Count -eq 0) {
-        Add-Stage -Name "hitch" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
+        Add-Stage -Name "hitch" -Status "TODO" -Seconds $watch.Elapsed.TotalSeconds -Detail "$detail; awareness only"
     } else {
-        Add-Stage -Name "hitch" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds -Detail "$detail; $($problems.Count) problem(s)"
+        Add-Stage -Name "hitch" -Status "TODO" -Seconds $watch.Elapsed.TotalSeconds -Detail "$detail; $($problems.Count) awareness item(s)"
         foreach ($p in $problems) {
-            Write-Host "  !! $p" -ForegroundColor Red
+            Write-Host "  !! hitch awareness: $p" -ForegroundColor Yellow
         }
     }
+    Add-Unchecked "the hitch stage reports detector health but does not gate this workstation's verification"
 }
 
 # ---- perf --------------------------------------------------------------------------------

@@ -254,7 +254,7 @@ public sealed class InstantActionRuntime
     ///: <c>row = draw % 5</c> over <see cref="PilotPersonalities"/>. Pure over the
     /// caller's own <c>rand()</c> pull, same shape as <see cref="ChooseAceSpawn"/>; feed the
     /// result to <see cref="RepresentativeRating"/> for the one flat rating
-    /// <c>AiAircraftSpawner.Spawn</c>'s <c>attackRating</c> takes, CSVM's AI tuning having no
+    /// <c>GameSession.SpawnAiAircraft</c>'s <c>attackRating</c> takes, CSVM's AI tuning having no
     /// per-stat curves of its own to hang the full vector on.</summary>
     public static AiSkillVector RandomPilotStats(uint draw)
     {

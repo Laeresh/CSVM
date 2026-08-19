@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using CSVM.Effects;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -288,7 +289,7 @@ public partial class FlightController : Node3D
 
     /// <summary>This pilot's target selection, or null for a seat that
     /// does no targeting (every AI rig, and the suites' bare rigs). Set by
-    /// <c>FlightRigAssembler</c> on each human pane; <see cref="StepTargeting"/> feeds it every
+    /// <c>HumanFlightAdapter</c> on each human pane; <see cref="StepTargeting"/> feeds it every
     /// frame. Read <c>Targeting.Current</c> for the selected target — that is the property the
     /// marker, Track Target's camera and any later AI-order consumer are meant to read.</summary>
     public TargetSelection? Targeting;
@@ -383,8 +384,14 @@ public partial class FlightController : Node3D
     public bool Spectating;
 
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
-    private const float SpawnThrottle = 0.5f;   // the original always spawns at half throttle (confirmed in-game, all planes)
-    private const float SpawnSpeed = 53.6f;     // m/s ≈ 120 mph. Remake placeholder: docs/org/flightModel.md, "What this changes" #13
+    // Spawn throttle/speed come from the mission's PLAYER_INIT via Setup (docs/formats/spawns.md).
+    // ⚠ These two are only the no-mission fallback (labs, tests, AI rigs), and they are the OLD
+    // placeholder, deliberately: the original gives an AI aircraft min(plane_speed_max, fd_speed),
+    // which is decoded but not landed, so moving them to the player's 18 m/s would be a third
+    // invented answer rather than that rule (docs/org/flightModel.md, "What this changes" #13).
+    private const float FallbackSpawnThrottle = 0.5f;
+    private const float FallbackSpawnSpeed = 53.6f;
+    private const float CarrierDropThrottle = 0.1f;
     // The pipper's placement and smoothing are decoded (docs/org/aim-assist.md "What the pipper follows"); no TUNE left in it.
     private const float ReticleFlightTime = 0.5f;      // s of flight the pipper marks
     private const float ReticleDefaultSpeed = 860f;    // m/s used when no weapon def resolves
@@ -439,6 +446,7 @@ public partial class FlightController : Node3D
     private readonly List<float> _missileGaugeSlots = new();
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
     private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
+    private readonly List<RocketPylonView> _pylonViews = new();          // the AI rocketeer's pylon walk
     private readonly List<RankedTargetCandidate> _rankCandidates = new(); // the D12 ranking snapshots
     private readonly List<FlightController> _rankSources = new();         // …and their controllers, by index
     private readonly RandomNumberGenerator _aimRng = Rng.Stream(Rng.Weapons); // the assist's 1° launch scatter
@@ -459,7 +467,12 @@ public partial class FlightController : Node3D
     private float _hudPaneFactor = 1f;            // last applied splitscreen shrink (1 = single player)
     private Vector3 _spawnPos;
     private Basis _spawnAttitude;
+    private float _spawnThrottle = FallbackSpawnThrottle;
+    private float _spawnSpeed = FallbackSpawnSpeed;
     private float _throttle;
+    private float _keyPitch;                     // the three keyboard axes' own deflection, ramped
+    private float _keyRoll;                      // by StickRamp; a gamepad's analogue axis adds on
+    private float _keyYaw;                       // top and is never ramped
     private double _sinceTelemetry;
     private bool _crashed;                       // frozen at the impact point, waiting for respawn
     private bool _destroyed;                     // hull spent: the destroy def is playing over the wreck
@@ -476,6 +489,7 @@ public partial class FlightController : Node3D
     private float _damageCooldown;               // s left before the next HP subtraction
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private float _collisionGrace;               // s left with no collision at all (obj+0xAC)
+    private float _postDropGroundBlow;           // s left at the carrier-drop 0.15 multiplier
     private float _collideArmorDamage;           // this contact's decoded pair, spent in SurviveHit
     private float _collideHealthDamage;
     private bool _collideDooms;                  // this contact kills the striker whatever its HP
@@ -492,6 +506,7 @@ public partial class FlightController : Node3D
     private bool _groundBlowLoggedFirst;         // verification breadcrumb: ground blow's first repelling hit
     private bool _gunnerLoggedTarget;            // verification breadcrumb: the AI gunner's first acquisition
     private bool _gunnerLoggedFire;              // verification breadcrumb: the AI gunner's first open fire
+    private bool _rocketeerLoggedFire;           // verification breadcrumb: the AI's first ordnance launch
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
@@ -650,15 +665,21 @@ public partial class FlightController : Node3D
 
     /// <summary>Wires the flight model and (for a piloted view) the chase camera, then spawns.
     /// <paramref name="camera"/> is null on an AI rig: no camera rides the plane and every camera
-    /// write below is skipped — the flight half is identical either way.</summary>
+    /// write below is skipped — the flight half is identical either way.
+    /// <paramref name="spawnThrottle"/>/<paramref name="spawnSpeed"/> are the mission's own
+    /// PLAYER_INIT values (docs/formats/spawns.md), defaulting to the fallback for callers with no
+    /// mission, and persist for every later respawn on this rig.</summary>
     public void Setup(FlightModel model, Camera3D? camera, CamParams camParams,
-        Vector3 spawnPos, Vector3 spawnLookAt)
+        Vector3 spawnPos, Vector3 spawnLookAt,
+        float spawnThrottle = FallbackSpawnThrottle, float spawnSpeed = FallbackSpawnSpeed)
     {
         _model = model;
         _viewCamera = camera;
         _cam = camera != null ? new CameraController(camera, camParams, KeyDown, PinnedView) : null;
         _spawnPos = spawnPos;
         _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
+        _spawnThrottle = spawnThrottle;
+        _spawnSpeed = spawnSpeed;
         _warningShots = new WarningShotCue(model.Stats.WarningShotMax,
             model.Stats.WarningShotDissipation, model.Stats.WarningShotInterval);
         Respawn();
@@ -820,6 +841,15 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>Rerun this plane's own run: fresh clock and every zone incomplete, then the
+    /// respawn below. A plane with no stunt run is simply respawned, which is all a free flight's
+    /// rerun amounts to.</summary>
+    public void Rerun()
+    {
+        Stunt?.Reset();
+        Respawn();
+    }
+
     /// <summary>Back to the spawn pose at half throttle with a healthy, repaired airframe: the
     /// crash respawn (R), and the session's per-plane reset for a race rematch. Leaves the
     /// stunt run alone — a mid-run crash deliberately keeps its zones and clock.</summary>
@@ -860,16 +890,15 @@ public partial class FlightController : Node3D
         // ⚠ An INERT airframe must stay off-screen and off the aircraft layer through a respawn too.
         // Setup() calls Respawn before _Ready builds the body, so this is also that first assertion.
         ApplyPresence();
-        _throttle = SpawnThrottle;
-        // The start choreography (snd_propstart already re-fires from FlightAudio's own
-        // Null on the very first spawn (Setup runs before FlightRigAssembler builds this); that
-        // assembler plays "startprops" once more there for that one case.
+        _throttle = _spawnThrottle;
+        _keyPitch = _keyRoll = _keyYaw = 0f;  // a fresh airframe spawns with the stick centred
+        // First setup precedes adapter construction, so the adapter replays startprops after attachment.
         CrashRuntime?.Play("startprops", PlaneModel, applyReset: false);
-        // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → SpawnThrottle)
-        // must never itself read as a slam.
+        // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → the spawn
+        // throttle) must never itself read as a slam.
         ThrottleSmoke?.Reset(_throttle);
         SpeedCue?.Reset();
-        _model.Reset(_spawnPos, _spawnAttitude, SpawnSpeed, _throttle);
+        _model.Reset(_spawnPos, _spawnAttitude, _spawnSpeed, _throttle);
         _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
         GlobalTransform = _simCurr;
         if (_cam != null && IsInsideTree())
@@ -882,7 +911,14 @@ public partial class FlightController : Node3D
     /// work it always does (spawn speed and throttle, a healthy repaired airframe, full ammo, the
     /// start choreography), so a wave arrives flying rather than parked. Calling this on an
     /// aircraft already in play is simply that teleport-and-reset.</summary>
-    public void Activate(Vector3 pos, Vector3 lookAt)
+    public void ArmSpawnTimers(bool carrierDrop = false)
+    {
+        _collisionGrace = CollisionDamage.SpawnGrace;
+        _postDropGroundBlow = carrierDrop ? 2.5f : 0f;
+    }
+
+    public void Activate(Vector3 pos, Vector3 lookAt, Vector3? launchVelocity = null,
+        bool carrierDrop = false)
     {
         var dir = lookAt - pos;
         _spawnPos = pos;
@@ -890,11 +926,22 @@ public partial class FlightController : Node3D
         if (dir.LengthSquared() > 1e-6f)
             _spawnAttitude = Basis.LookingAt(dir.Normalized(), Vector3.Up);
         Inert = false;
+        ArmSpawnTimers(carrierDrop);
         // The original snaps an activated vehicle to its net's nearest node (FUN_004b0f40 →
         // FUN_00432010), which is what makes a teleported wave patrol where it ARRIVED rather
         // than fly back to wherever it was parked.
         Pilot?.Patrol?.Reseat();
         Respawn();
+        if (launchVelocity is { } velocity)
+            _model.SetVelocity(velocity);
+        if (carrierDrop)
+        {
+            _throttle = CarrierDropThrottle;
+            _model.Throttle = CarrierDropThrottle;
+            if (Pilot != null)
+                Pilot.Throttle = CarrierDropThrottle;
+            ThrottleSmoke?.Reset(_throttle);
+        }
     }
 
     /// <summary>Weapon lab: pin the held airframe at <paramref name="pos"/> with its nose on
@@ -1012,18 +1059,17 @@ public partial class FlightController : Node3D
         if (_projectileHitsLogged < 6)
         {
             _projectileHitsLogged++;
-            GD.Print($"shot hit P{PlayerIndex + 1} ({colliderPart}→{struckPart}): {weapon.Id} "
-                + (state != null
-                    ? $"armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} "
-                    : string.Empty)
-                + $"hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
+            string zone = state != null
+                ? Log.Format($"armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} ")
+                : string.Empty;
+            Log.Info("weapons", $"shot hit P{PlayerIndex + 1} ({colliderPart}→{struckPart}): {weapon.Id} {zone}hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
         }
 
         // The decoded kill rule: whole-vehicle health current at or below zero (never a part
         // flag) — reachable through the zone-less overflow, so it is tested on every hit.
         if (Damage.IsDestroyed)
         {
-            Log.Info("flight", $"vehicle health exhausted ({struckPart} last) — shot down by {weapon.Id}");
+            Log.Info("weapons", $"vehicle health exhausted ({struckPart} last) — shot down by {weapon.Id}");
             Destroy(impact, $"gunfire ({weapon.Id})", colliderPart,
                 killer: shooter != ProjectilePool.NoShooter ? shooter : null);
             return;
@@ -1107,33 +1153,17 @@ public partial class FlightController : Node3D
             && (Race == null || Stunt.Elapsed >= PlayerIndex * DebugFinishStagger))
             Stunt.DebugCompleteAll(Race != null ? PlayerIndex * 2f : 0f);
 
-        // Dogfight: once decided, any player's R here means rematch, not respawn. Checked before
-        // the crash branch, but unlike stunt/race below this does NOT freeze the sim.
-        if (Match is { Completed: true } && RespawnPressed())
-        {
-            RestartMatch?.Invoke();
+        // ⚠ The rematch shortcuts are NOT read here; a results board halts the clock, so this step
+        // never runs while one is up. PollResultsShortcuts reads them off the rendered frame.
+        if (Match is { Completed: true })
             return;
-        }
 
-        // In a race, a finished pilot keeps flying under the shared board until the last pilot
-        // finishes; ahead of crash handling so a finish transition is always clean.
         if (Race is { AllFinished: true } && Stunt is { AllComplete: true })
-        {
-            bool autoRematch = HoldSegments != null && PlayerIndex == 0
-                && (_autoRestartIn -= dt) <= 0f;
-            if (RespawnPressed() || autoRematch)
-            {
-                RestartRace?.Invoke();
-                return;
-            }
-        }
+            return;
 
         if (Stunt is { AllComplete: true } && Race == null)
         {
             _simPrev = _simCurr;   // hold the finish pose — no stale pair left to interpolate
-            // The solo scoreboard accepts R as a fresh run, distinct from a mid-run respawn.
-            if (RespawnPressed())
-                RestartStuntRun();
             return;
         }
         _autoRestartIn = AutoRespawnDelay; // re-armed while the run is live
@@ -1179,11 +1209,17 @@ public partial class FlightController : Node3D
             var input = HoldSegments != null ? NextHoldInput(dt)
                 : Pilot != null ? NextPilotInput(dt)
                 : ReadKeyboard(dt);
-            ProbeGroundBlow(ref input);      // reads the pose this step ENTERED with, as the original does
+            // The response is absent for 1.5 s, then AI terms run at 15% for 1 s.
+            // Keep the probe off too, so the log records response rather than an inert hit.
+            bool groundBlowReady = IsHumanPiloted || _collisionGrace <= 0f;
+            if (groundBlowReady)
+                ProbeGroundBlow(ref input);  // reads the pose this step ENTERED with, as the original does
+            input.AiGroundBlowScale = !groundBlowReady ? -1f : _postDropGroundBlow > 0f ? 0.15f : 1f;
             _lastInput = input;
             _damageCooldown -= dt;
             _grazeReactionCooldown -= dt;
             _collisionGrace -= dt;
+            _postDropGroundBlow -= dt;
             _model.Step(input, dt);
 
             // The airframe boxes sweep along the frame's motion; the center ray stays as an
@@ -1244,7 +1280,13 @@ public partial class FlightController : Node3D
         // BEFORE the fire step reads them. Runs for AI pilots only; a gunner-less AI keeps the
         // released trigger it always had.
         if (!IsHumanPiloted && Pilot?.Gunner is { } aiGunner)
+        {
             DriveAiGunner(aiGunner);
+            // The ordnance half runs off the gunner's target, never its own acquisition, so the
+            // two weapon classes cannot chase different aircraft the way the original never does.
+            if (Pilot?.Rocketeer is { } aiRocketeer)
+                DriveAiRocketeer(aiRocketeer, aiGunner, dt);
+        }
 
         // Weapons: poll the raw held controls, let FireControl decide (selector edges, fire
         // clocks, ammo draw-down, cues), then perform its outcome against the pool and audio.
@@ -1261,7 +1303,8 @@ public partial class FlightController : Node3D
                 // trigger; without one the raw controls (--fire's AutoFire included) decide.
                 FireHeld = Projectiles != null
                     && (!IsHumanPiloted && Pilot?.Gunner is { } g ? g.WantsFire : FirePressed()),
-                RocketHeld = Projectiles != null && RocketFirePressed(),
+                RocketHeld = Projectiles != null
+                    && (!IsHumanPiloted && Pilot?.Rocketeer is { } r ? r.WantsFire : RocketFirePressed()),
                 GunSelectHeld = GunSelectPressed(),
                 RocketSelectHeld = RocketSelectPressed(),
             };
@@ -1341,6 +1384,7 @@ public partial class FlightController : Node3D
             return;
 
         var clock = GameClock.Current;
+        PollResultsShortcuts((float)delta);
         // Polled here, not in the sim step: a halted sim takes no steps and could never resume
         // itself. With a shared PauseState only the player who paused can resume it.
         bool pausePressed = PauseTogglePressed();
@@ -1352,7 +1396,7 @@ public partial class FlightController : Node3D
                 clock.Halted = !clock.Halted;
         }
         _pausePrev = pausePressed;
-        bool halted = PauseState?.Paused ?? (clock?.Halted ?? false);
+        bool halted = PauseState?.Halted ?? (clock?.Halted ?? false);
         if (clock != null)
             clock.Halted = halted;
         if (halted != _haltPrev)
@@ -1891,8 +1935,7 @@ public partial class FlightController : Node3D
         if (found.Found && !_aimLoggedFirst)
         {
             _aimLoggedFirst = true; // verification breadcrumb: the assist found something, once
-            GD.Print($"gun aim assist: P{PlayerIndex + 1} snapped onto {found.Kind} " +
-                     $"(score {found.Score:0.000}, {found.TimeOfFlight * (weapon.Velocity ?? ProjectilePool.DefaultVelocity):0} m out)");
+            Log.Info("weapons", $"gun aim assist: P{PlayerIndex + 1} snapped onto {found.Kind} (score {found.Score:0.000}, {found.TimeOfFlight * (weapon.Velocity ?? ProjectilePool.DefaultVelocity):0} m out)");
         }
         return dir;
     }
@@ -1928,10 +1971,10 @@ public partial class FlightController : Node3D
                 {
                     nearest = Mathf.Min(nearest, s.Position.DistanceTo(_model.Position));
                 }
-                GD.Print($"gun aim assist: candidates vehicles={_aimCandidates.Vehicles.Count} " +
-                         $"turrets={_aimCandidates.Turrets.Count} " +
-                         $"structures={_aimCandidates.Structures.Count} ordnance={_aimCandidates.Ordnance.Count}" +
-                         (_aimCandidates.Structures.Count > 0 ? $", nearest structure {nearest:0} m" : ""));
+                string nearestPart = _aimCandidates.Structures.Count > 0
+                    ? Log.Format($", nearest structure {nearest:0} m")
+                    : string.Empty;
+                Log.Info("weapons", $"gun aim assist: candidates vehicles={_aimCandidates.Vehicles.Count} turrets={_aimCandidates.Turrets.Count} structures={_aimCandidates.Structures.Count} ordnance={_aimCandidates.Ordnance.Count}{nearestPart}");
             }
         }
         var planeBasis = GlobalTransform.Basis.Orthonormalized();
@@ -1946,21 +1989,24 @@ public partial class FlightController : Node3D
             if (!_gunLoggedFirst[gi])
             {
                 _gunLoggedFirst[gi] = true;   // verification breadcrumb: which groups actually fire
-                GD.Print($"gun group {gi + 1} ({g.Mount}, {g.Weapon.Caliber ?? 0}-cal " +
-                         $"{g.Weapon.Id}) firing");
+                Log.Info("weapons", $"gun group {gi + 1} ({g.Mount}, {g.Weapon.Caliber ?? 0}-cal {g.Weapon.Id}) firing on {Name}");
             }
         }
         if (outcome.RocketPylon >= 0)
         {
             var hp = Loadout!.Hardpoints[outcome.RocketPylon];
-            // No aim assist on a rocket: the original's assist is the GUN fire path's
-            // (`FUN_004b6530` is reached from the gun branch alone). It leaves along the pylon axis.
-            Projectiles!.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon, team: Team);
+            // A human's rocket leaves along the pylon axis, unassisted (`FUN_004b6530` is reached
+            // from the gun branch alone; `BL-404` re-checks that). An AI's leaves along the clamped
+            // mount aim its 5° gate cleared (`AiRocketeer.LaunchDirWorld`).
+            var rocketAim = !IsHumanPiloted && Pilot?.Rocketeer is { } launcher
+                ? launcher.LaunchDirWorld
+                : (Vector3?)null;
+            Projectiles!.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon,
+                rocketAim, Team);
             if (_rocketsLaunched < 12)
             {
                 _rocketsLaunched++;
-                GD.Print($"rocket: {hp.Weapon.Id} ({hp.Weapon.Name}) from pylon{hp.Index}, " +
-                         $"{(InfiniteAmmo ? "∞" : hp.Ammo.ToString())} left on that pylon");
+                Log.Info("weapons", $"rocket: {Name} launched {hp.Weapon.Id} ({hp.Weapon.Name}) from pylon{hp.Index}, {(InfiniteAmmo ? "∞" : hp.Ammo.ToString(CultureInfo.InvariantCulture))} left on that pylon");
             }
         }
         if (outcome.GunLoopWanted)
@@ -1980,7 +2026,7 @@ public partial class FlightController : Node3D
         if (outcome.RocketDryCue)
         {
             Audio?.PlayEmptyClip();
-            GD.Print("rocket: dry pull, all pylons empty — empty-clip cue");
+            Log.Info("weapons", $"rocket: {Name} dry pull, all pylons empty — empty-clip cue");
         }
     }
 
@@ -2014,11 +2060,6 @@ public partial class FlightController : Node3D
     // Full stunt restart from the results scoreboard (R): fresh clock + every
     // zone incomplete, then the normal respawn (spawn pose / throttle / cleared damage). The
     // scoreboard hides itself once AllComplete clears; the marker HUD replays its intro line.
-    private void RestartStuntRun()
-    {
-        Stunt?.Reset();
-        Respawn();
-    }
 
     // True if the segment crosses any solid collider — the static world, or another
     // aircraft's body (never this plane's own, excluded by RID); on a hit,
@@ -2313,13 +2354,37 @@ public partial class FlightController : Node3D
     private float KeyAxis(Key positive, Key negative) =>
         (KeyDown(positive) ? 1f : 0f) - (KeyDown(negative) ? 1f : 0f);
 
+    // R and pad Y while a results board is up: the direct route to the board's Restart item, and
+    // the hold harness's automatic one. Read off the rendered frame on wall time, since the board
+    // halts the clock and a sim-dt timer under a halt would never fire.
+    private void PollResultsShortcuts(float delta)
+    {
+        if (Match is { Completed: true })
+        {
+            if (RespawnPressed())
+                RestartMatch?.Invoke();
+            return;
+        }
+        if (Race is { AllFinished: true } && Stunt is { AllComplete: true })
+        {
+            bool autoRematch = HoldSegments != null && PlayerIndex == 0
+                && (_autoRestartIn -= delta) <= 0f;
+            if (RespawnPressed() || autoRematch)
+                RestartRace?.Invoke();
+            return;
+        }
+        if (Stunt is { AllComplete: true } && Race == null && RespawnPressed())
+            Rerun();   // the solo board takes R as a fresh run, distinct from a mid-run respawn
+    }
+
     private bool RespawnPressed() =>
         KeyDown(Key.R) || PadPressed(JoyButton.Y);
 
-    // P (or gamepad Start), edge-detected so one press toggles once, gated on
-    // AllowPause (false for AI rigs and the suites' bare test rigs).
+    // P, Esc or gamepad Start, edge-detected so one press toggles once, gated on AllowPause
+    // (false for AI rigs and the suites' bare test rigs). Esc opens the pause board rather than
+    // leaving the flight; the board's Exit item is what leaves, and a pad can reach it.
     private bool PauseTogglePressed() =>
-        AllowPause && (KeyDown(Key.P) || PadPressed(JoyButton.Start));
+        AllowPause && (KeyDown(Key.P) || KeyDown(Key.Escape) || PadPressed(JoyButton.Start));
 
     // Tab / gamepad X — cycles the stunt marker's displayed target (caller edge-detects).
     // Gamepad Y would clash with the respawn button, so X (a free face button) instead.
@@ -2472,9 +2537,9 @@ public partial class FlightController : Node3D
         return segments[^1].Input;
     }
 
-    // The AI pilot's step: ask Pilot for this frame's input and mirror its
-    // throttle into the controller's own lever, so the readers of `_throttle` (spawn smoke,
-    // telemetry) see the flown value exactly as the keyboard ramp path leaves it.
+    // The AI pilot's throttle is the desired lever (+0x124); like keyboard input, its live
+    // flight-model lever (+0x128) must traverse at 0.5/s. Carrier launch seeds both at 0.1,
+    // then the AI may immediately request full power without erasing the visible settling ramp.
     private FlightInput NextPilotInput(float dt)
     {
         // The mode machine's obstacle probe (D11 avoid crash) is this node's world-and-aircraft
@@ -2483,7 +2548,8 @@ public partial class FlightController : Node3D
         if (Pilot!.Machine is { ProbeBlocked: null } machine && IsInsideTree())
             machine.ProbeBlocked = AvoidCrashBlocksLine;
         var input = Pilot!.Next(_model, dt);
-        _throttle = input.Throttle;
+        _throttle = Mathf.MoveToward(_throttle, input.Throttle, ThrottleRate * dt);
+        input.Throttle = _throttle;
         return input;
     }
 
@@ -2537,6 +2603,53 @@ public partial class FlightController : Node3D
             _gunnerLoggedFire = true; // verification breadcrumb: the gates first opened
             Log.Info("flight",
                 $"ai gunner: shooter {PlayerIndex} opens fire on P{target.PlayerIndex + 1} at {WorldPosition.DistanceTo(target.WorldPosition):0} m ({group.Weapon.Id})");
+        }
+    }
+
+    // One AI-rocketeer tick: age the lockout unconditionally (it is a vehicle timer, not one that
+    // stops when the AI loses its target), then walk the pylons against the GUNNER's target and let
+    // the decision name the pylon it chose, so a DAMAGES_ZEPPELIN round cannot be launched by a
+    // cursor that disagrees with the gates that cleared it.
+    private void DriveAiRocketeer(AiRocketeer rocketeer, AiGunner gunner, float dt)
+    {
+        rocketeer.Tick(dt);
+        if (_fire == null || Projectiles == null || Loadout is not { Hardpoints.Count: > 0 })
+            return;
+        if (gunner.Target is not { } target || !target.InPlay || !target.IsInsideTree())
+            return;
+        // ⚠ Only Pursue shoots, the same deliberate hold the guns take. The original restricts
+        // neither, so revisiting this is one change for both classes, not two.
+        if (Pilot?.Machine is { } modes && modes.Mode != AiMode.Pursue)
+            return;
+        _pylonViews.Clear();
+        for (int i = 0; i < Loadout.Hardpoints.Count; i++)
+        {
+            var hp = Loadout.Hardpoints[i];
+            _pylonViews.Add(new RocketPylonView
+            {
+                Index = i,   // the list position FireControl selects by, not the 1-based pylon number
+                DamagesZeppelin = hp.Weapon.DamagesZeppelin,
+                Armed = hp.Ammo > 0 || InfiniteAmmo,
+                MountPos = hp.Pylon.GlobalPosition,
+                RoundSpeed = hp.Weapon.Velocity ?? ProjectilePool.DefaultVelocity,
+            });
+        }
+        // No AI can aim at a gasbag yet (the acquisition collects aircraft alone), so the match's
+        // other half is unexercised rather than unwritten — this argument is what supplies it.
+        rocketeer.Solve(WorldPosition, WorldVelocity, _model.Attitude,
+            target.WorldPosition, target.WorldVelocity, target.NoseDirection,
+            targetIsGasbag: false, _pylonViews);
+        if (rocketeer.SelectedPylon >= 0)
+            _fire.SelectPylon(rocketeer.SelectedPylon);
+        if (rocketeer.WantsFire && !_rocketeerLoggedFire)
+        {
+            _rocketeerLoggedFire = true; // verification breadcrumb: the ordnance gates first opened
+            // pylon{Index}, never the list position the selection runs on: the launch line the
+            // fire step logs names the hardpoint's OWN number, and two numbers for one pylon in
+            // adjacent lines is how a reader concludes the wrong pylon fired.
+            var hp = Loadout.Hardpoints[rocketeer.SelectedPylon];
+            Log.Info("flight",
+                $"ai rocketeer: shooter {PlayerIndex} launches at P{target.PlayerIndex + 1} at {WorldPosition.DistanceTo(target.WorldPosition):0} m ({hp.Weapon.Id}, pylon{hp.Index})");
         }
     }
 
@@ -2648,12 +2761,18 @@ public partial class FlightController : Node3D
         _throttle = Mathf.Clamp(
             _throttle + (KeyAxis(Key.Shift, Key.Ctrl) + padThrottle) * ThrottleRate * dt, 0f, 1f);
 
+        // pull = S/Down, push = W/Up; bank/yaw left = A/Left/Q
+        _keyPitch = StickRamp.Step(
+            _keyPitch, Mathf.Sign(KeyAxis(Key.S, Key.W) + KeyAxis(Key.Down, Key.Up)), dt);
+        _keyRoll = StickRamp.Step(
+            _keyRoll, Mathf.Sign(KeyAxis(Key.A, Key.D) + KeyAxis(Key.Left, Key.Right)), dt);
+        _keyYaw = StickRamp.Step(_keyYaw, KeyAxis(Key.Q, Key.E), dt);
+
         return new FlightInput
         {
-            // pull = S/Down, push = W/Up; bank/yaw left = A/Left/Q
-            Pitch = Mathf.Clamp(KeyAxis(Key.S, Key.W) + KeyAxis(Key.Down, Key.Up) + padPitch, -1f, 1f),
-            Roll = Mathf.Clamp(KeyAxis(Key.A, Key.D) + KeyAxis(Key.Left, Key.Right) + padRoll, -1f, 1f),
-            Yaw = Mathf.Clamp(KeyAxis(Key.Q, Key.E) + padYaw, -1f, 1f),
+            Pitch = Mathf.Clamp(_keyPitch + padPitch, -1f, 1f),
+            Roll = Mathf.Clamp(_keyRoll + padRoll, -1f, 1f),
+            Yaw = Mathf.Clamp(_keyYaw + padYaw, -1f, 1f),
             Throttle = _throttle,
         };
     }

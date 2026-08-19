@@ -84,8 +84,8 @@ public sealed partial class MarkerHud : Control
             return;
         var font = GetThemeDefaultFont();
         // Never round a scaled font down to 0 — a quarter-height 4P pane scales hard.
-        int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s));
-        int statusFont = Mathf.Max(1, Mathf.RoundToInt(RefStatusFont * s));
+        int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s * HudMetrics.MarkerTextScale));
+        int statusFont = Mathf.Max(1, Mathf.RoundToInt(RefStatusFont * s * HudMetrics.StatusTextScale));
         int bannerFont = Mathf.Max(1, Mathf.RoundToInt(RefBannerFont * s));
         float cx = Size.X / 2f;
 

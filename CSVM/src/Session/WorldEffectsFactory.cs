@@ -90,7 +90,7 @@ public sealed class WorldEffectsFactory
     /// <summary>The session's one <c>touchdown_*</c> def vector, built against the same program the
     /// world-effects runtime binds. It is the original's global, built once at level init
     /// (<c>FUN_004735b0</c>) where each plane's crash vector is built at plane setup. Null until
-    /// <see cref="EnsureWorldEffects"/> has run. <c>FlightRigAssembler</c> hands it to every
+    /// <see cref="EnsureWorldEffects"/> has run. <c>HumanFlightAdapter</c> hands it to every
     /// controller, so all rigs index the ONE vector rather than each building its own.</summary>
     public SurfaceDefTable? TouchdownDefs { get; private set; }
 
@@ -439,7 +439,7 @@ public sealed class WorldEffectsFactory
 
     // The crash runtime also carries the damage-stage menu, so a part crossing an injure_anims
     // threshold plays its authored def. This is phase 2 of a setup split across two files:
-    // FlightRigAssembler.BuildDamageVisuals is phase 1 and runs for every rig, while this half
+    // HumanFlightAdapter.BuildDamageVisuals is phase 1 and runs for every rig, while this half
     // exists only where a crash runtime does.
     private static void WireDamageStages(FlightController controller, AnimProgram crashProgram)
     {

@@ -23,7 +23,7 @@ Flags are specified in [`cli.md`](cli.md).
 | stand-off slider | | weapon lab: how far back every placement parks (15–1100 m, default 90) — `--weapon-standoff=` |
 | `V` | | weapon lab: hand the view to a free camera and back — fly out and watch an impact from a metre away, then `V` returns the orbit where you left it. `--weapon-camera=free\|<frames>` |
 | `WASD` / numpad `+`/`−` | | weapon lab: swing and zoom the orbit around the held plane (numpad `+` in, `−` out; it reads no stick input while held). With `V` out, the freecam's own controls apply instead |
-| `R` | Y | respawn · rematch while the Dogfight results board is up |
+| `R` | Y | respawn · restart while a results board is up (the direct route to that board's Restart item) |
 | `T` | D-pad ↑ (tap) | target the next enemy/objective — steps the cycle, and reaches whoever shot you first |
 | `Y` | | target the next ally |
 | `U` | | target the next non-aircraft (turret emplacements, zeppelin sub-parts) |
@@ -42,7 +42,11 @@ Flags are specified in [`cli.md`](cli.md).
 
 | Input | Does |
 |---|---|
-| `P` | pause — halts the sim; `.` steps one frame. Splitscreen: any player's `P`/pad Start pauses everyone, and shows a shared "PAUSED" board naming who paused (`BL-373`) — only that player's `P`/Start resumes it |
+| `P` · `Esc` · Start | pause — halts the sim and opens the pause board's menu (Resume · Restart · Exit); `.` steps one frame. Splitscreen: any player's press pauses everyone, and the board names who paused (`BL-373`) — only that player resumes it and only that player drives the cursor |
+| ↑↓ / d-pad / left stick | move the board menu's cursor |
+| `Enter` · `Space` | A | confirm the highlighted item |
+| — | B | close the pause menu — the pad twin of `Esc`/`P`/Start. A results board's menu has no way back and reads none |
+| — | a results board (mission wrap-up, dogfight, race, stunt run) halts the sim and carries its own Restart · Exit menu, driven by player 1. The pause key does nothing while one is up |
 | — | a pilot out of lives watches from the `--freecam` controls (WASD/QE move, RMB look) on its own pane. Splitscreen: each downed pilot's spectator reads only its own pad/keyboard (`BL-375`) — two players watching at once move independently, not lockstep. Mouse look stays shared (one physical mouse) |
 | `.` | step one frame while paused |
 | `F12` | screenshot |
@@ -52,7 +56,7 @@ Flags are specified in [`cli.md`](cli.md).
 | `F16` | node-name labels — `--debug-names[=meshes\|all]`. Migrated off `T`, which is free for targeting |
 | `F11` | print the mode's subject placement as ready-to-paste `--pos=` / `--direction=` (in `--viewer`: `--pos=` / `--lookat=`, the orbit pivot) |
 | `F10` | export the plane on screen (current livery + damage) to a timestamped `.glb` under `Exports/` — the `--export-gltf=` twin |
-| `Esc` | quit |
+| `Esc` | at the launchscreen: back, and quit from the Mode screen. In flight it opens the pause board instead — a board menu's Exit item is what leaves a session, so a pad can reach it too |
 
 ## `--viewer`
 

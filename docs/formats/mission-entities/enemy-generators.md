@@ -99,9 +99,8 @@ event activating `cargobay`. No non-zeppelin host ships a def matching the node-
 that fallback resolves nothing in this install. Two placement facts that bite: the chapter can
 carry several `hangerdoors` namesakes (C1 has three — the zeppelin's and two ground hangars'),
 so a door call must be scoped to the host's subtree; and the `cargobay` origin node sits ON the
-bay floor inside the hull — an airframe spawned exactly there collides with the bay geometry on
-frame one (the remake drops fighters 12 m below it, an invented clearance; the binary's two
-untraced launch timers are not interpreted). C1/IA1's mission setup deactivates its zeppelin at load (`support\c1\ia1.gw`). The mission builder
+bay floor inside the hull. The remake releases fighters exactly there: the decoded 1.5 s carrier
+grace suppresses collision while the drop clears the hull. C1/IA1's mission setup deactivates its zeppelin at load (`support\c1\ia1.gw`). The mission builder
 then activates the zeppelin selected by `zeppelin_type` only for `zeppelin_run`; a `dogfight_squadron`
 session leaves it inactive. The same builder path arms the hull's dormant gun rings
 ([turrets.md](../turrets.md#waking-a-whole-subtree)).

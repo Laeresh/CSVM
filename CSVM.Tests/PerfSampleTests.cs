@@ -269,8 +269,14 @@ public class PerfSampleTests
     [Fact]
     public void AScopeAllocatesNothing()
     {
-        using (PerfSample.Scope(PerfSite.DebrisSpawn))
+        // An identical unmeasured warm-up loop pays off the runtime's own deferred work (tiered
+        // JIT recompilation, OSR) so the real loop below measures the scope alone. Without it those
+        // extras land inside the measured window and intermittently read non-zero (BL-379).
+        for (int i = 0; i < 10_000; i++)
         {
+            using (PerfSample.Scope(PerfSite.DebrisSpawn))
+            {
+            }
         }
 
         long before = GC.GetAllocatedBytesForCurrentThread();
@@ -282,9 +288,9 @@ public class PerfSampleTests
         }
         long after = GC.GetAllocatedBytesForCurrentThread();
 
-        // Exactly zero, not "a little": a ref-struct handle over a fixed enum has nothing to box,
-        // and an instrument that allocates on the frame path manufactures the collections it is
-        // there to catch.
+        // Exactly zero, not "a little": an instrument that allocates on the frame path manufactures
+        // the collections it is there to catch. Warm-up excludes the runtime's own noise, not an
+        // allocator that would show right here, so this stays an exact claim.
         Assert.Equal(0L, after - before);
     }
 

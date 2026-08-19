@@ -1,3 +1,4 @@
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -12,6 +13,18 @@ public static class HudMetrics
 {
     /// <summary>The reference viewport height every HUD metric was measured at (HUD.png).</summary>
     public const float ReferenceHeight = 1440f;
+
+    /// <summary>The lowest allowed HUD text multiplier.</summary>
+    public const float MinimumTextScale = 0.5f;
+
+    /// <summary>The highest allowed HUD text multiplier.</summary>
+    public const float MaximumTextScale = 2f;
+
+    /// <summary>The user-selected multiplier for flight-status text.</summary>
+    public static float StatusTextScale => TextScale("hud.statusTextScale");
+
+    /// <summary>The user-selected multiplier for flight marker labels.</summary>
+    public static float MarkerTextScale => TextScale("hud.markerTextScale");
 
     /// <summary>How much this control's viewport is shrunk by splitscreen: 1.0 for a full-screen
     /// single-player view (the pane IS the window), sqrt(½) ≈ 0.71 in a 2P pane, ½ in a 4P pane.
@@ -38,4 +51,9 @@ public static class HudMetrics
             windowH = control.GetViewportRect().Size.Y;
         return windowH / reference * PaneFactor(control);
     }
+
+    /// <summary>Constrain a user-selected HUD text multiplier to its supported range.</summary>
+    public static float ClampTextScale(float scale) => Mathf.Clamp(scale, MinimumTextScale, MaximumTextScale);
+
+    private static float TextScale(string key) => ClampTextScale(Config.GetFloat(key, 1f));
 }

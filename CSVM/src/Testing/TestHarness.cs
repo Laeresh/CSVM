@@ -61,7 +61,7 @@ public static class TestHarness
         {
             if (Registry.Count == 0)
             {
-                Suites.Register(Registry);
+                SuiteCatalog.RegisterAll(Registry);
             }
             return Registry;
         }

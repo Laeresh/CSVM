@@ -148,10 +148,18 @@ public sealed partial class TargetingOverlay : Node
         _mesh.ClearSurfaces();
         var rows = new List<string>();
         int firing = 0, tracking = 0, held = 0, idle = 0;
-        _mesh.SurfaceBegin(Mesh.PrimitiveType.Lines, _material);
 
+        // ⚠ The surface opens on the FIRST line, not before the walk: SurfaceEnd on an empty
+        // surface is a per-frame engine error, and a frame with nothing to draw is ordinary —
+        // every gunner idle at once is the normal state whenever no hostile is in reach.
+        bool begun = false;
         void Line(Vector3 from, Vector3 to, Color color)
         {
+            if (!begun)
+            {
+                _mesh.SurfaceBegin(Mesh.PrimitiveType.Lines, _material);
+                begun = true;
+            }
             _mesh.SurfaceSetColor(color);
             _mesh.SurfaceAddVertex(from);
             _mesh.SurfaceSetColor(color);
@@ -220,7 +228,10 @@ public sealed partial class TargetingOverlay : Node
                 }
             }
         }
-        _mesh.SurfaceEnd();
+        if (begun)
+        {
+            _mesh.SurfaceEnd();
+        }
 
         ShowHud($"targets (F15): {firing} firing, {tracking} tracking, {held} held, {idle} without a target\n"
             + string.Join("\n", rows));

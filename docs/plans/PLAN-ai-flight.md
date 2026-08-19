@@ -26,8 +26,7 @@ applies no speed term to pitch or roll; nothing under `CSVM/src` reads `bounce_f
 physics block "DECODED END TO END. What is left is implementation, not research", and its remaining
 to-do list is `BL-330` plus `BL-172`, both of which this plan lands. It therefore retires as a
 consequence of C24 and C25 rather than through an item of its own. **Retired 2026-08-15 at C25**,
-which split the two live gaps it still carried into `BL-382` (the post-carrier-drop ground-blow cut
-and the collision-grace timer) and `BL-383` (the ≈1.6× banked rotation, with no authored candidate
+which split the carrier-drop timers and `BL-383` (the ≈1.6× banked rotation, with no authored candidate
 left); `git log --grep=BL-095` for the record.
 
 ## Milestone goal
@@ -496,12 +495,10 @@ not "cut to 0.15", which read as a final value.
 A zeppelin's fighter-drop launch (`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`, the F20 mechanism
 the `zeppelin-launch` suite exercises) drops a freshly-spawned AI aircraft, yawed and given a launch
 velocity, onto the exact same `UsesAiForcePath` plant this law reads — this engine's own carrier
-drop, reachable in a normal Instant Action zeppelin run. The settling window is real and un-modelled,
-not moot: nothing in this port tracks a per-aircraft spawn timestamp, so a just-dropped fighter's
-ground blow runs at the full un-cut 5.0 for its first 2.5 s instead of the original's reduced 0.75.
-Recorded as a gap in `backlog.md` `BL-382` (minted when `BL-095` retired at C25), not implemented here — C23 scoped to the response law,
-and closing this needs new state (a spawn-time field) threaded through `AiAircraftSpawner`/
-`FlightController`, alongside the `obj+0xAC` collision-grace timer of the same family (`BL-382` owns both).
+drop, reachable in a normal Instant Action zeppelin run. The settling window is live: a carrier
+release carries host velocity minus 22.352 m/s vertically, starts at 10% throttle, suppresses ground
+blow and collision for 1.5 s, then limits ground blow to 15% until 2.5 s. `AiGeneratorRuntime` and
+`FlightController` own the per-aircraft release state.
 
 **The probe gap was the real blocker, not named in the item's Approach.** "Reuse the probe...
 unchanged; only the response differs" undersold the work: `ProbeGroundBlow`'s pre-existing
@@ -512,21 +509,15 @@ alone; an AI aircraft flipped back to the player path by `--no-ai-plant` stays u
 pre-existing gap (ground blow was player-only when `BL-359` landed, before this plan started) this
 item does not close, since the switch is temporary and F52 owns retiring it.
 
-**dt: normalised, by construction rather than by choice.** `GroundBlowTerm` still carries no dt on
-either path — the single `BodyRates += cmd * dt` the caller already applies once, uniformly, to
-every torque term (stick, bank coupling, weathervane, both ground-blow laws) is what makes the term
-linear in dt, exactly as it already does for the player law `BL-359` landed. There is no second,
-AI-specific dt multiply to add or omit: the original's own "not multiplied by dt anywhere" describes
-a per-object accumulator this codebase's shared per-frame integration step does not reproduce
-bit-for-bit regardless of this item, so normalising was not a new decision C23 introduced — it falls
-out of reusing the existing accumulator/integration split BL-359 already built.
+**The AI push is per tick.** `GroundBlowTerm` returns the fixed AI response directly to persistent
+angular velocity, without `dt`; player ground blow remains a command bias in the ordinary torque
+accumulator. This preserves the original's strong AI recovery response.
 
-**Two gates recorded as NOT modelled, both traced to addresses.** The AI branch's mode check
+**The carrier gates are modelled.** The AI branch's mode check
 (`param_1[0xd6] != 4`, `0x0048c220`'s own first line) IS ported — `ProbeGroundBlow` skips while
-stunned, so a stunned AI still flies into terrain as the trap required. Not ported: the per-object
-`obj+0xAC` collision-grace gate (non-player objects only, `(float)param_1[0x2b] <= DAT_0071c470`),
-because nothing in this engine tracks that timer yet — `BL-382` owns it (the same timer
-gates collision response, and C25 ported the impulse rather than the resolver around it), not a new one to invent here.
+stunned, so a stunned AI still flies into terrain as the trap required. The per-object `obj+0xAC`
+collision-grace gate now also reaches `FlightController`, where it gates collision and AI ground blow
+on a fresh carrier release.
 
 **No re-pins.** `.\RunTests.ps1` baseline taken first (METHOD-10): units 1301 → 1305 (four new
 `GroundBlowTests`, all this item's), engine 59 → 59, goldens 14 hash-identical both times. The
@@ -654,7 +645,7 @@ nothing under `CSVM/src` did before. The whole formula went in, doubled rotation
 the second term is present rather than folded into a raised constant. `BL-172` closes and `BL-095`
 retires with it; the residue neither of them had landed was split out rather than deleted —
 `BL-381` (the crash block's two damage ranges, the unexplained vertical-speed kill on a wall, the
-multi-tick scrape), `BL-382` (the post-carrier-drop cut and the collision-grace timer) and `BL-383`
+multi-tick scrape) and `BL-383`
 (the ≈1.6× banked rotation). `PT-53` is the graze-feel test the change now owes at the controls.
 
 **One correction came out of implementing it, and it is this item's other deliverable.** The

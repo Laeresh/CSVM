@@ -149,9 +149,9 @@ Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 |---|---|
 | `build` | `dotnet build CSVM/CSVM.sln`. A failure stops the run — nothing downstream can say anything about a tree that does not compile |
 | `units` | `dotnet test CSVM/CSVM.sln` (the `CSVM.Tests` xUnit project), `--no-build` since the build stage just produced the binaries. Counts are read from a TRX log in `.scratch/testresults/`, never scraped from the localized console summary |
-| `engine` | Godot with `--run-tests` — windowed (never `--headless`: no shaders compile there, so a clean error screen would prove nothing — LOG-8) and with `--log-file .scratch/run-tests-engine.log`, which is what lets the harness screen native engine `ERROR:` lines. `--run-tests` implies `--det` by itself. Verdict from the process exit code; counts and the failing suite names from `.scratch/test-report.json`, which is deleted before the run so a dead run cannot be scored from the last one's numbers |
+| `engine` | Godot with `--run-tests` — windowed (never `--headless`: no shaders compile there, so a clean error screen would prove nothing — LOG-8) and with `--log-file .scratch/run-tests-engine.log`, which is what lets the harness screen native engine `ERROR:` lines. `--run-tests` implies `--det` by itself. The launch has a five-minute watchdog: a timeout kills Godot, fails the stage with exit 124, and leaves the partial log. Otherwise the verdict comes from the process exit code; counts and failing suite names come from `.scratch/test-report.json`, which is deleted before the run so a dead run cannot be scored from the last one's numbers |
 | `goldens` | The golden-image tripwire: one Godot per shot in `analysis/goldens/manifest.json`, each a pinned `--det` capture with `--screenshot=` and `--log-file=` appended, compared as **md5 of the raw pixel buffer** the engine prints on its `[core] shot pixmd5=… size=… gpu=…` line (never the PNG's encoded bytes — SHOT-6). ~53 s for 11 shots |
-| `hitch` | Two scripted Godot launches proving `HitchMonitor`/`HitchSidecar` still work: a clean `--frames=180` run that must stay silent, and a `--hitch-inject=50@300 --frames=310` run that must trip exactly once, on frame 300, with a full 120-entry ring and a sidecar record matching the printed line |
+| `hitch` | Two scripted Godot launches reporting `HitchMonitor`/`HitchSidecar` health: a clean `--frames=180` run should stay silent, and `--hitch-inject=50@300 --frames=310` should trip once on frame 300 with a full 120-entry ring and matching sidecar record. Results are awareness-only and never fail the run |
 | `perf` | `-Perf` only: every scenario in `analysis/perf/scenarios.json` under `--det --perf --no-vsync --mute`, medians appended to the git-ignored `perf-history.jsonl`. ~88 s for 5 scenarios. It measures and records; it never judges (below) |
 
 Switches: **`-Filter <substring>`** (engine suite names only — `-Filter weapons` runs `weapons-defs`
@@ -171,15 +171,15 @@ byte-identically, so the diff is exactly the hash lines that moved. Regeneration
 never automatic — see `docs/verification.md` GOLD-1 for when it is the right answer and when it is
 covering up a defect, and `analysis/goldens/README.md` for the shot set.
 
-**The hitch stage is a scripted pass for the same structural reason the golden stage is one**:
+**The hitch stage is a scripted measurement for the same structural reason the golden stage is one**:
 `HitchMonitor` only trips on a real rendered frame measured over wall time (ticked from
 `Launcher._Process`), and `--run-tests` runs every suite to completion inside one `_Ready` call
 without ever yielding a frame, which is not a new exception. Each launch's sidecar path is recovered
 from the `"[core] log file=…"` line every session prints once at `Log.Open` (`Log.SinkPath`, the
 PROJECT's own log — a different file from Godot's own `--log-file` this stage also passes), then
-read back as `<that path minus .log>.hitches.jsonl`. A `FAIL` here means the detector stopped
-detecting (or started firing on nothing) with nobody watching, which is exactly the failure mode an
-always-on, silent-when-clean instrument invites. The injected record's C8 attribution is checked as
+read back as `<that path minus .log>.hitches.jsonl`. It prints detector failures as awareness items
+and never changes the verifier's exit code: workstation contention makes frame-time evidence too
+variable to gate unrelated work. The injected record's C8 attribution is checked as
 an identity — `attributed_ms + unattributed_ms` must close over `frame_ms`, with no scope violations
 — rather than as "no samples": the injected stall is deliberately unscoped, and C9 seeding a
 site that fires during this launch must not turn the check red.
@@ -403,5 +403,5 @@ The wait is bounded: `-TimeoutSec` (default **300**, `0` = wait forever) kills t
 expires and exits **124** (the GNU timeout convention), so a probe that never quits — a flag
 combination with no auto-quit, a stuck boot — cannot hang an agent session; the partial
 `.out`/`.err` streams survive the kill and show where it hung. A deliberately long run
-(`--frames=` beyond ~5 min of sim) needs an explicit larger value. `RunTests.ps1` is unaffected
-(its `Invoke-Godot` keeps the unbounded wait).
+(`--frames=` beyond ~5 min of sim) needs an explicit larger value. `RunTests.ps1` gives its
+in-engine phase the same five-minute bound; its other scripted stages retain their own policies.

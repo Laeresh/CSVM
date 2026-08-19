@@ -20,6 +20,8 @@ public static class CollisionDamage
     /// sweep, not just the damage.</summary>
     public const float EntityGrace = 1.0f;
 
+    public const float SpawnGrace = 1.5f;
+
     /// <summary>Impact severity, <c>s = -(v̂ · n̂)</c>: the cosine between the unit velocity and the
     /// contact normal, floored at zero so a receding contact is not a hit. Both arguments must
     /// already be unit vectors, which is what the original normalises for at

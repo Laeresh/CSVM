@@ -380,7 +380,7 @@ public sealed partial class TargetHud : Control
         if (s <= 0f)
             return;
         var font = GetThemeDefaultFont();
-        int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s));
+        int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s * HudMetrics.MarkerTextScale));
 
         // The shipped marker, drawn in BOTH modes unlike the hostile tracker below: --debug-markers
         // replaces that tracker but not this, so brackets, label and debug string draw in one frame

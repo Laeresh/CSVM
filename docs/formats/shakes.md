@@ -3,6 +3,12 @@
 Part of the [format documentation](README.md). These shared zrdr readers define aircraft wobble
 and camera-shake laws. `ShakeDefs` reads `shakes.json`; `PlaneShake` applies five of its six
 sources as visual-only roll. The caller for `damage_shakes.json` remains unknown.
+
+⚠ Where the original **consumes** these laws — the per-shot/per-frame shake magnitudes, the
+random-walk accumulator they feed, the camera-attachment rule, and the engine's fidelity gap — is
+a `crimson.exe` decode and lives in [`../org/shakes.md`](../org/shakes.md). This page is the
+reader reference only.
+
 ## Oscillator sources
 
 A plain alternating `name, properties` list. Each block is one shake *source* with an oscillator
@@ -21,32 +27,9 @@ Readings with confidence: `frequency` in Hz, `damp` a decay rate (the impulse so
 `sawtooth` selects the waveform (1 = the buzzy sources: firing, speed rattle, nitro), and
 `high_speed`'s magnitude is its driving quantity divided by `magnitude_quotient` (its input is
 self-evidently airspeed — it carries a `min_speed` gate). `nitro` is the only source with an
-**absolute** magnitude, 0.05.
-
-**`fire_bullet`'s magnitude is `magnitude_factor × CALIBER`, in radians of roll — measured, not
-inferred** (`analysis/gun-wobble-shake/`). A dead-astern chase clip of the original
-firing 40-cal slugs shows a roll-dominated wobble (left/right wing vertical motion
-anti-correlated at −0.86) of 2.8e-3 rad RMS / ~4.0e-3 rad peak; the dead-astern view makes the
-screen angle the world roll angle with no projection model. Candidates: caliber 40 × 7e-5 =
-2.8e-3 rad (match); damage 4.5 → 3.15e-4 (~9× under); velocity 900 → 6.3e-2 (~16× over) — an
-order-of-magnitude discrimination, not a one-coincidence match. Unmeasured residue: whether
-plane model/weight also enter (single-plane, single-gun clip — owed capture in `playtest.md`),
-and the impact sources' own quantities (the engine stands in caliber for gun hits and armor
-damage for rockets, declared TUNE).
-
-**What the oscillators displace**: in 3rd-person views of the original the **plane itself**
-wobbles against the world; cockpit/nose views read as camera shake. One mechanism explains
-both — rock the plane node, and any plane-mounted camera inherits the motion — mirroring how
-the `damage_shakes` defs below rock the plane's `healthy` node (there the camera gets its own
-authored half because the chase camera is not rigidly attached). The engine implements exactly
-this: `PlaneShake` rolls a pivot the plane model hangs under; physics and the camera never see
-it.
-
-**`high_speed`'s input reads as speed normalised by the plane's rated max** (`fd_speed`), so the
-`min_speed` 1.0 gate means "beyond rated max" — the overspeed/dive rattle. Level cruise in the
-firing clip shows a motionless idle floor (~0.01 px/frame), which an absolute-speed reading with
-a gate at 1.0 m/s could not produce. Unverified against a calibrated dive measurement; the
-overspeed audio layer (`prop_sound`) engages in the same regime.
+**absolute** magnitude, 0.05. The `fire_bullet` and `high_speed` magnitude *laws* — what the
+drive quantity actually is per shot / per frame — are decoded from `crimson.exe` in
+[`../org/shakes.md`](../org/shakes.md).
 
 ## Damage-shake animations
 

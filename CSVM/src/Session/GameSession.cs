@@ -54,6 +54,9 @@ public partial class GameSession : Node3D
     // Per-player pad binding chosen in the launchscreen's join flow (null = derive from the
     // connected roster in AssignPads, which is what every CLI launch does).
     private readonly int[][]? _menuPads;
+    // The panes handed to a spectator when their pilot ran out of lives, so a rerun can take them
+    // back. Freed with this node otherwise.
+    private readonly List<SpectatorCamera> _spectatorCameras = new();
     // The --screenshot=/--shots=/--frames= state machine — see
     // src/Testing/CaptureDirector.cs's entry. Process-scoped and owned by the Launcher (which
     // Ticks it); held here for the Pending reads that gate display choices during the build.
@@ -89,8 +92,13 @@ public partial class GameSession : Node3D
     // The static inspection view's orbit camera (LMB orbit, wheel zoom, AABB framing); the
     // Launcher creates it once and seeds --yaw=/--pitch= into its initial angles.
     private readonly OrbitCamera _orbit;
-    // launched into the menu → Esc from flight returns there, not quit
+    // launched into the menu → the boards' Exit item returns there, not quit
     private readonly bool _menuDriven;
+    // The boards' Exit item, routed by the Launcher (launchscreen or quit).
+    private readonly Action _exitSession;
+    // The boards' Restart item on an Instant Action mission: the Launcher frees this session and
+    // builds a fresh one. Nothing here can put a mission's opposition back on its own.
+    private readonly Action _restartSession;
     // Base (chapter-independent) paths, settled by the Launcher once per process and handed in via
     // the context; StartSession reads them each build and recomputes the chapter-dependent
     // gamez/texture/mission paths from _spec.Chapter.
@@ -162,9 +170,9 @@ public partial class GameSession : Node3D
     // the tree order Godot's physics tick would have used. Dropped by ReturnToMenu.
     private ProjectilePool? _projectiles;
     private IncomingFire? _incomingFire;   // --incoming: the near-miss test rig
-    // The AI actor seam: the spawner is built with the rigs; every AI aircraft it has
-    // spawned is stepped in DriveSimSteps after the player rigs and freed with the world.
-    private AiAircraftSpawner? _aiSpawner;
+    // The flight roster builds the human field and introduces AI aircraft later. Every AI it
+    // returns is stepped in DriveSimSteps after the player rigs and freed with the world.
+    private FlightRoster? _flightRoster;
     private AiSkills? _aiSkills; // ai_skill_parameters, loaded once on the first AI spawn
     private List<Maneuver>? _aiManeuvers; // the D13 library, loaded once for the D11 machines
     private bool _noAssistLogged; // the one-per-session --no-assist breadcrumb
@@ -205,6 +213,15 @@ public partial class GameSession : Node3D
     // advanced on the sim dt (never wall time). Null outside Versus — the Downed events then
     // simply have no subscriber. Freed with this node; flight holds no match state.
     private VersusMatch? _versus;
+    // The stunt race (--stunt with several pilots), for the same reason: a rerun resets it rather
+    // than each pilot's own run. Null outside a race.
+    private StuntRace? _race;
+    // One menu reader per player, built with that player's own pad binding, so a board menu can be
+    // driven by its owner alone. Null before the rigs exist.
+    private UI.MenuInput[]? _menuInputs;
+    // Who is holding the sim clock and why — shared by every rig and by every board that halts.
+    // Null before the rigs exist.
+    private PauseState? _pauseState;
     // The trailer-target resolver every net follower this session builds shares. Built
     // with the rigs (it needs the player rig), so the F13 overlay, built earlier, reads it through
     // this field rather than holding a reference it could not have had yet.
@@ -264,6 +281,8 @@ public partial class GameSession : Node3D
         _env = ctx.Env;
         _menuDriven = ctx.MenuDriven;
         _menuPads = ctx.MenuPads;
+        _exitSession = ctx.ExitSession;
+        _restartSession = ctx.RestartSession;
     }
 
     /// <summary>Whether the build completed — the Launcher's Esc routing reads it (return to the
@@ -303,7 +322,7 @@ public partial class GameSession : Node3D
         AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating, bool inert = false,
         bool shippedSkins = false)
     {
-        if (_aiSpawner == null)
+        if (_flightRoster == null)
         {
             GD.PushWarning($"ai: no spawner in this session mode — '{planeName}' not spawned");
             return null;
@@ -322,8 +341,17 @@ public partial class GameSession : Node3D
                     DeadEyeAngleDeg = _aiSkills.DeadEyeAngleDeg(skill),
                     QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(skill),
                 };
+                // The ordnance half rides the same rating, on its own draw off the ai stream so the
+                // launch dice and the dead-eye scatter cannot walk each other's sequence.
+                var ordRng = new RandomNumberGenerator { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
+                pilot.Rocketeer = new AiRocketeer(ordRng.Randf)
+                {
+                    QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(skill),
+                    QuickDrawChance = _aiSkills.QuickDrawChance(skill),
+                };
                 GD.Print($"ai: gunner armed at skill {skill} (dead-eye " +
-                         $"{pilot.Gunner.DeadEyeAngleDeg:0.00}°, quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°)");
+                         $"{pilot.Gunner.DeadEyeAngleDeg:0.00}°, quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°, " +
+                         $"ordnance roll {pilot.Rocketeer.QuickDrawChance:0.00} per {pilot.Rocketeer.RefireSeconds:0} s)");
             }
             catch (Exception e)
             {
@@ -362,7 +390,8 @@ public partial class GameSession : Node3D
                 GD.PushWarning($"ai: no mode machine — cannot load skills/maneuvers: {e.Message}");
             }
         }
-        var ai = _aiSpawner.Spawn(planeName, pos, lookAt, pilot, scheme, team, inert, shippedSkins);
+        var ai = _flightRoster.SpawnAi(new AiSpawn(planeName, pos, lookAt, pilot, scheme, team,
+            inert, shippedSkins));
         _aiPlanes.Add(ai);
         // Mode transitions and reaction rolls, in the engine's own vocabulary — the D11
         // observability lines. Through Log (not GD.Print) so a play session's file sink
@@ -1510,7 +1539,7 @@ public partial class GameSession : Node3D
 
     // --fly (and --stunt): builds every rendered rig's aircraft (model, loadout, HUD, audio,
     // stunt/crash hookup) over the session-wide flight data loaded once above the per-player loop.
-    // The per-player body lives in its own FlightRigAssembler.
+    // The per-player body lives in its own HumanFlightAdapter.
     private void BuildFlightRigs(BuildState state)
     {
         long mark = StartupProfile.Mark();
@@ -1566,6 +1595,9 @@ public partial class GameSession : Node3D
         // The launchscreen's join flow binds the pads; a CLI launch derives them
         // from the connected roster instead.
         var padAssignment = _menuPads ?? Pads.AssignPads(_rigs.Count);
+        // Ahead of the rigs, because the assembler hands both to the per-pane stunt board.
+        _menuInputs = BuildMenuInputs(padAssignment);
+        _pauseState = new PauseState();
         if (_menuPads != null)
             Pads.LogPads(_menuPads);
         // One livery RNG for the session, so P1..P4 draw distinct colours from one
@@ -1667,7 +1699,7 @@ public partial class GameSession : Node3D
                           $"{_spec.Chapter}/{_spec.Mission}, the mission type's own objective");
         }
 
-        // Dogfight (--vs): built here, before the rigs — same reason Race is (FlightRigAssembler
+        // Dogfight (--vs): built here, before the rigs — same reason Race is (HumanFlightAdapter
         // binds every pane's VersusHud to this one instance below); the score/respawn plumbing
         // that feeds it Downed reports only runs once every rig exists, further down.
         VersusMatch? versus = _spec.Versus
@@ -1690,7 +1722,7 @@ public partial class GameSession : Node3D
         IFlightStarts flightStarts = race != null && !_spec.Det
             ? new RaceGrid(_spawnPicker, GroundSampler())
             : _spawnPicker;
-        var rigInputs = new FlightRigAssembler.Inputs
+        var rigInputs = new HumanFlightAdapter.Inputs
         {
             Ambience = _ambience,
             PlanesGamez = planesGamez,
@@ -1700,6 +1732,10 @@ public partial class GameSession : Node3D
             RigCount = _rigs.Count,
             MixGain = mixGain,
             PadAssignment = padAssignment,
+            PauseState = _pauseState!,
+            MenuInputFor = MenuInputFor,
+            ExitsToMenu = _menuDriven,
+            ExitSession = _exitSession,
             PaintRng = paintRng,
             SpawnList = spawnList,
             SpawnBase = spawnBase,
@@ -1733,25 +1769,22 @@ public partial class GameSession : Node3D
             SoundGroups = state.SoundGroups,
             DebugCollision = state.DebugCollision,
         };
-        var assembler = new FlightRigAssembler(_spec, _liveryResolver, flightStarts,
-            _worldEffectsFactory, _worldRoot!, rigInputs);
-        // ⚠ Assemble in ascending player order; the paint rng and the spawn index wrap are shared
-        // streams, so the draw order decides what each player gets.
-        for (int pi = 0; pi < _rigs.Count; pi++)
-        {
-            assembler.Assemble(pi, _rigs[pi]);
-        }
-        state.MeshInstances += assembler.MeshInstances;
-        state.What += assembler.WhatSuffix;
+        var flightRoster = new FlightRoster(_spec, _liveryResolver, _worldEffectsFactory, _worldRoot!,
+            rigInputs, flightStarts);
+        var rosterBuild = flightRoster.BuildPlayers(_rigs);
+        state.MeshInstances += rosterBuild.MeshInstances;
+        state.What += rosterBuild.SummarySuffix;
 
         // One shared PauseState on every rig: any human pauses everybody, and only the pauser may
         // resume. ⚠ Wire single player the same way, so there is one pause path and not two. The
         // board covers the whole window on its own CanvasLayer, since a pause stops every pane.
-        var pauseState = new PauseState();
+        var pauseState = _pauseState!;
         foreach (var rig in _rigs)
             if (rig.Controller is { } pausable)
                 pausable.PauseState = pauseState;
-        var pauseBoard = PauseBoard.Build(pauseState, exitsToMenu: _menuDriven);
+        var pauseBoard = PauseBoard.Build(pauseState, exitsToMenu: _menuDriven, MenuInputFor);
+        pauseBoard.Restart = Rerun;
+        pauseBoard.Exit = _exitSession;
         var pauseLayer = new CanvasLayer { Name = "pause_board", Layer = UI.HudLayers.Board };
         pauseLayer.AddChild(pauseBoard);
         _worldRoot!.AddChild(pauseLayer);
@@ -1838,8 +1871,11 @@ public partial class GameSession : Node3D
         // so it routes back through the session.
         if (race != null)
         {
+            _race = race;
             var board = StuntRaceBoard.Build(race, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
-                exitsToMenu: _menuDriven);
+                exitsToMenu: _menuDriven, _pauseState!, MenuInputFor);
+            board.Restart = () => RestartRace(race);
+            board.Exit = _exitSession;
             var boardLayer = new CanvasLayer { Name = "race_board", Layer = UI.HudLayers.Board };
             boardLayer.AddChild(board);
             _worldRoot!.AddChild(boardLayer);
@@ -1887,7 +1923,9 @@ public partial class GameSession : Node3D
             // one CanvasLayer over the whole window (the match ends for everybody at once), R
             // routed back through this session via RestartMatch.
             var board = VersusBoard.Build(match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
-                exitsToMenu: _menuDriven);
+                exitsToMenu: _menuDriven, _pauseState!, MenuInputFor);
+            board.Restart = () => RestartMatch(match);
+            board.Exit = _exitSession;
             var boardLayer = new CanvasLayer { Name = "dogfight_board", Layer = UI.HudLayers.Board };
             boardLayer.AddChild(board);
             _worldRoot!.AddChild(boardLayer);
@@ -1907,10 +1945,9 @@ public partial class GameSession : Node3D
                      (_spec.IncomingWeapon != null ? $" ({_spec.IncomingWeapon})" : " (their own gun)"));
         }
 
-        // The AI actor seam: the spawner shares the session data the rigs were built from, so
-        // SpawnAiAircraft works from here on, at build or at any later sim step.
-        _aiSpawner = new AiAircraftSpawner(_spec, _liveryResolver, _worldEffectsFactory,
-            _worldRoot!, rigInputs);
+        // The roster shares the session data the human field was built from, so SpawnAiAircraft
+        // works from here on, at build or at any later sim step.
+        _flightRoster = flightRoster;
         // The E16 voice dispatch, over B8's seam: needs the world's WorldSounds (prewarmed
         // above) and the sound defs. Built before the --ai loop so spawns can register; the
         // players register as damage sources only (WA-HighDmg's broadcast trigger).
@@ -2514,7 +2551,11 @@ public partial class GameSession : Node3D
             // never per pane: the mission ends for every human at once. ⚠ Danger Zones Completed
             // and Shot % are summed across every human seat, never picked from one pane.
             var wrapupBoard = IaWrapupBoard.Build(
-                $"{_spec.Chapter}   ·   {iaEnd.Def.MissionType}", exitsToMenu: _menuDriven);
+                $"{_spec.Chapter}   ·   {InstantAction.MissionTypeLabel(iaEnd.Def.MissionType)}",
+                exitsToMenu: _menuDriven,
+                _pauseState!, MenuInputFor);
+            wrapupBoard.Restart = _restartSession;
+            wrapupBoard.Exit = _exitSession;
             var wrapupLayer = new CanvasLayer { Name = "ia_wrapup_board", Layer = UI.HudLayers.Board };
             wrapupLayer.AddChild(wrapupBoard);
             _worldRoot!.AddChild(wrapupLayer);
@@ -2524,7 +2565,7 @@ public partial class GameSession : Node3D
                 int shotPercent = InstantActionRuntime.ShotPercent(
                     _projectiles?.CannonHits ?? 0, _projectiles?.CannonRoundsFired ?? 0);
                 wrapupBoard.Present(outcome == InstantActionOutcome.Won, iaEnd.Elapsed,
-                    enemiesShotDown, zonesCompleted, shotPercent);
+                    enemiesShotDown, zonesCompleted, shotPercent, StuntSummaryFor(iaEnd));
             };
         }
 
@@ -2898,6 +2939,64 @@ public partial class GameSession : Node3D
         }
     }
 
+    // One menu reader per player, bound the way that player's plane is bound: player 1 also has the
+    // keyboard, and a session with no per-player split reads every connected pad (null).
+    private UI.MenuInput[] BuildMenuInputs(int[][]? padAssignment)
+    {
+        var inputs = new UI.MenuInput[Math.Max(1, _rigs.Count)];
+        for (int i = 0; i < inputs.Length; i++)
+            inputs[i] = new UI.MenuInput { Keyboard = i == 0, Pads = padAssignment?[i] };
+        return inputs;
+    }
+
+    // The reader a board menu drives its cursor from. An owner outside the roster (a board that
+    // named no player) falls back to player 1, who always exists.
+    private UI.MenuInput MenuInputFor(int playerIndex)
+    {
+        var inputs = _menuInputs ??= BuildMenuInputs(null);
+        return playerIndex >= 0 && playerIndex < inputs.Length ? inputs[playerIndex] : inputs[0];
+    }
+
+    // A board menu's Restart item. An Instant Action mission is REBUILT by the Launcher, because
+    // its opposition lives in the world and nothing here can put it back; every other mode reruns
+    // in place, the race and the match through their own bookkeeping and anything else per-plane.
+    private void Rerun()
+    {
+        if (_instantAction != null)
+        {
+            _restartSession();
+            return;
+        }
+        if (_race is { } race)
+        {
+            RestartRace(race);
+            return;
+        }
+        if (_versus is { } match)
+        {
+            RestartMatch(match);
+            return;
+        }
+        foreach (var rig in _rigs)
+            rig.Controller?.Rerun();
+    }
+
+    // Player 1's stunt run for the wrap-up board's split section, on a stunt mission alone. The
+    // best time is recorded here rather than on the board, under the same chapter/mission/plane key
+    // the solo scoreboard uses — a different mission id, so Instant Action bests stay their own.
+    private StuntSummary? StuntSummaryFor(InstantActionRuntime runtime)
+    {
+        if (runtime.Objective != InstantActionObjective.ZonesFlown)
+            return null;
+        if (_rigs.Count == 0 || _rigs[0].Controller?.Stunt is not { } run)
+            return null;
+        var store = ScoreStore.Load();
+        string key = $"{_spec.Chapter}/{_spec.Mission}/{PlaneRoster.PlaneFor(_spec, 0)}";
+        float? prevBest = store.GetBest(key);
+        bool newBest = store.RecordIfBest(key, run.Elapsed);
+        return new StuntSummary(run, run.Elapsed, prevBest, newBest);
+    }
+
     // Rematch from the shared race board (R): every player's zones, clock and placing cleared, then
     // every plane back to its own spawn. The session owns the planes, so the restart lands here
     // rather than in the FlightController that read the button.
@@ -3084,6 +3183,7 @@ public partial class GameSession : Node3D
             ShowReadout = false,   // the freecam's own label would sit over a splitscreen pane
         };
         _worldRoot!.AddChild(spectator);
+        _spectatorCameras.Add(spectator);   // tracked so a rerun can hand the panes back
         if (follow != null)
         {
             spectator.FollowNode(follow);
@@ -3158,7 +3258,8 @@ public partial class GameSession : Node3D
     // member of the CURRENT wave at the generator's own drop point and attitude. ⚠ Do not re-derive
     // that point here. Null once the wave has nothing parked left, which the generator accounts as
     // a failed spawn.
-    private FlightController? ReleaseInstantActionWaveMember(Vector3 pos, Vector3 lookAt)
+    private FlightController? ReleaseInstantActionWaveMember(Vector3 pos, Vector3 lookAt,
+        Vector3 launchVelocity)
     {
         if (_iaWaveRosters == null || _iaLaunchWave is < 1 or > 4)
         {
@@ -3170,7 +3271,7 @@ public partial class GameSession : Node3D
             {
                 continue;
             }
-            member.Activate(pos, lookAt);
+            member.Activate(pos, lookAt, launchVelocity, carrierDrop: true);
             return member;
         }
         return null;

@@ -106,7 +106,7 @@ public sealed partial class VersusHud : Control
         if (s <= 0f)
             return;
         var font = GetThemeDefaultFont();
-        int statusFont = Mathf.Max(1, Mathf.RoundToInt(RefStatusFont * s));
+        int statusFont = Mathf.Max(1, Mathf.RoundToInt(RefStatusFont * s * HudMetrics.StatusTextScale));
         float cx = Size.X / 2f;
 
         if (_match is { } match)
@@ -122,7 +122,7 @@ public sealed partial class VersusHud : Control
 
         if (Rigs == null)
             return;
-        int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s));
+        int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s * HudMetrics.MarkerTextScale));
         foreach (var opp in Rigs)
         {
             if (opp.Index == PlayerIndex || opp.Controller is not { Crashed: false } c)
