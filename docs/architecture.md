@@ -1630,17 +1630,25 @@ the blast sphere overlaps is scored from the nearest point on **its own collisio
 transform origin (`NearestBlastPoint`, BL-239) — a `GetRestInfo` query against the same sphere with
 every other candidate body excluded, so a large neighbour (a zeppelin gasbag, a long building mesh)
 is scored by how close the blast actually is to its skin, not by how far the blast is from wherever
-its origin happens to sit. Falls back to the shape owner's transform origin only if that query
-somehow finds no contact. The original measures to a per-node bounding sphere instead; the shape is
-kept because a Godot body has no such sphere and a chapter mesh's would engulf the map. Planes and
-world bodies then share ONE candidate list (`_blastCandidates`), sorted nearest first, and each is
+its origin happens to sit. Falls back to the struck shape's bounds centre only if that query somehow
+finds no contact. The original measures to a per-node bounding sphere instead; the shape is kept
+because a Godot body has no such sphere and a chapter mesh's would engulf the map. Planes and world
+bodies then share ONE candidate list (`_blastCandidates`), sorted nearest first, and each is
 **cover-tested** before it takes its share (`BlastCovered`, C11): a ray from the burst, lifted
 `CoverRayLift` 0.1 m along the struck normal so the wall the round hit shields what stands behind it
 and not its own side, to the candidate's centre, world layer only (`_coverRay`; aircraft are not
-cover, see the field), the candidate itself excluded; any hit drops it. At most `MaxBlastTargets`
-32 candidates take damage per burst, the original's hit-buffer size; when more are inside the radius
-the pool prints one `blast cap:` line naming the weapon, the burst and how many were dropped
-(Decision 9 of PLAN-ordnance-types: never silent). `MaxBlastBodies` 4096 is only the raw sphere
+cover, see the field), the candidate itself excluded; any hit drops it. A world candidate's centre
+is the **bounds centre of its struck collision shape** (`BlastCentre`, the original's per-node box
+centre), read off the physics server (`BodyGetShape` / `BodyGetShapeTransform` / `ShapeGetData`,
+bounds cached per shape RID in `_shapeBounds`), never a node origin: a chapter mesh node's origin
+sits at ground level, so a ray to it ends on the terrain and every building reads as covered, an
+origin-parked root's is the world origin, and a clutter region body (`Clutter.BuildSolidCollision`,
+`MapEdgeExtender`) has server-side shapes with no `CollisionShape3D` owner at all, on which the
+`ShapeFindOwner` / `ShapeOwnerGetTransform` pair errors and returns identity. At most
+`MaxBlastTargets` 32 candidates take damage per burst, the original's hit-buffer size; when more
+are inside the radius the pool prints one `blast limit:` line naming the weapon, the burst and how
+many were dropped (Decision 9 of PLAN-ordnance-types: never silent; not "cap", which this repo
+uses for captures). `MaxBlastBodies` 4096 is only the raw sphere
 query ceiling. The fuse tests the whole swept segment per candidate plane (no tunnelling at
 ~20 m/step) and gates through `DETONATION_DOT_PRODUCT` toward the nearest hull point. The
 1 N·s/HP impulse is TUNE (BL-227's open half).

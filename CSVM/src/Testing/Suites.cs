@@ -136,7 +136,9 @@ public static class Suites
         into.Add(new TestHarness.Suite("blast-curve-cover-cap",
             "splash damage follows 1 - d^2/R^2 at 0.25R, 0.5R and 0.75R (C10), a destructible " +
             "behind a wall takes nothing while the same layout without the wall takes the curve's " +
-            "value (C11), and a burst over 40 targets damages exactly the nearest 32 (C11)",
+            "value (C11), a burst over 40 targets damages exactly the nearest 32 (C11), and a " +
+            "chapter-style body (server-side shapes, no shape owners, origin at ground level) " +
+            "takes the curve's value with no engine error",
             BlastCurveCoverCap));
         into.Add(new TestHarness.Suite("launch-velocity-decay",
             "a LOCK_ON round carries its launcher's velocity and sheds it linearly over LOCK_ON " +
@@ -3182,7 +3184,8 @@ public static class Suites
     // sits at a known point on a known face and every target's near face is a measured distance
     // away. Boxes stand on the plate with a bottom edge at the exact range, so the nearest-shape
     // distance IS the range. Phase one is the curve at 0.25R/0.5R/0.75R; phase two the same target
-    // without and then with a wall in the way; phase three forty targets against the 32 cap.
+    // without and then with a wall in the way; phase three forty targets against the 32 cap; phase
+    // four a body built the way the clutter builder builds one, with a ground-level origin.
     private static void BlastCurveCoverCap(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -3296,6 +3299,32 @@ public static class Suites
             ctx.Check(hit == 32, $"forty targets inside the radius, exactly 32 damaged (the original's hit buffer): {hit}");
             ctx.Check(ring.Take(32).All(b => DealtTo(b) > 0f) && ring.Skip(32).All(b => DealtTo(b) == 0f),
                 $"the 32 that took damage are the nearest 32; the farthest 8 were dropped");
+            foreach (var b in ring) { b.Free(); bodies.Remove(b); }
+
+            // --- a chapter-style body: shapes attached through PhysicsServer3D.BodyAddShape with no
+            // CollisionShape3D child (Clutter.BuildSolidCollision), origin sunk in the plate like a
+            // mesh node's; the cover ray must aim at the box, not the origin, and must not error.
+            var serverSite = new Vector3(0f, 0f, -100f);
+            var serverBody = new StaticBody3D { Name = "blast-lab-server-shape" };
+            var serverShape = new BoxShape3D { Size = Vector3.One };
+            serverBody.SetMeta("shape_anchor", serverShape); // keeps the Ref alive, as the clutter root does
+            serverBody.GlobalTransform = new Transform3D(Basis.Identity, serverSite + new Vector3(15.5f, -0.05f, 0f));
+            // Attached before the body enters the space: a shape added to a body already in a space
+            // waits for the next physics flush to reach the broadphase, and this suite never yields
+            // a frame. In play the clutter builder's order works because frames follow.
+            PhysicsServer3D.BodyAddShape(serverBody.GetRid(), serverShape.GetRid(),
+                new Transform3D(Basis.Identity, new Vector3(0f, 0.55f, 0f)));
+            ctx.Host.AddChild(serverBody);
+            bodies.Add(serverBody);
+            // The pool's effect scatter draws off the shared Weapons stream, and ai-gunnery's assist
+            // verdict later in the run reads that stream's position (one extra burst here reads
+            // "moved=0" there), so this phase leaves the stream where it found it.
+            ulong weaponsRng = Rng.Stream(Rng.Weapons).State;
+            Burst(serverSite);
+            Rng.Stream(Rng.Weapons).State = weaponsRng;
+            float serverShare = full * (1f - (15f * 15f) / (radius * radius));
+            ctx.Check(Mathf.Abs(DealtTo(serverBody) - serverShare) < 1f,
+                $"a body with server-side shapes and no shape owners, its origin sunk in the ground, takes the curve's {serverShare:0.#} at 15 m (dealt {DealtTo(serverBody):0.#})");
         }
         finally
         {

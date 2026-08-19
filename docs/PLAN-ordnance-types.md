@@ -615,7 +615,10 @@ clamped, then squared), so `DistanceSquaredTo` on our nearest point is the match
 `MINE` branch is not built. `BL-227`'s falloff half is closed; its impulse half stays open.
 `blast-curve-cover-cap` measures three destructibles at 0.25R/0.5R/0.75R from one burst: 187.5,
 150 and 87.5 of 200 where the linear curve gave 150, 100 and 50 (baseline seen failing on the
-committed code before the change).
+committed code before the change). At the controls (`PT-65`) no building took splash: the same
+suite now also fires beside a body built the clutter builder's way (server-side shapes, no shape
+owners, origin at ground level), which takes the curve's 150 at 15 m with no engine error, and a
+probe over C1's `m_build01..04` deals 42.93 of 60 at 8 m (`1 − 64/225`) from open ground.
 
 **Goal.** Blast damage falls off on the original's curve. Closes `BL-227`'s falloff half.
 
@@ -656,7 +659,12 @@ which is not in the GameZ flags and has no immediate setter in the binary; the r
 candidate. Cover is world geometry only, aircraft are not cover (`_coverRay`'s field comment).
 `blast-curve-cover-cap`: a target 20 m out takes 111.1 with the way clear and 0 with a wall between
 (the wall itself takes 179.9), and forty targets inside the radius leave exactly the nearest 32
-damaged; the baseline dealt 66.7 through the wall and damaged all forty.
+damaged; the baseline dealt 66.7 through the wall and damaged all forty. The cover ray's target
+was the shape owner's transform origin, which for a chapter mesh is the node origin at ground level
+(the ray ended on the terrain, so every building read as covered) and for a clutter region body
+does not exist (engine `shape_find_owner` errors); it now aims at the struck shape's bounds centre
+read off the physics server (`BlastCentre`), and the log line reads `blast limit:` since "cap" is
+this repo's word for a capture.
 
 **Goal.** Cover protects against splash, and the gather has the original's limit.
 

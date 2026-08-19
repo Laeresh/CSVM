@@ -523,9 +523,11 @@ view to the spectator camera so a burst can be watched from a few metres away.
   - (b) **cover works**: put a building between the burst and a destructible. The shielded object
     must take nothing at all, and the wall itself must take the burst. Then fire the same burst from
     the open side, where it must stage as in (a);
-  - (c) **the cap announces itself**: a burst inside a dense cluster logs one `blast cap:` line per
-    dropped candidate naming the weapon and the count. Watch the console rather than the screen, and
-    say whether a capped burst reads as visibly unfair from the cockpit.
+  - (c) **the limit announces itself**: a burst inside a dense cluster logs one `blast limit:` line
+    naming the weapon, the burst and the dropped count. Watch the console rather than the screen,
+    and say whether a limited burst reads as visibly unfair from the cockpit. ⚠ The `damage:` lines
+    stop after the twelfth of a session (`AnimRuntime.DamageAt`), so a quiet console late in a
+    flight is the log budget, not a missing splash.
 
   *Blocks:* `C10`'s and `C11`'s at-the-controls half, and F22. A fail on (b) that is really the
   wall's own health is not a cover failure; check the wall took the damage before minting anything.

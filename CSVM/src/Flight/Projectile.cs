@@ -353,6 +353,9 @@ public sealed partial class ProjectilePool : Node3D
     // nothing here.
     private readonly PhysicsRayQueryParameters3D _coverRay = new() { CollisionMask = CollisionLayers.World };
     private readonly List<BlastCandidate> _blastCandidates = new();
+    // Local bounds per collision shape (BlastCentre), read once off the physics server: a chapter
+    // trimesh's face array is large and shared across every instance of its mesh.
+    private readonly Dictionary<Rid, Aabb> _shapeBounds = new();
     // The choker clouds the TANGLER hook leaves at each burst (FUN_004b94e0's list, DAT_0071db9c),
     // each choking every aircraft inside its radius for its TIME. Stepped by SimStep after the rounds.
     private readonly List<TanglerCloud> _tanglerClouds = new();
@@ -1560,6 +1563,46 @@ public sealed partial class ProjectilePool : Node3D
         mm.VisibleInstanceCount = n;
     }
 
+    // A shape's local bounds from the server's own data (the same read ColliderOverlay makes for
+    // the clutter bodies). A kind this does not read (a heightmap, a world boundary) reports a
+    // zero box at the shape origin, which aims the cover ray at the shape's placement rather than
+    // the body's, and never errors.
+    private static Aabb ShapeBounds(Rid shapeRid)
+    {
+        var data = PhysicsServer3D.ShapeGetData(shapeRid);
+        switch (PhysicsServer3D.ShapeGetType(shapeRid))
+        {
+            case PhysicsServer3D.ShapeType.Box:
+                var half = data.AsVector3();
+                return new Aabb(-half, half * 2f);
+            case PhysicsServer3D.ShapeType.Sphere:
+                float r = data.AsSingle();
+                return new Aabb(new Vector3(-r, -r, -r), new Vector3(2f * r, 2f * r, 2f * r));
+            case PhysicsServer3D.ShapeType.Capsule:
+            case PhysicsServer3D.ShapeType.Cylinder:
+                var dims = data.AsGodotDictionary();
+                float rad = dims["radius"].AsSingle();
+                float halfH = dims["height"].AsSingle() * 0.5f;
+                return new Aabb(new Vector3(-rad, -halfH, -rad), new Vector3(2f * rad, 2f * halfH, 2f * rad));
+            case PhysicsServer3D.ShapeType.ConvexPolygon:
+                return PointBounds(data.AsVector3Array());
+            case PhysicsServer3D.ShapeType.ConcavePolygon:
+                return PointBounds(data.AsGodotDictionary()["faces"].AsVector3Array());
+            default:
+                return new Aabb();
+        }
+    }
+
+    private static Aabb PointBounds(Vector3[] points)
+    {
+        if (points.Length == 0)
+            return new Aabb();
+        var box = new Aabb(points[0], Vector3.Zero);
+        for (int i = 1; i < points.Length; i++)
+            box = box.Expand(points[i]);
+        return box;
+    }
+
     // Builds one pooled sprite/streak pool: a MultiMesh of `cap`
     // instances over a single shared material. `crossed` supplies a mesh other
     // than the default unit quad — the tracer pools pass CrossedStreakMesh; everything
@@ -2191,20 +2234,29 @@ public sealed partial class ProjectilePool : Node3D
         _proximityQuery.Transform = new Transform3D(Basis.Identity, point);
         _proximityQuery.Motion = Vector3.Zero;
     }
-    private Vector3 DamageZonePosition(Node3D body, int shapeIndex)
+
+    // ⚠ The centre the cover ray aims at is the struck shape's BOUNDS centre, read back off the
+    // physics server, never a node origin: a chapter mesh node's origin sits at ground level (a ray
+    // to it ends ON the terrain, so every building reads as covered) or at the world origin, and a
+    // clutter region body's shapes have no CollisionShape3D owner at all
+    // (Clutter.BuildSolidCollision), so ShapeFindOwner/ShapeOwnerGetTransform on it error and
+    // return identity. The server knows every shape and its body-local placement either way.
+    private Vector3 BlastCentre(Node3D body, Rid rid, int shapeIndex, Vector3 fallback)
     {
-        if (body is CollisionObject3D collision)
-        {
-            uint owner = collision.ShapeFindOwner(shapeIndex);
-            return (collision.GlobalTransform * collision.ShapeOwnerGetTransform(owner)).Origin;
-        }
-        return body.GlobalPosition;
+        if (shapeIndex < 0 || shapeIndex >= PhysicsServer3D.BodyGetShapeCount(rid))
+            return fallback;
+        var shapeRid = PhysicsServer3D.BodyGetShape(rid, shapeIndex);
+        if (!_shapeBounds.TryGetValue(shapeRid, out var bounds))
+            _shapeBounds[shapeRid] = bounds = ShapeBounds(shapeRid);
+        var placement = body.GlobalTransform * PhysicsServer3D.BodyGetShapeTransform(rid, shapeIndex);
+        return placement * bounds.GetCenter();
     }
 
     // ⚠ Measure splash falloff to the nearest point on the neighbour's OWN collision shape, never
     // its transform origin. A large body (a zeppelin gasbag, a long building mesh) otherwise soaks
     // less splash than a small one, or none at all if its origin sits outside the sweep sphere.
-    // Falls back to the origin only as a defensive case; IntersectShape already found an overlap.
+    // Falls back to the shape's bounds centre only as a defensive case; IntersectShape already
+    // found an overlap.
     private Vector3 NearestBlastPoint(PhysicsDirectSpaceState3D space, Vector3 center, float radius,
         Node3D body, Rid bodyRid, Godot.Collections.Array<Godot.Collections.Dictionary> hits, int shapeIndex)
     {
@@ -2219,7 +2271,7 @@ public sealed partial class ProjectilePool : Node3D
         _proximityQuery.Exclude = exclude;
         var rest = space.GetRestInfo(_proximityQuery);
         _proximityQuery.Exclude = new Godot.Collections.Array<Rid>();
-        return rest.Count > 0 ? (Vector3)rest["point"] : DamageZonePosition(body, shapeIndex);
+        return rest.Count > 0 ? (Vector3)rest["point"] : BlastCentre(body, bodyRid, shapeIndex, body.GlobalPosition);
     }
 
     // The detonation's damage: the struck body takes the full figure, then every candidate inside
@@ -2267,7 +2319,7 @@ public sealed partial class ProjectilePool : Node3D
         {
             if (accepted == MaxBlastTargets)
             {
-                GD.Print($"blast cap: {weapon.Id} burst at ({point.X:0},{point.Y:0},{point.Z:0}) had"
+                GD.Print($"blast limit: {weapon.Id} burst at ({point.X:0},{point.Y:0},{point.Z:0}) had"
                          + $" {_blastCandidates.Count} targets inside {radius:0.#} m; the nearest"
                          + $" {MaxBlastTargets} took damage and {_blastCandidates.Count - i} were dropped"
                          + " (the original's 32-entry hit buffer)");
@@ -2342,7 +2394,7 @@ public sealed partial class ProjectilePool : Node3D
                 Rid = rid,
                 ShapeIdx = shapeIndex,
                 NearPoint = nearPoint,
-                Centre = DamageZonePosition(body3D, shapeIndex),
+                Centre = BlastCentre(body3D, rid, shapeIndex, nearPoint),
                 DistanceSq = nearPoint.DistanceSquaredTo(point),
             });
         }
@@ -2855,7 +2907,8 @@ public sealed partial class ProjectilePool : Node3D
 
     // One splash candidate: a registered plane (Plane set, its nearest hull box) or a world body
     // the blast sphere overlaps (Body set). DistanceSq is the squared distance from the burst to
-    // the candidate's own surface, and Centre is where the cover ray aims.
+    // the candidate's own surface, and Centre is where the cover ray aims: a plane's position, a
+    // world body's struck-shape bounds centre (BlastCentre).
     private struct BlastCandidate
     {
         public AircraftBody? Plane;

@@ -716,7 +716,10 @@ CSVM keeps the falloff, the engulf clamp, the occlusion cast and the 32 cap, and
 points by choice (`Projectile.ApplyDamage`): the surface distance is to the nearest point of the
 target's own collision shape rather than to a bounding sphere, because a Godot collision body has no
 per-node box and a chapter mesh's enclosing sphere would hand full damage to everything inside it;
-and the 32 winners are the nearest 32, since the original's grid order is placement luck.
+and the 32 winners are the nearest 32, since the original's grid order is placement luck. The
+occlusion ray does aim where the original's does, at the box centre: the bounds centre of the
+candidate's struck collision shape (`ProjectilePool.BlastCentre`), never its node origin, which a
+chapter mesh keeps at ground level.
 
 ### The engine stores radii squared
 
