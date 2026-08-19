@@ -587,9 +587,12 @@ one has been judged in the clean case.
   **1.0 s start delay**. `FLASH` also requires the victim to be facing it; `SONIC` does not.
   Nothing touches a human's controls, ever.
   *Look for:*
-  - (a) **the player's wash**: fly into your own `wep_08` burst. The pane goes red about a second
-    after the burst rather than instantly, holds for about five seconds at point blank, then
-    clears. Judge whether the five seconds reads as punishing or as broken;
+  - (a) **the player's wash**: fly into a `wep_08` burst **someone else fired** (a vs session is
+    the easy rig). The pane goes red about a second after the burst rather than instantly, holds
+    for about five seconds at point blank, then clears. Judge whether the five seconds reads as
+    punishing or as broken. ⚠ Your **own** burst never washes you: the splash gather excludes the
+    round's owner (`FUN_005aca30`), so a firer immune to their own sonic is the original's
+    behaviour, not a routing bug;
   - (b) **the facing test**: `--rocket=wep_09` bursting ahead of you washes white, and the same
     burst behind you washes nothing at all;
   - (c) **two hits overlap rather than replace**: two bursts a second apart must neither saturate
@@ -619,14 +622,13 @@ one has been judged in the clean case.
     instant-stall recollection is recorded as disproven;
   - (c) **the AI does not react**: no evasion, no call, no change of mode. That is correct, because
     no AI code reads the disabled-systems mask;
-  - (d) **the missing sound**: the original swaps the engine loop on the cut and our `PlaneStats`
-    has no slot for the second loop, so a choked aircraft still sounds like it is running. Judge how
-    badly that reads before anyone builds the slot;
+  - (d) **the missing sound**: nothing in our audio chain reads the engine-dead timer, so a choked
+    aircraft still sounds like it is running; what the original plays over the cut is undecoded
+    (`BL-421`). Judge how badly that reads before anyone builds it;
   - (e) fly into your own choker: a human is choked the same way, with no wash and no input
     lockout.
 
-  *Blocks:* `D17`'s owed clip, and F22. (d) is the trigger for a new `BL` if it reads as a real
-  gap rather than a detail.
+  *Blocks:* `D17`'s owed clip, and F22. (d)'s gap is `BL-421`.
 
 - `PT-70` `[Own]` **The smoke screen: no projectile, and a 600 m trap behind the layer
   (`PLAN-ordnance-types` `D18`, launch hook with `A5`).** A `SMOKE_SCREEN` pylon spawns **no
@@ -727,8 +729,9 @@ one has been judged in the clean case.
     washes by camera proximity exactly as it did, both panes flashing when both are near and only
     the near one when they are apart. Take that baseline **before** judging anything else in this
     section;
-  - (c) **a real hit routes the same way**: with `--rocket=wep_08`, one pilot flying into their own
-    sonic burst washes their own pane alone.
+  - (c) **a real hit routes the same way**: with `--rocket=wep_08`, a pilot caught in the **other**
+    pilot's sonic burst washes their own pane alone. (A pilot's own burst never washes them: the
+    gather excludes the round's owner, `FUN_005aca30`.)
 
   *Blocks:* `D13`'s owed two-pane look, and F22.
   *Variations:* `--debug-wash=3` in a two-pane session, which answers to no pane and must paint

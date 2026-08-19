@@ -2288,6 +2288,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   read too loud on its own terms. *Fix shape:* a level match by ear against the reference video,
   same method `BL-223` and `BL-269` already used for this signal chain.
 
+- `BL-421` `[Feature]` **A choked engine still sounds like a running one.** `PT-69` (d): the choker
+  (`wep_12`, `TANGLER`) cuts thrust for 5–13 s and nothing in the audio chain reacts, so a choked
+  aircraft, your own included, keeps its full engine loop. `FlightAudio` drives the loop from
+  throttle and damage (`damaged_engine_sound`), never from `FlightController`'s engine-dead timer.
+  ⚠ What the original plays over the cut is **undecoded**: the `PT-69` row asserted an engine-loop
+  swap, but no `docs/org` page records one, so decode the original's behaviour (silence, a stop/start
+  pair, or a second loop) before building. Scope today is the sounds a session already renders: the
+  own-ship loop, and other humans' planes once positional audio lands. An AI plane's engine is
+  inaudible anyway until `BL-079`, which another worktree is building toward.
+  *Fix shape:* gate `FlightAudio`'s loop on the engine-dead timer the same way the thrust cut reads
+  it, with whatever the decode says the original plays over the gap.
+  *Cross-refs:* `BL-079` (3D emitters), `BL-223`/`BL-285` (the loop's existing damage and start/stop
+  inputs), `BL-406` (the choke itself).
+
 ## Cameras & views
 
 - `BL-080` `[Feature]` **Future cockpit view** would consume a mix of already-parsed and still-raw data: `pcdpN`
