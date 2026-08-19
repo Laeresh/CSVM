@@ -185,6 +185,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ Evidence for the fall (findings (a) and (b) fixed, (c) disproven; `SHOT-29`'s objection
     re-measured and overturned for this subject, so the fall IS pinned by a golden)
 22. ☑ The bailed pilot must not inherit the wreck's velocity
+26. ☐ The bailed pilot hangs at the wreck's attitude instead of levelling under his canopy
 23. ☑ Decode `start: null` after a timed event (❌ disproven as the cause; the real mechanism is the
     dead vehicle flying itself until `Callback 15`), and convert the anim family off `GD.Print`
 24. ❌ A dead hull glides instead of dropping — **disproven**: the original changes nothing about a
@@ -909,6 +910,44 @@ builds a human rig off the production factory and is the headless half.
 **⚠ Traps.** Do not reach for a special multiplayer branch: the asymmetry this plan keeps being
 bitten by is exactly what one code path playing authored data avoids. `rem_pas` (remove passenger)
 is unread and may matter for the multi-crew airframes.
+
+## D26 ☐ The bailed pilot must level under his canopy
+
+**Goal.** The parachutist hangs upright and drifts down, instead of holding whatever attitude the
+aircraft had when he left it.
+
+**Evidence (confidence: traced to the data, mechanism a hypothesis).** Reported at the controls: the
+chute "should orient downward, currently they don't rotate after a few secs and hang wrong in the
+air". `chuteman-chuteman`'s `rotate_chute1` is an `ObjectMotionFromTo` with `rotate` **from (0,0,0)
+to (0,0,0) over 4.0 s** — an absolute drive to a level basis, which is exactly the levelling the
+report asks for. `FromToMotion.Channel` reads both endpoints and `HasAnyChannel` is true, so the
+tween IS built and does run; the local rotation therefore reaches zero.
+
+**The hypothesis to test first:** zero LOCAL rotation is not level in the world, because the staged
+copy hangs under the crash root, which is a child of the `FlightController` and so carries the
+wreck's live attitude as it falls and tumbles. `chuteman_sway` then keeps rocking
+`chutemanparent` about that inherited frame. The observed "stops rotating and hangs wrong" is what a
+completed 4 s drive to a wrong-framed zero looks like.
+
+**Approach.** Confirm the frame the rotation lands in before changing anything (the `--debug-anim`
+pose lines print world rotations; compare the chute's against the wreck's over the same seconds). If
+the hypothesis holds, the existing seam is `AnimRuntime.LevelPlacedTemplateNames`, which already
+levels a named template to world axes and is fed from `EffectCatalogue.CrashSurfaceLevelAnimNames`
+for the surface-hugging crash effects. ⚠ That list's own meaning is "lies flat on the struck
+surface", which the chute does not; if the mechanism fits but the name does not, give the chute its
+own curated list beside `BailoutAnimNames` rather than widening that one's meaning.
+
+**Model recommendation.** medium — small once the frame question is settled, and the failure mode is
+visible rather than silent.
+
+**Verify.** At the controls, the chute hangs upright and drifts. Headless, the chute's world rotation
+after 4 s is level and stays level while the wreck's is not.
+
+**⚠ Traps.** Do not force the pose from code every frame: the 4 s drive is authored and the sway is
+authored, and overwriting either replaces authored behaviour with a hand-held pose, which is the
+pattern this plan has spent four waves decoding its way out of. `BailoutAnimNames` already exempts
+the chute from the wreck's velocity for the same class of reason; the attitude is the other half of
+the same idea and belongs beside it.
 
 **Playtest (owed, Wave D).** Shoot down an enemy and watch the whole sequence against
 `Enemy AI Shotdown.mp4`: airburst, burning wreck falling on its old heading, parachute, second
