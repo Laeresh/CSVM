@@ -56,6 +56,12 @@ public sealed partial class ProjectilePool : Node3D
     /// instance's time bound in seconds (0 = the runtime's own), <see cref="GunEffectTtl"/> for guns.</summary>
     public System.Action<string, Vector3, Basis, float>? EffectSink;
 
+    /// <summary>Whether the world-effects runtime binds a def of this name (<c>AnimRuntime.Handles</c>).
+    /// Asked before the gamez-model impact spawn: an IMPACT name can be BOTH a gamez root and an
+    /// ON_CALL def anchored on it (the seeker's <c>ballflare.flt</c>), and the original plays the
+    /// def, so a static instance of its template must not stand in for it. Null carries nothing.</summary>
+    public System.Func<string, bool>? EffectHandles;
+
     /// <summary>The disabling wash's route to the struck human's pane, <c>ScreenFlash.PlayBlend</c>'s
     /// shape (player index, colour, weight, duration, start delay). Assigned by the session; null (a
     /// lab, a headless view) washes nobody while the AI stun beside it still runs.</summary>
@@ -1080,9 +1086,9 @@ public sealed partial class ProjectilePool : Node3D
             // ⚠ Resolve the three end conditions BEFORE the swept step, never after: the original
             // ends a round inside its motion step and moves and collides only what survives
             // (FUN_005afd50 returning to FUN_005af720's alive test).
-            if (EndConditionMet(in p, out bool detonates))
+            if (EndConditionMet(in p, out bool detonates, out bool targetFused))
             {
-                EndRound(ref p, prev, detonates);
+                EndRound(ref p, prev, detonates, targetFused ? RegisteredBodyOf(p.Target) : null);
                 continue;
             }
 
@@ -1422,10 +1428,11 @@ public sealed partial class ProjectilePool : Node3D
     private static Vector3 WorldVelocity(in Proj p) => p.Vel + p.Inherited * InheritedFraction(in p);
 
     // The three ways a round ends itself, in the original's own order (FUN_005afd50 from the RANGE
-    // compare to LAB_005b0318). Range wins outright: neither fuse is consulted once the path is
-    // spent. `detonates` is false only for the round that expires quietly at RANGE.
-    private static bool EndConditionMet(in Proj p, out bool detonates)
+    // compare to LAB_005b0318). Range wins outright. `detonates` is false only for the quiet RANGE
+    // expiry; `targetFused` marks the own-target fuse, whose burst resolves on the fused aircraft.
+    private static bool EndConditionMet(in Proj p, out bool detonates, out bool targetFused)
     {
+        targetFused = false;
         if (p.Travelled >= p.Range)
         {
             detonates = DetonatesAtRange(p.Weapon);
@@ -1433,7 +1440,10 @@ public sealed partial class ProjectilePool : Node3D
         }
         detonates = true;
         if (TargetFuseTriggered(in p))
+        {
+            targetFused = true;
             return true;
+        }
         return p.Weapon.DetonationTime is { } fuse && fuse > 0f && p.Age > fuse;
     }
 
@@ -1850,8 +1860,10 @@ public sealed partial class ProjectilePool : Node3D
         // the answer. Everything after this line obeys `outcome` — Impact itself decides nothing.
         var outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: false, hasEffectsRuntime, suppression);
         // A chapter gamez node name instances at the hit point and skips the spark; a reader-def
-        // or unresolved name leaves the spark to stand in.
-        if (outcome.EffectName is { } fxName && SpawnImpactModel(fxName, point, EffectOrient(outcome, normal)))
+        // or unresolved name leaves the spark to stand in. A name the effects runtime binds plays
+        // there instead (Apply's sink), even when a same-named gamez template exists (ballflare.flt).
+        if (outcome.EffectName is { } fxName && !(EffectHandles?.Invoke(fxName) ?? false)
+            && SpawnImpactModel(fxName, point, EffectOrient(outcome, normal)))
             outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: true, hasEffectsRuntime, suppression);
 
         // Verification breadcrumb: the first few impacts confirm hit detection and surface
@@ -2157,14 +2169,34 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     // The one exit every self-ended round takes, so the range expiry and both fuses share the
-    // effect, sound and splash paths a struck surface gets. No collider and no normal: the impact
-    // sprite falls back to the world-facing quad, and the shooter rides along so the blast's
-    // aircraft pass attributes its kills.
-    private void EndRound(ref Proj p, Vector3 at, bool detonate)
+    // effect, sound and splash paths a struck surface gets. The own-target fuse hands its aircraft
+    // along so the burst indexes the aircraft's IMPACT row exactly as the sweep fuse's does (the
+    // beeper/seeker author their explosion on `player`, and only the empty default row answers a
+    // colliderless burst); every other end strikes nothing and the impact sprite falls back to the
+    // world-facing quad. The shooter rides along so the blast's aircraft pass attributes its kills.
+    private void EndRound(ref Proj p, Vector3 at, bool detonate, AircraftBody? fused = null)
     {
         if (detonate)
-            Impact(p.Weapon, at, null, Vector3.Zero, shooter: p.Shooter, team: p.Team);
+        {
+            var toHull = fused != null ? fused.GlobalPosition - at : Vector3.Zero;
+            var normal = toHull.LengthSquared() > 1e-8f ? toHull.Normalized() : Vector3.Zero;
+            Impact(p.Weapon, at, fused, normal, shooter: p.Shooter, team: p.Team);
+        }
         RetireRound(ref p);
+    }
+
+    // The registered body of a round's own held target, so the own-target fuse can hand Impact the
+    // aircraft it burst on. Null for a non-aircraft target (a zeppelin part, a bare lab mark).
+    private AircraftBody? RegisteredBodyOf(object? target)
+    {
+        if (target is AircraftBody body)
+            return body;
+        if (target is not FlightController rig)
+            return null;
+        foreach (var b in _aircraft)
+            if (b.Rig == rig)
+                return b;
+        return null;
     }
 
     // Takes a round out of the pool and releases what it was carrying. The live smoke of a released

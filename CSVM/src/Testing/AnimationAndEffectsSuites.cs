@@ -64,11 +64,11 @@ internal static class AnimationAndEffectsSuites
                     $"no template mesh left lit after its effect was stopped{(lit.Count == 0 ? "" : $" — {string.Join("; ", lit)}")}");
                 ctx.Check(r.Puffered == 30,
                     $"the puffer half's tally holds under suite conditions ({r.Puffered} built one, expected 30)");
-                // The 18 includes `biggun_flying_parts` (`mesh[8] zep_ng_dstry1_flt 8/8 @0.0 m`):
-                // its eight parts fly their solved parabola before their own deactivation switches
-                // them off, so samples in the window catch them drawing.
-                ctx.Check(r.Meshed == 18,
-                    $"the mesh half's tally holds under suite conditions ({r.Meshed} showed meshes, expected 18)");
+                // The 19 includes `biggun_flying_parts` (its eight parts fly their solved parabola
+                // before their own deactivation, so samples catch them drawing) and the seeker's
+                // `ballflare.flt`, whose one sequence lights the flare disc it is anchored on.
+                ctx.Check(r.Meshed == 19,
+                    $"the mesh half's tally holds under suite conditions ({r.Meshed} showed meshes, expected 19)");
             }
             finally
             {

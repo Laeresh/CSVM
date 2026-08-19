@@ -256,6 +256,9 @@ public sealed class WorldEffectsFactory
         if (projectiles != null && projectiles.EffectSink == null)
         {
             projectiles.EffectSink = (name, pt, orient, ttl) => effects.PlayEffectAt(name, pt, null, ttl, orient);
+            // The sink's own carrier test, so an IMPACT name that is both a bound def and a gamez
+            // root (ballflare.flt) plays the def rather than a static instance of its template.
+            projectiles.EffectHandles = effects.Handles;
         }
         return effects;
     }

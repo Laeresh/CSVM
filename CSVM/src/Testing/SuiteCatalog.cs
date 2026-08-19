@@ -40,6 +40,7 @@ public static class SuiteCatalog
         "smoke-screen",
         "disabling-hits",
         "impact-orientation",
+        "ordnance-impact-effects",
         "ordnance-launch-axis",
         "motor-acceleration",
         "ordnance-end-conditions",
@@ -192,6 +193,13 @@ public static class SuiteCatalog
             "hands he_ground_effect a basis whose Y is the slope normal, the same round into flat " +
             "ground hands identity, and a wep_12's scatter_effect on the slope stays identity",
             ImpactOrientation));
+        into.Add(new TestHarness.Suite("ordnance-impact-effects",
+            "the beeper/seeker impacts play what the data authors (PT-67): a wep_10 bursting on its " +
+            "own fused target indexes the aircraft's IMPACT row and plays large_fireball, the same " +
+            "burst on a non-aircraft target plays the named-and-empty default row's nothing, and a " +
+            "wep_11 into the ground hands its authored ballflare.flt to the effects runtime — the " +
+            "white growing flare — instead of standing a static gamez-template instance in for it",
+            OrdnanceImpactEffects));
         into.Add(new TestHarness.Suite("ordnance-launch-axis",
             "a player's pylon salvo leaves along the AIRCRAFT's axis while an AI's leaves along its " +
             "mount's (A5): no shipped airframe cants a pylon marker, so the widest rig's markers are " +

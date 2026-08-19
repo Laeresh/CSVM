@@ -1656,6 +1656,164 @@ internal static class OrdnanceSuites
         }
     }
 
+    // PT-67 on a live pool: a beeper bursting on its own fused target indexes the aircraft's
+    // IMPACT row (large_fireball), never the empty default row; a burst on a non-aircraft target
+    // still plays the authored nothing; and the seeker's ground impact hands ballflare.flt — a
+    // bound ON_CALL def anchored on a same-named gamez root — to the effects sink instead of
+    // standing a static instance of its template in for the authored white flare.
+    internal static void OrdnanceImpactEffects(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_10", out var beeper) || !weapons.TryGet("wep_11", out var seeker))
+        {
+            ctx.Check(false, $"wep_10 and wep_11 resolve");
+            return;
+        }
+
+        // The authored rows this suite performs, read off the data first so a failure below names
+        // the mechanism and not a changed table.
+        ctx.Check(beeper.ImpactFor(SurfaceRegistry.Default) == null,
+            $"wep_10's default row is named-and-empty (a null row): a burst that strikes nothing plays nothing");
+        ctx.Check(beeper.ImpactFor(SurfaceRegistry.Player) is { Animation: "large_fireball", Sound: "snd_missile_beeper" },
+            $"wep_10's player row authors large_fireball + snd_missile_beeper");
+        ctx.Check(seeker.ImpactFor(SurfaceRegistry.Default) is { Animation: "ballflare.flt", Sound: "snd_missile_seeker" },
+            $"wep_11's default row authors ballflare.flt + snd_missile_seeker (the white ground flare)");
+        ctx.Check(seeker.ImpactFor(SurfaceRegistry.Player) is { Animation: "large_fireball" },
+            $"wep_11's player row authors large_fireball");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? victim = null;
+        Node3D? mark = null;
+        try
+        {
+            var effects = new List<(string Name, Vector3 At)>();
+            var live = new ProjectilePool(textures, null, null)
+            {
+                EffectSink = (name, at, orient, ttl) => effects.Add((name, at)),
+            };
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            // Head-on at 410 m: a 1200 m/s beeper samples pre-move positions every 20 m, so one
+            // lands 10 m short of the rig's centre — inside the 15 m fuse, ahead of the hull, and
+            // while the sweep fuse still holds (closing): the OWN-target fuse is the arm under test.
+            var origin = new Vector3(-6000f, 2500f, 0f);
+            var muzzle = new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up), origin);
+            var planePos = origin + new Vector3(0f, 0f, -410f);
+            var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            victim = new FlightController
+            {
+                PlaneModel = model,
+                Collider = PlaneCollider.Build(model),
+                Damage = new PlaneDamage(stats.DestroyableParts),
+                PlayerIndex = 2,
+                Projectiles = live,
+                UseKeyboard = false,
+                AllowPause = false,
+            };
+            victim.AddChild(model);
+            victim.Setup(new FlightModel(stats), ctx.Camera, new CamParams(),
+                planePos, planePos + Vector3.Forward);
+            ctx.Host.AddChild(victim);
+            ctx.Check(victim.Body != null, $"the target rig built and registered an AircraftBody");
+
+            (string Name, Vector3 At)? Fly(WeaponDef weapon, object? held, Transform3D from)
+            {
+                live.Clear();
+                effects.Clear();
+                var rounds = new List<(Vector3 Pos, Vector3 Velocity)>();
+                live.Spawn(weapon, from, Vector3.Zero, shooterId: 0, target: held);
+                for (int i = 0; i < 240; i++)
+                {
+                    live.SimStep(1f / 60f);
+                    rounds.Clear();
+                    live.CollectLiveRounds(rounds);
+                    if (rounds.Count == 0)
+                        break;
+                }
+                return effects.Count > 0 ? effects[0] : null;
+            }
+
+            var onPlane = Fly(beeper, victim, muzzle);
+            float toPlane = onPlane?.At.DistanceTo(victim.WorldPosition) ?? -1f;
+            ctx.Check(onPlane is { Name: "large_fireball" },
+                $"a beeper bursting on its own fused target plays the PLAYER row's large_fireball (played={onPlane?.Name ?? "nothing"})");
+            ctx.Check(toPlane > 5f && toPlane <= (beeper.DetonationDistance ?? 0f) + 1f,
+                $"and the burst is a fuse burst inside DETONATION_DISTANCE, not a contact hit d={toPlane:0.#} m");
+
+            // CONTROL: the same fuse on a bare mark resolves no aircraft, so the beeper's
+            // named-and-empty default row plays exactly nothing — no invented fallback effect.
+            // Flown on a parallel line 4 km abeam, out of the registered rig's sweep-fuse reach.
+            var controlFrom = new Transform3D(muzzle.Basis, origin + new Vector3(4000f, 0f, 0f));
+            mark = new Node3D { Name = "impact-fx-mark" };
+            ctx.Host.AddChild(mark);
+            mark.GlobalPosition = controlFrom.Origin + new Vector3(0f, 0f, -500f);
+            var onMark = Fly(beeper, mark, controlFrom);
+            ctx.Check(onMark == null,
+                $"the same burst on a non-aircraft target plays the empty default row: nothing (played={onMark?.Name ?? "nothing"})");
+        }
+        finally
+        {
+            victim?.Free();
+            mark?.Free();
+            pool?.Free();
+            textures.Dispose();
+        }
+
+        // --- the seeker's ground flare needs the chapter gamez, where ballflare.flt is BOTH a
+        // template root and a bound def: the def must win, or a bare 1 m disc stands in.
+        ctx.WithWorld("C1", collision: false, world =>
+        {
+            var bound = EffectCatalogue.WorldEffectAnimNames(world.Session.Program);
+            var sub = world.Session.Program.Subset(bound);
+            ctx.Check(sub.ByAnimName("ballflare.flt").Count > 0,
+                $"the world-effects bind carries the ballflare.flt def");
+            ctx.Check(world.Gamez.FindByName("ballflare.flt") != null,
+                $"and C1's gamez carries a same-named template root (the name collision under test)");
+
+            var worldTextures = new TextureArchive(texturesPath);
+            ProjectilePool? live = null;
+            StaticBody3D? plate = null;
+            try
+            {
+                var plays = new List<string>();
+                live = new ProjectilePool(worldTextures, null, null,
+                    flyoutGamez: world.Gamez, flyoutScene: world.Session.Builder.Scene,
+                    flyoutAnims: world.Session.Program)
+                {
+                    EffectSink = (name, at, orient, ttl) => plays.Add(name),
+                    // The production predicate (AnimRuntime.Handles over the bound subset).
+                    EffectHandles = name => sub.ByAnimName(name).Count > 0,
+                };
+                ctx.Host.AddChild(live);
+
+                var origin = new Vector3(-6000f, 4000f, -2000f);
+                plate = CombatSuites.Plate("impact-fx-plate", new Vector3(60f, 0.2f, 60f), origin);
+                ctx.Host.AddChild(plate);
+                live.Spawn(seeker, new Transform3D(
+                    Basis.LookingAt(Vector3.Down, Vector3.Forward), origin + new Vector3(0f, 20f, 0f)),
+                    Vector3.Zero);
+                for (int i = 0; i < 120 && plays.Count == 0; i++)
+                    live.SimStep(1f / 60f);
+                ctx.Check(plays.Count > 0 && plays[0] == "ballflare.flt",
+                    $"a seeker into the ground hands ballflare.flt to the effects sink — the authored flare def, not a static instance of its gamez template (played={(plays.Count > 0 ? plays[0] : "nothing")})");
+            }
+            finally
+            {
+                live?.Free();
+                plate?.Free();
+                worldTextures.Dispose();
+            }
+        });
+    }
+
     // A5's launch axis and D18's launch hook over a live fire path: the rig fires its own pylons
     // through FireControl, and the pool is never stepped, so every round still stands at the pose
     // it launched from. No shipped airframe cants a pylon marker, so the salvo flies off markers

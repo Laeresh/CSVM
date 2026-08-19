@@ -72,6 +72,9 @@ public static class EffectCatalogue
         "large_fireball", "small_fireball", "he_ground_effect", "ap_ground_effect", "flak_effect",
         "flash_effect", "sonic_ground_effect", "scatter_effect", "torpedo_ground_effect",
         "rear_flash_effect", "torpedo_water_effect",
+        // The seeker's default IMPACT row: an ON_CALL def anchored on a same-named gamez root.
+        // Already in the torpedo effects' CALL closure; named here because a weapon row indexes it.
+        "ballflare.flt",
         // gun IMPACT family — caliber (3040/5060/70) × ammo (slug/dum/ap/mag); see EffectSink
         "3040slug_gunhit", "3040ap_gunhit", "3040dum_gunhit", "3040mag_gunhit",
         "5060slug_gunhit", "5060ap_gunhit", "5060dum_gunhit", "5060mag_gunhit",
