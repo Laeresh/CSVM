@@ -162,6 +162,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/CompassTape.cs` — the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
 - `src/Flight/GaugeCluster.cs` — the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
 - `src/Flight/FlightController.cs` — the flying-aircraft node: input → FlightModel → transform, chase camera, HUD, collision/crash, respawn; `FireControl`'s engine adapter.
+- `src/Flight/FlightControllerBuild.cs` — FlightRoster's internal, write-once construction handoff for a controller before tree attachment.
 - `src/Flight/PlayerRig.cs` — one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
 - `src/Flight/ViewerSet.cs` — session-owned "every pane's camera" registry: `GameSession` binds it once after the rigs are built; `ProjectilePool.Viewers` is its first consumer.
 
@@ -231,7 +232,9 @@ instead.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
-- `src/Testing/Suites.cs` — the 26 registered suites and their golden counts (48 weapon defs, destructibles, glTF round trip). Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
+- `src/Testing/SuiteCatalog.cs` — the ordered registry of the in-engine suites; domain scenario bodies live in `*Suites.cs` modules, while `SuiteConstants` holds their shared golden inputs. Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
+- `src/Testing/*Suites.cs` — six domain scenario modules: puffer, combat, Instant Action, AI/targeting/zeppelins, world/tools, and animation/effects.
+- `src/Testing/SuiteConstants.cs` / `BurstTimeline.cs` / `SuiteViewers.cs` / `EffectStageSuiteHelper.cs` — the focused shared inputs, timeline values, pane-camera fixtures, and staged-effect fixture used by more than one suite module.
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
@@ -256,8 +259,8 @@ clusters they delegate to.
 - `src/Session/WeatherRig.cs` — loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
 - `src/Session/WorldEffectsFactory.cs` — builds the impact/destruction effect stages and the per-plane crash runtime.
 - `src/Session/LensFlareRig.cs` — the sun's lens flare: screen-space sprites along the sun→centre line, occlusion-tested.
-- `src/Session/FlightRigAssembler.cs` — assembles one player's flight rig: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
-- `src/Session/AiAircraftSpawner.cs` — spawns an AI-piloted aircraft into a running session: the flight-essential subset of a rig, an `AiPilot` at the controls, shooter ids from 100.
+- `src/Session/FlightRoster.cs` — the session's aircraft set: builds the human field in player order and introduces AI aircraft later through one assembly seam.
+- `src/Session/HumanFlightAdapter.cs` — the FlightRoster's internal human-rig adapter: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
 - `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll), and F12's objective-zeppelin selection.
 - `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry, pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in and F12's wave-credit budget that switches it back off.
@@ -1028,7 +1031,7 @@ selectable structures arrive through `Rebuild`'s separate `subParts` argument, f
 `ZeppelinRuntime.CollectTargetParts`. An `Ordnance` entry is admitted only when its source is a
 `ProjectilePool.Flyout` with the `TARGETABLE` admission byte set and still live, so a round wrapped
 only because it is fused stays unselectable. `Describe` is the only place in the targeting path that reads
-a concrete source type. `TargetSelection` owns the instance; `FlightRigAssembler` wires one per human
+a concrete source type. `TargetSelection` owns the instance; `HumanFlightAdapter` wires one per human
 pane and `FlightController.StepTargeting` feeds it every frame. Decode:
 [org/targeting.md](org/targeting.md) "The candidate list". Pinned by the `target-pool` suite, with
 the carried-gunner exclusion on `turret-gunner`.
@@ -1918,6 +1921,8 @@ The one place the flight HUD decides how big it draws: `Scale(control, reference
 window height / reference, damped by `PaneFactor` = sqrt(paneH/windowH) inside a splitscreen
 pane (2P ≈ 71 %, 4P 50 %; the damping exponent is TUNE). CompassTape, GaugeCluster, MarkerHud,
 StuntScoreboard and FlightController's text block all route through it.
+`hud.statusTextScale` and `hud.markerTextScale` multiply only their matching flight-HUD text,
+clamped from 0.5 to 2.0; arrows and layout remain at the base scale.
 
 ## src/Flight/HudFont.cs
 The game's own HUD bitmap font, rebuilt from `extracted/rimage/5pointhud.png` (+ the brighter
@@ -1996,7 +2001,7 @@ with no killer); and one opponent marker per living rig (`Rigs`, excluding `Play
 clock-hour bearing (`EdgePoint`/`ClockHour`, copied verbatim) when off screen/behind, in that
 opponent's own `SplitScreen.PlayerColor`. `Build(match, playerIndex, camera)` binds the match +
 this pane's own camera (opponent markers project through it, exactly like MarkerHud's zone);
-`Rigs` is attached once by `FlightRigAssembler` (the SAME live list `GameSession` keeps, not a
+`Rigs` is attached once by `HumanFlightAdapter` (the SAME live list `GameSession` keeps, not a
 snapshot — every seat exists before this pane assembles, only `.Controller` fills in as siblings
 do); `PlanePos`/`HeadingDeg` are fed every frame by `FlightController`, same site as `Marker`'s.
 The status line pulls the match live every `_Draw` (no pose to project for it) and `OnKill` is
@@ -2322,7 +2327,7 @@ _Process, frozen while paused or crashed. --fly only.
 `Suspend(flareName)` (BL-287) hands a named lamp to whatever just deactivated it — the fuel-leak stage
 (`player_fuelleak`'s `OBJECT_ACTIVE_STATE … wing_flare2 false`, never reversed by the def) used to
 fight the blink cycle, which unconditionally re-asserted the flare/light `Visible` every tick and
-undid the leak's deactivation within 1.5 s. `FlightRigAssembler`'s `DamageEffectSink` calls
+undid the leak's deactivation within 1.5 s. `HumanFlightAdapter`'s `DamageEffectSink` calls
 `Suspend("wing_flare2")` right after playing `player_fuelleak` through the rig runtime — a suspended
 lamp's index is skipped outright in `Advance`, deterministically, not by detecting a stray write after
 the fact (which would miss the common case where the blinker's own commanded state already happened
@@ -2347,7 +2352,7 @@ Single-sourced: the terrain sweep casts these boxes AND `AircraftBody` mounts th
 ## src/Flight/ShakeDefs.cs
 Typed reader over the shared `shakes.zrd.json` — the six shake-oscillator sources
 (`docs/formats/shakes.md`), modelled on `WeaponDefs`: load once (`GameSession` →
-`FlightRigAssembler.Inputs.Shakes`), named accessors per source, unhandled-key tripwire.
+`HumanFlightAdapter.Inputs.Shakes`), named accessors per source, unhandled-key tripwire.
 Each source is one law (frequency/damp/sawtooth) plus exactly one magnitude-term variant
 (`magnitude_factor` [+ `he_factor`], `min_speed`+`magnitude_quotient`, or absolute `magnitude`);
 absent sources read as null and `PlaneShake` no-ops them.
@@ -2360,7 +2365,15 @@ model under. Engine-free on purpose (unit-tested); the pivot write is the contro
 Amplitude = `magnitude_factor × caliber` in radians of roll, **measured** off original footage
 (`analysis/gun-wobble-shake/`); a rocket hit stands in its armor damage (declared TUNE).
 `high_speed`'s input is speed over the plane's `fd_speed`, so the authored `min_speed` 1.0 gate
-means "beyond rated max" — the dive rattle; cruise stays silent like the footage's idle floor.
+means "beyond rated max" — the dive rattle whose magnitude is the EXCESS over the gate,
+`(speedRatio − min_speed)/quotient` (zero at rated max, gentle overspeed ramp); cruise stays
+silent like the footage's idle floor.
+
+## src/Flight/FlightControllerBuild.cs
+The internal construction handoff from `FlightRoster` to `FlightController`. It contains one
+resolved controller's pre-tree state from either flight adapter, and `Bind` consumes it exactly once, before tree
+attachment; a repeated or late bind is a construction error. The roster keeps the data-resolution
+and lifecycle ordering, while the controller keeps its runtime interface.
 
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input → FlightModel → transform, text HUD + telemetry, weapon fire as
@@ -2492,7 +2505,7 @@ aircraft's side for every hostility test — the aim-assist candidate scan, `Sel
 carried `TurretController`s and `AiVoiceDispatcher` registration all read it, none re-derives one
 from `PlayerIndex` — and defaults to `AimAssist.TeamOfPilot(PlayerIndex)` until a mission sets it
 explicitly, so free flight and `--vs` are unchanged; plain flight's `--coop` is the one other
-explicit setter, `FlightRigAssembler` giving it `AimAssist.PlayerTeam` the same way Instant Action
+explicit setter, `HumanFlightAdapter` giving it `AimAssist.PlayerTeam` the same way Instant Action
 does. `Inert` is this aircraft's other lifecycle state: BUILT but held
 completely out of the session — not stepped (`SimStep` and `_Process` return at once), not drawn,
 not on the aircraft collision layer, not hittable, not a targeting candidate, and not counted as
@@ -3111,7 +3124,7 @@ sharing one `BuildState`; menu and CLI share that one build path. Owns the sessi
 `StartupProfile` and the `UI.ScreenFlash` overlay (built with the rigs, since it needs one surface
 per view and the `ViewerSet` that routes a wash to them, and handed as a sink to the world runtime
 and — via `WorldEffectsFactory.ScreenFlash` — the world-effects one); delegates to the `src/Session/` clusters (LiveryResolver, SpawnPicker,
-PlaneRoster, FlightRigAssembler, WorldEffectsFactory, WeatherRig, LensFlareRig) and to `Testing.ProbeRunner`/
+PlaneRoster, FlightRoster, WorldEffectsFactory, WeatherRig, LensFlareRig) and to `Testing.ProbeRunner`/
 `CaptureDirector` on the Launcher — read `src/Session/Launcher.cs`'s entry too before touching the
 build's edges. `BuildsCollision` is the only spelling of "does this session build colliders".
 `LoadArchives` opens the five session archives through `SessionArchives.OpenFor` (`ArchiveIntent.Lab`
@@ -3119,7 +3132,7 @@ when `_spec.AnimLab`, else `.Session`), which is also where `TexturesOutliveBuil
 `SoundsOutliveBuild` come from now — `BuildWorldStage`'s `WorldSession.Options` reads them off
 `BuildState`, it does not set them by hand. In `--vs`, `BuildFlightRigs` builds one `VersusMatch`
 (`VsKills`, `VsTimeMinutes`×60 s) BEFORE the rig loop — same reason `StuntRace` is built early —
-so `FlightRigAssembler` can bind every pane's `VersusHud` to it; once every rig exists it
+so `HumanFlightAdapter` can bind every pane's `VersusHud` to it; once every rig exists it
 forwards each one's `Downed` into TWO independent subscriptions: the scoring one (a killer inside
 the roster is `RegisterKill`, anything else — terrain, mid-air, unowned or `IncomingFire` rounds —
 is a plain `RegisterDeath`) and a kill-banner broadcast that pushes the same fact to every pane's
@@ -3133,7 +3146,7 @@ when parent-driven), so a halt freezes the match with the sim. `DriveSimSteps` a
 `--debug-scoreboard --vs`'s one-shot forced kill (`_versusDebugKillFired`, same single-fire shape
 as `--crash`'s `_crashFired`): P1 downs P2 through the real `DebugForceCrash(killer)` → `Crash` →
 `Downed` path on the first sim step, so a scripted screenshot has a real, attributed kill without
-scripting an actual shot. `BuildFlightRigs` also constructs `AiAircraftSpawner` over the same rig
+scripting an actual shot. `BuildFlightRigs` also constructs `FlightRoster` over the same rig
 `Inputs`; `SpawnAiAircraft` (public — the M4 A2 actor seam, called by `--ai=` at build and by
 later waves mid-session) adds each AI plane to `_aiPlanes`, stepped in `DriveSimSteps` after the
 rigs (a realtime clock lets them tick themselves, like the rigs). `AllAircraft()` is the one
@@ -3165,7 +3178,7 @@ overload rather than that method group (a generated enemy needs `shippedSkins: t
 four-parameter one no longer has to stay free of optional parameters — C# does not extend a
 method-group-to-delegate conversion over trailing optional ones, which is why the lambda is
 required. That overload's `inert:`
- forwards to `AiAircraftSpawner.Spawn` and is how a wave is built at session time and arrives
+ forwards to `FlightRoster.SpawnAi` and is how a wave is built at session time and arrives
 later; `--crash`'s sweep over `_aiPlanes` leaves an inert plane alone, since `DebugForceCrash` is
 gated on `InPlay`. `BuildFlightRigs` spawns
 the ace (`dogfight_ace` only; F12 adds the zeppelin arm) right after the player voice registration,
@@ -3266,7 +3279,7 @@ every mission type").
 mirroring the `--vs` block just above it): `dogfight_ace`/`dogfight_squadron` through
 `DebugForceCrash`, attributed to P1 so the board's kill row reads non-zero on a scripted
 screenshot too; `stunt_flying` needs nothing here, already forced unconditionally by
-`FlightRigAssembler`'s own `DebugCompleteStunt` wiring; `zeppelin_run` has no debug force — this
+`HumanFlightAdapter`'s own `DebugCompleteStunt` wiring; `zeppelin_run` has no debug force — this
 item does not add one, since G13's own verification drove that mode through real damage instead.
 
 ## src/Utils/GameClock.cs
@@ -3323,7 +3336,8 @@ and the build-time-preset blind spot: verification.md PERF-12/PERF-13/PERF-14.
 
 ## src/Utils/HitchSidecar.cs
 `HitchMonitor`'s write path: a tripped `HitchRecord` is copied — never
-referenced, since `Last` is overwritten on the next trip — into a small preallocated queue, then
+referenced, since `Last` is overwritten on the next trip — into a small preallocated queue (default depth 16,
+`hitchSidecar.queueDepth`, drained after a default 2 s, `hitchSidecar.flushSeconds` — both TUNE), then
 drained a few seconds later to one `[perf] hitch …` line (`ReportPerf`'s own flat key=value grammar,
 ms terms as-is, byte counts as MB) plus one JSON line in `.scratch/logs/<mode>-<stamp>.hitches.jsonl`,
 sharing the main log's stem. Both carry C8's attribution at the end: `samples=site:callsxms,…`
@@ -3349,7 +3363,7 @@ a closed enum (`debris_spawn` · `part_detach` · `ai_spawn` · `effect_checkout
 `material_create` · `resource_load` · `audio_load`); a site nothing called is ABSENT from the record
 rather than reported as zero.
 All eight sites are seeded: `AnimRuntime.RunDeathSequence` (debris_spawn),
-`FlightController.Crash` (part_detach), `AiAircraftSpawner.Spawn` (ai_spawn),
+`FlightController.Crash` (part_detach), `FlightRoster.SpawnAi` (ai_spawn),
 `AnimRuntime.PlayEffectAt` (effect_checkout), `EmitterDirector.Assert`'s miss branch
 (effect_pool_miss), `EmitterRenderer.Attach` (material_create), `TextureArchive.FindImage`
 (resource_load), `WorldSounds.Spawn`/`Create`'s decode-on-miss (audio_load). Confirmed live on two
@@ -3410,8 +3424,11 @@ so `puffer-modes` asserts on burst / distance-trail / sustain with no atlas, `Te
 the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replaces the draw so the
 emitter's own MODES are. Neither covers the other's job.
 
-## src/Testing/Suites.cs
-The 58 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+## src/Testing/SuiteCatalog.cs
+The ordered registry of 70 in-engine assertion suites. Scenario bodies are grouped by domain in the
+six `*Suites.cs` modules; `Names` is the registry-order test surface. It preserves the original
+suite order, including `emitter-lifetime` first, because that suite installs the shared C1 world's
+fake emitter factory. The suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
 build from ai.zrd + the thirdp mount, arc-centre rest pose, track/fire/hit under the host's
 shooter id, bored-window fire suppression with live tracking, the nearer-end-stop park, YAW [0,0]
@@ -3504,6 +3521,25 @@ slot 0's `sonic_ring1..5` read three frames into play 1 and play 5: visible-in-t
 per-instance opacity must agree, and both plays must be drawing at least one ring. Without the
 re-reset the fifth play's rings read INACTIVE at opacity 0, which is the sortie-long dead-burst
 symptom this suite exists to hold shut.
+
+## src/Testing/*Suites.cs
+Six domain modules hold the in-engine scenario bodies: `PufferSuites`, `CombatSuites`,
+`InstantActionSuites`, `AiTargetingAndZeppelinSuites`, `WorldAndToolSuites`, and
+`AnimationAndEffectsSuites`. They depend on `TestHarness` through `TestContext`; shared fixtures
+are separate focused modules, not an all-purpose suite helper.
+
+## src/Testing/SuiteConstants.cs
+The shared golden inputs used by more than one scenario module: airframe and weapon counts, puffer
+timing, the destructible census, and texture samples.
+
+## src/Testing/BurstTimeline.cs
+The three value types describing an authored ordnance-burst timeline and its observed dispatches.
+
+## src/Testing/SuiteViewers.cs
+Builds a test pane camera at a supplied world position for suites that exercise `ViewerSet`.
+
+## src/Testing/EffectStageSuiteHelper.cs
+Builds and frees a production-shaped, pooled effect-template stage for mesh-visibility suites.
 ## src/Testing/GoldenShot.cs
 The engine half of the golden-image tripwire: `PixelHash(Image)` (md5, lower-case hex) and
 `Adapter()` (`"<gpu> / <api>"`). Called at the `--screenshot` save site, which prints
@@ -3631,7 +3667,7 @@ type stays the single owner of spawn resolution.
 Where every pilot in a session starts: `ChooseStarts(spawns, missionZrdrPath, spawnBase,
 playerCount)` returns one `FlightStart` — the same `(pos, lookAt)` pair `FlightController.Setup`
 already took — per player. Two implementations: `SpawnPicker` (the plain per-player walk of the
-mission's spawn list) and `RaceGrid`. `FlightRigAssembler` holds the interface and resolves the
+mission's spawn list) and `RaceGrid`. `HumanFlightAdapter` holds the interface and resolves the
 field lazily on its first `Assemble`, so the resolve still happens where it always did.
 
 ## src/Session/RaceGrid.cs
@@ -3692,23 +3728,6 @@ root = how many slot containers the stage needs; `UnknownRoots` names an authore
 typo would otherwise size nothing silently. Asserted twice, because that set is now chapter data: in
 `EffectPoolsTests` against C1's bound program (an `ExtractedDataFact`, skipped without an
 extraction) and as an `effects-census` condition on whatever chapter the run was given.
-
-## src/Session/AiAircraftSpawner.cs
-Spawns an AI-piloted aircraft into a RUNNING session, any time after the build: the
-flight-essential subset of a player rig — painted plane, `FlightController` with an `AiPilot`,
-`IsHumanPiloted` false, `Setup(null)` (no camera), no HUD/devices, collider/body/damage, stock
-loadout, the standard crash runtime — over the same `FlightRigAssembler.Inputs` the rigs used.
-`GameSession.SpawnAiAircraft` is the entry point (`--ai=` is its CLI probe); the session steps
-every spawned plane in `DriveSimSteps` after the rigs. Shooter ids run from `ShooterIdBase` (100),
-outside every player index and `IncomingFire.ShooterId`. The crash runtime it builds indexes the
-`ai_crash_*` family, not `player_crash_*` — `BuildFlightCrashRuntime` keys the family on
-`IsHumanPiloted` (the original's own vehicle split); `--crash` forces spawned AI planes
-too, so the split is readable off the `CRASH … def=` line headlessly.
-`Spawn`'s `inert:` sets `FlightController.Inert` in the object initializer — before `Setup`,
-before the node joins the tree — so an aircraft built inert never has one live frame; the spawn
-log says `INERT`, and the caller puts it in play with `FlightController.Activate`. Everything else
-is built exactly as a live plane's: pilot, gunner and mode machine are all wired, they simply
-never step.
 
 ## src/Session/InstantActionRuntime.cs
 Owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's spawn draw
@@ -3845,7 +3864,15 @@ subscribes `InertChanged` — the dispatcher is engine-free and can see no contr
 is the only place the two meet. An INERT aircraft is registered in speaker order like any other and
 is simply not eligible until its wave launches.
 
-## src/Session/FlightRigAssembler.cs
+## src/Session/FlightRoster.cs
+The session-owned assembly seam for the flight roster: `BuildPlayers` constructs the whole human
+field in ascending player order and returns its build-summary facts; `SpawnAi` introduces one
+fully configured AI aircraft later. `GameSession` is its only caller. It preserves the shared
+livery stream, spawn-list order, and existing optional-feature fallbacks while keeping callers
+away from partially configured `FlightController` nodes. `HumanFlightAdapter` is its human
+implementation; AI policy stays private to the roster.
+
+## src/Session/HumanFlightAdapter.cs
 Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung
 on it — loadout/ordnance (and, with them, the aim assist's structure candidates: the world runtime's
 `DestructibleRegistry`, when this session built a world), the carried turret gunners

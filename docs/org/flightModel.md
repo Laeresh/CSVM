@@ -571,9 +571,8 @@ through the ramp moves the 1300 → 570 ms roll-off from **20.5× to 26.8×** ag
 **42×**, so the deficit falls from 2.05× to **1.57×**. That remainder is outside the ±20% amplitude
 systematics and the ±12% spread in the clips' mean airspeed, so it is a real difference and not
 measurement slack; the pitch transient nonetheless reads right at the controls, which is why no
-constant is chased for it. Three candidates have never been examined: the original's 0.5/s throttle
-slew (decoded, unimplemented — it contaminates the first seconds of any manoeuvre), the `liftAOAs`
-airflow blend under a rapidly reversing demand, and the possibility that the original's 570 ms point
+constant is chased for it. Two candidates have never been examined: the `liftAOAs` airflow blend
+under a rapidly reversing demand, and the possibility that the original's 570 ms point
 (a 4.9× drop from 700 ms over a 1.23 frequency ratio) is a resonance rather than a point on a smooth
 roll-off, which no monotone transfer function produces and which the corpus cannot separate from
 noise at 0.63 ± 0.13 ft.
@@ -1324,10 +1323,9 @@ we simulate and score sits. **Decoded, unimplemented, and deliberately unowned.*
 
 **The throttle slews at 0.5/s, with no idle floor** (`0x48e652`/`0x48e698`: current ±= `0.5 · dt`
 toward commanded, snapping exactly onto it when the step crosses). Cutting from full to zero takes
-2 s of tapering thrust; slamming open takes the same. The remake applies the lever instantly —
-**decoded, unimplemented**, and the one mechanism that could contaminate the first seconds of any
-throttle-step measurement taken from footage (it is far too fast to explain the CAP-05 deficit,
-whose implied residual lever would have to persist for ~28 s).
+2 s of tapering thrust; slamming open takes the same. `FlightController` now applies the live-lever
+slew to AI commands as well as keyboard commands, so a carrier release's 0.1 seed survives the AI's
+first desired-full-throttle update.
 
 ## The per-spawn jitter — eleven slots, non-player aircraft only (IMPLEMENTED)
 
@@ -1670,13 +1668,14 @@ accum += V · (ai_groundblow · groundblow_mag)           = A · S · 5.0 as aut
 It is independent of the AI's own command (a fixed push, where the player's is proportional to what
 the pilot asked for), **linear** in proximity rather than quadratic, and **not multiplied by `dt`**
 anywhere in the chain, so it is frame-rate dependent. Both the factor and `S` are cut by a further
-**×0.15** (5.0 → 0.75, not down TO 0.15 — confirmed by decompile) while the clock is inside
-`obj+0xB4` (below), a 2.5 s post-carrier-drop settling window (`FUN_00452450`'s spawn path only).
+**×0.15** (5.0 → 0.75, not down TO 0.15 — confirmed by decompile) after the `obj+0xAC`
+collision/ground-blow gate has expired but while the clock is inside `obj+0xB4` (below). Together
+these make a carrier drop: 1.5 s with no AI ground blow, then 1.0 s at ×0.15, then full strength.
 ⚠ **This window IS reachable in the remake.** A zeppelin's fighter-drop launch
 (`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`, the "Zeppelins" section below) is this engine's
 carrier drop, and a freshly-dropped fighter flies the same `UsesAiForcePath` plant this law reads.
-The port tracks no per-aircraft spawn timestamp, so the ×0.15 cut is an unmodelled gap
-(`backlog.md` `BL-382`), not an unreachable one: a just-dropped fighter gets the full un-cut 5.0.
+The port carries this timer on each carrier-released aircraft, so the ×0.15 cut applies for its
+full 2.5 s window.
 
 **Gates on the whole effect.** `obj[0xd6] != 4`; for non-player objects the clock must be past
 `obj+0xAC`; and `FUN_0048c470` skips the call entirely when the player is flagged crashed
@@ -1771,12 +1770,9 @@ AI's independence from command sign, and the body-frame conversion.
 ⚠ **`ai_groundblow` alone is not the AI factor.** `FlightModel.GroundBlowTerm`'s response is
 `ai_groundblow · groundblow_mag` (5.0 authored), matching the correction above; the AI probe is
 additionally gated on `AiModeMachine.Mode != AiMode.Stunned` (`0x0048c317`'s own mode check,
-flightModel.md above), reproducing "a stunned AI flies into terrain". Two gates are NOT modelled,
-both recorded as gaps (`backlog.md` `BL-382`) rather than as moot: the 2.5 s post-carrier-drop ×0.15
-cut — reachable here (a zeppelin fighter-drop launch is this engine's carrier drop, see "Zeppelins"
-above), just not tracked, since nothing carries a per-aircraft spawn timestamp — and the per-object
-`obj+0xAC` collision-grace gate (non-player objects only), the same timer family, which C25 did not
-take on either: it ported the impulse and not the resolver around it.
+flightModel.md above), reproducing "a stunned AI flies into terrain". Carrier releases now carry
+both timers: the 2.5 s post-drop ×0.15 window and the per-object `obj+0xAC` collision grace. The
+carrier grace also suppresses AI ground blow; its probe and both output terms begin only after it.
 
 ## Collision response and `bounce_factor` (`FUN_0048d7f0`)
 
@@ -1890,8 +1886,12 @@ in a single inter-frame interval at 30 fps, and it does not accumulate.
   ("Collision damage" below).
 - **`obj+0xB4`, a post-drop settling window.** Clock + **2.5**, written on the spawn paths only.
   `FUN_00452450` gives the context: the entity is repositioned, yawed to −π/2, and given the launch
-  velocity minus 22.352 m/s vertically, which is a drop from a carrier at 50 mph. Inside it, an AI's
-  ground blow runs at 15 %.
+  velocity minus 22.352 m/s vertically, which is a drop from a carrier at 50 mph. `AiGeneratorRuntime`
+  samples the host's live velocity each sim step and seeds this vector after the released aircraft's
+  respawn, so the generic spawn speed cannot overwrite it. The same routine seeds both throttle fields
+  to **0.1**, which `FlightController` carries through the release rather than its ordinary spawn throttle.
+  The first 1.5 s overlaps `+0xAC`, so ground blow is completely absent; only the final second runs
+  at 15 %.
 
 Neither is a damage-invulnerability timer; `obj+0xAC` disables collision itself.
 
@@ -2164,9 +2164,9 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
     days before this decode, and removed with no successor when
     the decoded Mach polar replaced the fitted drag law. `FlightModel.cs` now carries the same
     no-induced-drag statement in its own comments.
-12. **The throttle lever slews at 0.5/s with no idle floor** (2 s full-to-idle); the remake applies
-    it instantly. Decoded, unimplemented — a feel/transient gap, not a steady-state one, and the
-    one mechanism that could contaminate the first seconds of any throttle-step footage.
+12. **The throttle lever slews at 0.5/s with no idle floor** (2 s full-to-idle). `FlightController`
+    applies it to both keyboard and AI desired-throttle commands; carrier releases start both fields
+    at 0.1, then ramp if the AI immediately requests full power.
 13. **Spawn speed is the mission's own, and it is not plane-dependent.** ⚠ This item previously
     read "the original's is plane-dependent"; that is false at source, and the remake now reads
     the authored value. The player spawn routine `FUN_0047f1f0` takes its speed from the

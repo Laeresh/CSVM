@@ -177,7 +177,7 @@ public class GroundBlowTests
     public void TheAiLawIsAFixedPushNotACommandProportionalOne()
     {
         // The un-cut authored value (docs/org/flightModel.md's "Ground blow"); the 2.5 s
-        // post-carrier-drop cut is a separate, unmodelled factor. The push does not read cmd, so
+        // post-carrier-drop cut is applied by FlightController. The push does not read cmd, so
         // a deflected and a centred stick get the same bias relative to their own baseline.
         const float aiGroundBlow = 0.5f;
         var deflectedBase = OneStep(Basis.Identity, pitch: 1f, normal: Vector3.Zero, dist: 0f, ai: true);
@@ -222,16 +222,43 @@ public class GroundBlowTests
     }
 
     [Fact]
+    public void TheAiPostDropWindowCutsBothGroundBlowTermsToFifteenPercent()
+    {
+        const float aiGroundBlow = 0.5f;
+        var full = OneStep(Basis.Identity, pitch: 0f, normal: SlopeNormalBody, dist: 0f, ai: true);
+        var settling = OneStep(Basis.Identity, pitch: 0f, normal: SlopeNormalBody, dist: 0f,
+            ai: true, groundBlowScale: 0.15f);
+        var baseline = OneStep(Basis.Identity, pitch: 0f, normal: Vector3.Zero, dist: 0f, ai: true);
+        var expected = ExpectedAiDelta(ExpectedAxis(0f), aiGroundBlow);
+
+        AssertMatches(baseline + expected * 0.15f, settling, 0f);
+        AssertMatches(baseline + expected, full, 0f);
+    }
+
+    [Fact]
+    public void TheAiCarrierGraceSuppressesGroundBlowCompletely()
+    {
+        // The +0xAC gate in FUN_0048c220 returns before either the angular response or the
+        // velocity-direction steer. FlightController represents that whole-effect gate as -1.
+        var baseline = OneStep(Basis.Identity, pitch: 0f, normal: Vector3.Zero, dist: 0f, ai: true);
+        var suppressed = OneStep(Basis.Identity, pitch: 0f, normal: SlopeNormalBody, dist: 0f,
+            ai: true, groundBlowScale: -1f);
+
+        AssertMatches(baseline, suppressed, 0f);
+    }
+
+    [Fact]
     public void TheAiVelocitySteerNeverSuppresses()
     {
         // The player path zeroes its steer while commanding into the obstacle (S is zeroed on that
         // branch, TheVelocitySteerStopsWhenCommandingIntoTheSurface pins it); the AI path has no
         // command-direction branch to zero it, so the steer always rides at 2·S regardless of pitch.
-        float alone = GapAfter(pitch: 0f, normal: Vector3.Zero, ai: true);
-        float pushingIn = GapAfter(pitch: -1f, normal: SlopeNormalBody, ai: true);
+        // Zero only the angular push so this test isolates the separately decoded velocity steer.
+        float alone = GapAfter(pitch: 0f, normal: Vector3.Zero, ai: true, aiGroundBlow: 0f);
+        float pushingIn = GapAfter(pitch: -1f, normal: SlopeNormalBody, ai: true, aiGroundBlow: 0f);
         float expected = alone * Mathf.Exp(-2f * ExpectedProximity(0f) * Dt);
 
-        Assert.True(Mathf.IsEqualApprox(pushingIn, expected, 1e-6f),
+        Assert.True(Mathf.IsEqualApprox(pushingIn, expected, 2e-6f),
             $"the AI steer must run even while commanding into the surface: expected {expected:0.000000} "
             + $"rad, got {pushingIn:0.000000}");
     }
@@ -241,12 +268,11 @@ public class GroundBlowTests
     // slope is body +X (pitch up).
     private static Vector3 ExpectedAxis(float dist) => new(ExpectedProximity(dist), 0f, 0f);
 
-    // The AI law's contribution to one step's `BodyRates`: `v · (ai_groundblow ·
-    // groundblow_mag)` is a command-accumulator torque like the player law's, carrying no dt of
-    // its own — the same single `dt` then `exp(−dt·damp)` the caller applies to the whole
-    // accumulator applies here too.
+    // The AI law adds `v · (ai_groundblow · groundblow_mag)` directly to persistent BodyRates,
+    // then the shared angular-momentum decay applies. There is deliberately no dt factor:
+    // FUN_0048c220 is a per-tick response, not a physics torque.
     private static Vector3 ExpectedAiDelta(Vector3 v, float aiGroundBlow) =>
-        v * (aiGroundBlow * Mag) * Dt * Mathf.Exp(-Dt * AngDamp);
+        v * (aiGroundBlow * Mag) * Mathf.Exp(-Dt * AngDamp);
 
     private static float ExpectedProximity(float dist) =>
         Mathf.Sqrt(Vector3.Back.Dot(SlopeNormalBody)) * (Elev - dist) / Elev;
@@ -260,32 +286,33 @@ public class GroundBlowTests
     // The angle in radians between the flight path and the nose after one step, with the
     // path started 10° off the nose IN YAW so there is a gap for the steer to close on an axis the
     // pitch-axis bias does not move.
-    private static float GapAfter(float pitch, Vector3 normal, bool ai = false)
+    private static float GapAfter(float pitch, Vector3 normal, bool ai = false, float aiGroundBlow = 0.5f)
     {
-        var m = Fresh(ai: ai);
+        var m = Fresh(ai: ai, aiGroundBlow: aiGroundBlow);
         m.VelocityDir = (Basis.Identity.Rotated(Vector3.Up, Mathf.DegToRad(10f)) * m.VelocityDir).Normalized();
         m.Step(Input(pitch, normal, 0f), Dt);
         return m.VelocityDir.AngleTo(-m.Attitude.Z);
     }
 
-    private static Vector3 OneStep(Basis attitude, float pitch, Vector3 normal, float dist, bool ai = false)
+    private static Vector3 OneStep(Basis attitude, float pitch, Vector3 normal, float dist, bool ai = false, float groundBlowScale = 1f)
     {
         var m = Fresh(attitude, ai);
-        m.Step(Input(pitch, normal, dist), Dt);
+        m.Step(Input(pitch, normal, dist, groundBlowScale), Dt);
         return m.BodyRates;
     }
 
-    private static FlightInput Input(float pitch, Vector3 normal, float dist) => new()
+    private static FlightInput Input(float pitch, Vector3 normal, float dist, float groundBlowScale = 1f) => new()
     {
         Pitch = pitch,
         Throttle = 1f,
         GroundBlowNormal = normal,
         GroundBlowDistM = dist,
+        AiGroundBlowScale = groundBlowScale,
     };
 
-    private static FlightModel Fresh(Basis? attitude = null, bool ai = false)
+    private static FlightModel Fresh(Basis? attitude = null, bool ai = false, float aiGroundBlow = 0.5f)
     {
-        var m = new FlightModel(Bhawk(), ai);
+        var m = new FlightModel(Bhawk(aiGroundBlow), ai);
         m.Reset(Vector3.Zero, attitude ?? Basis.Identity, 120f, 1f);
         return m;
     }
@@ -293,7 +320,7 @@ public class GroundBlowTests
     // The Bloodhawk's real dynamics, with this install's authored ground-blow values
     // rather than the executable's 100/1.5/0.9 fallbacks (PlaneStatsFlightGlobalsTests pins the
     // read itself). `AiGroundBlow` at the authored 0.5 for the AI-path tests.
-    private static PlaneStats Bhawk() => new()
+    private static PlaneStats Bhawk(float aiGroundBlow = 0.5f) => new()
     {
         PitchTorque = 3.3f,
         RollTorque = 7.5f,
@@ -307,6 +334,6 @@ public class GroundBlowTests
         DragFactor = 0.37f,
         GroundBlowElev = Elev,
         GroundBlowMag = Mag,
-        AiGroundBlow = 0.5f,
+        AiGroundBlow = aiGroundBlow,
     };
 }

@@ -419,7 +419,7 @@ public sealed partial class ProjectilePool : Node3D
 
     /// <summary>Every camera that can see this pool's tracers, feeding the
     /// <see cref="TracerMinPixels"/> distance floor — a screen-space rule applied to one shared
-    /// world-space mesh, so it takes the NEAREST bound viewer. Unbound (weapon bench, `Suites.cs`
+    /// world-space mesh, so it takes the NEAREST bound viewer. Unbound (weapon bench, suite
     /// labs) means no floor.
     /// ⚠ Bind every pane, never player 1 alone: that floored every round against P1's distance and
     /// inflated it in every other pane too. See <see cref="TracerFloor"/>.</summary>
@@ -434,7 +434,7 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>The nearest-human seam (<c>GameSession.PlayerPositionsSnapshot</c>, C21's
     /// <c>PLAYER_RANGE</c> seam) — read here so a gun/rocket one-shot's distance term
     /// answers "how far is this from the nearest pilot", not player 1's alone. Null
-    /// outside a real session (the weapon bench, `Suites.cs` labs), where the distance term is
+    /// outside a real session (the weapon bench, suite labs), where the distance term is
     /// skipped entirely rather than guessing a listener.</summary>
     public Func<IReadOnlyList<Vector3>>? PlayerPositions { get; set; }
 
@@ -615,7 +615,7 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>The registered aircraft that fired a round carrying <paramref name="shooterId"/>, or
     /// null for an unowned round (<see cref="NoShooter"/>) or a plane no longer registered. Shooter
     /// ids ARE unique across a session (a human's is its pane index, an AI's is
-    /// <c>AiAircraftSpawner.ShooterIdBase + n</c>), so this resolves one plane, not a class of
+    /// <c>FlightRoster.ShooterIdBase + n</c>), so this resolves one plane, not a class of
     /// them.</summary>
     public FlightController? RigOfShooter(int shooterId)
     {
@@ -2797,7 +2797,7 @@ public sealed partial class ProjectilePool : Node3D
 
     // The NEAREST PlayerPositions entry to `worldPos` —
     // D31's "nearest human" reading, C21's `PLAYER_RANGE` seam reused for audio.
-    // float.MaxValue with nobody wired (the weapon bench, `Suites.cs` labs),
+    // float.MaxValue with nobody wired (the weapon bench, suite labs),
     // which DistanceGain reads as "skip the term".
     private float NearestPlayerDistance(Vector3 worldPos)
     {

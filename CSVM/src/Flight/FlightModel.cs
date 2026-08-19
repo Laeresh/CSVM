@@ -18,6 +18,11 @@ public struct FlightInput
 
     /// <inheritdoc cref="GroundBlowNormal"/>
     public float GroundBlowDistM;
+
+    /// <summary>Multiplier for both AI ground-blow terms during the post-drop settling window.
+    /// A negative value suppresses the term; zero keeps the normal factor, preserving callers
+    /// that do not set it.</summary>
+    public float AiGroundBlowScale;
 }
 
 /// <summary>
@@ -202,7 +207,7 @@ public sealed class FlightModel
     /// <param name="aiForcePath">Which of the original's two force paths this instance flows — see
     /// <see cref="UsesAiForcePath"/>. ⚠ Optional, and it defaults to the PLAYER path, so a
     /// production construction site added later gets the player plant silently. Two sites pass it
-    /// today (<c>FlightRigAssembler</c>, <c>AiAircraftSpawner</c>); a third one must pass it too.
+    /// today (<c>HumanFlightAdapter</c>, <c>FlightRoster</c>); a third one must pass it too.
     /// The default exists for the ~18 test sites that construct a plant with no session around
     /// them, not as a statement about what a new caller wants.</param>
     public FlightModel(PlaneStats stats, bool aiForcePath = false)
@@ -368,6 +373,14 @@ public sealed class FlightModel
     /// with the last one's choke still running.</summary>
     public void ClearChoke() => EngineDeadRemainingS = 0f;
 
+    /// <summary>Seeds the complete world velocity after a reset. A carrier launch inherits its
+    /// host's motion, so its direction must not be reconstructed from the launch attitude.</summary>
+    public void SetVelocity(Vector3 velocity)
+    {
+        Speed = velocity.Length();
+        VelocityDir = Speed > 1e-6f ? velocity / Speed : -Attitude.Z;
+    }
+
     public void Step(FlightInput input, float dt)
     {
         Throttle = Mathf.Clamp(input.Throttle, 0f, 1f);
@@ -423,14 +436,17 @@ public sealed class FlightModel
         if (!UsesAiForcePath)
             cmd += WeathervaneTorque() * s.RecInertia;
 
-        // Ground blow (see GroundBlowTerm) is last of the three torques, and it multiplies the
-        // accumulator the stick, the bank coupling and the weathervane are already summed into.
-        cmd += GroundBlowTerm(input, cmd, out float groundBlowSteer);
+        // The AI branch writes its fixed response into persistent angular velocity, not this tick's torque.
+        // It is per-tick, not dt-scaled; ordinary torque weakens recovery by the simulation rate.
+        // The player branch remains a command bias.
+        Vector3 groundBlow = GroundBlowTerm(input, cmd, out float groundBlowSteer);
 
         // The original's order: accumulate this tick's torque first, then decay the whole result,
         // the fresh torque included. ⚠ Keep the decay EXPONENTIAL. A linear subtraction agrees only
         // to first order and flips BodyRates' sign every tick once dt·damp exceeds 2.
-        BodyRates += cmd * dt;
+        BodyRates += (cmd + (UsesAiForcePath ? Vector3.Zero : groundBlow)) * dt;
+        if (UsesAiForcePath)
+            BodyRates += groundBlow;
         BodyRates *= Mathf.Exp(-dt * s.AngMomentumDamp);
 
         // Stall: below stall speed the nose is pulled toward WORLD-down on a great-circle rotation,
@@ -656,10 +672,10 @@ public sealed class FlightModel
 
     // Ground blow: the original's bias of control response away from anything large the nose is
     // closing on (docs/org/flightModel.md, "Ground blow"). The caller owns the probe. Two laws share
-    // it — the player's biases the STICK, the AI's is a fixed push — and both return a torque.
-    // ⚠ Apply no dt here. The caller's cmd * dt is what makes it linear in dt, as the original's is.
-    // ⚠ The AI factor is ai_groundblow · groundblow_mag, never ai_groundblow alone. The original's
-    // 2.5 s post-spawn cut of it is a recorded gap here rather than an omission (BL-382).
+    // it — the player's biases the STICK, the AI's is a fixed per-tick push. The caller applies
+    // dt only to the player command bias; the AI return goes straight to persistent angular speed.
+    // ⚠ The AI factor is ai_groundblow · groundblow_mag, never ai_groundblow alone. The caller gates
+    // carrier drops for 1.5 s, then applies their ×0.15 final-second response.
     private Vector3 GroundBlowTerm(in FlightInput input, Vector3 cmd, out float velocitySteerRate)
     {
         velocitySteerRate = 0f;
@@ -685,10 +701,13 @@ public sealed class FlightModel
 
         if (UsesAiForcePath)
         {
+            if (input.AiGroundBlowScale < 0f)
+                return Vector3.Zero;
             // AI law (0x0048c317): a fixed push, independent of the AI's own command, never
             // suppressed by command direction — unlike the player law below.
-            velocitySteerRate = GroundBlowVelocitySteer * proximity;
-            return v * (Stats.AiGroundBlow * Stats.GroundBlowMag);
+            float scale = input.AiGroundBlowScale == 0f ? 1f : input.AiGroundBlowScale;
+            velocitySteerRate = GroundBlowVelocitySteer * proximity * scale;
+            return v * (Stats.AiGroundBlow * Stats.GroundBlowMag * scale);
         }
 
         float p = cmd.Dot(v);

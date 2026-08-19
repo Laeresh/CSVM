@@ -277,7 +277,7 @@ public partial class FlightController : Node3D
 
     /// <summary>This pilot's target selection, or null for a seat that
     /// does no targeting (every AI rig, and the suites' bare rigs). Set by
-    /// <c>FlightRigAssembler</c> on each human pane; <see cref="StepTargeting"/> feeds it every
+    /// <c>HumanFlightAdapter</c> on each human pane; <see cref="StepTargeting"/> feeds it every
     /// frame. Read <c>Targeting.Current</c> for the selected target — that is the property the
     /// marker, Track Target's camera and any later AI-order consumer are meant to read.</summary>
     public TargetSelection? Targeting;
@@ -379,6 +379,7 @@ public partial class FlightController : Node3D
     // invented answer rather than that rule (docs/org/flightModel.md, "What this changes" #13).
     private const float FallbackSpawnThrottle = 0.5f;
     private const float FallbackSpawnSpeed = 53.6f;
+    private const float CarrierDropThrottle = 0.1f;
     // The pipper's placement and smoothing are decoded (docs/org/aim-assist.md "What the pipper follows"); no TUNE left in it.
     private const float ReticleFlightTime = 0.5f;      // s of flight the pipper marks
     private const float ReticleDefaultSpeed = 860f;    // m/s used when no weapon def resolves
@@ -474,6 +475,7 @@ public partial class FlightController : Node3D
     private float _damageCooldown;               // s left before the next HP subtraction
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private float _collisionGrace;               // s left with no collision at all (obj+0xAC)
+    private float _postDropGroundBlow;           // s left at the carrier-drop 0.15 multiplier
     private float _collideArmorDamage;           // this contact's decoded pair, spent in SurviveHit
     private float _collideHealthDamage;
     private bool _collideDooms;                  // this contact kills the striker whatever its HP
@@ -881,9 +883,7 @@ public partial class FlightController : Node3D
         ApplyPresence();
         _throttle = _spawnThrottle;
         _keyPitch = _keyRoll = _keyYaw = 0f;  // a fresh airframe spawns with the stick centred
-        // The start choreography (snd_propstart already re-fires from FlightAudio's own
-        // Null on the very first spawn (Setup runs before FlightRigAssembler builds this); that
-        // assembler plays "startprops" once more there for that one case.
+        // First setup precedes adapter construction, so the adapter replays startprops after attachment.
         CrashRuntime?.Play("startprops", PlaneModel, applyReset: false);
         // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → the spawn
         // throttle) must never itself read as a slam.
@@ -902,7 +902,14 @@ public partial class FlightController : Node3D
     /// work it always does (spawn speed and throttle, a healthy repaired airframe, full ammo, the
     /// start choreography), so a wave arrives flying rather than parked. Calling this on an
     /// aircraft already in play is simply that teleport-and-reset.</summary>
-    public void Activate(Vector3 pos, Vector3 lookAt)
+    public void ArmSpawnTimers(bool carrierDrop = false)
+    {
+        _collisionGrace = CollisionDamage.SpawnGrace;
+        _postDropGroundBlow = carrierDrop ? 2.5f : 0f;
+    }
+
+    public void Activate(Vector3 pos, Vector3 lookAt, Vector3? launchVelocity = null,
+        bool carrierDrop = false)
     {
         var dir = lookAt - pos;
         _spawnPos = pos;
@@ -910,11 +917,22 @@ public partial class FlightController : Node3D
         if (dir.LengthSquared() > 1e-6f)
             _spawnAttitude = Basis.LookingAt(dir.Normalized(), Vector3.Up);
         Inert = false;
+        ArmSpawnTimers(carrierDrop);
         // The original snaps an activated vehicle to its net's nearest node (FUN_004b0f40 →
         // FUN_00432010), which is what makes a teleported wave patrol where it ARRIVED rather
         // than fly back to wherever it was parked.
         Pilot?.Patrol?.Reseat();
         Respawn();
+        if (launchVelocity is { } velocity)
+            _model.SetVelocity(velocity);
+        if (carrierDrop)
+        {
+            _throttle = CarrierDropThrottle;
+            _model.Throttle = CarrierDropThrottle;
+            if (Pilot != null)
+                Pilot.Throttle = CarrierDropThrottle;
+            ThrottleSmoke?.Reset(_throttle);
+        }
     }
 
     /// <summary>Weapon lab: pin the held airframe at <paramref name="pos"/> with its nose on
@@ -1205,11 +1223,17 @@ public partial class FlightController : Node3D
             var input = HoldSegments != null ? NextHoldInput(dt)
                 : Pilot != null ? NextPilotInput(dt)
                 : ReadKeyboard(dt);
-            ProbeGroundBlow(ref input);      // reads the pose this step ENTERED with, as the original does
+            // The response is absent for 1.5 s, then AI terms run at 15% for 1 s.
+            // Keep the probe off too, so the log records response rather than an inert hit.
+            bool groundBlowReady = IsHumanPiloted || _collisionGrace <= 0f;
+            if (groundBlowReady)
+                ProbeGroundBlow(ref input);  // reads the pose this step ENTERED with, as the original does
+            input.AiGroundBlowScale = !groundBlowReady ? -1f : _postDropGroundBlow > 0f ? 0.15f : 1f;
             _lastInput = input;
             _damageCooldown -= dt;
             _grazeReactionCooldown -= dt;
             _collisionGrace -= dt;
+            _postDropGroundBlow -= dt;
             _model.Step(input, dt);
 
             // The airframe boxes sweep along the frame's motion; the center ray stays as an
@@ -2444,9 +2468,9 @@ public partial class FlightController : Node3D
         return segments[^1].Input;
     }
 
-    // The AI pilot's step: ask Pilot for this frame's input and mirror its
-    // throttle into the controller's own lever, so the readers of `_throttle` (spawn smoke,
-    // telemetry) see the flown value exactly as the keyboard ramp path leaves it.
+    // The AI pilot's throttle is the desired lever (+0x124); like keyboard input, its live
+    // flight-model lever (+0x128) must traverse at 0.5/s. Carrier launch seeds both at 0.1,
+    // then the AI may immediately request full power without erasing the visible settling ramp.
     private FlightInput NextPilotInput(float dt)
     {
         // The mode machine's obstacle probe (D11 avoid crash) is this node's world-and-aircraft
@@ -2455,7 +2479,8 @@ public partial class FlightController : Node3D
         if (Pilot!.Machine is { ProbeBlocked: null } machine && IsInsideTree())
             machine.ProbeBlocked = AvoidCrashBlocksLine;
         var input = Pilot!.Next(_model, dt);
-        _throttle = input.Throttle;
+        _throttle = Mathf.MoveToward(_throttle, input.Throttle, ThrottleRate * dt);
+        input.Throttle = _throttle;
         return input;
     }
 

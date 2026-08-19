@@ -159,8 +159,7 @@ public sealed class PlaneStats
     // ⚠ C23: the AI path is a DIFFERENT law from the player term, not that term scaled by this —
     // a fixed push, linear in proximity, not dt-scaled (docs/org/flightModel.md "Ground blow").
     // FlightModel.GroundBlowTerm reads AiGroundBlow · GroundBlowMag as that factor (5.0 authored).
-    // The compiled AI branch also cuts it ×0.15 for 2.5 s after a carrier drop and while stunned;
-    // neither cut is modelled here (backlog.md BL-382).
+    // Carrier drops suppress it for 1.5 s, then cut it ×0.15 for 1 s; stunned AI skips it too.
     public float AiGroundBlow = 0.9f;       // ai_groundblow, dimensionless
 
     // The collision restitution ceiling (player.json's `crash` block, docs/org/flightModel.md's

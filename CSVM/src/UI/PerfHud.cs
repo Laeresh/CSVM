@@ -216,9 +216,9 @@ public sealed partial class PerfHud : Node
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _hud = new Label { Text = "" };
-        _hud.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
-        _hud.OffsetLeft = 10;
-        _hud.OffsetTop = 2;
+        _hud.SetAnchorsPreset(Control.LayoutPreset.TopRight);
+        _hud.GrowHorizontal = Control.GrowDirection.Begin;
+        _hud.Position = new Vector2(-8, 8);
         root.AddChild(_hud);
         _hudLayer.AddChild(root);
         AddChild(_hudLayer);
@@ -235,7 +235,8 @@ public sealed partial class PerfHud : Node
             return;
         int span = Math.Clamp(Config.GetInt("perfHud.stripFrames", StripFramesDefault), 1, Monitor.RingFrames);
         _strip = new PerfHudStrip { MouseFilter = Control.MouseFilterEnum.Ignore, Monitor = Monitor };
-        _strip.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
+        _strip.SetAnchorsPreset(Control.LayoutPreset.TopRight);
+        _strip.GrowHorizontal = Control.GrowDirection.Begin;
         _strip.SetSpan(span);
         _root!.AddChild(_strip);
     }

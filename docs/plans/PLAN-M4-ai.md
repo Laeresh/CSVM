@@ -1504,9 +1504,8 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
     shipped compiled OnCall mis_anim defs rotating the hull's `door_left`/`door_right` ±90° over
     5 s) through the new host-scoped `AnimRuntime.PlayWithin`/`StopWithin` (C1 has three
     `hangerdoors` namesakes), and drops fighters at the origin node's live position on the
-    moving hull in the authored −90° attitude, 12 m below the doors (invented clearance — the
-    authored `cargobay` sits ON the bay floor and a spawn exactly there dies into the hull;
-    the binary's two untraced launch timers stay uninterpreted per BL-350 trap b).
+    moving hull at the authored `cargobay` origin in the −90° drop attitude. Carrier collision
+    grace lets the released fighter clear the hull before normal collision resumes.
     `NotifyHostDied(node)` is the named F18 seam (no caller yet). Pinned by the extended
     `GeneratorCycleTests` + the `zeppelin-launch` suite; demo: C1B/M03 `--zeppelins
     --generators`. **The capacity stand-in stays** (capacity ≤ 0 disables the check): the IA

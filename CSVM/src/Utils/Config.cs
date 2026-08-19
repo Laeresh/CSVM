@@ -203,6 +203,8 @@ public static class Config
     {
         try
         {
+            _ = Flight.HudMetrics.StatusTextScale;
+            _ = Flight.HudMetrics.MarkerTextScale;
             var fm = new FlightModel(new PlaneStats());
             fm.Reset(Vector3.Zero, Basis.Identity, 100f, 1f);
             fm.Step(default, 1f / 60f);

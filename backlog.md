@@ -1129,27 +1129,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
   buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
 
-- `BL-382` `[Feature]` **A just-dropped AI fighter gets the full ground blow, where the original cuts
-  it to 15 % for 2.5 s.** Split out of `BL-095` when that umbrella retired 2026-08-15; the mechanism
-  is decoded and the gap is narrow but real. The original's AI ground-blow branch multiplies BOTH the
-  push factor (`ai_groundblow × groundblow_mag`, 5.0 authored) and the velocity-steer's proximity by
-  **0.15** while the game clock sits inside `obj+0xB4`, a 2.5 s window written on the carrier-drop
-  spawn path (`FUN_00452450`: repositioned, yawed to −π/2, launch velocity minus 22.352 m/s
-  vertically — a drop from a carrier at 50 mph). See
-  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow" and its collision-response
-  timers.
-  ⚠ **The window IS reachable here.** A zeppelin's fighter-drop launch (`AiGeneratorRuntime` →
-  `AiAircraftSpawner.Spawn`) is this engine's carrier drop, and it puts a freshly-dropped AI aircraft
-  on the same `UsesAiForcePath` plant `FlightModel.GroundBlowTerm` reads. `PLAN-ai-flight` `C23`
-  scoped to the response law and left this out deliberately.
-  *Fix shape:* thread a per-aircraft spawn timestamp through `AiAircraftSpawner`/`FlightController`
-  (nothing carries one today) and cut both terms while the clock is inside 2.5 s of it. The same
-  per-object clock family holds `obj+0xAC`, a 1.5 s collision-grace window that disables collision
-  outright on a fresh spawn and 1.0 s on both parties after an entity-versus-entity impact — decoded,
-  also unmodelled, and worth landing in the same change.
-  *How you'd know it worked:* a fighter dropped from a zeppelin over terrain is not shoved off its
-  drop for its first 2.5 s.
-
 - `BL-393` `[Tuning]` **The control surfaces' deflection angles, mix and slew are decoded and the
   TUNEs are still in place.** `ControlSurfaceAnimator` deflects ±20° per kind and slews linearly at
   3 units/s, both chosen by eye. `PLAN-ai-flight` `C24` decoded what the original does while tracing
@@ -1987,7 +1966,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   SAME slider back past the SAME threshold) — the capture shows many DIFFERENT keys firing once
   each, not one key firing twice, so that narrower question is untested either way.
   *Cross-refs:* `PLAN-perf-hitches` G15/G16 (the diagnosis), `BL-356` (the sidecar losing 6 of this
-  session's 31 trips), `BL-231` (the pool-size tuning item
+  session's 31 trips to its queue — fixed in commit `73512b47` by raising the defaults to fit the
+  storm), `BL-231` (the pool-size tuning item
   this is explicitly NOT — a size increase would not touch this cost), `docs/verification.md`
   PERF-14.
 
@@ -2054,18 +2034,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   on its own; but the engine that declines to pitch-shift a police siren is unlikely to pitch-shift a
   passing plane. Treat Doppler on IA traffic as **unverified**, and measure it (same method: track a
   tonal component against the source WAV) before implementing it.
-
-- `BL-090` `[Feature]` **Small per-impact feedback gaps — items 1–4 landed (`docs/HISTORY.md`); one remains,
-  with the data already shipped.**
-  5. **`snd_dangerzone_camera` is a data-orphan with a ready trigger.** `dangerzone_camera.wav`,
-     SFX, non-3D; in no `SOUND_GROUPS` entry and named by no world data. `StuntMission.Complete` is
-     the obvious hook. ⚠ Confirm against the original that it is the zone-cleared cue and not a
-     replay-camera sting — the name argues for the latter.
-  ⚠ **Dropped from this group after checking — the "fireball leads the crash explosion by 0.5 s"
-  claim does not survive the data.** In `player-player_crash_dirt.json` the `Sound snd_exp_ground_a`
-  event is authored **before** the `large_fireball` calls (which cascade at +0, +0.25, +0.25,
-  +0.25), and `large_fireball` carries no sound of its own. A lead in `FlightAudio.OnCrash` is a
-  spec claim the shipped choreography contradicts — do not add one.
 
 - `BL-109` `[Bug]` **Engine pitch behavior in dives**: the original's engine drops ~12% through a dive and
   overshoots ~1.05 at pull-out — not reproducible by the throttle-only pitch curve (cap 1.0).
@@ -2533,56 +2501,58 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-266` `[Research]` `[Owed-playtest]` **Plane wobble: residual decode questions after the
   wiring landed.** The oscillators are wired (`ShakeDefs`/`PlaneShake`, visual-only roll on the
   plane node; law and measurement in [`docs/formats/shakes.md`](docs/formats/shakes.md) and
-  `analysis/gun-wobble-shake/`). Still open, all data questions: (a) the pure-caliber magnitude
-  law is measured on ONE clip (Bloodhawk, 40-cal) — whether plane model/weight also enter waits
-  on `CAP-30`; (b) the impact sources' per-event quantities are stand-ins declared TUNE (gun
-  hits reuse caliber, rockets use armor damage) — a being-hit capture pins them; (c) the
-  `ON_CALL` `small/medium/large` `damage_shakes` defs stay unwired — unknown caller, likely
-  script/set-piece; (d) `high_speed`'s normalised-by-`fd_speed` reading fits the quiet-cruise
-  evidence but is unverified against a calibrated dive.
-  **`PT-44` flown 2026-08-07 and retired — three verdicts, and (d) is now half-answered:**
-  - **(d) the normalisation is right, the OFFSET is missing — a decode correction.** At the
-    controls the overspeed rattle is "too strong, and should ramp up the more we are over the
-    speed" (user). The numbers agree: `PlaneShake.cs` computes `speedRatio / magnitude_quotient`,
-    so at the gate it switches on at **1.0/70 = 0.0143 rad — 5.1× the 40-cal gun buzz
-    (7e-5 × 40 = 0.0028)** — then grows only **27 %** across the whole remaining envelope
-    (0.0181 at the 1.27× `fd_speed` dive terminal). Read instead as **excess over the gate**,
-    `(speedRatio − min_speed) / magnitude_quotient`: zero at rated max, 0.0039 at the dive
-    terminal — it enters imperceptibly, ramps with overspeed, and lands in the same order as the
-    gun buzz instead of 5× above it. That is also why `min_speed` is authored as a gate *value*
-    at all. Falsifiable against a calibrated dive.
-  - **The frequency is NOT to be tuned** (user suggested lowering it): 15 Hz / damp 12.5 /
-    sawtooth 1 is authored data, identical to `fire_bullet`. Expect the "too buzzy" complaint to
-    dissolve once the magnitude drops — a 15 Hz buzz at 0.0143 rad reads nothing like the same
-    buzz at 0.002.
-  - **(a) the gun buzz is too small, and it is a pipeline loss, not a wrong constant.** Two
-    independent sources agree: "barely noticeable" at the controls, and `engine_check.py` reads
-    **~2–4× under the original clip**. But the `7e-5 × caliber` law was *measured from that very
-    clip*, so a render 2–4× weaker than the clip means the chain from law to pixels loses
-    amplitude — raising `magnitude_factor` would write a false number into decoded data to hide
-    it. ⚠ `FINDINGS.md`'s leading explanation does not carry the gap: with `damp` 12.5 the
-    envelope's mean over a kick cycle is 0.506 at 8 rounds/s vs 0.645 at 13, a factor of
-    **1.27×**, not 2–4×. The wiring is not the problem either — `FlightController.cs:1417` kicks
-    once per round per muzzle. *Approach, decided with the user 2026-08-07:* **(B) find the
-    missing amplitude first** — reconcile the counter-derived 12–13 rounds/s against authored
-    `FIRE_RATE` 8.0 (two guns at 8/s would be 16/s; check whether the probe fired one gun group
-    or two), re-run `engine_check.py` rate-matched, and check what the 60 fps render-interpolated
-    pose does to a 15 Hz buzz. Only if nothing survives that does it fall back to **(C)** a
-    second amplitude measurement from `CAP-30` (whose row was extended for exactly this — as
-    originally written it asks only about caliber and plane weight and **could not** have
-    answered a uniform shortfall).
-  - **Passing:** being-hit rocks read right — guns give a short rock, rockets read ok (user,
-    2026-08-07, `--vs`).
-  - **Unjudged:** (d) view coupling — the plane wobbling against the world in chase view cannot
-    be seen while (a) is too small to see at all.
-  *Playtest after fix:* re-fly the `PT-44` sortie once the offset correction and (a)'s residual
-  land — the overspeed ramp, the gun-buzz magnitude, and the view-coupling check that (a)
-  currently blocks.
+  `analysis/gun-wobble-shake/`). The dressing behind the shake is a decoded camera
+  random-walk (`crimson.exe`), not the remake's dated sawtooth — details below.
+  **Resolved (landed on `main`):**
+  - **(a) made faithful** — 2026-08-19 the fire source now IS the original's random-walk
+    accumulator (`PlaneShake.FireBullet` steps `Walk += (rand−0.5)×2·(factor×caliber)·2.0·6.2832·1.2`
+    = uniform ±7.54·(factor×caliber)/shot, wep40 ±2.11e-2 rad, decoded from `FUN_0042be10`; decayed
+    by the authored `damp` τ≈80 ms). Merged to `main` (`eba69782`, branch experiment `bl266-random-walk`).
+    **`GunBuzzKickScale` (default 1.0 = faithful) is the one tune knob — dial it, never
+    `magnitude_factor`.** The `camera+0x24` consumer traced NEGATIVE (2026-08-19) — that negative is
+    the FIRE block only; the high_speed finding below (same `FUN_0042be10` writer on block 4,
+    `camera+0xd4/+0xd8/+0xdc`) shows the mechanism is live, so the fire gap is a **mechanism/law
+    mismatch, not a render-pipeline loss** — this port is the first real feel of the kick law.
+    (The old approach-(B) suspects are also settled: fire-rate is one round per tick at authored
+    `FIRE_RATE` (8.0 for wep_40) — the "12–13/s" was a redraw-window artifact — and 60 fps
+    pose-interpolated render loss tested NEGATIVE.)
+  **Still open, all data/fidelity questions:**
+  - (b) the impact sources' per-event quantities are stand-ins declared TUNE (gun hits reuse
+    caliber, rockets use armor damage) — a being-hit capture pins them.
+  - (c) the `ON_CALL` `small/medium/large` `damage_shakes` defs stay unwired — unknown caller,
+    likely script/set-piece.
+  - **(d) high_speed shares the gun's random-walk accumulator — decoded, engine port now owed.**
+    The 2026-08-18 excess-over-gate correction (`(speedRatio − gate)/quotient`, `554edcee`) returned
+    the dive rattle to ~zero at rated max, but the ported gun buzz (~7× louder) exposes it as ~6× muted
+    vs the original's dive. **2026-08-19 the binary settled the open hypothesis: the original drives
+    `high_speed` through the SAME random-walk accumulator as the gun** — `FUN_0048c470` (per-frame
+    player updater) reads `camera+0xec/0xf0` (`min_speed`/`magnitude_quotient`) and calls
+    `FUN_0042c070(4, mag)` = the identical `FUN_0042be10` accumulator the `fire_bullet` path uses
+    (component index 4 vs 0, kicking 3-axis accumulators `camera+0xd4/+0xd8/+0xdc` per frame). So the
+    original is NOT the remake's damped sawtooth — it is a second random-walk accumulator fed by the
+    existing excess-over-gate `SetSpeedRatio` law. That mechanism mismatch (sawtooth vs random-walk) is
+    the root cause of the ~6× muted dive. Trace: `analysis/gun-wobble-shake/FINDINGS.md` (high_speed
+    section) and `docs/formats/shakes.md`. **Open/fidelity action:** port `PlaneShake`'s `_speed` path
+    to a `_fire`-style random-walk accumulator (tune `GunBuzzKickScale`-equivalent knob), then playtest
+    the dive against the original clip.
+  - **(fidelity) judge the port, then dial.** Playtest owed: fly the merged build and judge
+    `GunBuzzKickScale` (1.0 default = faithful step) against the original clip before touching it.
+    Two honest caveats: the random-walk **decay model (τ≈80 ms) is an engineering guess, not a
+    decode** (the original `camera+0x24` consumer is negative — but that negative is the FIRE block
+    only; `high_speed`'s accumulator is at `camera+0xd4/+0xd8/+0xdc`, a different block, see (d) above);
+    and with the buzz now ~7× louder, the quiet `554edcee` dive rattle reads ~6× softer than the gun
+    because the engine's `_speed` is a sawtooth where the original is a random-walk — track the (d)
+    engine-port + playtest.
   ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism — its sole carrier among all
   48 weapons is `wep_26` "FW", a zero-damage scripted fake weapon (a scripted detonation-shake
   marker); the fire path is the unflagged `fire_bullet` source. And the near-match trap: several
   magnitude candidates coincide with authored constants — wire nothing on one coincidence (the
   caliber law stood because the candidates separated by an order of magnitude each way).
+- `BL-420` `[Research]` **Decode the original's per-view base FOV from `crimson.exe` and record it under `docs/org/` — the engine holds a single 62° assumption that the binary refutes.** The original's camera projection has **exactly two base horizontal FOVs, 60° and 80°, both stored in radians as half-angle constants** (`1.0471976` = `92 0a 86 3f` and `1.3962634`), and **which one applies is gated per-camera-mode** (live mode at `camera+0x14c`, selected in `FUN_0042b660`): mode **6** → 80° (`FUN_006024d9`), every other mode (0–5, 7, 8, 9) → 60° (`FUN_00602508`). Modes 6 and 7 are the only two first-person views (both set the `DAT_009fd17c` first-person flag via `FUN_004e7100`, both route through the first-person placement `FUN_0042d980`, neither uses chase-position math — `FUN_0042dc20`/`FUN_0042c5c0` dispatch). So the three named views resolve definitively: **3rd Person / chase = 60°; Cockpit view = mode 6 = 80°; Nose view = mode 7 = 60°**. The cockpit/nose assignment is pinned by a direct render gate: `FUN_0049fb00` (the per-frame player render, sole caller `FUN_004a0220` = main tick) draws the cockpit interior model `cockpit1` (`DAT_0071c314`) **only when mode == 6**, so mode 6 is the interior cockpit view (80°), and mode 7 is the no-interior forward view (60°). The two first-person views also share the **same camera position** — both place the camera at the plane's `cockpit_camera` marker (`DAT_0071c328/32c/330`), so there is **no separate nose-camera offset**; mode 7 differs only in not drawing the interior/hull, not head-looking (fixed forward), and being 60°. The constants are **horizontal**; `FUN_006024d9`/`FUN_00602508` aspect-correct to stored vertical via `atan(tan(H/2) · (16:9)/(4:3))` → 60°→46.8° vertical, 80°→64.4° vertical. The project's current single **62° vertical assumption does not exist in the binary** — the 62°-in-radians constant `1.082104` (`63 82 8a 3f`) is absent, so the assumed number is unsupported and the correct base is 60°.
+  *Evidence:* ghidra-mcp read of the open `crimson.exe` (`/crimson.exe`): `FUN_0049fb00` (player render; draws `cockpit1` `DAT_0071c314` only when mode==6 via `FUN_004cca30(x,1/0)` around the interior draw), `FUN_0042b660` (mode gate), `FUN_00602508` (60° H-FOV; writes `_DAT_00a1eff0`/`_DAT_00a1eff4`), `FUN_006024d9` (80° H-FOV, mode 6), `FUN_0042b570` (frustum/projection, contains `0.5235987755982` = 30° = 60°/2), plus the 60°/80°/50.0/2.5 constants side-by-side at the data table `0060409c`. FOV is stored in radians (anim loader `FUN_00502da0` converts degrees→radians via `0.017453292`). The `0x3f860a92` 60° literal is also used by `FUN_0049d940` (player aim camera) and `FUN_004a0220`. Camera object is `DAT_0064ef78`. Placing the camera: both first-person modes run the same placement `FUN_0042d980`, which sets the camera to `plane_pos + plane_rot · (DAT_0071c328,32c,330)`, i.e. the plane's `cockpit_camera` marker offset (bound in `FUN_00473480` from the `cockpit_camera` node; default fallback `DAT_0075d1b8/bc/c0` = `(0,0,0)`). Plane-model `cockpit_camera` node translations (decoded from `extracted/C1/... planes/nodes.json`) put the camera on the fuselage centerline a bit above the local origin — default fighter `player_pfighter`: `(0, +0.75, −0.2)` — with +Y up, ±X the wingspan (ailerons at ±63, elevators/tail at −Z ≈ −37), so +Z = nose/forward and the marker is centered, ~0.75 up, marginally aft of the origin. There is **no `nose_camera` node or per-mode offset** — mode 7 reuses the cockpit_camera point. The `cam_anim` ZAN cockpit sequence (`player-gi_1stperson`) carries no FOV (it shows the interior/hides the plane via `cockpit1`/`camera1`), so the base FOV is not authored in `.ani` data.
+  *Fix shape:* **done — decoded facts landed as [`docs/org/cameraViews.md`](org/cameraViews.md) (2026-08-18)**, covering both the per-view FOV model (60° base; mode-6 cockpit = 80°) and the camera-placement fact (cockpit & nose share the `cockpit_camera` marker; no separate nose offset; per-plane authored offsets like `player_pfighter` `(0,0.75,−0.2)`). Remaining fix work is the engine-side amend: change CSVM's single-FOV assumption + the `docs/formats/camparam.md`/`camparam` references to the 60°/80° model. The engine's live FOV read (`GameSession.cs` and the 62° references in `PLAN-overcast-match.md:1463` and `docs/org/tracers.md:258`) should be corrected to 60° base, with the mode-6 80° first-person variant and the per-mode gating as the full model.
+  *⚠ Traps:* (i) **The two `CAMERA_STATE`/`CAMERA_FROM_TO` functions (`FUN_00502da0`, `FUN_00503e70`) are animated/in-script FOV changes only (`.ani` H/V_FOV events) — not the base per-view FOV; do not wire the engine's base FOV to them.** (ii) **The 80° is attached to camera mode 6 specifically, not "first person" generally** — mode 7 is also first-person but is 60°, so gating on "is first person" alone would read the mode-7 number wrong. (iii) The `Virtual Cockpit` string is a HUD/perf/zoning label (`FUN_0059c340`), not a view — ruled out. (iv) ~~Which of cockpit vs nose is mode 6 (80°) vs mode 7 (60°) was not pinned~~ — **resolved**: the `FUN_0049fb00` render gate (`cockpit1` drawn only when mode==6) pins mode 6 = Cockpit (80°) and mode 7 = Nose (60°). The remaining subtlety is that **both modes share the same `cockpit_camera` position** (no separate nose offset exists), so "nose" is a render/head-look/FOV variant of the same camera point, not a physically different marker. (v) "62°" invariants elsewhere are the assumption being corrected, not corroboration.
+  *Cross-refs:* `BL-255` (the nose view that exists in the original — the cockpit/nose FOV split this item decodes feeds that entry), `BL-150` (numpad fixed-view FOV calibration is still missing — a documented 60°/80° base + the aspect conversion is the calibration input it needs), `docs/formats/camparam.md` (chase/tuning only; does not cover FOV), `PLAN-overcast-match.md:1463` and `docs/org/tracers.md:258` (the 62° assumption to correct).
 
 ## HUD & UI
 
@@ -2736,25 +2706,6 @@ usual.
   per-def volume terms feeding `Projectile.cs`'s `def.Volume * 0.2f * MixGain * distanceGain`
   (line ~2238) — not the `1/sqrt(N)` splitscreen term itself, which is confirmed correct.
 
-- `BL-390` `[Bug]` **`PerfHud` (`--debug-fps`) overlaps player 1's VS HUD status text — both anchor
-  top-left.** Found at the `BL-126` chrome playtest (F52, 2026-08-15; folds in `PT-49`) at both 2P
-  and 4P: `PerfHud.cs:237` anchors its label `Control.LayoutPreset.TopLeft`, the same corner
-  `VersusBoard`'s status line uses for player 1's pane, so the two draw on top of each other
-  whenever `--debug-fps` is live in a VS session. Otherwise legible (font size, Compact/Full
-  content all read fine — the pane-size legibility question `PT-49` asked is answered: readable).
-  *Fix shape:* anchor `PerfHud` to a different corner (top-right reads as the natural pick, clear
-  of every pane's own status text) or give its label an outline/backdrop that survives sitting
-  over other text — pick whichever also serves NodeLabels/MarkerOverlay's existing debug-overlay
-  precedent, if any.
-
-- `BL-392` `[Feature]` **VS HUD status-line font size wants a config knob.** Found at the `BL-126`
-  chrome playtest (F52, 2026-08-15; folds in `PT-43(d)`): the opponent edge-arrows + status line
-  (`VersusBoard.cs`) read fine at 2P and 4P as currently sized, but the user asked for a way to
-  size them up/down rather than accept the fixed `HudMetrics`-scaled default — a legibility
-  preference, not a defect. *Fix shape:* a `Config` key (matching the `versusBoard.*`-style naming
-  already in use elsewhere) multiplying `VersusBoard`'s font-size call (`VersusBoard.cs:85`),
-  defaulting to today's unscaled size so single-player and the default splitscreen case are
-  unaffected.
 
 ## Missions, modes & campaign
 
@@ -2836,14 +2787,9 @@ usual.
   ⚠ **Traps.** (a) Do NOT "fix" the spawn placement — it matches the decode; the missing piece is
   the door animation, not the position. (b) Leads preserved from a partial decode: the launch also
   sets two timers (`+0xac = now + 1.5`, `+0xb4 = now + 2.5`) and an initial velocity with a
-  −22.352 m/s vertical component (the zeppelin drop case). `+0xb4`'s consumer is now traced
-  (`PLAN-ai-flight` `C23`): it cuts the AI ground-blow factor to ×0.15 for its 2.5 s span, reachable
-  in this engine via the same launch routine (`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`) but
-  not yet ported — a recorded gap, not a fix for THIS bug (ground blow is a control-response bias on
-  an already-flying aircraft; it cannot save a plane the collision sweep kills on the spawn frame).
-  `+0xac`'s consumer (the collision-grace gate) is decoded — it returns out of the collision resolver
-  outright, so the object has no collision at all inside the window — and unmodelled; `BL-382` owns
-  landing it with the drop timer beside it, so read that before inventing any grace window here. (c) The launched-vehicle mechanism itself
+  −22.352 m/s vertical component (the zeppelin drop case). The carrier path now carries both timers:
+  `+0xac` suppresses collision and AI ground blow for 1.5 s, then `+0xb4` limits the ground-blow
+  response to ×0.15 until 2.5 s. (c) The launched-vehicle mechanism itself
   (parked roster planes, not fresh spawns) is a separate fidelity gap from this bug; B6's fresh-spawn
   stand-in is documented in its landing commit.
 
@@ -2928,7 +2874,7 @@ usual.
   spacing, the self-blast exemption (own rockets can't hurt you — the guns invariant applied
   consistently, not a balance call), VS HUD line/arrow sizing at 4-player panes (`PT-43`(d):
   confirmed readable and correctly edge-flipping at both 2 and 4 players, `BL-126` chrome playtest
-  2026-08-15 — no retune owed; a font-size preference surfaced separately as `BL-392`). Related,
+  2026-08-15 — no retune owed; the general HUD text-scale config covers the separate font-size preference). Related,
   not absorbed: `BL-126` (splitscreen chrome, closed 2026-08-15). ⚠ The stunt race's
   abreast starting grid landed 2026-08-08 and deliberately did **not** touch `--vs` — it is
   selected only when a race exists, so Dogfight still walks the scattered `dogfight_ace` list.
@@ -3048,6 +2994,9 @@ usual.
   (`docs/HISTORY.md` 2026-08-01 "M3 Wave C C9"), and the constant's remaining roles are the `dzN`
   marker centre and, eventually, the trigger for a stunt screenshot feature. No design beyond
   this sentence exists yet — recorded so the constant's purpose and the feature intent survive.
+  The screenshot latch should also play `snd_dangerzone_camera` (`dangerzone_camera.wav`, a
+  data-orphan SFX named by no `SOUND_GROUPS` entry and no world data; the user confirms it is
+  the automatic-screenshot sting, not a zone-cleared cue — formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
 - `BL-361` `[Feature]` {CAMPAIGN} **Scripted-path vehicles: a second movement law, decoded, with
@@ -3174,59 +3123,6 @@ usual.
   closed as `BL-377`).
 
 ## Tooling, platform & docs
-
-- `BL-320` `[Bug]` **`RunTests.ps1` has no per-shot timeout, and the `viewer-bhawk` golden can hang
-  the suite forever** (found during PLAN-overcast-match B15, 2026-08-08, reproduced on two
-  consecutive runs, unrelated to that change — `--viewer` builds no chapter world). The shot
-  renders, prints its unchanged hash, then the process never exits; the golden stage blocks
-  until someone kills it by hand. Two halves: (a) diagnose why the `viewer-bhawk` launch fails
-  to quit after `--screenshot` completes; (b) give the golden loop a per-shot timeout that
-  fails the shot loudly instead of hanging the suite — a hung instrument that must be
-  hand-killed silently corrupts unattended runs.
-  *Workaround on record:* kill the lingering Godot process for that shot; the hash it printed
-  is still valid.
-
-- `BL-379` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` is flaky — it asserts EXACTLY zero
-  allocated bytes and intermittently reads 4872.** Hit once during PLAN-ai-flight C21 (2026-08-15) on
-  a run whose change touches nothing in `PerfSample`'s path, then **7 consecutive clean runs** of the
-  same tree, so roughly 1 in 8. The measurement is
-  `GC.GetAllocatedBytesForCurrentThread()` either side of a 10,000-iteration scope loop; the loop
-  body genuinely allocates nothing (a ref-struct handle over a fixed enum), so the bytes are almost
-  certainly the runtime's own — tiered JIT re-compilation or OSR firing inside the measured window,
-  which the single warm-up scope above it does not cover. Adding an unrelated test class perturbs it,
-  which fits that reading. **Cost is the false alarm, not the instrument:** a red gate suite on a
-  change that cannot have caused it burns a session's time deciding whether to trust it, which is
-  exactly what happened here. Fix by measuring the delta over a second identical loop (JIT paid on
-  the first), or by asserting a small ceiling with the reason written down rather than an exact 0.
-  ⚠ Do NOT "fix" it by relaxing the assertion to a large tolerance — the exact-zero claim is the
-  point of the test (an instrument that allocates on the frame path manufactures the collections it
-  exists to catch), so the noise floor is what must be excluded, not the property.
-
-- `BL-356` `[Bug]` **`HitchSidecar`'s queue (default depth 8, 3 s flush) loses records under a real
-  hitch storm — confirmed at the controls, not just a theoretical TUNE gap.** A user session
-  dragging the `DamageLab` sliders repeatedly (`.scratch/logs/fly-20260814-210336.{log,hitches.jsonl}`,
-  see `BL-355` for the mechanism these hitches share) tripped `HitchMonitor` **31 times** in ~7 s
-  (frames 3373-4243) but only **25 reached the sidecar/log** — three separate
-  `hitch sidecar queue overflowed dropped=N` warnings (`N` = 1, 2, 3; the counter resets after each
-  report per `HitchSidecar.Flush`, so the drops are additive: **6 records lost**, not 3). Both the
-  human-readable `[perf] hitch …` line and the JSON sidecar entry are written together at flush time
-  (`HitchSidecar.Flush`'s `WriteLogLine`+`WriteJsonLine` pair), so a dropped record vanishes from
-  *both* — not silently (the warning fires, per the module's own design intent), but a diagnosis
-  session reading the sidecar for "every hitch this session" is missing up to a fifth of them, and
-  exactly during the busiest, most interesting stretch.
-  *Fix shape:* `hitchSidecar.queueDepth`/`hitchSidecar.flushSeconds` are already `Config` keys
-  (TUNE) — raising depth or lowering the flush interval is a one-line config change with no code
-  risk, and is probably enough on its own for a solo-player session. Whether the DEFAULTS should
-  move, or whether a compound event (BL-355 alone can produce 6-7 trips in two frames) needs a
-  different policy (e.g. an immediate out-of-band flush the moment the queue nears full, rather than
-  waiting the full interval), is the open design question — the constant fix is cheap, the policy
-  question is not.
-  ⚠ **Traps.** Do not read this as evidence the instrument is unreliable in general: every drop was
-  reported (no silent gap), and the 25 records that DID land are exactly what diagnosed `BL-355` —
-  this is a capacity tuning gap under a specific heavy workload, not a correctness defect in the
-  detection or attribution logic.
-  *Cross-refs:* `BL-355` (the hitches this session's queue couldn't keep up with),
-  `PLAN-perf-hitches` B6 (`HitchSidecar`'s own design, `docs/architecture.md`).
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled
