@@ -620,6 +620,13 @@ internal static class DestroyChoreographySuites
 
             var healthy = Find(model, "healthy");
             var wreck = ai.CrashAnchor != null ? Find(ai.CrashAnchor, "destroyed") : null;
+
+            // ⚠ Fly it before killing it. On the spawn frame the commands are still default, so the
+            // frozen-commands check below cannot fail: freezing and neutralising are the same step
+            // there. One second of live flight puts the pilot's real throttle in them.
+            for (int i = 0; i < 60; i++)
+                ai.SimStep(Dt);
+
             var posAtKill = ai.WorldPosition;
             var velAtKill = ai.WorldVelocity;
 
@@ -675,11 +682,21 @@ internal static class DestroyChoreographySuites
             // original changes nothing about a destroyed aircraft's integration.
             ctx.Check(travelled > 100f,
                 $"the hull TRAVELLED under the flight model before the handover: {travelled:0} m (want over 100)");
+            // The arm that tells freezing from neutralising: a default input bleeds speed (measured
+            // 82 to 58 m/s), a frozen throttle holds it. ⚠ Speed RETAINED, never a downrange
+            // distance: the recordings' 175 m may not contest a decode (docs/org/flightModel.md).
+            float retained = velAtKill.Length() > 0.01f
+                ? velAtHandover.Length() / velAtKill.Length() : 0f;
+            ctx.Check(retained >= 0.95f,
+                $"the wreck flew its FROZEN commands, not neutral ones: it kept {retained * 100f:0}% of its speed ({velAtKill.Length():0} → {velAtHandover.Length():0} m/s, want 95% or better)");
             ctx.Check(rig.InheritedWorldVelocity.IsEqualApprox(velAtHandover)
                       && velAtHandover != Vector3.Zero,
                 $"Callback 16 handed the anim the velocity the wreck had reached inherited={rig.InheritedWorldVelocity} wreck={velAtHandover}");
-            ctx.Check(velAtKill.Length() - rig.InheritedWorldVelocity.Length() > 5f,
-                $"…sampled at the handover, not at the kill: drag took it from {velAtKill.Length():0.0} to {rig.InheritedWorldVelocity.Length():0.0} m/s over those seconds");
+            // The magnitude of the change, not its sign: what this proves is that the sample is the
+            // handover's rather than the kill's, and whether the hull gained or lost speed getting
+            // there is the frozen throttle's business, not this claim's.
+            ctx.Check(Mathf.Abs(velAtKill.Length() - rig.InheritedWorldVelocity.Length()) > 5f,
+                $"…sampled at the handover, not at the kill: it went from {velAtKill.Length():0.0} to {rig.InheritedWorldVelocity.Length():0.0} m/s over those seconds");
             ctx.Check(ai.LastCrashDef == null,
                 $"nothing played the ground-impact family on the way down def={ai.LastCrashDef ?? "-"}");
 

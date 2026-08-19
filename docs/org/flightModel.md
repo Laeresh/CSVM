@@ -209,19 +209,30 @@ herring, confirmed: it is the terrain-conform update for surface vehicles, reach
 **What falls, then, is the anim.** The dead hull holds altitude and travels, for the three seconds
 until `Callback 15` releases it; `randomdestseq`'s `ObjectMotion` (gravity −9.8, `impact_force`) is
 what flies it down (`docs/org/vehicleDamage.md`, "A dead aircraft keeps flying itself until
-`Callback 15`"). A headless kill measures our wreck holding 326 → 327 m over those three seconds
-and reaching 175 m downrange, then dropping to 128 m under the `ObjectMotion`. That downrange
-matches the one figure the reference recordings gave (`docs/PLAN-ai-damage-and-engine-audio.md`,
-D21).
+`Callback 15`").
 
-**Owed decision: we neutralise the commands where the original freezes them.**
-`FlightController.StepWreckFall` steps the model with a default `FlightInput`, so a wreck flies with
-zero throttle and neutral surfaces. Stepping it with the last commanded input instead is what the
-decode describes, and it was measured: the same kill goes from 175 m downrange and +1 m of altitude
-to 323 m and −8 m, because the frozen throttle keeps accelerating the hull. The mechanism is
-decoded; the magnitude depends on our own AI's last throttle rather than the original's, and it
-moves the downrange away from the reference figure, so it wants judging at the controls before it
-lands.
+**The commands freeze; they are not neutralised.** What death stops is the AI think and the weapon
+loop, so nothing writes the command vector and the integrator keeps reading its last value.
+`FlightController.StepWreckFall` steps the model with `_lastInput` for that reason. A default
+`FlightInput` there would fly the wreck on zero throttle and neutral surfaces, which is an
+invention: the original has no neutralising step on the death path.
+
+⚠ **Do not tune this against the recordings' downrange.** Freezing measures 323 m downrange and
+−8 m of altitude on a headless kill, where neutralising measured 175 m and +1 m, and 175 m is the
+figure a reference recording gave (`docs/PLAN-ai-damage-and-engine-audio.md`, D21). That agreement
+is not evidence for neutralising. It is a footage-derived distance, the class of measurement that
+has failed here repeatedly and may not contest a decode, and the magnitude under freezing is a
+function of **our** AI's last throttle rather than the original's, so neither number tests the
+mechanism. If the downrange reads wrong at the controls, the open question is what throttle an AI
+carries into its death (`BL-414`), not whether to reinstate a neutraliser the original never had.
+
+⚠ **Decoded for an AI, assumed for a human.** What `FUN_004897c0` skips on death is the AI think
+(`FUN_0041f810`/`FUN_0041c270`) and the weapon loop, so an AI's commands demonstrably stop being
+written. Whether the original also stops reading a HUMAN's stick on death is not decoded, and
+`StepWreckFall` serves both, so a dead player's hull flies the last stick position its pilot held.
+The stakes are lower than they look, since `player-player` breaks the hull into four separately
+flown pieces rather than falling as one, but a player killed holding full deflection is the case to
+watch.
 
 ## Atmosphere
 

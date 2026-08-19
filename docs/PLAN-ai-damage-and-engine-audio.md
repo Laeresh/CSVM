@@ -190,9 +190,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☑ Decode `start: null` after a timed event (❌ disproven as the cause; the real mechanism is the
     dead vehicle flying itself until `Callback 15`), and convert the anim family off `GD.Print`
 24. ❌ A dead hull glides instead of dropping — **disproven**: the original changes nothing about a
-    destroyed aircraft's flight integration, and the three-second glide is faithful. One real
-    deviation found (we neutralise the controls where the original freezes them), owed at the
-    controls rather than landed
+    destroyed aircraft's flight integration, and the three-second glide is faithful. The one real
+    deviation it found is fixed: the wreck's commands now FREEZE at their last value as the decode
+    describes, where we had been neutralising them (⚠ not tuned to the recordings' 175 m downrange,
+    which may not contest a decode; see `docs/org/flightModel.md`)
 25. ☑ Play the player's own destroy choreography: four flying pieces, the cockpit eject, `Callback 3`
     (`Callback 3` decoded as a CAMERA command needing no runtime handler; two defects filed as
     `BL-415` and `BL-416`)
