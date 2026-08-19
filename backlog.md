@@ -122,9 +122,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     yet another trigger path, and (b) is unproven to share any of their causes. Verify each
     independently before closing.
 
-- `BL-343` `[Feature]` **A shot-down plane's wreck should leave along the plane's own velocity, and
-    ours drops vertically.** `IMPACT_FORCE` is velocity inheritance, it fires in the original, and this
-    engine has neither half of it. The gate is fully decoded (2026-08-13); what is left is building it.
+- `BL-343` `[Feature]` **`IMPACT_FORCE` inheritance runs, but on our own gate rather than the
+    authored one.** A shot-down plane's wreck does now leave along the plane's own velocity: the
+    `Callback 16` half and the add both landed with `BL-385`'s Wave D. What has not landed is the
+    condition the original applies, so wreckage inherits in places the original leaves inert. The gate
+    is fully decoded; see "What is left" below.
     *Evidence:* [`docs/org/objectMotion.md`](docs/org/objectMotion.md), section "`IMPACT_FORCE` (bit
     `0x2`), and the callback that feeds it". The update's first-tick init requires three things
     (`FUN_004e8fa0`): the bit (`004e925e`), a velocity parked on the **anim instance** at `+0xc0..0xc8`
@@ -147,6 +149,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     the anim-stop notification, 3 is `player`'s own unrelated code); (3) in the motion's first-tick init,
     when the bit is set and the flag is set and the node has exactly one parent, add
     `parentWorldBasis⁻¹ · v` to the live velocity.
+    **Pieces (1) and (2) LANDED, and the add in (3) with them.** `AnimRuntime.InheritedWorldVelocity`
+    is the slot, its zero value standing in for the "is set" flag; the `Callback` handler fills it on
+    code 16 from the rig's `WreckVelocity` seam; and `MotionRuntime`'s first-tick init adds
+    `parentBasis⁻¹ · v`, which is what carries a killed aircraft's wreck downrange instead of dropping
+    it. Engine suites `callback-events` and `ai-wreck-fall` cover both, the second with an
+    able-to-fail control that sees nothing inherited when the seam is unwired.
+    **What is left is (3)'s GATE, and it is the half trap (b) warns about.** `impact_force` is read
+    nowhere in `CSVM/src`. The add is gated on a curated `InheritedVelocityExempt` opt-out list plus a
+    non-zero slot, not on the authored bit and not on the single-parent test, so a motion the original
+    leaves inert inherits in ours as soon as something on the same rig has raised `Callback 16`. The
+    remaining work is to read the flag per motion and gate on it, which is also what would let the
+    exemption list retire.
     ⚠ **Traps.** (a) **`BL-008` is closed (`1f09c2d`) on "the original does not inherit velocity into world
     debris", and that closure is still right for world debris.** Not one world destructible authors this
     flag; every carrier is aircraft wreckage, which is the population the closure never looked at. Do not
@@ -392,9 +406,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   damage outright while the part's armour pool covers the incoming armour damage. So a fully-armoured
   part crosses NO per-part threshold, not even the 0.99 `<part>_damage_effects` shim: the original
   shows nothing at all on a fresh armoured plane. Our combined armour+HP scale
-  (`PartState.Fraction`) was why panels tore early; **fixed 2026-08-15** as `BL-384` items (1) and
-  (2), re-basing the per-part loop on `PartState.HealthFraction` and splitting the hull loop out
-  onto `SummaryHealthFraction`. Owed at the controls with `BL-384`'s playtest line.
+  (`PartState.Fraction`) was why panels tore early; that is **fixed**, the per-part loop re-based on
+  `PartState.HealthFraction` and the hull loop split out onto `SummaryHealthFraction`
+  (`git log --grep=BL-384`). Owed at the controls as `PT-80`.
   **(1) location, answered; ours is faithful in mechanism and wrong in timing.** `FUN_00521180` binds
   an anim's node names through `FUN_004efaf0`, which searches the instance's context subtree, then
   the anim's local tables, then a GLOBAL by-name lookup (`FUN_004d0280(7, name)`). `pdpN` names are
@@ -409,7 +423,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   authored and faithful: `<part>_damage_effects` is a separate entry on each of the four zones with
   its own slot, so `pdp4` legitimately sparks up to four times a flight, once as each zone first
   crosses.
-  *Fix shape:* no code change is owned here. Symptom (2) is `BL-384` item (2). Symptoms (1) and (3)
+  *Fix shape:* no code change is owned here. Symptom (2) is fixed (`git log --grep=BL-384`),
+  and is `PT-80`'s to confirm at the controls. Symptoms (1) and (3)
   are faithful-as-authored and this item closes on them once `CAP-29` confirms the look. Do NOT
   resolve `random_gun_impact`/`player_fuelleak`'s panel pick to the nearest pdpN. The decode says
   the original does not do that.
@@ -426,136 +441,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `CAP-29` (the capture), `CAP-27` (spark-shim existence), `BL-288` landing
   (`docs/plans/PLAN-m3-polish-10.md` A1), `DamageVisuals.cs` (the consumer),
   `extracted/zrdr/vehicle.zrd.json` (the authority).
-
-- `BL-384` `[Bug]` `[Owed-playtest]` **Our `injure_anims` staging latches one-way where the original
-  retracts.** The original's rules are `docs/org/vehicleDamage.md` ("Damage staging"), restated with
-  their addresses under *Evidence* below. **Items (1) scope and (2) pool landed 2026-08-15**
-  (`DamageVisuals.OnHullDamage` split out from `OnPartDamage`, the two call sites in
-  `FlightController.cs` and both damage-lab targets moved onto the decoded quotients, engine suite
-  `damage-staging-pool`); what remains is item (3), and what is owed is the flight A/B below.
-  *Evidence (decode, `crimson.exe`, 2026-08-15).* `FUN_004b3800` drives the **def-level** list off
-  `[inst+0x2d0] / [inst+0x2cc]` — whole-vehicle health current over health max. `FUN_004b3d70`
-  drives the **per-part** list off `[part+0x30] / [part+0x2c]` — that part's health over its max.
-  Both start an entry's anim at `fraction <= threshold` and **stop it again** at
-  `threshold < fraction`, keeping one handle per entry (`inst+0x890`, `part+0x4c`).
-  Three deltas were filed; two are closed.
-  (1) **Scope — LANDED 2026-08-15.** The def-level list was walked against whatever per-part
-  fraction the caller passed, commented "any part qualifies", so one wing at 10% lit
-  `player_damage_trail` with the hull untouched. `DamageVisuals.OnHullDamage` is now its own call
-  site off `PlaneDamage.SummaryHealthFraction`, the quotient `FUN_004b3800` computes, and it runs
-  even on a zone-less hit.
-  (2) **Pool — LANDED 2026-08-15.** Both levels used the combined armour+health progression
-  (`PartState.Fraction`). The original divides health only at both levels, armour never entering
-  either quotient, so the per-part loop now takes `PartState.HealthFraction`. Because
-  `FUN_004b7f80` blocks health damage outright while a part's armour covers the hit, an armoured
-  part now crosses nothing at all, including the 0.99 spark shim.
-  (3) **Lifetime — OPEN.** The `_applied` set (`DamageVisuals.cs`) latches every stage one-way. The
-  original retracts: heal back above a threshold and the anim stops and its handle clears.
-  *Fix shape (item 3):* replace `_applied` with a per-entry handle the stop path can clear,
-  mirroring the two `+0x890` / `+0x4c` arrays.
-  *⚠ Traps.* (a) The combined armour+health fraction is **correct** for the gauge dial
-  (`docs/architecture.md:3780`) — fix the staging inputs without touching `GaugeCluster`'s scale.
-  (b) Do not change the shipped 0.10 / 0.85 / 0.99 thresholds; they are authored data and they are
-  right — only what is divided is wrong. (c) `docs/architecture.md` around the `injure_anims` bullet
-  carried the old defect note; it moved with items (1) and (2) and now records the open retraction
-  gap instead. (d) Retraction makes the F5 damage lab's repair path visibly un-stage, which is
-  faithful, not a regression — `DamageVisuals.Reset` stays for respawn.
-  *Playtest after fix (items 1 and 2, owed):* take sustained fire and confirm nothing at all shows
-  on a zone while its armour still absorbs, that a panel tears only once that zone's HEALTH crosses
-  its threshold, and that `player_damage_trail` starts when the hull gauge reads ~10% and not
-  before. The 0.99 spark shim going quiet on early hits is the most visible change.
-  *Playtest after fix (item 3):* repair in the F5 lab and watch the stage retract.
-  *Cross-refs:* `BL-259` (landed the anchor/staging this mis-keys), `BL-297` (the panel-damage semantics re-test — `pdpanelN` thresholds are on the same
-  health-only scale, so panels currently tear earlier than the original tears them; its 2026-08-15
-  decode confirms this and hands the fix to item (2) here).
-  *⚠ One more trap, from `BL-297`'s decode:* item (3)'s replacement of `_applied` must keep
-  ONCE-per-downward-crossing. The original's slot is cleared on the upward crossing alone, never
-  when the anim ends (`FUN_004b3e20` / `FUN_004b8180` are the repair wipe/restage), so a stage that
-  re-fires whenever the fraction stays below its threshold is a different bug, not the fix.
-
-- `BL-385` `[Bug]` **Enemy and wingman aircraft show no damage at all — the whole progressive-damage
-  layer is wired for the player only, and their crash is silent.** User at the controls 2026-08-15:
-  "the destruction animation only plays for the player but not enemies or wingmen". An AI plane
-  flies pristine until the frame it explodes.
-  *Evidence (code, 2026-08-15).* `controller.Visuals` is assigned at exactly two sites —
-  `FlightRigAssembler.cs:294` (the player rig) and `GameSession.cs:1477` (the parked damage lab).
-  `AiAircraftSpawner.Spawn` never assigns it, so `Visuals` is null on every AI controller, and all
-  three call sites are null-conditional (`FlightController.cs:972` projectile hit, `:2408` graze,
-  `:798` respawn reset). The `DamageEffectSink`/`DamageEffectStop` wiring is likewise inside
-  `if (controller.Visuals != null && …)` at `FlightRigAssembler.cs:452-488`. AI planes DO get
-  `Damage` (`AiAircraftSpawner.cs:102`) and DO get a rig runtime with the damage-stage defs bound
-  (`AiAircraftSpawner.cs:153-158`, `EffectCatalogue.cs:228-235`) — the stages are staged and
-  playable, just never triggered.
-  *Evidence (data, 2026-08-15) — the original authors a separate AI trail and we play none of it.*
-  `basic_airplane` carries a def-level `injure_anims` of **`[[0.5, "pfsmoketrail"]]`**
-  (`extracted/zrdr/vehicle.zrd.json:4108-4114`), inherited by every non-player airframe
-  (`bloodhawk`, `avenger`, `fury`, `brigand`, `devastator`, `autogyro`, `peacemaker`, the `r*`
-  variants, and `bswingman` — wingmen included). The def ships in every chapter as
-  `extracted/<ch>/cam_anim/piratefighter-pfsmoketrail.json`: a `smokepuffer` + `firepuffer` pair at
-  `prop1`. So in the original **an enemy starts trailing smoke at half hull health** — a combat read
-  the player uses to tell a hurt bandit from a fresh one — and it is one stage, not the player's
-  two (no `pfsmoketrail` counterpart to `player_fuelleak`).
-  *⚠ The threshold is whole-vehicle health, not a part fraction* — same decoded driver as the
-  player's (`FUN_004b3800`, `docs/org/vehicleDamage.md`), so this item lands on top of `BL-384`'s
-  correction rather than beside it. Doing this one first would wire the AI list to the same wrong
-  input.
-  *Fix shape:* give `AiAircraftSpawner.Spawn` the `DamageVisuals` construction and the sink/stop
-  pair that `FlightRigAssembler.cs:284-299,452-488` build, and a `FlightAudio` (see the audio half
-  below). Both blocks are near-verbatim; the shared shape wants extracting rather than copying.
-  *The audio half.* `FlightAudio` is built only at `FlightRigAssembler.cs:304-309`; the AI spawner
-  never sets `controller.Audio`, so `PlayCrashBoom` (`FlightController.cs:2027-2048`) and
-  `OnEngineStop` never run for an AI kill — **an AI fireball is completely silent** — even though
-  the `ai_crash_dirt` / `ai_crash_water` arms already exist in that switch. Note the crash
-  CHOREOGRAPHY is not missing: `Crash()` is one path for everyone and
-  `EffectCatalogue.CrashDefTableFor` (`WorldEffectsFactory.cs:311-319`) keys off `IsHumanPiloted`
-  onto the original's own `ai_crash_*` family. If an AI kill shows no fireball either, suspect that
-  family and its meshless `kestrel` scaffold anchor, not a missing call.
-  *⚠ Traps.* (a) Per-AI-plane panel pairing and puffer pools at spawn time is a real cost on a
-  chapter holding many aircraft — measure before wiring it unconditionally, and consider gating the
-  panel-flip half on distance or aircraft count. The trail half is one puffer pair and is cheap.
-  (b) `pfsmoketrail`'s `anim_root_name` is `piratefighter`, and it needs **no retarget**: decoded
-  2026-08-16, `anim_root_name` is an offset within the caller's context node, not a target selector,
-  and a def whose root name equals its own name (`FUN_0051dcf0`) has both fields overwritten with the
-  context node's name at play time (`FUN_00520910` / `FUN_00521180`). The real hazard is the
-  **anchor**: an anchor missing from the airframe is a soft failure that still starts the anim, and
-  the global by-name fallback in `FUN_004efaf0` binds it to any node of that name anywhere in the
-  scene. Confirm `prop1` exists on each AI airframe. See `docs/org/vehicleDamage.md`, "Which airframe
-  a stage's anim binds to". (c) Do not give AI planes the
-  `player_*` stage menu; their data names one stage and a different anim.
-  *Not part of this item, and settled:* an AI wreck never leaves ours, and it never leaves the
-  original either. Decoded 2026-08-16: nothing on the death path frees a vehicle, and there is no
-  timeout, distance cull, count cap or recycling. What ends the wreck visually is the `ai_crash_*`
-  def switching **all four** aircraft nodes (`dontmove`, `markers`, `healthy`, `destroyed`) inactive
-  on the frame the crash anim dispatches, every event untimed; the object stays allocated, dead and
-  hidden, until mission teardown. The only free path (`FUN_0047bab0`) is reached from mission
-  teardown, an ambient-plane pool a roster aircraft is not in, and the player's change-aircraft
-  command. So do not add a despawn timer. The question that remains is whether OUR `ai_crash_*`
-  playback actually performs those four deactivations; if it does not, the visible wreck is a
-  data-playback bug. ⚠ The player is authored the other way (`player_crash_dirt` keeps `destroyed`
-  active with `large_10sec_fire`), so a burning player hulk is correct and is not a template for the
-  AI. Details in `docs/org/vehicleDamage.md`, "What happens to the wreck".
-  *Playtest after fix:* shoot down a wingman and an enemy in C1 — smoke should start around half
-  health and the fireball should be audible.
-  *Cross-refs:* `BL-384` (the fraction correction this depends on, and the decode's addresses),
-  `BL-246` (the decode), `docs/org/vehicleDamage.md` ("Damage staging"),
-  `BL-343` (wreck momentum — the other AI-wreck item, whose mechanism is authored `Callback 16`,
-  handled by `LAB_00480710` pushing the vehicle's velocity into the crash anim through
-  `FUN_004ee0e0`). Which def the AI list is read from was
-  `BL-386`, closed 2026-08-16 (`git log --grep=BL-386`) — see the update below.
-  *Correction 2026-08-15 (found minting `BL-386`):* the `[[0.5, pfsmoketrail]]` cited above is NOT
-  on `basic_airplane` — `vehicle.zrd.json:4108-4114` sits inside the `bswingman` def (line 3993),
-  and `basic_airplane` (lines 3–224) authors no `injure_anims` at all. Each AI airframe authors its
-  own SEVEN-entry ladder instead (`fury` 4738–4768: `random_remote_damage` at
-  0.95/0.80/0.65/0.50/0.45/0.25 plus `pfsmoketrail` at **0.40**), restated verbatim on its `r*`
-  variant. So the original's smoke starts at 40% on an enemy and 50% on a campaign wingman, and the
-  `random_remote_damage` stages are part of the same list — the "one stage, not two" reading holds
-  only for the trail itself.
-  *Update 2026-08-16 — the `BL-386` blocker is cleared.* An AI spawn now resolves its own def, so
-  `stats.VehicleInjureAnims` on an AI plane IS the seven-entry AI ladder (`pfsmoketrail` at 0.40 on
-  an enemy) rather than the player's two. ⚠ And the threshold input is settled with it: an AI
-  airframe is **zone-less**, so there is no "worst part fraction" to read — `WorstFraction` returns
-  a constant 1f with no parts. Stage this ladder off `PlaneDamage.SummaryHealthFraction`, the
-  whole-vehicle pool, which is what `FUN_004b3800` walks and what `BL-384`'s correction settles.
 
 - `BL-394` `[Bug]` **AI aircraft still fly the player's guns, livery and pilot — only the damage
   model reads their own def.** `BL-386` landed the identity split deliberately narrow: `PlaneStats`

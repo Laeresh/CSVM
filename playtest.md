@@ -199,6 +199,92 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
   *Variations:* `--chapter=C4` for the one deck chapter whose `WorldLight` clamps to 1.0 — its
   deck must look exactly as it did, and its cards must still be *there* above the band.
 
+### C1 · Bloodhawk vs AI — the kill sequence, sound on
+
+```powershell
+./RunGame.ps1 --chapter=C1 --plane=player_bhawk --ai=player_fury --ai-attack=9 --volume=1.0 --no-det
+```
+
+⚠ `--volume=1.0` is not optional: the default master volume is 0, so a run without it is silent for
+reasons that have nothing to do with any of these checks.
+
+- `PT-77` `[A/B: OriginalScreenshots/Videos/Enemy AI Shotdown.mp4]` **A downed AI's wreck flies its
+  FROZEN commands.** The wreck flies itself for three seconds after the airburst, until the destroy
+  def's `Callback 15` releases it to the anim. What it flies with changed: the commands now freeze at
+  the pilot's last values rather than being neutralised, which is what the decode says and which
+  measures 344 m downrange against the 143 m it used to travel. That number deliberately moves *away*
+  from the ~175 m a reference recording gave, because a footage-derived distance may not contest a
+  decode (`docs/org/flightModel.md`); this sortie is the judgement that number cannot supply.
+  *Look for:*
+  - (a) the three-second fall reads as a wounded aircraft carrying its momentum, not as a hull
+    being flung. It is faster and travels further than it did;
+  - (b) ⚠ the one way freezing could be wrong: an aircraft killed **mid-turn** keeps its stick
+    deflected, so it keeps turning. The recordings show the wreck holding its `x`/`z` heading. Kill
+    one in a hard turn and one in level flight and compare;
+  - (c) the second, smokier explosion reads as a separate beat downrange rather than landing on top
+    of the airburst.
+  *Blocks:* the at-the-controls half of `D24` (`docs/plans/PLAN-ai-damage-and-engine-audio.md`). A
+  fail on (b) is not a reason to reinstate neutralised commands: it points at whether the original
+  zeroes an AI's stick on death, which is undecoded and would be a fresh item.
+
+- `PT-78` `[A/B: OriginalScreenshots/Videos/Enemy AI Shotdown.mp4]` **The bailed pilot hangs level
+  for the whole descent.** The chute is placed at 3.0 s and used to freeze at whatever attitude the
+  wreck held at that instant, leaving the canopy edge-on and standing on its side. It is now placed
+  level, which is what the airframe data authors (`chuteman`/`chutemanparent` are `transform:
+  "Initial"`). The golden pins one frame of this; the descent is what it cannot see.
+  *Look for:*
+  - (a) the canopy is a dome over the man from the moment it appears until the ground, never
+    edge-on and never rotating into a wrong pose a few seconds in;
+  - (b) the authored 4 s drive and the sway still read as a drift, so it does not look pinned;
+  - (c) a fidelity question rather than a defect: **every chute now has identical yaw**, because the
+    authored template is identity. Shoot down two or three and see whether a formation of canopies
+    all facing one way reads wrong.
+  *Blocks:* the at-the-controls half of `D26`. (c) failing is a decode question to reopen, not a
+  bug: the identical yaw is what the data says.
+
+- `PT-79` `[Own]` **A shot-down player leaves a wreck, and its hull flies your last stick.**
+  Get yourself killed rather than killing. `player-player` is the one destroy def that does not fall
+  as an intact hull: it breaks into four separately flown pieces with a cockpit eject.
+  ⚠ Decoded for an AI, assumed for a human: the decode shows an AI's commands stop being written
+  because the AI think loop is what death skips, but whether the original also stops reading a
+  human's stick is not decoded, and both paths share `StepWreckFall`.
+  *Variations:* to be shot at rather than shoot, fly into a wing of them —
+  `--ai=player_pfighter,player_pfighter,player_pfighter --ai-attack=9`.
+  *Look for:*
+  - (a) other pilots see a wreck at all, rather than the aircraft vanishing or hanging in the air;
+  - (b) all four pieces appear and fly their own arcs, and the pilot ejects;
+  - (c) the case the assumption bears on: die while **holding full deflection** and watch whether
+    the hull's motion reads plausibly or as a spiral nothing authored.
+  *Blocks:* nothing tracks (c) — a fail mints a fresh item against whether the original keeps
+  polling a dead player's input.
+
+- `PT-80` `[Own]` **Damage stages read HEALTH only, and armour hides nothing behind it.** The
+  original divides health alone at both the def level and the per-part level, armour never entering
+  either quotient, and a part whose armour still covers the hit takes no health damage at all, so an
+  armoured zone should cross no threshold whatever.
+  *Variations:* take the fire rather than give it —
+  `--ai=player_pfighter,player_pfighter --ai-attack=9`.
+  *Look for:*
+  - (a) nothing at all shows on a zone while its armour is still absorbing, the 0.99 spark shim
+    included; that shim going quiet on early hits is the most visible change here;
+  - (b) a panel tears only once that zone's own health crosses its threshold, not before;
+  - (c) `player_damage_trail` starts when the hull gauge reads about 10%, not earlier.
+  *Blocks:* the owed flight A/B for the staging scope and pool fixes. ⚠ The gauge dial is a separate
+  scale and is *correct* on combined armour+health, so a dial that disagrees with the staging here
+  is not a fault.
+
+- `PT-81` `[Own]` **A repair retracts the stage it lifted back over (F5 damage lab).** Staging used
+  to latch one way; the original stops an entry's anim and clears its handle on the upward crossing.
+  This one needs no AI, so it flies on the bare command:
+  ```powershell
+  ./RunGame.ps1 --chapter=C1 --plane=player_bhawk
+  ```
+  *Look for:* open the F5 damage lab, drag a zone down past a threshold to start its stage, then
+  repair back above it and watch the stage stop. Un-staging on repair is faithful, not a regression.
+  *Look for also:* it must fire ONCE per downward crossing. A stage that re-fires while the fraction
+  merely stays below its threshold is a different bug, not this fix working.
+  *Blocks:* the owed lab check for the staging lifetime fix.
+
 ### C1 · two pilots — Dogfight (splitscreen VS)
 
 ```powershell

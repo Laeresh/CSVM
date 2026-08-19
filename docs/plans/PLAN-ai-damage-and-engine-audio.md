@@ -1,8 +1,13 @@
 # AI damage visuals, crash audio and the decoded engine-audio model
 
-**ACTIVE PLAN** (written 2026-08-16). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE 2026-08-20** (written 2026-08-16). All 26 checklist items are ☑ or ❌, Waves A–D.
+Indexed in [`plans.md`](plans.md); read as history.
+
+⚠ Two things outlive the plan and are not closed by it. `BL-421` asks for a verdict on the engine
+audio B14 thinned, and was minted by this plan's own playtest. `BL-422` is a live defect the same
+playtest found, a firepuff that never despawns on the Bloodhawk and the Autogyro. Neither belongs
+to `BL-385`, which is why this closes with them open. D24 and D26 also each leave a fidelity
+question owed at the controls rather than a defect, recorded on the items themselves.
 
 This plan closes `BL-385` (enemy and wingman aircraft show no damage at all, and their crash is
 silent) and absorbs `BL-384` item (3) (the one-way `_applied` latch), which cannot be separated from
