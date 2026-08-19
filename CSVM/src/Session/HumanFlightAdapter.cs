@@ -49,6 +49,26 @@ internal sealed class HumanFlightAdapter
     /// Accumulated here so the caller can append it to its own summary.</summary>
     public string WhatSuffix { get; private set; } = "";
 
+    /// <summary>Phase 1 of the damage-visuals setup: the object itself, from the built model and
+    /// the airframe's own stats. Both spawners call this unconditionally, before any crash runtime
+    /// exists, because a rig without a crash program still flips torn panels through a null sink
+    /// (see <see cref="DamageVisuals.DamageEffectSink"/>). Phase 2, the sink and the stops, is
+    /// wired by <see cref="WorldEffectsFactory.BuildFlightCrashRuntime"/>: only that half needs a
+    /// live runtime, and folding this half in with it would leave the parked damage lab blank.</summary>
+    public static DamageVisuals BuildDamageVisuals(PlaneBuilder planeBuilder, Node3D planeModel,
+        PlaneStats stats, AnimProgram? crashProgram)
+    {
+        PanelPairing? pairing = null;
+        if (crashProgram is { } program)
+        {
+            var pairingDefs = new List<AnimDefinition>(program.ByAnimName("plane_reset"));
+            foreach (var n in EffectCatalogue.PlayerDamageStageAnims)
+                pairingDefs.AddRange(program.ByAnimName(n));
+            pairing = DamageVisuals.PanelPairingSets(pairingDefs);
+        }
+        return new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats, defPairing: pairing);
+    }
+
     /// <summary>Builds player <paramref name="pi"/>'s aircraft into <paramref name="rig"/> and
     /// adds it to the session world. Call once per rig in ascending player order (see the class
     /// note on the shared rng streams).</summary>
@@ -253,24 +273,15 @@ internal sealed class HumanFlightAdapter
                 GD.Print("gun reticle: ballistic impact point via impact_point.png");
         }
 
-        // Visible damage: torn-skin panel flips + the authored damage-stage anims, played through
-        // the rig runtime once it exists (wired below, after the runtime builds). A missing
-        // program leaves DamageVisuals' geometric fallback to engage, loudly.
+        // Visible damage, phase 1: the object, unconditionally. Phase 2 (the sink and the stops)
+        // is wired by WorldEffectsFactory.BuildFlightCrashRuntime, since only that half needs a
+        // live rig runtime.
         if (controller.Damage != null)
         {
-            PanelPairing? pairing = null;
-            if (_in.CrashProgram is { } program)
-            {
-                var pairingDefs = new List<AnimDefinition>(program.ByAnimName("plane_reset"));
-                foreach (var n in EffectCatalogue.PlayerDamageStageAnims)
-                    pairingDefs.AddRange(program.ByAnimName(n));
-                pairing = DamageVisuals.PanelPairingSets(pairingDefs);
-            }
-            controller.Visuals = new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats,
-                defPairing: pairing);
+            controller.Visuals = BuildDamageVisuals(planeBuilder, planeModel, stats, _in.CrashProgram);
             if (verbose)
-                GD.Print($"damage visuals: {controller.Visuals.PanelCount} panels — " +
-                         "authored stage anims via the rig runtime");
+                Log.Info("flight",
+                    $"damage visuals: {controller.Visuals.PanelCount} panels — authored stage anims via the rig runtime");
         }
 
         // The data-driven crash rig is built AFTER the controller enters the tree
@@ -283,9 +294,10 @@ internal sealed class HumanFlightAdapter
             controller.Audio = audio;
             controller.AddChild(audio);
             if (verbose)
-                GD.Print($"audio: engine={stats.EngineSound} (dual voice, " +
-                         $"{Config.GetFloat("flightAudio.engineDetuneRatio", FlightAudio.EngineDetuneRatio) * 100f:0.#}% detune) " +
-                         $"whine={stats.WhineSound} rattle={stats.RattleSound}" +
+                GD.Print($"audio: engine={stats.EngineSound} " +
+                         $"damaged={stats.DamagedEngineSound ?? "none"} " +
+                         $"whine={stats.WhineSound ?? "none (no def names prop_sound)"} " +
+                         $"rattle={stats.RattleSound}" +
                          (_in.MixGain < 1f ? $" (per-player mix gain {_in.MixGain:0.00})" : ""));
         }
         // This player's stunt run: player 1 flies the loaded instance, everyone else an
@@ -421,48 +433,15 @@ internal sealed class HumanFlightAdapter
         // states resolve valid global transforms.
         if (_in.CrashProgram != null && _in.WorldScene != null)
         {
+            // WorldSounds goes in on every rig alike; BuildFlightCrashRuntime drops it for a human
+            // one, so that asymmetry is stated once, there. The planes gamez goes in on every rig
+            // too, or a kill would drop a parachute for one spawner and not the other.
             _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _in.Gamez,
-                _in.WorldScene, _in.Textures, _in.CrashProgram, verbose);
+                _in.WorldScene, _in.Textures, _in.CrashProgram, verbose,
+                worldSounds: _in.WorldRuntime?.Sounds, planesGamez: _in.PlanesGamez);
             // The start choreography for the very first spawn: Respawn() plays this same def on
             // every later respawn, but Setup() above called Respawn() before this runtime existed.
             controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
-            // That runtime also carries the damage-stage menu, so a part crossing an
-            // injure_anims threshold plays its authored def. Wired here because the runtime is
-            // built after the controller joins the tree, later than DamageVisuals itself.
-            if (controller.Visuals != null && controller.CrashRuntime is { } rigRuntime)
-            {
-                // This closure also arbitrates node ownership against other per-frame systems:
-                // add a future contested case here by name, not as a generic scan.
-                controller.Visuals.DamageEffectSink = anim =>
-                {
-                    // applyReset:false as the crash trigger does — a reset would re-pose nodes
-                    // the damage state owns, not just the effect's.
-                    int started = rigRuntime.Play(anim, planeModel, applyReset: false).Count;
-                    // ⚠ started is instances, not emitters — PufferState events dispatch on the
-                    // runtime's next tick, so sample the puffer count later, not off this delta.
-                    Log.Info("anim", $"damage stage anim={anim} started={started} rig_puffers_total={rigRuntime.PuffersBuilt}");
-                    // player_fuelleak's ELSE branch deactivates wing_flare2 for the rest of
-                    // the leak (the def never re-activates it) — hand that lamp to the leak so
-                    // WingLightBlinker's 1.5 s cycle stops re-asserting the blink over it.
-                    if (anim.Equals("player_fuelleak", StringComparison.OrdinalIgnoreCase))
-                        controller.WingLights?.Suspend("wing_flare2");
-                };
-                // ⚠ The stop must cover the CALL closure, not the played roots alone, or a
-                // called-onto instance never gets its NODE_ACTIVE exit. Derived from the program
-                // so no hand list can rot.
-                var stageClosure = new List<string>();
-                foreach (var d in _in.CrashProgram.Subset(EffectCatalogue.PlayerDamageStageAnims).Defs)
-                {
-                    var n = d.AnimName ?? d.Name;
-                    if (!string.IsNullOrEmpty(n) && !stageClosure.Contains(n))
-                        stageClosure.Add(n);
-                }
-                controller.Visuals.DamageEffectStop = () =>
-                {
-                    foreach (var n in stageClosure)
-                        rigRuntime.Stop(n);
-                };
-            }
         }
     }
 

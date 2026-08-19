@@ -1196,5 +1196,4 @@ internal static class AnimationAndEffectsSuites
         ctx.Check(lights.CommittedPositions.Count == 1 && lights.CommittedPositions.Contains(nearP1),
             $"one viewer (single player) is the unchanged, pre-B13 rule");
     }
-
 }

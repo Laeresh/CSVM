@@ -129,8 +129,8 @@ public class EffectCatalogueTests
 
     /// <summary>The per-chapter census, as a golden: every chapter's compiled anim program defines
     /// exactly the three <c>ai_crash_*</c> defs (<c>default</c>/<c>dirt</c>/<c>water</c>) — the
-    /// same trio as the player and touchdown families — anchored on the shared <c>kestrel</c>
-    /// scaffold NAME, and the family pick follows the pilot: a human rig binds
+    /// same trio as the player and touchdown families — carrying the shared <c>kestrel</c>
+    /// anim-root NAME, and the family pick follows the pilot: a human rig binds
     /// <c>player_crash_*</c>, an AI plane <c>ai_crash_*</c> off the same program.</summary>
     [ExtractedDataFact]
     public void EveryChapterShipsExactlyTheThreeAiCrashDefs()
@@ -154,7 +154,7 @@ public class EffectCatalogueTests
             foreach (var def in ai.PlayableDefs)
             {
                 Assert.All(program.ByAnimName(def),
-                    d => Assert.Equal(EffectCatalogue.AiCrashScaffoldName, d.Name));
+                    d => Assert.Equal(EffectCatalogue.AiCrashAnimRoot, d.Name));
             }
 
             var human = EffectCatalogue.CrashDefTableFor(program, humanPiloted: true, "bloodhawk");
@@ -251,7 +251,7 @@ public class EffectCatalogueTests
 
     /// <summary>Every airframe's injure_anims entry that <see cref="DamageVisuals.RigAnimFor"/>
     /// maps to a rig anim must be a name the crash rig binds
-    /// (<see cref="EffectCatalogue.PlayerDamageStageAnims"/> or
+    /// (<see cref="EffectCatalogue.DamageStageAnims"/> or
     /// <see cref="EffectCatalogue.PlaneDamageEffectAnims"/>), else the crossing plays nothing.
     /// Also pins the 0.10 player_smoketrail -> player_damage_trail mapping.</summary>
     [ExtractedDataFact]
@@ -259,7 +259,7 @@ public class EffectCatalogueTests
     {
         var zrdr = SharedZrdr;
         var bound = new HashSet<string>(
-            EffectCatalogue.PlayerDamageStageAnims.Concat(EffectCatalogue.PlaneDamageEffectAnims),
+            EffectCatalogue.DamageStageAnims.Concat(EffectCatalogue.PlaneDamageEffectAnims),
             StringComparer.OrdinalIgnoreCase);
         var violations = new List<string>();
         int found = 0;
@@ -283,6 +283,54 @@ public class EffectCatalogueTests
         Assert.True(violations.Count == 0, string.Join("\n", violations));
         Assert.True(found > 0, "no plane's data carried a stage entry — the check ran on nothing");
         Assert.Equal("player_damage_trail", DamageVisuals.RigAnimFor("player_smoketrail"));
+    }
+
+    /// <summary>The AI half: every airframe's AI-side injure_anims entry that
+    /// <see cref="DamageVisuals.RigAnimFor"/> maps must be one of
+    /// <see cref="EffectCatalogue.AiDamageStageAnims"/>. An AI ladder names anims the player menu
+    /// never does, so a flat two-name list going stale would leave a plane staging nothing.</summary>
+    [ExtractedDataFact]
+    public void EveryAiInjureStageAnimIsOneOfTheAiMenu()
+    {
+        var zrdr = SharedZrdr;
+        var ai = new HashSet<string>(EffectCatalogue.AiDamageStageAnims, StringComparer.OrdinalIgnoreCase);
+        var violations = new List<string>();
+        int found = 0;
+
+        foreach (var nodeName in AllPlaneNodeNames)
+        {
+            var stats = PlaneStats.LoadForAi(zrdr, nodeName);
+            foreach (var (_, anim) in stats.VehicleInjureAnims)
+            {
+                if (DamageVisuals.RigAnimFor(anim) is not { } stage)
+                    continue;
+                found++;
+                if (!ai.Contains(stage))
+                    violations.Add($"{nodeName}: AI entry '{anim}' plays '{stage}', not an AI menu name");
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join("\n", violations));
+        Assert.True(found > 0, "no AI airframe's data carried a stage entry — the check ran on nothing");
+    }
+
+    /// <summary>The cockpit gauge families must stay unplayable on an airframe: C1 ships
+    /// <c>nose_damage_green</c> and three sets like it, plus four <c>*_got_hit</c> defs, so a
+    /// program-existence rule in place of the curated menus would light indicator geometry on the
+    /// aircraft. Also pins that a name in neither menu maps to nothing at all.</summary>
+    [Fact]
+    public void NoCockpitGaugeDefEverPlaysOnTheAirframe()
+    {
+        foreach (var part in new[] { "nose", "tail", "leftwing", "rightwing" })
+        {
+            foreach (var tier in new[] { "green", "yellow", "red" })
+                Assert.Null(DamageVisuals.RigAnimFor($"{part}_damage_{tier}"));
+            Assert.Null(DamageVisuals.RigAnimFor($"{part}_got_hit"));
+        }
+
+        Assert.Null(DamageVisuals.RigAnimFor("balmoral_healthtest"));
+        Assert.Equal("pfsmoketrail", DamageVisuals.RigAnimFor("PFSmokeTrail"));
+        Assert.Equal("random_remote_damage", DamageVisuals.RigAnimFor("random_remote_damage"));
     }
 
     /// <summary>The healthy↔torn candidate sets derive from the authored defs — the

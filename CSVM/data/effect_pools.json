@@ -42,7 +42,7 @@
     "why": "A library-root template with no entry here stays single-copy (today's behaviour) unless explicitly raised — matches genx12, which is deliberately NOT pooled in this pass (kkgate is one propane tank per chapter, never overlapping itself)."
   },
 
-  "_crashAbout": "A THIRD pool, for the per-player crash rig's templates (BL-288) — kept apart from 'roots' (the WORLD stage's, validated against its derived root set) and 'localCallRoots' (library-root clones). The rig's damage-stage menu (pdpanel1..8, player_damage_trail, the random_gun_impact shims, both crash defs) CALLs each template from several distinct anchors — a panel, prop1, a wreck piece — and the one shared copy was relocated-and-restarted onto every new call site, discarding the previous site's burst mid-flight. Unlike the world pool there is no cursor: AnimRuntime.AssignCallerSlot pins each (root, call anchor) pair to its own slot on first call, so sizes below are the AUTHORED distinct-anchor counts read off the C1 cam_anim defs (2026-08-06), not TUNE guesses — a re-count is only owed if the shared damage-stage defs ever change. No perExtraPlayer term: the whole rig is built once per player already. A root with no entry stays single-copy (the crash choreography templates, played once per crash).",
+  "_crashAbout": "A THIRD pool, for the per-player crash rig's templates (BL-288) — kept apart from 'roots' (the WORLD stage's, validated against its derived root set) and 'localCallRoots' (library-root clones). The rig's bound def set (both damage-stage menus, the random_gun_impact shims, the crash family, and the airframe's own self-named destroy def) CALLs each template from several distinct sites — a panel, prop1, a wreck piece, the `destroyed` node — and one shared copy was relocated-and-restarted onto every new call site, discarding the previous site's burst mid-flight. Unlike the world pool there is no cursor: AnimRuntime.AssignCallerSlot pins each (root, call anchor, authored call event) triple to its own slot on first call. Sizes below are therefore the AUTHORED CALL-SITE counts, not TUNE guesses: per template root, the number of distinct (call anchor, call event) pairs in the transitive CALL closure of ONE rig's bound defs, maximised over the twelve rigs (a human rig plus the eleven airframes). The count is per rig kind because a rig stages one menu: a human ladder names pdpanel*, an AI ladder names pfsmoketrail/random_remote_damage, and neither names the other's. Identical in all eight chapters' cam_anim. A re-count is owed whenever the bound def set changes (EffectCatalogue.CrashRigAnimNames) or those defs do. No perExtraPlayer term: the whole rig is built once per player already. A root with no entry stays single-copy (the crash choreography templates, played once per crash).",
 
   "crashDefault": {
     "base": 1,
@@ -51,32 +51,72 @@
 
   "crashRoots": {
     "planeflakes": {
-      "base": 8,
-      "why": "gimmeflakes debris — called AT its own pdpN by all eight pdpanelN defs; one copy per panel."
+      "base": 12,
+      "why": "gimmeflakes debris, the busiest root in the rig. Human: one call AT each of pdp1..pdp6, four at pdp7 (offsets +2/-2/-2/-2, staggered 0.2/0.3/0.4 s) and two at pdp8 = 12. AI: short_fire_follow and short_fireball_follow each call it twice at their INPUT_NODE, over railer1/lailer1/lft_elev/rt_elev = 8."
     },
     "planeflakes2": {
       "base": 2,
-      "why": "gimme_bigflakes — pdpanel4/6 only."
+      "why": "gimme_bigflakes — pdpanel4/6 only, one call each at pcdp4/pcdp6."
     },
     "short_firetrail": {
       "base": 6,
       "why": "Panel burn — pdpanel1/2/4/5/6 WITH their pdpN, plus player_damage_trail WITH prop1."
     },
     "large_firetrail": {
-      "base": 6,
-      "why": "pdpanel4/6 WITH their pdpN, plus the crash defs' four WITH pieceN trails — which shared one copy across all four flung pieces before this pool existed."
+      "base": 9,
+      "why": "Human: pdpanel4/6 WITH pcdp4/pcdp6, the destroy def's four pieceNseq trails WITH pieceN, and player_crash_default's own piece1/3/4 trails = 9. AI: the destroy def and ai_crash_* trail the hull at destroyed/healthy alongside the two panel calls = 4."
     },
     "small_injure_fireball": {
-      "base": 3,
-      "why": "small_fireball_follow — pdpanel2/3/5."
+      "base": 6,
+      "why": "small_fireball_follow / short_fireball_follow / short_fire_follow. AI: random_remote_damage's cascade calls twice each at railer1 and lailer1 and once each at lft_elev and rt_elev = 6. Human: pdpanel2/3/5 WITH their pdpN = 3."
+    },
+    "flame_ball_01": {
+      "base": 8,
+      "why": "large_fireball. Human: player_crash_dirt's four bursts and player_crash_default's two at healthy, plus p1grndhit/p2grndhit at piece1/piece2 = 8. AI: the destroy def's airburst and the crash family's, at destroyed, plus the scat_trail pair = 4 (5 on the Warhawk)."
     },
     "flame_ball_02": {
       "base": 2,
-      "why": "small_fireball — pdpanel7/8 (the world's own flame_ball callers play on the world-effects runtime, not this rig)."
+      "why": "small_fireball — pdpanel7/8 on a human rig, short_fireball_follow at railer1/lailer1 on an AI one (the world's own flame_ball callers play on the world-effects runtime, not this rig)."
+    },
+    "yellow_spark_01": {
+      "base": 9,
+      "why": "small_yellow_sparks — player_crash_default's five and player_crash_dirt's two at healthy, plus autogyro_loserotor's two at staticrotor1. Human rig only; no AI-bound def calls it."
     },
     "yellow_spark_02": {
       "base": 4,
       "why": "yellow_sparks_follow — pdpanel5 plus random_gun_impact's three WITH pdp1/2/4 shim calls."
+    },
+    "chuteman": {
+      "base": 3,
+      "why": "The bailed pilot. Ten airframes and player-player call it once AT destroyed; the Balmoral calls it THREE times from that one node at Event 1.0, a bomber's crew. Those three need three copies AND the per-call-site slot keying, since one slot per (root, anchor) collapses them onto one chute."
+    },
+    "carnage_trails": {
+      "base": 4,
+      "why": "call_crash_trails AT destroyed — one call from player_crash_default, one from _dirt and two from _water. Sticky per session, so a rig that crashes twice on different surfaces claims from both."
+    },
+    "apassengers": {
+      "base": 5,
+      "why": "rem_pas — the destroy def's two arms plus one per player_crash_* variant. Human rig only; no AI airframe def removes a passenger."
+    },
+    "fuel_trail": {
+      "base": 3,
+      "why": "player_fuelleak's three vapor calls, one each at pdp1/pdp2/pdp3."
+    },
+    "gunhit": {
+      "base": 3,
+      "why": "3040slug_gunhit, called by player_fuelleak at pdp1/pdp2/pdp3. Unrelated to the WORLD stage's shared `gunhit` entry above: these are CALL_ANIMATIONs on the crash rig and take no throttle."
+    },
+    "fire_here": {
+      "base": 2,
+      "why": "large_10sec_fire AT destroyed — player_crash_dirt and player_crash_water, one call each."
+    },
+    "flydirt": {
+      "base": 2,
+      "why": "flydirt_plane — the airframe destroy def's destroyed_dirt and ai_crash_dirt's randomdestseq both land it at destroyed."
+    },
+    "huge_splash_model": {
+      "base": 2,
+      "why": "plane_big_splash — the airframe destroy def's destroyed_water and ai_crash_water's randomdestseq, both at destroyed."
     }
   },
 

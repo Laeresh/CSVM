@@ -13,6 +13,7 @@ using Godot;
 using static CSVM.Testing.AiTargetingAndZeppelinSuites;
 using static CSVM.Testing.AnimationAndEffectsSuites;
 using static CSVM.Testing.CombatSuites;
+using static CSVM.Testing.DestroyChoreographySuites;
 using static CSVM.Testing.InstantActionSuites;
 using static CSVM.Testing.OrdnanceSuites;
 using static CSVM.Testing.PufferSuites;
@@ -76,8 +77,10 @@ public static class SuiteCatalog
         "emitter-host-deactivation",
         "effect-template-mesh",
         "fbfx-flash",
+        "callback-events",
         "ordnance-burst-timeline",
         "effect-pool-reset",
+        "repeat-call-slots",
         "effects-census",
         "bounce-launch",
         "ground-contact",
@@ -95,8 +98,12 @@ public static class SuiteCatalog
         "trail-world-anchor",
         "damage-template-pool",
         "damage-staging-pool",
+        "damage-stage-slots",
+        "ai-damage-stages",
         "crash-rig-anchors",
         "ai-crash-defs",
+        "ai-wreck-fall",
+        "player-destroy-choreography",
         "hostile-marker-hud",
         "target-ref",
         "target-pool",
@@ -448,10 +455,14 @@ public static class SuiteCatalog
             "an effect's template meshes show at the call site — including a CALLED template's — and go dark when it ends (BL-061)", EffectTemplateMesh));
         into.Add(new TestHarness.Suite("fbfx-flash",
             "he_ground_effect's six-step full-screen wash reports its authored run times, so the 1.2 s ramp does not collapse into one instant; the ramp routes by pane proximity and the victim-routed blend wash by player index, composited over it", FbfxFlash));
+        into.Add(new TestHarness.Suite("callback-events",
+            "a destroy def's CALLBACK 16 hands the instance the rig's wreck velocity and its 15 stops the damage stages, on player-player and fury-fury; an authored code the runtime does not act on is counted, and no def in the chapter authors the free arm, code 0 (D18)", CallbackEvents));
         into.Add(new TestHarness.Suite("ordnance-burst-timeline",
             "the HE, flash and sonic bursts play end to end and every sequence's whole event timeline matches the authored JSON — in order, at the authored time (D31)", OrdnanceBurstTimeline));
         into.Add(new TestHarness.Suite("effect-pool-reset",
             "a pooled effect copy is re-reset on checkout: the sonic burst played five times over a four-slot pool draws its rings on the fifth play exactly as on the first (BL-406)", EffectPoolReset));
+        into.Add(new TestHarness.Suite("repeat-call-slots",
+            "a template root CALLED REPEATEDLY from one anchor takes a pooled copy per authored call, not one for the anchor: pdpanel7's four gimmeflakes calls at pdp7 hold four copies, and a second tear reclaims those four rather than wrapping the pool (D21)", RepeatCallSlots));
         into.Add(new TestHarness.Suite("effects-census",
             "the full --effects-test sweep as verdicts: every effect resolves, template meshes show at the CALL SITE (not the stage origin), and none stays lit after its stop", EffectsCensus));
         into.Add(new TestHarness.Suite("bounce-launch",
@@ -486,10 +497,18 @@ public static class SuiteCatalog
             "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)", DamageTemplatePool));
         into.Add(new TestHarness.Suite("damage-staging-pool",
             "the injure staging reads health only: a zone stripped of armour tears no panel though its combined fraction has crossed the threshold, and the panel appears once health itself crosses (BL-384)", DamageStagingPool));
+        into.Add(new TestHarness.Suite("damage-stage-slots",
+            "the injure ladder stages per ENTRY: fury's six random_remote_damage thresholds each fire, a repair retracts what it lifted back over, and one entry on four zones fires four times (BL-385/BL-384)", DamageStageSlots));
+        into.Add(new TestHarness.Suite("ai-damage-stages",
+            "an AI plane spawned through FlightRoster stages end to end: its hull falls through the take-hit path and the rig runtime starts six random_remote_damage instances plus one pfsmoketrail, all anchored inside that aircraft, a repair tears each stage down once, and the Bloodhawk's missing elevator pair is named (BL-385)", AiDamageStages));
         into.Add(new TestHarness.Suite("crash-rig-anchors",
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
         into.Add(new TestHarness.Suite("ai-crash-defs",
-            "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default — while a human rig off the same factory keeps player_crash_* (G21)", AiCrashDefs));
+            "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default, and the def switches off both the airframe's healthy subtree and the crash root's wreck — while a human rig off the same factory keeps player_crash_* (G21)", AiCrashDefs));
+        into.Add(new TestHarness.Suite("ai-wreck-fall",
+            "a killed AI aircraft's whole fall: the kill starts its self-named destroy def and no ai_crash_* def, the airframe is drawn on every frame of the fall, the hull travels under the flight model until Callback 15 releases it at the authored 3.0 s, Callback 16 hands the anim the velocity it reached THERE, and a wreck that meets the ground first plays its surface-indexed crash def and is hidden only then (D21)", AiWreckFall));
+        into.Add(new TestHarness.Suite("player-destroy-choreography",
+            "a shot-down player plays player-player whole: the two authored arms are chosen by the def's own IF NODE_ACTIVE 1 (its node one is `player_autogyro`, so only the autogyro stops its rotor), the cockpit eject stages and shows its cpilot, all four wreck pieces appear and fly their own OBJECT_MOTION, and the camera-only Callback 3 stays counted rather than invented (D25)", PlayerDestroyChoreography));
         into.Add(new TestHarness.Suite("hostile-marker-hud",
             "the targeting HUD (TargetHud, every flight session): the tracker picks the " +
             "pane's nearest LIVE AI hostile off the pool's own aircraft roster (a closer human, " +

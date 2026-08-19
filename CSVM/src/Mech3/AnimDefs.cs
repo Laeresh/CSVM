@@ -299,6 +299,13 @@ public static class AnimDefs
                     }
                 }
                 break;
+            case "Callback":
+                // The reader writes CALLBACK [VALUE [n]] where the compiled event carries `value`
+                // directly. Without this a reader-authored destroy def raises a code the runtime
+                // cannot read, and the wreck silently inherits nothing.
+                if (Num(fields, "VALUE") is { } callbackCode)
+                    data["value"] = callbackCode;
+                break;
             case "PufferState":
                 AddPufferState(data, fields);
                 break;

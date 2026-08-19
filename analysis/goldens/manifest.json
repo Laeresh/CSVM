@@ -99,8 +99,8 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "c715c5f2ecbba06b80f98d0fb58abfb2",
-      "exercises": "the crash rig playing player_crash_default (--crash=5's null-material slot-0 arm), the airframe, the moving distance-puffer path, call_crash_trails' ranged launch and tumble, the vector-form pieces that do not turn, and flydirt's delta.",
+      "hash": "f3cab4da768a3d5b3c499b0c53fa9025",
+      "exercises": "player_crash_default on the crash rig (--crash=5's null-material slot-0 arm), the airframe, the moving distance-puffer path, call_crash_trails' ranged launch and tumble, vector-form pieces, flydirt's delta, repeat calls each taking a pooled copy.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
@@ -116,6 +116,13 @@
       "hash": "ee1a1c3408efc730a71bca150da7eed8",
       "exercises": "the targeting HUD's original-shaped marker: fixed brackets inside the selected gun's reach, the name label below the plane, and --debug-markers' identity/health string; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
+    },
+    {
+      "name": "c1-ai-wreck",
+      "frame": 280,
+      "hash": "54662d3d79a25031123b1894e9e32b36",
+      "exercises": "a shot-down AI aircraft three seconds after the kill, at the downrange its FROZEN commands flew it to: the destroy def's second fireball and trail at the handover where randomdestseq takes the hull over, and the parachutist level under his canopy.",
+      "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     }
   ]
 }

@@ -111,16 +111,32 @@ public sealed class FlightRoster
                 }
             }
 
+            // Visible damage, phase 1: the same object the player rig gets, built from this
+            // airframe's own injure_anims. Phase 2 (the sink and the stops) is wired by
+            // BuildFlightCrashRuntime below, once the runtime it plays into exists.
+            if (controller.Damage != null)
+            {
+                controller.Visuals = HumanFlightAdapter.BuildDamageVisuals(
+                    planeBuilder, planeModel, stats, _in.CrashProgram);
+            }
+
             controller.Setup(new FlightModel(stats, aiForcePath: true), null, new CamParams(),
                 spawn.Position, spawn.LookAt);
             controller.ArmSpawnTimers();
             controller.Name = $"ai{index + 1}_{spawn.PlaneName}";
             _worldRoot.AddChild(controller);
+            // The engine loop, positional and culled at 2000 units. Attach no-ops to null when the
+            // session found no sound archive; the own-ship FlightAudio is never built for an AI.
+            controller.EngineAudio = AiEngineAudio.Attach(controller, _in.Sounds, _in.SoundDefs, stats);
 
             if (_in.CrashProgram != null && _in.WorldScene != null)
             {
+                // The planes gamez goes in here exactly as it does on the player rig: the destroy
+                // def's `chuteman` is a template root of planes.zbd, and an asymmetry here would
+                // give the parachute to one kind of kill only.
                 _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, spawn.PlaneName, _in.Gamez,
-                    _in.WorldScene, _in.Textures, _in.CrashProgram, verbose: false);
+                    _in.WorldScene, _in.Textures, _in.CrashProgram, verbose: false,
+                    worldSounds: _in.WorldRuntime?.Sounds, planesGamez: _in.PlanesGamez);
                 controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
             }
         }

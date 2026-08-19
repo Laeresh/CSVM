@@ -199,26 +199,43 @@ public sealed class PlaneStats
     // pi/180 on the way in. The shipped 1.0 is a 1-degree cone.
     public float StickyBulletInaccuracy = Mathf.Pi / 180f;
 
-    // sound (vehicle.json 'engine_sound' name + player.json curve blocks).
-    // Engine curves run on throttle [0..1]; whine (the 'prop_sound' block — only
-    // audible past fd_speed, i.e. a dive) and rattle run on speed/fd_speed.
+    // sound: the three engine-slot def names are vehicle.json keys, the curves are player.json
+    // blocks every airframe indexes. Engine curves run on throttle [0..1]; the whine ('prop_sound')
+    // and rattle run on speed/fd_speed. Slot assignment: docs/formats/vehicle.md.
     public string EngineSound = "snd_devastatorengine"; // basic_airplane default
     public SoundCurve EngineVolume = new(0.1f, 1f, 1f, 1f);
     public SoundCurve EnginePitch = new(0.1f, 0.6f, 1f, 1f);
-    public string WhineSound = "snd_enginewhine"; // not named in the readers; the only pitch-shiftable candidate
+
+    /// <summary>vehicle.json <c>cockpit_engine_sound</c>, the engine def the original swaps onto the
+    /// engine slot in its two cockpit camera modes. ⚠ Nothing selects it here: CSVM's camera set is
+    /// external throughout, so its numpad 6/7 are flank views and not the original's modes 6/7
+    /// (<c>BL-080</c>). Read so the reader is complete; do not bind it to a numpad view.</summary>
+    public string? CockpitEngineSound;
+
+    /// <summary>vehicle.json <c>prop_sound</c>, the overspeed dive whine's def. ⚠ Stays null
+    /// install-wide: no shipped vehicle def authors the key and the slot has no compiled default,
+    /// so the original plays no whine at all. The player.json <c>prop_sound</c> CURVE block below is
+    /// a different key of the same name and IS authored.</summary>
+    public string? WhineSound;
     public SoundCurve WhineVolume = new(1f, 0f, 1.1f, 0.5f);
     public SoundCurve WhinePitch = new(1f, 0.65f, 1.2f, 1.25f);
     public string RattleSound = "snd_planeshake";
     public SoundCurve RattleVolume = new(1f, 0f, 1.2f, 1f);
 
-    /// <summary>vehicle.json 'damaged_engine_sound' — null when a def carries none (none do; every
-    /// plane inherits basic_airplane's single entry, verified install-wide). DamagedEngineGain reads
-    /// the entry's two trailing floats (0.0, 1.0 for every plane) as a fade window over accumulated
-    /// damage fraction (1 - worst part HP fraction): 0 gain at the low value, full gain at the high
-    /// one — the same shape as every other engine-audio SoundCurve. The floats are otherwise
-    /// undecoded; this reading is a TUNE candidate, not a confirmed original mechanic.</summary>
+    /// <summary>vehicle.json <c>damaged_engine_sound</c> — the looped def swapped ONTO the engine
+    /// slot while the airframe is damaged, not a second loop blended over it. One entry install-wide
+    /// (<c>snd_damagedengine</c>), inherited from basic_airplane by every plane.</summary>
     public string? DamagedEngineSound;
-    public SoundCurve DamagedEngineGain = new(0f, 0f, 1f, 1f);
+
+    /// <summary>The pitch multiplier drawn once per swap, uniform over this range, applied to the
+    /// engine pitch curve. Read only when <see cref="DamagedEnginePitchRandom"/> is set, which the
+    /// entry's own third element decides; the shipped entry authors it with the range 0.0 to 1.0, so
+    /// a damaged engine can drop to the bottom of the mixer's frequency floor.</summary>
+    public float DamagedEnginePitchLo;
+
+    public float DamagedEnginePitchHi = 1f;
+
+    public bool DamagedEnginePitchRandom;
 
     /// <summary>The plane's damageable sections ('destroyable_parts', nearest def in
     /// the kind_of chain). Empty when the def has none (damage model disabled).</summary>
@@ -371,6 +388,13 @@ public sealed class PlaneStats
                     return s;
             return fallback;
         }
+        string? PropStrOpt(string key)
+        {
+            foreach (var d in chain)
+                if (d.Str(key) is { } s)
+                    return s;
+            return null;
+        }
 
         var stats = new PlaneStats
         {
@@ -403,6 +427,9 @@ public sealed class PlaneStats
             RudderTol = Prop("rudder_tol", 0.2f),
         };
         stats.EngineSound = PropStr("engine_sound", stats.EngineSound);
+        stats.CockpitEngineSound = PropStrOpt("cockpit_engine_sound");
+        // Absent from every shipped def, which is the finding, not a parse gap — see WhineSound.
+        stats.WhineSound = PropStrOpt("prop_sound");
 
         // The whole-vehicle pair, only when the chain actually authors it (AI defs do; player
         // chains carry neither key, and Prop's fallback would invent a pool).
@@ -430,16 +457,22 @@ public sealed class PlaneStats
             break;
         }
 
-        // damaged_engine_sound: [[soundName, fadeStart, fadeEnd]] — see DamagedEngineSound's doc.
+        // damaged_engine_sound: an ARRAY of [soundName, pitchLo, pitchHi] entries, one swap candidate
+        // each. Every shipped def inherits basic_airplane's single entry, so the random draw over the
+        // array collapses to it; the two floats are the pitch range, present only on the longer form.
         foreach (var d in chain)
         {
             if (d.List("damaged_engine_sound") is not { Count: > 0 } dmgList)
                 continue;
-            if (dmgList[0] is List<object?> { Count: >= 3 } entry
-                && entry[0] is string dmgName && entry[1] is float fadeStart && entry[2] is float fadeEnd)
+            if (dmgList[0] is List<object?> { Count: >= 1 } entry && entry[0] is string dmgName)
             {
                 stats.DamagedEngineSound = dmgName;
-                stats.DamagedEngineGain = new SoundCurve(fadeStart, 0f, fadeEnd, 1f);
+                if (entry.Count >= 3 && entry[1] is float pitchLo && entry[2] is float pitchHi)
+                {
+                    stats.DamagedEnginePitchLo = pitchLo;
+                    stats.DamagedEnginePitchHi = pitchHi;
+                    stats.DamagedEnginePitchRandom = true;
+                }
             }
             break;
         }

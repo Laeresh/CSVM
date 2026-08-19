@@ -428,7 +428,7 @@ instantaneous base-state pass never has to interpret a branch.
 
 Playback ops seen and deferred: `OBJECT_DELETE_CHILD`,
 `SOUND` (the one-shot form — see below), `OBJECT_CYCLE_TEXTURE`, `CAMERA_STATE`,
-`CALLBACK`, `DETONATE_WEAPON`.
+`DETONATE_WEAPON`.
 (`FBFX_COLOR_FROM_TO` landed — see [`org/sequences.md`](../org/sequences.md)'s
 "FBFX_COLOR_FROM_TO is a full-screen wash";
 `LIGHT_STATE`/`LIGHT_ANIMATION` landed — see below;
@@ -436,7 +436,10 @@ Playback ops seen and deferred: `OBJECT_DELETE_CHILD`,
 three-event triple"; `OBJECT_MOTION`'s rotation half landed and its
 ballistic/scale/tumble half — see "OBJECT_MOTION is two ops in one";
 `OBJECT_OPACITY_STATE` landed and `OBJECT_OPACITY_FROM_TO` — see
-"OBJECT_OPACITY_STATE is translucency".)
+"OBJECT_OPACITY_STATE is translucency";
+`CALLBACK` landed for the two vehicle-death codes, 16 and 15 (see
+[`org/vehicleDamage.md`](../org/vehicleDamage.md)'s "What happens to the wreck"), while every other
+authored code is counted and ignored.)
 
 `CALL_ANIMATION` dispatched from the start but **ignored its target node** until —
 see "CALL_ANIMATION carries a target node" below; that is the data's template-instancing

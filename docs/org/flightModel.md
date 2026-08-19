@@ -181,6 +181,59 @@ where the explicit-Euler factor `(1 − dt·damp) = −4` would flip the rate's 
 tick — `CSVM.Tests/AngularDampingTests.cs` pins both the ordering (this tick's own torque is
 damped, not exempted) and this divergence.
 
+## A destroyed hull flies the same model
+
+⚠ **Nothing in the flight path is gated on death.** `FUN_0048e580` (the aircraft integrator),
+`FUN_0048c470` (the force and torque build) and `FUN_0048fc40` (thrust, drag, lift, gravity) do not
+read `+0x91d` or `+0x91f` at any instruction: a program-wide scan finds 100+ sites reading `+0x91d`
+and 39 reading `+0x91f`, and none of them lies inside those three functions. The only death test on
+the movement path is the run-or-skip gate itself, `FUN_00489ea0` at `0x00489ea3` / `0x00489ead`, and
+a vehicle that passes it dispatches the unmodified integrator for mode class 0 and 4. No lift term
+is dropped, no drag term is added, no coefficient is swapped, and no ballistic path exists. Neither
+does the death function `FUN_004b82d0` zero the throttle command or the control-surface
+deflections; those are AI-written state (`FUN_0041b560`, `FUN_004209b0` slew `+0x124`) and the AI
+think is what stops, so they **freeze at their last commanded values**.
+
+Two state flags do change the force build, and death sets neither:
+
+| Flag | Tested at | What it does | Set by |
+|---|---|---|---|
+| `+0x384` | `0x0048c4ba` | swaps the whole aerodynamic build for a velocity-match to `fd_speed · throttle` along the nose, the same arm any non-player over 1000 units from the player takes | `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` |
+| `+0x2dc` bit `0x2` | `0x0048fdd0` | engine out: **thrust alone** goes to zero (`local_c` at `LAB_0048fdf3`); lift and drag are untouched | `FUN_004b1690` (the systems-damage setter), `FUN_004aff80` and `FUN_004b40c0` at spawn/reset |
+
+So "a dead engine means no lift and high drag" is refuted twice over: there is no engine-out state
+on the death path, and the real engine-out bit only removes thrust. `FUN_0048ad20` is a red
+herring, confirmed: it is the terrain-conform update for surface vehicles, reached from
+`FUN_00489ea0`'s class 2/3/5 arms and never for an aeroplane.
+
+**What falls, then, is the anim.** The dead hull holds altitude and travels, for the three seconds
+until `Callback 15` releases it; `randomdestseq`'s `ObjectMotion` (gravity −9.8, `impact_force`) is
+what flies it down (`docs/org/vehicleDamage.md`, "A dead aircraft keeps flying itself until
+`Callback 15`").
+
+**The commands freeze; they are not neutralised.** What death stops is the AI think and the weapon
+loop, so nothing writes the command vector and the integrator keeps reading its last value.
+`FlightController.StepWreckFall` steps the model with `_lastInput` for that reason. A default
+`FlightInput` there would fly the wreck on zero throttle and neutral surfaces, which is an
+invention: the original has no neutralising step on the death path.
+
+⚠ **Do not tune this against the recordings' downrange.** Freezing measures 323 m downrange and
+−8 m of altitude on a headless kill, where neutralising measured 175 m and +1 m, and 175 m is the
+figure a reference recording gave (`docs/PLAN-ai-damage-and-engine-audio.md`, D21). That agreement
+is not evidence for neutralising. It is a footage-derived distance, the class of measurement that
+has failed here repeatedly and may not contest a decode, and the magnitude under freezing is a
+function of **our** AI's last throttle rather than the original's, so neither number tests the
+mechanism. If the downrange reads wrong at the controls, the open question is what throttle an AI
+carries into its death (`BL-414`), not whether to reinstate a neutraliser the original never had.
+
+⚠ **Decoded for an AI, assumed for a human.** What `FUN_004897c0` skips on death is the AI think
+(`FUN_0041f810`/`FUN_0041c270`) and the weapon loop, so an AI's commands demonstrably stop being
+written. Whether the original also stops reading a HUMAN's stick on death is not decoded, and
+`StepWreckFall` serves both, so a dead player's hull flies the last stick position its pilot held.
+The stakes are lower than they look, since `player-player` breaks the hull into four separately
+flown pieces rather than falling as one, but a player killed holding full deflection is the case to
+watch.
+
 ## Atmosphere
 
 `FUN_0041aca0` is a **two-band step function — there is no altitude gradient at all**:
@@ -1381,7 +1434,7 @@ are nonetheless authored on `basic_airplane` (`rates` 10/42, `turns` 4.6/6.5) an
 carries them; the shipped data authors them on exactly three defs — `basic_airplane`, `patrolboat`
 and `t_truck`.
 
-**In the remake:** `PlaneStats.WithAiSpawnJitter`, applied at `AiAircraftSpawner.Spawn` to a
+**In the remake:** `PlaneStats.WithAiSpawnJitter`, applied at `FlightRoster.SpawnAi` to a
 COPY of the session's shared per-airframe stats. The name test becomes `IsHumanPiloted` (C21's
 recorded divergence, since this engine flies up to four humans); the network gate holds trivially
 (no network play) and the class gate holds by construction (every airframe it can fly is class 0).
@@ -1672,7 +1725,7 @@ anywhere in the chain, so it is frame-rate dependent. Both the factor and `S` ar
 collision/ground-blow gate has expired but while the clock is inside `obj+0xB4` (below). Together
 these make a carrier drop: 1.5 s with no AI ground blow, then 1.0 s at ×0.15, then full strength.
 ⚠ **This window IS reachable in the remake.** A zeppelin's fighter-drop launch
-(`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`, the "Zeppelins" section below) is this engine's
+(`AiGeneratorRuntime` → `FlightRoster.SpawnAi`, the "Zeppelins" section below) is this engine's
 carrier drop, and a freshly-dropped fighter flies the same `UsesAiForcePath` plant this law reads.
 The port carries this timer on each carrier-released aircraft, so the ×0.15 cut applies for its
 full 2.5 s window.

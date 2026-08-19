@@ -154,6 +154,32 @@ is only interpretable if it names the quantity it multiplies at the right point 
   of them reassuring, one of them right. The nadir pose was the founding evidence of the bug, which
   is exactly why it was trusted alone.
 
+- **SHOT-29** — **Before pinning a golden, measure how much of the frame the subject actually
+  owns; a subject no scripted camera can approach does not earn one.** A shot is named for its
+  subject but hashed over the whole frame, so a small subject makes a tripwire for everything
+  else. Measured on an AI aircraft's damage stages: `--ai=` places the plane 250 m ahead of the
+  chase camera and it outruns the player from there, so the same C1 pose with the AI staging its
+  whole ladder (five `random_remote_damage` bursts and the `pfsmoketrail` heavy trail, visibly
+  burning under 4× magnification) differs from the pristine control by **396 of 921,600 pixels,
+  0.043 %**. A hash there would move on any render change and hold still through a total staging
+  regression. The A/B against the undamaged control is the cheap check, and it answers both ways:
+  it is also how a shot that IS worth pinning proves it.
+
+- **SHOT-30** — **A headless AI shootdown is reachable, and it writes `DESTROYED …`, not
+  `CRASH into …`.** `RunProbe.ps1 --chapter=C1 --plane=player_bhawk --ai=player_fury
+  --ai-damage=0.02 --fire --frames=1200` kills the AI plane in about a second and logs
+  `DESTROYED by gunfire (…) def=fury wreck=falling (flight model) lands=anim (bounce sequence)`.
+  Grepping a run for `CRASH` alone reads a working shootdown as nothing having happened, because
+  the two death stages are two different log lines and only the ground contact writes the second.
+
+- **SHOT-31** — **`SHOT-29`'s verdict is about the SUBJECT, not about AI aircraft, so re-measure
+  it for each one.** The same `--ai=` kill three seconds later, at the destroy def's handover,
+  differs from an unkilled control by **236,925 of 921,600 pixels, 25.7 %** (17,438, 1.9 %, past a
+  channel delta of 16), in a readable 215 × 206 px fireball; the shot repeats bit for bit across
+  runs and is 54.5 % frame-sensitive. A pristine AI aircraft's staged damage ladder moved 0.043 %
+  of the same frame. Same camera, same flags, 600× the signal: what fails a golden is the size of
+  the subject in frame, and a burning wreck is a different subject from the plane that was flying.
+
 ## GOLD — golden images
 
 - **GOLD-1** — **Update moved hashes with the visual change, and explain each moved shot in the
@@ -313,6 +339,12 @@ is only interpretable if it names the quantity it multiplies at the right point 
   before the run, and confirm the printed suite and golden counts are non-zero; a green with no
   golden line is a green that measured nothing.
 
+- **LOG-18** — **`--debug-anim`'s motion line prints a GLOBAL position and a LOCAL rotation.** Read
+  its `rot` as world attitude and every driven node under a moving parent reads wrong; it is world
+  attitude only for a placed template root, which the stage sets `TopLevel`. The parachute's line
+  read `rot (0.7, -92.2, -9.3)` while its wreck read `(39.5, 19.6, -118.3)`, two frames that only
+  looked comparable.
+
 ## WORLD — world data and runtime traps
 
 - **WORLD-8** — **Resolve objects by source identity, not normalized node names.**
@@ -420,6 +452,12 @@ is only interpretable if it names the quantity it multiplies at the right point 
   so the outer site's record absorbs the inner ones' cost by construction. Read a high
   `sample_violations` on a dominant site as "more happened here than the named sites show," not as
   a defect to chase.
+- **INSTR-18** — **Never place a flight-model probe above `flightModel.altitudeCapM`: the first step
+  teleports it down to the cap and every distance downstream measures the teleport.** The clamp
+  snaps any position over 2003 m to 2045.8 m, so a wreck released at 2500 m reports 454 m of
+  "falling" in one frame and a distance check passes on nothing having flown. Measured on the death
+  path, where the same wreck spawned at 1500 m holds its altitude to the metre across all three
+  seconds, a dead hull gliding rather than dropping.
 
 ## SRC — sources and documents
 

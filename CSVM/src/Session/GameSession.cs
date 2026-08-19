@@ -2336,14 +2336,17 @@ public partial class GameSession : Node3D
                     var look = net.Nodes.Count > 1 ? follower.NodePosition(1) : pos + fwd;
                     var pilot = AiPilot.HoldingCourse(pos, look);
                     pilot.Patrol = follower;
-                    RegisterAiVoice(SpawnAiAircraft(planeName, pos, look, pilot), accentId);
+                    var spawnedOnNet = SpawnAiAircraft(planeName, pos, look, pilot);
+                    RegisterAiVoice(spawnedOnNet, accentId);
+                    ApplyAiHullPreset(spawnedOnNet);
                 }
                 else
                 {
                     var pos = lead.WorldPosition + fwd * 250f + right * lateral;
-                    RegisterAiVoice(
-                        SpawnAiAircraft(planeName, pos, pos + fwd, AiPilot.HoldingCourse(pos, pos + fwd)),
-                        accentId);
+                    var spawnedAhead = SpawnAiAircraft(planeName, pos, pos + fwd,
+                        AiPilot.HoldingCourse(pos, pos + fwd));
+                    RegisterAiVoice(spawnedAhead, accentId);
+                    ApplyAiHullPreset(spawnedAhead);
                 }
             }
             state.What += $" + {aiPlanes.Count} AI";
@@ -2900,6 +2903,25 @@ public partial class GameSession : Node3D
             }
             return null;
         };
+    }
+
+    // --ai-damage=: spends this AI plane's hull down to the ordered fraction at build, so a scripted
+    // shot catches its injure_anims stages already up. Armour first and health second, in two exact
+    // spends, because that is the order the take-hit flow spends them in; an AI airframe resolves no
+    // zones, so both land in the whole pair the ladder reads. ⚠ Never drives the pool to zero — a
+    // preset that kills would leave a wreck where the point is a flying, burning aircraft.
+    private void ApplyAiHullPreset(FlightController? controller)
+    {
+        if (_spec.AiHullDamage is not { } fraction || controller?.Damage is not { } damage)
+            return;
+        if (damage.WholeArmor > 0f)
+            damage.Apply("hull", 0f, damage.WholeArmor);
+        float spend = damage.WholeHealth - (Mathf.Max(fraction, 0.01f) * damage.WholeHealthMax);
+        if (spend > 0f)
+            damage.Apply("hull", spend, 0f);
+        controller.Visuals?.OnHullDamage(damage.SummaryHealthFraction);
+        GD.Print($"ai damage preset: {controller.Name} hull at " +
+                 $"{damage.SummaryHealthFraction * 100f:0}% ({damage.WholeHealth:0.0}/{damage.WholeHealthMax:0})");
     }
 
     // Every player's own position: the flown aircraft where a rig has a bound FlightController,

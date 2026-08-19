@@ -250,10 +250,9 @@ public class GroundBlowTests
     [Fact]
     public void TheAiVelocitySteerNeverSuppresses()
     {
-        // The player path zeroes its steer while commanding into the obstacle (S is zeroed on that
-        // branch, TheVelocitySteerStopsWhenCommandingIntoTheSurface pins it); the AI path has no
-        // command-direction branch to zero it, so the steer always rides at 2·S regardless of pitch.
-        // Zero only the angular push so this test isolates the separately decoded velocity steer.
+        // The player path zeroes its steer while commanding into the obstacle (pinned by
+        // TheVelocitySteerStopsWhenCommandingIntoTheSurface); the AI path has no such branch, so the
+        // steer rides at 2·S whatever the pitch. Zeroing the angular push isolates that steer.
         float alone = GapAfter(pitch: 0f, normal: Vector3.Zero, ai: true, aiGroundBlow: 0f);
         float pushingIn = GapAfter(pitch: -1f, normal: SlopeNormalBody, ai: true, aiGroundBlow: 0f);
         float expected = alone * Mathf.Exp(-2f * ExpectedProximity(0f) * Dt);

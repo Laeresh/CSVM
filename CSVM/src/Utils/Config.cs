@@ -221,15 +221,10 @@ public static class Config
             // the warmup never does — register them here so --dump-config still documents them.
             GetInt("weapons.gunAmmoCap", FlightController.GunAmmoCapDefault);
             GetInt("weapons.ordnanceCap", FlightController.OrdnanceCapDefault);
-            // The whine mix gain is read only from a live FlightAudio.Update, which the warmup never
-            // drives (no SoundArchive here) — register it here so --dump-config still documents it.
-            GetFloat("flightAudio.whineMixGain", FlightAudio.WhineMixGain);
-            // Same reason as whineMixGain: the damaged-engine loop is only read from a live
-            // FlightAudio.Update with damage data, which the warmup never drives.
-            GetFloat("flightAudio.damagedEngineMixGain", FlightAudio.DamagedEngineMixGain);
-            // Same reason: the engine dual-stack detune ratio is only read from a live
-            // FlightAudio.Update, which the warmup never drives.
-            GetFloat("flightAudio.engineDetuneRatio", FlightAudio.EngineDetuneRatio);
+            // ⚠ Do not reinstate a `flightAudio` key. All three (whineMixGain,
+            // damagedEngineMixGain, engineDetuneRatio) scaled mechanisms the engine-audio decode
+            // refuted, so there is nothing left for them to tune (docs/formats/vehicle.md).
+
             // Puffer emitters read these at Init, which the warmup never reaches (an emitter needs
             // a texture archive) — register them here so --dump-config still documents them.
             GetFloat("puffer.burstSizeScale", Effects.Puffer.SizeScaleDefault);

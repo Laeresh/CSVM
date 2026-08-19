@@ -6,12 +6,12 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Own-plane sound, all from the player's own game data: the plane's engine loop
-/// (per-plane WAV via vehicle.json 'engine_sound', throttle-driven pitch/volume, played as a
-/// detuned dual voice), the overspeed whine (player.json 'prop_sound' curves —
-/// silent until past fd_speed in a dive), the airframe rattle (player.json 'rattle' block),
-/// plus the prop start/stop one-shots (snd_propstart/snd_propstop). Non-positional players:
-/// these are what the pilot hears; positional 3D emitters are for other aircraft, later.
+/// Own-plane sound, all from the player's own game data: the plane's engine loop (per-plane WAV via
+/// vehicle.json 'engine_sound', throttle-driven pitch and volume, swapped for 'damaged_engine_sound'
+/// while the airframe is hurt), the overspeed whine ('prop_sound', which no shipped def names), the
+/// airframe rattle (player.json 'rattle' block), plus the prop start/stop one-shots
+/// (snd_propstart/snd_propstop). Non-positional players: these are what the pilot hears, and
+/// <see cref="AiEngineAudio"/> is the positional twin every other aircraft carries.
 /// </summary>
 public partial class FlightAudio : Node
 {
@@ -19,33 +19,6 @@ public partial class FlightAudio : Node
     /// splitscreen sets 1/√N so N simultaneous engine stacks don't sum to a wall of noise
     /// (equal-power, so 2P ≈ −3 dB each, 4P ≈ −6 dB). TUNE — pending a real 4P listen.</summary>
     public float MixGain = 1f;
-
-    // The prop_sound curve caps the whine at volume 0.5, but spectral analysis of the
-    // user's reference video (Bloodhawk dive to ~1.27x fd_speed) bounds the original's whine at
-    // 0.06-0.14 of the engine's amplitude — the reader volume is evidently not a linear mix gain
-    // for this loop. 0.12 puts our saturated whine ~24 dB under the engine, at the bound. TUNE.
-    internal const float WhineMixGain = 0.12f;
-
-    // No reference recording exists for the damaged-engine loop the way the whine had a spectral
-    // dive to measure against — 1.0 (the def's own sounds.json volume, unattenuated) is the
-    // starting point until a real capture says otherwise. TUNE, Config-wired so it can move
-    // without a rebuild.
-    internal const float DamagedEngineMixGain = 1f;
-
-    // The original plays its engine loop as a detuned dual stack: spectral analysis of the
-    // reference dive recording found combs consistent with ~5% separation between two voices
-    // (a Doppler reading of those same combs was refuted; the detune reading was not).
-    // No exact ratio was measured, only "~5%", so
-    // this is a TUNE seeded from that figure. Config-wired so it can move without a rebuild.
-    internal const float EngineDetuneRatio = 0.05f;
-
-    // Splitting one engine voice into two changes nothing about total loudness only if each
-    // voice is attenuated to keep summed *power* (not amplitude) constant — the two voices are
-    // near-identical waveforms a few percent apart in pitch, so they add closer to
-    // uncorrelated (power) than correlated (amplitude) once they drift out of phase. 1/sqrt(2)
-    // per voice keeps the pair at the same RMS power as today's single full-gain loop, the same
-    // equal-power convention MixGain already uses for splitscreen.
-    private const float EngineVoiceGain = 0.70710678f;
 
     private const float SilenceThreshold = 0.002f;
     // s for the loop to fade to full behind snd_propstart. Sourced from startprops' authored prop
@@ -56,8 +29,16 @@ public partial class FlightAudio : Node
     private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
 
     private PlaneStats _stats = null!;
-    private AudioStreamPlayer? _engine, _engine2, _whine, _rattle, _damagedEngine;
-    private float _engineVol = 1f, _whineVol = 1f, _rattleVol = 1f, _damagedEngineVol = 1f; // sounds.json VOLUME base gain
+    private AudioStreamPlayer? _engine, _whine, _rattle;
+    private float _engineVol = 1f, _whineVol = 1f, _rattleVol = 1f; // sounds.json VOLUME base gain
+
+    // The engine slot's two candidate streams, both resolved at Setup so a mid-flight swap is an
+    // assignment rather than an archive read: the session's SoundArchive outlives the build, but a
+    // decode at the moment the airframe is hit is a hitch nobody needs.
+    private AudioStreamWav? _engineStream, _damagedStream;
+    private float _damagedVol = 1f;
+    private bool _engineDamaged;              // which of the two the slot currently holds
+    private float _enginePitchMul = 1f;       // the damaged swap's one-off pitch draw
     private AudioStreamPlayer? _crash;
     private AudioStreamPlayer? _groundExp, _waterExp;
     private float _groundExpVol = 1f, _waterExpVol = 1f;
@@ -94,15 +75,14 @@ public partial class FlightAudio : Node
         // The shared empty-clip cue (weapons.json NO_AMMO_WARNING = snd_emptyclip).
         _emptyClip = MakeOneShot(archive, defs, "snd_emptyclip", out _emptyClipVol);
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
-        // A second voice of the same loop, detuned a few percent off the first in Update,
-        // reproduces the original's dual-stack chorus. Same def/stream, its own player so the two
-        // voices run independent playback positions.
-        _engine2 = MakeLoop(archive, defs, stats.EngineSound, out _);
-        _whine = MakeLoop(archive, defs, stats.WhineSound, out _whineVol);
+        _engineStream = _engine?.Stream as AudioStreamWav;
+        // Not built as a player of its own: this stream replaces the engine's on the one slot, so a
+        // second player would be the blend the decode refuted.
+        if (stats.DamagedEngineSound is { } damagedName)
+            _damagedStream = LoadStream(archive, defs, damagedName, out _damagedVol);
+        if (stats.WhineSound is { } whineName)
+            _whine = MakeLoop(archive, defs, whineName, out _whineVol);
         _rattle = MakeLoop(archive, defs, stats.RattleSound, out _rattleVol);
-        // damaged_engine_sound: a second engine loop blended in as the airframe takes damage.
-        if (stats.DamagedEngineSound is { } damagedEngineSound)
-            _damagedEngine = MakeLoop(archive, defs, damagedEngineSound, out _damagedEngineVol);
 
         // Prop start/stop one-shots (both non-looped, no VOLUME field → base gain 1.0):
         // snd_propstart plays as the engine ramps in on (re)spawn; snd_propstop is the
@@ -192,30 +172,22 @@ public partial class FlightAudio : Node
     {
         if (_engineRamp < 1f)
             _engineRamp = Mathf.Min(1f, _engineRamp + dt / EngineStartRamp);
+        SetEngineDamaged(damageFrac > 0f);
         if (_engine != null)
         {
             if (!_engine.Playing)
                 StartEngine(); // respawn after a crash: propstart + fresh volume ramp-in
-            float pitch = Mathf.Max(0.01f, _stats.EnginePitch.Eval(throttle));
-            float halfDetune = Config.GetFloat("flightAudio.engineDetuneRatio", EngineDetuneRatio) * 0.5f;
-            float voiceGain = Mathf.Max(SilenceThreshold,
-                _stats.EngineVolume.Eval(throttle) * _engineVol * _engineRamp * MixGain) * EngineVoiceGain;
-            _engine.PitchScale = pitch * (1f - halfDetune);
-            _engine.VolumeDb = Mathf.LinearToDb(voiceGain);
-            if (_engine2 != null)
-            {
-                if (!_engine2.Playing)
-                    _engine2.Play();
-                _engine2.PitchScale = pitch * (1f + halfDetune);
-                _engine2.VolumeDb = Mathf.LinearToDb(voiceGain);
-            }
+            var (pitch, volume) = EngineAudioCurves.Engine(_stats, throttle, _enginePitchMul);
+            _engine.PitchScale = pitch;
+            _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold,
+                volume * (_engineDamaged ? _damagedVol : _engineVol) * _engineRamp * MixGain));
         }
-        UpdateLoop(_whine, _stats.WhineVolume.Eval(speedFrac) * _whineVol
-            * Config.GetFloat("flightAudio.whineMixGain", WhineMixGain) * MixGain,
-            _stats.WhinePitch.Eval(speedFrac));
+        if (_whine != null)
+        {
+            var (pitch, volume) = EngineAudioCurves.Whine(_stats, speedFrac);
+            UpdateLoop(_whine, volume * _whineVol * MixGain, pitch);
+        }
         UpdateLoop(_rattle, _stats.RattleVolume.Eval(speedFrac) * _rattleVol * MixGain, 1f);
-        UpdateLoop(_damagedEngine, _stats.DamagedEngineGain.Eval(damageFrac) * _damagedEngineVol
-            * Config.GetFloat("flightAudio.damagedEngineMixGain", DamagedEngineMixGain) * MixGain, 1f);
     }
 
     /// <summary>Holds (or releases) the own-plane loops where they are, for the sim-clock halt:
@@ -228,10 +200,6 @@ public partial class FlightAudio : Node
         {
             _engine.StreamPaused = paused;
         }
-        if (_engine2 != null)
-        {
-            _engine2.StreamPaused = paused;
-        }
         if (_whine != null)
         {
             _whine.StreamPaused = paused;
@@ -240,10 +208,6 @@ public partial class FlightAudio : Node
         {
             _rattle.StreamPaused = paused;
         }
-        if (_damagedEngine != null)
-        {
-            _damagedEngine.StreamPaused = paused;
-        }
     }
 
     /// <summary>Kills the flight loops (dead engine) and fires one of the game's
@@ -251,10 +215,8 @@ public partial class FlightAudio : Node
     public void OnCrash()
     {
         _engine?.Stop();
-        _engine2?.Stop();
         _whine?.Stop();
         _rattle?.Stop();
-        _damagedEngine?.Stop();
         if (_crash == null)
             return;
         var (name, stream, volume) = _crashSounds[
@@ -330,10 +292,8 @@ public partial class FlightAudio : Node
     public void OnEngineStop()
     {
         _engine?.Stop();
-        _engine2?.Stop();
         _whine?.Stop();
         _rattle?.Stop();
-        _damagedEngine?.Stop();
         // D32: fires right after OnCrash's boom, the same crash instant — MixGain for
         // the same pile-up reason, not the "your prop" respawn cue StartEngine plays below.
         float gain = _propStopVol * MixGain;
@@ -365,7 +325,10 @@ public partial class FlightAudio : Node
         player.VolumeDb = Mathf.LinearToDb(volume);
     }
 
-    private AudioStreamPlayer? MakeLoop(SoundArchive archive,
+    // A looped definition's stream and its unscaled VOLUME, same convention as WorldSounds' 3D
+    // emitters. Split out from MakeLoop so the engine slot's swap candidate can be resolved without
+    // building a player nothing would ever start.
+    private static AudioStreamWav? LoadStream(SoundArchive archive,
         IReadOnlyDictionary<string, SoundDef> defs, string sndName, out float baseVolume)
     {
         baseVolume = 1f;
@@ -374,11 +337,46 @@ public partial class FlightAudio : Node
             GD.PushWarning($"sound def not found in sounds.json: {sndName}");
             return null;
         }
-        var stream = archive.Find(def.WavName, def.Looped);
+        baseVolume = def.Volume;
+        return archive.Find(def.WavName, def.Looped);
+    }
+
+    /// <summary>Points the engine slot at <c>damaged_engine_sound</c> or back at
+    /// <c>engine_sound</c>, drawing the swap's pitch multiplier as it goes. The original gates this
+    /// on a per-vehicle damage bitmask; which damage sets which bit is undecoded, so any damage at
+    /// all swaps here and a full repair swaps back.</summary>
+    private void SetEngineDamaged(bool damaged)
+    {
+        damaged &= _damagedStream != null;
+        if (damaged == _engineDamaged || _engine == null)
+        {
+            return;
+        }
+        _engineDamaged = damaged;
+        var (name, pitchMul) = EngineAudioCurves.EngineDefFor(
+            _stats, damaged, Rng.Stream(Rng.FlightAudio));
+        _enginePitchMul = pitchMul;
+        var stream = damaged ? _damagedStream : _engineStream;
+        if (stream == null)
+        {
+            return;
+        }
+        bool wasPlaying = _engine.Playing;
+        _engine.Stop();
+        _engine.Stream = stream;
+        if (wasPlaying)
+            _engine.Play();
+        // The headless observable for a swap nobody can screenshot: which def the slot took and
+        // what the draw gave it.
+        GD.Print($"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
+    }
+
+    private AudioStreamPlayer? MakeLoop(SoundArchive archive,
+        IReadOnlyDictionary<string, SoundDef> defs, string sndName, out float baseVolume)
+    {
+        var stream = LoadStream(archive, defs, sndName, out baseVolume);
         if (stream == null)
             return null;
-        // Unscaled, same convention as WorldSounds' 3D emitters.
-        baseVolume = def.Volume;
         var player = new AudioStreamPlayer { Stream = stream, VolumeDb = -60f };
         AddChild(player);
         return player;
@@ -409,7 +407,6 @@ public partial class FlightAudio : Node
     {
         _engineRamp = 0f;
         _engine?.Play();
-        _engine2?.Play();
         // Stays at raw volume, deliberately unlike the crash-boom family — a respawn does not
         // pile up with other rigs' at one instant.
         PlayOneShot(_propStart, _propStartVol);

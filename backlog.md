@@ -513,20 +513,34 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps.* (a) Per-AI-plane panel pairing and puffer pools at spawn time is a real cost on a
   chapter holding many aircraft — measure before wiring it unconditionally, and consider gating the
   panel-flip half on distance or aircraft count. The trail half is one puffer pair and is cheap.
-  (b) `pfsmoketrail`'s `anim_root_name` is `piratefighter`; whether it retargets onto every AI
-  airframe through the runtime's root fallback (the `player_pfighter` shape noted at
-  `FlightRigAssembler.cs:458-459`) or needs an explicit OPERAND_NODE retarget is **unverified** —
-  check before assuming the player path's resolution carries over. (c) Do not give AI planes the
+  (b) `pfsmoketrail`'s `anim_root_name` is `piratefighter`, and it needs **no retarget**: decoded
+  2026-08-16, `anim_root_name` is an offset within the caller's context node, not a target selector,
+  and a def whose root name equals its own name (`FUN_0051dcf0`) has both fields overwritten with the
+  context node's name at play time (`FUN_00520910` / `FUN_00521180`). The real hazard is the
+  **anchor**: an anchor missing from the airframe is a soft failure that still starts the anim, and
+  the global by-name fallback in `FUN_004efaf0` binds it to any node of that name anywhere in the
+  scene. Confirm `prop1` exists on each AI airframe. See `docs/org/vehicleDamage.md`, "Which airframe
+  a stage's anim binds to". (c) Do not give AI planes the
   `player_*` stage menu; their data names one stage and a different anim.
-  *Open question, not part of this item:* an AI wreck never leaves. `Crash` arms `_autoRespawnIn`
-  but the respawn gate (`FlightController.cs:1090-1107`) needs a key press or
-  `HoldSegments`/`AutoRespawnAfter`, none of which the spawner sets, and nothing calls `QueueFree`
-  on an AI controller — so wrecks accumulate for the session. Whether the original also leaves them
-  is unchecked; do not "fix" it without that check.
+  *Not part of this item, and settled:* an AI wreck never leaves ours, and it never leaves the
+  original either. Decoded 2026-08-16: nothing on the death path frees a vehicle, and there is no
+  timeout, distance cull, count cap or recycling. What ends the wreck visually is the `ai_crash_*`
+  def switching **all four** aircraft nodes (`dontmove`, `markers`, `healthy`, `destroyed`) inactive
+  on the frame the crash anim dispatches, every event untimed; the object stays allocated, dead and
+  hidden, until mission teardown. The only free path (`FUN_0047bab0`) is reached from mission
+  teardown, an ambient-plane pool a roster aircraft is not in, and the player's change-aircraft
+  command. So do not add a despawn timer. The question that remains is whether OUR `ai_crash_*`
+  playback actually performs those four deactivations; if it does not, the visible wreck is a
+  data-playback bug. ⚠ The player is authored the other way (`player_crash_dirt` keeps `destroyed`
+  active with `large_10sec_fire`), so a burning player hulk is correct and is not a template for the
+  AI. Details in `docs/org/vehicleDamage.md`, "What happens to the wreck".
   *Playtest after fix:* shoot down a wingman and an enemy in C1 — smoke should start around half
   health and the fireball should be audible.
   *Cross-refs:* `BL-384` (the fraction correction this depends on, and the decode's addresses),
-  `docs/org/vehicleDamage.md` ("Damage staging"), `BL-343` (wreck momentum — the other AI-wreck item). Which def the AI list is read from was
+  `BL-246` (the decode), `docs/org/vehicleDamage.md` ("Damage staging"),
+  `BL-343` (wreck momentum — the other AI-wreck item, whose mechanism is authored `Callback 16`,
+  handled by `LAB_00480710` pushing the vehicle's velocity into the crash anim through
+  `FUN_004ee0e0`). Which def the AI list is read from was
   `BL-386`, closed 2026-08-16 (`git log --grep=BL-386`) — see the update below.
   *Correction 2026-08-15 (found minting `BL-386`):* the `[[0.5, pfsmoketrail]]` cited above is NOT
   on `basic_airplane` — `vehicle.zrd.json:4108-4114` sits inside the `bswingman` def (line 3993),
@@ -1113,6 +1127,49 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
+- `BL-415` `[Bug]` **The bail-out hides the parachutist's body instead of the pilot in the seat, so the
+  canopy deploys with nobody under it.** `cpeject1`'s `ObjectActiveState(pilot, false)` is anchored on
+  the crash root (`MAIN_ROOT_NODE` resolves to the caller's anchor), and `NameResolver.ResolveScoped`'s
+  tier 1 is that anchor's own subtree — which now contains the staged `chuteman > chutemanparent >
+  pilot` copy. It binds there instead of the airframe's `healthy/geometry/…/pilot_pos/pilot`, and
+  `chuteman`'s own def never names `pilot`, so nothing restores it. Measured on both `player_bhawk`
+  and `player_autogyro`: `seated pilot visible=True, chute pilot visible=False`, the exact inverse of
+  what the data asks for. Arrived with the `chuteman` staging (`BL-385` Wave D, D20) and became
+  visible when D25 made the ejection play.
+  **The mechanism the original uses instead:** compiled node POINTERS. `cpeject1`'s `pilot` is
+  `ptr=7655` and `pilot_pos` is `ptr=7654`, which is `NameResolver.Resolve`'s `SymbolClaims` tier. It
+  claims the name but binds nothing here, because a `PlaneBuilder`-built model carries no pointer
+  index, so resolution falls through to the scoped chain and lands on the wrong `pilot`.
+  ⚠ **Traps.** (a) The two candidate fixes are pointer indexing for plane models, or a resolver tier
+  that prefers the controller's own aircraft subtree over staged template copies for a call anchored
+  on the crash root. Both change `NameResolver`'s tier ORDER, which carries an explicit ⚠ against
+  reordering — that warning is there because the tiers were derived from the original's own
+  resolution, so a reorder needs the decode, not a local fix. (b) Do not special-case `chuteman` by
+  name: the collision is structural and any future staged template carrying a common node name hits
+  it. (c) The seated pilot exists on all eleven airframes, so a wrong fix is wrong everywhere at once.
+
+- `BL-414` `[Research]` **Untune the flight model: decode what is currently fitted.** `FlightModel.cs`
+  carries **18 `TUNE` markers** and **11 `flightModel.*` config overrides**, and
+  [`docs/org/flightModel.md`](docs/org/flightModel.md) already separates what was read out of
+  `crimson.exe` from what was fitted to match the original at the controls. This item is to shrink
+  the second set as far as the binary allows, constant by constant, rather than to re-fit any of
+  them. Priority targets are the ones a fitted value silently distorts: the lift clamp
+  (`LiftGMin` -5 / `LiftGMax` 9, a load factor), the aerodynamic ceiling `ClMaxStatic` /
+  `ClMaxMach`, `LiftAccelRate`, and the force/acceleration scale the lift and gravity terms share,
+  which that page records as a real unresolved conflict rather than a settled reading.
+  **Trigger:** a decoded death path (`BL-385`'s Wave D) put a dead hull under the model with no
+  thrust, and it *glided* where the original's drops, which is the kind of gap a fitted lift term
+  hides while a living aircraft still feels right.
+  ⚠ **Traps.** (a) These constants have measured provenance and A/B history at the controls; a
+  decode that replaces one must beat it on evidence, and "the number changed" is not the same as
+  "the aircraft is right" — this is the file where the user's eyes have overruled the instruments
+  before. (b) The two-integrator correction on that page is the worked example of how this goes
+  wrong: the provenance table named the wrong integrator for months. Confirm which function you are
+  reading before trusting an offset. (c) A change here moves every aircraft in the game; the goldens
+  and engine suites are the net, and a moved golden hash is a finding to explain, never to re-pin.
+  (d) Do not fold this into a feature item — the product here is the decode and its evidence, and a
+  correct disproof that leaves a constant fitted is a success.
+
 - `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
   complete and waiting, not as a discovery. Shipped: `MSG_CMD_NITROUS` ("Use Nitro-Booster") is a
   bindable command and `MSG_HUD_NITRO` ("Nitrous: boost: %1 charge: %2") its two-value readout;
@@ -1691,6 +1748,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
+- `BL-422` `[Bug]` **A small firepuff survives the kill forever on the Bloodhawk and the Autogyro,
+  but not on the Fury or the Devastator.** Reported at the controls after `BL-385`'s Wave D landed:
+  shoot one down and a small fire emitter is left burning in the air with nothing under it, for the
+  rest of the session. Two airframes tested clean, two dirty; the other seven are untested.
+  **What it is NOT:** the destroy defs. `bloodhawk-bloodhawk`, `autogyro-autogyro`, `fury-fury` and
+  `piratefighter-piratefighter` were compared event for event and their `destroy_craft`,
+  `randomdestseq`, `destroyed_dirt`/`_water` and `bounce_effects` sequences are identical but for the
+  Devastator's extra `flydirt_plane`. So the difference is in the airframe's own data or node names,
+  not in the choreography.
+  **Lead, which fits one of the two airframes and not the other:** an effect CALLed onto an anchor
+  that does not resolve falls back to the caller's anchor (`AnimRuntime.CallTargetSite`), and a stop
+  aimed at the authored node can then miss the instance that actually started at the fallback. The
+  Bloodhawk is the known node-name outlier — it spells its elevators `l_elev`/`r_elev` where
+  `random_remote_damage` calls `lft_elev`/`rt_elev` (`docs/org/vehicleDamage.md`, the AI stage anchor
+  census), so two of that cascade's five steps already fire at the airframe root there. ⚠ **The
+  Autogyro does not fit that story** — the same census found it carries all five anchors — so either
+  there are two causes or the real one is something both share and the Bloodhawk's naming is a
+  coincidence. Do not stop at the first airframe that explains itself.
+  ⚠ **Traps.** (a) `pfsmoketrail` and the trail family are `LOOP -1` with **no authored exit**; they
+  end only because the stop closure reaches them, so anything that breaks the match between a start
+  and its stop leaves an immortal emitter. That closure is derived from the program
+  (`WorldEffectsFactory.WireDamageStages`), so a hand list is not the fix. (b) Check the damage-stage
+  path AND the destroy path before concluding: the stage ladder runs before the kill and its stop is
+  `Callback 15`'s job. (c) Census all eleven airframes rather than the four tested, so the answer is
+  a rule and not two special cases.
+
 - `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
   flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
   traced the same day and **fully decoded 2026-08-13**. The decode is
@@ -2022,6 +2105,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
+- `BL-421` `[Research]` **The corrected engine-audio model is unconfirmed at the controls; the whine
+  removal in particular.** `BL-385`'s `B14` re-decoded the engine audio and removed four things our
+  build had been playing: the `snd_enginewhine` loop, the detuned dual engine stack
+  (`EngineDetuneRatio`, `EngineVoiceGain`), `WhineMixGain`, and the damaged-engine crossfade
+  (`DamagedEngineGain`, `DamagedEngineMixGain`). The decode behind that is firm — `FUN_00476250`
+  assigns slot 1 only when non-null, `FUN_00478a00` leaves the field at 0, **no shipped vehicle def
+  authors `prop_sound`** (its one occurrence in `extracted/zrdr/` is a curve block in
+  `player.zrd.json`, not a sound name), and `snd_enginewhine` is a literal nowhere in `crimson.exe`.
+  Flown afterwards, the verdict was "not sure if this is correct".
+  **What this item is:** get a verdict, not a re-tune. The A/B is stated in the plan's `B14`: HEAD
+  against the build, one plane and chapter, `--volume=1.0 --no-det`, listening for the chorus at fixed
+  throttle to be gone, for no whine layer to rise in through a full dive, and for the damaged engine
+  to be REPLACED rather than joined. A reference recording of the original is the only thing that can
+  settle it above taste.
+  ⚠ **Traps.** (a) A decode outranks a spectral measurement here by this project's own rule, and the
+  removed constants came FROM spectral analysis of a reference dive — that is what the decode
+  overturned, so re-deriving them from the same footage would just re-make the error. (b) The likely
+  honest outcome is that the original really is thinner than our old build and the ear has to adjust;
+  say so rather than reinstating a loop the data does not have. (c) If something IS missing, the open
+  candidate already recorded is the engine's **airspeed term** (`FUN_004b18a0` adds `0.26*|v|` to
+  volume and `0.25*|v|` to pitch, clamped to [0, 1.5]), deliberately unimplemented because the
+  velocity's units in that expression are unresolved — that is a decode to finish, not a mix to
+  invent. (d) Audio cannot be screenshot-verified; the `sound` log line names the resolved slot defs
+  and is the headless half.
+
 - `BL-079` `[Feature]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;
   the original's IA traffic is clearly audible in the reference video.
   ⚠ **The "with Doppler" half of that claim is now suspect and must not be built against.** This
@@ -2288,19 +2396,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   read too loud on its own terms. *Fix shape:* a level match by ear against the reference video,
   same method `BL-223` and `BL-269` already used for this signal chain.
 
-- `BL-421` `[Feature]` **A choked engine still sounds like a running one.** `PT-69` (d): the choker
+- `BL-423` `[Feature]` **A choked engine still sounds like a running one.** `PT-69` (d): the choker
   (`wep_12`, `TANGLER`) cuts thrust for 5–13 s and nothing in the audio chain reacts, so a choked
   aircraft, your own included, keeps its full engine loop. `FlightAudio` drives the loop from
   throttle and damage (`damaged_engine_sound`), never from `FlightController`'s engine-dead timer.
   ⚠ What the original plays over the cut is **undecoded**: the `PT-69` row asserted an engine-loop
   swap, but no `docs/org` page records one, so decode the original's behaviour (silence, a stop/start
-  pair, or a second loop) before building. Scope today is the sounds a session already renders: the
-  own-ship loop, and other humans' planes once positional audio lands. An AI plane's engine is
-  inaudible anyway until `BL-079`, which another worktree is building toward.
+  pair, or a second loop) before building. Scope is every loop a session renders: the own-ship one,
+  and the AI planes' positional loops (`PLAN-ai-damage-and-engine-audio`), which read the same
+  engine model and would otherwise keep running through a choke too.
   *Fix shape:* gate `FlightAudio`'s loop on the engine-dead timer the same way the thrust cut reads
   it, with whatever the decode says the original plays over the gap.
-  *Cross-refs:* `BL-079` (3D emitters), `BL-223`/`BL-285` (the loop's existing damage and start/stop
-  inputs), `BL-406` (the choke itself).
+  *Cross-refs:* `BL-421` (the engine-audio model's at-the-controls confirmation), `BL-223`/`BL-285`
+  (the loop's damage and start/stop inputs), `BL-406` (the choke itself).
 
 ## Cameras & views
 
@@ -3137,6 +3245,24 @@ usual.
   closed as `BL-377`).
 
 ## Tooling, platform & docs
+
+- `BL-417` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` flakes and aborts the whole battery.**
+  It asserts a `PerfSample.Scope` allocates zero bytes and intermittently reports **3984**, the same
+  value every time. Seen twice in one session on an unchanged binary, and it passes on an immediate
+  re-run both alone and in the full unit suite, so it is timing, not a real allocation regression.
+  The cost is out of proportion to the defect: `RunTests.ps1` stops at the units stage, so a flake
+  here means the engine suites, the goldens and the hitch check never run at all, and an unattended
+  run reports a red battery for a reason unrelated to whatever it was testing.
+  ⚠ **Traps.** (a) Do not "fix" it by loosening the assertion to a byte budget: zero-allocation is
+  the property the test exists to hold, and a threshold would hide the regression it guards. The
+  fault is in what makes the measurement noisy (GC timing or JIT on first entry), not in the bound.
+  (b) 3984 being byte-identical across occurrences is a lead worth following, not a coincidence to
+  average away. (c) Whatever the fix, the battery should not lose four stages to one unit flake;
+  that ordering question is worth answering separately.
+  *Status:* `BL-379` reported the same flake (at 4872 rather than 3984) and was closed by a warm-up
+  loop that excludes runtime JIT/OSR noise from the measured window. That fix plausibly covers this
+  too, so the first step is to re-verify rather than to re-diagnose; what stays open regardless is
+  (c), the battery losing four stages to one unit flake.
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled

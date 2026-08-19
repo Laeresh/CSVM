@@ -144,6 +144,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PhysicsConstants.cs` — `NomGravity`, the single `nom_gravity` value the flight model and its tests share.
 - `src/Flight/Weather.cs` — weather.json reader → `WeatherState`: per-zone fog, sunlight, cloud whiteout, wind, precipitation.
 - `src/Flight/FlightAudio.cs` — own-plane loops (engine, overspeed whine, rattle) + crash/prop one-shots, per-player `MixGain`.
+- `src/Flight/AiEngineAudio.cs` — an AI aircraft's positional engine loops and the 2000-unit cull.
+- `src/Flight/EngineAudioCurves.cs` — the engine-slot definition choice and curve maths both audio paths share.
 - `src/Flight/SpectatorCamera.cs` — the `--freecam`/`--anim-lab` observation camera: RMB-look + WASD/QE, no roll; `Frame`/`FollowNode` track an object.
 - `src/Flight/FlightModel.cs` — the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, calibrated control rates.
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
@@ -707,7 +709,9 @@ e.g. C1's three `hangerdoors`). Every construction site hands over a sealed `Tem
 sequence interpreter is `SequenceRunner.cs`, live motions are `Anim/MotionSet.cs`, name resolution
 is `Anim/NameResolver.cs` (this class forwards through `Resolve`/`ResolveScoped`/`Anchors`), puffer
 emitters are `Anim/EmitterDirector.cs`, and the effect-template pool/placement is
-`Anim/TemplateStage.cs`. `FBFX_COLOR_FROM_TO`/`LIGHT_ANIMATION` report their `run_time` as the
+`Anim/TemplateStage.cs`. `CALLBACK` raises the two vehicle-death codes through caller-supplied seams (`WreckVelocity`,
+`StopDamageStages`) and counts every other code; decode in `docs/org/vehicleDamage.md`.
+`FBFX_COLOR_FROM_TO`/`LIGHT_ANIMATION` report their `run_time` as the
 event's duration, spacing a chain instead of firing it in one instant; decode in
 `docs/formats/anim-definitions.md`.
 
@@ -791,8 +795,11 @@ constructor state — `Pooled`, `Shown`, `Places` — get-only, no setter anywhe
 `NameResolver<TNode>`: engine hooks at construction, the runtime-dependent hooks (`findAll`,
 `anchors`, `isLive`, live instances, …) late-bound via `Wire` at the handover, since the factory
 that builds the stage exists before any resolver does. Off-engine charter:
-`CSVM.Tests/TemplateStageTests.cs`; `effect-template-mesh`/`effects-census`/`damage-template-pool`
-are the in-engine integration tier.
+`AssignCallerSlot` claims per (template root, call anchor, authored call event) and hands a repeat
+site its own copy to start on, because instance identity is (def, anchor) and two live calls on one
+anchor need two anchors. Off-engine charter:
+`CSVM.Tests/TemplateStageTests.cs`; `effect-template-mesh`/`effects-census`/`damage-template-pool`/
+`repeat-call-slots` are the in-engine integration tier.
 
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam
@@ -2128,9 +2135,7 @@ falling to `NoFog` (no fog, fullbright). Deliberately NOT routed through the hor
 underneath it every time the camera crosses the cloud core.
 
 ## src/Flight/FlightAudio.cs
-Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whine, rattle,
-damaged-engine blend keyed to `Update`'s `damageFrac` via `PlaneStats.DamagedEngineGain`) +
-one-shots: `StartEngine`/`EngineStartRamp` prop-start fade (re-fired via the loop-restart hook
+Own-plane non-positional loops (engine, overspeed whine, rattle) + one-shots: `StartEngine`/`EngineStartRamp` prop-start fade (re-fired via the loop-restart hook
 in `Update`; `EngineStartRamp` 2.0 s is sourced from startprops' authored prop cross-fade duration,
 not a bare literal), `OnCrash` → `snd_exp_plane1..4` (the `plane_destroy_sg` group every crash def
 that names it wants), `OnGroundExplosion`/`OnWaterExplosion` layering the boom the *chosen crash
@@ -2144,10 +2149,28 @@ fallback `player_crash_default` Sounds only `plane_destroy_sg`, so it layers nei
 CHOSEN `touchdown_*` def, since the sound is authored inside that def). `OnWarningShot` draws one
 `bullet_warning_sg` variant per near miss (player.json `warning_shot_sound` is a SOUND_GROUPS name, so
 `Setup` takes the group table too; rate-limited by `FlightController`'s `WarningShotCue`, same split).
-The engine loop (`BL-078`) is two voices of the same clip, pitch-split ±half of `EngineDetuneRatio`
-(0.05 TUNE, `flightAudio.engineDetuneRatio`) around `EnginePitch.Eval`; each voice is held at the
-fixed equal-power `EngineVoiceGain` (1/√2, not a TUNE) so the pair sums to the old single loop's
-loudness.
+The engine is ONE voice on one slot; its pitch, gain and definition all come from
+`EngineAudioCurves`, shared with `AiEngineAudio` (see that entry). `SetEngineDamaged` swaps the
+slot's stream for `damaged_engine_sound` and back, both resolved at `Setup`. `MixGain` is the only
+own-ship scale left and stays here — splitscreen, not a fidelity knob.
+
+## src/Flight/EngineAudioCurves.cs
+The engine-audio slot maths both audio paths read: `EngineDefFor` (which definition the engine slot
+holds and the damaged swap's one-off pitch draw), `Engine` and `Whine` (each slot's pitch and gain
+off the `PlaneStats` curves), and `CullDistanceSq`. It exists because the original runs one
+per-frame routine for the player and every AI vehicle; the decode is in
+[formats/vehicle.md](formats/vehicle.md), "The engine audio's slots".
+
+## src/Flight/AiEngineAudio.cs
+The positional twin of `FlightAudio` that an AI-flown aircraft carries instead of it: the same two
+engine slots on `AudioStreamPlayer3D`s, plus the cull that stops them past `CullDistanceSq` from
+the nearest listener and starts them again inside it. `Attach` is the whole spawner-side surface.
+Deliberately carries no own-ship concept — no `MixGain`, no start ramp, no prop-start cue, no crash
+one-shots: an AI kill is audible from its crash animation's own authored `Sound` events. Audio
+cannot be screenshot-verified, so the `sound` log carries the whole observable: one line per
+aircraft at build naming what each slot resolved to (or that there was no archive at all), then one
+per cull transition and one per damaged-engine swap. The pair is what separates "silent past the
+cull" from "silent because the definition never resolved".
 
 ## src/Effects/Puffer.cs
 The original engine's billboard-particle emitter, data-driven from `PUFFER_STATE` blocks
@@ -2386,7 +2409,11 @@ shows no HUD — footage), restoring it on respawn. Sweeps the
 PlaneCollider boxes via CastMotion each physics frame — mask world+aircraft with its own
 `Body` (`AircraftBody`, built in `_Ready` from the same boxes) excluded by RID, so another plane
 is solid and a mid-air resolves through the same SurviveHit/Crash as terrain; `Crash`/`Respawn`
-toggle the body's hittability; the sim half is `SimStep(dt)`, called by
+toggle the body's hittability. The DEATH family (`CRASH into`, `midair aspect`, every
+`vehicle health exhausted`, `graze`, `ground stop`, `AI ram`, `impact severity`) routes through
+`Log.Info("flight", …)`, so a play session's file sink carries how each aircraft died; the
+per-round weapon breadcrumbs around them are a different family and still `GD.Print`.
+The sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). `SimStep` also ticks
 `Turrets` (the carried gunners) after the fire outcome, so the crash branch's early
 return silences them; `WorldBlocksLine` is their world-only line-of-sight ray. An AI aircraft
@@ -2433,21 +2460,20 @@ vector instead (M4 G21 — `BuildFlightCrashRuntime` keys the family on `IsHuman
 cascade, same trio per chapter, and its defs hide the wreck rather than flinging pieces);
 `LastCrashDef` records the selection and the `CRASH … def=` line prints it, which is how the
 `ai-crash-defs` suite and a headless run read which family fired.
-**The original's death is two-stage; this build's `Crash` only ever models the second stage.**
-`FUN_00498bf0` forks on a signed field of the death event: negative plays a canned mid-air destruct
-(`FUN_004b82d0` — no `player_crash_*` def, sets the byte `this+0x91f`) and defers the surface pick
-to ground contact; non-negative builds a synthetic impact record carrying that same field as the
-surface id and drives the id cascade directly, which is the only arm `Crash` implements. The
-handshake lives in `FUN_0048b920` `0x0048bb0a`–`0x0048bb30`: with `0x91f` set, a resolved bare-
-`player` handle suppresses the anim; otherwise the running mid-air anim at `this+0x6d8` is released
-before the crash anim starts. Nothing in this build's M3 slice shoots a plane down, so the negative
-arm has no trigger today — `Crash` fires once, at first (and only) contact, and always takes the
-cascade above. `player_crash_default` is the cascade's **fallback arm**, reached by a null material,
-an out-of-range id or an empty slot — it is NOT the original's air/no-impact variant, a reading
-`BL-059` disproved; the mid-air destruct is a separate, unwired anim with
-no `player_crash_*` def of its own. Modelling the two-stage split — wiring a trigger for the negative
-arm — is future work for when the player becomes killable; `this+0x19f ∈ {0,4}` inside
-`FUN_004b82d0` is undecoded and stays unmodelled.
+**Death is two-stage, and the two stages are two methods.** `Destroy` is stage one: whole-vehicle
+health at zero starts `DestroyDef`, the airframe's own self-named def (`fury-fury`, `player-player`),
+leaves the wreck VISIBLE, cuts the camera and raises `Downed`. `Crash` is stage two, the ground
+contact — a live aircraft flown into terrain, or that wreck landing. Which system carries the wreck
+down is asked of the data (`EffectCatalogue.FliesOwnHull`): the eleven airframe defs author an
+`ObjectMotion` on `MAIN_ROOT_NODE` with their own bounce landing and own the fall outright, so no
+`*_crash_*` follows; `player` authors none, so `_wreckFalling` keeps the hull in the flight model
+(no input, no weapons) until `StepWreckFall`'s sweep reaches the world and `Crash` plays
+`player_crash_*`. That second call is the one re-entry `Crash` allows while `_crashed`, and it
+re-fires neither `Downed` nor the camera cut. The `ai-wreck-fall` suite drives both stages on one
+spawned aircraft end to end and is where a regression in either shows up. `player_crash_default` is the cascade's **fallback
+arm**, reached by a null material, an out-of-range id or an empty slot — it is NOT an air/no-impact
+variant, a reading `BL-059` disproved. `this+0x19f ∈ {0,4}` inside `FUN_004b82d0` is undecoded and
+stays unmodelled.
 It also fires `Audio.OnEngineStop` (the wind-down cue, layered over the explosion) and plays
 `stopprops` on `CrashRuntime` — the one call site every engine-death path shares, whether the
 collision resolver called it for a full-speed impact, for whole-vehicle health exhausting on a
@@ -2603,10 +2629,19 @@ on that panel being ACTIVE, so it renders only once torn), the `<part>_damage_ef
 surface, live since M4 A2+D14 fielded AI shooters), and, for the data's 0.10 `player_smoketrail`, `player_damage_trail`
 (short_firetrail at prop1 + the fire_lt light) — `RigAnimFor` owns that one mapping.
 `DamageEffectStop` (Reset, first) stops the whole stage CLOSURE, derived from the program — a
-stopped pdpanelN cannot reach the trail it CALLed, and prop1's trail has no authored exit.
-Panel pairing (def-derived candidate sets, positional assignment, the three crossed-naming
-outliers) is decoded on `PairHealthySkins`; the null-sink stand-in fallback is on `UpdateStatic`/
-`PlayStage`.
+stopped pdpanelN cannot reach the trail it CALLed, and prop1's trail has no authored exit;
+`DamageEffectStopOne` is the single-stage form a retraction uses. Its lines route through `Log`
+(`flight` for the panel and smoke-trail state, `anim` for the stage routing), not a bare `GD.Print`,
+so a play session's own file sink records which stages fired. Staging is keyed per LADDER
+ENTRY and cleared on the upward crossing alone, so a repair un-stages and the entry can fire again
+(`StagedEntryCount`). Panel pairing (def-derived candidate sets, positional assignment, the three
+crossed-naming outliers) is decoded on `PairHealthySkins` and runs only for an airframe whose own
+data names a `pdpanel*` stage (`PairsPanels`); the null-sink stand-in fallback is on
+`UpdateStatic`/`PlayStage`. An AI ladder's own two anims (`pfsmoketrail`,
+`random_remote_damage`) play through the same sink: `RigAnimFor` is a membership test over
+`EffectCatalogue.DamageStageAnims` + `PlaneDamageEffectAnims`, curated rather than
+program-existence, so the cockpit gauge defs (`*_damage_green/yellow/red`, `*_got_hit`) can never
+play on an airframe.
 
 ## src/Flight/DamageLab.cs
 The damage lab (F5 toggles): one armor slider (parts the data gives an armor pool) plus one health
@@ -3173,7 +3208,8 @@ build path from wizard and CLI" (H16's own goal) is this one line, not two simil
 `SpawnAiAircraft` has a second overload
 (`string, Vector3, Vector3, AiPilot, PaintScheme?, int?, int?, bool inert = false,
 bool shippedSkins = false`) for this; the four-parameter one is the `--ai=` route, for an aircraft
-with no authored identity. `AiGeneratorRuntime`'s constructor takes a LAMBDA over the authoring
+with no authored identity, and `ApplyAiHullPreset` is `--ai-damage=`'s spend on whatever it returns
+— hull-pool only, since an AI airframe resolves no zones, and never down to zero. `AiGeneratorRuntime`'s constructor takes a LAMBDA over the authoring
 overload rather than that method group (a generated enemy needs `shippedSkins: true`), so the
 four-parameter one no longer has to stay free of optional parameters — C# does not extend a
 method-group-to-delegate conversion over trailing optional ones, which is why the lambda is
@@ -3425,7 +3461,7 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/SuiteCatalog.cs
-The ordered registry of 70 in-engine assertion suites. Scenario bodies are grouped by domain in the
+The ordered registry of 76 in-engine assertion suites. Scenario bodies are grouped by domain in the
 six `*Suites.cs` modules; `Names` is the registry-order test surface. It preserves the original
 suite order, including `emitter-lifetime` first, because that suite installs the shared C1 world's
 fake emitter factory. The suites cover plane/loadout bindings (stock and, since M3 B4,
@@ -3871,6 +3907,12 @@ fully configured AI aircraft later. `GameSession` is its only caller. It preserv
 livery stream, spawn-list order, and existing optional-feature fallbacks while keeping callers
 away from partially configured `FlightController` nodes. `HumanFlightAdapter` is its human
 implementation; AI policy stays private to the roster.
+`SpawnAi` builds an AI plane's visible damage in two phases:
+`HumanFlightAdapter.BuildDamageVisuals` for the object itself, then the sink and the stops inside
+`BuildFlightCrashRuntime`, which is the seam the `ai-damage-stages` suite drives end to end
+(`--ai-damage=` is its CLI probe). It passes the planes gamez in exactly as the human rig does,
+since the destroy def's `chuteman` is a template root of planes.zbd and an asymmetry there would
+give the parachute to one kind of kill only.
 
 ## src/Session/HumanFlightAdapter.cs
 Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung
@@ -3904,7 +3946,10 @@ is built below — so this method plays `startprops` once more right after
 The record of which authored anims are playable effects, and what their defs need staged: the name
 tables every effect producer must stay inside, static and engine-free. Owns `EffectAnimNames`, the
 crash-rig's own name sets (`CrashDefTable`/`AiCrashDefTable`/`TouchdownDefTable`,
-`PlaneDamageEffectAnims`, `PropChoreographyAnims`, `PlayerDamageStageAnims`), `ResolvedSurfaceIds`
+`PlaneDamageEffectAnims`, `PropChoreographyAnims`, and the two damage-stage menus
+`PlayerDamageStageAnims`/`AiDamageStageAnims` with their union `DamageStageAnims`), the death
+path's OTHER slot (`AirframeDestroyAnims`/`DestroyAnimFor`, the self-named destroy def, with
+`FliesOwnHull` asking the data which family owns the landing), `ResolvedSurfaceIds`
 (the collider overlay's colour key, `BL-345`), and the anchor-root derivation
 (`StageRootsFor`/`WorldStageRoots`/`CrashStageRoots`) — this IS `WorldEffectsFactory`'s stage
 source; an unstageable anchor fails the build rather than leaving a def anchored on nothing. Every
@@ -3917,8 +3962,17 @@ Builds the impact/destruction effect stages and the per-plane crash runtime: the
 playable slot of the crash-def vector (`EffectCatalogue.CrashDefTableFor` — `player_crash_*` for a
 human rig, `ai_crash_*` for an AI plane, keyed on `IsHumanPiloted`; handed to the
 controller as `CrashDefs`; the struck surface is only known at impact, so the whole vector is
-bound and `FlightController.Crash` indexes it with the struck body's surface id — an AI rig also
-gets a meshless `kestrel` scaffold under the crash root, the ai family's authored NAME)
+bound and `FlightController.Crash` indexes it with the struck body's surface id — the ai family's
+authored NAME `kestrel` resolves nowhere in a rig, so those defs take the crash root as their
+context node the way the original's caller supplies one).
+The pool-config drift check (`EffectPools.UnknownCrashRoots`) is asked against the roots BOTH rig
+kinds stage, derived by `BothRigKindsStageRoots`, not this rig's alone: `effect_pools.json` carries
+one `crashRoots` section for two families that stage different roots (an AI rig stages no
+`apassengers`, a human rig no `small_injure_fireball`), so a per-rig test reports every correct entry
+the other kind owns. ⚠ That union is resolved BEFORE the templates are staged, because a staged root
+answers `InScope` rather than `Stage` and drops out of the derivation.
+**plus** this rig's destroy def (`EffectCatalogue.DestroyAnimFor` → `DestroyDef`, with
+`DestroyDefFliesWreck` recording whether that def carries the wreck's fall and landing itself)
 **plus** `EffectCatalogue.PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
 `random_gun_impact` → `yellow_sparks_follow`) **plus** `EffectCatalogue.PropChoreographyAnims`
 (`startprops`/`stopprops`), because those need exactly what it already has — the
@@ -3929,11 +3983,22 @@ family gets one copy per authored call anchor), the runtime's `TemplateStage` bu
 beside the slot build and handed into `ForCrashRig` sealed, and
 the stage's caller-slot assignment pins each call anchor (`pdpN`, `prop1`, `pieceN`) to its own
 copy — see `AnimRuntime`'s pool paragraphs for the mechanism and the `damage-template-pool` suite
-for the regression shape. `LevelPlacedTemplateNames` is set beside
-`InheritedVelocityExempt`, once, from `EffectCatalogue.CrashSurfaceLevelAnimNames` (`BL-292`) — the
+for the regression shape. The stage has **two** sources: the chapter gamez, then the planes gamez
+for a root it has none of, which is the only place the destroy def's parachute (`chuteman`) lives;
+both spawners pass it, and its own builder is cached here for the session.
+`LevelPlacedTemplateNames` is set beside
+`InheritedVelocityExempt`, once, from `EffectCatalogue.CrashSurfaceLevelAnimNames` (`BL-292`) plus
+`EffectCatalogue.BailoutAnimNames` — the
 named defs only ever play from within a crash sequence, so unlike `InheritedWorldVelocity` (set
 per-crash in `FlightController.Crash`, since it depends on the live impact speed/direction) this
-needs no per-crash toggle. The
+needs no per-crash toggle. The parachute is on that list for a different reason than the splashes:
+its template is authored at identity and lives in the planes gamez, so only this rig's staging (the
+copy hangs under the crash root) gives the placing call a rotated basis to freeze, and levelling
+restores the pose the original places it at. `AnchorWarnAnimNames`/`AnchorWarnLabel` are injected the same way, from
+`EffectCatalogue.DamageStageAnims` and the plane's own name: the stage defs are authored against one
+airframe and retarget onto whichever plane stages them, so an anchor they name may be absent, which
+is a soft failure (the call lands on the airframe root and still draws) that nothing else reports.
+The
 prop choreography's own defs resolve their `staticpropN`/`propN`/`propNb` node names against the
 plane model directly (`LOCAL_NODES_ONLY`) — `FlightController.Respawn`/`Crash` call
 `CrashRuntime.Play("startprops"/"stopprops", PlaneModel, applyReset: false)` themselves, since

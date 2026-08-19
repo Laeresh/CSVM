@@ -624,11 +624,11 @@ one has been judged in the clean case.
     no AI code reads the disabled-systems mask;
   - (d) **the missing sound**: nothing in our audio chain reads the engine-dead timer, so a choked
     aircraft still sounds like it is running; what the original plays over the cut is undecoded
-    (`BL-421`). Judge how badly that reads before anyone builds it;
+    (`BL-423`). Judge how badly that reads before anyone builds it;
   - (e) fly into your own choker: a human is choked the same way, with no wash and no input
     lockout.
 
-  *Blocks:* `D17`'s owed clip, and F22. (d)'s gap is `BL-421`.
+  *Blocks:* `D17`'s owed clip, and F22. (d)'s gap is `BL-423`.
 
 - `PT-70` `[Own]` **The smoke screen: no projectile, and a 600 m trap behind the layer
   (`PLAN-ordnance-types` `D18`, launch hook with `A5`).** A `SMOKE_SCREEN` pylon spawns **no

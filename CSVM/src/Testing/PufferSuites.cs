@@ -1355,8 +1355,7 @@ internal static class PufferSuites
     }
 
     // Stays whole here rather than splitting an engine-free half into CSVM.Tests: Probes.Loadouts
-    // calls StockLoadouts.Load (Godot.FileAccess) and PlaneBuilder.Build to resolve Loadout.Bind's
-    // markers, both native-backed and fatal off-engine (AccessViolationException). Binding needs a
-    // built plane, so there is no pure half to extract without reimplementing marker resolution.
+    // calls StockLoadouts.Load and PlaneBuilder.Build to resolve Loadout.Bind's markers, both
+    // native-backed and fatal off-engine, and binding needs a built plane either way.
 
 }

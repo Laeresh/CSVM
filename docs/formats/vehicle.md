@@ -9,6 +9,7 @@ aircraft definitions. Its root alternates `defName, [properties...]`; definition
 - [Definition structure and inheritance](#definition-structure-and-inheritance)
 - [Units, dynamics, and engines](#units-dynamics-and-engines)
 - [Player global blocks](vehicle/player-globals.md)
+- [The engine audio's slots](#the-engine-audios-slots)
 - [Destroyable parts](#destroyable-parts)
 - [Definition injury animations](#definition-injury-animations)
 - [Collision probes](#collision-probes)
@@ -29,8 +30,8 @@ Keys the remake consumes (see `src/Flight/PlaneStats.cs`):
 | `kind_of` | parent def (inheritance chain) |
 | `nodename` | planes.zbd model root node |
 | `engine` | engines.json row id → power factor |
-| `engine_sound` / `cockpit_engine_sound` | sound-def names (SETS in sounds.json) — only `cockpit_engine_sound` unconsumed (needs a cockpit view) |
-| `damaged_engine_sound` | `[[soundName, f0, f1]]` — one shared `basic_airplane` entry (`snd_damagedengine`, 0.0, 1.0) covers every plane; `f0`/`f1` are undecoded and read as a fade window over accumulated damage fraction (below) |
+| `engine_sound` / `cockpit_engine_sound` / `prop_sound` | the three sound-def names (SETS in sounds.json) the engine audio's two slots draw from — see [The engine audio's slots](#the-engine-audios-slots) below. `prop_sound` is authored by no shipped def and `cockpit_engine_sound` is selected by no view CSVM has |
+| `damaged_engine_sound` | `[[soundName, pitchLo, pitchHi]]` — an array of candidates that REPLACE the engine slot's definition while the airframe is damaged. One shared `basic_airplane` entry (`snd_damagedengine`, 0.0, 1.0) covers every plane; the two floats are the pitch-multiplier draw range |
 | `dynamics` | nested dict: `pitch_torque`, `roll_torque`, `rudder_torque`, `return_rate`, `ang_momentum_damp`, `rec_moments_inertia` (xyz), `fd_speed` (m/s), `drag_factor`, `veh_weight`, `ref_area`. The parser also accepts `level_off_rate`, which **no shipped def authors** — see below |
 | `spin_props_anim` / `stop_props_anim` | prop-disc anim names (plane_props.json) |
 | `start_anims` | anims run at spawn (`wing_lights_blink`, `reset_bulletholes`) |
@@ -80,6 +81,30 @@ scaled by **reference area**, not divided by weight.
 ## Player global blocks
 
 See [player global blocks](vehicle/player-globals.md) for the player-global reader reference.
+
+## The engine audio's slots
+
+One per-frame routine drives every aircraft's engine audio, the player's and each AI's, and it
+holds **two** sound handles per vehicle. Both are positional or not by the sound definition's own
+`3D` flag, never by a player check.
+
+| Slot | Definition key | Notes |
+|---|---|---|
+| 0 | `engine_sound` | pitch and volume off the player-global `engine_sound` throttle curves |
+| 0, in the cockpit views | `cockpit_engine_sound` | swapped in while the camera is in either of the original's two cockpit modes, swapped back on leaving them |
+| 0, while damaged | `damaged_engine_sound[]` | a random entry replaces the definition and holds; the entry's pitch range is drawn once and multiplies the throttle pitch curve |
+| 1 | `prop_sound` | the overspeed whine, off the player-global `prop_sound` speed curves |
+
+An AI vehicle's arm adds exactly two things: the pitch multiplier is forced to 1, and both handles
+stop past **2000 world units** from the player (compared as a squared distance against 4000000) and
+start again on the way back in. Rattle, the collision one-shots and the landing one-shots are not
+part of this routine and are player-gated elsewhere.
+
+⚠ **Two of the four rows are unreachable in the retail install.** No shipped def authors
+`prop_sound` and the field has no compiled default, so slot 1 is never assigned and the whine never
+plays for anybody; and CSVM ships no cockpit view, so nothing selects `cockpit_engine_sound` here.
+Every def does author `engine_sound`, and every def inherits `basic_airplane`'s single
+`damaged_engine_sound` entry.
 
 ## Destroyable parts
 

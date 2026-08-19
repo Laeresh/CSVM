@@ -1949,8 +1949,11 @@ internal static class WorldAndToolSuites
                 ai.AddChild(aiModel);
                 ai.Setup(new FlightModel(stats), null, new CamParams(), spawn, spawn + Vector3.Forward);
                 ctx.Host.AddChild(ai);
+                // The planes gamez goes in as both spawners pass it: the destroy def's `chuteman`
+                // is a template root of planes.zbd, and without it the rig cannot stage it.
                 factory.BuildFlightCrashRuntime(ai, builder, ctx.PlaneName, world.Gamez,
-                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false);
+                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                    planesGamez: planesGamez);
 
                 ctx.Check(ai.CrashRuntime != null && ai.CrashDefs != null,
                     $"the AI rig built a crash runtime with a def table");
@@ -1961,6 +1964,16 @@ internal static class WorldAndToolSuites
                               d.StartsWith(Session.EffectCatalogue.AiCrashDefPrefix, System.StringComparison.Ordinal)),
                     $"the AI table's playable slots are the ai_crash_* trio [{string.Join(", ", ai.CrashDefs.PlayableDefs)}]");
 
+                // The two subtrees one context node has to reach: `healthy` sits on the plane
+                // model, `destroyed` under the crash root. Both shown first, or the wreck's
+                // built-hidden state would answer for the deactivation instead of the def.
+                var healthy = ai.PlaneModel?.FindChild("healthy", true, false) as Node3D;
+                var wreck = ai.CrashAnchor?.FindChild("destroyed", true, false) as Node3D;
+                if (healthy != null)
+                    healthy.Visible = true;
+                if (wreck != null)
+                    wreck.Visible = true;
+
                 // A crash on a known surface: a struck body stamped dirt(13) — the id cascade's
                 // own-slot arm, through the production Crash path.
                 dirt = new StaticBody3D { Name = "dirt_probe" };
@@ -1969,6 +1982,10 @@ internal static class WorldAndToolSuites
                 ai.DebugForceCrash(null, dirt);
                 ctx.Check(ai.Crashed && ai.LastCrashDef == Session.EffectCatalogue.AiCrashDefPrefix + "dirt",
                     $"an AI crash on dirt(13) plays ai_crash_dirt def={ai.LastCrashDef ?? "-"}");
+                string healthyState = healthy == null ? "-" : healthy.Visible ? "on" : "off";
+                string wreckState = wreck == null ? "-" : wreck.Visible ? "on" : "off";
+                ctx.Check(healthy is { Visible: false } && wreck is { Visible: false },
+                    $"…and the def's own OBJECT_ACTIVE_STATE events reach BOTH subtrees off one context node: healthy={healthyState} destroyed={wreckState}");
 
                 // No struck body: the null-material arm resolves slot 0 of the SAME family.
                 ai.Respawn();
@@ -1992,7 +2009,8 @@ internal static class WorldAndToolSuites
                     spawn + new Vector3(2000f, 0f, 0f), spawn + new Vector3(2000f, 0f, -1f));
                 ctx.Host.AddChild(human);
                 factory.BuildFlightCrashRuntime(human, humanBuilder, ctx.PlaneName, world.Gamez,
-                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false);
+                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                    planesGamez: planesGamez);
                 ctx.Check(human.CrashDefs != null && human.CrashDefs.PlayableDefs.All(d =>
                         d.StartsWith(Session.EffectCatalogue.CrashDefPrefix, System.StringComparison.Ordinal)),
                     $"the same factory keeps a human rig on player_crash_* [{string.Join(", ", human.CrashDefs?.PlayableDefs ?? System.Array.Empty<string>())}]");

@@ -7,23 +7,13 @@ namespace CSVM.Flight;
 /// The plane-wobble oscillators (<c>shakes.json</c> via <see cref="ShakeDefs"/>): gunfire buzz,
 /// overspeed rattle, and being-hit rocks, summed into <see cref="Roll"/> — radians the flight
 /// rig applies to a pivot node between the <see cref="FlightController"/> and its plane model.
-/// Decode: docs/formats/shakes.md. Engine-free on purpose: the pivot write is the controller's
-/// one line, the law lives here where the unit tests reach.
+/// Decode: docs/org/shakes.md, which carries the random-walk law the FIRE source runs and what
+/// the other sources still do. Engine-free on purpose: the pivot write is the controller's one
+/// line, the law lives here where the unit tests reach.
 /// ⚠ Everything visual rides the pivot; physics, aim and the chase camera read the controller's
 /// own transform and must never read the pivot's.
-///
-/// BL-266(a) branch: the FIRE source is a faithful random-walk accumulator instead of the
-/// deterministic damped sawtooth. Decoded from crimson.exe (FUN_0042be10): each shot adds a
-/// uniform random step
-///   <c>Δroll = (rand01−0.5) × (factor×caliber) × 2.0 × 6.2832 × 1.2</c>
-/// to the camera's roll accumulator — the original's gun buzz is a bounded random walk, not a
-/// periodic waveform. Per-shot step is uniform in ±<c>7.54·(factor×caliber)</c> (= ±2.11e-2 rad
-/// for wep40). The walk decays toward 0 with the authored <c>damp</c>, so over an 8/s burst it is
-/// bounded (τ≈80 ms, shots every 125 ms). <see cref="GunBuzzKickScale"/> is the one tune knob.
-/// The other sources (bullet_impact, missile_impact, explosion, high_speed) keep their sawtooth.
-/// Determinism: every step comes from the injected <see cref="Random"/> (the session supplies
-/// <see cref="Rng.NewSystemRandom(Rng.Shake)"/>, a pure function of the master), so a <c>--det</c>
-/// burst replays to the same wobble trace.</summary>
+/// ⚠ Every random step must come from the injected <see cref="Random"/>, never a fresh one, or
+/// a <c>--det</c> burst stops replaying to the same wobble trace.</summary>
 public sealed class PlaneShake
 {
     /// <summary>Per-shot gun-buzz step scale. The decoded law is ±<c>7.54·(factor×caliber)</c>;

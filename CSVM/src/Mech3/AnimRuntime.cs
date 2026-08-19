@@ -50,15 +50,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         "ObjectMotionSiScript", "Loop", "If", "Elseif", "Else", "Endif", "CallSequence",
         "StopSequence", "CallAnimation", "StopAnimation", "InvalidateAnimation", "ResetAnimation",
         "PufferState",
-        "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild",
+        "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild", "Callback",
     };
 
     /// <summary>Kinds with a handler that covers only part of what the event does — reported
     /// apart from the unhandled ones, since "acted on" and "acted on fully" are different answers.
-    /// <c>ObjectAddChild</c> handles its sound-emitter form and counts the rest as unhandled.</summary>
+    /// <c>ObjectAddChild</c> handles its sound-emitter form and counts the rest as unhandled, and
+    /// <c>Callback</c> acts on the two vehicle-death codes and counts every other one.</summary>
     public static readonly IReadOnlyCollection<string> PartialEventKinds = new HashSet<string>(StringComparer.Ordinal)
     {
-        "ObjectAddChild",
+        "ObjectAddChild", "Callback",
     };
 
     /// <summary>Collect a per-definition census of how the bind RESOLVED, and log it through
@@ -172,11 +173,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>Named CALL_ANIMATION callees whose placed root levels to world axes instead of the
     /// inherited parent rotation (<see cref="TemplateStage{TNode}.PlaceOn"/>), keyed by
-    /// <c>AnimName ?? Name</c>. Set by <see cref="FlightController.Crash"/> for the crash def's
-    /// surface-hugging sub-effects only, and cleared by <c>Respawn</c>. ⚠ Never make it blanket:
-    /// leveling `fly_trail1-5` strips the co-rotation their debris scatter is authored in. The one
-    /// list is <c>EffectCatalogue.CrashSurfaceLevelAnimNames</c>; see docs/architecture.md.</summary>
+    /// <c>AnimName ?? Name</c>. Set once by the crash rig, for the crash def's surface-hugging
+    /// sub-effects and the parachute. ⚠ Never make it blanket: leveling `fly_trail1-5` strips the
+    /// co-rotation their debris scatter is authored in. The lists are
+    /// <c>EffectCatalogue.CrashSurfaceLevelAnimNames</c> + <c>BailoutAnimNames</c>, docs/architecture.md.</summary>
     public HashSet<string>? LevelPlacedTemplateNames;
+
+    /// <summary>Callers whose unresolvable CALL_ANIMATION target is worth one warning each, keyed by
+    /// <c>AnimName ?? Name</c>, and the airframe that warning names. Injected like
+    /// <see cref="LevelPlacedTemplateNames"/> above: the per-plane crash rig sets both to the damage
+    /// stages and its own plane, and every other runtime leaves them null and stays quiet. The
+    /// shipped case is the Bloodhawk's elevators (docs/org/vehicleDamage.md); a stage that misses
+    /// its anchor still plays, at the airframe root, which no screenshot distinguishes.</summary>
+    public HashSet<string>? AnchorWarnAnimNames;
+
+    /// <summary>The airframe <see cref="AnchorWarnAnimNames"/>'s warnings name.</summary>
+    public string? AnchorWarnLabel;
 
     /// <summary>Key puffer emitters by owning def as well as (name, host) — see
     /// <see cref="EmitterDirector"/>'s keying remark, which carries the measurement behind each
@@ -221,6 +233,25 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// session-scoped, and this runtime is instanced per effect pool and per player crash rig.
     /// Which panes the wash reaches is the sink's decision, not this runtime's.</summary>
     public Action<Color, Color, float, Vector3, float>? ScreenFlash;
+
+    /// <summary>The world velocity a <c>Callback 16</c> hands the running instance, which is how a
+    /// wreck inherits the aircraft's motion (docs/org/vehicleDamage.md). Supplied by the rig,
+    /// because only the rig knows which vehicle is dying and how fast; null leaves the code
+    /// counted and <see cref="InheritedWorldVelocity"/> untouched. ⚠ The rig owns any scaling —
+    /// the runtime writes exactly what this returns.</summary>
+    public Func<Vector3>? WreckVelocity;
+
+    /// <summary>What a <c>Callback 15</c> stops: the damage-stage anims and start_anims, which is
+    /// where an injure-ladder smoke trail ends (docs/org/vehicleDamage.md). Bind it to the rig's
+    /// <c>DamageVisuals.DamageEffectStop</c>; null leaves the code counted and stops nothing.</summary>
+    public Action? StopDamageStages;
+
+    /// <summary>The other half of <c>Callback 15</c>: the dying vehicle stops flying ITSELF,
+    /// because the destroy def takes the hull over from this event on. Until it fires, a dead
+    /// aircraft is still stepped by its own flight model, which is the burning fall the reference
+    /// recordings show before the parachute (docs/org/vehicleDamage.md). Bind it to the rig; null
+    /// leaves the hull on the flight model and the two systems fly it at once.</summary>
+    public Action? StopWreckFlying;
 
     /// <summary>This runtime does not own audio — its SOUND / SOUND_NODE events are no-ops, not
     /// late-failure reports. Set on the world-effects runtime: it renders an effect def's
@@ -299,6 +330,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // approach by up to one cell diagonal, and the C3 spiderweb's 0.7 s fade needs the trigger to
     // land close to its authored range at cruise speed.
     private const float RangeCheckCellSize = 8f;
+
+    // The two CALLBACK codes the vehicle-death handler acts on, decoded from LAB_00480710
+    // (docs/org/vehicleDamage.md's "What happens to the wreck"). 16 hands the instance the dying
+    // vehicle's velocity; 15 ends the damage stages.
+    // ⚠ Never add code 0. It is the free/delete arm, no compiled def in the install authors it,
+    // and acting on it would delete a live wreck.
+    private const int CallbackWreckVelocity = 16;
+    private const int CallbackStopStages = 15;
 
     // Smallest magnitude a pose-scale component may reach. ⚠ Never let a pose scale reach exactly
     // 0, however the data authors it: a singular basis makes Godot's physics server spam
@@ -407,6 +446,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private readonly Dictionary<(string Kind, Node3D? Anchor), bool> _condLast = new();
 
     private readonly HashSet<string> _retargetsLogged = new(StringComparer.Ordinal);
+
+    // The (caller anim, target node) pairs AnchorWarnAnimNames has already warned about, which is
+    // also where a census reads back the anchors this airframe lacks. Sorted, so that read is
+    // order-stable.
+    private readonly SortedSet<string> _anchorWarned = new(StringComparer.OrdinalIgnoreCase);
 
     // Last opacity pushed to each subtree root. These events sit in `Loop{-1}` sequences —
     // C1's `cloudparent#` re-asserts its 0.6 every frame — so without this the whole subtree
@@ -547,6 +591,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Live animation instances currently running (diagnostics).</summary>
     public int ActiveInstances => _instances.Count;
 
+    /// <summary>Every <c>&lt;caller anim&gt;|&lt;target node&gt;</c> pair
+    /// <see cref="AnchorWarnAnimNames"/> has warned about on this rig, i.e. the anchors this
+    /// airframe does not carry. Empty on an airframe the stages fit, and empty on every runtime
+    /// that set no warn list.</summary>
+    public IReadOnlyCollection<string> UnresolvedStageAnchors => _anchorWarned;
+
     /// <summary>Per-kind counts of events (and puffer/sound sub-reasons) this runtime processed but
     /// could not act on — the same tally <c>ReportUnhandled</c> prints at bootstrap, exposed so a
     /// post-bootstrap harness (the effects test) can see WHY an effect built no puffer
@@ -641,7 +691,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             n => n.GlobalTransform,
             PlaceNodeAt,
             (n, visible) => n.Visible = visible,
-            s => GD.Print(s),
+            s => Log.Debug("anim", $"{s}"),
             () => debugMotions,
             pooled,
             shown,
@@ -842,11 +892,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return;
         _ambientStarted = true;
         var (startupRun, ran, missing) = RunAmbientPasses();
-        GD.Print($"anim: ambient start — {startupRun} ON_STARTUP + {ran.Count} start anims running, "
-                 + $"{_instances.Count} live instance(s), {Motions.Count} live motion(s)");
+        Log.Info("anim", $"anim: ambient start — {startupRun} ON_STARTUP + {ran.Count} start anims running, {_instances.Count} live instance(s), {Motions.Count} live motion(s)");
         if (ran.Count > 0 || missing.Count > 0)
-            GD.Print($"anim: start anims [{string.Join(", ", ran)}]" +
-                     (missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : ""));
+            Log.Info("anim", $"anim: start anims [{string.Join(", ", ran)}]{(missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : "")}");
     }
 
     /// <summary>Reverses <see cref="StartAmbient"/>, the animation debugger's ambient-off half.
@@ -883,8 +931,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         HideUncoveredDestroyed();
         _rangeDeferred.Clear(); // a quiet stage must not proximity-start ambient defs
         _ambientStarted = false;
-        GD.Print($"anim: ambient stopped — {_instances.Count} live instance(s) kept, "
-                 + $"{Motions.Count} live motion(s)");
+        Log.Info("anim", $"anim: ambient stopped — {_instances.Count} live instance(s) kept, {Motions.Count} live motion(s)");
     }
 
     /// <summary>Hard-stops everything this runtime created and re-applies every anchored
@@ -1217,9 +1264,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (_damagesLogged < 12)
         {
             _damagesLogged++;
-            GD.Print($"damage: -{healthDamage:0.##} on {NameOf(inst.Anchor)} " +
-                     $"HP {before:0.##}→{inst.Health:0.##}" +
-                     (destroyed ? " DESTROYED — death sequence run" : $" [stage {inst.DamageStage}]"));
+            Log.Info("anim", $"damage: -{healthDamage:0.##} on {NameOf(inst.Anchor)} HP {before:0.##}→{inst.Health:0.##}{(destroyed ? " DESTROYED — death sequence run" : $" [stage {inst.DamageStage}]")}");
         }
         return true;
     }
@@ -1359,7 +1404,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         bool collidable = alpha > OpacityCollisionEpsilon;
         if (WorldCollision.SetFaded(node, !collidable))
         {
-            GD.Print($"anim: fade {(collidable ? "restored" : "dropped")} colliders under '{node.Name}'");
+            Log.Info("anim", $"anim: fade {(collidable ? "restored" : "dropped")} colliders under '{node.Name}'");
         }
 
         int applied = ApplyOpacity(node, alpha);
@@ -1650,48 +1695,31 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         var netHidden = HideUncoveredDestroyed();
 
         if (Setup != null)
-            GD.Print(Setup.Report());
-        GD.Print($"anim: {program.Defs.Count} defs ({program.CompiledCount} compiled, " +
-                 $"{program.ReaderCount} reader), {program.ScriptPoolCount} SI scripts; " +
-                 $"{anchored} anchored, {_opsApplied} state ops applied, {_opsUnresolved} unresolved");
-        GD.Print($"anim: {startupRun} ON_STARTUP + {ran.Count} start anims running, " +
-                 $"{_instances.Count} live instance(s), {Motions.Count} live motion(s) " +
-                 $"[index {indexMs} ms, reset states {resetMs - indexMs} ms, " +
-                 $"start {sw.ElapsedMilliseconds - resetMs} ms]");
+            Log.Raw(Setup.Report());
+        Log.Info("anim", $"anim: {program.Defs.Count} defs ({program.CompiledCount} compiled, {program.ReaderCount} reader), {program.ScriptPoolCount} SI scripts; {anchored} anchored, {_opsApplied} state ops applied, {_opsUnresolved} unresolved");
+        Log.Info("anim", $"anim: {startupRun} ON_STARTUP + {ran.Count} start anims running, {_instances.Count} live instance(s), {Motions.Count} live motion(s) [index {indexMs} ms, reset states {resetMs - indexMs} ms, start {sw.ElapsedMilliseconds - resetMs} ms]");
         if (_destructibles.Count > 0)
-            GD.Print($"anim: {_destructibles.Count} destructible instance(s) across " +
-                     $"{_destructibles.DistinctAnchors} node group(s) registered " +
-                     $"(mutable HP; inert until weapons land)");
+            Log.Info("anim", $"anim: {_destructibles.Count} destructible instance(s) across {_destructibles.DistinctAnchors} node group(s) registered (mutable HP; inert until weapons land)");
         if (program.MissionLibrarySkipped.Count > 0)
-            GD.Print($"anim: {program.MissionLibrarySkipped.Count} reader def(s) superseded by " +
-                     $"this mission's compiled manifest (mission-scope + NAME1), not instantiated: " +
-                     string.Join(", ", program.MissionLibrarySkipped.Take(8)) +
-                     (program.MissionLibrarySkipped.Count > 8 ? ", …" : ""));
+            Log.Info("anim", $"anim: {program.MissionLibrarySkipped.Count} reader def(s) superseded by this mission's compiled manifest (mission-scope + NAME1), not instantiated: {string.Join(", ", program.MissionLibrarySkipped.Take(8))}{(program.MissionLibrarySkipped.Count > 8 ? ", …" : "")}");
         if (ran.Count > 0 || missing.Count > 0)
-            GD.Print($"anim: start anims [{string.Join(", ", ran)}]" +
-                     (missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : ""));
+            Log.Info("anim", $"anim: start anims [{string.Join(", ", ran)}]{(missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : "")}");
         var emitterCensus = Emitters.Census;
         if (emitterCensus.Count > 0)
-            GD.Print($"anim: {emitterCensus.Count} puffer emitter(s): " +
-                     string.Join(", ", emitterCensus.Select(r => r.Name).Distinct()));
+            Log.Info("anim", $"anim: {emitterCensus.Count} puffer emitter(s): {string.Join(", ", emitterCensus.Select(r => r.Name).Distinct())}");
         if (_lights.Count > 0)
         {
             int on = _lights.Values.Count(l => l.Active);
-            GD.Print($"anim: {_lights.Count} point light(s), {on} lit at startup: " +
-                     string.Join(", ", _lights.Keys.Select(k => k.Name).Distinct().Take(10)));
+            Log.Info("anim", $"anim: {_lights.Count} point light(s), {on} lit at startup: {string.Join(", ", _lights.Keys.Select(k => k.Name).Distinct().Take(10))}");
         }
         // Reported on their own line rather than through Count(), which is the "not yet acted on"
         // channel: filing a working feature there would report it as a missing one.
         if (_soundEmitters.Count > 0 || _soundsUnknown > 0 || _soundsAfterBuild > 0)
-            GD.Print($"anim: {_soundEmitters.Count} ambient sound emitter(s): " +
-                     string.Join(", ", Sounds?.Names ?? Enumerable.Empty<string>()) +
-                     (_soundsUnknown > 0 ? $" [{_soundsUnknown} unknown to sounds.json]" : "") +
-                     (_soundsAfterBuild > 0 ? $" [{_soundsAfterBuild} requested with no audio session]" : ""));
+            Log.Info("anim", $"anim: {_soundEmitters.Count} ambient sound emitter(s): {string.Join(", ", Sounds?.Names ?? Enumerable.Empty<string>())}{(_soundsUnknown > 0 ? $" [{_soundsUnknown} unknown to sounds.json]" : "")}{(_soundsAfterBuild > 0 ? $" [{_soundsAfterBuild} requested with no audio session]" : "")}");
         // Everything above is a bootstrap snapshot; from here on a failure reports itself.
         _soundCensusPrinted = true;
         if (netHidden.Count > 0)
-            GD.Print($"anim: safety net hid {netHidden.Count} uncovered destroyed subtree(s): " +
-                     string.Join(", ", netHidden.Take(10)) + (netHidden.Count > 10 ? ", …" : ""));
+            Log.Info("anim", $"anim: safety net hid {netHidden.Count} uncovered destroyed subtree(s): {string.Join(", ", netHidden.Take(10))}{(netHidden.Count > 10 ? ", …" : "")}");
         ReportConditions();
         ReportRetargets();
         ReportWaits();
@@ -1723,11 +1751,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             }
         _rangeCheckCells.Clear(); // force a sweep on the first Advance
         if (_rangeDeferred.Count > 0)
-            GD.Print($"anim: {_rangeDeferred.Count} ON_STARTUP def(s) deferred by EXECUTION_BY_RANGE: " +
-                     string.Join(", ", _rangeDeferred
-                         .Select(e => $"{e.Def.AnimName ?? e.Def.Name}({Mathf.Sqrt(e.Def.RangeMax):0} m)")
-                         .Distinct().Take(10)) +
-                     (_rangeDeferred.Count > 10 ? ", ..." : ""));
+            Log.Info("anim", $"anim: {_rangeDeferred.Count} ON_STARTUP def(s) deferred by EXECUTION_BY_RANGE: {string.Join(", ", _rangeDeferred.Select(e => $"{e.Def.AnimName ?? e.Def.Name}({Mathf.Sqrt(e.Def.RangeMax):0} m)").Distinct().Take(10))}{(_rangeDeferred.Count > 10 ? ", ..." : "")}");
 
         // Pass 3: the mission's start animations, by ANIMATION_NAME, in list order — each
         // through Play, which is also the debugger's --play-anim/Restart path, so the lab
@@ -1780,8 +1804,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             if (d2 < def.RangeMin || d2 > def.RangeMax)
                 continue;
             _rangeDeferred.RemoveAt(i);
-            GD.Print($"anim: EXECUTION_BY_RANGE reached - starting " +
-                     $"{def.AnimName ?? def.Name} at {Mathf.Sqrt(d2):0} m (range {Mathf.Sqrt(def.RangeMax):0} m)");
+            Log.Info("anim", $"anim: EXECUTION_BY_RANGE reached - starting {def.AnimName ?? def.Name} at {Mathf.Sqrt(d2):0} m (range {Mathf.Sqrt(def.RangeMax):0} m)");
             Start(def, anchor);
         }
     }
@@ -1854,8 +1877,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _waitsRouted++;
         if (_routedWaitsNamed.Add(callName))
         {
-            GD.Print($"anim: WAIT_FOR_COMPLETION on '{callName}' not held — the callee is routed to "
-                     + "the world-effects runtime, which this one cannot poll");
+            Log.Info("anim", $"anim: WAIT_FOR_COMPLETION on '{callName}' not held — the callee is routed to the world-effects runtime, which this one cannot poll");
         }
     }
 
@@ -1870,7 +1892,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // dispatched", and without it a probe reports an inert mechanism as untested.
             _waitsInert++;
             if (_inertWaitsNamed.Add(callName))
-                GD.Print($"anim: WAIT_FOR_COMPLETION on '{callName}' had nothing to hold — no live callee instance");
+                Log.Info("anim", $"anim: WAIT_FOR_COMPLETION on '{callName}' had nothing to hold — no live callee instance");
             return;
         }
         _waitsInstalled++;
@@ -1883,8 +1905,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             if (_elapsed < deadline)
                 return true;
             _waitsAbandoned++;
-            GD.Print($"anim: WAIT_FOR_COMPLETION on '{callName}' abandoned after "
-                     + $"{WaitCeilingS:0} s — the callee never finished");
+            Log.Warn("anim", $"anim: WAIT_FOR_COMPLETION on '{callName}' abandoned after {WaitCeilingS:0} s — the callee never finished");
             return false;
         };
     }
@@ -2288,18 +2309,19 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                 relocate = libraryCopy != null;
                             }
                         }
-                        // ⚠ A pooled copy must BE Start's anchor, not the call site. Its symbol
-                        // lookup misses the by-index map and falls to the name rescue scoped to its
-                        // own subtree, which finds nothing unless the copy is the anchor.
-                        var startAnchor = libraryCopy ?? callAnchor;
+                        // A relocating call outside the pool claims its sticky slot before the
+                        // placed-where test asks for this call's copy. ⚠ Keyed on the authored
+                        // EVENT: a REPEAT call from one anchor must not take the first one's slot.
+                        Node3D? repeatCopy = relocate && libraryCopy == null
+                            ? _templateStage.AssignCallerSlot(target, callAnchor!, ev) : null;
+                        // ⚠ A pooled copy must BE Start's anchor, not the call site: its symbol
+                        // lookup falls to the name rescue scoped to its own subtree, and instance
+                        // identity is (def, anchor), so two calls on one anchor need two anchors.
+                        var ownCopy = libraryCopy ?? repeatCopy;
+                        var startAnchor = ownCopy ?? callAnchor;
                         // Added whether or not the Start below fires: "wait until it completes"
                         // is about the named animation, not about which call started it.
                         waitOn?.Add((target, startAnchor));
-                        // A relocating call anchored outside the pool claims its sticky slot before
-                        // the placed-where test below asks for this call's copy. The library-copy
-                        // path has its own pool, and a call on a pooled copy already has a slot.
-                        if (relocate && libraryCopy == null)
-                            _templateStage.AssignCallerSlot(target, callAnchor!);
                         Vector3 wantSite = default;
                         bool movedAway = false;
                         if (relocate)
@@ -2308,8 +2330,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             // ⚠ A placed template called at a DIFFERENT site restarts even while
                             // live; one copy can only be in one place, so the live guard would
                             // otherwise give the second call no effect at all.
-                            movedAway = libraryCopy != null
-                                ? libraryCopy.GlobalTransform.Origin.DistanceSquaredTo(wantSite)
+                            movedAway = ownCopy != null
+                                ? ownCopy.GlobalTransform.Origin.DistanceSquaredTo(wantSite)
                                   > TemplateStage<Node3D>.MoveToleranceSq
                                 : !_templateStage.IsAt(target, callAnchor, siteOffset);
                         }
@@ -2322,8 +2344,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             // template's own root, so re-anchoring alone emits at the gamez origin.
                             if (relocate)
                             {
-                                if (libraryCopy != null)
-                                    _templateStage.PlaceOn(new[] { (Node3D?)libraryCopy }, wantSite);
+                                if (ownCopy != null)
+                                    // Level a repeat call's copy exactly as PlaceAt would level the
+                                    // first one; the library-root pool has never levelled.
+                                    _templateStage.PlaceOn(new[] { (Node3D?)ownCopy }, wantSite,
+                                        libraryCopy == null && LevelsTemplate(target));
                                 else
                                     _templateStage.PlaceAt(target, callAnchor!, siteOffset);
                             }
@@ -2410,6 +2435,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     return true;
                 }
 
+            case "Callback":
+                // A callback is a thing that happens, not a pose, so a RESET_STATE raises none.
+                // The two codes acted on are authored in sequences alone, never in a reset block.
+                if (!instant)
+                    HandleCallback(ev);
+                return true;
+
             case "ObjectAddChild":
                 // Only the sound-emitter three-quarters of this event is acted on — see
                 // HandleAddChild. Everything else it does still counts as unhandled.
@@ -2423,6 +2455,41 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // a case above and nothing else.
                 Count(ev.Kind);
                 return true;
+        }
+    }
+
+    // The authored code decides what a CALLBACK means, never the def it sits in: the player's
+    // crash defs carry `has_callbacks: true` and a code this runtime does not act on, so no family
+    // test can stand in for reading the value.
+    // ⚠ An unrecognised code is counted under its own key and nothing else. Codes outside the two
+    // below belong to the original's mission-script handler, and guessing at one invents behaviour.
+    private void HandleCallback(AnimEvent ev)
+    {
+        int code = (int)(ev.Data.Num("value") ?? -1f);
+        switch (code)
+        {
+            case CallbackWreckVelocity when WreckVelocity != null:
+                // Runtime-wide because the crash runtime is per aircraft, so its one wreck is the
+                // only thing this can reach.
+                InheritedWorldVelocity = WreckVelocity();
+                _opsApplied++;
+                return;
+            case CallbackStopStages when StopDamageStages != null || StopWreckFlying != null:
+                // Both halves of the original's code-15 arm, in its order: stop the stage anims,
+                // then drop the dead vehicle out of the movement update it was still running.
+                StopDamageStages?.Invoke();
+                StopWreckFlying?.Invoke();
+                _opsApplied++;
+                return;
+            case CallbackWreckVelocity:
+            case CallbackStopStages:
+                // Named apart from an unknown code: this one IS understood, and only the caller's
+                // seam is missing — which is the whole answer to "why did the wreck not inherit".
+                Count($"Callback({code}, no seam wired)");
+                return;
+            default:
+                Count($"Callback({code})");
+                return;
         }
     }
 
@@ -2804,12 +2871,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             _retargeted++;
         else
             _retargetUnresolved++;
+        if (resolved == null && AnchorWarnAnimNames != null && (def.AnimName ?? def.Name) is { } caller
+            && AnchorWarnAnimNames.Contains(caller) && _anchorWarned.Add($"{caller}|{targetName}"))
+        {
+            Log.Warn("anim", $"{AnchorWarnLabel ?? "rig"}: '{caller}' calls '{ev.Data.Str("name")}' onto '{targetName}', which this airframe has no node for — it lands on the airframe root instead");
+        }
         // Once per distinct (callee, target, caller) triple: the poll idiom re-issues its calls
         // every frame, so an unconditional line here would bury the log.
         if (DebugMotions && _retargetsLogged.Add($"{ev.Data.Str("name")}|{targetName}|{def.AnimName}"))
-            GD.Print($"anim: retarget '{ev.Data.Str("name")}' onto '{targetName}' "
-                     + $"({(resolved != null ? resolved.GetMeta(NameMeta).AsString() : "UNRESOLVED")})"
-                     + $" [caller {def.AnimName}]");
+            Log.Debug("anim", $"anim: retarget '{ev.Data.Str("name")}' onto '{targetName}' ({(resolved != null ? resolved.GetMeta(NameMeta).AsString() : "UNRESOLVED")}) [caller {def.AnimName}]");
         return (resolved, offset);
     }
 
@@ -2939,8 +3009,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             var at = anchor == null ? "<global>"
                 : $"{NameOf(anchor)} {WorldPos(anchor).Snapped(Vector3.One)}";
-            GD.Print($"anim/debug: cond {kind}({Describe(value)}) on {at} " +
-                     $"[player {PlayerPos().Snapped(Vector3.One)}] → {(result ? "TRUE" : "false")}");
+            Log.Debug("anim", $"anim/debug: cond {kind}({Describe(value)}) on {at} [player {PlayerPos().Snapped(Vector3.One)}] → {(result ? "TRUE" : "false")}");
         }
         return result;
     }
@@ -3142,8 +3211,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         if (_retargeted == 0 && _retargetUnresolved == 0)
             return;
-        GD.Print($"anim: {_retargeted} call(s) retargeted onto a named node"
-                 + (_retargetUnresolved > 0 ? $", {_retargetUnresolved} target(s) unresolved" : ""));
+        Log.Info("anim", $"anim: {_retargeted} call(s) retargeted onto a named node{(_retargetUnresolved > 0 ? $", {_retargetUnresolved} target(s) unresolved" : "")}");
     }
 
     // The WAIT_FOR_COMPLETION holds armed so far, by callee, printed with the bootstrap census.
@@ -3154,8 +3222,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (_waitsByCallee.Count == 0)
             return;
         var parts = _waitsByCallee.OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key} ×{kv.Value}");
-        GD.Print($"anim: {_waitsInstalled} WAIT_FOR_COMPLETION hold(s) armed during bootstrap: "
-                 + string.Join(", ", parts));
+        Log.Info("anim", $"anim: {_waitsInstalled} WAIT_FOR_COMPLETION hold(s) armed during bootstrap: {string.Join(", ", parts)}");
     }
 
     private void ReportConditions()
@@ -3164,7 +3231,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return;
         var parts = _conditions.OrderByDescending(kv => kv.Value.True + kv.Value.False)
             .Select(kv => $"{kv.Key} {kv.Value.True}✓/{kv.Value.False}✗");
-        GD.Print($"anim: conditions evaluated (lod {QualityLod}): {string.Join(", ", parts)}");
+        Log.Info("anim", $"anim: conditions evaluated (lod {QualityLod}): {string.Join(", ", parts)}");
     }
 
     private void Count(string kind) =>
@@ -3176,8 +3243,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return;
         var top = _unhandled.OrderByDescending(kv => kv.Value).Take(12)
             .Select(kv => $"{kv.Key}×{kv.Value}");
-        GD.Print($"anim: {_unhandled.Count} event kind(s) not yet acted on: {string.Join(", ", top)}"
-                 + (_unhandled.Count > 12 ? ", …" : ""));
+        Log.Info("anim", $"anim: {_unhandled.Count} event kind(s) not yet acted on: {string.Join(", ", top)}{(_unhandled.Count > 12 ? ", …" : "")}");
     }
 
     // --debug-anim: one line per live motion per second. Headless verification that things
@@ -3192,11 +3258,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // other line reports exactly as a working test, and one tier can carry the total alone.
         if (Motions.ContactLandings + Motions.ClockEndings > 0)
         {
-            GD.Print($"anim/debug: contact-tested bodies ended: {Motions.ContactLandings} by contact, "
-                     + $"{Motions.ClockEndings} on their run time"
-                     + $" (column {Motions.ColumnLandings}/{Motions.ColumnClockEndings},"
-                     + $" sweep {Motions.SweepLandings}/{Motions.SweepClockEndings})"
-                     + (Motions.ContactLandings == 0 ? " — NO CONTACT AT ALL (is a mask wired?)" : ""));
+            Log.Debug("anim", $"anim/debug: contact-tested bodies ended: {Motions.ContactLandings} by contact, {Motions.ClockEndings} on their run time (column {Motions.ColumnLandings}/{Motions.ColumnClockEndings}, sweep {Motions.SweepLandings}/{Motions.SweepClockEndings}){(Motions.ContactLandings == 0 ? " — NO CONTACT AT ALL (is a mask wired?)" : "")}");
         }
 
         var emitting = Emitters.Census.Where(r => r.Emitting).ToList();
@@ -3207,13 +3269,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 live += r.LiveParticles;
             // Name them: several runtimes print this line, so a bare count cannot say whose
             // emitters are running.
-            GD.Print($"anim/debug: {emitting.Count} active puffer(s), {live} live particle(s)"
-                     + $": {string.Join(", ", emitting.Select(r => r.Name).Distinct())}");
+            Log.Debug("anim", $"anim/debug: {emitting.Count} active puffer(s), {live} live particle(s): {string.Join(", ", emitting.Select(r => r.Name).Distinct())}");
         }
         // ⚠ Totals before the list, which is capped at 12. A debris piece is routinely past the
         // cap, so reading "it never launched" out of the truncated list is unsound.
-        GD.Print($"anim/debug: {Motions.Count} live motion(s), "
-                 + $"{BallisticMotionsLaunched} ballistic launch(es) so far");
+        Log.Debug("anim", $"anim/debug: {Motions.Count} live motion(s), {BallisticMotionsLaunched} ballistic launch(es) so far");
         if (Motions.Count == 0)
         {
             return;
@@ -3229,11 +3289,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // Visibility matters as much as position here: a correctly-animated node inside a
             // subtree the mission deactivated moves perfectly and renders nothing.
             bool shown = t.IsVisibleInTree();
-            GD.Print($"anim/debug: {name} at ({p.X:0.0}, {p.Y:0.0}, {p.Z:0.0}) "
-                     + $"rot ({r.X:0.0}, {r.Y:0.0}, {r.Z:0.0}) {(shown ? "visible" : "HIDDEN")}");
+            Log.Debug("anim", $"anim/debug: {name} at ({p.X:0.0}, {p.Y:0.0}, {p.Z:0.0}) rot ({r.X:0.0}, {r.Y:0.0}, {r.Z:0.0}) {(shown ? "visible" : "HIDDEN")}");
         }
         if (Motions.Count > 12)
-            GD.Print($"anim/debug: … and {Motions.Count - 12} more");
+            Log.Debug("anim", $"anim/debug: … and {Motions.Count - 12} more");
     }
 
     // Advances every live motion, then dispatches whatever landed. ⚠ The two halves stay in one
@@ -3256,9 +3315,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             else
                 Count("ObjectMotion(bounce landed after its instance ended)");
             if (DebugMotions)
-                GD.Print($"anim/debug: '{landing.Target.Name}' landed at {landing.Target.GlobalPosition} "
-                         + $"— bounce sequence '{landing.Bounce}'"
-                         + (live ? "" : " — NO LIVE INSTANCE, dispatched nothing"));
+                Log.Debug("anim", $"anim/debug: '{landing.Target.Name}' landed at {landing.Target.GlobalPosition} — bounce sequence '{landing.Bounce}'{(live ? "" : " — NO LIVE INSTANCE, dispatched nothing")}");
         }
     }
 
