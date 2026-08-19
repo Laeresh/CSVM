@@ -1955,6 +1955,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
+- `BL-422` `[Bug]` **A small firepuff survives the kill forever on the Bloodhawk and the Autogyro,
+  but not on the Fury or the Devastator.** Reported at the controls after `BL-385`'s Wave D landed:
+  shoot one down and a small fire emitter is left burning in the air with nothing under it, for the
+  rest of the session. Two airframes tested clean, two dirty; the other seven are untested.
+  **What it is NOT:** the destroy defs. `bloodhawk-bloodhawk`, `autogyro-autogyro`, `fury-fury` and
+  `piratefighter-piratefighter` were compared event for event and their `destroy_craft`,
+  `randomdestseq`, `destroyed_dirt`/`_water` and `bounce_effects` sequences are identical but for the
+  Devastator's extra `flydirt_plane`. So the difference is in the airframe's own data or node names,
+  not in the choreography.
+  **Lead, which fits one of the two airframes and not the other:** an effect CALLed onto an anchor
+  that does not resolve falls back to the caller's anchor (`AnimRuntime.CallTargetSite`), and a stop
+  aimed at the authored node can then miss the instance that actually started at the fallback. The
+  Bloodhawk is the known node-name outlier — it spells its elevators `l_elev`/`r_elev` where
+  `random_remote_damage` calls `lft_elev`/`rt_elev` (`docs/org/vehicleDamage.md`, the AI stage anchor
+  census), so two of that cascade's five steps already fire at the airframe root there. ⚠ **The
+  Autogyro does not fit that story** — the same census found it carries all five anchors — so either
+  there are two causes or the real one is something both share and the Bloodhawk's naming is a
+  coincidence. Do not stop at the first airframe that explains itself.
+  ⚠ **Traps.** (a) `pfsmoketrail` and the trail family are `LOOP -1` with **no authored exit**; they
+  end only because the stop closure reaches them, so anything that breaks the match between a start
+  and its stop leaves an immortal emitter. That closure is derived from the program
+  (`WorldEffectsFactory.WireDamageStages`), so a hand list is not the fix. (b) Check the damage-stage
+  path AND the destroy path before concluding: the stage ladder runs before the kill and its stop is
+  `Callback 15`'s job. (c) Census all eleven airframes rather than the four tested, so the answer is
+  a rule and not two special cases.
+
 - `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
   flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
   traced the same day and **fully decoded 2026-08-13**. The decode is
@@ -2231,6 +2257,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   PERF-14.
 
 ## Audio
+
+- `BL-421` `[Research]` **The corrected engine-audio model is unconfirmed at the controls; the whine
+  removal in particular.** `BL-385`'s `B14` re-decoded the engine audio and removed four things our
+  build had been playing: the `snd_enginewhine` loop, the detuned dual engine stack
+  (`EngineDetuneRatio`, `EngineVoiceGain`), `WhineMixGain`, and the damaged-engine crossfade
+  (`DamagedEngineGain`, `DamagedEngineMixGain`). The decode behind that is firm — `FUN_00476250`
+  assigns slot 1 only when non-null, `FUN_00478a00` leaves the field at 0, **no shipped vehicle def
+  authors `prop_sound`** (its one occurrence in `extracted/zrdr/` is a curve block in
+  `player.zrd.json`, not a sound name), and `snd_enginewhine` is a literal nowhere in `crimson.exe`.
+  Flown afterwards, the verdict was "not sure if this is correct".
+  **What this item is:** get a verdict, not a re-tune. The A/B is stated in the plan's `B14`: HEAD
+  against the build, one plane and chapter, `--volume=1.0 --no-det`, listening for the chorus at fixed
+  throttle to be gone, for no whine layer to rise in through a full dive, and for the damaged engine
+  to be REPLACED rather than joined. A reference recording of the original is the only thing that can
+  settle it above taste.
+  ⚠ **Traps.** (a) A decode outranks a spectral measurement here by this project's own rule, and the
+  removed constants came FROM spectral analysis of a reference dive — that is what the decode
+  overturned, so re-deriving them from the same footage would just re-make the error. (b) The likely
+  honest outcome is that the original really is thinner than our old build and the ear has to adjust;
+  say so rather than reinstating a loop the data does not have. (c) If something IS missing, the open
+  candidate already recorded is the engine's **airspeed term** (`FUN_004b18a0` adds `0.26*|v|` to
+  volume and `0.25*|v|` to pitch, clamped to [0, 1.5]), deliberately unimplemented because the
+  velocity's units in that expression are unresolved — that is a decode to finish, not a mix to
+  invent. (d) Audio cannot be screenshot-verified; the `sound` log line names the resolved slot defs
+  and is the headless half.
 
 - `BL-079` `[Feature]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;
   the original's IA traffic is clearly audible in the reference video.
