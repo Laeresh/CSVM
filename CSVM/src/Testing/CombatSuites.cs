@@ -75,10 +75,42 @@ internal static class CombatSuites
                     plane?.Free();
                 }
             }
+
+            AiLoadoutBind(ctx, planesGamez, textures, weapons);
         }
         finally
         {
             textures.Dispose();
+        }
+    }
+
+    // The AI half of the same bind: a militia def's authored weapons tuples onto its airframe's rig,
+    // through the same Loadout.Bind. Black Hat's Warhawk is the case worth pinning — eight torpedoes
+    // and a gun off one authored list, told apart by the weapon def's own CANNON flag.
+    internal static void AiLoadoutBind(TestContext ctx, GameZ planesGamez, TextureArchive textures,
+        WeaponDefs weapons)
+    {
+        var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_warhawk", "bhatwarhawk");
+        ctx.Same(2, stats.AiWeapons.Count, $"bhatwarhawk authors two weapon entries");
+        Node3D? plane = null;
+        try
+        {
+            plane = new PlaneBuilder(planesGamez, textures).Build(stats.NodeName);
+            var loadout = Loadout.BindAi(stats.AiWeapons, "bhatwarhawk", plane, weapons);
+            ctx.Same(1, loadout.Hardpoints.Count, $"the torpedo entry takes one pylon");
+            ctx.Check(loadout.Hardpoints[0].Weapon.Id == "wep_14",
+                $"the pylon carries the authored torpedo (got {loadout.Hardpoints[0].Weapon.Id})");
+            ctx.Same(8, loadout.Hardpoints[0].Ammo, $"it carries the authored eight rounds");
+            ctx.Check(loadout.Hardpoints[0].Weapon.DamagesZeppelin,
+                $"the torpedo is the DAMAGES_ZEPPELIN weapon the ordnance match keeps off aircraft");
+            ctx.Same(1, loadout.Guns.Count, $"the gun entry binds one group");
+            ctx.Check(loadout.Guns[0].Ammo == 8000,
+                $"the gun carries its authored rounds (got {loadout.Guns[0].Ammo})");
+            ctx.Check(loadout.Guns[0].Muzzles.Count > 0, $"the gun group resolved its firepoints");
+        }
+        finally
+        {
+            plane?.Free();
         }
     }
 

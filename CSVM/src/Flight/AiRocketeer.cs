@@ -28,6 +28,15 @@ public readonly struct RocketPylonView
     /// the lead onto the launcher's frame and the motor's ramp, which is the branch the original's
     /// per-mount solver takes on this same field (docs/org/aiPilot/aiWeapons.md).</summary>
     public float RoundAccel { get; init; }
+
+    /// <summary>This slot's own authored engagement window and refire interval, metres and seconds.
+    /// The original keeps all three per weapon slot; 0 means the fit authored none and the walk
+    /// falls back to the vehicle-wide defaults on <see cref="AiRocketeer"/>.</summary>
+    public float MinRangeM { get; init; }
+
+    public float MaxRangeM { get; init; }
+
+    public float RefireSeconds { get; init; }
 }
 
 /// <summary>The AI's ordnance employment: when a non-human pilot pulls the rocket trigger, decoded
@@ -66,23 +75,24 @@ public sealed class AiRocketeer
     /// <summary>Traverse pitch half-limit, degrees (<c>gun_pitch</c>).</summary>
     public float PylonPitchLimitDeg = AiGunner.GunConeHalfAngleDeg;
 
-    /// <summary>The engagement window's near end, metres: 200 m on every militia variant the game
-    /// ships (30 m on the five base defs that author fields 3 and 4 transposed). A per-vehicle
-    /// window arrives with the <c>weapons</c> tuple itself (<c>BL-394</c>).
+    /// <summary>The engagement window's near end, metres, for a pylon whose fit authored none:
+    /// 200 m on every militia variant the game ships (30 m on the five base defs that author fields
+    /// 3 and 4 transposed). A pylon carrying its def's own window flies that instead.
     /// ⚠ The window is a BAND. A max-range-only gate lets an AI launch from the merge.</summary>
     public float MinRangeM = 200f;
 
     /// <summary>The engagement window's far end, metres (see <see cref="MinRangeM"/>).</summary>
     public float MaxRangeM = 800f;
 
-    /// <summary>The vehicle-wide ordnance lockout, seconds — 30 on the shipped militia variants,
-    /// 5 for the Black Hat torpedo. Vehicle-wide, not per pylon, so a plane carrying two rocket
-    /// types cannot alternate them. Our loadout is pylons rather than the original's weapon-type
-    /// slots, so this doubles as the per-slot timer while one ordnance type is carried; a mixed
-    /// loadout wants one timer per weapon, and arrives with <c>BL-394</c>.</summary>
+    /// <summary>The ordnance lockout, seconds, for a pylon whose fit authored none: 30 on the
+    /// shipped militia variants, 5 for the Black Hat torpedo. Every launch stamps two timers, as the
+    /// original does: the vehicle-wide one, which blocks ordnance of any kind, and the launching
+    /// slot's own next-ready. A plane carrying two rocket types therefore cannot alternate them
+    /// (docs/org/aiPilot/aiWeapons.md, "The fire routine").</summary>
     public float RefireSeconds = 30f;
 
     private readonly Func<float> _roll;
+    private readonly Dictionary<int, float> _slotLockouts = new();
     private float _lockout;
 
     /// <summary>The dice source is a delegate, not the engine's rng object: the roll is a decoded
@@ -122,6 +132,16 @@ public sealed class AiRocketeer
         {
             _lockout -= dt;
         }
+        // The per-slot next-ready timers age alongside the vehicle-wide one: the original stamps
+        // both on every launch and gates on both, which is why a two-type fit cannot alternate.
+        if (_slotLockouts.Count > 0)
+        {
+            foreach (int index in new List<int>(_slotLockouts.Keys))
+            {
+                if (_slotLockouts[index] > 0f)
+                    _slotLockouts[index] -= dt;
+            }
+        }
     }
 
     /// <summary>One tick's ordnance decision, in the original's gate order: the quick-draw cone
@@ -151,8 +171,15 @@ public sealed class AiRocketeer
             // Hat Warhawk's eight torpedoes end up aimed at an aircraft.
             if (p.DamagesZeppelin != targetIsGasbag)
                 continue;
+            // Its own next-ready, checked in the trigger pass: a slot on cooldown is invisible to
+            // the walk. Decoded rather than biting today, since one pylon per authored entry makes
+            // it expire alongside the vehicle-wide timer the same launch set.
+            if (_slotLockouts.TryGetValue(p.Index, out float slotLockout) && slotLockout > 0f)
+                continue;
+            float minRange = p.MinRangeM > 0f ? p.MinRangeM : MinRangeM;
+            float maxRange = p.MaxRangeM > 0f ? p.MaxRangeM : MaxRangeM;
             float sep2 = p.MountPos.DistanceSquaredTo(targetPos);
-            if (sep2 < MinRangeM * MinRangeM || sep2 > MaxRangeM * MaxRangeM)
+            if (sep2 < minRange * minRange || sep2 > maxRange * maxRange)
                 continue;
             // The original leads each round in the frame it flies in (FUN_0041afe0): a motor round
             // in the launcher's, on the ramp it climbs, and one without a motor at VELOCITY against
@@ -174,7 +201,9 @@ public sealed class AiRocketeer
                 continue; // the mount cannot be brought close enough: keep maneuvering
             SelectedPylon = p.Index;
             LaunchDirWorld = (basis * clamped).Normalized();
-            _lockout = RefireSeconds;
+            float refire = p.RefireSeconds > 0f ? p.RefireSeconds : RefireSeconds;
+            _lockout = refire;
+            _slotLockouts[p.Index] = refire;
             // The dice, last and only here. Inclusive, as the original's compare is.
             WantsFire = _roll() <= QuickDrawChance;
             return;

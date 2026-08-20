@@ -69,8 +69,8 @@ public sealed class AiGunner
 
     /// <summary>The engagement window, metres: the separation the gun is willing to shoot
     /// across. Authored per weapon slot in the vehicle def's <c>weapons</c> tuple, and 1 to 900 m
-    /// on every AI gun the game ships (docs/org/aiPilot/aiWeapons.md); a per-vehicle window
-    /// arrives with the tuple itself (<c>BL-394</c>). The floor is authored, not a sentinel.</summary>
+    /// on every AI gun the game ships (docs/org/aiPilot/aiWeapons.md). A gun group bound from an AI
+    /// def carries its own window and replaces these. The floor is authored, not a sentinel.</summary>
     public float MinRangeM = 1f;
 
     /// <summary>The engagement window's far end, metres (see <see cref="MinRangeM"/>).</summary>

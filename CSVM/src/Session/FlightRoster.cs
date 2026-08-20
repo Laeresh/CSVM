@@ -100,18 +100,34 @@ public sealed class FlightRoster
                 Shake = new PlaneShake(_in.Shakes),
             });
 
-            if (_in.StockLoadouts.For(stats.DefName) is { } loadout)
+            // The AI def's own fit when it authors one, the player stock table otherwise. Both
+            // paths say so when they come up empty: an AI plane that flies unarmed is a bug that
+            // looks exactly like a passive enemy from the cockpit.
+            try
             {
-                try
+                if (stats.AiWeapons.Count > 0)
+                {
+                    controller.Loadout = Loadout.BindAi(stats.AiWeapons,
+                        stats.AiDefName ?? stats.DefName, planeModel, _in.WeaponDefs);
+                }
+                else if (_in.StockLoadouts.For(stats.DefName) is { } loadout)
                 {
                     controller.Loadout = Loadout.Bind(loadout, planeModel, _in.WeaponDefs);
+                }
+                else
+                {
+                    string armed = stats.AiDefName ?? stats.DefName;
+                    Log.Warn("weapons", $"ai: no weapons block on '{armed}' and no stock loadout for '{stats.DefName}' — this plane flies unarmed");
+                }
+                if (controller.Loadout != null)
+                {
                     controller.Destructibles = _in.WorldRuntime?.Destructibles;
                     controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _in.Projectiles);
                 }
-                catch (Exception e)
-                {
-                    Log.Warn("weapons", $"ai: loadout bind failed for '{stats.DefName}' — this plane flies unarmed error={e.Message}");
-                }
+            }
+            catch (Exception e)
+            {
+                Log.Warn("weapons", $"ai: loadout bind failed for '{stats.DefName}' — this plane flies unarmed error={e.Message}");
             }
 
             // Visible damage, phase 1: the same object the player rig gets, built from this
