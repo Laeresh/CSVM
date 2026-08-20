@@ -317,12 +317,21 @@ shipped textures — the same `shippedSkins` flag that keeps it out of the playe
 Hunter colours, which an enemy wearing would read as friendly.
 
 A wave configured on the **launchscreen wizard** does carry its militia, because the wizard picks
-it: `enemy_name` is written as "&lt;militia&gt; &lt;aircraft&gt;", and `Mech3/MilitiaDefs` resolves
-that pair to the militia's own `vehicle.json` def (`Black Hat` + `Warhawk` → `bhatwarhawk`). The
-member then flies that def outright — its armament, damage model, authored livery and pilot — rather
-than the airframe's base def. Two menu pairs have no def, Sacred Trust's Warhawk and Broadway
-Bomber's Peacemaker, since the militia roster comes from `.BM` paint coverage rather than from
-`vehicle.json`; they fall back to the shipped-skins case above.
+it: `enemy_name` is written as "&lt;militia&gt; &lt;aircraft&gt;". That is the same string the
+install itself uses for the militia def, so `Mech3/MilitiaDefs` matches the two directly: every
+militia def's `title` resolves through the message table to exactly that name
+(`bhatwarhawk`'s is `MSG_VEH_BHAT_WARHAWK`, "Black Hat Warhawk"; `stihellhound`'s is
+`MSG_VEH_STRUST_HELLHOUND`, "Sacred Trust Hellhound"). Nothing parses def names, which are not a
+reliable guide: `sti` is Sacred Trust, `blakepeace` is the Blake Aviation Peacemaker, and the
+`_2`/`_3`/`_5` chapter duplicates repeat their base def's title verbatim (first def wins). The one
+vocabulary difference is the menu's "Hollywood Knight" against the table's "Hollywood Knights",
+matched loosely on the militia half alone.
+
+The member then flies that def outright: its armament, damage model, authored livery and pilot,
+rather than the airframe's base def. Three menu pairs resolve to nothing — Fortune Hunter (the
+player militia has no AI defs), Sacred Trust's Warhawk and Broadway Bomber's Peacemaker, since that
+roster comes from `.BM` paint coverage rather than from `vehicle.json` — and fall back to the
+shipped-skins case above.
 
 ⚠ **A wave enemy's nine pilot stats are drawn at random from a table of five, not from its skill.**
 `FUN_0045a280(row, k)` reads `0x00607a3c + row·36 + k·4`, and the caller picks `row = rand() % 5`

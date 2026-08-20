@@ -7,59 +7,69 @@ namespace CSVM.Mech3;
 /// Which <c>vehicle.json</c> def a militia's aircraft is: the Black Hat Warhawk is
 /// <c>bhatwarhawk</c>. An AI aircraft spawned under one of these flies that def's own armament,
 /// damage model, livery and pilot (<c>PlaneStats.LoadForAi</c>) instead of the airframe's base def.
-/// ⚠ The table is read off each def's own authored <c>paint_pattern</c>, never off its name: the
-/// prefixes are not a system (<c>britpeace</c>, <c>secgyro</c>), and <c>stihellhound</c> is Sacred
-/// Trust's only because it wears <c>sactrust</c>. Which pairs have no def, and why a shipped
-/// <c>ia.json</c> wave resolves none, is in docs/formats/instant-action.md.
+/// The pairing is the game's own: each def's <c>title</c> resolves through the message table to
+/// exactly "&lt;militia&gt; &lt;aircraft&gt;" (<c>MSG_VEH_STRUST_HELLHOUND</c> is "Sacred Trust
+/// Hellhound"), which is the string the wave editor writes. Nothing here parses def names.
 /// </summary>
 public static class MilitiaDefs
 {
-    // Keyed "<militia>|<aircraft>", both in the launch menu's own display vocabulary.
-    private static readonly Dictionary<string, string> Defs = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Black Hat|Warhawk"] = "bhatwarhawk",
-        ["Black Hat|Brigand"] = "bhatbrigand",
-        ["Black Hat|Autogyro"] = "bhatgyro",
-        ["Black Swan|Fury"] = "bsfury",
-        ["Blake Aviation|Bloodhawk"] = "blakebloodhawk",
-        ["Blake Aviation|Peacemaker"] = "blakepeace",
-        ["British|Peacemaker"] = "britpeace",
-        ["British|Balmoral"] = "britbalmoral",
-        ["Hollywood Knight|Firebrand"] = "hkfirebrand",
-        ["Hughes Aviation|Bloodhawk"] = "habloodhawk",
-        ["Hughes Aviation|Kestrel"] = "hakestrel",
-        ["Hughes Aviation|Fury"] = "hafury",
-        ["Medusa|Kestrel"] = "medkestrel",
-        ["Medusa|Brigand"] = "medbrigand",
-        ["Russian|Devastator"] = "rusdevastator",
-        ["Sacred Trust|Hellhound"] = "stihellhound",
-        ["German|Hellhound"] = "germanhellhound",
-        ["Studio Security|Fury"] = "secfury",
-        ["Studio Security|Autogyro"] = "secgyro",
-    };
+    // The launch menu says "Hollywood Knight", the message table "Hollywood Knights", and they mean
+    // the same militia. Matching is loose enough to cover it rather than hard-coding the pair.
+    private static readonly char[] Space = { ' ' };
 
-    // Longest first, so "Black Hat" cannot claim a name a longer militia also prefixes.
-    private static readonly string[] MilitiaNames =
+    /// <summary>Every militia aircraft the install names, keyed by its display string. The FIRST def
+    /// to claim a name wins: the <c>_2</c>/<c>_3</c>/<c>_5</c> chapter duplicates repeat their base
+    /// def's title verbatim. Base and player defs are in here too, under a bare aircraft name
+    /// ("Fury"), where no militia string can reach them.</summary>
+    public static Dictionary<string, string> ByDisplayName(string zrdrPath, Messages messages)
     {
-        "Hollywood Knight", "Studio Security", "Blake Aviation", "Hughes Aviation",
-        "Broadway Bomber", "Sacred Trust", "Fortune Hunter", "Black Swan", "Black Hat",
-        "Russian", "British", "German", "Medusa",
-    };
+        var root = Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
+            ?? throw new InvalidOperationException("vehicle.json: unexpected root shape");
 
-    /// <summary>The def for a militia and one of its aircraft, both as the launch menu names them;
-    /// null when the pair has no def of its own.</summary>
-    public static string? For(string militia, string aircraft) =>
-        Defs.TryGetValue($"{militia}|{aircraft}", out var def) ? def : null;
+        var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i + 1 < root.Count; i += 2)
+        {
+            if (root[i] is not string def || root[i + 1] is not List<object?> props)
+                continue;
+            var d = ZrdrDict.FromAlternating(props);
+            if (d.Str("title") is not { } title)
+                continue;
+            string display = messages.Get(title);
+            if (display.Length > 0 && !byName.ContainsKey(display))
+                byName[display] = def;
+        }
+        return byName;
+    }
 
     /// <summary>The def behind a wave's authored <c>enemy_name</c>, which the wizard writes as
-    /// "&lt;militia&gt; &lt;aircraft&gt;". Null when the name names no militia (a shipped
-    /// <c>MSG_*</c> key, a hand-authored label) or when that militia's aircraft has no def, and the
-    /// aircraft's base def is flown instead.</summary>
-    public static string? ForWave(string enemyName, string aircraft)
+    /// "&lt;militia&gt; &lt;aircraft&gt;". Null when no def carries that name: a shipped
+    /// <c>ia.json</c>'s <c>MSG_*</c> key, the player militia (which has no AI defs), or a menu pair
+    /// the install ships no def for. The aircraft's base def is flown then.</summary>
+    public static string? ForWave(IReadOnlyDictionary<string, string> byDisplayName, string enemyName)
     {
-        foreach (string militia in MilitiaNames)
-            if (enemyName.StartsWith(militia, StringComparison.OrdinalIgnoreCase))
-                return For(militia, aircraft);
+        if (byDisplayName.TryGetValue(enemyName, out var def))
+            return def;
+        // Singular/plural on the militia half only ("Hollywood Knight" against "Hollywood Knights"),
+        // never on the aircraft half, which both sides spell the same way.
+        foreach (var pair in byDisplayName)
+            if (SameAircraft(pair.Key, enemyName) && SameMilitia(pair.Key, enemyName))
+                return pair.Value;
         return null;
+    }
+
+    private static bool SameAircraft(string a, string b)
+    {
+        int i = a.LastIndexOfAny(Space), j = b.LastIndexOfAny(Space);
+        return i > 0 && j > 0
+            && string.Equals(a[(i + 1)..], b[(j + 1)..], StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool SameMilitia(string a, string b)
+    {
+        int i = a.LastIndexOfAny(Space), j = b.LastIndexOfAny(Space);
+        if (i <= 0 || j <= 0)
+            return false;
+        string x = a[..i].TrimEnd('s', 'S'), y = b[..j].TrimEnd('s', 'S');
+        return string.Equals(x, y, StringComparison.OrdinalIgnoreCase);
     }
 }

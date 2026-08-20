@@ -447,8 +447,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   model, its `weapons` fit (`Loadout.BindAi`, bound through the same `Loadout.Bind` and told apart
   from guns by the weapon's `CANNON` flag), its authored livery and its nine-slot pilot vector plus
   `accentID`. Two things name a def: `--ai=<plane>:def=<name>`, and an Instant Action wave whose
-  militia the launchscreen wizard picked, resolved through `Mech3/MilitiaDefs` (the table is read
-  off each def's own `paint_pattern`, since the prefixes are not a system). A wave read from a
+  militia the launchscreen wizard picked, resolved through `Mech3/MilitiaDefs` by the def's own
+  `title` (`MSG_VEH_STRUST_HELLHOUND` is "Sacred Trust Hellhound", which is exactly the string the
+  wave editor writes), never by parsing the def name. A wave read from a
   shipped `ia.json` still names no militia and keeps its shipped skins: its `enemy_name` is an
   `MSG_*` key for the aircraft alone, which is not recoverable
   ([`docs/formats/instant-action.md`](docs/formats/instant-action.md)).
