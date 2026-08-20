@@ -1076,7 +1076,7 @@ internal static class CombatSuites
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = plane => PlaneStats.LoadForAi(ctx.ZrdrPath, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
                 RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
@@ -1153,7 +1153,7 @@ internal static class CombatSuites
                 StatsFor = _ => shared,
                 // The same one object on both seams: this suite measures the jitter's spread over
                 // a SHARED cache entry, so the AI flavour must not quietly become a second object.
-                AiStatsFor = _ => shared,
+                AiStatsFor = (_, _) => shared,
                 RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,

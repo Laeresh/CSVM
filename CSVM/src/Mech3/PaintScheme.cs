@@ -136,12 +136,74 @@ public sealed class PaintScheme
         };
     }
 
+    /// <summary>One vehicle def's own authored scheme, resolved through <c>kind_of</c> so a militia
+    /// variant that names only a pattern still inherits its base def's colours. Null when no def in
+    /// the chain authors <c>paint_pattern</c> at all, which is a plane with no scheme of its own
+    /// rather than a parse failure. Each field falls back independently, as the original's spawn
+    /// does (docs/org/paint.md).</summary>
+    public static PaintScheme? ForDef(string zrdrPath, string defName)
+    {
+        var root = Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
+            ?? throw new InvalidOperationException("vehicle.json: unexpected root shape");
+
+        var defs = new Dictionary<string, ZrdrDict>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i + 1 < root.Count; i += 2)
+            if (root[i] is string name && root[i + 1] is List<object?> props)
+                defs[name] = ZrdrDict.FromAlternating(props);
+
+        var chain = new List<ZrdrDict>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var cur = defName; cur != null && seen.Add(cur) && defs.TryGetValue(cur, out var d);)
+        {
+            chain.Add(d);
+            cur = d.Str("kind_of")!;
+        }
+
+        string? pattern = null;
+        foreach (var d in chain)
+            if (d.Str("paint_pattern") is { } p)
+            {
+                pattern = p;
+                break;
+            }
+        if (pattern == null)
+            return null;
+
+        return new PaintScheme
+        {
+            Pattern = pattern,
+            Color1 = ChainColor(chain, "paint_color1", FortuneRed),
+            Color2 = ChainColor(chain, "paint_color2", FortuneTrim),
+            Color3 = ChainColor(chain, "paint_color3", FortuneFlash),
+            NoseDecal = ChainDecal(chain, "paint_decal1", 21),
+            TailDecal = ChainDecal(chain, "paint_decal2", 7),
+            WingDecal = ChainDecal(chain, "paint_decal3", 7),
+        };
+    }
+
     public Color ColorFor(int slot) => slot switch { 0 => Color1, 1 => Color2, _ => Color3 };
 
     public override string ToString() =>
         $"{Label} [{Fmt(Color1)} {Fmt(Color2)} {Fmt(Color3)}] decals {NoseDecal}/{TailDecal}/{WingDecal}";
 
     private static string Fmt(Color c) => $"{(int)Math.Round(c.R * 255)},{(int)Math.Round(c.G * 255)},{(int)Math.Round(c.B * 255)}";
+
+    // Nearest def in the chain that authors the key wins, as every other inherited property does.
+    private static Color ChainColor(List<ZrdrDict> chain, string key, Color fallback)
+    {
+        foreach (var d in chain)
+            if (d.List(key) is { Count: >= 3 })
+                return ReadColor(d, key, fallback);
+        return fallback;
+    }
+
+    private static int ChainDecal(List<ZrdrDict> chain, string key, int fallback)
+    {
+        foreach (var d in chain)
+            if (d.Has(key))
+                return (int)d.Float(key, fallback);
+        return fallback;
+    }
 
     private static Color ReadColor(ZrdrDict d, string key, Color fallback)
     {

@@ -454,11 +454,11 @@ internal sealed class HumanFlightAdapter
         public GameZ PlanesGamez = null!;
         /// This plane's stats, loaded once per distinct aircraft (splitscreen players differ).
         public Func<string, PlaneStats> StatsFor = null!;
-        /// The same aircraft as the AI flies it: the player chain for everything except the damage
-        /// model, which comes from the AI def (PlaneStats.LoadForAi). Cached separately
-        /// from <see cref="StatsFor"/> — the two flavours of one airframe are different objects,
-        /// so a single name-keyed cache would hand whichever loaded first to both.
-        public Func<string, PlaneStats> AiStatsFor = null!;
+        /// The same aircraft as the AI flies it, by node name and militia def (null takes the base
+        /// def): the player chain for everything except the damage model and the armament, which
+        /// come from the AI def (PlaneStats.LoadForAi). Cached separately from <see cref="StatsFor"/>
+        /// and keyed by both names, since one airframe's militia variants are different objects.
+        public Func<string, string?, PlaneStats> AiStatsFor = null!;
         /// This plane's camera tuning, cached the same way and for the same reason.
         public Func<string, CamParams> CamParamsFor = null!;
         /// How many rigs this session flies — drives the log tags, the verbose-once lines and the

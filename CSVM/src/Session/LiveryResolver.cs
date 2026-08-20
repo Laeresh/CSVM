@@ -20,6 +20,7 @@ public sealed class LiveryResolver
 
     private readonly SessionSpec _spec;
     private readonly string _rofPath;
+    private readonly Dictionary<string, PaintScheme?> _defSchemes = new(StringComparer.OrdinalIgnoreCase);
     private List<PaintScheme>? _paintCatalog;
     private PatternLibrary? _patternLibrary;
 
@@ -33,6 +34,12 @@ public sealed class LiveryResolver
     /// the extracted UI archive. Empty (and a one-line note) when ExtractRof.ps1 has not been
     /// run — aircraft then build unpainted rather than failing.</summary>
     public PatternLibrary Patterns => _patternLibrary ??= PatternLibrary.Load(_rofPath);
+
+    /// <summary>True when the launch asked for a livery by hand (<c>--paint=</c>,
+    /// <c>--paint-color=</c>, <c>--paint-decal=</c>). An AI aircraft's own militia scheme yields to
+    /// that: a typed request is about this run, not about who the plane is.</summary>
+    public bool PaintRequested => _spec.PaintNames is { Count: > 0 }
+        || _spec.PaintColorOverride != null || _spec.PaintDecalOverride != null;
 
     /// <summary>The 12 named schemes shipped in vehicle.json, loaded once per session.
     /// Empty on a read failure — paint is cosmetic and must never block a build.</summary>
@@ -52,6 +59,27 @@ public sealed class LiveryResolver
             _paintCatalog = new List<PaintScheme>();
         }
         return _paintCatalog;
+    }
+
+    /// <summary>The livery a vehicle def authors for itself, cached per def name. This is what an AI
+    /// aircraft wears in the original: the spawn resolves each paint field against the def and only
+    /// an explicit override displaces it (docs/org/paint.md). Null when the def's chain authors no
+    /// pattern, or when vehicle.json cannot be read — paint is cosmetic and never blocks a build.</summary>
+    public PaintScheme? DefScheme(string zrdrPath, string defName)
+    {
+        if (_defSchemes.TryGetValue(defName, out var cached))
+            return cached;
+        PaintScheme? scheme = null;
+        try
+        {
+            scheme = PaintScheme.ForDef(zrdrPath, defName);
+        }
+        catch (Exception e)
+        {
+            GD.Print($"[paint] no authored scheme for '{defName}' ({e.Message}) — falling back");
+        }
+        _defSchemes[defName] = scheme;
+        return scheme;
     }
 
     /// <summary>The patterns this aircraft has masks for — the list the original's paint UI

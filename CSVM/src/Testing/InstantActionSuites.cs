@@ -115,7 +115,7 @@ internal static class InstantActionSuites
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = plane => PlaneStats.LoadForAi(ctx.ZrdrPath, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
                 RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
@@ -342,7 +342,7 @@ internal static class InstantActionSuites
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = plane => PlaneStats.LoadForAi(ctx.ZrdrPath, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
                 RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
@@ -601,7 +601,7 @@ internal static class InstantActionSuites
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = plane => PlaneStats.LoadForAi(ctx.ZrdrPath, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
                 RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
@@ -939,7 +939,7 @@ internal static class InstantActionSuites
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = plane => PlaneStats.LoadForAi(ctx.ZrdrPath, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
                 RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,

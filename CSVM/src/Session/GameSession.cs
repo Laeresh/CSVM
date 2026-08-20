@@ -316,11 +316,14 @@ public partial class GameSession : Node3D
 
     /// <summary>Spawns an AI-piloted aircraft into this session at runtime, any time after the
     /// flight build. Null when this session built no flight rigs. This is the <c>--ai=</c>
-    /// overload: no authored identity, so the aircraft wears the Fortune Hunters default.
+    /// overload: no authored identity beyond <paramref name="aiDef"/>, whose militia scheme the
+    /// aircraft then wears in place of the Fortune Hunters default.
     /// ⚠ Route an authored enemy through the other overload instead; it carries the livery, team,
     /// rating and <c>shippedSkins</c> a mission's actor needs.</summary>
-    public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt, AiPilot pilot) =>
-        SpawnAiAircraft(planeName, pos, lookAt, pilot, scheme: null, team: null, attackRating: null);
+    public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt,
+        AiPilot pilot, string? aiDef = null) =>
+        SpawnAiAircraft(planeName, pos, lookAt, pilot, scheme: null, team: null, attackRating: null,
+            aiDef: aiDef);
 
     /// <summary>As the four-parameter overload, plus an authored actor's identity.
     /// <paramref name="scheme"/>/<paramref name="team"/> are worn as-is, with no RNG draw;
@@ -330,7 +333,7 @@ public partial class GameSession : Node3D
     /// its own textures, for an actor flying for a militia the mission data never names.</summary>
     public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt,
         AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating, bool inert = false,
-        bool shippedSkins = false)
+        bool shippedSkins = false, string? aiDef = null)
     {
         if (_flightRoster == null)
         {
@@ -401,7 +404,7 @@ public partial class GameSession : Node3D
             }
         }
         var ai = _flightRoster.SpawnAi(new AiSpawn(planeName, pos, lookAt, pilot, scheme, team,
-            inert, shippedSkins));
+            inert, shippedSkins, aiDef));
         _aiPlanes.Add(ai);
         ai.SmokeScreens = _smokeScreens;   // a shipped AI smoker lays through the same fire path
         // Mode transitions and reaction rolls, in the engine's own vocabulary — the D11
@@ -1625,12 +1628,15 @@ public partial class GameSession : Node3D
         // The AI flavour of the same airframe: a different object off the same key, so it needs its
         // own dictionary. Loaded lazily, so a session with no AI spawns parses nothing twice.
         var aiStatsCache = new Dictionary<string, PlaneStats>();
-        PlaneStats AiStatsFor(string plane)
+        PlaneStats AiStatsFor(string plane, string? aiDef)
         {
-            if (aiStatsCache.TryGetValue(plane, out var cached))
+            // Keyed by both: one airframe flown by two militias is two different sets of weapons,
+            // paint and skills off the same node name.
+            string key = aiDef == null ? plane : $"{plane}/{aiDef}";
+            if (aiStatsCache.TryGetValue(key, out var cached))
                 return cached;
-            var loaded = PlaneStats.LoadForAi(state.ZrdrPath, plane);
-            aiStatsCache[plane] = loaded;
+            var loaded = PlaneStats.LoadForAi(state.ZrdrPath, plane, aiDef);
+            aiStatsCache[key] = loaded;
             GD.Print($"ai flight stats [{loaded.DefName} damage:{loaded.AiDefName}]: " +
                      $"armor={loaded.VehicleArmor:0.#} health={loaded.VehicleHealth:0.#} " +
                      $"zones={loaded.DestroyableParts.Count} injure_anims={loaded.VehicleInjureAnims.Count}");
@@ -2303,7 +2309,7 @@ public partial class GameSession : Node3D
             bool netsTried = false;
             for (int i = 0; i < aiPlanes.Count; i++)
             {
-                var (planeName, netRef, accentId) = aiPlanes[i];
+                var (planeName, netRef, accentId, aiDef) = aiPlanes[i];
                 float lateral = 60f * ((i + 1) / 2) * (i % 2 == 0 ? 1f : -1f);
                 AiNet? net = null;
                 if (netRef != null)
@@ -2336,7 +2342,7 @@ public partial class GameSession : Node3D
                     var look = net.Nodes.Count > 1 ? follower.NodePosition(1) : pos + fwd;
                     var pilot = AiPilot.HoldingCourse(pos, look);
                     pilot.Patrol = follower;
-                    var spawnedOnNet = SpawnAiAircraft(planeName, pos, look, pilot);
+                    var spawnedOnNet = SpawnAiAircraft(planeName, pos, look, pilot, aiDef: aiDef);
                     RegisterAiVoice(spawnedOnNet, accentId);
                     ApplyAiHullPreset(spawnedOnNet);
                 }
@@ -2344,7 +2350,7 @@ public partial class GameSession : Node3D
                 {
                     var pos = lead.WorldPosition + fwd * 250f + right * lateral;
                     var spawnedAhead = SpawnAiAircraft(planeName, pos, pos + fwd,
-                        AiPilot.HoldingCourse(pos, pos + fwd));
+                        AiPilot.HoldingCourse(pos, pos + fwd), aiDef: aiDef);
                     RegisterAiVoice(spawnedAhead, accentId);
                     ApplyAiHullPreset(spawnedAhead);
                 }
