@@ -78,6 +78,29 @@ public class PlaneStatsAiWeaponsTests
             () => PlaneStats.LoadForAi(ZrdrPath, "player_warhawk", "secfury"));
     }
 
+    // The nine-slot pilot vector and the voice accent are def facts too: Black Hat's Warhawk flies
+    // at 6 across most slots with a steady hand of 1, which is the pilot the militia authored.
+    [ExtractedDataFact]
+    public void AMilitiaVariantCarriesItsOwnPilotSkills()
+    {
+        var militia = PlaneStats.LoadForAi(ZrdrPath, "player_warhawk", "bhatwarhawk");
+
+        Assert.Equal(6, militia.AiPilotSkills.DeadEye);
+        Assert.Equal(6, militia.AiPilotSkills.QuickDraw);
+        Assert.Equal(6, militia.AiPilotSkills.DareDevil);
+        Assert.Equal(1, militia.AiPilotSkills.SteadyHand);
+        Assert.NotNull(militia.AiAccentId);
+    }
+
+    [ExtractedDataFact]
+    public void APlayerLoadReadsNoPilotSkillsEither()
+    {
+        var s = PlaneStats.Load(ZrdrPath, "player_warhawk");
+
+        Assert.Null(s.AiPilotSkills.DeadEye);
+        Assert.Null(s.AiAccentId);
+    }
+
     // player_airplane authors a weapons block of its own, the 39-id buyable catalogue. Reading it as
     // a fit would arm the player's plane with every weapon in the game.
     [ExtractedDataFact]

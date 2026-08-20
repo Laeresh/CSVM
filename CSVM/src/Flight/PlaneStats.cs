@@ -97,6 +97,14 @@ public sealed class PlaneStats
     public string DefName = "";          // vehicle.json def, e.g. "pbloodhawk"
     public string NodeName = "";         // GameZ node, e.g. "player_bhawk"
 
+    /// <summary>The AI def's own nine-slot pilot skill vector and voice accent, resolved down the AI
+    /// chain; every slot null on a player load. A roster block's own vector outranks these, which is
+    /// the fallback the engine takes when a slot there is unset (<see cref="AiSkillVector"/>).</summary>
+    public AiSkillVector AiPilotSkills;
+
+    /// <summary>The AI def's <c>accentID</c>, a <c>voice.zrd</c> row; null when it authors none.</summary>
+    public int? AiAccentId;
+
     /// <summary>The AI def's own armament, nearest <c>weapons</c> block in the AI chain, empty on a
     /// player load. Deliberately not read down the player chain: <c>player_airplane</c> authors a
     /// <c>weapons</c> block too, but that one is the 39-id buyable catalogue rather than a fit, and
@@ -507,6 +515,32 @@ public sealed class PlaneStats
                     && entry[0] is float frac && entry[1] is string anim)
                     stats.VehicleInjureAnims.Add((frac, anim));
             break;
+        }
+
+        // The pilot the def flies with: nine skill slots and a voice accent, each resolved on its
+        // own down the AI chain, since a militia variant overrides some and inherits the rest.
+        if (aiChain != null)
+        {
+            int? Skill(string key)
+            {
+                foreach (var d in aiChain)
+                    if (d.TryFloat(key, out var f))
+                        return (int)f;
+                return null;
+            }
+            stats.AiPilotSkills = new AiSkillVector
+            {
+                DareDevil = Skill("dare_devil"),
+                NaturalTouch = Skill("natural_touch"),
+                SixthSense = Skill("sixth_sense"),
+                DeadEye = Skill("dead_eye"),
+                QuickDraw = Skill("quick_draw"),
+                SteadyHand = Skill("steady_hand"),
+                StunRecovery = Skill("stun_recovery"),
+                Talker = Skill("talker"),
+                Constitution = Skill("constitution"),
+            };
+            stats.AiAccentId = Skill("accentID");
         }
 
         // weapons: the AI chain's own armament, 5-tuples in list order. Guarded on aiChain rather
