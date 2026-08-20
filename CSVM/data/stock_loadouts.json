@@ -10,6 +10,30 @@
   "_gun_resolves": "A gun's weapon id is caliber N + ammo index k -> wep_{N+k} (the wep_30..73 matrix, each caliber's four ammo types consecutive). Stock ammo 'slug' (k=0) gives wep_N: wep_30/40/50/60/70.",
   "_binding_rule": "gun slot n -> firepoint(9-2n),(10-2n); W1->fp7,8 W2->fp5,6 W3->fp3,4 W4->fp1,2. The 'markers' arrays below are the explicit result, checked into the file (not computed at runtime) so a wrong one is a visible fix. Strongly supported by geometry, pending in-engine confirmation (A10).",
   "_turrets": "Slots whose mount is a Turret carry \"turret\": true. Turrets are AI gunners (decision 10), deferred to M4: the loader parses them but constructs them inert. Filled on the 5 turret airframes; the Balmoral is the only two-turret airframe (Nose + Rear).",
+  "_selectable": "The Ammo Selection screen's two dropdowns, in the original's own order, read off OriginalScreenshots/'Ammo Selection Gun DropDown.png' and 'Ammo Selection Hardpoint DropDown.png'. NOT derivable from the weapon tiers: the incendiary wep_04 is a named weapon the screen does not offer, and the rocket order is not id order. There is no per-airframe, per-hardpoint or budget restriction on what may be fitted (user, holding the original). Labels are the dropdown's own words, which is why magnesium reads 'Explosive'.",
+  "selectable": {
+    "gun_ammo": [
+      { "id": "slug", "label": "Slug" },
+      { "id": "dumdum", "label": "Dum-dum" },
+      { "id": "ap", "label": "Armor-piercing" },
+      { "id": "magnesium", "label": "Explosive" },
+      { "id": "none", "label": "None" }
+    ],
+    "pylon_ordnance": [
+      { "id": "wep_05", "label": "Armor-piercing" },
+      { "id": "wep_06", "label": "High explosive" },
+      { "id": "wep_07", "label": "Flak" },
+      { "id": "wep_08", "label": "Sonic" },
+      { "id": "wep_09", "label": "Flash" },
+      { "id": "wep_15", "label": "Rear flash" },
+      { "id": "wep_13", "label": "Smoke" },
+      { "id": "wep_12", "label": "Choker" },
+      { "id": "wep_10", "label": "Beeper" },
+      { "id": "wep_11", "label": "Seeker" },
+      { "id": "wep_14", "label": "Torpedo" },
+      { "id": "none", "label": "None" }
+    ]
+  },
   "planes": {
     "pautogyro": {
       "model": "player_autogyro",

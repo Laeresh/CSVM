@@ -534,10 +534,10 @@ reasons that have nothing to do with any of these checks.
 ./RunGame.ps1 --coop --players=2 --chapter=C1 --debug-wash=2
 ```
 
-`--rocket=<wep_id>` (used here and below) swaps every pylon to the named type, which is the only
-way to fly a type a stock loadout does not carry: all 11 loadouts fit HE `wep_06`, and the Weapon
-Loadout screen that would let a pilot fit the rest is `BL-353`, unbuilt. The rocket trigger is
-**F**, one round per pull.
+`--rocket=<wep_id>` (used here and below) swaps every pylon to the named type. All 11 stock
+loadouts fit HE `wep_06`, so a flag is what pins a type here rather than the menu's own Ammo
+Selection screen: the flag beats a menu-chosen fit deliberately, so a row that names a type gets it
+whatever was clicked on the way in. The rocket trigger is **F**, one round per pull.
 
 ⚠ **Every figure quoted in this section and the ones below is a decoded constant or an authored
 value.** A clip that disagrees with one is evidence about our implementation, never a correction to

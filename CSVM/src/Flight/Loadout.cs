@@ -33,6 +33,9 @@ public sealed class StockLoadouts
 
     public IReadOnlyDictionary<string, LoadoutDef> All => _byDef;
 
+    /// <summary>The Ammo Selection screen's dropdown rosters, empty when the file omits them.</summary>
+    public LoadoutOptions Options { get; private set; } = new();
+
     /// <summary>A gun's stock weapon id: caliber N + ammo k → <c>wep_{N+k}</c> (the wep_30..73
     /// player matrix, each caliber's four ammo types consecutive). Stock ammo <c>slug</c> → <c>wep_N</c>.</summary>
     public static string GunWeaponId(int caliber, string ammo) =>
@@ -97,11 +100,36 @@ public sealed class StockLoadouts
             }
             loadouts._byDef[def.Def] = def;
         }
+
+        if (doc.RootElement.TryGetProperty("selectable", out var selectable)
+            && selectable.ValueKind == JsonValueKind.Object)
+        {
+            loadouts.Options = new LoadoutOptions
+            {
+                GunAmmo = OptionList(selectable, "gun_ammo"),
+                PylonOrdnance = OptionList(selectable, "pylon_ordnance"),
+            };
+        }
         return loadouts;
     }
 
     /// <summary>The def's stock loadout, or null when the plane isn't in the file.</summary>
     public LoadoutDef? For(string defName) => _byDef.TryGetValue(defName, out var d) ? d : null;
+
+    /// <summary>The stock loadout of whichever def flies <paramref name="modelNode"/>
+    /// (<c>player_pfighter</c>), or null. The menu knows a plane by its model node, not its def
+    /// name, and the two differ often enough not to be guessable.</summary>
+    public LoadoutDef? ForModel(string modelNode)
+    {
+        foreach (var def in _byDef.Values)
+        {
+            if (string.Equals(def.Model, modelNode, StringComparison.OrdinalIgnoreCase))
+            {
+                return def;
+            }
+        }
+        return null;
+    }
 
     private static string Str(JsonElement e, string key) =>
         e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
@@ -121,6 +149,22 @@ public sealed class StockLoadouts
             }
         }
         return strings.ToArray();
+    }
+
+    private static IReadOnlyList<LoadoutOption> OptionList(JsonElement e, string key)
+    {
+        var list = new List<LoadoutOption>();
+        if (e.TryGetProperty(key, out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in arr.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Object)
+                {
+                    list.Add(new LoadoutOption(Str(item, "id"), Str(item, "label")));
+                }
+            }
+        }
+        return list;
     }
 
     private static int Int(JsonElement e, string key) =>
@@ -251,6 +295,14 @@ public sealed class Loadout
             for (int i = 0; i < hp.Count; i++)
             {
                 string stockId = hp.Stock[i];
+
+                // An empty pylon (the screen's "None") builds nothing, but still consumes its
+                // fill-order index so the pylons after it stay on the wing they belong to.
+                if (string.Equals(stockId, LoadoutChoice.None, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 var weapon = weapons.Get(stockId)
                     ?? throw new InvalidOperationException(
                         $"loadout {def.Def}: hardpoint stock {i + 1} '{stockId}' not in weapons.json");

@@ -11,8 +11,13 @@ namespace CSVM.Tests;
 /// </summary>
 public class PadsTests
 {
+    /// <summary>⚠ Null is the ANSWER for one player, not a missing one: <see cref="Pads.For"/>
+    /// reads every connected pad for a null binding and none at all for an empty one, so a
+    /// consumer that coalesces this to <c>Array.Empty&lt;int&gt;()</c> on the way to a flight rig
+    /// flies that player pad-dead while their menus still work. That shipped once, in the
+    /// FlightRoster unification, and this names the distinction so it cannot return quietly.</summary>
     [Fact]
-    public void SinglePlayerReturnsNull()
+    public void SinglePlayerReturnsNullWhichIsNotTheSameAsAnEmptyBinding()
         => Assert.Null(Pads.AssignPads(1, new List<int> { 5, 6, 7 }));
 
     [Fact]

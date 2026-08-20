@@ -817,11 +817,16 @@ public partial class Launcher : Node3D
         MenuMode mode, InstantActionDef? iaDef)
     {
         var planes = new List<string>(players.Count);
+        // The fits ride alongside the planes rather than inside them: FromMenu writes each
+        // menu-settable field explicitly, so a chosen loadout has to be handed over here or it
+        // would be dropped exactly like any other field left out of that factory.
+        var fits = new List<Flight.LoadoutChoice?>(players.Count);
         foreach (var p in players)
         {
             planes.Add(p.PlaneNode);
+            fits.Add(p.Fit);
         }
-        _spec = SessionSpec.FromMenu(_cli, chapter, planes, mode, iaDef);
+        _spec = SessionSpec.FromMenu(_cli, chapter, planes, mode, iaDef, fits);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.
