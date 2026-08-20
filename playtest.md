@@ -437,28 +437,6 @@ building rows. `B` hides the panel, the weapon stepper re-arms every pylon witho
 left-click re-parks the held aircraft facing what you clicked, and `--weapon-camera=free` hands the
 view to the spectator camera so a burst can be watched from a few metres away.
 
-- `PT-65` `[Own]` **The blast: quadratic falloff, cover, and the 32-object cap
-  (`PLAN-ordnance-types` `C10`, `C11`; closes `BL-227`'s falloff half).** Splash damage is
-  `1 − d²/R²` of the authored damage, measured to the nearest point of the target's collision shape,
-  so at **half the radius a target takes 0.75** of full damage where the old linear curve gave 0.5.
-  A ray from the burst to each candidate drops anything with world geometry in the way, and at most
-  32 objects take damage from one burst.
-  *Look for:*
-  - (a) **the curve reads harder than it did**: HE `wep_06` bursting near a cluster of C1 huts kills
-    or stages things at ranges that used to leave them alone. Judge whether the new reach feels like
-    an area weapon or like a much bigger one;
-  - (b) **cover works**: put a building between the burst and a destructible. The shielded object
-    must take nothing at all, and the wall itself must take the burst. Then fire the same burst from
-    the open side, where it must stage as in (a);
-  - (c) **the limit announces itself**: a burst inside a dense cluster logs one `blast limit:` line
-    naming the weapon, the burst and the dropped count. Watch the console rather than the screen,
-    and say whether a limited burst reads as visibly unfair from the cockpit. ⚠ The `damage:` lines
-    stop after the twelfth of a session (`AnimRuntime.DamageAt`), so a quiet console late in a
-    flight is the log budget, not a missing splash.
-
-  *Blocks:* `C10`'s and `C11`'s at-the-controls half, and F22. A fail on (b) that is really the
-  wall's own health is not a cover failure; check the wall took the damage before minting anything.
-
 - `PT-67` `[Own]` **The beeper and the seeker as one weapon system (`PLAN-ordnance-types` `B6`,
   `B8`, `B9`).** `wep_10` paints an aircraft for its authored `TIME` and deals no damage at all;
   `wep_11` is the only `BEEPER_SEEKER` and the only type with a real `TURN_RATE`, and it retargets
