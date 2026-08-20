@@ -446,19 +446,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   name, so a spawn flies a militia variant (`bhatwarhawk`, `secfury`) and gets that def's damage
   model, its `weapons` fit (`Loadout.BindAi`, bound through the same `Loadout.Bind` and told apart
   from guns by the weapon's `CANNON` flag), its authored livery and its nine-slot pilot vector plus
-  `accentID`. Two things name a def: `--ai=<plane>:def=<name>`, and an Instant Action wave whose
-  militia the launchscreen wizard picked, resolved through `Mech3/MilitiaDefs` by the def's own
-  `title` (`MSG_VEH_STRUST_HELLHOUND` is "Sacred Trust Hellhound", which is exactly the string the
-  wave editor writes), never by parsing the def name. The PAINT follows the militia rather than the
-  def, as the original's setup-screen rule does, so a pair with no def (Sacred Trust's Warhawk, which
-  is selectable in the original and wears the colours) is painted all the same and falls back to the
-  base def for its armament and pilot alone. A wave read from a shipped `ia.json` still names no
-  militia and keeps its shipped skins: its `enemy_name` is an `MSG_*` key for the aircraft alone,
-  which is not recoverable ([`docs/formats/instant-action.md`](docs/formats/instant-action.md)).
-  *⚠ One pair stays unpainted:* Broadway Bomber's Peacemaker. `BROADWAY` ships six `PEA_*` masks and
-  no def anywhere authors `paint_pattern broadway`, so there are no colours to fill them with; they
-  have to be read off the original as `player_fortune`'s were.
-  *What still routes nothing:* a campaign mission's own enemy set, and the `--generators` waves.
+  `accentID`. `--ai=<plane>:def=<name>` names one directly.
+  *⚠ Instant Action names none, and that is decoded, not assumed.* `FUN_0045a390` takes each spawn's
+  aircraft as an index into the eleven-row plane table at `0x00620c70` and reads the PLAIN AI def out
+  of it (`FUN_00426d20`), so an Instant Action Black Hat Warhawk is the plain `warhawk`. The militia
+  supplies the livery alone, written into the spawn's override record from the setup-screen record at
+  `0x00718dcc`. The militia defs are the campaign's, whose mission rosters name them outright. That
+  is also why a Sacred Trust Warhawk exists in the original with no def behind it
+  ([`docs/formats/instant-action.md`](docs/formats/instant-action.md)).
+  *⚠ One militia stays unpainted:* Broadway Bomber. `BROADWAY` ships six `PEA_*` masks and no def
+  anywhere authors `paint_pattern broadway`, so there are no colours to fill them with; they have to
+  be read off the original as `player_fortune`'s were.
+  *What still routes nothing:* a campaign mission's own enemy set, which is where the militia defs
+  belong, and the `--generators` waves.
   *Owed at the controls:* fly a Black Hat flight
   (`--ai=player_warhawk:def=bhatwarhawk --ai-attack`, or a wizard wave set to Black Hat Warhawk) and
   confirm the militia paint, the eight torpedoes, and that they stay on the rail against aircraft.

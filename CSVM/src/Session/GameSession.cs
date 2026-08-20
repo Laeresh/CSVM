@@ -187,7 +187,6 @@ public partial class GameSession : Node3D
     // The roster's own AI stats reader, so a spawn can consult the def it is about to fly (pilot
     // skills, accent) before the roster builds it. Same cache: the read here is not a second parse.
     private Func<string, string?, PlaneStats>? _aiStatsFor;
-    private Dictionary<string, string>? _militiaDefs; // display name -> militia vehicle def
     private Dictionary<string, string>? _militiaPatterns; // militia -> its paint pattern
     private List<Maneuver>? _aiManeuvers; // the D13 library, loaded once for the D11 machines
     private bool _noAssistLogged; // the one-per-session --no-assist breadcrumb
@@ -2264,17 +2263,16 @@ public partial class GameSession : Node3D
                             // Activate re-seats it, so a member patrols from where it arrives
                             // rather than from this parking pose.
                             armIaPatrol(pilot);
-                            // The militia paints it, and its def (where the install ships one for
-                            // that pair) arms it. An unnamed militia keeps its own skins:
-                            // ⚠ never the Fortune Hunters default, which reads as friendly.
-                            string? waveDef = MilitiaDefs.ForWave(MilitiaDefsByName(state), wave.EnemyName);
+                            // ⚠ The militia paints it and nothing more: the original spawns a wave
+                            // member from the PLAIN AI def of its aircraft. An unnamed militia keeps
+                            // its own skins, never the Fortune Hunters default.
                             var waveScheme = WaveMilitiaScheme(state, wave.EnemyName);
                             int rating = InstantActionRuntime.RepresentativeRating(
                                 InstantActionRuntime.RandomPilotStats(Rng.Stream(Rng.Ai).Randi()));
                             var enemy = SpawnAiAircraft(waveNode, Vector3.Zero, Vector3.Forward,
                                 pilot, scheme: waveScheme, team: InstantActionRuntime.EnemyTeam,
                                 attackRating: rating, inert: true,
-                                shippedSkins: waveScheme == null, aiDef: waveDef);
+                                shippedSkins: waveScheme == null);
                             if (enemy == null)
                             {
                                 continue;
@@ -3463,7 +3461,7 @@ public partial class GameSession : Node3D
     // does. Null when the militia is not named or names no pattern, and the member keeps its skins.
     private PaintScheme? WaveMilitiaScheme(BuildState state, string enemyName)
     {
-        if (MilitiaDefs.PatternForWave(MilitiaPatterns(state), enemyName) is not { } pattern)
+        if (MilitiaPaint.PatternForWave(MilitiaPatterns(state), enemyName) is not { } pattern)
             return null;
         foreach (var scheme in _liveryResolver.PaintCatalog(state.ZrdrPath))
             if (string.Equals(scheme.Pattern, pattern, StringComparison.OrdinalIgnoreCase))
@@ -3477,7 +3475,7 @@ public partial class GameSession : Node3D
             return _militiaPatterns;
         try
         {
-            _militiaPatterns = MilitiaDefs.PatternByMilitia(state.ZrdrPath, Messages.Load(state.MessagesPath));
+            _militiaPatterns = MilitiaPaint.PatternByMilitia(state.ZrdrPath, Messages.Load(state.MessagesPath));
         }
         catch (Exception e)
         {
@@ -3485,25 +3483,6 @@ public partial class GameSession : Node3D
             _militiaPatterns = new Dictionary<string, string>();
         }
         return _militiaPatterns;
-    }
-
-    // Every militia aircraft the install names, by its display string. Built once per session: it
-    // reads vehicle.json and the message table, and a four-wave setup would otherwise do it eight
-    // times. Empty on a read failure, which spawns base defs rather than failing the mission.
-    private IReadOnlyDictionary<string, string> MilitiaDefsByName(BuildState state)
-    {
-        if (_militiaDefs != null)
-            return _militiaDefs;
-        try
-        {
-            _militiaDefs = MilitiaDefs.ByDisplayName(state.ZrdrPath, Messages.Load(state.MessagesPath));
-        }
-        catch (Exception e)
-        {
-            GD.PushWarning($"ia: cannot read the militia aircraft names: {e.Message}");
-            _militiaDefs = new Dictionary<string, string>();
-        }
-        return _militiaDefs;
     }
 
     // The AI flavour of one airframe as the roster would load it, or null before the rigs are

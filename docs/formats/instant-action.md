@@ -316,39 +316,34 @@ militia abbreviation (`MSG_VEH_<ABBREV>_<PLANE>` in five of the eight chapters,
 shipped textures — the same `shippedSkins` flag that keeps it out of the player militia's Fortune
 Hunter colours, which an enemy wearing would read as friendly.
 
-A wave configured on the **launchscreen wizard** does carry its militia, because the wizard picks
-it: `enemy_name` is written as "&lt;militia&gt; &lt;aircraft&gt;". That is the same string the
-install itself uses for the militia def, so `Mech3/MilitiaDefs` matches the two directly: every
-militia def's `title` resolves through the message table to exactly that name
-(`bhatwarhawk`'s is `MSG_VEH_BHAT_WARHAWK`, "Black Hat Warhawk"; `stihellhound`'s is
-`MSG_VEH_STRUST_HELLHOUND`, "Sacred Trust Hellhound"). Nothing parses def names, which are not a
-reliable guide: `sti` is Sacred Trust, and `blakepeace` is the Blake Aviation Peacemaker. The one
-vocabulary difference is the menu's "Hollywood Knight" against the table's "Hollywood Knights",
-matched loosely on the militia half alone.
+⚠ **A militia never selects a vehicle def on this path. It selects paint.** `FUN_0045a390`, the
+Instant Action build, takes each spawn's aircraft as an INDEX into an eleven-row plane table at
+`0x00620c70` (seven pointers per row: display name, gamez node, `p*` player def, `r*` remote def,
+`w*` wingman def, and the plain AI def twice). Wingmen read the `w*` slot through `FUN_00426d60`;
+the ace and every wave member read the plain AI def through `FUN_00426d20` (`0x0045aa53`,
+`0x0045ada8`), look it up by name in the vehicle-def list and spawn it through `FUN_0047c210`. No
+militia def name appears anywhere in that path: an Instant Action Black Hat Warhawk is the plain
+`warhawk` def, and the militia's own defs (`bhatwarhawk` and the rest) are flown only by the
+campaign's mission rosters, which name them outright.
+
+So the militia decides the livery and nothing else. `FUN_0045a390` fills the spawn's override record
+with the wave's pattern, three decals and nine colour components from the setup-screen record at
+`0x00718dcc`, which `FUN_0047c210` then resolves per field against the def
+([`../org/paint.md`](../org/paint.md)). That is why a Sacred Trust Warhawk exists at all: it is
+selectable in the original and wears the Sacred Trust colours (user, at the controls) even though
+`vehicle.json` ships no def for one, because the paint never came from a def.
+
+The pattern is read off whichever def of that militia names one, so it agrees with the def's own
+paint wherever both exist. Two militias name none: Fortune Hunter (the player militia flies the
+`p*` family, and the livery picker's own default covers it) and Broadway Bomber.
 
 ⚠ **A `_N`-suffixed def is a second flight, not a duplicate.** `bhatbrigand`, `bhatbrigand_2` and
 `bhatbrigand_5` all carry the title "Black Hat Brigand", and they are different aeroplanes: the
 pilot vectors differ (6 against 4 against 7 on most slots) and so does the armament
 (`bhatbrigand` carries `wep_05` where `_2` carries `wep_06`; `blakepeace` a `wep_130` gun where
 `_3` carries `wep_140`; `bsfury` a `wep_09` where `_5` carries `wep_06`). Each has its own
-instances in the mission rosters, so the suffix is not an instance index either. A display-name
-lookup therefore takes the **unsuffixed** def and leaves the variants to the missions that name
-them outright.
-
-The member then flies that def outright: its armament, damage model, authored livery and pilot,
-rather than the airframe's base def.
-
-**The paint follows the militia, not the def**, which is what the setup-screen rule above says and
-what the original does: a Sacred Trust Warhawk is selectable there and wears the Sacred Trust
-colours (user, at the controls) even though `vehicle.json` ships no def for one. So a wave member is
-painted from its militia's pattern in that pattern's shipped colours whenever the militia is named,
-and only its armament, damage model and pilot fall back to the base def when the pair has no def of
-its own. The pattern is read off whichever def of that militia names one, so it agrees with the
-def's own paint wherever both exist.
-
-Three menu pairs have no def: Fortune Hunter (the player militia flies the `p*` family), Sacred
-Trust's Warhawk and Broadway Bomber's Peacemaker, since that roster comes from `.BM` paint coverage
-rather than from `vehicle.json`. The first two are painted all the same.
+instances in the mission rosters, so the suffix is not an instance index either. This matters to the
+campaign, which names these defs; Instant Action reaches none of them.
 
 ⚠ **Broadway Bomber is the one pair that stays unpainted.** Its `BROADWAY` folder ships six masks,
 all `PEA_*`, so the aircraft is paintable, but no vehicle def anywhere authors `paint_pattern`
