@@ -146,13 +146,23 @@ public sealed class GunSpec
     public string Ammo = "slug";
     public List<string> Markers = new();
     public bool Turret;           // an AI turret slot — parsed but built inert
+
+    /// <summary>The weapon id outright, bypassing <see cref="Caliber"/> + <see cref="Ammo"/>. An AI
+    /// def names its gun as a <c>wep_NN</c> and never as a caliber (<see cref="Loadout.BindAi"/>).</summary>
+    public string? WeaponId;
+
+    /// <summary>Rounds carried, when the source authors its own count. Null takes the weapon's
+    /// <c>CLUSTER_SIZE</c>, which is what the player's stock fit uses.</summary>
+    public int? Rounds;
 }
 
-/// <summary>The authored hardpoint block: pylon count + one stock ordnance id per pylon.</summary>
+/// <summary>The authored hardpoint block: pylon count, one stock ordnance id per pylon, and
+/// optionally the rounds each carries (null takes the weapon's <c>CLUSTER_SIZE</c>).</summary>
 public sealed class HardpointSpec
 {
     public int Count;
     public string[] Stock = Array.Empty<string>();
+    public int[]? Rounds;
 }
 
 /// <summary>
@@ -209,7 +219,7 @@ public sealed class Loadout
         var guns = new List<GunGroup>();
         foreach (var spec in def.Guns)
         {
-            var weaponId = StockLoadouts.GunWeaponId(spec.Caliber, spec.Ammo);
+            var weaponId = spec.WeaponId ?? StockLoadouts.GunWeaponId(spec.Caliber, spec.Ammo);
             var weapon = weapons.Get(weaponId)
                 ?? throw new InvalidOperationException(
                     $"loadout {def.Def} slot {spec.Slot} ({spec.Mount}): weapon '{weaponId}' " +
@@ -219,7 +229,7 @@ public sealed class Loadout
             {
                 muzzles.Add(Resolve(markerNodes, name, def, $"slot {spec.Slot} ({spec.Mount})"));
             }
-            int capacity = weapon.ClusterSize ?? 0;
+            int capacity = spec.Rounds ?? weapon.ClusterSize ?? 0;
             guns.Add(new GunGroup
             {
                 Slot = spec.Slot,
@@ -244,7 +254,9 @@ public sealed class Loadout
                 var weapon = weapons.Get(stockId)
                     ?? throw new InvalidOperationException(
                         $"loadout {def.Def}: hardpoint stock {i + 1} '{stockId}' not in weapons.json");
-                int perPylon = weapon.ClusterSize ?? 0;
+                int perPylon = hp.Rounds is { } rounds && i < rounds.Length
+                    ? rounds[i]
+                    : weapon.ClusterSize ?? 0;
                 int pylonNumber = PylonFillOrder[i];
                 var pylon = Resolve(markerNodes, $"pylon{pylonNumber}", def, "hardpoint");
                 hardpoints.Add(new Hardpoint
@@ -259,6 +271,97 @@ public sealed class Loadout
         }
 
         return new Loadout(def, guns, hardpoints);
+    }
+
+    /// <summary>An AI aircraft's fit, built from its vehicle def's own <c>weapons</c> tuples
+    /// (docs/org/aiPilot/aiWeapons.md) instead of <c>stock_loadouts.json</c>, which holds the eleven
+    /// player defs alone. Guns and ordnance ride one authored list and are told apart by the weapon
+    /// def's own <c>CANNON</c> flag, as the original tells them apart. Throws like
+    /// <see cref="Bind"/> does; an unknown weapon id is a loud error, never a silent skip.</summary>
+    public static Loadout BindAi(IReadOnlyList<AiWeaponSlot> slots, string defName, Node3D plane,
+        WeaponDefs weapons)
+    {
+        var markerNodes = CollectMarkers(plane);
+        var firepoints = new SortedSet<int>();
+        var pylons = new SortedSet<int>();
+        foreach (var name in markerNodes.Keys)
+            if (MarkerRig.Classify(name, out var kind, out int ord))
+            {
+                if (kind == MarkerRig.MarkerKind.Firepoint)
+                    firepoints.Add(ord);
+                else if (kind == MarkerRig.MarkerKind.Pylon)
+                    pylons.Add(ord);
+            }
+
+        var def = new LoadoutDef { Def = defName, Display = defName };
+        var stock = new List<string>();
+        var rounds = new List<int>();
+        var gunSlots = new List<AiWeaponSlot>();     // parallel to def.Guns
+        var pylonSlots = new List<AiWeaponSlot>();   // parallel to stock
+        int gunSlot = 0;
+        foreach (var slot in slots)
+        {
+            var weapon = weapons.Get(slot.WeaponId)
+                ?? throw new InvalidOperationException(
+                    $"ai loadout {defName}: weapon '{slot.WeaponId}' not in weapons.json");
+            if (weapon.IsGun)
+            {
+                // One group over every firepoint the rig carries: the original's AI fires its
+                // airframe's gun mount, and the tuple counts rounds for the weapon, not per barrel.
+                var markers = new List<string>();
+                foreach (int ord in firepoints)
+                    markers.Add($"firepoint{ord}");
+                if (markers.Count == 0)
+                    continue; // an airframe with no firepoints carries no gun to bind
+                def.Guns.Add(new GunSpec
+                {
+                    Slot = ++gunSlot,
+                    Mount = $"Gun Group {gunSlot}",
+                    WeaponId = slot.WeaponId,
+                    Markers = markers,
+                    Rounds = slot.Rounds,
+                });
+                gunSlots.Add(slot);
+            }
+            else if (stock.Count < pylons.Count && stock.Count < PylonFillOrder.Length)
+            {
+                // One pylon per authored ordnance entry, carrying that entry's whole count: the
+                // original counts rounds per weapon slot and has no pylons at all. A def with more
+                // entries than the airframe has pylons drops the overflow rather than stacking.
+                stock.Add(slot.WeaponId);
+                rounds.Add(slot.Rounds);
+                pylonSlots.Add(slot);
+            }
+        }
+
+        if (stock.Count > 0)
+            def.Hardpoints = new HardpointSpec
+            {
+                Count = stock.Count,
+                Stock = stock.ToArray(),
+                Rounds = rounds.ToArray(),
+            };
+
+        var loadout = Bind(def, plane, weapons);
+
+        // The authored window and interval ride along on the bound slots: the original keeps both
+        // per weapon slot, and the AI gates read them from there rather than from a vehicle default.
+        for (int i = 0; i < loadout.Guns.Count && i < gunSlots.Count; i++)
+            Carry(loadout.Guns[i], gunSlots[i]);
+        for (int i = 0; i < loadout.Hardpoints.Count && i < pylonSlots.Count; i++)
+        {
+            loadout.Hardpoints[i].MinRangeM = pylonSlots[i].MinRangeM;
+            loadout.Hardpoints[i].MaxRangeM = pylonSlots[i].MaxRangeM;
+            loadout.Hardpoints[i].RefireSeconds = pylonSlots[i].RefireSeconds;
+        }
+        return loadout;
+
+        static void Carry(GunGroup group, AiWeaponSlot slot)
+        {
+            group.MinRangeM = slot.MinRangeM;
+            group.MaxRangeM = slot.MaxRangeM;
+            group.RefireSeconds = slot.RefireSeconds;
+        }
     }
 
     /// <summary>Synthesizes a lab loadout covering the airframe's whole marker rig: all four
@@ -396,6 +499,15 @@ public sealed class GunGroup : IGunSlot
     public IReadOnlyList<Node3D> Muzzles = Array.Empty<Node3D>();
     public bool IsTurret;
 
+    /// <summary>The engagement window and refire interval this slot's AI def authored, metres and
+    /// seconds; all three 0 on a fit from <c>stock_loadouts.json</c>, which authors none and leaves
+    /// the AI gates on their own defaults (<see cref="Loadout.BindAi"/>).</summary>
+    public float MinRangeM;
+
+    public float MaxRangeM;
+
+    public float RefireSeconds;
+
     public WeaponDef Weapon { get; set; } = null!;
 
     public int Capacity { get; set; }  // CLUSTER_SIZE — the full per-group load
@@ -414,6 +526,15 @@ public sealed class Hardpoint : IPylonSlot
 {
     public int Index;             // pylon number, 1-based
     public Node3D Pylon = null!;
+
+    /// <summary>The engagement window and refire interval this pylon's AI def authored, metres and
+    /// seconds; all three 0 on a player fit (<see cref="Loadout.BindAi"/>). The original keeps them
+    /// per weapon slot, and one pylon per authored entry is our nearest equivalent.</summary>
+    public float MinRangeM;
+
+    public float MaxRangeM;
+
+    public float RefireSeconds;
 
     public WeaponDef Weapon { get; set; } = null!;
 

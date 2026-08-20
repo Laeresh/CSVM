@@ -51,6 +51,23 @@ public sealed class DestroyablePart
     public List<(float Frac, string Anim)> InjureAnims = new();
 }
 
+/// <summary>One entry of an AI vehicle def's <c>weapons</c> block: the authored 5-tuple
+/// <c>[weapon_id, rounds_carried, refire_interval_s, min_range_m, max_range_m]</c>, decoded from the
+/// builder <c>FUN_004b59b0</c> (docs/org/aiPilot/aiWeapons.md). Guns and ordnance share the block;
+/// nothing separates them but the weapon def's own <c>CANNON</c> flag.
+/// ⚠ Five base defs (<c>firebrand</c>, <c>bloodhawk</c>, <c>brigand</c>, <c>fury</c>,
+/// <c>autogyro</c>) author <see cref="RefireSeconds"/> and <see cref="MinRangeM"/> transposed against
+/// all 25 militia variants, so they run a 200-second ordnance refire. That is shipped data: the
+/// original's reader takes element 3 as the interval in every case, and so does this.</summary>
+public sealed class AiWeaponSlot
+{
+    public string WeaponId = "";
+    public int Rounds;
+    public float RefireSeconds;
+    public float MinRangeM;
+    public float MaxRangeM;
+}
+
 /// <summary>One entry of a vehicle def's <c>turrets</c> block: which <c>ai.zrd</c> gunner row
 /// (<see cref="Title"/>, a <c>MSG_TUR_*</c> key) drives which turret-rig subtree
 /// (<see cref="Node"/>, e.g. <c>kestrel_turret1</c>). The block is keyed by VIEWPOINT —
@@ -79,6 +96,20 @@ public sealed class PlaneStats
 
     public string DefName = "";          // vehicle.json def, e.g. "pbloodhawk"
     public string NodeName = "";         // GameZ node, e.g. "player_bhawk"
+
+    /// <summary>The AI def's own nine-slot pilot skill vector and voice accent, resolved down the AI
+    /// chain; every slot null on a player load. A roster block's own vector outranks these, which is
+    /// the fallback the engine takes when a slot there is unset (<see cref="AiSkillVector"/>).</summary>
+    public AiSkillVector AiPilotSkills;
+
+    /// <summary>The AI def's <c>accentID</c>, a <c>voice.zrd</c> row; null when it authors none.</summary>
+    public int? AiAccentId;
+
+    /// <summary>The AI def's own armament, nearest <c>weapons</c> block in the AI chain, empty on a
+    /// player load. Deliberately not read down the player chain: <c>player_airplane</c> authors a
+    /// <c>weapons</c> block too, but that one is the 39-id buyable catalogue rather than a fit, and
+    /// the player's own fit comes from <c>stock_loadouts.json</c>.</summary>
+    public List<AiWeaponSlot> AiWeapons = new();
 
     /// <summary>The AI def the damage trio came from ("bloodhawk"), or null on a player load
     /// (<see cref="Load"/>). Set only by <see cref="LoadForAi"/>, and deliberately NOT used as
@@ -278,14 +309,14 @@ public sealed class PlaneStats
     public static PlaneStats Load(string zrdrPath, string planeNodeName) =>
         LoadCore(zrdrPath, planeNodeName, forAi: false);
 
-    /// <summary>The same airframe as flown by the AI. Everything except the damage model still
-    /// resolves down the player chain (<see cref="DefName"/>, <see cref="TurretMounts"/> and the
-    /// built model must stay there — the loadout table and the rig key off them). The damage
-    /// model instead resolves down the AI def's own chain: an authored <c>armor</c>/<c>health</c>
-    /// pair and no <c>destroyable_parts</c>, so an AI aircraft is zone-less.
+    /// <summary>The same airframe as flown by the AI: the damage model and the armament resolve
+    /// down the AI def's own chain (an <c>armor</c>/<c>health</c> pair, no
+    /// <c>destroyable_parts</c>, the <c>weapons</c> tuples), everything else down the player chain,
+    /// where <see cref="DefName"/>, <see cref="TurretMounts"/> and the built model must stay.
+    /// <paramref name="aiDefName"/> names a militia variant and must derive from the base def.
     /// ⚠ The <c>r*</c> family carries parts but is the remote-player family; no roster spawns one.</summary>
-    public static PlaneStats LoadForAi(string zrdrPath, string planeNodeName) =>
-        LoadCore(zrdrPath, planeNodeName, forAi: true);
+    public static PlaneStats LoadForAi(string zrdrPath, string planeNodeName, string? aiDefName = null) =>
+        LoadCore(zrdrPath, planeNodeName, forAi: true, aiDefName);
 
     /// <summary>The original's per-spawn dynamics jitter (docs/org/flightModel.md "The per-spawn
     /// jitter"). Returns a jittered COPY: the caller's object is the shared per-airframe cache.
@@ -295,7 +326,7 @@ public sealed class PlaneStats
     /// are not among the jittered slots.</summary>
     public PlaneStats WithAiSpawnJitter(Random rng)
     {
-        // Shallow: DestroyableParts / TurretMounts / VehicleInjureAnims are read-only after Load and
+        // Shallow: DestroyableParts / TurretMounts / VehicleInjureAnims / AiWeapons are read-only after Load and
         // nothing below touches them, so the copy shares them with the cached original on purpose.
         var jittered = (PlaneStats)MemberwiseClone();
         jittered.VehicleHealth = (VehicleHealth ?? SumParts(static p => p.MaxHp)) * Factor(rng);
@@ -308,7 +339,8 @@ public sealed class PlaneStats
         return jittered;
     }
 
-    private static PlaneStats LoadCore(string zrdrPath, string planeNodeName, bool forAi)
+    private static PlaneStats LoadCore(string zrdrPath, string planeNodeName, bool forAi,
+        string? aiDefName = null)
     {
         var vehicleRoot = Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
             ?? throw new InvalidOperationException("vehicle.json: unexpected root shape");
@@ -333,6 +365,18 @@ public sealed class PlaneStats
                 cur = d.Str("kind_of")!;
             }
             return chain; // derived first, base last
+        }
+
+        bool DerivesFrom(string defName, string baseName)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var cur = defName; cur != null && seen.Add(cur) && defs.TryGetValue(cur, out var d);)
+            {
+                if (string.Equals(cur, baseName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+                cur = d.Str("kind_of")!;
+            }
+            return false;
         }
 
         // Requiring player_airplane in the chain is what makes the nodename match unique — the
@@ -360,17 +404,23 @@ public sealed class PlaneStats
         if (found == null || chain == null)
             throw new ArgumentException($"no player vehicle def with nodename '{planeNodeName}' in vehicle.json");
 
-        // pfury -> fury; cannot be found by nodename since bare AI defs author none of their own.
-        // Fails loud rather than silently falling back to the player chain.
+        // pfury -> fury, or the named militia variant (secfury, bhatwarhawk) that derives from it.
+        // Neither can be found by nodename, since bare AI defs author none of their own. Fails loud
+        // rather than silently falling back to the player chain.
         string? aiName = null;
         List<ZrdrDict>? aiChain = null;
         if (forAi)
         {
-            aiName = found.StartsWith("p", StringComparison.OrdinalIgnoreCase) ? found[1..] : null;
+            string? baseName = found.StartsWith("p", StringComparison.OrdinalIgnoreCase) ? found[1..] : null;
+            aiName = aiDefName ?? baseName;
             if (aiName == null || !defs.ContainsKey(aiName))
                 throw new ArgumentException(
                     $"no AI vehicle def for player def '{found}' (looked for '{aiName ?? found}') in vehicle.json");
             aiChain = Chain(aiName);
+            if (baseName != null && !DerivesFrom(aiName, baseName))
+                throw new ArgumentException(
+                    $"AI def '{aiName}' does not derive from '{baseName}': it is not a variant of the " +
+                    $"airframe '{planeNodeName}' was built from");
         }
 
         // Where the damage model comes from: the AI chain on an AI load, the player chain otherwise.
@@ -464,6 +514,53 @@ public sealed class PlaneStats
                 if (item is List<object?> { Count: >= 2 } entry
                     && entry[0] is float frac && entry[1] is string anim)
                     stats.VehicleInjureAnims.Add((frac, anim));
+            break;
+        }
+
+        // The pilot the def flies with: nine skill slots and a voice accent, each resolved on its
+        // own down the AI chain, since a militia variant overrides some and inherits the rest.
+        if (aiChain != null)
+        {
+            int? Skill(string key)
+            {
+                foreach (var d in aiChain)
+                    if (d.TryFloat(key, out var f))
+                        return (int)f;
+                return null;
+            }
+            stats.AiPilotSkills = new AiSkillVector
+            {
+                DareDevil = Skill("dare_devil"),
+                NaturalTouch = Skill("natural_touch"),
+                SixthSense = Skill("sixth_sense"),
+                DeadEye = Skill("dead_eye"),
+                QuickDraw = Skill("quick_draw"),
+                SteadyHand = Skill("steady_hand"),
+                StunRecovery = Skill("stun_recovery"),
+                Talker = Skill("talker"),
+                Constitution = Skill("constitution"),
+            };
+            stats.AiAccentId = Skill("accentID");
+        }
+
+        // weapons: the AI chain's own armament, 5-tuples in list order. Guarded on aiChain rather
+        // than damageChain because the player chain's block is the buyable catalogue, not a fit.
+        foreach (var d in aiChain ?? new List<ZrdrDict>())
+        {
+            if (d.List("weapons") is not { } weaponList)
+                continue;
+            foreach (var item in weaponList)
+                if (item is List<object?> { Count: >= 5 } w && w[0] is string weaponId
+                    && w[1] is float rounds && w[2] is float refire
+                    && w[3] is float minRange && w[4] is float maxRange)
+                    stats.AiWeapons.Add(new AiWeaponSlot
+                    {
+                        WeaponId = weaponId,
+                        Rounds = (int)rounds,
+                        RefireSeconds = refire,
+                        MinRangeM = minRange,
+                        MaxRangeM = maxRange,
+                    });
             break;
         }
 

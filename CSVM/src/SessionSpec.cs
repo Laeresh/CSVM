@@ -287,9 +287,10 @@ public sealed record SessionSpec
     public float? IncomingPass { get; private set; }
     /// <summary>Which weapon <c>--incoming</c> fires; null takes the target's own first gun.</summary>
     public string? IncomingWeapon { get; private set; }
-    /// <summary><c>--ai=&lt;plane&gt;[:&lt;net&gt;][:accent=&lt;id&gt;][,…]</c>: AI-piloted aircraft
-    /// spawned into the flight session (docs/cli.md). Null when the flag was absent.</summary>
-    public IReadOnlyList<(string Plane, string? Net, int? Accent)>? AiPlanes { get; private set; }
+    /// <summary><c>--ai=&lt;plane&gt;[:&lt;net&gt;][:accent=&lt;id&gt;][:def=&lt;vehicle def&gt;][,…]</c>:
+    /// AI-piloted aircraft spawned into the flight session (docs/cli.md). <c>def=</c> names the
+    /// militia variant flown; without it the airframe's base def. Null when the flag was absent.</summary>
+    public IReadOnlyList<(string Plane, string? Net, int? Accent, string? Def)>? AiPlanes { get; private set; }
     /// <summary><c>--ai-damage=&lt;fraction&gt;</c>: the hull health fraction every <c>--ai=</c> plane
     /// is spent down to as it spawns, so its authored injure_anims stages are already up in a
     /// scripted shot. Null when the flag was absent. <c>--damage=</c> is the player's counterpart
@@ -300,6 +301,11 @@ public sealed record SessionSpec
     /// <c>ai_skill_parameters</c>; default 5), auto-targeting the nearest hostile aircraft.
     /// Null when the flag was absent.</summary>
     public int? AiAttackSkill { get; private set; }
+
+    /// <summary>True only for <c>--ai-attack=&lt;N&gt;</c>, the typed rating. Bare <c>--ai-attack</c>
+    /// arms the gunnery without an opinion on skill, so each plane flies its own vehicle def's
+    /// authored slots; a typed rating pins every plane to it instead.</summary>
+    public bool AiAttackSkillExplicit { get; private set; }
     /// <summary><c>--no-assist</c>: disable the D15 rubber-band assist — every spawned AI mode
     /// machine gets <c>AssistEnabled</c> false, so the lay-off mode is never entered (pursue
     /// only). Default off: the assist is the original's shipped behaviour.</summary>
@@ -836,29 +842,36 @@ public sealed record SessionSpec
             }
             else if (arg.StartsWith("--ai="))
             {
-                var entries = new List<(string Plane, string? Net, int? Accent)>();
+                var entries = new List<(string Plane, string? Net, int? Accent, string? Def)>();
                 foreach (var token in arg["--ai=".Length..].Split(',', StringSplitOptions.RemoveEmptyEntries))
                 {
                     var segments = token.Split(':');
                     string plane = segments[0];
                     string? net = null;
                     int? accent = null;
+                    string? def = null;
                     for (int si = 1; si < segments.Length; si++)
                     {
                         if (segments[si].StartsWith("accent="))
                             accent = int.Parse(segments[si]["accent=".Length..]);
+                        else if (segments[si].StartsWith("def="))
+                            def = segments[si]["def=".Length..];
                         else if (segments[si].Length > 0 && net == null)
                             net = segments[si];
                     }
                     if (plane.Length > 0)
-                        entries.Add((plane, net, accent));
+                        entries.Add((plane, net, accent, def));
                 }
                 if (entries.Count > 0)
                     s.AiPlanes = entries;
             }
             else if (arg.StartsWith("--ai-damage=")) { s.AiHullDamage = Math.Clamp(Flt(arg["--ai-damage=".Length..]), 0f, 1f); }
             else if (arg == "--ai-attack") { s.AiAttackSkill = 5; }
-            else if (arg.StartsWith("--ai-attack=")) { s.AiAttackSkill = Math.Clamp(int.Parse(arg["--ai-attack=".Length..]), 1, 9); }
+            else if (arg.StartsWith("--ai-attack="))
+            {
+                s.AiAttackSkill = Math.Clamp(int.Parse(arg["--ai-attack=".Length..]), 1, 9);
+                s.AiAttackSkillExplicit = true;
+            }
             else if (arg == "--no-assist") { s.NoAssist = true; }
             else if (arg == "--generators") { s.Generators = true; }
             else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }

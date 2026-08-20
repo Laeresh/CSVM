@@ -159,23 +159,28 @@ public class SessionSpecParserTests
         Assert.Equal(new Vector3(1, 2, 3), s.Pos);
     }
 
-    /// <summary>The B5/E16 grammar: `--ai=plane[:net][:accent=id],…` splits into
-    /// (plane, net, accent) entries, a bare name has a null net and accent, an empty net after
-    /// the colon reads as none, and `accent=` binds wherever it appears among the segments.</summary>
+    /// <summary>The B5/E16 grammar: `--ai=plane[:net][:accent=id][:def=name],…` splits into
+    /// (plane, net, accent, def) entries, a bare name has a null net, accent and def, an empty net
+    /// after the colon reads as none, and the keyed segments bind wherever they appear.</summary>
     [Fact]
     public void AiEntriesCarryTheirOptionalNetReference()
     {
         var s = SessionSpec.Parse(new[] { "--ai=player_fury:M4ReinfAce,player_bhawk,ebrigand:10,edevast:" });
         Assert.Equal(4, s.AiPlanes!.Count);
-        Assert.Equal(("player_fury", "M4ReinfAce", null), s.AiPlanes[0]);
-        Assert.Equal(("player_bhawk", null, null), s.AiPlanes[1]);
-        Assert.Equal(("ebrigand", "10", null), s.AiPlanes[2]);
-        Assert.Equal(("edevast", null, null), s.AiPlanes[3]);
+        Assert.Equal(("player_fury", "M4ReinfAce", null, null), s.AiPlanes[0]);
+        Assert.Equal(("player_bhawk", null, null, null), s.AiPlanes[1]);
+        Assert.Equal(("ebrigand", "10", null, null), s.AiPlanes[2]);
+        Assert.Equal(("edevast", null, null, null), s.AiPlanes[3]);
 
         var a = SessionSpec.Parse(new[] { "--ai=player_fury:M4ReinfAce:accent=12,ebrigand:accent=14,edevast:accent=12:7" });
-        Assert.Equal(("player_fury", "M4ReinfAce", 12), a.AiPlanes![0]);
-        Assert.Equal(("ebrigand", null, 14), a.AiPlanes[1]);
-        Assert.Equal(("edevast", "7", 12), a.AiPlanes[2]);
+        Assert.Equal(("player_fury", "M4ReinfAce", 12, null), a.AiPlanes![0]);
+        Assert.Equal(("ebrigand", null, 14, null), a.AiPlanes[1]);
+        Assert.Equal(("edevast", "7", 12, null), a.AiPlanes[2]);
+
+        // The militia variant an AI flies: its own weapons, paint and skills come off that def.
+        var d = SessionSpec.Parse(new[] { "--ai=player_warhawk:def=bhatwarhawk:accent=12,player_fury:def=secfury" });
+        Assert.Equal(("player_warhawk", null, 12, "bhatwarhawk"), d.AiPlanes![0]);
+        Assert.Equal(("player_fury", null, null, "secfury"), d.AiPlanes[1]);
     }
 
     /// <summary>The D14 gunnery arm: bare `--ai-attack` reads skill 5, a value clamps to the

@@ -184,6 +184,10 @@ public partial class GameSession : Node3D
     // returns is stepped in DriveSimSteps after the player rigs and freed with the world.
     private FlightRoster? _flightRoster;
     private AiSkills? _aiSkills; // ai_skill_parameters, loaded once on the first AI spawn
+    // The roster's own AI stats reader, so a spawn can consult the def it is about to fly (pilot
+    // skills, accent) before the roster builds it. Same cache: the read here is not a second parse.
+    private Func<string, string?, PlaneStats>? _aiStatsFor;
+    private Dictionary<string, string>? _militiaPatterns; // militia -> its paint pattern
     private List<Maneuver>? _aiManeuvers; // the D13 library, loaded once for the D11 machines
     private bool _noAssistLogged; // the one-per-session --no-assist breadcrumb
     // The E16 voice dispatch (built with the rigs when the world has sounds; its mission clock
@@ -316,11 +320,14 @@ public partial class GameSession : Node3D
 
     /// <summary>Spawns an AI-piloted aircraft into this session at runtime, any time after the
     /// flight build. Null when this session built no flight rigs. This is the <c>--ai=</c>
-    /// overload: no authored identity, so the aircraft wears the Fortune Hunters default.
+    /// overload: no authored identity beyond <paramref name="aiDef"/>, whose militia scheme the
+    /// aircraft then wears in place of the Fortune Hunters default.
     /// ⚠ Route an authored enemy through the other overload instead; it carries the livery, team,
     /// rating and <c>shippedSkins</c> a mission's actor needs.</summary>
-    public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt, AiPilot pilot) =>
-        SpawnAiAircraft(planeName, pos, lookAt, pilot, scheme: null, team: null, attackRating: null);
+    public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt,
+        AiPilot pilot, string? aiDef = null) =>
+        SpawnAiAircraft(planeName, pos, lookAt, pilot, scheme: null, team: null, attackRating: null,
+            aiDef: aiDef);
 
     /// <summary>As the four-parameter overload, plus an authored actor's identity.
     /// <paramref name="scheme"/>/<paramref name="team"/> are worn as-is, with no RNG draw;
@@ -330,13 +337,20 @@ public partial class GameSession : Node3D
     /// its own textures, for an actor flying for a militia the mission data never names.</summary>
     public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt,
         AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating, bool inert = false,
-        bool shippedSkins = false)
+        bool shippedSkins = false, string? aiDef = null)
     {
         if (_flightRoster == null)
         {
             GD.PushWarning($"ai: no spawner in this session mode — '{planeName}' not spawned");
             return null;
         }
+        // The vehicle def's own nine-slot pilot vector, when this spawn resolves one. A slot it
+        // authors is the rating that slot's consumer flies at, unless --ai-attack=N pinned one.
+        var defStats = AiStatsForSpawn(planeName, aiDef);
+        var defSkills = defStats?.AiPilotSkills ?? default;
+        int SkillFor(int? authored, int fallback) =>
+            _spec.AiAttackSkillExplicit || attackRating != null ? fallback : authored ?? fallback;
+
         // --ai-attack arms every spawned pilot with a D14 gunner at the ordered skill rating:
         // interpolated dead-eye/quick-draw cones, nearest-hostile auto-targeting, its own
         // seeded scatter stream. A pilot armed by its caller keeps what it was given.
@@ -348,19 +362,23 @@ public partial class GameSession : Node3D
                 var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
                 pilot.Gunner = new AiGunner(rng)
                 {
-                    DeadEyeAngleDeg = _aiSkills.DeadEyeAngleDeg(skill),
-                    QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(skill),
+                    DeadEyeAngleDeg = _aiSkills.DeadEyeAngleDeg(SkillFor(defSkills.DeadEye, skill)),
+                    QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(SkillFor(defSkills.QuickDraw, skill)),
                 };
-                // The ordnance half rides the same rating, on its own draw off the ai stream so the
-                // launch dice and the dead-eye scatter cannot walk each other's sequence.
+                // The ordnance half rides the quick-draw slot, on its own draw off the ai stream so
+                // the launch dice and the dead-eye scatter cannot walk each other's sequence.
                 var ordRng = new RandomNumberGenerator { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
+                int quickDraw = SkillFor(defSkills.QuickDraw, skill);
                 pilot.Rocketeer = new AiRocketeer(ordRng.Randf)
                 {
-                    QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(skill),
-                    QuickDrawChance = _aiSkills.QuickDrawChance(skill),
+                    QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(quickDraw),
+                    QuickDrawChance = _aiSkills.QuickDrawChance(quickDraw),
                 };
-                GD.Print($"ai: gunner armed at skill {skill} (dead-eye " +
-                         $"{pilot.Gunner.DeadEyeAngleDeg:0.00}°, quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°, " +
+                // Names the ratings actually flown, not the session default: with a def's own slots
+                // in play the two differ, and a reader comparing cones needs the numbers behind them.
+                GD.Print($"ai: gunner armed at dead-eye {SkillFor(defSkills.DeadEye, skill)} / " +
+                         $"quick-draw {quickDraw} (dead-eye {pilot.Gunner.DeadEyeAngleDeg:0.00}°, " +
+                         $"quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°, " +
                          $"ordnance roll {pilot.Rocketeer.QuickDrawChance:0.00} per {pilot.Rocketeer.RefireSeconds:0} s)");
             }
             catch (Exception e)
@@ -378,14 +396,15 @@ public partial class GameSession : Node3D
                 _aiSkills ??= AiSkills.Load(_zrdrPath);
                 _aiManeuvers ??= Maneuvers.Load(_zrdrPath);
                 int rating = attackRating ?? _spec.AiAttackSkill ?? 5;
+                int sixthSense = SkillFor(defSkills.SixthSense, rating);
                 pilot.Machine = new AiModeMachine(Rng.NewSystemRandom(Rng.Ai))
                 {
                     ActivationRange = _aiSkills.MinAiActiveDist,
-                    SteadyHandChance = _aiSkills.At("steady_hand_chance", rating),
-                    SixthSenseChance = _aiSkills.At("sixth_sense_chance", rating),
-                    SixthSenseFactor = _aiSkills.At("sixth_sense_factor", rating),
-                    StunRecoveryIntervalS = _aiSkills.At("stun_recovery_interval", rating),
-                    NaturalTouch = rating,
+                    SteadyHandChance = _aiSkills.At("steady_hand_chance", SkillFor(defSkills.SteadyHand, rating)),
+                    SixthSenseChance = _aiSkills.At("sixth_sense_chance", sixthSense),
+                    SixthSenseFactor = _aiSkills.At("sixth_sense_factor", sixthSense),
+                    StunRecoveryIntervalS = _aiSkills.At("stun_recovery_interval", SkillFor(defSkills.StunRecovery, rating)),
+                    NaturalTouch = SkillFor(defSkills.NaturalTouch, rating),
                     Library = _aiManeuvers,
                     AssistEnabled = !_spec.NoAssist,
                 };
@@ -401,7 +420,7 @@ public partial class GameSession : Node3D
             }
         }
         var ai = _flightRoster.SpawnAi(new AiSpawn(planeName, pos, lookAt, pilot, scheme, team,
-            inert, shippedSkins));
+            inert, shippedSkins, aiDef));
         _aiPlanes.Add(ai);
         ai.SmokeScreens = _smokeScreens;   // a shipped AI smoker lays through the same fire path
         // Mode transitions and reaction rolls, in the engine's own vocabulary — the D11
@@ -1625,17 +1644,21 @@ public partial class GameSession : Node3D
         // The AI flavour of the same airframe: a different object off the same key, so it needs its
         // own dictionary. Loaded lazily, so a session with no AI spawns parses nothing twice.
         var aiStatsCache = new Dictionary<string, PlaneStats>();
-        PlaneStats AiStatsFor(string plane)
+        PlaneStats AiStatsFor(string plane, string? aiDef)
         {
-            if (aiStatsCache.TryGetValue(plane, out var cached))
+            // Keyed by both: one airframe flown by two militias is two different sets of weapons,
+            // paint and skills off the same node name.
+            string key = aiDef == null ? plane : $"{plane}/{aiDef}";
+            if (aiStatsCache.TryGetValue(key, out var cached))
                 return cached;
-            var loaded = PlaneStats.LoadForAi(state.ZrdrPath, plane);
-            aiStatsCache[plane] = loaded;
+            var loaded = PlaneStats.LoadForAi(state.ZrdrPath, plane, aiDef);
+            aiStatsCache[key] = loaded;
             GD.Print($"ai flight stats [{loaded.DefName} damage:{loaded.AiDefName}]: " +
                      $"armor={loaded.VehicleArmor:0.#} health={loaded.VehicleHealth:0.#} " +
                      $"zones={loaded.DestroyableParts.Count} injure_anims={loaded.VehicleInjureAnims.Count}");
             return loaded;
         }
+        _aiStatsFor = AiStatsFor;
         // The camera's per-plane tuning, cached the same way and for the same reason. Only the
         // chase distance is applied; the line names it so a capture's evidence is in its own log.
         var camCache = new Dictionary<string, CamParams>();
@@ -2240,14 +2263,16 @@ public partial class GameSession : Node3D
                             // Activate re-seats it, so a member patrols from where it arrives
                             // rather than from this parking pose.
                             armIaPatrol(pilot);
-                            // ⚠ Never dress a wave member in the Fortune Hunters default; an enemy
-                            // in the player militia's colours reads as friendly. Its own militia is
-                            // a setup-screen value ia.json never carries, so it keeps its skins.
+                            // ⚠ The militia paints it and nothing more: the original spawns a wave
+                            // member from the PLAIN AI def of its aircraft. An unnamed militia keeps
+                            // its own skins, never the Fortune Hunters default.
+                            var waveScheme = WaveMilitiaScheme(state, wave.EnemyName);
                             int rating = InstantActionRuntime.RepresentativeRating(
                                 InstantActionRuntime.RandomPilotStats(Rng.Stream(Rng.Ai).Randi()));
                             var enemy = SpawnAiAircraft(waveNode, Vector3.Zero, Vector3.Forward,
-                                pilot, scheme: null, team: InstantActionRuntime.EnemyTeam,
-                                attackRating: rating, inert: true, shippedSkins: true);
+                                pilot, scheme: waveScheme, team: InstantActionRuntime.EnemyTeam,
+                                attackRating: rating, inert: true,
+                                shippedSkins: waveScheme == null);
                             if (enemy == null)
                             {
                                 continue;
@@ -2303,7 +2328,7 @@ public partial class GameSession : Node3D
             bool netsTried = false;
             for (int i = 0; i < aiPlanes.Count; i++)
             {
-                var (planeName, netRef, accentId) = aiPlanes[i];
+                var (planeName, netRef, accentId, aiDef) = aiPlanes[i];
                 float lateral = 60f * ((i + 1) / 2) * (i % 2 == 0 ? 1f : -1f);
                 AiNet? net = null;
                 if (netRef != null)
@@ -2336,16 +2361,16 @@ public partial class GameSession : Node3D
                     var look = net.Nodes.Count > 1 ? follower.NodePosition(1) : pos + fwd;
                     var pilot = AiPilot.HoldingCourse(pos, look);
                     pilot.Patrol = follower;
-                    var spawnedOnNet = SpawnAiAircraft(planeName, pos, look, pilot);
-                    RegisterAiVoice(spawnedOnNet, accentId);
+                    var spawnedOnNet = SpawnAiAircraft(planeName, pos, look, pilot, aiDef: aiDef);
+                    RegisterAiVoice(spawnedOnNet, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
                     ApplyAiHullPreset(spawnedOnNet);
                 }
                 else
                 {
                     var pos = lead.WorldPosition + fwd * 250f + right * lateral;
                     var spawnedAhead = SpawnAiAircraft(planeName, pos, pos + fwd,
-                        AiPilot.HoldingCourse(pos, pos + fwd));
-                    RegisterAiVoice(spawnedAhead, accentId);
+                        AiPilot.HoldingCourse(pos, pos + fwd), aiDef: aiDef);
+                    RegisterAiVoice(spawnedAhead, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
                     ApplyAiHullPreset(spawnedAhead);
                 }
             }
@@ -3427,6 +3452,53 @@ public partial class GameSession : Node3D
             // The weapon lab has no sim step of its own: it is hosted by player 1's
             // FlightController, which owns the fire clock, and fires into _projectiles above.
             _versus?.Advance(dt);
+        }
+    }
+
+    // The livery a wave flies in: its militia's pattern, in that pattern's shipped colours. The
+    // original paints a wave member from the setup screen rather than from a vehicle def, so this
+    // holds for a pair the install ships no def for (Sacred Trust's Warhawk) as much as for one it
+    // does. Null when the militia is not named or names no pattern, and the member keeps its skins.
+    private PaintScheme? WaveMilitiaScheme(BuildState state, string enemyName)
+    {
+        if (MilitiaPaint.PatternForWave(MilitiaPatterns(state), enemyName) is not { } pattern)
+            return null;
+        foreach (var scheme in _liveryResolver.PaintCatalog(state.ZrdrPath))
+            if (string.Equals(scheme.Pattern, pattern, StringComparison.OrdinalIgnoreCase))
+                return scheme;
+        return null;
+    }
+
+    private IReadOnlyDictionary<string, string> MilitiaPatterns(BuildState state)
+    {
+        if (_militiaPatterns != null)
+            return _militiaPatterns;
+        try
+        {
+            _militiaPatterns = MilitiaPaint.PatternByMilitia(state.ZrdrPath, Messages.Load(state.MessagesPath));
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"ia: cannot read the militia paint patterns: {e.Message}");
+            _militiaPatterns = new Dictionary<string, string>();
+        }
+        return _militiaPatterns;
+    }
+
+    // The AI flavour of one airframe as the roster would load it, or null before the rigs are
+    // built. Read for the def's own pilot facts at spawn; the roster reads the same cached object.
+    private PlaneStats? AiStatsForSpawn(string planeName, string? aiDef)
+    {
+        if (_aiStatsFor == null)
+            return null;
+        try
+        {
+            return _aiStatsFor(planeName, aiDef);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"ai: cannot resolve '{aiDef ?? planeName}': {e.Message}");
+            return null;
         }
     }
 

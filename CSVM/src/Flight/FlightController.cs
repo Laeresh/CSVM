@@ -2669,6 +2669,13 @@ public partial class FlightController : Node3D
         foreach (var m in group.Muzzles)
             muzzlePos += m.GlobalPosition;
         muzzlePos /= group.Muzzles.Count;
+        // The engagement window is a property of the weapon slot, not of the pilot, so a group whose
+        // AI def authored one flies that one; a stock fit authors none and keeps the gunner's own.
+        if (group.MinRangeM > 0f && group.MaxRangeM > 0f)
+        {
+            gunner.MinRangeM = group.MinRangeM;
+            gunner.MaxRangeM = group.MaxRangeM;
+        }
         gunner.Solve(muzzlePos, WorldVelocity, _model.Attitude,
             target.WorldPosition, target.WorldVelocity, target.NoseDirection,
             group.Weapon.Velocity ?? ProjectilePool.DefaultVelocity);
@@ -2707,6 +2714,9 @@ public partial class FlightController : Node3D
                 MountPos = hp.Pylon.GlobalPosition,
                 RoundSpeed = hp.Weapon.Velocity ?? ProjectilePool.DefaultVelocity,
                 RoundAccel = hp.Weapon.Acceleration ?? 0f,
+                MinRangeM = hp.MinRangeM,
+                MaxRangeM = hp.MaxRangeM,
+                RefireSeconds = hp.RefireSeconds,
             });
         }
         // No AI can aim at a gasbag yet (the acquisition collects aircraft alone), so the match's

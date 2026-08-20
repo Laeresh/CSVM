@@ -10,9 +10,11 @@ namespace CSVM.Session;
 /// <summary>The aggregate facts the initial human-field build adds to the session summary.</summary>
 public readonly record struct FlightRosterBuild(int MeshInstances, string SummarySuffix);
 
-/// <summary>One AI aircraft's authored identity and launch facts.</summary>
+/// <summary>One AI aircraft's authored identity and launch facts. <c>AiDef</c> names the militia
+/// variant it flies (<c>bhatwarhawk</c>); null takes the airframe's base def.</summary>
 public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector3 LookAt, AiPilot Pilot,
-    PaintScheme? Scheme = null, int? Team = null, bool Inert = false, bool ShippedSkins = false);
+    PaintScheme? Scheme = null, int? Team = null, bool Inert = false, bool ShippedSkins = false,
+    string? AiDef = null);
 
 /// <summary>The session's aircraft set: builds the human field in deterministic player order and
 /// introduces AI aircraft later for missions, waves, and generators. The roster is the assembly
@@ -55,7 +57,7 @@ public sealed class FlightRoster
     public FlightController SpawnAi(AiSpawn spawn)
     {
         int index = _spawned++;
-        var stats = _in.AiStatsFor(spawn.PlaneName).WithAiSpawnJitter(
+        var stats = _in.AiStatsFor(spawn.PlaneName, spawn.AiDef).WithAiSpawnJitter(
             Rng.NewSystemRandom(Rng.Spawn, index, 0));
         if (spawn.Pilot.Machine is { } machine)
         {
@@ -68,7 +70,8 @@ public sealed class FlightRoster
         using (PerfSample.Scope(PerfSite.AiSpawn))
         {
             var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
-                scheme: spawn.Scheme ?? _liveries.SchemeFor(_in.RigCount + index, _in.ZrdrPath,
+                scheme: spawn.Scheme ?? MilitiaScheme(stats, spawn) ?? _liveries.SchemeFor(
+                    _in.RigCount + index, _in.ZrdrPath,
                     _in.PaintRng, _liveries.PatternsForPlane(_in.PlanesGamez, spawn.PlaneName),
                     useDefaultPattern: !spawn.ShippedSkins),
                 patterns: _liveries.Patterns);
@@ -97,18 +100,34 @@ public sealed class FlightRoster
                 Shake = new PlaneShake(_in.Shakes),
             });
 
-            if (_in.StockLoadouts.For(stats.DefName) is { } loadout)
+            // The AI def's own fit when it authors one, the player stock table otherwise. Both
+            // paths say so when they come up empty: an AI plane that flies unarmed is a bug that
+            // looks exactly like a passive enemy from the cockpit.
+            try
             {
-                try
+                if (stats.AiWeapons.Count > 0)
+                {
+                    controller.Loadout = Loadout.BindAi(stats.AiWeapons,
+                        stats.AiDefName ?? stats.DefName, planeModel, _in.WeaponDefs);
+                }
+                else if (_in.StockLoadouts.For(stats.DefName) is { } loadout)
                 {
                     controller.Loadout = Loadout.Bind(loadout, planeModel, _in.WeaponDefs);
+                }
+                else
+                {
+                    string armed = stats.AiDefName ?? stats.DefName;
+                    Log.Warn("weapons", $"ai: no weapons block on '{armed}' and no stock loadout for '{stats.DefName}' — this plane flies unarmed");
+                }
+                if (controller.Loadout != null)
+                {
                     controller.Destructibles = _in.WorldRuntime?.Destructibles;
                     controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _in.Projectiles);
                 }
-                catch (Exception e)
-                {
-                    Log.Warn("weapons", $"ai: loadout bind failed for '{stats.DefName}' — this plane flies unarmed error={e.Message}");
-                }
+            }
+            catch (Exception e)
+            {
+                Log.Warn("weapons", $"ai: loadout bind failed for '{stats.DefName}' — this plane flies unarmed error={e.Message}");
             }
 
             // Visible damage, phase 1: the same object the player rig gets, built from this
@@ -149,5 +168,15 @@ public sealed class FlightRoster
                      ? $"net='{patrol.Net.Name}#{patrol.Net.Id}' ({patrol.Net.Nodes.Count} nodes)"
                      : $"heading={spawn.Pilot.TargetHeadingDeg:0}° alt={spawn.Pilot.TargetAltitude:0} m"));
         return controller;
+    }
+
+    // The scheme the AI def authors for itself, which is what the original's spawn resolves against
+    // (docs/org/paint.md). Yields to --paint= and to a caller asking for the bare shipped skins,
+    // both of which are about this run rather than about who the plane is.
+    private PaintScheme? MilitiaScheme(PlaneStats stats, AiSpawn spawn)
+    {
+        if (spawn.ShippedSkins || _liveries.PaintRequested || stats.AiDefName is not { } def)
+            return null;
+        return _liveries.DefScheme(_in.ZrdrPath, def);
     }
 }

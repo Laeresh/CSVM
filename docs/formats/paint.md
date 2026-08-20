@@ -15,6 +15,9 @@ Extracted data and the user's reference screenshots show
 see "Implementing this in the remake" at the bottom for what the remake actually does and
 where it knowingly diverges.
 
+The engine half (which slot each key parses into, how an override falls back to the def per field,
+how three components become one packed dword) is decoded in [`org/paint.md`](../org/paint.md).
+
 ## The scheme record
 
 Seven fields, appearing under three different key prefixes depending on where the scheme lives.
@@ -243,6 +246,13 @@ plausible assignments against `CustomPlane Paint1 Bloodhawk.png`: only *(red, bl
 puts black on the outer wing panels and the white swoosh between them, as the reference shows.
 White in both trims loses the black wing entirely; black in slot 3 paints the swoosh instead
 of the panel.
+
+The executable corroborates the ordering discipline but not the region reading: `FUN_00479240`
+parses the three colours into fixed consecutive slots and `FUN_0047c210` resolves and packs them
+positionally, so nothing between `vehicle.json` and the scheme record permutes them
+([`org/paint.md`](../org/paint.md)). Which region each slot reaches is decided past the message
+dispatch that decode stops at, so the assignment above still rests on the render test and the
+Colour/Shade reading.
 
 That also pins down **`player_fortune`'s missing colours** as `223,0,41 / 0,0,0 / 255,255,255`
 — the same shape every shipped scheme has (`hughes` is yellow/black/white). The red comes from

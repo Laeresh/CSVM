@@ -277,6 +277,61 @@ public class AiRocketeerTests
         Assert.False(r.WantsFire);
     }
 
+    // A pylon bound from an AI def carries its own window, and it decides the shot: the Warhawk's
+    // torpedo starts at 350 m, so a 300 m separation is inside the class default and outside the
+    // weapon's own.
+    [Theory]
+    [InlineData(300f, false)]
+    [InlineData(500f, true)]
+    public void APylonsOwnEngagementWindowOverridesTheVehicleDefault(float separation, bool fires)
+    {
+        var r = Rocketeer(rollsPass: true);   // vehicle default 200 to 800 m
+        var ownPos = new Vector3(0f, 0f, separation);
+        var pylon = new RocketPylonView
+        {
+            Index = 0,
+            Armed = true,
+            MountPos = ownPos,
+            RoundSpeed = Speed,
+            MinRangeM = 350f,
+            MaxRangeM = 800f,
+        };
+        r.Solve(ownPos, Vector3.Zero, Basis.LookingAt(TargetPos - ownPos, Vector3.Up),
+            TargetPos, Vector3.Zero, TargetForward, targetIsGasbag: false,
+            new List<RocketPylonView> { pylon });
+        Assert.Equal(fires, r.WantsFire);
+    }
+
+    // Two timers are stamped per launch, as the original stamps them: the vehicle-wide lockout and
+    // the launching slot's own next-ready. The vehicle one is what stops a two-type fit alternating.
+    [Fact]
+    public void ALaunchStampsBothTheVehicleLockoutAndTheSlotsOwnInterval()
+    {
+        var r = Rocketeer(rollsPass: true);
+        var ownPos = new Vector3(0f, 0f, 500f);
+        var basis = Basis.LookingAt(TargetPos - ownPos, Vector3.Up);
+        var pylons = new List<RocketPylonView>
+        {
+            new() { Index = 0, Armed = true, MountPos = ownPos, RoundSpeed = Speed, RefireSeconds = 5f },
+            new() { Index = 1, Armed = true, MountPos = ownPos, RoundSpeed = Speed, RefireSeconds = 30f },
+        };
+
+        r.Solve(ownPos, Vector3.Zero, basis, TargetPos, Vector3.Zero, TargetForward, false, pylons);
+        Assert.Equal(0, r.SelectedPylon);
+        Assert.Equal(5f, r.LockoutRemaining, 3);   // the launching slot's interval, not the default 30
+
+        // The vehicle-wide lockout is live, so the second pylon cannot step in behind the first.
+        r.Tick(1f);
+        r.Solve(ownPos, Vector3.Zero, basis, TargetPos, Vector3.Zero, TargetForward, false, pylons);
+        Assert.Equal(-1, r.SelectedPylon);
+
+        // Past it, the first slot's own next-ready has expired too and it takes the shot again.
+        for (int i = 0; i < 5; i++)
+            r.Tick(1f);
+        r.Solve(ownPos, Vector3.Zero, basis, TargetPos, Vector3.Zero, TargetForward, false, pylons);
+        Assert.Equal(0, r.SelectedPylon);
+    }
+
     private static void Solve(AiRocketeer r, float separation)
     {
         var ownPos = new Vector3(0f, 0f, separation);
