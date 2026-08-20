@@ -42,11 +42,13 @@ Flags are specified in [`cli.md`](cli.md).
 
 | Input | Does |
 |---|---|
-| `P` · `Esc` · Start | pause — halts the sim and opens the pause board's menu (Resume · Restart · Exit); `.` steps one frame. Splitscreen: any player's press pauses everyone, and the board names who paused (`BL-373`) — only that player resumes it and only that player drives the cursor |
+| `P` · `Esc` · Start | pause — halts the sim and opens the pause board's menu (Resume · Photo Mode · Restart · Exit); `.` steps one frame. Splitscreen: any player's press pauses everyone, and the board names who paused (`BL-373`) — only that player resumes it and only that player drives the cursor |
 | ↑↓ / d-pad / left stick | move the board menu's cursor |
 | `Enter` · `Space` | A | confirm the highlighted item |
 | — | B | close the pause menu — the pad twin of `Esc`/`P`/Start. A results board's menu has no way back and reads none |
-| — | a results board (mission wrap-up, dogfight, race, stunt run) halts the sim and carries its own Restart · Exit menu, driven by player 1. The pause key does nothing while one is up |
+| — | a results board (mission wrap-up, dogfight, race, stunt run) halts the sim and carries its own Photo Mode · Restart · Exit menu, driven by player 1. The pause key does nothing while one is up. Photo Mode leads because the resting row must be the harmless one, and on a results board Restart throws away the run just finished |
+| — | **while any board is up the camera holds still.** It keeps the pose it had when the board appeared, so moving the menu cursor no longer swings the view (`BL-429`); the free look is the Photo Mode row |
+| Photo Mode row | | hands that player's pane to the `--freecam` controls over the frozen world, hides the board and the whole pilot HUD, and starts locked onto your own aircraft so entering never jumps. The halt is never dropped, so it stays a still frame with the audio paused. `Esc` (pad `B`) brings the board back, leaving the camera where you flew it. Splitscreen: only the pausing player's pane, the other panes stay frozen |
 | — | a pilot out of lives watches from the `--freecam` controls (WASD/QE move, RMB look, `F`/pad `X` to lock onto an aircraft) on its own pane. Splitscreen: each downed pilot's spectator reads only its own pad/keyboard (`BL-375`) — two players watching at once move independently, not lockstep. Mouse look stays shared (one physical mouse) |
 | `.` | step one frame while paused |
 | `F12` | screenshot |

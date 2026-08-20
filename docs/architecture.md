@@ -116,7 +116,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/SmokeScreens.cs` — the smoke screen's stun trap: the world's active screens, walked over the roster every sim step to stun AI and wash humans behind the layer; the cone rule, the wash cadence and the three `player.json` tunables beside it.
 - `src/Flight/BeeperTags.cs` — the beeper's paint and the seeker's pick: the world's tag list with its countdown, dead-aircraft slam and five-second tail, the tagging gate, and the per-frame query with the original's inverted-dot, squared-distance selection rule.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
-- `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, paused orbit. Steers a `Camera3D` it does not own.
+- `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, the weapon lab's held-airframe orbit. Steers a `Camera3D` it does not own.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, the steering step (turn clamp, speed penalty, `LOCK_ON_LEAD`, the seeker's retarget), tracers, flashes, per-surface impact, damage to destructibles, the beeper's paint.
 - `src/Flight/ProjectileFlyoutAnim.cs` — `ProjectilePool`'s `FLYOUT MODEL_ANIMATION` half: each ordnance round runs its def on the sequence interpreter, the pool as host (trail puffers, the torpedo's launch look and switch, its sounds).
@@ -201,6 +201,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (F16): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
+- `src/UI/PhotoModeHud.cs` — photo mode's fading hint line and its Escape/pad-B way out; raises an event, decides nothing.
 - `src/UI/PerfHud.cs` — the frame-cost readout (F14, `--debug-fps=`): fps/current-frame-cost/worst-recent-frame, once for the window, drawn above the launchscreen too.
 - `src/UI/TargetingOverlay.cs` — the targeting overlay (F15, `--debug-targets`): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
@@ -1264,7 +1265,12 @@ stick reads as a snap back to the ordinary chase pose), the authored crash camer
 hard cut to a static elevated vantage `crash_horiz` behind / `crash_y` above the impact, held until
 respawn — framing decoded off the original's crash footage; `crash_elev`/`crash_chord_y` stay
 capture-gated on `BL-260`, as do the death and flyby cameras) and the free orbit used while the
-debug freeze holds the world. Steers a `Camera3D` it does not own, as `UI/OrbitCamera` does for the
+weapon lab holds an airframe. ⚠ That orbit no longer answers to a HALT (`BL-429`): a board's menu
+cursor reads the same `WASD`/arrows/left stick `OrbitInput` does, so a halted world that also flew
+the camera meant choosing a menu row swung the view. `FlightController` writes nothing to the
+camera while a board is up, and the free look moved behind the board's Photo Mode row, which hands
+the pane to a `SpectatorCamera` instead. `Held` is the only remaining orbit source here, and no
+menu shares its keys. Steers a `Camera3D` it does not own, as `UI/OrbitCamera` does for the
 static viewer. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
 authored) plus a first-order acceleration transient relaxing at the MEASURED 0.65 /sim-s
 (`UpdateDynamics`, host-called once per sim step); the offset's DIRECTION (behind and above at
@@ -2791,7 +2797,9 @@ A board's cursor and item list, engine-free so the selection rules test off engi
 feeds one frame's result to `Handle(move, accept, back)`, which is what stops a pad steering a menu
 it does not own. Returns whether the highlight moved, so a board repaints only when it has to.
 Opens on the first item, and the boards order their rows so the first is the harmless one (Resume,
-else Restart) — a stray confirm on a menu that just appeared then cannot destroy a run. Confirm
+else **Photo Mode**) — a stray confirm on a menu that just appeared then cannot destroy a run. That
+is why Photo Mode leads a results board rather than trailing it: the alternative resting row is
+Restart, which throws away the run just finished (`BL-429`). Confirm
 beats back in the same frame, the row having already been chosen. A results board's menu is not
 `Dismissable`: dismissing it would leave the player in a halted world with no way back, so it
 answers no back key and advertises none. Off-engine coverage: `CSVM.Tests/BoardMenuTests.cs`.
@@ -2972,6 +2980,33 @@ The `--viewer` marker overlay (key K): draws every firepoint / pylon / target on
 aircraft as a coloured gizmo + billboarded label (firepoints orange, shared-mount firepoints
 magenta, pylons cyan, target green); `--markers` opens it at launch. Reuses `MarkerRig.Classify`
 + `GroupCoLocated`, so its gizmos agree with `--dump-markers` by construction.
+
+## src/UI/PhotoModeHud.cs
+Photo mode's only screen furniture and its way out: a hint line naming the bindings on a
+`HudLayers.Board` layer of its own, and the Escape / pad-`B` read that raises `Exit` for
+`GameSession.ExitPhotoMode` to act on. Decides nothing about the mode itself.
+The hint **fades** (5 s lit, 1.5 s out, both TUNE) rather than persisting or toggling: the mode
+exists to compose a frame and a permanent strip would be in it, while a mode that has swallowed the
+menu with no visible way back is the worst thing it could be. The fade runs on WALL time — photo
+mode holds the clock, so a sim-timed fade would never start. Pad reads go through the seat's own
+`Pads.For` filter, so in splitscreen another player's pad cannot close a mode that is not theirs,
+and the exit press is marked handled so it cannot also reach the suspended board behind it.
+
+Photo mode itself lives in `GameSession.EnterPhotoMode`/`ExitPhotoMode`: it sets `CameraOwned`,
+hides the whole pilot HUD (`FlightController.SetPilotHudVisible`), stands up a `SpectatorCamera`
+on the pane with the rig's own device filter and `LockCandidateAircraft`, and locks onto the
+player's OWN aircraft — `FollowNode` seeds from the current eye, so following what the camera is
+already looking at never jumps, while locking any other plane would keep the offset and teleport.
+The halt is never dropped, so the world stays the still frame the board froze.
+⚠ Suspending a board is hide AND `ProcessMode.Disabled`, not hide alone: a board left processing
+still polls its owner's menu reader, so the cursor keys would drive an invisible menu while the
+same keys fly the camera — the very collision this mode exists to remove.
+⚠ `FlightController.InPhotoMode` silences that node's pause key for the duration, or one Escape
+would both leave the mode and unpause the session behind it.
+⚠ Leaving primes every board's `MenuInput` before the cursor comes back. `MenuInput` polls raw key
+state, which bypasses the handled flag the exit press set, so an Escape still under the player's
+finger would read as a fresh press on the board that just returned and dismiss the pause it was
+meant to reopen — `BL-279`'s mechanism, a third time.
 
 ## src/UI/PerfHud.cs
 The frame-cost readout (key **F14**): fps, current frame cost and the

@@ -70,6 +70,11 @@ public sealed partial class IaWrapupBoard : Control
     /// <summary>Leave the session, chosen from the menu.</summary>
     public Action? Exit { get; set; }
 
+    /// <summary>Hand player 1's pane to a free camera over the frozen world, chosen from the menu.
+    /// The mission's halt is never dropped and no result is spent, so this is the one row that
+    /// leaves the board's own state exactly as it found it.</summary>
+    public Action? PhotoMode { get; set; }
+
     /// <summary>Builds the (hidden) board. Add it to a <c>CanvasLayer</c> above the splitscreen
     /// panes; the caller calls <see cref="Present"/> once, from
     /// <see cref="InstantActionRuntime.MissionEnded"/>.</summary>
@@ -219,6 +224,13 @@ public sealed partial class IaWrapupBoard : Control
     // and dogfight boards the hide and the clock release happen here rather than on a live flag.
     private void OnActivated(BoardMenuItem item)
     {
+        if (item == BoardMenuItem.Photo)
+        {
+            // ⚠ Before the Exit test and returning: everything below this point is the Restart
+            // path, which spends the halt and reruns the mission.
+            PhotoMode?.Invoke();
+            return;
+        }
         if (item == BoardMenuItem.Exit)
         {
             Exit?.Invoke();
@@ -299,6 +311,7 @@ public sealed partial class IaWrapupBoard : Control
         // Restart and Exit are session-wide decisions, and no player raised this board.
         var menu = new BoardMenu(
             dismissable: false,
+            (BoardMenuItem.Photo, "Photo Mode"),
             (BoardMenuItem.Restart, "Restart"),
             (BoardMenuItem.Exit, _exitLabel));
         menu.Activated += OnActivated;

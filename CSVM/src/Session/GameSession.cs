@@ -79,6 +79,10 @@ public partial class GameSession : Node3D
     private readonly List<FlightController> _aiPlanes = new();
     // Scratch for LockCandidateAircraft, reused so a target-key press allocates nothing.
     private readonly List<Node3D> _lockCandidates = new();
+    // The whole-window boards photo mode has to get out of the way, and what they were showing
+    // before it did. Registered at build; a session that builds no board registers none.
+    private readonly List<Control> _boards = new();
+    private readonly List<bool> _boardWasVisible = new();
     // scratch: the rigs' controllers plus _aiPlanes, rebuilt on every AllAircraft() call
     private readonly List<FlightController> _aircraftScan = new();
     // scratch: rig camera positions for the edge extender
@@ -238,6 +242,11 @@ public partial class GameSession : Node3D
     // Who is holding the sim clock and why — shared by every rig and by every board that halts.
     // Null before the rigs exist.
     private PauseState? _pauseState;
+    // Photo mode's three pieces, all null unless it is engaged: the hint/exit reader, the camera
+    // holding the pane, and whose pane it is.
+    private UI.PhotoModeHud? _photoHud;
+    private SpectatorCamera? _photoCamera;
+    private FlightController? _photoPilot;
     // The trailer-target resolver every net follower this session builds shares. Built
     // with the rigs (it needs the player rig), so the F13 overlay, built earlier, reads it through
     // this field rather than holding a reference it could not have had yet.
@@ -1894,9 +1903,23 @@ public partial class GameSession : Node3D
         var pauseBoard = PauseBoard.Build(pauseState, exitsToMenu: _menuDriven, MenuInputFor);
         pauseBoard.Restart = Rerun;
         pauseBoard.Exit = _exitSession;
+        // Read at press time, not captured: the owner is whoever paused THIS time, and only that
+        // player drives the cursor that reached this row.
+        pauseBoard.PhotoMode = () => EnterPhotoMode(pauseState.OwnerPlayerIndex);
+        _boards.Add(pauseBoard);
         var pauseLayer = new CanvasLayer { Name = "pause_board", Layer = UI.HudLayers.Board };
         pauseLayer.AddChild(pauseBoard);
         _worldRoot!.AddChild(pauseLayer);
+        // The per-pane stunt scoreboards are built with their rigs (HumanFlightAdapter), so they
+        // are collected here rather than at a construction site of their own.
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller?.Scoreboard is not { } scoreboard)
+                continue;
+            int owner = rig.Index;
+            scoreboard.PhotoMode = () => EnterPhotoMode(owner);
+            _boards.Add(scoreboard);
+        }
 
         // Damage lab in flight (F5): the panel --viewer hosts, bound to P1's real PlaneDamage
         // rather than visuals alone, so a dialled-in state drives the HUD and can then be flown.
@@ -1985,6 +2008,9 @@ public partial class GameSession : Node3D
                 exitsToMenu: _menuDriven, _pauseState!, MenuInputFor);
             board.Restart = () => RestartRace(race);
             board.Exit = _exitSession;
+            // Player 1: a results board reads _inputFor(0), so its cursor is P1's whoever won.
+            board.PhotoMode = () => EnterPhotoMode(0);
+            _boards.Add(board);
             var boardLayer = new CanvasLayer { Name = "race_board", Layer = UI.HudLayers.Board };
             boardLayer.AddChild(board);
             _worldRoot!.AddChild(boardLayer);
@@ -2035,6 +2061,9 @@ public partial class GameSession : Node3D
                 exitsToMenu: _menuDriven, _pauseState!, MenuInputFor);
             board.Restart = () => RestartMatch(match);
             board.Exit = _exitSession;
+            // Player 1, for the same reason the race board is: the cursor is _inputFor(0)'s.
+            board.PhotoMode = () => EnterPhotoMode(0);
+            _boards.Add(board);
             var boardLayer = new CanvasLayer { Name = "dogfight_board", Layer = UI.HudLayers.Board };
             boardLayer.AddChild(board);
             _worldRoot!.AddChild(boardLayer);
@@ -2672,6 +2701,9 @@ public partial class GameSession : Node3D
                 _pauseState!, MenuInputFor);
             wrapupBoard.Restart = _restartSession;
             wrapupBoard.Exit = _exitSession;
+            // Player 1, for the same reason the race and dogfight boards are.
+            wrapupBoard.PhotoMode = () => EnterPhotoMode(0);
+            _boards.Add(wrapupBoard);
             var wrapupLayer = new CanvasLayer { Name = "ia_wrapup_board", Layer = UI.HudLayers.Board };
             wrapupLayer.AddChild(wrapupBoard);
             _worldRoot!.AddChild(wrapupLayer);
@@ -2981,6 +3013,10 @@ public partial class GameSession : Node3D
     // SplitScreen pane rig, each pane culling every other player's private sky/deck/puff layer.
     private void BuildRigs(int count)
     {
+        // Photo mode belongs to the rigs and boards about to be replaced: leaving it engaged would
+        // point a camera at a freed aircraft, and the old boards would linger in the suspend list.
+        ExitPhotoMode();
+        _boards.Clear();
         _rigs.Clear();
         _split = null;
         if (count <= 1)
@@ -3272,6 +3308,101 @@ public partial class GameSession : Node3D
             if (rig.Controller is { InPlay: true } pilot)
                 _lockCandidates.Add(pilot);
         return _lockCandidates;
+    }
+
+    /// <summary>Take <paramref name="playerIndex"/>'s pane to photo mode, chosen from whichever
+    /// board is up. The halt is NEVER dropped: the world stays the still frame the board froze, so
+    /// this only moves an eye. Idempotent, so a second press of the row while already in it does
+    /// nothing rather than stacking cameras.</summary>
+    private void EnterPhotoMode(int playerIndex)
+    {
+        if (_photoHud != null)
+            return;
+        PlayerRig? found = null;
+        foreach (var r in _rigs)
+            if (r.Index == playerIndex)
+                found = r;
+        if (found is not { Controller: { } pilot } rig)
+            return;
+        SuspendBoards();
+        pilot.BeginPhotoMode();
+        pilot.CameraOwned = true;   // D8's seam: the controller writes this pane's camera no more
+        pilot.SetPilotHudVisible(false);
+        var eye = rig.Camera.Position;
+        _photoCamera = new SpectatorCamera(rig.Camera, eye, eye - rig.Camera.Basis.Z,
+            pilot.PadDevices, pilot.UseKeyboard)
+        {
+            Name = "photo_mode_camera",
+            ShowReadout = false,   // the hint line is this mode's only furniture
+            LockCandidates = LockCandidateAircraft,
+        };
+        _worldRoot!.AddChild(_photoCamera);
+        // ⚠ Lock onto this player's OWN aircraft, wreck included, and nothing else. FollowNode
+        // seeds the orbit from the current eye, so following what the camera is already looking at
+        // never jumps — while locking any other plane would keep the offset and teleport the view.
+        _photoCamera.FollowNode(pilot);
+        _photoPilot = pilot;
+        _photoHud = UI.PhotoModeHud.Build(pilot.PadDevices, pilot.UseKeyboard);
+        _photoHud.Exit += ExitPhotoMode;
+        _worldRoot!.AddChild(_photoHud);
+        GD.Print($"photo mode: P{playerIndex + 1}'s pane, over the frame the board froze");
+    }
+
+    /// <summary>Escape (or pad B) out of photo mode: the board comes back and the pilot's HUD with
+    /// it. The camera is left where it was flown to, so the board returns over the frame just
+    /// composed and re-entering continues from the same eye.</summary>
+    private void ExitPhotoMode()
+    {
+        if (_photoHud == null)
+            return;
+        _photoHud.QueueFree();
+        _photoHud = null;
+        _photoCamera?.QueueFree();
+        _photoCamera = null;
+        if (_photoPilot is { } pilot && IsInstanceValid(pilot))
+        {
+            pilot.SetPilotHudVisible(true);
+            pilot.CameraOwned = false;
+            pilot.EndPhotoMode();   // seeds the pause edge, or the held Escape unpauses too
+        }
+        _photoPilot = null;
+        RestoreBoards();
+        // ⚠ Prime every board reader: MenuInput POLLS raw keys, so the Escape still under the
+        // player's finger would read as a fresh press on the board that just returned and dismiss
+        // the pause it was meant to reopen (BL-279's mechanism, docs/architecture.md).
+        foreach (var rig in _rigs)
+            MenuInputFor(rig.Index).Prime();
+    }
+
+    // ⚠ Suspending a board is hide AND stop processing, not hide alone. A board left processing
+    // still polls its owner's menu reader, so the cursor keys would drive a menu nobody can see
+    // while the same keys fly the photo camera — the very collision this mode exists to remove.
+    private void SuspendBoards()
+    {
+        _boardWasVisible.Clear();
+        foreach (var board in _boards)
+        {
+            bool alive = IsInstanceValid(board);
+            _boardWasVisible.Add(alive && board.Visible);
+            if (!alive)
+                continue;
+            board.Visible = false;
+            board.ProcessMode = ProcessModeEnum.Disabled;
+        }
+    }
+
+    // Back to exactly what was on screen. A results board would recompute its own visibility on the
+    // next _Process anyway, but the pause board's is event-driven and no event is coming.
+    private void RestoreBoards()
+    {
+        for (int i = 0; i < _boards.Count; i++)
+        {
+            if (!IsInstanceValid(_boards[i]))
+                continue;
+            _boards[i].ProcessMode = ProcessModeEnum.Inherit;
+            _boards[i].Visible = i < _boardWasVisible.Count && _boardWasVisible[i];
+        }
+        _boardWasVisible.Clear();
     }
 
     // A pilot has spent its last life. The Spectating flag pins the wreck, so neither R nor the
