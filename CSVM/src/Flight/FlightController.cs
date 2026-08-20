@@ -1431,34 +1431,19 @@ public partial class FlightController : Node3D
 
     public override void _Process(double delta)
     {
-        // Nothing to draw, animate, interpolate or point a camera at while inert. Only an
-        // AI aircraft is ever inert, so no human's pause key is swallowed by this return.
+        var clock = GameClock.Current;
+        if (!_inert)
+            PollResultsShortcuts((float)delta);
+        // ⚠ Ahead of the inert return, for a rig that HAS a pause key. --debug-spectate flags
+        // every human rig inert (GameSession.ApplyDebugSpectate), so swallowing the key here
+        // leaves a spectated session with no way to freeze the picture at all.
+        bool halted = false;
+        if (AllowPause || !_inert)
+            halted = PollPauseAndHalt(clock);
+        // Nothing left to draw, animate, interpolate or point a camera at while inert.
         if (_inert)
             return;
 
-        var clock = GameClock.Current;
-        PollResultsShortcuts((float)delta);
-        // Polled here, not in the sim step: a halted sim takes no steps and could never resume
-        // itself. With a shared PauseState only the player who paused can resume it.
-        bool pausePressed = PauseTogglePressed();
-        if (pausePressed && !_pausePrev)
-        {
-            if (PauseState != null)
-                PauseState.TryToggle(PlayerIndex);
-            else if (clock != null)
-                clock.Halted = !clock.Halted;
-        }
-        _pausePrev = pausePressed;
-        bool halted = PauseState?.Halted ?? (clock?.Halted ?? false);
-        if (clock != null)
-            clock.Halted = halted;
-        if (halted != _haltPrev)
-        {
-            _haltPrev = halted;
-            // The engine/whine/rattle loops hold their sample position through the freeze; the
-            // one-shots already in flight are left to play out.
-            Audio?.SetPaused(halted);
-        }
         // Seeding on the edge starts the orbit where the chase camera left off, so entering the
         // P freeze or a weapon-lab hold never jumps.
         bool orbiting = halted || Held;
@@ -2456,6 +2441,33 @@ public partial class FlightController : Node3D
     // leaving the flight; the board's Exit item is what leaves, and a pad can reach it.
     private bool PauseTogglePressed() =>
         AllowPause && (KeyDown(Key.P) || KeyDown(Key.Escape) || PadPressed(JoyButton.Start));
+
+    // One frame of the pause key, and the halt it mirrors into the shared clock. Polled from
+    // _Process, not the sim step: a halted sim takes no steps and could never resume itself.
+    // With a shared PauseState only the player who paused may resume it.
+    private bool PollPauseAndHalt(GameClock? clock)
+    {
+        bool pausePressed = PauseTogglePressed();
+        if (pausePressed && !_pausePrev)
+        {
+            if (PauseState != null)
+                PauseState.TryToggle(PlayerIndex);
+            else if (clock != null)
+                clock.Halted = !clock.Halted;
+        }
+        _pausePrev = pausePressed;
+        bool halted = PauseState?.Halted ?? (clock?.Halted ?? false);
+        if (clock != null)
+            clock.Halted = halted;
+        if (halted != _haltPrev)
+        {
+            _haltPrev = halted;
+            // The engine/whine/rattle loops hold their sample position through the freeze; the
+            // one-shots already in flight are left to play out.
+            Audio?.SetPaused(halted);
+        }
+        return halted;
+    }
 
     // Tab / gamepad X — cycles the stunt marker's displayed target (caller edge-detects).
     // Gamepad Y would clash with the respawn button, so X (a free face button) instead.
