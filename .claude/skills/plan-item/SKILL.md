@@ -217,7 +217,8 @@ falls inside an existing decode page's topic (weather, clutter, flightModel, tra
 sequences, aim-assist), matching those pages' contract — behaviour and constants, every claim naming
 the function it came from, no decompiler output reproduced; otherwise **`analysis/<slug>/FINDINGS.md`**,
 dated, with the method stated. **In either case also offer the one-line amendment to the `backlog.md`
-entry** — the number, its address, the date, the pointer. That line is load-bearing: without it the
+entry** — the number, its address, the pointer. No date: `backlog.md` is live prose, so the decode's
+date belongs in the commit message that lands it. That line is load-bearing: without it the
 next explanation re-reads the stale footage number, re-flags it, and re-recommends the decode that was
 already done.
 

@@ -176,6 +176,7 @@ disk, it goes to whichever fits:
 - **`analysis/<slug>/FINDINGS.md`** when it does not — dated, with the method stated.
 
 **In either case, also offer the one-line amendment to the `backlog.md` entry**: the number, its
-address, the date, and the pointer to the write-up. That line is load-bearing. Without it the next
+address, and the pointer to the write-up. No date — `backlog.md` is live prose, so the date of the
+decode belongs in the commit message that lands it. That line is load-bearing. Without it the next
 `/backlog` on this item re-reads the stale footage number, re-flags it under **Traps**, and
 re-recommends the decode that was already done.

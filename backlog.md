@@ -121,6 +121,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     trailing call on an otherwise-correct trigger, (d) looks like a stalled/dropped sequence on
     yet another trigger path, and (b) is unproven to share any of their causes. Verify each
     independently before closing.
+    **The resolver half is decoded; do not re-decode it.** [`docs/org/sequences.md`](docs/org/sequences.md),
+    "A node reference is resolved once, at load, and stored as an index" and "CALL_ANIMATION hands the
+    call site down as INPUT_NODE": the original binds exactly ONE node per reference, at load, and the
+    running engine only reads an index (`FUN_004efaf0`, `FUN_004e8d60`), so nothing there can drive six
+    balloons from one event; six instances come from `*`/`#` on the definition's NAME multiplying
+    INSTANCES (`FUN_0059d610`, `FUN_0051ff40`), never matches; every tier compares case-sensitively with
+    no `.flt` stripping; and a call does not re-anchor its callee (`PUSH 0x0` at `004eb53d`), the site
+    arriving as `INPUT_NODE` at `+0x7c`. Ours diverges on all four (a per-event LIST, `OrdinalIgnoreCase`
+    plus a `.flt` fallback, `*`/`#` read as node-name patterns, and the call site used as the callee's
+    Start anchor). ⚠ Check `BL-415` before treating (a)/(b) as their own investigation: tier 1 searching
+    the call anchor's shared subtree rather than the definition's private copy is the same fault shape,
+    already filed, and one fix may cover both.
 
 - `BL-343` `[Feature]` **`IMPACT_FORCE` inheritance runs, but on our own gate rather than the
     authored one.** A shot-down plane's wreck does now leave along the plane's own velocity: the
