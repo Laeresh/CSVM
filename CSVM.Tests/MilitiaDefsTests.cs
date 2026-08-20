@@ -38,6 +38,16 @@ public class MilitiaDefsTests
         Assert.Equal("stihellhound", MilitiaDefs.ForWave(Map(), "Sacred Trust Hellhound"));
     }
 
+    // Three defs are titled "Black Hat Brigand" — bhatbrigand, _2 and _5 — and they are different
+    // aeroplanes: different pilot ratings, and _2 carries wep_06 where the plain one carries wep_05.
+    // A display-name lookup takes the plain def; the variants are for missions that name them.
+    [ExtractedDataFact]
+    public void AVariantDefNeverWinsADisplayNameLookup()
+    {
+        Assert.Equal("bhatbrigand", MilitiaDefs.ForWave(Map(), "Black Hat Brigand"));
+        Assert.Equal("blakepeace", MilitiaDefs.ForWave(Map(), "Blake Aviation Peacemaker"));
+    }
+
     // The menu says "Hollywood Knight", the message table "Hollywood Knights". Same militia.
     [ExtractedDataFact]
     public void TheMilitiaHalfMatchesAcrossSingularAndPlural()

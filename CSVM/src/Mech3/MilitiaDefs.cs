@@ -17,10 +17,12 @@ public static class MilitiaDefs
     // the same militia. Matching is loose enough to cover it rather than hard-coding the pair.
     private static readonly char[] Space = { ' ' };
 
-    /// <summary>Every militia aircraft the install names, keyed by its display string. The FIRST def
-    /// to claim a name wins: the <c>_2</c>/<c>_3</c>/<c>_5</c> chapter duplicates repeat their base
-    /// def's title verbatim. Base and player defs are in here too, under a bare aircraft name
-    /// ("Fury"), where no militia string can reach them.</summary>
+    /// <summary>Every militia aircraft the install names, keyed by its display string. Several defs
+    /// can claim one name: <c>bhatbrigand</c>, <c>bhatbrigand_2</c> and <c>bhatbrigand_5</c> are all
+    /// "Black Hat Brigand", and they differ in pilot ratings and sometimes in weapon, so the
+    /// UNSUFFIXED def wins and the <c>_N</c> variants are left to the missions that name them
+    /// outright. Base and player defs are in here too, under a bare aircraft name ("Fury"), where no
+    /// militia string can reach them.</summary>
     public static Dictionary<string, string> ByDisplayName(string zrdrPath, Messages messages)
     {
         var root = Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
@@ -35,7 +37,9 @@ public static class MilitiaDefs
             if (d.Str("title") is not { } title)
                 continue;
             string display = messages.Get(title);
-            if (display.Length > 0 && !byName.ContainsKey(display))
+            if (display.Length == 0)
+                continue;
+            if (!byName.TryGetValue(display, out var held) || (IsVariant(held) && !IsVariant(def)))
                 byName[display] = def;
         }
         return byName;
@@ -55,6 +59,19 @@ public static class MilitiaDefs
             if (SameAircraft(pair.Key, enemyName) && SameMilitia(pair.Key, enemyName))
                 return pair.Value;
         return null;
+    }
+
+    // A "<name>_<digits>" variant of another def, e.g. bhatbrigand_5. Missions name these directly;
+    // nothing resolves one from a display name, since every variant shares the plain def's title.
+    private static bool IsVariant(string def)
+    {
+        int i = def.LastIndexOf('_');
+        if (i <= 0 || i == def.Length - 1)
+            return false;
+        for (int k = i + 1; k < def.Length; k++)
+            if (!char.IsDigit(def[k]))
+                return false;
+        return true;
     }
 
     private static bool SameAircraft(string a, string b)

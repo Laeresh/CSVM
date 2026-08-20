@@ -322,10 +322,18 @@ install itself uses for the militia def, so `Mech3/MilitiaDefs` matches the two 
 militia def's `title` resolves through the message table to exactly that name
 (`bhatwarhawk`'s is `MSG_VEH_BHAT_WARHAWK`, "Black Hat Warhawk"; `stihellhound`'s is
 `MSG_VEH_STRUST_HELLHOUND`, "Sacred Trust Hellhound"). Nothing parses def names, which are not a
-reliable guide: `sti` is Sacred Trust, `blakepeace` is the Blake Aviation Peacemaker, and the
-`_2`/`_3`/`_5` chapter duplicates repeat their base def's title verbatim (first def wins). The one
+reliable guide: `sti` is Sacred Trust, and `blakepeace` is the Blake Aviation Peacemaker. The one
 vocabulary difference is the menu's "Hollywood Knight" against the table's "Hollywood Knights",
 matched loosely on the militia half alone.
+
+⚠ **A `_N`-suffixed def is a second flight, not a duplicate.** `bhatbrigand`, `bhatbrigand_2` and
+`bhatbrigand_5` all carry the title "Black Hat Brigand", and they are different aeroplanes: the
+pilot vectors differ (6 against 4 against 7 on most slots) and so does the armament
+(`bhatbrigand` carries `wep_05` where `_2` carries `wep_06`; `blakepeace` a `wep_130` gun where
+`_3` carries `wep_140`; `bsfury` a `wep_09` where `_5` carries `wep_06`). Each has its own
+instances in the mission rosters, so the suffix is not an instance index either. A display-name
+lookup therefore takes the **unsuffixed** def and leaves the variants to the missions that name
+them outright.
 
 The member then flies that def outright: its armament, damage model, authored livery and pilot,
 rather than the airframe's base def. Three menu pairs resolve to nothing — Fortune Hunter (the
