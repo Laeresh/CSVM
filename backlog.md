@@ -1064,13 +1064,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   divides by their own tiny `h`, blowing the normalised pair back up to order 1. `roll = -bx` then
   feeds that full-scale value into `Limit()`, and architecture.md's own note on this file already
   flags the output as "NEAR-BANG-BANG… anything past ~0.29 of body-frame aim error saturates" — so a
-  near-zero true error still commands a near-maximum bank. With no term damping the TURN RATE (only
-  bank angle is corrected, and roll→bank→turn rate→heading is two open integrators), this is a relay
-  hunting around its own setpoint: it overshoots the tiny error, the sign flips, it banks the other
-  way, repeating without bound. A real, sustained turn (large `bx`/`by` before renormalisation) does
-  not have this problem — the sign stays consistent and the plane just banks hard one way — which is
-  exactly why dogfighting and any leg with real heading error reads fine and straight-and-level does
-  not.
+  near-zero true error still commands a near-maximum bank.
+  ⚠ **The loop is ONE integrator, not two, and this entry said otherwise.** `bx` is
+  `aimDir · att.X`, so rolling rotates `att.X` and moves `bx` DIRECTLY; roll→bank→turn rate→heading
+  is the slow outer path, not the one that closes. A relay on a single integrator does not wind up,
+  it slides onto `bx = 0` and chatters tightly, which is what the original measurably does (below).
+  Rolling only reduces `bx` while the aim point is OFF the nose, though. Nearly dead ahead, `bz ≈ 1`
+  with `bx`/`by` both near zero, rolling barely moves `bx` at all, the renormalisation amplifies
+  whichever is momentarily larger, and no roll angle is the right one — the loop stops behaving as an
+  integrator and the relay has nothing to slide onto. **A straight leg is exactly that degenerate
+  geometry, and a turn is exactly when it is well conditioned**, which is why `PT-54`'s dogfight
+  found nothing wrong.
+  ⚠ **Instrumented live in `crimson.exe`, and the original's AI roll is NEVER saturated.** Five
+  samples off two airborne AI, read through the ghidra debugger: roll stick `−0.0014`, `−0.206`,
+  `−0.234`, `+0.102`, `+0.339`, against a mean `|roll|` of 0.91 in ours. The decoded slots all
+  confirm on the live object — scales `3.5`, limits `1.0`, `+0x974` (`sixth_sense_factor`) `1.0278`
+  — and the arithmetic closes exactly: at roll `−0.206` the implied `bx` is `0.0573`, the elevator
+  reads `1.0 × 1.0278` saturated, and `0.0573² + 0.998² = 1.0000`, so the pair really is on the unit
+  circle. Those aircraft sit in established banked turns (51°, −33°) with the target in their
+  vertical plane, `bx` near zero and the ELEVATOR doing the turning. Bank-to-turn, working.
+  ⚠ **Still unsampled: an original AI on a straight leg.** Both live aircraft were Instant Action
+  dogfighters and never stopped turning, which is the well-conditioned case. The decisive sample
+  needs a patrolling or escorting AI that has not been drawn into combat. Until it exists, "the
+  original does not do this on a straight leg" rests on the at-the-controls report alone.
   ⚠ **The law is a faithful port and must not be touched, and the aim point has been eliminated
   too.** Decoded from
   `FUN_0041b560` directly: the renormalisation writes back into the same locals the output stage
