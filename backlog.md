@@ -1055,9 +1055,34 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-387` (found while eliminating plant candidates for it, and measured not to
   explain it).
 
-- `BL-387` `[Bug]` **An AI aircraft flying straight and level, needing no turn, rolls left-right-left
-  indefinitely and never settles — confirmed absent from the original at the controls (`PT-54`/
-  `PT-56`, 2026-08-15).** First seen netless and targetless
+- `BL-387` `[Bug]` `[Owed-playtest]` **FOUND AND FIXED, pending a playtest: the port had the sign of
+  `bz` inverted, so it renormalised the aim error for targets AHEAD instead of astern.** An AI
+  aircraft flying straight and level, needing no turn, rolled left-right-left indefinitely and never
+  settled, confirmed absent from the original at the controls (`PT-54`/`PT-56`).
+  **The fix is two characters** (`src/Flight/AiControlLaw.cs`): `bz` and `noseY` both read row 2 of
+  the basis at `obj+0x180`, and that row is the **backward** axis, not the forward one.
+  `FUN_00476250` builds the vehicle's forward vector out of it by negation, `FLD [ESI+0x198]; FCHS;
+  FSTP [ESI+0x1e0]` at `0x00476339`, and the escort law's station offsets read the same row the same
+  way. So `bz > 0` means the aim point is BEHIND. The original renormalises to commit to a
+  reversal; we were renormalising to fly at something already in front of us, which throws away a
+  genuinely tiny error's magnitude and hands `roll = -bx` full scale every frame.
+  *Measured*, one static aim point 8 km dead ahead and level, zero lateral offset, no turn required:
+  mean `|roll|` **0.95 → 0.00**, saturated **90 % → 0 %**, mean bank **41° → 0°**. Removing the
+  renormalisation entirely gives exactly the same three numbers, which is what identifies it as the
+  whole mechanism. Ordered 90° and 225° turns still converge, so the aeroplane still turns.
+  ⚠ **Four confirmations besides the disassembly**, because a sign flip deserves more than one.
+  (a) The low-speed recovery (`noseY < -0.5` and under 60 mph, push and firewall) is a STALL
+  recovery only if it fires nose UP; under the old reading it pushed an already-diving aeroplane
+  further down. (b) The emergency arm's altitude cheat only LIFTS the aircraft if it fires nose
+  down. (c) `DesiredSpeed` raises the target speed for a climb in the binary and raised it for a
+  dive in ours. (d) The wings-level rule could never fire in the old "ahead" branch, and its own
+  code comment flagged that it "reads backwards at a glance"; corrected, it is the straight-ahead
+  case, which is what a wings-leveller is for. A fifth is the live sample of the original itself:
+  aircraft flying at something in front sat in the yaw-writing branch, recorded below as an
+  unexplained puzzle, and that branch is simply the ahead branch.
+  *History below is kept deliberately.* Four hypotheses were measured and discarded before this, and
+  the record of what is NOT the cause is worth as much as the fix.
+  First seen netless and targetless
   (`--stage=empty --plane=player_bhawk --ai=player_fury,player_avenger`, `AiPilot.FlyPatrol`'s
   no-`Patrol` branch holding a fixed `OrderAim` 1000 m out) and persisting through
   `AiMode.AvoidCrash` in the same session. **Re-flown on a real net** (`--debug-spectate` on a
@@ -1154,8 +1179,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replacing an invention, not because it closes this entry.
   That is the fourth hypothesis measured and discarded as the CAUSE, after the aim point, the
   plant's roll authority and the far-field force model.
-  ⚠ **The law is a faithful port and must not be touched, and the aim point has been eliminated
-  too.** Decoded from
+  ⚠ **This paragraph's headline was wrong and is kept as the record of how.** It read "the law is a
+  faithful port and must not be touched", and that confidence is what steered four rounds of
+  measurement into the plant, the aim point, the cadence and the force model. Everything it says
+  about the arithmetic below is still true; what it missed is that a faithful transcription of the
+  operations can still feed them an input of the wrong sign. The aim point IS eliminated. Decoded from
   `FUN_0041b560` directly: the renormalisation writes back into the same locals the output stage
   reads, so the original also takes `roll = -bx` from the RENORMALISED value; no stick channel
   carries a rate term (every step to `+0x114` is memoryless, the throttle is the only filtered
@@ -1193,18 +1221,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `FUN_0041d1f0` with no timer or throttle anywhere on the path. The original's law runs every frame
   at the frame `dt`, exactly as ours does, and a coarser tick would widen the limit cycle rather than
   close it. All four `AiLawParams` tables were re-checked against the decode and match.
-  *Fix shape:* what is left is the SHAPE of the loop rather than any constant in it. A relay driving
-  a double integrator (roll → bank → heading) winds up to a large bank because the error only crosses
-  zero once the HEADING does, by which time the bank is committed. Either the original breaks that
-  chain somewhere not yet read, or an AI aircraft in it really does hunt and the original's aircraft
-  are never on a straight leg long enough to show it (its nets are ~1 km figure-eights, so a leg is
-  a few hundred metres). Settle which before adding anything: a hand-rolled damping term is the last
-  resort `BL-330` warns it is. The netless branch is a configuration the original has no equivalent
-  of (`aiPilot.md`, "The patrol-net follower has no netless branch") and stays out of scope.
-  *Playtest after fix:* `PT-54`/`PT-56` (`docs/plans/PLAN-ai-flight.md` F52) — watch a straight patrol leg
-  and a netless hold-course alike for the roll to settle instead of hunting.
+  ⚠ **What the observation at the controls was worth.** The reported case is a wingman on the ocean
+  with no enemies: it takes a net like anything else (Instant Action hands every actor the chapter's
+  first net id, `FUN_0045a390`, and a net frees the escort buffer outright, `FUN_00476250` at
+  `0x00476382`), spawns far from it, and **flies a straight line to it without rolling**. That single
+  sentence is what located the fault, because it named a state the original demonstrably holds and
+  ours demonstrably could not, in a geometry with no turn, no anchoring and no arrival test in it. No
+  amount of measuring our own sim against itself was going to produce it.
+  ⚠ **No damping term was added, and none is needed.** `BL-330`'s warning stands and was not
+  breached: the fix removes a fault, it does not invent a mechanism.
+  *Owed playtest:* `PT-83`, which also carries the `RollTune` removal that halved every airframe's
+  roll rate in the same branch.
   *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (this is the AI-arm finding it owes), `BL-330`
-  (a prior instance of not inventing a rate term from field names).
+  (a prior instance of not inventing a rate term from field names), `BL-388` (its candidate (1)
+  reads the same `noseY` sign and is restated by this).
 
 - `BL-388` `[Tuning]` `[Owed-playtest]` **The AI autogyro's nose-down at low speed may read softer
   than the original's — soft, single-session A/B, not a confirmed measurement.** `PT-57`
@@ -1212,10 +1242,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   otherwise matched the original directly at the controls; the one residual is "the nose pulling
   down is not as hard as in the original", offered with a "perhaps".
   *Evidence:* two candidate mechanisms, neither pinned to the report yet. (1) `AiControlLaw`'s
-  low-speed recovery (`src/Flight/AiControlLaw.cs`:116,119,250–254): below `RecoveryNoseY` (nose
-  more than ~30° under the horizon) and `RecoverySpeed` (60 mph), the law firewalls pitch full
-  nose-down and the throttle to `SpeedCap` — if this arms later or weaker than the original's
-  equivalent, the recovery would read soft exactly like this. (2) `C24`'s authority ramp
+  low-speed recovery: below `RecoveryNoseY` and `RecoverySpeed` (60 mph) the law firewalls pitch
+  nose-down and the throttle to `SpeedCap`. ⚠ `BL-387` corrected the sign of `noseY`, so this arms
+  with the nose ~30° **UP** and slow, a stall recovery, not with the nose down. That makes it a
+  weaker candidate for a soft nose-down than it looked, since the reported feel is a dive and this
+  arm no longer fires in one; re-read it against the corrected sign before pursuing it. (2) `C24`'s authority ramp
   (`FlightModel.RollPitchAuthorityAt`) fades pitch alongside roll below `turn_fade_in`/`_out`; the
   autogyro is the airframe `BL-330` measured losing the MOST authority by its own stall speed
   (~79%), so a soft nose-down there could also just be the ramp doing its authored job and reading

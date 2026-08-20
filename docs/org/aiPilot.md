@@ -302,10 +302,10 @@ displacement moves with the aircraft's own drift, which is a washout on the posi
 
 ⚠ **This is a tracking rule, not a damping rule, and it does not by itself steady the aeroplane.**
 It was measured on the ported law: flying a 8 km leg entered 120 m off the line, the displacement
-holds the aeroplane out on a parallel course as intended, but the roll wallow is unchanged against
-the same flight aimed at the node (peak bank about 90°, mean about 48° either way). Whatever keeps
-the original's aircraft steady is not this and is not in the law either
-([`aiControlLaw.md`](aiControlLaw.md)); `BL-387` remains open on the plant.
+holds the aeroplane out on a parallel course as intended, and it does not change the roll against
+the same flight aimed at the node. What steadies the aeroplane is in the law, and specifically in
+the sign of `bz` ([`aiControlLaw.md`](aiControlLaw.md), step 4): the renormalisation is the astern
+case, so an aircraft tracking something in front of it keeps its error's true magnitude.
 
 ⚠ The vertical component is carried too. `off` is a full 3-vector, so an aircraft above or below its
 leg is aimed above or below the node by the same 0.9, and the 200 m cap is on the 3-D magnitude.
@@ -343,10 +343,11 @@ constructor default (`FUN_004303d0` writes `10.0f` to `+0x28`) and every shipped
 alone — element 1 of the net record is `10.0` on all 222 files. Altitude change along a leg does not
 widen the capture, which is consistent with the follower's other, horizontal, arrival tests.
 
-⚠ **Porting this does not steady the aeroplane.** Measured on the anchored `M4ReinfAce` against the
-invented 200 m horizontal radius it replaced, node advances in 90 s go 3 → 7 with the player under
-way — the stranding is real and this removes it — while the roll wallow does not improve (mean bank
-62° → 54°, saturation 44 % → 64 %). `BL-387` survives it.
+⚠ **Porting this does not by itself steady the aeroplane.** Measured on the anchored `M4ReinfAce`
+against the invented 200 m horizontal radius it replaced, node advances in 90 s go 3 → 7 with the
+player under way, so the stranding is real and this removes it, while the roll was unchanged. The
+roll was the `bz` sign in [`aiControlLaw.md`](aiControlLaw.md), which is a separate fault in a
+separate function; both were real and this one is the reason a walk could stall on a node.
 
 ## The patrol-net follower has no netless branch
 

@@ -10,9 +10,9 @@ namespace CSVM.Tests;
 /// <see cref="PlaneStats"/> so the arithmetic is pinned against the DECODED numbers rather than
 /// against whatever the install happens to author.
 ///
-/// <para>What these exist to catch is the three readings D31 landed backwards and E41 corrected:
-/// which branch a given geometry takes, which way <c>rudder_tol</c> points, and that the
-/// wings-level rule is the dead-astern case rather than the straight-ahead one.</para>
+/// <para>What these exist to catch is which branch a given geometry takes, which way
+/// <c>rudder_tol</c> points, and above all the SIGN of <c>bz</c>: the renormalisation is the
+/// ASTERN case, and the wings-level rule the straight-ahead one.</para>
 /// </summary>
 public class AiControlLawTests
 {
@@ -79,8 +79,8 @@ public class AiControlLawTests
     {
         var aim = new Vector3(100f, 400f, -100f); // ahead and to the right
 
-        // Stock 0.2: an aim point ahead renormalises the horizontal pair, so h is exactly 1 and
-        // clears the threshold. The aircraft banks.
+        // Stock 0.2: 45° off the nose is 0.707 of true horizontal error, which clears the
+        // threshold on its own magnitude. The aircraft banks.
         var banked = AiControlLaw.Steer(Model(), aim, Vector3.Zero, AiLawParams.Cruise, 0.85f, Dt);
         Assert.Equal(-1f, banked.Roll, 4);
         Assert.Equal(0f, banked.Yaw);
@@ -94,12 +94,31 @@ public class AiControlLawTests
         Assert.Equal(0f, ruddered.Roll);
     }
 
+    /// <summary>⚠ The renormalisation is the ASTERN case. `bz` is the aim point's component along
+    /// the BACKWARD axis (row 2 of the basis at `+0x180`, negated at `0x00476339` to build the
+    /// forward vector), so it is positive behind. Throwing the error's magnitude away and keeping
+    /// its direction is how the original commits to a reversal; getting this backwards is what
+    /// made every AI saw at full stick on a straight leg (`BL-387`).</summary>
     [Fact]
-    public void AnAimPointNearlyDeadAsternGoesOnTheRudderAtTheStockTolerance()
+    public void AnAimPointAsternIsRenormalisedAndCommitsToFullBank()
     {
-        // 0.19 of lateral against 0.98 of behind: inside the default 0.2 astern cone, and outside
-        // the wings-level rule's much tighter 0.06 gate.
+        // 0.19 of lateral against 0.98 of BEHIND. The true horizontal error is only 0.19, but
+        // astern it is renormalised to 1, which clears rudder_tol and takes the bank branch.
         var input = AiControlLaw.Steer(Model(), new Vector3(190f, 400f, 980f), Vector3.Zero,
+            AiLawParams.Cruise, 0.85f, Dt);
+
+        Assert.Equal(-1f, input.Roll, 4);
+        Assert.Equal(0f, input.Yaw);    // renormalised, so nothing falls through to the rudder
+        Assert.Equal(0f, input.Pitch);  // and the bank command is far outside the 0.06 deadband
+    }
+
+    /// <summary>The same geometry AHEAD keeps its true magnitude, and 0.19 of lateral does not
+    /// clear the stock 0.2. That is the branch the original's own AI was sampled in while flying
+    /// a leg, and the reason a tracking aeroplane holds its course instead of wallowing.</summary>
+    [Fact]
+    public void TheSameErrorAheadKeepsItsMagnitudeAndGoesOnTheRudder()
+    {
+        var input = AiControlLaw.Steer(Model(), new Vector3(190f, 400f, -980f), Vector3.Zero,
             AiLawParams.Cruise, 0.85f, Dt);
 
         Assert.Equal(-0.666, input.Yaw, 2);  // -0.19033 x the 3.5 scale
@@ -108,18 +127,30 @@ public class AiControlLawTests
     }
 
     [Fact]
-    public void TheWingsLevelRuleIsTheDeadAsternCaseAndRollsOutOfBank()
+    public void TheWingsLevelRuleIsTheStraightAheadCaseAndRollsOutOfBank()
     {
-        // Banked 30 degrees right, with the aim point exactly astern: both body components are 0,
-        // which is only reachable behind the aircraft because anything ahead is renormalised to a
-        // unit horizontal pair.
+        // Banked 30 degrees right, with the aim point straight AHEAD and level: both body
+        // components are 0, which only survives unrenormalised, so it is reachable only in front.
         var banked = Basis.Identity.Rotated(Vector3.Forward, Mathf.DegToRad(30f));
-        var input = AiControlLaw.Steer(Model(attitude: banked), new Vector3(0f, 400f, 1000f),
+        var input = AiControlLaw.Steer(Model(attitude: banked), new Vector3(0f, 400f, -1000f),
             Vector3.Zero, AiLawParams.Cruise, 0.85f, Dt);
 
         // 0.2 authority x sin(30) = 0.1, then the 3.5 scale, under the limit of 1.
         Assert.Equal(0.35, input.Roll, 3);
         Assert.True(input.Roll > 0f, "a right bank is levelled with a LEFT roll");
+        Assert.Equal(0f, input.Pitch);
+        Assert.Equal(0f, input.Yaw);
+    }
+
+    /// <summary>The plainest statement of `BL-387`: an aim point dead ahead and level needs no
+    /// turn, so every channel must be still. Under the inverted `bz` this commanded full roll.</summary>
+    [Fact]
+    public void AnAimPointDeadAheadAndLevelCommandsNothingAtAll()
+    {
+        var input = AiControlLaw.Steer(Model(), new Vector3(0f, 400f, -8000f), Vector3.Zero,
+            AiLawParams.Cruise, 0.85f, Dt);
+
+        Assert.Equal(0f, input.Roll);
         Assert.Equal(0f, input.Pitch);
         Assert.Equal(0f, input.Yaw);
     }

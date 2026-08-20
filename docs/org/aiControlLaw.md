@@ -127,11 +127,13 @@ regardless of airframe**, and on the faster fighters that ceiling binds well bef
 `fd_speed · params[1]` does: a Bloodhawk chasing at `params[1] = 1.3` would ask for 393 mph and
 gets 250. Recovered 2026-08-15 while landing `E41`; D31 left it named as unresolved.
 
-When `emergency` is set, `want` is 22.352 m/s, and with the nose above the horizon the law
-**writes the aircraft's own state**: it adds `dt · noseY · 4.0` to the altitude and, if the vertical
-velocity is below `-22.352 · noseY`, eases it toward that value at rate 0.5 and rewrites the
-velocity vector and speed at `+0x924`…`+0x934`. Nose below the horizon instead raises `want` to
-`22.352 · (1 - noseY)`. This is a position and velocity cheat during crash recovery, not a force.
+When `emergency` is set, `want` is 22.352 m/s, and with the nose at or below the horizon
+(`noseY >= 0`) the law **writes the aircraft's own state**: it adds `dt · noseY · 4.0` to the
+altitude and, if the vertical velocity is below `-22.352 · noseY`, eases it toward that value at
+rate 0.5 and rewrites the velocity vector and speed at `+0x924`…`+0x934`. Both terms lift a diving
+aeroplane, which is what makes this a position and velocity cheat during crash recovery rather than
+a force. Nose above the horizon instead raises `want` to `22.352 · (1 - noseY)`, more speed for the
+climb.
 
 **3. Aim.** `FUN_00460be0` solves the intercept quadratic and returns a unit direction, with bit 1
 set when a second root exists. With `gunLead` clear it is solved at `want` against the aim
@@ -141,7 +143,16 @@ straight-line direction. When two roots exist and `DAT_0064ee4c` is clear, the l
 root has the larger dot product with the current nose, that is the one needing less turning.
 
 **4. Body frame.** The aim direction is rotated by the 3x3 at `obj+0x180` into `bx` (right), `by`
-(up), `bz` (forward).
+(up), `bz`.
+
+⚠ **`bz` is BACKWARD, and it is positive BEHIND the aircraft.** The third row of that basis
+(`obj+0x198`…`obj+0x1a0`) is the backward axis: `FUN_00476250` builds the vehicle's forward vector
+by loading those three and negating them (`FLD [ESI+0x198]; FCHS; FSTP [ESI+0x1e0]` at
+`0x00476339`), and the escort law's station offsets read the same row the same way. Everything the
+law does with `bz` and with `noseY` (`obj+0x19c`, that row's Y, so **positive nose DOWN**) hangs on
+this sign, and reading it as "forward" inverts step 6, step 7 and step 8 together. Two consequences
+make the sign legible without the disassembly at all: step 8 is a recovery only if it fires nose
+UP, and step 2's emergency arm only lifts the aeroplane if it fires nose DOWN.
 
 **5. Throttle** (`obj+0x124`, the commanded lever, which the integrator then rate-limits like the
 player's):
@@ -155,40 +166,40 @@ throttle = clamp(throttle, params[0], params[1])
 ```
 
 **6. Stick.** With `h` the horizontal magnitude of `(bx, by)`, renormalised to 1.0 when the target
-is ahead (`bz > 0`), pitch and yaw start at zero and:
+is **behind** (`bz > 0`), pitch and yaw start at zero and:
 
 ```
 if h > def+0x260 (rudder_tol) or |bx| <= |by|:       the ordinary branch
     if by < 0:  bx = -bx  when emergency or h < params[6],  else bx = sign(bx)
     roll = -bx
     if |bx| < params[2]:  pitch = by
-else:                                                the dead-astern branch
+else:                                                the small-error branch
     if bx < 0:  by = -by
     roll = by
     if |by| < params[2]:  yaw = -bx
 ```
 
 ⚠ **Read the branch test together with the renormalisation above it, or it reads backwards.**
-Because `h` is forced to exactly 1.0 whenever the target is ahead, `h > rudder_tol` (0.2 by
-default) is **true for every target in front of the aircraft**, so the first branch is the ordinary
-one: bank toward the lateral error, and add elevator once the bank command is nearly satisfied.
-That is bank-to-turn with a pull, and it lets the plant's own bank coupling do the turning.
+Because `h` is forced to exactly 1.0 whenever the target is **behind**, `h > rudder_tol` (0.2 by
+default) is true for everything astern, so anything behind the aircraft takes the bank branch at
+full authority. That is the reversal: throw the error's magnitude away, keep its direction, and
+commit the stick to bringing the target round.
 
-At the default `rudder_tol` the second branch can only be reached when `bz <= 0`, and `h <= 0.2`
-then forces `|bz| >= 0.98`: the aim point is within about 11 degrees of **dead astern**. There the
-law banks on the *vertical* component and puts the *lateral* component on the rudder, which is how
-it breaks into a turn with nothing ahead to bank toward. Raising `rudder_tol` widens that cone, and
-at 1.0 it swallows the whole forward hemisphere as well (see the warning below).
+An aim point **ahead** keeps its true magnitude, and that is what the second branch is for. `h` is
+then the real horizontal aim error, so a genuine turn still clears `rudder_tol` and banks, while an
+error under 0.2 with the lateral component dominating falls through to the rudder instead. **This is
+the branch a patrolling or pursuing aircraft flying at something in front of it normally sits in**,
+and it is where the original's own AI was sampled under a debugger: a small lateral error on the
+rudder, a roll command in the thousandths, wings level.
 
-⚠ **`rudder_tol` reads the opposite way round to what its position in the test suggests, and D31
-had it backwards twice.** Settled 2026-08-15 while landing `E41`, and pinned by
+⚠ **`rudder_tol` reads the opposite way round to what its position in the test suggests.** Pinned by
 `CSVM.Tests/AiControlLawTests`. Clearing the threshold selects the BANK branch, so a **higher**
 `rudder_tol` yields **more** rudder, not less:
 
-| `rudder_tol` | Aim point ahead (`h` = 1) | Aim point behind |
+| `rudder_tol` | Aim point ahead (`h` = the true error) | Aim point behind (`h` = 1) |
 |---|---|---|
-| **0.2**, the def default | `1 > 0.2`, so always the bank branch | rudder once inside about 11 degrees of astern and the lateral error dominates |
-| **1.0**, authored by `autogyro` and `balmoral` | `1 > 1` is false, so the branch falls to `abs(bx) <= abs(by)`: a lateral-dominant error goes on the RUDDER | rudder whenever the lateral error dominates |
+| **0.2**, the def default | banks once the horizontal error passes 0.2, roughly 12 degrees off the nose; under that, a lateral-dominant error goes on the rudder | `1 > 0.2`, so always the bank branch |
+| **1.0**, authored by `autogyro` and `balmoral` | `1 > 1` is false at the very most, so a lateral-dominant error ALWAYS goes on the RUDDER | `1 > 1` is false, so rudder whenever the lateral error dominates |
 
 So the key is what its name says, a tolerance on how much horizontal aim error justifies banking
 rather than ruddering, and the two defs that raise it to 1.0 are **rudder-steered aircraft**. The
@@ -200,17 +211,19 @@ the aircraft is not near vertical (`|noseY| < 0.9`), the roll command is overwri
 levelling term read off the right-wing vector's vertical component `obj+0x184`, sign-flipped when
 inverted.
 
-⚠ **This is the DEAD-ASTERN case, not the straight-ahead one, and the renormalisation is again
-why.** Whenever the aim point is ahead, `(bx, by)` is scaled to unit length, so at least one of
-them is at least 0.707 and the pair can never both sit under 0.06. Both small therefore forces
-`bz <= 0` and `|bz| > 0.996`: the aim point is within about 5 degrees of dead astern. What the rule
-actually says is "the thing I want is directly behind me, so stop steering and roll the wings
-level". Note also the edge case one step earlier: an aim point EXACTLY ahead gives `h == 0` before
-renormalisation, and the law sets `by = 1`, which is full elevator.
+⚠ **This is the STRAIGHT-AHEAD case, and the renormalisation is again why.** Whenever the aim point
+is behind, `(bx, by)` is scaled to unit length, so at least one of them is at least 0.707 and the
+pair can never both sit under 0.06. Both small therefore forces `bz <= 0`: the aim point is in
+front, and within about 3 degrees of the nose. What the rule actually says is "I am pointed at the
+thing I want, so stop steering and roll the wings level", which is the ordinary end state of
+flying a leg. Note the edge case one step earlier, which is the mirror of it: an aim point EXACTLY
+astern gives `h == 0` before renormalisation, and the law sets `by = 1`, full elevator, pulling up
+and over into the reversal.
 
-**8. Low-speed recovery.** Nose more than 0.5 below the horizon and speed under 26.8224 m/s
-(60 mph) forces pitch to `-1.0` upright or `+1.0` inverted (pull toward level either way) and the
-throttle to `params[1]`.
+**8. Low-speed recovery.** Nose more than 0.5 **above** the horizon (`noseY < -0.5`, the backward
+axis half a unit down) and speed under 26.8224 m/s (60 mph) forces pitch to `-1.0` upright or
+`+1.0` inverted, pushing the nose down either way up, and the throttle to `params[1]`. Slow and
+nose high is a stall, and unloading with full power is the recovery from it.
 
 **9. Scale, clamp, ease off.**
 
@@ -231,15 +244,17 @@ frame to `+0x114` is memoryless: the branch, the scale, the clamp and the skill 
 frame's aim error and nothing else. No channel is filtered against its previous value, none reads a
 body rate, and no `dt` enters any of the three. The throttle at `obj+0x49` is the one filtered
 quantity in the function (`±dt · 0.35`), and the identity stub means the copy out adds no slew
-either. So the roll command is a relay on the SIGN of the lateral aim error: because the
-renormalisation in step 6 writes back into the same `bx` the bank branch outputs, the magnitude is
-gone, and the shipped 3.5 scale against a limit of 1.0 saturates anything past about 0.29.
+either. So **behind** the aircraft the roll command is a relay on the SIGN of the lateral aim error:
+the renormalisation in step 6 writes back into the same `bx` the bank branch outputs, the magnitude
+is gone, and the shipped 3.5 scale against a limit of 1.0 saturates anything past about 0.29. That
+is deliberate and it is confined to the reversal. **Ahead**, the magnitude survives, and the 3.5
+scale is then a proportional gain on a real error rather than a relay on a sign.
 
-What keeps an aircraft steady on a straight leg is therefore not in this function, and the search for
-it should not restart here. The aim point was the obvious next candidate and has been eliminated by
-measurement: the patrol executor does displace it off the node ([aiPilot.md](aiPilot.md), "What the
-patrol executor aims at"), but porting that displacement leaves the roll wallow unchanged. On our
-plant this relay drives the bank to about 90° before the sign flips, which is what `BL-387` is.
+⚠ **`BL-387` was this sign read backwards in the port, not a missing damping term.** With the
+renormalisation applied to targets in FRONT, a tiny lateral error on a straight leg was blown up to
+full scale every frame and the bank sawed to about 90°; with it applied astern, as here, the same
+flight commands nothing at all. There is no rate term to go looking for, and the search for one
+should not restart here.
 
 ### The parameter tables
 
