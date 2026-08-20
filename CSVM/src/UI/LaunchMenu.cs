@@ -156,6 +156,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     private static readonly Color FooterColor = new(0.52f, 0.60f, 0.70f);
     private static readonly Color ErrorColor = new(1f, 0.55f, 0.45f);
 
+    // A selected-but-not-yet-flying aircraft. Distinct from RowFocusColor on purpose: the two
+    // stages of the pick are the one thing on this screen a pilot must be able to tell apart at
+    // a glance, and "the cursor is here" and "this is chosen" would otherwise look identical.
+    private static readonly Color RowLockedColor = new(0.55f, 0.95f, 0.62f);
+
     private readonly Dictionary<string, PlaneStats?> _stats = new();
     // The joined players, player 1 first. Never empty once ShowMenu has run.
     private readonly List<Slot> _slots = new();
@@ -383,7 +388,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             "missiontype" => Screen.MissionType,
             "waves" => Screen.Waves,
             "wingmen" => Screen.Wingmen,
-            "plane" or "loadout" => Screen.Plane,
+            "plane" or "loadout" or "selected" => Screen.Plane,
             "wingmanloadout" => Screen.WingmanLoadout,
             _ => Screen.Mode,
         };
@@ -431,10 +436,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
         // A pane's own fit only exists once that slot has selected an airframe, so the aid makes
         // that press for the reader — after the reset loop above, which would undo it.
-        if (startScreen == "loadout")
+        if (startScreen is "loadout" or "selected")
         {
             _slots[0].Locked = true;
-            _slots[0].InLoadout = true;
+            _slots[0].InLoadout = startScreen == "loadout";
             _slots[0].FitRow = 0;
         }
         SyncDevices();
@@ -1239,6 +1244,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.WingmanLoadout => $"WINGMEN — AMMO SELECTION  ({Planes[_wingmanPlaneIndex].Name})",
             _ when _slots.Count == 1 && _slots[0].InLoadout =>
                 $"AMMO SELECTION  ({Planes[_slots[0].PlaneIndex].Name})",
+            _ when _slots.Count == 1 && _slots[0].Locked => "AIRCRAFT SELECTED",
             _ => _slots.Count > 1 ? "SELECT AIRCRAFT — ALL PLAYERS" : "SELECT AIRCRAFT",
         };
         _body.AddChild(Label(heading, (int)(HeadingFont * s), HeadingColor, HorizontalAlignment.Center));
@@ -1260,6 +1266,15 @@ public sealed partial class LaunchMenu : CanvasLayer
             {
                 _body.AddChild(Spacer((int)(4 * s)));
                 _body.AddChild(Label(wingmen, (int)(DetailFont * s), DetailColor, HorizontalAlignment.Center));
+            }
+
+            // The lock is otherwise invisible in the centred layout, and an unacknowledged press
+            // on a screen that used to launch on it reads as a freeze rather than as a stage.
+            if (_slots.Count == 1 && _slots[0].Locked)
+            {
+                _body.AddChild(Spacer((int)(4 * s)));
+                _body.AddChild(Label($"✓  {Planes[_slots[0].PlaneIndex].Name} selected",
+                    (int)(DetailFont * s), RowLockedColor, HorizontalAlignment.Center));
             }
         }
 
@@ -1422,12 +1437,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         // It is two more VBox children (the spacer and the label itself), which the separation
         // term below must also grow by, not just the row height sum.
         bool wingmenLine = _screen == Screen.Plane && WingmenLine().Length > 0;
-        int extraChildren = wingmenLine ? 2 : 0;
+        // The selected-aircraft line is a second conditional pair on the same screen, so it is
+        // counted the same way — a wingman-heavy locked launch adds both at once.
+        bool lockedLine = _screen == Screen.Plane && _slots.Count == 1 && _slots[0].Locked;
+        int extraChildren = (wingmenLine ? 2 : 0) + (lockedLine ? 2 : 0);
         float refH =
             font.GetHeight(TitleFont) + font.GetHeight(CrumbFont) + font.GetHeight(FooterFont) +
             font.GetHeight(HeadingFont) + rows * font.GetHeight(RowFont) +
             font.GetHeight(DetailFont) + font.GetHeight(FooterFont) +
             (wingmenLine ? font.GetHeight(DetailFont) + 4 : 0) +
+            (lockedLine ? font.GetHeight(DetailFont) + 4 : 0) +
             (_error.Length > 0 ? font.GetHeight(ErrorFont) + 4 : 0) +
             8 + 8 + 6 + 10 + 16 +          // the explicit spacers Rebuild adds
             6 * (10 + rows + extraChildren); // the body VBox's separation between children
@@ -1581,7 +1600,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             _ => Planes[index].Name,
         };
         bool sel = index == CurrentIndex;
-        return CursorRow.Build(text, (int)(RowFont * s), sel ? RowFocusColor : RowColor, sel);
+        // A locked single-player pick recolours its row, because the centred layout has no
+        // per-pane status line to carry the state the way the splitscreen panes do.
+        bool locked = _screen == Screen.Plane && _slots.Count == 1 && _slots[0].Locked;
+        var colour = sel ? locked ? RowLockedColor : RowFocusColor : RowColor;
+        return CursorRow.Build(text, (int)(RowFont * s), colour, sel);
     }
 
     // One Waves-screen row: an unconfigured slot reads "empty" (decision 1's own "starts
@@ -1696,7 +1719,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         string fit = _screen == Screen.Plane || (_screen == Screen.Wingmen && _numWingmen > 0)
             ? "       L / Y  Weapons"
             : "";
-        string select = _screen == Screen.Plane ? "Enter / A  Select, again to fly" : "Enter / A  Select";
+        // Name the press that is actually next. Before the lock that is "select"; after it, "fly"
+        // — a footer still offering "select" on an already-selected plane is why the second press
+        // was not obvious in the first place.
+        string select = _screen != Screen.Plane ? "Enter / A  Select"
+            : _slots.Count == 1 && _slots[0].Locked ? "Enter / A  FLY"
+            : "Enter / A  Select";
         return $"{nav}       {select}{fit}       {back}{who}";
     }
 
