@@ -415,53 +415,21 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
   early relative to its own stall, the Balmoral barely at all, and the Fury somewhere between.
   *Blocks:* F52's player-side verdict.
 
-### C1 · Bloodhawk — ordnance in ordinary flight (`PLAN-ordnance-types` F22)
-
-```powershell
-./RunGame.ps1 --plane=player_bhawk --chapter=C1 --rocket=wep_14 --infinite-ammo
-```
-
-`--rocket=<wep_id>` swaps every pylon to the named type, which with the weapon lab is the only way
-to fly a type a stock loadout does not carry: all 11 loadouts fit HE `wep_06`, and the Weapon
-Loadout screen that would let a pilot fit the rest is `BL-353`, unbuilt. The rocket trigger is
-**F**, one round per pull.
-
-⚠ **Every figure quoted in this section and the four below is a decoded constant or an authored
-value.** A clip that disagrees with one is evidence about our implementation, never a correction to
-the constant: a decode is not contested with a measurement read off a running picture
-(`docs/verification.md` DET-12).
-
-- `PT-62` `[Own]` **Torpedo launch inheritance and the launch look (`PLAN-ordnance-types` `A2`,
-  `A4`; closes `BL-290`'s at-the-controls half).** `wep_14` authors `LOCK_ON [2.5]` and
-  `VELOCITY [60]`, so a torpedo leaves at the launching aircraft's speed and blends that inherited
-  vector out linearly across 2.5 s onto its own 60 m/s. `RANGE_MINIMUM` is a hittability gate, not
-  an arming or a visibility one: the body is drawn from launch, wings folded and prop absent, with
-  the orange flame ribbon, and at 3.5 s on its def's clock the flame stops, the wings swing out over
-  5 s, the prop appears, the white puffs start and the arming beeps sound.
-  *Look for:*
-  - (a) **the decay** with the sea or a shoreline in frame for scale: launched flat out, the round
-    pulls ahead fast and visibly settles over about two and a half seconds, then holds a steady
-    cruise. Launched slow (throttle back to a speed near 60 m/s first) it should show no settling at
-    all, because there is almost nothing to blend out;
-  - (b) **the switch** with nothing selected: the round is drawn from the rail with the flame, and
-    about 3.5 s out the flame gives way to white puffs while the wings unfold and the beeps sound,
-    with no moment at which the round is missing;
-  - (c) **no target selected still decays** (the one deliberate divergence from the original, `B6`):
-    with `T`/`O` pressed to clear the selection, the round must still settle to 60 m/s rather than
-    hold launcher speed the whole way out.
-
-  *Blocks:* `A2`'s and `A4`'s owed clips, and with the other open `PT` rows here the F22 sign-off that completes
-  `docs/PLAN-ordnance-types.md`. A fail on (a) or (c) is evidence against
-  `ProjectilePool.SteeringStepRuns`, not against the 2.5 s.
-  *Variations:* `--view=2` and `--view=4` hold the belly and flank cameras, which is where the
-  launch look in (b) reads best; `--target=nearest` with an `--ai=player_fury` up gives (c) its
-  positive control.
-
 ### C1 · Bloodhawk — the weapon lab, one ordnance type at a time (`PLAN-ordnance-types` F22)
 
 ```powershell
 ./RunGame.ps1 --weapon-lab=wep_15 --plane=player_bhawk --chapter=C1
 ```
+
+`--rocket=<wep_id>` (used by the sections below) swaps every pylon to the named type, which with
+the weapon lab is the only way to fly a type a stock loadout does not carry: all 11 loadouts fit HE
+`wep_06`, and the Weapon Loadout screen that would let a pilot fit the rest is `BL-353`, unbuilt.
+The rocket trigger is **F**, one round per pull.
+
+⚠ **Every figure quoted in this section and the ones below is a decoded constant or an authored
+value.** A clip that disagrees with one is evidence about our implementation, never a correction to
+the constant: a decode is not contested with a measurement read off a running picture
+(`docs/verification.md` DET-12).
 
 The lab holds the aircraft in place inside a real C1 flight session and fires through the session's
 own projectile pool at the chapter's real surfaces, so impacts play the authored dirt, water and
