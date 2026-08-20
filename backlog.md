@@ -969,22 +969,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-415` `[Bug]` **The bail-out hides the parachutist's body instead of the pilot in the seat, so the
   canopy deploys with nobody under it.** `cpeject1`'s `ObjectActiveState(pilot, false)` is anchored on
-  the crash root (`MAIN_ROOT_NODE` resolves to the caller's anchor), and `NameResolver.ResolveScoped`'s
+  the crash root (our `MAIN_ROOT_NODE` resolves to the caller's anchor), and `NameResolver.ResolveScoped`'s
   tier 1 is that anchor's own subtree — which now contains the staged `chuteman > chutemanparent >
   pilot` copy. It binds there instead of the airframe's `healthy/geometry/…/pilot_pos/pilot`, and
   `chuteman`'s own def never names `pilot`, so nothing restores it. Measured on both `player_bhawk`
   and `player_autogyro`: `seated pilot visible=True, chute pilot visible=False`, the exact inverse of
   what the data asks for. Arrived with the `chuteman` staging (`BL-385` Wave D, D20) and became
   visible when D25 made the ejection play.
-  **The mechanism the original uses instead:** compiled node POINTERS. `cpeject1`'s `pilot` is
-  `ptr=7655` and `pilot_pos` is `ptr=7654`, which is `NameResolver.Resolve`'s `SymbolClaims` tier. It
-  claims the name but binds nothing here, because a `PlaneBuilder`-built model carries no pointer
-  index, so resolution falls through to the scoped chain and lands on the wrong `pilot`.
-  ⚠ **Traps.** (a) The two candidate fixes are pointer indexing for plane models, or a resolver tier
-  that prefers the controller's own aircraft subtree over staged template copies for a call anchored
-  on the crash root. Both change `NameResolver`'s tier ORDER, which carries an explicit ⚠ against
-  reordering — that warning is there because the tiers were derived from the original's own
-  resolution, so a reorder needs the decode, not a local fix. (b) Do not special-case `chuteman` by
+  **The mechanism the original uses instead, decoded:** the name is resolved ONCE, at definition
+  load, inside a subtree the definition owns exclusively, and the event stores only the resulting
+  index. Nothing is searched by name at the moment the event fires. `FUN_004efaf0` resolves `pilot`
+  in the animation root subtree (`def+0x6c`), then the main root subtree (`def+0x48`), then the
+  definition's two interned lists, and reaches the world only when `LOCAL_NODES_ONLY` is clear; the
+  definition loader `FUN_0051dcf0` first gives the definition a private COPY of its anchor's node tree
+  (`FUN_004d8610`, recorded as flag bit `0x80000` in `def+0x9c`), which is why no staged template copy
+  can shadow the name there. `cpeject1`'s `ptr=7655` / `ptr=7654` are the interned results of that
+  pass, not a lookup key. At run time `FUN_004e8d60` is a table lookup, and `MAIN_ROOT_NODE` is the
+  definition's OWN root (`inst+0x48`), not the caller's anchor. The caller's node is the separate
+  `INPUT_NODE` sentinel (`inst+0x7c`), and `AnimRuntime.IsSelfNodeRef` collapses the two. Full decode:
+  [`docs/org/sequences.md`](docs/org/sequences.md), "A node reference is resolved once, at load, and
+  stored as an index".
+  ⚠ **Traps.** (a) The fix is the SCOPE of the resolver's first tier, not the ORDER of its tiers, so
+  `NameResolver`'s ⚠ against reordering does not block it: the original's tier 1 searches a subtree the
+  definition owns alone, ours searches a crash root shared with staged copies. Pointer indexing is not
+  the answer either, because the original's index is per-definition and built at load from its own
+  subtree, which is what `NameResolveFallback` already stands in for. Note the decode also puts the
+  interned lists at tiers 3 and 4, where `Resolve`/`Targets` consult `SymbolClaims` first; that
+  inversion is a second, separate deviation. (b) Do not special-case `chuteman` by
   name: the collision is structural and any future staged template carrying a common node name hits
   it. (c) The seated pilot exists on all eleven airframes, so a wrong fix is wrong everywhere at once.
 
