@@ -2467,6 +2467,37 @@ usual.
 
 ## Missions, modes & campaign
 
+- `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
+  controls flying `PT-83`: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.
+  **The mechanism.** `GameSession.StuntSummaryFor` (`GameSession.cs:3083-3094`) calls
+  `store.RecordIfBest(key, run.Elapsed)` behind two guards and no third: the objective is
+  `ZonesFlown`, and player 1 has a `Stunt` run at all. Neither asks whether the run was
+  **finished**. So every end of an Instant Action stunt mission records a time, a loss included.
+  A failed run then wins the comparison almost every time, because it ended early: `RecordIfBest`
+  (`ScoreStore.cs:59-63`) takes any total lower than the stored one, and dying halfway round
+  produces exactly that.
+  **Why it is not cosmetic.** The write persists immediately to `user://stunt_scores.json`, so a
+  bogus time becomes the record a later honest run is measured against and, being unbeatably short,
+  can never be displaced by real flying. The damage outlives the session that caused it.
+  **The shape of the fix is already in the file.** The solo path does this correctly by
+  construction: `StuntScoreboard.OnRunCompleted` (`StuntScoreboard.cs:156-160`) only runs on
+  completion, and the board uses `StuntMission.AllComplete` (`:98`) as its own retire test. The
+  Instant Action wrap-up needs the same predicate; the two paths disagree today and only one of
+  them is right.
+  ⚠ **Traps.** (a) Do not gate on the mission's win/loss flag instead. Decision 10 of
+  [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) has every player fly
+  their own zone set with the mission ending when all of them are done, so a splitscreen mission
+  can end with one pilot complete and another not; the test belongs on the run, per pilot, not on
+  the mission. (b) `prevBest` is read *before* the record (`GameSession.cs:3091-3092`), so a fix
+  that stops the write without touching the display would still show a stale figure. (c) The store
+  is in `user://`, not the repo, so any machine that has already hit this carries a poisoned file
+  that no code change repairs. Decide explicitly whether to invalidate existing entries.
+  **Open question, a taste call.** Whether a failed run shows its elapsed time at all (without the
+  NEW BEST flag) or shows no time. The original's own behaviour here is not decoded.
+  *How you'd know it worked:* fail a stunt mission deliberately, confirm the wrap-up claims no best
+  and `user://stunt_scores.json` is byte-identical afterwards; then complete one and confirm it
+  does record.
+
 - `BL-352` `[Feature]` **Instant Action's Table of Contents: the 19 preset scenarios and their View
   Story page.** Split out of [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing
   (2026-08-14) as deliberately out of that plan's scope. The original's Instant Action screen is not
