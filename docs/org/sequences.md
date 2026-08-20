@@ -564,16 +564,58 @@ the callee's anchor. CSVM instead makes the call site the callee's Start anchor
 (`AnimRuntime`'s `CallAnimation` arm, `callAnchor = siteNode ?? anchor`), which is an undeliberate
 difference and a candidate cause in `BL-348`.
 
-**The restart refusal is keyed on the callee's own run state, with no anchor in it.** In
-`FUN_004ed8c0`: run state byte `+0xa0 == 2` with bit `0x100` of `+0x9c` clear, under a zero anchor
-argument, returns 0 immediately. It also refuses outright in states 4, 5 and 6, and in states 2 or 3
-when `+0xac` is within 0.1 of `-99.0`. Given a NON-zero anchor (which `CALL_ANIMATION` never passes)
-it instead walks the instance chain at `+0x10c` and refuses only an instance that is both running and
-already on that anchor, otherwise reusing a stopped chain entry or cloning through `FUN_00520910`;
-with bit `0x100` set it always clones, so concurrent instances are allowed. This is the decoded form
-of the semantic `formats/anim-definitions.md` derives observationally from C1/MP1's rearm-door poll,
-and it is **stricter** than that derivation: the original refuses a second call while the callee runs
+### The restart refusal is keyed on the callee's own run state, with no anchor in it
+
+`FUN_004ed8c0(callee, anchor)` decides the whole question, and `CALL_ANIMATION` always reaches it
+with a zero anchor. Under that zero anchor the decision reads the run state byte at `+0xa0` and
+nothing else (`004ed8d5`–`004ed8fe`):
+
+| `+0xa0` | State | A call |
+|---|---|---|
+| 0, 1 | idle: never started, or torn down after a run | starts it, and `004edaa1` writes state 2 |
+| 2 | running | refused, returning 0 at `004edab1` |
+| 3 | parked at rest | starts it |
+| 4 | paused, entered from state 3 | refused |
+| 5 | dead: load failure or teardown | refused |
+| 6 | paused, entered from state 2 | refused |
+
+The transitions that produce those values are three small functions. `FUN_004ed500` is the pause:
+`2 → 6`, any other live state `→ 4`, state 5 left alone. `FUN_004ed480` is the resume: `6 → 2`,
+`4 → 3`. `FUN_004ed190` is the teardown: it refuses on state 5, maps `6 → 4`, and takes everything
+else **to state 1**, which the gate accepts. So an animation that has run to completion is
+immediately callable again, and the gate holds no "already played once" latch; that job belongs to
+`INVALIDATE_ANIMATION` alone.
+
+⚠ **State 5 is never a resting state.** It is written on the loader's failure path (`0051deee`,
+right after logging *"Unable to copy node tree"* and returning −1), on the tick walk's error path
+(`004ecf17`, likewise immediately before a log call), and by `FUN_00520910` and `FUN_004ee4b0`. A
+re-implementation that uses one state for "not running" and "failed" will refuse calls the original
+accepts.
+
+⚠ **The refusal is silent**, returning 0 with no diagnostic, where every other failure on this path
+logs. A call that lands on a running callee leaves no trace at all.
+
+The gate also refuses in states 2 or 3 when `+0xac` is within 0.1 of `-99.0` (`004ed900`–`004ed919`),
+and **that branch is unreachable from shipped data**. `+0xac` is the authored `RESET_TIME`: the
+loader reads the keyword at `0051f503` and writes the slot at `0051f553`/`0051f566`, and the compiled
+record carries the same field at offset 172. Across all 61 archives the only values are −1.0 (13,311
+definitions, which the fork reports as `null`, since `hangar3_doors` authors `RESET_TIME [-1.0]` in
+its reader source and decodes to `null`), 0.0 (1,651) and 5.0 (one). Nothing is −99, and the 99.0
+constant at `00608de8` has exactly one reference in the binary, this test. Treat the branch as
+decoded and inert rather than as a rule to reproduce.
+
+Given a NON-zero anchor, which `CALL_ANIMATION` never passes, the gate instead walks the instance
+chain at `+0x10c` and refuses only an instance that is both running and already on that anchor,
+otherwise reusing a stopped chain entry or cloning through `FUN_00520910`; with bit `0x100` set it
+always clones, so concurrent instances are allowed. This is the decoded form of the semantic
+`formats/anim-definitions.md` derives observationally from C1/MP1's rearm-door poll, and it is
+**stricter** than that derivation: the original refuses a second call while the callee runs
 anywhere, not merely on the same anchor.
+
+CSVM's guard (`AnimRuntime`'s `CallAnimation` arm, `!IsLive(target, startAnchor) || movedAway`) is
+keyed on `(def, anchor)`, which is the pair the original deliberately leaves out. That makes ours
+more permissive across anchors and never stricter, so it can drop a call only when the callee is
+already live on that same anchor.
 
 `WAIT_FOR_COMPLETION` (bit `0x10`) is checked at `004eba0e` against a cached instance pointer kept in
 the call table (`def+0x104`, stride `0x48`, cache at `entry+0x44`, written back after each start at

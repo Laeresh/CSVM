@@ -133,6 +133,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     Start anchor). ⚠ Check `BL-415` before treating (a)/(b) as their own investigation: tier 1 searching
     the call anchor's shared subtree rather than the definition's private copy is the same fault shape,
     already filed, and one fix may cover both.
+    **The dispatch half is decoded too, and it rules out three candidates.** [`docs/org/sequences.md`](docs/org/sequences.md),
+    "The restart refusal is keyed on the callee's own run state": `FUN_004ed8c0` decides on the callee's
+    run-state byte `+0xa0` alone under `CALL_ANIMATION`'s always-zero anchor, and the teardown
+    `FUN_004ed190` returns a finished animation to state 1, so a completed callee is immediately
+    re-callable and the gate holds no play-once latch. The `+0xac ≈ -99.0` refusal is inert: that slot is
+    the authored `RESET_TIME` (loader `0051f503`/`0051f553`, compiled offset 172) and the shipped
+    archives hold only -1.0, 0.0 and one 5.0. Our own guard is keyed on `(def, anchor)`, which is more
+    permissive than the original and never stricter, so it can drop a call only on a callee already live
+    on that same anchor. And M02 authors **no wildcard**: `extracted/C3/M02/mis_anim/` holds six separate
+    exact-numbered defs per role (`ball_kaboom1..6`, `balloon_up1..6`, `tbase_kaboom1..6`,
+    `balloont_die1..6`), each on its own numbered anchor, so the `*`/`#` deviation is not what raises six
+    balloons here.
+    *What that leaves for (c) and (d):* a sequence that stops reporting completion, not a dropped call.
+    `balloon_up1`'s second sequence is `ObjectMotionFromTo(bont1, run_time 24.0)` then
+    `CallAnimation(ball_kaboom1)`, and the ramp IS the event's duration, so the call is due at the top of
+    the rise and an incomplete motion loses it. `balloont_die1`'s main sequence swaps the skin, calls two
+    sequences, then runs `StopSequence(flame_light_seq)` before `CallAnimation(large_fireball)`,
+    `Sound`, and at `Event + 2.0` both `CallAnimation(ball_kaboom1)` and `ObjectActiveState(b_turret1)`,
+    so a stop that reaches the CALLER's runner loses everything the entry reports missing, in order.
+    Sequence identity is the sequence object, never its name.
 
 - `BL-343` `[Feature]` **`IMPACT_FORCE` inheritance runs, but on our own gate rather than the
     authored one.** A shot-down plane's wreck does now leave along the plane's own velocity: the
