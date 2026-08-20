@@ -1017,6 +1017,35 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ The ±20° pair was validated by eye against the original, so this is an A/B against footage, not a
   correction of something known wrong.
 
+- `BL-425` `[Bug]` **A distant AI aircraft flies a SIMPLIFIED force model in the original, and we
+  give every AI the full aerodynamic one.** `FUN_0048c470`, the live force and torque build, opens on
+  a test that is not the AI/player split it looks like: **crashed, OR not the player and further than
+  1000 m from it** (`FUN_00538920` squared separation against `1e6`, the same helper and units as the
+  law's already-decoded 2000 m throttle test). Everything inside 1000 m, AI and player alike, takes
+  the full path. Beyond it the aircraft gets:
+  - **no lift or drag solve at all.** `FUN_0048fc40` is not called; the force is
+    `−(fd_speed · obj+0x4a)` along the nose, a speed-hold pseudo-force, with a further `−5.0` for a
+    non-player aircraft;
+  - **all three authority factors and the reverse-authority factor forced to 1.0**, so `FUN_0048bdd0`
+    never runs and the low-speed ramp never bites;
+  - **no bank coupling.** The `_DAT_006289f8`/`_DAT_006289fc` block sits under the same guard, so a
+    distant aircraft's bank does not turn its nose.
+  `FlightModel` models none of this and cannot: the plant is never told where the player is
+  (`PlayerPosition` reaches `AiControlLaw`'s throttle and nothing else). Every AI in our sim flies the
+  full model at every range.
+  ⚠ **This is not one of the four divergences [`docs/architecture.md`](docs/architecture.md) records**
+  (the `liftAOAs` blend, the weathervane, the nose-speed floor, the ground blow). One address that
+  note cites as evidence for the AI force path, `0x48c520`, sits in this far-field test rather than
+  among the function's three player compares, which are at `0x48cd3e`, `0x48cf7e` and `0x48cf9d`.
+  Confirm which before editing that paragraph; the far-field branch itself is not in doubt.
+  ⚠ Sequencing: the near-field behaviour is what a player ever watches, and it is already right.
+  Porting this changes only aircraft too far away to see, so it is a faithfulness fix rather than a
+  visible one, and it needs the plant to learn a player position it currently has no reason to know.
+  *How you'd know it worked:* a spectated AI beyond 1000 m holds speed along its nose and stops
+  turning with bank; inside 1000 m nothing changes.
+  *Cross-refs:* `BL-387` (found while eliminating plant candidates for it, and it does not explain
+  that bug — the aircraft judged there is inside 1000 m).
+
 - `BL-387` `[Bug]` **An AI aircraft flying straight and level, needing no turn, rolls left-right-left
   indefinitely and never settles — confirmed absent from the original at the controls (`PT-54`/
   `PT-56`, 2026-08-15).** First seen netless and targetless
