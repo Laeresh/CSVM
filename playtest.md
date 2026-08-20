@@ -1,4 +1,4 @@
-# Playtest checklist
+﻿# Playtest checklist
 
 Everything that needs a human at the controls (or the original game open for A/B), consolidated.
 **This file holds only what is actionable *today*.** Anything whose test is blocked on an unlanded
@@ -614,33 +614,6 @@ against `BL-389` rather than against the wash routing.
   `BL`.
   *Variations:* `--players=2` and `--players=3` for the intermediate pane counts, which is where a
   routing off-by-one would show.
-
-- `PT-83` `[Own]` **AI aircraft hold a straight course, and every airframe's roll rate is halved.**
-  Two changes on one branch, both touching every aeroplane in the game, so they are flown together.
-  `BL-387` was the sign of `bz` in the steering law: the aim error was being renormalised for
-  targets AHEAD instead of astern, which handed the roll channel full stick every frame on a
-  straight leg. `RollTune` is gone in the same branch, so the roll rate drops to the decode's
-  90.7 °/s, which is roughly half what it was, and that half is the player's aeroplane as much as
-  the AI's.
-  ```powershell
-  ./RunGame.ps1 --chapter=C1 --plane=player_bhawk --debug-spectate --no-det
-  ```
-  *Look for:*
-  - (a) spectate an AI on a straight run to a distant node. The wings must sit **level**. Any
-    left-right-left sawing at all is a fail, and it is what the whole branch is about;
-  - (b) it must still TURN. Watch it reach the net and fly the pattern: a rolled-in, committed bank
-    onto each leg, not a mushy skid. Fixing the saw by making the AI reluctant to bank would be the
-    obvious way to get (a) and be wrong, so (b) is the one that catches it;
-  - (c) something behind it. Give it a quarry astern (or fly astern of one yourself) and watch it
-    reverse: astern is exactly where full-authority roll is supposed to happen, and it should look
-    decisive;
-  - (d) the player's own roll, on the stick, against the original. Half the previous rate is a
-    large change to how the aeroplane reads. This is the half that most wants your hands rather
-    than a measurement, since the rate itself came out of the binary and is not up for a re-tune.
-  *Blocks:* `BL-387`, which is fixed but stays open until (a) and (b) both pass at the controls.
-  ⚠ The rate in (d) is decoded, not fitted. If it reads wrong, that is a finding to write down and
-  a new `BL`, not a licence to put a multiplier back: the one that was there came off video
-  measurements and is exactly what `docs/verification.md` forbids.
 
 ---
 
