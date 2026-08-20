@@ -450,33 +450,12 @@ the constant: a decode is not contested with a measurement read off a running pi
     with `T`/`O` pressed to clear the selection, the round must still settle to 60 m/s rather than
     hold launcher speed the whole way out.
 
-  *Blocks:* `A2`'s and `A4`'s owed clips, and with `PT-63`–`PT-76` the F22 sign-off that completes
+  *Blocks:* `A2`'s and `A4`'s owed clips, and with the other open `PT` rows here the F22 sign-off that completes
   `docs/PLAN-ordnance-types.md`. A fail on (a) or (c) is evidence against
   `ProjectilePool.SteeringStepRuns`, not against the 2.5 s.
   *Variations:* `--view=2` and `--view=4` hold the belly and flank cameras, which is where the
   launch look in (b) reads best; `--target=nearest` with an `--ai=player_fury` up gives (c) its
   positive control.
-
-- `PT-63` `[Own]` **The motor round leaves at launcher speed and climbs above it
-  (`PLAN-ordnance-types` `A3`).** `wep_04` authors `ACCELERATION`, so its cap is `VELOCITY 450`
-  **plus** the launcher's own speed and it starts at that launcher speed rather than from rest. A
-  type without a motor is seeded at its cap and is never accelerated at all. Nothing anywhere
-  applies drag, which is why rounds carry so far.
-  *Launch:* `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --rocket=wep_04 --infinite-ammo`
-  *Look for:*
-  - (a) fired from a dive at high speed the round pulls away hard and keeps gaining, with no
-    moment where it hangs at the muzzle and then spools up;
-  - (b) fired from near-stall it still gains, and reaches its cruise over a visibly longer stretch;
-  - (c) side by side with `--rocket=wep_06` (HE, no motor) in the same pass: the HE round leaves at
-    its own speed immediately and never gains on itself.
-
-  *Blocks:* `A3`'s owed clip, and F22. The flak consequence `A3` records is the same mechanism seen
-  from the ground and rides the variation below.
-  *Variations:* `./RunGame.ps1 --fly --chapter=C1 --wake-turrets --pos=-6650,300,-6300
-  "--direction=-1,0,-0.2"` parks you over C1's aagun fort, whose `wep_27` flak needs 5.7 s to reach
-  its authored 850 m/s and expires at its 900 m range before it gets there. Judge whether the flak
-  now reads as too slow to threaten anything, which is a behaviour question for `A3` and a separate
-  one from the mix (`BL-389`).
 
 ### C1 · Bloodhawk — the weapon lab, one ordnance type at a time (`PLAN-ordnance-types` F22)
 
@@ -489,26 +468,6 @@ own projectile pool at the chapter's real surfaces, so impacts play the authored
 building rows. `B` hides the panel, the weapon stepper re-arms every pylon without a relaunch,
 left-click re-parks the held aircraft facing what you clicked, and `--weapon-camera=free` hands the
 view to the spectator camera so a burst can be watched from a few metres away.
-
-- `PT-64` `[Own]` **The three end conditions, and which of them detonates
-  (`PLAN-ordnance-types` `A4`).** A round ends on distance travelled reaching `RANGE`, on age
-  passing `DETONATION_TIME`, or on closing inside `DETONATION_DISTANCE` of **its own** target, and
-  reaching `RANGE` only detonates for a type carrying `LOCK_ON`. So the choker, the cannonball and
-  the fake weapon vanish at their range where a torpedo bursts.
-  *Look for:*
-  - (a) **the timed fuse**: `wep_15` released with nothing near it bursts 2.0 s after launch, every
-    time, at whatever distance that puts it;
-  - (b) **the range end**: a `wep_12` fired over open water out to its range simply disappears, with
-    no burst, no effect and no sound;
-  - (c) **the target fuse is a second path**: with `--ai=` up and one aircraft selected, a
-    `wep_14` fused by its own target while a different aircraft sits nearer proves the round's own
-    target check and the proximity sweep are distinct;
-  - (d) nothing bursts at the muzzle: an unauthored `DETONATION_TIME` is off, not instant.
-
-  *Blocks:* `A4`'s four owed clips (all four are asserted in the `ordnance-end-conditions` suite and
-  none has been looked at), and F22.
-  *Variations:* `--weapon-lab=wep_12` and `--weapon-lab=wep_14` step through (b) and (c) without a
-  relaunch; `--weapon-surface=water` parks the lab facing open sea for (b).
 
 - `PT-65` `[Own]` **The blast: quadratic falloff, cover, and the 32-object cap
   (`PLAN-ordnance-types` `C10`, `C11`; closes `BL-227`'s falloff half).** Splash damage is
@@ -532,20 +491,6 @@ view to the spectator camera so a burst can be watched from a few metres away.
   *Blocks:* `C10`'s and `C11`'s at-the-controls half, and F22. A fail on (b) that is really the
   wall's own health is not a cover failure; check the wall took the damage before minting anything.
 
-- `PT-66` `[Own]` **`SURFACE_ANIMATION` lies on the slope it struck
-  (`PLAN-ordnance-types` `C12`; closes `BL-293`'s actionable half).** The `IMPACT` row's
-  `SURFACE_ANIMATION` is spawned with its up axis rotated onto the struck surface normal, while the
-  row's plain `ANIMATION` keeps its fixed axis. ⚠ **Do not judge this on flat ground**, where the
-  rule changes nothing by construction.
-  *Look for:* fire `wep_06` into a real chapter slope, the steeper the better, from the free
-  camera: the ground effect must lie along the hillside rather than stand upright out of it, and
-  the same weapon into flat terrain must look exactly as it did. Then `wep_12`, whose
-  `scatter_effect` is a plain `ANIMATION` and must keep its fixed axis on the same slope.
-  *Blocks:* `C12`'s owed slope clip, and F22. `BL-293`'s parked half stays parked whatever this
-  shows: the fixed-axis upper ring is a plain `ANIMATION` and is correct as it is.
-  *Variations:* `--chapter=C4` or `--chapter=C5` for steeper ground than C1 offers;
-  `--weapon-camera=free` to get the eye down onto the surface.
-
 - `PT-67` `[Own]` **The beeper and the seeker as one weapon system (`PLAN-ordnance-types` `B6`,
   `B8`, `B9`).** `wep_10` paints an aircraft for its authored `TIME` and deals no damage at all;
   `wep_11` is the only `BEEPER_SEEKER` and the only type with a real `TURN_RATE`, and it retargets
@@ -567,148 +512,6 @@ view to the spectator camera so a burst can be watched from a few metres away.
 
   *Blocks:* `B6`'s, `B8`'s and `B9`'s owed clips, and F22. `B7`'s lead blend has no shipped carrier
   that ever reaches its onset time, so nothing at the controls can show it and no row asks for it.
-
-### Empty stage · Bloodhawk against AI — the four no-damage types (`PLAN-ordnance-types` F22)
-
-```powershell
-./RunGame.ps1 --stage=empty --plane=player_bhawk --ai=player_fury --ai-attack=9 --rocket=wep_08 --infinite-ammo
-```
-
-`--stage=empty` is a collidable ground plane and nothing else, which is what makes an AI's recovery
-from a stun readable. The same rows are worth a second pass in a chapter (`--chapter=C1`) once each
-one has been judged in the clean case.
-
-- `PT-68` `[Own]` **The sonic and the flash: red and white washes, and an AI going limp
-  (`PLAN-ordnance-types` `D14`, `D15`, `D16`).** A sonic or flash burst deals no damage and instead
-  washes every human it catches and stuns every AI it catches, out to `IMPACT_PROXIMITY` and through
-  the blast's own gather, cover test and 32 cap. Intensity is full strength out to about 77% of the
-  radius and fades over the last quarter. The wash is red `(1,0,0)` for `SONIC` and white for
-  `FLASH`, at a weight equal to the intensity, for five times the intensity in seconds, after a
-  **1.0 s start delay**. `FLASH` also requires the victim to be facing it; `SONIC` does not.
-  Nothing touches a human's controls, ever.
-  *Look for:*
-  - (a) **the player's wash**: fly into a `wep_08` burst **someone else fired** (a vs session is
-    the easy rig). The pane goes red about a second after the burst rather than instantly, holds
-    for about five seconds at point blank, then clears. Judge whether the five seconds reads as
-    punishing or as broken. ⚠ Your **own** burst never washes you: the splash gather excludes the
-    round's owner (`FUN_005aca30`), so a firer immune to their own sonic is the original's
-    behaviour, not a routing bug;
-  - (b) **the facing test**: `--rocket=wep_09` bursting ahead of you washes white, and the same
-    burst behind you washes nothing at all;
-  - (c) **two hits overlap rather than replace**: two bursts a second apart must neither saturate
-    the pane to flat colour nor restart from nothing;
-  - (d) **the AI stun**: a sonic burst near the Fury leaves it limp for about five seconds, falling
-    with its momentum on the flight model rather than freezing or snapping level, then flying
-    again. Hit it again while it is still limp: it must take the new stun;
-  - (e) **no ledger moves**: neither the AI's damage nor yours changes from any of it.
-
-  *Blocks:* `D14`, `D15` and `D16`'s owed clips, and F22.
-  *Variations:* `--rocket=wep_15`, the flare, whose `IMPACT_PROXIMITY [500]` puts full strength out
-  to about 387 m and makes (a) reachable without flying into the burst.
-
-- `PT-69` `[Own]` **The choker cuts the engine and leaves a cloud (`PLAN-ordnance-types` `D17`).**
-  `wep_12` leaves a 2 s cloud at the burst holding its `RADIUS` squared, and every frame an
-  aircraft's origin sits inside that radius its engine-dead timer is refreshed. The duration mixes a
-  squared distance against a raw radius exactly as the original does, so `RADIUS [35]` gives about
-  **13 s at the centre and the 5 s floor beyond about 4.6 m**, while the catch radius stays a full
-  35 m. It cuts thrust and nothing else, and it applies to a human exactly as to an AI.
-  *Launch:* `./RunGame.ps1 --stage=empty --plane=player_bhawk --ai=player_fury --ai-attack=9
-  --rocket=wep_12 --infinite-ammo`
-  *Look for:*
-  - (a) a direct hit on the Fury: it holds the choke for roughly thirteen seconds, and a burst
-    caught out near the edge of the cloud for about five;
-  - (b) **it bleeds, it does not stall**: the choked aircraft loses speed on drag and keeps flying
-    ballistically. Anything that reads as an instant stall is our bug, not the original, whose
-    instant-stall recollection is recorded as disproven;
-  - (c) **the AI does not react**: no evasion, no call, no change of mode. That is correct, because
-    no AI code reads the disabled-systems mask;
-  - (d) **the missing sound**: nothing in our audio chain reads the engine-dead timer, so a choked
-    aircraft still sounds like it is running; what the original plays over the cut is undecoded
-    (`BL-423`). Judge how badly that reads before anyone builds it;
-  - (e) fly into your own choker: a human is choked the same way, with no wash and no input
-    lockout.
-
-  *Blocks:* `D17`'s owed clip, and F22. (d)'s gap is `BL-423`.
-
-- `PT-70` `[Own]` **The smoke screen: no projectile, and a 600 m trap behind the layer
-  (`PLAN-ordnance-types` `D18`, launch hook with `A5`).** A `SMOKE_SCREEN` pylon spawns **no
-  round**: it lays a screen that tracks the laying aircraft's live pose, spends a round of ammo, and
-  plays no `FIRE` sound or animation because both live inside the spawn the branch skips. Every
-  frame the screen runs it stuns every AI and washes every human, alive and not the layer, inside
-  `smokescreen_stun_range` **600 m** and inside the cone `smokescreen_stun_angle` **170°** about the
-  layer's backward axis. ⚠ 170° is a **half**-angle, so the cone opens 85° either side of dead
-  astern, which is close to everything behind the layer. That reach is the authored value and the
-  instinct that it is a bug is wrong.
-  *Launch:* `./RunGame.ps1 --stage=empty --plane=player_bhawk --ai=player_fury --ai-attack=9
-  --rocket=wep_13 --infinite-ammo`
-  *Look for:*
-  - (a) **nothing is fired**: no body leaves the pylon, no trail, no impact anywhere, and the ammo
-    counter still steps down by one;
-  - (b) **the cloud**: it starts at the aircraft, follows it as it manoeuvres, and stops when the
-    screen's `TIME` runs out or the layer dies;
-  - (c) **the trap**: a pursuing AI inside the cone goes limp and is re-stunned every step it stays
-    there, and recovers once it is out. An AI off to the side beyond 85° from dead astern is
-    untouched. Say whether 600 m across that cone makes the smoker unbeatable in play;
-  - (d) **the layer is immune**, and so is anything ahead of it.
-
-  *Blocks:* `D18`'s owed 1v1, and F22. A verdict that the weapon is too strong is a fidelity note
-  against the authored tunables, not a licence to change them.
-
-- `PT-71` `[A/B: CAP-23]` **The smoke cloud's look against the reference footage
-  (`PLAN-ordnance-types` `D18`; the decode is `docs/org/ordnanceTypes.md`, "What the cloud is, from
-  the numbers").** The two gaps that had left our screen a thin pale ribbon are closed: the trail
-  path now spawns the authored four puffs per 0.65 m with the 10 m/s astern `LOCAL_VELOCITY`, and
-  the `COLORS` ramp is linearised, so the `53,74,37` green renders on the reference's `50,68,35`
-  instead of a washed `109,126,92`. `CAP-23` is the Balmoral's smoker from the rear cockpit plus two
-  external poses.
-  *Look for:*
-  - (a) **density and colour** at a matched pose: our cloud should read as the same weight and the
-    same dark green, not paler and not thinner;
-  - (b) **the known residual**: our puffs are thousands of stacked `splashbase` quads whose rims
-    carry 2–5% alpha that no single sprite shows and a thousand do, so the silhouette closes toward
-    a rounded square where the reference reads as round soft blobs. Judge how visible that is in
-    motion, at distance and up close;
-  - (c) **the whole-`TIME` emission**: the reference is still laying cloud seven seconds after one
-    launch, which is what our reading reproduces. The screen must not stop emitting a quarter of the
-    way in.
-
-  *Blocks:* the look half of `D18`, and F22. A fail on (b) is fresh evidence for a new `BL` against
-  the sprite rim (an alpha test, or a different puff texture), not against the puffer counts, which
-  are authored; whether the original's rasteriser dropped that rim is undecoded and nothing
-  authored says so.
-
-- `PT-72` `[Own]` **The torpedo as a target: cyclable, shootable, and its destruction effect
-  (`PLAN-ordnance-types` `E19`, `E20`).** `TARGETABLE` admits a round to the target list and
-  `FLYOUT_HEALTH` makes it destructible; `wep_14` carries both. Its armour pool is always zero, so
-  the first hit spends health directly, and health reaching zero destroys the round and plays
-  `torpedo_destroy_effect`. **This row cannot be flown until `E19` and `E20` land** (Wave E is open);
-  it is written here so the sign-off set is complete.
-  *Launch:* `./RunGame.ps1 --stage=empty --plane=player_bhawk --ai=player_fury --rocket=wep_14
-  --infinite-ammo --target=next`
-  *Look for:*
-  - (a) a torpedo in flight appears in the target cycle (`T`/`U`) and can be pinned, while an
-    ordinary `--rocket=wep_06` round never does;
-  - (b) it takes 10 points of gunfire and then dies playing `torpedo_destroy_effect`, rather than
-    vanishing or bursting as if it had reached a target;
-  - (c) an ordinary rocket is unaffected by the same gunfire.
-
-  *Blocks:* `E19` and `E20`'s owed clips, and F22.
-
-- `PT-73` `[Own]` **The `DAMAGES_ZEPPELIN` gate, player side only (`PLAN-ordnance-types` `E21`).**
-  A weapon without `DAMAGES_ZEPPELIN` cannot hurt a gasbag and, on the **AI** side, is refused as a
-  shot at a zeppelin at all, while a weapon carrying it is refused against anything else. Only
-  `wep_14` and `wep_28` carry it in this install. **The AI half cannot be flown today:** an AI's
-  candidate list is aircraft only (`BL-363`), so no AI ever aims at a zeppelin, and no stock fit
-  carries a torpedo because the vehicle def's `weapons` tuple is unparsed (`BL-394`), so the Black
-  Hat Warhawk's eight torpedoes never reach a pylon. What is flyable is the player half, which
-  skips the aim gate by construction.
-  *Launch:* `./RunGame.ps1 --chapter=C1 --plane=player_bhawk --zeppelins --rocket=wep_14
-  --infinite-ammo --target=gasbag1`
-  *Look for:* a torpedo into a gasbag damages it and an HE round (`--rocket=wep_06`) into the same
-  gasbag does not, while both still hurt the engines. The engines are the only winning path a
-  menu-launched zeppelin run has until `BL-353` fits a torpedo from the loadout screen.
-  *Blocks:* the flyable half of `E21`, and F22. The AI half stays owed on `BL-363` and `BL-394` and
-  does not block the plan.
 
 ### C1 · two pilots — the victim-routed screen wash (`PLAN-ordnance-types` F22)
 
