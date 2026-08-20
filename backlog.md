@@ -1835,30 +1835,38 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-421` `[Research]` **The corrected engine-audio model is unconfirmed at the controls; the whine
-  removal in particular.** `BL-385`'s `B14` re-decoded the engine audio and removed four things our
-  build had been playing: the `snd_enginewhine` loop, the detuned dual engine stack
-  (`EngineDetuneRatio`, `EngineVoiceGain`), `WhineMixGain`, and the damaged-engine crossfade
-  (`DamagedEngineGain`, `DamagedEngineMixGain`). The decode behind that is firm — `FUN_00476250`
-  assigns slot 1 only when non-null, `FUN_00478a00` leaves the field at 0, **no shipped vehicle def
-  authors `prop_sound`** (its one occurrence in `extracted/zrdr/` is a curve block in
-  `player.zrd.json`, not a sound name), and `snd_enginewhine` is a literal nowhere in `crimson.exe`.
-  Flown afterwards, the verdict was "not sure if this is correct".
-  **What this item is:** get a verdict, not a re-tune. The A/B is stated in the plan's `B14`: HEAD
-  against the build, one plane and chapter, `--volume=1.0 --no-det`, listening for the chorus at fixed
-  throttle to be gone, for no whine layer to rise in through a full dive, and for the damaged engine
-  to be REPLACED rather than joined. A reference recording of the original is the only thing that can
-  settle it above taste.
-  ⚠ **Traps.** (a) A decode outranks a spectral measurement here by this project's own rule, and the
-  removed constants came FROM spectral analysis of a reference dive — that is what the decode
-  overturned, so re-deriving them from the same footage would just re-make the error. (b) The likely
-  honest outcome is that the original really is thinner than our old build and the ear has to adjust;
-  say so rather than reinstating a loop the data does not have. (c) If something IS missing, the open
-  candidate already recorded is the engine's **airspeed term** (`FUN_004b18a0` adds `0.26*|v|` to
-  volume and `0.25*|v|` to pitch, clamped to [0, 1.5]), deliberately unimplemented because the
-  velocity's units in that expression are unresolved — that is a decode to finish, not a mix to
-  invent. (d) Audio cannot be screenshot-verified; the `sound` log line names the resolved slot defs
-  and is the headless half.
+- `BL-423` `[Fidelity]` **The engine slot's manoeuvre and attitude terms are decoded and
+  unimplemented; our engine note is a function of throttle alone.** The original adds two terms to
+  each engine curve's NORMALISED parameter before the output remap, decoded in full at
+  [`docs/formats/vehicle.md`](docs/formats/vehicle.md) ("The engine slot's pitch and gain are not
+  throttle alone"): `0.25 · sqrt(pitchRate² + yawRate²)` and `−0.15 · (−nose.Y)`, clamped to
+  `[0, 1.5]`. Every constant is read from the image and the sign of the attitude term is settled by
+  row 2 being −nose. Nothing is left to decode.
+  **Why it is buildable now.** The units question that parked it is answered: the quantity is
+  ANGULAR velocity, and `FlightModel.BodyRates` already carries it in rad/s with nose on −Z, so
+  `q = sqrt(BodyRates.X² + BodyRates.Y²)` and `a = Attitude.Z.Y` map straight across with no
+  scaling. The real work is that the terms add to the normalised curve parameter, so `SoundCurve`
+  has to split into a `Frac(x)` and a `Remap(t)`; today `Eval` fuses them.
+  ⚠ **Traps.** (a) **Only the PITCH term is audible in the retail install.** The shipped
+  `engine_sound` volume curve is flat 1.0, so the remap multiplies the 0.26 volume term by zero.
+  Implement both, but expect to hear one, and do not "fix" the silent one. (b) **Roll must not
+  raise the note.** The original squares only the two rows perpendicular to the nose and drops the
+  nose-axis component; a plain `BodyRates.Length()` would be wrong. (c) The boost flag REPLACES both
+  parameters (1.17 volume, 1.25 pitch) rather than adding to them. (d) Both audio paths share
+  `EngineAudioCurves`, so an AI aircraft's note gains the same terms.
+  **`BL-109` is this item's acceptance test, and it was measured before the expression was read.**
+  `CAP-10`'s dive-recovery take concluded independently that the note needs exactly two terms: (a)
+  an UNSIGNED transient on stick movement, up for push and pull alike, and (b) a slow level sitting
+  low in a sustained near-vertical dive and returning to baseline when level. Those are this
+  decode's two terms: `q` is a magnitude, so it cannot be signed, and `a` is pinned at a dive's
+  attitude rather than tracking its rate. The arithmetic predicts the numbers:
+  a vertical dive gives `0.6 + 0.4·(1 − 0.15) = 0.94`, i.e. **−6.0 %** against the take's measured
+  **−6.3 %**, and the measured **+3.0 %** transient wants `q ≈ 0.3 rad/s`, an ordinary pushover
+  rate. ⚠ This is corroboration, not derivation: a video measurement may not contest or refine the
+  decode, and the coefficients stay as read from the image even if a take disagrees.
+  ⚠ It also explains why `BL-109` ruled climb RATE out and found no gauge variable that fits: term
+  (b) is climb **attitude** (`nose.Y`), which no gauge shows and which is pinned near −1 for a
+  whole vertical dive while the rate keeps changing.
 
 - `BL-079` `[Feature]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;
   the original's IA traffic is clearly audible in the reference video.
@@ -1875,6 +1883,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-109` `[Bug]` **Engine pitch behavior in dives**: the original's engine drops ~12% through a dive and
   overshoots ~1.05 at pull-out — not reproducible by the throttle-only pitch curve (cap 1.0).
+  ⚠ **THE MECHANISM IS DECODED AND `BL-423` OWNS THE FIX.** Both terms this entry's measurements
+  converged on are read out of `FUN_004b18a0`
+  ([`docs/formats/vehicle.md`](docs/formats/vehicle.md), "The engine slot's pitch and gain are not
+  throttle alone"): the unsigned transient is `0.25·sqrt(pitchRate² + yawRate²)` and the dive floor
+  is `−0.15·(−nose.Y)`. What remains here is **verification data, not an open question** — the
+  figures below are `BL-423`'s acceptance test. Do not fit a curve, re-measure a take, or rank a
+  driver against them; the coefficients come from the image.
   **Playtest 2026-07-30 narrows this**: the user confirms the original's note modulates with **climb
   rate and elevator input**, not throttle alone, and reads noticeably less constant than ours. Camera
   Doppler is ruled out as the mechanism — own-ship engine audio is a plain `AudioStreamPlayer`

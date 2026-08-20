@@ -87,8 +87,11 @@ second slot's definition comes from the vehicle def's `prop_sound` string key; n
 authors it, the field has no compiled default, and `snd_enginewhine` appears as a literal nowhere
 in `crimson.exe`. The curves above are still read, and would drive the slot if a def ever named
 one. A spectral comb in a reference dive recording was previously read as the whine mixed 12–18 dB
-under the engine; that reading is refuted, and the engine slot's own speed-driven pitch term is the
-better candidate for what produced it.
+under the engine; that reading is refuted. What moves the engine note in a dive is the engine
+slot's own **manoeuvre and attitude** terms, decoded in
+[vehicle.md](vehicle.md#the-engine-slots-pitch-and-gain-are-not-throttle-alone). ⚠ Not a
+speed-driven term, which this page said before the expression was read: the quantity is angular
+velocity, and airspeed reaches the engine slot nowhere.
 
 ## WAV format
 

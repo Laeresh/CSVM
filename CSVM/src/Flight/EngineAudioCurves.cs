@@ -45,7 +45,10 @@ internal static class EngineAudioCurves
 
     /// <summary>Slot 0, the engine loop: both curves run on throttle, and the pitch carries the
     /// damaged-swap multiplier. The returned volume is the curve alone — the caller still applies
-    /// the definition's own VOLUME, its start ramp and any own-ship mix gain.</summary>
+    /// the definition's own VOLUME, its start ramp and any own-ship mix gain.
+    /// ⚠ Throttle is only the original's FIRST term. It also adds a turn-rate and a climb-attitude
+    /// term to each curve's normalised parameter (docs/formats/vehicle.md, "The engine slot's pitch
+    /// and gain are not throttle alone"), which this does not yet carry.</summary>
     internal static (float Pitch, float Volume) Engine(PlaneStats stats, float throttle, float pitchMul) =>
         (Mathf.Max(MinPitch, stats.EnginePitch.Eval(throttle) * pitchMul),
          stats.EngineVolume.Eval(throttle));
