@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Godot;
 
 namespace CSVM.Flight;
@@ -15,6 +17,13 @@ public sealed partial class SpectatorCamera : Node
     /// <summary>Shows the live position/speed readout (on by default; off for screenshots).</summary>
     public bool ShowReadout = true;
 
+    /// <summary>What the target key (<c>F</c> / pad <c>X</c>) may lock onto, answered afresh on
+    /// each press. Null (the default) leaves the key inert, for a call site with no roster to
+    /// offer. A caller that has one supplies the aircraft it considers in play; the key takes the
+    /// nearest and steps outward (<see cref="OrbitLock.Next"/>), which is the only way back into
+    /// a lock once a translation has released it.</summary>
+    public Func<IReadOnlyList<Node3D>>? LockCandidates;
+
     private const float MinSpeed = 2f, MaxSpeed = 6000f;
     private const float BoostFactor = 6f, SlowFactor = 6f;
     private const float MouseLookRate = 0.0035f;   // radians per pixel of mouse motion. TUNE.
@@ -23,6 +32,7 @@ public sealed partial class SpectatorCamera : Node
     private const float PadDeadzone = 0.18f;
     private const float PitchLimit = 1.5533f;      // ~89°, so the view never gimbals over the top
     private const float OrbitMinDist = 3f, OrbitMaxDist = 8000f;
+    private const float OrbitZoomRate = 1.6f;      // trigger dolly while locked (1/s, exponential). TUNE.
     // Kept short of straight-above so the look-at (Basis.LookingAt) never gets parallel to world
     // up, which is degenerate.
     private const float OrbitPitchLimit = 1.396f; // ~80°
@@ -34,6 +44,9 @@ public sealed partial class SpectatorCamera : Node
     // UseKeyboard instead, so two pilots watching at once no longer move together.
     private readonly int[]? _padDevices;
     private readonly bool _useKeyboard;
+    // Scratch for CycleLock, reused so a per-press lock costs no allocation.
+    private readonly List<Node3D> _lockNodes = new();
+    private readonly List<Vector3> _lockScan = new();
 
     private float _yaw, _pitch;
     private float _speed = DefaultSpeed;
@@ -67,10 +80,10 @@ public sealed partial class SpectatorCamera : Node
     // ---- follow / orbit (anim lab): the camera locks onto a node and orbits it -----------------
 
     /// <summary>The node the camera is locked onto, or null. While set, the camera <b>orbits</b>
-    /// it (RMB drags the orbit, the wheel zooms, and the node stays centred as it moves), exactly
-    /// like the static viewer's orbit camera but around a live target. Set via
-    /// <see cref="FollowNode"/>; cleared the moment the user translates (WASD/QE / pad), so flying
-    /// off ends the lock while the mouse keeps it. Read for the lab's status line.</summary>
+    /// it (RMB or the right stick swings, the wheel or the triggers zoom, and the node stays
+    /// centred as it moves), like the static viewer's orbit camera but around a live target. Set
+    /// via <see cref="FollowNode"/> or the target key; cleared the moment the user translates
+    /// (WASD/QE / left stick), so flying off ends the lock while looking keeps it.</summary>
     public Node3D? Follow { get; private set; }
 
     // True while a text input owns keyboard focus (the picker's filter): the camera polls raw key
@@ -126,6 +139,17 @@ public sealed partial class SpectatorCamera : Node
     {
         switch (@event)
         {
+            // ⚠ The target key is handled here, never polled like the axes below it. This camera
+            // reads raw key state, which bypasses GUI focus and SetInputAsHandled, so a polled
+            // edge would also fire for a host that has already spoken for the key (BL-279).
+            case InputEventKey { Keycode: Key.F, Pressed: true, Echo: false }
+                when _useKeyboard && !KeyboardCaptured:
+                CycleLock();
+                break;
+            case InputEventJoypadButton { ButtonIndex: JoyButton.X, Pressed: true } padButton
+                when ReadsPad(padButton.Device):
+                CycleLock();
+                break;
             case InputEventMouseButton { ButtonIndex: MouseButton.Right } rmb:
                 _looking = rmb.Pressed;
                 Input.MouseMode = _looking ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
@@ -185,6 +209,7 @@ public sealed partial class SpectatorCamera : Node
             }
             else
             {
+                OrbitPad(dt);
                 OrbitUpdate();
                 UpdateReadout();
                 return;
@@ -245,7 +270,53 @@ public sealed partial class SpectatorCamera : Node
         }
         var p = _camera.Position;
         _readout.Text = $"freecam  x {p.X:0} y {p.Y:0} z {p.Z:0}   speed {_speed:0} m/s" +
-                        "   [RMB look · WASD/QE move · Shift fast · wheel speed]";
+                        "   [RMB look · WASD/QE move · Shift fast · wheel speed · F lock]";
+    }
+
+    // The pad's half of the locked orbit: right stick swings it, triggers dolly it (RT out, LT in,
+    // the sense FlightController.OrbitInput already uses). Without this the lock is mouse-only and
+    // a pad's sole effect on it is TranslationRequested, which throws it away.
+    private void OrbitPad(float dt)
+    {
+        float yaw = PadAxis(JoyAxis.RightX), pitch = PadAxis(JoyAxis.RightY);
+        float zoom = PadTrigger(JoyAxis.TriggerRight) - PadTrigger(JoyAxis.TriggerLeft);
+        _orbitYaw -= yaw * PadLookRate * dt;
+        _orbitPitch = Mathf.Clamp(_orbitPitch - (pitch * PadLookRate * dt), -OrbitPitchLimit, OrbitPitchLimit);
+        _orbitDist = Mathf.Clamp(_orbitDist * Mathf.Exp(OrbitZoomRate * zoom * dt), OrbitMinDist, OrbitMaxDist);
+    }
+
+    // The target key: nearest first, then a step outward. The roster is re-read on every press
+    // rather than snapshotted, so an aircraft shot down between presses stops being lockable.
+    private void CycleLock()
+    {
+        var candidates = LockCandidates?.Invoke();
+        if (candidates == null)
+            return;
+        _lockScan.Clear();
+        _lockNodes.Clear();
+        int current = -1;
+        foreach (var node in candidates)
+        {
+            if (node == null || !IsInstanceValid(node))
+                continue;
+            if (node == Follow)
+                current = _lockNodes.Count;
+            _lockNodes.Add(node);
+            _lockScan.Add(node.GlobalPosition);
+        }
+        int next = OrbitLock.Next(_lockScan, _camera.Position, current);
+        if (next >= 0)
+            FollowNode(_lockNodes[next]);
+    }
+
+    // Whether this seat may read `device` — the event-side twin of the Pads.For gate the polled
+    // reads use, so --no-pads, an unfocused window and a per-seat binding all still hold.
+    private bool ReadsPad(int device)
+    {
+        foreach (int pad in Pads.For(_padDevices))
+            if (pad == device)
+                return true;
+        return false;
     }
 
     // Places the eye on its orbit around the locked target and aims at it — the whole "orbit like

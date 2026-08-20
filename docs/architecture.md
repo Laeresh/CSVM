@@ -146,7 +146,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/FlightAudio.cs` — own-plane loops (engine, overspeed whine, rattle) + crash/prop one-shots, per-player `MixGain`.
 - `src/Flight/AiEngineAudio.cs` — an AI aircraft's positional engine loops and the 2000-unit cull.
 - `src/Flight/EngineAudioCurves.cs` — the engine-slot definition choice and curve maths both audio paths share.
-- `src/Flight/SpectatorCamera.cs` — the `--freecam`/`--anim-lab` observation camera: RMB-look + WASD/QE, no roll; `Frame`/`FollowNode` track an object.
+- `src/Flight/SpectatorCamera.cs` — the `--freecam`/`--anim-lab` observation camera: RMB-look + WASD/QE, no roll; `Frame`/`FollowNode` track an object, `F`/pad `X` re-locks onto one.
+- `src/Flight/OrbitLock.cs` — the re-lock rule behind that key: nearest first, then outward, engine-free.
 - `src/Flight/FlightModel.cs` — the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, calibrated control rates.
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/ThrottleSlamSmoke.cs` — a large throttle jump streams dark exhaust trail smoke for a few seconds; a single notch or a decrease shows nothing.
@@ -2292,6 +2293,18 @@ The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look 
 while held), wheel speed, pads via `Pads.For(_padDevices)`; lab additions `Frame(Aabb)`, the
 `FollowNode` orbit-lock (released by any translation input; `ExitFollow` keeps orientation) and
 a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
+While locked, the orbit answers the mouse **and the pad**: right stick swings it, the triggers
+dolly it (`OrbitPad`, RT out / LT in, the sense `FlightController.OrbitInput` already uses). The
+target key `F` / pad `X` (`CycleLock`) re-locks onto what `LockCandidates` offers, nearest first
+then outward (`OrbitLock.Next`) — the only route back into a lock, since a release is otherwise
+one-way. `GameSession.LockCandidateAircraft` supplies the roster (every `InPlay` aircraft, AI and
+human) to all four spectator cameras; a null provider leaves the key inert.
+⚠ The target key is handled in `_UnhandledInput`, NOT polled like the axes. This camera reads raw
+key state, which bypasses `SetInputAsHandled`, so a polled edge would fire behind a host that has
+already consumed the key — `BL-279`'s mechanism. The same rule is why the anim lab's def picker
+moved from `F` to `F18` (`BL-428`) rather than the two sharing a key. Pad button events are gated
+through `ReadsPad`, the event-side twin of `Pads.For`, so `--no-pads`, an unfocused window and a
+per-seat binding all still hold.
 It is also the pane an Instant Action pilot out of lives watches from
 (`GameSession.BeginInstantActionSpectate`): the lab's own `FollowNode` orbit is what "follow a live
 aircraft" needed, so nothing was added for it. Constructor params `padDevices`/`useKeyboard` (
@@ -2305,6 +2318,16 @@ a text field owns focus — raw key polls bypass GUI focus. ⚠ Vertical is Q/E 
   alternate — not C/Space: C toggles the collider overlay and Space fires guns, and because this
   camera POLLS raw key state, sharing either key moved the camera as a side effect of the other
   action (`BL-279` moved Space off; Z stays clear of C for the same reason).
+
+## src/Flight/OrbitLock.cs
+`SpectatorCamera`'s re-lock rule, taken as positions and an index rather than nodes so it runs
+off-engine (`OrbitLockTests`) — the same split `Pads.AssignPads`'s pure overload uses. `Next`
+answers the nearest target to the eye from no lock, the next one outward from a held one, and
+wraps past the farthest back to the nearest so no press is ever a dead one. It RANKS rather than
+sorts: the answer is an index into the caller's list, so a sorted copy would only have to be
+undone. Ties break on the index, so two aircraft at equal range still get distinct turns and
+neither is unreachable. A `current` that is out of range reads as no lock, which is what a stale
+index (its plane gone since the last press) resolves to.
 
 ## src/Flight/FlightModel.cs
 The aircraft's plant: the arcade velocity-vector flight model, decoded from the original and
@@ -3134,6 +3157,9 @@ last two SIM poses (`GameClock.StepFraction`); sim poses are restored before any
 render smoothing never leaks into event held-pose seeding and FixedStep stays byte-identical.
 Puffer particle spread is unseeded RNG (DIAG-21, docs/verification.md): same-step shots differ in
 particle noise alone.
+⚠ The picker toggle is `F18`, not `F` (`BL-428`). The shared `SpectatorCamera` owns `F` as its
+target key, and this lab's `SetInputAsHandled` cannot protect a camera that polls raw key state,
+so the two are separated by binding rather than by ordering.
 
 ## src/UI/AnimTimeline.cs
 The anim lab's authored-vs-fired timeline (custom-drawn `Control`): authored blocks above, fired

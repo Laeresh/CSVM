@@ -206,7 +206,9 @@ public sealed partial class AnimLab : Node
             case Key.Period:
                 StepFrame();
                 break;
-            case Key.F:
+            // ⚠ F18, not F: the shared SpectatorCamera this lab flies takes F for its target key,
+            // and a raw-polled camera would re-lock behind SetInputAsHandled (BL-279's mechanism).
+            case Key.F18:
                 TogglePicker();
                 break;
             default:
@@ -775,7 +777,7 @@ public sealed partial class AnimLab : Node
             $"anim-lab  t {_playhead:0.00} s (step {_steps})  {Clock?.Scale ?? 1f:0.##}×  " +
             $"{(paused ? "PAUSED" : "PLAYING")}   seed {_seed}   ambient {(_ambient ? "on" : "off")}\n" +
             $"def: {def}   {follow}   " +
-            "[P pause · . step · R restart · F picker · click an object · PgUp/PgDn/Home/End walk its ladder · RMB look · WASD/QE move]";
+            "[P pause · . step · R restart · F18 picker · F lock · click an object · PgUp/PgDn/Home/End walk its ladder · RMB look · WASD/QE move]";
     }
 
     private Button TBtn(string text, Action pressed)

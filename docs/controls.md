@@ -47,7 +47,7 @@ Flags are specified in [`cli.md`](cli.md).
 | `Enter` · `Space` | A | confirm the highlighted item |
 | — | B | close the pause menu — the pad twin of `Esc`/`P`/Start. A results board's menu has no way back and reads none |
 | — | a results board (mission wrap-up, dogfight, race, stunt run) halts the sim and carries its own Restart · Exit menu, driven by player 1. The pause key does nothing while one is up |
-| — | a pilot out of lives watches from the `--freecam` controls (WASD/QE move, RMB look) on its own pane. Splitscreen: each downed pilot's spectator reads only its own pad/keyboard (`BL-375`) — two players watching at once move independently, not lockstep. Mouse look stays shared (one physical mouse) |
+| — | a pilot out of lives watches from the `--freecam` controls (WASD/QE move, RMB look, `F`/pad `X` to lock onto an aircraft) on its own pane. Splitscreen: each downed pilot's spectator reads only its own pad/keyboard (`BL-375`) — two players watching at once move independently, not lockstep. Mouse look stays shared (one physical mouse) |
 | `.` | step one frame while paused |
 | `F12` | screenshot |
 | `F13` | AI patrol-net overlay (chapter worlds only) — `--debug-ainets`. First tenant of the F13–F24 range reserved for debug overlays; the letter-key overlays (`C`/`X`/…) are to migrate there |
@@ -74,6 +74,9 @@ Flags are specified in [`cli.md`](cli.md).
 | `WASD` / arrows | move | |
 | `Q` / `E` (alt `Z` / `U`) | descend / ascend | |
 | RMB-held mouse (alt `IJKL`) | look | |
+| `F` · pad `X` | lock onto the nearest aircraft and orbit it; press again to step outward, wrapping past the farthest back to the nearest. The only way back into a lock once you have flown off one (`BL-428`). Inert where the session offers no aircraft (the static viewer, an empty stage) | |
+| RMB-drag · right stick | while locked: swing the orbit. Any translation (WASD/QE, left stick) releases the lock and flies off instead | |
+| wheel · triggers | while locked: dolly the orbit (RT out, LT in). Unlocked, the wheel sets the fly speed | |
 | click an object | select it | `--debug-select=` |
 | `PgUp` / `PgDn` | walk the selection's `cs_name` ancestor ladder | |
 | `Home` / `End` | jump to the ends of that ladder | |
@@ -82,3 +85,4 @@ Flags are specified in [`cli.md`](cli.md).
 | `C` | show the built colliders, coloured by the surface id they resolve to (see `--collision`) — also bound in `--fly`/`--stunt` | `--debug-colliders` |
 | `X` | colour world objects by class (destructible/facade/clutter/scenery) — also bound in `--fly`/`--stunt` | `--debug-classoverlay` |
 | `F5` | damage lab on the selected destructible | `--debug-damage=` |
+| `F18` | anim lab: the def picker. Moved off `F`, which the camera's lock key now owns — the camera polls raw key state, so one key could not serve both (`BL-428`) | |

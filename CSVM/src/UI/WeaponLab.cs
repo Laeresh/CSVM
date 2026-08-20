@@ -478,6 +478,9 @@ public sealed partial class WeaponLab : Node3D
             // from exactly where it took it and the no-jump check could not fail. Displace it on
             // the way out, so the hand-back is measured from an eye the orbit never chose.
             var start = CameraToggleFrames > 0 ? eye + ScriptedFreeCameraOffset : eye;
+            // ⚠ No LockCandidates, deliberately: F is this lab's rocket trigger and the held plane
+            // fires against a running sim, so a camera target key on the same F would launch one
+            // every time you re-aimed the view. The key is inert without a roster (BL-428).
             _spectator = new Flight.SpectatorCamera(_camera, start, _plane.GlobalPosition)
             {
                 Name = "weapon_lab_freecam",

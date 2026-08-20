@@ -77,6 +77,8 @@ public partial class GameSession : Node3D
     // Every AI aircraft spawned into this session — stepped in DriveSimSteps after the
     // player rigs, freed with the world subtree.
     private readonly List<FlightController> _aiPlanes = new();
+    // Scratch for LockCandidateAircraft, reused so a target-key press allocates nothing.
+    private readonly List<Node3D> _lockCandidates = new();
     // scratch: the rigs' controllers plus _aiPlanes, rebuilt on every AllAircraft() call
     private readonly List<FlightController> _aircraftScan = new();
     // scratch: rig camera positions for the edge extender
@@ -1347,7 +1349,11 @@ public partial class GameSession : Node3D
         // play/pick. Starts at the mission spawn; --pos/--direction override.
         var camPos = _spec.CamPos ?? spawnPos;
         var camLook = _spec.CamDir is { } labDir ? camPos + labDir : _spec.LookAt ?? spawnLook;
-        var labCam = new SpectatorCamera(_camera, camPos, camLook) { ShowReadout = false };
+        var labCam = new SpectatorCamera(_camera, camPos, camLook)
+        {
+            ShowReadout = false,
+            LockCandidates = LockCandidateAircraft,
+        };
         // --node=: the mission spawn is meaningless on a single-subtree stage — frame
         // the subject instead, unless the tester placed the eye themselves.
         if (state.NodeAabb is { } nodeBox && _spec.CamPos == null && _spec.LookAt == null && _spec.CamDir == null)
@@ -1608,6 +1614,7 @@ public partial class GameSession : Node3D
         {
             // A scripted --screenshot run wants the frame clean of the overlay.
             ShowReadout = !_captureDirector.Pending,
+            LockCandidates = LockCandidateAircraft,
         };
         _worldRoot!.AddChild(_spectator);
         state.What += " + freecam";
@@ -3237,6 +3244,7 @@ public partial class GameSession : Node3D
                 follow != null ? follow.WorldPosition : eye - rig.Camera.Basis.Z)
             {
                 ShowReadout = _rigs.Count == 1,   // one pane, so the freecam readout has room
+                LockCandidates = LockCandidateAircraft,
             };
             _worldRoot!.AddChild(spectator);
             if (follow != null)
@@ -3247,6 +3255,23 @@ public partial class GameSession : Node3D
         GD.Print($"--debug-spectate: {_rigs.Count} human(s) pinned, inert and untargetable; " +
                  (follow != null ? $"camera following {follow.Name}" : "camera free at the spawn") +
                  $" ({_aiPlanes.Count} AI aircraft flying)");
+    }
+
+    /// <summary>What a <see cref="SpectatorCamera"/>'s target key may lock onto: every aircraft
+    /// still in play, AI and human alike. Rebuilt per press, so a plane that has since been shot
+    /// down or stood down (<see cref="FlightController.InPlay"/> covers crashed and inert both)
+    /// drops out without anyone pruning a list. Empty on a stage with no aircraft, which leaves
+    /// the key inert rather than special-cased.</summary>
+    private IReadOnlyList<Node3D> LockCandidateAircraft()
+    {
+        _lockCandidates.Clear();
+        foreach (var ai in _aiPlanes)
+            if (ai is { InPlay: true })
+                _lockCandidates.Add(ai);
+        foreach (var rig in _rigs)
+            if (rig.Controller is { InPlay: true } pilot)
+                _lockCandidates.Add(pilot);
+        return _lockCandidates;
     }
 
     // A pilot has spent its last life. The Spectating flag pins the wreck, so neither R nor the
@@ -3277,6 +3302,7 @@ public partial class GameSession : Node3D
             pilot.PadDevices, pilot.UseKeyboard)
         {
             ShowReadout = false,   // the freecam's own label would sit over a splitscreen pane
+            LockCandidates = LockCandidateAircraft,
         };
         _worldRoot!.AddChild(spectator);
         _spectatorCameras.Add(spectator);   // tracked so a rerun can hand the panes back
