@@ -1043,8 +1043,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   visible one, and it needs the plant to learn a player position it currently has no reason to know.
   *How you'd know it worked:* a spectated AI beyond 1000 m holds speed along its nose and stops
   turning with bank; inside 1000 m nothing changes.
-  *Cross-refs:* `BL-387` (found while eliminating plant candidates for it, and it does not explain
-  that bug — the aircraft judged there is inside 1000 m).
+  ⚠ **Implemented experimentally and reverted; it does NOT settle `BL-387`.** The whole arm was built
+  (authority forced to 1, coupling skipped, velocity dragged onto the nose at `fd_speed × lever − 5`)
+  and flown on C1's `M4ReinfAce`: mean bank **66°** against the near-field plant's 64°, peak 90° on
+  both, roll saturated on 50 % of steps against 43 %. Speed drops 111 → 98 m/s and nothing else moves.
+  The reasoning it was built on — no lift means no turn radius means no need to bank — is wrong: the
+  bank is not a RESPONSE to a turn requirement, it is the law's direct output. `roll = -bx` rolls
+  until the target sits in the vertical plane whether or not lift is what turns the aircraft.
+  So this stays a faithfulness item on its own merits, with no bug riding on it, and whoever picks it
+  up should wire the plumbing in the same change rather than leave an unreachable branch.
+  *Cross-refs:* `BL-387` (found while eliminating plant candidates for it, and measured not to
+  explain it).
 
 - `BL-387` `[Bug]` **An AI aircraft flying straight and level, needing no turn, rolls left-right-left
   indefinitely and never settles — confirmed absent from the original at the controls (`PT-54`/
@@ -1116,10 +1125,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   plant settles at 111 m/s. At 249 mph a ~550 × 1030 m figure-eight demands about 64° of bank
   geometrically, and a figure-eight reverses its turn at the crossover — which is a left-right-left
   roll that is not a control instability at all.
-  *Next:* compare the plant's steady speed at 0.8 throttle against the original's. If the original's
-  Bloodhawk cruises near the law's own 80 m/s at that lever, its aircraft fly the same rings gently
-  and the reported wallow on nets is our aircraft being 38 % too fast, not the law hunting. The one
-  live sample is consistent with that: the original's net-following AI was flying DEAD LEVEL.
+  ⚠ **Speed is not it either, and neither is the far-field plant.** `BL-425`'s whole arm was built
+  and flown on the same net: mean bank 66° against 64°, peak 90° on both, roll saturated on 50 % of
+  steps against 43 %, speed 111 → 98 m/s. The bank is the LAW's direct output (`roll = -bx` rolls
+  until the target is in the vertical plane) and not a response to a turn requirement, so removing
+  the turn radius removes the NEED to bank without touching the COMMAND to.
+  *Next:* the hard part is now that the law, faithfully ported and fed a faithful aim point, banks a
+  net-follower to a mean of 64° — and the one live sample of the original doing the same job was
+  flying dead level. Reconciling those two needs more original samples than the single one taken:
+  specifically an original AI on a net INSIDE 1000 m of the player, in the ordinary (ahead) branch,
+  which is the state neither the debugger session nor any of our probes has yet observed.
   ⚠ **The law is a faithful port and must not be touched, and the aim point has been eliminated
   too.** Decoded from
   `FUN_0041b560` directly: the renormalisation writes back into the same locals the output stage
