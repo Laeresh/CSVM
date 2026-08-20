@@ -1103,6 +1103,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ Method note: attaching a debugger to the original costs the session's controls (stopping a
   DirectInput app drops its exclusive keyboard grab and it never re-acquires). Sample it with ONE
   stop that arms a hardware watchpoint, not one stop per reading.
+  ⚠ **On a REAL shipped net the degenerate geometry does not arise, and the numbers point at SPEED.**
+  Everything above was measured on a synthetic 8 km leg, where the true error is tiny (mean raw
+  `h` 0.036, min 0.0007) and gets renormalised to 1 on 100 % of steps — a 28× to 1400×
+  amplification. Flown on C1's `M4ReinfAce` instead (11 nodes, 20 node-advances in 90 s), the true
+  error is LARGE and sign-coherent: mean raw `h` **0.515**, ahead on 90 % of steps. The aircraft is
+  not hunting an ill-conditioned setpoint, it is turning hard and continuously — mean bank **64°**,
+  peak 90°, roll saturated on 43 % of steps.
+  **Because it flies the net at 111 m/s (249 mph) when the law asks for 80.47.** For a stationary
+  aim point `DesiredSpeed` is the decoded `StaticAimSpeed` 80.4672 m/s (180 mph), and nothing in the
+  chain raises it; what holds the speed up is the cruise table's throttle FLOOR of 0.8, at which our
+  plant settles at 111 m/s. At 249 mph a ~550 × 1030 m figure-eight demands about 64° of bank
+  geometrically, and a figure-eight reverses its turn at the crossover — which is a left-right-left
+  roll that is not a control instability at all.
+  *Next:* compare the plant's steady speed at 0.8 throttle against the original's. If the original's
+  Bloodhawk cruises near the law's own 80 m/s at that lever, its aircraft fly the same rings gently
+  and the reported wallow on nets is our aircraft being 38 % too fast, not the law hunting. The one
+  live sample is consistent with that: the original's net-following AI was flying DEAD LEVEL.
   ⚠ **The law is a faithful port and must not be touched, and the aim point has been eliminated
   too.** Decoded from
   `FUN_0041b560` directly: the renormalisation writes back into the same locals the output stage
