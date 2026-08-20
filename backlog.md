@@ -2270,6 +2270,86 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps:* (i) **The two `CAMERA_STATE`/`CAMERA_FROM_TO` functions (`FUN_00502da0`, `FUN_00503e70`) are animated/in-script FOV changes only (`.ani` H/V_FOV events) — not the base per-view FOV; do not wire the engine's base FOV to them.** (ii) **The 80° is attached to camera mode 6 specifically, not "first person" generally** — mode 7 is also first-person but is 60°, so gating on "is first person" alone would read the mode-7 number wrong. (iii) The `Virtual Cockpit` string is a HUD/perf/zoning label (`FUN_0059c340`), not a view — ruled out. (iv) ~~Which of cockpit vs nose is mode 6 (80°) vs mode 7 (60°) was not pinned~~ — **resolved**: the `FUN_0049fb00` render gate (`cockpit1` drawn only when mode==6) pins mode 6 = Cockpit (80°) and mode 7 = Nose (60°). The remaining subtlety is that **both modes share the same `cockpit_camera` position** (no separate nose offset exists), so "nose" is a render/head-look/FOV variant of the same camera point, not a physically different marker. (v) "62°" invariants elsewhere are the assumption being corrected, not corroboration.
   *Cross-refs:* `BL-255` (the nose view that exists in the original — the cockpit/nose FOV split this item decodes feeds that entry), `BL-150` (numpad fixed-view FOV calibration is still missing — a documented 60°/80° base + the aspect conversion is the calibration input it needs), `docs/formats/camparam.md` (chase/tuning only; does not cover FOV), `PLAN-overcast-match.md:1463` and `docs/org/tracers.md:258` (the 62° assumption to correct).
 
+- `BL-428` `[Feature]` **A pad cannot swing the spectator camera's follow-orbit, and releasing the
+  lock is one-way.** While `Follow != null`, `SpectatorCamera._Process` returns as soon as
+  `OrbitUpdate()` has run, so the right stick never reaches `Look()` and the triggers never reach
+  the dolly: the orbit is mouse-only (RMB drag, wheel zoom). The left stick's only effect is
+  `TranslationRequested()`, which calls `ExitFollow()` and drops the lock for good. Nothing
+  anywhere locks it again.
+  *Evidence:* `SpectatorCamera.cs:171-196` (the early return in the follow branch), `:125-169`
+  (RMB and wheel are the only orbit inputs), `:278-288` (`TranslationRequested`). Both session
+  callers lock exactly once at build time and never again: `GameSession.ApplyDebugSpectate`
+  (`GameSession.cs:3236-3245`, the first in-play AI) and `GameSession.BeginInstantActionSpectate`
+  (`:3275-3286`, the first other human rig). The anim lab's own `FollowNode` lock has the same
+  dead end.
+  *Fix shape:* while following, feed the right stick into `_orbitYaw`/`_orbitPitch` and the
+  triggers into `_orbitDist`, so a pad drives this orbit the way `FlightController.OrbitInput`
+  already drives the paused one. Add a re-lock on `F` (keyboard) and pad `X`: snapshot the in-play
+  aircraft ordered by distance from the camera, lock the nearest, and step to the next on each
+  further press, rebuilding the list after a release. Put the ordering and the index step in a
+  pure function so a suite can assert them with no camera in the tree.
+  *⚠ Traps:* (a) Bind the re-lock in `_UnhandledInput`, never as a raw `Input.IsKeyPressed` poll.
+  This camera polls raw key state, which bypasses `SetInputAsHandled`; that is the mechanism
+  behind `BL-279` (Space fired the guns while moving the freecam) and behind the `C`
+  collider-overlay clash the Q/E vertical pair already dodges. (b) `F` is not free:
+  `AnimLab.cs:209` toggles the def picker on it. Move the picker to `F18`, joining the
+  `F13`/`F14`/`F15`/`F16` debug block, rather than working around the clash. (c)
+  `FlightController.cs:1754` fires rockets on `F`; confirm that path is inert wherever this camera
+  is live instead of assuming it. (d) Every new read goes through `Pads.For(_padDevices)` and
+  honours `_useKeyboard`, or two splitscreen spectators orbit in lockstep again (`BL-375`).
+  *How you'd know it worked:* `--debug-spectate` on a pad, the right stick swings the orbit around
+  the followed AI, the left stick flies off it, and `F` locks back onto the nearest aircraft with
+  further presses stepping outward. In the anim lab, `F18` opens the picker and `F` re-locks with
+  the picker staying shut.
+  *Cross-refs:* `BL-429` (photo mode, which depends on this landing first), `BL-375` (the
+  per-device filter), `BL-279` (the raw-poll key clash), `BL-296` and `BL-398` (the ActionMap and
+  the rebindable keymap that would make bindings like these declarative).
+
+- `BL-429` `[Feature]` **A board's menu cursor flies the camera at the same time, because a halt
+  still means "orbit".** With the pause board or any results board up, `FlightController._Process`
+  sets `orbiting = halted || Held` and `OrbitInput()` reads `W`/`A`/`S`/`D`, the arrows and the
+  left stick. `MenuInput` reads the same keys and the same stick to move the cursor, so choosing a
+  menu row swings the camera as a side effect. The orbit belongs behind an explicit photo mode
+  reached from the menu, not under every board.
+  *Evidence:* `FlightController.cs:1464` (`orbiting = halted || Held`, where `halted` covers
+  `HaltReason.Paused` and `HaltReason.Ended` alike), `:3208` (`OrbitInput`), `MenuInput.cs:216-230`
+  (`RawDir`/`RawDirX`). Five boards carry a `BoardMenu`: `PauseBoard` (Resume/Restart/Exit,
+  dismissable) plus `IaWrapupBoard`, `VersusBoard`, `StuntRaceBoard` and `StuntScoreboard`
+  (Restart/Exit, not dismissable, all hardwired to `_inputFor(0)`).
+  *Fix shape:* `orbiting` becomes `Held || photoMode`, so a halt no longer implies an orbit and a
+  board sits over the pose the camera held when it appeared. Add a `Photo Mode` row to all five
+  boards, ordered `Resume · Photo Mode · Restart · Exit` on the pause board and
+  `Photo Mode · Restart · Exit` on the results boards, which also moves the results boards' resting
+  cursor off `Restart` onto something harmless. Choosing it hides the board, hides that pane's
+  pilot HUD outright (dials, reticle, weapon readout, text block, marker HUD), sets `CameraOwned`
+  and hands the pane to a `SpectatorCamera` locked onto your own aircraft when its node still
+  exists and unlocked at the current pose otherwise. `FollowNode` seeds from the current eye
+  offset, so entry never jumps. The halt reason is never dropped, so the world stays a still frame
+  with audio paused and a capture reproducible. A hint line naming the look, fly, re-lock and exit
+  bindings appears briefly and fades. `Esc` or pad `B` tears the mode down and reopens the board,
+  leaving the camera where you left it so re-entry continues from the same eye. In splitscreen only
+  the pausing player's pane enters the mode; the others keep their frozen pose.
+  *⚠ Traps:* (a) `Held` is the weapon lab's pinned airframe, not a board, and it keeps its
+  documented `WASD` swing and `Kp±` dolly. Only the `halted` half of `orbiting` is being removed.
+  (b) Suppress the pause toggle (`P`, `Esc`, Start, `FlightController.cs:2457`) while photo mode is
+  engaged, or one `Esc` press both leaves the mode and unpauses. (c) The results boards read
+  `_inputFor(0)`, so photo mode from one is always player 1's pane whoever survived. That is
+  already true of Restart and Exit, so accept it here and leave board ownership alone. (d)
+  `FlightController.cs:1617`'s halt hint advertises `Shift/Ctrl` for a zoom that lives on `Kp±` and
+  the triggers; it is already wrong and this work rewrites it, along with
+  [`docs/controls.md`](docs/controls.md) and the `SpectatorCamera`/`FlightController` bullets in
+  [`docs/architecture.md`](docs/architecture.md). (e) Photo mode hides the marker HUD while
+  `--debug-spectate` deliberately keeps it; the two differ because one exists to make a picture and
+  the other to watch behaviour.
+  *How you'd know it worked:* pause in flight, move the cursor through the menu, and the world
+  behind it does not move. Choose Photo Mode, and the board and the HUD go, the camera orbits the
+  frozen aircraft on stick or mouse, `F` steps to other aircraft, and `Esc` brings the board back
+  over the frame you composed. Repeat from a results board.
+  *Cross-refs:* `BL-428` (the camera work this builds on), `BL-373` (closed; it landed the shared
+  pause and the rule that only the pauser resumes and drives the cursor), `BL-256` (the stunt
+  screenshot feature, a separate consumer of a still frame),
+  `BL-150` (the numpad view scheme, untouched here).
+
 ## HUD & UI
 
 - `BL-113` `[Tuning]` `[Owed-playtest]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
