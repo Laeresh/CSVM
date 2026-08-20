@@ -94,8 +94,8 @@ public sealed class LiveryResolver
     /// <summary>The livery player <paramref name="index"/> flies, or null to build the shipped
     /// unpainted skins. With no --paint= this is <see cref="DefaultPattern"/> everywhere;
     /// --paint=none asks for the bare shipped skins. <paramref name="useDefaultPattern"/> false
-    /// drops that default for an enemy that must not wear the player militia's colours
-    /// (docs/formats/instant-action.md "CSVM does not model the wave militia livery").</summary>
+    /// drops that default for an enemy that must not wear the player militia's colours, which is
+    /// the case for a wave whose own militia the file never named (docs/formats/instant-action.md).</summary>
     public PaintScheme? SchemeFor(int index, string zrdrPath, RandomNumberGenerator rng,
         IReadOnlyList<string>? available = null, bool useDefaultPattern = true)
     {

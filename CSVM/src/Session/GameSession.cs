@@ -2262,14 +2262,16 @@ public partial class GameSession : Node3D
                             // Activate re-seats it, so a member patrols from where it arrives
                             // rather than from this parking pose.
                             armIaPatrol(pilot);
-                            // ⚠ Never dress a wave member in the Fortune Hunters default; an enemy
-                            // in the player militia's colours reads as friendly. Its own militia is
-                            // a setup-screen value ia.json never carries, so it keeps its skins.
+                            // The wave's own militia def when the setup screen named one; a shipped
+                            // ia.json names none and the member keeps its shipped skins instead.
+                            // ⚠ Never the Fortune Hunters default: an enemy in it reads as friendly.
+                            string? waveDef = MilitiaDefs.ForWave(wave.EnemyName, wave.EnemyPlane);
                             int rating = InstantActionRuntime.RepresentativeRating(
                                 InstantActionRuntime.RandomPilotStats(Rng.Stream(Rng.Ai).Randi()));
                             var enemy = SpawnAiAircraft(waveNode, Vector3.Zero, Vector3.Forward,
                                 pilot, scheme: null, team: InstantActionRuntime.EnemyTeam,
-                                attackRating: rating, inert: true, shippedSkins: true);
+                                attackRating: rating, inert: true, shippedSkins: waveDef == null,
+                                aiDef: waveDef);
                             if (enemy == null)
                             {
                                 continue;

@@ -442,17 +442,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/plans/PLAN-m3-polish-10.md` A1), `DamageVisuals.cs` (the consumer),
   `extracted/zrdr/vehicle.zrd.json` (the authority).
 
-- `BL-394` `[Bug]` **A session's AI aircraft still fly base defs, so nothing routes a militia to
-  them.** The three halves have landed: `PlaneStats.LoadForAi` takes a def name, so a spawn can fly
-  a militia variant (`bhatwarhawk`, `secfury`) and gets that def's damage model, its `weapons` fit
-  (`Loadout.BindAi`, bound through the same `Loadout.Bind` and told apart from guns by the weapon's
-  `CANNON` flag), its authored livery and its nine-slot pilot vector plus `accentID`. What is
-  missing is the routing: only `--ai=<plane>:def=<name>` names one, so an ordinary flight still
-  spawns the base def, which authors no paint keys and no militia identity. A mission's or Instant
-  Action's own enemy set has to name the militia before any of this reaches a normal session.
+- `BL-394` `[Bug]` **AI identity: landed, and owed a flight.** `PlaneStats.LoadForAi` takes a def
+  name, so a spawn flies a militia variant (`bhatwarhawk`, `secfury`) and gets that def's damage
+  model, its `weapons` fit (`Loadout.BindAi`, bound through the same `Loadout.Bind` and told apart
+  from guns by the weapon's `CANNON` flag), its authored livery and its nine-slot pilot vector plus
+  `accentID`. Two things name a def: `--ai=<plane>:def=<name>`, and an Instant Action wave whose
+  militia the launchscreen wizard picked, resolved through `Mech3/MilitiaDefs` (the table is read
+  off each def's own `paint_pattern`, since the prefixes are not a system). A wave read from a
+  shipped `ia.json` still names no militia and keeps its shipped skins: its `enemy_name` is an
+  `MSG_*` key for the aircraft alone, which is not recoverable
+  ([`docs/formats/instant-action.md`](docs/formats/instant-action.md)).
+  *What still routes nothing:* a campaign mission's own enemy set, and the `--generators` waves.
   *Owed at the controls:* fly a Black Hat flight
-  (`--ai=player_warhawk:def=bhatwarhawk --ai-attack`) and confirm the militia paint, the eight
-  torpedoes, and that they stay on the rail against aircraft.
+  (`--ai=player_warhawk:def=bhatwarhawk --ai-attack`, or a wizard wave set to Black Hat Warhawk) and
+  confirm the militia paint, the eight torpedoes, and that they stay on the rail against aircraft.
   *Still open inside the landed work:* `dare_devil` is parsed and unconsumed; each authored ordnance
   entry takes ONE pylon carrying its whole round count, since the original counts rounds per weapon
   slot and has no pylons at all; a def authoring more entries than the airframe has pylons drops the
@@ -490,8 +493,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Trap, handled:* `stock_loadouts.json` holds the eleven `p*` defs alone, so an AI def name run
   through it disarms the plane. `FlightRoster` binds the def's own fit first, falls back to the
   table, and says so in the log when neither arms the plane.
-  *Size:* what remains is localized — one routing decision (who picks the militia) and its wiring
-  into the mission and Instant Action enemy sets.
+  *Size:* what remains is localized — the same resolution wired into a campaign mission's enemy set
+  and into `--generators`, plus the cockpit confirmation.
   *Cross-refs:* `BL-386` (the damage half — landed and closed 2026-08-16,
   `git log --grep=BL-386`; this builds on the `PlaneStats.AiDefName` seam it left),
   `docs/formats/vehicle.md` (the def-family census), `docs/formats/instant-action.md` (the militia
