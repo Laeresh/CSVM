@@ -44,8 +44,9 @@ public class AngularDampingTests
         m.Reset(Vector3.Zero, Basis.Identity, 120f, 1f);
         m.Step(new FlightInput { Roll = 1f }, Dt);
 
-        const float rollTune = 2.12f; // mirrors FlightModel.RollTune
-        float cmdZ = stats.RollTorque * stats.RecInertia.Z * rollTune;
+        // No roll calibration factor: the binary builds the roll term from the authored torque and
+        // reciprocal inertia alone (FlightModel.RollTune).
+        float cmdZ = stats.RollTorque * stats.RecInertia.Z;
         float undamped = cmdZ * Dt;
         float expected = undamped * Mathf.Exp(-Dt * stats.AngMomentumDamp);
         Assert.True(Mathf.IsEqualApprox(m.BodyRates.Z, expected, 1e-6f),

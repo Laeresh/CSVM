@@ -2091,15 +2091,28 @@ collision damage at all; every write to that field found so far stores 0.
 
 The remake's per-axis control-rate calibration. Steady rate is
 `torque · rec_moments_inertia · Tune / ang_momentum_damp` (× the yaw authority curve on yaw), and a
-full 360° takes ≈ `1/damp` of spin-up plus `2π/rate`. Fitted to stopwatch timings of the original
-and then confirmed against cockpit-gauge video of it — **360° roll 2.05 s, sustained pitch ≈33 °/s,
-full-rudder 360° 28.6 s** — all three within a few percent of what the values already gave.
+full 360° takes ≈ `1/damp` of spin-up plus `2π/rate`.
 
 | Constant | Value | Note |
 |---|---:|---|
-| `PitchTune` | **0.89** | 0.75 before C23; the weathervane explains a little over half of what it used to absorb |
-| `YawTune` | **1.57** | 1.33 before C23 (and 1.32 before C21's authored yaw curve) |
-| `RollTune` | **2.12** | untouched by C21/C22/C23 — the weathervane's torque is ⊥ the nose and provably cannot reach roll |
+| `PitchTune` | **0.89** | fitted to stopwatch timings and cockpit-gauge video, sustained pitch ≈33 °/s; 0.75 before C23, the weathervane explains a little over half of what it used to absorb |
+| `YawTune` | **1.57** | pinned against the authored yaw curve, full-rudder 360° 28.6 s; 1.33 before C23 and 1.32 before C21 |
+| `RollTune` | **1.0** | **not a calibration.** The decode leaves no room for one |
+
+⚠ **Roll carries no calibration factor, and a 2.12 that used to sit here is gone.** `FUN_00490f70`
+builds the roll term as `roll_torque · stick · dt · f_roll(speed)` and `FUN_00490e10` returns
+`f_roll` as the shared low-speed ramp with **no high-speed fade and no other factor** — roll is also
+the one axis with no reverse-authority test, which pitch and yaw both carry. So the authored numbers
+are the whole of it: the Bloodhawk's `roll_torque 7.5` and `rec_moments_inertia.z 1.10` against
+`ang_momentum_damp 5.0` give **90.7 °/s** and a 360° roll in **4.17 s**.
+
+The 2.12 existed to reach a **2.05 s** roll timed off footage, which is 2.12× what the executable's
+own arithmetic produces. A decode is not contested with a stopwatch reading, so the multiplier went
+rather than the decode. Restoring one needs a mechanism traced in the binary.
+
+⚠ **This halves the roll rate of every airframe, the player's included**, since the other ten move
+with the Bloodhawk as they always have. It is a decode correction and not a feel change, so the
+at-the-controls read of it belongs in a playtest rather than in a re-tune.
 
 **The video also closed an open question: the original's pitch rate does NOT fall off with speed.**
 Binned round a loop it reads 37.9 / 33.7 / 30.7 / 36.5 °/s over 120–280 mph — flat within the

@@ -1064,13 +1064,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   [`docs/org/aiPilot.md`](docs/org/aiPilot.md)'s "What the patrol executor aims at".
   ⚠ `CAP-37` is not the instrument for any of this, and neither is any other footage: this was a
   data-flow question the binary states outright.
-  *Fix shape:* what is left is the PLANT. The law hands it a relay that flips on the sign of the
-  lateral aim error, and on our plant the bank reaches about 90° before the flip comes, which is a
-  loop-lag figure rather than a law figure: bank builds far faster than the heading it is supposed
-  to correct swings back. Decode `return_rate`, `ang_momentum_damp` and the roll authority against
-  that input before changing anything, and treat a hand-added damping term as the last resort
-  `BL-330` warns it is. The netless branch is a configuration the original has no equivalent of
-  (`aiPilot.md`, "The patrol-net follower has no netless branch") and stays out of scope.
+  ⚠ **The plant's roll authority has been eliminated as well, and the limit cycle is scale-invariant
+  in it.** `RollTune` is gone (`FUN_00490f70` leaves no room for a calibration factor, so the roll
+  rate halves to the decode's 90.7 °/s), and the same flight under the corrected plant still wallows:
+  peak bank 84° against 90°, mean 45° against 49°. Halving the roll rate halves how fast the bank
+  builds AND how fast the aim error crosses zero, so the amplitude barely moves. No change to a plant
+  GAIN can fix this. Geometry is out too: a short leg entered on the line halves the mean (25°) and
+  still peaks at 83°, and a 1 km leg entered 60 m off is the worst case measured at 79° mean.
+  *Fix shape:* what is left is the SHAPE of the loop rather than any constant in it. A relay driving
+  a double integrator (roll → bank → heading) winds up to a large bank because the error only crosses
+  zero once the HEADING does, by which time the bank is committed. Either the original breaks that
+  chain somewhere not yet read, or an AI aircraft in it really does hunt and the original's aircraft
+  are never on a straight leg long enough to show it (its nets are ~1 km figure-eights, so a leg is
+  a few hundred metres). Settle which before adding anything: a hand-rolled damping term is the last
+  resort `BL-330` warns it is. The netless branch is a configuration the original has no equivalent
+  of (`aiPilot.md`, "The patrol-net follower has no netless branch") and stays out of scope.
   *Playtest after fix:* `PT-54`/`PT-56` (`docs/plans/PLAN-ai-flight.md` F52) — watch a straight patrol leg
   and a netless hold-course alike for the roll to settle instead of hunting.
   *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (this is the AI-arm finding it owes), `BL-330`
