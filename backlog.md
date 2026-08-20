@@ -1130,11 +1130,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   steps against 43 %, speed 111 → 98 m/s. The bank is the LAW's direct output (`roll = -bx` rolls
   until the target is in the vertical plane) and not a response to a turn requirement, so removing
   the turn radius removes the NEED to bank without touching the COMMAND to.
-  *Next:* the hard part is now that the law, faithfully ported and fed a faithful aim point, banks a
-  net-follower to a mean of 64° — and the one live sample of the original doing the same job was
-  flying dead level. Reconciling those two needs more original samples than the single one taken:
-  specifically an original AI on a net INSIDE 1000 m of the player, in the ordinary (ahead) branch,
-  which is the state neither the debugger session nor any of our probes has yet observed.
+  ⚠ **REPRODUCED, on the real scenario, and the ARRIVAL TEST is the live suspect.** The reported case
+  is a wingman on the chapter's first net, which is `[10, "player"]` — anchored, so the whole pattern
+  is carried around the player. Flown that way (`M4ReinfAce`, anchored, player under way at 100 m/s),
+  the symptom appears: mean bank **59°**, peak 90°, roll saturated on 54 % of steps, **51 roll
+  reversals in 90 s** — one every 1.8 s. Held to a slower lever it is starker still: mean raw `h`
+  **0.057**, ahead on 100 % of steps, roll saturated on **83 %**, and **one node advance in 90 s**.
+  That last run is this entry's own description exactly — an aeroplane flying nearly straight behind
+  a receding pattern, a genuinely tiny error renormalised to full scale, wallowing.
+  **It cannot reach its node, and that is our arrival test, not the original's.** Ours advances when
+  the HORIZONTAL distance to the node falls under `AiNetFollower.DefaultArrivalRadius`, an invented
+  200 m. The original advances when `dot(pos - nextNode, legDir) > -radius` (`FUN_0041d1f0`, after
+  the law call, against `sqrt(edge+0x1c)`) — an ALONG-LEG test that fires as soon as the aeroplane
+  draws abeam the node however far off to the side it is. The two differ in shape, not just in
+  value, and ours is the one that can strand an aircraft chasing a node it never catches.
+  *Next:* decode `edge+0x1c`. It is not authored — our parser requires edges to be exactly `[i,j]`
+  and all eight chapters load — so the engine computes it at net load; find that write, then port the
+  along-leg test with it. This is the first candidate that explains the stranding rather than just
+  the wallow, and `DefaultArrivalRadius` is already marked in the code as invented.
   ⚠ **The law is a faithful port and must not be touched, and the aim point has been eliminated
   too.** Decoded from
   `FUN_0041b560` directly: the renormalisation writes back into the same locals the output stage
