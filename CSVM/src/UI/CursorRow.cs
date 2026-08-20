@@ -22,6 +22,9 @@ public sealed partial class CursorRow : CenterContainer
     private Label _marker = null!;
     private Label _label = null!;
 
+    // The second column, on a two-column row only. Null on a plain one, which has no value cell.
+    private Label? _value;
+
     /// <summary>Builds a row carrying <paramref name="text"/> at an already-scaled
     /// <paramref name="fontSize"/>. <paramref name="color"/> applies to both the label and the
     /// marker, so a caller that colours a selected row differently passes the colour it wants.</summary>
@@ -55,6 +58,48 @@ public sealed partial class CursorRow : CenterContainer
         });
 
         row.Set(text, color, selected);
+        return row;
+    }
+
+    /// <summary>A two-column row: a left-aligned <paramref name="label"/> cell of
+    /// <paramref name="labelWidth"/> and a left-aligned <paramref name="value"/> cell of
+    /// <paramref name="valueWidth"/>, the pair centred as a group like <see cref="Build"/>'s.
+    /// ⚠ Both widths are fixed on purpose. Centring one string that carries label and value
+    /// together recentres the row whenever the value changes length, so stepping a stepper walks
+    /// the label out from under the cursor; fixed cells hold both still.</summary>
+    public static CursorRow BuildColumns(string label, string value, float labelWidth,
+        float valueWidth, int fontSize, Color color, bool selected)
+    {
+        float cell = fontSize * MarkerCellEms;
+        var row = new CursorRow
+        {
+            MouseFilter = MouseFilterEnum.Ignore,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+
+        var group = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+        row.AddChild(group);
+
+        row._marker = Text(Marker, fontSize, HorizontalAlignment.Right);
+        row._marker.CustomMinimumSize = new Vector2(cell, 0f);
+        group.AddChild(row._marker);
+
+        row._label = Text(label, fontSize, HorizontalAlignment.Left);
+        row._label.CustomMinimumSize = new Vector2(labelWidth, 0f);
+        group.AddChild(row._label);
+
+        row._value = Text(value, fontSize, HorizontalAlignment.Left);
+        row._value.CustomMinimumSize = new Vector2(valueWidth, 0f);
+        group.AddChild(row._value);
+
+        group.AddChild(new Control
+        {
+            CustomMinimumSize = new Vector2(cell, 0f),
+            MouseFilter = MouseFilterEnum.Ignore,
+        });
+
+        row.Set(label, color, selected);
+        row._value.AddThemeColorOverride("font_color", color);
         return row;
     }
 

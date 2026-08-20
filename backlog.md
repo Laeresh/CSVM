@@ -2531,6 +2531,37 @@ usual.
 
 ## Missions, modes & campaign
 
+- `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
+  controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.
+  **The mechanism.** `GameSession.StuntSummaryFor` (`GameSession.cs:3083-3094`) calls
+  `store.RecordIfBest(key, run.Elapsed)` behind two guards and no third: the objective is
+  `ZonesFlown`, and player 1 has a `Stunt` run at all. Neither asks whether the run was
+  **finished**. So every end of an Instant Action stunt mission records a time, a loss included.
+  A failed run then wins the comparison almost every time, because it ended early: `RecordIfBest`
+  (`ScoreStore.cs:59-63`) takes any total lower than the stored one, and dying halfway round
+  produces exactly that.
+  **Why it is not cosmetic.** The write persists immediately to `user://stunt_scores.json`, so a
+  bogus time becomes the record a later honest run is measured against and, being unbeatably short,
+  can never be displaced by real flying. The damage outlives the session that caused it.
+  **The shape of the fix is already in the file.** The solo path does this correctly by
+  construction: `StuntScoreboard.OnRunCompleted` (`StuntScoreboard.cs:156-160`) only runs on
+  completion, and the board uses `StuntMission.AllComplete` (`:98`) as its own retire test. The
+  Instant Action wrap-up needs the same predicate; the two paths disagree today and only one of
+  them is right.
+  ⚠ **Traps.** (a) Do not gate on the mission's win/loss flag instead. Decision 10 of
+  [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) has every player fly
+  their own zone set with the mission ending when all of them are done, so a splitscreen mission
+  can end with one pilot complete and another not; the test belongs on the run, per pilot, not on
+  the mission. (b) `prevBest` is read *before* the record (`GameSession.cs:3091-3092`), so a fix
+  that stops the write without touching the display would still show a stale figure. (c) The store
+  is in `user://`, not the repo, so any machine that has already hit this carries a poisoned file
+  that no code change repairs. Decide explicitly whether to invalidate existing entries.
+  **Open question, a taste call.** Whether a failed run shows its elapsed time at all (without the
+  NEW BEST flag) or shows no time. The original's own behaviour here is not decoded.
+  *How you'd know it worked:* fail a stunt mission deliberately, confirm the wrap-up claims no best
+  and `user://stunt_scores.json` is byte-identical afterwards; then complete one and confirm it
+  does record.
+
 - `BL-352` `[Feature]` **Instant Action's Table of Contents: the 19 preset scenarios and their View
   Story page.** Split out of [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing
   (2026-08-14) as deliberately out of that plan's scope. The original's Instant Action screen is not
@@ -2550,35 +2581,6 @@ usual.
   drives the screen's own state machine. (b) 19 presets against 7 environments means presets are not
   per-environment; do not assume a mapping. (c) Blocked on nothing, but pointless before
   `PLAN-instant-action` lands the configurable mission the presets would fill in.
-
-- `BL-353` `[Feature]` **Weapon Loadout before an Instant Action flight.** Split out of
-  [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing (2026-08-14). The original's
-  Instant Action screen carries a *Weapon Loadout* button (`IA_B_CHANGEWEAPONS`, `IDS_IA_B_WEAPONLOADOUT`)
-  that opens `ORDINANCELAYOUT.SCRIPT` for either the pilot or the wingmen, selected by the
-  `IA_B_PLAYER` / `IA_B_WINGMAN` radio pair beside it (`@globals@ZQ` is -1 for the pilot, -2 for the
-  wingmen). We fly the stock fit and offer no way to change it outside `--loadout=` and the weapon
-  lab.
-  **Why it is cheap-ish.** The runtime half largely exists: `Loadout.ForRig` already binds every
-  firepoint and every pylon from the stock fit, which is what the weapon lab uses to arm a mount the
-  stock file never names, and `PylonOrdnance` already builds the mounted bodies. The missing half is
-  the UI and the persistence of a chosen fit into `InstantActionDef`.
-  **Raised 2026-08-15: this is no longer cosmetic on one mission type.** The `zeppelin_run` win
-  condition decode (`PLAN-instant-action.md` G13's correction) established that the mode has two
-  winning paths, the engines and the gasbag hull kill. Gasbags are behind the `DAMAGES_ZEPPELIN`
-  gate, which in this install only `wep_14` (the aerial torpedo) and `wep_28` (the broadside
-  cannonball) pass, and all 11 stock loadouts carry HE `wep_06`. So without this screen a
-  menu-launched zeppelin run can only ever be won on engines: the hull path is unreachable by any
-  route a player has, and `--rocket=wep_14` is a testing flag, not one. The original has no such
-  restriction, because its own Weapon Loadout screen is where you fit the torpedo. The mode is
-  fully playable meanwhile, which is why this stays a `[Feature]` rather than a `[Bug]`.
-  ⚠ **Traps.** (a) The loadout is bound **before** the controller enters the tree, because
-  `FlightController._Ready` builds the fire state and the ordnance-type list from it
-  (`Session/FlightRigAssembler`); a fit chosen in a menu has to reach the assembler, not be applied
-  after. (b) The pilot/wingman radio means one chosen fit covers all wingmen, not one each; do not
-  build a per-wingman editor without checking that against the original. (c) The torpedo is not an
-  ordinary rocket: `wep_14` carries `TARGETABLE` + `FLYOUT_HEALTH [10]`, so its in-flight
-  projectile can itself be shot down ([`docs/formats/weapons.md`](docs/formats/weapons.md)). Offering
-  it from a menu is the first time that path is reachable in normal play.
 
 - `BL-354` `[Feature]` **The hangar: Build Custom Plane.** Split out of
   [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing (2026-08-14) as a milestone
@@ -2945,6 +2947,26 @@ usual.
   closed as `BL-377`).
 
 ## Tooling, platform & docs
+
+- `BL-427` `[Feature]` **Extract `langui.dll`'s string table.** Split out while the Ammo Selection
+  screen was built (`git log --grep=BL-353`). `extracted/messages.json` carries the weapon **names**
+  (`MSG_WEAP_APIERCING_ROCKET` → "Armor-piercing rocket", the `MSG_WEAP_*` block at ids 12124–12160)
+  but no prose beyond them. The original's Ammo Selection screen also shows a description pane for
+  the highlighted round ("Slugs — These standard lead bullets do damage equally well to both armor
+  and internal components", visible in `OriginalScreenshots/Ammo Selection Gun DropDown.png`), and
+  nothing in the extracted data contains that text. It can only be in
+  `CrimsonSkiesGame/GOSDATA/ASSETS/BINARIES/langui.dll`, a Win32 resource table no tool of ours
+  reads.
+  **Why it is worth its own item.** It unblocks two features, not one. `BL-352`'s entry says the
+  *View Story* prose for the 19 preset scenarios "may be `langui` strings, or it may be
+  `crimson.rof` artwork", and this settles that question in the same pass. The wizard's own decoded
+  facts already cite langui ids (the thirteen militias at 3670, the presets at 3600–3618), so the
+  table is being read second-hand today from decode notes rather than from the file.
+  ⚠ **Traps.** (a) Our Ammo Selection screen ships without description panes, which is a stated
+  divergence rather than an oversight; adding them is this item, not a bug fix on that screen. (b) A
+  quarter-width four-player pane has no room for a prose block, so the panes are not simply "the
+  screen plus a description" once the strings exist. (c) `langui.dll` is in the game install, which
+  is git-ignored and absent from worktrees — read it by absolute path.
 
 - `BL-417` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` flakes and aborts the whole battery.**
   It asserts a `PerfSample.Scope` allocates zero bytes and intermittently reports **3984**, the same

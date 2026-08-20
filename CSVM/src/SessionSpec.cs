@@ -265,6 +265,12 @@ public sealed record SessionSpec
     public bool PlayersExplicit { get; private set; }
     public string? LoadoutOverride { get; private set; }
     public string? RocketOverride { get; private set; }
+
+    /// <summary>The fits chosen on the menu's loadout screen, one per player pane and null where a
+    /// pane took the stock fit. Empty outside a menu launch. An explicit <see cref="LoadoutOverride"/>
+    /// or <see cref="RocketOverride"/> beats these: both are testing flags reaching nothing a player
+    /// has, and a playtest row's evidence depends on getting the fit it names.</summary>
+    public IReadOnlyList<LoadoutChoice?> MenuLoadouts { get; private set; } = Array.Empty<LoadoutChoice?>();
     public int GunSelect { get; private set; }
 
     /// <summary><c>--target=</c>: the scripted twin of the targeting keys.
@@ -1037,11 +1043,12 @@ public sealed record SessionSpec
     /// — the &gt;= 2-player Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. <paramref
     /// name="iaDef"/>, when given, decides <see cref="Scenario"/>/<see cref="Stunt"/> instead.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
-        MenuMode mode, InstantActionDef? iaDef = null)
+        MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null)
     {
         var names = planeNodes.ToArray();
         return cli with
         {
+            MenuLoadouts = loadouts ?? Array.Empty<LoadoutChoice?>(),
             Chapter = chapter,
             PlaneNames = names,
             // An empty pick cannot come from the launchscreen (it launches only when every joined

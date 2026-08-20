@@ -22,7 +22,12 @@ internal sealed class FlightControllerBuild
     public Action<string, Vector3>? GrazeEffectSink;
     public SurfaceDefTable? TouchdownDefs;
     public ProjectilePool? Projectiles;
-    public int[] PadDevices = Array.Empty<int>();
+    /// <summary>⚠ Nullable because null and empty are DIFFERENT bindings downstream
+    /// (<see cref="FlightController.PadDevices"/>): null reads every connected pad, empty reads
+    /// none. The default stays empty so a builder that says nothing arms nothing — an AI rig
+    /// omitting it must not inherit the player's stick — but a single human has to be able to
+    /// pass the null through, which a non-nullable field made impossible.</summary>
+    public int[]? PadDevices = Array.Empty<int>();
     public bool UseKeyboard;
     public bool AllowPause;
     public bool Inert;

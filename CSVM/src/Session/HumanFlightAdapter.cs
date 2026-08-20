@@ -117,7 +117,10 @@ internal sealed class HumanFlightAdapter
             CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
             GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
             TouchdownDefs = _in.TouchdownDefs,
-            PadDevices = _in.PadAssignment?[pi] ?? Array.Empty<int>(),
+            // ⚠ Pass the null through. Null and empty are DIFFERENT bindings to Pads.For: null
+            // reads every connected pad (the single-player default, which AssignPads returns for
+            // one player), empty reads none. Coalescing here flew a single player pad-dead.
+            PadDevices = _in.PadAssignment?[pi],
             UseKeyboard = pi == 0,
             AllowPause = true,
             Team = _in.InstantActionActive || _in.Coop ? AimAssist.PlayerTeam : null,
@@ -128,8 +131,9 @@ internal sealed class HumanFlightAdapter
         // its built model — resolves markers to muzzle nodes + weapons to WeaponDefs.
         // Set before the controller enters the tree (its _Ready builds the fire state).
         var loadoutDefName = _spec.LoadoutOverride ?? stats.DefName;
-        if (_in.StockLoadouts.For(loadoutDefName) is { } ldef)
+        if (_in.StockLoadouts.For(loadoutDefName) is { } stockDef)
         {
+            var ldef = MenuFitFor(pi) is { } choice ? choice.ApplyTo(stockDef) : stockDef;
             try
             {
                 // The weapon lab flies the FULL-RIG loadout instead: every firepoint and
@@ -443,6 +447,20 @@ internal sealed class HumanFlightAdapter
             // every later respawn, but Setup() above called Respawn() before this runtime existed.
             controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
         }
+    }
+
+    /// <summary>Pane <paramref name="pi"/>'s menu-chosen fit, or null to fly the stock one. An
+    /// explicit <c>--loadout=</c> takes the whole choice away rather than merging with it, so the
+    /// flag names the fit outright the way a playtest row needs; <c>--rocket=</c> needs no test
+    /// here because it is applied after the bind and wins by arriving later.</summary>
+    private LoadoutChoice? MenuFitFor(int pi)
+    {
+        if (_spec.LoadoutOverride != null || pi < 0 || pi >= _spec.MenuLoadouts.Count)
+        {
+            return null;
+        }
+
+        return _spec.MenuLoadouts[pi];
     }
 
     /// <summary>The session-wide flight data every rig reads — loaded once by

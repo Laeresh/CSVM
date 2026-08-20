@@ -337,7 +337,7 @@ public partial class GameSession : Node3D
     /// its own textures, for an actor flying for a militia the mission data never names.</summary>
     public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt,
         AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating, bool inert = false,
-        bool shippedSkins = false, string? aiDef = null)
+        bool shippedSkins = false, string? aiDef = null, Flight.LoadoutChoice? fit = null)
     {
         if (_flightRoster == null)
         {
@@ -420,7 +420,7 @@ public partial class GameSession : Node3D
             }
         }
         var ai = _flightRoster.SpawnAi(new AiSpawn(planeName, pos, lookAt, pilot, scheme, team,
-            inert, shippedSkins, aiDef));
+            inert, shippedSkins, aiDef, fit));
         _aiPlanes.Add(ai);
         ai.SmokeScreens = _smokeScreens;   // a shipped AI smoker lays through the same fire path
         // Mode transitions and reaction rolls, in the engine's own vocabulary — the D11
@@ -2205,8 +2205,13 @@ public partial class GameSession : Node3D
                     // ⚠ Pass an explicit rating, never null: a wingman's Gunner and Machine are only
                     // built when one resolves, and null would arm them solely on a launch that
                     // happened to carry --ai-attack= (docs/formats/instant-action.md).
+
+                    // The wizard's one wingman fit, covering the whole flight as the original's
+                    // Player/Wingman radio does. Passed per spawn, never as a blanket default: the
+                    // stock-table branch it lands in also catches enemies on player airframes.
                     var wingman = SpawnAiAircraft(wingmanNode, pos, pos + wmFwd, pilot,
-                        scheme: wingmanScheme, team: AimAssist.PlayerTeam, attackRating: 5);
+                        scheme: wingmanScheme, team: AimAssist.PlayerTeam, attackRating: 5,
+                        fit: iaWingmen.Def.WingmanLoadout);
                     wingmen[i] = wingman;
                     if (wingman == null)
                         continue;

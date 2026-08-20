@@ -320,6 +320,22 @@ public class SessionSpecMenuTests
         Assert.Equal(onePlayer.IaDef!.NumWingmen, fourPlayers.IaDef!.NumWingmen);
     }
 
+    /// <summary>A menu-chosen fit rides the spec per pane, and an absent one is empty rather than
+    /// null so the bind site can index without a guard of its own.</summary>
+    [Fact]
+    public void AMenuLaunchCarriesOneFitPerPane()
+    {
+        var mine = new Flight.LoadoutChoice();
+        mine.SetPylon(1, "wep_14");
+        var spec = SessionSpec.FromMenu(Cli(), "C4", new[] { "player_fury", "player_bhawk" },
+            MenuMode.Free, iaDef: null, loadouts: new Flight.LoadoutChoice?[] { mine, null });
+
+        Assert.Equal(2, spec.MenuLoadouts.Count);
+        Assert.Equal("wep_14", spec.MenuLoadouts[0]!.PylonFor(1));
+        Assert.Null(spec.MenuLoadouts[1]);
+        Assert.Empty(Menu(Cli(), "C4", MenuMode.Free, "player_fury").MenuLoadouts);
+    }
+
     private static InstantActionDef WizardDef(string missionType) => new()
     {
         MissionType = missionType,

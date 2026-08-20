@@ -920,6 +920,16 @@ Schema: docs/formats/loadouts.md. Verify/inspect with `--dump-loadout` (add `--w
 the full-rig loadout below instead of the stock one). `StockLoadouts.Load`'s missing-file warning
 logs through `Log` (`Utils`), not `GD.PushWarning` (`engine-free-suites` A2).
 
+A third layer sits above those two: `src/Flight/LoadoutChoice.cs`. `LoadoutOptions` holds the Ammo
+Selection screen's two dropdown rosters, parsed from the same file's `selectable` block (the eleven
+offered ordnance types plus `none`, and the four ammo types plus `none`, both in the original's own
+order). `LoadoutChoice` records one pilot's edits keyed by **slot identity** — gun slots 1–4,
+pylons 1–8, the formats' own ceilings — and `ApplyTo(LoadoutDef)` lays them over a base handed in
+rather than looked up, dropping a pick for a slot the base lacks. That is what lets a custom plane's
+saved fit (`BL-354`) use the same path. `none` on a gun omits the group; on a pylon it keeps the
+array entry as a sentinel that `Bind` skips, because entry *i* binds to `PylonFillOrder[i]` and
+dropping it would move every later pylon to the other wing.
+
 `Loadout.ForRig(plane, WeaponDefs, LoadoutDef?)` synthesizes a lab loadout covering the
 airframe's **whole** rig rather than only what stock names: the 4 gun-group slots the reverse-index
 rule seats (`docs/formats/markers.md` "Slot → firepoint binding" — W1→fp(9−2n),(10−2n)), each
