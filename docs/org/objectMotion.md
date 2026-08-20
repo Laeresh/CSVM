@@ -59,7 +59,7 @@ full table with its corroboration is in `analysis/object-motion-flags/FINDINGS.m
 | Bit | Token | Parser | What the update does with it |
 |---|---|---|---|
 | `0x1` | `GRAVITY` | `0050868b` | gates the gravity fold **and the whole contact block** |
-| `0x2` | `IMPACT_FORCE` | `00508d03` | adds the owning object's velocity into the launch, once, if a `CALLBACK 16` put it there (the add is built, the flag is not read: `BL-343`) |
+| `0x2` | `IMPACT_FORCE` | `00508d03` | adds the owning object's velocity into the launch, once, if a `CALLBACK 16` put it there |
 | `0x4` | `TRANSLATION` | `00508d27` | the vector launch form |
 | `0x8` / `0x10` | `TRANSLATION_RANGE_MIN` / `_MAX` | `005095de` / `00509df0` | the polar launch form: draws the four ranges and builds the direction |
 | `0x20` | `XYZ_ROTATION` | `0050a60f` | steady spin integration |
@@ -152,8 +152,7 @@ add followed by the transformed one. That combination is in the binary and no da
 
 ## `IMPACT_FORCE` (bit `0x2`), and the callback that feeds it
 
-Decoded 2026-08-13, answering the research half of `BL-343`; of the build half, the add has landed
-and the gate has not. This is
+Decoded 2026-08-13. This is
 velocity inheritance: the body leaves with the
 velocity the object that owned the animation had at the moment of death, and for an airframe wreck
 it is the **only** launch velocity there is.
@@ -419,7 +418,8 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 | **The per-step admission test and its `COMPLEX` widening are transcribed but behaviourally inert** | With a downward ray, a step that ends higher than it starts cannot end below a surface found at or under its start. They are load-bearing in the original because its cell query can return a surface *above* the body |
 | **A defensive contact cap (8)** | The energy test ends a body in two or three contacts, so it is never reached; it exists so a mistake in that test cannot spin a body forever on the hot path |
 | **`MORPH` and `FORWARD_ROTATION DISTANCE` are not built** | No chapter authors the first, and all 1,399 tumbles author `Time` for the second |
-| **`IMPACT_FORCE`'s add is built; its gate is not** | ⚠ Not a divergence anyone chose, and not harmless either way. The `CALLBACK 16` half and the add both exist (`AnimRuntime.InheritedWorldVelocity`, `MotionRuntime`), which matters because on the eleven airframes this is the wreck's only launch velocity. What is missing is the authored bit: the add is gated on a curated opt-out list and a non-zero slot, so the 62 events the original leaves inert can inherit here. Tracked as `BL-343` |
+| **`IMPACT_FORCE` on a `TopLevel` node converts through IDENTITY, not the parent's basis** | Such a node's own transform IS world, so there is no frame to convert into and the world velocity applies unrotated. The original has no `TopLevel`: it reads the real parent matrix, which for the same node would rotate the velocity by the attitude the aircraft died in. Same reasoning as `COMPLEX` gravity's own `TopLevel` arm above |
+| **The exactly-one-parent test is a has-a-parent test** | `node+0x54 == 1` skips a detached node and a multiply-parented one. A Godot node cannot have two parents, so only the detached half is reachable and only that half is written |
 
 ### The re-home rule, and the three nodes exempt from it
 

@@ -95,18 +95,11 @@ public static class EffectCatalogue
         // vector, so WorldEffectAnimNames appends whichever slots the bound program can play.
     };
 
-    // The belly-slide ground splash (`flydirt_plane`): authored as a near-zero-horizontal sink,
-    // indistinguishable in data shape from a wreck piece's own translation.
-    // ⚠ Wired into `InheritedVelocityExempt` so the crash's momentum nudge does not also drag
-    // this splash off with the sliding wreck.
-    public static readonly string[] GroundSplashAnimNames = { "flydirt_plane" };
-
-    // The bailed pilot under his canopy. He leaves a wreck that is itself carrying the aircraft's
-    // momentum, and the data cannot tell his launch from a thrown wreck piece, so without this he
-    // is catapulted along the flight path instead of drifting down (judged at the controls).
-    // ⚠ Wired into `InheritedVelocityExempt` and into `AnimRuntime.LevelPlacedTemplateNames`, for
-    // the same reason twice: he is not a piece of the wreck, he is a man stepping out of it, so he
-    // takes neither its momentum nor its attitude. His template is authored at identity.
+    // The bailed pilot under his canopy. He is not a piece of the wreck, he is a man stepping out
+    // of it, so he takes neither its momentum nor its attitude. The momentum half needs no list any
+    // more: `chuteman` authors no `impact_force`, so the authored gate excludes him by data.
+    // ⚠ Still wired into `AnimRuntime.LevelPlacedTemplateNames` for the attitude half, because his
+    // template is authored at identity and only our staging hangs it under the crash root.
     public static readonly string[] BailoutAnimNames = { "chuteman" };
 
     // The crash def's sub-effects meant to lie flat on the struck surface rather than co-rotate

@@ -4020,12 +4020,13 @@ copy — see `AnimRuntime`'s pool paragraphs for the mechanism and the `damage-t
 for the regression shape. The stage has **two** sources: the chapter gamez, then the planes gamez
 for a root it has none of, which is the only place the destroy def's parachute (`chuteman`) lives;
 both spawners pass it, and its own builder is cached here for the session.
-`LevelPlacedTemplateNames` is set beside
-`InheritedVelocityExempt`, once, from `EffectCatalogue.CrashSurfaceLevelAnimNames` (`BL-292`) plus
-`EffectCatalogue.BailoutAnimNames` — the
-named defs only ever play from within a crash sequence, so unlike `InheritedWorldVelocity` (set
-per-crash in `FlightController.Crash`, since it depends on the live impact speed/direction) this
-needs no per-crash toggle. The parachute is on that list for a different reason than the splashes:
+`LevelPlacedTemplateNames` is set once, from `EffectCatalogue.CrashSurfaceLevelAnimNames`
+(`BL-292`) plus `EffectCatalogue.BailoutAnimNames` — the named defs only ever play from within a
+crash sequence, so unlike `InheritedWorldVelocity` (written per anim instance by `Callback 16`,
+since it carries the dying vehicle's live velocity) this needs no per-crash toggle. ⚠ There is no
+companion opt-out list for the momentum: which motions inherit is the authored `impact_force` bit,
+read per event in `MotionRuntime` (`docs/org/objectMotion.md`), and a name list there would
+re-answer by hand a question the data already answers. The parachute is on that list for a different reason than the splashes:
 its template is authored at identity and lives in the planes gamez, so only this rig's staging (the
 copy hangs under the crash root) gives the placing call a rotated basis to freeze, and levelling
 restores the pose the original places it at. `AnchorWarnAnimNames`/`AnchorWarnLabel` are injected the same way, from

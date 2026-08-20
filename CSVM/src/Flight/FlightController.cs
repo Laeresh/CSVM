@@ -417,7 +417,6 @@ public partial class FlightController : Node3D
                                                  // for a plane with no destroyable_parts data; a
                                                  // plane with a ledger uses the decoded rule instead
                                                  // (health remaining), which carries no speed term.
-    private const float WreckMomentum = 0.4f;    // TUNE: fraction of impact velocity the crash wreck pieces inherit
     private const float GrazeMaxDamage = 18f;    // HP at a just-under-crash graze (parts have 20–25)
     private const float GrazeFriction = 0.35f;   // tangential speed kill at full severity
     private const float GrazeKick = 1.2f;        // rad/s attitude kick at full severity
@@ -2341,9 +2340,8 @@ public partial class FlightController : Node3D
         if (CrashRuntime != null && crashDef != null)
         {
             // Plays the compiled def; see this module's entry in docs/architecture.md.
-            // WreckMomentum (TUNE) is the fraction of impact velocity the wreck pieces inherit.
-            CrashRuntime.InheritedWorldVelocity = _model.VelocityDir * _model.Speed * WreckMomentum;
-            // The wreck-piece launch: this plane's own parts detaching, not a world destructible's.
+            // ⚠ Never seed an inherited velocity here: the `player_crash_*` defs this path plays
+            // inherit none in the original, and only a `Callback 16` can arm one anyway.
             using (PerfSample.Scope(PerfSite.PartDetach))
             {
                 CrashRuntime.Play(crashDef, CrashAnchor, applyReset: false);

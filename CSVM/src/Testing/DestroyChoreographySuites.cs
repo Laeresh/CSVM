@@ -505,8 +505,8 @@ internal static class DestroyChoreographySuites
                     runtime.Advance(1f / 60f);
                 }
 
-                ctx.Check(runtime.InheritedWorldVelocity.IsEqualApprox(handed),
-                    $"{animName}: CALLBACK 16 handed the instance the rig's velocity inherited={runtime.InheritedWorldVelocity} handed={handed}");
+                ctx.Check(runtime.InheritedWorldVelocity.IsEqualApprox(handed) && runtime.InheritedVelocityArmed,
+                    $"{animName}: CALLBACK 16 handed the instance the rig's velocity and ARMED it inherited={runtime.InheritedWorldVelocity} handed={handed} armed={runtime.InheritedVelocityArmed}");
                 ctx.Same(1, stops, $"{animName}: CALLBACK 15 stopped the damage stages exactly once");
                 foreach (var (key, n) in runtime.UnhandledEventCounts)
                 {
@@ -526,8 +526,8 @@ internal static class DestroyChoreographySuites
                     runtime.Advance(1f / 60f);
                 }
 
-                ctx.Check(runtime.InheritedWorldVelocity == Vector3.Zero,
-                    $"ABLE-TO-FAIL CONTROL {animName}: with no seam wired the wreck inherits nothing inherited={runtime.InheritedWorldVelocity}");
+                ctx.Check(runtime.InheritedWorldVelocity == Vector3.Zero && !runtime.InheritedVelocityArmed,
+                    $"ABLE-TO-FAIL CONTROL {animName}: with no seam wired the wreck inherits nothing inherited={runtime.InheritedWorldVelocity} armed={runtime.InheritedVelocityArmed}");
                 ctx.Check(runtime.UnhandledEventCounts.ContainsKey("Callback(16, no seam wired)")
                           && runtime.UnhandledEventCounts.ContainsKey("Callback(15, no seam wired)"),
                     $"...and both codes are reported as unwired rather than silently skipped keys=[{string.Join(",", runtime.UnhandledEventCounts.Keys)}]");
@@ -716,6 +716,18 @@ internal static class DestroyChoreographySuites
                 ai.SimStep(Dt);
             ctx.Check(ai.WorldPosition.IsEqualApprox(afterHandover),
                 $"and the flight model stopped moving it once released moved={ai.WorldPosition.DistanceTo(afterHandover):0.00} m");
+
+            // What carries it from here is IMPACT_FORCE, and randomdestseq's MAIN_ROOT_NODE is the
+            // install's clearest carrier: it authors translation (0,0,0), so every metre downrange
+            // below is inherited. ⚠ A wreck that drops vertically means the gate refused it.
+            var wreckFrom = ai.CrashAnchor?.GlobalPosition ?? Vector3.Zero;
+            for (int i = 0; i < 60; i++)
+                rig.Advance(Dt);
+            var wreckTo = ai.CrashAnchor?.GlobalPosition ?? Vector3.Zero;
+            float downrange = new Vector3(wreckTo.X - wreckFrom.X, 0f, wreckTo.Z - wreckFrom.Z).Length();
+            ctx.Note($"the wreck carried {downrange:0} m downrange in the second after the handover, off {velAtHandover.Length():0} m/s inherited");
+            ctx.Check(downrange > 20f,
+                $"the authored IMPACT_FORCE gate ADMITTED the hull's momentum: {downrange:0} m downrange in that second (want over 20; unflagged it would be 0)");
         }
         finally
         {

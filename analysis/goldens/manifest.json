@@ -99,8 +99,8 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "f3cab4da768a3d5b3c499b0c53fa9025",
-      "exercises": "player_crash_default on the crash rig (--crash=5's null-material slot-0 arm), the airframe, the moving distance-puffer path, call_crash_trails' ranged launch and tumble, vector-form pieces, flydirt's delta, repeat calls each taking a pooled copy.",
+      "hash": "57e7d89e5bc429993b4ecf162db94afc",
+      "exercises": "player_crash_default on the crash rig (--crash=5's null-material slot-0 arm), the airframe, the moving distance-puffer path, call_crash_trails' ranged launch and tumble, vector-form pieces inheriting no momentum, flydirt's delta, pooled repeat calls.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
@@ -120,8 +120,8 @@
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "cffb05d522e62df12a533f396ee3d9f0",
-      "exercises": "a shot-down AI aircraft three seconds after the kill, at the downrange its FROZEN commands flew it to: the destroy def's second fireball and trail at the handover where randomdestseq takes the hull over.",
+      "hash": "d66c0e784de0ae1e94c5e77a472325b4",
+      "exercises": "a shot-down AI aircraft three seconds after the kill, at the downrange its FROZEN commands flew it to: the destroy def's second fireball and trail at the handover where randomdestseq takes the hull over on its inherited world velocity.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     }
   ]

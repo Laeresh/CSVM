@@ -189,10 +189,11 @@ internal static class AnimationAndEffectsSuites
             // that selects neither; timed: false omits run_time the way the ballistic events do, and is thrown
             // upward so the parabola has an apex to report to the sequence.
             AnimData Body(bool flagged = true, bool noAltitude = false, bool complex = true,
-                bool timed = true)
+                bool timed = true, bool impactForce = false)
             {
                 var props = new Dictionary<string, object?>
                 {
+                    ["impact_force"] = impactForce,
                     ["gravity"] = new Dictionary<string, object?>
                     {
                         ["value"] = -9.8f,
@@ -427,14 +428,14 @@ internal static class AnimationAndEffectsSuites
                     // The follow-up is built the way pNhit authors one: the SAME body with the flag off. ⚠ It must
                     // resume from the landing and still be contact-tested, or it runs its whole clock and buries the
                     // piece under the airfield, which is the "plane went through the ground" symptom.
-                    var settle = Body(flagged: false);
+                    var settle = Body(flagged: false, impactForce: true); // ⚠ ON, or the authored gate refuses before the landing rule is asked
                     // A dive hands the crash rig a large downward momentum. The FIRST launch spends
                     // it; a hop off the ground must not be handed it again, or it covers the 2 m
                     // arming epsilon in 0.044 s and is under the terrain before the sweep can look.
                     var inheritWas = runtime.InheritedWorldVelocity;
-                    runtime.InheritedWorldVelocity = new Vector3(0f, -45f, 0f);
+                    runtime.ArmInheritedVelocity(new Vector3(0f, -45f, 0f));
                     var second = MotionRuntime.Create(runtime, node, settle, Authored);
-                    runtime.InheritedWorldVelocity = inheritWas;
+                    runtime.ArmInheritedVelocity(inheritWas);
                     second?.Seek(0f);
                     float relaunchY = node.GlobalPosition.Y;
                     ctx.Check(Mathf.Abs(relaunchY - restedY) < 1f,
@@ -458,6 +459,34 @@ internal static class AnimationAndEffectsSuites
                     var plain = MotionRuntime.Create(runtime, elsewhere, settle, Authored);
                     ctx.Check(plain is { ContactTier: MotionContactTier.Column },
                         $"a false-flagged launch that continues nothing takes the column too tier={plain?.ContactTier}");
+
+                    // The IMPACT_FORCE gate itself: one armed runtime, one body, the authored flag
+                    // the only difference. ⚠ High above the surface, not at the rest pose, or the
+                    // column tier stops both launches on the same polygon and they read alike.
+                    elsewhere.GlobalPosition = new Vector3(0f, surfaceY + DropHeight, 0f);
+                    float LaunchY(bool impactForce)
+                    {
+                        MotionRuntime.Create(runtime, elsewhere, Body(flagged: false, impactForce: impactForce),
+                            Authored)?.Seek(0.2f);
+                        return elsewhere.GlobalPosition.Y;
+                    }
+
+                    runtime.ArmInheritedVelocity(new Vector3(0f, -45f, 0f));
+                    float gated = LaunchY(impactForce: false);
+                    float carried = LaunchY(impactForce: true);
+                    ctx.Check(gated - carried > 5f,
+                        $"the authored impact_force flag is what admits the momentum, not the def's name: flagged fell to {carried:0.00}, unflagged to {gated:0.00}");
+                    // ⚠ And the arm is a flag, not "the vector is non-zero": a sub-threshold Callback
+                    // 16 CLEARS it in the original (`004ee143`), so a flagged body gets nothing after
+                    // one, even though the stored vector is not zero.
+                    runtime.ArmInheritedVelocity(new Vector3(0f, -0.005f, 0f));
+                    ctx.Check(!runtime.InheritedVelocityArmed
+                              && runtime.InheritedWorldVelocity != Vector3.Zero,
+                        $"a sub-0.01 Callback 16 disarms the instance and still stores its vector armed={runtime.InheritedVelocityArmed} v={runtime.InheritedWorldVelocity}");
+                    float afterDisarm = LaunchY(impactForce: true);
+                    ctx.Check(Mathf.Abs(afterDisarm - gated) < 0.01f,
+                        $"…so the flagged launch inherits nothing after it y={afterDisarm:0.00} unflagged={gated:0.00}");
+                    runtime.ArmInheritedVelocity(inheritWas);
                     elsewhere.QueueFree();
                 }
                 finally
