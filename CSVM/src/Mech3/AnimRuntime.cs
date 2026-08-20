@@ -560,7 +560,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public AnimRuntime(TemplateStage<Node3D> stage)
     {
         _templateStage = stage;
-        _resolver = new NameResolver<Node3D>(Node3DIdentity.Instance, _templateStage.RootsFor, IsInstanceValid);
+        _resolver = new NameResolver<Node3D>(Node3DIdentity.Instance, _templateStage.RootsFor, IsInstanceValid,
+            StagingAdmits);
         _templateStage.Wire(
             FindAll,
             Anchors,
@@ -3317,6 +3318,55 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             if (DebugMotions)
                 Log.Debug("anim", $"anim/debug: '{landing.Target.Name}' landed at {landing.Target.GlobalPosition} — bounce sequence '{landing.Bounce}'{(live ? "" : " — NO LIVE INSTANCE, dispatched nothing")}");
         }
+    }
+
+    // Whether one definition's name resolution may see a staged template copy. The pool is our
+    // stand-in for the private node-tree copy the original hands each definition at load, and a
+    // copy nothing in this definition references sits in no scope the original would search — so
+    // the bail-out's `pilot` reaches the man in the seat and not the parachutist's body (BL-415).
+    // ⚠ Keyed on the def's own symbol table, never on a template name: any staged template
+    // carrying a name an airframe also uses hits this, not just `chuteman`.
+    private bool StagingAdmits(AnimDefinition def, Node3D? scope, Node3D node)
+    {
+        // The copy root is the node directly under the poolN container carrying the slot mark.
+        static Node3D? CopyRootOf(Node3D? from)
+        {
+            Node3D? below = null;
+            for (Node? at = from; at != null; at = at.GetParent())
+            {
+                if (at.HasMeta(PoolSlotMeta))
+                    return below;
+                below = at as Node3D;
+            }
+            return null;
+        }
+        if (_templateStage.SlotOf(node) < 0 || CopyRootOf(node) is not { } root)
+            return true;
+        // The scope this tier is searching already sits inside that copy — a CALL_ANIMATION
+        // retargeted onto its call site's copy, which is where its own choreography now lives.
+        if (CopyRootOf(scope) is { } scopeRoot && scopeRoot.GetInstanceId() == root.GetInstanceId())
+            return true;
+        // Its own template, matched the way every tier matches — so a staged `.flt` copy still
+        // answers to the NAME its definition authors.
+        if (IsNamed(def.Name, root) || IsNamed(def.RootName, root))
+            return true;
+        var name = NameOf(root);
+        // A reader-sourced def has no symbol table to ask, so it keeps the old, wider view.
+        return string.IsNullOrEmpty(name) || def.NodeRefs.Count == 0 || def.NodeRefs.ContainsKey(name);
+    }
+
+    // Whether a NAME pattern resolves to this exact node, by instance id — Node3D's inherited
+    // equality is unreliable across proxies of one native node (see Node3DIdentity).
+    private bool IsNamed(string? pattern, Node3D node)
+    {
+        if (string.IsNullOrEmpty(pattern))
+            return false;
+        foreach (var match in FindAll(pattern, null))
+        {
+            if (match.GetInstanceId() == node.GetInstanceId())
+                return true;
+        }
+        return false;
     }
 
     // ---- node resolution — the rules live in NameResolver.cs; these are the forwards ----

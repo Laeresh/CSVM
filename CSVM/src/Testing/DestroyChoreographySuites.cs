@@ -1054,7 +1054,14 @@ internal static class DestroyChoreographySuites
                 ? chuteman.GlobalBasis.GetEuler() * (180f / Mathf.Pi) : Vector3.Zero;
             ctx.Check(chuteman != null && chuteEuler.Length() < 1f,
                 $"{planeName}: the canopy hangs level, world rot ({chuteEuler.X:0.0}, {chuteEuler.Y:0.0}, {chuteEuler.Z:0.0}), under a wreck at ({player.GlobalRotationDegrees.X:0.0}, {player.GlobalRotationDegrees.Y:0.0}, {player.GlobalRotationDegrees.Z:0.0})");
-            ctx.Note($"{planeName}: eject at t={ejectAt:0.00} s, breakup at t={breakupAt:0.00} s, seated pilot visible={(Find(planeModel, "pilot")?.Visible.ToString() ?? "-")}, chute pilot visible={(chuteman != null ? Find(chuteman, "pilot")?.Visible.ToString() ?? "-" : "-")}");
+            // ⚠ The eject hides the SEATED pilot, never the parachutist's body — both nodes are
+            // named `pilot`, and the staged chute copy hangs under the crash root `cpeject1`
+            // anchors on (BL-415).
+            var seatedPilot = Find(planeModel, "pilot");
+            var chutePilot = chuteman != null ? Find(chuteman, "pilot") : null;
+            ctx.Check(seatedPilot is { Visible: false } && chutePilot is { Visible: true },
+                $"{planeName}: the seat is empty and the man under the canopy has a body seated={(seatedPilot?.Visible.ToString() ?? "-")} chute={(chutePilot?.Visible.ToString() ?? "-")}");
+            ctx.Note($"{planeName}: eject at t={ejectAt:0.00} s, breakup at t={breakupAt:0.00} s");
             ctx.Note($"{planeName}: unhandled event kinds [{string.Join(", ", rig.UnhandledEventCounts.Select(kv => $"{kv.Key}×{kv.Value}"))}]");
         }
         finally

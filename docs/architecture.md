@@ -64,7 +64,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Anim/` — `AnimRuntime`'s motion + light value types (`IAnimMotion` and its four implementations, `AnimLight`, the bind-census enums), split out of `AnimRuntime.cs` into their own files/namespace for size.
 - `src/Mech3/Anim/MotionSet.cs` — the live motion collection: the two registration rules, the per-frame sweep, and the pending-bounce predicate the instance walk retires on.
 - `src/Mech3/Anim/EmitterDirector.cs` — every PUFFER_STATE emitter's whole life on one runtime: the keying rule, the start, all four stops, the respawn wipe, the per-frame follow, and the census. Plus `IEmitter`/`IEmitterFactory` and the real/retired adapters.
-- `src/Mech3/Anim/NameResolver.cs` — name→node resolution: the index, wildcard matcher, memoized `FindAll`, the three-tier scope chain (`Resolve`/`ResolveScoped` with the `ownRootsOf` hook), the symbol authority, `Anchors` (narrowing + root lift) and the bind census; generic over the node type, off-engine testable.
+- `src/Mech3/Anim/NameResolver.cs` — name→node resolution: the index, wildcard matcher, memoized `FindAll`, the three-tier scope chain (`Resolve`/`ResolveScoped` with the `ownRootsOf` hook and the `stagingAdmits` pooled-copy filter), the symbol authority, `Anchors` (narrowing + root lift) and the bind census; generic over the node type, off-engine testable.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock / LOOP / IF-ELSEIF), extracted behind the 3-member `ISequenceHost` seam; headlessly testable.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
@@ -780,6 +780,19 @@ match → symbol narrowing → root lift, policy inputs `NameResolveFallback`/`S
 is constructor-supplied (`IEqualityComparer<TNode>`; the engine keys on `GetInstanceId()`), never
 the node type's inherited `Equals`. `AnimRuntime`'s `Resolve`/`ResolveScoped`/`FindAll`/`Anchors`
 are one-line forwards; the engine-free instantiation over a plain token type is `CSVM.Tests`' suite.
+
+**Every tier is filtered by `AdmissibleStaging`, and the template pool is why.** The original
+resolves a node name inside a subtree the definition was given a private copy of at load
+([org/sequences.md](org/sequences.md), "The definition owns a private copy of its subtree"), so an
+unrelated instance's copy of a common name (`pilot`, `geometry`, `healthy`) can never answer first.
+Our stand-in is the effect-template pool, whose copies hang under the same crash root a definition
+anchors on, so the raw subtree walk is not exclusive at all. The `stagingAdmits` hook is the owner's
+verdict on one pooled copy (`AnimRuntime.StagingAdmits`): a copy is visible when the scope this tier
+searches sits inside it (a `CALL_ANIMATION` retargeted onto its call site's copy), when its root
+answers to the definition's own NAME or `ANIMATION_ROOT_NAME`, or when the definition's symbol table
+names that root. Everything outside the pool always resolves, and on a non-pooled runtime nothing is
+refused, which is what keeps the ambient world boot byte-identical. ⚠ The filter belongs on every
+tier: applied to the first alone it only hands the same foreign copy to the next one down.
 
 ## src/Mech3/Anim/TemplateStage.cs
 The effect-template stage as one module (`TemplateStage<TNode>`): pool-slot arithmetic (`SlotOf`,

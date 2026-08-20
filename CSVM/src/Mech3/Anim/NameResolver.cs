@@ -67,6 +67,12 @@ public sealed class NameResolver<TNode>
     // Liveness of an anchor node (the engine passes Godot's IsInstanceValid; tests pass _ => true).
     private readonly Func<TNode, bool> _isLive;
 
+    // Whether a definition's resolution may see a node at all: false only for a copy staged into
+    // the template pool under a template root this definition never names. Off the pool it answers
+    // true everywhere and the narrowing below is inert, which keeps a non-pooled world boot
+    // byte-identical.
+    private readonly Func<AnimDefinition, TNode?, TNode, bool> _stagingAdmits;
+
     // The compiled gamez index -> built node map SymbolClaims and NarrowToSymbolRoot read. See
     // Add for the two population rules (never on a fallback runtime, never for a pooled copy).
     private readonly Dictionary<int, TNode> _byIndex = new();
@@ -89,17 +95,19 @@ public sealed class NameResolver<TNode>
     /// <summary><paramref name="ownRootsOf"/> supplies the middle tier: a definition's own template
     /// root copies for the given anchor's pool slot. Runs per event, so it must resolve through
     /// <see cref="FindAll"/> only — never <see cref="Anchors"/>, whose census it would re-enter.
-    /// Null means "no own roots" (the tier always misses). <paramref name="isLive"/> answers
-    /// whether an anchor is still valid; a dead one drops the scoped tiers
-    /// (<see cref="ResolveScoped"/>).</summary>
+    /// Null means "no own roots" (the tier always misses). <paramref name="isLive"/> answers whether
+    /// an anchor is still valid; a dead one drops the scoped tiers. <paramref name="stagingAdmits"/>
+    /// is the owner's verdict on a pooled copy (<see cref="AdmissibleStaging"/>).</summary>
     public NameResolver(
         IEqualityComparer<TNode>? identity = null,
         Func<AnimDefinition, TNode?, IReadOnlyList<TNode>>? ownRootsOf = null,
-        Func<TNode, bool>? isLive = null)
+        Func<TNode, bool>? isLive = null,
+        Func<AnimDefinition, TNode?, TNode, bool>? stagingAdmits = null)
     {
         _identity = identity ?? EqualityComparer<TNode>.Default;
         _ownRootsOf = ownRootsOf ?? ((_, _) => Array.Empty<TNode>());
         _isLive = isLive ?? (_ => true);
+        _stagingAdmits = stagingAdmits ?? ((_, _, _) => true);
         _parentOf = new Dictionary<TNode, TNode?>(_identity);
         _findCache = new Dictionary<(string, TNode?), List<TNode>>(new ScopeKeyComparer(_identity));
     }
@@ -185,24 +193,24 @@ public sealed class NameResolver<TNode>
 
     /// <summary>Resolves a NAME path, narrowest scope first: the call anchor's subtree, then the
     /// definition's OWN template roots (<c>ownRootsOf</c>), then — unless <c>LOCAL_NODES_ONLY</c> —
-    /// the whole index. A null or dead anchor skips the scoped tiers. ⚠ This order is structural:
-    /// <see cref="ResolvePath"/> is private, so no caller can compose it differently — it once
-    /// diverged and an authored stop never reached its emitter. Callers must treat the result as
-    /// read-only.</summary>
+    /// the whole index, every tier filtered by <see cref="AdmissibleStaging"/>. A null or dead
+    /// anchor skips the scoped tiers. ⚠ This order is structural: <see cref="ResolvePath"/> is
+    /// private, so no caller can compose it differently — it once diverged and an authored stop
+    /// never reached its emitter. Callers must treat the result as read-only.</summary>
     public List<TNode> ResolveScoped(IReadOnlyList<string> path, AnimDefinition def, TNode? anchor)
     {
         if (anchor == null || !_isLive(anchor))
         {
-            return ResolvePath(path, null, localOnly: true);
+            return AdmissibleStaging(ResolvePath(path, null, localOnly: true), def, null);
         }
-        var found = ResolvePath(path, anchor, localOnly: true);
+        var found = AdmissibleStaging(ResolvePath(path, anchor, localOnly: true), def, anchor);
         if (found.Count == 0)
         {
             found = ResolveInOwnRoot(path, def, anchor);
         }
         if (found.Count == 0 && !def.LocalNodesOnly)
         {
-            found = ResolvePath(path, null, localOnly: true);
+            found = AdmissibleStaging(ResolvePath(path, null, localOnly: true), def, anchor);
         }
         return found;
     }
@@ -368,7 +376,7 @@ public sealed class NameResolver<TNode>
         }
         foreach (var root in _ownRootsOf(def, anchor))
         {
-            foreach (var node in ResolvePath(path, root, localOnly: true))
+            foreach (var node in AdmissibleStaging(ResolvePath(path, root, localOnly: true), def, root))
             {
                 if (!ContainsIdentity(found, node))
                 {
@@ -377,6 +385,40 @@ public sealed class NameResolver<TNode>
             }
         }
         return found;
+    }
+
+    /// <summary>Every tier's scope correction: drops candidates the owner refuses this definition
+    /// (<c>stagingAdmits</c>), i.e. copies staged under a template root neither the definition nor
+    /// the scope being searched belongs to. Off a pooled runtime nothing is refused and this
+    /// returns its input untouched.
+    /// ⚠ Never mutate the argument — it is <see cref="FindAll"/>'s memoized list, shared with every
+    /// other query for the same (pattern, scope).</summary>
+    // ⚠ Every tier needs this, not only the first: narrowing one tier alone just hands the same
+    // foreign copy to the next one down. Why the pool needs excluding at all: docs/architecture.md,
+    // this file's entry, and docs/org/sequences.md's "The definition owns a private copy".
+    private List<TNode> AdmissibleStaging(List<TNode> candidates, AnimDefinition def, TNode? scope)
+    {
+        if (candidates.Count == 0)
+        {
+            return candidates;
+        }
+        List<TNode>? kept = null;
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            if (_stagingAdmits(def, scope, candidates[i]))
+            {
+                kept?.Add(candidates[i]);
+            }
+            else if (kept == null)
+            {
+                kept = new List<TNode>(candidates.Count - 1);
+                for (int j = 0; j < i; j++)
+                {
+                    kept.Add(candidates[j]);
+                }
+            }
+        }
+        return kept ?? candidates;
     }
 
     private bool ContainsIdentity(List<TNode> list, TNode node)
