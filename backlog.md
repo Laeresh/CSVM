@@ -1,4 +1,4 @@
-﻿# Backlog — unscheduled future work
+# Backlog — unscheduled future work
 
 Everything known-but-not-scheduled, so it survives between polish runs. Which plan is active, if
 any, is `PROJECT_CONTEXT.md`'s "Current status" — never restated here. Per-item history/diagnosis
@@ -154,75 +154,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     so a stop that reaches the CALLER's runner loses everything the entry reports missing, in order.
     Sequence identity is the sequence object, never its name.
 
-- `BL-343` `[Feature]` **`IMPACT_FORCE` inheritance runs, but on our own gate rather than the
-    authored one.** A shot-down plane's wreck does now leave along the plane's own velocity: the
-    `Callback 16` half and the add both landed with `BL-385`'s Wave D. What has not landed is the
-    condition the original applies, so wreckage inherits in places the original leaves inert. The gate
-    is fully decoded; see "What is left" below.
-    *Evidence:* [`docs/org/objectMotion.md`](docs/org/objectMotion.md), section "`IMPACT_FORCE` (bit
-    `0x2`), and the callback that feeds it". The update's first-tick init requires three things
-    (`FUN_004e8fa0`): the bit (`004e925e`), a velocity parked on the **anim instance** at `+0xc0..0xc8`
-    with `+0x9c` bit `0x80` set (`004e9268`), and the moving node having **exactly one parent**
-    (`004e9275`, the parent count `node+0x54` that `FUN_004cef20` reads). It then transforms that
-    world velocity into the body's parent frame through the transposed parent matrix and adds it to the
-    **live velocity** `+0x58..0x60`, once. The velocity gets there only when the animation runs a
-    **`CALLBACK 16`** event (kind 35, `FUN_004ec5e0`) whose handler reads the owning object's velocity
-    into the slot (`FUN_004ee0e0`, ignoring anything under 0.01). Census over 8 chapters: **182 events /
-    25 shapes / 15 defs**, of which **120 events / 15 shapes fire** (the eleven airframes'
-    `MAIN_ROOT_NODE`, `player`'s four pieces, all of which author `CALLBACK 16` in `destroy_craft`
-    before calling the motion's sequence) and **62 are inert** for lack of any `CALLBACK` event
-    (`player_crash_default`, `agyrobus`, `drop_smokescreen_canister`). ⚠ On all eleven airframes the
-    authored `translation.initial` and `delta` are **(0,0,0)**, so the inherited velocity is the wreck's
-    *only* horizontal motion. `CSVM/src/Mech3/` handles no `CALLBACK` event and reads `impact_force`
-    nowhere.
-    *Fix shape:* three pieces, in order. (1) A per-anim-instance velocity slot plus an "is set" flag,
-    cleared at anim start, set only when a component exceeds 0.01; (2) a `Callback` event handler that on
-    value 16 reads the owning object's world velocity into it (15 is the airframe-hide notification, 0 is
-    the anim-stop notification, 3 is `player`'s own unrelated code); (3) in the motion's first-tick init,
-    when the bit is set and the flag is set and the node has exactly one parent, add
-    `parentWorldBasis⁻¹ · v` to the live velocity.
-    **Pieces (1) and (2) LANDED, and the add in (3) with them.** `AnimRuntime.InheritedWorldVelocity`
-    is the slot, its zero value standing in for the "is set" flag; the `Callback` handler fills it on
-    code 16 from the rig's `WreckVelocity` seam; and `MotionRuntime`'s first-tick init adds
-    `parentBasis⁻¹ · v`, which is what carries a killed aircraft's wreck downrange instead of dropping
-    it. Engine suites `callback-events` and `ai-wreck-fall` cover both, the second with an
-    able-to-fail control that sees nothing inherited when the seam is unwired.
-    **What is left is (3)'s GATE, and it is the half trap (b) warns about.** `impact_force` is read
-    nowhere in `CSVM/src`. The add is gated on a curated `InheritedVelocityExempt` opt-out list plus a
-    non-zero slot, not on the authored bit and not on the single-parent test, so a motion the original
-    leaves inert inherits in ours as soon as something on the same rig has raised `Callback 16`. The
-    remaining work is to read the flag per motion and gate on it, which is also what would let the
-    exemption list retire.
-    **The inherited fraction is 1, decoded.** No scalar exists anywhere on the original's path: integer
-    moves from the owner's velocity accessor to the argument buffer (`00470954`) and on into the
-    instance (`004ee0f8`), the only multiplies being the nine of the parent-basis transform
-    (`004e9346`), and the add itself unit-coefficient (`004e93a1`…`004e93b9`). ⚠ **The player's two
-    death paths inherit differently, and `FlightController.cs:2360` is on the wrong one.** Shot down,
-    the def `player` runs `CALLBACK 16` and its four pieces inherit in full; flown into the ground, the
-    `player_crash_*` def picked by surface id inherits **nothing** (`player_crash_dirt` authors the flag
-    false, `player_crash_default` is inert). That line writes the seam directly on the ground-crash
-    path, bypassing `Callback 16`, so reading the bit narrows the population and also removes the
-    player's ground crash from it entirely. Visible at the controls; playtest rather than flip silently.
-    ⚠ **The "is set" flag is not a stand-in for a non-zero velocity.** `FUN_004ee0e0` stores the vector
-    unconditionally and *clears* bit `0x80` when every axis is under 0.01 (`004ee143`), so a
-    `CALLBACK 16` raised while the owner is nearly stationary disarms an instance an earlier one armed.
-    Ours arms on any non-zero value and never disarms. See `docs/org/objectMotion.md`.
-    ⚠ **Traps.** (a) **`BL-008` is closed (`1f09c2d`) on "the original does not inherit velocity into world
-    debris", and that closure is still right for world debris.** Not one world destructible authors this
-    flag; every carrier is aircraft wreckage, which is the population the closure never looked at. Do not
-    reopen `BL-008`; this is the part of the question it did not answer. (b) **The flag alone is not the
-    trigger.** Building the add without the `CALLBACK` half gives every carrier inheritance, including the
-    62 events the original leaves inert. (c) **The feared conflict with the `pNhit` rule is resolved, not
-    open.** `player_crash_dirt` authors `impact_force: false` on all eight of its motions, so the judged "a motion
-    continuing a contact landing inherits none of the aircraft's momentum"
-    (`docs/formats/destructibles.md`) is a different def and does not collide. `player_crash_default`'s
-    `p1hit`/`p2hit` do carry the flag and are inert. (d) `BL-122`'s crash-debris look was signed off on
-    *direction* only (`CAP-16`), never magnitude, so it is not evidence either way here. (e) A replicated
-    anim start can carry a velocity directly (`FUN_004eddd0`, network path only); irrelevant single
-    player, remember it if network parity ever matters.
-    *Why now:* the Game AI milestone puts shot-down aircraft on screen in quantity, which is exactly the
-    population this fires on.
-
 - `BL-060` `[Feature]` **Improve on the original crash — the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
   User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the
   faithful data-driven crash, so it was preserved on that branch rather than deleted. **The A/B playtest
@@ -277,9 +208,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   whole-plane trail is expected, not a puzzle.
 
 - `BL-122` `[Tuning]` `[Owed-playtest]` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
-  all needing the original at the controls: `WreckMomentum` **0.4** (`FlightController.cs` — the
-  fraction of impact velocity the wreck pieces inherit, so they scatter along travel vs. pop straight
-  up; **decoded, and it retires with `BL-343`**, see the sub-item below); the **debris-arc trajectory** (the executable decode is settled — `translation_range` gives
+  all needing the original at the controls: the **debris-arc trajectory** (the executable decode is settled — `translation_range` gives
   `dirY = elevation/90` and horizontal `1 − |elevation|/90`, `initial` the launch speed, `delta` an
   acceleration, `PLAN-object-motion-decode`, 2026-08-13; the former `DebrisTune.LaunchScale` footage
   fit is deleted with no replacement scalar, and the arc's *look* is settled too: the unscaled arc
@@ -303,21 +232,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     shows is the piece's path plus camera motion. Recorded as agreement, not as evidence — the
     footage is one piece, near edge-on under camera motion, and no measurement off it decides a
     decode.
-  - **`WreckMomentum` — direction confirmed, magnitude not pinned.** The same panel travels on a
-    straight shallow down-and-forward path along the flight direction (t = 6.13, 6.27); it does not
-    pop upward. At t = 12.50 the burning chunks lie **scattered laterally on the ground**, at rest,
-    either side of the impact — no lofted arcs. Consistent with a substantial travel-velocity
-    inheritance, i.e. 0.4 is the right *shape*; the footage cannot pin the fraction without a known
-    impact speed and piece velocity.
-    **It is no longer a TUNE: the binary answers it, and the answer is not a fraction.** There is no
-    scalar anywhere on the original's inheritance path (`docs/org/objectMotion.md`; integer moves at
-    `00470954`/`004ee0f8`, a unit-coefficient add at `004e93a1`), so a def that inherits, inherits in
-    full. The ground crash is not such a def: the `player_crash_*` defs this line's code path plays
-    inherit **nothing**, one authoring `impact_force` false and the other never arming the instance.
-    So 0.4 has no counterpart in the original at either end, and the number goes when `BL-343` gates
-    the add on the authored bit. ⚠ Losing it is visible at the controls, which is what the owed
-    playtest here should now judge: the pieces stop scattering along travel on a ground crash. What
-    stays owed is the *look* of that, not the fraction.
+  - **Wreck momentum on a ground crash — there is none, and the owed judgement is the look of that.**
+    No fraction is authored or applied: the `player_crash_*` defs this path plays inherit nothing
+    (`player_crash_dirt` authors `impact_force` false, `player_crash_default` never arms the
+    instance), and the original scales the inheritance nowhere in any case
+    (`docs/org/objectMotion.md`). The pieces therefore stay where they blew rather than scattering
+    along travel. ⚠ `CAP-16` shows a panel travelling down-and-forward and chunks scattered
+    laterally at rest, which reads as inheritance; it is one piece near edge-on under camera motion,
+    with no known impact speed, and no measurement off it decides a decode. What this item still
+    owes is the whole crash judged at the controls, not a number.
   - **Overall crash intensity — "one big fireball" is correct for ground, and is surface-dependent.**
     The dirt crash genuinely reads as a single dominant fireball: granular yellow sprite cluster at
     ignition (t = 6.27), white-hot core with orange body by t = 7.40, still at full intensity at

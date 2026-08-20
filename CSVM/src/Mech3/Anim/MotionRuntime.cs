@@ -244,7 +244,7 @@ internal sealed class MotionRuntime : IAnimMotion
             var rnd = tr.Vec3("rnd_xz");
             v0 += new Vector3(RandSym() * rnd.X, RandSym() * rnd.Y, RandSym() * rnd.Z);
             // `delta` folds straight into acceleration, never divided by run_time
-            // (docs/org/objectMotion.md). InheritedLocal carries its own WreckMomentum TUNE.
+            // (docs/org/objectMotion.md). InheritedLocal adds the whole inherited velocity or none.
             m._v0 = v0 + InheritedLocal();
             m._accel = GravityAccel() + tr.Vec3("delta");
             m._hasBallistic = true;

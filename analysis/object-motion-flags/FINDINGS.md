@@ -142,7 +142,7 @@ The update gates the add on this bit at `004e925e`, but the bit is not sufficien
 velocity parked on the anim instance by a **`CALLBACK 16`** event, which splits the 182 into **120
 that fire** (the airframes and `player`) and **62 that are inert** (`player_crash_default`,
 `agyrobus`, the canister, none of which author a `CALLBACK`). Full decode in
-[`docs/org/objectMotion.md`](../../docs/org/objectMotion.md); tracked as `BL-343`.
+[`docs/org/objectMotion.md`](../../docs/org/objectMotion.md), which the engine gates on.
 
 `BL-008` was closed on the finding that the original does not inherit velocity into world debris,
 which the census confirms for *world* debris and leaves open for aircraft wreckage, where every
