@@ -29,8 +29,8 @@ public sealed class AiPilot
     /// different follower is <c>SET_AI_NET</c>'s seam; null returns to the last derived course).
     /// Each <see cref="Next"/> re-derives heading/altitude from the follower's current target node
     /// when set; branch choices draw from its own seeded rng, so a fixed-dt run stays deterministic.
-    /// ⚠ Null (netless) is a configuration the original never reaches — it hunts in roll and does
-    /// not settle through <see cref="AiControlLaw"/>, including AvoidCrash (`BL-387`).</summary>
+    /// ⚠ Null (netless) is a configuration the original never reaches, and it hunts in roll: no leg
+    /// means no <see cref="PatrolAim"/> displacement to damp it (`BL-387`).</summary>
     public AiNetFollower? Patrol;
 
     /// <summary>The forward-gun gunnery, or null for an unarmed pilot. When its target is live and
@@ -82,6 +82,12 @@ public sealed class AiPilot
     // INVENTED: how far right of its own ground track the climb-out is displaced, making the
     // 1000 m pull-up a 45° break to the right rather than a vertical one. See ClimbOutAim.
     private const float ClimbOutBreakM = 1000f;
+
+    // The patrol aim's two decoded constants (FUN_0041d1f0 case 0, the aim built at 0x0041d30b-
+    // 0x0041d4e0): the fraction of its own cross-track error the aim point carries (0x0060355c)
+    // and the cap on that displacement (0x00603550, tested squared against 40000 at 0x00603558).
+    private const float PatrolCrossTrackCarry = 0.9f;
+    private const float PatrolCrossTrackCapM = 200f;
 
     // The merge rule's five decoded constants (FUN_0041d9f0 at 0x0041e130): the range it arms
     // inside, the fraction of each party's own speed its closure test wants along the line of
@@ -159,6 +165,26 @@ public sealed class AiPilot
             ? new Vector3(-track.Z, 0f, track.X).Normalized()
             : Vector3.Right;
         return pos + (Vector3.Up * ClimbOutAimM) + (right * ClimbOutBreakM);
+    }
+
+    /// <summary>The patrol aim point (<c>FUN_0041d1f0</c> case 0): <paramref name="target"/>
+    /// displaced sideways by 0.9 of the aeroplane's own cross-track error from its leg, capped at
+    /// 200 m, so the commanded course lies nearly parallel to the leg (docs/org/aiPilot.md).
+    /// ⚠ Never aim at the node itself. <see cref="AiControlLaw"/>'s roll is a relay on the SIGN of
+    /// the lateral error, so a full-strength convergence error banks hard each way and never
+    /// settles (`BL-387`); this displacement is the only damping the original has.</summary>
+    public static Vector3 PatrolAim(Vector3 pos, Vector3 legStart, Vector3 target)
+    {
+        var leg = target - legStart;
+        if (leg.LengthSquared() < 1e-6f)
+            return target;
+        leg = leg.Normalized();
+        var fromStart = pos - legStart;
+        var off = (fromStart - (leg * fromStart.Dot(leg))) * PatrolCrossTrackCarry;
+        float offSq = off.LengthSquared();
+        if (offSq > PatrolCrossTrackCapM * PatrolCrossTrackCapM)
+            off *= PatrolCrossTrackCapM / Mathf.Sqrt(offSq);
+        return target + off;
     }
 
     /// <summary>The decoded merge test (<c>FUN_0041d9f0</c> at <c>0x0041e130</c>): the victim is
@@ -340,9 +366,11 @@ public sealed class AiPilot
         return input;
     }
 
-    // Patrol: a net node is already the point-with-no-velocity shape the law wants, so it
-    // is flown directly; without a net the standing heading/altitude orders are projected into
-    // one. Both on the cruise table, which is what the original's patrol arm uses.
+    // Patrol: the node is a point with no velocity, which is the shape the law wants, but it is
+    // NOT the aim point — PatrolAim displaces it off the aeroplane's own cross-track error, and
+    // flying at the node itself is what BL-387 was. Until the walk has advanced once there is no
+    // leg to be off, so the node is flown directly. Without a net the standing heading/altitude
+    // orders are projected into a point. All of it on the cruise table, the original's patrol arm.
     private FlightInput FlyPatrol(FlightModel model, float dt)
     {
         if (Patrol is not { } patrol)
@@ -350,11 +378,15 @@ public sealed class AiPilot
 
         SteeringPatrol = true;
         patrol.Update(model.Position);
-        var toNode = patrol.CurrentTarget - model.Position;
+        var node = patrol.CurrentTarget;
+        var toNode = node - model.Position;
         if (new Vector2(toNode.X, toNode.Z).LengthSquared() > 1f)
             TargetHeadingDeg = HeadingDegOf(toNode);
-        TargetAltitude = patrol.CurrentTarget.Y;
-        return Fly(model, dt, patrol.CurrentTarget, Vector3.Zero, AiLawParams.Cruise);
+        TargetAltitude = node.Y;
+        var aim = patrol.LegStart is { } legStart
+            ? PatrolAim(model.Position, legStart, node)
+            : node;
+        return Fly(model, dt, aim, Vector3.Zero, AiLawParams.Cruise);
     }
 
     // The aim point a bare heading/altitude order becomes (see

@@ -1042,18 +1042,35 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   not have this problem — the sign stays consistent and the plane just banks hard one way — which is
   exactly why dogfighting and any leg with real heading error reads fine and straight-and-level does
   not.
-  ⚠ **Do not assume this is a faithful port of a genuinely twitchy original law.** The user's direct
-  A/B says the original does not do this; the decode (`docs/org/aiControlLaw.md`, plan D31/E41) may
-  be missing a rate-damping term, or the renormalisation step itself may be over-applied relative to
-  what the original does with it (the original may use it only for the `rudder_tol` branch-select
-  test, not for the roll MAGNITUDE too). `CAP-37` (unfilmed) is the instrument that would settle
-  which, but this bug does not need footage to confirm — it is visible against the player's own
-  flying and against a wingman's own patrol leg.
-  *Fix shape:* re-check `docs/org/aiControlLaw.md`'s decode of `FUN_0048bdd0`/whichever function
-  owns this branch for whether the renormalised `bx` is what the original feeds to roll, or whether
-  the original keeps (or re-scales by) the pre-normalisation magnitude for the OUTPUT even while
-  using the normalised pair for branch selection — before inventing a rate-damping term from nothing,
-  which `BL-330`'s history warns against.
+  ⚠ **The law is a faithful port and must not be touched, and the aim point has been eliminated
+  too.** Decoded from
+  `FUN_0041b560` directly: the renormalisation writes back into the same locals the output stage
+  reads, so the original also takes `roll = -bx` from the RENORMALISED value; no stick channel
+  carries a rate term (every step to `+0x114` is memoryless, the throttle is the only filtered
+  quantity, and the copy out through `FUN_00460890` is an identity stub, `FLD [ESP+4]; RET` at
+  `0x00460890`); and all four parameter tables give `params[2]`/`params[3]` of 0.06/0.06 or
+  0.08/0.01, so the wings-level rule is unreachable ahead under every mode. Recorded in
+  [`docs/org/aiControlLaw.md`](docs/org/aiControlLaw.md)'s "Scale, clamp, ease off".
+  **What the original does instead, `FUN_0041d1f0` case 0** (the aeroplane patrol arm, aim built at
+  `0x0041d30b`–`0x0041d4e0`): the aim point is not the node. It is the node at the far end of the
+  current edge, DISPLACED SIDEWAYS by `0.9` of the aeroplane's own cross-track error from the leg it
+  is flying, capped at 200 m. So the commanded course is nearly parallel to the leg and only the
+  residual tenth converges on it. That is ported (`AiPilot.PatrolAim`), because it is a decode we
+  were missing, but **it is not this bug's fix**: measured over a 8 km leg entered 120 m off the
+  line, it holds the parallel course it should and leaves the wallow untouched, peak bank about 90°
+  and mean about 48° whether the aim is displaced or on the node. Constants confirmed at: `0.9` at
+  `0x0060355c`, the `40000` cap test at `0x00603558`, `200.0` (double) at `0x00603550`, and the aim
+  velocity `DAT_0075d1b8` is three zero floats. Written up in
+  [`docs/org/aiPilot.md`](docs/org/aiPilot.md)'s "What the patrol executor aims at".
+  ⚠ `CAP-37` is not the instrument for any of this, and neither is any other footage: this was a
+  data-flow question the binary states outright.
+  *Fix shape:* what is left is the PLANT. The law hands it a relay that flips on the sign of the
+  lateral aim error, and on our plant the bank reaches about 90° before the flip comes, which is a
+  loop-lag figure rather than a law figure: bank builds far faster than the heading it is supposed
+  to correct swings back. Decode `return_rate`, `ang_momentum_damp` and the roll authority against
+  that input before changing anything, and treat a hand-added damping term as the last resort
+  `BL-330` warns it is. The netless branch is a configuration the original has no equivalent of
+  (`aiPilot.md`, "The patrol-net follower has no netless branch") and stays out of scope.
   *Playtest after fix:* `PT-54`/`PT-56` (`docs/plans/PLAN-ai-flight.md` F52) — watch a straight patrol leg
   and a netless hold-course alike for the roll to settle instead of hunting.
   *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (this is the AI-arm finding it owes), `BL-330`

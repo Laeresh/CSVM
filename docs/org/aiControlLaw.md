@@ -225,6 +225,22 @@ Every scale takes `+0.5` and every limit `+0.25` while `DAT_0064ee4c` is set. Th
 is set and cut to a tenth while `clock < obj+0xb4`. Finally the three are copied to
 `+0x114`/`+0x11c`/`+0x120` through the identity stub.
 
+⚠ **No stick channel carries a rate term.** The law reads like a controller that ought to have one,
+which is why the absence is recorded here rather than left to be inferred. Every step from the body
+frame to `+0x114` is memoryless: the branch, the scale, the clamp and the skill factor all read this
+frame's aim error and nothing else. No channel is filtered against its previous value, none reads a
+body rate, and no `dt` enters any of the three. The throttle at `obj+0x49` is the one filtered
+quantity in the function (`±dt · 0.35`), and the identity stub means the copy out adds no slew
+either. So the roll command is a relay on the SIGN of the lateral aim error: because the
+renormalisation in step 6 writes back into the same `bx` the bank branch outputs, the magnitude is
+gone, and the shipped 3.5 scale against a limit of 1.0 saturates anything past about 0.29.
+
+What keeps an aircraft steady on a straight leg is therefore not in this function, and the search for
+it should not restart here. The aim point was the obvious next candidate and has been eliminated by
+measurement: the patrol executor does displace it off the node ([aiPilot.md](aiPilot.md), "What the
+patrol executor aims at"), but porting that displacement leaves the roll wallow unchanged. On our
+plant this relay drives the bank to about 90° before the sign flips, which is what `BL-387` is.
+
 ### The parameter tables
 
 Four eight-float tables in `.rdata`, read back from the image:

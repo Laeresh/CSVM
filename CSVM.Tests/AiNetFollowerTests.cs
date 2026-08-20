@@ -97,6 +97,20 @@ public class AiNetFollowerTests
         Assert.Equal(1, f.Advances);
     }
 
+    /// <summary>The leg the aeroplane is on, which is what <c>AiPilot.PatrolAim</c> measures its
+    /// cross-track error against. Null until the walk has advanced once: our first target is the
+    /// nearest node rather than the far end of its edge, so there is no node behind us yet.</summary>
+    [Fact]
+    public void TheLegStartsAtTheNodeJustLeftAndIsAbsentBeforeTheFirstAdvance()
+    {
+        var f = new AiNetFollower(Path(), new Random(1));
+        f.Update(Vector3.Zero);
+        Assert.Null(f.LegStart);
+        Assert.True(f.Update(f.CurrentTarget));
+        Assert.Equal(f.NodePosition(0), f.LegStart);
+        Assert.NotEqual(f.LegStart, f.CurrentTarget);
+    }
+
     [Fact]
     public void AnIsolatedNodeIsHeldNotEscaped()
     {

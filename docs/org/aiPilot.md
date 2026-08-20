@@ -277,6 +277,42 @@ to a world node. The one thing the binary cannot answer is whose position `playe
 split field, because the original has no splitscreen; the call (2026-08-15) is that split play
 matches single player, so rig 0 is used and nothing else is invented.
 
+## What the patrol executor aims at
+
+`FUN_0041d1f0` case 0 is the aeroplane's patrol arm, and the aim point it hands the control law is
+**not the node**. Built at `0x0041d30b`–`0x0041d4e0`, with `cur` the node the aircraft is flying
+from (`obj+0x2e8`) and `next` the far end of the current edge (`DAT_0064e860`, both positions read
+through `FUN_00432140` so the trailer offset is already in them):
+
+```
+leg   = normalise(next - cur)                    ; FUN_00422690
+along = dot(pos - cur, leg)
+off   = ((pos - cur) - along · leg) · 0.9        ; 0.9 at 0x0060355c
+if |off|² > 40000:  off = off · (200 / |off|)    ; 40000 at 0x00603558, 200.0 (double) at 0x00603550
+aim   = next + off
+```
+
+Then `FUN_0041b560(aim, velocity = DAT_0075d1b8, table 0x61fb68, emergency = 0, gunLead = 0)`, where
+`DAT_0075d1b8` is three zero floats, so the aim point is stationary.
+
+**The aim point carries 0.9 of the aircraft's own cross-track error, capped at 200 m.** An aeroplane
+50 m left of the leg line is sent at a point 45 m left of the node, so the commanded course is very
+nearly parallel to the leg and only the residual tenth of the offset converges on it. The
+displacement moves with the aircraft's own drift, which is a washout on the position error.
+
+⚠ **This is a tracking rule, not a damping rule, and it does not by itself steady the aeroplane.**
+It was measured on the ported law: flying a 8 km leg entered 120 m off the line, the displacement
+holds the aeroplane out on a parallel course as intended, but the roll wallow is unchanged against
+the same flight aimed at the node (peak bank about 90°, mean about 48° either way). Whatever keeps
+the original's aircraft steady is not this and is not in the law either
+([`aiControlLaw.md`](aiControlLaw.md)); `BL-387` remains open on the plant.
+
+⚠ The vertical component is carried too. `off` is a full 3-vector, so an aircraft above or below its
+leg is aimed above or below the node by the same 0.9, and the 200 m cap is on the 3-D magnitude.
+
+Case 3, avoid crash, aims at the aircraft's own position with **1000.0 added to Y only**
+(`0x0041d2e2`) on the emergency table `0x61fb48`. There is no lateral component to it.
+
 ## The patrol-net follower has no netless branch
 
 `FUN_0041d1f0` resolves the net before it does anything else (`0x0041d1f9`–`0x0041d237`): it scans

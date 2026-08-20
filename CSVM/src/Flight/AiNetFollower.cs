@@ -86,6 +86,13 @@ public sealed class AiNetFollower
     /// valid once <see cref="Update"/> has run.</summary>
     public Vector3 CurrentTarget => NodePosition(CurrentIndex);
 
+    /// <summary>Where the leg being flown STARTS: the node just left, trailer offset included, or
+    /// null before the first advance. The original always has one (`obj+0x2e8` is seated at spawn
+    /// and it aims at the far end of that edge); our first leg targets the nearest node instead of
+    /// leaving it, so it has no start until the walk advances once.
+    /// <see cref="AiPilot.PatrolAim"/> is the consumer.</summary>
+    public Vector3? LegStart => _previousIndex < 0 ? null : NodePosition(_previousIndex);
+
     /// <summary>How far an anchored net's nodes are carried from their authored coordinates right
     /// now: <c>target − anchorNode</c> in X and Z, <b>zero in Y</b>, because the pattern keeps its
     /// authored altitude, so a ring authored at 400 m stays at 400 m over a zeppelin at 200 m.
