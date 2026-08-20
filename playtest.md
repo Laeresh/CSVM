@@ -534,10 +534,10 @@ reasons that have nothing to do with any of these checks.
 ./RunGame.ps1 --coop --players=2 --chapter=C1 --debug-wash=2
 ```
 
-`--rocket=<wep_id>` (used here and below) swaps every pylon to the named type, which is the only
-way to fly a type a stock loadout does not carry: all 11 loadouts fit HE `wep_06`, and the Weapon
-Loadout screen that would let a pilot fit the rest is `BL-353`, unbuilt. The rocket trigger is
-**F**, one round per pull.
+`--rocket=<wep_id>` (used here and below) swaps every pylon to the named type. All 11 stock
+loadouts fit HE `wep_06`, so a flag is what pins a type here rather than the menu's own Ammo
+Selection screen: the flag beats a menu-chosen fit deliberately, so a row that names a type gets it
+whatever was clicked on the way in. The rocket trigger is **F**, one round per pull.
 
 ⚠ **Every figure quoted in this section and the ones below is a decoded constant or an authored
 value.** A clip that disagrees with one is evidence about our implementation, never a correction to
@@ -614,6 +614,40 @@ against `BL-389` rather than against the wash routing.
   `BL`.
   *Variations:* `--players=2` and `--players=3` for the intermediate pane counts, which is where a
   routing off-by-one would show.
+
+### Instant Action · a menu-fitted torpedo into a zeppelin hull (`BL-353`)
+
+```powershell
+./RunGame.ps1
+```
+
+No flags. That is the point of the row: this is the first fit reachable by a route a player has,
+and passing `--rocket=` would test the flag rather than the screen. At the menu take Instant
+Action, any environment, **Attack a Zeppelin**, on to aircraft select; press **A** to select an
+airframe, **Y** to open Ammo Selection, step every pylon to **Torpedo**, **B** to come back, then
+**A** again to fly.
+
+- `PT-83` `[Own]` **A fit chosen in the menu reaches the aircraft, and the gasbag path opens
+  (`BL-353`).** All eleven stock loadouts carry HE `wep_06`, and only `wep_14` and `wep_28` pass
+  `DAMAGES_ZEPPELIN`, so before this screen a menu-launched zeppelin run could be won on the engines
+  alone. The hull was unreachable by any route a player had.
+  *Look for:*
+  - (a) **the fit flies**: the mounted models under the pylons are torpedoes, not HE rockets, and
+    the weapon gauge reads the count a torpedo racks rather than HE's three;
+  - (b) **the hull path opens**: torpedoes into the gasbag kill the zeppelin without touching an
+    engine, which is the outcome that was impossible before;
+  - (c) **the second stage does not get in the way**: a launch where you never press Y is A, A and
+    nothing else, and the aircraft flies its stock fit exactly as it used to;
+  - (d) **None means none**: set one pylon to None, and that pylon carries no model and the gap
+    stays where it is rather than the remaining rockets sliding along the wing;
+  - (e) **guns follow too**: step a gun group to Armor-piercing and its rounds do an AP round's
+    damage split, not a slug's.
+
+  *Blocks:* `BL-353`'s close. A fail on (a) or (b) is the item, not a new one; a fail on (c) is a
+  regression in the aircraft select every mode shares.
+  *Variations:* Dogfight and Free Flight, which reach the same screen by decision, and a
+  two-player splitscreen launch where P1 opens their loadout while P2 is still browsing — neither
+  should be able to launch the other out from under them.
 
 ---
 

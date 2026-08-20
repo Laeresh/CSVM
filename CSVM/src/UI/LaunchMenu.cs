@@ -372,8 +372,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// button still held from the transition here (the Esc that left a flight, the Start that
     /// joined a player) does not fire immediately. Joined players survive a return from flight;
     /// their plane locks do not. <paramref name="startScreen"/>
-    /// ("chapter"/"environment"/"missiontype"/"waves"/"wingmen"/"plane") opens on a later screen —
-    /// a screenshot/verification aid (--menu=plane, --menu=missiontype).</summary>
+    /// ("chapter"/"environment"/"missiontype"/"waves"/"wingmen"/"plane"/"loadout"/"wingmanloadout")
+    /// opens on a later screen — a screenshot/verification aid (--menu=plane, --menu=loadout).</summary>
     public void ShowMenu(string startScreen = "")
     {
         _screen = startScreen switch
@@ -383,16 +383,25 @@ public sealed partial class LaunchMenu : CanvasLayer
             "missiontype" => Screen.MissionType,
             "waves" => Screen.Waves,
             "wingmen" => Screen.Wingmen,
-            "plane" => Screen.Plane,
+            "plane" or "loadout" => Screen.Plane,
+            "wingmanloadout" => Screen.WingmanLoadout,
             _ => Screen.Mode,
         };
         // Environment/MissionType/Waves/Wingmen only exist under Instant Action — force it so a
         // --menu= opening straight onto one of them (a screenshot aid) renders the right
         // roster/filter rather than whatever _mode was last left at.
-        if (_screen is Screen.Environment or Screen.MissionType or Screen.Waves or Screen.WaveEdit or Screen.Wingmen)
+        if (_screen is Screen.Environment or Screen.MissionType or Screen.Waves or Screen.WaveEdit
+            or Screen.Wingmen or Screen.WingmanLoadout)
         {
             _modeIndex = (int)MenuMode.Stunt;
             _mode = MenuMode.Stunt;
+        }
+
+        // The wingman list is empty at 0 wingmen, so opening straight onto it (a screenshot aid)
+        // has to configure a flight to arm, the way the aid for Waves parks its cursor.
+        if (_screen == Screen.WingmanLoadout && _numWingmen == 0)
+        {
+            _numWingmen = 2;
         }
         // Opening straight onto Waves skips the accept that normally parks the cursor, so put it
         // where a player would find it — otherwise the aid screenshots a state nobody sees.
@@ -413,6 +422,14 @@ public sealed partial class LaunchMenu : CanvasLayer
             slot.InLoadout = false;
             slot.Fit.ResetToStock();
             slot.Input.Prime();
+        }
+        // A pane's own fit only exists once that slot has selected an airframe, so the aid makes
+        // that press for the reader — after the reset loop above, which would undo it.
+        if (startScreen == "loadout")
+        {
+            _slots[0].Locked = true;
+            _slots[0].InLoadout = true;
+            _slots[0].FitRow = 0;
         }
         SyncDevices();
         PrimeJoins();

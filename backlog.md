@@ -2507,14 +2507,27 @@ usual.
   route a player has, and `--rocket=wep_14` is a testing flag, not one. The original has no such
   restriction, because its own Weapon Loadout screen is where you fit the torpedo. The mode is
   fully playable meanwhile, which is why this stays a `[Feature]` rather than a `[Bug]`.
+  **What the screen offers** (`OriginalScreenshots/Ammo Selection Gun DropDown.png` and
+  `Ammo Selection Hardpoint DropDown.png`, plus the user holding the original). Ammo type per gun
+  group and ordnance type per pylon, nothing else: the caliber is a label above each gun dropdown,
+  not a control, and a new airframe is `BL-354`'s hangar. The gun dropdown is Slug / Dum-dum /
+  Armor-piercing / **Explosive** (the magnesium round's screen name) / None. The rocket dropdown is
+  eleven weapons plus None, in an order that is neither id order nor a tier: `wep_05` AP, `wep_06`
+  HE, `wep_07` Flak, `wep_08` Sonic, `wep_09` Flash, `wep_15` Rear flash, `wep_13` Smoke, `wep_12`
+  Choker, `wep_10` Beeper, `wep_11` Seeker, `wep_14` Torpedo. ⚠ The incendiary `wep_04` is a named
+  weapon (`MSG_WEAP_INCENDIARY_ROCKET`) the screen does **not** offer, so "the `wep_04`–`15` block"
+  is the wrong rule. There is no restriction by airframe, by hardpoint location, or by any budget.
   ⚠ **Traps.** (a) The loadout is bound **before** the controller enters the tree, because
   `FlightController._Ready` builds the fire state and the ordnance-type list from it
-  (`Session/FlightRigAssembler`); a fit chosen in a menu has to reach the assembler, not be applied
-  after. (b) The pilot/wingman radio means one chosen fit covers all wingmen, not one each; do not
-  build a per-wingman editor without checking that against the original. (c) The torpedo is not an
-  ordinary rocket: `wep_14` carries `TARGETABLE` + `FLYOUT_HEALTH [10]`, so its in-flight
-  projectile can itself be shot down ([`docs/formats/weapons.md`](docs/formats/weapons.md)). Offering
-  it from a menu is the first time that path is reachable in normal play.
+  (`Session/HumanFlightAdapter`, the live path; the entry's old `Session/FlightRigAssembler`
+  pointer names a file that no longer exists); a fit chosen in a menu has to reach the bind, not be
+  applied after. (b) The pilot/wingman radio means one chosen fit covers all wingmen, not one each;
+  do not build a per-wingman editor. (c) The torpedo is not an ordinary rocket: `wep_14` carries
+  `TARGETABLE` + `FLYOUT_HEALTH [10]`, so its in-flight projectile can itself be shot down
+  ([`docs/formats/weapons.md`](docs/formats/weapons.md)). Offering it from a menu is the first time
+  that path is reachable in normal play. (d) A wingman fit must be addressed to wingman spawns, not
+  to the roster's stock-table fallback branch: that branch also catches enemy waves flying player
+  airframes, which must keep their own fit.
 
 - `BL-354` `[Feature]` **The hangar: Build Custom Plane.** Split out of
   [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing (2026-08-14) as a milestone
@@ -2881,6 +2894,26 @@ usual.
   closed as `BL-377`).
 
 ## Tooling, platform & docs
+
+- `BL-425` `[Feature]` **Extract `langui.dll`'s string table.** Split out of `BL-353` while building
+  the Ammo Selection screen. `extracted/messages.json` carries the weapon **names**
+  (`MSG_WEAP_APIERCING_ROCKET` → "Armor-piercing rocket", the `MSG_WEAP_*` block at ids 12124–12160)
+  but no prose beyond them. The original's Ammo Selection screen also shows a description pane for
+  the highlighted round ("Slugs — These standard lead bullets do damage equally well to both armor
+  and internal components", visible in `OriginalScreenshots/Ammo Selection Gun DropDown.png`), and
+  nothing in the extracted data contains that text. It can only be in
+  `CrimsonSkiesGame/GOSDATA/ASSETS/BINARIES/langui.dll`, a Win32 resource table no tool of ours
+  reads.
+  **Why it is worth its own item.** It unblocks two features, not one. `BL-352`'s entry says the
+  *View Story* prose for the 19 preset scenarios "may be `langui` strings, or it may be
+  `crimson.rof` artwork", and this settles that question in the same pass. The wizard's own decoded
+  facts already cite langui ids (the thirteen militias at 3670, the presets at 3600–3618), so the
+  table is being read second-hand today from decode notes rather than from the file.
+  ⚠ **Traps.** (a) Our Ammo Selection screen ships without description panes, which is a stated
+  divergence rather than an oversight; adding them is this item, not a bug fix on `BL-353`. (b) A
+  quarter-width four-player pane has no room for a prose block, so the panes are not simply "the
+  screen plus a description" once the strings exist. (c) `langui.dll` is in the game install, which
+  is git-ignored and absent from worktrees — read it by absolute path.
 
 - `BL-417` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` flakes and aborts the whole battery.**
   It asserts a `PerfSample.Scope` allocates zero bytes and intermittently reports **3984**, the same
