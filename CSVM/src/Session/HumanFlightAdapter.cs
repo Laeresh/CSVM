@@ -117,7 +117,10 @@ internal sealed class HumanFlightAdapter
             CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
             GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
             TouchdownDefs = _in.TouchdownDefs,
-            PadDevices = _in.PadAssignment?[pi] ?? Array.Empty<int>(),
+            // ⚠ Pass the null through. Null and empty are DIFFERENT bindings to Pads.For: null
+            // reads every connected pad (the single-player default, which AssignPads returns for
+            // one player), empty reads none. Coalescing here flew a single player pad-dead.
+            PadDevices = _in.PadAssignment?[pi],
             UseKeyboard = pi == 0,
             AllowPause = true,
             Team = _in.InstantActionActive || _in.Coop ? AimAssist.PlayerTeam : null,
