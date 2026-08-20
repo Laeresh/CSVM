@@ -455,10 +455,14 @@ internal static class DestroyChoreographySuites
             var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
             try
             {
-                // A fixed pair, not ctx.PlaneName: the verdict IS the branch between them, so
-                // --plane= must not be able to make both runs the same arm.
-                PlayerDestroyArm(ctx, world, planesGamez, textures, "player_bhawk", autogyro: false);
-                PlayerDestroyArm(ctx, world, planesGamez, textures, "player_autogyro", autogyro: true);
+                // Every airframe, not ctx.PlaneName: part of the verdict IS the branch between
+                // them, and `pilot` is a name all eleven carry, so a resolver binding the wrong
+                // one is wrong everywhere at once (BL-415).
+                foreach (var planeName in Session.EffectCatalogue.AirframeDestroyAnims.Keys)
+                {
+                    PlayerDestroyArm(ctx, world, planesGamez, textures, planeName,
+                        autogyro: string.Equals(planeName, "player_autogyro", System.StringComparison.OrdinalIgnoreCase));
+                }
             }
             finally
             {
