@@ -1071,6 +1071,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   builds AND how fast the aim error crosses zero, so the amplitude barely moves. No change to a plant
   GAIN can fix this. Geometry is out too: a short leg entered on the line halves the mean (25°) and
   still peaks at 83°, and a 1 km leg entered 60 m off is the worst case measured at 79° mean.
+  ⚠ **Two more eliminations, so that nobody re-runs them.** (a) The `by < 0` arm's sign-snap
+  (`bx = sign(bx)`, which the patrol table's `FlipSpeed` 0.35 can never escape since `h` is 1) is not
+  what saturates the roll: measured over the same leg, `by` is negative on 42 % of steps with mean
+  `|roll|` 1.00 there, and the OTHER arm still averages 0.91, so the renormalisation saturates the
+  command on its own either way. Lifting the aim 200 m to hold `by` positive leaves peak bank 89° and
+  mean 44°. (b) There is no AI think cadence to blame: `FUN_004897c0` sets the flight `dt` to the
+  frame delta and walks every active vehicle every frame, and `FUN_0041c270` dispatches straight into
+  `FUN_0041d1f0` with no timer or throttle anywhere on the path. The original's law runs every frame
+  at the frame `dt`, exactly as ours does, and a coarser tick would widen the limit cycle rather than
+  close it. All four `AiLawParams` tables were re-checked against the decode and match.
   *Fix shape:* what is left is the SHAPE of the loop rather than any constant in it. A relay driving
   a double integrator (roll → bank → heading) winds up to a large bank because the error only crosses
   zero once the HEADING does, by which time the bank is committed. Either the original breaks that
