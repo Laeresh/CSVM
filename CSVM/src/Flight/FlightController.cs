@@ -490,6 +490,7 @@ public partial class FlightController : Node3D
     private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
     private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
     private ImmediateMesh? _probe;               // debug collision-probe line
+    private IWorldQuery? _worldQuery;             // the sweep/ray seam; bound in Bind, lazy for bare test rigs
     private float _damageCooldown;               // s left before the next HP subtraction
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private float _collisionGrace;               // s left with no collision at all (obj+0xAC)
@@ -677,6 +678,10 @@ public partial class FlightController : Node3D
             _cameraOwned = value;
         }
     }
+
+    // The sweep/ray seam: set in Bind, and lazy here too so a bare test rig that never binds
+    // still gets one (GetWorld3D() only needs tree membership, which Bind does not gate).
+    private IWorldQuery World => _worldQuery ??= new GodotWorldQuery(this);
 
     /// <summary>The direction an ordnance round leaves along, which the player and the AI decide
     /// differently in the original (docs/org/ordnanceTypes.md, "Who aims ordnance, and who does
@@ -1694,14 +1699,8 @@ public partial class FlightController : Node3D
     /// <summary>Whether static world geometry blocks the segment — the turret gunners' cached
     /// line-of-sight test. World layer only: another aircraft in the way is not cover, which is
     /// also why <see cref="HitWorld"/> (world + aircraft) is not reused here.</summary>
-    internal bool WorldBlocksLine(Vector3 from, Vector3 to)
-    {
-        var space = GetWorld3D()?.DirectSpaceState;
-        if (space == null)
-            return false;
-        return space.IntersectRay(
-            PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World)).Count > 0;
-    }
+    internal bool WorldBlocksLine(Vector3 from, Vector3 to) =>
+        World.Ray(from, to, CollisionLayers.World, null, out _);
 
     /// <summary>What blocks the AI's avoid-crash lookahead along the segment — the static world or
     /// another aircraft, never this plane's own body — as the struck body's name, or null for a
@@ -1711,16 +1710,11 @@ public partial class FlightController : Node3D
     /// but changes no outcome, and detection was never the bottleneck (same doc).</summary>
     internal string? AvoidCrashBlocksLine(Vector3 from, Vector3 to)
     {
-        var space = GetWorld3D()?.DirectSpaceState;
-        if (space == null)
-            return null;
-        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            from, to, CollisionLayers.WorldAndAircraft, Body?.ExcludeSelf));
-        if (hit.Count == 0)
+        if (!World.Ray(from, to, CollisionLayers.WorldAndAircraft, Body?.ExcludeSelf, out var report))
             return null;
         // The name is the diagnostic: a block on "a5/col" is terrain, one on
         // "ai6_player_bhawk/airframe" is the aircraft case the decode says this ray also covers.
-        return hit["collider"].Obj is Node body
+        return report.Collider is { } body
             ? $"{body.GetParent()?.Name}/{body.Name}"
             : "unnamed";
     }
@@ -2170,15 +2164,10 @@ public partial class FlightController : Node3D
         point = to;
         hitName = "";
         hitBody = null;
-        var space = GetWorld3D()?.DirectSpaceState;
-        if (space == null)
+        if (!World.Ray(from, to, CollisionLayers.WorldAndAircraft, Body?.ExcludeSelf, out var report))
             return false;
-        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to,
-            CollisionLayers.WorldAndAircraft, Body?.ExcludeSelf));
-        if (hit.Count == 0)
-            return false;
-        point = (Vector3)hit["position"];
-        if (hit["collider"].Obj is Node body)
+        point = report.Position;
+        if (report.Collider is { } body)
         {
             hitBody = body;
             hitName = $"{body.GetParent()?.Name}/{body.Name}";
@@ -2197,21 +2186,16 @@ public partial class FlightController : Node3D
             return;
         if (!IsHumanPiloted && (!_model.UsesAiForcePath || Pilot?.IsStunned == true))
             return;
-        var space = GetWorld3D()?.DirectSpaceState;
-        if (space == null)
-            return;
         var from = _model.Position;
-        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            from, from - _model.Attitude.Z * elev, CollisionLayers.World));
-        if (hit.Count == 0)
+        if (!World.Ray(from, from - _model.Attitude.Z * elev, CollisionLayers.World, null, out var report))
             return;
-        input.GroundBlowNormal = (Vector3)hit["normal"];
-        input.GroundBlowDistM = from.DistanceTo((Vector3)hit["position"]);
+        input.GroundBlowNormal = report.Normal;
+        input.GroundBlowDistM = from.DistanceTo(report.Position);
         if (!_groundBlowLoggedFirst && _model.Attitude.Z.Dot(input.GroundBlowNormal) > 0f)
         {
             _groundBlowLoggedFirst = true;   // verification breadcrumb: the probe reaches real geometry
             // The facing test comes with it: a hit that fails it is inert and must not read as "working".
-            string what = (hit["collider"].Obj as Node) is { } body
+            string what = report.Collider is { } body
                 ? $"{body.GetParent()?.Name}/{body.Name}" : "?";
             GD.Print($"ground blow: first repelling hit on {what} at {input.GroundBlowDistM:0} m "
                      + $"of {elev:0} (facing {_model.Attitude.Z.Dot(input.GroundBlowNormal):0.00})");
@@ -2222,13 +2206,10 @@ public partial class FlightController : Node3D
     // another aircraft below the camera is not ground for speed_cue's NODE_NEAR_GROUND gate.
     private float HeightAboveWorldGround(Vector3 from)
     {
-        var space = GetWorld3D()?.DirectSpaceState;
-        if (space == null)
-            return float.MaxValue;
         var to = from + Vector3.Down * 1000f;
-        var hit = space.IntersectRay(
-            PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World));
-        return hit.Count > 0 ? from.Y - ((Vector3)hit["position"]).Y : float.MaxValue;
+        return World.Ray(from, to, CollisionLayers.World, null, out var report)
+            ? from.Y - report.Position.Y
+            : float.MaxValue;
     }
 
     // The explosion boom the chosen crash def authors, which FlightAudio
@@ -3159,50 +3140,17 @@ public partial class FlightController : Node3D
         stopFrac = 1f;
         if (Collider == null)
             return false;
-        var space = GetWorld3D()?.DirectSpaceState;
-        if (space == null)
-            return false;
         var baseXf = new Transform3D(_model.Attitude, from);
-        bool hit = false;
-        foreach (var p in Collider.Parts)
-        {
-            var query = new PhysicsShapeQueryParameters3D
-            {
-                Shape = p.Shape,
-                Transform = baseXf * p.Local,
-                Motion = motion,
-                CollisionMask = CollisionLayers.WorldAndAircraft,
-            };
-            if (Body != null)
-                query.Exclude = Body.ExcludeSelf; // never sweep into this plane's own body
-            var cast = space.CastMotion(query); // [safe, unsafe] fractions; [1,1] = clear
-            if (cast[0] >= 1f || cast[0] >= stopFrac)
-                continue;
-            hit = true;
-            stopFrac = cast[0];
-            part = p.Name;
-            // Slightly PAST the first-overlap pose: at exactly cast[1] GetRestInfo can come back
-            // empty, leaving the wrong head-on fallback normal on what was really a shallow graze.
-            query.Transform = query.Transform.Translated(
-                motion * cast[1] + (mLen > 1e-6f ? motion / mLen * 0.05f : Vector3.Zero));
-            query.Motion = Vector3.Zero;
-            var rest = space.GetRestInfo(query);
-            if (rest.Count > 0)
-            {
-                impact = (Vector3)rest["point"];
-                normal = (Vector3)rest["normal"];
-                hitBody = GodotObject.InstanceFromId((ulong)rest["collider_id"]) as Node;
-                hitName = hitBody != null ? $"{hitBody.GetParent()?.Name}/{hitBody.Name}" : "world";
-            }
-            else
-            {
-                impact = (baseXf * p.Local).Origin + motion * cast[1];
-                normal = mLen > 1e-6f ? -motion / mLen : Vector3.Up;
-                hitBody = null;
-                hitName = "world";
-            }
-        }
-        return hit;
+        if (!World.Sweep(Collider.Parts, baseXf, motion, CollisionLayers.WorldAndAircraft,
+            Body?.ExcludeSelf, out var report))
+            return false;
+        impact = report.Contact;
+        hitName = report.ColliderName;
+        part = report.Part;
+        normal = report.Normal;
+        stopFrac = report.StopFraction;
+        hitBody = report.Collider;
+        return true;
     }
 
     // Debug view of the collision test: the swept center ray with a cross at

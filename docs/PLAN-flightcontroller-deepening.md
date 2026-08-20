@@ -141,7 +141,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the world-query seam
 
-1. ☐ `IWorldQuery` with `Sweep` and `Ray`, its Godot adapter, and all eight query sites routed
+1. ☑ `IWorldQuery` with `Sweep` and `Ray`, its Godot adapter, and all eight query sites routed
 2. ☐ `TurretController` drops its `FlightController` reference for the seam, asserted off-engine
 
 ### Wave B — the input source
@@ -191,7 +191,7 @@ five board files another session owns.
 
 # Wave A — the world-query seam
 
-## A1 ☐ `IWorldQuery` with `Sweep` and `Ray`, its Godot adapter, and all eight query sites routed
+## A1 ☑ `IWorldQuery` with `Sweep` and `Ray`, its Godot adapter, and all eight query sites routed
 
 **Goal.** Every physics query in `FlightController` goes through one interface with two methods, and
 the Godot types behind them appear in exactly one adapter.

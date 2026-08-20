@@ -67,6 +67,8 @@ public partial class FlightController
         if (build.Team is { } team)
             Team = team;
 
+        _worldQuery = new GodotWorldQuery(this);
+
         Shake = build.Shake;
         var shakePivot = new Node3D { Name = "ShakePivot" };
         ShakePivot = shakePivot;

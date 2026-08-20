@@ -159,6 +159,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's triangles, with no per-plane data.
 - `src/Flight/CollisionLayers.cs` — the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.
 - `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` boxes on the aircraft layer; struck shape → part name.
+- `src/Flight/IWorldQuery.cs` — the one seam onto the live physics world: a shape swept along a motion, and a ray.
+- `src/Flight/GodotWorldQuery.cs` — the only adapter over `DirectSpaceState`; implements `IWorldQuery`.
 - `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part; owns the whole-vehicle kill rule (`IsDestroyed`).
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
 - `src/Flight/DamageLab.cs` — the `--damage`/F5 slider UI: one HP slider per part, driving the parked plane's DamageVisuals or the flown plane's real PlaneDamage.
@@ -2468,8 +2470,10 @@ performs the `FireOutcome`: muzzle-transform spawns, gun-loop start/stop, dry cu
 logs), crash and respawn. The camera is `CameraController`'s — this node only feeds it
 the pose, the dt and the mixed orbit axes (`OrbitInput`); on a crash it cuts to `CrashView` once,
 writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
-shows no HUD — footage), restoring it on respawn. Sweeps the
-PlaneCollider boxes via CastMotion each physics frame — mask world+aircraft with its own
+shows no HUD — footage), restoring it on respawn. Every physics query — the PlaneCollider boxes'
+sweep each physics frame plus every ray (ground AGL, the ground-blow probe, the camera's height
+check, both turret/AI lines of sight) — goes through the one `IWorldQuery` bound in `Bind`
+(`GodotWorldQuery`, the sole adapter over `DirectSpaceState`); mask world+aircraft with its own
 `Body` (`AircraftBody`, built in `_Ready` from the same boxes) excluded by RID, so another plane
 is solid and a mid-air resolves through the same SurviveHit/Crash as terrain; `Crash`/`Respawn`
 toggle the body's hittability. The DEATH family (`CRASH into`, `midair aspect`, every
@@ -4202,3 +4206,15 @@ point — blast falloff), `SegmentDistance(from,to)` (closest approach of a swep
 search per box — distance to a box is convex along the segment), `BoundRadius` for the cheap
 per-step reject, and `TakeProjectileHit(..., damageScale)` scaling both damage magnitudes by the
 blast falloff share (1 = direct round).
+
+## src/Flight/IWorldQuery.cs
+The one seam onto the live physics world: `Sweep` (a shape moved along a motion, earliest stop
+across a named part list) and `Ray` (one ray). `FlightController` reads the world only through
+this; nothing else may reach `DirectSpaceState`. `SweepReport`/`RayReport` carry the answer,
+including the struck collider as a plain `Node?` so a caller builds its own name.
+
+## src/Flight/GodotWorldQuery.cs
+The only adapter over Godot's `DirectSpaceState`, implementing `IWorldQuery`. Resolves the wrapped
+node's `World3D` at each call rather than caching it, since the node may be bound before it joins
+the tree. `Sweep` holds the airframe's whole per-part cast/rest-info dance, including the 0.05 m
+nudge past the first overlap (`GetRestInfo` can come back empty exactly at the unsafe fraction).
