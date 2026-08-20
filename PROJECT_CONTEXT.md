@@ -217,7 +217,7 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1 through 4 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, Instant Action, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI: aircraft that patrol, engage, evade and die, turrets, zeppelins, and pilot voice. All four Instant Action mission types (ace, squadron, stunt flying, zeppelin run) are playable and scored, solo or in splitscreen, over the seven shipped environments.
 
-**Active plan: [`docs/PLAN-c3-balloon-kill-chain.md`](docs/PLAN-c3-balloon-kill-chain.md)** (`BL-348`, C3/M02's balloon kill chain). Next: **A1**, re-fly C3/M02 and record which of the four symptoms survive; Wave B (B2–B5) waits on it. Completed plans are in [`docs/plans/`](docs/plans/plans.md).
+**Active plan: [`docs/PLAN-c3-balloon-kill-chain.md`](docs/PLAN-c3-balloon-kill-chain.md)** (`BL-348`, C3/M02's balloon kill chain). Wave A and Wave B are done (B2–B5 all disproven). Next: **C6**, retire `BL-348`. Completed plans are in [`docs/plans/`](docs/plans/plans.md).
 
 Verify any change with **`.\RunTests.ps1`** (build → units →in-engine suites → golden hashes → one exit code); read[`docs/verification.md`](docs/verification.md) first.
 

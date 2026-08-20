@@ -108,14 +108,14 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — re-observe
 
-1. ☐ Re-fly C3/M02 and record which of the four symptoms survive on the current build
+1. ☑ Re-fly C3/M02 and record which of the four symptoms survive on the current build
 
 ### Wave B — the four faults, one item each
 
-2. ☐ (a) One `tbaseN` kill raises all six balloons
-3. ☐ (c) A wrongly-risen balloon never detonates at the top of its 24 s rise
-4. ☐ (d) A `b_turretN` kill leaves the balloon hanging, with no `ball_kaboomN`
-5. ☐ (b) The killed `tbaseN` drags upward with its balloon
+2. ❌ (a) One `tbaseN` kill raises all six balloons
+3. ❌ (c) A wrongly-risen balloon never detonates at the top of its 24 s rise
+4. ❌ (d) A `b_turretN` kill leaves the balloon hanging, with no `ball_kaboomN`
+5. ❌ (b) The killed `tbaseN` drags upward with its balloon
 
 ### Wave C — close
 
@@ -142,7 +142,7 @@ C6 needs all four B items resolved (landed or disproven).
 
 # Wave A — re-observe
 
-## A1 ☐ Re-fly C3/M02 and record which of the four symptoms survive on the current build
+## A1 ☑ Re-fly C3/M02 and record which of the four symptoms survive on the current build
 
 **Goal.** A current, dated record of which of `BL-348`'s four symptoms still reproduce, so no item in
 Wave B is chasing a fault that is already gone.
@@ -172,6 +172,22 @@ be carrying that line. Do not fix anything in this item.
 **Model recommendation.** Not an agent item at all; this is a human at the controls. The write-up of
 what was seen is medium tier at most.
 
+**Observation, recorded at the controls.** None of the four symptoms reproduce. All three kills were
+flown in one sitting, on separate balloons:
+
+1. Killing one `tbaseN`: exactly one balloon rises, and no other. The killed anchor deactivates and
+   stays planted; the tether rope burns and shrinks as the balloon climbs, rather than stretching or
+   dragging the anchor upward.
+2. The balloon raised by that kill detonates cleanly at the top of its rise, full `ball_kaboomN`
+   (debris, fireball, sound, fall); the animation reads correctly.
+3. Killing a `b_turretN` on a separate, untouched balloon: the skin swaps, then the full
+   `ball_kaboomN` runs two seconds later, matching the authored `Event + 2.0` pair.
+
+The build under test was `worktree-bl348-balloon-kill-chain`; a diff against `main` at the time of
+this flight shows the two branches identical in every source file, differing only by this plan
+document and the `PROJECT_CONTEXT.md` pointer to it, so the animation code exercised is the same
+code either checkout would have run.
+
 **Verify.** The item's deliverable is the observation record, so it verifies itself. The one failure
 mode to guard: confirm which build is actually running before flying. A live symptom is evidence
 about the build that was running, and this repo has parallel worktrees that can put a different
@@ -183,7 +199,10 @@ saw, not what you concluded.
 
 # Wave B — the four faults, one item each
 
-## B2 ☐ (a) One `tbaseN` kill raises all six balloons
+## B2 ❌ (a) One `tbaseN` kill raises all six balloons
+
+**Outcome.** Disproven by A1's re-fly: killing one `tbaseN` on the current build raises exactly one
+balloon. Closed as fixed-by-`BL-415`, per this item's own stated expected outcome.
 
 **Goal.** Killing one balloon's ground tether anchor raises that balloon and no other.
 
@@ -217,7 +236,10 @@ the resolver has already had one authored stop fail to reach its emitter that wa
 (`NameResolver.cs:197-199`). Do not assume this item's cause explains (c); the entry is explicit that
 they are opposite shapes.
 
-## B3 ☐ (c) A wrongly-risen balloon never detonates at the top of its 24 s rise
+## B3 ❌ (c) A wrongly-risen balloon never detonates at the top of its 24 s rise
+
+**Outcome.** Disproven by A1's re-fly: the balloon raised by a `tbaseN` kill on the current build
+detonates cleanly at the top of its rise. Closed as no longer reproducing.
 
 **Goal.** Every balloon that runs `balloon_upN` fires the `CallAnimation(ball_kaboomN)` that follows
 its rise, and detonates at the top.
@@ -251,7 +273,11 @@ runner does not touch what it already launched: motions and puffers have authore
 outlive the sequence that started them, so "the balloon still rose" does not prove the runner
 survived.
 
-## B4 ☐ (d) A `b_turretN` kill leaves the balloon hanging, with no `ball_kaboomN`
+## B4 ❌ (d) A `b_turretN` kill leaves the balloon hanging, with no `ball_kaboomN`
+
+**Outcome.** Disproven by A1's re-fly: killing a `b_turretN` on an untouched balloon on the current
+build swaps the skin, then runs the full `ball_kaboomN` two seconds later, matching the authored
+`Event + 2.0` pair. Closed as no longer reproducing.
 
 **Goal.** Killing a slung turret swaps the balloon to its destroyed skin and, two seconds later,
 runs the full `ball_kaboomN`: debris, fireball, sound and the `balloon_downaN` fall.
@@ -284,7 +310,11 @@ running.
 stop's reach. Do not widen the fix into the `callAnchor` divergence without evidence that it drives
 this symptom; that divergence is real but is a separate change.
 
-## B5 ☐ (b) The killed `tbaseN` drags upward with its balloon
+## B5 ❌ (b) The killed `tbaseN` drags upward with its balloon
+
+**Outcome.** Disproven by A1's re-fly: the killed `tbaseN` stays planted while its balloon rises; the
+tether rope burns and shrinks rather than stretching or dragging the anchor upward. Closed as
+fixed-by-`BL-415`, per this item's own stated expected outcome for A1 closing it outright.
 
 **Goal.** A killed ground tether anchor stays on the ground. Only its three debris chunks move.
 
