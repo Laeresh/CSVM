@@ -254,6 +254,29 @@ public class InstantActionTests
         }
     }
 
+    /// <summary>The wingman fit is dropped wherever there are no wingmen to carry it — the ace duel
+    /// and a count of 0 — so stale wizard state cannot arm a flight that does not exist. It is one
+    /// fit for the whole flight, the original's Player/Wingman radio, never one per wingman.</summary>
+    [Fact]
+    public void TheWingmanFitIsDroppedWhenNoWingmenFly()
+    {
+        var baseDef = InstantAction.Load(TestData.Fixture("ia"));
+        var waves = new[]
+        {
+            InstantAction.EmptyWave, InstantAction.EmptyWave,
+            InstantAction.EmptyWave, InstantAction.EmptyWave,
+        };
+        var fit = new Flight.LoadoutChoice();
+        fit.SetPylon(1, "wep_14");
+
+        Assert.Equal("wep_14", InstantAction.BuildFromWizard(
+            baseDef, "dogfight_squadron", "Kestrel", 2, "Fury", waves, 1, fit).WingmanLoadout!.PylonFor(1));
+        Assert.Null(InstantAction.BuildFromWizard(
+            baseDef, "dogfight_squadron", "Kestrel", 0, "Fury", waves, 1, fit).WingmanLoadout);
+        Assert.Null(InstantAction.BuildFromWizard(
+            baseDef, "dogfight_ace", "Kestrel", 3, "Fury", waves, 1, fit).WingmanLoadout);
+    }
+
     /// <summary>An unconfigured wizard wave slot (0 enemies) and a JSON file's own omitted
     /// <c>groupN</c> key resolve to the exact same <see cref="InstantActionWave"/>, regardless of
     /// what the wizard's militia/aircraft/skill cursors happen to be sitting on — they are not

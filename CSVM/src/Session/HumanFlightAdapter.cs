@@ -128,8 +128,9 @@ internal sealed class HumanFlightAdapter
         // its built model — resolves markers to muzzle nodes + weapons to WeaponDefs.
         // Set before the controller enters the tree (its _Ready builds the fire state).
         var loadoutDefName = _spec.LoadoutOverride ?? stats.DefName;
-        if (_in.StockLoadouts.For(loadoutDefName) is { } ldef)
+        if (_in.StockLoadouts.For(loadoutDefName) is { } stockDef)
         {
+            var ldef = MenuFitFor(pi) is { } choice ? choice.ApplyTo(stockDef) : stockDef;
             try
             {
                 // The weapon lab flies the FULL-RIG loadout instead: every firepoint and
@@ -443,6 +444,20 @@ internal sealed class HumanFlightAdapter
             // every later respawn, but Setup() above called Respawn() before this runtime existed.
             controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
         }
+    }
+
+    /// <summary>Pane <paramref name="pi"/>'s menu-chosen fit, or null to fly the stock one. An
+    /// explicit <c>--loadout=</c> takes the whole choice away rather than merging with it, so the
+    /// flag names the fit outright the way a playtest row needs; <c>--rocket=</c> needs no test
+    /// here because it is applied after the bind and wins by arriving later.</summary>
+    private LoadoutChoice? MenuFitFor(int pi)
+    {
+        if (_spec.LoadoutOverride != null || pi < 0 || pi >= _spec.MenuLoadouts.Count)
+        {
+            return null;
+        }
+
+        return _spec.MenuLoadouts[pi];
     }
 
     /// <summary>The session-wide flight data every rig reads — loaded once by
