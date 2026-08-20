@@ -501,6 +501,9 @@ there and the players' lock-on sees them for free. ⚠ Adjacent, and NOT C9's to
 `BL-348` (filed 2026-08-13) is a live bug in the `CallAnimation`/`NameResolver` wiring under C3's
 slung balloon turrets (`b_turretN`) — verify C9 against a chapter without it, and keep its fix a
 separate change.
+    *Delta 2026-08-21:* `BL-348`'s re-fly found none of its four symptoms reproducing, on any of
+    the three `b_turretN`/`bontN`/`tbaseN` death paths — closed disproven. C9 needs no chapter
+    exclusion on this account.
 
 **Wave F's destruction choreography got cheaper** (PLAN-object-motion-decode, completed
 2026-08-13). `BL-245` closed: the 379 apex-less `OBJECT_MOTION` falls — zeppelin gasbags,

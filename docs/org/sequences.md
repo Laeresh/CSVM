@@ -566,7 +566,8 @@ calls the data's template-instancing mechanism, and it is narrower than "the cal
 caller's node": the target is resolved by the caller and delivered as an input, not substituted for
 the callee's anchor. CSVM instead makes the call site the callee's Start anchor
 (`AnimRuntime`'s `CallAnimation` arm, `callAnchor = siteNode ?? anchor`), which is an undeliberate
-difference and a candidate cause in `BL-348`.
+difference; it was investigated as a candidate cause of C3/M02's balloon kill-chain symptoms and
+confirmed to drive none of them, since none reproduced on the current build.
 
 ### The restart refusal is keyed on the callee's own run state, with no anchor in it
 
