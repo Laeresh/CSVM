@@ -1,8 +1,10 @@
 # Ordnance types — implement the decoded ordnance runtime
 
-**ACTIVE PLAN** (written 2026-08-16). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (2026-08-20). All 22 items landed and the F22 sign-off flew: `PT-62`–`PT-73` passed
+at the controls (verdicts in their retiring commits, `git log --grep=<ID>`), and the three rows a
+sitting could not finish (`PT-74`'s (c) and the four-player `PT-75`/`PT-76`) stay open in
+[`playtest.md`](../../playtest.md) as ordinary rows by the user's decision, a fail there minting a
+new `BL` rather than reopening this plan.
 
 This plan implements `BL-406`: the twelve ordnance types the install ships all fly as the same
 generic projectile today, and the original's behaviour for every one of them is decoded in
@@ -1144,16 +1146,19 @@ against aircraft and launch at a zeppelin. Then an ordinary rocket AI, which mus
 
 # Wave F — Sign-off
 
-## F22 ◐ Four-viewer splitscreen pass and the per-type playtest
+## F22 ☑ Four-viewer splitscreen pass and the per-type playtest
 
-**Verdict.** The harness half is done: the sign-off rows exist in
-[`playtest.md`](../playtest.md) as `PT-62`–`PT-76`, one per behaviour a human has to judge, each
-naming its command line, the decoded rule it is judged against and the item it signs off. The
-flying is the user's, and **the plan completes when those rows are signed off**, not when they are
-written. Three of them cannot be flown to completion today and say so in the row rather than being
-left out: `PT-72` waits on `E19`/`E20` landing, `PT-73`'s AI half waits on `BL-363` and `BL-394`,
-and every row reaches its ordnance through `--weapon-lab=`/`--rocket=` because `BL-353` is the
-screen that would let a pilot fit these types in a real flight.
+**Verdict.** Signed off. `PT-62`–`PT-73` passed at the controls and are retired, their verdicts in
+the retiring commits (`git log --grep=<ID>`). The sitting produced four fixes before the passes
+held: the torpedo's visible-from-launch look (`A4`/`E19`), the pooled-copy re-reset that kept the
+fifth sonic burst drawing (`effect-pool-reset`), the splash cover ray aimed at the struck shape
+(`C10`/`C11`), and the beeper/seeker fuse burst indexing its aircraft `IMPACT` row with
+`ballflare.flt` unshadowed (`B6`/`B8`/`B9`). It also overturned one row's expectation: a firer is
+never washed by their own burst, which is the decoded owner exclusion, not a routing bug. Three
+rows outlive the plan as ordinary `playtest.md` rows by the user's decision: `PT-74`'s (c) and the
+four-player `PT-75`/`PT-76`; a fail there mints a new `BL`. `PT-73`'s AI half stays owed on
+`BL-363`/`BL-394`, the choke's missing engine-sound reaction is `BL-423`, and `CAP-38` owes the
+original's on-plane beeper/seeker hit.
 
 **Goal.** Every landed behaviour is correct with four viewers, and each type has been seen doing the
 right thing at the controls.

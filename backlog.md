@@ -973,7 +973,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   a camera shake: the original's launch shake is **guns-only**, sized by `CALIBER`, so an ordnance
   shake is content the game never had. (c) Survey the other `CImmCompoundEffect` carriers before
   scoping; ordnance launch is unlikely to be the only one.
-  *Cross-refs:* `BL-406` (which excludes `TORPEDO` for this reason).
+  *Cross-refs:* `BL-406` (closed; the ordnance plan excluded `TORPEDO` for this reason).
 
 - `BL-412` `[Research]` **What does `CRATER` do? Six weapons author it and it drives a whole
   terrain-deformation subsystem.** *Evidence:* the flag sets weapon `+0x74` bit `0x2000` and parses a
@@ -987,7 +987,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   pooled, and what happens on the three failure paths.
   ⚠ *Trap:* `+0x74` bit `0x2000` is **not** the extension struct's `0x2000` (`SHAKES_CAMERA`). The
   two flag words are unrelated bit spaces.
-  *Cross-refs:* `BL-413` (the implementation), `BL-406` (which excludes it).
+  *Cross-refs:* `BL-413` (the implementation), `BL-406` (closed; it excluded this).
 
 - `BL-413` `[Feature]` `[Blocked: BL-412]` **Ground-attack ordnance leaves no crater.** *Evidence:*
   six weapons author `CRATER` and the original carves terrain geometry for it; we do nothing. Blocked
@@ -996,7 +996,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ *Trap:* this is a **terrain and renderer** change triggered by ordnance, not an ordnance change.
   Scope it against the terrain system's constraints (chunking, LOD, the golden manifest's mesh
   counts), not against the weapon table.
-  *Cross-refs:* `BL-412`, `BL-406`.
+  *Cross-refs:* `BL-412`, `BL-406` (closed).
 
 - `BL-405` `[Fidelity]` **Mounted ordnance should track the aim before it launches, not hang fixed
   along the pylon.** *Evidence:* the mount model is decoded
@@ -1055,75 +1055,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-363` (the candidate pool is aircraft-only, the other half of why the biases do
   nothing), [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) (slot 33 and the
   `bias × −750` decode), `AiTargetRanking.ObjectiveBiasFor`, `AiSkills.RosterRatingBiases`.
-
-- `BL-406` `[Feature]` **The ordnance runtime is fully decoded and none of it is implemented: every
-  round we fire is still the same generic projectile.** *Evidence:* the decode is
-  [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), covering the flag map and the
-  weapon-extension struct, the **second** flags word at weapon `+0x74`, the launch dispatch, the
-  aiming split between player and AI, guidance, the motion step, the proximity fuse, the shootable
-  flyout, the beeper/seeker pair, and detonation with its splash. Our side has not moved:
-  `WeaponDefs.cs` parses every special into fields marked "unimplemented, parsed so no key is
-  dropped" (`WeaponDefs.cs:107`), `IsGuided` "describes the data rather than driving flight"
-  (`WeaponDefs.cs:129-133`), and `Projectile` flies all twelve types identically.
-  *Fix shape:* seven landings, each consuming a decoded rule rather than a judged one.
-  (**A**) *Motion.* Launch-velocity inheritance decaying linearly over `LOCK_ON`, gated on the round
-  holding a target; `ACCELERATION` toward the speed cap; and the three end conditions, `RANGE`,
-  `DETONATION_TIME`, and coming within `DETONATION_DISTANCE` of the round's own target.
-  (**B**) *Guidance.* The two gates (`LOCK_ON` present **and** a target held),
-  `maxTurn = TURN_RATE × dt × ramp`, the slerp by `maxTurn / angle`, the `0.8 + 0.2·cos(angle)`
-  speed penalty every steering frame, and `LOCK_ON_LEAD`'s slerp from bearing to intercept.
-  (**C**) *Splash.* Replace the invented linear falloff with `1 − d²/IMPACT_PROXIMITY²`, measure `d`
-  to the target's bounding-sphere surface clamped at zero, add the occlusion test, cap the gather at
-  32. This is `BL-227`'s falloff half and should land here, not twice.
-  (**D**) *The four no-damage types.* All four zero the damage pair first, and the player and an AI
-  take **different** effects. `SONIC` and `FLASH` share one intensity model (full strength out to
-  ≈77% of the radius, then a linear fade; `FLASH` additionally requires the victim to be facing it):
-  the player gets a **purely visual** full-screen wash, red for `SONIC` and white for `FLASH`, lasting
-  five times the intensity and blending with any wash already running, with **no** control effect;
-  an AI instead gets a **stun** of the same duration that zeroes its control inputs. `BEEPER` does
-  nothing to its victim beyond leaving the tag. `TANGLER` cuts the engine and no AI code reads that,
-  so a choked AI simply flies without thrust.
-  (**E**) *`SMOKE_SCREEN` and `REAR`.* Both belong to `wep_13`, the only entry carrying either: the
-  smoker spawns **no projectile**, only a world object carrying `TIME [8]`, and `REAR` inverts the
-  aim test and the spawn axis and is gated on the being-hit latch. Neither deals damage. ⚠ **The
-  smoke is a stun trap, not concealment** — it is no occluder and nothing queries it for targeting.
-  While its `TIME` runs it walks the aircraft list and hits anything within `smokescreen_stun_range`
-  (**600 m**) and inside a `smokescreen_stun_angle` (**170°**, a half-angle cosine) cone about the
-  layer's axis: a grey-green 2 s screen wash for the player on a 2 s cooldown, and the same stun an
-  AI takes from a sonic round for `smokescreen_stun_interval` (**5 s**), refreshed every frame it
-  stays in the cloud. Those three are authored in `player.zrd.json` and loaded by the
-  `ai_skill_parameters` loader, so they are game-wide, not per-weapon. ⚠ The flare `wep_15` is named
-  `MSG_WEAP_REARARC_FLASH` but does **not** carry `REAR`; it is a `FLASH` round that hangs where it
-  is dropped (`VELOCITY [1.0]`) and goes off on `DETONATION_TIME [2.0]`.
-  (**F**) *The flyout.* `TARGETABLE` admits the round to the target list; `FLYOUT_HEALTH` gives it a
-  health pair spent armour-then-health; zero destroys it, playing `DESTROY_ANIMATION`.
-  (**G**) *Gates.* `DAMAGES_ZEPPELIN` refuses its weapon against non-zeppelins as well as the
-  reverse, and the AI's aim gate is cos 5° for ordnance against cos 10° for guns.
-  *Size:* **LARGER, plan-sized.** ▶ **Scheduled: [`docs/PLAN-ordnance-types.md`](docs/PLAN-ordnance-types.md)**
-  (22 items, six waves), which carries the decisions, the wrong-claims table and the per-item
-  evidence. Work from the plan, not from this entry.
-  *Out of scope there, each with its own item:* `TORPEDO` (`BL-411`, force feedback), `CRATER`
-  (`BL-412` decode, `BL-413` implementation), and the ten unauthored keys.
-  *⚠ Traps:* (a) **Do not implement the ten unauthored keys.** `MINE`, `RANDOM_DEVIATION`, `INSTANT`,
-  `TETHER_GUIDED`, `PITCH_RATE`, `TURN_SUSPEND_TIME`, `REMOTE_DETONATE`, `MULTI_TARGET`, `EXPIRES`
-  and `IMPACT_TYPE` are parsed by the original and authored by no shipped weapon. Their **defaults**
-  are what shape shipped behaviour; building the behaviours themselves is inventing content the game
-  never had. (b) **The engine stores radii squared** (`IMPACT_PROXIMITY²` at `+0x40`,
-  `DETONATION_DISTANCE²` at `+0x44`, and `FUN_00538880` returns squared distances). Reading one of
-  those as a plain radius flips a falloff from quadratic to linear; it did exactly that once during
-  the decode, which is why the page leads with the convention. (c) **`SONIC`, `FLASH`, `BEEPER` and
-  `TANGLER` never spend their damage pair on an aircraft** (all four author zero in this install; the
-  hit branch discards the pair regardless) — do not spend them. (d) `TORPEDO` selects **only** a
-  force-feedback effect; hang no behaviour on it. (e) The player's ordnance gets no aim component and
-  the AI's does; that asymmetry is correct and must not be flattened.
-  *How you'd know it worked:* per-type acceptance in `--weapon-lab`, one clip each: a torpedo
-  launched fast visibly settling to 60 m/s over 2.5 s; a choker cutting an engine for 13 s at the
-  centre and 5 s at the edge; a smoker leaving a screen and no round; a seeker turning onto a
-  beeper-tagged target; a torpedo shot down in flight; and a blast behind cover doing nothing.
-  *Cross-refs:* `BL-227` (splash falloff, whose fix is landing **C**), `BL-233` (the fuse), `BL-293` (the
-  `SURFACE_ANIMATION` normal rule), `BL-353` (the Weapon Loadout screen, the only route by which a
-  player ever fits a non-HE type, so it gates whether most of this is reachable in a real flight),
-  `BL-404`/`BL-405`, `WeaponDefs.cs`, `Projectile.cs`.
 
 ## Flight model & collision physics
 
@@ -2075,7 +2006,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ *Trap:* the checkout re-reset (`AnimRuntime.ResetCheckedOutCopies`) runs in the same
   `effect_checkout` scope; a hitch attributed to that site is this item's construction cost, not the
   reset, until measured otherwise.
-  *Cross-refs:* `BL-355` (the crash/damage cascade's identical mechanism), `BL-406`.
+  *Cross-refs:* `BL-355` (the crash/damage cascade's identical mechanism), `BL-406` (closed).
 - `BL-419` `[Fidelity]` **The sonic ground burst does not read like the original's: ours is soft cyan
   hoops rising in the air, the original is one flat crisp pale-green ring growing on the terrain.**
   *Evidence:* `OriginalScreenshots/Videos/CAP-23 Rocket Sonic Ground.mp4` (frames 200-330 at 30 fps,
@@ -2101,7 +2032,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   a brief sparkle.
   *Cross-refs:* `CAP-26` (the rocket-impact rings capture; the sonic half is answered by the CAP-23
   clips above, and its "look for" list should gain the flat-ring-versus-airborne-hoops question),
-  `BL-418`, `BL-406`.
+  `BL-418`, `BL-406` (closed).
 
 ## Audio
 
@@ -2408,7 +2339,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* gate `FlightAudio`'s loop on the engine-dead timer the same way the thrust cut reads
   it, with whatever the decode says the original plays over the gap.
   *Cross-refs:* `BL-421` (the engine-audio model's at-the-controls confirmation), `BL-223`/`BL-285`
-  (the loop's damage and start/stop inputs), `BL-406` (the choke itself).
+  (the loop's damage and start/stop inputs), `BL-406` (closed; the choke itself landed there).
 
 ## Cameras & views
 

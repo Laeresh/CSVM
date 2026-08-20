@@ -449,7 +449,9 @@ the constant: a decode is not contested with a measurement read off a running pi
     pilot's sonic burst washes their own pane alone. (A pilot's own burst never washes them: the
     gather excludes the round's owner, `FUN_005aca30`.)
 
-  *Blocks:* `D13`'s owed two-pane look, and F22.
+  *Blocks:* nothing tracks the outcome (`PLAN-ordnance-types` is complete; (a)/(b) passed at the
+  controls and only (c) is still owed): a fail on routing is a `D13` regression and mints a new
+  `BL`.
   *Variations:* `--debug-wash=3` in a two-pane session, which answers to no pane and must paint
   nothing at all.
 
@@ -459,11 +461,11 @@ the constant: a decode is not contested with a measurement read off a running pi
 ./RunGame.ps1 --coop --players=4 --chapter=C1 --rocket=wep_08 --infinite-ammo
 ```
 
-Four viewers is the case the whole plan is written against: the original routes its wash through a
-single global and that does not survive four panes. ⚠ `BL-389` already reports that the splitscreen
-weapon mix wants a retune, with rockets too quiet against guns and worst with four guns firing at
-once. **A mix problem is not a behaviour problem**: judge what happens, and file loudness against
-`BL-389` rather than against any item in this plan.
+Four viewers is the case the wash channel was designed against: the original routes its wash
+through a single global and that does not survive four panes. ⚠ `BL-389` already reports that the
+splitscreen weapon mix wants a retune, with rockets too quiet against guns and worst with four guns
+firing at once. **A mix problem is not a behaviour problem**: judge what happens, and file loudness
+against `BL-389` rather than against the wash routing.
 
 - `PT-75` `[Own]` **The disabling types with four viewers on one team (`PLAN-ordnance-types` F22,
   `D13`, `D15`, `D18`).**
@@ -479,8 +481,8 @@ once. **A mix problem is not a behaviour problem**: judge what happens, and file
   - (e) frame cost holds up with four panes and a dense burst (`--debug-fps`), since every splash
     candidate now costs a cover ray.
 
-  *Blocks:* F22's four-viewer half, and with it the plan's completion. A fail here on routing is a
-  `D13` regression; a fail on loudness is `BL-389`.
+  *Blocks:* nothing tracks the outcome (`PLAN-ordnance-types` is complete): a fail on routing is a
+  `D13` regression and mints a new `BL`; a fail on loudness is `BL-389`.
 
 - `PT-76` `[Own]` **The same pass under Dogfight rules, four viewers hostile
   (`PLAN-ordnance-types` F22).** `--coop` puts every human on one team, so the beeper's hostility
@@ -496,7 +498,8 @@ once. **A mix problem is not a behaviour problem**: judge what happens, and file
     facing rule still holding for the flash;
   - (d) the match keeps scoring normally: none of the no-damage types registers a hit or a kill.
 
-  *Blocks:* F22's Dogfight half, and with it the plan's completion.
+  *Blocks:* nothing tracks the outcome (`PLAN-ordnance-types` is complete): a fail mints a new
+  `BL`.
   *Variations:* `--players=2` and `--players=3` for the intermediate pane counts, which is where a
   routing off-by-one would show.
 

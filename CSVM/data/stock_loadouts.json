@@ -303,7 +303,7 @@
       ],
       "hardpoints": {
         "count": 3,
-        "stock": ["wep_06", "wep_06", "wep_06"]
+        "stock": ["wep_08", "wep_11", "wep_06"]
       }
     },
     "pkestrel": {
