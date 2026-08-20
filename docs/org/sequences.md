@@ -231,13 +231,10 @@ else returns nothing. No name comparison happens on the event path.
 ### Where CSVM stands against this
 
 `NameResolver`'s scope chain is the same shape as tiers 1, 2 and 5, and `LOCAL_NODES_ONLY` gates the
-last tier the same way. Five differences are real and none of them is deliberate:
+last tier the same way. Four differences remain and none of them is deliberate:
 
 - `Resolve` and `AnimRuntime.Targets` consult the symbol table **first**, where the original consults
   its interned lists at tiers 3 and 4.
-- The subtree tier 1 searches is the call anchor's, which for a crash rig is a shared root that also
-  holds staged template copies, where the original's is the definition's own exclusive copy. That
-  difference is what `BL-415` is: the fault is the SCOPE of tier 1, not the ORDER of the tiers.
 - **A tier returns a LIST and the event is applied to every element** (`ResolveScoped`, and
   `AnimRuntime.Targets` over its result), where the original binds exactly one node pointer per
   reference, once, at load. Nothing in the original can drive two nodes from one event, so any
@@ -248,6 +245,13 @@ last tier the same way. Five differences are real and none of them is deliberate
 - **`Matcher` reads `*` and `#` as node-name patterns** (`*` any run, `#` a digit run), where in the
   original they are instantiation controls on the definition's NAME and no node name is ever matched
   as a pattern. This is the same multiplicity in the wrong place described above.
+
+The scope of the subtree tiers is **not** among them any more. Ours searches the call anchor's
+subtree, which for a crash rig is a root shared with staged template copies, where the original's is
+the definition's own exclusive copy; `NameResolver.AdmissibleStaging` closes the gap by filtering
+every tier so a pooled copy answers only the definition that owns or reaches it
+(`docs/architecture.md`, that file's entry). The correction is to the SCOPE of the tiers, never their
+order.
 
 ## Three clocks, and which origin reads which
 

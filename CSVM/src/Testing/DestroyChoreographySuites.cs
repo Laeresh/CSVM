@@ -457,7 +457,7 @@ internal static class DestroyChoreographySuites
             {
                 // Every airframe, not ctx.PlaneName: part of the verdict IS the branch between
                 // them, and `pilot` is a name all eleven carry, so a resolver binding the wrong
-                // one is wrong everywhere at once (BL-415).
+                // one is wrong everywhere at once.
                 foreach (var planeName in Session.EffectCatalogue.AirframeDestroyAnims.Keys)
                 {
                     PlayerDestroyArm(ctx, world, planesGamez, textures, planeName,
@@ -1060,7 +1060,7 @@ internal static class DestroyChoreographySuites
                 $"{planeName}: the canopy hangs level, world rot ({chuteEuler.X:0.0}, {chuteEuler.Y:0.0}, {chuteEuler.Z:0.0}), under a wreck at ({player.GlobalRotationDegrees.X:0.0}, {player.GlobalRotationDegrees.Y:0.0}, {player.GlobalRotationDegrees.Z:0.0})");
             // ⚠ The eject hides the SEATED pilot, never the parachutist's body — both nodes are
             // named `pilot`, and the staged chute copy hangs under the crash root `cpeject1`
-            // anchors on (BL-415).
+            // anchors on.
             var seatedPilot = Find(planeModel, "pilot");
             var chutePilot = chuteman != null ? Find(chuteman, "pilot") : null;
             ctx.Check(seatedPilot is { Visible: false } && chutePilot is { Visible: true },

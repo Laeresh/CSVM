@@ -1,4 +1,4 @@
-﻿# Backlog — unscheduled future work
+# Backlog — unscheduled future work
 
 Everything known-but-not-scheduled, so it survives between polish runs. Which plan is active, if
 any, is `PROJECT_CONTEXT.md`'s "Current status" — never restated here. Per-item history/diagnosis
@@ -130,9 +130,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     no `.flt` stripping; and a call does not re-anchor its callee (`PUSH 0x0` at `004eb53d`), the site
     arriving as `INPUT_NODE` at `+0x7c`. Ours diverges on all four (a per-event LIST, `OrdinalIgnoreCase`
     plus a `.flt` fallback, `*`/`#` read as node-name patterns, and the call site used as the callee's
-    Start anchor). ⚠ Check `BL-415` before treating (a)/(b) as their own investigation: tier 1 searching
-    the call anchor's shared subtree rather than the definition's private copy is the same fault shape,
-    already filed, and one fix may cover both.
+    Start anchor). ⚠ **Re-observe (a) and (b) against the current build before investigating them.** The
+    same fault shape — a tier searching a shared subtree where the original searches the definition's
+    private copy — has since been corrected: `NameResolver` filters every tier through
+    `AdmissibleStaging`, so a pooled template copy answers only the definition that owns or reaches
+    it (`docs/architecture.md`, `NameResolver.cs`'s entry). Whether that moved the over-trigger is
+    unmeasured; the symptoms above were recorded before it.
     **The dispatch half is decoded too, and it rules out three candidates.** [`docs/org/sequences.md`](docs/org/sequences.md),
     "The restart refusal is keyed on the callee's own run state": `FUN_004ed8c0` decides on the callee's
     run-state byte `+0xa0` alone under `CALL_ANIMATION`'s always-zero anchor, and the teardown
@@ -1021,38 +1024,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `bias × −750` decode), `AiTargetRanking.ObjectiveBiasFor`, `AiSkills.RosterRatingBiases`.
 
 ## Flight model & collision physics
-
-- `BL-415` `[Bug]` **The bail-out hides the parachutist's body instead of the pilot in the seat, so the
-  canopy deploys with nobody under it.** `cpeject1`'s `ObjectActiveState(pilot, false)` is anchored on
-  the crash root (our `MAIN_ROOT_NODE` resolves to the caller's anchor), and `NameResolver.ResolveScoped`'s
-  tier 1 is that anchor's own subtree — which now contains the staged `chuteman > chutemanparent >
-  pilot` copy. It binds there instead of the airframe's `healthy/geometry/…/pilot_pos/pilot`, and
-  `chuteman`'s own def never names `pilot`, so nothing restores it. Measured on both `player_bhawk`
-  and `player_autogyro`: `seated pilot visible=True, chute pilot visible=False`, the exact inverse of
-  what the data asks for. Arrived with the `chuteman` staging (`BL-385` Wave D, D20) and became
-  visible when D25 made the ejection play.
-  **The mechanism the original uses instead, decoded:** the name is resolved ONCE, at definition
-  load, inside a subtree the definition owns exclusively, and the event stores only the resulting
-  index. Nothing is searched by name at the moment the event fires. `FUN_004efaf0` resolves `pilot`
-  in the animation root subtree (`def+0x6c`), then the main root subtree (`def+0x48`), then the
-  definition's two interned lists, and reaches the world only when `LOCAL_NODES_ONLY` is clear; the
-  definition loader `FUN_0051dcf0` first gives the definition a private COPY of its anchor's node tree
-  (`FUN_004d8610`, recorded as flag bit `0x80000` in `def+0x9c`), which is why no staged template copy
-  can shadow the name there. `cpeject1`'s `ptr=7655` / `ptr=7654` are the interned results of that
-  pass, not a lookup key. At run time `FUN_004e8d60` is a table lookup, and `MAIN_ROOT_NODE` is the
-  definition's OWN root (`inst+0x48`), not the caller's anchor. The caller's node is the separate
-  `INPUT_NODE` sentinel (`inst+0x7c`), and `AnimRuntime.IsSelfNodeRef` collapses the two. Full decode:
-  [`docs/org/sequences.md`](docs/org/sequences.md), "A node reference is resolved once, at load, and
-  stored as an index".
-  ⚠ **Traps.** (a) The fix is the SCOPE of the resolver's first tier, not the ORDER of its tiers, so
-  `NameResolver`'s ⚠ against reordering does not block it: the original's tier 1 searches a subtree the
-  definition owns alone, ours searches a crash root shared with staged copies. Pointer indexing is not
-  the answer either, because the original's index is per-definition and built at load from its own
-  subtree, which is what `NameResolveFallback` already stands in for. Note the decode also puts the
-  interned lists at tiers 3 and 4, where `Resolve`/`Targets` consult `SymbolClaims` first; that
-  inversion is a second, separate deviation. (b) Do not special-case `chuteman` by
-  name: the collision is structural and any future staged template carrying a common node name hits
-  it. (c) The seated pilot exists on all eleven airframes, so a wrong fix is wrong everywhere at once.
 
 - `BL-414` `[Research]` **Untune the flight model: decode what is currently fitted.** `FlightModel.cs`
   carries **18 `TUNE` markers** and **11 `flightModel.*` config overrides**, and

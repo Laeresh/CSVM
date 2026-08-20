@@ -3323,7 +3323,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // Whether one definition's name resolution may see a staged template copy. The pool is our
     // stand-in for the private node-tree copy the original hands each definition at load, and a
     // copy nothing in this definition references sits in no scope the original would search — so
-    // the bail-out's `pilot` reaches the man in the seat and not the parachutist's body (BL-415).
+    // the bail-out's `pilot` reaches the man in the seat and not the parachutist's body.
     // ⚠ Keyed on the def's own symbol table, never on a template name: any staged template
     // carrying a name an airframe also uses hits this, not just `chuteman`.
     private bool StagingAdmits(AnimDefinition def, Node3D? scope, Node3D node)
