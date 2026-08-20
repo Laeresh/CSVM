@@ -373,8 +373,11 @@ public partial class GameSession : Node3D
                     QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(quickDraw),
                     QuickDrawChance = _aiSkills.QuickDrawChance(quickDraw),
                 };
-                GD.Print($"ai: gunner armed at skill {skill} (dead-eye " +
-                         $"{pilot.Gunner.DeadEyeAngleDeg:0.00}°, quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°, " +
+                // Names the ratings actually flown, not the session default: with a def's own slots
+                // in play the two differ, and a reader comparing cones needs the numbers behind them.
+                GD.Print($"ai: gunner armed at dead-eye {SkillFor(defSkills.DeadEye, skill)} / " +
+                         $"quick-draw {quickDraw} (dead-eye {pilot.Gunner.DeadEyeAngleDeg:0.00}°, " +
+                         $"quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°, " +
                          $"ordnance roll {pilot.Rocketeer.QuickDrawChance:0.00} per {pilot.Rocketeer.RefireSeconds:0} s)");
             }
             catch (Exception e)

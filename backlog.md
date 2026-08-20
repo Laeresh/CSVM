@@ -442,10 +442,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/plans/PLAN-m3-polish-10.md` A1), `DamageVisuals.cs` (the consumer),
   `extracted/zrdr/vehicle.zrd.json` (the authority).
 
-- `BL-394` `[Bug]` **AI aircraft still fly the player's guns, livery and pilot — only the damage
-  model reads their own def.** `BL-386` landed the identity split deliberately narrow: `PlaneStats`
-  resolves the AI def for `armor`/`health`/`injure_anims` and nothing else, so `DefName` (and with
-  it the stock loadout, the display name and the built model) is still `pfury` on an enemy Fury.
+- `BL-394` `[Bug]` **A session's AI aircraft still fly base defs, so nothing routes a militia to
+  them.** The three halves have landed: `PlaneStats.LoadForAi` takes a def name, so a spawn can fly
+  a militia variant (`bhatwarhawk`, `secfury`) and gets that def's damage model, its `weapons` fit
+  (`Loadout.BindAi`, bound through the same `Loadout.Bind` and told apart from guns by the weapon's
+  `CANNON` flag), its authored livery and its nine-slot pilot vector plus `accentID`. What is
+  missing is the routing: only `--ai=<plane>:def=<name>` names one, so an ordinary flight still
+  spawns the base def, which authors no paint keys and no militia identity. A mission's or Instant
+  Action's own enemy set has to name the militia before any of this reaches a normal session.
+  *Owed at the controls:* fly a Black Hat flight
+  (`--ai=player_warhawk:def=bhatwarhawk --ai-attack`) and confirm the militia paint, the eight
+  torpedoes, and that they stay on the rail against aircraft.
+  *Still open inside the landed work:* `dare_devil` is parsed and unconsumed; each authored ordnance
+  entry takes ONE pylon carrying its whole round count, since the original counts rounds per weapon
+  slot and has no pylons at all; a def authoring more entries than the airframe has pylons drops the
+  overflow.
   *What the AI defs actually author (data, 2026-08-16).* A `weapons` block of 5-tuples —
   `fury`: `[wep_04, 4, 200, 30, 800]`, `[wep_07, 2, 200, 30, 800]`, `[wep_130, 9000, 0.05, 1, 900]`
   — overridden per militia variant (`secfury` swaps to `[wep_12, 6, 30, 200, 800]`,
@@ -476,24 +487,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   falls back to the def below `-1`, a colour component on any negative, so an AI aircraft with no
   override wears its own def's scheme. Write-up:
   [`docs/org/paint.md`](docs/org/paint.md).
-  *⚠ Trap:* `stock_loadouts.json` holds the eleven `p*` defs alone. Moving `DefName` to an AI def
-  without giving `Loadout.Bind` an AI path disarms every AI plane **silently**:
-  `FlightRoster` warns when a bind throws but has no branch at all for a name the table does not
-  hold, the way `HumanFlightAdapter` does.
-  *Size:* LARGER, and better split — weapons, livery and pilot skills are three independent halves
-  over one resolution change.
+  *⚠ Trap, handled:* `stock_loadouts.json` holds the eleven `p*` defs alone, so an AI def name run
+  through it disarms the plane. `FlightRoster` binds the def's own fit first, falls back to the
+  table, and says so in the log when neither arms the plane.
+  *Size:* what remains is localized — one routing decision (who picks the militia) and its wiring
+  into the mission and Instant Action enemy sets.
   *Cross-refs:* `BL-386` (the damage half — landed and closed 2026-08-16,
   `git log --grep=BL-386`; this builds on the `PlaneStats.AiDefName` seam it left),
   `docs/formats/vehicle.md` (the def-family census), `docs/formats/instant-action.md` (the militia
   table's provenance).
-  *The AI ordnance trigger is already built and waiting on this item.* `AiRocketeer` fires under
-  the decoded gates but on the *player's* pylons, so its shipped defaults (200–800 m band, 30 s
-  refire) stand in for the per-vehicle `weapons` tuple this item parses; they are fields, ready to
-  be fed. Two things only become reachable once it lands, and neither is a defect until then:
-  launch rates are worth tuning at all, and the `DAMAGES_ZEPPELIN` rule (a Black Hat Warhawk's
-  eight torpedoes must never be launched at an aircraft) becomes exercisable in the cockpit
-  rather than only in `AiRocketeerTests`. Fly a Black Hat flight when it lands and confirm the
-  torpedoes stay on the rail against aircraft.
+  *The AI ordnance trigger reads the fit now.* `AiRocketeer` takes each pylon's own engagement band
+  and refire interval, and stamps both timers a launch stamps in the original: the vehicle-wide
+  lockout that blocks ordnance of any kind and the launching slot's own next-ready. `AiGunner` takes
+  a bound group's window the same way. Launch rates are worth tuning from here, and the
+  `DAMAGES_ZEPPELIN` rule is exercisable in the cockpit rather than only in `AiRocketeerTests`.
 
 ## Weapons & combat
 
