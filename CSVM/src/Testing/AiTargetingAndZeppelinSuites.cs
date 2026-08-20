@@ -658,8 +658,7 @@ internal static class AiTargetingAndZeppelinSuites
         });
 
         // A second chapter's census (C4: the ground AA belt — aagun/tcargun/t_truck/8igun),
-        // built and freed here; placement only, no firing. b_turret sites place too, but the
-        // C3 balloon wiring bug (BL-348) and its fix stay out of this item.
+        // built and freed here; placement only, no firing. b_turret sites place too.
         ctx.WithWorld("C4", collision: false, world =>
         {
             using var c4Textures = new TextureArchive(texturesPath);

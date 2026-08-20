@@ -1,8 +1,8 @@
 # C3's balloon-battery kill chain (BL-348)
 
-**ACTIVE PLAN** (written 2026-08-21). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE 2026-08-21** (written 2026-08-21). Indexed in [`plans.md`](plans.md); read as history.
+All six items landed: Wave A's re-fly found none of the four symptoms reproducing, and Waves B and
+C closed on that evidence.
 
 This plan resolves `BL-348`: C3/M02's six balloon batteries do not die the way their authored data
 says, on any of four death paths. Each balloon is three independently `WeaponHit`-able destructibles
@@ -16,12 +16,12 @@ and `4ddac6c8`, none of them closing it) and the code (`Mech3/Anim/NameResolver.
 
 Two boundaries. The reverse-engineering is **done** and is not re-run here: both the node-resolution
 half and the `CALL_ANIMATION` dispatch half are decoded and written up in
-[`org/sequences.md`](org/sequences.md), and this plan consumes those decodes rather than reopening
-them. And the four known divergences between our resolver and the original (a per-event list, an
-`OrdinalIgnoreCase` compare plus a `.flt` fallback, `*`/`#` read as node-name patterns, and the call
-site used as the callee's Start anchor) are treated here as *candidate causes to test*, not as a
-faithfulness backlog to clear; correcting a divergence that turns out not to drive any of these four
-symptoms is out of scope and gets its own item.
+[`../org/sequences.md`](../org/sequences.md), and this plan consumes those decodes rather than
+reopening them. And the four known divergences between our resolver and the original (a per-event
+list, an `OrdinalIgnoreCase` compare plus a `.flt` fallback, `*`/`#` read as node-name patterns, and
+the call site used as the callee's Start anchor) are treated here as *candidate causes to test*, not
+as a faithfulness backlog to clear; correcting a divergence that turns out not to drive any of these
+four symptoms is out of scope and gets its own item.
 
 ## Milestone goal
 
@@ -53,7 +53,7 @@ two of them have a plausible reason to have already moved.
 | **Leads only, no mechanism yet** | B2, B5, C6 | Budget for investigation; this may end in a disproof. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
-worktree session here; use a local commit or a file copy. This plan runs on
+worktree session here; use a local commit or a file copy. This plan ran on
 `worktree-bl348-balloon-kill-chain`.
 
 ## What the data actually ships
@@ -69,18 +69,18 @@ with an exact digit, never a wildcard):
 | `balloont_dieN` | `b_turretN` killed | swaps the skin, calls two sequences, runs `StopSequence(flame_light_seq)`, then `CallAnimation(large_fireball)`, `Sound`, and at `Event + 2.0` both `CallAnimation(ball_kaboomN)` and `ObjectActiveState(b_turretN)`. |
 | `ball_kaboomN` | `bontN` killed (health 30), or called | debris, fireball, sound, the `balloon_downaN` fall, and `CallAnimation(balloont_dieN)` back. |
 
-The decoded original, from [`org/sequences.md`](org/sequences.md), and where we diverge:
+The decoded original, from [`../org/sequences.md`](../org/sequences.md), and where we diverge:
 
 | The original | Ours |
 |---|---|
 | One node bound per reference, at load; the runtime reads an index (`FUN_004efaf0`, `FUN_004e8d60`) | a per-event list |
 | Every tier compares case-sensitively, with no `.flt` stripping | `OrdinalIgnoreCase` plus a `.flt` suffix fallback |
 | `*`/`#` on a definition's NAME multiplies INSTANCES (`FUN_0059d610`, `FUN_0051ff40`) | read as node-name patterns |
-| `CALL_ANIMATION` does not re-anchor its callee: `PUSH 0x0` at `004eb53d`, the site arriving as `INPUT_NODE` at `callee+0x7c` | the call site becomes the callee's Start anchor (`AnimRuntime.cs:2276`, `var callAnchor = siteNode ?? anchor`); flagged as an undeliberate difference at `org/sequences.md:567-569` |
+| `CALL_ANIMATION` does not re-anchor its callee: `PUSH 0x0` at `004eb53d`, the site arriving as `INPUT_NODE` at `callee+0x7c` | the call site becomes the callee's Start anchor (`AnimRuntime.cs:2276`, `var callAnchor = siteNode ?? anchor`); flagged as an undeliberate difference at `../org/sequences.md` |
 
 Two further decoded facts this plan leans on: a `StopSequence` also reaches the **caller's own**
-runner and takes effect within the same tick (`org/sequences.md:528-534`), and sequence identity for
-"is this running" is the sequence **object**, never its name (`:532-534`).
+runner and takes effect within the same tick (`../org/sequences.md`), and sequence identity for
+"is this running" is the sequence **object**, never its name.
 
 ## Ground rules
 
@@ -104,7 +104,7 @@ runner and takes effect within the same tick (`org/sequences.md:528-534`), and s
 
 ## Checklist
 
-Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items land.**
+Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 ### Wave A — re-observe
 
@@ -119,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — close
 
-6. ☐ Retire `BL-348` once all four paths are confirmed
+6. ☑ Retire `BL-348` once all four paths are confirmed
 
 ## Dependency and parallelism notes
 
@@ -184,8 +184,8 @@ flown in one sitting, on separate balloons:
    `ball_kaboomN` runs two seconds later, matching the authored `Event + 2.0` pair.
 
 The build under test was `worktree-bl348-balloon-kill-chain`; a diff against `main` at the time of
-this flight shows the two branches identical in every source file, differing only by this plan
-document and the `PROJECT_CONTEXT.md` pointer to it, so the animation code exercised is the same
+this flight showed the two branches identical in every source file, differing only by this plan
+document and the `PROJECT_CONTEXT.md` pointer to it, so the animation code exercised was the same
 code either checkout would have run.
 
 **Verify.** The item's deliverable is the observation record, so it verifies itself. The one failure
@@ -219,9 +219,7 @@ is the expected outcome and a legitimate one. If it still reproduces, instrument
 tier answered, then compare against the exact digit the def authored. The divergence to test first
 is the per-event list, since a single-answer resolve cannot raise six. `OrdinalIgnoreCase` and the
 `.flt` fallback cannot merge `balloon_up1` with `balloon_up2`, so they are not candidates for this
-symptom specifically. <TODO: decide, once the tier is known, whether the fix is to narrow that tier
-or to make the resolve single-answer as the original is; the second is the faithful shape but has a
-blast radius across every def in the game.>
+symptom specifically.
 
 **Model recommendation.** High. The suspect module is shared by every animation in the project, so a
 narrowing that overshoots breaks chapters this item never touches.
@@ -287,9 +285,9 @@ runs the full `ball_kaboomN`: debris, fireball, sound and the `balloon_downaN` f
 the `Sound`, and at `Event + 2.0` both `CallAnimation(ball_kaboomN)` and
 `ObjectActiveState(b_turretN)`. What survives is exactly what precedes the stop (the skin swap). The
 decode gives the mechanism that produces that cut: a stop also reaches the **caller's own** runner
-and takes effect within the same tick (`org/sequences.md:528-534`). The entry states this reading
-directly. Unmeasured: whether our `StopSequence` is matching `flame_light_seq` by name and therefore
-hitting more sequence objects than the original would.
+and takes effect within the same tick. The entry states this reading directly. Unmeasured: whether
+our `StopSequence` is matching `flame_light_seq` by name and therefore hitting more sequence objects
+than the original would.
 
 **Approach.** Reproduce on an untouched balloon (a `b_turretN` kill with no prior `tbaseN` kill on
 the same balloon). Trace `StopSequence`'s selector in `SequenceRunner.cs`: what set of running
@@ -328,15 +326,12 @@ cause with the other three symptoms.
 **Approach.** Confirm it still reproduces (A1). Then inspect the scene parenting under a balloon
 instance: is `tbaseN` a descendant of `bontN`, or of a node `balloon_upN`'s motion moves? A
 destroyed-state reparent or a pooled-copy staging that puts the anchor under the wrong root is the
-kind of thing that produces this with no authored motion at all. <TODO: name the instrument, the
-node-tree dump or overlay that shows a live instance's parenting at runtime, which this session did
-not establish.>
+kind of thing that produces this with no authored motion at all.
 
 **Model recommendation.** Medium. Open search, but narrow: one scene subtree, one relationship.
 
 **Verify.** Kill a `tbaseN` on C3/M02 and watch the anchor: it stays put while the balloon rises, and
-the tether behaves as it does in the original. <TODO: name the `OriginalScreenshots/` or capture
-reference for what the tether should look like during the rise, if one exists.>
+the tether behaves as it does in the original.
 
 **⚠ Traps.** Do not fix this by pinning the anchor's transform in code. If the parenting is wrong,
 the pin hides it and the same wrong parent will bite the next thing that moves. Video-derived
@@ -345,7 +340,13 @@ is not a measurement footage can settle.
 
 # Wave C — close
 
-## C6 ☐ Retire `BL-348` once all four paths are confirmed
+## C6 ☑ Retire `BL-348` once all four paths are confirmed
+
+**Outcome.** `BL-348` deleted from `backlog.md`. All four symptoms are confirmed disproven, per A1's
+re-fly and B2–B5's closing outcomes, so this item is retirement mechanics only, landing no code of
+its own. The `docs/plans/PLAN-M4-ai.md` and `AiTargetingAndZeppelinSuites.cs` restatements of the
+bug are struck, and `docs/org/sequences.md`'s note on the `callAnchor` divergence now says the
+investigation found it drives none of the four symptoms.
 
 **Goal.** `BL-348` is deleted from `backlog.md`, with the outcome of all four investigations recorded
 in the closing commit's message.
@@ -356,11 +357,11 @@ close as already-fixed or disproven; both are outcomes, and both belong in the r
 
 **Approach.** Run the `close-backlog-item` skill on `BL-348`. It retires the ID, logs the outcome in
 the closing commit, and strikes the caveat everywhere it was restated. Two restatements are known and
-must be struck or updated: `docs/plans/PLAN-M4-ai.md:501-503` (which tells C9 to verify against a
-chapter without this bug and to keep the fix separate) and `CSVM/src/Testing/AiTargetingAndZeppelinSuites.cs:662`
-(which records that this bug and its fix stay out of that item). `docs/org/sequences.md:569` names
-`BL-348` as the place the `callAnchor` divergence is a candidate cause; update that line to say what
-the investigation actually found.
+must be struck or updated: `docs/plans/PLAN-M4-ai.md` (which told C9 to verify against a chapter
+without this bug and to keep the fix separate) and `CSVM/src/Testing/AiTargetingAndZeppelinSuites.cs`
+(which recorded that this bug and its fix stayed out of that item). `docs/org/sequences.md` named
+`BL-348` as the place the `callAnchor` divergence is a candidate cause; that line is updated to say
+what the investigation actually found.
 
 **Model recommendation.** Medium. Mechanical, but it touches three files that each state the bug's
 status, and getting one wrong leaves a stale caveat behind.
