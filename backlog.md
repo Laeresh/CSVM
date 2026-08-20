@@ -469,9 +469,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `autogyro`) author fields 3 and 4 transposed against all 25 militia variants, `200, 30` against
   `30, 200`, so they run a 200-second ordnance refire. That is shipped data; carry it, do not
   "fix" it.
+  *The paint keys are decoded too.* `FUN_00479240` parses `paint_pattern` (`+0x220`),
+  `paint_decal1..3` (`+0x230`/`+0x234`/`+0x238`) and `paint_color1..3`
+  (`+0x23c`/`+0x248`/`+0x254`, three components each) into fixed slots in authored order, and
+  `FUN_0047c210` resolves a spawn's scheme **per field** against a per-instance override: a decal
+  falls back to the def below `-1`, a colour component on any negative, so an AI aircraft with no
+  override wears its own def's scheme. Write-up:
+  [`docs/org/paint.md`](docs/org/paint.md).
   *⚠ Trap:* `stock_loadouts.json` holds the eleven `p*` defs alone. Moving `DefName` to an AI def
-  without giving `Loadout.Bind` an AI path disarms every AI plane **silently** —
-  `AiAircraftSpawner` has no "unarmed" warning branch the way `FlightRigAssembler` does.
+  without giving `Loadout.Bind` an AI path disarms every AI plane **silently**:
+  `FlightRoster` warns when a bind throws but has no branch at all for a name the table does not
+  hold, the way `HumanFlightAdapter` does.
   *Size:* LARGER, and better split — weapons, livery and pilot skills are three independent halves
   over one resolution change.
   *Cross-refs:* `BL-386` (the damage half — landed and closed 2026-08-16,
