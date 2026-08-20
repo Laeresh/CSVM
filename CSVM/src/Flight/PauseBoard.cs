@@ -34,6 +34,11 @@ public sealed partial class PauseBoard : Control
     /// <summary>Leave the session, chosen from the menu.</summary>
     public Action? Exit { get; set; }
 
+    /// <summary>Hand the pausing player's pane to a free camera over the frozen world, chosen from
+    /// the menu. The session suspends this board for the duration and brings it back on Escape;
+    /// the halt is never dropped, so the world stays the still frame it already is.</summary>
+    public Action? PhotoMode { get; set; }
+
     /// <summary>Builds the (hidden) board and subscribes to the shared pause state. Add it to a
     /// CanvasLayer above the splitscreen panes; it wakes on <see cref="PauseState.Changed"/> and
     /// hides itself the same way. <paramref name="inputFor"/> answers with a player's own menu
@@ -108,6 +113,9 @@ public sealed partial class PauseBoard : Control
             case BoardMenuItem.Resume:
                 _state.ForceResume();
                 break;
+            case BoardMenuItem.Photo:
+                PhotoMode?.Invoke();    // the halt stays: photo mode is a still frame, not a resume
+                break;
             case BoardMenuItem.Restart:
                 _state.ForceResume();   // the rerun runs against a live clock, not a held one
                 Restart?.Invoke();
@@ -162,6 +170,7 @@ public sealed partial class PauseBoard : Control
         var menu = new BoardMenu(
             dismissable: true,
             (BoardMenuItem.Resume, "Resume"),
+            (BoardMenuItem.Photo, "Photo Mode"),
             (BoardMenuItem.Restart, "Restart"),
             (BoardMenuItem.Exit, _exitLabel));
         menu.Activated += OnActivated;

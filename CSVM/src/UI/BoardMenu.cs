@@ -34,8 +34,9 @@ public sealed class BoardMenu
     public IReadOnlyList<(BoardMenuItem Item, string Label)> Items => _items;
 
     /// <summary>The highlighted row. Starts at the first item, which is always the harmless one
-    /// (Resume, else Restart), so a stray confirm on a menu that just appeared is never
-    /// destructive.</summary>
+    /// (Resume, else Photo Mode), so a stray confirm on a menu that just appeared is never
+    /// destructive. ⚠ That is why Photo Mode leads a results board: the alternative resting row is
+    /// Restart, which throws away the run just finished.</summary>
     public int Index { get; private set; }
 
     public bool Dismissable { get; }

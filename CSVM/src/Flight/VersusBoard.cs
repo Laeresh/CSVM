@@ -45,6 +45,11 @@ public sealed partial class VersusBoard : Control
     /// <summary>Leave the session, chosen from the menu.</summary>
     public System.Action? Exit { get; set; }
 
+    /// <summary>Hand player 1's pane to a free camera over the frozen world, chosen from the menu.
+    /// The match's halt is never dropped and no standing is spent, so this is the one row that
+    /// leaves the board's own state exactly as it found it.</summary>
+    public System.Action? PhotoMode { get; set; }
+
     /// <summary>Builds the (hidden) board and subscribes to the match's completion. Add it to a
     /// CanvasLayer above the splitscreen panes; it wakes itself on
     /// <see cref="VersusMatch.MatchCompleted"/> and retires on a rematch.</summary>
@@ -134,6 +139,12 @@ public sealed partial class VersusBoard : Control
 
     private void OnActivated(BoardMenuItem item)
     {
+        if (item == BoardMenuItem.Photo)
+        {
+            // ⚠ Ahead of the Exit test and returning: the tail of this method is the Restart path.
+            PhotoMode?.Invoke();
+            return;
+        }
         if (item == BoardMenuItem.Exit)
         {
             Exit?.Invoke();
@@ -229,6 +240,7 @@ public sealed partial class VersusBoard : Control
 
         var menu = new BoardMenu(
             dismissable: false,
+            (BoardMenuItem.Photo, "Photo Mode"),
             (BoardMenuItem.Restart, "Restart"),
             (BoardMenuItem.Exit, _exitLabel));
         menu.Activated += OnActivated;

@@ -642,6 +642,12 @@ public partial class FlightController : Node3D
     /// consumer that tests <see cref="Crashed"/> alone silently sees inert aircraft.</summary>
     public bool InPlay => !_crashed && !_inert;
 
+    /// <summary>This pane is in photo mode: the session owns its camera and its HUD is hidden,
+    /// and this node's pause key is silent so Escape means "leave photo mode" and nothing else.
+    /// Driven by <c>GameSession</c> through <see cref="BeginPhotoMode"/>/<see cref="EndPhotoMode"/>;
+    /// this node decides nothing about the mode itself.</summary>
+    public bool InPhotoMode { get; private set; }
+
     /// <summary>The flight model's world position — the plane as a SIM value, not a node transform
     /// (the node lags it by the render interpolation). What another plane's aim assist aims at.</summary>
     public Vector3 WorldPosition => _model.Position;
@@ -998,6 +1004,44 @@ public partial class FlightController : Node3D
     /// look at, not a mount to fire); the firing path's own armed scan still advances off it when
     /// the trigger is pulled.</summary>
     public void SelectPylon(int index) => _fire?.SelectPylon(index);
+
+    /// <summary>Show or hide everything this pane draws for its pilot: the dial cluster, the
+    /// reticle, the weapon readout, the text block and the marker/target HUD. Photo mode hides the
+    /// lot, since instruments belonging to an aircraft you are looking at from outside are noise
+    /// in a picture (BL-429). ⚠ Not what <c>--debug-spectate</c> wants: that mode keeps the marker
+    /// HUD deliberately, so it sets the three cockpit fields itself rather than calling this.</summary>
+    /// <summary>Enter photo mode: the pause key goes silent for the duration.</summary>
+    public void BeginPhotoMode() => InPhotoMode = true;
+
+    /// <summary>Leave photo mode, seeding the pause key's edge flag from the CURRENT device state.
+    /// ⚠ Clearing the flag alone is a bug, and was one: <see cref="PauseTogglePressed"/> answered
+    /// false for the whole mode, so <c>_pausePrev</c> is false, and the Escape still under the
+    /// player's finger the instant the gate lifts then reads as a fresh press and unpauses the
+    /// session that photo mode was opened from. Same hazard as priming a menu reader, one edge
+    /// flag further down.</summary>
+    public void EndPhotoMode()
+    {
+        InPhotoMode = false;
+        // The raw combination, not PauseTogglePressed: that still reads the gates, and the point
+        // is to record what the hands are doing regardless of them.
+        _pausePrev = KeyDown(Key.P) || KeyDown(Key.Escape) || PadPressed(JoyButton.Start);
+    }
+
+    public void SetPilotHudVisible(bool visible)
+    {
+        if (Gauges != null)
+            Gauges.Visible = visible;
+        if (Reticle != null)
+            Reticle.Visible = visible;
+        if (WeaponReadout != null)
+            WeaponReadout.Visible = visible;
+        if (_hud != null)
+            _hud.Visible = visible;
+        if (Marker != null)
+            Marker.Visible = visible;
+        if (TargetHud != null)
+            TargetHud.Visible = visible;
+    }
 
     /// <summary>The decoded bracket gate for the targeting marker (<c>FUN_004574d0</c>): whether the
     /// SELECTED gun group could reach an intercept inside the weapon's authored <c>RANGE</c>. That,
@@ -1443,9 +1487,10 @@ public partial class FlightController : Node3D
         if (_inert)
             return;
 
-        // Seeding on the edge starts the orbit where the chase camera left off, so entering the
-        // P freeze or a weapon-lab hold never jumps.
-        bool orbiting = halted || Held;
+        // ⚠ A halt does NOT orbit: a board's cursor keys ARE the orbit keys, so the free look
+        // lives behind its Photo Mode row instead (BL-429, docs/architecture.md). The weapon lab's
+        // hold keeps its own orbit, seeded on the edge so entering it never jumps.
+        bool orbiting = Held;
         if ((orbiting && !_orbitPrev) || _reseedOrbit)
         {
             _reseedOrbit = false;
@@ -1472,11 +1517,15 @@ public partial class FlightController : Node3D
         }
         else if (orbiting)
         {
-            // The orbit camera runs on wall time through a halt on purpose: the point of the
-            // freeze is to fly the camera around a stopped world. A held airframe is the same
-            // situation with the world still running.
+            // The orbit camera runs on wall time on purpose: a held airframe is a stopped subject
+            // with the world still running, and the point is to look around it.
             var (yawIn, pitchIn, zoomIn) = OrbitInput();
             _cam.Orbit((float)delta, _model.Position, yawIn, pitchIn, zoomIn);
+        }
+        else if (halted)
+        {
+            // A board is up. Nothing is written, so the camera holds the pose it had when the
+            // board appeared and the menu sits over a still frame (BL-429).
         }
         else if (_crashed)
         {
@@ -1599,7 +1648,7 @@ public partial class FlightController : Node3D
             if (Stunt != null && Marker == null)
                 _hud.Text += $"\n{Stunt.StatusLine()}";
             if (halted)
-                _hud.Text += "\n⏸ PAUSED — orbit: WASD/arrows · zoom: Shift/Ctrl · P (gamepad Start) resume · . step one frame";
+                _hud.Text += "\n⏸ PAUSED — . steps one frame";   // the board's own menu says the rest
             else if (_crashed)
                 _hud.Text += "\n⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN";
         }
@@ -2437,8 +2486,11 @@ public partial class FlightController : Node3D
     // P, Esc or gamepad Start, edge-detected so one press toggles once, gated on AllowPause
     // (false for AI rigs and the suites' bare test rigs). Esc opens the pause board rather than
     // leaving the flight; the board's Exit item is what leaves, and a pad can reach it.
+    // ⚠ Silent in photo mode: Escape is what LEAVES that mode, and this reads Escape too, so one
+    // press would both close the mode and unpause the session behind it (BL-429).
     private bool PauseTogglePressed() =>
-        AllowPause && (KeyDown(Key.P) || KeyDown(Key.Escape) || PadPressed(JoyButton.Start));
+        AllowPause && !InPhotoMode
+        && (KeyDown(Key.P) || KeyDown(Key.Escape) || PadPressed(JoyButton.Start));
 
     // One frame of the pause key, and the halt it mirrors into the shared clock. Polled from
     // _Process, not the sim step: a halted sim takes no steps and could never resume itself.

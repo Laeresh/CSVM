@@ -10,6 +10,10 @@ public enum BoardMenuItem
     /// <summary>Drop the pause halt reason and fly on.</summary>
     Resume,
 
+    /// <summary>Hand this pane to a free camera over the frozen world, and take the board away
+    /// until Esc brings it back. The one row that changes nothing about the session.</summary>
+    Photo,
+
     /// <summary>Rerun: reset the running mode in place, same seed and same world.</summary>
     Restart,
 

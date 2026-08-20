@@ -19,6 +19,25 @@ public class BoardMenuTests
         Assert.Equal(0, Results().Index);
     }
 
+    /// <summary>The reason the harmless-row rule is worth a test of its own: on a results board
+    /// the resting row used to be Restart, so one stray confirm threw away the run just finished.
+    /// Photo Mode leads there instead, and it changes nothing about the session (`BL-429`).</summary>
+    [Fact]
+    public void TheRestingRowIsNeverDestructive()
+    {
+        var pause = Pause();
+        var results = Results();
+        BoardMenuItem? fromPause = null, fromResults = null;
+        pause.Activated += item => fromPause = item;
+        results.Activated += item => fromResults = item;
+
+        pause.Handle(move: 0, accept: true, back: false);
+        results.Handle(move: 0, accept: true, back: false);
+
+        Assert.Equal(BoardMenuItem.Resume, fromPause);
+        Assert.Equal(BoardMenuItem.Photo, fromResults);
+    }
+
     [Fact]
     public void ConfirmReportsTheHighlightedItem()
     {
@@ -29,7 +48,7 @@ public class BoardMenuTests
         menu.Handle(move: 0, accept: true, back: false);
         menu.Handle(move: 1, accept: true, back: false);
 
-        Assert.Equal(new[] { BoardMenuItem.Resume, BoardMenuItem.Restart }, fired);
+        Assert.Equal(new[] { BoardMenuItem.Resume, BoardMenuItem.Photo }, fired);
     }
 
     [Fact]
@@ -38,7 +57,7 @@ public class BoardMenuTests
         var menu = Pause();
 
         Assert.True(menu.Handle(move: -1, accept: false, back: false));
-        Assert.Equal(2, menu.Index);
+        Assert.Equal(3, menu.Index);   // up from Resume lands on Exit, the last row
 
         Assert.True(menu.Handle(move: 1, accept: false, back: false));
         Assert.Equal(0, menu.Index);
@@ -101,7 +120,7 @@ public class BoardMenuTests
 
         menu.Handle(move: 1, accept: true, back: false);
 
-        Assert.Equal(BoardMenuItem.Restart, fired);
+        Assert.Equal(BoardMenuItem.Photo, fired);
     }
 
     [Fact]
@@ -121,14 +140,18 @@ public class BoardMenuTests
         Assert.Throws<ArgumentException>(() => new BoardMenu(dismissable: true));
     }
 
+    // The row sets the boards actually build (PauseBoard and the four results boards), so these
+    // tests move when the shipped menus do rather than drifting into a shape nothing constructs.
     private static BoardMenu Pause() => new(
         dismissable: true,
         (BoardMenuItem.Resume, "Resume"),
+        (BoardMenuItem.Photo, "Photo Mode"),
         (BoardMenuItem.Restart, "Restart"),
         (BoardMenuItem.Exit, "Exit to Menu"));
 
     private static BoardMenu Results() => new(
         dismissable: false,
+        (BoardMenuItem.Photo, "Photo Mode"),
         (BoardMenuItem.Restart, "Restart"),
         (BoardMenuItem.Exit, "Exit to Menu"));
 }
