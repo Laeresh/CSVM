@@ -2468,7 +2468,7 @@ usual.
 ## Missions, modes & campaign
 
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
-  controls flying `PT-83`: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.
+  controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.
   **The mechanism.** `GameSession.StuntSummaryFor` (`GameSession.cs:3083-3094`) calls
   `store.RecordIfBest(key, run.Elapsed)` behind two guards and no third: the objective is
   `ZonesFlown`, and player 1 has a `Stunt` run at all. Neither asks whether the run was
@@ -2517,48 +2517,6 @@ usual.
   drives the screen's own state machine. (b) 19 presets against 7 environments means presets are not
   per-environment; do not assume a mapping. (c) Blocked on nothing, but pointless before
   `PLAN-instant-action` lands the configurable mission the presets would fill in.
-
-- `BL-353` `[Feature]` **Weapon Loadout before an Instant Action flight.** Split out of
-  [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing (2026-08-14). The original's
-  Instant Action screen carries a *Weapon Loadout* button (`IA_B_CHANGEWEAPONS`, `IDS_IA_B_WEAPONLOADOUT`)
-  that opens `ORDINANCELAYOUT.SCRIPT` for either the pilot or the wingmen, selected by the
-  `IA_B_PLAYER` / `IA_B_WINGMAN` radio pair beside it (`@globals@ZQ` is -1 for the pilot, -2 for the
-  wingmen). We fly the stock fit and offer no way to change it outside `--loadout=` and the weapon
-  lab.
-  **Why it is cheap-ish.** The runtime half largely exists: `Loadout.ForRig` already binds every
-  firepoint and every pylon from the stock fit, which is what the weapon lab uses to arm a mount the
-  stock file never names, and `PylonOrdnance` already builds the mounted bodies. The missing half is
-  the UI and the persistence of a chosen fit into `InstantActionDef`.
-  **Raised 2026-08-15: this is no longer cosmetic on one mission type.** The `zeppelin_run` win
-  condition decode (`PLAN-instant-action.md` G13's correction) established that the mode has two
-  winning paths, the engines and the gasbag hull kill. Gasbags are behind the `DAMAGES_ZEPPELIN`
-  gate, which in this install only `wep_14` (the aerial torpedo) and `wep_28` (the broadside
-  cannonball) pass, and all 11 stock loadouts carry HE `wep_06`. So without this screen a
-  menu-launched zeppelin run can only ever be won on engines: the hull path is unreachable by any
-  route a player has, and `--rocket=wep_14` is a testing flag, not one. The original has no such
-  restriction, because its own Weapon Loadout screen is where you fit the torpedo. The mode is
-  fully playable meanwhile, which is why this stays a `[Feature]` rather than a `[Bug]`.
-  **What the screen offers** (`OriginalScreenshots/Ammo Selection Gun DropDown.png` and
-  `Ammo Selection Hardpoint DropDown.png`, plus the user holding the original). Ammo type per gun
-  group and ordnance type per pylon, nothing else: the caliber is a label above each gun dropdown,
-  not a control, and a new airframe is `BL-354`'s hangar. The gun dropdown is Slug / Dum-dum /
-  Armor-piercing / **Explosive** (the magnesium round's screen name) / None. The rocket dropdown is
-  eleven weapons plus None, in an order that is neither id order nor a tier: `wep_05` AP, `wep_06`
-  HE, `wep_07` Flak, `wep_08` Sonic, `wep_09` Flash, `wep_15` Rear flash, `wep_13` Smoke, `wep_12`
-  Choker, `wep_10` Beeper, `wep_11` Seeker, `wep_14` Torpedo. ⚠ The incendiary `wep_04` is a named
-  weapon (`MSG_WEAP_INCENDIARY_ROCKET`) the screen does **not** offer, so "the `wep_04`–`15` block"
-  is the wrong rule. There is no restriction by airframe, by hardpoint location, or by any budget.
-  ⚠ **Traps.** (a) The loadout is bound **before** the controller enters the tree, because
-  `FlightController._Ready` builds the fire state and the ordnance-type list from it
-  (`Session/HumanFlightAdapter`, the live path; the entry's old `Session/FlightRigAssembler`
-  pointer names a file that no longer exists); a fit chosen in a menu has to reach the bind, not be
-  applied after. (b) The pilot/wingman radio means one chosen fit covers all wingmen, not one each;
-  do not build a per-wingman editor. (c) The torpedo is not an ordinary rocket: `wep_14` carries
-  `TARGETABLE` + `FLYOUT_HEALTH [10]`, so its in-flight projectile can itself be shot down
-  ([`docs/formats/weapons.md`](docs/formats/weapons.md)). Offering it from a menu is the first time
-  that path is reachable in normal play. (d) A wingman fit must be addressed to wingman spawns, not
-  to the roster's stock-table fallback branch: that branch also catches enemy waves flying player
-  airframes, which must keep their own fit.
 
 - `BL-354` `[Feature]` **The hangar: Build Custom Plane.** Split out of
   [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing (2026-08-14) as a milestone
@@ -2926,8 +2884,8 @@ usual.
 
 ## Tooling, platform & docs
 
-- `BL-425` `[Feature]` **Extract `langui.dll`'s string table.** Split out of `BL-353` while building
-  the Ammo Selection screen. `extracted/messages.json` carries the weapon **names**
+- `BL-425` `[Feature]` **Extract `langui.dll`'s string table.** Split out while the Ammo Selection
+  screen was built (`git log --grep=BL-353`). `extracted/messages.json` carries the weapon **names**
   (`MSG_WEAP_APIERCING_ROCKET` → "Armor-piercing rocket", the `MSG_WEAP_*` block at ids 12124–12160)
   but no prose beyond them. The original's Ammo Selection screen also shows a description pane for
   the highlighted round ("Slugs — These standard lead bullets do damage equally well to both armor
@@ -2941,7 +2899,7 @@ usual.
   facts already cite langui ids (the thirteen militias at 3670, the presets at 3600–3618), so the
   table is being read second-hand today from decode notes rather than from the file.
   ⚠ **Traps.** (a) Our Ammo Selection screen ships without description panes, which is a stated
-  divergence rather than an oversight; adding them is this item, not a bug fix on `BL-353`. (b) A
+  divergence rather than an oversight; adding them is this item, not a bug fix on that screen. (b) A
   quarter-width four-player pane has no room for a prose block, so the panes are not simply "the
   screen plus a description" once the strings exist. (c) `langui.dll` is in the game install, which
   is git-ignored and absent from worktrees — read it by absolute path.
