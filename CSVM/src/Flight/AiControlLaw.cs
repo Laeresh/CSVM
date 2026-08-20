@@ -101,7 +101,8 @@ public static class AiControlLaw
     /// the original rather than a real round's speed.</summary>
     public const float GunSolutionSpeed = 860f;
 
-    /// <summary>Nose-below-horizon component that arms the low-speed recovery.</summary>
+    /// <summary>The backward axis's Y at which the low-speed recovery arms: −0.5 is the tail half a
+    /// unit DOWN, so the nose is 30° UP. See <c>noseY</c>'s sign in the class's decode page.</summary>
     public const float RecoveryNoseY = -0.5f;
 
     /// <summary>Speed below which the low-speed recovery arms, 60 mph.</summary>
@@ -148,7 +149,10 @@ public static class AiControlLaw
         var stats = model.Stats;
         var att = model.Attitude;
         var pos = model.Position;
-        float noseY = -att.Z.Y;
+        // ⚠ `param_1[0x67]`, the BACKWARD axis's Y, so this is + with the nose DOWN. Kept under the
+        // engine's name rather than renamed, because every constant compared against it is signed
+        // the engine's way too.
+        float noseY = att.Z.Y;
 
         // The aim point is held inside the AI's altitude band, and an aim velocity that would carry
         // it further outside is flattened rather than followed.
@@ -175,11 +179,10 @@ public static class AiControlLaw
 
         float bx = aimDir.Dot(att.X);   // + = the aim point is to the right
         float by = aimDir.Dot(att.Y);   // + = above
-        float bz = aimDir.Dot(-att.Z);  // + = ahead
+        float bz = aimDir.Dot(att.Z);   // + = BEHIND: row 2 of the basis at +0x180 is BACKWARD
 
-        // With the aim point ahead, the horizontal pair is renormalised and h pinned to 1. That is
-        // what makes the rudder_tol test below select the ORDINARY branch for anything in front:
-        // only a target within acos(rudder_tol) of dead astern can leave h small.
+        // ⚠ BEHIND, not ahead. Do not "fix" this to bz < 0: that was BL-387, and it hands the roll
+        // channel full stick on a straight leg. aiControlLaw.md step 4 has the five confirmations.
         float h = Mathf.Sqrt((bx * bx) + (by * by));
         if (bz > 0f)
         {
@@ -196,8 +199,8 @@ public static class AiControlLaw
         float lever = Throttle(model, stats, want, throttle, dt, p, pos, playerPosition);
 
         // ⚠ CLEARING rudder_tol picks the BANK branch, so a higher rudder_tol means MORE rudder.
-        // At the 0.2 default h is 1 for anything ahead, so an aim point in front always banks;
-        // balmoral's authored 1.0 can never be exceeded, so its lateral errors go on the rudder.
+        // Astern h is pinned to 1 and always banks; ahead it is the true error. aiControlLaw.md
+        // step 6 has the table, including why balmoral's authored 1.0 is all-rudder.
         float roll, pitch = 0f, yaw = 0f, absBx;
         if (h > stats.RudderTol || Mathf.Abs(bx) <= Mathf.Abs(by))
         {
@@ -212,8 +215,9 @@ public static class AiControlLaw
         }
         else
         {
-            // Dead astern: nothing ahead to bank toward, so the vertical error drives the bank and
-            // the lateral error goes on the rudder.
+            // A lateral-dominant error too small to be worth banking for: the vertical error drives
+            // what roll there is and the lateral one goes on the rudder. Only reachable AHEAD,
+            // since anything astern was renormalised to h = 1 and took the branch above.
             absBx = Mathf.Abs(bx);
             if (bx < 0f)
                 by = -by;
@@ -222,16 +226,16 @@ public static class AiControlLaw
                 yaw = -bx;
         }
 
-        // ⚠ The DEAD-ASTERN case, not the straight-ahead one — reads backwards at a glance;
-        // AiControlLawTests exists to keep it honest.
+        // The straight-ahead case: both body components tiny, which only survives unrenormalised,
+        // so this is the rule that holds a tracking aeroplane's wings level.
         if (!emergency && absBx < p.CrossDeadband && Mathf.Abs(by) < p.LevelDeadband
             && Mathf.Abs(noseY) < NearVerticalNoseY)
         {
             roll = (att.Y.Y >= 0f ? -att.X.Y : att.X.Y < 0f ? 1f : -1f) * LevelAuthority;
         }
 
-        // Steeply nose-down and slow: push the nose further down and firewall the lever, either way
-        // up. Unloading to regain flying speed, not a pull-out.
+        // Steeply nose-UP and slow: push the nose down and firewall the lever, either way up. A
+        // stall recovery, which is what makes the sign of noseY legible — see aiControlLaw.md.
         if (noseY < RecoveryNoseY && model.Speed < RecoverySpeed)
         {
             pitch = att.Y.Y >= 0f ? -1f : 1f;

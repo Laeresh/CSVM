@@ -165,15 +165,14 @@ public sealed class FlightModel
     private const float DragPolarQuad = 0.5f;
 
     // Per-axis control-rate calibration: steady rate = torque · recInertia · Tune / ang_momentum_damp
-    // (× eff on yaw). Pinned to stopwatch and cockpit-gauge video of the original, Bloodhawk-measured.
-    // docs/org/flightModel.md, "The three *Tune rates".
-    // ⚠ Do not move these to chase the transient response, which is a narrowed but open divergence.
+    // (× eff on yaw). docs/org/flightModel.md, "The three *Tune rates".
+    // ⚠ Roll's 1.0 is the decode, not an unfitted axis. Restoring a multiplier there needs a
+    // mechanism traced in the binary, never a roll timed off footage — that is what it replaced.
+    // ⚠ Do not move the other two to chase the transient response, a narrowed but open divergence.
     // They set the STEADY rate, which matches, and a transient chased through them breaks that.
-    // ⚠ Re-pin one only when a decoded mechanism moves the steady rate it holds, never on feel.
     private const float PitchTune = 0.89f;        // TUNE: pinned to measured video of the original
     private const float YawTune = 1.57f;          // TUNE: pinned against the authored yaw curve below
-    private const float RollTune = 2.12f;         // TUNE: pinned — untouched, the weathervane cannot
-                                                  // reach the roll axis (its torque is ⊥ the nose)
+    private const float RollTune = 1f;            // the binary's own, not a tune
 
     // Bank coupling, the original's coordinated-turn cheat and the only part of its rotation that no
     // airframe authors: banking yaws the nose the way the wings point and pulls it up, with a further

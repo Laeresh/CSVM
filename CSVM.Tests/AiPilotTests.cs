@@ -64,6 +64,43 @@ public class AiPilotTests
         Assert.True(model.Speed > 40f, $"the flight ended stalled at {model.Speed:0.0} m/s");
     }
 
+    /// <summary>Flown: the ported aim makes an AI TRACK its leg rather than chase its node. Entered
+    /// 120 m off a long straight leg it stays out there, converging by the decoded tenth, where the
+    /// same flight aimed at the node pulls in hard — the able-to-fail control.
+    /// ⚠ It does NOT settle the roll. Both flights still wallow (peak bank ~90°, mean ~48°), so
+    /// `BL-387` survives this and its cause is in the plant, not in the aim point.</summary>
+    [ExtractedDataFact]
+    public void ThePatrolAimTracksTheLegInsteadOfChasingTheNode()
+    {
+        var stats = PlaneStats.Load(ZrdrPath, "player_bhawk");
+
+        // 40 s of a straight leg due north, entered 120 m to the west of it and already on
+        // heading, so the only thing to work off is the cross-track error.
+        float CrossTrackAfter40s(bool aimAtNode)
+        {
+            var model = new FlightModel(stats);
+            model.Reset(new Vector3(-120f, 400f, 0f), Basis.Identity, 80f, 0.85f);
+            var legStart = new Vector3(0f, 400f, 0f);
+            var node = new Vector3(0f, 400f, -8000f);
+            float throttle = 0.85f;
+            for (int i = 0; i < (int)(40f / Dt); i++)
+            {
+                var aim = aimAtNode ? node : AiPilot.PatrolAim(model.Position, legStart, node);
+                var input = AiControlLaw.Steer(model, aim, Vector3.Zero, AiLawParams.Cruise,
+                    throttle, Dt);
+                throttle = input.Throttle;
+                model.Step(input, Dt);
+            }
+            return Mathf.Abs(model.Position.X);
+        }
+
+        float chasing = CrossTrackAfter40s(aimAtNode: true);
+        float tracking = CrossTrackAfter40s(aimAtNode: false);
+        Assert.True(chasing < 70f, $"the control did not converge on its node: {chasing:0} m off");
+        Assert.True(tracking > 80f,
+            $"the ported aim converged like a node chase: {tracking:0} m off against {chasing:0} m");
+    }
+
     /// <summary>`SteeringPatrol` reports what the last step actually did, which is what F13's
     /// leashes colour on: a bare-orders pilot is not flying a net however its mode reads, and a
     /// net-following one is: the distinction between "holds that node" and "is flying at it".</summary>
@@ -203,6 +240,45 @@ public class AiPilotTests
         // A hover with no horizontal track still yields a usable aim point rather than a NaN.
         var still = AiPilot.ClimbOutAim(pos, Vector3.Zero);
         Assert.True(still.IsFinite() && still.Y > pos.Y);
+    }
+
+    /// <summary>The patrol aim carries 0.9 of the aeroplane's own cross-track error onto the node,
+    /// capped at 200 m (<c>FUN_0041d1f0</c> case 0). What that buys is a commanded course nearly
+    /// PARALLEL to the leg: the residual convergence is a tenth of the offset, which is small
+    /// enough that the law's sign-relay roll stops banking hard each way (`BL-387`).</summary>
+    [Fact]
+    public void ThePatrolAimCarriesMostOfItsOwnCrossTrackErrorOntoTheNode()
+    {
+        // A leg due north (−Z) from the origin, and an aeroplane 100 m to the west of it.
+        var legStart = new Vector3(0f, 400f, 0f);
+        var node = new Vector3(0f, 400f, -2000f);
+        var pos = new Vector3(-100f, 400f, -1000f);
+
+        var aim = AiPilot.PatrolAim(pos, legStart, node);
+        Assert.Equal(-90f, aim.X, 3);          // 0.9 of the 100 m offset, on the aeroplane's side
+        Assert.Equal(node.Z, aim.Z, 3);        // along-leg distance is untouched
+        Assert.Equal(node.Y, aim.Y, 3);
+
+        // The residual is what converges, and it points back at the leg rather than away from it.
+        Assert.True(Mathf.Abs(aim.X - pos.X) < Mathf.Abs(node.X - pos.X),
+            "the aim point sits further from the aeroplane than the node does");
+
+        // On the leg, the aim IS the node; there is nothing to carry.
+        var onLeg = AiPilot.PatrolAim(new Vector3(0f, 400f, -1000f), legStart, node);
+        Assert.Equal(node.X, onLeg.X, 3);
+        Assert.Equal(node.Y, onLeg.Y, 3);
+
+        // Past the cap the displacement is 200 m, not 0.9 of a kilometre.
+        var far = AiPilot.PatrolAim(new Vector3(-1000f, 400f, -1000f), legStart, node);
+        Assert.Equal(-200f, far.X, 3);
+
+        // The vertical component is carried the same way: off is a full 3-vector.
+        var high = AiPilot.PatrolAim(new Vector3(0f, 500f, -1000f), legStart, node);
+        Assert.Equal(490f, high.Y, 3);
+
+        // A degenerate leg has no cross-track direction, and must not divide by its own zero.
+        var degenerate = AiPilot.PatrolAim(pos, node, node);
+        Assert.Equal(node, degenerate);
     }
 
     /// <summary>The aspect test (<c>FUN_0041d9f0</c> at <c>0x0041dd49</c>) takes BOTH of the
