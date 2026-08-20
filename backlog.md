@@ -2948,7 +2948,7 @@ usual.
 
 ## Tooling, platform & docs
 
-- `BL-425` `[Feature]` **Extract `langui.dll`'s string table.** Split out while the Ammo Selection
+- `BL-427` `[Feature]` **Extract `langui.dll`'s string table.** Split out while the Ammo Selection
   screen was built (`git log --grep=BL-353`). `extracted/messages.json` carries the weapon **names**
   (`MSG_WEAP_APIERCING_ROCKET` → "Armor-piercing rocket", the `MSG_WEAP_*` block at ids 12124–12160)
   but no prose beyond them. The original's Ammo Selection screen also shows a description pane for
