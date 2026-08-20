@@ -106,6 +106,47 @@ plays for anybody; and CSVM ships no cockpit view, so nothing selects `cockpit_e
 Every def does author `engine_sound`, and every def inherits `basic_airplane`'s single
 `damaged_engine_sound` entry.
 
+### The engine slot's pitch and gain are not throttle alone
+
+The throttle curve is only the first term. On an aircraft (mode class 0 or 4, the same gate the
+death path uses) `FUN_004b18a0` adds a **manoeuvre** term and an **attitude** term to each curve's
+normalised parameter, at `0x004b1c83`–`0x004b1d6b`:
+
+```
+w      = M(+0x180) · ω(+0x16c)              ; world→body, by ROWS
+q      = fastsqrt(w.x² + w.y²)              ; rows 0 and 1 only
+a      = [+0x19c]                           ; orientation row 2 . Y, and row 2 is −nose
+tVol   = clamp(frac(throttle, volCurve)   + 0.26·q − 0.15·a, 0, 1.5)
+tPitch = clamp(frac(throttle, pitchCurve) + 0.25·q − 0.15·a, 0, 1.5)
+volume = volY0   + (volY1   − volY0)  · tVol
+pitch  = pitchY0 + (pitchY1 − pitchY0)· tPitch
+```
+
+`fastsqrt` is the exponent-halving bit trick, not a library call: the sum is stored as a float and
+reloaded as an int, shifted right one and offset by `0x1fc00000`, then reloaded as a float
+(`0x004b1d09`–`0x004b1d19`). Constants read from the image: `0.26` at `0x00608b98`, `0.25` at
+`0x006034f4`, `0.15` at `0x006036a8`, the clamp pair `0.0`/`1.5` at `0x006032c8`/`0x00603460`.
+
+⚠ **`ω` is ANGULAR velocity, so `q` is a turn rate and there is no airspeed in this anywhere.**
+`+0x16c` is written as torque × the reciprocal inertia at `+0x197`..`+0x199` (`FUN_0048e580`), which
+is what fixes it as angular. The true speed scalar sits at `+0x934` and this routine does read it,
+but only for the whine slot, never here. ⚠ **The component about the nose is dropped**: only the two
+rows perpendicular to it are squared, so `q` is pitch rate and yaw rate combined and **roll rate
+does not raise the engine note at all**.
+
+The attitude term's sign is settled by row 2 being −nose ([org/flightModel.md](../org/flightModel.md),
+"The sign is settled from the bytes"), so `a = −nose.Y` and `−0.15·a` **rises with climb and falls
+with dive**.
+
+⚠ **In the retail install the 0.26 volume term does nothing**, because the shipped `engine_sound`
+volume curve is flat 1.0 ([sounds.md](sounds.md), "Player curves"): the term moves `tVol`, and
+`volY1 − volY0` is zero, so the remap discards it. Only the pitch term is audible. Do not read the
+two coefficients as a matched pair that both landed.
+
+Boost short-circuits both curves rather than scaling them: with the boost flag `+0x947` set
+(`0x004b1c51`), `tVol` is replaced by **1.17** and `tPitch` by **1.25** outright, which is what the
+`1.5` clamp headroom above 1.0 exists for.
+
 ## Destroyable parts
 
 A list of part entries:

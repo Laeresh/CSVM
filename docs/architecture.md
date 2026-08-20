@@ -2157,9 +2157,17 @@ own-ship scale left and stays here — splitscreen, not a fidelity knob.
 ## src/Flight/EngineAudioCurves.cs
 The engine-audio slot maths both audio paths read: `EngineDefFor` (which definition the engine slot
 holds and the damaged swap's one-off pitch draw), `Engine` and `Whine` (each slot's pitch and gain
-off the `PlaneStats` curves), and `CullDistanceSq`. It exists because the original runs one
-per-frame routine for the player and every AI vehicle; the decode is in
+off the `PlaneStats` curves), `DriveFrom`, and `CullDistanceSq`. It exists because the original runs
+one per-frame routine for the player and every AI vehicle; the decode is in
 [formats/vehicle.md](formats/vehicle.md), "The engine audio's slots".
+The engine slot's parameter is **not the throttle lever alone**: `DriveFrom` reads a turn rate off
+the two body axes perpendicular to the nose and a climb attitude off the orientation, and `Engine`
+adds them to each curve's NORMALISED parameter under a [0, 1.5] clamp before the curve maps it out.
+That ordering is why `SoundCurve` exposes `Frac`/`Remap` separately from `Eval`, and the headroom
+above 1.0 is what lets a hard pull overshoot the curve's own top. Both terms are read from the image
+(same decode section); the turn-rate-into-volume one is inert against the shipped flat volume curve
+and is kept because the data, not the mechanism, is what makes it so. `BL-109`'s `CAP-10`
+measurements of the original are the acceptance test and are pinned by the `engine-note` suite.
 
 ## src/Flight/AiEngineAudio.cs
 The positional twin of `FlightAudio` that an AI-flown aircraft carries instead of it: the same two

@@ -122,9 +122,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     yet another trigger path, and (b) is unproven to share any of their causes. Verify each
     independently before closing.
 
-- `BL-343` `[Feature]` **A shot-down plane's wreck should leave along the plane's own velocity, and
-    ours drops vertically.** `IMPACT_FORCE` is velocity inheritance, it fires in the original, and this
-    engine has neither half of it. The gate is fully decoded (2026-08-13); what is left is building it.
+- `BL-343` `[Feature]` **`IMPACT_FORCE` inheritance runs, but on our own gate rather than the
+    authored one.** A shot-down plane's wreck does now leave along the plane's own velocity: the
+    `Callback 16` half and the add both landed with `BL-385`'s Wave D. What has not landed is the
+    condition the original applies, so wreckage inherits in places the original leaves inert. The gate
+    is fully decoded; see "What is left" below.
     *Evidence:* [`docs/org/objectMotion.md`](docs/org/objectMotion.md), section "`IMPACT_FORCE` (bit
     `0x2`), and the callback that feeds it". The update's first-tick init requires three things
     (`FUN_004e8fa0`): the bit (`004e925e`), a velocity parked on the **anim instance** at `+0xc0..0xc8`
@@ -147,6 +149,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     the anim-stop notification, 3 is `player`'s own unrelated code); (3) in the motion's first-tick init,
     when the bit is set and the flag is set and the node has exactly one parent, add
     `parentWorldBasis⁻¹ · v` to the live velocity.
+    **Pieces (1) and (2) LANDED, and the add in (3) with them.** `AnimRuntime.InheritedWorldVelocity`
+    is the slot, its zero value standing in for the "is set" flag; the `Callback` handler fills it on
+    code 16 from the rig's `WreckVelocity` seam; and `MotionRuntime`'s first-tick init adds
+    `parentBasis⁻¹ · v`, which is what carries a killed aircraft's wreck downrange instead of dropping
+    it. Engine suites `callback-events` and `ai-wreck-fall` cover both, the second with an
+    able-to-fail control that sees nothing inherited when the seam is unwired.
+    **What is left is (3)'s GATE, and it is the half trap (b) warns about.** `impact_force` is read
+    nowhere in `CSVM/src`. The add is gated on a curated `InheritedVelocityExempt` opt-out list plus a
+    non-zero slot, not on the authored bit and not on the single-parent test, so a motion the original
+    leaves inert inherits in ours as soon as something on the same rig has raised `Callback 16`. The
+    remaining work is to read the flag per motion and gate on it, which is also what would let the
+    exemption list retire.
     ⚠ **Traps.** (a) **`BL-008` is closed (`1f09c2d`) on "the original does not inherit velocity into world
     debris", and that closure is still right for world debris.** Not one world destructible authors this
     flag; every carrier is aircraft wreckage, which is the population the closure never looked at. Do not
@@ -392,9 +406,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   damage outright while the part's armour pool covers the incoming armour damage. So a fully-armoured
   part crosses NO per-part threshold, not even the 0.99 `<part>_damage_effects` shim: the original
   shows nothing at all on a fresh armoured plane. Our combined armour+HP scale
-  (`PartState.Fraction`) was why panels tore early; **fixed 2026-08-15** as `BL-384` items (1) and
-  (2), re-basing the per-part loop on `PartState.HealthFraction` and splitting the hull loop out
-  onto `SummaryHealthFraction`. Owed at the controls with `BL-384`'s playtest line.
+  (`PartState.Fraction`) was why panels tore early; that is **fixed**, the per-part loop re-based on
+  `PartState.HealthFraction` and the hull loop split out onto `SummaryHealthFraction`
+  (`git log --grep=BL-384`). Owed at the controls as `PT-80`.
   **(1) location, answered; ours is faithful in mechanism and wrong in timing.** `FUN_00521180` binds
   an anim's node names through `FUN_004efaf0`, which searches the instance's context subtree, then
   the anim's local tables, then a GLOBAL by-name lookup (`FUN_004d0280(7, name)`). `pdpN` names are
@@ -409,7 +423,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   authored and faithful: `<part>_damage_effects` is a separate entry on each of the four zones with
   its own slot, so `pdp4` legitimately sparks up to four times a flight, once as each zone first
   crosses.
-  *Fix shape:* no code change is owned here. Symptom (2) is `BL-384` item (2). Symptoms (1) and (3)
+  *Fix shape:* no code change is owned here. Symptom (2) is fixed (`git log --grep=BL-384`),
+  and is `PT-80`'s to confirm at the controls. Symptoms (1) and (3)
   are faithful-as-authored and this item closes on them once `CAP-29` confirms the look. Do NOT
   resolve `random_gun_impact`/`player_fuelleak`'s panel pick to the nearest pdpN. The decode says
   the original does not do that.
@@ -426,136 +441,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `CAP-29` (the capture), `CAP-27` (spark-shim existence), `BL-288` landing
   (`docs/plans/PLAN-m3-polish-10.md` A1), `DamageVisuals.cs` (the consumer),
   `extracted/zrdr/vehicle.zrd.json` (the authority).
-
-- `BL-384` `[Bug]` `[Owed-playtest]` **Our `injure_anims` staging latches one-way where the original
-  retracts.** The original's rules are `docs/org/vehicleDamage.md` ("Damage staging"), restated with
-  their addresses under *Evidence* below. **Items (1) scope and (2) pool landed 2026-08-15**
-  (`DamageVisuals.OnHullDamage` split out from `OnPartDamage`, the two call sites in
-  `FlightController.cs` and both damage-lab targets moved onto the decoded quotients, engine suite
-  `damage-staging-pool`); what remains is item (3), and what is owed is the flight A/B below.
-  *Evidence (decode, `crimson.exe`, 2026-08-15).* `FUN_004b3800` drives the **def-level** list off
-  `[inst+0x2d0] / [inst+0x2cc]` — whole-vehicle health current over health max. `FUN_004b3d70`
-  drives the **per-part** list off `[part+0x30] / [part+0x2c]` — that part's health over its max.
-  Both start an entry's anim at `fraction <= threshold` and **stop it again** at
-  `threshold < fraction`, keeping one handle per entry (`inst+0x890`, `part+0x4c`).
-  Three deltas were filed; two are closed.
-  (1) **Scope — LANDED 2026-08-15.** The def-level list was walked against whatever per-part
-  fraction the caller passed, commented "any part qualifies", so one wing at 10% lit
-  `player_damage_trail` with the hull untouched. `DamageVisuals.OnHullDamage` is now its own call
-  site off `PlaneDamage.SummaryHealthFraction`, the quotient `FUN_004b3800` computes, and it runs
-  even on a zone-less hit.
-  (2) **Pool — LANDED 2026-08-15.** Both levels used the combined armour+health progression
-  (`PartState.Fraction`). The original divides health only at both levels, armour never entering
-  either quotient, so the per-part loop now takes `PartState.HealthFraction`. Because
-  `FUN_004b7f80` blocks health damage outright while a part's armour covers the hit, an armoured
-  part now crosses nothing at all, including the 0.99 spark shim.
-  (3) **Lifetime — OPEN.** The `_applied` set (`DamageVisuals.cs`) latches every stage one-way. The
-  original retracts: heal back above a threshold and the anim stops and its handle clears.
-  *Fix shape (item 3):* replace `_applied` with a per-entry handle the stop path can clear,
-  mirroring the two `+0x890` / `+0x4c` arrays.
-  *⚠ Traps.* (a) The combined armour+health fraction is **correct** for the gauge dial
-  (`docs/architecture.md:3780`) — fix the staging inputs without touching `GaugeCluster`'s scale.
-  (b) Do not change the shipped 0.10 / 0.85 / 0.99 thresholds; they are authored data and they are
-  right — only what is divided is wrong. (c) `docs/architecture.md` around the `injure_anims` bullet
-  carried the old defect note; it moved with items (1) and (2) and now records the open retraction
-  gap instead. (d) Retraction makes the F5 damage lab's repair path visibly un-stage, which is
-  faithful, not a regression — `DamageVisuals.Reset` stays for respawn.
-  *Playtest after fix (items 1 and 2, owed):* take sustained fire and confirm nothing at all shows
-  on a zone while its armour still absorbs, that a panel tears only once that zone's HEALTH crosses
-  its threshold, and that `player_damage_trail` starts when the hull gauge reads ~10% and not
-  before. The 0.99 spark shim going quiet on early hits is the most visible change.
-  *Playtest after fix (item 3):* repair in the F5 lab and watch the stage retract.
-  *Cross-refs:* `BL-259` (landed the anchor/staging this mis-keys), `BL-297` (the panel-damage semantics re-test — `pdpanelN` thresholds are on the same
-  health-only scale, so panels currently tear earlier than the original tears them; its 2026-08-15
-  decode confirms this and hands the fix to item (2) here).
-  *⚠ One more trap, from `BL-297`'s decode:* item (3)'s replacement of `_applied` must keep
-  ONCE-per-downward-crossing. The original's slot is cleared on the upward crossing alone, never
-  when the anim ends (`FUN_004b3e20` / `FUN_004b8180` are the repair wipe/restage), so a stage that
-  re-fires whenever the fraction stays below its threshold is a different bug, not the fix.
-
-- `BL-385` `[Bug]` **Enemy and wingman aircraft show no damage at all — the whole progressive-damage
-  layer is wired for the player only, and their crash is silent.** User at the controls 2026-08-15:
-  "the destruction animation only plays for the player but not enemies or wingmen". An AI plane
-  flies pristine until the frame it explodes.
-  *Evidence (code, 2026-08-15).* `controller.Visuals` is assigned at exactly two sites —
-  `FlightRigAssembler.cs:294` (the player rig) and `GameSession.cs:1477` (the parked damage lab).
-  `AiAircraftSpawner.Spawn` never assigns it, so `Visuals` is null on every AI controller, and all
-  three call sites are null-conditional (`FlightController.cs:972` projectile hit, `:2408` graze,
-  `:798` respawn reset). The `DamageEffectSink`/`DamageEffectStop` wiring is likewise inside
-  `if (controller.Visuals != null && …)` at `FlightRigAssembler.cs:452-488`. AI planes DO get
-  `Damage` (`AiAircraftSpawner.cs:102`) and DO get a rig runtime with the damage-stage defs bound
-  (`AiAircraftSpawner.cs:153-158`, `EffectCatalogue.cs:228-235`) — the stages are staged and
-  playable, just never triggered.
-  *Evidence (data, 2026-08-15) — the original authors a separate AI trail and we play none of it.*
-  `basic_airplane` carries a def-level `injure_anims` of **`[[0.5, "pfsmoketrail"]]`**
-  (`extracted/zrdr/vehicle.zrd.json:4108-4114`), inherited by every non-player airframe
-  (`bloodhawk`, `avenger`, `fury`, `brigand`, `devastator`, `autogyro`, `peacemaker`, the `r*`
-  variants, and `bswingman` — wingmen included). The def ships in every chapter as
-  `extracted/<ch>/cam_anim/piratefighter-pfsmoketrail.json`: a `smokepuffer` + `firepuffer` pair at
-  `prop1`. So in the original **an enemy starts trailing smoke at half hull health** — a combat read
-  the player uses to tell a hurt bandit from a fresh one — and it is one stage, not the player's
-  two (no `pfsmoketrail` counterpart to `player_fuelleak`).
-  *⚠ The threshold is whole-vehicle health, not a part fraction* — same decoded driver as the
-  player's (`FUN_004b3800`, `docs/org/vehicleDamage.md`), so this item lands on top of `BL-384`'s
-  correction rather than beside it. Doing this one first would wire the AI list to the same wrong
-  input.
-  *Fix shape:* give `AiAircraftSpawner.Spawn` the `DamageVisuals` construction and the sink/stop
-  pair that `FlightRigAssembler.cs:284-299,452-488` build, and a `FlightAudio` (see the audio half
-  below). Both blocks are near-verbatim; the shared shape wants extracting rather than copying.
-  *The audio half.* `FlightAudio` is built only at `FlightRigAssembler.cs:304-309`; the AI spawner
-  never sets `controller.Audio`, so `PlayCrashBoom` (`FlightController.cs:2027-2048`) and
-  `OnEngineStop` never run for an AI kill — **an AI fireball is completely silent** — even though
-  the `ai_crash_dirt` / `ai_crash_water` arms already exist in that switch. Note the crash
-  CHOREOGRAPHY is not missing: `Crash()` is one path for everyone and
-  `EffectCatalogue.CrashDefTableFor` (`WorldEffectsFactory.cs:311-319`) keys off `IsHumanPiloted`
-  onto the original's own `ai_crash_*` family. If an AI kill shows no fireball either, suspect that
-  family and its meshless `kestrel` scaffold anchor, not a missing call.
-  *⚠ Traps.* (a) Per-AI-plane panel pairing and puffer pools at spawn time is a real cost on a
-  chapter holding many aircraft — measure before wiring it unconditionally, and consider gating the
-  panel-flip half on distance or aircraft count. The trail half is one puffer pair and is cheap.
-  (b) `pfsmoketrail`'s `anim_root_name` is `piratefighter`, and it needs **no retarget**: decoded
-  2026-08-16, `anim_root_name` is an offset within the caller's context node, not a target selector,
-  and a def whose root name equals its own name (`FUN_0051dcf0`) has both fields overwritten with the
-  context node's name at play time (`FUN_00520910` / `FUN_00521180`). The real hazard is the
-  **anchor**: an anchor missing from the airframe is a soft failure that still starts the anim, and
-  the global by-name fallback in `FUN_004efaf0` binds it to any node of that name anywhere in the
-  scene. Confirm `prop1` exists on each AI airframe. See `docs/org/vehicleDamage.md`, "Which airframe
-  a stage's anim binds to". (c) Do not give AI planes the
-  `player_*` stage menu; their data names one stage and a different anim.
-  *Not part of this item, and settled:* an AI wreck never leaves ours, and it never leaves the
-  original either. Decoded 2026-08-16: nothing on the death path frees a vehicle, and there is no
-  timeout, distance cull, count cap or recycling. What ends the wreck visually is the `ai_crash_*`
-  def switching **all four** aircraft nodes (`dontmove`, `markers`, `healthy`, `destroyed`) inactive
-  on the frame the crash anim dispatches, every event untimed; the object stays allocated, dead and
-  hidden, until mission teardown. The only free path (`FUN_0047bab0`) is reached from mission
-  teardown, an ambient-plane pool a roster aircraft is not in, and the player's change-aircraft
-  command. So do not add a despawn timer. The question that remains is whether OUR `ai_crash_*`
-  playback actually performs those four deactivations; if it does not, the visible wreck is a
-  data-playback bug. ⚠ The player is authored the other way (`player_crash_dirt` keeps `destroyed`
-  active with `large_10sec_fire`), so a burning player hulk is correct and is not a template for the
-  AI. Details in `docs/org/vehicleDamage.md`, "What happens to the wreck".
-  *Playtest after fix:* shoot down a wingman and an enemy in C1 — smoke should start around half
-  health and the fireball should be audible.
-  *Cross-refs:* `BL-384` (the fraction correction this depends on, and the decode's addresses),
-  `BL-246` (the decode), `docs/org/vehicleDamage.md` ("Damage staging"),
-  `BL-343` (wreck momentum — the other AI-wreck item, whose mechanism is authored `Callback 16`,
-  handled by `LAB_00480710` pushing the vehicle's velocity into the crash anim through
-  `FUN_004ee0e0`). Which def the AI list is read from was
-  `BL-386`, closed 2026-08-16 (`git log --grep=BL-386`) — see the update below.
-  *Correction 2026-08-15 (found minting `BL-386`):* the `[[0.5, pfsmoketrail]]` cited above is NOT
-  on `basic_airplane` — `vehicle.zrd.json:4108-4114` sits inside the `bswingman` def (line 3993),
-  and `basic_airplane` (lines 3–224) authors no `injure_anims` at all. Each AI airframe authors its
-  own SEVEN-entry ladder instead (`fury` 4738–4768: `random_remote_damage` at
-  0.95/0.80/0.65/0.50/0.45/0.25 plus `pfsmoketrail` at **0.40**), restated verbatim on its `r*`
-  variant. So the original's smoke starts at 40% on an enemy and 50% on a campaign wingman, and the
-  `random_remote_damage` stages are part of the same list — the "one stage, not two" reading holds
-  only for the trail itself.
-  *Update 2026-08-16 — the `BL-386` blocker is cleared.* An AI spawn now resolves its own def, so
-  `stats.VehicleInjureAnims` on an AI plane IS the seven-entry AI ladder (`pfsmoketrail` at 0.40 on
-  an enemy) rather than the player's two. ⚠ And the threshold input is settled with it: an AI
-  airframe is **zone-less**, so there is no "worst part fraction" to read — `WorstFraction` returns
-  a constant 1f with no parts. Stage this ladder off `PlaneDamage.SummaryHealthFraction`, the
-  whole-vehicle pool, which is what `FUN_004b3800` walks and what `BL-384`'s correction settles.
 
 - `BL-394` `[Bug]` **AI aircraft still fly the player's guns, livery and pilot — only the damage
   model reads their own def.** `BL-386` landed the identity split deliberately narrow: `PlaneStats`
@@ -1679,32 +1564,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
-- `BL-422` `[Bug]` **A small firepuff survives the kill forever on the Bloodhawk and the Autogyro,
-  but not on the Fury or the Devastator.** Reported at the controls after `BL-385`'s Wave D landed:
-  shoot one down and a small fire emitter is left burning in the air with nothing under it, for the
-  rest of the session. Two airframes tested clean, two dirty; the other seven are untested.
-  **What it is NOT:** the destroy defs. `bloodhawk-bloodhawk`, `autogyro-autogyro`, `fury-fury` and
-  `piratefighter-piratefighter` were compared event for event and their `destroy_craft`,
-  `randomdestseq`, `destroyed_dirt`/`_water` and `bounce_effects` sequences are identical but for the
-  Devastator's extra `flydirt_plane`. So the difference is in the airframe's own data or node names,
-  not in the choreography.
-  **Lead, which fits one of the two airframes and not the other:** an effect CALLed onto an anchor
-  that does not resolve falls back to the caller's anchor (`AnimRuntime.CallTargetSite`), and a stop
-  aimed at the authored node can then miss the instance that actually started at the fallback. The
-  Bloodhawk is the known node-name outlier — it spells its elevators `l_elev`/`r_elev` where
-  `random_remote_damage` calls `lft_elev`/`rt_elev` (`docs/org/vehicleDamage.md`, the AI stage anchor
-  census), so two of that cascade's five steps already fire at the airframe root there. ⚠ **The
-  Autogyro does not fit that story** — the same census found it carries all five anchors — so either
-  there are two causes or the real one is something both share and the Bloodhawk's naming is a
-  coincidence. Do not stop at the first airframe that explains itself.
-  ⚠ **Traps.** (a) `pfsmoketrail` and the trail family are `LOOP -1` with **no authored exit**; they
-  end only because the stop closure reaches them, so anything that breaks the match between a start
-  and its stop leaves an immortal emitter. That closure is derived from the program
-  (`WorldEffectsFactory.WireDamageStages`), so a hand list is not the fix. (b) Check the damage-stage
-  path AND the destroy path before concluding: the stage ladder runs before the kill and its stop is
-  `Callback 15`'s job. (c) Census all eleven airframes rather than the four tested, so the answer is
-  a rule and not two special cases.
-
 - `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
   flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
   traced the same day and **fully decoded 2026-08-13**. The decode is
@@ -2036,31 +1895,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-421` `[Research]` **The corrected engine-audio model is unconfirmed at the controls; the whine
-  removal in particular.** `BL-385`'s `B14` re-decoded the engine audio and removed four things our
-  build had been playing: the `snd_enginewhine` loop, the detuned dual engine stack
-  (`EngineDetuneRatio`, `EngineVoiceGain`), `WhineMixGain`, and the damaged-engine crossfade
-  (`DamagedEngineGain`, `DamagedEngineMixGain`). The decode behind that is firm — `FUN_00476250`
-  assigns slot 1 only when non-null, `FUN_00478a00` leaves the field at 0, **no shipped vehicle def
-  authors `prop_sound`** (its one occurrence in `extracted/zrdr/` is a curve block in
-  `player.zrd.json`, not a sound name), and `snd_enginewhine` is a literal nowhere in `crimson.exe`.
-  Flown afterwards, the verdict was "not sure if this is correct".
-  **What this item is:** get a verdict, not a re-tune. The A/B is stated in the plan's `B14`: HEAD
-  against the build, one plane and chapter, `--volume=1.0 --no-det`, listening for the chorus at fixed
-  throttle to be gone, for no whine layer to rise in through a full dive, and for the damaged engine
-  to be REPLACED rather than joined. A reference recording of the original is the only thing that can
-  settle it above taste.
-  ⚠ **Traps.** (a) A decode outranks a spectral measurement here by this project's own rule, and the
-  removed constants came FROM spectral analysis of a reference dive — that is what the decode
-  overturned, so re-deriving them from the same footage would just re-make the error. (b) The likely
-  honest outcome is that the original really is thinner than our old build and the ear has to adjust;
-  say so rather than reinstating a loop the data does not have. (c) If something IS missing, the open
-  candidate already recorded is the engine's **airspeed term** (`FUN_004b18a0` adds `0.26*|v|` to
-  volume and `0.25*|v|` to pitch, clamped to [0, 1.5]), deliberately unimplemented because the
-  velocity's units in that expression are unresolved — that is a decode to finish, not a mix to
-  invent. (d) Audio cannot be screenshot-verified; the `sound` log line names the resolved slot defs
-  and is the headless half.
-
 - `BL-079` `[Feature]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;
   the original's IA traffic is clearly audible in the reference video.
   ⚠ **The "with Doppler" half of that claim is now suspect and must not be built against.** This
@@ -2073,168 +1907,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   on its own; but the engine that declines to pitch-shift a police siren is unlikely to pitch-shift a
   passing plane. Treat Doppler on IA traffic as **unverified**, and measure it (same method: track a
   tonal component against the source WAV) before implementing it.
-
-- `BL-109` `[Bug]` **Engine pitch behavior in dives**: the original's engine drops ~12% through a dive and
-  overshoots ~1.05 at pull-out — not reproducible by the throttle-only pitch curve (cap 1.0).
-  **Playtest 2026-07-30 narrows this**: the user confirms the original's note modulates with **climb
-  rate and elevator input**, not throttle alone, and reads noticeably less constant than ours. Camera
-  Doppler is ruled out as the mechanism — own-ship engine audio is a plain `AudioStreamPlayer`
-  (`FlightAudio.cs`), non-positional by design, so no Doppler shift applies to it regardless of
-  whether `AudioStreamPlayer3D.DopplerTracking` is ever enabled elsewhere — and `CAP-09` has since
-  measured that the original applies **no Doppler to any emitter**, so `DopplerTracking` stays
-  `DISABLED` on purpose (`docs/HISTORY.md` 2026-08-04). Left
-  standing: a speed/RPM term, or wiring climb-rate/elevator directly into `EnginePitch.Eval`'s input
-  instead of throttle. **`CAP-10` measured 2026-08-04 over eleven takes — both halves of the claim
-  are now confirmed in direction and roughly halved in magnitude, and the note needs TWO terms.**
-  Audio: the engine is a looped
-  sample, so its spectrum translates rigidly in log-frequency, and cross-correlating each frame's
-  whitened log-spectrum against level flight gives the playback-rate multiplier without an f0
-  estimate (`analysis/engine-note/scale.py`). Flight state: both external takes decode through the
-  existing chase-HUD calibration (`analysis/video-flight-calibration`, altimeter fit NCC 0.9900),
-  paired to the audio on PTS by `enginepitch.py`.
-
-  **Climb rate is ruled out, and so is every other state variable the gauges carry.** The user's
-  2026-08-04 re-record (three takes, built to break the collinearity a plain dive has) collapses the
-  correlation that the first two takes appeared to show:
-
-  | take | what it varies | climb | speed | γ | dHe |
-  |---|---|---|---|---|---|
-  | `CAP-10 3 3rd Person.mp4` | plain dive | 0.949 | 0.746 | 0.942 | 0.384 |
-  | `Bloodhawk Dive Sound.mp4` (t<16 s) | plain dive | 0.576 | 0.335 | 0.611 | 0.007 |
-  | `…Dive 100% Thrust variable climb rate.mp4` | **climb rate** | **0.188** | 0.130 | 0.191 | 0.056 |
-  | `…90° Banked Pith Up Down.mp4` | **elevator at γ≈0** | **0.159** | 0.206 | 0.120 | 0.081 |
-  | `…Variable Climp Pitch up.mp4` | climb + pull | 0.442 | 0.237 | 0.416 | 0.055 |
-
-  In a plain dive climb rate, γ, airspeed and elevator all move together, so the first two takes'
-  R² ≈ 0.95 was **collinearity, not causation** — the clip flown specifically to vary climb rate
-  scores 0.188 against it. The 90°-banked take is the discriminator: at 90° of bank the elevator
-  swings the nose in azimuth, so it holds **altitude to 168 ft over 15 s (γ −5.7°..+0.7°)** while
-  the note still swings **6.2%** (peak ×1.0608 at t=6.4 s). Energy-height rate `dHe` — the
-  throttle-pinned proxy for how hard the airframe is being worked — does no better (≤0.384).
-
-  **What is left is the elevator input itself, and the evidence for it is positive, not just
-  residual.** `…Variable Climp Pitch up.mp4` drives the note *up* to **×1.1126** under pull (the
-  first take to show a rise, the earlier dives only showing drops), and in the banked take the note
-  **stays elevated at ×1.029–1.035 for as long as the stick is held** at near-zero climb rate, rather
-  than decaying like a rate would. That is the user's "strain on the engine" reading. ⚠ An earlier
-  version of this entry added "and it matches the sign throughout: pull → note rises, push → note
-  falls"; the dive-recovery take below **disproves the second half** — a pushover raises the note by
-  +3.4%, the same direction as a pull. The transient is unsigned, which is also why F13's rig, which
-  alternated nose-up and nose-down within every step, read a *monotone* staircase in duty.
-
-  **Confirmed by a scripted run, 2026-08-04 — the note follows the elevator input, and climb rate is
-  dead.** `capture-rigs/ElevatorDutySweep.ahk` (F13) stepped the input duty cycle 0→1→0 in nine 6 s
-  steps with every key edge logged, so the elevator is *known*. `dutysweep.py` aligns the log to the
-  video and reads a clean monotone staircase:
-
-  | duty | 0.00 | 0.25 | 0.50 | 0.75 | 1.00 | 0.75 | 0.50 | 0.25 | 0.00 |
-  |---|---|---|---|---|---|---|---|---|---|
-  | note | 1.0000 | 1.0024 | 1.0058 | 1.0108 | **1.0169** | 1.0132 | 1.0074 | 1.0043 | 1.0025 |
-  | climb ft/min | −23 | +96 | +366 | +600 | +1273 | **+1679** | +1092 | +911 | +874 |
-
-  `note ≈ 1.0002 + 0.0154·duty`, **R² 0.931**. Across the nine steps the note tracks **duty (0.931)**
-  far better than climb rate (0.543) or airspeed (0.719) — and the descending leg dissociates them
-  outright: at the run's **highest** climb rate (+1679 ft/min) the note is *lower* (1.0132) than at
-  duty 1.00 where climb was only +1273 (1.0169), and by the final duty-0 step the note is back to
-  1.0025 while the aircraft is **still climbing at +874 ft/min**. Stick stops moving → note returns
-  to baseline regardless of climb rate. That is the controlled version of the result, and it kills
-  climb rate as a candidate rather than merely out-scoring it.
-
-  **The response builds with sustained deflection — it is not an instantaneous function of stick
-  position.** The F14 held-pull ladder gives +1.5% / +4.7% / +8.0% / +8.9% for holds of
-  250 / 500 / 1000 / 1500 ms, saturating near **+9%**, whereas F13's rapid 300 ms alternation reaches
-  only +1.7% at *full* duty. So `EnginePitch` wants the elevator **low-passed / integrated**, with a
-  time constant of order **0.5–0.7 s** (crude first-order fit to those four points; they do not fit a
-  single exponential well, so treat it as an order of magnitude). That also explains the hand-flown
-  spread — sustained dives and pulls reach ±10% while brief inputs barely move it.
-
-  ⚠ Limits on the scripted run: the log-to-video alignment is only loosely determined (R² sits on a
-  broad plateau for offsets 3.0–6.5 s, every one giving slope +0.015 ± 0.002 and span +1.6–1.9%, so
-  the conclusion is robust to it but the exact offset is not). The rig's zero-mean-pitch-rate goal
-  was **not** fully met — the aircraft gained 680 ft over the run and duty correlates with climb at
-  R² 0.343 and airspeed at 0.512, which is why the descending leg, not the ascending one, carries the
-  argument. F14 is weaker evidence than F13: its gauge decode is poor (`d2 sd` 19.2, airspeed
-  bottoming at 0), its offset was solved from the note itself rather than independently, and its last
-  row's gap window falls past the end of the run. Do not quote the 2000 ms row.
-
-  **The pull-out, measured at last — `CAP-10 Dive Recovery.mp4`, 2026-08-04.** The eleventh take is
-  the first to hold a dive *through* the recovery: level at 5,180 ft / 296 mph, pushover at t≈4.4 s,
-  near-vertical descent to −32,600 ft/min and 355 mph, recovery t≈12.6–14.3 s, then five seconds of
-  near-level flight at 296 mph. Decode is the cleanest of the set (alt `d2 sd` **4.61**, mph **1.14**
-  — cf. F14's 19.2). `recovery.py` pairs it to the note; figure in `playtest/CAP-10/dive-recovery.png`.
-  **Both halves of the original claim are confirmed in direction and about half the stated size:**
-
-  | | claim | measured | where |
-  |---|---|---|---|
-  | drop through the dive | ~0.88 (−12%) | **0.9370** (−6.3%) | t=6.57 s |
-  | overshoot at pull-out | ~1.05 | **1.0296** (+3.0%) | t=13.74 s |
-
-  The overshoot is real — it clears both the level-flight baseline (1.0000) and the post-recovery
-  settle (0.9985) — and it is **transient**, decaying back to baseline within ~1 s of the recovery
-  finishing rather than establishing a new level.
-
-  ⚠ **But the overshoot is not a pull-out phenomenon, and this take says the note needs two terms.**
-  An equal-and-opposite bump appears at the **pushover**, where the stick goes the *other* way:
-
-  | t (s) | 4.20 | 4.40 | 4.60 | 4.80 | 5.20 | 5.40 |
-  |---|---|---|---|---|---|---|
-  | note | 1.0004 | 1.0113 | **1.0301** | **1.0336** | 1.0048 | 0.9907 |
-  | climb ft/min | +670 | +554 | +125 | −836 | −4,662 | −7,407 |
-  | mph | 296.2 | 296.2 | 296.1 | 297.3 | 295.5 | 284.5 |
-
-  At t=4.60 the note is already **+3.0%** while the aircraft is at its peak altitude, at its
-  level-flight airspeed, and climb rate has moved only −545 ft/min. In the established dive a
-  −30,000 ft/min change buys −6.3%; here a −545 ft/min change comes with **+3.0%** — ~55× the
-  sensitivity and the **opposite sign**. A third instance sits mid-dive at t≈7.7 s: the note jumps
-  0.9528 → **0.9942** while climb rate is still *steepening* (−26,400 → −29,800 ft/min). All three
-  bumps have tracker NCC 0.62–0.68, i.e. level-flight confidence, so none is a tracking failure.
-
-  So the note carries **(a)** an unsigned transient on stick movement — the F13/F14 effect, up for
-  push and pull alike — and **(b)** a slow level that sits ~6% low in a sustained near-vertical dive
-  and returns to baseline when level. BL-109's "overshoot at pull-out" is term (a) firing at the
-  recovery; the "12% drop" is term (b). A single input into `EnginePitch.Eval` cannot produce both.
-
-  ⚠ Read the whole-take R² on this clip with care, and do **not** use it to re-rank the drivers
-  against F13. Over the 493 γ-unclipped frames it reads climb 0.519 / γ 0.511 / airspeed 0.314 /
-  |dγ/dt| 0.052 — apparently reversing the scripted result. Two reasons it does not: this take has no
-  logged input, so `dγ/dt` is the only elevator proxy available and it is a poor one (γ **saturates
-  at −90°** for most of the dive because descent rate genuinely reaches airspeed, and the frames
-  where it unpins throw ±60 °/s artifacts); and a whole-take R² weights the long sustained dive over
-  the three ~1 s bumps, so it measures term (b) almost exclusively. The dissociation above is
-  event-level and does not depend on any R².
-
-  ⚠ The dive floor is **not** the overspeed whine (`BL-252`) leaking into the tracker: the note reads
-  0.9381 at 301 mph (t 6.5–7.3) and 0.9415 at 351 mph (t 9.0–11.2) — 50 mph apart, 0.3% of note
-  apart — and the floor is reached at t=6.57 s, *before* the high-speed regime. Tracker NCC does sag
-  in the dive (0.48–0.51 vs 0.64 level), so treat the floor's exact depth as ±1% rather than exact.
-  Two ~10 mph step glitches in the speedometer decode (t≈6.6, 12.1, 16.9) are needle-wrap artifacts
-  and are not used for anything above.
-
-  **The two cockpit takes cannot supply this number and are not a failed recording.** They do carry
-  game audio — a +2 to +4 dB broadband 400–900 Hz swell that tracks the visual screen-shake window
-  (`CAP-10.mp4` t≈6.5–12.0, `CAP-10 2.mp4` t≈8.0–17.5; r≈+0.5 against a frame-difference shake
-  trace) — but a median-subtracted spectrogram shows **no moving harmonic at all** in either, against
-  clear bending traces at ~230/400/660 Hz in the external takes. The cockpit mix is damped as the
-  user describes, and what becomes audible as the shaking starts is **broadband rush, not a pitch
-  change** — it is the wind/overspeed layer, and it belongs to `prop_sound`, not here (below).
-
-  **Throttle was pinned at 100% through all four dives (user, 2026-08-04)**, so none of the swing
-  belongs to the throttle term — it is climb-rate/elevator driven, as the 2026-07-30 playtest said.
-  The user's own reading of the mechanism is *strain on the engine*, i.e. the note follows how hard
-  the airframe is being worked rather than speed as such; that fits the sign we measure (nose-down,
-  unloaded, engine **falls**) and is what the climb-rate-over-airspeed result says quantitatively.
-
-  Decoded flight state and the pairing live in
-  `analysis/video-flight-calibration/{run2chase,enginepitch}.py`
-  (`playtest/CAP-10/` holds the audio side).
-  ⚠ The engine note and the overspeed whine move together in a dive; a frequency-domain measurement
-  that does not separate them will attribute one to the other.
-
-- `BL-123` `[Tuning]` `[Owed-playtest]` **Audio (Run-2 item 11)** — `WhineMixGain` 0.12; A/B'd against the original 2026-07-30:
-  close, but "could be a bit louder." `flightAudio.whineMixGain` is now config-wired
-  (`FlightAudio.cs:145`). *Playtest after fix:* nudge `flightAudio.whineMixGain` up from 0.12 via
-  `config.json`, re-A/B a dive, then delete the override (`docs/verification.md` DET-8 applies here
-  too).
 
 - `BL-161` `[Feature]` `[Blocked: cockpit view]` **`cockpit_engine_sound` ships per plane, unparsed.** `extracted/zrdr/vehicle.zrd.json`
   carries it alongside `engine_sound` for every plane def (Devastator: `snd_devastator_cp`, lines
@@ -2262,13 +1934,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   No capture owed: the `engine` data flag plus the user's recollection carry the zone rule, and
   filming the original to prove armor hits don't trigger it would be trying to hear a negative.
   The gain TUNE survives as this entry's tail: `FlightAudio.DamagedEngineMixGain` (default 1.0,
-  the def's own sounds.json volume, unattenuated) has no reference recording, unlike
-  `WhineMixGain`'s measured dive — judge against the healthy engine at the controls after the
-  regating. Config keys: `flightAudio.damagedEngineMixGain`.
+  the def's own sounds.json volume, unattenuated) has no reference recording of its own — judge it
+  against the healthy engine at the controls after the regating. Config keys:
+  `flightAudio.damagedEngineMixGain`.
 
-- `BL-252` `[Tuning]` `[Owed-playtest]` **Overspeed-whine volume** (`prop_sound`; `FlightAudio.WhineMixGain` 0.12). `CAP-10` plus a
+- `BL-252` `[Tuning]` `[Owed-playtest]` **Overspeed-whine volume** (`prop_sound`). `CAP-10` plus a
   live cross-check incidentally confirmed the **gating** of the original's dive/overspeed sound and
   left only its level open.
+  ⚠ **This entry's SUBJECT is now wrong, and its observation is the valuable part.** There is no
+  whine: no shipped def names `prop_sound`, so slot 1 is unassigned install-wide, and
+  `WhineMixGain` no longer exists to tune. What the entry actually recorded is that the original
+  plays *something* starting exactly at `1.0× fd_speed`, and that is still true and still
+  unexplained by the engine slot, whose two non-throttle terms read turn rate and attitude and know
+  nothing about speed (`docs/formats/vehicle.md`). **The open candidate is the RATTLE**, whose
+  shipped curve is volume 0→1 over `1.0`→`1.2× fd_speed`, i.e. the same foot the entry measured, and
+  which unlike the whine IS assigned on every def (`snd_planeshake`). ⚠ Settle what the sound is
+  before tuning any level; this entry has already tuned the wrong slot once.
 
   **The gate is the plane's own maximum level speed, not a fixed number.** User test 2026-08-04
   (Hoplite and autogyro): hold straight and level at 100% throttle — which by definition settles at
@@ -2327,7 +2008,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   read too loud on its own terms. *Fix shape:* a level match by ear against the reference video,
   same method `BL-223` and `BL-269` already used for this signal chain.
 
-- `BL-423` `[Feature]` **A choked engine still sounds like a running one.** `PT-69` (d): the choker
+- `BL-424` `[Feature]` **A choked engine still sounds like a running one.** `PT-69` (d): the choker
   (`wep_12`, `TANGLER`) cuts thrust for 5–13 s and nothing in the audio chain reacts, so a choked
   aircraft, your own included, keeps its full engine loop. `FlightAudio` drives the loop from
   throttle and damage (`damaged_engine_sound`), never from `FlightController`'s engine-dead timer.
@@ -2338,7 +2019,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   engine model and would otherwise keep running through a choke too.
   *Fix shape:* gate `FlightAudio`'s loop on the engine-dead timer the same way the thrust cut reads
   it, with whatever the decode says the original plays over the gap.
-  *Cross-refs:* `BL-421` (the engine-audio model's at-the-controls confirmation), `BL-223`/`BL-285`
+  *Cross-refs:* `BL-421` (closed; it confirmed the engine-audio model at the controls), `BL-223`/`BL-285`
   (the loop's damage and start/stop inputs), `BL-406` (closed; the choke itself landed there).
 
 ## Cameras & views

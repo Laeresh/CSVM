@@ -250,7 +250,8 @@ def-level list carries `[0.85, player_fuelleak]` and `[0.10, player_smoketrail]`
 whole-vehicle-health stages, so `player_smoketrail` means "the hull is at 10%", not "some zone is at
 10%". Driving the def-level list off a per-part fraction fires the whole-plane trail while the hull
 is still near full. The backlog item this settled is retired; its closing commit is
-`git log --grep=BL-246`. Our implementation's three deltas against this are `BL-384`.
+`git log --grep=BL-246`. Our implementation had three deltas against this (scope, pool and
+lifetime); all three are closed, and their record is `git log --grep=BL-384`.
 
 ### One start per downward crossing
 

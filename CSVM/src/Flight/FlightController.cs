@@ -1627,8 +1627,11 @@ public partial class FlightController : Node3D
             // damaged swap. A player's two track each other, so this cannot move its own timing.
             float damageFrac = 1f - Mathf.Min(Damage?.WorstFraction ?? 1f,
                 Damage?.SummaryHealthFraction ?? 1f);
-            Audio?.Update(simDt, _model.Throttle, speedFrac, damageFrac);
-            EngineAudio?.Update(simDt, _model.Throttle, speedFrac, damageFrac);
+            // One drive for both paths: the original runs ONE per-frame routine for the player and
+            // every AI vehicle, so the two must never read the airframe differently.
+            var engineDrive = EngineAudioCurves.DriveFrom(_model);
+            Audio?.Update(simDt, engineDrive, speedFrac, damageFrac);
+            EngineAudio?.Update(simDt, engineDrive, speedFrac, damageFrac);
             // The throttle-slam gate needs the live value every frame, not just while its plume
             // is active, so it can tell a fresh climb from one already in progress.
             ThrottleSmoke?.Update(simDt, _model.Throttle);
@@ -2236,11 +2239,15 @@ public partial class FlightController : Node3D
         if (destroyDef != null)
         {
             // The dead hull flies itself from here; the def's own Callback 15 stops it, at 3.0 s on
-            // the ten AI airframes and at once on `player`. ⚠ Wire both seams before Play, or the
-            // untimed player def raises them into nothing (docs/org/vehicleDamage.md).
+            // the ten AI airframes and at once on `player`. ⚠ Wire all three seams before Play, or
+            // the untimed player def raises them into nothing (docs/org/vehicleDamage.md).
             _wreckFalling = true;
             CrashRuntime!.WreckVelocity = () => _model.VelocityDir * _model.Speed;
             CrashRuntime.StopWreckFlying = () => _wreckFalling = false;
+            // Code 15's other half: the stages the hull was wearing end with it. Both AI stage anims
+            // are LOOP -1 with NO authored exit, so nothing else can reach them and a survivor emits
+            // forever at the node the wreck left behind.
+            CrashRuntime.StopDamageStages = () => Visuals?.DamageEffectStop?.Invoke();
             // The airburst, the pilot's chute and (on the eleven airframe defs) the wreck's own
             // launch: this plane's parts detaching, not a world destructible's.
             using (PerfSample.Scope(PerfSite.PartDetach))

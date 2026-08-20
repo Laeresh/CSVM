@@ -168,7 +168,7 @@ public partial class FlightAudio : Node
     /// <summary>Per-frame drive: <paramref name="speedFrac"/> is speed / fd_speed,
     /// <paramref name="damageFrac"/> is accumulated damage (1 - PlaneDamage.WorstFraction, 0 when
     /// pristine). Not called while crashed, so the loops stay dead until respawn.</summary>
-    public void Update(float dt, float throttle, float speedFrac, float damageFrac)
+    public void Update(float dt, in EngineDrive drive, float speedFrac, float damageFrac)
     {
         if (_engineRamp < 1f)
             _engineRamp = Mathf.Min(1f, _engineRamp + dt / EngineStartRamp);
@@ -177,7 +177,7 @@ public partial class FlightAudio : Node
         {
             if (!_engine.Playing)
                 StartEngine(); // respawn after a crash: propstart + fresh volume ramp-in
-            var (pitch, volume) = EngineAudioCurves.Engine(_stats, throttle, _enginePitchMul);
+            var (pitch, volume) = EngineAudioCurves.Engine(_stats, drive, _enginePitchMul);
             _engine.PitchScale = pitch;
             _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold,
                 volume * (_engineDamaged ? _damagedVol : _engineVol) * _engineRamp * MixGain));

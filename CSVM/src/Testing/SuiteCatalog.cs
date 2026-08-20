@@ -49,6 +49,7 @@ public static class SuiteCatalog
         "ordnance-guidance",
         "air-to-air",
         "ai-plane-defs",
+        "engine-note",
         "team-model",
         "instant-action",
         "instant-action-zeppelin",
@@ -266,6 +267,14 @@ public static class SuiteCatalog
             "and the AI seven-entry injure ladder, while the player def still supplies the loadout " +
             "key and the rig — and a real spawn comes out damageable, zone-less and armed",
             AiPlaneDefs));
+        into.Add(new TestHarness.Suite("engine-note",
+            "the engine slot's two non-throttle terms (BL-423): a sustained vertical dive drops the " +
+            "note to 0.94 against the 0.9370 CAP-10 measured off the original, ±0.3 rad/s both RAISE " +
+            "it by the +3.0 % that item measured because the term is a MAGNITUDE, a 4 rad/s roll " +
+            "moves it not at all because the nose-axis component is dropped, a climb reads the " +
+            "opposite sign to a dive off a real attitude, neither term is audible on the shipped " +
+            "flat volume curve, and the authored 1.5 parameter clamp holds a tumble",
+            EngineNote));
         into.Add(new TestHarness.Suite("team-model",
             "the B7 team model: two distinct pilot indices (real PlayerIndex values, not synthetic " +
             "ints) share one explicit FlightController.Team and a third sits on another — " +

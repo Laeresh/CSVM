@@ -219,7 +219,7 @@ invention: the original has no neutralising step on the death path.
 
 ⚠ **Do not tune this against the recordings' downrange.** Freezing measures 323 m downrange and
 −8 m of altitude on a headless kill, where neutralising measured 175 m and +1 m, and 175 m is the
-figure a reference recording gave (`docs/PLAN-ai-damage-and-engine-audio.md`, D21). That agreement
+figure a reference recording gave (`docs/plans/PLAN-ai-damage-and-engine-audio.md`, D21). That agreement
 is not evidence for neutralising. It is a footage-derived distance, the class of measurement that
 has failed here repeatedly and may not contest a decode, and the magnitude under freezing is a
 function of **our** AI's last throttle rather than the original's, so neither number tests the

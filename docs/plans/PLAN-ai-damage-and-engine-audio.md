@@ -1,8 +1,21 @@
 # AI damage visuals, crash audio and the decoded engine-audio model
 
-**ACTIVE PLAN** (written 2026-08-16). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE 2026-08-20** (written 2026-08-16). All 26 checklist items are ☑ or ❌, Waves A–D.
+Indexed in [`plans.md`](plans.md); read as history.
+
+⚠ Two things outlived the plan and were not closed by it, both minted by its own closing playtest
+and neither belonging to `BL-385`. Both are since closed on their own (`git log --grep=BL-421`,
+`--grep=BL-422`): the firepuff was an unwired seam, and the verdict on the engine audio B14 thinned
+is that its four removals stand and a FIFTH mechanism it did not read is missing, now decoded and
+owned by `BL-423`. D24 and D26 each still leave a fidelity question owed at the controls rather
+than a defect, recorded on the items themselves.
+
+⚠ **B14's model table below is wrong on one point and is kept as written because this file is
+history.** It calls the extra pitch/volume input "an airspeed term of 0.26 into volume and 0.25 into
+pitch". There is no airspeed in it: the quantity is angular velocity, the volume half is inert
+against the shipped flat volume curve, and there is a third, attitude term the table omits. The
+live reading is [`docs/formats/vehicle.md`](../formats/vehicle.md), "The engine slot's pitch and
+gain are not throttle alone".
 
 This plan closes `BL-385` (enemy and wingman aircraft show no damage at all, and their crash is
 silent) and absorbs `BL-384` item (3) (the one-way `_applied` latch), which cannot be separated from

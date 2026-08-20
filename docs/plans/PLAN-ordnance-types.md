@@ -1157,7 +1157,7 @@ fifth sonic burst drawing (`effect-pool-reset`), the splash cover ray aimed at t
 never washed by their own burst, which is the decoded owner exclusion, not a routing bug. Three
 rows outlive the plan as ordinary `playtest.md` rows by the user's decision: `PT-74`'s (c) and the
 four-player `PT-75`/`PT-76`; a fail there mints a new `BL`. `PT-73`'s AI half stays owed on
-`BL-363`/`BL-394`, the choke's missing engine-sound reaction is `BL-423`, and `CAP-38` owes the
+`BL-363`/`BL-394`, the choke's missing engine-sound reaction is `BL-424`, and `CAP-38` owes the
 original's on-plane beeper/seeker hit.
 
 **Goal.** Every landed behaviour is correct with four viewers, and each type has been seen doing the
