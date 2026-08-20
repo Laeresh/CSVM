@@ -193,6 +193,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     leaves inert inherits in ours as soon as something on the same rig has raised `Callback 16`. The
     remaining work is to read the flag per motion and gate on it, which is also what would let the
     exemption list retire.
+    **The inherited fraction is 1, decoded.** No scalar exists anywhere on the original's path: integer
+    moves from the owner's velocity accessor to the argument buffer (`00470954`) and on into the
+    instance (`004ee0f8`), the only multiplies being the nine of the parent-basis transform
+    (`004e9346`), and the add itself unit-coefficient (`004e93a1`…`004e93b9`). ⚠ **The player's two
+    death paths inherit differently, and `FlightController.cs:2360` is on the wrong one.** Shot down,
+    the def `player` runs `CALLBACK 16` and its four pieces inherit in full; flown into the ground, the
+    `player_crash_*` def picked by surface id inherits **nothing** (`player_crash_dirt` authors the flag
+    false, `player_crash_default` is inert). That line writes the seam directly on the ground-crash
+    path, bypassing `Callback 16`, so reading the bit narrows the population and also removes the
+    player's ground crash from it entirely. Visible at the controls; playtest rather than flip silently.
+    ⚠ **The "is set" flag is not a stand-in for a non-zero velocity.** `FUN_004ee0e0` stores the vector
+    unconditionally and *clears* bit `0x80` when every axis is under 0.01 (`004ee143`), so a
+    `CALLBACK 16` raised while the owner is nearly stationary disarms an instance an earlier one armed.
+    Ours arms on any non-zero value and never disarms. See `docs/org/objectMotion.md`.
     ⚠ **Traps.** (a) **`BL-008` is closed (`1f09c2d`) on "the original does not inherit velocity into world
     debris", and that closure is still right for world debris.** Not one world destructible authors this
     flag; every carrier is aircraft wreckage, which is the population the closure never looked at. Do not
@@ -265,7 +279,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-122` `[Tuning]` `[Owed-playtest]` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: `WreckMomentum` **0.4** (`FlightController.cs` — the
   fraction of impact velocity the wreck pieces inherit, so they scatter along travel vs. pop straight
-  up); the **debris-arc trajectory** (the executable decode is settled — `translation_range` gives
+  up; **decoded, and it retires with `BL-343`**, see the sub-item below); the **debris-arc trajectory** (the executable decode is settled — `translation_range` gives
   `dirY = elevation/90` and horizontal `1 − |elevation|/90`, `initial` the launch speed, `delta` an
   acceleration, `PLAN-object-motion-decode`, 2026-08-13; the former `DebrisTune.LaunchScale` footage
   fit is deleted with no replacement scalar, and the arc's *look* is settled too: the unscaled arc
@@ -294,7 +308,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     pop upward. At t = 12.50 the burning chunks lie **scattered laterally on the ground**, at rest,
     either side of the impact — no lofted arcs. Consistent with a substantial travel-velocity
     inheritance, i.e. 0.4 is the right *shape*; the footage cannot pin the fraction without a known
-    impact speed and piece velocity, so 0.4 stays a TUNE.
+    impact speed and piece velocity.
+    **It is no longer a TUNE: the binary answers it, and the answer is not a fraction.** There is no
+    scalar anywhere on the original's inheritance path (`docs/org/objectMotion.md`; integer moves at
+    `00470954`/`004ee0f8`, a unit-coefficient add at `004e93a1`), so a def that inherits, inherits in
+    full. The ground crash is not such a def: the `player_crash_*` defs this line's code path plays
+    inherit **nothing**, one authoring `impact_force` false and the other never arming the instance.
+    So 0.4 has no counterpart in the original at either end, and the number goes when `BL-343` gates
+    the add on the authored bit. ⚠ Losing it is visible at the controls, which is what the owed
+    playtest here should now judge: the pieces stop scattering along travel on a ground crash. What
+    stays owed is the *look* of that, not the fraction.
   - **Overall crash intensity — "one big fireball" is correct for ground, and is surface-dependent.**
     The dirt crash genuinely reads as a single dominant fireball: granular yellow sprite cluster at
     ignition (t = 6.27), white-hot core with orange body by t = 7.40, still at full intensity at
