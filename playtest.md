@@ -121,6 +121,7 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
 | `CAP-26` | Rocket impacts, one clip per type, **with audio** | Fire each rocket type at open ground and film it close enough to count and orient the rings, with clean audio on the same take: `wep_04` (9M/incendiary), `wep_05` (ARMOR), `wep_06` (BOOM/HE), `wep_08` (SONIC). Two playtests point here: `PT-17` found HE's second ring present but its orientation "kinda random", and `PT-20` judged the sounds "a lot better" but not settleable by ear alone. *Look for:* ring count, ring orientation and how fast the burst reads (`BL-016`'s open "faster than the original" half), plus the launch bark and the per-type impact sound | `BL-016` (open half), `BL-211` |
 | `CAP-27` | Does the original spark on the airframe at all? | Take damage in the original — a light scrape is enough — with the aircraft in frame (external/chase fine), and look for a **spark burst on the airframe itself**, distinct from smoke at the contact point. ⚠ This capture can **delete** a feature rather than tune one: our per-impact spark burst is driven by a 0.99 `injure_anims` entry that exists on **1 of 11** aircraft (the Devastator), plausibly an authoring leftover (was `BL-090` item 2, closed — `git log --grep=BL-090`). If the original never sparks, our implementation goes. If it does, `BL-281`'s ricochet mix can be judged | `BL-281` |
 | `CAP-30` | Firing-wobble amplitude across calibers and airframes | Dead-astern external/chase clips, level flight, guns held 3 s+: **(a)** one plane with two well-separated calibers (30 vs 70), **(b)** one caliber on a light vs a heavy plane, **(c)** — added 2026-08-07 — a **Bloodhawk 40-cal** clip framed and fire-rate-matched to `Gun Wobble and animation.mp4`, giving a *second independent amplitude measurement* of the same case the law was derived from. (c) is what lets this capture serve as `BL-266`(a)'s fallback instrument: (a)/(b) alone ask only whether caliber and plane weight enter the law, and **cannot** settle the uniform ~2–4× shortfall our render shows against the reference clip. ⚠ Dead-astern framing is load-bearing: it makes the on-screen roll angle the world roll angle with no projection model (`analysis/gun-wobble-shake/FINDINGS.md`, capture spec there). Confirms or refutes the pure-caliber magnitude law (7e-5 × caliber, measured on one 40-cal clip) and whether plane model/weight enter; a being-hit clip on the same sortie also pins the impact sources' stand-in quantities | `BL-266` |
+| `CAP-38` | Beeper and seeker hits ON an aircraft, **with audio** | In the original, fire the beeper (`wep_10`) and the seeker (`wep_11`) at an aircraft and film the hit itself, external/chase, close enough to read the burst on the airframe. Both weapons author `ANIMATION large_fireball` on their aircraft `IMPACT` row and ours plays exactly that on a fused or struck plane; the ground-side look is already signed off, so this clip is only the on-plane half. *Look for:* whether the original shows the large fireball on the plane, something smaller, or nothing beyond the paint, and the per-type impact sound on the same take (`snd_missile_beeper` / `snd_missile_seeker`) | Nothing tracks the outcome; a mismatch with our on-plane burst mints a new `BL` |
 | `CAP-29` | Panel-damage semantics | Take controlled damage per part in the original, own aircraft in frame (external/chase), damage display visible if possible. **Reduced 2026-08-15 by the `BL-297` decode**, which answered all three questions out of `crimson.exe` (`docs/org/vehicleDamage.md`, "Damage staging"): (a) effects land at the node the def names, so a nose hit DOES spark wing sites; (b) nothing per-part fires at all while a part's armor absorbs; (c) each entry fires once per downward crossing, so a panel tears once until repaired. **What is still owed is the look:** watch one panel cross its tear threshold and judge whether the flung debris reads as a piece of that panel or as generic flakes, and what visibly changes on the airframe. The other three are now confirmation, worth capturing on the same take if the framing allows but not worth a dedicated sortie | `BL-297` |
 
 ### World
@@ -415,55 +416,21 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
   early relative to its own stall, the Balmoral barely at all, and the Fury somewhere between.
   *Blocks:* F52's player-side verdict.
 
-### C1 · Bloodhawk — the weapon lab, one ordnance type at a time (`PLAN-ordnance-types` F22)
-
-```powershell
-./RunGame.ps1 --weapon-lab=wep_15 --plane=player_bhawk --chapter=C1
-```
-
-`--rocket=<wep_id>` (used by the sections below) swaps every pylon to the named type, which with
-the weapon lab is the only way to fly a type a stock loadout does not carry: all 11 loadouts fit HE
-`wep_06`, and the Weapon Loadout screen that would let a pilot fit the rest is `BL-353`, unbuilt.
-The rocket trigger is **F**, one round per pull.
-
-⚠ **Every figure quoted in this section and the ones below is a decoded constant or an authored
-value.** A clip that disagrees with one is evidence about our implementation, never a correction to
-the constant: a decode is not contested with a measurement read off a running picture
-(`docs/verification.md` DET-12).
-
-The lab holds the aircraft in place inside a real C1 flight session and fires through the session's
-own projectile pool at the chapter's real surfaces, so impacts play the authored dirt, water and
-building rows. `B` hides the panel, the weapon stepper re-arms every pylon without a relaunch,
-left-click re-parks the held aircraft facing what you clicked, and `--weapon-camera=free` hands the
-view to the spectator camera so a burst can be watched from a few metres away.
-
-- `PT-67` `[Own]` **The beeper and the seeker as one weapon system (`PLAN-ordnance-types` `B6`,
-  `B8`, `B9`).** `wep_10` paints an aircraft for its authored `TIME` and deals no damage at all;
-  `wep_11` is the only `BEEPER_SEEKER` and the only type with a real `TURN_RATE`, and it retargets
-  every frame onto whatever the tag list holds, ignoring both the shooter's own selection and any
-  unpainted aircraft. Turning costs speed on every steering frame.
-  *Launch:* `./RunGame.ps1 --weapon-lab=wep_10 --plane=player_bhawk --chapter=C1
-  --ai=player_fury,player_avenger --ai-attack=9 --target=ai1_player_fury`
-  *Look for:*
-  - (a) **the paint is free**: `wep_10` into a hostile aircraft deals nothing, moves no damage
-    gauge and no longer reads as a hit;
-  - (b) **the seeker turns**: stepped to `wep_11` and fired at the painted aircraft while it
-    manoeuvres, the round visibly turns after it and visibly bleeds speed while turning hard. That
-    bleed is the original's behaviour and is not to be damped;
-  - (c) **it follows the paint, not your selection**: with the second aircraft selected and the
-    first one painted, the round still goes for the painted one, and with nothing painted it flies
-    straight;
-  - (d) a dumbfire type fired at a selected aircraft flies effectively straight, which is what
-    proves the gate is on the `LOCK_ON` flag rather than on the turn rate.
-
-  *Blocks:* `B6`'s, `B8`'s and `B9`'s owed clips, and F22. `B7`'s lead blend has no shipped carrier
-  that ever reaches its onset time, so nothing at the controls can show it and no row asks for it.
-
 ### C1 · two pilots — the victim-routed screen wash (`PLAN-ordnance-types` F22)
 
 ```powershell
 ./RunGame.ps1 --coop --players=2 --chapter=C1 --debug-wash=2
 ```
+
+`--rocket=<wep_id>` (used here and below) swaps every pylon to the named type, which is the only
+way to fly a type a stock loadout does not carry: all 11 loadouts fit HE `wep_06`, and the Weapon
+Loadout screen that would let a pilot fit the rest is `BL-353`, unbuilt. The rocket trigger is
+**F**, one round per pull.
+
+⚠ **Every figure quoted in this section and the ones below is a decoded constant or an authored
+value.** A clip that disagrees with one is evidence about our implementation, never a correction to
+the constant: a decode is not contested with a measurement read off a running picture
+(`docs/verification.md` DET-12).
 
 - `PT-74` `[Own]` **The wash is addressed to the viewer who was hit, and blends
   (`PLAN-ordnance-types` `D13`, Decision 2).** The original holds one wash state for the whole
