@@ -1083,10 +1083,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reads `1.0 × 1.0278` saturated, and `0.0573² + 0.998² = 1.0000`, so the pair really is on the unit
   circle. Those aircraft sit in established banked turns (51°, −33°) with the target in their
   vertical plane, `bx` near zero and the ELEVATOR doing the turning. Bank-to-turn, working.
-  ⚠ **Still unsampled: an original AI on a straight leg.** Both live aircraft were Instant Action
-  dogfighters and never stopped turning, which is the well-conditioned case. The decisive sample
-  needs a patrolling or escorting AI that has not been drawn into combat. Until it exists, "the
-  original does not do this on a straight leg" rests on the at-the-controls report alone.
+  ⚠ **The straight-leg sample was taken, and the original holds ZERO.** A class-0 aircraft
+  (`+0x67c = 0`) on the patrol path (`+0x2f0 = 0`) in the steering law (`+0x358 = 0`), flying dead
+  level, reads roll `+0.0001` at bank `−0.007°`, and `−0.0089` at bank `0.7°` a moment earlier. In
+  that state our port commands ±1 and wallows to 84°. The at-the-controls report is confirmed from
+  the other side: the original does not hunt on a straight leg.
+  ⚠ **Both straight-leg samples carry a non-zero YAW stick, which places them in the DEAD-ASTERN
+  branch — the one the renormalisation never touches.** The ordinary bank branch never writes yaw;
+  only the else-branch does (`roll = by`, `yaw = -bx`). So `bz <= 0` on both, `bx`/`by` keep their
+  true magnitudes, and that is why the commands are thousandths instead of order 1. Working back
+  through `3.5 ×` the skill factor, the level sample has `bx ≈ -0.0017`, `by ≈ 3e-5`, `h ≈ 0.0017`:
+  the aim direction is almost exactly astern. **If a patrolling original AI routinely sits in that
+  branch, the renormalisation is not on its hot path at all and our reaching the ordinary branch
+  instead is the whole bug.** Two samples are not a pattern; this is the next thing to test, and it
+  is testable in our own sim by logging which branch `AiControlLaw.Steer` takes on a patrol leg.
+  ⚠ Sampling caveat: that aircraft was 1.7 km from the player, so it was also on `BL-425`'s
+  simplified far-field force model. The LAW is unaffected by that branch (it is in the force build),
+  so the stick readings stand, but the near-field case is unsampled.
+  ⚠ Method note: attaching a debugger to the original costs the session's controls (stopping a
+  DirectInput app drops its exclusive keyboard grab and it never re-acquires). Sample it with ONE
+  stop that arms a hardware watchpoint, not one stop per reading.
   ⚠ **The law is a faithful port and must not be touched, and the aim point has been eliminated
   too.** Decoded from
   `FUN_0041b560` directly: the renormalisation writes back into the same locals the output stage
