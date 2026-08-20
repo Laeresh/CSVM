@@ -159,8 +159,7 @@ internal sealed class MotionRuntime : IAnimMotion
     // guard against it.
     private bool Tumbles => (_tumbleRate != 0f || _tumbleAccel != 0f) && _tumbleAxis != Vector3.Zero;
 
-    public static MotionRuntime? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime,
-        bool inheritVelocity = true)
+    public static MotionRuntime? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime)
     {
         var rest = rt.RestOf(target); // records the authored pose; the fallback for a bad live basis
         var held = target.Transform;
@@ -221,14 +220,21 @@ internal sealed class MotionRuntime : IAnimMotion
                                 && (data.Has("translation") || data.Has("translation_range"))
                                 && rt.ConsumeLandingResume(target);
 
-        // The plane's momentum, in the node's parent frame; `inheritVelocity` opts a caller's node out.
-        // ⚠ A settle hop inherits NOTHING. Re-inheriting it let a piece tunnel through the ground
-        // before contact could arm.
+        // IMPACT_FORCE: the owning object's momentum, whole, in the node's parent frame, on the
+        // original's own three tests (docs/org/objectMotion.md) rather than a curated name list.
+        // ⚠ A settle hop inherits NOTHING; re-inheriting it tunnelled pieces through the ground.
+        bool impactForce = data.Bool("impact_force");
         Vector3 InheritedLocal()
         {
-            if (!inheritVelocity || continuesLanding || rt.InheritedWorldVelocity == Vector3.Zero)
+            if (!impactForce || continuesLanding || !rt.InheritedVelocityArmed)
                 return Vector3.Zero;
-            var parentBasis = (target.GetParent() as Node3D)?.GlobalTransform.Basis ?? Basis.Identity;
+            // The original skips a node whose parent count is not exactly 1 (`004e9275`). A detached
+            // node is the reachable half of that here; a second parent cannot be represented.
+            if (target.GetParent() is not Node3D parent)
+                return Vector3.Zero;
+            // As GravityAccel: a TopLevel node's own transform IS world, so there is no frame to
+            // convert into.
+            var parentBasis = target.TopLevel ? Basis.Identity : parent.GlobalTransform.Basis;
             return parentBasis.Inverse() * rt.InheritedWorldVelocity;
         }
 

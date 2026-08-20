@@ -237,8 +237,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>The world velocity a <c>Callback 16</c> hands the running instance, which is how a
     /// wreck inherits the aircraft's motion (docs/org/vehicleDamage.md). Supplied by the rig,
     /// because only the rig knows which vehicle is dying and how fast; null leaves the code
-    /// counted and <see cref="InheritedWorldVelocity"/> untouched. ⚠ The rig owns any scaling —
-    /// the runtime writes exactly what this returns.</summary>
+    /// counted and <see cref="InheritedWorldVelocity"/> untouched. ⚠ Return the vehicle's whole
+    /// velocity. The original scales it nowhere on this path, so a fraction here is an invention.
+    /// </summary>
     public Func<Vector3>? WreckVelocity;
 
     /// <summary>What a <c>Callback 15</c> stops: the damage-stage anims and start_anims, which is
@@ -268,19 +269,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// untouched.</summary>
     public float EffectTtl;
 
-    /// <summary>A world-space velocity added to every ballistic <see cref="MotionRuntime"/> launch,
-    /// transformed into the launched node's parent frame. Zero by default. The crash sets it to a
-    /// fraction of the plane's impact velocity so wreck pieces carry its momentum; the fraction is
-    /// a TUNE, not a decode.
-    /// ⚠ Leave it zero on the world runtime. The original's world debris shows no directional bias
-    /// with the attack heading, so a shot building's pieces must inherit nothing.</summary>
+    /// <summary>The world-space velocity an <c>IMPACT_FORCE</c> launch adds, transformed into the
+    /// launched node's parent frame. Written only by <c>Callback 16</c>, which is the original's
+    /// only single-player path to it, and taken WHOLE: the original applies no fraction anywhere
+    /// between the dying object's velocity accessor and the add (docs/org/objectMotion.md).
+    /// ⚠ Write it only through <see cref="ArmInheritedVelocity"/>: this vector and the arm below
+    /// answer different questions, and the original moves them together.</summary>
     public Vector3 InheritedWorldVelocity;
 
-    /// <summary>Animation names <see cref="InheritedWorldVelocity"/> must not reach. The data shape
-    /// alone cannot tell a launched piece from a ground-planted effect, so the caller names the
-    /// exceptions. Null, the default, means every ballistic motion inherits. The crash rig sets it
-    /// so the nudge that scatters wreck pieces does not drag the crash splash off with them.</summary>
-    public HashSet<string>? InheritedVelocityExempt;
+    /// <summary>Whether that velocity is armed: the original's <c>animInstance+0x9c</c> bit
+    /// <c>0x80</c>, which is what <c>IMPACT_FORCE</c> actually gates on.</summary>
+    public bool InheritedVelocityArmed;
 
     // ---- PUFFER_STATE ----
     /// <summary>What <see cref="Emitters"/> builds through; null, the default, renders no emitters
@@ -338,6 +337,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // and acting on it would delete a live wreck.
     private const int CallbackWreckVelocity = 16;
     private const int CallbackStopStages = 15;
+
+    // Per-axis magnitude a Callback 16 must exceed to ARM the velocity it hands over (`004ee0e0`).
+    private const float InheritedVelocityEpsilon = 0.01f;
 
     // Smallest magnitude a pose-scale component may reach. ⚠ Never let a pose scale reach exactly
     // 0, however the data authors it: a singular basis makes Godot's physics server spam
@@ -1341,6 +1343,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         inst.DamageStage = 0;
     }
 
+    /// <summary>Hands this instance the velocity a <c>Callback 16</c> carries, on the original's own
+    /// terms (<c>FUN_004ee0e0</c>): the vector is stored whatever it is, and it ARMS only if some
+    /// axis exceeds 0.01.
+    /// ⚠ Below that the arm is CLEARED, not left alone. A near-stationary <c>Callback 16</c>
+    /// disarms one an earlier callback armed, so this cannot collapse into "non-zero means armed".
+    /// </summary>
+    public void ArmInheritedVelocity(Vector3 v)
+    {
+        InheritedWorldVelocity = v;
+        InheritedVelocityArmed = Mathf.Abs(v.X) > InheritedVelocityEpsilon
+            || Mathf.Abs(v.Y) > InheritedVelocityEpsilon
+            || Mathf.Abs(v.Z) > InheritedVelocityEpsilon;
+    }
+
     // ---- state application ----
     /// <summary>Clamps each near-zero scale component to <see cref="MinPoseScale"/> (sign
     /// preserved) so an animated pose can never write a singular basis. Applied at every
@@ -2135,12 +2151,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // The longest of them is what the sequence waits on.
                         float ballTime = authored;
                         bool bounceArmed = false;
-                        // Once per event, not per target: every target of one event shares the def.
-                        bool inheritVelocity = InheritedVelocityExempt == null
-                            || !InheritedVelocityExempt.Contains(def.AnimName ?? def.Name);
                         foreach (var t in Targets(ev, def, anchor))
                         {
-                            var motion = MotionRuntime.Create(this, t, ev.Data, authored, inheritVelocity);
+                            var motion = MotionRuntime.Create(this, t, ev.Data, authored);
                             if (motion == null)
                                 continue;
                             float flight = motion.RunTime;
@@ -2471,7 +2484,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             case CallbackWreckVelocity when WreckVelocity != null:
                 // Runtime-wide because the crash runtime is per aircraft, so its one wreck is the
                 // only thing this can reach.
-                InheritedWorldVelocity = WreckVelocity();
+                ArmInheritedVelocity(WreckVelocity());
                 _opsApplied++;
                 return;
             case CallbackStopStages when StopDamageStages != null || StopWreckFlying != null:
