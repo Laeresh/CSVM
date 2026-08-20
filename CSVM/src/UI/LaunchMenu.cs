@@ -397,11 +397,17 @@ public sealed partial class LaunchMenu : CanvasLayer
             _mode = MenuMode.Stunt;
         }
 
-        // The wingman list is empty at 0 wingmen, so opening straight onto it (a screenshot aid)
-        // has to configure a flight to arm, the way the aid for Waves parks its cursor.
-        if (_screen == Screen.WingmanLoadout && _numWingmen == 0)
+        // The wingman list needs a flight to arm and a mission that HAS wingmen, so the aid
+        // configures both — the ace duel forces the count to 0, and opening onto a state no
+        // player can reach is worse than not having the aid.
+        if (_screen == Screen.WingmanLoadout)
         {
-            _numWingmen = 2;
+            _missionTypeIndex = Math.Max(0, Array.FindIndex(CurrentMissionTypes,
+                m => m.Key != "dogfight_ace"));
+            if (_numWingmen == 0)
+            {
+                _numWingmen = 2;
+            }
         }
         // Opening straight onto Waves skips the accept that normally parks the cursor, so put it
         // where a player would find it — otherwise the aid screenshots a state nobody sees.
@@ -925,6 +931,56 @@ public sealed partial class LaunchMenu : CanvasLayer
     private List<FitRow> WingmanFitRows() =>
         FitRowsFor(StockFitFor(_wingmanPlaneIndex), _wingmanFit);
 
+    // The fit list the centred body is showing, or null when it is showing something else. A
+    // lone pilot's plane screen keeps the centred layout, so its list draws through the same
+    // path the wingman one does; a pane's list is drawn by RebuildPanes instead.
+    private List<FitRow>? CentredFitRows() =>
+        _screen == Screen.WingmanLoadout ? WingmanFitRows()
+        : _screen == Screen.Plane && _slots.Count == 1 && _slots[0].InLoadout
+            ? FitRowsFor(StockFitFor(_slots[0].PlaneIndex), _slots[0].Fit)
+            : null;
+
+    // The list's two column widths, measured rather than guessed: the label column takes the
+    // widest mount name present, the value column the widest entry EITHER roster can produce, so
+    // a row keeps its width whatever it is stepped to. Falls back to em estimates with no theme
+    // font, which is the same guard LayoutScale uses.
+    private Vector2 FitColumns(List<FitRow> rows, int fontSize)
+    {
+        var font = _body.GetThemeDefaultFont();
+        if (font == null)
+        {
+            return new Vector2(fontSize * 7f, fontSize * 8f);
+        }
+
+        float label = 0f;
+        foreach (var row in rows)
+        {
+            label = Mathf.Max(label, font.GetStringSize(row.Label, HorizontalAlignment.Left, -1, fontSize).X);
+        }
+
+        float value = 0f;
+        foreach (var option in Fits.Options.GunAmmo)
+        {
+            value = Mathf.Max(value, font.GetStringSize(option.Label, HorizontalAlignment.Left, -1, fontSize).X);
+        }
+
+        foreach (var option in Fits.Options.PylonOrdnance)
+        {
+            value = Mathf.Max(value, font.GetStringSize(option.Label, HorizontalAlignment.Left, -1, fontSize).X);
+        }
+
+        return new Vector2(label + (fontSize * 1.2f), value);
+    }
+
+    // One loadout row as a control: mount in the left column, what is fitted there in the right.
+    private Control FitRowControl(List<FitRow> rows, int index, int fontSize, Color color, bool selected)
+    {
+        var columns = FitColumns(rows, fontSize);
+        var row = rows[index];
+        return CursorRow.BuildColumns(row.Label, row.Value, columns.X, columns.Y,
+            fontSize, color, selected);
+    }
+
     // The horizontal axis's effect, screen by screen — always a live-editing stepper on
     // whichever field the vertical cursor is focused on, never a "select and lock" gesture (that
     // is what Accept is for). Split out of HandleInput because it now has one branch
@@ -1280,7 +1336,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         // layout's own Plane-screen-only check.
         if (wingmenLine)
             strip.AddChild(Label(WingmenLine(), (int)(FooterFont * s), DetailColor, HorizontalAlignment.Center));
-        strip.AddChild(Label("↑↓  Choose       Enter / A  Lock in       Esc / B  Unlock  ·  leave",
+        strip.AddChild(Label(
+            "↑↓  Choose       Enter / A  Select, again to fly       L / Y  Weapons       Esc / B  Back",
             (int)(FooterFont * s), FooterColor, HorizontalAlignment.Center));
         if (_error.Length > 0)
             strip.AddChild(Label(_error, (int)(ErrorFont * s), ErrorColor, HorizontalAlignment.Center));
@@ -1322,7 +1379,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             for (int i = 0; i < fitRows.Count; i++)
             {
                 bool selected = i == slot.FitRow;
-                box.AddChild(CursorRow.Build(FitRowText(fitRows, i), (int)(RowFont * paneScale),
+                box.AddChild(FitRowControl(fitRows, i, (int)(RowFont * paneScale),
                     selected ? color : RowColor, selected));
             }
 
@@ -1497,12 +1554,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Waves => _waves.Length + 1, // + the trailing "Continue" row
         Screen.WaveEdit => 4, // Enemies / Militia / Aircraft / Skill
         Screen.Wingmen => WingmenRowCount,
-        Screen.WingmanLoadout => WingmanFitRows().Count,
-        // A lone pilot's Plane screen keeps the centred layout, so its loadout list draws here
-        // too — the pane swap below only exists once somebody else has joined.
-        _ => _slots.Count == 1 && _slots[0].InLoadout
-            ? FitRowsFor(StockFitFor(_slots[0].PlaneIndex), _slots[0].Fit).Count
-            : Planes.Length,
+        _ => CentredFitRows()?.Count ?? Planes.Length,
     };
 
     // One centred list row with a ▶ cursor — the item-4 layout, used by every screen
@@ -1510,6 +1562,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     // into per-player panes instead (RebuildPanes).
     private Control Row(int index, float s)
     {
+        if (CentredFitRows() is { } fitRows)
+        {
+            bool focused = index == CurrentIndex;
+            return FitRowControl(fitRows, index, (int)(RowFont * s),
+                focused ? RowFocusColor : RowColor, focused);
+        }
+
         string text = _screen switch
         {
             Screen.Mode => Modes[index].Label,
@@ -1519,9 +1578,6 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Waves => WaveListRowText(index),
             Screen.WaveEdit => WaveFieldRowText(index),
             Screen.Wingmen => WingmenFieldRowText(index),
-            Screen.WingmanLoadout => FitRowText(WingmanFitRows(), index),
-            _ when _slots.Count == 1 && _slots[0].InLoadout =>
-                FitRowText(FitRowsFor(StockFitFor(_slots[0].PlaneIndex), _slots[0].Fit), index),
             _ => Planes[index].Name,
         };
         bool sel = index == CurrentIndex;
@@ -1565,18 +1621,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         0 => $"Wingmen         {_numWingmen}",
         _ => $"Aircraft        {Planes[_wingmanPlaneIndex].Name}",
     };
-
-    // One loadout row: its mount and what is fitted there. The reset row carries no value, so it
-    // reads as a plain command rather than a stepper with nothing to step.
-    private string FitRowText(List<FitRow> rows, int index)
-    {
-        if (index < 0 || index >= rows.Count)
-        {
-            return "";
-        }
-        var row = rows[index];
-        return row.Kind == FitRowKind.Reset ? row.Label : $"{row.Label,-12}  {row.Value}";
-    }
 
     // The detail area: one stats line for the focused entry.
     private Control DetailBlock(float s) =>
@@ -1633,9 +1677,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private string Footer()
     {
-        bool inFit = _screen == Screen.WingmanLoadout
-            || (_screen == Screen.Plane && _slots.Count == 1 && _slots[0].InLoadout);
-        if (inFit)
+        if (CentredFitRows() != null)
         {
             return "↑↓  Choose mount       ←→  Change       L / Y or Esc / B  Done";
         }
@@ -1685,8 +1727,9 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.MissionType => LivesDetail(),
         Screen.Waves => focus == _waves.Length ? "Enter / A  on to the wingmen" : "Enter / A  edit a wave",
         Screen.WaveEdit or Screen.Wingmen => "←→  change",
-        Screen.WingmanLoadout => "←→  change",
-        _ when _slots.Count == 1 && _slots[0].InLoadout => "←→  change",
+        // Blank: the footer already names the steppers, and a second copy of "←→ change" directly
+        // over it reads as two different controls rather than one.
+        _ when CentredFitRows() != null => "",
         _ => PlaneStat(Planes[focus].Node),
     };
 
