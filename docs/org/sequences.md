@@ -41,6 +41,19 @@ bottom rather than hidden.
 | `FUN_004ec6a0` | `FBFX_COLOR_FROM_TO`, dispatch slot 36 — the model for "a timed event reports STILL RUNNING until its run time is up" |
 | `004e82b0` | `LIGHT_ANIMATION`, dispatch slot 5 — advances one tick's worth of the authored delta per dispatch, clamps the last tick to the remainder, and returns still-running on the same test |
 | `FUN_004f7120` | `PUFFER_STATE` reader/parser — reached from a sequence's `PUFFER_STATE` event; decoded in [`org/puffer.md`](puffer.md) |
+| `FUN_004efaf0` | The node-name tier chain: animation root subtree, main root subtree, the two interned lists, then the world |
+| `FUN_004efa70` | The subtree walk the first two tiers use: depth-first, first match wins |
+| `FUN_004ef7d0` | The node-reference parser: the `GLOBAL`/`LOCAL` scope words, the `INPUT_NODE` / `MAIN_ROOT_NODE` sentinels, and the interning call |
+| `FUN_004ef0c0` / `FUN_004eef30` | Intern a resolved node into the node-reference list / the node-state list, returning the index the event stores |
+| `FUN_004e8d60` | The run-time index-to-node lookup, including both sentinels |
+| `FUN_0051dcf0` | The definition loader: the name buffers, the private subtree copy, `ANIMATION_ROOT_NAME`, and the sequence-array scan |
+| `004eb3e0`–`004eb56d` | The `CALL_ANIMATION` handler. Undefined in the database; the block is the citable unit. `PUSH 0x0` at `004eb53d` is the anchor argument, which is what makes the callee keep its own |
+| `FUN_004edf80` | The animation start the handler calls: parks the call site's node at `callee+0x7c` (`INPUT_NODE`) with a position snapshot at `+0x80`, plus a second node/position pair at `+0x8c`/`+0x90` |
+| `FUN_004ed8c0` | The start gate, i.e. the restart refusal: the callee's own run state at `+0xa0`, the concurrency bit `0x100` in `+0x9c`, and the instance chain at `+0x10c` |
+| `FUN_00521180` | The re-anchor: swaps `+0x48`, re-resolves the root name under the new anchor only, then re-resolves every interned entry. `CALL_ANIMATION` never invokes it |
+| `FUN_004ebc80` | Resolving a callee BY NAME at run time (the stop-style events): the call table's name then its `LOCAL_NAME`, then the global animation array, first match wins, cached back into the event |
+| `FUN_0059d610` / `FUN_0059d6e0` / `FUN_0059d750` | The `*` digit odometer: scan and record the positions, step the counters, stamp them into a name |
+| `FUN_0051ff40` / `FUN_0051fe60` | The instantiation loop the odometer drives, and the `#` per-object repeat |
 
 The interpreter was compiled from `D:\zipper\gamez\zEffect\zeff_ani*.c`; the image base is
 `0x400000`.
@@ -95,6 +108,146 @@ as a gap. That agreement is an independent confirmation the fork's event numberi
 an assumption inherited from it. The exe additionally has real handlers at slots 38, 43, 44 and 45
 (`LAB_004ecb70`, `LAB_004eac40`, `FUN_004eac90`, `FUN_004eadd0` respectively) that mech3ax leaves
 undecoded; no shipped def uses any of the four, so nothing downstream needs them yet.
+
+## A node reference is resolved once, at load, and stored as an index
+
+An event names its target as a string in the authored source, but the running engine never searches
+for that string. The name is resolved while the definition is being read, the resolved node is
+interned into one of the definition's own lists, and what the event carries from then on is the
+small index of that entry. A support-array `ptr` in the extraction is the result of this pass, not a
+lookup key the runtime re-evaluates.
+
+### The tier chain
+
+`FUN_004efaf0(def, name, localOnly)` tries these in order and stops at the first hit:
+
+1. A depth-first, first-match walk of the subtree at `def+0x6c`, the **animation root node**
+   (`FUN_004efa70`; a node's name is at `node+0`, its child count is the short at `node+0x56`, its
+   child pointer array is at `node+0x5c`).
+2. The same walk from `def+0x48`, the **main animation root node**, skipped when the two fields hold
+   the same node.
+3. A linear scan of the definition's node-state list (`def+0xec`, count byte at `def+0xdb`, stride
+   `0x2c`, node pointer at `entry+0x24`), comparing each interned node's own name (`FUN_004ee7e0`).
+   Index 0 is not a candidate.
+4. The same over the second list (`def+0xf4`, count byte at `def+0xdd`) (`FUN_004ee770`).
+5. Only when `localOnly` is clear: `FUN_004d0280(7, name)`, the process-wide by-name node lookup,
+   which keeps its own cache.
+
+`localOnly` is **bit 21 of the definition flag word at `def+0x9c`**, which is `LOCAL_NODES_ONLY`;
+every call site reads it as `*(uint *)(def + 0x9c) >> 0x15 & 1`. A path of several names resolves
+element by element: the first goes through the chain above, and each later one is searched inside
+the node the previous element resolved to (`FUN_004efa40`).
+
+**Every tier compares the name with a plain `strcmp`, and nothing normalises it.** All four search
+functions (`FUN_004efa70`, `FUN_004ee7e0`, `FUN_004ee770`, `FUN_004d0280`) inline a byte-pair
+compare with no case folding, so node names are matched **case-sensitively**. `_stricmp` appears in
+this path only for keyword tokens, never for a node name: the `ON`/`OFF` argument to
+`LOCAL_NODES_ONLY` and the four reserved words `FUN_004ef7d0` consumes. There is also **no `.flt`
+suffix stripping** anywhere in the engine; a search of the string table finds no such suffix
+handling, and the only normalisation applied to a name is truncation to 31 characters, which logs a
+"Truncating name" diagnostic.
+
+⚠ **The interned lists are consulted after the subtree walks, not before them.** Tier 1 and tier 2
+are the authority, and a name they both miss is looked up in the definition's own tables only as a
+fallback. A re-implementation that treats the compiled symbol table as authoritative has inverted
+the order.
+
+### The two roots are different fields
+
+`FUN_0051dcf0` writes both while reading the definition:
+
+- **`def+0x48`, the main animation root node.** The anchor node the definition was created on. Its
+  name is copied into the definition's NAME buffer at `def+0x28`; the animation's own name occupies
+  `def+0x00`, both 32-byte buffers.
+- **`def+0x6c`, the animation root node.** `ANIMATION_ROOT_NAME` is copied to `def+0x4c` and resolved
+  through the chain above. When it is absent, or resolves to nothing, `+0x6c` is set to the same node
+  as `+0x48`, logged as *"ANIMATION_ROOT_NAME error; unable to find root node… Using main animation
+  root node instead"* (`0051e176`).
+
+### The definition owns a private copy of its subtree
+
+Before either field is set, the loader copies the anchor's whole node tree (`FUN_004d8610`) whenever
+the global switch at `0072835c` is set and the tree root's type word at `node+0x34` is neither 1 nor
+2. Failure is fatal, logged as *"Animation error: Unable to copy node tree."*; a definition that took
+the copy is marked with bit `0x80000` in `def+0x9c`, and `+0x48` and `+0x6c` point into the copy.
+
+This is what makes tier 1 safe in the original. The subtree the name is searched in belongs to that
+one definition and holds nothing else, so an unrelated instance carrying a node of the same common
+name (`pilot`, `geometry`, `healthy`) cannot be found first. The scope is per definition and
+exclusive, not a shared region of the world tree that other things are also staged into.
+
+### Parsing, interning, and the two sentinels
+
+`FUN_004ef7d0` reads a node reference, which is either a bare string or a list of names forming a
+path, and consumes a leading `GLOBAL` or `LOCAL` scope word (`GLOBAL` clears `localOnly`, `LOCAL`
+sets it) before resolving anything. Two names are answered without any lookup at all:
+
+| Authored name | Stored index | Resolved at run time to |
+|---|---|---|
+| `MAIN_ROOT_NODE` | `-100` | `*(inst+0x48)`, the definition's own main animation root |
+| `INPUT_NODE` | `-200` | `*(inst+0x7c)`, the node the call site supplied |
+
+⚠ **`MAIN_ROOT_NODE` is the definition's own root, not the caller's.** The call site's node is the
+other sentinel. The two are separate fields on the instance and are not interchangeable.
+
+Anything else is resolved and then interned. `FUN_004ef0c0` appends to the **node-reference list**
+(`def+0xe8`, count byte at `def+0xda`, stride `0x2c`, node pointer at `entry+0x28`, preceded by a
+nine-dword snapshot of the node at `entry+4`) and returns the index the event stores;
+`FUN_004eef30` does the same for the 1-based **node-state list** (`def+0xe4`, count byte at
+`def+0xd9`, stride `0x5c`, node pointer at `entry+0x24`). Both return an existing index when the
+node is already interned, both cap at 255 entries and log an overflow there, and a name that
+resolves to nothing logs *"Animation error: Unable to find animation node."*
+
+### `*` and `#` multiply INSTANCES, never matches
+
+Both wildcards act on the definition's own NAME at load, deciding **how many animation instances get
+created**. Neither is a matcher, and no node name is ever compared as a pattern (see the `strcmp`
+rule above).
+
+- **`*` is a digit odometer.** `FUN_0059d610` scans the name right to left starting at `len-2`, so
+  the final character is excluded, and records up to **5** `*` positions, zeroing a counter for each.
+  `FUN_0059d6e0` steps the odometer (each digit runs 0 to 9, carrying, returning 0 when exhausted),
+  and `FUN_0059d750` stamps the current counters into a copy of the name with `sprintf("%d", …)`,
+  one character per `*`. `FUN_0051ff40` (with `FUN_0051fe60`) runs the whole instantiation once per
+  digit tuple. ⚠ Within one instance every `*` in every event name takes **the same** digit; the
+  variation is across instances, not inside one.
+- **`#` is a per-object repeat**, and applies only to the animation's NAME, only on the first path
+  element (`param_5 == 1` in `FUN_0051ff40`) and only as the **last character**, which is stripped.
+  It sets a repeat flag that keeps pulling the next object of that name out of the global type-7
+  enumeration (`FUN_004d1150`), creating a **separate animation instance per matching object**.
+
+This is how one authored definition serves six identically-shaped world objects: six instances, each
+with its own anchor and its own interned single-pointer tables, not one instance reaching six sets of
+generically-named nodes. A re-implementation that instead reads `*`/`#` as a node-name pattern has
+put the multiplicity in the wrong place, and will move every instance's copy of a shared name at
+once.
+
+### At run time the reference is a table lookup
+
+`FUN_004e8d60(inst, index)` is the whole of it: a non-negative index reads
+`*(*(inst+0xe8) + 0x28 + index*0x2c)`, `-100` and `-200` return the two fields above, and anything
+else returns nothing. No name comparison happens on the event path.
+
+### Where CSVM stands against this
+
+`NameResolver`'s scope chain is the same shape as tiers 1, 2 and 5, and `LOCAL_NODES_ONLY` gates the
+last tier the same way. Five differences are real and none of them is deliberate:
+
+- `Resolve` and `AnimRuntime.Targets` consult the symbol table **first**, where the original consults
+  its interned lists at tiers 3 and 4.
+- The subtree tier 1 searches is the call anchor's, which for a crash rig is a shared root that also
+  holds staged template copies, where the original's is the definition's own exclusive copy. That
+  difference is what `BL-415` is: the fault is the SCOPE of tier 1, not the ORDER of the tiers.
+- **A tier returns a LIST and the event is applied to every element** (`ResolveScoped`, and
+  `AnimRuntime.Targets` over its result), where the original binds exactly one node pointer per
+  reference, once, at load. Nothing in the original can drive two nodes from one event, so any
+  cross-instance over-trigger in ours is structural rather than a mis-tuned scope.
+- **`FindAll` compares `OrdinalIgnoreCase`**, where every tier of the original is case-sensitive; and
+  it also matches a name against a `.flt`-stripped copy of each candidate, which the original has no
+  counterpart for. Both widen a match the original would refuse.
+- **`Matcher` reads `*` and `#` as node-name patterns** (`*` any run, `#` a digit run), where in the
+  original they are instantiation controls on the definition's NAME and no node name is ever matched
+  as a pattern. This is the same multiplicity in the wrong place described above.
 
 ## Three clocks, and which origin reads which
 
@@ -379,6 +532,101 @@ into one and loses half the burst.
 ⚠ Halting a runner does not touch what it already launched. Motions and puffers have authored
 lifetimes and outlive the sequence that started them.
 
+## CALL_ANIMATION hands the call site down as INPUT_NODE, and does not re-anchor the callee
+
+The event is 0x50 bytes, opcode 0x18, parsed by `FUN_00515c00`: the callee's name at `+0x0c`, a flag
+byte at `+0x2e`, the call-table index at `+0x32`, the resolved `AT_NODE`/`WITH_NODE` reference index
+at `+0x34` and the `OPERAND_NODE` index at `+0x2c`. `AT_NODE` sets flag bit `0x1`, `WITH_NODE` bit
+`0x8` and `WAIT_FOR_COMPLETION` bit `0x10`; **both node spellings write the same `+0x34` slot**, and
+the index is resolved in the CALLER's namespace at load like any other reference (a failure there
+bails the parse with `-1`).
+
+The handler (`004eb3e0`–`004eb56d`) reads the flag byte, fetches the node out of the caller's own
+interned reference list, optionally converts it to a world position with `FUN_004cf490`, and starts
+the callee at `004eb540` through `FUN_004edf80`. The argument order at that push site is what
+settles the semantics:
+
+- **The anchor argument is a literal `PUSH 0x0`** (`004eb53d`). The call site's node goes down as the
+  *third* argument instead, which `FUN_004edf80` parks at `callee+0x7c` with a position snapshot at
+  `+0x80..+0x88` and a second node/position pair at `+0x8c`/`+0x90..+0x98`. `callee+0x7c` is the field
+  the `INPUT_NODE` sentinel reads, so the site reaches the callee **only** through a reference the
+  callee itself authors as `INPUT_NODE`.
+- With a zero anchor, `FUN_004ed8c0` skips `FUN_00521180` entirely, so **the callee's own node names
+  keep resolving against its own `+0x48`/`+0x6c`**. Re-anchoring machinery exists and is thorough
+  (swap `+0x48`, re-resolve the root name by subtree search under the new anchor only, killing the
+  animation with "Animation node not found" if it misses, then re-resolve every interned entry), but
+  no `CALL_ANIMATION` path reaches it.
+
+⚠ This is the decoded half of what [`formats/anim-definitions.md`](../formats/anim-definitions.md)
+calls the data's template-instancing mechanism, and it is narrower than "the callee runs on the
+caller's node": the target is resolved by the caller and delivered as an input, not substituted for
+the callee's anchor. CSVM instead makes the call site the callee's Start anchor
+(`AnimRuntime`'s `CallAnimation` arm, `callAnchor = siteNode ?? anchor`), which is an undeliberate
+difference and a candidate cause in `BL-348`.
+
+### The restart refusal is keyed on the callee's own run state, with no anchor in it
+
+`FUN_004ed8c0(callee, anchor)` decides the whole question, and `CALL_ANIMATION` always reaches it
+with a zero anchor. Under that zero anchor the decision reads the run state byte at `+0xa0` and
+nothing else (`004ed8d5`–`004ed8fe`):
+
+| `+0xa0` | State | A call |
+|---|---|---|
+| 0, 1 | idle: never started, or torn down after a run | starts it, and `004edaa1` writes state 2 |
+| 2 | running | refused, returning 0 at `004edab1` |
+| 3 | parked at rest | starts it |
+| 4 | paused, entered from state 3 | refused |
+| 5 | dead: load failure or teardown | refused |
+| 6 | paused, entered from state 2 | refused |
+
+The transitions that produce those values are three small functions. `FUN_004ed500` is the pause:
+`2 → 6`, any other live state `→ 4`, state 5 left alone. `FUN_004ed480` is the resume: `6 → 2`,
+`4 → 3`. `FUN_004ed190` is the teardown: it refuses on state 5, maps `6 → 4`, and takes everything
+else **to state 1**, which the gate accepts. So an animation that has run to completion is
+immediately callable again, and the gate holds no "already played once" latch; that job belongs to
+`INVALIDATE_ANIMATION` alone.
+
+⚠ **State 5 is never a resting state.** It is written on the loader's failure path (`0051deee`,
+right after logging *"Unable to copy node tree"* and returning −1), on the tick walk's error path
+(`004ecf17`, likewise immediately before a log call), and by `FUN_00520910` and `FUN_004ee4b0`. A
+re-implementation that uses one state for "not running" and "failed" will refuse calls the original
+accepts.
+
+⚠ **The refusal is silent**, returning 0 with no diagnostic, where every other failure on this path
+logs. A call that lands on a running callee leaves no trace at all.
+
+The gate also refuses in states 2 or 3 when `+0xac` is within 0.1 of `-99.0` (`004ed900`–`004ed919`),
+and **that branch is unreachable from shipped data**. `+0xac` is the authored `RESET_TIME`: the
+loader reads the keyword at `0051f503` and writes the slot at `0051f553`/`0051f566`, and the compiled
+record carries the same field at offset 172. Across all 61 archives the only values are −1.0 (13,311
+definitions, which the fork reports as `null`, since `hangar3_doors` authors `RESET_TIME [-1.0]` in
+its reader source and decodes to `null`), 0.0 (1,651) and 5.0 (one). Nothing is −99, and the 99.0
+constant at `00608de8` has exactly one reference in the binary, this test. Treat the branch as
+decoded and inert rather than as a rule to reproduce.
+
+Given a NON-zero anchor, which `CALL_ANIMATION` never passes, the gate instead walks the instance
+chain at `+0x10c` and refuses only an instance that is both running and already on that anchor,
+otherwise reusing a stopped chain entry or cloning through `FUN_00520910`; with bit `0x100` set it
+always clones, so concurrent instances are allowed. This is the decoded form of the semantic
+`formats/anim-definitions.md` derives observationally from C1/MP1's rearm-door poll, and it is
+**stricter** than that derivation: the original refuses a second call while the callee runs
+anywhere, not merely on the same anchor.
+
+CSVM's guard (`AnimRuntime`'s `CallAnimation` arm, `!IsLive(target, startAnchor) || movedAway`) is
+keyed on `(def, anchor)`, which is the pair the original deliberately leaves out. That makes ours
+more permissive across anchors and never stricter, so it can drop a call only when the callee is
+already live on that same anchor.
+
+`WAIT_FOR_COMPLETION` (bit `0x10`) is checked at `004eba0e` against a cached instance pointer kept in
+the call table (`def+0x104`, stride `0x48`, cache at `entry+0x44`, written back after each start at
+`004eb55d` / `004eba04`): a non-null cache in state 2 or 6 yields without advancing, anything else
+clears the cache and advances.
+
+⚠ **A callee named at run time resolves to exactly one animation too.** `FUN_004ebc80`, the
+stop-style path, matches the call-table entry's name (`+0`) or its `LOCAL_NAME` (`+0x20`), first match
+wins, then falls back to a `strcmp` scan of the global animation array (`DAT_009fd14c`, count
+`DAT_009fd14a`, stride 0x110) and again takes the first match, caching the index back into the event.
+
 ## The tick walk is ascending, and that is what decides same-tick dispatch
 
 A running definition advances its sequences in **one forward pass over the array**, not over a list
@@ -625,6 +873,15 @@ been seen in code.
 reading a dedicated address, which is a weaker kind of confirmation than the rest of this page. The
 animation-frame tick keeps a hypothesis the decode cannot rule out (`min(render rate, 60)`) alongside
 its confirmation.
+
+Three residuals around `CALL_ANIMATION`. **Nothing found sets bit `0x100` of `+0x9c`**, the
+concurrency bit `FUN_004ed8c0` consults: no keyword in `FUN_0051dcf0` writes it, so it comes from the
+compiled `.zbd` or from somewhere not traced, and until that is known the "concurrent instances are
+allowed" branch is decoded but unattributed. The meanings of the remaining call-event flag bits
+(`+0x2e` bits `0x2`/`0x4`, `+0x2f` bits `0x1`/`0x2`/`0x8`, the offset variants and any
+caller-inherited nodes) are not pinned down; the anchor reading at `004eb53d` is directly readable
+and does not depend on them. And the handler block itself has no Ghidra function boundary, so it was
+read as disassembly rather than decompiled.
 
 ## Sequences of one definition run CONCURRENTLY
 

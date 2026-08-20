@@ -44,7 +44,7 @@ different update paths, none of this applies to them.
 | `FUN_004d25c0` / `FUN_004d1ba0` | Accumulate the tumble onto the node's own euler angles (`node+0x18..0x20`) |
 | `FUN_004cef20` | `gwNodeBuildNodeToAncestorMatrix`, walking a node's parent chain; the matrix both `COMPLEX` gravity and `IMPACT_FORCE` transform through |
 | `FUN_004ec5e0` | The `CALLBACK` event (kind 35): calls the owning object's registered handler with the authored value |
-| `FUN_004ee0e0` | Stores a velocity on the **anim instance** (`+0xc0..0xc8`) and sets `+0x9c` bit `0x80`, the state `IMPACT_FORCE` gates on |
+| `FUN_004ee0e0` | Stores a velocity on the **anim instance** (`+0xc0..0xc8`) and sets `+0x9c` bit `0x80`, the state `IMPACT_FORCE` gates on; below the threshold it **clears** that bit |
 | `FUN_004ee160` / `FUN_0048b920` | Register that handler on the anim instance (`+0x74`/`+0x78`); the object's death handler that starts the death animation and registers it |
 
 The parser emits `OBJECT_MOTION: NO_ALTITUDE fall lacks RUN_TIME` (`0063161c`) and
@@ -59,7 +59,7 @@ full table with its corroboration is in `analysis/object-motion-flags/FINDINGS.m
 | Bit | Token | Parser | What the update does with it |
 |---|---|---|---|
 | `0x1` | `GRAVITY` | `0050868b` | gates the gravity fold **and the whole contact block** |
-| `0x2` | `IMPACT_FORCE` | `00508d03` | adds the owning object's velocity into the launch, once, if a `CALLBACK 16` put it there (not built, `BL-343`) |
+| `0x2` | `IMPACT_FORCE` | `00508d03` | adds the owning object's velocity into the launch, once, if a `CALLBACK 16` put it there (the add is built, the flag is not read: `BL-343`) |
 | `0x4` | `TRANSLATION` | `00508d27` | the vector launch form |
 | `0x8` / `0x10` | `TRANSLATION_RANGE_MIN` / `_MAX` | `005095de` / `00509df0` | the polar launch form: draws the four ranges and builds the direction |
 | `0x20` | `XYZ_ROTATION` | `0050a60f` | steady spin integration |
@@ -152,7 +152,8 @@ add followed by the transformed one. That combination is in the binary and no da
 
 ## `IMPACT_FORCE` (bit `0x2`), and the callback that feeds it
 
-Decoded 2026-08-13, answering the research half of `BL-343`; the build half is still open. This is
+Decoded 2026-08-13, answering the research half of `BL-343`; of the build half, the add has landed
+and the gate has not. This is
 velocity inheritance: the body leaves with the
 velocity the object that owned the animation had at the moment of death, and for an airframe wreck
 it is the **only** launch velocity there is.
@@ -178,11 +179,23 @@ velocity by it. The result lands in the **live velocity** (`+0x58..0x60`), not t
 world-space velocity is therefore brought into the body's parent frame, exactly as the world-down
 gravity vector is.
 
+**The inherited fraction is 1, and there is no scalar anywhere on the path.** The three floats
+leave the owning object's virtual velocity accessor and reach the live velocity untouched by any
+multiply but the basis: the callback site copies them into its argument buffer with integer moves
+(`00470954`, `0047095a`, `00470965`), `FUN_004ee0e0` stores them the same way (`004ee0f8`…
+`004ee103`), the only `FMUL`s in the consumer are the nine of the inlined 3×3 at `004e9346`…
+`004e9386`, and the add itself is load-add-store with unit coefficient (`004e93a1`…`004e93b9`). A
+wreck leaves with the whole of the velocity its owner had, not a fraction of it.
+
 **Where the velocity comes from, and why this is not automatic.** `animInstance+0xc0..0xc8` and bit
 `0x80` are written in only two places. One is the anim-start entry that takes a velocity argument
 (`FUN_004eddd0`), whose only real caller is the **network** message dispatcher, so a replicated anim
-start can carry a vector. The other is `FUN_004ee0e0`, which stores the vector and sets the bit
-**only if some axis exceeds 0.01**. `FUN_004ee0e0` is called from two anim-callback handlers
+start can carry a vector. The other is `FUN_004ee0e0`, which stores the vector unconditionally and
+then sets the bit **only if some axis exceeds 0.01**. ⚠ The sub-threshold arm is not a no-op: it
+**clears** the bit (`AND [ECX+0x9c],0xffffff7f` at `004ee143`), so a `CALLBACK 16` raised while the
+owner is nearly stationary disarms an instance an earlier one had armed. A port that lets a
+zero-or-tiny stored velocity stand in for the bit gets that case backwards.
+`FUN_004ee0e0` is called from two anim-callback handlers
 (`0047096e`, `00480757`; which of the two is registered depends on `FUN_00440ad0`, and both treat
 this code identically). Each reads the owning object's velocity through its virtual accessor and
 hands it over, and each does that **only on callback code `0x10`**, i.e. `16`.
@@ -223,6 +236,13 @@ point. Reading "unbuilt, no data reaches it" onto this bit is what hid that.
 The judged rule that a motion continuing a contact landing inherits none of the aircraft's momentum
 (`formats/destructibles.md`, the `pNhit` case) is therefore about a different def and does not
 collide with this bit. `player_crash_default`'s `p1hit`/`p2hit` do carry it, and are inert.
+
+⚠ **The player has two death paths and they inherit differently.** Shot down, the def `player` runs
+`CALLBACK 16` in `destroy_craft` and its `piece1`…`piece4` inherit in full. Flown into the ground,
+the `player_crash_*` def selected by the struck surface id inherits **nothing**: `player_crash_dirt`
+because it authors the flag false, `player_crash_default` because no `CALLBACK` event ever arms the
+instance. "The player's wreck inherits its momentum" is true of one of those paths and false of the
+other, so a single blanket rule over both is wrong whichever value it picks.
 
 ## Contact is the default, in two tiers
 
@@ -399,7 +419,7 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 | **The per-step admission test and its `COMPLEX` widening are transcribed but behaviourally inert** | With a downward ray, a step that ends higher than it starts cannot end below a surface found at or under its start. They are load-bearing in the original because its cell query can return a surface *above* the body |
 | **A defensive contact cap (8)** | The energy test ends a body in two or three contacts, so it is never reached; it exists so a mistake in that test cannot spin a body forever on the hot path |
 | **`MORPH` and `FORWARD_ROTATION DISTANCE` are not built** | No chapter authors the first, and all 1,399 tumbles author `Time` for the second |
-| **`IMPACT_FORCE` is not built** | ⚠ Not a harmless gap: 120 of its 182 events do fire in the original, and on the eleven airframes it is the wreck's only launch velocity. It needs the `CALLBACK` event and an anim-instance velocity slot, neither of which this engine has. Tracked as `BL-343` |
+| **`IMPACT_FORCE`'s add is built; its gate is not** | ⚠ Not a divergence anyone chose, and not harmless either way. The `CALLBACK 16` half and the add both exist (`AnimRuntime.InheritedWorldVelocity`, `MotionRuntime`), which matters because on the eleven airframes this is the wreck's only launch velocity. What is missing is the authored bit: the add is gated on a curated opt-out list and a non-zero slot, so the 62 events the original leaves inert can inherit here. Tracked as `BL-343` |
 
 ### The re-home rule, and the three nodes exempt from it
 

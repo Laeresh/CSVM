@@ -96,8 +96,14 @@ mission uses on C5) is in [`instant-action.md`](instant-action.md).
 ```
 
 One record per file: 14 elements, or 13 on the 8 files that omit the trailer. Element 1
-is `10.0` on every file; elements 2–10 are nine floats, near-always `0.0` — both
-undecoded.
+is `10.0` on every file; elements 2–10 are nine floats, near-always `0.0` — undecoded.
+
+**Element 1 is almost certainly the net's minimum arrival radius in metres.** `CCENet+0x28`
+is the floor under every edge's capture radius (`FUN_00431a90`, decoded in
+[`aiPilot.md`](../org/aiPilot.md)), and its constructor `FUN_004303d0` seats exactly `10.0f`
+there while zeroing every neighbouring field. Whether element 1 is that field or the field is
+simply never deserialised does not change the value in play: **the floor is 10 m on all 222
+shipped nets**, which is what a port needs.
 
 ### NODES — `[x, y, z]` (+ optional tags)
 

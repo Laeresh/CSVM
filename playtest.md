@@ -1,4 +1,4 @@
-# Playtest checklist
+﻿# Playtest checklist
 
 Everything that needs a human at the controls (or the original game open for A/B), consolidated.
 **This file holds only what is actionable *today*.** Anything whose test is blocked on an unlanded

@@ -1013,11 +1013,12 @@ public static class Probes
             $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed, α {m.Alpha:0.0}°, "
             + $"thrust ×{FlightModel.AttitudeThrustScale(m.Attitude.Z.Y):0.000}");
 
-        // --- roll. Accumulated body roll rate: no other axis is commanded, so this is the 360° the
-        // stopwatch and the video's ADI bank centroid both timed.
+        // --- roll. Accumulated body roll rate: no other axis is commanded. The target is the
+        // DECODE's own — roll_torque · recInertia.z / ang_momentum_damp, 90.6 °/s steady plus the
+        // spin-up — not the 2.05 s a stopwatch and the video's ADI bank centroid read off footage.
         m = Fresh(stats, Level(), fd, 1f);
         double tRoll = RunUntil(m, 1f, 30f, RollAccum(m), roll: 1f);
-        Row("roll-360", "full aileron from level cruise, 360°", "s", tRoll, 2.05, 0.25,
+        Row("roll-360", "full aileron from level cruise, 360°", "s", tRoll, 4.15, 0.25,
             $"α {m.Alpha:0.0}° at finish");
 
         // --- pitch, at three speeds: speed-independent by construction, so the three catch

@@ -1,4 +1,4 @@
-# Backlog — unscheduled future work
+﻿# Backlog — unscheduled future work
 
 Everything known-but-not-scheduled, so it survives between polish runs. Which plan is active, if
 any, is `PROJECT_CONTEXT.md`'s "Current status" — never restated here. Per-item history/diagnosis
@@ -121,6 +121,38 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     trailing call on an otherwise-correct trigger, (d) looks like a stalled/dropped sequence on
     yet another trigger path, and (b) is unproven to share any of their causes. Verify each
     independently before closing.
+    **The resolver half is decoded; do not re-decode it.** [`docs/org/sequences.md`](docs/org/sequences.md),
+    "A node reference is resolved once, at load, and stored as an index" and "CALL_ANIMATION hands the
+    call site down as INPUT_NODE": the original binds exactly ONE node per reference, at load, and the
+    running engine only reads an index (`FUN_004efaf0`, `FUN_004e8d60`), so nothing there can drive six
+    balloons from one event; six instances come from `*`/`#` on the definition's NAME multiplying
+    INSTANCES (`FUN_0059d610`, `FUN_0051ff40`), never matches; every tier compares case-sensitively with
+    no `.flt` stripping; and a call does not re-anchor its callee (`PUSH 0x0` at `004eb53d`), the site
+    arriving as `INPUT_NODE` at `+0x7c`. Ours diverges on all four (a per-event LIST, `OrdinalIgnoreCase`
+    plus a `.flt` fallback, `*`/`#` read as node-name patterns, and the call site used as the callee's
+    Start anchor). ⚠ Check `BL-415` before treating (a)/(b) as their own investigation: tier 1 searching
+    the call anchor's shared subtree rather than the definition's private copy is the same fault shape,
+    already filed, and one fix may cover both.
+    **The dispatch half is decoded too, and it rules out three candidates.** [`docs/org/sequences.md`](docs/org/sequences.md),
+    "The restart refusal is keyed on the callee's own run state": `FUN_004ed8c0` decides on the callee's
+    run-state byte `+0xa0` alone under `CALL_ANIMATION`'s always-zero anchor, and the teardown
+    `FUN_004ed190` returns a finished animation to state 1, so a completed callee is immediately
+    re-callable and the gate holds no play-once latch. The `+0xac ≈ -99.0` refusal is inert: that slot is
+    the authored `RESET_TIME` (loader `0051f503`/`0051f553`, compiled offset 172) and the shipped
+    archives hold only -1.0, 0.0 and one 5.0. Our own guard is keyed on `(def, anchor)`, which is more
+    permissive than the original and never stricter, so it can drop a call only on a callee already live
+    on that same anchor. And M02 authors **no wildcard**: `extracted/C3/M02/mis_anim/` holds six separate
+    exact-numbered defs per role (`ball_kaboom1..6`, `balloon_up1..6`, `tbase_kaboom1..6`,
+    `balloont_die1..6`), each on its own numbered anchor, so the `*`/`#` deviation is not what raises six
+    balloons here.
+    *What that leaves for (c) and (d):* a sequence that stops reporting completion, not a dropped call.
+    `balloon_up1`'s second sequence is `ObjectMotionFromTo(bont1, run_time 24.0)` then
+    `CallAnimation(ball_kaboom1)`, and the ramp IS the event's duration, so the call is due at the top of
+    the rise and an incomplete motion loses it. `balloont_die1`'s main sequence swaps the skin, calls two
+    sequences, then runs `StopSequence(flame_light_seq)` before `CallAnimation(large_fireball)`,
+    `Sound`, and at `Event + 2.0` both `CallAnimation(ball_kaboom1)` and `ObjectActiveState(b_turret1)`,
+    so a stop that reaches the CALLER's runner loses everything the entry reports missing, in order.
+    Sequence identity is the sequence object, never its name.
 
 - `BL-343` `[Feature]` **`IMPACT_FORCE` inheritance runs, but on our own gate rather than the
     authored one.** A shot-down plane's wreck does now leave along the plane's own velocity: the
@@ -161,6 +193,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     leaves inert inherits in ours as soon as something on the same rig has raised `Callback 16`. The
     remaining work is to read the flag per motion and gate on it, which is also what would let the
     exemption list retire.
+    **The inherited fraction is 1, decoded.** No scalar exists anywhere on the original's path: integer
+    moves from the owner's velocity accessor to the argument buffer (`00470954`) and on into the
+    instance (`004ee0f8`), the only multiplies being the nine of the parent-basis transform
+    (`004e9346`), and the add itself unit-coefficient (`004e93a1`…`004e93b9`). ⚠ **The player's two
+    death paths inherit differently, and `FlightController.cs:2360` is on the wrong one.** Shot down,
+    the def `player` runs `CALLBACK 16` and its four pieces inherit in full; flown into the ground, the
+    `player_crash_*` def picked by surface id inherits **nothing** (`player_crash_dirt` authors the flag
+    false, `player_crash_default` is inert). That line writes the seam directly on the ground-crash
+    path, bypassing `Callback 16`, so reading the bit narrows the population and also removes the
+    player's ground crash from it entirely. Visible at the controls; playtest rather than flip silently.
+    ⚠ **The "is set" flag is not a stand-in for a non-zero velocity.** `FUN_004ee0e0` stores the vector
+    unconditionally and *clears* bit `0x80` when every axis is under 0.01 (`004ee143`), so a
+    `CALLBACK 16` raised while the owner is nearly stationary disarms an instance an earlier one armed.
+    Ours arms on any non-zero value and never disarms. See `docs/org/objectMotion.md`.
     ⚠ **Traps.** (a) **`BL-008` is closed (`1f09c2d`) on "the original does not inherit velocity into world
     debris", and that closure is still right for world debris.** Not one world destructible authors this
     flag; every carrier is aircraft wreckage, which is the population the closure never looked at. Do not
@@ -233,7 +279,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-122` `[Tuning]` `[Owed-playtest]` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: `WreckMomentum` **0.4** (`FlightController.cs` — the
   fraction of impact velocity the wreck pieces inherit, so they scatter along travel vs. pop straight
-  up); the **debris-arc trajectory** (the executable decode is settled — `translation_range` gives
+  up; **decoded, and it retires with `BL-343`**, see the sub-item below); the **debris-arc trajectory** (the executable decode is settled — `translation_range` gives
   `dirY = elevation/90` and horizontal `1 − |elevation|/90`, `initial` the launch speed, `delta` an
   acceleration, `PLAN-object-motion-decode`, 2026-08-13; the former `DebrisTune.LaunchScale` footage
   fit is deleted with no replacement scalar, and the arc's *look* is settled too: the unscaled arc
@@ -262,7 +308,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     pop upward. At t = 12.50 the burning chunks lie **scattered laterally on the ground**, at rest,
     either side of the impact — no lofted arcs. Consistent with a substantial travel-velocity
     inheritance, i.e. 0.4 is the right *shape*; the footage cannot pin the fraction without a known
-    impact speed and piece velocity, so 0.4 stays a TUNE.
+    impact speed and piece velocity.
+    **It is no longer a TUNE: the binary answers it, and the answer is not a fraction.** There is no
+    scalar anywhere on the original's inheritance path (`docs/org/objectMotion.md`; integer moves at
+    `00470954`/`004ee0f8`, a unit-coefficient add at `004e93a1`), so a def that inherits, inherits in
+    full. The ground crash is not such a def: the `player_crash_*` defs this line's code path plays
+    inherit **nothing**, one authoring `impact_force` false and the other never arming the instance.
+    So 0.4 has no counterpart in the original at either end, and the number goes when `BL-343` gates
+    the add on the authored bit. ⚠ Losing it is visible at the controls, which is what the owed
+    playtest here should now judge: the pieces stop scattering along travel on a ground crash. What
+    stays owed is the *look* of that, not the fraction.
   - **Overall crash intensity — "one big fireball" is correct for ground, and is surface-dependent.**
     The dirt crash genuinely reads as a single dominant fireball: granular yellow sprite cluster at
     ignition (t = 6.27), white-hot core with orange body by t = 7.40, still at full intensity at
@@ -969,22 +1024,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-415` `[Bug]` **The bail-out hides the parachutist's body instead of the pilot in the seat, so the
   canopy deploys with nobody under it.** `cpeject1`'s `ObjectActiveState(pilot, false)` is anchored on
-  the crash root (`MAIN_ROOT_NODE` resolves to the caller's anchor), and `NameResolver.ResolveScoped`'s
+  the crash root (our `MAIN_ROOT_NODE` resolves to the caller's anchor), and `NameResolver.ResolveScoped`'s
   tier 1 is that anchor's own subtree — which now contains the staged `chuteman > chutemanparent >
   pilot` copy. It binds there instead of the airframe's `healthy/geometry/…/pilot_pos/pilot`, and
   `chuteman`'s own def never names `pilot`, so nothing restores it. Measured on both `player_bhawk`
   and `player_autogyro`: `seated pilot visible=True, chute pilot visible=False`, the exact inverse of
   what the data asks for. Arrived with the `chuteman` staging (`BL-385` Wave D, D20) and became
   visible when D25 made the ejection play.
-  **The mechanism the original uses instead:** compiled node POINTERS. `cpeject1`'s `pilot` is
-  `ptr=7655` and `pilot_pos` is `ptr=7654`, which is `NameResolver.Resolve`'s `SymbolClaims` tier. It
-  claims the name but binds nothing here, because a `PlaneBuilder`-built model carries no pointer
-  index, so resolution falls through to the scoped chain and lands on the wrong `pilot`.
-  ⚠ **Traps.** (a) The two candidate fixes are pointer indexing for plane models, or a resolver tier
-  that prefers the controller's own aircraft subtree over staged template copies for a call anchored
-  on the crash root. Both change `NameResolver`'s tier ORDER, which carries an explicit ⚠ against
-  reordering — that warning is there because the tiers were derived from the original's own
-  resolution, so a reorder needs the decode, not a local fix. (b) Do not special-case `chuteman` by
+  **The mechanism the original uses instead, decoded:** the name is resolved ONCE, at definition
+  load, inside a subtree the definition owns exclusively, and the event stores only the resulting
+  index. Nothing is searched by name at the moment the event fires. `FUN_004efaf0` resolves `pilot`
+  in the animation root subtree (`def+0x6c`), then the main root subtree (`def+0x48`), then the
+  definition's two interned lists, and reaches the world only when `LOCAL_NODES_ONLY` is clear; the
+  definition loader `FUN_0051dcf0` first gives the definition a private COPY of its anchor's node tree
+  (`FUN_004d8610`, recorded as flag bit `0x80000` in `def+0x9c`), which is why no staged template copy
+  can shadow the name there. `cpeject1`'s `ptr=7655` / `ptr=7654` are the interned results of that
+  pass, not a lookup key. At run time `FUN_004e8d60` is a table lookup, and `MAIN_ROOT_NODE` is the
+  definition's OWN root (`inst+0x48`), not the caller's anchor. The caller's node is the separate
+  `INPUT_NODE` sentinel (`inst+0x7c`), and `AnimRuntime.IsSelfNodeRef` collapses the two. Full decode:
+  [`docs/org/sequences.md`](docs/org/sequences.md), "A node reference is resolved once, at load, and
+  stored as an index".
+  ⚠ **Traps.** (a) The fix is the SCOPE of the resolver's first tier, not the ORDER of its tiers, so
+  `NameResolver`'s ⚠ against reordering does not block it: the original's tier 1 searches a subtree the
+  definition owns alone, ours searches a crash root shared with staged copies. Pointer indexing is not
+  the answer either, because the original's index is per-definition and built at load from its own
+  subtree, which is what `NameResolveFallback` already stands in for. Note the decode also puts the
+  interned lists at tiers 3 and 4, where `Resolve`/`Targets` consult `SymbolClaims` first; that
+  inversion is a second, separate deviation. (b) Do not special-case `chuteman` by
   name: the collision is structural and any future staged template carrying a common node name hits
   it. (c) The seated pilot exists on all eleven airframes, so a wrong fix is wrong everywhere at once.
 
@@ -1041,47 +1107,43 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ The ±20° pair was validated by eye against the original, so this is an A/B against footage, not a
   correction of something known wrong.
 
-- `BL-387` `[Bug]` **An AI aircraft flying straight and level, needing no turn, rolls left-right-left
-  indefinitely and never settles — confirmed absent from the original at the controls (`PT-54`/
-  `PT-56`, 2026-08-15).** First seen netless and targetless
-  (`--stage=empty --plane=player_bhawk --ai=player_fury,player_avenger`, `AiPilot.FlyPatrol`'s
-  no-`Patrol` branch holding a fixed `OrderAim` 1000 m out) and persisting through
-  `AiMode.AvoidCrash` in the same session. **Re-flown on a real net** (`--debug-spectate` on a
-  wingman flying its default patrol net, `PT-56`): the net-follow itself "looked good", but **the
-  same oscillation appears whenever the plane is flying straight and does not need to turn** — it is
-  not confined to the static/netless case after all. **Not reproduced in Instant Action → Dogfight a
-  Squadron** (`PT-54`), where aircraft spend most of their time turning hard onto a live quarry
-  rather than holding a straight leg.
-  *Evidence:* `AiControlLaw.Steer` (`src/Flight/AiControlLaw.cs`:189–207) renormalises `bx`/`by`
-  (the body-frame lateral/vertical aim error) onto the UNIT CIRCLE whenever the aim point is ahead
-  (`bz > 0`) — `h = sqrt(bx²+by²); bx /= h; by /= h`. This throws away the MAGNITUDE of the error and
-  keeps only its sign/ratio: flying dead-on with a genuinely tiny error (`bx`, `by` ~1e-3) still
-  divides by their own tiny `h`, blowing the normalised pair back up to order 1. `roll = -bx` then
-  feeds that full-scale value into `Limit()`, and architecture.md's own note on this file already
-  flags the output as "NEAR-BANG-BANG… anything past ~0.29 of body-frame aim error saturates" — so a
-  near-zero true error still commands a near-maximum bank. With no term damping the TURN RATE (only
-  bank angle is corrected, and roll→bank→turn rate→heading is two open integrators), this is a relay
-  hunting around its own setpoint: it overshoots the tiny error, the sign flips, it banks the other
-  way, repeating without bound. A real, sustained turn (large `bx`/`by` before renormalisation) does
-  not have this problem — the sign stays consistent and the plane just banks hard one way — which is
-  exactly why dogfighting and any leg with real heading error reads fine and straight-and-level does
-  not.
-  ⚠ **Do not assume this is a faithful port of a genuinely twitchy original law.** The user's direct
-  A/B says the original does not do this; the decode (`docs/org/aiControlLaw.md`, plan D31/E41) may
-  be missing a rate-damping term, or the renormalisation step itself may be over-applied relative to
-  what the original does with it (the original may use it only for the `rudder_tol` branch-select
-  test, not for the roll MAGNITUDE too). `CAP-37` (unfilmed) is the instrument that would settle
-  which, but this bug does not need footage to confirm — it is visible against the player's own
-  flying and against a wingman's own patrol leg.
-  *Fix shape:* re-check `docs/org/aiControlLaw.md`'s decode of `FUN_0048bdd0`/whichever function
-  owns this branch for whether the renormalised `bx` is what the original feeds to roll, or whether
-  the original keeps (or re-scales by) the pre-normalisation magnitude for the OUTPUT even while
-  using the normalised pair for branch selection — before inventing a rate-damping term from nothing,
-  which `BL-330`'s history warns against.
-  *Playtest after fix:* `PT-54`/`PT-56` (`docs/plans/PLAN-ai-flight.md` F52) — watch a straight patrol leg
-  and a netless hold-course alike for the roll to settle instead of hunting.
-  *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (this is the AI-arm finding it owes), `BL-330`
-  (a prior instance of not inventing a rate term from field names).
+- `BL-425` `[Bug]` **A distant AI aircraft flies a SIMPLIFIED force model in the original, and we
+  give every AI the full aerodynamic one.** `FUN_0048c470`, the live force and torque build, opens on
+  a test that is not the AI/player split it looks like: **crashed, OR not the player and further than
+  1000 m from it** (`FUN_00538920` squared separation against `1e6`, the same helper and units as the
+  law's already-decoded 2000 m throttle test). Everything inside 1000 m, AI and player alike, takes
+  the full path. Beyond it the aircraft gets:
+  - **no lift or drag solve at all.** `FUN_0048fc40` is not called; the force is
+    `−(fd_speed · obj+0x4a)` along the nose, a speed-hold pseudo-force, with a further `−5.0` for a
+    non-player aircraft;
+  - **all three authority factors and the reverse-authority factor forced to 1.0**, so `FUN_0048bdd0`
+    never runs and the low-speed ramp never bites;
+  - **no bank coupling.** The `_DAT_006289f8`/`_DAT_006289fc` block sits under the same guard, so a
+    distant aircraft's bank does not turn its nose.
+  `FlightModel` models none of this and cannot: the plant is never told where the player is
+  (`PlayerPosition` reaches `AiControlLaw`'s throttle and nothing else). Every AI in our sim flies the
+  full model at every range.
+  ⚠ **This is not one of the four divergences [`docs/architecture.md`](docs/architecture.md) records**
+  (the `liftAOAs` blend, the weathervane, the nose-speed floor, the ground blow). One address that
+  note cites as evidence for the AI force path, `0x48c520`, sits in this far-field test rather than
+  among the function's three player compares, which are at `0x48cd3e`, `0x48cf7e` and `0x48cf9d`.
+  Confirm which before editing that paragraph; the far-field branch itself is not in doubt.
+  ⚠ Sequencing: the near-field behaviour is what a player ever watches, and it is already right.
+  Porting this changes only aircraft too far away to see, so it is a faithfulness fix rather than a
+  visible one, and it needs the plant to learn a player position it currently has no reason to know.
+  *How you'd know it worked:* a spectated AI beyond 1000 m holds speed along its nose and stops
+  turning with bank; inside 1000 m nothing changes.
+  ⚠ **Implemented experimentally and reverted; it does NOT settle `BL-387`.** The whole arm was built
+  (authority forced to 1, coupling skipped, velocity dragged onto the nose at `fd_speed × lever − 5`)
+  and flown on C1's `M4ReinfAce`: mean bank **66°** against the near-field plant's 64°, peak 90° on
+  both, roll saturated on 50 % of steps against 43 %. Speed drops 111 → 98 m/s and nothing else moves.
+  The reasoning it was built on — no lift means no turn radius means no need to bank — is wrong: the
+  bank is not a RESPONSE to a turn requirement, it is the law's direct output. `roll = -bx` rolls
+  until the target sits in the vertical plane whether or not lift is what turns the aircraft.
+  So this stays a faithfulness item on its own merits, with no bug riding on it, and whoever picks it
+  up should wire the plumbing in the same change rather than leave an unreachable branch.
+  *Cross-refs:* `BL-387`, closed (`git log --grep=BL-387`) — this was found while eliminating plant
+  candidates for it, and measured not to explain it.
 
 - `BL-388` `[Tuning]` `[Owed-playtest]` **The AI autogyro's nose-down at low speed may read softer
   than the original's — soft, single-session A/B, not a confirmed measurement.** `PT-57`
@@ -1089,10 +1151,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   otherwise matched the original directly at the controls; the one residual is "the nose pulling
   down is not as hard as in the original", offered with a "perhaps".
   *Evidence:* two candidate mechanisms, neither pinned to the report yet. (1) `AiControlLaw`'s
-  low-speed recovery (`src/Flight/AiControlLaw.cs`:116,119,250–254): below `RecoveryNoseY` (nose
-  more than ~30° under the horizon) and `RecoverySpeed` (60 mph), the law firewalls pitch full
-  nose-down and the throttle to `SpeedCap` — if this arms later or weaker than the original's
-  equivalent, the recovery would read soft exactly like this. (2) `C24`'s authority ramp
+  low-speed recovery: below `RecoveryNoseY` and `RecoverySpeed` (60 mph) the law firewalls pitch
+  nose-down and the throttle to `SpeedCap`. ⚠ `noseY` is the BACKWARD axis's Y
+  ([`docs/org/aiControlLaw.md`](docs/org/aiControlLaw.md) step 4), so this arms with the nose ~30°
+  **UP** and slow, a stall recovery, not with the nose down. That makes it a weaker candidate for a
+  soft nose-down than it looked, since the reported feel is a dive and this arm does not fire in
+  one; re-read it against that sign before pursuing it. (2) `C24`'s authority ramp
   (`FlightModel.RollPitchAuthorityAt`) fades pitch alongside roll below `turn_fade_in`/`_out`; the
   autogyro is the airframe `BL-330` measured losing the MOST authority by its own stall speed
   (~79%), so a soft nose-down there could also just be the ramp doing its authored job and reading

@@ -1708,8 +1708,11 @@ Walks an `AiNet` patrol graph as a waypoint stream: first the nearest node, then
 edge-list neighbours, no immediate backtrack, branches drawn from its own seeded `Random` (per
 plane off the `Rng.Ai` stream at spawn, never Godot's global rng). Aircraft-agnostic on purpose:
 positions in, target node out; its two consumers are `AiPilot.Patrol` (aircraft) and
-`ZeppelinMotion` (F17's kinematic node follow). Pinned by `AiNetFollowerTests` + the
-`ai-net-follow` suite.
+`ZeppelinMotion` (F17's kinematic node follow). Arrival is the decoded ALONG-LEG test — a tenth of
+the leg's horizontal length, floored at 10 m (`docs/org/aiPilot.md`) — so a vehicle that cannot
+turn tightly enough flows past its node instead of orbiting a capture sphere it never enters.
+A zeppelin raises that floor to clear its own turning circle, which is invented and only a floor.
+Pinned by `AiNetFollowerTests` + the `ai-net-follow` suite.
 
 ## src/Flight/ZeppelinBroadside.cs
 The pure zeppelin broadside law (M4 F19), engine-free: the decoded 90° arc
