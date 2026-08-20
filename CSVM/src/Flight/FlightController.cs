@@ -1574,8 +1574,11 @@ public partial class FlightController : Node3D
             // damaged swap. A player's two track each other, so this cannot move its own timing.
             float damageFrac = 1f - Mathf.Min(Damage?.WorstFraction ?? 1f,
                 Damage?.SummaryHealthFraction ?? 1f);
-            Audio?.Update(simDt, _model.Throttle, speedFrac, damageFrac);
-            EngineAudio?.Update(simDt, _model.Throttle, speedFrac, damageFrac);
+            // One drive for both paths: the original runs ONE per-frame routine for the player and
+            // every AI vehicle, so the two must never read the airframe differently.
+            var engineDrive = EngineAudioCurves.DriveFrom(_model);
+            Audio?.Update(simDt, engineDrive, speedFrac, damageFrac);
+            EngineAudio?.Update(simDt, engineDrive, speedFrac, damageFrac);
             // The throttle-slam gate needs the live value every frame, not just while its plume
             // is active, so it can tell a fresh climb from one already in progress.
             ThrottleSmoke?.Update(simDt, _model.Throttle);

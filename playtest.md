@@ -285,6 +285,32 @@ reasons that have nothing to do with any of these checks.
   merely stays below its threshold is a different bug, not this fix working.
   *Blocks:* the owed lab check for the staging lifetime fix.
 
+- `PT-82` `[A/B: OriginalScreenshots/Videos/Bloodhawk Dive Sound.mp4]` **The engine note moves with
+  the stick and with the climb, not with the throttle alone.** Two decoded terms landed on the engine
+  slot: an unsigned transient on pitch and yaw rate, and a level that falls through a dive and rises
+  in a climb. The note was previously a function of the throttle lever and nothing else, so at a
+  fixed throttle it was flat whatever the aircraft did. This one needs no AI:
+  ```powershell
+  ./RunGame.ps1 --chapter=C1 --plane=player_bhawk --volume=1.0 --no-det
+  ```
+  *Look for:*
+  - (a) hold the throttle fixed in level flight and pull, then push. The note rises **both** times.
+    That it rises on a push is the surprising half and is what the decode says;
+  - (b) a sustained vertical dive at fixed throttle sits about 6% below level, and returns to level
+    when you pull out rather than staying down;
+  - (c) roll hard at fixed throttle. The note must **not** move at all: the original drops the
+    nose-axis rate, so a barrel roll is silent where a pitch input is not.
+  *Blocks:* nothing tracks this; it is the last thing owed on the engine note now that the mechanism
+  is decoded and pinned (`git log --grep=BL-109`, `--grep=BL-423`). The numbers already match the
+  original to within a third of a point, so a fail here is about whether it READS right, not whether
+  it matches. ⚠ Do not ask for a re-tune of the coefficients on a listen: they are read from the
+  executable, and `docs/verification.md`'s rule that a recording may not contest a decode applies to
+  the ear too.
+  ⚠ **This is probably what the retired `BL-123` was hearing** (`git log --grep=BL-123`). That item
+  A/B'd our dive whine against the original and reported it "close, but could be a bit louder",
+  which read as a mix problem. The original has no whine at all, so what the ear was matching in
+  that dive was the engine slot's own movement, and these terms are what produces it.
+
 ### C1 · two pilots — Dogfight (splitscreen VS)
 
 ```powershell

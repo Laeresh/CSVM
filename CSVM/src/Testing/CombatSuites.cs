@@ -1308,6 +1308,88 @@ internal static class CombatSuites
         }
     }
 
+    // The engine note's two non-throttle terms, against the shipped curves and against the figures
+    // CAP-10 measured off the original BEFORE the expression was read (BL-109). Decode:
+    // docs/formats/vehicle.md, "The engine slot's pitch and gain are not throttle alone".
+    // ⚠ The measured numbers are a CHECK on the decode, never its source. If one disagrees, the
+    // coefficients still stand: they are read from the image and a recording may not contest them.
+    internal static void EngineNote(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var stats = PlaneStats.Load(ctx.ZrdrPath, "player_bhawk");
+
+        // Everything below is quoted in PERCENT OF THE LEVEL BASELINE, so the shipped curve has to
+        // be the one the decode assumes before any of it means anything.
+        ctx.Check(Mathf.IsEqualApprox(stats.EnginePitch.MinY, 0.6f)
+                  && Mathf.IsEqualApprox(stats.EnginePitch.MaxY, 1f),
+            $"the shipped engine pitch curve spans {stats.EnginePitch.MinY:0.##}→{stats.EnginePitch.MaxY:0.##} (want 0.6→1)");
+        ctx.Check(Mathf.IsEqualApprox(stats.EngineVolume.MinY, stats.EngineVolume.MaxY),
+            $"…and its volume curve is FLAT at {stats.EngineVolume.MinY:0.##}, which is what makes the 0.26 term inert");
+
+        float Pitch(EngineDrive d) => EngineAudioCurves.Engine(stats, d, 1f).Pitch;
+        float Volume(EngineDrive d) => EngineAudioCurves.Engine(stats, d, 1f).Volume;
+        var level = new EngineDrive(1f, 0f, 0f);
+        float baseline = Pitch(level);
+        ctx.Check(Mathf.IsEqualApprox(baseline, 1f),
+            $"full throttle, wings level, no rotation reads the curve's own top: {baseline:0.0000}");
+
+        // Term (b). A vertical dive puts the nose at −1 in Y, and the original's `a` is −nose.Y, so
+        // it reaches +1 and subtracts 0.15 of the parameter: 0.6 + 0.4·0.85 = 0.94.
+        float dive = Pitch(new EngineDrive(1f, 0f, 1f));
+        ctx.Note($"vertical dive reads {dive:0.0000} ({(dive - 1f) * 100f:+0.0;-0.0} %), against CAP-10's measured 0.9370 (−6.3 %)");
+        ctx.Check(Mathf.IsEqualApprox(dive, 0.94f),
+            $"a sustained vertical dive drops the note to {dive:0.0000} (want 0.94)");
+        ctx.Check(Mathf.Abs(dive - 0.9370f) < 0.01f,
+            $"…which lands within a point of the figure CAP-10 measured off the original, 0.9370");
+
+        // Term (a). ⚠ Taken from OPPOSITE body rates, not from one drive quoted twice: the property
+        // CAP-10 needed three takes to establish is that the transient is UNSIGNED, up for push and
+        // pull alike, and only a magnitude of the rate can do that.
+        var pullModel = new FlightModel(stats) { Throttle = 1f, BodyRates = new Vector3(0.3f, 0f, 0f) };
+        var pushModel = new FlightModel(stats) { Throttle = 1f, BodyRates = new Vector3(-0.3f, 0f, 0f) };
+        float pull = Pitch(EngineAudioCurves.DriveFrom(pullModel));
+        float push = Pitch(EngineAudioCurves.DriveFrom(pushModel));
+        ctx.Check(pull > baseline && Mathf.IsEqualApprox(pull, push),
+            $"±0.3 rad/s both RAISE the note, to {pull:0.0000} pulling and {push:0.0000} pushing");
+        ctx.Check(Mathf.Abs((pull - 1f) - 0.030f) < 0.005f,
+            $"…by {(pull - 1f) * 100f:0.0} %, against CAP-10's measured +3.0 % transient");
+
+        // ⚠ Roll is the arm that separates this from a plain rate magnitude: the original drops the
+        // nose-axis component, so a fast roll must not move the note at all.
+        var rolling = new FlightModel(stats) { BodyRates = new Vector3(0f, 0f, 4f) };
+        var rollDrive = EngineAudioCurves.DriveFrom(rolling);
+        ctx.Check(Mathf.IsEqualApprox(rollDrive.TurnRate, 0f),
+            $"a 4 rad/s ROLL reads turn rate {rollDrive.TurnRate:0.000} — the nose-axis component is dropped");
+        var pitching = new FlightModel(stats) { BodyRates = new Vector3(0.3f, 0f, 4f) };
+        ctx.Check(Mathf.IsEqualApprox(EngineAudioCurves.DriveFrom(pitching).TurnRate, 0.3f),
+            $"…while the same roll with 0.3 rad/s of pitch on top reads exactly the pitch rate");
+
+        // The sign trap, taken off a real attitude rather than asserted: our nose is −Z, so a climb
+        // has to come out NEGATIVE to match the original's own reading of its row 2.
+        var climbing = new FlightModel(stats);
+        climbing.Reset(Vector3.Zero, new Basis(Vector3.Right, Mathf.Pi / 4f), 100f, 1f);
+        float climbA = EngineAudioCurves.DriveFrom(climbing).ClimbAttitude;
+        ctx.Check(climbA < -0.5f,
+            $"a 45° climb reads a={climbA:0.000}, negative as the original's row-2 decode says");
+        ctx.Check(Pitch(new EngineDrive(1f, 0f, climbA)) > baseline,
+            $"…so a climb RAISES the note where the dive above lowered it");
+
+        // Both terms move the parameter; only pitch has a span to show it.
+        ctx.Check(Mathf.IsEqualApprox(Volume(level), Volume(new EngineDrive(1f, 0.3f, 1f))),
+            $"neither term is audible on volume against the flat curve: {Volume(level):0.0000} either way");
+
+        // Boost REPLACES the parameters. Nothing sets it today (no nitro system), so this is the
+        // only thing that exercises the branch.
+        float boosted = Pitch(new EngineDrive(0f, 0f, 0f, Boosting: true));
+        ctx.Check(Mathf.IsEqualApprox(boosted, stats.EnginePitch.Remap(1.25f)),
+            $"boost pins the pitch parameter at 1.25 regardless of a closed throttle: {boosted:0.0000}");
+
+        // The clamp is what stops a spin from running the note away.
+        float spun = Pitch(new EngineDrive(1f, 50f, 0f));
+        ctx.Check(Mathf.IsEqualApprox(spun, stats.EnginePitch.Remap(1.5f)),
+            $"an absurd 50 rad/s tumble clamps at the authored 1.5 parameter: {spun:0.0000}");
+    }
+
     // The air-to-air hit chain on two real flight rigs driven by manual sim steps: body strike,
     // struck-shape to part mapping, armor-first damage, the decoded whole-vehicle kill rule, a
     // crashed plane's immunity, Downed attribution into a real VersusMatch, the VS respawn loop, and

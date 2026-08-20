@@ -77,7 +77,7 @@ public sealed partial class AiEngineAudio : Node3D
     /// <summary>Per-frame drive, same arguments as <see cref="FlightAudio.Update"/> and called from
     /// the same place, so both paths run off the sim clock. Beyond the cull both slots stop; back
     /// inside, they start again.</summary>
-    public void Update(float dt, float throttle, float speedFrac, float damageFrac)
+    public void Update(float dt, in EngineDrive drive, float speedFrac, float damageFrac)
     {
         _ = dt;
         SetEngineDamaged(damageFrac > 0f);
@@ -99,7 +99,7 @@ public sealed partial class AiEngineAudio : Node3D
         }
         if (_engine != null)
         {
-            var (pitch, volume) = EngineAudioCurves.Engine(_stats, throttle, _enginePitchMul);
+            var (pitch, volume) = EngineAudioCurves.Engine(_stats, drive, _enginePitchMul);
             UpdateLoop(_engine, volume * (_engineDamaged ? _damagedVol : _engineVol), pitch);
         }
         if (_whine != null)

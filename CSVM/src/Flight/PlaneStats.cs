@@ -14,9 +14,19 @@ public readonly struct SoundCurve
     public SoundCurve(float minX, float minY, float maxX, float maxY) =>
         (MinX, MinY, MaxX, MaxY) = (minX, minY, maxX, maxY);
 
-    public float Eval(float x) => MaxX <= MinX
-        ? MaxY
-        : MinY + (MaxY - MinY) * Mathf.Clamp((x - MinX) / (MaxX - MinX), 0f, 1f);
+    /// <summary>Where <paramref name="x"/> falls between the two control points, clamped to [0, 1].
+    /// Split out from <see cref="Eval"/> because the engine slot's own terms are added to THIS
+    /// parameter and not to the output (docs/formats/vehicle.md, "The engine slot's pitch and gain
+    /// are not throttle alone").</summary>
+    public float Frac(float x) =>
+        MaxX <= MinX ? 1f : Mathf.Clamp((x - MinX) / (MaxX - MinX), 0f, 1f);
+
+    /// <summary>The output a parameter maps to. ⚠ Deliberately does NOT clamp: a caller that added
+    /// to <see cref="Frac"/>'s result is allowed past 1, which is the only way the original's engine
+    /// note overshoots its curve's own top.</summary>
+    public float Remap(float t) => MinY + (MaxY - MinY) * t;
+
+    public float Eval(float x) => Remap(Frac(x));
 }
 
 /// <summary>One entry of a vehicle def's 'destroyable_parts' block:
