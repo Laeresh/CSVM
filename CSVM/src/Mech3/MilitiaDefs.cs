@@ -45,6 +45,44 @@ public static class MilitiaDefs
         return byName;
     }
 
+    /// <summary>Each militia's paint pattern, keyed by the militia half of a display name. Read off
+    /// whichever of its defs names one, since every def of a militia wears the same pattern. This is
+    /// what paints a wave member: the original takes a wave's livery from the setup screen, so a
+    /// militia/aircraft pair with no def of its own (Sacred Trust's Warhawk) is painted all the
+    /// same, and only its armament, damage model and pilot fall back to the base def.</summary>
+    public static Dictionary<string, string> PatternByMilitia(string zrdrPath, Messages messages)
+    {
+        var root = Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
+            ?? throw new InvalidOperationException("vehicle.json: unexpected root shape");
+
+        var byMilitia = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i + 1 < root.Count; i += 2)
+        {
+            if (root[i] is not string || root[i + 1] is not List<object?> props)
+                continue;
+            var d = ZrdrDict.FromAlternating(props);
+            if (d.Str("title") is not { } title || d.Str("paint_pattern") is not { } pattern)
+                continue;
+            string display = messages.Get(title);
+            int cut = display.LastIndexOfAny(Space);
+            if (cut <= 0)
+                continue; // a bare aircraft name: a base or player def, no militia to key on
+            byMilitia.TryAdd(Key(display[..cut]), pattern);
+        }
+        return byMilitia;
+    }
+
+    /// <summary>The pattern a wave's <c>enemy_name</c> is painted in, or null when its militia names
+    /// none (a shipped <c>MSG_*</c> key, or Broadway Bomber, whose masks ship under no def at
+    /// all).</summary>
+    public static string? PatternForWave(IReadOnlyDictionary<string, string> patternByMilitia,
+        string enemyName)
+    {
+        int cut = enemyName.LastIndexOfAny(Space);
+        return cut > 0 && patternByMilitia.TryGetValue(Key(enemyName[..cut]), out var pattern)
+            ? pattern : null;
+    }
+
     /// <summary>The def behind a wave's authored <c>enemy_name</c>, which the wizard writes as
     /// "&lt;militia&gt; &lt;aircraft&gt;". Null when no def carries that name: a shipped
     /// <c>ia.json</c>'s <c>MSG_*</c> key, the player militia (which has no AI defs), or a menu pair
@@ -60,6 +98,10 @@ public static class MilitiaDefs
                 return pair.Value;
         return null;
     }
+
+    // The militia half, normalised: the menu says "Hollywood Knight" and the message table
+    // "Hollywood Knights", so the trailing plural comes off both before either is compared.
+    private static string Key(string militia) => militia.TrimEnd('s', 'S');
 
     // A "<name>_<digits>" variant of another def, e.g. bhatbrigand_5. Missions name these directly;
     // nothing resolves one from a display name, since every variant shares the plain def's title.

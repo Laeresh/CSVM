@@ -336,10 +336,25 @@ lookup therefore takes the **unsuffixed** def and leaves the variants to the mis
 them outright.
 
 The member then flies that def outright: its armament, damage model, authored livery and pilot,
-rather than the airframe's base def. Three menu pairs resolve to nothing — Fortune Hunter (the
-player militia has no AI defs), Sacred Trust's Warhawk and Broadway Bomber's Peacemaker, since that
-roster comes from `.BM` paint coverage rather than from `vehicle.json` — and fall back to the
-shipped-skins case above.
+rather than the airframe's base def.
+
+**The paint follows the militia, not the def**, which is what the setup-screen rule above says and
+what the original does: a Sacred Trust Warhawk is selectable there and wears the Sacred Trust
+colours (user, at the controls) even though `vehicle.json` ships no def for one. So a wave member is
+painted from its militia's pattern in that pattern's shipped colours whenever the militia is named,
+and only its armament, damage model and pilot fall back to the base def when the pair has no def of
+its own. The pattern is read off whichever def of that militia names one, so it agrees with the
+def's own paint wherever both exist.
+
+Three menu pairs have no def: Fortune Hunter (the player militia flies the `p*` family), Sacred
+Trust's Warhawk and Broadway Bomber's Peacemaker, since that roster comes from `.BM` paint coverage
+rather than from `vehicle.json`. The first two are painted all the same.
+
+⚠ **Broadway Bomber is the one pair that stays unpainted.** Its `BROADWAY` folder ships six masks,
+all `PEA_*`, so the aircraft is paintable, but no vehicle def anywhere authors `paint_pattern`
+`broadway` — so the install carries the masks and no colours to put in them. That member keeps its
+shipped skins until the colours are read off the original the way `player_fortune`'s were
+(`formats/paint.md`).
 
 ⚠ **A wave enemy's nine pilot stats are drawn at random from a table of five, not from its skill.**
 `FUN_0045a280(row, k)` reads `0x00607a3c + row·36 + k·4`, and the caller picks `row = rand() % 5`

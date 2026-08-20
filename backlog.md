@@ -449,10 +449,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `accentID`. Two things name a def: `--ai=<plane>:def=<name>`, and an Instant Action wave whose
   militia the launchscreen wizard picked, resolved through `Mech3/MilitiaDefs` by the def's own
   `title` (`MSG_VEH_STRUST_HELLHOUND` is "Sacred Trust Hellhound", which is exactly the string the
-  wave editor writes), never by parsing the def name. A wave read from a
-  shipped `ia.json` still names no militia and keeps its shipped skins: its `enemy_name` is an
-  `MSG_*` key for the aircraft alone, which is not recoverable
-  ([`docs/formats/instant-action.md`](docs/formats/instant-action.md)).
+  wave editor writes), never by parsing the def name. The PAINT follows the militia rather than the
+  def, as the original's setup-screen rule does, so a pair with no def (Sacred Trust's Warhawk, which
+  is selectable in the original and wears the colours) is painted all the same and falls back to the
+  base def for its armament and pilot alone. A wave read from a shipped `ia.json` still names no
+  militia and keeps its shipped skins: its `enemy_name` is an `MSG_*` key for the aircraft alone,
+  which is not recoverable ([`docs/formats/instant-action.md`](docs/formats/instant-action.md)).
+  *⚠ One pair stays unpainted:* Broadway Bomber's Peacemaker. `BROADWAY` ships six `PEA_*` masks and
+  no def anywhere authors `paint_pattern broadway`, so there are no colours to fill them with; they
+  have to be read off the original as `player_fortune`'s were.
   *What still routes nothing:* a campaign mission's own enemy set, and the `--generators` waves.
   *Owed at the controls:* fly a Black Hat flight
   (`--ai=player_warhawk:def=bhatwarhawk --ai-attack`, or a wizard wave set to Black Hat Warhawk) and

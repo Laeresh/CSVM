@@ -78,6 +78,42 @@ public class MilitiaDefsTests
         Assert.Null(MilitiaDefs.ForWave(byName, "Broadway Bomber Peacemaker"));
     }
 
+    // A pair with no def is still painted: the original takes a wave's livery from the setup screen,
+    // and a Sacred Trust Warhawk is selectable there and wears the colours (user, at the controls).
+    // Only its armament and pilot fall back to the base def.
+    [ExtractedDataFact]
+    public void APairWithNoDefIsStillPaintedInItsMilitiasPattern()
+    {
+        var patterns = Patterns();
+
+        Assert.Null(MilitiaDefs.ForWave(Map(), "Sacred Trust Warhawk"));
+        Assert.Equal("sactrust", MilitiaDefs.PatternForWave(patterns, "Sacred Trust Warhawk"));
+        Assert.Equal("sactrust", MilitiaDefs.PatternForWave(patterns, "Sacred Trust Hellhound"));
+    }
+
+    // The pattern comes off the militia, so it agrees with the def's own paint wherever both exist.
+    [ExtractedDataFact]
+    public void AMilitiasPatternAgreesWithItsDefsOwn()
+    {
+        var patterns = Patterns();
+        var byName = Map();
+
+        foreach (string display in new[] { "Black Hat Warhawk", "Studio Security Fury", "Medusa Kestrel" })
+        {
+            var def = PaintScheme.ForDef(ZrdrPath, byName[display]);
+            Assert.NotNull(def);
+            Assert.Equal(def!.Pattern, MilitiaDefs.PatternForWave(patterns, display));
+        }
+    }
+
+    // A shipped wave name carries no militia, so it names no pattern either and the member keeps
+    // its own skins rather than being dressed in whatever the last lookup happened to hold.
+    [ExtractedDataFact]
+    public void AShippedWaveNameNamesNoPattern()
+    {
+        Assert.Null(MilitiaDefs.PatternForWave(Patterns(), "MSG_OBJ_IVARS_FIREBRAND"));
+    }
+
     // Every militia/aircraft pair the wave editor offers either resolves to a def that loads onto
     // the airframe the menu pairs it with, or is one of the three the install ships no def for.
     [ExtractedDataFact]
@@ -109,4 +145,7 @@ public class MilitiaDefsTests
 
     private static System.Collections.Generic.Dictionary<string, string> Map() =>
         MilitiaDefs.ByDisplayName(ZrdrPath, Messages.Load(MessagesPath));
+
+    private static System.Collections.Generic.Dictionary<string, string> Patterns() =>
+        MilitiaDefs.PatternByMilitia(ZrdrPath, Messages.Load(MessagesPath));
 }

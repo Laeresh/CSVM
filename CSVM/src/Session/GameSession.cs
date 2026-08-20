@@ -188,6 +188,7 @@ public partial class GameSession : Node3D
     // skills, accent) before the roster builds it. Same cache: the read here is not a second parse.
     private Func<string, string?, PlaneStats>? _aiStatsFor;
     private Dictionary<string, string>? _militiaDefs; // display name -> militia vehicle def
+    private Dictionary<string, string>? _militiaPatterns; // militia -> its paint pattern
     private List<Maneuver>? _aiManeuvers; // the D13 library, loaded once for the D11 machines
     private bool _noAssistLogged; // the one-per-session --no-assist breadcrumb
     // The E16 voice dispatch (built with the rigs when the world has sounds; its mission clock
@@ -2263,16 +2264,17 @@ public partial class GameSession : Node3D
                             // Activate re-seats it, so a member patrols from where it arrives
                             // rather than from this parking pose.
                             armIaPatrol(pilot);
-                            // The wave's own militia def when the setup screen named one; a shipped
-                            // ia.json names none and the member keeps its shipped skins instead.
-                            // ⚠ Never the Fortune Hunters default: an enemy in it reads as friendly.
+                            // The militia paints it, and its def (where the install ships one for
+                            // that pair) arms it. An unnamed militia keeps its own skins:
+                            // ⚠ never the Fortune Hunters default, which reads as friendly.
                             string? waveDef = MilitiaDefs.ForWave(MilitiaDefsByName(state), wave.EnemyName);
+                            var waveScheme = WaveMilitiaScheme(state, wave.EnemyName);
                             int rating = InstantActionRuntime.RepresentativeRating(
                                 InstantActionRuntime.RandomPilotStats(Rng.Stream(Rng.Ai).Randi()));
                             var enemy = SpawnAiAircraft(waveNode, Vector3.Zero, Vector3.Forward,
-                                pilot, scheme: null, team: InstantActionRuntime.EnemyTeam,
-                                attackRating: rating, inert: true, shippedSkins: waveDef == null,
-                                aiDef: waveDef);
+                                pilot, scheme: waveScheme, team: InstantActionRuntime.EnemyTeam,
+                                attackRating: rating, inert: true,
+                                shippedSkins: waveScheme == null, aiDef: waveDef);
                             if (enemy == null)
                             {
                                 continue;
@@ -3453,6 +3455,36 @@ public partial class GameSession : Node3D
             // FlightController, which owns the fire clock, and fires into _projectiles above.
             _versus?.Advance(dt);
         }
+    }
+
+    // The livery a wave flies in: its militia's pattern, in that pattern's shipped colours. The
+    // original paints a wave member from the setup screen rather than from a vehicle def, so this
+    // holds for a pair the install ships no def for (Sacred Trust's Warhawk) as much as for one it
+    // does. Null when the militia is not named or names no pattern, and the member keeps its skins.
+    private PaintScheme? WaveMilitiaScheme(BuildState state, string enemyName)
+    {
+        if (MilitiaDefs.PatternForWave(MilitiaPatterns(state), enemyName) is not { } pattern)
+            return null;
+        foreach (var scheme in _liveryResolver.PaintCatalog(state.ZrdrPath))
+            if (string.Equals(scheme.Pattern, pattern, StringComparison.OrdinalIgnoreCase))
+                return scheme;
+        return null;
+    }
+
+    private IReadOnlyDictionary<string, string> MilitiaPatterns(BuildState state)
+    {
+        if (_militiaPatterns != null)
+            return _militiaPatterns;
+        try
+        {
+            _militiaPatterns = MilitiaDefs.PatternByMilitia(state.ZrdrPath, Messages.Load(state.MessagesPath));
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"ia: cannot read the militia paint patterns: {e.Message}");
+            _militiaPatterns = new Dictionary<string, string>();
+        }
+        return _militiaPatterns;
     }
 
     // Every militia aircraft the install names, by its display string. Built once per session: it
