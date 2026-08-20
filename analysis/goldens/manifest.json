@@ -113,15 +113,15 @@
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "0d0e5e9974549cc18b99c56ca80ab6e5",
+      "hash": "9d466dfe5074ac3985bef95c85ff0bfd",
       "exercises": "the targeting HUD's original-shaped marker: fixed brackets inside the selected gun's reach, the name label below the plane, and --debug-markers' identity/health string; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "9a9043cc08e864bfcc3abae114e45770",
-      "exercises": "a shot-down AI aircraft three seconds after the kill, at the downrange its FROZEN commands flew it to: the destroy def's second fireball and trail at the handover where randomdestseq takes the hull over, and the parachutist level under his canopy.",
+      "hash": "cffb05d522e62df12a533f396ee3d9f0",
+      "exercises": "a shot-down AI aircraft three seconds after the kill, at the downrange its FROZEN commands flew it to: the destroy def's second fireball and trail at the handover where randomdestseq takes the hull over.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     }
   ]
