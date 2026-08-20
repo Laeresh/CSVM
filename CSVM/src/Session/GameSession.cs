@@ -2205,6 +2205,7 @@ public partial class GameSession : Node3D
                     // ⚠ Pass an explicit rating, never null: a wingman's Gunner and Machine are only
                     // built when one resolves, and null would arm them solely on a launch that
                     // happened to carry --ai-attack= (docs/formats/instant-action.md).
+
                     // The wizard's one wingman fit, covering the whole flight as the original's
                     // Player/Wingman radio does. Passed per spawn, never as a blanket default: the
                     // stock-table branch it lands in also catches enemies on player airframes.

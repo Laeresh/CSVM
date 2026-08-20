@@ -40,6 +40,11 @@ public sealed class MenuInput
     public bool PadBack;
     public bool Start;      // pressed this frame (edge)
 
+    /// <summary>Open the loadout for whatever this screen is about (edge). Y is free in menu
+    /// context — nothing else here reads it, and its only other use is in flight — so it can mean
+    /// one thing everywhere the menu offers a fit to edit.</summary>
+    public bool Loadout;
+
     /// <summary>The last of this player's pads seen actually doing something (a menu button or the
     /// stick past the deadzone) — −1 until one does. The launchscreen uses it to <i>claim</i> the
     /// pad player 1 drives the Mode/Chapter screens with, so that pad is player 1's for good and
@@ -53,7 +58,7 @@ public sealed class MenuInput
     private const float RepeatInterval = 0.12f;  // s between repeats after that
     private const float StickDeadzone = 0.5f;    // |LeftY| past this counts as a d-pad press
 
-    private bool _acceptPrev, _backPrev, _padBackPrev, _startPrev;
+    private bool _acceptPrev, _backPrev, _padBackPrev, _startPrev, _loadoutPrev;
     private int _dirPrev, _dirXPrev;
     private float _repeatTimer, _repeatTimerX;
 
@@ -135,6 +140,10 @@ public sealed class MenuInput
         Start = start && !_startPrev;
         _startPrev = start;
 
+        bool loadout = RawLoadout();
+        Loadout = loadout && !_loadoutPrev;
+        _loadoutPrev = loadout;
+
         int active = ScanActivePad();
         if (active >= 0)
             LastActivePad = active;
@@ -148,13 +157,14 @@ public sealed class MenuInput
         _backPrev = RawBack();
         _padBackPrev = RawPadBack();
         _startPrev = RawStart();
+        _loadoutPrev = RawLoadout();
         _dirPrev = RawDir();
         _repeatTimer = RepeatInitial;
         Move = 0;
         _dirXPrev = RawDirX();
         _repeatTimerX = RepeatInitial;
         MoveX = 0;
-        Accept = Back = PadBack = Start = false;
+        Accept = Back = PadBack = Start = Loadout = false;
     }
 
     // The first of this player's pads currently producing menu input (excluding Start).
@@ -229,4 +239,9 @@ public sealed class MenuInput
     // Start is the join gesture, so it is pad-only: the keyboard is always player 1,
     // who is joined from the start and has nothing to join.
     private bool RawStart() => PadButton(JoyButton.Start);
+
+    // L on the keyboard beside Y on the pad. Both are otherwise unread in menu context, so this
+    // adds a meaning rather than overloading one: W/A/S/D are the stepper axes and Space/Enter,
+    // Escape and Start are all spoken for.
+    private bool RawLoadout() => KeyDown(Key.L) || PadButton(JoyButton.Y);
 }

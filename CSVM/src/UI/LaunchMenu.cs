@@ -185,6 +185,14 @@ public sealed partial class LaunchMenu : CanvasLayer
     // over from here unedited rather than defaulting to the built-in generic ace/zeppelin. Null
     // until an environment has actually been confirmed once (a --menu= screenshot never launches).
     private InstantActionDef? _iaBaseDef;
+    // The stock-fit table and the Ammo Selection rosters, loaded once on first use: the loadout
+    // rows are built from an airframe's own gun slots and pylon count, which only this file knows.
+    private StockLoadouts? _stockFits;
+    // The one wingman fit (the original's Player/Wingman radio is not per wingman) and its row
+    // cursor. Cleared when the wingman aircraft changes, since pylon count and gun slots are
+    // per-airframe and a fit for one has nowhere to live on another.
+    private LoadoutChoice _wingmanFit = new();
+    private int _wingmanFitRow;
     private MenuMode _mode;
     private string _error = "";
     // The pad player 1 claimed by driving the Mode/Chapter screens with it (−1 = none yet, i.e.
@@ -198,7 +206,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // instead of _center on the Plane screen once more than one player has joined.
     private Control _paneRoot = null!;
 
-    private enum Screen { Mode, Chapter, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane }
+    private enum Screen { Mode, Chapter, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout }
+
+    // What a fit row edits. The reset row carries no slot of its own and is the only one Accept
+    // does anything on, since every other row is a live stepper.
+    private enum FitRowKind { Gun, Pylon, Reset }
 
     // The chapter roster the picked mode offers — the Chapter screen and everything
     // downstream (breadcrumb, launch) index into this, never the full list. Free Flight/Dogfight
@@ -222,8 +234,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Waves => _waveListIndex,
         Screen.WaveEdit => _waveFieldIndex,
         Screen.Wingmen => _wingmenFieldIndex,
-        _ => _slots[0].PlaneIndex,
+        Screen.WingmanLoadout => _wingmanFitRow,
+        _ => _slots.Count == 1 && _slots[0].InLoadout ? _slots[0].FitRow : _slots[0].PlaneIndex,
     };
+
+    // The stock-fit table, loaded on first use. A failed load leaves the rosters empty, which
+    // shows as a loadout list of nothing but its reset row rather than a crash on the way to
+    // flying: the fit is optional and a launch must survive without it.
+    private StockLoadouts Fits => _stockFits ??= StockLoadouts.Load();
 
     // How many rows the Wingmen screen shows right now: the Aircraft field is hidden at
     // 0 wingmen, matching the decoded setup screen's own behaviour.
@@ -388,7 +406,12 @@ public sealed partial class LaunchMenu : CanvasLayer
             _slots.Add(new Slot { Input = { Keyboard = true } });
         foreach (var slot in _slots)
         {
+            // Every stage of the pick, not just the lock: a slot left Confirmed would satisfy the
+            // launch gate on the first frame back from flight and fly again without a press.
             slot.Locked = false;
+            slot.Confirmed = false;
+            slot.InLoadout = false;
+            slot.Fit.ResetToStock();
             slot.Input.Prime();
         }
         SyncDevices();
@@ -700,6 +723,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                     case Screen.Waves: _waveListIndex = Wrap(_waveListIndex + p1.Move, n); break;
                     case Screen.WaveEdit: _waveFieldIndex = Wrap(_waveFieldIndex + p1.Move, n); break;
                     case Screen.Wingmen: _wingmenFieldIndex = Wrap(_wingmenFieldIndex + p1.Move, n); break;
+                    case Screen.WingmanLoadout: _wingmanFitRow = Wrap(_wingmanFitRow + p1.Move, n); break;
                 }
                 dirty = true;
             }
@@ -707,13 +731,21 @@ public sealed partial class LaunchMenu : CanvasLayer
             {
                 dirty |= HandleMoveX(p1.MoveX);
             }
+            // Y on the Wingmen step opens the flight's one fit — the same meaning Y carries on a
+            // plane pane. Gated on there being wingmen to arm, like the Aircraft row above it.
+            if (p1.Loadout && _screen == Screen.Wingmen && _numWingmen > 0)
+            {
+                _screen = Screen.WingmanLoadout;
+                _wingmanFitRow = 0;
+                return true;
+            }
             if (p1.Accept)
             {
                 _error = "";
                 HandleAccept();
                 dirty = true;
             }
-            else if (p1.Back)
+            else if (p1.Back || (p1.Loadout && _screen == Screen.WingmanLoadout))
             {
                 if (_screen == Screen.Mode)
                     Quit?.Invoke();
@@ -725,6 +757,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                         Screen.Waves => Screen.MissionType,
                         Screen.WaveEdit => Screen.Waves,
                         Screen.Wingmen => Screen.Waves,
+                        Screen.WingmanLoadout => Screen.Wingmen,
                         _ => Screen.Mode, // Chapter
                     };
                 dirty = true;
@@ -745,20 +778,57 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             var slot = _slots[i];
             var input = slot.Input;
+
+            // A pane inside its loadout reads nothing else, so one player arming cannot pull
+            // anybody else out of browsing and cannot launch while somebody is still in there.
+            if (slot.InLoadout)
+            {
+                dirty |= HandleFitInput(slot);
+                continue;
+            }
+
             if (input.Move != 0 && !slot.Locked)
             {
+                int was = slot.PlaneIndex;
                 slot.PlaneIndex = Wrap(slot.PlaneIndex + input.Move, Planes.Length);
+                if (slot.PlaneIndex != was)
+                {
+                    // Pylon count and gun slots are per-airframe, so a fit built for one has
+                    // nowhere to live on another. Keyed to the airframe changing, never to
+                    // unlocking: backing out to re-read the stats line must not cost the fit.
+                    slot.Fit.ResetToStock();
+                }
                 dirty = true;
             }
-            if (input.Accept && !slot.Locked)
+            if (input.Loadout && slot.Locked && !slot.Confirmed)
             {
-                slot.Locked = true;
+                slot.InLoadout = true;
+                slot.FitRow = 0;
+                dirty = true;
+            }
+            else if (input.Accept && !slot.Confirmed)
+            {
+                // Two stages: A selects the airframe, A again confirms it and launches once
+                // everybody has. Unconditional — a pilot with no interest in weapons taps twice
+                // and flies the stock fit, which is the old behaviour plus one press.
+                if (slot.Locked)
+                {
+                    slot.Confirmed = true;
+                }
+                else
+                {
+                    slot.Locked = true;
+                }
                 _error = "";
                 dirty = true;
             }
             else if (input.Back)
             {
-                if (slot.Locked)
+                if (slot.Confirmed)
+                {
+                    slot.Confirmed = false;
+                }
+                else if (slot.Locked)
                 {
                     slot.Locked = false;
                 }
@@ -771,7 +841,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                         : CurrentMissionTypes[_missionTypeIndex].Key == "dogfight_ace" ? Screen.MissionType
                         : Screen.Wingmen;
                     foreach (var s in _slots)
+                    {
                         s.Locked = false;
+                        s.Confirmed = false;
+                        s.InLoadout = false;
+                    }
                     return true;
                 }
                 else
@@ -789,6 +863,50 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
         return dirty;
     }
+
+    // A pane showing its loadout list. Live-editing steppers like every other wizard screen, and
+    // B returns to the airframe keeping the fit rather than discarding it. ⚠ That last part is
+    // INVENTED: the original pairs ACCEPT LOADOUT with CANCEL LOADOUT, but its Cancel is a button
+    // you click, while ours would sit on the pad's navigation key — a discard there would throw
+    // away a fit somebody was only stepping back from. Reset to stock is the revert we keep.
+    private bool HandleFitInput(Slot slot)
+    {
+        var input = slot.Input;
+        var def = StockFitFor(slot.PlaneIndex);
+        var rows = FitRowsFor(def, slot.Fit);
+        bool dirty = false;
+        if (input.Move != 0)
+        {
+            slot.FitRow = Wrap(slot.FitRow + input.Move, rows.Count);
+            dirty = true;
+        }
+
+        slot.FitRow = Math.Clamp(slot.FitRow, 0, rows.Count - 1);
+        var row = rows[slot.FitRow];
+        if (input.MoveX != 0)
+        {
+            StepFit(def, slot.Fit, row, input.MoveX);
+            dirty = true;
+        }
+
+        if (input.Accept && row.Kind == FitRowKind.Reset)
+        {
+            slot.Fit.ResetToStock();
+            dirty = true;
+        }
+
+        if (input.Back || input.Loadout)
+        {
+            slot.InLoadout = false;
+            dirty = true;
+        }
+        return dirty;
+    }
+
+    // The wingman list's rows — the one fit the whole flight carries, so it hangs off the
+    // Wingmen step rather than any pane.
+    private List<FitRow> WingmanFitRows() =>
+        FitRowsFor(StockFitFor(_wingmanPlaneIndex), _wingmanFit);
 
     // The horizontal axis's effect, screen by screen — always a live-editing stepper on
     // whichever field the vertical cursor is focused on, never a "select and lock" gesture (that
@@ -833,7 +951,19 @@ public sealed partial class LaunchMenu : CanvasLayer
                 }
                 else
                 {
+                    int was = _wingmanPlaneIndex;
                     _wingmanPlaneIndex = Wrap(_wingmanPlaneIndex + dir, Planes.Length);
+                    if (_wingmanPlaneIndex != was)
+                    {
+                        _wingmanFit.ResetToStock();
+                    }
+                }
+                return true;
+            case Screen.WingmanLoadout:
+                {
+                    var rows = WingmanFitRows();
+                    _wingmanFitRow = Math.Clamp(_wingmanFitRow, 0, rows.Count - 1);
+                    StepFit(StockFitFor(_wingmanPlaneIndex), _wingmanFit, rows[_wingmanFitRow], dir);
                 }
                 return true;
             default:
@@ -848,6 +978,18 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         switch (_screen)
         {
+            case Screen.WingmanLoadout:
+                {
+                    // Reset is the only row Accept does anything on: the rest are live steppers,
+                    // and B is what leaves, so Accept has nothing else to mean here.
+                    var rows = WingmanFitRows();
+                    _wingmanFitRow = Math.Clamp(_wingmanFitRow, 0, rows.Count - 1);
+                    if (rows[_wingmanFitRow].Kind == FitRowKind.Reset)
+                    {
+                        _wingmanFit.ResetToStock();
+                    }
+                }
+                break;
             case Screen.Mode:
                 _mode = (MenuMode)_modeIndex; // the row order IS the enum order
                 if (_mode == MenuMode.Stunt) // "Instant Action" — the wizard's step 1
@@ -933,24 +1075,28 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
     }
 
-    private bool AllLocked()
+    // The launch gate reads CONFIRMED, the second stage, not the lock. That is what leaves a
+    // window between selecting an airframe and flying it for the loadout to be opened in;
+    // locking used to launch on the same frame the last slot locked.
+    private bool AllConfirmed()
     {
         foreach (var slot in _slots)
-            if (!slot.Locked)
+            if (!slot.Confirmed)
                 return false;
         return _slots.Count > 0;
     }
 
     // Whether the Plane screen's launch gesture is live right now. A lone Dogfight pilot
     // stays on this screen with JoinHint naming what it is waiting for.
-    private bool CanLaunch() => CanLaunch(_mode, AllLocked(), _slots.Count);
+    private bool CanLaunch() => CanLaunch(_mode, AllConfirmed(), _slots.Count);
 
     private void FireLaunch()
     {
         var choices = new List<PlayerChoice>(_slots.Count);
         foreach (var slot in _slots)
             choices.Add(new PlayerChoice(Planes[slot.PlaneIndex].Node,
-                slot.Input.Pads ?? Array.Empty<int>()));
+                slot.Input.Pads ?? Array.Empty<int>(),
+                slot.Fit.IsStock ? null : slot.Fit));
 
         string chapter;
         InstantActionDef? iaDef = null;
@@ -969,7 +1115,8 @@ public sealed partial class LaunchMenu : CanvasLayer
                 _numWingmen,
                 Planes[_wingmanPlaneIndex].Name,
                 waves,
-                _lives);
+                _lives,
+                _wingmanFit.IsStock ? null : _wingmanFit);
         }
         else
         {
@@ -1016,6 +1163,9 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Waves => "CONFIGURE WAVES",
             Screen.WaveEdit => $"WAVE {_waveEditIndex + 1}",
             Screen.Wingmen => "WINGMEN",
+            Screen.WingmanLoadout => $"WINGMEN — AMMO SELECTION  ({Planes[_wingmanPlaneIndex].Name})",
+            _ when _slots.Count == 1 && _slots[0].InLoadout =>
+                $"AMMO SELECTION  ({Planes[_slots[0].PlaneIndex].Name})",
             _ => _slots.Count > 1 ? "SELECT AIRCRAFT — ALL PLAYERS" : "SELECT AIRCRAFT",
         };
         _body.AddChild(Label(heading, (int)(HeadingFont * s), HeadingColor, HorizontalAlignment.Center));
@@ -1147,6 +1297,25 @@ public sealed partial class LaunchMenu : CanvasLayer
         box.AddChild(Label($"{SplitScreen.PlayerTag(player)}   {slot.Input.DeviceLabel}",
             (int)(CrumbFont * paneScale), color, HorizontalAlignment.Center));
 
+        // This pane swaps to its own loadout list in place, so the players beside it keep
+        // browsing untouched — and nobody can launch while somebody is still in here.
+        if (slot.InLoadout)
+        {
+            var fitRows = FitRowsFor(StockFitFor(slot.PlaneIndex), slot.Fit);
+            for (int i = 0; i < fitRows.Count; i++)
+            {
+                bool selected = i == slot.FitRow;
+                box.AddChild(CursorRow.Build(FitRowText(fitRows, i), (int)(RowFont * paneScale),
+                    selected ? color : RowColor, selected));
+            }
+
+            box.AddChild(Label(Planes[slot.PlaneIndex].Name, (int)(DetailFont * paneScale),
+                DetailColor, HorizontalAlignment.Center));
+            box.AddChild(Label("←→ change    B done", (int)(FooterFont * paneScale),
+                FooterColor, HorizontalAlignment.Center));
+            return box;
+        }
+
         for (int i = 0; i < Planes.Length; i++)
         {
             bool sel = i == slot.PlaneIndex;
@@ -1156,7 +1325,9 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         box.AddChild(Label(PlaneStat(Planes[slot.PlaneIndex].Node), (int)(DetailFont * paneScale),
             DetailColor, HorizontalAlignment.Center));
-        box.AddChild(Label(slot.Locked ? "✓  LOCKED IN" : "choosing…", (int)(FooterFont * paneScale),
+        box.AddChild(Label(
+            slot.Confirmed ? "✓  READY" : slot.Locked ? "A again to fly    Y weapons" : "choosing…",
+            (int)(FooterFont * paneScale),
             slot.Locked ? color : FooterColor, HorizontalAlignment.Center));
         return box;
     }
@@ -1189,6 +1360,117 @@ public sealed partial class LaunchMenu : CanvasLayer
         return Mathf.Min(s, viewH / refH);
     }
 
+    // The stock fit behind a roster row, or null when the table has no def flying that model.
+    private LoadoutDef? StockFitFor(int planeIndex) => Fits.ForModel(Planes[planeIndex].Node);
+
+    // One airframe's loadout list: a row per firable gun slot, a row per pylon, then reset.
+    // Turret slots are left out while they are built inert — an ammo pick there would change
+    // nothing that can be fired. Pylons list in fill order under their PHYSICAL number, so the
+    // screen agrees with the weapon gauge's belt lights rather than renumbering them 1..N.
+    private List<FitRow> FitRowsFor(LoadoutDef? def, LoadoutChoice fit)
+    {
+        var rows = new List<FitRow>();
+        if (def == null)
+        {
+            rows.Add(new FitRow(FitRowKind.Reset, 0, "Reset to stock", ""));
+            return rows;
+        }
+
+        foreach (var gun in def.Guns)
+        {
+            if (gun.Turret)
+            {
+                continue;
+            }
+            string id = fit.GunAmmoFor(gun.Slot) ?? gun.Ammo;
+            rows.Add(new FitRow(FitRowKind.Gun, gun.Slot, $".{gun.Caliber}-cal.", LabelFor(Fits.Options.GunAmmo, id)));
+        }
+
+        var hp = def.Hardpoints;
+        for (int i = 0; hp != null && i < hp.Count && i < Loadout.PylonFillOrder.Length; i++)
+        {
+            int pylon = Loadout.PylonFillOrder[i];
+            string id = fit.PylonFor(pylon) ?? (i < hp.Stock.Length ? hp.Stock[i] : LoadoutChoice.None);
+            rows.Add(new FitRow(FitRowKind.Pylon, pylon, $"Pylon {pylon}", LabelFor(Fits.Options.PylonOrdnance, id)));
+        }
+
+        rows.Add(new FitRow(FitRowKind.Reset, 0, "Reset to stock", ""));
+        return rows;
+    }
+
+    // An id's dropdown label, falling back to the id so an unoffered stock value (a def naming
+    // something the screen does not list) is visible rather than blank.
+    private string LabelFor(IReadOnlyList<LoadoutOption> options, string id)
+    {
+        foreach (var option in options)
+        {
+            if (string.Equals(option.Id, id, StringComparison.OrdinalIgnoreCase))
+            {
+                return option.Label;
+            }
+        }
+        return id;
+    }
+
+    // The stepper on one fit row: walk the row's own roster from wherever it sits now. A value
+    // the roster does not carry starts the walk at the first entry rather than refusing to move.
+    private void StepFit(LoadoutDef? def, LoadoutChoice fit, FitRow row, int dir)
+    {
+        var options = row.Kind == FitRowKind.Gun ? Fits.Options.GunAmmo : Fits.Options.PylonOrdnance;
+        if (def == null || options.Count == 0 || row.Kind == FitRowKind.Reset)
+        {
+            return;
+        }
+
+        string current = row.Kind == FitRowKind.Gun
+            ? fit.GunAmmoFor(row.Key) ?? StockGunAmmo(def, row.Key)
+            : fit.PylonFor(row.Key) ?? StockPylon(def, row.Key);
+        int at = 0;
+        for (int i = 0; i < options.Count; i++)
+        {
+            if (string.Equals(options[i].Id, current, StringComparison.OrdinalIgnoreCase))
+            {
+                at = i;
+                break;
+            }
+        }
+
+        string picked = options[Wrap(at + dir, options.Count)].Id;
+        if (row.Kind == FitRowKind.Gun)
+        {
+            fit.SetGunAmmo(row.Key, picked);
+        }
+        else
+        {
+            fit.SetPylon(row.Key, picked);
+        }
+    }
+
+    private string StockGunAmmo(LoadoutDef def, int slot)
+    {
+        foreach (var gun in def.Guns)
+        {
+            if (gun.Slot == slot)
+            {
+                return gun.Ammo;
+            }
+        }
+        return "slug";
+    }
+
+    private string StockPylon(LoadoutDef def, int pylon)
+    {
+        var hp = def.Hardpoints;
+        for (int i = 0; hp != null && i < hp.Count && i < Loadout.PylonFillOrder.Length; i++)
+        {
+            if (Loadout.PylonFillOrder[i] == pylon)
+            {
+                return i < hp.Stock.Length ? hp.Stock[i] : LoadoutChoice.None;
+            }
+        }
+        return LoadoutChoice.None;
+    }
+
     private int CurrentCount() => _screen switch
     {
         Screen.Mode => Modes.Length,
@@ -1198,7 +1480,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Waves => _waves.Length + 1, // + the trailing "Continue" row
         Screen.WaveEdit => 4, // Enemies / Militia / Aircraft / Skill
         Screen.Wingmen => WingmenRowCount,
-        _ => Planes.Length,
+        Screen.WingmanLoadout => WingmanFitRows().Count,
+        // A lone pilot's Plane screen keeps the centred layout, so its loadout list draws here
+        // too — the pane swap below only exists once somebody else has joined.
+        _ => _slots.Count == 1 && _slots[0].InLoadout
+            ? FitRowsFor(StockFitFor(_slots[0].PlaneIndex), _slots[0].Fit).Count
+            : Planes.Length,
     };
 
     // One centred list row with a ▶ cursor — the item-4 layout, used by every screen
@@ -1215,6 +1502,9 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Waves => WaveListRowText(index),
             Screen.WaveEdit => WaveFieldRowText(index),
             Screen.Wingmen => WingmenFieldRowText(index),
+            Screen.WingmanLoadout => FitRowText(WingmanFitRows(), index),
+            _ when _slots.Count == 1 && _slots[0].InLoadout =>
+                FitRowText(FitRowsFor(StockFitFor(_slots[0].PlaneIndex), _slots[0].Fit), index),
             _ => Planes[index].Name,
         };
         bool sel = index == CurrentIndex;
@@ -1258,6 +1548,18 @@ public sealed partial class LaunchMenu : CanvasLayer
         0 => $"Wingmen         {_numWingmen}",
         _ => $"Aircraft        {Planes[_wingmanPlaneIndex].Name}",
     };
+
+    // One loadout row: its mount and what is fitted there. The reset row carries no value, so it
+    // reads as a plain command rather than a stepper with nothing to step.
+    private string FitRowText(List<FitRow> rows, int index)
+    {
+        if (index < 0 || index >= rows.Count)
+        {
+            return "";
+        }
+        var row = rows[index];
+        return row.Kind == FitRowKind.Reset ? row.Label : $"{row.Label,-12}  {row.Value}";
+    }
 
     // The detail area: one stats line for the focused entry.
     private Control DetailBlock(float s) =>
@@ -1314,6 +1616,13 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private string Footer()
     {
+        bool inFit = _screen == Screen.WingmanLoadout
+            || (_screen == Screen.Plane && _slots.Count == 1 && _slots[0].InLoadout);
+        if (inFit)
+        {
+            return "↑↓  Choose mount       ←→  Change       L / Y or Esc / B  Done";
+        }
+
         string back = _screen == Screen.Mode ? "Esc / B  Quit" : "Esc / B  Back";
         string who = _slots.Count > 1 ? "       (P1 chooses)" : "";
         string nav = _screen switch
@@ -1322,7 +1631,14 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.WaveEdit or Screen.Wingmen => "↑↓  Choose field       ←→  Change",
             _ => "↑↓  Navigate",
         };
-        return $"{nav}       Enter / A  Select       {back}{who}";
+        // The loadout is an unbound face button, so it is invisible unless the footer says so.
+        // Named only where it does something: a lone pilot at aircraft select, and the wingmen
+        // step once there are wingmen to arm.
+        string fit = _screen == Screen.Plane || (_screen == Screen.Wingmen && _numWingmen > 0)
+            ? "       L / Y  Weapons"
+            : "";
+        string select = _screen == Screen.Plane ? "Enter / A  Select, again to fly" : "Enter / A  Select";
+        return $"{nav}       {select}{fit}       {back}{who}";
     }
 
     private string Breadcrumb()
@@ -1336,7 +1652,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.MissionType => $"{mode}  ›  {Environments[_environmentIndex].Name}  ›  Mission  ›  Aircraft",
             Screen.Waves or Screen.WaveEdit =>
                 $"{mode}  ›  {Environments[_environmentIndex].Name}  ›  {CurrentMissionTypes[_missionTypeIndex].Label}  ›  Waves  ›  Aircraft",
-            Screen.Wingmen =>
+            Screen.Wingmen or Screen.WingmanLoadout =>
                 $"{mode}  ›  {Environments[_environmentIndex].Name}  ›  {CurrentMissionTypes[_missionTypeIndex].Label}  ›  Wingmen  ›  Aircraft",
             _ when _mode == MenuMode.Stunt =>
                 $"{mode}  ›  {Environments[_environmentIndex].Name}  ›  {CurrentMissionTypes[_missionTypeIndex].Label}  ›  Aircraft",
@@ -1352,6 +1668,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.MissionType => LivesDetail(),
         Screen.Waves => focus == _waves.Length ? "Enter / A  on to the wingmen" : "Enter / A  edit a wave",
         Screen.WaveEdit or Screen.Wingmen => "←→  change",
+        Screen.WingmanLoadout => "←→  change",
+        _ when _slots.Count == 1 && _slots[0].InLoadout => "←→  change",
         _ => PlaneStat(Planes[focus].Node),
     };
 
@@ -1407,7 +1725,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>One player's confirmed selection: the plane node to build and the gamepad(s) that
     /// fly it. A joined player has exactly one; player 1 (who also has the keyboard) carries every
     /// pad nobody claimed, so a lone controller still flies it and phantom devices stay harmless.</summary>
-    public readonly record struct PlayerChoice(string PlaneNode, int[] Pads);
+    /// <summary><paramref name="Fit"/> is this pane's own Ammo Selection edits, or null for the
+    /// airframe's stock fit. Per pane, because the roster above it is.</summary>
+    public readonly record struct PlayerChoice(string PlaneNode, int[] Pads, LoadoutChoice? Fit = null);
+
+    // One editable line of a loadout list. Key is the gun slot (1-4) or the physical pylon
+    // number (1-8) — slot identity, the same key LoadoutChoice uses, never a row index.
+    private readonly record struct FitRow(FitRowKind Kind, int Key, string Label, string Value);
 
     private readonly record struct Choice(string Label, string Detail);
 
@@ -1431,6 +1755,16 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         public readonly MenuInput Input = new();
         public int PlaneIndex;
+
+        // Browsing → Locked → Confirmed. The second stage exists so there IS a moment to open the
+        // loadout from: locking used to launch on the same frame the last slot locked.
         public bool Locked;
+        public bool Confirmed;
+
+        // This pane is showing its loadout list instead of the roster. Per slot, so one player
+        // arming cannot pull anybody else out of browsing.
+        public bool InLoadout;
+        public int FitRow;
+        public LoadoutChoice Fit = new();
     }
 }

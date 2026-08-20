@@ -116,6 +116,21 @@ public sealed class StockLoadouts
     /// <summary>The def's stock loadout, or null when the plane isn't in the file.</summary>
     public LoadoutDef? For(string defName) => _byDef.TryGetValue(defName, out var d) ? d : null;
 
+    /// <summary>The stock loadout of whichever def flies <paramref name="modelNode"/>
+    /// (<c>player_pfighter</c>), or null. The menu knows a plane by its model node, not its def
+    /// name, and the two differ often enough not to be guessable.</summary>
+    public LoadoutDef? ForModel(string modelNode)
+    {
+        foreach (var def in _byDef.Values)
+        {
+            if (string.Equals(def.Model, modelNode, StringComparison.OrdinalIgnoreCase))
+            {
+                return def;
+            }
+        }
+        return null;
+    }
+
     private static string Str(JsonElement e, string key) =>
         e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
 
