@@ -1138,16 +1138,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   **0.057**, ahead on 100 % of steps, roll saturated on **83 %**, and **one node advance in 90 s**.
   That last run is this entry's own description exactly — an aeroplane flying nearly straight behind
   a receding pattern, a genuinely tiny error renormalised to full scale, wallowing.
-  **It cannot reach its node, and that is our arrival test, not the original's.** Ours advances when
-  the HORIZONTAL distance to the node falls under `AiNetFollower.DefaultArrivalRadius`, an invented
-  200 m. The original advances when `dot(pos - nextNode, legDir) > -radius` (`FUN_0041d1f0`, after
-  the law call, against `sqrt(edge+0x1c)`) — an ALONG-LEG test that fires as soon as the aeroplane
-  draws abeam the node however far off to the side it is. The two differ in shape, not just in
-  value, and ours is the one that can strand an aircraft chasing a node it never catches.
-  *Next:* decode `edge+0x1c`. It is not authored — our parser requires edges to be exactly `[i,j]`
-  and all eight chapters load — so the engine computes it at net load; find that write, then port the
-  along-leg test with it. This is the first candidate that explains the stranding rather than just
-  the wallow, and `DefaultArrivalRadius` is already marked in the code as invented.
+  **It cannot reach its node, and that was our arrival test, not the original's.** Ours advanced when
+  the HORIZONTAL distance to the node fell under an invented 200 m. The original advances when
+  `dot(pos - nextNode, legDir) > -radius` (`FUN_0041d1f0`, after the law call, against
+  `sqrt(edge+0x1c)`) — an ALONG-LEG test that fires as soon as the aeroplane draws abeam the node
+  however far off to the side it is. The two differ in shape, not just in value, and ours is the one
+  that can strand an aircraft chasing a node it never catches.
+  ⚠ **The along-leg test is decoded and landed, and it does NOT settle the roll either.**
+  `edge+0x1c` is written at net load by `FUN_00431a90`: a tenth of the leg's HORIZONTAL length,
+  floored at `CCENet+0x28` (whose constructor `FUN_004303d0` seats 10 m, which every shipped net
+  keeps), stored squared. Ported into `AiNetFollower` and flown on the same anchored `M4ReinfAce`
+  against the 200 m horizontal test it replaced: node advances in 90 s go **3 → 7** with the player
+  under way, so the stranding is real and this fixes it, but the wallow is untouched — mean bank
+  62° → 54°, roll saturation 44 % → 64 %, reversals 7 → 21. It is kept because it is the decode
+  replacing an invention, not because it closes this entry.
+  That is the fourth hypothesis measured and discarded as the CAUSE, after the aim point, the
+  plant's roll authority and the far-field force model.
   ⚠ **The law is a faithful port and must not be touched, and the aim point has been eliminated
   too.** Decoded from
   `FUN_0041b560` directly: the renormalisation writes back into the same locals the output stage

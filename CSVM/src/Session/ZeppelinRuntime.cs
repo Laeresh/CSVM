@@ -51,11 +51,11 @@ public sealed partial class ZeppelinRuntime : Node
                 GD.Print($"zep: '{def.Node}' placed but held: net '{def.Net}' not in neindex");
                 continue;
             }
-            // The capture radius must clear the turning circle (v/ω plus headroom for the
-            // rate ramp-in), or a slow wide zeppelin orbits a node forever; same invented-
-            // radius caveat as AiNetFollower.DefaultArrivalRadius.
+            // A zeppelin flies its net through ZeppelinMotion, not the aeroplane executor whose
+            // along-leg test is decoded, so it keeps its own floor on the radius: clear of the
+            // turning circle (v/ω plus headroom for the rate ramp-in). Invented, and only a floor.
             float turnCircle = def.MaxSpeed / Mathf.Max(Mathf.DegToRad(def.MaxRateYawDeg), 1e-3f);
-            float arrival = Mathf.Max(AiNetFollower.DefaultArrivalRadius, 1.5f * turnCircle);
+            float arrival = 1.5f * turnCircle;
             var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai), arrival,
                 trailerTarget?.Invoke(net));
             var motion = new ZeppelinMotion(def, follower);

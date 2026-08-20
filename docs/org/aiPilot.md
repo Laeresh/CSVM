@@ -313,6 +313,41 @@ leg is aimed above or below the node by the same 0.9, and the 200 m cap is on th
 Case 3, avoid crash, aims at the aircraft's own position with **1000.0 added to Y only**
 (`0x0041d2e2`) on the emergency table `0x61fb48`. There is no lateral component to it.
 
+## Arrival is measured ALONG the leg, not as a distance to the node
+
+After the law call, case 0 advances the walk on this test, with `next` the node being flown at and
+`leg` the unit vector from `cur` to it:
+
+```
+if dot(pos - next, leg) <= -sqrt(edge+0x1c):  return   ; not arrived
+FUN_0041d8f0(obj)                                      ; step to the next edge
+```
+
+**It fires as soon as the aeroplane draws abeam the node, however far off to the side it is.** A
+capture SPHERE can be missed by an aircraft that cannot turn tightly enough, and then the walk is
+stranded on a node it orbits forever; a plane perpendicular to the leg cannot be. The other branches
+(pursue, maneuver) use a horizontal squared distance against the same `edge+0x1c` instead, so the
+along-leg shape is the patrol arm's alone.
+
+`edge+0x1c` is not authored. It is written once per edge at net load by `FUN_00431a90`, which also
+fills the edge's delta and 3-D length (`+0x0c`…`+0x18`) before normalising the delta in place:
+
+```
+r = sqrt(dx² + dz²) · 0.1                   ; the leg's HORIZONTAL length, a tenth of it
+if r < net+0x20:  r = net+0x20              ; CCENet+0x28, copied in by FUN_004314e0
+edge+0x1c = r²
+```
+
+**A tenth of the horizontal leg length, floored at 10 m, stored squared.** The floor is `CCENet`'s
+constructor default (`FUN_004303d0` writes `10.0f` to `+0x28`) and every shipped net leaves it
+alone — element 1 of the net record is `10.0` on all 222 files. Altitude change along a leg does not
+widen the capture, which is consistent with the follower's other, horizontal, arrival tests.
+
+⚠ **Porting this does not steady the aeroplane.** Measured on the anchored `M4ReinfAce` against the
+invented 200 m horizontal radius it replaced, node advances in 90 s go 3 → 7 with the player under
+way — the stranding is real and this removes it — while the roll wallow does not improve (mean bank
+62° → 54°, saturation 44 % → 64 %). `BL-387` survives it.
+
 ## The patrol-net follower has no netless branch
 
 `FUN_0041d1f0` resolves the net before it does anything else (`0x0041d1f9`–`0x0041d237`): it scans
@@ -763,6 +798,9 @@ is where to start.
 | `FUN_0041b560` | the shared steering law: point in, stick and throttle out |
 | `FUN_004311c0` | builds the chapter net table from `neindex`, in file order (`FUN_00431300` frees it) |
 | `FUN_004314e0` | builds one `CCENet` from its record: nodes, edges, volumes, and the trailer's name→object resolve |
+| `FUN_00431a90` | per edge at net load: the delta, its 3-D length, and the arrival radius squared into `edge+0x1c` |
+| `FUN_004303d0` | the `CCENet` constructor, whose `+0x28` default is the 10 m arrival-radius floor |
+| `FUN_0041d8f0` | steps the walk to the next edge once the arrival test fires |
 | `FUN_00432010` | node position with the trailer offset applied: the "this net rides that object" rule |
 | `FUN_00432140` | node position by index, the wrapper every consumer calls |
 | `FUN_00431900` | nearest node to a point, skipping edgeless nodes |

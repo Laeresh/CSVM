@@ -9,36 +9,41 @@ namespace CSVM.Flight;
 /// current target node out. Aircraft-agnostic on purpose, so <c>ZeppelinMotion</c> (F17) reuses it
 /// unchanged; <see cref="AiPilot.Patrol"/> is the aircraft consumer. Traversal is decoded in this
 /// module's docs/architecture.md entry; the anchored-trailer ride is docs/formats/ai-nets.md.
-/// The arrival radius is invented (see <see cref="DefaultArrivalRadius"/>). Per-node tags
+/// Arrival is the decoded along-leg test (<see cref="ArrivalRadius"/>). Per-node tags
 /// (<see cref="AiNetNode.Tags"/>) are preserved raw and unacted on (docs/formats/ai-nets.md).
 /// </summary>
 public sealed class AiNetFollower
 {
-    /// <summary>The capture radius, metres: an invented value, not original behaviour. Re-measured
-    /// against the ported <see cref="AiControlLaw"/> on the same C1 M4ReinfAce loop.
-    /// ⚠ Do not shrink it. No smaller value measured better; a tighter radius makes the patrol
-    /// slower to advance, not more precise.</summary>
-    public const float DefaultArrivalRadius = 200f;
+    /// <summary>The floor on a leg's arrival radius, metres: <c>CCENet+0x28</c>, whose constructor
+    /// (<c>FUN_004303d0</c>) seats 10 and which every shipped net leaves at that default.</summary>
+    public const float MinArrivalRadiusM = 10f;
+
+    // The radius is a tenth of the leg's HORIZONTAL length, floored (FUN_00431a90, which squares
+    // it into edge+0x1c at net load). Altitude change along a leg does not widen the capture.
+    private const float ArrivalRadiusPerLeg = 0.1f;
 
     private readonly Random _rng;
-    private readonly float _arrivalRadius;
+    private readonly float _minArrivalRadius;
     private readonly int[][] _neighbors;
     private readonly Func<Vector3?>? _trailerTarget;
     private readonly int _anchorIndex = -1;
     private int _previousIndex = -1;
+    private Vector3? _legOrigin;
 
     /// <param name="trailerTarget">Where the net's trailer target is right now, or null when it
     /// cannot be located this frame. Supplied only by a caller that WANTS the net to ride;
     /// omitted, or paired with a net whose trailer has no anchor node, the authored
     /// coordinates are flown. Called once per node read, so it must be cheap.</param>
-    public AiNetFollower(AiNet net, Random rng, float arrivalRadius = DefaultArrivalRadius,
+    /// <param name="minArrivalRadius">The net's own floor on the per-leg radius. Raised only by a
+    /// caller whose vehicle cannot turn inside the decoded one; never lowers it.</param>
+    public AiNetFollower(AiNet net, Random rng, float minArrivalRadius = MinArrivalRadiusM,
         Func<Vector3?>? trailerTarget = null)
     {
         if (net.Nodes.Count == 0)
             throw new ArgumentException($"net '{net.Name}#{net.Id}' has no nodes", nameof(net));
         Net = net;
         _rng = rng;
-        _arrivalRadius = arrivalRadius;
+        _minArrivalRadius = Mathf.Max(minArrivalRadius, MinArrivalRadiusM);
         if (trailerTarget != null && net.Trailer is { NodeIndex: >= 0 } trailer
             && trailer.NodeIndex < net.Nodes.Count)
         {
@@ -86,12 +91,25 @@ public sealed class AiNetFollower
     /// valid once <see cref="Update"/> has run.</summary>
     public Vector3 CurrentTarget => NodePosition(CurrentIndex);
 
-    /// <summary>Where the leg being flown STARTS: the node just left, trailer offset included, or
-    /// null before the first advance. The original always has one (`obj+0x2e8` is seated at spawn
-    /// and it aims at the far end of that edge); our first leg targets the nearest node instead of
-    /// leaving it, so it has no start until the walk advances once.
-    /// <see cref="AiPilot.PatrolAim"/> is the consumer.</summary>
-    public Vector3? LegStart => _previousIndex < 0 ? null : NodePosition(_previousIndex);
+    /// <summary>Where the leg being flown STARTS, trailer offset included: the node just left, or
+    /// on the first leg the point the walk was seated from. The original always has one
+    /// (`obj+0x2e8` is seated at spawn and it aims at the far end of that edge); our first leg
+    /// targets the nearest node instead of leaving it, so it starts where the vehicle was.
+    /// Null only before the first <see cref="Update"/>. <see cref="AiPilot.PatrolAim"/> and the
+    /// arrival test are the consumers.</summary>
+    public Vector3? LegStart =>
+        _previousIndex >= 0 ? NodePosition(_previousIndex)
+        : _legOrigin is { } o ? o + LiveOffset()
+        : null;
+
+    /// <summary>The radius, metres, at which a leg from <paramref name="legStart"/> to
+    /// <paramref name="node"/> counts as reached — a tenth of its horizontal length, floored at
+    /// <see cref="MinArrivalRadiusM"/>. The engine keeps the square in <c>edge+0x1c</c>.</summary>
+    public static float ArrivalRadius(Vector3 legStart, Vector3 node, float floorM = MinArrivalRadiusM)
+    {
+        var leg = node - legStart;
+        return Mathf.Max(ArrivalRadiusPerLeg * Mathf.Sqrt((leg.X * leg.X) + (leg.Z * leg.Z)), floorM);
+    }
 
     /// <summary>How far an anchored net's nodes are carried from their authored coordinates right
     /// now: <c>target − anchorNode</c> in X and Z, <b>zero in Y</b>, because the pattern keeps its
@@ -123,26 +141,35 @@ public sealed class AiNetFollower
     {
         CurrentIndex = -1;
         _previousIndex = -1;
+        _legOrigin = null;
     }
 
     /// <summary>Advances the walk from <paramref name="position"/>: the first call targets the
-    /// nearest node (the design's "fly first to the nearest node"); afterwards, reaching the
-    /// capture radius steps to a connected neighbour. Returns true when the target changed.</summary>
+    /// nearest node (the design's "fly first to the nearest node"); afterwards, drawing abeam the
+    /// node steps to a connected neighbour. Returns true when the target changed.</summary>
+    // ⚠ The test is ALONG the leg, not a distance to the node (FUN_0041d1f0, after the law call):
+    // it fires however far off to the side the vehicle is, so one that cannot turn tightly enough
+    // flows past its node instead of orbiting it forever.
     public bool Update(Vector3 position)
     {
         if (CurrentIndex < 0)
         {
             CurrentIndex = NearestNode(position);
+            _legOrigin = position - LiveOffset();
             return true;
         }
-        var to = CurrentTarget - position;
-        if (new Vector2(to.X, to.Z).LengthSquared() > _arrivalRadius * _arrivalRadius)
+        var node = CurrentTarget;
+        var start = LegStart ?? position;
+        var leg = node - start;
+        if (leg.LengthSquared() > 1e-6f
+            && (position - node).Dot(leg.Normalized()) <= -ArrivalRadius(start, node, _minArrivalRadius))
             return false;
         var candidates = _neighbors[CurrentIndex];
         if (candidates.Length == 0)
             return false; // an isolated node is held, not escaped by inventing an edge
         int next = candidates.Length == 1 ? candidates[0] : PickOnward(candidates);
         _previousIndex = CurrentIndex;
+        _legOrigin = null;
         CurrentIndex = next;
         Advances++;
         return true;

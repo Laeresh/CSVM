@@ -81,31 +81,54 @@ public class AiNetFollowerTests
     }
 
     [Fact]
-    public void ArrivalIsHorizontalWithinTheCaptureRadius()
+    public void ArrivalIsMeasuredAlongTheLegAtATenthOfItsHorizontalLength()
     {
         var f = new AiNetFollower(Path(), new Random(1));
-        f.Update(Vector3.Zero);
+        f.Update(new Vector3(-500f, 400f, 0f)); // seats on node 0, so the first leg is 500 m long
         Assert.Equal(0, f.CurrentIndex);
-        // 250 m short horizontally: not arrived, whatever the altitude.
-        Assert.False(f.Update(new Vector3(250f, 400f, 0f)));
+        Assert.Equal(50f, AiNetFollower.ArrivalRadius(new Vector3(-500f, 400f, 0f), f.CurrentTarget));
+        Assert.False(f.Update(new Vector3(-100f, 400f, 0f)));
         Assert.Equal(0, f.CurrentIndex);
-        // Within the (invented) 200 m capture radius in XZ, 300 m of altitude error is ignored:
-        // neither the deleted placeholder law nor the ported one converges on altitude quickly
-        // through a level patrol turn, so arrival is horizontal by design.
-        Assert.True(f.Update(new Vector3(150f, 700f, 0f)));
+        Assert.True(f.Update(new Vector3(-40f, 400f, 0f)));
         Assert.Equal(1, f.CurrentIndex);
         Assert.Equal(1, f.Advances);
     }
 
-    /// <summary>The leg the aeroplane is on, which is what <c>AiPilot.PatrolAim</c> measures its
-    /// cross-track error against. Null until the walk has advanced once: our first target is the
-    /// nearest node rather than the far end of its edge, so there is no node behind us yet.</summary>
     [Fact]
-    public void TheLegStartsAtTheNodeJustLeftAndIsAbsentBeforeTheFirstAdvance()
+    public void DrawingAbeamTheNodeArrivesHoweverFarOffToTheSideItIs()
+    {
+        // The whole point of the along-leg test: an aeroplane that cannot turn tightly enough
+        // flows PAST its node rather than orbiting a horizontal capture circle it never enters.
+        var f = new AiNetFollower(Path(), new Random(1));
+        f.Update(new Vector3(-500f, 400f, 0f));
+        f.Update(new Vector3(-40f, 400f, 0f));
+        Assert.Equal(1, f.CurrentIndex); // node 1, on the 1000 m leg 0→1, radius 100 m
+        Assert.False(f.Update(new Vector3(880f, 400f, 3000f)));
+        Assert.True(f.Update(new Vector3(910f, 400f, 3000f)));
+        Assert.Equal(2, f.Advances);
+    }
+
+    [Fact]
+    public void ANearlyVerticalLegFallsBackOnTheNetsOwnFloor()
+    {
+        // A tenth of a horizontal length of zero is zero, so without CCENet+0x28's 10 m the
+        // capture would be a point and a climb leg would never end.
+        var straightUp = new Vector3(0f, 400f, 0f);
+        Assert.Equal(10f, AiNetFollower.ArrivalRadius(Vector3.Zero, straightUp));
+    }
+
+    /// <summary>The leg the aeroplane is on, which is what <c>AiPilot.PatrolAim</c> measures its
+    /// cross-track error against, and what the arrival test projects onto. Null only before the
+    /// walk is seated: our first target is the nearest node rather than the far end of its edge,
+    /// so the first leg starts where the vehicle was standing.</summary>
+    [Fact]
+    public void TheLegStartsAtTheNodeJustLeftAndBeforeThatWhereTheWalkWasSeated()
     {
         var f = new AiNetFollower(Path(), new Random(1));
-        f.Update(Vector3.Zero);
         Assert.Null(f.LegStart);
+        var seat = new Vector3(-500f, 400f, 0f);
+        f.Update(seat);
+        Assert.Equal(seat, f.LegStart);
         Assert.True(f.Update(f.CurrentTarget));
         Assert.Equal(f.NodePosition(0), f.LegStart);
         Assert.NotEqual(f.LegStart, f.CurrentTarget);
