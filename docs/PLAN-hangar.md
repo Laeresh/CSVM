@@ -291,7 +291,8 @@ Tests in `CSVM.Tests/CustomPlaneStoreTests.cs`: `RoundTrip_PreservesEveryField`,
 `Save_SameName_Overwrites`, `Save_EmptyName_Throws`, `Deserialize_ClampsOutOfRangeValues`,
 `Constructor_RelativeDirectory_Throws`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Orchestrator battery on the committed tree at C21: build 0/0, units 1734/1734,
+engine suites 90/90 with errors clean, 16 goldens hash-identical, exit 0.
 
 **Original approach (kept for reference).**
 
@@ -339,7 +340,8 @@ UI's darkest Shade is 25/25/25, not pure black, which also refines `player_fortu
 trim. One record (`B`) carries stray high bits in the +0x84 twin dword (0xc3 with only two
 occupied slots), so only bit n may be read for slot n.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Orchestrator battery on the committed tree at C21: build 0/0, units 1734/1734,
+engine suites 90/90 with errors clean, 16 goldens hash-identical, exit 0.
 
 **Original approach (kept for reference).**
 
@@ -391,7 +393,8 @@ Tests in `CSVM.Tests/HangarEconomyTests.cs` (17 cases): `AirframeTable_MatchesTh
 `EnginelessWarhawk_IsRejectedForItsEngine` (3081/5773 NoEngine),
 `StarRatings_MatchTheDecodedFormulas`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Orchestrator battery on the committed tree at C21: build 0/0, units 1734/1734,
+engine suites 90/90 with errors clean, 16 goldens hash-identical, exit 0.
 
 **Original approach (kept for reference).**
 
@@ -494,7 +497,8 @@ Tests in `CSVM.Tests/HangarFlowTests.cs` (14 cases): `ScreenOrderIsTheOriginals`
 `CSVM.Tests/UiStringsTests.cs` for the table's two-namespace rule and the `FormatMessage`
 conversion.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Orchestrator battery on the committed tree at C21: build 0/0, units 1734/1734,
+engine suites 90/90 with errors clean, 16 goldens hash-identical, exit 0.
 
 **Original approach (kept for reference).**
 
