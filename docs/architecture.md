@@ -138,6 +138,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
 - `src/Flight/StuntRaceBoard.cs` — the race's shared ranked results overlay, on its own full-window CanvasLayer above the splitscreen panes.
 - `src/Flight/ScoreStore.cs` — stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only.
+- `src/Flight/CustomPlaneDef.cs` — a custom-built plane as a pure model: the decoded 204-byte record's chosen fields (airframe, engine, armour x4, guns x4 with twin bits, hardpoint counts x2, paint pattern/picks/colours, name), none of its derived fields; engine-free.
+- `src/Flight/CustomPlaneStore.cs` — one JSON file per custom plane under `user://Planes/` (versioned schema, name = identity, same name overwrites); list/load/save over a plain absolute directory so it unit-tests, `UserPlanes()` resolves the `user://` scheme.
 - `src/Flight/VersusMatch.cs` — Dogfight deathmatch bookkeeping: per-player kills/deaths, the host-fed match clock, threshold/time-out completion, ranked standings.
 - `src/Flight/VersusHud.cs` — per-pane Dogfight status line: remaining time, this player's kills, the leader, and the hostile marker.
 - `src/Flight/VersusBoard.cs` — the Dogfight results overlay, one whole-window CanvasLayer above the splitscreen panes.
