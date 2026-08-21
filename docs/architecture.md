@@ -274,6 +274,7 @@ clusters they delegate to.
 - `src/Session/LensFlareRig.cs` — the sun's lens flare: screen-space sprites along the sun→centre line, occlusion-tested.
 - `src/Session/FlightRoster.cs` — the session's aircraft set: builds the human field in player order and introduces AI aircraft later through one assembly seam.
 - `src/Session/HumanFlightAdapter.cs` — the FlightRoster's internal human-rig adapter: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
+- `src/Session/InstantActionDirector.cs` — the engine-side sequencing of one Instant Action mission: construction, the actor build phases, the zeppelin switch and wave arm, the sequencer tick and the end-condition/wrap-up wiring, called by `GameSession` at its pinned build and drive points.
 - `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll), and F12's objective-zeppelin selection.
 - `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry, pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in and F12's wave-credit budget that switches it back off.
@@ -2147,8 +2148,8 @@ strings rather than read off `ui_strings.json` at runtime, since that table is a
 extraction artifact of the `.rof` archive and not one of the five archives `SessionArchives.OpenFor`
 loads. Unlike `VersusBoard`/`StuntRaceBoard` it takes no live match object at all: `Present`'s
 arguments are the caller's own snapshot, handed in once from `InstantActionRuntime.MissionEnded` —
-`GameSession` owns every source (the mission clock, the kill tally, `ProjectilePool`'s shot
-counters, the summed `StuntMission.CompletedCount`) and this class only draws what it is given.
+`InstantActionDirector` owns every source (the mission clock, the kill tally, `ProjectilePool`'s
+shot counters, the summed `StuntMission.CompletedCount`) and this class only draws what it is given.
 On a `stunt_flying` mission `Present` also takes a `StuntSummary`, and the board grows the run's
 zone splits, total and best-time row in `StuntScoreboard`'s layout; the scoreboard is then not
 built at all, which is how `BL-358`'s two stacked boards became one. Safe because the scoreboard
@@ -2336,10 +2337,10 @@ moved from `F` to `F18` (`BL-428`) rather than the two sharing a key. Pad button
 through `ReadsPad`, the event-side twin of `Pads.For`, so `--no-pads`, an unfocused window and a
 per-seat binding all still hold.
 It is also the pane an Instant Action pilot out of lives watches from
-(`GameSession.BeginInstantActionSpectate`): the lab's own `FollowNode` orbit is what "follow a live
-aircraft" needed, so nothing was added for it. Constructor params `padDevices`/`useKeyboard` (
+(`InstantActionDirector`'s spectate hand-off): the lab's own `FollowNode` orbit is what "follow a
+live aircraft" needed, so nothing was added for it. Constructor params `padDevices`/`useKeyboard` (
 `BL-375`) default to null/true — every connected pad plus the keyboard, unchanged for `--freecam`,
-the anim lab and the weapon lab — but `BeginInstantActionSpectate` passes its rig's own
+the anim lab and the weapon lab — but the director passes its rig's own
 `FlightController.PadDevices`/`UseKeyboard`, the same filter the flying panes use, so two
 splitscreen pilots watching at once move independently instead of lockstep. Mouse look has no such
 split (one physical mouse) and stays shared. ⚠ Default start is the mission spawn — RANDOM per
@@ -3397,14 +3398,12 @@ projectile pool as `ProjectilePool.BeeperTags` and stepped at the same two point
 screens: after the pool has hit and the aircraft have died this step, so a tag on a crashed
 aircraft collapses on the same step's tick and the one-tag-per-step gate re-arms only once the
 step's hits are in. Nothing tags or seeks yet: the `BEEPER` hit's `TryTag` and the
-`BEEPER_SEEKER` round's per-frame `PickTarget` are the projectile lane's. `_instantAction`
-(`InstantActionRuntime?`) builds at the very top of `StartSession` —
-before any archive, since loading its source is a bare value read — from whichever of two
-producers the spec carries: `SessionSpec.IaDef` (the Instant Action wizard's own already-built def,
-H16) first, else `--ia=<path>` loaded through `InstantAction.LoadFromJson`; stays null on a load
-failure or when neither was given, which is what keeps every other mode untouched by its
-existence. Both producers converge on the identical `new InstantActionRuntime(def)` call — "one
-build path from wizard and CLI" (H16's own goal) is this one line, not two similar ones.
+`BEEPER_SEEKER` round's per-frame `PickTarget` are the projectile lane's. `_iaDirector`
+(`InstantActionDirector?`) builds at the very top of `StartSession` through
+`InstantActionDirector.TryCreate` — before any archive, since loading its source is a bare value
+read — and stays null on a load failure or when no mission was given, which is what keeps every
+other mode untouched by its existence. The mission's own state and sequencing are the director's
+(its entry below); what stays here is the call order its phases are pinned to.
 `SpawnAiAircraft` has a second overload
 (`string, Vector3, Vector3, AiPilot, PaintScheme?, int?, int?, bool inert = false,
 bool shippedSkins = false`) for this; the four-parameter one is the `--ai=` route, for an aircraft
@@ -3416,12 +3415,18 @@ method-group-to-delegate conversion over trailing optional ones, which is why th
 required. That overload's `inert:`
  forwards to `FlightRoster.SpawnAi` and is how a wave is built at session time and arrives
 later; `--crash`'s sweep over `_aiPlanes` leaves an inert plane alone, since `DebugForceCrash` is
-gated on `InPlay`. `BuildFlightRigs` spawns
-the ace (`dogfight_ace` only; F12 adds the zeppelin arm) right after the player voice registration,
-through that overload, with the authored `PaintScheme`/`InstantActionRuntime.EnemyTeam`/rating —
-the ace's own spawn-point draw is `InstantActionRuntime.ChooseAceSpawn` over
-`Rng.Stream(Rng.Spawn)`, one call after the player's own `ChooseSpawnBase` draw in the same
-stream, so a `--det` run reproduces it. `BuildFlightRigs` builds one `PauseState` (`BL-373`) and one
+gated on `InPlay`. `BuildFlightRigs` calls the director's `BuildActors` right after the player
+voice registration, handing it a lambda over that authoring overload (the same lambda rule as
+`AiGeneratorRuntime`'s constructor) — the placement is pinned, since the ace's spawn draw is one
+call after the player's own `ChooseSpawnBase` draw in the same `Rng.Spawn` stream (a `--det` run
+reproduces it) and the wingman fan reads P1's built pose. The director's other phases keep their
+old points too: `SwitchZeppelins` between the `--zeppelins` and `--generators` blocks (a held hull
+must not feed a generator's altitude gate; the switched nodes feed the turret arm inside the
+emplacement block, BEFORE `--wake-turrets`, the order the original has), `ArmZeppelinRun` after
+the generator block, `WireEndConditions` near the method's end once every signal source exists,
+`Step` from BOTH drive paths (`DriveSimSteps` after the AI planes have taken the step's crashes,
+and `_PhysicsProcess` on a realtime clock, like the match clock), and `ForceDebugScoreboard` from
+`DriveSimSteps`'s `--debug-scoreboard` block. `BuildFlightRigs` builds one `PauseState` (`BL-373`) and one
 `MenuInput` per player AHEAD of the rig loop, since the assembler hands both to the per-pane stunt
 board, then assigns the state to every rig's `FlightController.PauseState` and `PauseBoard.Build`s
 the shared pause board — single player included, so there is one pause path rather than a solo one
@@ -3429,66 +3434,9 @@ plus a splitscreen one. `MenuInputFor(playerIndex)` is the seam every board menu
 reader from. `Rerun()` is the Restart item's session-wide arm, and it routes by mode: an Instant
 Action mission calls the Launcher's `RestartSession` (the world is rebuilt — the waves, the ace and
 a killed zeppelin cannot be put back in place), the race and the match reset their own bookkeeping,
-anything else resets per plane. Right after the ace block, D9's wingman block spawns
-`InstantActionRuntime.FlownWingmen(NumWingmen, _rigs.Count)` wingmen (`NumWingmen` is 0 on
-`dogfight_ace`, so the two blocks never both fire) on `AimAssist.PlayerTeam`, fanned off
-`_rigs[0]`'s pose by `WingmanSlotFor`, wearing the paint catalog's `player_fortune` entry (no
-RNG draw, same reason the ace's scheme is worn as-is), armed at a fixed `attackRating: 5` (the
-roster skill vector is UNSET in the original, but `SpawnAiAircraft` only builds a `Gunner`/
-`Machine` at all when `attackRating ?? _spec.AiAttackSkill` resolves to something — passing 5
-explicitly, rather than null, is what keeps a wingman armed on a CLI launch that carries no
-`--ai-attack=`). Each wingman's `AiPilot` is kept as a local so its `Gunner.PrimaryTargetName`/
-`Machine.ActivationRange` can be set AFTER `SpawnAiAircraft` has populated them — wingmen 2 and
-4's target is the ALREADY-SPAWNED `FlightController` for wingmen 1/3's own `.Name` (ascending
-spawn order is load-bearing here, not just cosmetic), read off the real spawned node rather than
-reconstructing the original's `<plane>_ia1`-style roster name.
-Right after the wingman block, E11's wave block builds EVERY configured wave's members through
-the same `SpawnAiAircraft` overload, `inert: true`, at the world origin (Decision 6: build inert,
-then teleport-and-activate on wave change, folding "wave 1 spawns live" into the same path every
-later wave takes) — on all four modes, `zeppelin_run` included, where the original also builds even
-wave 1 deactivated at the origin and it is the ARRIVAL that differs (F12). Each member's
-attack rating is `InstantActionRuntime.RepresentativeRating(RandomPilotStats(draw))` off
-`Rng.Stream(Rng.Ai)` (the wave sequencer's own five-row personality roll) and its voice accent is
-`ResolveWaveAccentId(EnemyAccentId, draw)` off the same stream (the accent-12 re-roll); its livery
-is `scheme: null`, the ordinary AI resolver, since a wave's militia is a setup-screen-only value
-`ia.json` never carries (`InstantActionRuntime.cs`'s own entry has the full reasoning). The built
-rosters live in `_iaWaveRosters[w]` (an array of `List<FlightController>`, not engine state), and
-`InstantActionWaves.Start()` — called once the rosters exist — returns the first wave worth
-activating, handed to `ActivateInstantActionWave`. `DriveSimSteps` calls `InstantActionWaves.Step`
-once per sim step with `_iaWaveRosters[CurrentWave-1].Count(fc => fc.InPlay)`, activating whatever
-wave number it returns; `ActivateInstantActionWave` draws the spawn point
-(`InstantActionWaves.ChooseWaveSpawn`, `Rng.Stream(Rng.Spawn)`) against every live human's CURRENT
-`WorldPosition`, not their spawn pose, and fans the roster onto it (`InstantActionWaves.FanOffset`)
-through `FlightController.Activate`.
-F12's zeppelin run rewires three points of that without a second code path. (1) The `--zeppelins`
-and `--generators` blocks run unconditionally on that mode: the objective IS a zeppelin and its
-generator is the only way an enemy gets airborne, so neither is the tester's flag to remember.
-(2) Between them sits the builder's own zeppelin switch — every distinct
-`InstantActionRuntime.ZeppelinNodes` entry is resolved through the world runtime and written
-`Visible = objective`, which is the decoded `gwNodeSetActive`, with `ZeppelinRuntime.Hold` on the
-ones switched off.
-(3) `ActivateInstantActionWave` branches at the top: on
-`zeppelin_run` it stamps `_iaLaunchWave` (the generator's decoded `+0x64` group) and calls
-`AiGeneratorRuntime.GrantWaveCapacity` with the wave's member count instead of drawing a spawn
-point, and `ReleaseInstantActionWaveMember` — handed to the generator at build — activates the next
-still-inert member of that wave at the generator's own bay drop point. Because the credit needs the
-generator to exist, `InstantActionWaves.Start()` is called after the generator block on that mode
-rather than inside the wave block.
-G13 closes the mission. One block near the end of `BuildFlightRigs` routes each mode's own signal
-into `_instantAction` — the ace's `Downed`, each pilot's own `StuntMission.RunCompleted` into
-`CheckInstantActionZoneSets` (which asks `InstantActionRuntime.ZoneSetsFlown`, and is called again
-whenever a pilot goes out — the only other event that can make it true, so nothing is polled),
-`ZeppelinRuntime.ZeppelinEnginesDisabled` **and** `ZeppelinKilled`, both filtered to the OBJECTIVE
-node and both reporting the one objective (the decoded mode wins on either, engines first), and the
-wave sequencer's exhausted counter from `StepInstantAction` — then registers every human seat on the
-lives ledger, arms the same 3 s `VersusRespawnDelay`, and subscribes one `Downed` handler per rig
-that either logs the lives left or calls `BeginInstantActionSpectate`. A mission whose win signal
-cannot arrive is disabled and WARNS at build rather than silently never ending.
-`BeginInstantActionSpectate` pins the wreck (`FlightController.Spectating`), takes the pane with
-`CameraOwned` and gives it a `SpectatorCamera` locked onto a still-flying human where there is one;
-the target is picked once, so if that pilot later goes out too (3+ players) the watcher orbits a
-wreck until any movement input releases the lock.
-`ApplyDebugSpectate` (`--debug-spectate`) is the deliberate twin of that path, for watching the AI
+anything else resets per plane.
+`ApplyDebugSpectate` (`--debug-spectate`) is the deliberate twin of the director's out-of-lives
+spectate hand-off, for watching the AI
 with nobody provoking it: every human aircraft goes `Held` + `Inert` (pinned, undrawn, and absent
 from every candidate scan's live set, which is what stops the pursuit) and its pane takes a
 `SpectatorCamera` following the first AI aircraft, cockpit instruments hidden and the marker HUD
@@ -3500,23 +3448,6 @@ away rather than a hang.
 An `--ia=` `stunt_flying` mission also loads the
 danger zones itself, `--stunt` or not — the mission type is what asks for them, the way a zeppelin
 run asks for the zeppelin and generator runtimes.
-G14 adds the wrap-up board, built once right after G13's own block (same `_instantAction is { }
-iaEnd` guard) and shown from a second `MissionEnded` subscriber. `enemiesShotDown` is a plain local
-int, incremented from a `Downed` handler on the ace and every `_iaWaveRosters` member — the only
-actors ever built on `InstantActionRuntime.EnemyTeam` — filtered on `killer != null` so a bare
-terrain/mid-air crash never counts (docs/formats/instant-action.md: the original's counter lives in
-the take-hit body, not in every `Downed` cause). Every human seat's `PlayerIndex` also joins
-`ProjectilePool.ScoredShooters` in the same lives-registration loop, which is what lets
-`_projectiles.CannonRoundsFired`/`CannonHits` answer `InstantActionRuntime.ShotPercent` at
-`MissionEnded` time; `zonesCompleted` is `_rigs.Sum(r => r.Controller?.Stunt?.CompletedCount ?? 0)`,
-read live rather than accumulated (0 on every non-stunt mission, matching the decode's "present on
-every mission type").
-`--debug-scoreboard` forces this mission's own win signal on the first sim step (`DriveSimSteps`,
-mirroring the `--vs` block just above it): `dogfight_ace`/`dogfight_squadron` through
-`DebugForceCrash`, attributed to P1 so the board's kill row reads non-zero on a scripted
-screenshot too; `stunt_flying` needs nothing here, already forced unconditionally by
-`HumanFlightAdapter`'s own `DebugCompleteStunt` wiring; `zeppelin_run` has no debug force — this
-item does not add one, since G13's own verification drove that mode through real damage instead.
 
 ## src/Utils/GameClock.cs
 The session's simulation clock: `BeginFrame(wallDelta)` (first thing in `GameSession._Process`)
@@ -3965,27 +3896,78 @@ typo would otherwise size nothing silently. Asserted twice, because that set is 
 `EffectPoolsTests` against C1's bound program (an `ExtractedDataFact`, skipped without an
 extraction) and as an `effects-census` condition on whatever chapter the run was given.
 
+## src/Session/InstantActionDirector.cs
+The engine-side sequencing of one Instant Action mission, behind `GameSession`'s one nullable
+`_iaDirector` field. A plain sealed class, not a Node: `GameSession` owns the tick order and calls
+the phases at its pinned points (its entry has the order), and every node built on the mission's
+behalf parents under the handed `_worldRoot`, so the session's no-Teardown rule holds unchanged.
+The decoded rules stay engine-free in `InstantActionRuntime` and `InstantActionWaves`; this class
+is where they meet the engine, and it owns every "ia:" log line.
+`TryCreate(spec)` is construction: `SessionSpec.IaDef` (the wizard's already-built def, H16)
+first, else `--ia=<path>` through `InstantAction.LoadFromJson`; both producers converge on the one
+`new InstantActionRuntime(def)` call (⚠ in the code — two similar calls is the failure it avoids),
+and a load failure warns and returns null rather than aborting the launch.
+`BuildActors(ActorBuildInputs)` is the contiguous actor phase, its inputs in
+`HumanFlightAdapter.Inputs`' shape (stable references plus the two delegates `GameSession` keeps
+private behaviour behind, the authoring `SpawnAiAircraft` lambda and `RegisterAiVoice`): the
+chapter's FIRST patrol net armed on every actor, the `dogfight_ace` ace (spawn draw
+`ChooseAceSpawn`, authored livery/team/rating), D9's wingmen (`FlownWingmen` clamp,
+`WingmanSlotFor` fan off P1's pose, `player_fortune` livery, explicit `attackRating: 5`, the
+escort chain set AFTER spawn so wingmen 2/4 target the already-spawned 1/3), and E11's waves —
+EVERY configured wave built inert at the world origin on all four modes (Decision 6: build inert,
+then teleport-and-activate, folding "wave 1 spawns live" into the path every later wave takes),
+each member's rating and accent drawn from `Rng.Stream(Rng.Ai)`, its livery the militia pattern or
+its own shipped skins, never the Fortune Hunters default. Wave 1 starts here on every mode but
+`zeppelin_run`.
+F12's zeppelin run rewires three points without a second code path: `SwitchZeppelins` writes every
+distinct authored zeppelin node `Visible = objective` (the decoded `gwNodeSetActive`, colliders
+derive from it) with `ZeppelinRuntime.Hold` on the ones switched off, returning the switched nodes
+for `GameSession`'s turret arm; `ArmZeppelinRun` hands the private `ReleaseWaveMember` launch hook
+to the objective's generator (`UseInstantActionLaunches`) and only then starts wave 1, since
+activating it means crediting a generator that did not exist at `BuildActors` time; `ActivateWave`
+branches at the top, stamping the launch-wave group (the generator's decoded `+0x64`) and calling
+`GrantWaveCapacity` instead of drawing a spawn point.
+`Step(dt)` (⚠ called from BOTH drive paths) advances the mission clock, ticks
+`InstantActionWaves.Step` with the current wave's alive count (a member still parked in the
+zeppelin's bay COUNTS as present, as the decoded walk counts a still-deactivated enemy), activates
+whatever wave it returns, and reports `WavesCleared` when the sequencer finishes.
+`WireEndConditions(EndConditionInputs)` is G13+G14: each mode's own signal routed into the runtime
+(the ace's `Downed`; `StuntMission.RunCompleted` into the zone-set check, re-checked when a pilot
+goes out, never polled; both zeppelin signals filtered to the OBJECTIVE node, engines first; the
+sequencer's exhausted counter from `Step`), a mission whose win signal cannot arrive disabled with
+a WARN at build; every human seat on the lives ledger with the 3 s respawn delay and a `Downed`
+handler that logs the lives left or hands the pane to the spectate path (the pilot's own pad
+filter, so two downed splitscreen pilots move independently); and the whole-window wrap-up board,
+its counters summed across every seat (`enemiesShotDown` filtered on `killer != null` — a bare
+terrain crash never reaches the take-hit body the original counts in — Shot % through
+`ProjectilePool.ScoredShooters`, zones read live at `MissionEnded` time, P1's stunt best recorded
+under the mission's own score key).
+`ForceDebugScoreboard()` is `--debug-scoreboard`'s single-fire force, attributed to P1:
+`dogfight_ace`/`dogfight_squadron` through `DebugForceCrash`; `stunt_flying` needs nothing,
+already forced by `HumanFlightAdapter`'s own `DebugCompleteStunt` wiring; `zeppelin_run` has no
+force, its verification drove the mode through real damage.
+
 ## src/Session/InstantActionRuntime.cs
 Owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's spawn draw
 and rating, the wingmen's fan placement, each wave's per-member draws, the objective-zeppelin
-selection, and the mission's end. Static, engine-free helpers `GameSession.BuildFlightRigs` calls:
+selection, and the mission's end. Static, engine-free helpers `InstantActionDirector` calls:
 `ChooseAceSpawn`, `RepresentativeRating`, `WingmanSlotFor`/`FlownWingmen`,
 `RandomPilotStats`/`ResolveWaveAccentId`, `ZeppelinNodes`/`SelectedZeppelinNode`/`ZeppelinTypeIndex`,
 `FormatElapsed`/`ShotPercent`. The end half (`Objective`, `ReportObjective`, `DisableObjective`,
 `ZoneSetsFlown`, the lives ledger, `Outcome`/`MissionEnded`, `Elapsed`) holds no engine type and
 calls no `GD.*`, the same construction rule `VersusMatch` follows —
-`CSVM.Tests/InstantActionEndTests.cs` pins it off-engine, and `GameSession` owns every log line
-about it. Format and decode: docs/formats/instant-action.md.
+`CSVM.Tests/InstantActionEndTests.cs` pins it off-engine, and `InstantActionDirector` owns every
+log line about it. Format and decode: docs/formats/instant-action.md.
 
 ## src/Session/InstantActionWaves.cs
 The decoded wave sequencer's own selection, trigger and geometry logic (`FUN_0045b9d0`): pure state
 over `Start`/`Step` calls, in the shape of `GeneratorCycle` —
-`CSVM.Tests\InstantActionWavesTests.cs` pins it off-engine. `GameSession.BuildFlightRigs` builds
-every configured wave's members INERT at the world origin, tracked in its own `_iaWaveRosters[w]`
-array, then calls `Start()` and activates whatever it returns; `DriveSimSteps` ticks `Step` once
-per sim step, and `ActivateInstantActionWave` resolves the spawn draw against every live human's
-CURRENT position before calling `FlightController.Activate` on each member. Format and decode:
-docs/formats/instant-action.md.
+`CSVM.Tests\InstantActionWavesTests.cs` pins it off-engine. `InstantActionDirector.BuildActors`
+builds every configured wave's members INERT at the world origin, tracked in the director's own
+per-wave rosters, then calls `Start()` and activates whatever it returns; the director's `Step`
+ticks `InstantActionWaves.Step` once per sim step, and its `ActivateWave` resolves the spawn draw
+against every live human's CURRENT position before calling `FlightController.Activate` on each
+member. Format and decode: docs/formats/instant-action.md.
 
 ## src/Session/GeneratorCycle.cs
 The decoded egen launch timing law for ONE generator (M4 B6 + F20), pure over `Step` calls (no
