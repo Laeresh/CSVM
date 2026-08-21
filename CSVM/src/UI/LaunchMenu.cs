@@ -19,6 +19,11 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class LaunchMenu : CanvasLayer
 {
+    /// <summary>The row that opens the hangar, on the Mode screen and on the Instant Action plane
+    /// pick. The original has no button string of its own for it; this is the phrase its own help
+    /// text uses (langui 10524).</summary>
+    public const string HangarRow = "Build Custom Plane";
+
     /// <summary>Fired when every joined player has locked a plane: (chapter code, one choice per
     /// player in player order, the picked mode, and — Instant Action only, else null — the
     /// wizard's own built <c>InstantActionDef</c>). The host hides the menu and builds the
@@ -199,6 +204,14 @@ public sealed partial class LaunchMenu : CanvasLayer
     private LoadoutChoice _wingmanFit = new();
     private int _wingmanFitRow;
     private MenuMode _mode;
+    // The Build Custom Plane flow while it is open, and the screen it was opened from. Both
+    // doors (the Mode screen's trailing row, the Instant Action plane pick) come through
+    // OpenHangar, so cancelling always lands back where the pilot pressed.
+    private HangarFlow? _hangar;
+    private Screen _hangarReturn = Screen.Mode;
+    // The langui table, loaded on first hangar entry (a session that never opens it never reads
+    // the file). Null until then; a failed load leaves UiStrings.Empty here.
+    private UiStrings? _uiStrings;
     private string _error = "";
     // The pad player 1 claimed by driving the Mode/Chapter screens with it (−1 = none yet, i.e.
     // player 1 is on the keyboard and every connected pad is still free to join).
@@ -211,11 +224,17 @@ public sealed partial class LaunchMenu : CanvasLayer
     // instead of _center on the Plane screen once more than one player has joined.
     private Control _paneRoot = null!;
 
-    private enum Screen { Mode, Chapter, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout }
+    private enum Screen { Mode, Chapter, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout, Hangar }
 
     // What a fit row edits. The reset row carries no slot of its own and is the only one Accept
     // does anything on, since every other row is a live stepper.
     private enum FitRowKind { Gun, Pylon, Reset }
+
+    /// <summary>The name of the last plane the hangar built this session, or "". ⚠ This is D31's
+    /// seam: it lists saved customs after the eleven stock airframes and auto-selects this one in
+    /// the picker the hangar was entered from (the original's index-11 contract). Nothing reads it
+    /// yet, so a build today returns to an unchanged picker.</summary>
+    public string LastBuiltPlane { get; private set; } = "";
 
     // The chapter roster the picked mode offers — the Chapter screen and everything
     // downstream (breadcrumb, launch) index into this, never the full list. Free Flight/Dogfight
@@ -240,6 +259,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.WaveEdit => _waveFieldIndex,
         Screen.Wingmen => _wingmenFieldIndex,
         Screen.WingmanLoadout => _wingmanFitRow,
+        Screen.Hangar => _hangar?.Row ?? 0,
         _ => _slots.Count == 1 && _slots[0].InLoadout ? _slots[0].FitRow : _slots[0].PlaneIndex,
     };
 
@@ -251,6 +271,14 @@ public sealed partial class LaunchMenu : CanvasLayer
     // How many rows the Wingmen screen shows right now: the Aircraft field is hidden at
     // 0 wingmen, matching the decoded setup screen's own behaviour.
     private int WingmenRowCount => _numWingmen > 0 ? 2 : 1;
+
+    // Whether the plane pick offers the hangar row. Decision 6 puts the Build entry on the
+    // Instant Action pick; a splitscreen pane never draws it, so the roster there stays the
+    // eleven stock airframes and PlaneIndex cannot point past them.
+    private bool HangarRowOnPlaneScreen => _mode == MenuMode.Stunt && _slots.Count == 1;
+
+    // The plane pick's row count, the eleven airframes plus the hangar row where it is offered.
+    private int PlaneRowCount => Planes.Length + (HangarRowOnPlaneScreen ? 1 : 0);
 
     /// <summary>Builds the (hidden) launchscreen. <paramref name="zrdrPath"/> is the shared zrdr
     /// extraction the plane stats come from; <paramref name="dataRoot"/> is where <c>extracted/</c>
@@ -421,6 +449,9 @@ public sealed partial class LaunchMenu : CanvasLayer
             _waveListIndex = _waves.Length;
         }
         _error = "";
+        // A flow never survives a trip through flight: it holds an unsaved scratch plane, and
+        // resuming one after a session would be editing something nobody remembers starting.
+        _hangar = null;
         Visible = true;
         if (_slots.Count == 0)
             _slots.Add(new Slot { Input = { Keyboard = true } });
@@ -739,6 +770,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             var p1 = _slots[0].Input;
             dirty |= ClaimP1Pad();
+            if (_screen == Screen.Hangar)
+            {
+                return HandleHangarInput(p1) || dirty;
+            }
+
             if (p1.Move != 0)
             {
                 int n = CurrentCount();
@@ -818,7 +854,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             if (input.Move != 0 && !slot.Locked)
             {
                 int was = slot.PlaneIndex;
-                slot.PlaneIndex = Wrap(slot.PlaneIndex + input.Move, Planes.Length);
+                slot.PlaneIndex = Wrap(slot.PlaneIndex + input.Move, i == 0 ? PlaneRowCount : Planes.Length);
                 if (slot.PlaneIndex != was)
                 {
                     // Pylon count and gun slots are per-airframe, so a fit built for one has
@@ -828,6 +864,14 @@ public sealed partial class LaunchMenu : CanvasLayer
                 }
                 dirty = true;
             }
+            // The hangar row is a door, not an aircraft: it never locks, so nothing downstream
+            // ever indexes the roster with it.
+            if (input.Accept && i == 0 && slot.PlaneIndex >= Planes.Length)
+            {
+                OpenHangar(Screen.Plane);
+                return true;
+            }
+
             if (input.Loadout && slot.Locked && !slot.Confirmed)
             {
                 slot.InLoadout = true;
@@ -1069,6 +1113,13 @@ public sealed partial class LaunchMenu : CanvasLayer
                 }
                 break;
             case Screen.Mode:
+                // The trailing row is the hangar's top-level door, past the three modes.
+                if (_modeIndex >= Modes.Length)
+                {
+                    OpenHangar(Screen.Mode);
+                    break;
+                }
+
                 _mode = (MenuMode)_modeIndex; // the row order IS the enum order
                 if (_mode == MenuMode.Stunt) // "Instant Action" — the wizard's step 1
                 {
@@ -1133,6 +1184,91 @@ public sealed partial class LaunchMenu : CanvasLayer
                 PrimeJoins();
                 break;
         }
+    }
+
+    // --- the hangar ---
+
+    // Opens the Build Custom Plane flow, remembering the screen to land back on. Both doors
+    // (the Mode screen's trailing row and the Instant Action plane pick) come through here, so
+    // there is one entry, one exit and one place the scratch plane lives.
+    private void OpenHangar(Screen returnTo)
+    {
+        _hangarReturn = returnTo;
+        _hangar = new HangarFlow(CustomPlaneStore.UserPlanes(), HangarStrings());
+        _screen = Screen.Hangar;
+        _error = "";
+    }
+
+    // One frame of player 1's input on a hangar screen. Nobody else steers it: the flow edits one
+    // scratch plane, and a second cursor in it would have nothing of its own to move.
+    private bool HandleHangarInput(MenuInput p1)
+    {
+        if (_hangar is not { } flow)
+        {
+            _screen = _hangarReturn;
+            return true;
+        }
+
+        bool dirty = false;
+        if (p1.Move != 0)
+        {
+            dirty |= flow.Move(p1.Move);
+        }
+
+        if (p1.MoveX != 0)
+        {
+            dirty |= flow.Step(p1.MoveX);
+        }
+
+        if (p1.Accept)
+        {
+            dirty |= flow.Accept();
+        }
+        else if (p1.Back)
+        {
+            dirty |= flow.Back();
+        }
+
+        // The gate's refusal (overweight, no engine, no name) rides the screen's own error line.
+        _error = flow.Message;
+        if (flow.Exit != HangarExit.None)
+        {
+            CloseHangar(flow);
+            return true;
+        }
+
+        return dirty;
+    }
+
+    // Leaves the flow, built or cancelled, for the screen it was opened from. A cancelled flow
+    // wrote nothing, so there is nothing to undo.
+    private void CloseHangar(HangarFlow flow)
+    {
+        _screen = _hangarReturn;
+        _hangar = null;
+        _error = "";
+        if (flow.Exit == HangarExit.Built && flow.BuiltPlaneName is { } name)
+        {
+            LastBuiltPlane = name;
+            GD.Print($"launchscreen: hangar built \"{name}\" (the picker's auto-select is D31's)");
+        }
+    }
+
+    // The langui table, read once per session on first hangar entry. A missing extraction is a
+    // warning, not a refusal: every hangar label carries its own fallback text.
+    private UiStrings HangarStrings()
+    {
+        if (_uiStrings == null)
+        {
+            _uiStrings = UiStrings.TryLoad(_dataRoot);
+            if (_uiStrings == null)
+            {
+                GD.PushWarning("launchscreen: no extracted/rof/—— hangar labels fall back");
+                _uiStrings = UiStrings.Empty;
+            }
+        }
+
+        return _uiStrings;
     }
 
     // The chosen Instant Action environment's own shipped ia.zrd.json, for the fields the
@@ -1216,6 +1352,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         _paneRoot.Visible = split;
         if (split)
         {
+            // The hangar row exists only in the lone-pilot layout, so a pilot joining while
+            // player 1 sits on it must not leave a cursor past the roster's end.
+            foreach (var slot in _slots)
+                slot.PlaneIndex = Math.Min(slot.PlaneIndex, Planes.Length - 1);
             RebuildPanes();
             return;
         }
@@ -1242,6 +1382,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.WaveEdit => $"WAVE {_waveEditIndex + 1}",
             Screen.Wingmen => "WINGMEN",
             Screen.WingmanLoadout => $"WINGMEN — AMMO SELECTION  ({Planes[_wingmanPlaneIndex].Name})",
+            Screen.Hangar => _hangar?.Page.Title ?? HangarRow,
             _ when _slots.Count == 1 && _slots[0].InLoadout =>
                 $"AMMO SELECTION  ({Planes[_slots[0].PlaneIndex].Name})",
             _ when _slots.Count == 1 && _slots[0].Locked => "AIRCRAFT SELECTED",
@@ -1566,14 +1707,15 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private int CurrentCount() => _screen switch
     {
-        Screen.Mode => Modes.Length,
+        Screen.Mode => Modes.Length + 1, // + the trailing hangar row
+        Screen.Hangar => _hangar?.Page.RowCount ?? 1,
         Screen.Chapter => CurrentChapters.Length,
         Screen.Environment => Environments.Length,
         Screen.MissionType => CurrentMissionTypes.Length,
         Screen.Waves => _waves.Length + 1, // + the trailing "Continue" row
         Screen.WaveEdit => 4, // Enemies / Militia / Aircraft / Skill
         Screen.Wingmen => WingmenRowCount,
-        _ => CentredFitRows()?.Count ?? Planes.Length,
+        _ => CentredFitRows()?.Count ?? PlaneRowCount,
     };
 
     // One centred list row with a ▶ cursor — the item-4 layout, used by every screen
@@ -1590,14 +1732,15 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         string text = _screen switch
         {
-            Screen.Mode => Modes[index].Label,
+            Screen.Mode => index < Modes.Length ? Modes[index].Label : HangarRow,
+            Screen.Hangar => _hangar?.Page.RowText(index) ?? "",
             Screen.Chapter => CurrentChapters[index].Name,
             Screen.Environment => Environments[index].Name,
             Screen.MissionType => CurrentMissionTypes[index].Label,
             Screen.Waves => WaveListRowText(index),
             Screen.WaveEdit => WaveFieldRowText(index),
             Screen.Wingmen => WingmenFieldRowText(index),
-            _ => Planes[index].Name,
+            _ => index < Planes.Length ? Planes[index].Name : HangarRow,
         };
         bool sel = index == CurrentIndex;
         // A locked single-player pick recolours its row, because the centred layout has no
@@ -1705,6 +1848,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             return "↑↓  Choose mount       ←→  Change       L / Y or Esc / B  Done";
         }
 
+        if (_screen == Screen.Hangar)
+        {
+            return "↑↓  Choose       ←→  Change       Enter / A  Continue       Esc / B  Back";
+        }
+
         string back = _screen == Screen.Mode ? "Esc / B  Quit" : "Esc / B  Back";
         string who = _slots.Count > 1 ? "       (P1 chooses)" : "";
         string nav = _screen switch
@@ -1734,6 +1882,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         return _screen switch
         {
             Screen.Mode => "Mode  ›  Map  ›  Aircraft",
+            Screen.Hangar => $"{HangarRow}  ›  {_hangar?.Page.Title}",
             Screen.Chapter => $"{mode}  ›  Map  ›  Aircraft",
             Screen.Environment => $"{mode}  ›  Environment  ›  Mission  ›  Aircraft",
             Screen.MissionType => $"{mode}  ›  {Environments[_environmentIndex].Name}  ›  Mission  ›  Aircraft",
@@ -1749,7 +1898,8 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private string Detail(int focus) => _screen switch
     {
-        Screen.Mode => Modes[focus].Detail,
+        Screen.Mode => focus < Modes.Length ? Modes[focus].Detail : "Build a plane in the hangar and fly it.",
+        Screen.Hangar => _hangar?.Page.Detail(focus) ?? "",
         Screen.Chapter => $"Region {CurrentChapters[focus].Code}",
         Screen.Environment => $"Region {Environments[focus].Code}",
         Screen.MissionType => LivesDetail(),
@@ -1758,7 +1908,9 @@ public sealed partial class LaunchMenu : CanvasLayer
         // Blank: the footer already names the steppers, and a second copy of "←→ change" directly
         // over it reads as two different controls rather than one.
         _ when CentredFitRows() != null => "",
-        _ => PlaneStat(Planes[focus].Node),
+        _ => focus < Planes.Length
+            ? PlaneStat(Planes[focus].Node)
+            : "Build a plane in the hangar and fly it.",
     };
 
     // The lives stepper's own line, shown where the other screens show the focused row's

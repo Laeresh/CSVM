@@ -125,7 +125,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — the screens
 
-21. ☐ Hangar shell and navigation: screen order, IA Build entry, top-level entry
+21. ☑ Hangar shell and navigation: screen order, IA Build entry, top-level entry
 22. ☐ AIRFRAME screen
 23. ☐ ENGINE and ARMOR screens
 24. ☐ GUNS and HARDPOINTS screens (BL-067)
@@ -422,6 +422,81 @@ gun.
 # Wave C — the screens
 
 ## C21 ☐ Hangar shell and navigation: screen order, IA Build entry, top-level entry
+
+**Landed.** The shell is `CSVM/src/UI/HangarFlow.cs`, engine-free the way `BoardMenu` is: it owns
+the screen order, the scratch plane and the rules, and `LaunchMenu` is only its renderer and input
+source. `HangarFlow.Order` is the original's nine screens (plane selection, airframe, engine,
+armour, guns, hardpoints, paint, name, purchase), walked over one scratch `CustomPlaneDef` with
+`Move` / `Step` / `Accept` / `Back` in the launchscreen's own live-stepper idiom.
+
+- **Two doors, one entry point.** `LaunchMenu.OpenHangar(returnTo)` is reached from a trailing
+  `Build Custom Plane` row past the three Mode rows, and from the same row past the eleven
+  airframes on the Instant Action plane pick (Decision 6). It records the screen to land back on,
+  so cancelling always returns where the pilot pressed.
+- **Cancel is residue-free by construction.** Nothing is written until `Commit()`, so `Back()` off
+  the first screen sets `Exit = Cancelled` and the scratch plane is simply dropped. There is no
+  undo path to get wrong. A flow never survives a trip through flight either: `ShowMenu` clears it.
+- **The commit is the whole gate, in one place.** A name (langui 203), then `HangarEconomy`'s
+  verdict in the original's own words (1182 + 1227 OVERWEIGHT, 1182 + 1171 No Engine Selected),
+  then `CustomPlaneStore.Save`. Funds are never checked (Decision 2). Editing a saved plane starts
+  from a copy made through the store's canonical serialisation, so abandoning an edit cannot touch
+  what is on disk.
+- **The D31 seam** is `LaunchMenu.LastBuiltPlane`, the name a completed build hands back. Nothing
+  reads it yet, so a build today returns to an unchanged picker; D31 lists customs after the eleven
+  stock airframes and auto-selects this one (the index-11 contract).
+- **Strings** resolve through the new `CSVM/src/Mech3/UiStrings.cs`: `extracted/rof/ui_strings.json`
+  under the session's own `dataRoot` (the path idiom `HudFont` already uses), langui rows only
+  (ids repeat across the file's two tables), `FormatMessage` specifiers (`%1!d!`, `%1!02d!`, `%%`)
+  converted to composite format, leading `[FONTID]` tags stripped. Loaded once on first hangar
+  entry; a missing extraction is a warning and every label falls back to its own plain text.
+- **Nothing scripted sees it.** No `--menu=` opening onto a hangar screen, no `SessionSpec` field,
+  no `Launcher` change. The hangar row is a door, not an aircraft: it cannot be locked or
+  confirmed, so no launch path reads it, and it is drawn only for a lone pilot under Instant Action
+  (`HangarRowOnPlaneScreen`) so a splitscreen pane's roster stays the eleven airframes.
+
+**The mount-point contract for C22-C26.** Each item implements `IHangarPage` for its screen in a
+NEW file of its own (`CSVM/src/UI/Hangar<Screen>Page.cs`), deriving from `HangarPage` for the flow,
+the scratch plane and the langui heading. The members are:
+
+| Member | What the screen provides |
+|---|---|
+| `Screen` | its `HangarScreen` value |
+| `Title` | inherited; already the screen's own langui id (1017 / 1004-1010 / 1401) |
+| `RowCount` / `RowText(row)` | the list the shell draws |
+| `Detail(row)` | the line under the list for the focused row, or `""` |
+| `Step(row, dir)` | the ←→ live stepper, editing `Scratch` in place; returns whether anything changed |
+| `Accept(row)` | `false` (the default) lets the flow advance to the next screen; `true` means the page handled the press |
+
+Everything is plain text and plain indices, so a page is engine-free and testable and the shell
+needs no change to draw one. The ONLY edit outside the new file is one line in
+`HangarFlow.PageFor`'s switch, replacing that screen's `HangarPlaceholderPage`. `LaunchMenu.cs`
+is not touched by C22-C26 at all, which is what lets them run concurrently. Screens needing art
+(the blueprint/icon TGAs of Decision 4, C25's `PlanePainter` preview) also need a TGA loader, which
+the codebase does not have and this shell deliberately did not invent: that page brings its own,
+plus whatever extension to the page contract it needs.
+
+What stands in each screen today: `HangarPlaceholderPage` for airframe, engine, armour, guns,
+hardpoints and paint. The right heading, a Continue row, and a real summary of what the scratch
+plane carries there (langui names, stat-table slot titles, the economy's own figures). It edits
+nothing, so a flow walked straight through produces exactly the plane the screens before it chose.
+`HangarPlaneSelectionPage` is real (New Plane, or one of the store's saved planes to edit).
+`HangarNamePage`'s stepper over airframe-derived names is a placeholder for C25's text entry, and
+`HangarPurchasePage`'s totals line is a placeholder for C26's itemised list, but the gate and the
+save under it are already the real ones.
+
+Tests in `CSVM.Tests/HangarFlowTests.cs` (14 cases): `ScreenOrderIsTheOriginals`,
+`AFlowOpensOnPlaneSelection`, `EveryScreenTitlesItselfFromLangui`,
+`ConfirmWalksTheOrderAndStopsOnPurchase`, `BackWalksTheOrderInReverse`,
+`BackOffTheFirstScreenCancels`, `CancellingMidFlowWritesNothing`,
+`CompletingTheFlowSavesTheScratchPlaneAndNamesIt`, `AnEnginelessBuildIsRefusedWithTheOriginalsWords`,
+`AnOverweightBuildIsRefused`, `ANamelessBuildIsRefused`, `EditingASavedPlaneWorksOnACopy`,
+`NewPlaneSeatsAFreshScratch`, `ThePlaceholderScreensEditNothing`; and
+`CSVM.Tests/UiStringsTests.cs` for the table's two-namespace rule and the `FormatMessage`
+conversion.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The hangar opens from the IA wizard's Build button and from a top-level launchscreen
 entry, walks the original's screen order over a scratch `CustomPlaneDef`, and returns to the
