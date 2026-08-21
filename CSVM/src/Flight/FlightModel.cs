@@ -35,7 +35,7 @@ public struct FlightInput
 /// Decode: docs/org/flightModel.md. The two force paths, the plumbing and the standing
 /// decode-vs-footage gaps: this module's entry in docs/architecture.md.
 /// ⚠ Do not retune the constants marked TUNE by feel. The three *Tune rates are pinned to
-/// measured video of the original, and every other coefficient here is the binary's own.
+/// measured video, the graze trio on Collide is ours, and every other coefficient is the binary's.
 /// </summary>
 public sealed class FlightModel
 {
@@ -152,6 +152,14 @@ public sealed class FlightModel
     // ⚠ Do not raise it to reach the original's measured flat-ground rebound. That rebound comes
     // from the doubled contact-point term, which is not restitution and is unbounded.
     private const float BounceLeverScale = 2.25f;
+
+    // The graze response's three constants (see Collide), all TUNE and ours rather than the
+    // original's. They were tuned together against a slide that carried no restitution yet, so they
+    // and BounceLeverScale above are not independent of one another.
+    // ⚠ Do not retune one alone; the friction and the kick share one severity, vn / crashSpeed.
+    private const float GrazeFriction = 0.35f;   // tangential speed kill at full severity
+    private const float GrazeKick = 1.2f;        // rad/s attitude kick at full severity
+    private const float GrazePushOut = 0.15f;    // m off the surface after a graze (no sticky slide)
 
     // Drag is a parabolic polar in MACH: C_D = DragPolarScale · (parasite + linear·M + quad·M²),
     // opposing the velocity in weight units. All four numbers are shared by every aircraft, which
@@ -647,6 +655,45 @@ public sealed class FlightModel
         float a = dOmega.Length();
         float fLin = l + a > 0f ? l / (l + a) : 0f;   // L == 0 → 0, the original's own degenerate arm
         return vn - vpn * (1f + fLin * Stats.BounceFactor);
+    }
+
+    /// <summary>The decoded collision response: the slide along the struck surface, the restitution
+    /// (<see cref="BounceNormalSpeed"/>) and the lever-arm attitude kick, in that order.
+    /// <paramref name="crashSpeed"/> is the caller's crash threshold, the divisor both severity
+    /// terms read; it belongs to the contact, not to the plant, so it is passed rather than copied.
+    /// ⚠ The restitution is PLAYER-only, as the original is; an AI gets the position correction alone.
+    /// ⚠ Keep it before the kick, which adds to the body rates the restitution reads.</summary>
+    public void Collide(Vector3 prev, Vector3 step, float stopFrac, Vector3 impact, Vector3 normal,
+        bool humanPiloted, float crashSpeed)
+    {
+        var vel = VelocityDir * Speed;
+        float vn = Mathf.Abs(vel.Dot(normal));
+
+        // Place at the safe pose just off the surface and keep the tangential velocity, less a
+        // severity-scaled loss; the impulse direction is the surface normal at the impact point.
+        Position = prev + step * stopFrac + normal * GrazePushOut;
+        var slide = vel - normal * vel.Dot(normal);
+        float slideLen = slide.Length();
+        Speed = slideLen * (1f - GrazeFriction * vn / crashSpeed);
+        if (slideLen > 1e-4f)
+            VelocityDir = slide / slideLen;
+
+        if (humanPiloted)
+        {
+            float rebound = BounceNormalSpeed(vel, normal, impact - Position);
+            var bounced = VelocityDir * Speed + normal * rebound;
+            float bouncedLen = bounced.Length();
+            if (bouncedLen > 1e-4f)
+            {
+                Speed = bouncedLen;
+                VelocityDir = bounced / bouncedLen;
+            }
+        }
+
+        var inv = Attitude.Inverse();
+        var lever = (inv * (impact - Position)).Normalized();
+        var kick = lever.Cross((inv * normal).Normalized());
+        BodyRates += kick * (GrazeKick * vn / crashSpeed);
     }
 
     // Solves clMax(V)·q(V)·RefArea = VehWeight for V at a load factor of 1 (see StallSpeed's doc for

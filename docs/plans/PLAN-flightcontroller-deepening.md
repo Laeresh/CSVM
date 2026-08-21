@@ -1,8 +1,9 @@
 # FlightController deepening — six waves, six modules
 
-**ACTIVE PLAN** (written 2026-08-21). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (2026-08-21). All thirteen items landed, every one gated on the full battery
+(units, in-engine suites, 16/16 goldens hash-identical) with no golden repinned and no behaviour
+change. The per-item records live in the landing commits on `worktree-fc-deepening`,
+`git log --grep="^A1:"` and siblings.
 
 `CSVM/src/Flight/FlightController.cs` is one Godot node holding human and AI input, the fixed-step
 flight loop, weapons, targeting, the collision sweep and its response, crash and respawn, camera
@@ -106,11 +107,12 @@ The eight physics-query sites in `FlightController.cs`, which A1 routes through 
 | `WorldBlocksLine` | ray, line of sight | `TurretController` |
 | `AvoidCrashBlocksLine` | ray, line of sight with a name | `AiModeMachine.ProbeBlocked` |
 
-Public declarations at class scope: 47, of which 43 are mutable fields. The 16 this plan targets:
-`Compass`, `Gauges`, `FontTest`, `WeaponReadout`, `Reticle`, `Marker`, `TargetHud` and `Scoreboard`
+Public declarations at class scope: 47, of which 43 are mutable fields. The 15 this plan targets:
+`Compass`, `Gauges`, `FontTest`, `WeaponReadout`, `Reticle`, `Marker` and `TargetHud`
 (wave C); `Collider`, `Body`, `TouchdownDefs` (wave E); `CrashRuntime`, `CrashDefs`, `CrashAnchor`
-(wave F); `HoldSegments` (wave B). `VersusHud` is a board-adjacent readout and stays until the
-concurrent board work settles.
+(wave F); `HoldSegments` (wave B). `VersusHud` and `Scoreboard` are board-adjacent readouts, fed
+nothing per frame and parented on the HUD canvas alone, and stay until the concurrent board work
+settles.
 
 Goldens on this plan's path, of the 16: `c1-flight`, `c1-crash`, `c1-debris-rest`,
 `c1-destroy-effects`, `c1-targeting-hud`, `c1-ai-wreck`.
@@ -141,34 +143,34 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the world-query seam
 
-1. ☐ `IWorldQuery` with `Sweep` and `Ray`, its Godot adapter, and all eight query sites routed
-2. ☐ `TurretController` drops its `FlightController` reference for the seam, asserted off-engine
+1. ☑ `IWorldQuery` with `Sweep` and `Ray`, its Godot adapter, and all eight query sites routed
+2. ☑ `TurretController` drops its `FlightController` reference for the seam, asserted off-engine
 
 ### Wave B — the input source
 
-3. ☐ `IFlightInputSource` and its three adapters, resolved once in `Bind`
-4. ☐ A scripted adapter, and `HoldSegments` stops being a public field
+3. ☑ `IFlightInputSource` and its three adapters, resolved once in `Bind`
+4. ☑ A scripted adapter, and `HoldSegments` stops being a public field
 
 ### Wave C — the pilot HUD
 
-5. ☐ `FlightHud` fed a per-frame struct, absorbing `SetPilotHudVisible`
-6. ☐ The HUD state-to-readout mapping asserted off-engine, including the damage flash
+5. ☑ `FlightHud` fed a per-frame struct, absorbing `SetPilotHudVisible`
+6. ☑ The HUD state-to-readout mapping asserted off-engine, including the damage flash
 
 ### Wave D — the collision response
 
-7. ☐ `FlightModel.Collide` takes slide, restitution and the lever-arm kick
-8. ☐ `BounceRestitutionTests` extended past restitution to the slide friction and the kick
+7. ☑ `FlightModel.Collide` takes slide, restitution and the lever-arm kick
+8. ☑ `BounceRestitutionTests` extended past restitution to the slide friction and the kick
 
 ### Wave E — the contact resolver
 
-9. ☐ `ContactReport` and `ContactOutcome`, and the detection half reduced to filling a report
-10. ☐ `AircraftContactResolver` owns fate, the damage pair and the un-embed loop
-11. ☐ The outcome table asserted off-engine, and the cross-instance grace write replaced
+9. ☑ `ContactReport` and `ContactOutcome`, and the detection half reduced to filling a report
+10. ☑ `AircraftContactResolver` owns fate, the damage pair and the un-embed loop
+11. ☑ The outcome table asserted off-engine, and the cross-instance grace write replaced
 
 ### Wave F — the aircraft lifecycle
 
-12. ☐ `AircraftLifecycle` owns `_crashed`, `_inert` and the spawn timers, and reports transitions
-13. ☐ The transition table asserted off-engine, including inert and the respawn timers
+12. ☑ `AircraftLifecycle` owns `_crashed`, `_inert` and the spawn timers, and reports transitions
+13. ☑ The transition table asserted off-engine, including inert and the respawn timers
 
 ## Dependency and parallelism notes
 
@@ -191,7 +193,7 @@ five board files another session owns.
 
 # Wave A — the world-query seam
 
-## A1 ☐ `IWorldQuery` with `Sweep` and `Ray`, its Godot adapter, and all eight query sites routed
+## A1 ☑ `IWorldQuery` with `Sweep` and `Ray`, its Godot adapter, and all eight query sites routed
 
 **Goal.** Every physics query in `FlightController` goes through one interface with two methods, and
 the Godot types behind them appear in exactly one adapter.
@@ -221,7 +223,7 @@ graze. Carry it verbatim; it is not tidyable. `HitWorld`'s three callers want di
 the same ray, so resist collapsing them into one helper with a flags argument. The ⚠ forbidding a
 swept sphere lives on the sweep and moves with it.
 
-## A2 ☐ `TurretController` drops its `FlightController` reference for the seam, asserted off-engine
+## A2 ☑ `TurretController` drops its `FlightController` reference for the seam, asserted off-engine
 
 **Goal.** A turret's line-of-sight check runs against a world it was handed, not against a 3,000-line
 node it holds a reference to, and a test can put a blocker in that world.
@@ -247,7 +249,7 @@ its own comment, and merging the two is a behaviour change wearing a refactor's 
 
 # Wave B — the input source
 
-## B3 ☐ `IFlightInputSource` and its three adapters, resolved once in `Bind`
+## B3 ☑ `IFlightInputSource` and its three adapters, resolved once in `Bind`
 
 **Goal.** Which stick an aircraft flies is a value chosen at bind, and the sim step reads one source.
 
@@ -273,7 +275,7 @@ class that already has several. Put it next to the existing `Bind` assignments r
 `_Ready`, so the rule sits where the other construction rules are. A null source is a bug, not a
 fallback to keyboard: fail loudly.
 
-## B4 ☐ A scripted adapter, and `HoldSegments` stops being a public field
+## B4 ☑ A scripted adapter, and `HoldSegments` stops being a public field
 
 **Goal.** A suite can fly a deterministic input profile without a public field on the controller.
 
@@ -295,7 +297,7 @@ what a held airframe looks like.
 
 # Wave C — the pilot HUD
 
-## C5 ☐ `FlightHud` fed a per-frame struct, absorbing `SetPilotHudVisible`
+## C5 ☑ `FlightHud` fed a per-frame struct, absorbing `SetPilotHudVisible`
 
 **Goal.** The pilot HUD is a module told what to draw, and the controller stops pushing text and
 numbers into seven collaborators through public fields.
@@ -324,7 +326,7 @@ adjacent to, with a live perf constraint.
 pause key reads `InPhotoMode`, which stays on the node, so do not let the flag follow the HUD into
 the module. `VersusHud` is board-adjacent and stays on the node this wave.
 
-## C6 ☐ The HUD state-to-readout mapping asserted off-engine, including the damage flash
+## C6 ☑ The HUD state-to-readout mapping asserted off-engine, including the damage flash
 
 **Goal.** The mapping from aircraft state to what the pilot reads is pinned by a test rather than by
 one golden frame.
@@ -346,7 +348,7 @@ asserted, it goes through `CultureInfo.InvariantCulture`, per the repo-wide rule
 
 # Wave D — the collision response
 
-## D7 ☐ `FlightModel.Collide` takes slide, restitution and the lever-arm kick
+## D7 ☑ `FlightModel.Collide` takes slide, restitution and the lever-arm kick
 
 **Goal.** The decoded collision response lives on the model whose fields it changes.
 
@@ -372,7 +374,7 @@ to the body rates the restitution reads. Preserve that order. The friction term 
 `CrashSpeed`, so it is coupled to a constant that lives on the controller; pass it rather than
 duplicating it.
 
-## D8 ☐ `BounceRestitutionTests` extended past restitution to the slide friction and the kick
+## D8 ☑ `BounceRestitutionTests` extended past restitution to the slide friction and the kick
 
 **Goal.** The whole response is pinned off-engine, not just the restitution term.
 
@@ -391,7 +393,7 @@ it, so a retune does not silently void the test.
 
 # Wave E — the contact resolver
 
-## E9 ☐ `ContactReport` and `ContactOutcome`, and the detection half reduced to filling a report
+## E9 ☑ `ContactReport` and `ContactOutcome`, and the detection half reduced to filling a report
 
 **Goal.** Detection produces a value, and nothing downstream of it holds a Godot type.
 
@@ -414,7 +416,7 @@ E11. This item introduces types and changes no decision, so a moved golden means
 **⚠ Traps.** The grace window suppresses the sweep, not just the damage, so `_collisionGrace` is a
 precondition of detection and not a filter on its result. Keep it on the detection side.
 
-## E10 ☐ `AircraftContactResolver` owns fate, the damage pair and the un-embed loop
+## E10 ☑ `AircraftContactResolver` owns fate, the damage pair and the un-embed loop
 
 **Goal.** A contact's outcome is computed by a module that holds no Godot type and can be run in a
 unit test with no physics world.
@@ -441,7 +443,7 @@ session-level broker; suppressing the struck plane hitting back is the failure t
 Decision 3: keep the outcome one value with no optional parts, so forgetting it is forgetting one
 statement rather than four.
 
-## E11 ☐ The outcome table asserted off-engine, and the cross-instance grace write replaced
+## E11 ☑ The outcome table asserted off-engine, and the cross-instance grace write replaced
 
 **Goal.** The decoded contact rules are readable as a table in a unit test, and no aircraft writes
 another aircraft's private field.
@@ -464,7 +466,7 @@ and mask the exact bug this item exists to catch.
 
 # Wave F — the aircraft lifecycle
 
-## F12 ☐ `AircraftLifecycle` owns `_crashed`, `_inert` and the spawn timers, and reports transitions
+## F12 ☑ `AircraftLifecycle` owns `_crashed`, `_inert` and the spawn timers, and reports transitions
 
 **Goal.** The states an aircraft moves between live in one module, and the node performs the effects
 of a transition rather than deciding it.
@@ -489,7 +491,7 @@ cut, which is the accepted cost of Decision 7. The mitigation is the same as E10
 optional parts. `StepWreckFall` routes through `IWorldQuery` from A1, so do not reintroduce a direct
 query here.
 
-## F13 ☐ The transition table asserted off-engine, including inert and the respawn timers
+## F13 ☑ The transition table asserted off-engine, including inert and the respawn timers
 
 **Goal.** The state machine is pinned by a table rather than by two golden frames.
 

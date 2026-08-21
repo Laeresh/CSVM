@@ -381,23 +381,19 @@ public sealed class WorldEffectsFactory
         crashRuntime.Bind(controller,
             crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(crashDefs, destroyAnim)));
         controller.AddChild(crashRuntime);
-        controller.CrashRuntime = crashRuntime;
-        controller.CrashDefs = crashDefs;
         controller.DestroyDef = destroyAnim;
         // Which of the two families owns the landing, asked of the data rather than of who is
         // flying: a def that takes the hull over also authors its own bounce sequences.
         controller.DestroyDefFliesWreck = EffectCatalogue.FliesOwnHull(crashProgram, destroyAnim);
-        // The context node both families play against: the ai_crash_* NAME `kestrel` resolves
-        // nowhere in a rig, so Play falls back to this anchor, which is the node the original's
-        // own caller supplies (org/vehicleDamage.md).
-        controller.CrashAnchor = crashRoot;
-        controller.CrashRestPoses = restPoses;
         // The plane model's built visibility, so respawn can undo the crash def's healthy/markers
         // hides (its RESET_STATE only restores dontmove). Captured pristine, before any crash.
         var planeVis = new List<(Node3D, bool)>();
         if (controller.PlaneModel != null)
             CollectVisibility(controller.PlaneModel, planeVis);
-        controller.CrashPlaneVisibility = planeVis;
+        // One call for the whole rig, so it cannot be half-bound. The anchor is the context node
+        // both families play against: the ai_crash_* NAME `kestrel` resolves nowhere in a rig, so
+        // Play falls back to it, the node the original's own caller supplies (org/vehicleDamage.md).
+        controller.BindCrashRig(crashRuntime, crashDefs, crashRoot, restPoses, planeVis);
         // Phase 2 of the damage-visuals setup: the sink and the stops, which need a live rig
         // runtime and so cannot be wired where the object is built.
         WireDamageStages(controller, crashProgram);

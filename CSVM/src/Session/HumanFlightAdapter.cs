@@ -94,9 +94,6 @@ internal sealed class HumanFlightAdapter
 
         var controller = new FlightController
         {
-            // one scripted sequence per player ('|'-separated); the last covers the rest
-            HoldSegments = _spec.HoldSets == null ? null
-                : _spec.HoldSets[Math.Min(pi, _spec.HoldSets.Length - 1)],
             DebugCollision = _in.DebugCollision,
             PinnedView = _spec.View,
             HudParent = rig.Viewport,
@@ -108,6 +105,9 @@ internal sealed class HumanFlightAdapter
         {
             PlayerIndex = pi,
             IsHumanPiloted = true,
+            // one scripted sequence per player ('|'-separated); the last covers the rest
+            HoldSegments = _spec.HoldSets == null ? null
+                : _spec.HoldSets[Math.Min(pi, _spec.HoldSets.Length - 1)],
             PlaneModel = planeModel,
             Props = PropAnimator.Build(planeModel),
             WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod),
@@ -226,22 +226,26 @@ internal sealed class HumanFlightAdapter
             GD.Print($"damage parts: {string.Join(", ", partDescs)} (* = critical)");
         }
 
+        // Every readout this pane draws for its pilot belongs to the controller's own FlightHud,
+        // which owns the per-frame feed; nothing here writes one after assembly.
+        var pilotHud = controller.PilotHud;
+
         // The original's heading tape, rebuilt from the chapter's own HUD
         // textures (compassticks2/compasstxt ship in every chapter's archive).
-        controller.Compass = CompassTape.Build(_in.Textures);
-        if (verbose && controller.Compass != null)
+        pilotHud.Compass = CompassTape.Build(_in.Textures);
+        if (verbose && pilotHud.Compass != null)
             GD.Print("compass: heading tape from compassticks2/compasstxt");
 
         // The cockpit dials (altimeter / speedometer / damage display), rebuilt
         // from the plane's own gauges subtree in planes.zbd + the chapter's
         // HUD textures (needle/lowalt/stall/<plane>_damage/hilite/hatchptrn).
-        controller.Gauges = GaugeCluster.Build(_in.PlanesGamez, planeName, _in.Textures,
+        pilotHud.Gauges = GaugeCluster.Build(_in.PlanesGamez, planeName, _in.Textures,
             stats.DestroyableParts);
-        if (controller.Gauges != null)
+        if (pilotHud.Gauges is { } gauges)
         {
             var damage = controller.Damage;
             if (damage != null)
-                controller.Gauges.PartFraction = name =>
+                gauges.PartFraction = name =>
                     damage.Parts.TryGetValue(name, out var s) ? s.Fraction : 1f;
             if (verbose)
                 GD.Print("gauges: altimeter/speedometer/damage dial from the plane's gauges subtree");
@@ -252,7 +256,7 @@ internal sealed class HumanFlightAdapter
         // enters the tree — its _Ready adds this to the HUD canvas.
         if (_in.HudFont != null && _spec.HudFontTest)
         {
-            controller.FontTest = new HudFontTest(_in.HudFont, _spec.HudFontTestText);
+            pilotHud.FontTest = new HudFontTest(_in.HudFont, _spec.HudFontTestText);
             if (verbose)
                 GD.Print($"hud-font-test: '{_spec.HudFontTestText}' via 5pointhud font");
         }
@@ -262,7 +266,7 @@ internal sealed class HumanFlightAdapter
         // templates. Built whenever the font loaded and the plane carries a loadout.
         if (_in.HudFont != null && controller.Loadout != null)
         {
-            controller.WeaponReadout = WeaponReadout.Build(_in.HudFont, _in.WeaponMessages);
+            pilotHud.WeaponReadout = WeaponReadout.Build(_in.HudFont, _in.WeaponMessages);
             if (verbose)
                 GD.Print("weapon readout: MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES via 5pointhud font");
         }
@@ -272,7 +276,7 @@ internal sealed class HumanFlightAdapter
         // trailing the nose in a hard turn, on the rounds in steady flight.
         if (_in.ReticleTex != null && controller.Loadout != null)
         {
-            controller.Reticle = ImpactReticle.Build(_in.ReticleTex, rig.Camera);
+            pilotHud.Reticle = ImpactReticle.Build(_in.ReticleTex, rig.Camera);
             if (verbose)
                 GD.Print("gun reticle: ballistic impact point via impact_point.png");
         }
@@ -314,7 +318,8 @@ internal sealed class HumanFlightAdapter
             // The objective marker HUD, one per pane: projects that player's
             // active danger zone through THEIR camera, with the edge arrow + clock
             // bearing + run status.
-            controller.Marker = MarkerHud.Build(controller.Stunt, rig.Camera);
+            var marker = MarkerHud.Build(controller.Stunt, rig.Camera);
+            pilotHud.Marker = marker;
             if (_in.Race is { } race)
             {
                 // Racing: no per-player splits board — the shared ranked board
@@ -322,8 +327,8 @@ internal sealed class HumanFlightAdapter
                 // HUD shows this player's placing meanwhile.
                 race.Add(pi, controller.Stunt, PlaneRoster.PlaneDisplayName(stats));
                 controller.Race = race;
-                controller.Marker.Race = race;
-                controller.Marker.PlayerIndex = pi;
+                marker.Race = race;
+                marker.PlayerIndex = pi;
             }
             else if (_in.InstantActionActive)
             {
@@ -366,7 +371,8 @@ internal sealed class HumanFlightAdapter
 
         // One per human pane, in EVERY flight session unlike VersusHud: built unconditionally
         // because generators spawn hostiles mid-session, and it draws nothing with an empty pool.
-        controller.TargetHud = TargetHud.Build(pi, rig.Camera, _in.Projectiles);
+        var targetHud = TargetHud.Build(pi, rig.Camera, _in.Projectiles);
+        pilotHud.TargetHud = targetHud;
         if (verbose)
             GD.Print("targeting HUD: selected-target marker (brackets + label, edge arrow off screen)");
 
@@ -379,13 +385,13 @@ internal sealed class HumanFlightAdapter
         // ⚠ Bind on EVERY pane, not only under --debug-markers: it is what TargetHud.OwnTeam reads
         // this pane's side off, and the pilot-index derivation it falls back to is the
         // wingman-in-the-marker bug.
-        controller.TargetHud.Own = controller;
+        targetHud.Own = controller;
 
         // --debug-markers: the same HUD marks every live aircraft instead of one hostile. Own also
         // keeps it from marking the aircraft the camera is sitting on.
         if (_spec.DebugMarkers)
         {
-            controller.TargetHud.MarkAll = true;
+            targetHud.MarkAll = true;
             if (verbose)
                 GD.Print("--debug-markers: marking EVERY live aircraft (red hostile / blue own side)");
         }

@@ -159,13 +159,21 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's triangles, with no per-plane data.
 - `src/Flight/CollisionLayers.cs` — the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.
 - `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` boxes on the aircraft layer; struck shape → part name.
+- `src/Flight/IWorldQuery.cs` — the one seam onto the live physics world: a shape swept along a motion, a ray, and a standing overlap test.
+- `src/Flight/GodotWorldQuery.cs` — the only adapter over `DirectSpaceState`; implements `IWorldQuery`.
+- `src/Flight/ContactReport.cs` — one detected contact as a value: impact, normal, struck part, collider name, stop fraction, and whether an aeroplane was struck.
+- `src/Flight/ContactOutcome.cs` — what a contact costs the striker: fate, the decoded damage pair, doom, the charged zone, the HUD flash, the push-out, and the struck-aircraft instruction.
+- `src/Flight/AircraftContactResolver.cs` — the decoded contact rules for one aircraft: the damage pair, the fate, and the un-embed loop, with no `Node` in sight.
+- `src/Flight/AircraftLifecycle.cs` — the states one aircraft moves between (in play, crashed, destroyed, inert) with the spawn timers, holding a `SurfaceDefTable` for the crash-def selection; every transition returns what the node must perform.
 - `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part; owns the whole-vehicle kill rule (`IsDestroyed`).
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
 - `src/Flight/DamageLab.cs` — the `--damage`/F5 slider UI: one HP slider per part, driving the parked plane's DamageVisuals or the flown plane's real PlaneDamage.
 - `src/Flight/CompassTape.cs` — the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
 - `src/Flight/GaugeCluster.cs` — the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
 - `src/Flight/FlightController.cs` — the flying-aircraft node: input → FlightModel → transform, chase camera, HUD, collision/crash, respawn; `FireControl`'s engine adapter.
+- `src/Flight/FlightHud.cs` — everything one pane draws for its pilot, fed one per-frame state struct; the controller's seven HUD collaborators live here.
 - `src/Flight/FlightControllerBuild.cs` — FlightRoster's internal, write-once construction handoff for a controller before tree attachment.
+- `src/Flight/IFlightInputSource.cs` — the seam a sim step reads this frame's pilot intent through; `Bind` resolves one of its three adapters once per aircraft.
 - `src/Flight/PlayerRig.cs` — one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
 - `src/Flight/ViewerSet.cs` — session-owned "every pane's camera" registry: `GameSession` binds it once after the rigs are built; `ProjectilePool.Viewers` is its first consumer.
 
@@ -1111,8 +1119,14 @@ wrap-aware directed yaw clamp + pitch clamp, bounded slew (3.0/s), pose written 
 nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution cone, cached
 1–2 s world-only line of sight, `FIRE_RATE` redraw. `PlatformOf`/`PlatformColliderRids` are what
 keep an emplacement's own mounting section out of its line-of-sight ray.
+A carried gunner's line of sight runs through `WorldBlocksLine`, a static method mirroring
+`FlightController.WorldBlocksLine`'s exact call shape against the `IWorldQuery` `BuildCarried`
+hands the constructor (a `GodotWorldQuery` over the host); `_host` itself stays for what it alone
+gives (`WorldVelocity`, `InPlay`, `PlayerIndex`). An emplacement has no host and no `IWorldQuery`
+either, so it keeps its own `WorldRayBlocked` twin, deliberately left alone: a gunner mounted on
+world geometry needs its own section excluded from the ray, which a carried gunner never does.
 Format and decode: [formats/turrets.md](formats/turrets.md). Proven by the `carried-turrets` and
-`world-turrets` suites and `TurretDefsTests`.
+`world-turrets` suites, `TurretDefsTests` and `TurretLineOfSightTests`.
 
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math (an `internal` class — nothing else may call it):
@@ -2351,9 +2365,15 @@ weathervane, floors its post-integration nose-axis velocity at 10 mph, and appli
 command-independent ground blow instead of the player's command-proportional one; air density is NOT
 branched. The original selected inside the force function on a compare against its single global
 player (`0x48c520`, `0x48cd3e`, `0x48e925`, `0x48c317`) — not copied, because that presumes ONE
-player and this engine flies four. `BounceNormalSpeed` is the one law here that no step of the plant
-calls: the decoded collision restitution (`bounce_factor` × the lever-arm partition), asked for
-by `FlightController.SurviveHit`, which owns the contact and the player-only gate.
+player and this engine flies four. The collision response is the one law here that no step of the
+plant calls: `Collide` takes the contact facts (previous position, step, stop fraction, impact,
+normal, whether the pilot is human, and the caller's crash threshold) and performs the slide, the
+restitution (`BounceNormalSpeed`, still public for the tests and the instruments: `bounce_factor` ×
+the lever-arm partition) and the lever-arm attitude kick, in that order, because the kick adds to
+the body rates the restitution reads. The restitution is PLAYER-only and `Collide` holds that gate;
+its three graze constants are TUNE and ours, unlike the rest of this module. `FlightController`
+applies it for `AircraftContactResolver`, which keeps the fate decision and the un-embed loop (the
+last needs world queries, which this module deliberately has none of).
 The choker's engine cutout lives here as well (`ChokeEngine` / `ClearChoke` / `EngineDeadRemainingS`):
 an extend-only timer, spent at the top of `Step`, that zeroes the thrust term and touches nothing
 else — no drag, lift or airspeed change, so a choked aircraft decelerates on drag alone. The throttle
@@ -2459,31 +2479,106 @@ silent like the footage's idle floor.
 The internal construction handoff from `FlightRoster` to `FlightController`. It contains one
 resolved controller's pre-tree state from either flight adapter, and `Bind` consumes it exactly once, before tree
 attachment; a repeated or late bind is a construction error. The roster keeps the data-resolution
-and lifecycle ordering, while the controller keeps its runtime interface.
+and lifecycle ordering, while the controller keeps its runtime interface. `HoldSegments` (the
+scripted hold profile, when a caller wants one) rides this DTO the same way `Pilot` does, so
+`FlightController` never exposes a public field for either arm; `Bind` copies it to the private
+`_holdSegments` field before resolving `IFlightInputSource` (below) and storing it, alongside the
+`IWorldQuery` seam.
+
+## src/Flight/IFlightInputSource.cs
+The seam a sim step reads this frame's pilot intent through: `Read(dt)` returns one `FlightInput`.
+`PilotInputSource`/`KeyboardInputSource` are thin wrappers calling the matching `FlightController`
+method (kept `internal` rather than `private` so the adapters can reach them); `ScriptedInputSource`
+is the third arm and carries its own state instead — the segment list and its own elapsed-time
+clock — so a suite can construct one directly with no `FlightController` in the process. Its
+`Reset()` is what a respawn calls to restart the sequence from the first segment.
+`FlightController.Bind` resolves which one flies a given aircraft off whichever of the private
+`_holdSegments` field (assigned from `FlightControllerBuild.HoldSegments`, the caller's scripted
+profile) or `Pilot` is set, and stores it, because that choice cannot change afterward (both arrive
+only through the build DTO, before the first sim step). A private `InputSource` property lazily
+resolves and caches the same way for a bare test rig that never binds — no suite mutates either
+field once a rig is stepping, so this is never stale. Ground-blow probing and the AI ground-blow
+write stay on `FlightController` after `Read` returns: they need the live world, which a source
+does not have.
+
+## src/Flight/FlightHud.cs
+Everything one pane draws for its pilot, in one module the flight node holds privately: the heading
+tape (`CompassTape`), the cockpit dials and their two weapon gauges (`GaugeCluster`), the gun pipper
+(`ImpactReticle`), the selected-weapon text readout (`WeaponReadout`), the stunt objective marker
+(`MarkerHud`), the targeting HUD (`TargetHud`), the `--hud-font-test` overlay (`HudFontTest`) and
+the flight text block. Nothing outside this class writes one of them.
+The per-frame entry is `Draw(in FlightHudState)`, a struct passed by `in` and never a class: this
+runs once per rendered frame per aircraft, so it allocates nothing. The struct carries aircraft
+STATE, not readout values: `Crashed`, `Halted`, `Held`, `StallWarned` and the rest arrive raw, and
+the composing into text, dial positions and gates happens here, which is what makes the mapping
+assertable with no Godot `Control` in the process. Three query properties exist so the caller can
+skip work it would only throw away: `DrawsReticle` (a muzzle midpoint costs one world transform per
+barrel), `DrawsTextBlock` (the damage ledger's `Summary` walks and joins every hurt zone) and
+`NeedsStuntStatusLine` (the marker HUD normally carries that line instead). Each guards a real
+per-frame cost on aircraft that draw nothing, AI rigs above all.
+`Attach(canvas, versusHud, scoreboard)` builds the text block and parents every readout in the
+shipped draw order; `VersusHud` and `StuntScoreboard` are still the flight node's, and are threaded
+through because their z-order slots sit INSIDE this order rather than after it. `SetVisible` is
+photo mode's hide-everything (`BL-429`, forwarded from `FlightController.SetPilotHudVisible` because
+`GameSession` drives it per rig); `SetInstrumentsVisible` is the narrower one `--debug-spectate`
+wants, which keeps the marker HUD deliberately. `StepAgl` is the altimeter's LOW ALT feed, one ray
+per physics frame through the same `IWorldQuery` seam every other aircraft query uses, and
+`AglMeters` reads it back for the flight telemetry line. `Flash` raises the impact line and `Reset`
+is what a respawn calls. The damage flash counts down on WALL time, so a halted session does not
+burn it off while nothing is drawn.
+The state-to-readout mapping itself is decoded into static, Control-free pieces `CSVM.Tests`
+(`FlightHudMappingTests`) drives directly: `ComputeStallWarning`, `MphFromSpeedMps`,
+`FeetFromWorldY` and `ComputeAgl` are pure functions of the struct (or a synthetic `IWorldQuery`);
+`ComputeGunGauge`/`ComputeMissileGauge` take bare `GunGroup`/`Hardpoint` lists (no bound `Loadout`
+needed) and return a `GunGaugeReadout`/`MissileGaugeReadout`, filling the reused belt-fraction list
+by pylon NUMBER, not list position; `AdvanceDamageFlash` is the wall-time countdown, gated off while
+halted or crashed, independent of whether a text block exists to show it; and `ComposeTextLines`
+returns the text block's lines as a list rather than one concatenated string. `Draw` and the three
+`Update*` helpers stay the thin writers pushing those return values onto the seven Controls.
 
 ## src/Flight/FlightController.cs
-The flying-aircraft node: input → FlightModel → transform, text HUD + telemetry, weapon fire as
+The flying-aircraft node: input → FlightModel → transform, weapon fire as
 `FireControl`'s engine adapter (polls the held triggers, `Step`s the machine each sim tick,
 performs the `FireOutcome`: muzzle-transform spawns, gun-loop start/stop, dry cues, breadcrumb
-logs), crash and respawn. The camera is `CameraController`'s — this node only feeds it
+logs), crash and respawn. The pilot HUD is `FlightHud`'s (see that entry): this node holds the
+module privately, feeds it one `FlightHudState` per rendered frame, and forwards photo mode's
+`SetPilotHudVisible` because `GameSession` calls it; the seven readouts are no longer fields here.
+`VersusHud` and `Scoreboard` stay board-adjacent fields on this node.
+The camera is `CameraController`'s — this node only feeds it
 the pose, the dt and the mixed orbit axes (`OrbitInput`); on a crash it cuts to `CrashView` once,
 writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
-shows no HUD — footage), restoring it on respawn. Sweeps the
-PlaneCollider boxes via CastMotion each physics frame — mask world+aircraft with its own
+shows no HUD — footage), restoring it on respawn. Every physics query — the PlaneCollider boxes'
+sweep each physics frame plus every ray (ground AGL, the ground-blow probe, the camera's height
+check, both turret/AI lines of sight) — goes through the one `IWorldQuery` bound in `Bind`
+(`GodotWorldQuery`, the sole adapter over `DirectSpaceState`); mask world+aircraft with its own
 `Body` (`AircraftBody`, built in `_Ready` from the same boxes) excluded by RID, so another plane
-is solid and a mid-air resolves through the same SurviveHit/Crash as terrain; `Crash`/`Respawn`
-toggle the body's hittability. The DEATH family (`CRASH into`, `midair aspect`, every
+is solid and a mid-air resolves through the same contact rules as terrain; `Crash`/`Respawn`
+toggle the body's hittability. Contact detection is two fillers of one `ContactReport` (see that
+entry): `SweepAirframe` from the sweep, and `CenterRayContact` from the anti-tunnelling centre ray
+when no box reached the obstacle. Deciding what that contact does is
+`AircraftContactResolver`'s (see that entry); this node builds the `ContactConditions`, hands over
+a `ContactEffects` for the applying, and performs the `ContactOutcome` (the struck rig's share and
+both grace windows, the HUD flash, the un-embed push, `Crash` on a fatal fate). Arming the struck
+rig's own grace window goes through its `ArmCollisionGrace()`, a narrow public method, rather than
+a direct write to the other instance's private field.
+Which state the aircraft is in, and what moves it between states, is `AircraftLifecycle`'s (see that
+entry): this node holds one privately, forwards `Crashed`/`Destroyed`/`WreckFalling`/`Inert`/`InPlay`
+onto it, and performs what a transition reports rather than deciding it. `BindCrashRig` takes the
+crash runtime, the def table, the anchor and the two respawn snapshots in one call, so the rig
+cannot be half-bound and only `CrashRuntime`/`CrashAnchor` stay readable as properties. The DEATH family (`CRASH into`, `midair aspect`, every
 `vehicle health exhausted`, `graze`, `ground stop`, `AI ram`, `impact severity`) routes through
 `Log.Info("flight", …)`, so a play session's file sink carries how each aircraft died; the
 per-round weapon breadcrumbs around them are a different family and still `GD.Print`.
 The sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). `SimStep` also ticks
 `Turrets` (the carried gunners) after the fire outcome, so the crash branch's early
-return silences them; `WorldBlocksLine` is their world-only line-of-sight ray. An AI aircraft
- is this SAME node with `Pilot` (an `AiPilot`) as its input source, `IsHumanPiloted`
+return silences them; `WorldBlocksLine` is their world-only line-of-sight ray. Which stick flies a
+given aircraft is one `IFlightInputSource` (see `src/Flight/IFlightInputSource.cs`), resolved once
+in `Bind` and read through `InputSource.Read(dt)` in place of the old per-frame ternary. An AI
+aircraft is this SAME node with `Pilot` (an `AiPilot`) driving that source, `IsHumanPiloted`
 false, `Setup(null)` for the camera (every camera write skipped, `_cam` null) and no HUD canvas
 built — flight, collision, weapons and damage are byte-for-byte the player's path.
-`TakeProjectileHit`/`SurviveHit` run the decoded damage flow (PlaneDamage: dead-zone redirect +
+`TakeProjectileHit` and the contact's ledger spend run the decoded damage flow (PlaneDamage: dead-zone redirect +
 whole-pool overflow, 2026-08-14) — the struck zone is Apply's ANSWER, not the geometric guess,
 and `IsDestroyed` is tested on every hit, zone-less included; the HUD DMG line leads with the
 hull pair. The two disabling entries a hit path calls on a struck aircraft sit beside them:
@@ -2513,8 +2608,8 @@ rather than from the sim step. The board halts the clock, so the sim step no lon
 them, and the hold harness's automatic rematch would have stopped with them. The sim step keeps
 only the structural halves of those branches: the early returns, and the `_simPrev = _simCurr`
 hold that leaves no stale pair to interpolate at the finish pose.
-`Crash` reads the struck body's numeric surface id (`SceneBuilder.SurfaceIdMeta`) and indexes
-`CrashDefs` (`SurfaceDefTable`) with it, the original's own cascade: `dirt`(13) plays
+`Crash` reads the struck body's numeric surface id (`SceneBuilder.SurfaceIdMeta`) and hands it to
+the lifecycle, which indexes `CrashDefs` (`SurfaceDefTable`) with it, the original's own cascade: `dirt`(13) plays
 `player_crash_dirt` + `snd_exp_ground_a`, `water`(1) `player_crash_water` + `snd_exp_water_a`, and
 everything else — id 0 plus the ids whose def this install does not ship — falls back to slot 0,
 `player_crash_default`, which authors no surface boom of its own. `--crash` has no struck body, so
@@ -2529,7 +2624,7 @@ leaves the wreck VISIBLE, cuts the camera and raises `Downed`. `Crash` is stage 
 contact — a live aircraft flown into terrain, or that wreck landing. Which system carries the wreck
 down is asked of the data (`EffectCatalogue.FliesOwnHull`): the eleven airframe defs author an
 `ObjectMotion` on `MAIN_ROOT_NODE` with their own bounce landing and own the fall outright, so no
-`*_crash_*` follows; `player` authors none, so `_wreckFalling` keeps the hull in the flight model
+`*_crash_*` follows; `player` authors none, so the lifecycle's `WreckFalling` keeps the hull in the flight model
 (no input, no weapons) until `StepWreckFall`'s sweep reaches the world and `Crash` plays
 `player_crash_*`. That second call is the one re-entry `Crash` allows while `_crashed`, and it
 re-fires neither `Downed` nor the camera cut. The `ai-wreck-fall` suite drives both stages on one
@@ -2540,7 +2635,7 @@ stays unmodelled.
 It also fires `Audio.OnEngineStop` (the wind-down cue, layered over the explosion) and plays
 `stopprops` on `CrashRuntime` — the one call site every engine-death path shares, whether the
 collision resolver called it for a full-speed impact, for whole-vehicle health exhausting on a
-survivable-speed graze (`SurviveHit` returning false), or for a projectile kill
+survivable-speed graze (a `ContactFate.Crash` outcome), or for a projectile kill
 (`TakeProjectileHit`: the pool-resolved hit — part-mapped armor-first damage plus the graze's
 feedback triple, no cooldown since rounds are discrete; its `damageScale` is the blast falloff
 share for a splash hit, 1 for a direct round). The weapon/graze kill test is
@@ -2563,7 +2658,7 @@ once — (victim `PlayerIndex`, killer: the killing round's shooter id; null for
 an unowned `NoShooter` round and every other cause) — a fact report the session scores in `--vs`;
 flight holds no match state, and `Respawn` emits nothing. `AutoRespawnAfter` (session-armed —
 Versus sets 3 s on every rig) auto-respawns a crash on the sim clock with R still skipping early;
-null, the default, keeps every other mode manual-R (scripted HoldSegments runs keep their 1.5 s).
+null, the default, keeps every other mode manual-R (scripted hold runs keep their 1.5 s).
 In a splitscreen stunt race, a finished pilot continues normal flight, collision, weapons and
 crash/respawn while `StuntMission` holds their timer/objectives and `MarkerHud` holds their placing;
 this prevents their finish pose from obstructing another pilot's gate.
@@ -4202,3 +4297,82 @@ point — blast falloff), `SegmentDistance(from,to)` (closest approach of a swep
 search per box — distance to a box is convex along the segment), `BoundRadius` for the cheap
 per-step reject, and `TakeProjectileHit(..., damageScale)` scaling both damage magnitudes by the
 blast falloff share (1 = direct round).
+
+## src/Flight/IWorldQuery.cs
+The one seam onto the live physics world: `Sweep` (a shape moved along a motion, earliest stop
+across a named part list), `Ray` (one ray), and `Overlaps` (does any named part touch anything at
+a standing pose, which is what the un-embed loop asks). `FlightController` reads the world only
+through this; nothing else may reach `DirectSpaceState`. `SweepReport`/`RayReport` carry the answer,
+including the struck collider as a plain `Node?` so a caller builds its own name. A carried
+`TurretController` reads the same seam for its line-of-sight check
+(`TurretController.WorldBlocksLine`), built with the `GodotWorldQuery` its `BuildCarried` makes
+from the host it is riding; a synthetic `IWorldQuery` proves the mask and the blocked/clear cases
+off-engine (`TurretLineOfSightTests`), with no live node in the process.
+
+## src/Flight/ContactReport.cs
+One detected contact, as the value both halves of detection fill: the impact, the struck surface's
+normal, which airframe box reached it first, the collider's name, how far along the frame's motion
+the airframe stopped, and `StruckIsAircraft`. `FlightController.SweepAirframe` fills it from the
+`IWorldQuery` sweep; `CenterRayContact` fills the same shape from the anti-tunnelling centre ray,
+where there is no struck box and no surface normal, so the part reads `center`, the normal is the
+reversed motion (making the contact head-on) and the stop fraction stays 1. The report holds no
+`Node` on purpose: the only question the decision side asks about the struck object is whether it
+is an aeroplane, and the caller keeps the collider for the applying (the struck rig's damage, the
+crash def's surface id, the graze reaction). The grace window is a precondition of detection rather
+than a filter on a report: while `_collisionGrace` is live no sweep runs at all.
+
+## src/Flight/ContactOutcome.cs
+What one contact costs the striking aircraft, as a value with no `Node` and no physics space behind
+it: the fate (`ContactFate.Graze` survivable, `Crash` fatal), the decoded damage pair both parties
+spend, the doom rule's answer, the zone the ledger charged (`Apply`'s answer, not the geometric
+guess), the pilot HUD's flash line, `PushOut` (how far along the normal the caller must move the
+striker to un-embed it, applied on a crash too), and `DamageStruckAircraft`, the instruction a
+caller owes because only it holds the struck rig: hand that aeroplane the pair and arm the
+collision grace on both parties. One value with no optional parts, so forgetting to perform it is
+forgetting one statement rather than four. `AircraftContactResolver` fills it.
+
+## src/Flight/AircraftContactResolver.cs
+The decoded contact rules for one aircraft, holding an `IWorldQuery` and no `Node`: the damage pair
+both parties spend (`FUN_0048d2c0`), the fate (the doom rule, the no-ledger speed threshold, health
+exhausted, the ground stop, an airframe that cannot un-embed), and the un-embed loop over the
+seam's `Overlaps`. One call answers one contact with one `ContactOutcome` the caller performs.
+The engine effects it interleaves with, because each one's result is the next rule's premise, go
+through `IContactEffects`: the fly-through offer, the graze reaction, the ledger spend and its
+readouts, and the contact response. `FlightController` implements that as a per-contact
+`ContactEffects`, keeping the struck `Node`, the damage cooldown and the flight model on the node.
+`ContactConditions` is the striker's state per call, `IsHumanPiloted` included.
+`AircraftContactResolverTests` pins the rule table off-engine against a synthetic `IWorldQuery` and
+a scriptable `IContactEffects`: the doom rule for an AI ramming a non-aeroplane, the entity cut for
+AI into AI, the player's exemption from both (asserted on the damage magnitude, not just
+`DamageStruckAircraft`, since the entity cut applies only on the non-player branch and only against
+another aeroplane), the ground stop reading `ContactResponse.Speed` alone, and the un-embed loop's
+three-try give-up.
+
+## src/Flight/AircraftLifecycle.cs
+The states one aircraft moves between and the rules that move it: in play, crashed, destroyed with
+its wreck still flying, inert, and back to spawned. It owns those flags plus the collision-grace,
+carrier-drop ground-blow and auto-respawn timers, holds the crash-def table and the selection off it
+(`LastCrashDef`), and holds no `Node`, so the whole table runs in a unit test. Every transition
+REPORTS what happened instead of performing it (Decision 7 of
+`docs/plans/PLAN-flightcontroller-deepening.md`): `Crash(surfaceId, killer)` answers one `CrashOutcome`
+(did it happen, was it the wreck landing, which crash def, whether the shutdown, the camera cut and
+the `Downed` report are owed, and the killer to name) and `Destroy(destroyDef, killer)` one
+`DestroyOutcome` on the same terms, with `WreckFalling` deciding whether the hull flies itself down.
+Each is one value with no optional parts, so a caller that forgets half a crash is forgetting one
+statement rather than four. `FlightController` keeps `Crashed`, `Destroyed`, `WreckFalling`, `Inert`
+and `InPlay` as forwards onto it, so its fifteen internal readers and every session-side consumer
+read the same spellings they always did, and it keeps the `Downed`/`InertChanged`/`DamageApplied`
+events, which the session subscribes to. The guard that a crashed aircraft cannot crash again is a
+transition rule here: `Crash` refuses while `Crashed`, and the single exception is the falling
+wreck's own landing, which reports `WreckLanding` and owes neither the cut nor the report because
+the death was reported at the kill. `ArmSpawnTimers(carrierDrop)` opens the spawn's collision-free
+window (`CollisionDamage.SpawnGrace`), and the carrier-drop arm adds
+`CarrierDropGroundBlow` seconds of the 0.15 ground-blow multiplier on top; `ArmCollisionGrace` is
+the shorter window a resolved ram writes to both parties. `SetInert` answers whether the flag moved,
+which is what makes the node's presence write and its `InertChanged` raise conditional.
+
+## src/Flight/GodotWorldQuery.cs
+The only adapter over Godot's `DirectSpaceState`, implementing `IWorldQuery`. Resolves the wrapped
+node's `World3D` at each call rather than caching it, since the node may be bound before it joins
+the tree. `Sweep` holds the airframe's whole per-part cast/rest-info dance, including the 0.05 m
+nudge past the first overlap (`GetRestInfo` can come back empty exactly at the unsafe fraction).

@@ -3270,12 +3270,7 @@ public partial class GameSession : Node3D
             pilot.CameraOwned = true;   // D8's seam: the controller writes this pane's camera no more
             // The cockpit instruments belong to an aircraft nobody is flying; the marker HUD is a
             // sibling on the same canvas and stays, which is the whole point of the mode.
-            if (pilot.Gauges != null)
-                pilot.Gauges.Visible = false;
-            if (pilot.Reticle != null)
-                pilot.Reticle.Visible = false;
-            if (pilot.WeaponReadout != null)
-                pilot.WeaponReadout.Visible = false;
+            pilot.PilotHud.SetInstrumentsVisible(false);
             var spectator = new SpectatorCamera(rig.Camera, eye,
                 follow != null ? follow.WorldPosition : eye - rig.Camera.Basis.Z)
             {

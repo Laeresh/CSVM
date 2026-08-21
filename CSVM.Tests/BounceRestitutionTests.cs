@@ -159,3 +159,156 @@ public class BounceRestitutionTests
         BounceFactor = bounceFactor,
     });
 }
+
+/// <summary>
+/// <see cref="FlightModel.Collide"/>'s graze response past restitution: the slide along the
+/// struck surface (direction and the friction speed loss), the push-out, and the lever-arm
+/// kick's sign. Restitution itself stays <see cref="BounceRestitutionTests"/>'s; this class
+/// covers the parts D7 moved onto <c>Collide</c> alongside it.
+/// The plan text naming this item also names a ground-stop threshold: that constant
+/// (<c>GrazeStopSpeed</c>) is a fate decision outside <c>Collide</c>, so it sits on
+/// <see cref="AircraftContactResolver"/> and is asserted there, not here.
+/// </summary>
+public class CollideResponseTests
+{
+    private const float Sink = 30f;
+    private const float CrashSpeed = 25f;   // FlightController's crash-speed divisor
+
+    /// <summary>The push-out is exact arithmetic with no severity scaling: it lands the aircraft
+    /// at <c>prev + step·stopFrac + normal·0.15</c> regardless of speed, angle or pilot.</summary>
+    [Fact]
+    public void PositionAfterCollideIsExactlyThePrestepPlusPushOut()
+    {
+        var m = Plant(0.6f);
+        m.Reset(Vector3.Zero, Basis.Identity, Sink, 0f);
+        m.VelocityDir = Vector3.Forward;
+
+        var prev = new Vector3(10f, 5f, 0f);
+        var step = new Vector3(2f, 0f, -1f);
+
+        m.Collide(prev, step, 0.6f, impact: Vector3.Zero, normal: Vector3.Up,
+            humanPiloted: false, CrashSpeed);
+
+        Assert.Equal(11.2f, m.Position.X, 4);
+        Assert.Equal(5.15f, m.Position.Y, 4);
+        Assert.Equal(-0.6f, m.Position.Z, 4);
+    }
+
+    /// <summary>A dead-on impact carries no tangential velocity to slide on: the slide is the
+    /// zero vector, so friction has nothing to act on and speed is arrested outright.</summary>
+    [Fact]
+    public void AHeadOnImpactArrestsAllSpeedWithNoTangentialSlide()
+    {
+        var m = Plant(0.6f);
+        m.Reset(Vector3.Zero, Basis.Identity, Sink, 0f);
+        m.VelocityDir = new Vector3(0f, 0f, -1f);
+
+        m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: Vector3.Zero,
+            normal: new Vector3(0f, 0f, 1f), humanPiloted: false, CrashSpeed);
+
+        Assert.Equal(0f, m.Speed, 4);
+        Assert.Equal(0f, m.VelocityDir.X, 4);
+        Assert.Equal(0f, m.VelocityDir.Y, 4);
+        Assert.Equal(-1f, m.VelocityDir.Z, 4);
+    }
+
+    /// <summary>The same head-on impact, human-piloted: with no slide to carry, the outcome is
+    /// restitution alone, and it reproduces the single-axis rebound
+    /// <see cref="BounceRestitutionTests.AnAxialNonRotatingContactReboundsAtExactlyBounceFactor"/>
+    /// already pins — straight back the way it came at <c>bounce_factor · Sink</c>.</summary>
+    [Fact]
+    public void AHeadOnImpactHumanPilotedReboundsStraightBackAtBounceFactor()
+    {
+        var m = Plant(0.6f);
+        m.Reset(Vector3.Zero, Basis.Identity, Sink, 0f);
+        m.VelocityDir = new Vector3(0f, 0f, -1f);
+
+        m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: Vector3.Zero,
+            normal: new Vector3(0f, 0f, 1f), humanPiloted: true, CrashSpeed);
+
+        Assert.Equal(0.6f * Sink, m.Speed, 2);
+        Assert.Equal(0f, m.VelocityDir.X, 4);
+        Assert.Equal(0f, m.VelocityDir.Y, 4);
+        Assert.Equal(1f, m.VelocityDir.Z, 4);
+    }
+
+    /// <summary>A shallow graze carries most of its speed tangentially: friction kills only the
+    /// fraction the closing speed along the normal earns it, and the surviving direction is
+    /// exactly the tangential component, normalised.</summary>
+    [Fact]
+    public void AShallowGrazeSlidesAlongTheSurfaceLosingOnlyItsNormalShare()
+    {
+        var m = Plant(0.6f);
+        m.Reset(Vector3.Zero, Basis.Identity, 0f, 0f);
+        // vel = (28, -6, 0): mostly tangential to an Up-normal surface, sinking in at 6 m/s.
+        var vel = new Vector3(28f, -6f, 0f);
+        m.VelocityDir = vel.Normalized();
+        m.Speed = vel.Length();
+
+        m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: Vector3.Zero, normal: Vector3.Up,
+            humanPiloted: false, CrashSpeed);
+
+        // slide = (28, 0, 0); friction fraction = GrazeFriction · vn/crashSpeed = 0.35 · 6/25.
+        Assert.Equal(28f * (1f - 0.35f * 6f / 25f), m.Speed, 2);
+        Assert.Equal(1f, m.VelocityDir.X, 4);
+        Assert.Equal(0f, m.VelocityDir.Y, 4);
+    }
+
+    /// <summary>The same shallow graze, human-piloted: restitution adds an outward component the
+    /// AI case has none of, so the two headings must diverge on the normal axis alone — the A/B
+    /// this item's evidence rests on.</summary>
+    [Fact]
+    public void AShallowGrazeHumanPilotedGainsAnOutwardComponentTheAiCaseHasNone()
+    {
+        var vel = new Vector3(28f, -6f, 0f);
+
+        var ai = Plant(0.6f);
+        ai.Reset(Vector3.Zero, Basis.Identity, 0f, 0f);
+        ai.VelocityDir = vel.Normalized();
+        ai.Speed = vel.Length();
+
+        var human = Plant(0.6f);
+        human.Reset(Vector3.Zero, Basis.Identity, 0f, 0f);
+        human.VelocityDir = vel.Normalized();
+        human.Speed = vel.Length();
+
+        ai.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: Vector3.Zero, normal: Vector3.Up,
+            humanPiloted: false, CrashSpeed);
+        human.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: Vector3.Zero, normal: Vector3.Up,
+            humanPiloted: true, CrashSpeed);
+
+        Assert.Equal(0f, ai.VelocityDir.Y, 4);
+        Assert.True(human.VelocityDir.Y > 0f,
+            $"the human case must rebound off the surface, VelocityDir.Y={human.VelocityDir.Y:0.000}");
+    }
+
+    /// <summary>The lever-arm kick's sign follows which side of the aircraft the impact landed
+    /// on: a contact ahead of the aircraft and one behind it, everything else identical, must spin
+    /// the body rate in opposite directions.</summary>
+    [Theory]
+    [InlineData(1f, true)]     // impact ahead of the push-out point
+    [InlineData(-1f, false)]   // impact behind it
+    public void TheKickSignFollowsWhichSideOfTheAircraftWasStruck(float impactX, bool expectPositiveZ)
+    {
+        var m = Plant(0.6f);
+        m.Reset(Vector3.Zero, Basis.Identity, Sink, 0f);
+        m.VelocityDir = new Vector3(0f, -1f, 0f);
+
+        m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: new Vector3(impactX, 0f, 0f),
+            normal: Vector3.Up, humanPiloted: false, CrashSpeed);
+
+        if (expectPositiveZ)
+            Assert.True(m.BodyRates.Z > 0f, $"BodyRates.Z={m.BodyRates.Z:0.000}");
+        else
+            Assert.True(m.BodyRates.Z < 0f, $"BodyRates.Z={m.BodyRates.Z:0.000}");
+    }
+
+    private static FlightModel Plant(float bounceFactor) => new(new PlaneStats
+    {
+        RecInertia = new Vector3(1.18f, 1f, 1.1f),
+        FdSpeed = 135f,
+        VehWeight = 1900f,
+        RefArea = 330f,
+        BounceFactor = bounceFactor,
+    });
+}

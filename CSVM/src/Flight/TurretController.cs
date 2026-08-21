@@ -47,6 +47,7 @@ public sealed class TurretController
     public const float MaxPlatformSpeed = 447f;
 
     private readonly FlightController? _host;
+    private readonly IWorldQuery? _worldQuery; // the carried case's line-of-sight seam; null on an emplacement
     private readonly ProjectilePool _pool;
     private readonly RandomNumberGenerator _rng;
     private readonly AimCandidateSet _scan = new(); // reused per tick, aircraft list only
@@ -69,13 +70,14 @@ public sealed class TurretController
     private Godot.Collections.Array<Rid>? _platformColliders;
 
     private TurretController(TurretDef def, WeaponDef weapon, FlightController? host,
-        ProjectilePool pool, Node3D? yawNode, Node3D pitchNode, Node3D[] firepoints,
-        RandomNumberGenerator rng, int team, bool activated, Node3D? healthyNode, Node3D? site,
-        Node3D? platform, string label)
+        IWorldQuery? worldQuery, ProjectilePool pool, Node3D? yawNode, Node3D pitchNode,
+        Node3D[] firepoints, RandomNumberGenerator rng, int team, bool activated,
+        Node3D? healthyNode, Node3D? site, Node3D? platform, string label)
     {
         Def = def;
         Weapon = weapon;
         _host = host;
+        _worldQuery = worldQuery;
         _pool = pool;
         YawNode = yawNode;
         PitchNode = pitchNode;
@@ -244,9 +246,11 @@ public sealed class TurretController
                 continue;
             }
             var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
-            built.Add(new TurretController(def, weapon, host, pool, yaw, pitch, fps.ToArray(), rng,
-                host.Team, activated: true, healthyNode: null, site: null, platform: null,
-                label: mount.Title));
+            // The same seam the host itself reads physics through: a carried gunner's line of
+            // sight goes through IWorldQuery, not through a cast back to the host's own type.
+            built.Add(new TurretController(def, weapon, host, new GodotWorldQuery(host), pool, yaw,
+                pitch, fps.ToArray(), rng, host.Team, activated: true, healthyNode: null, site: null,
+                platform: null, label: mount.Title));
         }
         return built.ToArray();
     }
@@ -323,8 +327,11 @@ public sealed class TurretController
                     rig.TryGetValue(def.HealthyNode ?? "healthy", out var healthy);
                     healthy ??= site;
                     var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
-                    built.Add(new TurretController(def, weapon, host: null, pool, yaw, pitch,
-                        fps.ToArray(), rng, def.TeamId,
+                    // No host, so no IWorldQuery either: an emplacement's line of sight stays on
+                    // WorldRayBlocked, the twin this item deliberately leaves alone (see its own
+                    // comment).
+                    built.Add(new TurretController(def, weapon, host: null, worldQuery: null, pool,
+                        yaw, pitch, fps.ToArray(), rng, def.TeamId,
                         def.Activated, healthy, site, PlatformOf(site, worldRoot), label));
                 }
             }
@@ -395,6 +402,14 @@ public sealed class TurretController
         float p = Mathf.DegToRad(pitchDeg);
         return new Basis(Vector3.Up, y) * new Basis(Vector3.Right, p) * Vector3.Forward;
     }
+
+    /// <summary>Mirrors <c>FlightController.WorldBlocksLine</c>'s exact call shape (world-layer
+    /// mask, no exclusion) against whatever <see cref="IWorldQuery"/> a carried gunner was built
+    /// with, so behaviour stays bit-identical to reading the host directly. Static, like the
+    /// other decoded rules on this class, so <c>CSVM.Tests</c> can assert it against a synthetic
+    /// <see cref="IWorldQuery"/> with no live node in the process.</summary>
+    public static bool WorldBlocksLine(IWorldQuery world, Vector3 from, Vector3 to) =>
+        world.Ray(from, to, CollisionLayers.World, null, out _);
 
     /// <summary>The activation stand-in's hook (and, later, the real <c>WAKEUP_TURRETS</c>'):
     /// wakes a dormant emplacement. Logged by the caller, never silent.</summary>
@@ -623,8 +638,8 @@ public sealed class TurretController
         if (now >= _losNext)
         {
             _losNext = now + RandRange(1f, 2f);
-            _losBlocked = _host != null
-                ? _host.WorldBlocksLine(WorldPosition, targetPos + Vector3.Up * 0.2f)
+            _losBlocked = _worldQuery != null
+                ? WorldBlocksLine(_worldQuery, WorldPosition, targetPos + Vector3.Up * 0.2f)
                 : WorldRayBlocked(WorldPosition, targetPos + Vector3.Up * 0.2f);
         }
         return _losBlocked;

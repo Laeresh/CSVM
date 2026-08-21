@@ -1830,7 +1830,7 @@ carrier grace also suppresses AI ground blow; its probe and both output terms be
 ## Collision response and `bounce_factor` (`FUN_0048d7f0`)
 
 Decoded 2026-08-14, **impulse implemented 2026-08-15** (retiring `BL-172`):
-`FlightModel.BounceNormalSpeed` is the law and `FlightController.SurviveHit` the site, gated on
+`FlightModel.BounceNormalSpeed` is the law and `FlightModel.Collide` the site, gated on
 `IsHumanPiloted` and not-already-crashed. The sweep, the placement and the two timers below are
 NOT ported — this engine has its own collision sweep, and what C25 bound is the impulse alone.
 
@@ -1952,7 +1952,7 @@ Neither is a damage-invulnerability timer; `obj+0xAC` disables collision itself.
 
 The section above is the response; this is the damage. `FUN_0048d7f0` returns an impact severity and
 `FUN_0048d2c0` turns it into a damage pair. **Ported**, as `Flight/CollisionDamage.cs` with the
-authored ranges read in `PlaneStats` and the contact resolved in `FlightController.ResolveContact`;
+authored ranges read in `PlaneStats` and the contact resolved in `AircraftContactResolver`;
 the struck party's damage runs through `AnimRuntime.CollideDamageAt` and the striker's through
 `PlaneDamage.Apply`. Two parts of the section below are knowingly not ported and say so where they
 appear: the object's own `+0xbc` damage reduction, and the every-other-frame sweep parity.

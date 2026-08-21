@@ -61,6 +61,34 @@ _Avoid_: place, scatter, plant, dress, decorate
 The session's aircraft set: the human field prepared at session start and the AI aircraft introduced later by missions, waves, or generators.
 _Avoid_: AI roster (it excludes the human field)
 
+**World query**:
+The one seam onto the live physics world, `IWorldQuery`: `Sweep`, a shape cast along a motion,
+`Ray`, a single ray, and `Overlaps`, a standing-pose touch test. The only Godot adapter over
+`DirectSpaceState`.
+_Avoid_: probe (taken by `Testing/Probes.cs`, `ProbeGroundBlow` and `ProbeBlocked` already)
+
+## Contact
+
+**Contact**:
+The event: an aircraft touching anything solid, world or another aeroplane. It names the whole
+family, whatever the outcome, and it is what the airframe sweep detects.
+_Avoid_: collision, hit, touch, strike (as nouns for the event)
+
+**Impact**:
+The point a contact happened at, in world space. A position, never the event.
+_Avoid_: contact point, hit point, collision point, impact event
+
+**Graze**:
+A contact the striking aircraft survives: it slides along the surface, spends the contact's damage
+pair, and keeps flying.
+_Avoid_: scrape, glance, bump, survivable collision, minor hit
+
+**Crash**:
+A contact the striking aircraft does not survive, whatever made it fatal (the doom rule, health
+exhausted, the ground stop, no damage data at speed). Also the ground contact that ends a wreck's
+fall, which is the same word for the same reason.
+_Avoid_: death, destruction, fatal hit, kill (a kill is what a shooter is credited with)
+
 ## Boards and the sim clock
 
 **Board**:
