@@ -1,8 +1,7 @@
 # AnimRuntime dispatch-axis families
 
-**ACTIVE PLAN** (written 2026-08-21). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans/plans.md`](plans/plans.md), when every item lands.
+**✅ COMPLETE** (written 2026-08-21, completed 2026-08-21). Archived in `docs/plans/`; its row is
+in [`plans.md`](plans.md).
 
 This plan carves the dispatch region of `CSVM/src/Mech3/AnimRuntime.cs` (the ~1,300 lines from the
 `switch (ev.Kind)` at `:2030` through the per-kind handlers) into three internally owned event-kind
