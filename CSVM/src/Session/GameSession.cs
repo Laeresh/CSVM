@@ -724,7 +724,10 @@ public partial class GameSession : Node3D
         if (dt <= 0f)
             return;
         _versus?.Advance(dt);
-        StepInstantAction(dt);
+        // ⚠ Step the mission director from BOTH drive paths, like the match clock above: a
+        // realtime session never enters DriveSimSteps, so a sequencer stepped only there
+        // advances no wave at the controls.
+        _iaDirector?.Step(dt);
         // On a realtime clock the walk reads whatever pose each aircraft holds at this node's
         // tick; a step's stale pose is at most one 60 Hz frame of a 600 m cone.
         _smokeScreens?.SimStep(dt);
@@ -2093,7 +2096,6 @@ public partial class GameSession : Node3D
                     SpawnAiAircraft(plane, pos, look, pilot, scheme, team, rating, inert, shipped,
                         fit: fit),
                 RegisterVoice = RegisterAiVoice,
-                ActivateWave = ActivateInstantActionWave,
             });
             iaAce = iaDirActors.Ace;
             iaWaveEnemies = iaDirActors.WaveEnemyCount;
@@ -2265,7 +2267,7 @@ public partial class GameSession : Node3D
         // The zeppelin run's wave arm (the director's phase): the objective zeppelin's generator
         // releases the waves built inert above. ⚠ It can only run here, after the generator block:
         // starting wave 1 on that mode means crediting a generator that did not exist earlier.
-        _iaDirector?.ArmZeppelinRun(_generators, ActivateInstantActionWave);
+        _iaDirector?.ArmZeppelinRun(_generators);
 
         // Instant Action's end conditions, lives and spectating: every signal already exists above,
         // so this only routes them into the runtime that decides the outcome. ⚠ Each source reports
@@ -2874,56 +2876,6 @@ public partial class GameSession : Node3D
         _orbit.Frame(aabb, _spec.CamPos, pivot);
     }
 
-    // Teleports and activates waveNumber's built (inert) roster: a spawn drawn against every live
-    // human's CURRENT position, then the fan pattern off that point's heading. A missing spawn list
-    // leaves the wave parked inert with a warning rather than guessing a position.
-    // ⚠ On zeppelin_run the generator arm REPLACES all of that, never adds to it: the wave is not
-    // moved and no spawn is drawn, the objective zeppelin's generator is credited instead.
-    private void ActivateInstantActionWave(int waveNumber)
-    {
-        var roster = _iaDirector!.WaveRosters![waveNumber - 1];
-        if (roster.Count == 0)
-        {
-            return; // InstantActionWaves.Start/Step never hand back an empty wave; stay defensive
-        }
-        if (_iaDirector.Runtime is { IsZeppelinRun: true } iaZepRun)
-        {
-            _iaDirector.LaunchWave = waveNumber;   // the decoded group stamp (the generator's +0x64)
-            string objectiveZep = InstantActionRuntime.SelectedZeppelinNode(iaZepRun.Def);
-            int fed = _generators?.GrantWaveCapacity(objectiveZep, roster.Count) ?? 0;
-            GD.Print($"ia: wave {waveNumber} ({roster.Count} aircraft) credited to '" +
-                      $"{objectiveZep}' ({fed} generator(s)) — they launch from the bay, " +
-                      "not teleported");
-            return;
-        }
-        if (_iaDirector.WaveSpawnList is not { Count: > 0 } spawns)
-        {
-            GD.PushWarning($"ia: no spawn points for wave {waveNumber} — {roster.Count} " +
-                            "aircraft stay parked inert");
-            return;
-        }
-        var humanPositions = new List<Vector3>();
-        foreach (var rig in _rigs)
-        {
-            if (rig.Controller is { } human)
-            {
-                humanPositions.Add(human.WorldPosition);
-            }
-        }
-        uint draw = Rng.Stream(Rng.Spawn).Randi();
-        var (spIndex, sp) = InstantActionWaves.ChooseWaveSpawn(spawns, humanPositions, draw);
-        var fwd = new Basis(Vector3.Up, Mathf.DegToRad(sp.HeadingDeg)) * Vector3.Forward;
-        for (int m = 0; m < roster.Count; m++)
-        {
-            var (metres, offsetDeg) = InstantActionWaves.FanOffset(m);
-            var dir = fwd.Rotated(Vector3.Up, Mathf.DegToRad(offsetDeg));
-            var pos = sp.Position + dir * metres;
-            roster[m].Activate(pos, pos + fwd);
-        }
-        GD.Print($"ia: wave {waveNumber} ({roster.Count} aircraft) activated at spawn #{spIndex} " +
-                  $"of {spawns.Count}");
-    }
-
     // --debug-spectate: build the whole session as it would be flown, then take every human out of
     // it, so the AI can be watched with nobody provoking it. Each human aircraft goes Held and
     // Inert, and its pane takes a SpectatorCamera following the first AI aircraft.
@@ -3153,43 +3105,6 @@ public partial class GameSession : Node3D
         }
     }
 
-    // One sim step of the Instant Action mission: the wave sequencer's tick, the mission clock and
-    // the wave-cleared win signal. ⚠ Call this from BOTH drive paths, like the match clock: a
-    // realtime session never enters DriveSimSteps, so a sequencer stepped only there advances no
-    // wave at the controls.
-    private void StepInstantAction(float dt)
-    {
-        if (_iaDirector is not { } iaDir)
-        {
-            return;
-        }
-        var ia = iaDir.Runtime;
-        ia.Advance(dt);
-        if (iaDir.Waves is not { Finished: false, CurrentWave: >= 1 } waves)
-        {
-            return;
-        }
-        var waveRoster = iaDir.WaveRosters![waves.CurrentWave - 1];
-        // ⚠ A wave member still waiting in the zeppelin's bay COUNTS as present, as the decoded walk
-        // counts a still-deactivated enemy, or a credited wave reads as cleared in the frames
-        // before its first launch (docs/formats/instant-action.md).
-        int alive = ia.IsZeppelinRun
-            ? waveRoster.Count(fc => !fc.Crashed)
-            : waveRoster.Count(fc => fc.InPlay);
-        int next = waves.Step(alive);
-        if (next != 0)
-        {
-            ActivateInstantActionWave(next);
-        }
-        else if (waves.Finished)
-        {
-            // Every configured wave cleared — the squadron mode's win. Reported on every mode;
-            // the runtime drops it on the ones that do not run on it (a zeppelin run's waves all
-            // clear too, and the zeppelin is what decides that mission).
-            ia.ReportObjective(InstantActionObjective.WavesCleared);
-        }
-    }
-
     // Steps the consumers whose sim normally rides Godot's physics tick; they return early from
     // _PhysicsProcess whenever the clock is not realtime, since a fixed or halted sim cannot be
     // paced by a tick it does not own. ⚠ Keep the tree order those callbacks had, so a round fired
@@ -3260,8 +3175,8 @@ public partial class GameSession : Node3D
             }
             // E11/G13: one sequencer tick and one mission-clock step per sim step, after the AI
             // planes above have taken this step's crashes — the alive count
-            // InstantActionWaves.Step reads must reflect them.
-            StepInstantAction(dt);
+            // InstantActionWaves.Step reads must reflect them. The other drive path steps it too.
+            _iaDirector?.Step(dt);
             // The smoke screens after every aircraft has moved this step: the walk reads the
             // layer's and the victims' poses as they stand now, as the original's does.
             _smokeScreens?.SimStep(dt);

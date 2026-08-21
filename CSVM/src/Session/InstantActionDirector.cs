@@ -48,6 +48,11 @@ public sealed class InstantActionDirector
     // The militia -> paint-pattern table, loaded once per mission for the wave liveries.
     private Dictionary<string, string>? _militiaPatterns;
 
+    // The session's rigs and (zeppelin run only) its generator runtime, kept from the build
+    // phases so the sequencer tick can activate a wave without reaching back into GameSession.
+    private List<PlayerRig>? _rigs;
+    private AiGeneratorRuntime? _generators;
+
     private InstantActionDirector(InstantActionRuntime runtime)
     {
         Runtime = runtime;
@@ -104,6 +109,7 @@ public sealed class InstantActionDirector
     internal string BuildActors(ActorBuildInputs inputs)
     {
         string what = "";
+        _rigs = inputs.Rigs;
         // ⚠ Hand every Instant Action actor the chapter's FIRST patrol net, ace, wingmen and wave
         // members alike, and read "first" as neindex FILE order, never the lowest id
         // (docs/formats/instant-action.md).
@@ -326,7 +332,7 @@ public sealed class InstantActionDirector
             int firstWave = Waves.Start();
             if (firstWave != 0)
             {
-                inputs.ActivateWave(firstWave);
+                ActivateWave(firstWave);
             }
         }
         int iaWaveEnemies = rosters.Sum(r => r.Count);
@@ -386,12 +392,13 @@ public sealed class InstantActionDirector
     /// built inert by BuildActors on a budget the sequencer credits wave by wave. ⚠ The first wave
     /// can only start here, since activating it means crediting a generator that did not exist at
     /// BuildActors time. A no-op on every other mission type.</summary>
-    internal void ArmZeppelinRun(AiGeneratorRuntime? generators, Action<int> activateWave)
+    internal void ArmZeppelinRun(AiGeneratorRuntime? generators)
     {
         if (!Runtime.IsZeppelinRun || Waves is not { } waves)
         {
             return;
         }
+        _generators = generators;
         string objectiveZep = InstantActionRuntime.SelectedZeppelinNode(Runtime.Def);
         int claimed = generators?.UseInstantActionLaunches(
             objectiveZep, ReleaseWaveMember) ?? 0;
@@ -412,8 +419,91 @@ public sealed class InstantActionDirector
         int firstZepWave = waves.Start();
         if (firstZepWave != 0)
         {
-            activateWave(firstZepWave);
+            ActivateWave(firstZepWave);
         }
+    }
+
+    /// <summary>One sim step of the mission: the wave sequencer's tick, the mission clock and the
+    /// wave-cleared win signal. ⚠ GameSession calls this from BOTH drive paths, like the match
+    /// clock: a realtime session never enters DriveSimSteps, so a sequencer stepped only there
+    /// advances no wave at the controls.</summary>
+    internal void Step(float dt)
+    {
+        var ia = Runtime;
+        ia.Advance(dt);
+        if (Waves is not { Finished: false, CurrentWave: >= 1 } waves)
+        {
+            return;
+        }
+        var waveRoster = WaveRosters![waves.CurrentWave - 1];
+        // ⚠ A wave member still waiting in the zeppelin's bay COUNTS as present, as the decoded walk
+        // counts a still-deactivated enemy, or a credited wave reads as cleared in the frames
+        // before its first launch (docs/formats/instant-action.md).
+        int alive = ia.IsZeppelinRun
+            ? waveRoster.Count(fc => !fc.Crashed)
+            : waveRoster.Count(fc => fc.InPlay);
+        int next = waves.Step(alive);
+        if (next != 0)
+        {
+            ActivateWave(next);
+        }
+        else if (waves.Finished)
+        {
+            // Every configured wave cleared — the squadron mode's win. Reported on every mode;
+            // the runtime drops it on the ones that do not run on it (a zeppelin run's waves all
+            // clear too, and the zeppelin is what decides that mission).
+            ia.ReportObjective(InstantActionObjective.WavesCleared);
+        }
+    }
+
+    // Teleports and activates waveNumber's built (inert) roster: a spawn drawn against every live
+    // human's CURRENT position, then the fan pattern off that point's heading. A missing spawn list
+    // leaves the wave parked inert with a warning rather than guessing a position.
+    // ⚠ On zeppelin_run the generator arm REPLACES all of that, never adds to it: the wave is not
+    // moved and no spawn is drawn, the objective zeppelin's generator is credited instead.
+    private void ActivateWave(int waveNumber)
+    {
+        var roster = WaveRosters![waveNumber - 1];
+        if (roster.Count == 0)
+        {
+            return; // InstantActionWaves.Start/Step never hand back an empty wave; stay defensive
+        }
+        if (Runtime is { IsZeppelinRun: true } iaZepRun)
+        {
+            LaunchWave = waveNumber;   // the decoded group stamp (the generator's +0x64)
+            string objectiveZep = InstantActionRuntime.SelectedZeppelinNode(iaZepRun.Def);
+            int fed = _generators?.GrantWaveCapacity(objectiveZep, roster.Count) ?? 0;
+            GD.Print($"ia: wave {waveNumber} ({roster.Count} aircraft) credited to '" +
+                      $"{objectiveZep}' ({fed} generator(s)) — they launch from the bay, " +
+                      "not teleported");
+            return;
+        }
+        if (WaveSpawnList is not { Count: > 0 } spawns)
+        {
+            GD.PushWarning($"ia: no spawn points for wave {waveNumber} — {roster.Count} " +
+                            "aircraft stay parked inert");
+            return;
+        }
+        var humanPositions = new List<Vector3>();
+        foreach (var rig in _rigs!)
+        {
+            if (rig.Controller is { } human)
+            {
+                humanPositions.Add(human.WorldPosition);
+            }
+        }
+        uint draw = Rng.Stream(Rng.Spawn).Randi();
+        var (spIndex, sp) = InstantActionWaves.ChooseWaveSpawn(spawns, humanPositions, draw);
+        var fwd = new Basis(Vector3.Up, Mathf.DegToRad(sp.HeadingDeg)) * Vector3.Forward;
+        for (int m = 0; m < roster.Count; m++)
+        {
+            var (metres, offsetDeg) = InstantActionWaves.FanOffset(m);
+            var dir = fwd.Rotated(Vector3.Up, Mathf.DegToRad(offsetDeg));
+            var pos = sp.Position + dir * metres;
+            roster[m].Activate(pos, pos + fwd);
+        }
+        GD.Print($"ia: wave {waveNumber} ({roster.Count} aircraft) activated at spawn #{spIndex} " +
+                  $"of {spawns.Count}");
     }
 
     // The launch hook handed to the objective zeppelin's generator: releases the next still-parked
@@ -472,8 +562,7 @@ public sealed class InstantActionDirector
 
     /// <summary>What BuildActors reads from the session's build, in the shape of
     /// HumanFlightAdapter.Inputs: stable references plus the two delegates GameSession keeps
-    /// private behaviour behind (the spawner and the voice registration). ActivateWave is
-    /// GameSession's teleport-and-activate arm.</summary>
+    /// private behaviour behind (the spawner and the voice registration).</summary>
     internal sealed class ActorBuildInputs
     {
         public List<PlayerRig> Rigs = null!;
@@ -489,6 +578,5 @@ public sealed class InstantActionDirector
         public NetTrailerTargets NetTrailers = null!;
         public SpawnAuthoredAircraft Spawn = null!;
         public RegisterAiVoice RegisterVoice = null!;
-        public Action<int> ActivateWave = null!;
     }
 }
