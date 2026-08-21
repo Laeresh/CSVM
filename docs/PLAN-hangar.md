@@ -64,7 +64,7 @@ From the grilling that preceded this plan. The table is the authority when prose
 |---|---|---|
 | **Traced** | A2, A3 (inputs), B12, B13, C21-C26, D31 (the data they render/compute is decoded with addresses) | Confirm against `org/hangar.md` / `formats/paint.md`, then build. |
 | **Direction sound** | B11, D32 | The record and spawn path are decoded; the CSVM-side shape (JSON schema, builder wiring) is ours to design. |
-| **Leads only** | A1 | The consumers of armour/engine/weight past the spawn descriptor are untraced; this may end in a partial disproof or a split-out BL. |
+| **Leads only** | (none since A1 landed) | A1's consumer trace closed the plan's one lead-only item: armour and engine are traced to their combat consumers, weight and the power rating are sourced dead ends. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.
@@ -112,7 +112,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — decodes and inventories
 
-1. ◐ Trace the spawn-descriptor consumers: armour units, engine id and total weight into flight and damage
+1. ☑ Trace the spawn-descriptor consumers: armour units, engine id and total weight into flight and damage
 2. ☑ Asset and string inventory: the blueprint/icon TGAs and every langui roster the screens need
 3. ☑ The gun mapping: calibre + twin + turret onto `weapons.zrd` defs, and how the ammo layer sits on top
 
@@ -120,7 +120,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ `CustomPlaneDef`: the CSVM model and its JSON persistence under `user://`
 12. ☐ The 204-byte importer, tested against real saved-plane files
-13. ☐ The economy component: costs, weights, totals, and the capacity/engine gate
+13. ☑ The economy component: costs, weights, totals, and the capacity/engine gate
 
 ### Wave C — the screens
 
@@ -151,34 +151,38 @@ paint/name only.
 
 # Wave A — decodes and inventories
 
-## A1 ☐ Trace the spawn-descriptor consumers: armour units, engine id and total weight into flight and damage
+## A1 ☑ Trace the spawn-descriptor consumers: armour units, engine id and total weight into flight and damage
 
-**Goal.** A sourced statement of what the original does with the record's armour units (+0x74),
-engine id and total weight (+0x3c) once the spawn message leaves `FUN_00414f40`: which flight or
-damage quantities they feed and by what arithmetic, so D32 wires facts rather than inventions.
+**Landed.** The full trace is [`org/hangar.md`](org/hangar.md) "Into the mission: what the
+build changes on the spawned vehicle". The shape D32 wires:
 
-**Evidence (confidence: lead-only).** The spawn path is decoded to the message boundary:
-`FUN_00417090` packs the 17-dword descriptor mirroring the record's own offsets and
-`FUN_00414f40` repacks it as a type-8 message handed to `FUN_0041a320` ([`org/hangar.md`](org/hangar.md)).
-Past that queue nothing is traced. The stat table carries an engine power rating (+0x08 of
-`0x00619d98`) and the star-rating formulas use armour units, but no combat consumer of either has
-been found. This may legitimately conclude "cosmetic in Instant Action" for some field; a sourced
-null result is a valid landing.
+- **Armour is live per-zone combat data.** The four values (order nose, tail, left wing,
+  right wing) travel as raw x5 floats through globals onto the vehicle's four named damage
+  zones, setting the armour pool's max and current; structure pools come from the mission
+  file. Vehicle totals are always recomputed sums over zones, never independent state.
+  Negative means "do not override". Difficulty scales enemies only (x0.875/1.0/1.125), never
+  the player.
+- **Engine id is two things.** Ids 0-5 decompose into a power tier 0-2 plus a nitrous boolean
+  (ids 3-5); the tier selects a row of a separate engine registry whose power float lands in
+  the vehicle's flight-tuning block (`veh+0x66c`); nitrous is an independent flag
+  (`veh+0x946`). Id 6 = stock, no override.
+- **Two sourced dead ends.** Total weight (+0x3c) is consumed only by the hangar's overweight
+  indicator; the stat-table power rating feeds only two display strings. Neither reaches
+  mass, thrust or drag; D32 must not invent a flight dependency on either.
+- **The type-8 spawn message carries paint only** (pattern, colours, and the three
+  +0x5c/+0x60/+0x64 picks as texture/decal registrations); stats ride a separate global
+  block.
+- Not decoded, split as its own concern: the per-hit damage application order across
+  zone/total and armour/structure pools (entry points recorded in the org page's Open list).
 
-**Approach.** Fresh-context decode agent, read-only on the Ghidra project, starting from the
-type-8 message consumer out of `FUN_0041a320`'s queue and from xrefs to the per-plane structures
-the spawn fills. Bound it to the three named fields. If the consumer web exceeds a wave's worth of
-work, stop, mint the split-out BL with the leads recorded, and let D32 fall back to
-chosen-but-inert per Decision 3.
+**Verified.** Report-only decode; every constant in the write-up carries its address and
+condition, per the item's own bar.
 
-**Model recommendation.** high — an open-ended binary trace where a wrong reading poisons D32.
-
-**Verify.** Every reported constant carries its address and applying condition; the write-up lands
-on [`org/hangar.md`](org/hangar.md) as a new section before D32 consumes it.
-
-**⚠ Traps.** Do not fall back to footage or feel to fill a gap the trace leaves; an unrun decode
-stays an open question (this project's standing rule). Do not confuse the hangar's star-rating
-formulas (`FUN_0040faf0`, display only) with combat consumers.
+**Original approach (kept for reference).** Fresh-context decode agent from the type-8
+message consumer outward, bounded to the three fields, with the split-out rule of Decision 3
+if the web exceeded a wave. The ballooning case did not arise; the only unexplored branch
+(per-hit application order) was deliberately left, being a damage-model topic rather than a
+hangar one.
 
 ## A2 ☑ Asset and string inventory: the blueprint/icon TGAs and every langui roster the screens need
 
@@ -338,6 +342,32 @@ JSON is authoritative for our planes; imports are a one-way read). Armour units 
 premultiplied by 5 in the record; do not double-apply the display factor.
 
 ## B13 ☐ The economy component: costs, weights, totals, and the capacity/engine gate
+
+**Landed.** `CSVM/src/Flight/HangarEconomy.cs` holds the decoded tables as data (`Airframes`,
+the 11 stat rows with cost/weight/capacity/agility/armour/availability/turret mask/slot-title
+ids; `GunTable`, five wing/turret cost-weight rows; `EngineBases` plus the six-entry
+`EngineCostOffsets`/`EngineWeightOffsets`; hardpoint and armour-unit constants) and
+`HangarEconomy.Price(CustomPlaneDef) -> HangarBill`: per-line `CostWeight` for airframe, engine
+(id 6 = none = zero), each of the four gun slots (wing or turret column per the airframe's
+0-based turret bit, twin doubling both), armour units x4 for cost and weight, hardpoints at
+$410 / 480 lb; the summed `Total`; the `PurchaseVerdict` (Overweight when total weight exceeds
+the airframe's capacity, else NoEngine on id 6, else Ok, funds never checked per Decision 2);
+and the display-only star ratings. The armour star formula was confirmed against the decompile
+of `FUN_0040faf0` case 2 to read the record's stored armour dwords, which hold units x5, so
+`ArmourStars = min((armourStat + units*5 - 1)/0x49, 4)`; agility is C-truncated `(val-1)/4`
+capped at 4, matching case 3's shift arithmetic. Provenance stays in
+[`org/hangar.md`](org/hangar.md); the code carries one pointer, no per-line addresses.
+Tests in `CSVM.Tests/HangarEconomyTests.cs` (17 cases): `AirframeTable_MatchesTheDecode`
+(Hoplite/Balmoral/Warhawk rows), `AirframeTable_SlotTitles_MatchTheDecode`,
+`GunTable_MatchesTheDecode` (all five rows), `EngineLine_AppliesBaseAndOffsets`,
+`EngineLine_NoEngine_IsZero`, `EmptyBuild_TotalsAirframePlusEngine_AndPassesTheGate`
+(Hoplite 7650/2400 Ok), `MaxedBalmoral_GoesOverweight` (14187/19892 vs 15760),
+`EnginelessWarhawk_IsRejectedForItsEngine` (3081/5773 NoEngine),
+`StarRatings_MatchTheDecodedFormulas`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A pure component that, given a `CustomPlaneDef`, reproduces the original's arithmetic:
 per-line costs and weights, the two totals, and the gate verdict (overweight / no engine / ok),
@@ -513,13 +543,17 @@ defs on the chosen slots, hardpoint ordnance capacity per the wing counts, paint
 shown where planes are named, and armour/engine/weight wired per A1's findings (or explicitly
 inert with the split-out BL minted).
 
-**Evidence (confidence: direction-sound).** `LoadoutChoice.ApplyTo` was built to take any base;
-`PlaneBuilder` drives per-aircraft paint substitution already
-([`formats/paint.md`](formats/paint.md) "Implementing this in the remake"). The join from
-`CustomPlaneDef` to a `LoadoutDef` base is new.
+**Evidence (confidence: direction-sound, traced for the armour/engine wiring).**
+`LoadoutChoice.ApplyTo` was built to take any base; `PlaneBuilder` drives per-aircraft paint
+substitution already ([`formats/paint.md`](formats/paint.md) "Implementing this in the
+remake"). The armour and engine wiring is A1's traced shape ([`org/hangar.md`](org/hangar.md)
+"Into the mission"): per-zone armour pools in nose/tail/leftwing/rightwing order, engine as
+power tier + nitrous flag, and explicitly NO flight dependency on total weight or the
+stat-table power rating. The join from `CustomPlaneDef` to a `LoadoutDef` base is new.
 <TODO: how hardpoint COUNTS map onto the stock pylon set — the original stores counts, our
-loadouts store per-pylon weapons; the join rule (first N pylons per wing?) needs A1/A3 input or a
-decode note.>
+loadouts store per-pylon weapons; the join rule (first N pylons per wing?) is unread. Lead:
+`FUN_00443de0`, the in-mission weapon wiring, is the one flight-side reader of the plane
+record (+0x84 and the +0x88..+0xc4 runs) and is where the original makes this join.>
 
 **Approach.** A `CustomPlaneDef -> LoadoutDef` builder beside A3's mapping; spawn path otherwise
 unchanged. Wire A1's findings exactly as decoded, nothing more.

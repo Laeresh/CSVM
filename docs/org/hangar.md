@@ -80,7 +80,7 @@ reader in code:
 | +0x04 | airframe weight (lb) | 2251 at `0x0040af67`; total-weight `FUN_00405550` |
 | +0x08 | weight capacity (lb) | validator 2264 at `0x0040b4bc` ("OVERWEIGHT", `langui` 1227) |
 | +0x0c | agility rating base | star rating `FUN_0040faf0` case 3: `(val − 1)/4`, clamped to 4 stars |
-| +0x10 | armour rating base | `FUN_0040faf0` case 2: `(val + armourUnits − 1)/0x49` |
+| +0x10 | armour rating base | `FUN_0040faf0` case 2: `(val + Σ record armour dwords − 1)/0x49`, the record dwords being units premultiplied by 5; C-truncating division, clamped to 4 |
 | +0x14 | availability threshold (campaign progress) | `FUN_00410120` compares `DAT_0064b678 + 1` against it when mapping dropdown index to airframe id |
 | +0x18 | per-gun-slot turret bitmask (bit i = slot i is a turret) | gun cost `0x00405700` tests bit `slot` to pick the turret price column |
 | +0x1c..+0x28 | four `langui` string ids, one per gun slot (slot titles) | GUNS callback 2250 tail at `0x0040ef8c` |
@@ -162,9 +162,75 @@ cost `LEA EDX,[ECX*4]` at `0x0040b1a6`, weight `units*20/5` at `0x0040b188`). Zo
 **Hardpoints**: $410 and 480 lb each (handler `0x0040b2b4`; the constants resolve at
 `0x0040b31d`, 0x19a and 0x1e0, and reappear in both totals functions).
 
+## Into the mission: what the build changes on the spawned vehicle
+
+The consumer trace past the launch bridge. Armour and engine are live combat data; total
+weight and the stat-table power rating are hangar-only.
+
+**Armour (record +0x74/+0x78/+0x80/+0x7c order nose, tail, left wing, right wing).**
+`FUN_00417090` converts the four ints to floats with no rescaling (the x5 premultiply
+survives) into globals `0x0071daf8..db04` (player) / `0x0071db58..64` (wingman); the
+multiplayer writer `FUN_004136e0` (`0x00413acd..0x00413af1`) fills the same globals from the
+MP config block at `0x00643044`. The mission loader `FUN_004735b0` patches them onto the
+matched `CCEVeh` record at +0xdc/+0xe4/+0xec/+0xf4 in three name-matched branches ("player" at
+`0x00474db4`, "wingman_1" at `0x00474edf`, the campaign branch at `0x0047510d`), each store
+guarded by `value >= 0.0`: **a negative armour global means "leave the mission file's value
+alone"**. The vehicle spawn `FUN_0047c210` (`0x0047cb67..0x0047cc63`) hands them to
+`FUN_0047bd90(veh, zoneName, armour, structure)` for the four zones named `nose` / `tail` /
+`leftwing` / `rightwing` (strings at `0x0062838c..0x006283a8`). Each zone (vector at
+`veh+0x9c`, stride 0x58) holds two pools as (max, current) pairs: armour at zone+0x24/+0x28,
+structure at +0x2c/+0x30; an argument of `-1.0` leaves that pool alone, and the hangar sets
+only the armour pool (structure comes from the mission file, `CCEVeh+0xe0/+0xe8/+0xf0/+0xf8`).
+Vehicle totals (`veh+0x2c4/+0x2c8` armour max/current, `+0x2cc/+0x2d0` structure) are
+recomputed on every zone write as the sum over zones of values > 0, so they are derived state,
+never independent. Difficulty scales an enemy's pools and totals by 0.875 / 1.0 / 1.125
+(`FUN_00440710` mapped through `d*0.125 + 1.0` at `0x0047cc00..0x0047cd10`), suppressed when
+`CCEVeh+0xa4` is set; the player's plane is never scaled. Both pools feed combat: the
+damage-callout thresholds read `(armourCur + structCur) / (armourMax + structMax)` against
+0.3/0.5/0.7 (`FUN_00498170` at `0x00498513..59`), and the totals are read across the damage
+and HUD paths (`0x0047ee30`, `0x0049fa42`, `0x004b80d1..`, among others). The per-hit
+application order (zone vs total, armour vs structure) is not decoded here.
+
+**Engine (record +0x30).** `FUN_00416ee0` decomposes the pick: engine ids 0/1/2 are three
+power tiers, 3/4/5 the same tiers plus a **nitrous injector boolean**, 6 is stock (no offset,
+no nitrous, no cost or weight). The airframe maps to a base registry id via `FUN_00416e10`
+(eleven-entry switch, base 0x0a stepping by 3: airframe 0 -> 0x25, 1 -> 0x13, 2 -> 0x28,
+3 -> 0x0a, 4 -> 0x19, 5 -> 0x16, 6 -> 0x1f, 7 -> 0x10, 8 -> 0x1c, 9 -> 0x0d, 10 -> 0x22) and
+the tier adds 0/1/2. Result and nitrous flag ride globals `0x0071daf0`/`0x0071daf4` (player,
+mirrors for wingman and MP) onto `CCEVeh+0x10c`/`+0x108` (id -1 = no override), and
+`FUN_0047c210` (`0x0047d4e0..17`) resolves the id in the **engine registry at `0x0064fb80`**
+(entry stride 0x18, key +0x00, name +0x08, **power float +0x14**) writing the power into
+`veh+0x66c`, inside the flight-tuning block `+0x654..+0x678` (spawn-jittered by
+`FUN_00476250`, read in the force path `FUN_0048fc40` at `0x0048fde1` multiplied by
+`veh+0x678`). Nitrous sets `veh+0x946`. Both identifications corroborated by the debug
+console `FUN_0043d640` ("Choosing engine %s.", "You now have the nitrous injector").
+
+**Total weight (record +0x3c) is hangar-only.** Written by `FUN_00405550`; its only consumer
+is the overweight indicator at `0x0040b4ab..c8` comparing against the stat table's capacity.
+Neither launch bridge reads +0x3c, and the plane-record array is addressed nowhere in flight
+code (33 sites, all menu-band, plus `FUN_00443de0`, the in-mission weapon wiring, which reads
+only +0x84 and the dword runs +0x88..+0xa4 / +0xa8..+0xc4). Weight is not mass, thrust or
+drag anywhere.
+
+**The stat-table power rating (`0x00619d98+8`) is display-only**: two readers program-wide,
+the hangar's power stat line at `0x0040bb3e` (multiplied by a per-engine-id double at
+`0x00619e38`) and the star rating `FUN_0040faf0`. The sim's engine power comes from the
+separate registry above.
+
+**The type-8 spawn message is paint, not stats.** `FUN_004084a0(8, buf)` dispatches to
+`FUN_00401e80`, which builds `assets\graphics\<pattern>\...` texture paths from descriptor
++0x40 (pattern, a 14-entry name table at `0x0060301c`), +0x2c and +0x68; `FUN_0041a320`
+registers three 0x34-byte texture entries per plane from the +0x5c/+0x60/+0x64 picks against
+the logo/decal name table at `0x0061da20`. Armour and engine ride the global block, not this
+message.
+
 ## Open
 
-- Record +0x64, the third dword of the paint-pick triple, is carried into the spawn
-  descriptor (`FUN_00417090`) but no screen handler writing it was found.
-- The gun table's +0x10/+0x14 stats (rate-of-fire-shaped and range-shaped) were not traced to
-  their combat consumers; only their monotone ordering across the calibres is stated here.
+- The three paint picks at +0x5c/+0x60/+0x64 are consumed as three per-plane texture/decal
+  registrations (`FUN_0041a320`); the composite `a*5 + b` encoding's exact meaning per pick,
+  and which screen writes +0x64, are still unread.
+- The per-hit damage application order across zone/total and armour/structure pools is not
+  decoded (entry points `FUN_004b9b30` / `FUN_004b9bc0` / `FUN_004b3800`).
+- The gun table's +0x10/+0x14 stats: +0x14 matches the shipped `CLUSTER_SIZE` magazine series
+  (2800/2400/2000/1600/1200) exactly; +0x10 is rate-of-fire-shaped; neither is traced to a
+  combat consumer.
