@@ -466,7 +466,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   now read: gun cost/weight table at `0x00619e68` (wing and turret columns, twin doubles both),
   per-airframe engine bases at `0x00619d98` with fixed per-engine-id offsets, armour at units*4
   cost and weight, hardpoints $410 / 480 lb each, totals in `FUN_00405680`/`FUN_00405550` with the
-  overweight/no-engine purchase gate in callback 2264 (`0x0040b418`).
+  overweight/no-engine purchase gate in callback 2264 (`0x0040b418`). The full tables, values and
+  callback map are [`docs/org/hangar.md`](docs/org/hangar.md).
 
 - `BL-226` `[Feature]` `[Blocked: cockpit view]` **The incoming-fire cue set's other two halves are blocked on things that do not exist
   yet.** The near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,
@@ -2437,7 +2438,8 @@ usual.
   `FUN_00407670`), and `callback(1024)` is that dispatcher's case 0x400, the `Planes\*.*` directory
   scan with a 24-plane cap. The full field layout, pattern/decal picks included, is in
   [`docs/formats/paint.md`](docs/formats/paint.md) "Saved custom planes", so the import half is
-  unblocked.
+  unblocked. The screens' callback map, the airframe stat table and the purchase economy are
+  [`docs/org/hangar.md`](docs/org/hangar.md).
 
 - `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
   (C1/M04 `--generators`, user-reported 2026-08-13).** The spawn position is decoded-correct: the
