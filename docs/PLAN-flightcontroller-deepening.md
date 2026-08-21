@@ -158,7 +158,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — the collision response
 
 7. ☑ `FlightModel.Collide` takes slide, restitution and the lever-arm kick
-8. ☐ `BounceRestitutionTests` extended past restitution to the slide friction and the kick
+8. ☑ `BounceRestitutionTests` extended past restitution to the slide friction and the kick
 
 ### Wave E — the contact resolver
 
@@ -373,7 +373,7 @@ to the body rates the restitution reads. Preserve that order. The friction term 
 `CrashSpeed`, so it is coupled to a constant that lives on the controller; pass it rather than
 duplicating it.
 
-## D8 ☐ `BounceRestitutionTests` extended past restitution to the slide friction and the kick
+## D8 ☑ `BounceRestitutionTests` extended past restitution to the slide friction and the kick
 
 **Goal.** The whole response is pinned off-engine, not just the restitution term.
 
