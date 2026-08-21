@@ -203,28 +203,11 @@ public partial class GameSession : Node3D
     // DriveSimSteps before the AI planes it spawns into _aiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
     private ZeppelinRuntime? _zeppelins;
-    // The active Instant Action mission, loaded once at the top of
-    // StartSession from --ia=<path> — null outside one, which is what keeps every other session
-    // mode (free flight, Dogfight) untouched by its existence.
-    private InstantActionRuntime? _instantAction;
-    // E11's wave sequencer: null on dogfight_ace (every wave count is forced to 0) or outside an
-    // Instant Action mission. _iaWaveRosters[w] is wave w+1's built (inert until activated)
-    // members, indexed the same way; DriveSimSteps polls the current wave's alive count and
-    // activates whatever InstantActionWaves.Step hands back — through the teleport arm, or (F12,
-    // zeppelin_run) through the zeppelin generator's own wave credit.
-    private InstantActionWaves? _iaWaves;
-    private List<FlightController>[]? _iaWaveRosters;
-    private List<SpawnPoint>? _iaWaveSpawnList;
-    // F12: the wave whose parked members the objective zeppelin's generator is releasing — the
-    // decoded group stamp (FUN_0045b9d0 writes the new counter to the generator's +0x64). 0
-    // outside a zeppelin run, or before the first wave becomes current.
-    private int _iaLaunchWave;
-    // G14: the authored ace, kept as a field (not just BuildFlightRigs' own local) so
-    // --debug-scoreboard can force it down from DriveSimSteps, well after every Downed
-    // subscription the end-condition block wires is in place. Null outside dogfight_ace.
-    private FlightController? _iaAce;
-    // --debug-scoreboard (IA): single-fire, same shape as _crashFired/_versusDebugKillFired.
-    private bool _iaDebugForceFired;
+    // The active Instant Action mission's director: the mission runtime, the wave state and (as
+    // the deepening proceeds) the sequencing (see InstantActionDirector). Built at the top of
+    // StartSession — null outside a mission, which is what keeps every other session mode
+    // (free flight, Dogfight) untouched by its existence.
+    private InstantActionDirector? _iaDirector;
     // The world AA emplacements: built with the rigs whenever a chapter world and the
     // shared pool exist, stepped in DriveSimSteps after the zeppelins (slung mounts read the
     // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
@@ -541,36 +524,9 @@ public partial class GameSession : Node3D
             ?? (_spec.WorldMode ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter) : _planesGamezPath);
         state.MissionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _spec.Chapter, _spec.Mission);
 
-        // ⚠ Keep both producers (the wizard's SessionSpec.IaDef and --ia=<path>) converging on the
-        // one InstantActionRuntime construction; two similar calls is the failure this avoids.
-        // A failed --ia= load warns and flies without a mission rather than aborting the launch.
-        _instantAction = null;
-        _iaWaves = null;
-        _iaWaveRosters = null;
-        _iaWaveSpawnList = null;
-        _iaLaunchWave = 0;
-        _iaAce = null;
-        _iaDebugForceFired = false;
-        if (_spec.IaDef is { } wizardDef)
-        {
-            _instantAction = new InstantActionRuntime(wizardDef);
-            GD.Print($"ia: wizard mission_type={wizardDef.MissionType} " +
-                     $"player='{wizardDef.PlayerPlane}' ace='{wizardDef.AceName}' ({wizardDef.AcePlane})");
-        }
-        else if (_spec.IaPath != null)
-        {
-            try
-            {
-                var def = InstantAction.LoadFromJson(_spec.IaPath);
-                _instantAction = new InstantActionRuntime(def);
-                GD.Print($"ia: '{_spec.IaPath}' mission_type={def.MissionType} " +
-                         $"player='{def.PlayerPlane}' ace='{def.AceName}' ({def.AcePlane})");
-            }
-            catch (Exception e)
-            {
-                GD.PushWarning($"--ia={_spec.IaPath}: cannot load ({e.Message}) — flying without a mission");
-            }
-        }
+        // A fresh director per build, or null: construction (and its one-InstantActionRuntime ⚠)
+        // lives on InstantActionDirector.TryCreate.
+        _iaDirector = InstantActionDirector.TryCreate(_spec);
 
         Stopwatch sw;
         try
@@ -1705,18 +1661,19 @@ public partial class GameSession : Node3D
         var paintRng = _liveryResolver.NewPaintRng();
         // Instant Action: the mission's own mission_type IS the scenario key, and its player_plane
         // overrides whichever --plane= was given, so an --ia= launch needs neither flag.
-        string iaScenario = _instantAction?.Def.MissionType ?? _spec.Scenario;
-        string? iaPlayerNode = _instantAction != null
-            ? InstantAction.PlaneNodeFor(_instantAction.Def.PlayerPlane) : null;
-        if (_instantAction != null && iaPlayerNode == null)
+        var iaRt = _iaDirector?.Runtime;
+        string iaScenario = iaRt?.Def.MissionType ?? _spec.Scenario;
+        string? iaPlayerNode = iaRt != null
+            ? InstantAction.PlaneNodeFor(iaRt.Def.PlayerPlane) : null;
+        if (iaRt != null && iaPlayerNode == null)
         {
-            GD.PushWarning($"ia: player plane '{_instantAction.Def.PlayerPlane}' is not one of " +
+            GD.PushWarning($"ia: player plane '{iaRt.Def.PlayerPlane}' is not one of " +
                             $"the eleven airframes — flying '{_spec.PlaneName}' instead");
         }
         // One spawn list for the session; each player takes the next index (wrapping).
         // The empty stage has no mission, so nothing to read: ChooseSpawn takes the
         // --pos/default override placed over the grid origin.
-        _spawnPicker.ScenarioOverride = _instantAction != null ? iaScenario : null;
+        _spawnPicker.ScenarioOverride = iaRt != null ? iaScenario : null;
         var spawnList = _spec.EmptyStage ? null : SpawnPoints.LoadIa(state.MissionZrdrPath, iaScenario);
         int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
 
@@ -1791,7 +1748,7 @@ public partial class GameSession : Node3D
         StuntRace? race = null;
         // An Instant Action stunt_flying mission IS a stunt run: the mission type asks for the
         // zones, so --stunt is not the tester's flag to remember on an --ia= launch.
-        bool iaStunt = _instantAction is { } iaStuntMission
+        bool iaStunt = iaRt is { } iaStuntMission
             && string.Equals(iaStuntMission.Def.MissionType, "stunt_flying", StringComparison.OrdinalIgnoreCase);
         bool wantStunt = _spec.Stunt || iaStunt;
         if (wantStunt && _spec.EmptyStage)
@@ -1865,7 +1822,7 @@ public partial class GameSession : Node3D
             VersusMatch = versus,
             Rigs = _rigs,
             InstantActionPlayerPlaneNode = iaPlayerNode,
-            InstantActionActive = _instantAction != null,
+            InstantActionActive = iaRt != null,
             Coop = _spec.Coop,
             Textures = state.Textures,
             ZrdrPath = state.ZrdrPath,
@@ -2121,7 +2078,7 @@ public partial class GameSession : Node3D
         // members alike, and read "first" as neindex FILE order, never the lowest id
         // (docs/formats/instant-action.md).
         AiNet? iaPatrolNet = null;
-        if (_instantAction != null)
+        if (iaRt != null)
         {
             try
             {
@@ -2153,7 +2110,7 @@ public partial class GameSession : Node3D
             pilot.Patrol = new AiNetFollower(iaPatrolNet, Rng.NewSystemRandom(Rng.Ai),
                 trailerTarget: netTrailers.For(iaPatrolNet));
         };
-        if (_instantAction is { } ia
+        if (iaRt is { } ia
             && string.Equals(ia.Def.MissionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase))
         {
             string? aceNode = InstantAction.PlaneNodeFor(ia.Def.AcePlane);
@@ -2184,7 +2141,7 @@ public partial class GameSession : Node3D
                     attackRating: rating, shippedSkins: true);
                 RegisterAiVoice(ace, ia.Def.AceAccentId, rating);
                 iaAce = ace;
-                _iaAce = ace;
+                _iaDirector!.Ace = ace;
                 InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
                 if (ace != null)
                 {
@@ -2196,7 +2153,7 @@ public partial class GameSession : Node3D
         }
         // Instant Action's wingmen. NumWingmen is forced to 0 on dogfight_ace at parse time, so
         // this and the ace block above are exclusive without an extra mission-type test.
-        if (_instantAction is { } iaWingmen && iaWingmen.Def.NumWingmen > 0
+        if (iaRt is { } iaWingmen && iaWingmen.Def.NumWingmen > 0
             && _rigs.Count > 0 && _rigs[0].Controller is { } leadForWingmen)
         {
             string? wingmanNode = InstantAction.PlaneNodeFor(iaWingmen.Def.WingmanPlane);
@@ -2276,7 +2233,7 @@ public partial class GameSession : Node3D
         // Instant Action's wave sequencer. ⚠ Build EVERY wave inert here, wave 1 included, so one
         // build-then-activate path serves them all; the mission type decides a wave's ARRIVAL, not
         // whether it is built (docs/formats/instant-action.md).
-        if (_instantAction is { } iaWaves)
+        if (iaRt is { } iaWaves)
         {
             var waveSizes = iaWaves.Def.Waves.Select(w => w.NumEnemies).ToArray();
             var rosters = new List<FlightController>[4];
@@ -2334,15 +2291,15 @@ public partial class GameSession : Node3D
                 }
                 rosters[w] = roster;
             }
-            _iaWaveRosters = rosters;
-            _iaWaveSpawnList = spawnList;
-            _iaWaves = new InstantActionWaves(waveSizes);
+            _iaDirector!.WaveRosters = rosters;
+            _iaDirector.WaveSpawnList = spawnList;
+            _iaDirector.Waves = new InstantActionWaves(waveSizes);
             // On zeppelin_run the first wave is started after the generator block below, since
             // "activating" it there means crediting the zeppelin's generator, which does not
             // exist yet at this point in the build.
             if (!iaWaves.IsZeppelinRun)
             {
-                int firstWave = _iaWaves.Start();
+                int firstWave = _iaDirector.Waves.Start();
                 if (firstWave != 0)
                 {
                     ActivateInstantActionWave(firstWave);
@@ -2421,7 +2378,7 @@ public partial class GameSession : Node3D
         // --zeppelins: the mission's zeppelin instances, placed at their authored pose and flown
         // along their nets as kinematic world nodes. ⚠ Build them before --generators below, so a
         // zeppelin generator's min_altitude gate reads the flown host's live Y from the first step.
-        bool iaZeppelinRun = _instantAction?.IsZeppelinRun ?? false;
+        bool iaZeppelinRun = iaRt?.IsZeppelinRun ?? false;
         if (_spec.Zeppelins || iaZeppelinRun)
         {
             List<ZeppelinDef> zepDefs;
@@ -2476,7 +2433,7 @@ public partial class GameSession : Node3D
         // derive Disabled from it, and each switched node must reach the turret arm below or the
         // objective zeppelin flies unarmed.
         var iaZepTurretSwitch = new List<(Node3D Node, bool Objective, string Name)>();
-        if (_instantAction is { } iaZeppelins && rigInputs.WorldRuntime is { } iaZepWorld)
+        if (iaRt is { } iaZeppelins && rigInputs.WorldRuntime is { } iaZepWorld)
         {
             string selectedZep = InstantActionRuntime.SelectedZeppelinNode(iaZeppelins.Def);
             var switchedZeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2554,7 +2511,7 @@ public partial class GameSession : Node3D
         // The zeppelin run's wave arm: the objective zeppelin's generator releases the waves built
         // inert above on a budget the sequencer credits wave by wave. ⚠ The first wave can only
         // start here, since activating it means crediting a generator that did not exist earlier.
-        if (iaZeppelinRun && _instantAction is { } iaZepRun && _iaWaves != null)
+        if (iaZeppelinRun && iaRt is { } iaZepRun && _iaDirector is { Waves: { } zepWaves })
         {
             string objectiveZep = InstantActionRuntime.SelectedZeppelinNode(iaZepRun.Def);
             int claimed = _generators?.UseInstantActionLaunches(
@@ -2573,7 +2530,7 @@ public partial class GameSession : Node3D
                           $"({claimed} generator(s) on the wave-credit budget). BL-350 is open " +
                           "and in this mission's way: a drop is not gated on the doors opening.");
             }
-            int firstZepWave = _iaWaves.Start();
+            int firstZepWave = zepWaves.Start();
             if (firstZepWave != 0)
             {
                 ActivateInstantActionWave(firstZepWave);
@@ -2583,7 +2540,7 @@ public partial class GameSession : Node3D
         // Instant Action's end conditions, lives and spectating: every signal already exists above,
         // so this only routes them into the runtime that decides the outcome. ⚠ Each source reports
         // the objective it satisfied and the runtime drops what this mission does not run on.
-        if (_instantAction is { } iaEnd)
+        if (iaRt is { } iaEnd)
         {
             // "Enemies Shot Down": every EnemyTeam actor downed by an attributed shooter, on every
             // mission type. ⚠ Keep the killer != null filter: a bare terrain or mid-air crash never
@@ -2593,9 +2550,9 @@ public partial class GameSession : Node3D
             {
                 iaAce.Downed += (_, killer) => { if (killer != null) enemiesShotDown++; };
             }
-            if (_iaWaveRosters != null)
+            if (_iaDirector?.WaveRosters is { } endRosters)
             {
-                foreach (var roster in _iaWaveRosters)
+                foreach (var roster in endRosters)
                 {
                     foreach (var member in roster)
                     {
@@ -3101,7 +3058,7 @@ public partial class GameSession : Node3D
     // in place, the race and the match through their own bookkeeping and anything else per-plane.
     private void Rerun()
     {
-        if (_instantAction != null)
+        if (_iaDirector != null)
         {
             _restartSession();
             return;
@@ -3194,14 +3151,14 @@ public partial class GameSession : Node3D
     // moved and no spawn is drawn, the objective zeppelin's generator is credited instead.
     private void ActivateInstantActionWave(int waveNumber)
     {
-        var roster = _iaWaveRosters![waveNumber - 1];
+        var roster = _iaDirector!.WaveRosters![waveNumber - 1];
         if (roster.Count == 0)
         {
             return; // InstantActionWaves.Start/Step never hand back an empty wave; stay defensive
         }
-        if (_instantAction is { IsZeppelinRun: true } iaZepRun)
+        if (_iaDirector.Runtime is { IsZeppelinRun: true } iaZepRun)
         {
-            _iaLaunchWave = waveNumber;   // the decoded group stamp (the generator's +0x64)
+            _iaDirector.LaunchWave = waveNumber;   // the decoded group stamp (the generator's +0x64)
             string objectiveZep = InstantActionRuntime.SelectedZeppelinNode(iaZepRun.Def);
             int fed = _generators?.GrantWaveCapacity(objectiveZep, roster.Count) ?? 0;
             GD.Print($"ia: wave {waveNumber} ({roster.Count} aircraft) credited to '" +
@@ -3209,7 +3166,7 @@ public partial class GameSession : Node3D
                       "not teleported");
             return;
         }
-        if (_iaWaveSpawnList is not { Count: > 0 } spawns)
+        if (_iaDirector.WaveSpawnList is not { Count: > 0 } spawns)
         {
             GD.PushWarning($"ia: no spawn points for wave {waveNumber} — {roster.Count} " +
                             "aircraft stay parked inert");
@@ -3448,7 +3405,7 @@ public partial class GameSession : Node3D
     // predicate the session runs. A no-op on every other mission type.
     private void CheckInstantActionZoneSets()
     {
-        if (_instantAction is not { } ia)
+        if (_iaDirector?.Runtime is not { } ia)
         {
             return;
         }
@@ -3472,16 +3429,17 @@ public partial class GameSession : Node3D
     // wave at the controls.
     private void StepInstantAction(float dt)
     {
-        if (_instantAction is not { } ia)
+        if (_iaDirector is not { } iaDir)
         {
             return;
         }
+        var ia = iaDir.Runtime;
         ia.Advance(dt);
-        if (_iaWaves is not { Finished: false, CurrentWave: >= 1 } waves)
+        if (iaDir.Waves is not { Finished: false, CurrentWave: >= 1 } waves)
         {
             return;
         }
-        var waveRoster = _iaWaveRosters![waves.CurrentWave - 1];
+        var waveRoster = iaDir.WaveRosters![waves.CurrentWave - 1];
         // ⚠ A wave member still waiting in the zeppelin's bay COUNTS as present, as the decoded walk
         // counts a still-deactivated enemy, or a credited wave reads as cleared in the frames
         // before its first launch (docs/formats/instant-action.md).
@@ -3509,11 +3467,11 @@ public partial class GameSession : Node3D
     private FlightController? ReleaseInstantActionWaveMember(Vector3 pos, Vector3 lookAt,
         Vector3 launchVelocity)
     {
-        if (_iaWaveRosters == null || _iaLaunchWave is < 1 or > 4)
+        if (_iaDirector is not { WaveRosters: { } rosters, LaunchWave: >= 1 and <= 4 } iaDir)
         {
             return null;
         }
-        foreach (var member in _iaWaveRosters[_iaLaunchWave - 1])
+        foreach (var member in rosters[iaDir.LaunchWave - 1])
         {
             if (!member.Inert)
             {
@@ -3553,19 +3511,20 @@ public partial class GameSession : Node3D
         // --debug-scoreboard (IA): force this mission's own win signal on the first sim step, the
         // same single-fire shape as the two blocks above, attributed to P1 so the wrap-up board
         // reads non-zero. Which modes have a force at all: docs/architecture.md on GameSession.cs.
-        if (_instantAction is { } iaDebug && _spec.DebugScoreboard && !_iaDebugForceFired)
+        if (_iaDirector is { DebugForceFired: false } iaDbgDir && _spec.DebugScoreboard)
         {
-            _iaDebugForceFired = true;
+            var iaDebug = iaDbgDir.Runtime;
+            iaDbgDir.DebugForceFired = true;
             int? attributedTo = _rigs.Count > 0 ? _rigs[0].Controller?.PlayerIndex : null;
             if (iaDebug.Objective == InstantActionObjective.AceDown)
             {
-                _iaAce?.DebugForceCrash(attributedTo);
+                iaDbgDir.Ace?.DebugForceCrash(attributedTo);
             }
-            else if (iaDebug.Objective == InstantActionObjective.WavesCleared && _iaWaveRosters != null)
+            else if (iaDebug.Objective == InstantActionObjective.WavesCleared && iaDbgDir.WaveRosters is { } dbgRosters)
             {
                 // DebugForceCrash self-gates on InPlay, so this reaches only whatever wave
                 // is currently active — the rest are still parked inert awaiting their own turn.
-                foreach (var roster in _iaWaveRosters)
+                foreach (var roster in dbgRosters)
                     foreach (var member in roster)
                         member.DebugForceCrash(attributedTo);
             }
