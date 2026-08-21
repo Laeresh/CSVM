@@ -1,4 +1,5 @@
 using System;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI;
@@ -58,9 +59,13 @@ public sealed class MenuInput
     private const float RepeatInterval = 0.12f;  // s between repeats after that
     private const float StickDeadzone = 0.5f;    // |LeftY| past this counts as a d-pad press
 
+    // One timing rule for both cursor axes, shared with TapHoldButton's hold instead of a pair of
+    // hand-rolled timer fields.
+    private readonly HoldToRepeat _repeat = new(RepeatInitial, RepeatInterval);
+    private readonly HoldToRepeat _repeatX = new(RepeatInitial, RepeatInterval);
+
     private bool _acceptPrev, _backPrev, _padBackPrev, _startPrev, _loadoutPrev;
     private int _dirPrev, _dirXPrev;
-    private float _repeatTimer, _repeatTimerX;
 
     /// <summary>The single pad this player is bound to, or −1 when it has none or several
     /// (player 1's unclaimed set) — for logging and the join bookkeeping.</summary>
@@ -87,42 +92,39 @@ public sealed class MenuInput
     public static bool JoinPressed(int pad) =>
         !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.Start);
 
+    /// <summary>One frame of one cursor axis: a fresh press or a direction flip fires immediately
+    /// and arms the initial delay, a held direction repeats on the timer, and letting go releases
+    /// it. Public so the d-pad shape unit-tests (the repo takes public members over
+    /// InternalsVisibleTo); it reads no device itself.</summary>
+    public static int StepAxis(int dir, ref int prev, HoldToRepeat repeat, float dt)
+    {
+        int move = 0;
+        if (dir != prev)
+        {
+            if (dir != 0)
+            {
+                move = dir;
+                repeat.Press();
+            }
+            else
+            {
+                repeat.Release();
+            }
+        }
+        else if (dir != 0 && repeat.Tick(dt))
+        {
+            move = dir;
+        }
+
+        prev = dir;
+        return move;
+    }
+
     /// <summary>Reads this player's devices and fills the result fields.</summary>
     public void Poll(float dt)
     {
-        int dir = RawDir();
-        Move = 0;
-        if (dir != 0)
-        {
-            if (dir != _dirPrev)
-            {
-                Move = dir;
-                _repeatTimer = RepeatInitial;
-            }
-            else if ((_repeatTimer -= dt) <= 0f)
-            {
-                Move = dir;
-                _repeatTimer = RepeatInterval;
-            }
-        }
-        _dirPrev = dir;
-
-        int dirX = RawDirX();
-        MoveX = 0;
-        if (dirX != 0)
-        {
-            if (dirX != _dirXPrev)
-            {
-                MoveX = dirX;
-                _repeatTimerX = RepeatInitial;
-            }
-            else if ((_repeatTimerX -= dt) <= 0f)
-            {
-                MoveX = dirX;
-                _repeatTimerX = RepeatInterval;
-            }
-        }
-        _dirXPrev = dirX;
+        Move = StepAxis(RawDir(), ref _dirPrev, _repeat, dt);
+        MoveX = StepAxis(RawDirX(), ref _dirXPrev, _repeatX, dt);
 
         bool accept = RawAccept();
         Accept = accept && !_acceptPrev;
@@ -159,10 +161,16 @@ public sealed class MenuInput
         _startPrev = RawStart();
         _loadoutPrev = RawLoadout();
         _dirPrev = RawDir();
-        _repeatTimer = RepeatInitial;
+        if (_dirPrev != 0)
+            _repeat.Press();
+        else
+            _repeat.Release();
         Move = 0;
         _dirXPrev = RawDirX();
-        _repeatTimerX = RepeatInitial;
+        if (_dirXPrev != 0)
+            _repeatX.Press();
+        else
+            _repeatX.Release();
         MoveX = 0;
         Accept = Back = PadBack = Start = Loadout = false;
     }

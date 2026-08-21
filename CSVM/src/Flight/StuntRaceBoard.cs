@@ -5,17 +5,16 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The shared results board for a splitscreen stunt race. Where the single-player
-/// <see cref="StuntScoreboard"/> shows one pilot's per-zone splits inside their own pane, this
-/// ranks the whole field and covers the entire window on its own CanvasLayer over the splitscreen
-/// panes, because the race ends for everybody at once.
-/// One row per player in finishing order: placing, colour-coded tag, aircraft, zones cleared and
-/// total time. The world halts underneath it, and the board's own menu offers the rematch and the
-/// way out; R and pad Y still reach the rematch directly. Construction detail: this module's entry
-/// in docs/architecture.md.
+/// The shared results board for a splitscreen stunt race — <see cref="ResultsBoard"/>'s shell.
+/// Where the single-player <see cref="StuntScoreboard"/> shows one pilot's per-zone splits inside
+/// their own pane, this ranks the whole field and covers the entire window on its own CanvasLayer
+/// over the splitscreen panes, because the race ends for everybody at once. One row per player in
+/// finishing order: placing, colour-coded tag, aircraft, zones cleared and total time. R and pad Y
+/// still reach the rematch directly. Construction detail: this module's entry in
+/// docs/architecture.md.
 /// ⚠ Best times are deliberately not recorded here (<see cref="ScoreStore"/> is single-player
 /// only): race totals aren't comparable across player counts.</summary>
-public sealed partial class StuntRaceBoard : Control
+public sealed partial class StuntRaceBoard : ResultsBoard
 {
     // Base metrics at 720p (scaled by window height). All TUNE — mirrors StuntScoreboard so the
     // solo and race boards read as the same screen.
@@ -24,31 +23,11 @@ public sealed partial class StuntRaceBoard : Control
     private const int HeaderFont = 14;
     private const int RowFont = 18;
 
-    private static readonly Color TitleColor = new(0.93f, 0.96f, 1f);
-    private static readonly Color ContextColor = new(0.60f, 0.75f, 0.95f);
-    private static readonly Color HeaderColor = new(0.50f, 0.62f, 0.80f);
-    private static readonly Color RowColor = new(0.86f, 0.89f, 0.94f);
-
     private StuntRace _race = null!;
     private string _context = "";
-    private string _exitLabel = "";
-    private PauseState _state = null!;
-    private System.Func<int, MenuInput> _inputFor = null!;
 
-    private CenterContainer _center = null!;
-    private PanelContainer? _panel;
-    private BoardMenuHost? _host;
-
-    /// <summary>Rerun the race in place, chosen from the menu.</summary>
-    public System.Action? Restart { get; set; }
-
-    /// <summary>Leave the session, chosen from the menu.</summary>
-    public System.Action? Exit { get; set; }
-
-    /// <summary>Hand player 1's pane to a free camera over the frozen world, chosen from the menu.
-    /// The race's halt is never dropped and no standing is spent, so this is the one row that
-    /// leaves the board's own state exactly as it found it.</summary>
-    public System.Action? PhotoMode { get; set; }
+    // A rematch clears the placings, which the shell's _Process turns into the hide and the release.
+    protected override bool StillEnded => _race.AllFinished;
 
     /// <summary>Builds the (hidden) board and subscribes to the race's completion. Add it to a
     /// CanvasLayer above the splitscreen panes; it wakes itself on
@@ -56,103 +35,13 @@ public sealed partial class StuntRaceBoard : Control
     public static StuntRaceBoard Build(StuntRace race, string context, bool exitsToMenu,
         PauseState state, System.Func<int, MenuInput> inputFor)
     {
-        var board = new StuntRaceBoard
-        {
-            _race = race,
-            _context = context,
-            _exitLabel = exitsToMenu ? "Exit to Menu" : "Quit Game",
-            _state = state,
-            _inputFor = inputFor,
-            MouseFilter = MouseFilterEnum.Ignore,
-            FocusMode = FocusModeEnum.None,
-            Visible = false,
-        };
-        board.SetAnchorsPreset(LayoutPreset.FullRect);
-
-        var backdrop = new ColorRect { Color = new Color(0f, 0f, 0f, 0.62f), MouseFilter = MouseFilterEnum.Ignore };
-        backdrop.SetAnchorsPreset(LayoutPreset.FullRect);
-        board.AddChild(backdrop);
-
-        board._center = new CenterContainer { MouseFilter = MouseFilterEnum.Ignore };
-        board._center.SetAnchorsPreset(LayoutPreset.FullRect);
-        board.AddChild(board._center);
-
+        var board = new StuntRaceBoard { _race = race, _context = context };
+        board.InitShell(state, exitsToMenu, inputFor);
         race.RaceCompleted += board.OnRaceCompleted;
         return board;
     }
 
     public override void _ExitTree() => _race.RaceCompleted -= OnRaceCompleted;
-
-    public override void _Process(double delta)
-    {
-        // Track the window (resizable) so the backdrop always covers it.
-        Position = Vector2.Zero;
-        Size = GetViewportRect().Size;
-        // A rematch clears the placings — retire the board and release the clock until the next
-        // race ends. R and pad Y reach the rematch without the menu, so the release belongs here
-        // rather than only on the menu's own Restart.
-        if (Visible && !_race.AllFinished)
-        {
-            Visible = false;
-            _host = null;
-            _state.Clear(HaltReason.Ended);
-            return;
-        }
-        if (Visible)
-            _host?.Poll((float)delta);
-    }
-
-    private static Label Label(string text, int fontSize, Color color)
-    {
-        var l = new Label { Text = text };
-        l.AddThemeFontSizeOverride("font_size", fontSize);
-        l.AddThemeColorOverride("font_color", color);
-        l.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.7f));
-        l.AddThemeConstantOverride("shadow_offset_x", 1);
-        l.AddThemeConstantOverride("shadow_offset_y", 1);
-        return l;
-    }
-
-    private static CenterContainer Centered(Control c)
-    {
-        var cc = new CenterContainer();
-        cc.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        cc.AddChild(c);
-        return cc;
-    }
-
-    private static void AddCell(GridContainer grid, string text, int fontSize, Color color,
-        HorizontalAlignment align, int minWidth)
-    {
-        var l = Label(text, fontSize, color);
-        l.HorizontalAlignment = align;
-        l.CustomMinimumSize = new Vector2(minWidth, 0);
-        grid.AddChild(l);
-    }
-
-    private static HSeparator Separator(float s)
-    {
-        var sep = new HSeparator();
-        sep.AddThemeConstantOverride("separation", Mathf.RoundToInt(8f * s));
-        return sep;
-    }
-
-    private void OnActivated(BoardMenuItem item)
-    {
-        if (item == BoardMenuItem.Photo)
-        {
-            // ⚠ Ahead of the Exit test and returning: the tail of this method is the Restart path.
-            PhotoMode?.Invoke();
-            return;
-        }
-        if (item == BoardMenuItem.Exit)
-        {
-            Exit?.Invoke();
-            return;
-        }
-        // The rematch clears AllFinished, which _Process turns into the hide and the release.
-        Restart?.Invoke();
-    }
 
     private void OnRaceCompleted()
     {
@@ -162,42 +51,13 @@ public sealed partial class StuntRaceBoard : Control
             Log.Info("flight",
                 $"  {StuntRace.Ordinal(r.Rank)}  {r.Tag}  {r.PlaneDisplay}  {StuntMission.FormatTime(r.FinishTime)}");
         Populate();
-        Visible = true;
-        // The race stops the world now, rather than leaving the finished pilots to fly on under a
-        // board that has already ranked them.
-        _state.Raise(HaltReason.Ended);
+        Wake();
     }
 
     private void Populate()
     {
-        // The board spans the whole window, not a pane — so it scales on the window height alone
-        // (no HudMetrics pane damping, which is for HUD elements drawn inside a pane).
-        float s = Mathf.Max(0.5f, Size.Y > 0f ? Size.Y / 720f : 1f);
-
-        if (_panel != null)
-        {
-            _center.RemoveChild(_panel);
-            _panel.QueueFree();
-        }
-
-        _panel = new PanelContainer();
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.05f, 0.07f, 0.11f, 0.94f),
-            BorderColor = new Color(0.34f, 0.48f, 0.72f),
-            ContentMarginLeft = 34f * s,
-            ContentMarginRight = 34f * s,
-            ContentMarginTop = 24f * s,
-            ContentMarginBottom = 22f * s,
-        };
-        style.SetBorderWidthAll(Mathf.RoundToInt(2f * s));
-        style.SetCornerRadiusAll(Mathf.RoundToInt(6f * s));
-        _panel.AddThemeStyleboxOverride("panel", style);
-        _center.AddChild(_panel);
-
-        var body = new VBoxContainer();
-        body.AddThemeConstantOverride("separation", Mathf.RoundToInt(7f * s));
-        _panel.AddChild(body);
+        float s = BoardScale();
+        var body = BeginPanel(s);
 
         body.AddChild(Centered(Label("STUNT RACE RESULTS", (int)(TitleFont * s), TitleColor)));
         body.AddChild(Centered(Label(_context, (int)(ContextFont * s), ContextColor)));
@@ -244,14 +104,6 @@ public sealed partial class StuntRaceBoard : Control
         }
 
         body.AddChild(Separator(s));
-
-        var menu = new BoardMenu(
-            dismissable: false,
-            (BoardMenuItem.Photo, "Photo Mode"),
-            (BoardMenuItem.Restart, "Restart"),
-            (BoardMenuItem.Exit, _exitLabel));
-        menu.Activated += OnActivated;
-        _host = BoardMenuHost.Build(menu, _inputFor(0), s);
-        body.AddChild(_host.View);
+        AddStandardMenu(body, s);
     }
 }

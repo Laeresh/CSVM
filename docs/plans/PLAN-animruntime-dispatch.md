@@ -1,8 +1,7 @@
 # AnimRuntime dispatch-axis families
 
-**ACTIVE PLAN** (written 2026-08-21). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans/plans.md`](plans/plans.md), when every item lands.
+**✅ COMPLETE** (written 2026-08-21, completed 2026-08-21). Archived in `docs/plans/`; its row is
+in [`plans.md`](plans.md).
 
 This plan carves the dispatch region of `CSVM/src/Mech3/AnimRuntime.cs` (the ~1,300 lines from the
 `switch (ev.Kind)` at `:2030` through the per-kind handlers) into three internally owned event-kind
@@ -98,20 +97,20 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Sound family
 
-1. ☐ Extract the sound family (`SoundNode`/`Sound`) into `Anim/`
+1. ☑ Extract the sound family (`SoundNode`/`Sound`) into `Anim/`
 
 ### Wave B — Light family
 
-11. ☐ Extract the light family (`LightState`/`LightAnimation`) into `Anim/`
+11. ☑ Extract the light family (`LightState`/`LightAnimation`) into `Anim/`
 
 ### Wave C — Pose/visual family
 
-21. ☐ Extract the pose/visual family, with the `_rest` seam design check
+21. ☑ Extract the pose/visual family, with the `_rest` seam design check
 
 ### Wave D — Surface trim
 
-31. ☐ Delete unread observability; demote dead members to private
-32. ☐ Demote the `WorldSession`-only and test-only tiers to `internal`
+31. ☑ Delete unread observability; demote dead members to private
+32. ☑ Demote the `WorldSession`-only and test-only tiers to `internal`
 
 ## Dependency and parallelism notes
 
@@ -124,7 +123,42 @@ ever run in parallel worktrees.
 
 # Wave A — Sound family
 
-## A1 ☐ Extract the sound family (`SoundNode`/`Sound`) into `Anim/`
+## A1 ☑ Extract the sound family (`SoundNode`/`Sound`) into `Anim/`
+
+**Landed.** `CSVM/src/Mech3/Anim/SoundChannel.cs` owns `HandleSoundNode`/`HandleSound`/
+`OneShotSoundPosition`/`ReportLateSoundFailure`, the `_soundEmitters`/`_soundFailuresReported`
+state, the census counters (`_soundsUnknown`/`_soundsAfterBuild`/`_soundCensusPrinted`) and its own
+`OneShotSoundsPlayed`. `AnimRuntime` keeps `case "SoundNode":`/`case "Sound":` delegating to a
+lazily-built `Sound` property (same `??=` pattern as `Emitters`), forwards `OneShotSoundsPlayed` to
+the channel's counter, and keeps the two reach-ins the router still needs directly: the
+`OBJECT_ACTIVE_STATE` sound-emitter test now calls `Sound.TrySetActive`, and the sound-emitter
+quarter of `OBJECT_ADD_CHILD` now calls `Sound.TryGetChild`/`Sound.Attach`. `ResetToBaseState` and
+`TearDownResourcesOf` hand their sound work to `Sound.Reset()`/`Sound.DiscardFor(anchor)`.
+`Sounds`/`SoundHandledElsewhere` stayed public fields on `AnimRuntime`; the channel takes them as
+`Func<WorldSounds?>`/`Func<bool>` closures rather than a constructor snapshot, since `Sounds` is
+null until the world build finishes and can be reassigned afterwards (`WorldEffectsFactory`'s crash
+runtime). The channel's other two dependencies are `Resolve` (an existing method-group delegate)
+and `Func<Random>` over `_rng`, plus an `Action` callback for `_opsApplied` — five dependencies
+total, matching Decision 4's "a handful". `WorldTransform` went `private static` → `internal
+static` (the same visibility `NameOf`/`VisualOriginOf` already carry) so the channel's one-shot
+positioning can call it without AnimRuntime having to forward it as a sixth delegate.
+`docs/architecture.md`'s `AnimRuntime` and `Anim/` entries, and the top-level `src/Mech3/Anim/`
+bullet list, describe the new module and the router's remaining reach-ins.
+
+**Verified.** `.\RunTests.ps1` full pass: build, 1646/1646 units, 89/89 engine suites with zero
+engine error lines, 16/16 goldens hash-identical, hitch detector healthy. `AnimRuntime`'s public
+declaration count is unchanged at 96 (`'public '` matches): this wave moved bodies and state, it
+did not touch the public surface, which is Wave D's job.
+
+**Decided along the way.** `HandleAddChild`'s two sound reach-ins (the emitter lookup and the
+`Sounds.Attach` call) are not case bodies the plan named for this item — `OBJECT_ADD_CHILD` stays a
+router case per Decision 3 — but they read `_soundEmitters` directly, so they got two narrow methods
+on the channel (`TryGetChild`, `Attach`) rather than staying reach-ins into a field that no longer
+lives on `AnimRuntime`. Same reasoning for the `OBJECT_ACTIVE_STATE` sound-emitter test: it became
+`Sound.TrySetActive`, which also folds in the `_opsApplied` bump so the router's case body is just
+`if (Sound.TrySetActive(ev, anchor)) return true;`.
+
+### Original approach (kept for reference)
 
 **Goal.** The `SoundNode` and `Sound` case bodies, their state and their teardown live in one
 internal family class in `Anim/`; the router case labels remain and call it directly. Sound becomes
@@ -159,7 +193,40 @@ the flag's semantics must move with the family intact, not be re-derived. Do not
 
 # Wave B — Light family
 
-## B11 ☐ Extract the light family (`LightState`/`LightAnimation`) into `Anim/`
+## B11 ☑ Extract the light family (`LightState`/`LightAnimation`) into `Anim/`
+
+**Landed.** `CSVM/src/Mech3/Anim/LightChannel.cs` owns `HandleLightState`/`HandleLightAnimation`/
+`Tick`/`Reset`/`DiscardFor`, the `_lights` table and the bootstrap-census accessors (`Count`/
+`ActiveCount`/`Names`). `AnimRuntime` keeps `case "LightState":`/`case "LightAnimation":` delegating
+to a lazily-built `Light` property (same `??=` pattern as `Sound`), and `ResetToBaseState`/
+`TearDownResourcesOf` hand their light work to `Light.Reset()`/`Light.DiscardFor(anchor)`. The
+`Advance` tick spine calls `Light.Tick(dt)` where it called `TickLights` (Decision 5). `Lights`/
+`LightViewerPositions` stayed public fields on `AnimRuntime`; the channel takes them as
+`Func<WorldLights?>` and a single `Func<IReadOnlyList<Vector3>>` closure that folds
+`LightViewerPositions`' null/empty fallback to `PlayerPos()` in at construction, plus `Resolve` (an
+existing method-group delegate) and `Func<bool>` over `DebugMotions` — four dependencies total,
+tighter than A1's five. `HandleLightState`/`HandleLightAnimation` report whether they applied
+through their return value instead of taking `_opsApplied`/`Count` callbacks the way `SoundChannel`
+took `recordApplied`; the router applies `_opsApplied++`/`Count("LightAnimation(no light)")` after
+the call, exactly where the handlers always did it inline, which cut two more dependencies without
+changing when either fires. `docs/architecture.md`'s `AnimRuntime` and `Anim/` entries, and a new
+`LightChannel.cs` entry mirroring `SoundChannel.cs`'s, describe the module. `AnimRuntime`'s public
+declaration count is unchanged at 96 (`'public '` matches): this wave moved bodies and state, same
+as A1.
+
+**Verified.** `.\RunTests.ps1` full pass: build, 1646/1646 units, 89/89 engine suites with zero
+engine error lines, 16/16 goldens hash-identical, hitch detector healthy. `AnimRuntime`'s public
+declaration count unchanged at 96.
+
+**Decided along the way.** Rebuilding with `-t:Rebuild` (the repo's pre-commit hook forces this)
+surfaced two `SA1202`/one `SA1204` StyleCop warnings already present on `main` before this item
+touched anything (`AnimRuntime.Motions`/`WorldTransform` out of accessibility order, and
+`SoundChannel`'s private helpers interleaved with its internal methods) — confirmed via
+`git stash` against the pre-change tree. Since the hook blocks `dotnet test`/`git commit` on any
+remaining warning regardless of who introduced it, this item also reorders those members (no
+behaviour change, StyleCop-only) so the verification step it owes can actually run.
+
+### Original approach (kept for reference)
 
 **Goal.** The `LightState` and `LightAnimation` case bodies, the `_lights` table and the per-frame
 light tick live in one internal family class; `Advance` calls the family's tick.
@@ -184,7 +251,53 @@ singleton, not a light: leave it and the `Rgba` helper (`:2534`, used only by it
 
 # Wave C — Pose/visual family
 
-## C21 ☐ Extract the pose/visual family, with the `_rest` seam design check
+## C21 ☑ Extract the pose/visual family, with the `_rest` seam design check
+
+**Landed.** `CSVM/src/Mech3/Anim/PoseChannel.cs` owns the nine `OBJECT_*` case bodies
+(`HandleActiveState`'s non-sound remainder, `HandleTranslateState`/`HandleRotateState`/
+`HandleScaleState`, `HandleMotionFromTo`, `HandleOpacityState`/`HandleOpacityFromTo`,
+`HandleMotion`, `HandleMotionSiScript`), the pose helpers `PoseTranslate`/`PoseRotate`/`PoseScale`
+(mission setup's pass 0 drives the first two through the `Pose` property), the opacity/fade state
+(`_opacity`, `_fadeTwinCache`, `_fadeTwins`, `_fadeShaderCache`, `EnsureOpacityPath`, `FadeTwinOf`,
+`ApplyOpacity`, `SetSubtreeOpacity`, the `OpacityCollisionEpsilon` cap) and `_resumeFromLanding`
+with `ConsumeLandingResume`/`MarkLandingResume`. The router keeps every case label, delegating with
+`_opsApplied += Pose.HandleX(...)`.
+
+**The design check's outcome (the `_rest` seam).** The seam is the runtime's existing
+`internal RestOf(node)`, unchanged: record-on-first-touch and lookup are one fused operation, and
+that single method is everything the family needs, because the pose helpers use rest only as their
+offset base and the motion builders (`MotionRuntime`/`FromToMotion`/`ScriptPlayback`) already read
+it as `rt.RestOf`. No delegate pair and no interface were minted: the channel necessarily holds an
+`AnimRuntime` reference anyway (the motion value types declare `AnimRuntime` as their host
+argument, and `MotionRuntime` is off-limits to edit), so the family reaches rest through that
+reference exactly as the builders do, and its doc comment binds the reference to that seam plus
+the builder-argument role, nothing wider. `_rest` and the death-flow readers
+(`RestoreRestPoses`/`ApplyDeathSwap`) stay private on `AnimRuntime` (Decision 3b); the seam did
+not widen into a general handle because everything else the channel touches arrives as its own
+dependency: the `Targets` resolver, the `MotionSet`, `Func<EmitterDirector>` and a `ScriptFor`
+closure (both late-bound), and an `Action<string>` count for multi-key unhandled tallies. That is
+six constructor parameters, inside Decision 4's bound. `_opsApplied` needed no callback: every
+handler returns its applied-op count and the router adds it, extending B11's return-value
+precedent.
+
+**Decided along the way.** `SetSubtreeActive` went `private static` → `internal static` (the A1
+`WorldTransform` precedent) since bootstrap passes 0/4 and `ApplyDeathSwap` still use it router-side
+while the family's `HandleActiveState` writes the same rule. `AnimRuntime` keeps thin internal
+forwards for `ConsumeLandingResume`/`MarkLandingResume`/`SetSubtreeOpacity`, whose callers
+(`MotionRuntime.Create`, the `ground-contact` suite, `OpacityFade`) name the runtime; the facade
+and the motion types are untouched. No teardown/reset reach-in was added: unlike emitters, lights
+and sounds, none of this family's state is per-(def, anchor) instance state, and `ResetToBaseState`/
+`TearDownResourcesOf` never touched it. `_rangeDeferred`/`TickDeferredByRange` stay on the runtime:
+they defer whole ON_STARTUP definitions, which is bootstrap lifecycle, not pose state. `_washGates`
+stays with `FbfxColorFromTo`, a router singleton per Decision 3. `Projectile.cs`'s splash-scale
+comment now names `PoseChannel.PoseScale`.
+
+**Verified.** `.\RunTests.ps1` full pass: build, 1646/1646 units, 89/89 engine suites with zero
+engine error lines, 16/16 goldens hash-identical (the motion-heavy shots `c1-debris-rest`,
+`c1-crash`, `c1-destroy-effects` among them), hitch detector healthy. `AnimRuntime`'s public
+declaration count unchanged at 96.
+
+### Original approach (kept for reference)
 
 **Goal.** The object-pose and visual kinds (`ObjectActiveState`, `ObjectTranslateState`,
 `ObjectRotateState`, `ObjectScaleState`, `ObjectMotionFromTo`, `ObjectOpacityState`,
@@ -223,7 +336,25 @@ without widening into a general runtime handle.
 
 # Wave D — Surface trim
 
-## D31 ☐ Delete unread observability; demote dead members to private
+## D31 ☑ Delete unread observability; demote dead members to private
+
+**Landed.** Deleted (pure unread observability, increments included since nothing else read them):
+`ActiveInstances`, `WaitsRouted`, `WaitsInert` — the backing `_waitsRouted`/`_waitsInert` fields and
+their `++` sites are gone too; the `Log.Info` lines the counters sat beside stay, since those (not
+the counters) were the actual once-per-callee observability. Demoted to `private`: `Invalidate`,
+`ResetAnimation` (the wrappers only — the `InvalidateAnimation`/`ResetAnimation` dispatch cases
+still reach them), `FirstPerson`, `EffectTtl`, `DefScopedPufferKeys`. `NameOf`, `VisualOriginOf`,
+`ConsumeLandingResume`, `SetSubtreeOpacity` were already `internal` from the Wave C extraction, so
+D31 made no further change to them. `Lights` is spared at `private`: the census's "zero external
+references" missed an object-initializer write (`WorldSession.cs`'s `Lights = lights,`), the same
+blind spot the census caveat names; it lands at `internal` instead, since `WorldSession.cs` is a
+different class in the same assembly.
+
+**Verified.** `.\RunTests.ps1` full pass: build with zero warnings, 1646/1646 units, 89/89 engine
+suites with zero engine error lines, 16/16 goldens hash-identical, hitch detector healthy.
+`AnimRuntime`'s public declaration count went 96 → 60.
+
+**Original approach (kept for reference).**
 
 **Goal.** Members with no reference anywhere outside `AnimRuntime.cs` and its siblings stop being
 public: unread observability is deleted, real behaviour with no external caller goes private.
@@ -249,7 +380,28 @@ members, 96 `public` matches in the file).
 also reach (`InvalidateAnimation`/`ResetAnimation` kinds): demote the wrappers, do not touch the
 event-driven paths.
 
-## D32 ☐ Demote the `WorldSession`-only and test-only tiers to `internal`
+## D32 ☑ Demote the `WorldSession`-only and test-only tiers to `internal`
+
+**Landed.** All members in both tiers moved `public` → `internal`, with no other change:
+`WorldSession`-only tier `ReportResolution`, `DebugMotions`, `QualityLod`, `Setup`, `Seed`,
+`ResolveLibraryRoot`, `IndexPooledCopy`, `NameResolveFallback`, `LightViewerPositions`,
+`PlayerPosition`; test-only tier `Start`, `StopAll`, `ApplyDamageStages`, `InheritedWorldVelocity`,
+`InheritedVelocityArmed`, `ArmInheritedVelocity`, `UnresolvedStageAnchors`, `UnhandledEventCounts`,
+`WorldRoot`, `WaitsInstalled`, `WaitsAbandoned`, `Emitters`, `PoolRecycles`, `AutoStart`,
+`EmitterFactory` and both constructors. `RestOf` and `MarkLandingResume`, named in the original
+census, were already `internal` from the Wave C extraction by the time D32 ran; no change needed.
+`CSVM.Tests` still compiles untouched. The doc-comment mentions in `WorldEffectsFactory.cs:30`
+(`PoolRecycles`) and `VersusHud.cs:15` (`PlayerPosition`) stayed accurate as written: both are
+same-assembly callers, so the member names and their reachability from those files did not change.
+Reordering `AnimRuntime.cs`'s members to keep StyleCop's accessibility ordering (SA1202/SA1204)
+happy — public block, then internal, then private, per member kind — was the larger part of this
+item's diff; no behaviour moved, only declaration order.
+
+**Verified.** `.\RunTests.ps1` full pass: build with zero warnings, 1646/1646 units, 89/89 engine
+suites with zero engine error lines, 16/16 goldens hash-identical, hitch detector healthy.
+`AnimRuntime`'s public declaration count went 96 → 60.
+
+**Original approach (kept for reference).**
 
 **Goal.** Members reachable only by their single configurer or by the in-engine suites stop
 claiming `public`.

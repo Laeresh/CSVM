@@ -1,21 +1,15 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Mech3.Anim;
 using CSVM.Session;
-using CSVM.Utils;
 using Godot;
 
-using static CSVM.Testing.SuiteConstants;
 namespace CSVM.Testing;
 
-/// <summary>The death choreography: the CALLBACK codes a destroy def authors, the per-entry
-/// injure staging behind them, and the two anim slots a killed aircraft plays on its way
-/// down. Its own module rather than part of the animation/effects one because these six
-/// suites drive whole aircraft through a kill, not a staged template.</summary>
+/// <summary>Suites asserting the choreography a death dispatches: destroy defs, wreck
+/// flights, crash rigs, callbacks, and the stops that end them.</summary>
 internal static class DestroyChoreographySuites
 {
     // ---- CALLBACK: the two vehicle-death codes ---------------------------------------------------
@@ -47,7 +41,7 @@ internal static class DestroyChoreographySuites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var stage = new Node3D { Name = "RepeatCallStage" };
-            var pdp7 = WorldAndToolSuites.PoolAnchorNode("pdp7", new Vector3(-10, 0, 0));
+            var pdp7 = DamageSuites.PoolAnchorNode("pdp7", new Vector3(-10, 0, 0));
             stage.AddChild(pdp7);
             var copies = new List<Node3D>();
             for (int slot = 0; slot < 4; slot++)
@@ -122,242 +116,161 @@ internal static class DestroyChoreographySuites
         });
     }
 
-    // ---- the injure ladder stages per ENTRY, and retracts on the upward crossing ---------------
-
-    // fury's AI ladder names random_remote_damage at six of its seven thresholds, so a latch keyed
-    // on the anim name plays five of them never. Three halves: the count over the real ladder, the
-    // retraction a repair makes (cleared on the upward crossing alone, never by staying below), and
-    // the per-(part, entry) keying, which no shipped def exercises — see the synthetic ladder below.
-    internal static void DamageStageSlots(TestContext ctx)
+    // The authored STOP_SEQUENCE stops must actually run; nothing else in the gate measures an effect's
+    // DURATION (--effects-test only proves a puffer builds, docs/verification.md). It asserts on the
+    // dispatch timeline via AnimRuntime.OnEventDispatched, so it needs no textures: the rocket
+    // fireball's ON_CALL stopper is named by a stop nothing runs and must stay silent, and the 30 s
+    // fire's emitting poll loop is halted, since an un-halted Loop{-1} re-fires every frame forever.
+    internal static void StopSequenceStops(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_fury");
-        ctx.Check(stats.VehicleInjureAnims.Count == 7,
-            $"fury's AI ladder carries {stats.VehicleInjureAnims.Count} entries (want 7)");
-
-        var root = new Node3D { Name = "fury_root" };
-        ctx.Host.AddChild(root);
-        try
-        {
-            var visuals = new DamageVisuals(System.Array.Empty<Node3D>(), root, stats);
-            ctx.Check(!visuals.PairsPanels,
-                $"fury's AI data names no pdpanel stage, so nothing is paired and nothing warns");
-
-            // one step per band, so each threshold is crossed on its own
-            foreach (float frac in new[] { 0.99f, 0.9f, 0.7f, 0.55f, 0.47f, 0.42f, 0.3f, 0.2f })
-                visuals.OnHullDamage(frac);
-            int repeats = visuals.StagedEntryCount("random_remote_damage");
-            ctx.Check(repeats == 6,
-                $"the whole ladder walked down: {repeats} random_remote_damage entries staged (want 6)");
-            ctx.Check(visuals.StagedEntryCount("pfsmoketrail") == 1,
-                $"…and the one pfsmoketrail entry at 0.40 staged with them");
-
-            // repaired to half: the three entries under 0.5 retract, the four at or above hold
-            visuals.OnHullDamage(0.5f);
-            ctx.Check(visuals.StagedEntryCount("random_remote_damage") == 4
-                      && visuals.StagedEntryCount("pfsmoketrail") == 0,
-                $"repaired to 50%: {visuals.StagedEntryCount("random_remote_damage")} random_remote_damage and {visuals.StagedEntryCount("pfsmoketrail")} pfsmoketrail entries still staged (want 4 and 0)");
-            visuals.OnHullDamage(0.2f);
-            ctx.Check(visuals.StagedEntryCount("random_remote_damage") == 6
-                      && visuals.StagedEntryCount("pfsmoketrail") == 1,
-                $"…and every retracted entry fires again on the next descent");
-        }
-        finally
-        {
-            root.Free();
-        }
-
-        // Per-(part, entry) keying. A census of all 22 shipped defs carrying destroyable_parts found
-        // no anim authored on two zones of one def, so the shared-entry case is driven from a
-        // synthetic ladder: four zones naming pdpanel1. The pairing warning fires here by design.
-        var multi = new PlaneStats();
-        foreach (string zone in new[] { "nose", "tail", "leftwing", "rightwing" })
-            multi.DestroyableParts.Add(new DestroyablePart { Name = zone, InjureAnims = { (0.5f, "pdpanel1") } });
-
-        var zoneRoot = new Node3D { Name = "zoned_root" };
-        ctx.Host.AddChild(zoneRoot);
-        try
-        {
-            var visuals = new DamageVisuals(System.Array.Empty<Node3D>(), zoneRoot, multi);
-            int starts = 0, stops = 0;
-            visuals.DamageEffectSink = _ => starts++;
-            visuals.DamageEffectStopOne = _ => stops++;
-            foreach (var part in multi.DestroyableParts)
-                visuals.OnPartDamage(part.Name, 0.4f);
-            ctx.Check(starts == 4 && visuals.StagedEntryCount("pdpanel1") == 4,
-                $"one entry authored on four zones started {starts} times and holds {visuals.StagedEntryCount("pdpanel1")} slots (want 4 and 4)");
-
-            foreach (var part in multi.DestroyableParts)
-                visuals.OnPartDamage(part.Name, 0.3f);
-            ctx.Check(starts == 4, $"…and staying below the threshold started nothing new ({starts} total)");
-
-            visuals.OnPartDamage("nose", 1f);
-            ctx.Check(visuals.StagedEntryCount("pdpanel1") == 3 && stops == 0,
-                $"one zone repaired clears its own slot and stops nothing — three zones still hold the anim");
-            foreach (var part in multi.DestroyableParts)
-                visuals.OnPartDamage(part.Name, 1f);
-            ctx.Check(visuals.StagedEntryCount("pdpanel1") == 0 && stops == 1,
-                $"…and the last one to retract stops the stage exactly once (stops={stops})");
-
-            visuals.OnPartDamage("nose", 0.4f);
-            ctx.Check(starts == 5, $"a repaired zone re-crossing fires again ({starts} starts)");
-        }
-        finally
-        {
-            zoneRoot.Free();
-        }
-
-        // A2's other half: a player airframe DOES name pdpanel stages, so pairing (and its
-        // missing-data alarm) stays armed on that path.
-        var player = PlaneStats.Load(ctx.ZrdrPath, "player_fury");
-        var playerRoot = new Node3D { Name = "player_root" };
-        ctx.Host.AddChild(playerRoot);
-        try
-        {
-            var visuals = new DamageVisuals(System.Array.Empty<Node3D>(), playerRoot, player);
-            ctx.Check(visuals.PairsPanels,
-                $"the player fury names pdpanel stages, so panel pairing still runs for it");
-        }
-        finally
-        {
-            playerRoot.Free();
-        }
-    }
-
-    // ---- an AI plane's ladder reaching the rig runtime, through the real spawner ----------------
-
-    // The seam the tree-free slot tests cannot reach: FlightRoster building an aircraft whose
-    // hull then falls, with the stages counted off the RUNTIME's own instance hook rather than off
-    // the sink the wiring under test installs. Phase 1 (the DamageVisuals) and phase 2 (the sink and
-    // stops, wired inside BuildFlightCrashRuntime) live in different files, so "the object exists"
-    // and "it plays into a runtime" are separate failures and asserted separately.
-    internal static void AiDamageStages(TestContext ctx)
-    {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
-            ProjectilePool? pool = null;
-            FlightController? ai = null;
-            FlightController? bhawk = null;
+            var program = world.Session.Program.Subset(new[] { "large_fireball", "large_30sec_fire" });
+            var fireball = program.ByAnimName("large_fireball");
+            var fire30 = program.ByAnimName("large_30sec_fire");
+            ctx.Check(fireball.Count > 0, $"chapter program has large_fireball defs={fireball.Count}");
+            ctx.Check(fire30.Count > 0, $"chapter program has large_30sec_fire defs={fire30.Count}");
+            if (fireball.Count == 0 || fire30.Count == 0)
+            {
+                return;
+            }
+
+            var stage = new Node3D { Name = "StopSequenceStage" };
+            var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
             try
             {
-                var live = new ProjectilePool(textures, null, null);
-                pool = live;
-                ctx.Host.AddChild(live);
-                var spec = SessionSpec.Parse(System.Array.Empty<string>());
-                var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-                var factory = new Session.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
-                var inputs = new HumanFlightAdapter.Inputs
-                {
-                    PlanesGamez = planesGamez,
-                    StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-                    RigCount = 0,
-                    PaintRng = new RandomNumberGenerator(),
-                    ZrdrPath = ctx.ZrdrPath,
-                    StockLoadouts = StockLoadouts.Load(),
-                    WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-                    Textures = textures,
-                    Projectiles = live,
-                    Shakes = ShakeDefs.Load(ctx.ZrdrPath),
-                    Gamez = world.Gamez,
-                    WorldScene = world.Session.Builder.Scene,
-                    CrashProgram = world.Session.Program,
-                };
-                var spawner = new FlightRoster(spec, liveries, factory, ctx.Host, inputs);
-                var start = new Vector3(0f, 500f, 0f);
-                ai = spawner.SpawnAi(new AiSpawn("player_fury", start, start + Vector3.Forward,
-                    AiPilot.HoldingCourse(start, start + Vector3.Forward)));
+                runtime.Bind(stage, program);
+                var timeline = new List<(float T, string Seq, string Kind)>();
+                float clock = 0f;
+                runtime.OnEventDispatched = d => timeline.Add((clock, d.Sequence, d.EventKind));
 
-                ctx.Check(ai.Visuals != null,
-                    $"the spawner built the AI Fury's DamageVisuals (phase 1)");
-                ctx.Check(ai.Visuals?.DamageEffectSink != null && ai.Visuals?.DamageEffectStop != null
-                          && ai.Visuals?.DamageEffectStopOne != null,
-                    $"…and the crash-runtime build wired its sink and both stops (phase 2)");
-                if (ai.Visuals is not { } visuals || ai.CrashRuntime is not { } rig
-                    || ai.Damage is not { } damage)
+                // The fireball: activate_puffer names its ON_CALL stopper at EVENT_OFFSET 0.3 while
+                // nothing runs under that name — the stop halts nothing and must START nothing,
+                // so the stopper's teardown never dispatches at all.
+                runtime.Start(fireball[0], stage);
+                for (int i = 0; i < 60; i++)
                 {
-                    return;
+                    clock += 1f / 60f;
+                    runtime.Advance(1f / 60f);
                 }
-
-                var starts = new Dictionary<string, int>(System.StringComparer.OrdinalIgnoreCase);
-                var stops = new Dictionary<string, int>(System.StringComparer.OrdinalIgnoreCase);
-                var anchors = new List<Node3D?>();
-                rig.OnInstanceStarted += (def, anchor) =>
+                int stopperDispatches = 0;
+                int trailPuffs = 0;
+                foreach (var e in timeline)
                 {
-                    string n = def.AnimName ?? def.Name ?? "";
-                    starts[n] = starts.TryGetValue(n, out var c) ? c + 1 : 1;
-                    if (Session.EffectCatalogue.AiDamageStageAnims.Contains(n, System.StringComparer.OrdinalIgnoreCase))
-                        anchors.Add(anchor);
+                    if (e.Seq == "stop_p1trail")
+                    {
+                        stopperDispatches++;
+                    }
+                    else if (e.Kind == "PufferState")
+                    {
+                        trailPuffs++;
+                    }
+                }
+                ctx.Check(trailPuffs > 0, $"the fireball's own puffer events dispatch puffs={trailPuffs}");
+                ctx.Same(0, stopperDispatches, $"stop_p1trail dispatches nothing within 1 s");
+
+                // The 30 s fire: fire_n_smoke is a running Loop{-1} poll re-asserting its emitter
+                // every frame — the ANIMATION_OFFSET 30 stop must HALT it (the halt idiom), or the
+                // re-assert would revive the puffer one frame after the paired INACTIVE.
+                float t0 = clock;
+                runtime.Start(fire30[0], stage);
+                for (int i = 0; i < 320; i++)
+                {
+                    clock += 0.1f;
+                    runtime.Advance(0.1f);
+                }
+                int pollsBefore = 0;
+                float lastPoll = -1f;
+                int stopPuffs = 0;
+                float stop30At = -1f;
+                foreach (var e in timeline)
+                {
+                    float rel = e.T - t0;
+                    if (e.Seq == "fire_n_smoke")
+                    {
+                        pollsBefore += rel <= 30f ? 1 : 0;
+                        lastPoll = rel > lastPoll ? rel : lastPoll;
+                    }
+                    else if (e.Seq == "stop_fire_n_smoke" && e.Kind == "PufferState")
+                    {
+                        stopPuffs++;
+                        stop30At = rel;
+                    }
+                }
+                ctx.Check(pollsBefore > 100, $"the fire's poll loop runs until its stop polls={pollsBefore}");
+                ctx.Check(lastPoll <= 30.2f, $"no fire_n_smoke dispatch after the authored 30 s halt last={lastPoll:0.0}");
+                ctx.Same(1, stopPuffs, $"stop_fire_n_smoke PUFFER_STATE dispatches");
+                ctx.Check(stop30At >= 29.5f && stop30At <= 30.5f,
+                    $"the fire's own puffer-off lands at the authored 30 s t={stop30At:0.0}");
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
+    }
+
+    // ---- the compiled destruction slot dispatches at death --------------------------------------
+
+    // The live-path start check the direct-Start stop-sequence suite cannot make: a real kill must
+    // dispatch the def's compiled destruction slot (AnimDefinition.DeathSlot), the block carrying
+    // nearly all of large_30sec_fire's death calls. An unparsed block no-ops every one of them and
+    // every "the fire ends on time" check reads the absence as a pass (DIAG-20). Subject: a C1 AA gun.
+    // Able to fail: with RunDeathSlot deleted, no destruction_slot lane ever dispatches.
+    internal static void DeathSlotDispatches(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var runtime = world.Runtime;
+            DestructibleRegistry.Instance? gun = null;
+            foreach (var inst in runtime.Destructibles.All)
+            {
+                if (inst.Def.DeathSlot is { } s && s.Events.Any(e => e.Kind == "CallAnimation"))
+                {
+                    gun = inst;
+                    break;
+                }
+            }
+            ctx.Check(gun != null, $"chapter ships a destructible with a calling destruction slot chapter={ctx.Chapter}");
+            if (gun == null)
+            {
+                return;
+            }
+            if (gun.Status == DestructibleRegistry.State.Destroyed)
+            {
+                runtime.ResetDestructible(gun);
+            }
+
+            var gunDef = gun.Def;
+            var slotDispatches = new List<(string Kind, string? Name)>();
+            var previous = runtime.OnEventDispatched;
+            try
+            {
+                runtime.OnEventDispatched = d =>
+                {
+                    if (d.Def == gunDef && d.Sequence == "destruction_slot")
+                    {
+                        slotDispatches.Add((d.EventKind, d.EventName));
+                    }
                 };
-                rig.OnInstanceFinished += (def, _) =>
+                runtime.DamageAt(gun.Anchor, gun.MaxHealth + 1f);
+                for (int i = 0; i < 30; i++)
                 {
-                    string n = def.AnimName ?? def.Name ?? "";
-                    stops[n] = stops.TryGetValue(n, out var c) ? c + 1 : 1;
-                };
-
-                // Armour off first, in one spend, then the ladder walked down one band at a time
-                // through TakeCollisionHit — the production take-hit entry, not the visuals API.
-                ai.TakeCollisionHit(damage.WholeArmor, 0f, ai.GlobalPosition, 0);
-                foreach (float frac in new[] { 0.9f, 0.7f, 0.55f, 0.47f, 0.42f, 0.3f, 0.2f })
-                    SpendHullTo(ai, damage, frac);
-                ctx.Check(damage.SummaryHealthFraction is > 0.19f and < 0.21f,
-                    $"the AI Fury's hull walked down to {damage.SummaryHealthFraction * 100f:0}% through the take-hit path");
-                ctx.Check(Count(starts, "random_remote_damage") == 6 && Count(starts, "pfsmoketrail") == 1,
-                    $"the rig runtime STARTED {Count(starts, "random_remote_damage")} random_remote_damage and {Count(starts, "pfsmoketrail")} pfsmoketrail instance(s) (want 6 and 1)");
-                ctx.Check(visuals.StagedEntryCount("random_remote_damage") == 6
-                          && visuals.StagedEntryCount("pfsmoketrail") == 1,
-                    $"…and the ladder holds one slot per start: {visuals.StagedEntryCount("random_remote_damage")} and {visuals.StagedEntryCount("pfsmoketrail")}");
-                int offPlane = anchors.Count(a => a == null || (a != ai && !ai.IsAncestorOf(a)));
-                ctx.Check(anchors.Count == 7 && offPlane == 0,
-                    $"every one of the {anchors.Count} stage instances anchored inside THIS aircraft ({offPlane} elsewhere)");
-
-                // The repair: the whole ladder retracts, and each stage is stopped exactly once —
-                // once per ANIM, not once per entry, or five of fury's six would stop nothing.
-                stops.Clear();
-                visuals.OnHullDamage(1f);
-                ctx.Check(Count(stops, "random_remote_damage") == 1 && Count(stops, "pfsmoketrail") == 1,
-                    $"a full repair tore down {Count(stops, "random_remote_damage")} random_remote_damage and {Count(stops, "pfsmoketrail")} pfsmoketrail instance(s) (want 1 and 1)");
-                ctx.Check(visuals.StagedEntryCount("random_remote_damage") == 0,
-                    $"…leaving no entry staged");
-                foreach (float frac in new[] { 0.9f, 0.7f, 0.55f, 0.47f, 0.42f, 0.3f, 0.2f })
-                    visuals.OnHullDamage(frac);
-                ctx.Check(Count(starts, "random_remote_damage") == 12 && Count(starts, "pfsmoketrail") == 2,
-                    $"…and the next descent fires all seven again ({Count(starts, "random_remote_damage")} and {Count(starts, "pfsmoketrail")} starts in total)");
-
-                // C16's anchor census as a live A/B: the stage defs are authored against the
-                // Devastator, and the Bloodhawk spells its elevators l_elev/r_elev. Same rig, same
-                // pinned dice, one airframe apart — so the warned set is about the airframe alone.
-                ctx.Check(rig.AnchorWarnLabel == "player_fury" && rig.AnchorWarnAnimNames != null
-                          && rig.AnchorWarnAnimNames.Contains("random_remote_damage"),
-                    $"the AI rig is armed to name an unresolved stage anchor (label={rig.AnchorWarnLabel ?? "-"})");
-                CascadeUntilExhausted(rig, ai.PlaneModel);
-                ctx.Check(rig.UnresolvedStageAnchors.Count == 0,
-                    $"the Fury carries all five stage anchors: {rig.UnresolvedStageAnchors.Count} unresolved [{string.Join(", ", rig.UnresolvedStageAnchors)}]");
-
-                bhawk = spawner.SpawnAi(new AiSpawn("player_bhawk", start + new Vector3(3000f, 0f, 0f),
-                    start + new Vector3(3000f, 0f, -1f),
-                    AiPilot.HoldingCourse(start + new Vector3(3000f, 0f, 0f), start + new Vector3(3000f, 0f, -1f))));
-                if (bhawk.CrashRuntime is { } bhawkRig)
-                {
-                    CascadeUntilExhausted(bhawkRig, bhawk.PlaneModel);
-                    ctx.Check(bhawkRig.UnresolvedStageAnchors.SequenceEqual(new[]
-                        {
-                            "random_remote_damage|lft_elev", "random_remote_damage|rt_elev",
-                        }),
-                        $"the Bloodhawk misses exactly the elevator pair: [{string.Join(", ", bhawkRig.UnresolvedStageAnchors)}]");
+                    runtime.Advance(1f / 60f);
                 }
             }
             finally
             {
-                bhawk?.Free();
-                ai?.Free();
-                pool?.Free();
-                textures.Dispose();
+                runtime.OnEventDispatched = previous;
             }
+
+            ctx.Check(slotDispatches.Count > 0,
+                $"the destruction slot dispatched on death def={gunDef.AnimName} events={slotDispatches.Count}");
+            ctx.Check(slotDispatches.Any(e => e.Kind == "CallAnimation"),
+                $"the slot's CALL_ANIMATION dispatched targets=[{string.Join(",", slotDispatches.Where(e => e.Kind == "CallAnimation").Select(e => e.Name))}]");
         });
     }
 
@@ -471,6 +384,342 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // ---- binding the crash rig must leave the airframe under the controller --------------------
+
+    // Builds the crash rig the way WorldEffectsFactory.BuildFlightCrashRuntime does, binds the
+    // crash-rig subset, and asserts the two things that go wrong in flight. ⚠ The airframe model stays
+    // a plain child of the controller, not world-pinned: on the Devastator the reset defs' authored
+    // name is the model root itself, and the reset chain must not relocate the aircraft the way it
+    // places effect templates. ⚠ Every pooled template copy of one root must show the same lit mesh
+    // count as its slot-0 sibling; a copy the reset pass missed stays lit for the whole session.
+    internal static void CrashRigAnchors(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            try
+            {
+                foreach (var model in new[] { "player_bhawk", "player_pfighter" })
+                {
+                    var controller = new Node3D { Name = "controller_replica" };
+                    var runtime = AnimRuntime.ForCrashRig(
+                        Session.WorldEffectsFactory.NewCrashTemplateStage(),
+                        1, new CountingEmitterFactory(), false);
+                    runtime.ManualAdvance = true;
+                    try
+                    {
+                        var builder = new PlaneBuilder(planesGamez, textures);
+                        var planeModel = builder.Build(model);
+                        controller.AddChild(planeModel);
+                        var crashRoot = new Node3D { Name = "player" };
+                        crashRoot.SetMeta(AnimRuntime.NameMeta, "player");
+                        crashRoot.Transform = planeModel.Transform;
+                        controller.AddChild(crashRoot);
+                        var rootNames = Session.WorldEffectsFactory.CrashStageRootNames(
+                            world.Session.Program, world.Gamez, controller);
+                        Session.WorldEffectsFactory.StageCrashTemplates(world.Gamez,
+                            world.Session.Builder.Scene, crashRoot, rootNames,
+                            Utils.EffectPools.Load());
+                        var copies = new List<(string Root, int Slot, Node3D Copy)>();
+                        foreach (var child in crashRoot.GetChildren())
+                        {
+                            if (child is Node3D pool && pool.HasMeta(AnimRuntime.PoolSlotMeta))
+                            {
+                                int slot = (int)pool.GetMeta(AnimRuntime.PoolSlotMeta);
+                                foreach (var staged in pool.GetChildren())
+                                {
+                                    if (staged is Node3D copy)
+                                    {
+                                        string root = copy.HasMeta(AnimRuntime.NameMeta)
+                                            ? (string)copy.GetMeta(AnimRuntime.NameMeta)
+                                            : copy.Name;
+                                        copies.Add((root, slot, copy));
+                                    }
+                                }
+                            }
+                        }
+
+                        var wreck = builder.BuildDestroyed(model);
+                        var restPoses = new List<(Node3D Node, Transform3D RestPose)>();
+                        if (wreck != null)
+                        {
+                            wreck.Visible = false;
+                            crashRoot.AddChild(wreck);
+                            CollectRestPoses(wreck, restPoses);
+                        }
+
+                        ctx.Host.AddChild(controller);
+                        ctx.Host.AddChild(runtime);
+                        var restOrigin = planeModel.GlobalTransform.Origin;
+                        runtime.Bind(controller,
+                            world.Session.Program.Subset(Session.EffectCatalogue.CrashRigAnimNames(
+                                Session.EffectCatalogue.CrashDefTable(world.Session.Program))));
+                        for (int i = 0; i < 6; i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                        }
+
+                        ctx.Check(!planeModel.TopLevel,
+                            $"{model}: the airframe model is not world-pinned (TopLevel) by the rig's bind");
+                        ctx.Check(planeModel.GetParent() == controller,
+                            $"{model}: the airframe model still hangs under the controller");
+                        ctx.Check(planeModel.GlobalTransform.Origin.DistanceTo(restOrigin) < 0.5f,
+                            $"{model}: the airframe model has not moved off its rig position");
+                        // Staged dark: a copy left lit sits at the plane's centre for the whole
+                        // session (the flake/gunhit family has no authored deactivation).
+                        var lit = string.Join("; ", copies
+                            .Select(c => (c.Root, c.Slot, Lit: LitMeshCount(c.Copy)))
+                            .Where(c => c.Lit > 0)
+                            .Select(c => $"'{c.Root}' slot{c.Slot} lights {c.Lit}"));
+                        ctx.Check(lit.Length == 0,
+                            $"{model}: every staged template copy is dark after the bind{(lit.Length == 0 ? "" : $" — {lit}")}");
+
+                        // A real tear: the damage sink's own call shape. The CALLed gimmeflakes
+                        // copy must light at its pdp5 site, and the panel def's instance ending on
+                        // the AIRFRAME anchor must not drag the model into the retire-hide.
+                        runtime.Play("pdpanel5", planeModel, applyReset: false);
+                        for (int i = 0; i < 6; i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                        }
+
+                        ctx.Check(copies.Any(c => c.Root == "planeflakes" && LitMeshCount(c.Copy) > 0),
+                            $"{model}: the tear's planeflakes copy is revealed while its burst flies");
+                        for (int i = 0; i < 120; i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                        }
+
+                        ctx.Check(copies.All(c => c.Root != "planeflakes" || LitMeshCount(c.Copy) == 0),
+                            $"{model}: the burst's copy goes dark again once the effect is over");
+                        ctx.Check(!planeModel.TopLevel
+                                  && planeModel.GlobalTransform.Origin.DistanceTo(restOrigin) < 0.5f
+                                  && planeModel.Visible,
+                            $"{model}: the airframe model is still parented, placed and visible after the tear");
+
+                        // Crash, respawn, move, crash again: the wreck and every template a crash reveals must play at the
+                        // SECOND crash's site. The failure looks like the destroyed plane and the dirt burst replaying at
+                        // the first crash's position on every crash after the first.
+                        runtime.Play("player_crash_dirt", crashRoot, applyReset: false);
+                        for (int i = 0; i < 180; i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                        }
+
+                        // The respawn ritual, FlightController.Respawn's crash arm verbatim.
+                        runtime.ResetToBaseState();
+                        foreach (var (node, rest) in restPoses)
+                        {
+                            node.Transform = rest;
+                        }
+
+                        var leftover = string.Join("; ", copies
+                            .Select(c => (c.Root, c.Slot, Lit: LitMeshCount(c.Copy)))
+                            .Where(c => c.Lit > 0)
+                            .Select(c => $"'{c.Root}' slot{c.Slot} lights {c.Lit}"));
+                        ctx.Check(leftover.Length == 0,
+                            $"{model}: respawn leaves no crash template revealed{(leftover.Length == 0 ? "" : $" — {leftover}")}");
+
+                        controller.Position += new Vector3(400, 0, 0);
+                        runtime.Play("player_crash_dirt", crashRoot, applyReset: false);
+                        for (int i = 0; i < 180; i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                        }
+
+                        var here = controller.GlobalTransform.Origin;
+                        if (wreck != null)
+                        {
+                            ctx.Check(wreck.GlobalTransform.Origin.DistanceTo(here) < 150f,
+                                $"{model}: the wreck flies from the SECOND crash's site ({wreck.GlobalTransform.Origin.DistanceTo(here):0} m away)");
+                        }
+
+                        var stale = string.Join("; ", copies
+                            .Where(c => LitMeshCount(c.Copy) > 0
+                                        && c.Copy.GlobalTransform.Origin.DistanceTo(here) > 150f)
+                            .Select(c => $"'{c.Root}' slot{c.Slot} at {c.Copy.GlobalTransform.Origin.DistanceTo(here):0} m"));
+                        ctx.Check(stale.Length == 0,
+                            $"{model}: every template the second crash reveals plays at its own site{(stale.Length == 0 ? "" : $" — {stale}")}");
+                        ctx.Check(!crashRoot.TopLevel,
+                            $"{model}: the crash scaffold is never world-pinned by a crash's own calls");
+                    }
+                    finally
+                    {
+                        runtime.Free();
+                        controller.Free();
+                    }
+                }
+            }
+            finally
+            {
+                textures.Dispose();
+            }
+        });
+    }
+
+    // Every wreck node's rest pose — the local mirror of
+    // `WorldEffectsFactory.CollectRestPoses`, so the suite's respawn ritual can re-home the
+    // flung pieces the way `FlightController.Respawn` does.
+    internal static void CollectRestPoses(Node3D node, List<(Node3D Node, Transform3D RestPose)> into)
+    {
+        into.Add((node, node.Transform));
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node3D sub)
+            {
+                CollectRestPoses(sub, into);
+            }
+        }
+    }
+
+    // Meshes drawing under one staged template copy — visibility taken in-tree, so a
+    // parent the reset pass switched off darkens the whole copy the way it does on screen.
+    internal static int LitMeshCount(Node3D copy)
+    {
+        int n = copy is MeshInstance3D lit && lit.IsVisibleInTree() ? 1 : 0;
+        foreach (var child in copy.GetChildren())
+        {
+            if (child is Node3D sub)
+            {
+                n += LitMeshCount(sub);
+            }
+        }
+        return n;
+    }
+
+    // ---- an AI plane's crash picks from the ai_crash_* vector ----------------------------
+
+    // The AI arm of the crash-family split, through the REAL factory call, which keys the family on
+    // IsHumanPiloted: an AI controller's rig binds the ai_crash_* vector, a crash on a body stamped
+    // dirt selects ai_crash_dirt, and a crash with no struck body takes the null-material arm to slot
+    // 0, ai_crash_default, never a player_crash_* def. ⚠ Keep the human-piloted A/B control; without
+    // it a family mix-up in the pick would be invisible from the AI side alone.
+    internal static void AiCrashDefs(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var factory = new Session.WorldEffectsFactory(
+                SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
+            FlightController? ai = null;
+            FlightController? human = null;
+            StaticBody3D? dirt = null;
+            try
+            {
+                var spawn = new Vector3(0f, 500f, 0f);
+                var builder = new PlaneBuilder(planesGamez, textures);
+                var aiModel = builder.Build(ctx.PlaneName);
+                ai = new FlightController
+                {
+                    PlaneModel = aiModel,
+                    Collider = PlaneCollider.Build(aiModel),
+                    PlayerIndex = FlightRoster.ShooterIdBase,
+                    IsHumanPiloted = false,
+                    Pilot = AiPilot.HoldingCourse(spawn, spawn + Vector3.Forward),
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                ai.AddChild(aiModel);
+                ai.Setup(new FlightModel(stats), null, new CamParams(), spawn, spawn + Vector3.Forward);
+                ctx.Host.AddChild(ai);
+                // The planes gamez goes in as both spawners pass it: the destroy def's `chuteman`
+                // is a template root of planes.zbd, and without it the rig cannot stage it.
+                factory.BuildFlightCrashRuntime(ai, builder, ctx.PlaneName, world.Gamez,
+                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                    planesGamez: planesGamez);
+
+                ctx.Check(ai.CrashRuntime != null && ai.CrashDefs != null,
+                    $"the AI rig built a crash runtime with a def table");
+                if (ai.CrashDefs == null)
+                    return;
+                ctx.Check(ai.CrashDefs.PlayableDefs.Count == 3
+                          && ai.CrashDefs.PlayableDefs.All(d =>
+                              d.StartsWith(Session.EffectCatalogue.AiCrashDefPrefix, System.StringComparison.Ordinal)),
+                    $"the AI table's playable slots are the ai_crash_* trio [{string.Join(", ", ai.CrashDefs.PlayableDefs)}]");
+
+                // The two subtrees one context node has to reach: `healthy` sits on the plane
+                // model, `destroyed` under the crash root. Both shown first, or the wreck's
+                // built-hidden state would answer for the deactivation instead of the def.
+                var healthy = ai.PlaneModel?.FindChild("healthy", true, false) as Node3D;
+                var wreck = ai.CrashAnchor?.FindChild("destroyed", true, false) as Node3D;
+                if (healthy != null)
+                    healthy.Visible = true;
+                if (wreck != null)
+                    wreck.Visible = true;
+
+                // A crash on a known surface: a struck body stamped dirt(13) — the id cascade's
+                // own-slot arm, through the production Crash path.
+                dirt = new StaticBody3D { Name = "dirt_probe" };
+                dirt.SetMeta(SceneBuilder.SurfaceIdMeta, 13);
+                ctx.Host.AddChild(dirt);
+                ai.DebugForceCrash(null, dirt);
+                ctx.Check(ai.Crashed && ai.LastCrashDef == Session.EffectCatalogue.AiCrashDefPrefix + "dirt",
+                    $"an AI crash on dirt(13) plays ai_crash_dirt def={ai.LastCrashDef ?? "-"}");
+                string healthyState = healthy == null ? "-" : healthy.Visible ? "on" : "off";
+                string wreckState = wreck == null ? "-" : wreck.Visible ? "on" : "off";
+                ctx.Check(healthy is { Visible: false } && wreck is { Visible: false },
+                    $"…and the def's own OBJECT_ACTIVE_STATE events reach BOTH subtrees off one context node: healthy={healthyState} destroyed={wreckState}");
+
+                // No struck body: the null-material arm resolves slot 0 of the SAME family.
+                ai.Respawn();
+                ai.DebugForceCrash();
+                ctx.Check(ai.LastCrashDef == Session.EffectCatalogue.AiCrashDefPrefix + "default",
+                    $"an AI crash with no material falls to ai_crash_default def={ai.LastCrashDef ?? "-"}");
+
+                // The A/B control: a human rig through the same factory keeps the player family.
+                var humanBuilder = new PlaneBuilder(planesGamez, textures);
+                var humanModel = humanBuilder.Build(ctx.PlaneName);
+                human = new FlightController
+                {
+                    PlaneModel = humanModel,
+                    Collider = PlaneCollider.Build(humanModel),
+                    PlayerIndex = 0,
+                    UseKeyboard = false,
+                    AllowPause = false,
+                };
+                human.AddChild(humanModel);
+                human.Setup(new FlightModel(stats), ctx.Camera, new CamParams(),
+                    spawn + new Vector3(2000f, 0f, 0f), spawn + new Vector3(2000f, 0f, -1f));
+                ctx.Host.AddChild(human);
+                factory.BuildFlightCrashRuntime(human, humanBuilder, ctx.PlaneName, world.Gamez,
+                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                    planesGamez: planesGamez);
+                ctx.Check(human.CrashDefs != null && human.CrashDefs.PlayableDefs.All(d =>
+                        d.StartsWith(Session.EffectCatalogue.CrashDefPrefix, System.StringComparison.Ordinal)),
+                    $"the same factory keeps a human rig on player_crash_* [{string.Join(", ", human.CrashDefs?.PlayableDefs ?? System.Array.Empty<string>())}]");
+                human.DebugForceCrash(null, dirt);
+                ctx.Check(human.LastCrashDef == Session.EffectCatalogue.CrashDefPrefix + "dirt",
+                    $"…and its dirt crash plays player_crash_dirt def={human.LastCrashDef ?? "-"}");
+            }
+            finally
+            {
+                dirt?.Free();
+                human?.Free();
+                ai?.Free();
+                textures.Dispose();
+            }
+        });
+    }
+
+    internal static int Count(IReadOnlyDictionary<string, int> counts, string key) =>
+        counts.TryGetValue(key, out var n) ? n : 0;
+
+    // One exact health spend, so a band is entered by crossing it rather than by an approximate
+    // hit: the armour pool is already empty, so the whole amount reaches the hull pair.
+    internal static void SpendHullTo(FlightController ai, PlaneDamage damage, float fraction)
+    {
+        float spend = damage.WholeHealth - (fraction * damage.WholeHealthMax);
+        if (spend > 0f)
+            ai.TakeCollisionHit(0f, spend, ai.GlobalPosition, 0);
+    }
+
     private static void CallbackSeamsReceiveTheirCodes(TestContext ctx, TestWorld world)
     {
         // 3.0 s past chuteman's authored start, which is what fury-fury's own callbacks follow.
@@ -494,7 +743,7 @@ internal static class DestroyChoreographySuites
                 continue;
             }
 
-            WorldAndToolSuites.WithEmitterStage(ctx, program, $"Callback_{animName}", destroyDefNodes, (stage, runtime, fake) =>
+            AnimationAndEffectsSuites.WithEmitterStage(ctx, program, $"Callback_{animName}", destroyDefNodes, (stage, runtime, fake) =>
             {
                 int stops = 0;
                 runtime.WreckVelocity = () => handed;
@@ -518,7 +767,7 @@ internal static class DestroyChoreographySuites
 
             // THE CONTROL, and the unknown-code arm: the same def with no seams. Nothing moves, and
             // player-player's authored 3 is counted rather than guessed at either way.
-            WorldAndToolSuites.WithEmitterStage(ctx, program, $"CallbackBare_{animName}", destroyDefNodes, (stage, runtime, fake) =>
+            AnimationAndEffectsSuites.WithEmitterStage(ctx, program, $"CallbackBare_{animName}", destroyDefNodes, (stage, runtime, fake) =>
             {
                 runtime.Start(defs[0], stage);
                 for (int i = 0; i < Steps; i++)
@@ -574,27 +823,6 @@ internal static class DestroyChoreographySuites
             $"no def authors the free/delete arm, code 0");
         ctx.Check(codes.ContainsKey(16) && codes.ContainsKey(15),
             $"and the two codes this runtime acts on ARE authored here 16×{(codes.TryGetValue(16, out int c16) ? c16 : 0)} 15×{(codes.TryGetValue(15, out int c15) ? c15 : 0)}");
-    }
-
-    private static int Count(IReadOnlyDictionary<string, int> counts, string key) =>
-        counts.TryGetValue(key, out var n) ? n : 0;
-
-    // One exact health spend, so a band is entered by crossing it rather than by an approximate
-    // hit: the armour pool is already empty, so the whole amount reaches the hull pair.
-    private static void SpendHullTo(FlightController ai, PlaneDamage damage, float fraction)
-    {
-        float spend = damage.WholeHealth - (fraction * damage.WholeHealthMax);
-        if (spend > 0f)
-            ai.TakeCollisionHit(0f, spend, ai.GlobalPosition, 0);
-    }
-
-    // random_remote_damage is a RandomWeight 0.33 chain: one start reaches at most one of its four
-    // anchors, so the census below needs the whole cascade walked. 200 starts puts the deepest step
-    // (0.67³ × 0.33 ≈ 10 %) beyond any doubt while the seed keeps it identical run to run.
-    private static void CascadeUntilExhausted(AnimRuntime rig, Node3D? planeModel)
-    {
-        for (int i = 0; i < 200; i++)
-            rig.Play("random_remote_damage", planeModel, applyReset: false);
     }
 
     // The fall itself, from a height clear of both the ground and the altitude cap. Everything here

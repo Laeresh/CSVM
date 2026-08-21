@@ -160,7 +160,7 @@ internal sealed class HumanFlightAdapter
                 }
                 // Hang the FLYOUT-model ordnance under the pylons — one body per pylon,
                 // hidden as its ammo depletes. Uses the same gamez prototype the round flies.
-                controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _in.Projectiles);
+                controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _in.Projectiles, controller.InfiniteAmmo);
                 if (verbose)
                 {
                     int groups = 0;

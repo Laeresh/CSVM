@@ -61,9 +61,12 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WorldLights.cs` — packs the world's `LIGHT_STATE` point lights into the `csky_light_data` texture the fullbright world shader reads.
 - `src/Mech3/MissionSetup.cs` — parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
 - `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap, live def instances, event dispatch, motions, conditions, lights, puffers, world effects.
-- `src/Mech3/Anim/` — `AnimRuntime`'s motion + light value types (`IAnimMotion` and its four implementations, `AnimLight`, the bind-census enums), split out of `AnimRuntime.cs` into their own files/namespace for size.
+- `src/Mech3/Anim/` — `AnimRuntime`'s motion value types (`IAnimMotion` and its four implementations, the bind-census enums), split out of `AnimRuntime.cs` into their own files/namespace for size; plus the sound, light and pose/visual dispatch-axis families.
 - `src/Mech3/Anim/MotionSet.cs` — the live motion collection: the two registration rules, the per-frame sweep, and the pending-bounce predicate the instance walk retires on.
 - `src/Mech3/Anim/EmitterDirector.cs` — every PUFFER_STATE emitter's whole life on one runtime: the keying rule, the start, all four stops, the respawn wipe, the per-frame follow, and the census. Plus `IEmitter`/`IEmitterFactory` and the real/retired adapters.
+- `src/Mech3/Anim/SoundChannel.cs` — one runtime's `SOUND_NODE`/`SOUND` events: the pooled ambient emitters, the one-shot player, the late-failure census, and the sound half of `OBJECT_ADD_CHILD`/`OBJECT_ACTIVE_STATE`.
+- `src/Mech3/Anim/LightChannel.cs` — one runtime's `LIGHT_STATE`/`LIGHT_ANIMATION` events: the live point-light table, the signed-delta tween, and the per-frame submission to `WorldLights`. `AnimLight` stays its own value type in the same namespace.
+- `src/Mech3/Anim/PoseChannel.cs` — one runtime's object-pose/visual events (`OBJECT_ACTIVE_STATE` through `OBJECT_MOTION_SI_SCRIPT`): the pose helpers, the subtree opacity/fade machinery, and the motion-builder role that hands finished motions to `MotionSet`.
 - `src/Mech3/Anim/NameResolver.cs` — name→node resolution: the index, wildcard matcher, memoized `FindAll`, the three-tier scope chain (`Resolve`/`ResolveScoped` with the `ownRootsOf` hook and the `stagingAdmits` pooled-copy filter), the symbol authority, `Anchors` (narrowing + root lift) and the bind census; generic over the node type, off-engine testable.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock / LOOP / IF-ELSEIF), extracted behind the 3-member `ISequenceHost` seam; headlessly testable.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
@@ -246,7 +249,7 @@ instead.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
 - `src/Testing/SuiteCatalog.cs` — the ordered registry of the in-engine suites; domain scenario bodies live in `*Suites.cs` modules, while `SuiteConstants` holds their shared golden inputs. Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
-- `src/Testing/*Suites.cs` — six domain scenario modules: puffer, combat, Instant Action, AI/targeting/zeppelins, world/tools, and animation/effects.
+- `src/Testing/*Suites.cs` — eleven domain scenario modules: puffer, combat, ordnance, Instant Action, AI, targeting, zeppelins, damage, destroy choreography, animation/effects, and world/tools.
 - `src/Testing/SuiteConstants.cs` / `BurstTimeline.cs` / `SuiteViewers.cs` / `EffectStageSuiteHelper.cs` — the focused shared inputs, timeline values, pane-camera fixtures, and staged-effect fixture used by more than one suite module.
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
@@ -720,8 +723,19 @@ e.g. C1's three `hangerdoors`). Every construction site hands over a sealed `Tem
 (`NewTemplateStage`/`ForEffects`/`ForCrashRig`). Sibling modules, each with its own entry: the
 sequence interpreter is `SequenceRunner.cs`, live motions are `Anim/MotionSet.cs`, name resolution
 is `Anim/NameResolver.cs` (this class forwards through `Resolve`/`ResolveScoped`/`Anchors`), puffer
-emitters are `Anim/EmitterDirector.cs`, and the effect-template pool/placement is
-`Anim/TemplateStage.cs`. `CALLBACK` raises the two vehicle-death codes through caller-supplied seams (`WreckVelocity`,
+emitters are `Anim/EmitterDirector.cs`, ambient/one-shot sound is `Anim/SoundChannel.cs`, point
+lights are `Anim/LightChannel.cs`, the object-pose/visual family is `Anim/PoseChannel.cs`, and the
+effect-template pool/placement is `Anim/TemplateStage.cs`.
+The router keeps the `SOUND_NODE`/`SOUND` case labels and the sound reach-ins inside
+`OBJECT_ACTIVE_STATE`/`OBJECT_ADD_CHILD`, delegating every body to `Sound`; `Sounds`/
+`SoundHandledElsewhere` stay public fields here, since callers configure them, and `Sound` reads
+both live rather than snapshotting them. The router also keeps the `LIGHT_STATE`/`LIGHT_ANIMATION`
+case labels, delegating every body to `Light`; `Lights`/`LightViewerPositions` stay public fields
+here for the same reason, and `Light` reads both live. The nine `OBJECT_*` pose/visual case labels
+delegate to `Pose` the same way, each adding the handler's returned op count to the census counter;
+the `_rest` pose table stays here, since the death flow (`RestoreRestPoses`/`ApplyDeathSwap`) reads
+it too, and both the family and the motion value types reach it only through `RestOf`.
+`CALLBACK` raises the two vehicle-death codes through caller-supplied seams (`WreckVelocity`,
 `StopDamageStages`) and counts every other code; decode in `docs/org/vehicleDamage.md`.
 `FBFX_COLOR_FROM_TO`/`LIGHT_ANIMATION` report their `run_time` as the
 event's duration, spacing a chain instead of firing it in one instant; decode in
@@ -731,14 +745,15 @@ event's duration, spacing a chain instead of firing it in one instant; decode in
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
 namespace, purely for file size — not an independently-owned subsystem, still driven entirely by
 `AnimRuntime`. `IAnimMotion` (`ScriptPlayback`/`SpinMotion`/`FromToMotion`/`OpacityFade`/
-`MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum. `SpinMotion.ComposeSpin` is
+`MotionRuntime`), `AnimLight` (owned by `LightChannel` below), and the bind-census `AnchorKind`
+enum. `SpinMotion.ComposeSpin` is
 the one member reached from outside this namespace without going through `AnimRuntime` at all —
 `Flight/PropAnimator.cs` calls it directly so a plane's own props spin through the identical
 accumulate-from-rest decode instead of a second hand conversion; it takes a rest `Basis` and a
 rate, no `AnimRuntime`/`MotionSet` state, so the reach-in is inert to everything else here.
 `MotionSet`, `EmitterDirector`,
-`NameResolver` and `TemplateStage` share the namespace but ARE independently owned — their own
-entries below.
+`SoundChannel`, `LightChannel`, `PoseChannel`, `NameResolver` and `TemplateStage` share the
+namespace but ARE independently owned — their own entries below.
 **The original's `OBJECT_MOTION` update is written up in [org/objectMotion.md](org/objectMotion.md)**
 — the function map, the flag word, the linear elevation, `delta` as an acceleration, both contact
 tiers and how they pick a surface, the landing response, the termination model, and the retired
@@ -768,7 +783,7 @@ visibility rationale on their declarations — read those before touching either
 `AnimRuntime`'s live motions as a module: `Add` (owner stamp + `(Target, Channel)` eviction +
 `LaunchCount`), the per-frame `Tick` sweep, `DiscardFor`/`Reset`, and the two predicates the rest of
 the runtime asks — `OwesBounce` (the retirement hold `AnimRuntime.Retirable` consults) and
-`HasSpinOn` (the `Loop{-1}` spin re-assert guard). Never constructs a motion — `AnimRuntime` builds
+`HasSpinOn` (the `Loop{-1}` spin re-assert guard). Never constructs a motion — `PoseChannel` builds
 them and hands them over. `Node3D`-typed but never dereferenced: every operation here is identity
 comparison, so the behaviour is engine-free even though the type is not — the in-engine
 `bounce-launch` suite is what an off-engine fake cannot cover.
@@ -781,6 +796,55 @@ and the `active_state` read. One director per runtime; `IEmitterFactory` is what
 `TextureArchive` and the parent node sit behind that seam), so a suite can install a fake. The
 selector/disposition split across the four stops, the emitter-keying tradeoff and the stop-family
 history live in this file's own doc comments, not here.
+
+## src/Mech3/Anim/SoundChannel.cs
+One runtime's `SOUND_NODE`/`SOUND` events as a module: `HandleSoundNode` (declare/place/start the
+pooled ambient emitter), `HandleSound` (the one-shot destruction/impact player, positioned by
+`OneShotSoundPosition`), the late-failure census (`ReportLateSoundFailure`, gated on
+`MarkCensusPrinted`), `Reset` (the crash rig's respawn) and `DiscardFor` (the teardown reach-in,
+keyed by anchor like lights). `AnimRuntime` keeps the `SOUND_NODE`/`SOUND` case labels and the two
+sound reach-ins the router still owns outright — `TrySetActive` for the `OBJECT_ACTIVE_STATE` case
+(an ordinary node event whose NAME can turn out to be a sound emitter instead) and
+`TryGetChild`/`Attach` for the sound-emitter three-quarters of `OBJECT_ADD_CHILD`. `Sounds` and
+`SoundHandledElsewhere` stay public fields on `AnimRuntime`, since callers configure them (and
+`SoundHandledElsewhere` differs between the world and effects runtimes sharing one world); the
+channel reads both through closures rather than a constructor snapshot, since `Sounds` goes
+non-null only once the world build finishes. `OneShotSoundsPlayed` is a one-line forward from
+`AnimRuntime` to the channel's own counter.
+
+## src/Mech3/Anim/LightChannel.cs
+One runtime's `LIGHT_STATE`/`LIGHT_ANIMATION` events as a module: `HandleLightState` (the partial
+update that declares a light on first use and never defaults an absent field), `HandleLightAnimation`
+(the signed-delta tween over `run_time`), `Tick` (the per-frame tween advance and submission to
+`WorldLights`), `Reset` (the crash rig's respawn) and `DiscardFor` (the teardown reach-in, keyed by
+anchor like sound emitters). `HandleLightState`/`HandleLightAnimation` report whether they applied
+through their return value rather than reaching for an `_opsApplied`/unhandled-count callback
+directly; `AnimRuntime` applies both after the call, matching what the handlers always did inline.
+`Lights` and `LightViewerPositions` stay public fields on `AnimRuntime`, since callers configure
+them; the channel reads both through closures rather than a constructor snapshot, folding
+`LightViewerPositions`' single-camera fallback (`PlayerPos`) into the same closure. `AnimLight`
+stays its own value type in the `Anim` namespace, constructed only by this channel.
+
+## src/Mech3/Anim/PoseChannel.cs
+One runtime's object-pose/visual events as a module: the nine `OBJECT_*` handler bodies
+(`ACTIVE_STATE`'s non-sound remainder, the three `*_STATE` poses, both opacity events and the three
+motion events), the pose helpers (`PoseTranslate`/`PoseRotate`/`PoseScale`, which mission setup's
+pass 0 also drives), the subtree opacity/fade machinery (the per-root opacity cache, the fade-twin
+material tables, `SetSubtreeOpacity`), and the landing-resume marks
+(`ConsumeLandingResume`/`MarkLandingResume`). It carries the motion-BUILDER role: it parses the
+motion events into `MotionRuntime`/`FromToMotion`/`SpinMotion`/`ScriptPlayback`/`OpacityFade`
+instances and hands them to `MotionSet`, which stays a pure live-set container; the tick spine
+stays in `AnimRuntime.Advance`. Every handler returns how many ops it applied and the router adds
+that to its census counter, the same return-value shape `LightChannel` uses; multi-key unhandled
+tallies go through an `Action<string>` count dependency instead, since one return value cannot name
+them. The channel's constructor takes `AnimRuntime` itself as one dependency — the motion value
+types already declare it as their host argument, and the pose helpers reach the `_rest` table
+through the same `RestOf` seam the builders use — plus the `Targets` resolver, the `MotionSet`,
+and closures over `Emitters` and the program's `ScriptFor` (both late-bound). `_rest` itself stays
+on `AnimRuntime`, read by the death flow; `AnimRuntime` keeps thin internal forwards for
+`ConsumeLandingResume`/`MarkLandingResume`/`SetSubtreeOpacity`, whose callers (`MotionRuntime`,
+the `ground-contact` suite, `OpacityFade`) name the runtime. No teardown reach-in exists: none of
+this family's state is per-instance the way emitters, lights and sounds are.
 
 ## src/Mech3/Anim/NameResolver.cs
 Name→node resolution as one public module, generic over the node type (`NameResolver<TNode>`): the
@@ -3592,8 +3656,8 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/SuiteCatalog.cs
-The ordered registry of 76 in-engine assertion suites. Scenario bodies are grouped by domain in the
-six `*Suites.cs` modules; `Names` is the registry-order test surface. It preserves the original
+The ordered registry of the in-engine assertion suites. Scenario bodies are grouped by domain in
+the `*Suites.cs` modules; `Names` is the registry-order test surface and the count's one home. It preserves the original
 suite order, including `emitter-lifetime` first, because that suite installs the shared C1 world's
 fake emitter factory. The suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
@@ -3690,10 +3754,19 @@ re-reset the fifth play's rings read INACTIVE at opacity 0, which is the sortie-
 symptom this suite exists to hold shut.
 
 ## src/Testing/*Suites.cs
-Six domain modules hold the in-engine scenario bodies: `PufferSuites`, `CombatSuites`,
-`InstantActionSuites`, `AiTargetingAndZeppelinSuites`, `WorldAndToolSuites`, and
-`AnimationAndEffectsSuites`. They depend on `TestHarness` through `TestContext`; shared fixtures
-are separate focused modules, not an all-purpose suite helper.
+Eleven domain modules hold the in-engine scenario bodies, each named for the whole of what it
+files: `PufferSuites` (the emitter model's modes, wind, fades and fire column), `CombatSuites`
+(loadouts, live fire, aim assist and the hit chain), `OrdnanceSuites` (a round's flight, guidance
+and ends), `InstantActionSuites` (the mission runtime from spawn to wrap-up), `AiSuites` (how a
+computer-controlled combatant behaves: pilots, mounted gunners, combat voice, and the inert state
+they wait in), `TargetingSuites` (the `TargetRef` abstraction, candidate pool, sticky selection,
+input decoding and marker HUD), `ZeppelinSuites` (motion, fighter launch, multi-zone damage,
+broadsides), `DamageSuites` (spending armor and health, and the injure staging those ledgers
+fire), `DestroyChoreographySuites` (the choreography a death dispatches: destroy defs, wreck
+flights, crash rigs, callbacks and stops), `AnimationAndEffectsSuites` (anim launches, effect
+templates, washes and burst timelines), and `WorldAndToolSuites` (the built world's data gates
+and censuses, lighting and viewers, and the lab surfaces). They depend on `TestHarness` through
+`TestContext`; shared fixtures are separate focused modules, not an all-purpose suite helper.
 
 ## src/Testing/SuiteConstants.cs
 The shared golden inputs used by more than one scenario module: airframe and weapon counts, puffer
