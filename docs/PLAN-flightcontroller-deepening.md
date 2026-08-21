@@ -157,7 +157,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — the collision response
 
-7. ☐ `FlightModel.Collide` takes slide, restitution and the lever-arm kick
+7. ☑ `FlightModel.Collide` takes slide, restitution and the lever-arm kick
 8. ☐ `BounceRestitutionTests` extended past restitution to the slide friction and the kick
 
 ### Wave E — the contact resolver
@@ -347,7 +347,7 @@ asserted, it goes through `CultureInfo.InvariantCulture`, per the repo-wide rule
 
 # Wave D — the collision response
 
-## D7 ☐ `FlightModel.Collide` takes slide, restitution and the lever-arm kick
+## D7 ☑ `FlightModel.Collide` takes slide, restitution and the lever-arm kick
 
 **Goal.** The decoded collision response lives on the model whose fields it changes.
 

@@ -368,9 +368,6 @@ public partial class FlightController : Node3D
                                                  // plane with a ledger uses the decoded rule instead
                                                  // (health remaining), which carries no speed term.
     private const float GrazeMaxDamage = 18f;    // HP at a just-under-crash graze (parts have 20–25)
-    private const float GrazeFriction = 0.35f;   // tangential speed kill at full severity
-    private const float GrazeKick = 1.2f;        // rad/s attitude kick at full severity
-    private const float GrazePushOut = 0.15f;    // m off the surface after a graze (no sticky slide)
     private const float DamageCooldown = 0.3f;   // s between HP subtractions (multi-frame scrapes)
     private const float GrazeReactionInterval = 1.5f; // s between graze reactions — NOT a tuned value:
                                                       // the touchdown defs stop their own puffer at
@@ -2657,8 +2654,8 @@ public partial class FlightController : Node3D
 
     // Decides a confirmed collision's outcome: false = crash, true = survivable graze —
     // the plane slides along the surface, a human-piloted aircraft additionally rebounds along
-    // the contact normal (FlightModel.BounceNormalSpeed, the decoded `bounce_factor` impulse;
-    // AI gets the position correction alone), and the attitude takes a lever-arm kick.
+    // the contact normal, and the attitude takes a lever-arm kick. That response is
+    // FlightModel.Collide; what stays here is the fate, the damage ledger and the un-embed loop.
     private bool SurviveHit(Vector3 prev, Vector3 step, float stopFrac, Vector3 impact,
         string hitName, string part, Vector3 normal, Node? hitBody)
     {
@@ -2719,35 +2716,9 @@ public partial class FlightController : Node3D
             }
         }
 
-        // Slide: place at the safe pose just off the surface, keep the tangential
-        // velocity (with a severity-scaled loss), and kick the attitude about the
-        // lever arm — impulse direction is the surface normal at the impact point.
-        _model.Position = prev + step * stopFrac + normal * GrazePushOut;
-        var slide = vel - normal * vel.Dot(normal);
-        float slideLen = slide.Length();
-        _model.Speed = slideLen * (1f - GrazeFriction * vn / CrashSpeed);
-        if (slideLen > 1e-4f)
-            _model.VelocityDir = slide / slideLen;
-
-        // Restitution along the normal (decoded bounce_factor impulse, docs/org/flightModel.md
-        // "Collision response"); computed BEFORE the attitude kick adds to the body rates it reads.
-        // ⚠ Player-only, as the original is. AI gets the position correction alone.
-        if (IsHumanPiloted && !_crashed)
-        {
-            float rebound = _model.BounceNormalSpeed(vel, normal, impact - _model.Position);
-            var bounced = _model.VelocityDir * _model.Speed + normal * rebound;
-            float bouncedLen = bounced.Length();
-            if (bouncedLen > 1e-4f)
-            {
-                _model.Speed = bouncedLen;
-                _model.VelocityDir = bounced / bouncedLen;
-            }
-        }
-
-        var inv = _model.Attitude.Inverse();
-        var lever = (inv * (impact - _model.Position)).Normalized();
-        var kick = lever.Cross((inv * normal).Normalized());
-        _model.BodyRates += kick * (GrazeKick * vn / CrashSpeed);
+        // Slide, restitution and lever-arm kick, on the plant whose fields they write. An airframe
+        // already crashed is off the player path, so its gate rides the restitution's argument.
+        _model.Collide(prev, step, stopFrac, impact, normal, IsHumanPiloted && !_crashed, CrashSpeed);
 
         // A plane ground to (near) standstill is a wreck, not a parked aircraft
         // (user-reported: it sat there collecting zero-damage kisses forever).

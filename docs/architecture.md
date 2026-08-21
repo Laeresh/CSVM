@@ -2361,9 +2361,15 @@ weathervane, floors its post-integration nose-axis velocity at 10 mph, and appli
 command-independent ground blow instead of the player's command-proportional one; air density is NOT
 branched. The original selected inside the force function on a compare against its single global
 player (`0x48c520`, `0x48cd3e`, `0x48e925`, `0x48c317`) — not copied, because that presumes ONE
-player and this engine flies four. `BounceNormalSpeed` is the one law here that no step of the plant
-calls: the decoded collision restitution (`bounce_factor` × the lever-arm partition), asked for
-by `FlightController.SurviveHit`, which owns the contact and the player-only gate.
+player and this engine flies four. The collision response is the one law here that no step of the
+plant calls: `Collide` takes the contact facts (previous position, step, stop fraction, impact,
+normal, whether the pilot is human, and the caller's crash threshold) and performs the slide, the
+restitution (`BounceNormalSpeed`, still public for the tests and the instruments: `bounce_factor` ×
+the lever-arm partition) and the lever-arm attitude kick, in that order, because the kick adds to
+the body rates the restitution reads. The restitution is PLAYER-only and `Collide` holds that gate;
+its three graze constants are TUNE and ours, unlike the rest of this module. `FlightController`
+calls it from `SurviveHit`, which keeps the fate decision, the damage ledger and the un-embed loop
+(the last needs world queries, which this module deliberately has none of).
 The choker's engine cutout lives here as well (`ChokeEngine` / `ClearChoke` / `EngineDeadRemainingS`):
 an extend-only timer, spent at the top of `Step`, that zeroes the thrust term and touches nothing
 else — no drag, lift or airspeed change, so a choked aircraft decelerates on drag alone. The throttle
