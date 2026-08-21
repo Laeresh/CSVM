@@ -110,8 +110,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Surface trim
 
-31. ☐ Delete unread observability; demote dead members to private
-32. ☐ Demote the `WorldSession`-only and test-only tiers to `internal`
+31. ☑ Delete unread observability; demote dead members to private
+32. ☑ Demote the `WorldSession`-only and test-only tiers to `internal`
 
 ## Dependency and parallelism notes
 
@@ -337,7 +337,25 @@ without widening into a general runtime handle.
 
 # Wave D — Surface trim
 
-## D31 ☐ Delete unread observability; demote dead members to private
+## D31 ☑ Delete unread observability; demote dead members to private
+
+**Landed.** Deleted (pure unread observability, increments included since nothing else read them):
+`ActiveInstances`, `WaitsRouted`, `WaitsInert` — the backing `_waitsRouted`/`_waitsInert` fields and
+their `++` sites are gone too; the `Log.Info` lines the counters sat beside stay, since those (not
+the counters) were the actual once-per-callee observability. Demoted to `private`: `Invalidate`,
+`ResetAnimation` (the wrappers only — the `InvalidateAnimation`/`ResetAnimation` dispatch cases
+still reach them), `FirstPerson`, `EffectTtl`, `DefScopedPufferKeys`. `NameOf`, `VisualOriginOf`,
+`ConsumeLandingResume`, `SetSubtreeOpacity` were already `internal` from the Wave C extraction, so
+D31 made no further change to them. `Lights` is spared at `private`: the census's "zero external
+references" missed an object-initializer write (`WorldSession.cs`'s `Lights = lights,`), the same
+blind spot the census caveat names; it lands at `internal` instead, since `WorldSession.cs` is a
+different class in the same assembly.
+
+**Verified.** `.\RunTests.ps1` full pass: build with zero warnings, 1646/1646 units, 89/89 engine
+suites with zero engine error lines, 16/16 goldens hash-identical, hitch detector healthy.
+`AnimRuntime`'s public declaration count went 96 → 60.
+
+**Original approach (kept for reference).**
 
 **Goal.** Members with no reference anywhere outside `AnimRuntime.cs` and its siblings stop being
 public: unread observability is deleted, real behaviour with no external caller goes private.
@@ -363,7 +381,28 @@ members, 96 `public` matches in the file).
 also reach (`InvalidateAnimation`/`ResetAnimation` kinds): demote the wrappers, do not touch the
 event-driven paths.
 
-## D32 ☐ Demote the `WorldSession`-only and test-only tiers to `internal`
+## D32 ☑ Demote the `WorldSession`-only and test-only tiers to `internal`
+
+**Landed.** All members in both tiers moved `public` → `internal`, with no other change:
+`WorldSession`-only tier `ReportResolution`, `DebugMotions`, `QualityLod`, `Setup`, `Seed`,
+`ResolveLibraryRoot`, `IndexPooledCopy`, `NameResolveFallback`, `LightViewerPositions`,
+`PlayerPosition`; test-only tier `Start`, `StopAll`, `ApplyDamageStages`, `InheritedWorldVelocity`,
+`InheritedVelocityArmed`, `ArmInheritedVelocity`, `UnresolvedStageAnchors`, `UnhandledEventCounts`,
+`WorldRoot`, `WaitsInstalled`, `WaitsAbandoned`, `Emitters`, `PoolRecycles`, `AutoStart`,
+`EmitterFactory` and both constructors. `RestOf` and `MarkLandingResume`, named in the original
+census, were already `internal` from the Wave C extraction by the time D32 ran; no change needed.
+`CSVM.Tests` still compiles untouched. The doc-comment mentions in `WorldEffectsFactory.cs:30`
+(`PoolRecycles`) and `VersusHud.cs:15` (`PlayerPosition`) stayed accurate as written: both are
+same-assembly callers, so the member names and their reachability from those files did not change.
+Reordering `AnimRuntime.cs`'s members to keep StyleCop's accessibility ordering (SA1202/SA1204)
+happy — public block, then internal, then private, per member kind — was the larger part of this
+item's diff; no behaviour moved, only declaration order.
+
+**Verified.** `.\RunTests.ps1` full pass: build with zero warnings, 1646/1646 units, 89/89 engine
+suites with zero engine error lines, 16/16 goldens hash-identical, hitch detector healthy.
+`AnimRuntime`'s public declaration count went 96 → 60.
+
+**Original approach (kept for reference).**
 
 **Goal.** Members reachable only by their single configurer or by the in-engine suites stop
 claiming `public`.

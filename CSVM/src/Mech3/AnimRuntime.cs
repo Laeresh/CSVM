@@ -62,38 +62,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         "ObjectAddChild", "Callback",
     };
 
-    /// <summary>Collect a per-definition census of how the bind RESOLVED, and log it through
-    /// <see cref="ResolutionLines"/>. Set before <see cref="Bind"/> by a caller that built only
-    /// part of the world (the <c>--node=</c> stage), where "this def did nothing" is the normal
-    /// case and needs to be told apart from a defect. Default false: a full-world session collects
-    /// nothing, so this is inert when nobody asks for it. Copied into the resolver — which owns
-    /// the census — when <see cref="Bind"/> runs, like the two flags below.</summary>
-    public bool ReportResolution;
-
     /// <summary>Refuse the <c>ANIMATION_ROOT_NAME</c> anchor lift, however few matches it finds.
     /// ⚠ Set this only from a caller that built part of the world. The resolver's
     /// <c>MaxRootLift</c> cap assumes a whole-world node population, so a single-subtree stage
     /// drops under it and unrelated definitions anchor onto whatever generic child the subtree
     /// owns. Suppressed lifts are counted and reported, never silently dropped.</summary>
     public bool SuppressRootLift;
-
-    /// <summary>--debug-anim: log every live motion's target and pose once a second, so a
-    /// headless run can verify that (say) the train actually drives its loop.</summary>
-    public bool DebugMotions;
-
-    /// <summary>Our answer to the data's <c>ANIMATION_LOD</c> condition, a project quality setting
-    /// rather than a fact about the world. Every LOD-gated branch in this install asks for
-    /// <c>HIGH</c>, which compiles to 2, so the default passes them all. <c>--anim-lod=N</c> lowers
-    /// it for A/B comparison.</summary>
-    public int QualityLod = HighLod;
-
-    /// <summary>Where the player is, for a <c>PLAYER_RANGE</c> condition with no
-    /// <see cref="PlayerPositions"/> wired (a lab, a unit test). Supplied by the session (the
-    /// flown aircraft, or the spectator camera); absent → the viewport camera, and failing
-    /// that the world origin. During the bootstrap passes there is no camera yet, which is
-    /// harmless: every PLAYER_RANGE definition in this install re-polls from a <c>Loop{-1}</c>,
-    /// so a bootstrap-time miss corrects on the next frame.</summary>
-    public Func<Vector3>? PlayerPosition;
 
     /// <summary>Refuses a COLLISION's damage on a struck destructible while the contact itself
     /// stands. Wired to <c>ZeppelinRuntime.GateCollisionDamage</c> so a rammed gasbag takes
@@ -110,29 +84,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <see cref="PlayerPosition"/> alone, keeping a runtime built without this seam (a lab, a
     /// test) on the pre-C21 single-camera behaviour.</summary>
     public Func<IReadOnlyList<Vector3>>? PlayerPositions;
-
-    /// <summary>Every pane's camera position, for budgeting <see cref="Lights"/>:
-    /// a world light must not fade or lose its slot just because player 1 is far from it. This is
-    /// the draw-rule seam (<c>ViewerSet.Positions</c>), not <see cref="PlayerPositions"/> (the
-    /// gameplay one) — null or empty falls back to <see cref="PlayerPos"/> alone, keeping a
-    /// runtime built without a viewer seam (a lab, a test) on today's single-camera behaviour.</summary>
-    public Func<IReadOnlyList<Vector3>>? LightViewerPositions;
-
-    /// <summary>Answers the data's <c>PLAYER_1ST_PERSON</c> condition. No cockpit view
-    /// exists yet, so false.</summary>
-    public bool FirstPerson;
-
-    /// <summary>Whether <see cref="Bootstrap"/> runs the ambient-playback passes (ON_STARTUP defs
-    /// and the mission's startanims). True in every game/viewer/flight session. False gives the
-    /// animation debugger a quiet stage: base states and mission setup still apply, but nothing
-    /// animates until <see cref="StartAmbient"/>. Set before <see cref="Bind"/>.</summary>
-    public bool AutoStart = true;
-
-    /// <summary>The mission's interp boot script (<c>support\&lt;chapter&gt;\&lt;mission&gt;.gw</c>),
-    /// run as bootstrap pass 0. It is what decides which world entities this mission shows —
-    /// see <see cref="MissionSetup"/>. Null when the mission ships no script, which is normal.
-    /// Set before <see cref="Bind"/>.</summary>
-    public MissionSetup? Setup;
 
     // ---- observability (the animation debugger's timeline; null = zero cost in the game) ----
     /// <summary>Raised as each sequence event fires at runtime. Null by default → zero cost in the
@@ -190,21 +141,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>The airframe <see cref="AnchorWarnAnimNames"/>'s warnings name.</summary>
     public string? AnchorWarnLabel;
 
-    /// <summary>Key puffer emitters by owning def as well as (name, host) — see
-    /// <see cref="EmitterDirector"/>'s keying remark, which carries the measurement behind each
-    /// case. Set on the world-effects runtime, where distinct effect defs declaring same-named
-    /// puffers are distinct emitters (the damage-stage sputters); off on the world runtime, where
-    /// the collapsed key de-dups same-name multi-def ambient stacks. Read once, when
-    /// <see cref="Emitters"/> is first built.</summary>
-    public bool DefScopedPufferKeys;
-
-    /// <summary>Resolve every node reference by NAME, leaving the resolver's by-index map empty
-    /// (<see cref="IndexWorld"/>). ⚠ Never turn this on for the shared world: name matching
-    /// resolves C1's <c>caboose</c> to the real consist and to an unrelated <c>caboose.flt</c>.
-    /// The per-player crash runtime must have it on, because its def's node ptrs index a planes.zbd
-    /// this build never loads and its subtree mixes two colliding gamez index spaces.</summary>
-    public bool NameResolveFallback;
-
     /// <summary>Hands a named effect to the world-effects runtime instead of starting it locally,
     /// passing the call-site world point and the resolved call-site node (the callee's INPUT_NODE).
     /// Returns true when it took the effect, so the local Start is skipped. Set on the WORLD
@@ -217,14 +153,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <see cref="ResetDestructible"/> heals an object whose damage-stage sputter loops for as long
     /// as its host stays active, so the reset itself must end it.</summary>
     public Action<string>? ExternalEffectStop;
-
-    /// <summary>Lazily builds, indexes and RESET_STATE-poses a pooled copy of a named library root
-    /// (<see cref="GameZ.IsLibraryRoot"/>, docs/formats/gamez.md), returning the copy this exact
-    /// caller owns; a different caller gets a fresh one until the pool wraps. Null when the name is
-    /// no library root, and on every runtime that stages its templates eagerly instead.
-    /// ⚠ It returns the node rather than a permission bool on purpose. Drive that one copy, never
-    /// the def's name-wide <see cref="TemplateStage{TNode}.RootsFor"/> set.</summary>
-    public Func<string, Node3D, Node3D?>? ResolveLibraryRoot;
 
     /// <summary>Washes the picture from one RGBA to another, driven by <c>FBFX_COLOR_FROM_TO</c>.
     /// The arguments are <c>(from, to, run_time, origin, radius²)</c>; the radius is metres SQUARED,
@@ -261,13 +189,70 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// session it would only spam "silent for the session" warnings.</summary>
     public bool SoundHandledElsewhere;
 
-    /// <summary>How long a <see cref="PlayEffectAt"/> effect instance may run before this runtime
-    /// stops it (seconds; 0 = never, the default). The world-effects runtime sets it so a stop-less
-    /// sustained effect — <c>large_30sec_fire</c>'s <c>fire_n_smoke</c>, which has no ACTIVE_STATE 0
-    /// and would otherwise emit for the rest of the session — is bounded. Only effects this runtime
-    /// itself started via PlayEffectAt are tracked; ambient/crash runtimes leave it 0 and are
-    /// untouched.</summary>
-    public float EffectTtl;
+    // ---- SOUND_NODE (+ the sound half of OBJECT_ADD_CHILD) ----
+    /// <summary>The world's ambient 3D emitters. Null in a muted or soundless session, in which
+    /// case SOUND_NODE is tracked and reported but nothing is built.</summary>
+    public WorldSounds? Sounds;
+
+    /// <summary>Collect a per-definition census of how the bind RESOLVED, and log it through
+    /// <see cref="ResolutionLines"/>. Set before <see cref="Bind"/> by a caller that built only
+    /// part of the world (the <c>--node=</c> stage), where "this def did nothing" is the normal
+    /// case and needs to be told apart from a defect. Default false: a full-world session collects
+    /// nothing, so this is inert when nobody asks for it. Copied into the resolver — which owns
+    /// the census — when <see cref="Bind"/> runs, like the two flags below.</summary>
+    internal bool ReportResolution;
+
+    /// <summary>--debug-anim: log every live motion's target and pose once a second, so a
+    /// headless run can verify that (say) the train actually drives its loop.</summary>
+    internal bool DebugMotions;
+
+    /// <summary>Our answer to the data's <c>ANIMATION_LOD</c> condition, a project quality setting
+    /// rather than a fact about the world. Every LOD-gated branch in this install asks for
+    /// <c>HIGH</c>, which compiles to 2, so the default passes them all. <c>--anim-lod=N</c> lowers
+    /// it for A/B comparison.</summary>
+    internal int QualityLod = HighLod;
+
+    /// <summary>Where the player is, for a <c>PLAYER_RANGE</c> condition with no
+    /// <see cref="PlayerPositions"/> wired (a lab, a unit test). Supplied by the session (the
+    /// flown aircraft, or the spectator camera); absent → the viewport camera, and failing
+    /// that the world origin. During the bootstrap passes there is no camera yet, which is
+    /// harmless: every PLAYER_RANGE definition in this install re-polls from a <c>Loop{-1}</c>,
+    /// so a bootstrap-time miss corrects on the next frame.</summary>
+    internal Func<Vector3>? PlayerPosition;
+
+    /// <summary>Every pane's camera position, for budgeting <see cref="Lights"/>:
+    /// a world light must not fade or lose its slot just because player 1 is far from it. This is
+    /// the draw-rule seam (<c>ViewerSet.Positions</c>), not <see cref="PlayerPositions"/> (the
+    /// gameplay one) — null or empty falls back to <see cref="PlayerPos"/> alone, keeping a
+    /// runtime built without a viewer seam (a lab, a test) on today's single-camera behaviour.</summary>
+    internal Func<IReadOnlyList<Vector3>>? LightViewerPositions;
+
+    /// <summary>Whether <see cref="Bootstrap"/> runs the ambient-playback passes (ON_STARTUP defs
+    /// and the mission's startanims). True in every game/viewer/flight session. False gives the
+    /// animation debugger a quiet stage: base states and mission setup still apply, but nothing
+    /// animates until <see cref="StartAmbient"/>. Set before <see cref="Bind"/>.</summary>
+    internal bool AutoStart = true;
+
+    /// <summary>The mission's interp boot script (<c>support\&lt;chapter&gt;\&lt;mission&gt;.gw</c>),
+    /// run as bootstrap pass 0. It is what decides which world entities this mission shows —
+    /// see <see cref="MissionSetup"/>. Null when the mission ships no script, which is normal.
+    /// Set before <see cref="Bind"/>.</summary>
+    internal MissionSetup? Setup;
+
+    /// <summary>Resolve every node reference by NAME, leaving the resolver's by-index map empty
+    /// (<see cref="IndexWorld"/>). ⚠ Never turn this on for the shared world: name matching
+    /// resolves C1's <c>caboose</c> to the real consist and to an unrelated <c>caboose.flt</c>.
+    /// The per-player crash runtime must have it on, because its def's node ptrs index a planes.zbd
+    /// this build never loads and its subtree mixes two colliding gamez index spaces.</summary>
+    internal bool NameResolveFallback;
+
+    /// <summary>Lazily builds, indexes and RESET_STATE-poses a pooled copy of a named library root
+    /// (<see cref="GameZ.IsLibraryRoot"/>, docs/formats/gamez.md), returning the copy this exact
+    /// caller owns; a different caller gets a fresh one until the pool wraps. Null when the name is
+    /// no library root, and on every runtime that stages its templates eagerly instead.
+    /// ⚠ It returns the node rather than a permission bool on purpose. Drive that one copy, never
+    /// the def's name-wide <see cref="TemplateStage{TNode}.RootsFor"/> set.</summary>
+    internal Func<string, Node3D, Node3D?>? ResolveLibraryRoot;
 
     /// <summary>The world-space velocity an <c>IMPACT_FORCE</c> launch adds, transformed into the
     /// launched node's parent frame. Written only by <c>Callback 16</c>, which is the original's
@@ -275,11 +260,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// between the dying object's velocity accessor and the add (docs/org/objectMotion.md).
     /// ⚠ Write it only through <see cref="ArmInheritedVelocity"/>: this vector and the arm below
     /// answer different questions, and the original moves them together.</summary>
-    public Vector3 InheritedWorldVelocity;
+    internal Vector3 InheritedWorldVelocity;
 
     /// <summary>Whether that velocity is armed: the original's <c>animInstance+0x9c</c> bit
     /// <c>0x80</c>, which is what <c>IMPACT_FORCE</c> actually gates on.</summary>
-    public bool InheritedVelocityArmed;
+    internal bool InheritedVelocityArmed;
 
     // ---- PUFFER_STATE ----
     /// <summary>What <see cref="Emitters"/> builds through; null, the default, renders no emitters
@@ -287,16 +272,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// session's <see cref="TextureArchive"/>. A caller whose archive dies with its build must call
     /// <see cref="EmitterDirector.RetireFactory"/> afterwards, so a later request is reported
     /// instead of faulting on a closed zip handle.</summary>
-    public IEmitterFactory? EmitterFactory;
-
-    // ---- SOUND_NODE (+ the sound half of OBJECT_ADD_CHILD) ----
-    /// <summary>The world's ambient 3D emitters. Null in a muted or soundless session, in which
-    /// case SOUND_NODE is tracked and reported but nothing is built.</summary>
-    public WorldSounds? Sounds;
+    internal IEmitterFactory? EmitterFactory;
 
     /// <summary>Where the world's lights are delivered. Null outside a lit session, in which
     /// case LIGHT_STATE is tracked but never rendered.</summary>
-    public WorldLights? Lights;
+    internal WorldLights? Lights;
 
     // The runtime's dice: RANDOM_WEIGHT verdicts, SOUND_GROUPS one-shot picks, crash-debris
     // scatter. One field rather than scattered GD.Randf() calls so the session's master seed can
@@ -504,13 +484,33 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // How many waits were installed, and how many hit WaitCeilingS instead of their callee
     // finishing. The second number is the one that matters — it must be 0.
-    private int _waitsInstalled, _waitsAbandoned, _waitsRouted, _waitsInert;
+    private int _waitsInstalled, _waitsAbandoned;
+
+    /// <summary>Answers the data's <c>PLAYER_1ST_PERSON</c> condition. No cockpit view
+    /// exists yet, so false.</summary>
+    private bool FirstPerson;
+
+    /// <summary>Key puffer emitters by owning def as well as (name, host) — see
+    /// <see cref="EmitterDirector"/>'s keying remark, which carries the measurement behind each
+    /// case. Set on the world-effects runtime, where distinct effect defs declaring same-named
+    /// puffers are distinct emitters (the damage-stage sputters); off on the world runtime, where
+    /// the collapsed key de-dups same-name multi-def ambient stacks. Read once, when
+    /// <see cref="Emitters"/> is first built.</summary>
+    private bool DefScopedPufferKeys;
+
+    /// <summary>How long a <see cref="PlayEffectAt"/> effect instance may run before this runtime
+    /// stops it (seconds; 0 = never, the default). The world-effects runtime sets it so a stop-less
+    /// sustained effect — <c>large_30sec_fire</c>'s <c>fire_n_smoke</c>, which has no ACTIVE_STATE 0
+    /// and would otherwise emit for the rest of the session — is bounded. Only effects this runtime
+    /// itself started via PlayEffectAt are tracked; ambient/crash runtimes leave it 0 and are
+    /// untouched.</summary>
+    private float EffectTtl;
 
     /// <summary>The inert stage: nothing pooled, nothing staged hidden, no called template
     /// relocated. What the ambient world runtime and every plain testing runtime take —
     /// the three flags are sealed, so a runtime built this
     /// way cannot be talked into a template role after the fact.</summary>
-    public AnimRuntime()
+    internal AnimRuntime()
         : this(NewTemplateStage())
     {
     }
@@ -521,7 +521,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// resolver and the resolver's <c>ownRootsOf</c> is the stage's
     /// <see cref="TemplateStage{TNode}.RootsFor"/>; both are delegates, invoked after this returns.
     /// One stage per runtime. The resolver's own policy flags follow at <see cref="Bootstrap"/>.</summary>
-    public AnimRuntime(TemplateStage<Node3D> stage)
+    internal AnimRuntime(TemplateStage<Node3D> stage)
     {
         _templateStage = stage;
         _resolver = new NameResolver<Node3D>(Node3DIdentity.Instance, _templateStage.RootsFor, IsInstanceValid,
@@ -539,34 +539,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             ApplyResetStatesWithin);
     }
 
-    /// <summary>How many <see cref="PlayEffectAt"/> calls took a pool slot whose previous instance
-    /// was still live — the pool being smaller than the concurrency it met, so those two calls
-    /// share one template copy (<see cref="TemplateStage{TNode}.Pooled"/>). Zero
-    /// is "the pool covered everything asked of it"; a growing count is the number to size against
-    /// (the pool size itself is a TUNE, `WorldEffectsFactory.EffectPoolSlots`). Forwards to
-    /// <see cref="TemplateStage{TNode}.Recycles"/>, which counts both wrap flavours.</summary>
-    public int PoolRecycles => _templateStage.Recycles;
-
     /// <summary>Running count of ballistic <see cref="MotionRuntime"/> bodies launched — the debris
     /// pieces a death or crash flings (translation/translation_range/scale/forward_rotation over a
     /// run time). Zero at bootstrap (nothing ambient fires the ballistic path); the damage harness
     /// samples the delta across a kill to prove the wreck actually tumbles.</summary>
     public int BallisticMotionsLaunched => Motions.LaunchCount;
-
-    /// <summary>Live animation instances currently running (diagnostics).</summary>
-    public int ActiveInstances => _instances.Count;
-
-    /// <summary>Every <c>&lt;caller anim&gt;|&lt;target node&gt;</c> pair
-    /// <see cref="AnchorWarnAnimNames"/> has warned about on this rig, i.e. the anchors this
-    /// airframe does not carry. Empty on an airframe the stages fit, and empty on every runtime
-    /// that set no warn list.</summary>
-    public IReadOnlyCollection<string> UnresolvedStageAnchors => _anchorWarned;
-
-    /// <summary>Per-kind counts of events (and puffer/sound sub-reasons) this runtime processed but
-    /// could not act on — the same tally <c>ReportUnhandled</c> prints at bootstrap, exposed so a
-    /// post-bootstrap harness (the effects test) can see WHY an effect built no puffer
-    /// (<c>PufferState(no host node)</c>, <c>PufferState(no texture: …)</c>).</summary>
-    public IReadOnlyDictionary<string, int> UnhandledEventCounts => _unhandled;
 
     /// <summary>The live per-instance HP of every destructible node group in this world.
     /// Built during the bootstrap; the source of the value <c>ANIM_HEALTH</c> conditions read.
@@ -577,43 +554,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// defs by a rule <see cref="Play"/>'s name lookup cannot express (the zeppelin damage
     /// runtime finding the hull-death def by its activation prerequisite, M4 F18).</summary>
     public IReadOnlyList<AnimDefinition> ProgramDefs => _program.Defs;
-
-    /// <summary>The built world's own root, the node every world subtree hangs under. Exposed so
-    /// a caller can ask which top-level world object a node belongs to (a turret gunner's "which
-    /// platform am I bolted to"); null before <see cref="Bind"/>.</summary>
-    public Node3D? WorldRoot => _root;
-
-    /// <summary>Pins the runtime's RNG for a reproducible run. Every session sets one, derived from
-    /// the master seed (<see cref="Utils.Rng"/>); null leaves it drawn from .NET's own entropy. Set
-    /// at construction through the object initializer, before <see cref="Bind"/>.</summary>
-    public int? Seed
-    {
-        init
-        {
-            _seed = value;
-            if (value is { } s)
-                _rng = new Random(s);
-        }
-    }
-
-    Action<EventDispatch>? ISequenceHost.OnEventDispatched => OnEventDispatched;
-
-    Func<bool>? ISequenceHost.PendingWait => _pendingWait;
-
-    /// <summary>How many <c>WAIT_FOR_COMPLETION</c> holds this runtime has armed, and how many of
-    /// those ended at <see cref="WaitCeilingS"/> instead of at their callee. The second is the one
-    /// that matters and is expected to stay 0; the `wait-for-completion` suite asserts both.
-    /// </summary>
-    public int WaitsInstalled => _waitsInstalled;
-
-    public int WaitsAbandoned => _waitsAbandoned;
-
-    /// <summary>Flagged calls this runtime handed to the world-effects runtime instead of holding
-    /// on — the one scope boundary the wait has (see <see cref="NoteRoutedWait"/>).</summary>
-    public int WaitsRouted => _waitsRouted;
-
-    /// <summary>Flagged calls that reached no live callee instance, so held nothing.</summary>
-    public int WaitsInert => _waitsInert;
 
     /// <summary>One-shot SOUND events that resolved to a stream and fired this session (the
     /// destruction/damage/impact audio). Exposed for the damage-test harness, which cannot
@@ -627,12 +567,62 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// renders nothing (verification.md).</summary>
     public int PuffersBuilt => Emitters.Built;
 
+    Action<EventDispatch>? ISequenceHost.OnEventDispatched => OnEventDispatched;
+
+    Func<bool>? ISequenceHost.PendingWait => _pendingWait;
+
+    /// <summary>How many <see cref="PlayEffectAt"/> calls took a pool slot whose previous instance
+    /// was still live — the pool being smaller than the concurrency it met, so those two calls
+    /// share one template copy (<see cref="TemplateStage{TNode}.Pooled"/>). Zero
+    /// is "the pool covered everything asked of it"; a growing count is the number to size against
+    /// (the pool size itself is a TUNE, `WorldEffectsFactory.EffectPoolSlots`). Forwards to
+    /// <see cref="TemplateStage{TNode}.Recycles"/>, which counts both wrap flavours.</summary>
+    internal int PoolRecycles => _templateStage.Recycles;
+
+    /// <summary>Every <c>&lt;caller anim&gt;|&lt;target node&gt;</c> pair
+    /// <see cref="AnchorWarnAnimNames"/> has warned about on this rig, i.e. the anchors this
+    /// airframe does not carry. Empty on an airframe the stages fit, and empty on every runtime
+    /// that set no warn list.</summary>
+    internal IReadOnlyCollection<string> UnresolvedStageAnchors => _anchorWarned;
+
+    /// <summary>Per-kind counts of events (and puffer/sound sub-reasons) this runtime processed but
+    /// could not act on — the same tally <c>ReportUnhandled</c> prints at bootstrap, exposed so a
+    /// post-bootstrap harness (the effects test) can see WHY an effect built no puffer
+    /// (<c>PufferState(no host node)</c>, <c>PufferState(no texture: …)</c>).</summary>
+    internal IReadOnlyDictionary<string, int> UnhandledEventCounts => _unhandled;
+
+    /// <summary>The built world's own root, the node every world subtree hangs under. Exposed so
+    /// a caller can ask which top-level world object a node belongs to (a turret gunner's "which
+    /// platform am I bolted to"); null before <see cref="Bind"/>.</summary>
+    internal Node3D? WorldRoot => _root;
+
+    /// <summary>Pins the runtime's RNG for a reproducible run. Every session sets one, derived from
+    /// the master seed (<see cref="Utils.Rng"/>); null leaves it drawn from .NET's own entropy. Set
+    /// at construction through the object initializer, before <see cref="Bind"/>.</summary>
+    internal int? Seed
+    {
+        init
+        {
+            _seed = value;
+            if (value is { } s)
+                _rng = new Random(s);
+        }
+    }
+
+    /// <summary>How many <c>WAIT_FOR_COMPLETION</c> holds this runtime has armed, and how many of
+    /// those ended at <see cref="WaitCeilingS"/> instead of at their callee. The second is the one
+    /// that matters and is expected to stay 0; the `wait-for-completion` suite asserts both.
+    /// </summary>
+    internal int WaitsInstalled => _waitsInstalled;
+
+    internal int WaitsAbandoned => _waitsAbandoned;
+
     /// <summary>Every PUFFER_STATE emitter's whole life on this runtime: start, the four stops,
     /// the follow, and the census a suite reads.
     /// ⚠ Built on FIRST USE, inside <see cref="Bind"/>, capturing <see cref="EmitterFactory"/>,
     /// <see cref="DefScopedPufferKeys"/> and <see cref="DebugMotions"/> as they stand then. Set all
     /// three before binding; flipping one afterwards does not reach the director.</summary>
-    public EmitterDirector Emitters => _emitters ??= new EmitterDirector(
+    internal EmitterDirector Emitters => _emitters ??= new EmitterDirector(
         EmitterFactory ?? new SpentEmitterFactory(), DefScopedPufferKeys, DebugMotions, Count);
 
     /// <summary>The live motion collection and its registration rules. `internal` so the
@@ -963,14 +953,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         ApplyResetStatesWithin(subtree);
     }
 
-    /// <summary>Indexes one pooled copy of a library-root call template: everything
-    /// <see cref="IndexStage"/> does, except the resolver's by-index map.
-    /// ⚠ Never add a pooled copy to that map. Every copy carries the same compiled node indices, so
-    /// the map holds only the first claimant and a second copy's events would resolve onto the
-    /// first copy's nodes. Anchor-scoped name resolution has no such collision, which is why a copy
-    /// resolves against itself as long as it is passed as the anchor.</summary>
-    public void IndexPooledCopy(Node3D subtree) => _templateStage.IndexPooledCopy(subtree);
-
     // ---- ISequenceHost: the sequence interpreter's 3-point view of this runtime, satisfied by
     // explicit interface implementation so Dispatch/EvaluateCondition stay off AnimRuntime's own
     // surface. See SequenceRunner.cs. ----
@@ -1035,61 +1017,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
     }
 
-    /// <summary>Starts a definition on one anchor (null resolves its node names globally), running
-    /// every sequence that is not ACTIVATION ON_CALL. Starting a def already live on the same
-    /// anchor restarts it; CALL_ANIMATION deliberately does not take this path for a running
-    /// animation. <paramref name="protectSelfInvalidate"/> is the death path's opt-in against a
-    /// same-name self stop tearing this burst's own instance down; keep it off elsewhere
-    /// (<see cref="_startingInstances"/>).</summary>
-    public void Start(AnimDefinition def, Node3D? anchor, bool protectSelfInvalidate = false)
-    {
-        // ⚠ Keep the depth bound. CALL_ANIMATION chains are data and some chapters author cycles,
-        // which recurse until the stack dies, since a start fires its t=0 events immediately.
-        if (_startDepth >= MaxStartDepth)
-        {
-            Count("CallAnimation(depth limit)");
-            return;
-        }
-        // ⚠ Keep this refusal; it is where INVALIDATE_ANIMATION's whole effect lands. Without it a
-        // def that invalidated itself would still re-run on the next call.
-        if (_invalidated.Contains(def))
-        {
-            Count("Start(invalidated)");
-            return;
-        }
-        // ⚠ Do not tear down the live resources on a restart; the new instance re-establishes them
-        // idempotently, and tearing down rebuilds every one of them instead. A caller that wants
-        // them cleared calls Stop directly.
-        RemoveInstances(def.AnimName, anchor, tearDown: false);
-        var inst = new AnimInstance(def, anchor);
-        foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
-            inst.AddRunner(seq);
-        if (inst.Finished)
-            return;
-        _instances.Add(inst);
-        OnInstanceStarted?.Invoke(def, anchor);
-        // Fire whatever is due at t=0 immediately, so instantaneous sequences (zepstate's
-        // active-state roster) settle during the build rather than one frame later.
-        _startDepth++;
-        _startingInstances.Push((inst, protectSelfInvalidate));
-        try
-        {
-            inst.Advance(this, 0f);
-        }
-        finally
-        {
-            _startingInstances.Pop();
-            _startDepth--;
-        }
-        // The t=0 events can finish the instance, so notify only a finish that removed something:
-        // the timeline needs start and finish notifications balanced against the live count.
-        if (Retirable(inst) && _instances.Remove(inst))
-        {
-            FinishInputGoverned(def, anchor);
-            OnInstanceFinished?.Invoke(def, anchor);
-        }
-    }
-
     /// <summary>Stops every live instance of an animation name (optionally only on one anchor) and
     /// tears down the resources it created. Removing the instance alone would leave its motions
     /// driving nodes, its puffers emitting, its lights lit and its sounds playing;
@@ -1097,36 +1024,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// not route through here; it keeps the resources so re-assertion is a no-op.</summary>
     public void Stop(string? animName, Node3D? anchor = null) =>
         RemoveInstances(animName, anchor, tearDown: true);
-
-    /// <summary>INVALIDATE_ANIMATION: latches an animation off without touching what it is doing.
-    /// Whatever is running keeps running to its own end; what changes is that nothing can start it
-    /// again until a RESET_ANIMATION (or an explicit <see cref="Play"/>) clears the latch. See
-    /// <see cref="_invalidated"/> for the state machine this stands in for.</summary>
-    public void Invalidate(string? animName)
-    {
-        if (string.IsNullOrEmpty(animName))
-            return;
-        foreach (var def in _program.ByAnimName(animName))
-            _invalidated.Add(def);
-    }
-
-    /// <summary>RESET_ANIMATION: clears the invalidation latch and re-poses the definition's
-    /// RESET_STATE on each of its anchors. Does NOT start anything — the original's reset is
-    /// state-plus-pose only, and the one authored user (`turnoff_fliteN`) issues its own
-    /// STOP_ANIMATION first.</summary>
-    public void ResetAnimation(string? animName)
-    {
-        if (string.IsNullOrEmpty(animName))
-            return;
-        foreach (var def in _program.ByAnimName(animName))
-        {
-            _invalidated.Remove(def);
-            if (def.ResetState == null)
-                continue;
-            foreach (var anchor in Anchors(def))
-                ApplyInstant(def.ResetState.Events, def, anchor);
-        }
-    }
 
     // ---- world-effects runtime ----
     /// <summary>Does this runtime's program hold a definition for an effect animation name? The
@@ -1188,43 +1085,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             }
         }
         return matched;
-    }
-
-    /// <summary>Stops every live instance and clears the effect-TTL list — a full reset of what
-    /// PlayEffectAt started, so the verify measures each effect in a clean window (these effects
-    /// share puffer names/hosts, so a lingering one would contaminate the next). Not used in play.</summary>
-    public void StopAll()
-    {
-        foreach (var name in _instances.Select(i => i.Def.AnimName).Distinct().ToList())
-            Stop(name);
-        _effectTtls.Clear();
-    }
-
-    /// <summary>Escalates a destructible's visible damage to the stage its current HP sits in,
-    /// running its <c>DAMAGE_SEQUENCE</c> (docs/formats/destructibles.md). Call it after the HP
-    /// changes; it neither decrements HP nor runs the death sequence. Returns false when no new
-    /// threshold was crossed, or the def carries no such sequence.
-    /// ⚠ Keep the stage gate. Without it a one-shot damage effect re-fires on every hit inside a
-    /// band; only a sustained one is spared by CALL_ANIMATION's own live guard.</summary>
-    public bool ApplyDamageStages(DestructibleRegistry.Instance inst)
-    {
-        var seq = inst.Def.Sequences.FirstOrDefault(s =>
-            string.Equals(s.Name, DamageSequenceName, StringComparison.OrdinalIgnoreCase));
-        if (seq == null)
-            return false;
-        int stage = DamageStageFor(seq, inst.Health);
-        if (stage <= inst.DamageStage)
-            return false;
-        inst.DamageStage = stage;
-        if (inst.Status == DestructibleRegistry.State.Healthy)
-            inst.Status = DestructibleRegistry.State.Damaged;
-        // A one-shot selector, not a persistent instance: the cascade carries no timed events, so
-        // one zero-dt advance resolves the whole IF chain. The effect it starts becomes its own
-        // live instance and this host is discarded.
-        var host = new AnimInstance(inst.Def, inst.Anchor);
-        host.AddRunner(seq);
-        host.Advance(this, 0f);
-        return true;
     }
 
     /// <summary>Applies weapon damage to whatever destructible a struck world node belongs to, and
@@ -1328,20 +1188,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         inst.DamageStage = 0;
     }
 
-    /// <summary>Hands this instance the velocity a <c>Callback 16</c> carries, on the original's own
-    /// terms (<c>FUN_004ee0e0</c>): the vector is stored whatever it is, and it ARMS only if some
-    /// axis exceeds 0.01.
-    /// ⚠ Below that the arm is CLEARED, not left alone. A near-stationary <c>Callback 16</c>
-    /// disarms one an earlier callback armed, so this cannot collapse into "non-zero means armed".
-    /// </summary>
-    public void ArmInheritedVelocity(Vector3 v)
-    {
-        InheritedWorldVelocity = v;
-        InheritedVelocityArmed = Mathf.Abs(v.X) > InheritedVelocityEpsilon
-            || Mathf.Abs(v.Y) > InheritedVelocityEpsilon
-            || Mathf.Abs(v.Z) > InheritedVelocityEpsilon;
-    }
-
     // ---- state application ----
     /// <summary>Clamps each near-zero scale component to <see cref="MinPoseScale"/> (sign
     /// preserved) so an animated pose can never write a singular basis. Applied at every
@@ -1392,6 +1238,120 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     internal static void SetSubtreeActive(Node3D node, bool active)
     {
         node.Visible = active;
+    }
+
+    /// <summary>Indexes one pooled copy of a library-root call template: everything
+    /// <see cref="IndexStage"/> does, except the resolver's by-index map.
+    /// ⚠ Never add a pooled copy to that map. Every copy carries the same compiled node indices, so
+    /// the map holds only the first claimant and a second copy's events would resolve onto the
+    /// first copy's nodes. Anchor-scoped name resolution has no such collision, which is why a copy
+    /// resolves against itself as long as it is passed as the anchor.</summary>
+    internal void IndexPooledCopy(Node3D subtree) => _templateStage.IndexPooledCopy(subtree);
+
+    /// <summary>Starts a definition on one anchor (null resolves its node names globally), running
+    /// every sequence that is not ACTIVATION ON_CALL. Starting a def already live on the same
+    /// anchor restarts it; CALL_ANIMATION deliberately does not take this path for a running
+    /// animation. <paramref name="protectSelfInvalidate"/> is the death path's opt-in against a
+    /// same-name self stop tearing this burst's own instance down; keep it off elsewhere
+    /// (<see cref="_startingInstances"/>).</summary>
+    internal void Start(AnimDefinition def, Node3D? anchor, bool protectSelfInvalidate = false)
+    {
+        // ⚠ Keep the depth bound. CALL_ANIMATION chains are data and some chapters author cycles,
+        // which recurse until the stack dies, since a start fires its t=0 events immediately.
+        if (_startDepth >= MaxStartDepth)
+        {
+            Count("CallAnimation(depth limit)");
+            return;
+        }
+        // ⚠ Keep this refusal; it is where INVALIDATE_ANIMATION's whole effect lands. Without it a
+        // def that invalidated itself would still re-run on the next call.
+        if (_invalidated.Contains(def))
+        {
+            Count("Start(invalidated)");
+            return;
+        }
+        // ⚠ Do not tear down the live resources on a restart; the new instance re-establishes them
+        // idempotently, and tearing down rebuilds every one of them instead. A caller that wants
+        // them cleared calls Stop directly.
+        RemoveInstances(def.AnimName, anchor, tearDown: false);
+        var inst = new AnimInstance(def, anchor);
+        foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
+            inst.AddRunner(seq);
+        if (inst.Finished)
+            return;
+        _instances.Add(inst);
+        OnInstanceStarted?.Invoke(def, anchor);
+        // Fire whatever is due at t=0 immediately, so instantaneous sequences (zepstate's
+        // active-state roster) settle during the build rather than one frame later.
+        _startDepth++;
+        _startingInstances.Push((inst, protectSelfInvalidate));
+        try
+        {
+            inst.Advance(this, 0f);
+        }
+        finally
+        {
+            _startingInstances.Pop();
+            _startDepth--;
+        }
+        // The t=0 events can finish the instance, so notify only a finish that removed something:
+        // the timeline needs start and finish notifications balanced against the live count.
+        if (Retirable(inst) && _instances.Remove(inst))
+        {
+            FinishInputGoverned(def, anchor);
+            OnInstanceFinished?.Invoke(def, anchor);
+        }
+    }
+
+    /// <summary>Stops every live instance and clears the effect-TTL list — a full reset of what
+    /// PlayEffectAt started, so the verify measures each effect in a clean window (these effects
+    /// share puffer names/hosts, so a lingering one would contaminate the next). Not used in play.</summary>
+    internal void StopAll()
+    {
+        foreach (var name in _instances.Select(i => i.Def.AnimName).Distinct().ToList())
+            Stop(name);
+        _effectTtls.Clear();
+    }
+
+    /// <summary>Escalates a destructible's visible damage to the stage its current HP sits in,
+    /// running its <c>DAMAGE_SEQUENCE</c> (docs/formats/destructibles.md). Call it after the HP
+    /// changes; it neither decrements HP nor runs the death sequence. Returns false when no new
+    /// threshold was crossed, or the def carries no such sequence.
+    /// ⚠ Keep the stage gate. Without it a one-shot damage effect re-fires on every hit inside a
+    /// band; only a sustained one is spared by CALL_ANIMATION's own live guard.</summary>
+    internal bool ApplyDamageStages(DestructibleRegistry.Instance inst)
+    {
+        var seq = inst.Def.Sequences.FirstOrDefault(s =>
+            string.Equals(s.Name, DamageSequenceName, StringComparison.OrdinalIgnoreCase));
+        if (seq == null)
+            return false;
+        int stage = DamageStageFor(seq, inst.Health);
+        if (stage <= inst.DamageStage)
+            return false;
+        inst.DamageStage = stage;
+        if (inst.Status == DestructibleRegistry.State.Healthy)
+            inst.Status = DestructibleRegistry.State.Damaged;
+        // A one-shot selector, not a persistent instance: the cascade carries no timed events, so
+        // one zero-dt advance resolves the whole IF chain. The effect it starts becomes its own
+        // live instance and this host is discarded.
+        var host = new AnimInstance(inst.Def, inst.Anchor);
+        host.AddRunner(seq);
+        host.Advance(this, 0f);
+        return true;
+    }
+
+    /// <summary>Hands this instance the velocity a <c>Callback 16</c> carries, on the original's own
+    /// terms (<c>FUN_004ee0e0</c>): the vector is stored whatever it is, and it ARMS only if some
+    /// axis exceeds 0.01.
+    /// ⚠ Below that the arm is CLEARED, not left alone. A near-stationary <c>Callback 16</c>
+    /// disarms one an earlier callback armed, so this cannot collapse into "non-zero means armed".
+    /// </summary>
+    internal void ArmInheritedVelocity(Vector3 v)
+    {
+        InheritedWorldVelocity = v;
+        InheritedVelocityArmed = Mathf.Abs(v.X) > InheritedVelocityEpsilon
+            || Mathf.Abs(v.Y) > InheritedVelocityEpsilon
+            || Mathf.Abs(v.Z) > InheritedVelocityEpsilon;
     }
 
     /// <summary>The node's authored pose, remembered the first time anything moves it, so
@@ -1545,6 +1505,36 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         root.TopLevel = true;
         root.GlobalTransform = xf;
+    }
+
+    /// <summary>INVALIDATE_ANIMATION: latches an animation off without touching what it is doing.
+    /// Whatever is running keeps running to its own end; what changes is that nothing can start it
+    /// again until a RESET_ANIMATION (or an explicit <see cref="Play"/>) clears the latch. See
+    /// <see cref="_invalidated"/> for the state machine this stands in for.</summary>
+    private void Invalidate(string? animName)
+    {
+        if (string.IsNullOrEmpty(animName))
+            return;
+        foreach (var def in _program.ByAnimName(animName))
+            _invalidated.Add(def);
+    }
+
+    /// <summary>RESET_ANIMATION: clears the invalidation latch and re-poses the definition's
+    /// RESET_STATE on each of its anchors. Does NOT start anything — the original's reset is
+    /// state-plus-pose only, and the one authored user (`turnoff_fliteN`) issues its own
+    /// STOP_ANIMATION first.</summary>
+    private void ResetAnimation(string? animName)
+    {
+        if (string.IsNullOrEmpty(animName))
+            return;
+        foreach (var def in _program.ByAnimName(animName))
+        {
+            _invalidated.Remove(def);
+            if (def.ResetState == null)
+                continue;
+            foreach (var anchor in Anchors(def))
+                ApplyInstant(def.ResetState.Events, def, anchor);
+        }
     }
 
     private void Bootstrap(Node3D worldRoot, AnimProgram program)
@@ -1780,7 +1770,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // counter raised afterwards is never seen and the dropped hold becomes a silent skip.
     private void NoteRoutedWait(string callName)
     {
-        _waitsRouted++;
         if (_routedWaitsNamed.Add(callName))
         {
             Log.Info("anim", $"anim: WAIT_FOR_COMPLETION on '{callName}' not held — the callee is routed to the world-effects runtime, which this one cannot poll");
@@ -1794,9 +1783,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         if (!waitOn.Any(w => IsLive(w.Def, w.Anchor)))
         {
-            // ⚠ Keep this line. "Reached but holding nothing" is a different state from "never
+            // ⚠ Keep this log. "Reached but holding nothing" is a different state from "never
             // dispatched", and without it a probe reports an inert mechanism as untested.
-            _waitsInert++;
             if (_inertWaitsNamed.Add(callName))
                 Log.Info("anim", $"anim: WAIT_FOR_COMPLETION on '{callName}' had nothing to hold — no live callee instance");
             return;
