@@ -94,9 +94,6 @@ internal sealed class HumanFlightAdapter
 
         var controller = new FlightController
         {
-            // one scripted sequence per player ('|'-separated); the last covers the rest
-            HoldSegments = _spec.HoldSets == null ? null
-                : _spec.HoldSets[Math.Min(pi, _spec.HoldSets.Length - 1)],
             DebugCollision = _in.DebugCollision,
             PinnedView = _spec.View,
             HudParent = rig.Viewport,
@@ -108,6 +105,9 @@ internal sealed class HumanFlightAdapter
         {
             PlayerIndex = pi,
             IsHumanPiloted = true,
+            // one scripted sequence per player ('|'-separated); the last covers the rest
+            HoldSegments = _spec.HoldSets == null ? null
+                : _spec.HoldSets[Math.Min(pi, _spec.HoldSets.Length - 1)],
             PlaneModel = planeModel,
             Props = PropAnimator.Build(planeModel),
             WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod),

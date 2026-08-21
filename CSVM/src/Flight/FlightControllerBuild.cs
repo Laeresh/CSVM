@@ -12,6 +12,12 @@ internal sealed class FlightControllerBuild
     public int PlayerIndex;
     public bool IsHumanPiloted;
     public AiPilot? Pilot;
+
+    /// <summary>When set, replaces keyboard input — used by automated screenshot runs. Each
+    /// segment holds its input for its duration (seconds of sim time); the last segment holds
+    /// forever, and a respawn restarts the sequence (deterministic runs). Such runs are
+    /// unattended, so a crash auto-respawns after a short pause.</summary>
+    public (FlightInput Input, float Duration)[]? HoldSegments;
     public Node3D PlaneModel = null!;
     public PropAnimator? Props;
     public WingLightBlinker? WingLights;
@@ -50,6 +56,7 @@ public partial class FlightController
         PlayerIndex = build.PlayerIndex;
         IsHumanPiloted = build.IsHumanPiloted;
         Pilot = build.Pilot;
+        _holdSegments = build.HoldSegments;
         PlaneModel = build.PlaneModel;
         Props = build.Props;
         WingLights = build.WingLights;
@@ -68,9 +75,9 @@ public partial class FlightController
             Team = team;
 
         _worldQuery = new GodotWorldQuery(this);
-        // HoldSegments (if any) is set by the caller's object initializer before this call, so it
-        // is already final by the time this reads it; resolving here rather than leaving it to the
-        // lazy InputSource fallback keeps the choice next to the rest of this method's assignments.
+        // _holdSegments is assigned just above, so it is already final by the time this reads it;
+        // resolving here rather than leaving it to the lazy InputSource fallback keeps the choice
+        // next to the rest of this method's assignments.
         _inputSource = ResolveInputSource();
 
         Shake = build.Shake;

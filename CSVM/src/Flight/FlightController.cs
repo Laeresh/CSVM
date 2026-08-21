@@ -31,12 +31,6 @@ public partial class FlightController : Node3D
     /// the same knob as <see cref="GunAmmoCapDefault"/>, for hardpoints instead of gun groups.</summary>
     public const int OrdnanceCapDefault = 0;
 
-    /// <summary>When set, replaces keyboard input — used by automated screenshot runs.
-    /// Each segment holds its input for its duration (seconds of sim time); the last
-    /// segment holds forever, and a respawn restarts the sequence (deterministic runs).
-    /// Such runs are unattended, so a crash auto-respawns after a short pause.</summary>
-    public (FlightInput Input, float Duration)[]? HoldSegments;
-
     /// <summary>Own-plane sound, if the sound archive was found (add as a child too).</summary>
     public FlightAudio? Audio;
 
@@ -167,8 +161,8 @@ public partial class FlightController : Node3D
     /// Null when the flag was absent — falls through to the config.json knobs.</summary>
     public int? AmmoCapOverride;
 
-    /// <summary>--fire: hold the gun trigger down (scripted screenshot / soak runs), as
-    /// <see cref="HoldSegments"/> does for flight input.</summary>
+    /// <summary>--fire: hold the gun trigger down (scripted screenshot / soak runs), as a scripted
+    /// hold profile does for flight input.</summary>
     public bool AutoFire;
 
     /// <summary>--fire-rockets: hold the rocket trigger down (scripted screenshot / soak runs).
@@ -326,7 +320,7 @@ public partial class FlightController : Node3D
     public TurretController[] Turrets = Array.Empty<TurretController>();
 
     /// <summary>The non-player input source: set (with <see cref="IsHumanPiloted"/> false), it
-    /// replaces the keyboard/pad read each sim step, the way <see cref="HoldSegments"/> does for
+    /// replaces the keyboard/pad read each sim step, the way a scripted hold profile does for
     /// scripted runs — collision, weapons, damage and crash downstream are byte-for-byte the
     /// player's path. ⚠ The FLIGHT MODEL is the one exception: construction selects the AI force
     /// path off this same split (<see cref="FlightModel.UsesAiForcePath"/>).</summary>
@@ -483,9 +477,15 @@ public partial class FlightController : Node3D
     private bool _wreckFalling;                  // that wreck still flying itself down to its crash def
     private WarningShotCue? _warningShots;       // the near-miss cue's shipped accumulator
     private FlightInput _lastInput;              // this physics frame's stick input (drives the surfaces)
-    private float _autoRespawnIn;                // s until auto-respawn (HoldSegments runs only)
-    private float _autoRestartIn = AutoRespawnDelay; // s until auto-rematch on a finished race (HoldSegments runs only)
-    private float _holdElapsed;                  // sim time into the HoldSegments sequence
+    private float _autoRespawnIn;                // s until auto-respawn (scripted hold runs only)
+    private float _autoRestartIn = AutoRespawnDelay; // s until auto-rematch on a finished race (scripted hold runs only)
+
+    /// <summary>When set (from <see cref="FlightControllerBuild.HoldSegments"/>), replaces keyboard
+    /// input for automated screenshot/demo runs: each segment holds its input for its duration
+    /// (seconds of sim time), the last holds forever, and a respawn restarts the sequence
+    /// (<see cref="ScriptedInputSource.Reset"/>). Such runs are unattended, so a crash
+    /// auto-respawns after a short pause.</summary>
+    private (FlightInput Input, float Duration)[]? _holdSegments;
     private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
     private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
     private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
@@ -685,13 +685,13 @@ public partial class FlightController : Node3D
     private IWorldQuery World => _worldQuery ??= new GodotWorldQuery(this);
 
     // Which stick flies this aircraft: set in Bind, and lazy here too so a bare test rig that
-    // never binds still gets one, off whichever of HoldSegments/Pilot it already set (Decision 8,
+    // never binds still gets one, off whichever of _holdSegments/Pilot it already set (Decision 8,
     // docs/PLAN-flightcontroller-deepening.md); no suite mutates either after stepping starts.
 #pragma warning disable SA1202 // kept beside World, its seam counterpart, ahead of the public method below
     private IFlightInputSource InputSource => _inputSource ??= ResolveInputSource();
 
     private IFlightInputSource ResolveInputSource() =>
-        HoldSegments != null ? new HoldInputSource(this)
+        _holdSegments != null ? new ScriptedInputSource(_holdSegments)
         : Pilot != null ? new PilotInputSource(this)
         : new KeyboardInputSource(this);
 
@@ -901,7 +901,7 @@ public partial class FlightController : Node3D
         _crashed = false;
         _destroyed = false;
         _wreckFalling = false;
-        _holdElapsed = 0f; // scripted hold sequences restart from the spawn
+        (_inputSource as ScriptedInputSource)?.Reset(); // scripted hold sequences restart from the spawn
         _lastInput = default;
         Pilot?.ClearStun();  // a fresh airframe never wakes up with its pilot's hands still off
         _model.ClearChoke(); // nor with the last airframe's engine still choked
@@ -1292,7 +1292,7 @@ public partial class FlightController : Node3D
                 return;
             }
             if (RespawnPressed()
-                || ((HoldSegments != null || AutoRespawnAfter != null) && (_autoRespawnIn -= dt) <= 0f))
+                || ((_holdSegments != null || AutoRespawnAfter != null) && (_autoRespawnIn -= dt) <= 0f))
             {
                 Respawn();
                 return;
@@ -2462,7 +2462,7 @@ public partial class FlightController : Node3D
         }
         if (Race is { AllFinished: true } && Stunt is { AllComplete: true })
         {
-            bool autoRematch = HoldSegments != null && PlayerIndex == 0
+            bool autoRematch = _holdSegments != null && PlayerIndex == 0
                 && (_autoRestartIn -= delta) <= 0f;
             if (RespawnPressed() || autoRematch)
                 RestartRace?.Invoke();
@@ -2648,27 +2648,10 @@ public partial class FlightController : Node3D
         _targetKeyPrev[slot] = down;
     }
 
-    // Internal rather than private: IFlightInputSource.cs's three adapters call these to keep
-    // each body exactly where it always lived among the other sim-step helpers, rather than
-    // hoisting them up next to the class's public/internal members for SA1202's sake.
+    // Internal rather than private: IFlightInputSource.cs's PilotInputSource calls this to keep
+    // the body where it always lived, rather than hoisting it for SA1202's sake. The scripted hold
+    // sequence's own body lives on ScriptedInputSource now, which needs no such wrapper.
 #pragma warning disable SA1202
-    // Advance the scripted hold sequence by this frame and return the active
-    // segment's input. Segments run for their duration in order; the last one (or a
-    // duration ≤ 0) holds until respawn.
-    internal FlightInput NextHoldInput(float dt)
-    {
-        var segments = HoldSegments!;
-        _holdElapsed += dt;
-        float t = _holdElapsed;
-        for (int i = 0; i < segments.Length - 1; i++)
-        {
-            if (segments[i].Duration <= 0f || t < segments[i].Duration)
-                return segments[i].Input;
-            t -= segments[i].Duration;
-        }
-        return segments[^1].Input;
-    }
-
     // The AI pilot's throttle is the desired lever (+0x124); like keyboard input, its live
     // flight-model lever (+0x128) must traverse at 0.5/s. Carrier launch seeds both at 0.1,
     // then the AI may immediately request full power without erasing the visible settling ramp.
@@ -2886,9 +2869,9 @@ public partial class FlightController : Node3D
         return best >= 0 ? _rankSources[best] : null;
     }
 
-    // Internal rather than private: HoldInputSource/PilotInputSource/KeyboardInputSource
-    // (IFlightInputSource.cs) call this and its siblings above to keep each body exactly where it
-    // always lived among the other sim-step helpers, rather than hoisting it for SA1202's sake.
+    // Internal rather than private: PilotInputSource/KeyboardInputSource (IFlightInputSource.cs)
+    // call this and its sibling above to keep each body exactly where it always lived among the
+    // other sim-step helpers, rather than hoisting it for SA1202's sake.
 #pragma warning disable SA1202
     internal FlightInput ReadKeyboard(float dt)
     {

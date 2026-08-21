@@ -2468,19 +2468,24 @@ silent like the footage's idle floor.
 The internal construction handoff from `FlightRoster` to `FlightController`. It contains one
 resolved controller's pre-tree state from either flight adapter, and `Bind` consumes it exactly once, before tree
 attachment; a repeated or late bind is a construction error. The roster keeps the data-resolution
-and lifecycle ordering, while the controller keeps its runtime interface. `Bind` also resolves
-`IFlightInputSource` (below) and stores it, alongside the `IWorldQuery` seam.
+and lifecycle ordering, while the controller keeps its runtime interface. `HoldSegments` (the
+scripted hold profile, when a caller wants one) rides this DTO the same way `Pilot` does, so
+`FlightController` never exposes a public field for either arm; `Bind` copies it to the private
+`_holdSegments` field before resolving `IFlightInputSource` (below) and storing it, alongside the
+`IWorldQuery` seam.
 
 ## src/Flight/IFlightInputSource.cs
 The seam a sim step reads this frame's pilot intent through: `Read(dt)` returns one `FlightInput`.
-Three adapters carry the ternary's old three bodies unchanged (`HoldInputSource`/
-`PilotInputSource`/`KeyboardInputSource`, each a thin wrapper calling the matching
-`FlightController` method, kept `internal` rather than `private` so the adapters can reach them).
-`FlightController.Bind` resolves which one flies a given aircraft off whichever of `HoldSegments`/
-`Pilot` is set and stores it, because that choice cannot change afterward (`Pilot` arrives only
-through the build DTO, `HoldSegments` only from the caller, both before the first sim step). A
-private `InputSource` property lazily resolves and caches the same way for a bare test rig that
-never binds, off whichever field its own object initializer already set — no suite mutates either
+`PilotInputSource`/`KeyboardInputSource` are thin wrappers calling the matching `FlightController`
+method (kept `internal` rather than `private` so the adapters can reach them); `ScriptedInputSource`
+is the third arm and carries its own state instead — the segment list and its own elapsed-time
+clock — so a suite can construct one directly with no `FlightController` in the process. Its
+`Reset()` is what a respawn calls to restart the sequence from the first segment.
+`FlightController.Bind` resolves which one flies a given aircraft off whichever of the private
+`_holdSegments` field (assigned from `FlightControllerBuild.HoldSegments`, the caller's scripted
+profile) or `Pilot` is set, and stores it, because that choice cannot change afterward (both arrive
+only through the build DTO, before the first sim step). A private `InputSource` property lazily
+resolves and caches the same way for a bare test rig that never binds — no suite mutates either
 field once a rig is stepping, so this is never stale. Ground-blow probing and the AI ground-blow
 write stay on `FlightController` after `Read` returns: they need the live world, which a source
 does not have.
@@ -2591,7 +2596,7 @@ once — (victim `PlayerIndex`, killer: the killing round's shooter id; null for
 an unowned `NoShooter` round and every other cause) — a fact report the session scores in `--vs`;
 flight holds no match state, and `Respawn` emits nothing. `AutoRespawnAfter` (session-armed —
 Versus sets 3 s on every rig) auto-respawns a crash on the sim clock with R still skipping early;
-null, the default, keeps every other mode manual-R (scripted HoldSegments runs keep their 1.5 s).
+null, the default, keeps every other mode manual-R (scripted hold runs keep their 1.5 s).
 In a splitscreen stunt race, a finished pilot continues normal flight, collision, weapons and
 crash/respawn while `StuntMission` holds their timer/objectives and `MarkerHud` holds their placing;
 this prevents their finish pose from obstructing another pilot's gate.

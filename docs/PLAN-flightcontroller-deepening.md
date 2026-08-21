@@ -147,7 +147,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the input source
 
 3. ☑ `IFlightInputSource` and its three adapters, resolved once in `Bind`
-4. ☐ A scripted adapter, and `HoldSegments` stops being a public field
+4. ☑ A scripted adapter, and `HoldSegments` stops being a public field
 
 ### Wave C — the pilot HUD
 
@@ -273,7 +273,7 @@ class that already has several. Put it next to the existing `Bind` assignments r
 `_Ready`, so the rule sits where the other construction rules are. A null source is a bug, not a
 fallback to keyboard: fail loudly.
 
-## B4 ☐ A scripted adapter, and `HoldSegments` stops being a public field
+## B4 ☑ A scripted adapter, and `HoldSegments` stops being a public field
 
 **Goal.** A suite can fly a deterministic input profile without a public field on the controller.
 
