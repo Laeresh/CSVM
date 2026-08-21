@@ -70,6 +70,11 @@ public sealed class CameraController
 
     private const float ChaseLogInterval = 0.25f; // sim-s between chase-distance breadcrumb lines
 
+    // The fixed head-pitch offset FUN_0042d980 applies about the same axis as elevation, in both
+    // first-person views: −4.70° = −0.08203 rad (bit pattern 0xbda7ff58). Not head-look (C21) —
+    // a constant tilt baked into the view build, applied straight ahead until C21 lands.
+    private const float HeadPitchOffsetRad = -0.08203f;
+
     // The offset the direction above works out to at unit... i.e. the length of (BaseBack, BaseUp),
     // ≈ 16.62 m. Only used to normalise that direction against the data's own distance.
     private static readonly float BaseDist = Mathf.Sqrt((BaseBack * BaseBack) + (BaseUp * BaseUp));
@@ -110,6 +115,11 @@ public sealed class CameraController
     // else — they are one number, and moving only one desyncs the two cameras.
     private readonly float _dist, _distFactor;
 
+    // The plane-local offset of this aircraft's authored cockpit_camera marker (PlaneBuilder,
+    // fallback (0,0,0) when the plane has none) — both first-person views share it, there is no
+    // separate nose marker (docs/org/cameraViews.md).
+    private readonly Vector3 _cockpitCameraOffset;
+
     // The dynamic chase radius: _dist + _distFactor·V + the acceleration transient. Advanced by
     // UpdateDynamics on the sim clock; read by both the chase camera and the fixed views.
     private float _radius;
@@ -127,7 +137,7 @@ public sealed class CameraController
     private int _viewPrev = -1;                  // index into Views last applied (-1 = chase camera)
 
     public CameraController(Camera3D camera, CamParams cam, Func<Key, bool> keyDown, int pinnedView,
-        PilotViewMode viewMode = PilotViewMode.Chase)
+        PilotViewMode viewMode = PilotViewMode.Chase, Vector3 cockpitCameraOffset = default)
     {
         _camera = camera;
         _keyDown = keyDown;
@@ -140,6 +150,7 @@ public sealed class CameraController
         _crashY = cam.CrashY;
         _backMin = cam.BackDistMin;
         _backMax = cam.BackDistMax;
+        _cockpitCameraOffset = cockpitCameraOffset;
     }
 
     /// <summary>Which view this pilot has SELECTED — Chase, Cockpit or Nose. State, not a held
@@ -243,6 +254,32 @@ public sealed class CameraController
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
     }
 
+    // Kept beside the instance method that calls it, ahead of the property it's declared after
+    // in source, rather than up with the constructor — SA1204 would put it before every instance
+    // property, which reads worse than the one local suppression here.
+#pragma warning disable SA1204
+    /// <summary>The pure first-person placement law: <c>camera_world = plane_pos + plane_rotation
+    /// × offset</c>, aimed straight down the nose plus the fixed −4.70° head-pitch offset
+    /// (<see cref="HeadPitchOffsetRad"/>) about the plane's own right axis. Static and engine-free
+    /// so the math is unit-testable without a live <see cref="Camera3D"/> — <see cref="FirstPersonView"/>
+    /// is the thin write onto one.</summary>
+    public static (Vector3 Position, Basis Basis) FirstPersonPose(Vector3 planePos, Basis attitude, Vector3 cockpitCameraOffset) =>
+        (planePos + (attitude * cockpitCameraOffset), attitude * new Basis(Vector3.Right, HeadPitchOffsetRad));
+#pragma warning restore SA1204
+
+    /// <summary>First-person placement (Cockpit mode 6 / Nose mode 7): rigidly mounted at the
+    /// plane's <c>cockpit_camera</c> marker via <see cref="FirstPersonPose"/>. No smoothing and no
+    /// camera-side shake: riding the DRAWN pose one-to-one is what lets the camera inherit the
+    /// plane node's wobble for free (docs/org/shakes.md, "two cockpit views need no separate
+    /// handling"). Head-look (C21) is not built yet — the view holds straight ahead plus the
+    /// fixed offset until then.</summary>
+    public void FirstPersonView(in Transform3D renderPose)
+    {
+        var (position, basis) = FirstPersonPose(renderPose.Origin, renderPose.Basis, _cockpitCameraOffset);
+        _camera.Position = position;
+        _camera.Basis = basis;
+    }
+
     /// <summary>The authored crash camera (<c>crash_horiz</c>/<c>crash_y</c>): on a fatal crash
     /// the original hard-cuts to a static elevated vantage looking down at the impact point.
     /// Framing decoded off the original's crash footage — see docs/formats/camparam.md.
@@ -339,6 +376,14 @@ public sealed class CameraController
         if (BackActive())
         {
             BackView(renderPose);
+            return;
+        }
+        if (FirstPerson)
+        {
+            // Without this arm a spawn/respawn into Cockpit or Nose would place at the chase pose
+            // for one frame — Snap is the settle-immediately path, so it needs its own first-person
+            // arm rather than falling through to the chase math below (PLAN-cockpit-view, A2).
+            FirstPersonView(renderPose);
             return;
         }
         _offset = DesiredOffset(attitude, out var camUp);

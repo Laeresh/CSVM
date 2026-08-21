@@ -79,12 +79,21 @@ public sealed class PlaneBuilder
     /// Null when the model carries no decal-placeholder material to read it from.</summary>
     public string? SkinPrefix => _skinPrefix;
 
+    /// <summary>The plane-local offset of this aircraft's authored <c>cockpit_camera</c> marker
+    /// (docs/formats/markers.md), read the same way <see cref="MarkerRig"/> reads weapon markers —
+    /// accumulated from below the plane root, skipping the cockpit-interior/wreck subtrees that
+    /// may carry their own same-named node. Zero before <see cref="Build"/> runs, and the
+    /// original's own fallback for a plane with no such node
+    /// (docs/org/cameraViews.md, "Where the first-person camera sits").</summary>
+    public Vector3 CockpitCameraOffset { get; private set; }
+
     /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk").</summary>
     public Node3D Build(string rootName)
     {
         var root = _gamez.FindByName(rootName)
             ?? throw new ArgumentException($"node '{rootName}' not found in GameZ data");
         EnsurePainter(root);
+        CockpitCameraOffset = MarkerRig.FindNamedMarker(_gamez, rootName, "cockpit_camera");
         var built = _scene.BuildSubtree(root, Skip)!;
         CollectWingFlares(built);
         return built;

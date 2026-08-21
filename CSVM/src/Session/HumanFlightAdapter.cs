@@ -407,7 +407,7 @@ internal sealed class HumanFlightAdapter
         // rather than the original's own pointer-compare-against-the-player test.
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
             rig.Camera, _in.CamParamsFor(planeName), start.Pos, start.LookAt,
-            start.ThrottleFrac, start.SpeedMps);
+            start.ThrottleFrac, start.SpeedMps, cockpitCameraOffset: planeBuilder.CockpitCameraOffset);
         // --weapon-lab: a flight session whose aircraft is pinned at the spawn pose. Set after
         // Setup, so the pin, captured at the first held sim step, takes the pose Setup just wrote.
         if (_spec.WeaponLab)

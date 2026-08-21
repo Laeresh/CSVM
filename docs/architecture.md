@@ -417,6 +417,10 @@ Flight (`spinningProps`) now builds the static `staticpropN` disc alongside the 
 it always built, not just one or the other — the startprops/stopprops choreography cross-fades
 between them at spawn/engine-stop (`FlightController`), so both must exist. `staticrotorN` (the
 autogyro) is unaffected and stays skipped in flight — that def only names propeller nodes.
+`Build` also reads `CockpitCameraOffset`, the plane-local `cockpit_camera` marker translate
+(`MarkerRig.FindNamedMarker`, fallback the origin), for `CameraController`'s first-person
+placement (PLAN-cockpit-view, A2) — `cockpit1`/`cockpit2` still skip for the model itself, but the
+marker read walks past them to the authored node in the top-level `markers` group.
 
 ## src/Mech3/PaintScheme.cs
 One aircraft livery: pattern name + three colours + three decal indices — the paint_* record a
@@ -636,6 +640,10 @@ root, accumulating locals down to each `firepoint*`/`pylon*`/`target`, and repor
 positions + co-located groups (two gun groups on one mount). `Format` prints one dump block per
 plane; `PlayerAirframes` is the model→display list. The committed instrument `docs/formats/markers.md`
 regenerates from, and the source of truth `--dump-markers` and `UI.MarkerOverlay` share.
+`FindNamedMarker` is the sibling read for one non-weapon node by name (e.g. `cockpit_camera`,
+`PlaneBuilder.CockpitCameraOffset`'s reader): the same accumulate-below-root walk, skipping
+`cockpit1`/`cockpit2`/`destroyed`/`player_damage_off` so a plane whose interior/wreck carries its
+own same-named node still resolves to the authored one in the top-level `markers` group.
 
 ## src/Mech3/CompiledAnim.cs
 Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): typed defs, events,
@@ -1366,8 +1374,15 @@ without an engine; this class holds the state and the camera. ⚠ The modes are 
 in `Views`: `BL-150` rebuilds that table later and must be able to replace it without touching them
 (PLAN-cockpit-view, Decision 2). A held numpad key overrides the mode for as long as it is down and
 leaves the selection alone, the same precedence it has over `--view=`'s pinned digit. Cockpit and
-Nose still take the chase camera's placement — A1 lands the mode, `cockpit_camera` placement (A2),
-per-mode FOV (A3) and the interior (B11) follow — but `LogView` already names them
+Nose sit at the plane's authored `cockpit_camera` marker (`FirstPersonPose`, a static, engine-free
+law: `camera_world = plane_pos + plane_rotation × offset`, plus the fixed −4.70° head-pitch
+tilt — `FirstPersonView` is its thin write onto the owned `Camera3D`), rigidly mounted with no
+smoothing and no camera-side shake so the camera inherits the plane node's wobble for free
+(`docs/org/shakes.md`). The offset comes in through the constructor
+(`PlaneBuilder.CockpitCameraOffset`, fallback the origin) — A3 still owes each mode its own FOV,
+and C21 still owes head-look; until then the view holds straight ahead plus the fixed offset.
+`Snap` carries the same first-person arm as `_Process`'s camera chain, so a spawn/respawn into
+Cockpit or Nose does not show one frame of the chase pose. `LogView` already names the modes
 (`view n=cockpit`), which is what makes a scripted mode selection verifiable. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
 authored) plus a first-order acceleration transient relaxing at the MEASURED 0.65 /sim-s
 (`UpdateDynamics`, host-called once per sim step); the offset's DIRECTION (behind and above at

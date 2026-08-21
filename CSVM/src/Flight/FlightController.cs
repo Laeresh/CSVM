@@ -651,19 +651,20 @@ public partial class FlightController : Node3D
 #pragma warning restore SA1202
 
     /// <summary>Wires the flight model and (for a piloted view) the chase camera, then spawns.
-    /// <paramref name="camera"/> is null on an AI rig: no camera rides the plane and every camera
-    /// write below is skipped — the flight half is identical either way.
-    /// <paramref name="spawnThrottle"/>/<paramref name="spawnSpeed"/> are the mission's own
-    /// PLAYER_INIT values (docs/formats/spawns.md), defaulting to the fallback for callers with no
-    /// mission, and persist for every later respawn on this rig.</summary>
+    /// <paramref name="camera"/> is null on an AI rig: no camera write below runs.
+    /// <paramref name="cockpitCameraOffset"/> is this rig's authored <c>cockpit_camera</c> marker
+    /// (<see cref="Mech3.PlaneBuilder.CockpitCameraOffset"/>), origin for callers with no first
+    /// person view. <paramref name="spawnThrottle"/>/<paramref name="spawnSpeed"/> are the
+    /// mission's PLAYER_INIT values, defaulted for callers with none, and persist across respawns.</summary>
     public void Setup(FlightModel model, Camera3D? camera, CamParams camParams,
         Vector3 spawnPos, Vector3 spawnLookAt,
-        float spawnThrottle = FallbackSpawnThrottle, float spawnSpeed = FallbackSpawnSpeed)
+        float spawnThrottle = FallbackSpawnThrottle, float spawnSpeed = FallbackSpawnSpeed,
+        Vector3 cockpitCameraOffset = default)
     {
         _model = model;
         _viewCamera = camera;
         _cam = camera != null
-            ? new CameraController(camera, camParams, KeyDown, PinnedView, PinnedViewMode)
+            ? new CameraController(camera, camParams, KeyDown, PinnedView, PinnedViewMode, cockpitCameraOffset)
             : null;
         _spawnPos = spawnPos;
         _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
@@ -1460,10 +1461,10 @@ public partial class FlightController : Node3D
             }
             else if (_cam.FirstPerson)
             {
-                // A1 lands the MODE, not the pose: Cockpit and Nose still take the chase camera's
-                // placement until A2 sits them on the cockpit_camera marker and A3 gives each its
-                // FOV. The breadcrumb names the mode, so a scripted run is verifiable before then.
-                _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis);
+                // A2: both first-person views sit at the plane's cockpit_camera marker, rigidly
+                // mounted (no smoothing) so the camera inherits the plane's wobble for free —
+                // A3 still owes each mode its own FOV.
+                _cam.FirstPersonView(_renderPose);
                 view = _cam.ViewMode == PilotViewMode.Nose
                     ? CameraController.NoseViewLog
                     : CameraController.CockpitViewLog;

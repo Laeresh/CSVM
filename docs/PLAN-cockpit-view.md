@@ -151,7 +151,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — camera modes and placement
 
 1. ☑ View-mode architecture: Cockpit/Nose as camera modes beside `Views[]`, cycle key, selector
-2. ☐ First-person placement: `cockpit_camera` marker, −4.70° head-pitch offset, wobble inheritance
+2. ☑ First-person placement: `cockpit_camera` marker, −4.70° head-pitch offset, wobble inheritance
 3. ☐ Per-mode FOV: 80° H cockpit / 60° H nose, horizontal-base aspect correction (new modes only)
 
 ### Wave B — rendering
@@ -268,7 +268,65 @@ suites; find the right one at build time).>
 rebuild later replaces that table without touching these modes. The original's F7 "Access Chase
 View" is the flyby (mode 9), not the following chase — do not wire anything to it here.
 
-## A2 ☐ First-person placement: `cockpit_camera`, −4.70° offset, wobble inheritance
+## A2 ☑ First-person placement: `cockpit_camera`, −4.70° offset, wobble inheritance
+
+**Landed.** Both first-person views sit at the plane's authored `cockpit_camera` marker, rigidly
+mounted with the fixed −4.70° head-pitch offset, and inherit the plane's wobble automatically by
+riding the DRAWN pose one-to-one — no camera-side shake was added.
+
+`CameraController.FirstPersonPose(planePos, attitude, offset)` is the pure placement law
+(`camera_world = plane_pos + plane_rotation × offset`, plus the fixed pitch tilt as a rotation
+about the plane's own right axis), static and engine-free so it unit-tests without a `Camera3D`;
+`FirstPersonView` is the thin write of that pose onto the owned camera. The offset arrives through
+the constructor (`cockpitCameraOffset`, default the origin) — `FlightController.Setup` takes the
+same parameter and forwards it, and `HumanFlightAdapter` supplies it from the newly-added
+`PlaneBuilder.CockpitCameraOffset`. Two camera sites needed the new arm, both in the plan's own
+wiring contract: `FlightController._Process`'s `_cam.FirstPerson` branch (replacing its A1
+placeholder that called `Chase`) and `CameraController.Snap` (held-view → back-view → **first
+person** → chase fallback), so a spawn/respawn into Cockpit or Nose no longer shows one frame of
+the chase pose before the next `_Process` tick corrects it.
+
+**Where the offset lives, and how it's read.** `cockpit_camera` is a mesh-less node inside the
+plane's top-level `markers` group (a sibling of `healthy`/`cockpit1`/`destroyed`/`dontmove`,
+confirmed against `extracted/planes/nodes.json`: `player_pfighter`'s copy under `markers` carries
+local translate `(0, 0.75, −0.2)`, matching the plan's cited value exactly with an identity
+parent chain below the root). The interior/wreck subtrees (`cockpit1`, `cockpit2`) carry their
+own same-named decoy nodes with different values, so a naive whole-subtree, first-match walk can
+resolve to the wrong one depending on child order. `MarkerRig.FindNamedMarker` (new: the
+non-weapon sibling of `MarkerRig.Extract`'s weapon-marker walk) skips those alternate-state
+subtrees explicitly, the same list `PlaneBuilder.SkipNames` already excludes from the exterior
+model; `PlaneBuilder.Build` calls it once per build and exposes the result as
+`CockpitCameraOffset`, falling back to `(0,0,0)` for a plane with no such node, as the original
+does.
+
+**Axis mapping.** No swap is applied. `docs/org/cameraViews.md`'s "Axis convention" section reads
+`nodes.json`'s raw z-signs as "+Z forward," but that reading is a description of the ORIGINAL
+BINARY's own internal convention, and it disagrees with this codebase's own, far more broadly
+established one: `docs/formats/gotchas.md` (censused over 6,728 `AT_NODE`/`PUFFER_STATE` uses)
+states the extracted frame has the nose at **−Z**, "Godot's frame exactly — no mirroring, no axis
+swap," and every existing camera site already builds on exactly that (`CameraController.Chase`'s
+`nose = -attitude.Z`, `FixedView`'s Kp8 "ahead" direction `(0,0,-1)`, the compass heading in
+`FlightController._Process`). Since `PlaneBuilder`/`SceneBuilder` never axis-flip a GameZ node's
+local transform when building the Godot tree, the resolving move is to do what every other marker
+already does: take `cockpit_camera`'s raw local translate as-is and feed it straight into
+`plane_rotation × offset` in Godot's own frame (`attitude * cockpitCameraOffset`), which is
+exactly `FirstPersonPose`'s implementation. This sidesteps needing to settle which convention the
+*original* binary used internally — CSVM is not re-deriving that engine's math, only placing a
+Godot camera relative to a Godot-space plane using Godot-space marker data, the same as every
+firepoint and pylon already does. `org/cameraViews.md`'s "Axis convention" section is not amended
+here (E41 is this plan's close-out item for `org/cameraViews.md` corrections).
+
+**Tests.** `CSVM.Tests/MarkerRigTests.cs` covers `FindNamedMarker`'s accumulation, its
+alternate-state skip (a decoy `cockpit_camera` nested first under a fixture `cockpit1`), and the
+absent-node/absent-plane fallback. `CSVM.Tests/CameraControllerFirstPersonTests.cs` covers
+`FirstPersonPose` against the plan's known value (`player_pfighter`'s `(0, +0.75, −0.2)`), the
+fixed pitch tilt's sign (it looks down, revealing the plane's own nose, matching the plan's Verify
+text), and that the plane's attitude carries both the position offset and the aim together, not
+independently.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Both first-person views sit at the plane's authored `cockpit_camera` marker (read from
 the model per plane, no hardcoded offset), carry the fixed −4.70° head-pitch offset, and rock with
