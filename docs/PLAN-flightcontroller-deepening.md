@@ -442,7 +442,7 @@ session-level broker; suppressing the struck plane hitting back is the failure t
 Decision 3: keep the outcome one value with no optional parts, so forgetting it is forgetting one
 statement rather than four.
 
-## E11 ☐ The outcome table asserted off-engine, and the cross-instance grace write replaced
+## E11 ☑ The outcome table asserted off-engine, and the cross-instance grace write replaced
 
 **Goal.** The decoded contact rules are readable as a table in a unit test, and no aircraft writes
 another aircraft's private field.

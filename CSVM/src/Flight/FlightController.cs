@@ -1111,6 +1111,12 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>Arms this plane's own collision-free window, the other half of a ram's grace pair:
+    /// the caller arms its own side and calls this on the struck rig so neither re-resolves the
+    /// overlap they are still in. Kept off <see cref="TakeCollisionHit"/> itself because that
+    /// method's test callers exercise the receiving half alone, with no ram and no grace to arm.</summary>
+    public void ArmCollisionGrace() => _collisionGrace = CollisionDamage.EntityGrace;
+
     public override void _PhysicsProcess(double delta)
     {
         float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
@@ -2616,7 +2622,7 @@ public partial class FlightController : Node3D
             struckRig.TakeCollisionHit(outcome.ArmorDamage, outcome.HealthDamage, contact.Impact, PlayerIndex);
             // Both parties go collision-free, so neither re-resolves the overlap they are still in.
             _collisionGrace = CollisionDamage.EntityGrace;
-            struckRig._collisionGrace = CollisionDamage.EntityGrace;
+            struckRig.ArmCollisionGrace();
         }
 
         if (outcome.DamageFlashText is { } flash)

@@ -2557,7 +2557,9 @@ entry): `SweepAirframe` from the sweep, and `CenterRayContact` from the anti-tun
 when no box reached the obstacle. Deciding what that contact does is
 `AircraftContactResolver`'s (see that entry); this node builds the `ContactConditions`, hands over
 a `ContactEffects` for the applying, and performs the `ContactOutcome` (the struck rig's share and
-both grace windows, the HUD flash, the un-embed push, `Crash` on a fatal fate). The DEATH family (`CRASH into`, `midair aspect`, every
+both grace windows, the HUD flash, the un-embed push, `Crash` on a fatal fate). Arming the struck
+rig's own grace window goes through its `ArmCollisionGrace()`, a narrow public method, rather than
+a direct write to the other instance's private field. The DEATH family (`CRASH into`, `midair aspect`, every
 `vehicle health exhausted`, `graze`, `ground stop`, `AI ram`, `impact severity`) routes through
 `Log.Info("flight", …)`, so a play session's file sink carries how each aircraft died; the
 per-round weapon breadcrumbs around them are a different family and still `GD.Print`.
@@ -4333,6 +4335,12 @@ through `IContactEffects`: the fly-through offer, the graze reaction, the ledger
 readouts, and the contact response. `FlightController` implements that as a per-contact
 `ContactEffects`, keeping the struck `Node`, the damage cooldown and the flight model on the node.
 `ContactConditions` is the striker's state per call, `IsHumanPiloted` included.
+`AircraftContactResolverTests` pins the rule table off-engine against a synthetic `IWorldQuery` and
+a scriptable `IContactEffects`: the doom rule for an AI ramming a non-aeroplane, the entity cut for
+AI into AI, the player's exemption from both (asserted on the damage magnitude, not just
+`DamageStruckAircraft`, since the entity cut applies only on the non-player branch and only against
+another aeroplane), the ground stop reading `ContactResponse.Speed` alone, and the un-embed loop's
+three-try give-up.
 
 ## src/Flight/GodotWorldQuery.cs
 The only adapter over Godot's `DirectSpaceState`, implementing `IWorldQuery`. Resolves the wrapped
