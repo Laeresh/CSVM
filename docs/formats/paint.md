@@ -193,7 +193,7 @@ Little-endian 32-bit fields, offsets confirmed against the screen callbacks that
 |---|---|---|
 | 0x04 | name, NUL-padded string | the writer's `sprintf` |
 | 0x2c | airframe id | spawn descriptor slot 0 in `FUN_00417090`; first `%d` of the icon filename `PX_Icon_%d_%d_%d.tga` (`0x61f370`) |
-| 0x34, 0x38 | hardpoint 0/1 ordnance pick, 0 = empty | callback 2245 handler at `0x0040ad0f` |
+| 0x34, 0x38 | left/right wing hardpoint count, 0-4 | callback 2245 handler at `0x0040ad0f`; the dropdown (callback 2244 at `0x0040b81d`) offers five rows, langui 1165/1168/1169 |
 | 0x40 | paint pattern index 0-13 (13 remaps to 11 for the icon) | handlers at `0x0040d523`/`0x0040d54d`, second `%d` of the icon filename |
 | 0x5c, 0x60 | two composite paint picks stored as `a*5 + b` (grid row/column on the decal pages) | get/set handler at `0x0040d5b7`: write is `arg1*5 + arg2`, read returns `value/10` and `value%5` |
 | 0x64 | third dword of that triple, carried into the spawn descriptor; no screen handler found | `FUN_00417090` |
@@ -202,7 +202,7 @@ Little-endian 32-bit fields, offsets confirmed against the screen callbacks that
 | 0x84 | per-gun-slot family bit byte (adds 5 to the dropdown row) | callback 2249 handler at `0x0040bea2` |
 | 0x88-0x94 | four gun ids, 5 = empty | callback 2249 |
 | 0x98-0xa4 | per-gun-slot 4 = empty, else 0; derived at commit | case 22 of `FUN_00407670` |
-| 0xa8-0xc4 | eight per-pylon display cells: commit writes 1 if position < pick else 11; callback 2245's write refills them `rand()%20 > 10` per cell while a pick is loaded | case 22; `0x0040ad4f` |
+| 0xa8-0xc4 | eight per-pylon display cells: commit writes 1 if position < that wing's hardpoint count else 11; callback 2245's write refills them `rand()%20 > 10` per cell while the count is non-zero | case 22; `0x0040ad4f` |
 
 The saved-plane name index is a separate structure: 33-byte name records at `0x648534`,
 capacity 24 (bound `0x64884c`), filled by the `Planes\*.*` directory scan `FUN_00415000`

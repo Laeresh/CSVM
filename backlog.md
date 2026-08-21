@@ -454,12 +454,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   have to be invented. The mount names are data (`IDS_AIRFRAMEGUNGROUPNAMES`, ui_strings
   3060–3079) and the per-plane stock table is authored, so the *placing* half is real.
   **Decoded:** callbacks 2245/2249/2250 resolve through the widget dispatcher at `0x004093a0` to
-  `0x0040ad0f`/`0x0040bea2`/`0x0040bf72`: two hardpoint-pick globals and an 11-row gun model per
-  slot (five gun types, the same five with a family bit adding 5, row 10 empty; names are `langui`
-  3310+type), state living in the scratch custom-plane record
-  ([`docs/formats/paint.md`](docs/formats/paint.md) "Saved custom planes"). Per-plane slot counts
-  and costs are NOT behind these three; they sit behind unnamed `PURCHASE`/`PLANECONSTRUCTION`
-  callback ids and are still undecoded.
+  `0x0040ad0f`/`0x0040bea2`/`0x0040bf72`: the two per-wing hardpoint counts (0-4 each) and an
+  11-row gun model per slot (five gun types, the same five twinned via a family bit adding 5, row
+  10 empty; names are `langui` 3310+type), state living in the scratch custom-plane record
+  ([`docs/formats/paint.md`](docs/formats/paint.md) "Saved custom planes"). The per-plane
+  slot-count premise is DISPROVEN: `GUNS.SCRIPT` builds its four dropdowns in a fixed loop no
+  callback gates, and every airframe carries 4 gun slots and 2 per-wing hardpoint groups; what
+  varies per airframe is the slot titles and the turret bitmask in the airframe stat table at
+  `0x00619bb0` (stride 0x2c: cost, weight, weight capacity, agility, armour rating, availability,
+  turret bits, four slot-title string ids). The buying half is executable-resident as asserted and
+  now read: gun cost/weight table at `0x00619e68` (wing and turret columns, twin doubles both),
+  per-airframe engine bases at `0x00619d98` with fixed per-engine-id offsets, armour at units*4
+  cost and weight, hardpoints $410 / 480 lb each, totals in `FUN_00405680`/`FUN_00405550` with the
+  overweight/no-engine purchase gate in callback 2264 (`0x0040b418`).
 
 - `BL-226` `[Feature]` `[Blocked: cockpit view]` **The incoming-fire cue set's other two halves are blocked on things that do not exist
   yet.** The near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,
