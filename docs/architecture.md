@@ -164,7 +164,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ContactReport.cs` — one detected contact as a value: impact, normal, struck part, collider name, stop fraction, and whether an aeroplane was struck.
 - `src/Flight/ContactOutcome.cs` — what a contact costs the striker: fate, the decoded damage pair, doom, the charged zone, the HUD flash, the push-out, and the struck-aircraft instruction.
 - `src/Flight/AircraftContactResolver.cs` — the decoded contact rules for one aircraft: the damage pair, the fate, and the un-embed loop, with no `Node` in sight.
-- `src/Flight/AircraftLifecycle.cs` — the states one aircraft moves between (in play, crashed, destroyed, inert) with the spawn timers; every transition returns what the node must perform.
+- `src/Flight/AircraftLifecycle.cs` — the states one aircraft moves between (in play, crashed, destroyed, inert) with the spawn timers, holding a `SurfaceDefTable` for the crash-def selection; every transition returns what the node must perform.
 - `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part; owns the whole-vehicle kill rule (`IsDestroyed`).
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
 - `src/Flight/DamageLab.cs` — the `--damage`/F5 slider UI: one HP slider per part, driving the parked plane's DamageVisuals or the flown plane's real PlaneDamage.

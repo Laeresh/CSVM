@@ -169,7 +169,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave F — the aircraft lifecycle
 
 12. ☑ `AircraftLifecycle` owns `_crashed`, `_inert` and the spawn timers, and reports transitions
-13. ☐ The transition table asserted off-engine, including inert and the respawn timers
+13. ☑ The transition table asserted off-engine, including inert and the respawn timers
 
 ## Dependency and parallelism notes
 
@@ -490,7 +490,7 @@ cut, which is the accepted cost of Decision 7. The mitigation is the same as E10
 optional parts. `StepWreckFall` routes through `IWorldQuery` from A1, so do not reintroduce a direct
 query here.
 
-## F13 ☐ The transition table asserted off-engine, including inert and the respawn timers
+## F13 ☑ The transition table asserted off-engine, including inert and the respawn timers
 
 **Goal.** The state machine is pinned by a table rather than by two golden frames.
 
