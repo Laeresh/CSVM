@@ -614,7 +614,7 @@ public partial class FlightController : Node3D
 
     // Which stick flies this aircraft: set in Bind, and lazy here too so a bare test rig that
     // never binds still gets one, off whichever of _holdSegments/Pilot it already set (Decision 8,
-    // docs/PLAN-flightcontroller-deepening.md); no suite mutates either after stepping starts.
+    // docs/plans/PLAN-flightcontroller-deepening.md); no suite mutates either after stepping starts.
 #pragma warning disable SA1202 // kept beside World, its seam counterpart, ahead of the public method below
     private IFlightInputSource InputSource => _inputSource ??= ResolveInputSource();
 

@@ -6,7 +6,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The pilot HUD's state-struct-to-readout mapping (docs/PLAN-flightcontroller-deepening.md, C6):
+/// The pilot HUD's state-struct-to-readout mapping (docs/plans/PLAN-flightcontroller-deepening.md, C6):
 /// the STALL lamp gate, the mph/ft conversions, the damage flash countdown, the AGL ray and the two
 /// weapon-gauge slot fills. Every member under test here is a static or Loadout-free instance method
 /// on <see cref="FlightHud"/> that returns the value a Control would be given, so none of this needs

@@ -1,8 +1,9 @@
 # FlightController deepening — six waves, six modules
 
-**ACTIVE PLAN** (written 2026-08-21). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (2026-08-21). All thirteen items landed, every one gated on the full battery
+(units, in-engine suites, 16/16 goldens hash-identical) with no golden repinned and no behaviour
+change. The per-item records live in the landing commits on `worktree-fc-deepening`,
+`git log --grep="^A1:"` and siblings.
 
 `CSVM/src/Flight/FlightController.cs` is one Godot node holding human and AI input, the fixed-step
 flight loop, weapons, targeting, the collision sweep and its response, crash and respawn, camera

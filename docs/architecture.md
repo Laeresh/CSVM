@@ -4354,7 +4354,7 @@ its wreck still flying, inert, and back to spawned. It owns those flags plus the
 carrier-drop ground-blow and auto-respawn timers, holds the crash-def table and the selection off it
 (`LastCrashDef`), and holds no `Node`, so the whole table runs in a unit test. Every transition
 REPORTS what happened instead of performing it (Decision 7 of
-`docs/PLAN-flightcontroller-deepening.md`): `Crash(surfaceId, killer)` answers one `CrashOutcome`
+`docs/plans/PLAN-flightcontroller-deepening.md`): `Crash(surfaceId, killer)` answers one `CrashOutcome`
 (did it happen, was it the wreck landing, which crash def, whether the shutdown, the camera cut and
 the `Downed` report are owed, and the killer to name) and `Destroy(destroyDef, killer)` one
 `DestroyOutcome` on the same terms, with `WreckFalling` deciding whether the hull flies itself down.

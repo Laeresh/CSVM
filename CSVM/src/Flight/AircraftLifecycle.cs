@@ -72,7 +72,7 @@ public readonly record struct DestroyOutcome
 /// destroyed with its wreck still flying, inert, and back to spawned. It owns those flags and the
 /// spawn/respawn timers, and every transition RETURNS what happened rather than performing it, so
 /// the rules are assertable with no engine in the process (Decision 7 of
-/// docs/PLAN-flightcontroller-deepening.md). The aircraft node keeps <c>InPlay</c> and
+/// docs/plans/PLAN-flightcontroller-deepening.md). The aircraft node keeps <c>InPlay</c> and
 /// <c>Crashed</c> as forwards onto this, and performs what a transition reports.
 /// ⚠ Crashed is one-way until <see cref="Respawn"/>: a crashed aircraft cannot crash again, and the
 /// falling wreck reaching the ground is the single exception.</summary>
