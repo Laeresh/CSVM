@@ -193,7 +193,6 @@ public partial class GameSession : Node3D
     // The roster's own AI stats reader, so a spawn can consult the def it is about to fly (pilot
     // skills, accent) before the roster builds it. Same cache: the read here is not a second parse.
     private Func<string, string?, PlaneStats>? _aiStatsFor;
-    private Dictionary<string, string>? _militiaPatterns; // militia -> its paint pattern
     private List<Maneuver>? _aiManeuvers; // the D13 library, loaded once for the D11 machines
     private bool _noAssistLogged; // the one-per-session --no-assist breadcrumb
     // The E16 voice dispatch (built with the rigs when the world has sounds; its mission clock
@@ -2070,249 +2069,34 @@ public partial class GameSession : Node3D
             name => rigInputs.WorldRuntime?.FindNodes(name) is { Count: > 0 } trailerHits
                 ? trailerHits[0]
                 : null);
-        // Instant Action's authored ace, dogfight_ace only. Kept as a local so the end-condition
-        // block at the bottom of this method can hang the mode's win signal on it.
+        // Instant Action's actor build (director phase), at this exact point: the ace's spawn
+        // draw follows the player's ChooseSpawnBase draw in the same stream, and the wingman
+        // fan reads P1's built pose.
         FlightController? iaAce = null;
         int iaWaveEnemies = 0;
-        // ⚠ Hand every Instant Action actor the chapter's FIRST patrol net, ace, wingmen and wave
-        // members alike, and read "first" as neindex FILE order, never the lowest id
-        // (docs/formats/instant-action.md).
-        AiNet? iaPatrolNet = null;
-        if (iaRt != null)
+        if (_iaDirector is { } iaDirActors)
         {
-            try
+            state.What += iaDirActors.BuildActors(new InstantActionDirector.ActorBuildInputs
             {
-                iaPatrolNet = AiNets.ChapterFirst(AiNets.Load(rigInputs.ChapterZrdrPath),
-                    rigInputs.ChapterZrdrPath);
-            }
-            catch (Exception e)
-            {
-                GD.PushWarning($"ia: cannot read {_spec.Chapter}'s patrol nets: {e.Message}");
-            }
-            if (iaPatrolNet is { Nodes.Count: 0 })
-            {
-                iaPatrolNet = null;
-            }
-            GD.Print(iaPatrolNet != null
-                ? $"ia: actors patrol '{iaPatrolNet.Name}' (net {iaPatrolNet.Id}), the chapter's first"
-                  + (iaPatrolNet.Trailer is { NodeIndex: >= 0, Name: { } anchorName }
-                      ? $", anchored to '{anchorName}' at node {iaPatrolNet.Trailer.Value.NodeIndex}"
-                      : "")
-                : $"ia: {_spec.Chapter} has no first patrol net, actors fly their spawn course");
-        }
-        // The net IS the standing order. ⚠ Do not let it bring its own volumes: the original copies
-        // the roster block's volumes over the net's afterwards, so ApplyActorVolumes has the last
-        // word (docs/formats/instant-action.md).
-        Action<AiPilot> armIaPatrol = pilot =>
-        {
-            if (iaPatrolNet == null)
-                return;
-            pilot.Patrol = new AiNetFollower(iaPatrolNet, Rng.NewSystemRandom(Rng.Ai),
-                trailerTarget: netTrailers.For(iaPatrolNet));
-        };
-        if (iaRt is { } ia
-            && string.Equals(ia.Def.MissionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase))
-        {
-            string? aceNode = InstantAction.PlaneNodeFor(ia.Def.AcePlane);
-            if (aceNode == null)
-            {
-                GD.PushWarning($"ia: ace plane '{ia.Def.AcePlane}' is not one of the eleven " +
-                                "airframes — no ace spawned");
-            }
-            else if (SpawnPoints.LoadIa(state.MissionZrdrPath, ia.Def.MissionType) is not { Count: > 0 } aceSpawns)
-            {
-                GD.PushWarning($"ia: no '{ia.Def.MissionType}' spawn points for " +
-                                $"{_spec.Chapter}/{_spec.Mission} — no ace spawned");
-            }
-            else
-            {
-                int playerSpawnIndex = spawnBase % aceSpawns.Count;
-                uint draw = Rng.Stream(Rng.Spawn).Randi();
-                var (spIndex, sp) = InstantActionRuntime.ChooseAceSpawn(aceSpawns, playerSpawnIndex, draw);
-                var fwd = new Basis(Vector3.Up, Mathf.DegToRad(sp.HeadingDeg)) * Vector3.Forward;
-                var pilot = AiPilot.HoldingCourse(sp.Position, sp.Position + fwd);
-                armIaPatrol(pilot);
-                int rating = InstantActionRuntime.RepresentativeRating(ia.Def.AceStats);
-                // shippedSkins for the same reason as a wave member below: the ace flies for an
-                // enemy militia, so an ia.json without ace_pattern (hand-authored only) falls back
-                // to its own textures, never the player militia's Fortune Hunters default.
-                var ace = SpawnAiAircraft(aceNode, sp.Position, sp.Position + fwd, pilot,
-                    scheme: ia.Def.AceLivery, team: InstantActionRuntime.EnemyTeam,
-                    attackRating: rating, shippedSkins: true);
-                RegisterAiVoice(ace, ia.Def.AceAccentId, rating);
-                iaAce = ace;
-                _iaDirector!.Ace = ace;
-                InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
-                if (ace != null)
-                {
-                    GD.Print($"ia: ace '{ia.Def.AceName}' ({aceNode}) rating={rating} " +
-                              $"team={InstantActionRuntime.EnemyTeam} spawn #{spIndex} of {aceSpawns.Count}");
-                    state.What += " + IA ace";
-                }
-            }
-        }
-        // Instant Action's wingmen. NumWingmen is forced to 0 on dogfight_ace at parse time, so
-        // this and the ace block above are exclusive without an extra mission-type test.
-        if (iaRt is { } iaWingmen && iaWingmen.Def.NumWingmen > 0
-            && _rigs.Count > 0 && _rigs[0].Controller is { } leadForWingmen)
-        {
-            string? wingmanNode = InstantAction.PlaneNodeFor(iaWingmen.Def.WingmanPlane);
-            if (wingmanNode == null)
-            {
-                GD.PushWarning($"ia: wingman plane '{iaWingmen.Def.WingmanPlane}' is not one of " +
-                                "the eleven airframes — no wingmen spawned");
-            }
-            else
-            {
-                int humans = _rigs.Count;
-                int flown = InstantActionRuntime.FlownWingmen(iaWingmen.Def.NumWingmen, humans);
-                if (flown < iaWingmen.Def.NumWingmen)
-                {
-                    GD.Print($"ia: wingmen clamped to {flown} of {iaWingmen.Def.NumWingmen} " +
-                              $"configured ({humans} human(s), flight cap 6 — decision 8a)");
-                }
-                // player_fortune: the wingmen's shared livery. The colour and decal values ride the
-                // setup screen in the original, not ia.json, so the catalog entry stands in
-                // (docs/formats/paint.md).
-                var wingmanScheme = _liveryResolver.PaintCatalog(_zrdrPath)
-                    .Find(s => string.Equals(s.Pattern, LiveryResolver.DefaultPattern, StringComparison.OrdinalIgnoreCase));
-                if (wingmanScheme == null)
-                {
-                    GD.PushWarning("ia: no 'player_fortune' entry in the paint catalog — wingmen " +
-                                    "fly unpainted/random");
-                }
-                var wmBasis = leadForWingmen.GlobalTransform.Basis;
-                var wmFwd = -wmBasis.Z;
-                var wmLeadPos = leadForWingmen.WorldPosition;
-                var wingmen = new FlightController?[flown];
-                for (int i = 0; i < flown; i++)
-                {
-                    var slot = InstantActionRuntime.WingmanSlotFor(i);
-                    var offsetDir = wmFwd.Rotated(Vector3.Up, Mathf.DegToRad(slot.OffsetDeg));
-                    var pos = wmLeadPos + offsetDir * slot.MetresOut;
-                    var pilot = AiPilot.HoldingCourse(pos, pos + wmFwd);
-                    // The wingman takes the same net the ace and the waves do, which in the original
-                    // demotes it out of wingman mode, so the escort chain below is a target
-                    // assignment and not a flown formation (docs/org/aiPilot.md).
-                    armIaPatrol(pilot);
-                    // ⚠ Pass an explicit rating, never null: a wingman's Gunner and Machine are only
-                    // built when one resolves, and null would arm them solely on a launch that
-                    // happened to carry --ai-attack= (docs/formats/instant-action.md).
-
-                    // The wizard's one wingman fit, covering the whole flight as the original's
-                    // Player/Wingman radio does. Passed per spawn, never as a blanket default: the
-                    // stock-table branch it lands in also catches enemies on player airframes.
-                    var wingman = SpawnAiAircraft(wingmanNode, pos, pos + wmFwd, pilot,
-                        scheme: wingmanScheme, team: AimAssist.PlayerTeam, attackRating: 5,
-                        fit: iaWingmen.Def.WingmanLoadout);
-                    wingmen[i] = wingman;
-                    if (wingman == null)
-                        continue;
-                    // primary_target: 0, 1 and 3 escort the player; 2 and 4 escort
-                    // wingmen 1 and 3 — FlightController.SelectRankedTarget's own by-name/"player"
-                    // match, the same seam the D12 ranking already reads.
-                    if (pilot.Gunner != null)
-                    {
-                        pilot.Gunner.PrimaryTargetName = slot.PrimaryTargetIsWingman is { } escortIdx
-                            ? wingmen[escortIdx]?.Name.ToString()
-                            : "player";
-                    }
-                    // An Instant Action actor's volumes are all authored far wider than the airframe
-                    // defaults SpawnAiAircraft arms (docs/formats/instant-action.md).
-                    InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
-                    RegisterAiVoice(wingman, slot.AccentId);
-                }
-                int wmSpawned = wingmen.Count(w => w != null);
-                if (wmSpawned > 0)
-                {
-                    GD.Print($"ia: {wmSpawned} wingman(s) ({wingmanNode}) team={AimAssist.PlayerTeam}");
-                    state.What += $" + {wmSpawned} IA wingmen";
-                }
-            }
-        }
-        // Instant Action's wave sequencer. ⚠ Build EVERY wave inert here, wave 1 included, so one
-        // build-then-activate path serves them all; the mission type decides a wave's ARRIVAL, not
-        // whether it is built (docs/formats/instant-action.md).
-        if (iaRt is { } iaWaves)
-        {
-            var waveSizes = iaWaves.Def.Waves.Select(w => w.NumEnemies).ToArray();
-            var rosters = new List<FlightController>[4];
-            for (int w = 0; w < 4; w++)
-            {
-                var roster = new List<FlightController>();
-                var wave = iaWaves.Def.Waves[w];
-                if (wave.NumEnemies > 0)
-                {
-                    string? waveNode = InstantAction.PlaneNodeFor(wave.EnemyPlane);
-                    if (waveNode == null)
-                    {
-                        GD.PushWarning($"ia: wave {w + 1} plane '{wave.EnemyPlane}' is not one " +
-                                        "of the eleven airframes — no wave enemies spawned");
-                    }
-                    else
-                    {
-                        for (int m = 0; m < wave.NumEnemies; m++)
-                        {
-                            // Built at the origin, inert — position is irrelevant until
-                            // ActivateInstantActionWave teleports it in, same as the original's
-                            // own "deactivated at the world origin".
-                            var pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
-                            // Armed at build, but the follower seats itself at its first update and
-                            // Activate re-seats it, so a member patrols from where it arrives
-                            // rather than from this parking pose.
-                            armIaPatrol(pilot);
-                            // ⚠ The militia paints it and nothing more: the original spawns a wave
-                            // member from the PLAIN AI def of its aircraft. An unnamed militia keeps
-                            // its own skins, never the Fortune Hunters default.
-                            var waveScheme = WaveMilitiaScheme(state, wave.EnemyName);
-                            int rating = InstantActionRuntime.RepresentativeRating(
-                                InstantActionRuntime.RandomPilotStats(Rng.Stream(Rng.Ai).Randi()));
-                            var enemy = SpawnAiAircraft(waveNode, Vector3.Zero, Vector3.Forward,
-                                pilot, scheme: waveScheme, team: InstantActionRuntime.EnemyTeam,
-                                attackRating: rating, inert: true,
-                                shippedSkins: waveScheme == null);
-                            if (enemy == null)
-                            {
-                                continue;
-                            }
-                            if (pilot.Gunner != null)
-                            {
-                                pilot.Gunner.PrimaryTargetName = "player";
-                            }
-                            // The same authored actor volumes as the ace and wingmen
-                            // (docs/formats/instant-action.md).
-                            InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
-                            int accentId = InstantActionRuntime.ResolveWaveAccentId(
-                                wave.EnemyAccentId, Rng.Stream(Rng.Ai).Randi());
-                            RegisterAiVoice(enemy, accentId, rating);
-                            roster.Add(enemy);
-                        }
-                    }
-                }
-                rosters[w] = roster;
-            }
-            _iaDirector!.WaveRosters = rosters;
-            _iaDirector.WaveSpawnList = spawnList;
-            _iaDirector.Waves = new InstantActionWaves(waveSizes);
-            // On zeppelin_run the first wave is started after the generator block below, since
-            // "activating" it there means crediting the zeppelin's generator, which does not
-            // exist yet at this point in the build.
-            if (!iaWaves.IsZeppelinRun)
-            {
-                int firstWave = _iaDirector.Waves.Start();
-                if (firstWave != 0)
-                {
-                    ActivateInstantActionWave(firstWave);
-                }
-            }
-            iaWaveEnemies = rosters.Sum(r => r.Count);
-            if (iaWaveEnemies > 0)
-            {
-                GD.Print($"ia: {iaWaveEnemies} wave enemies across " +
-                          $"{rosters.Count(r => r.Count > 0)} wave(s), built inert, " +
-                          $"team={InstantActionRuntime.EnemyTeam}");
-                state.What += $" + {iaWaveEnemies} IA wave enemies";
-            }
+                Rigs = _rigs,
+                Chapter = _spec.Chapter,
+                Mission = _spec.Mission,
+                ChapterZrdrPath = rigInputs.ChapterZrdrPath,
+                MissionZrdrPath = state.MissionZrdrPath,
+                ZrdrPath = state.ZrdrPath,
+                MessagesPath = state.MessagesPath,
+                SpawnList = spawnList,
+                SpawnBase = spawnBase,
+                LiveryResolver = _liveryResolver,
+                NetTrailers = netTrailers,
+                Spawn = (plane, pos, look, pilot, scheme, team, rating, inert, shipped, fit) =>
+                    SpawnAiAircraft(plane, pos, look, pilot, scheme, team, rating, inert, shipped,
+                        fit: fit),
+                RegisterVoice = RegisterAiVoice,
+                ActivateWave = ActivateInstantActionWave,
+            });
+            iaAce = iaDirActors.Ace;
+            iaWaveEnemies = iaDirActors.WaveEnemyCount;
         }
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
             && _rigs[0].Controller is { } lead)
@@ -2429,42 +2213,12 @@ public partial class GameSession : Node3D
             state.What += $" + {_zeppelins.LiveCount} zeppelin(s)";
         }
 
-        // Instant Action's own zeppelin switch. ⚠ Visible is the WHOLE write, since world colliders
-        // derive Disabled from it, and each switched node must reach the turret arm below or the
-        // objective zeppelin flies unarmed.
-        var iaZepTurretSwitch = new List<(Node3D Node, bool Objective, string Name)>();
-        if (iaRt is { } iaZeppelins && rigInputs.WorldRuntime is { } iaZepWorld)
-        {
-            string selectedZep = InstantActionRuntime.SelectedZeppelinNode(iaZeppelins.Def);
-            var switchedZeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (string zepName in InstantActionRuntime.ZeppelinNodes(iaZeppelins.Def))
-            {
-                if (!switchedZeps.Add(zepName))
-                {
-                    continue;   // all 8 shipped chapters name the same node three times
-                }
-                bool objective = iaZeppelinRun
-                    && zepName.Equals(selectedZep, StringComparison.OrdinalIgnoreCase);
-                if (iaZepWorld.FindNodes(zepName) is not { Count: > 0 } zepNodes)
-                {
-                    GD.Print($"ia: zeppelin '{zepName}' is not in {_spec.Chapter}'s world — " +
-                              "nothing to switch");
-                    continue;
-                }
-                foreach (var zepNode in zepNodes)
-                {
-                    zepNode.Visible = objective;   // colliders derive from this (WorldCollision)
-                    iaZepTurretSwitch.Add((zepNode, objective, zepName));
-                }
-                if (!objective)
-                {
-                    _zeppelins?.Hold(zepName);
-                }
-                GD.Print($"ia: zeppelin '{zepName}' " + (objective
-                    ? "ACTIVATED as this mission's objective (zeppelin_run)"
-                    : "deactivated by the Instant Action builder"));
-            }
-        }
+        // Instant Action's own zeppelin switch (the director's phase, between the --zeppelins and
+        // --generators blocks so a held hull never feeds a generator's altitude gate). The switched
+        // nodes feed the turret arm inside the emplacement block below.
+        var iaZepTurretSwitch = _iaDirector != null && rigInputs.WorldRuntime is { } iaZepWorld
+            ? _iaDirector.SwitchZeppelins(iaZepWorld, _zeppelins, _spec.Chapter)
+            : new List<(Node3D Node, bool Objective, string Name)>();
 
         // --generators: the mission's egen enemy generators, spawning through the seam above and
         // loaded here because the drop rules need the built world. An Instant Action zeppelin run
@@ -2508,34 +2262,10 @@ public partial class GameSession : Node3D
             state.What += $" + {_generators.LiveCount} generator(s)";
         }
 
-        // The zeppelin run's wave arm: the objective zeppelin's generator releases the waves built
-        // inert above on a budget the sequencer credits wave by wave. ⚠ The first wave can only
-        // start here, since activating it means crediting a generator that did not exist earlier.
-        if (iaZeppelinRun && iaRt is { } iaZepRun && _iaDirector is { Waves: { } zepWaves })
-        {
-            string objectiveZep = InstantActionRuntime.SelectedZeppelinNode(iaZepRun.Def);
-            int claimed = _generators?.UseInstantActionLaunches(
-                objectiveZep, ReleaseInstantActionWaveMember) ?? 0;
-            if (claimed == 0)
-            {
-                // ⚠ Do not invent a fallback spawn path: the original burns through every wave the
-                // same way, its counter advancing whether or not the top-up lands
-                // (docs/formats/instant-action.md).
-                GD.PushWarning($"ia: zeppelin '{objectiveZep}' carries no egen generator — no " +
-                                "wave will ever launch on this zeppelin run");
-            }
-            else
-            {
-                GD.Print($"ia: zeppelin run: '{objectiveZep}' launches every wave " +
-                          $"({claimed} generator(s) on the wave-credit budget). BL-350 is open " +
-                          "and in this mission's way: a drop is not gated on the doors opening.");
-            }
-            int firstZepWave = zepWaves.Start();
-            if (firstZepWave != 0)
-            {
-                ActivateInstantActionWave(firstZepWave);
-            }
-        }
+        // The zeppelin run's wave arm (the director's phase): the objective zeppelin's generator
+        // releases the waves built inert above. ⚠ It can only run here, after the generator block:
+        // starting wave 1 on that mode means crediting a generator that did not exist earlier.
+        _iaDirector?.ArmZeppelinRun(_generators, ActivateInstantActionWave);
 
         // Instant Action's end conditions, lives and spectating: every signal already exists above,
         // so this only routes them into the runtime that decides the outcome. ⚠ Each source reports
@@ -3460,29 +3190,6 @@ public partial class GameSession : Node3D
         }
     }
 
-    // The launch hook handed to the objective zeppelin's generator: releases the next still-parked
-    // member of the CURRENT wave at the generator's own drop point and attitude. ⚠ Do not re-derive
-    // that point here. Null once the wave has nothing parked left, which the generator accounts as
-    // a failed spawn.
-    private FlightController? ReleaseInstantActionWaveMember(Vector3 pos, Vector3 lookAt,
-        Vector3 launchVelocity)
-    {
-        if (_iaDirector is not { WaveRosters: { } rosters, LaunchWave: >= 1 and <= 4 } iaDir)
-        {
-            return null;
-        }
-        foreach (var member in rosters[iaDir.LaunchWave - 1])
-        {
-            if (!member.Inert)
-            {
-                continue;
-            }
-            member.Activate(pos, lookAt, launchVelocity, carrierDrop: true);
-            return member;
-        }
-        return null;
-    }
-
     // Steps the consumers whose sim normally rides Godot's physics tick; they return early from
     // _PhysicsProcess whenever the clock is not realtime, since a fixed or halted sim cannot be
     // paced by a tick it does not own. ⚠ Keep the tree order those callbacks had, so a round fired
@@ -3569,36 +3276,6 @@ public partial class GameSession : Node3D
             // FlightController, which owns the fire clock, and fires into _projectiles above.
             _versus?.Advance(dt);
         }
-    }
-
-    // The livery a wave flies in: its militia's pattern, in that pattern's shipped colours. The
-    // original paints a wave member from the setup screen rather than from a vehicle def, so this
-    // holds for a pair the install ships no def for (Sacred Trust's Warhawk) as much as for one it
-    // does. Null when the militia is not named or names no pattern, and the member keeps its skins.
-    private PaintScheme? WaveMilitiaScheme(BuildState state, string enemyName)
-    {
-        if (MilitiaPaint.PatternForWave(MilitiaPatterns(state), enemyName) is not { } pattern)
-            return null;
-        foreach (var scheme in _liveryResolver.PaintCatalog(state.ZrdrPath))
-            if (string.Equals(scheme.Pattern, pattern, StringComparison.OrdinalIgnoreCase))
-                return scheme;
-        return null;
-    }
-
-    private IReadOnlyDictionary<string, string> MilitiaPatterns(BuildState state)
-    {
-        if (_militiaPatterns != null)
-            return _militiaPatterns;
-        try
-        {
-            _militiaPatterns = MilitiaPaint.PatternByMilitia(state.ZrdrPath, Messages.Load(state.MessagesPath));
-        }
-        catch (Exception e)
-        {
-            GD.PushWarning($"ia: cannot read the militia paint patterns: {e.Message}");
-            _militiaPatterns = new Dictionary<string, string>();
-        }
-        return _militiaPatterns;
     }
 
     // The AI flavour of one airframe as the roster would load it, or null before the rigs are
