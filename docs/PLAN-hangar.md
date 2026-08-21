@@ -112,13 +112,13 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — decodes and inventories
 
-1. ☐ Trace the spawn-descriptor consumers: armour units, engine id and total weight into flight and damage
-2. ☐ Asset and string inventory: the blueprint/icon TGAs and every langui roster the screens need
-3. ☐ The gun mapping: calibre + twin + turret onto `weapons.zrd` defs, and how the ammo layer sits on top
+1. ◐ Trace the spawn-descriptor consumers: armour units, engine id and total weight into flight and damage
+2. ☑ Asset and string inventory: the blueprint/icon TGAs and every langui roster the screens need
+3. ☑ The gun mapping: calibre + twin + turret onto `weapons.zrd` defs, and how the ammo layer sits on top
 
 ### Wave B — model, persistence, economy
 
-11. ☐ `CustomPlaneDef`: the CSVM model and its JSON persistence under `user://`
+11. ☑ `CustomPlaneDef`: the CSVM model and its JSON persistence under `user://`
 12. ☐ The 204-byte importer, tested against real saved-plane files
 13. ☐ The economy component: costs, weights, totals, and the capacity/engine gate
 
@@ -180,58 +180,115 @@ on [`org/hangar.md`](org/hangar.md) as a new section before D32 consumes it.
 stays an open question (this project's standing rule). Do not confuse the hangar's star-rating
 formulas (`FUN_0040faf0`, display only) with combat consumers.
 
-## A2 ☐ Asset and string inventory: the blueprint/icon TGAs and every langui roster the screens need
+## A2 ☑ Asset and string inventory: the blueprint/icon TGAs and every langui roster the screens need
 
-**Goal.** A verified list of what Decision 4's hybrid UI can actually pull in: do
-`PX_%d_Blueprint.tga` and `PX_Icon_%d_%d_%d.tga` exist in the extraction (and at what paths and
-sizes), and are all needed string ids present in `extracted/rof/ui_strings.json`.
+**Landed.** Every hangar screen can get the hybrid treatment; no launchscreen-only fallback is
+needed. The inventory, from the read-only sweep of `Z:\CSVM\extracted`:
 
-**Evidence (confidence: traced for the names, unverified for the files).** The filename templates
-are in the executable at `0x61f370`/`0x61f3a0` ([`org/hangar.md`](org/hangar.md)); the string ids
-are enumerated there (3000+af, 3060-3079, 3100+af*6+id, 3310-3314, 506, 1165-1194, 1227). Whether
-the TGAs are extracted, and whether every icon combination ships, is not checked.
-<TODO: run the inventory — this is the item.>
+- **Blueprints 11/11**: `extracted/rof/ASSETS/GRAPHICS/PX_<n>_BLUEPRINT.TGA`, n = 0..10, all
+  358x335 24-bit RLE (TGA type 10). No converted copies exist; the TGAs are the only form.
+- **Icons 128 files**, `PX_ICON_<airframe>_<pattern>_<n>.TGA`, all 358x335 32-bit RGBA RLE, the
+  same canvas as the blueprints so the two overlay exactly. The `n` axis is always complete
+  (0-3) but **patterns are sparse**: only pattern 4 exists for every airframe (2-4 patterns per
+  airframe; 13 unused everywhere, 12 only on airframe 9). A UI assuming a dense 0-13 grid hits
+  missing files; default to pattern 4 when a pattern id has no icon set.
+- Bonus assets in the same directory: `PX_P_BLUEPRINTSMALL.TGA` (an 11-cell 128x128 thumbnail
+  strip, one per airframe), `PX_P_DECALS.TGA` (a 50-cell 66x66 strip), `PX_PLANEICONS.PNG`,
+  `PX_PLANENAMEBACKGROUND.PNG`, `PX_BACKGROUND.JPG`, and the `PX_B_*` button/scrollbar set.
+- **Strings: all 105 requested ids present** in `extracted/rof/ui_strings.json`. That file is a
+  flat array of `{id, symbol, font, text, dll}` records, ids are NOT unique across the two
+  merged tables (ids 9-35 exist in both `langui` and `language`); filter `dll == "langui"`,
+  where every hangar range lives. Formats are Win32 `FormatMessage` style (`%1!d!`), not printf.
+- **Correction to the decode's label reading**: string 506 is `"(%1!d!) "`, a parenthesised
+  count prefix with a trailing space, not a literal "2x". No `2x` string exists in the file. A
+  twin gun row therefore reads "(2) <gun name>". `org/hangar.md` corrected in the same commit.
+- Airframe names 3000-3010 confirmed (Ford Hoplite through Curtiss-Wright P2 Warhawk); the
+  engine layout `3100 + airframe*6 + engineId` confirmed by the data (three displacements plus
+  the same three " nitro" per manufacturer); gun names 3310-3314 carry embedded double quotes
+  on 3310/3313/3314.
 
-**Approach.** Filesystem sweep over `extracted/` (absolute path into the main checkout for
-anything gitignored), plus a read of `ui_strings.json` for each id. Output: a table in the item's
-landing commit; missing TGAs demote the affected screen to pure launchscreen idiom, which is the
-hybrid decision's built-in fallback.
+**Verified.** Report-only item; the inventory above is the deliverable, recorded here and
+consumed by C22-C26.
 
-**Model recommendation.** medium, low effort — mechanical enumeration against a known list.
+**Original approach (kept for reference).** Filesystem sweep over `extracted/` plus a read of
+`ui_strings.json` for each id enumerated in [`org/hangar.md`](org/hangar.md) (templates at
+`0x61f370`/`0x61f3a0`); missing TGAs would have demoted the affected screen to pure
+launchscreen idiom.
 
-**Verify.** Every id and file on the list marked found/missing; no screen item in Wave C cites an
-asset this inventory did not confirm.
+## A3 ☑ The gun mapping: calibre + twin + turret onto `weapons.zrd` defs, and how the ammo layer sits on top
 
-## A3 ☐ The gun mapping: calibre + twin + turret onto `weapons.zrd` defs, and how the ammo layer sits on top
+**Landed.** The mapping is arithmetic and neither twin nor turret enters the def id:
 
-**Goal.** A written mapping from the hangar's gun pick (calibre 0-4, twin bit, turret slot) to the
-weapon def ids the loadout model consumes, and a statement of how the existing Ammo Selection
-layer (`LoadoutChoice`) composes with it.
+- **Def id.** `StockLoadouts.GunWeaponId(caliber, ammo)` = `wep_{caliber + AmmoIndex[ammo]}`
+  (`CSVM/src/Flight/Loadout.cs:41`; slug=0, dumdum=1, ap=2, magnesium=3), calibre in tens. The
+  player matrix `wep_30..33/40..43/50..53/60..63/70..73` covers all 5 calibres x 4 ammo types.
+  Hangar calibre id c maps to `caliber = 30 + 10c`; pick id 5 = empty = slot omitted entirely
+  (`LoadoutChoice.None`, no group built).
+- **Twin is one gun instance with two firepoints**, never a second def and never two instances:
+  the marker list is the multiplicity (`GunSpec.Markers`, slot n owns `firepoint(9-2n)` and
+  `firepoint(10-2n)`; single = the low one only). Proof: the Kestrel's slot 1 is the sole
+  single-barrel stock mount (`CSVM/data/stock_loadouts.json`, one marker where every other slot
+  has two, same def either way); the original corroborates (an `ai.zrd.json` turret is one
+  weapon over a two-entry firepoint list). Hangar-side the twin bit is only the x2 price/weight
+  multiplier.
+- **Turret is the same def flagged** (`"turret": true` -> `GunGroup.IsTurret`), selecting only
+  the price/weight column. ⚠ Recorded divergence: the original's AI turrets fire the detuned
+  slug-only `wep_130..170` family; CSVM's turret slots bind the full-strength player def. Inert
+  today (turrets do not fire; `LoadoutChoice.ApplyTo` forces the ammo pick null at
+  `LoadoutChoice.cs:123`), but if a hangar turret ever fires, `wep_1N0` is the original's id,
+  and no non-slug turret def exists at all.
+- **The ammo layer composes with no change.** The hangar writes `Caliber`/`Markers`/`Turret`
+  and leaves `WeaponId` null; Ammo Selection keeps writing its slot-keyed ammo name;
+  `Loadout.Bind` resolves `WeaponId ?? GunWeaponId(Caliber, Ammo)`. The `WeaponId` escape hatch
+  stays reserved for AI defs.
 
-**Evidence (confidence: traced for the inputs).** The 11-row gun model and the turret bitmask are
-decoded ([`org/hangar.md`](org/hangar.md)); `extracted/zrdr/weapons.zrd.json` authors the calibre
-guns (`30CAL`-`70CAL` families with per-ammo variants); `LoadoutChoice`
-(`CSVM/src/Flight/LoadoutChoice.cs`) already edits ammo per slot over any base and was built for
-"a custom plane's saved fit" as the base. What is unwritten is the join: which def a twin mount
-uses (two guns per slot vs a twin def), and which def a turret slot uses.
-<TODO: settle twin = two gun instances vs a dedicated def, from weapons.zrd's own entries.>
+**⚠ Traps for B11/C24/D32.** (a) Render four gun rows for every airframe: most stock planes
+author fewer slots in `stock_loadouts.json`, which per the original are slots holding empty
+(id 5), not absent slots. (b) The stat table's turret bitmask is 0-based; `stock_loadouts.json`
+slots are 1-based (Balmoral `0x0c` = JSON slots 3 and 4); shift by one when binding.
+(c) `wep_00..03` is a separate higher-rate slug family whose `NAME`s collide with the player
+matrix's; resolve by id, never by NAME (weapons.md's standing rule). It has no 70-cal member
+and is not hangar-reachable. (d) Magazine size is calibre-derived (`CLUSTER_SIZE`
+2800/2400/2000/1600/1200, agreeing with the hangar stat at gun-table +0x14), so picking a
+bigger calibre legitimately shrinks rounds; a design consequence, not a bug.
 
-**Approach.** Read `weapons.zrd.json`'s gun families and the stock planes' `vehicle.json` gun
-entries (how do stock twins/turrets author themselves?); write the mapping as a table in the item;
-it becomes B11's gun field semantics.
+**Verified.** Report-only item; every one of the 11 dropdown rows x wing/turret resolves to a
+shipped def or an explicit named absence, as required.
 
-**Model recommendation.** medium — data reading with one design join, no code.
-
-**Verify.** Every one of the 11 dropdown rows x wing/turret maps to a def id that exists in the
-extraction, or is explicitly marked absent with the fallback named.
-
-**⚠ Traps.** Do not re-derive the ammo rosters; `LoadoutOptions` already carries the original's
-own dropdown order and warns against sorting. The hangar picks the gun; Ammo Selection keeps
-picking its ammo.
+**Original approach (kept for reference).** Read `weapons.zrd.json`'s gun families and the
+stock planes' gun entries; settle twin = two instances vs a dedicated def; the mapping becomes
+B11's gun field semantics.
 
 # Wave B — model, persistence, economy
 
 ## B11 ☐ `CustomPlaneDef`: the CSVM model and its JSON persistence under `user://`
+
+**Landed.** `CSVM/src/Flight/CustomPlaneDef.cs` holds the pure model (no Godot types): `Name`,
+`Airframe` 0-10, `Engine` 0-6 with `EngineNone = 6`, four armour zone unit counts 0-12, four
+`GunChoice` slots (nullable calibre 0-4 plus twin bit; null calibre is the record's empty id 5),
+per-wing hardpoint counts 0-4, and paint as pattern 0-13, the two composite `a*5+b` picks, the
+third pick dword carried opaquely, and three `PaintColour` (byte RGB) slots. The record's derived
+fields are deliberately absent, and `Clamp()` forces every field into its decoded range.
+`CSVM/src/Flight/CustomPlaneStore.cs` is the persistence: one JSON file per plane
+(`<name>.json`, invalid filename characters replaced by `_`), schema `version: 1` with fields
+`name / airframe / engine / armour{nose,tail,leftWing,rightWing} / guns[4]{calibre,twin} /
+hardpoints{leftWing,rightWing} / paint{pattern,pick1,pick2,pick3,colour1..3}`; `List` / `Load` /
+`Save` run over a plain absolute directory through System.IO so they unit-test engine-free, and
+`UserPlanes()` is the single Godot touch resolving `user://Planes/`. A file claiming any other
+version, or malformed, or missing, reads as null (List skips it); serialisation is canonical, so
+load then save is byte-identical. Duplicate-name policy: the name is the identity, exactly as the
+original's `sprintf("Planes\%s")` writer behaves, so saving a plane whose name matches an
+existing file overwrites it, and two names sanitising to the same filename are the same plane.
+Tests in `CSVM.Tests/CustomPlaneStoreTests.cs`: `RoundTrip_PreservesEveryField`,
+`Serialize_IsStableAcrossARoundTrip`, `Load_MissingFile_ReturnsNull`,
+`Load_MalformedFile_ReturnsNull`, `Load_WrongVersion_ReturnsNull`,
+`List_SortsByName_AndSkipsTheUnreadable`, `List_MissingDirectory_IsEmpty`,
+`Save_SameName_Overwrites`, `Save_EmptyName_Throws`, `Deserialize_ClampsOutOfRangeValues`,
+`Constructor_RelativeDirectory_Throws`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A value type holding everything the record holds (airframe, engine, armour x4, guns x4
 with twin bits, hardpoint counts x2, paint pattern/picks/colours, name), serialised as CSVM's own
@@ -368,8 +425,8 @@ display units x5.
 ## C24 ☐ GUNS and HARDPOINTS screens (BL-067)
 
 **Goal.** Guns: four slots titled from the stat table, each an 11-row dropdown (five calibres,
-five twins with the "2x" prefix, No Gun), turret slots priced as turrets; hardpoints: the two
-per-wing counts 0-4 with the original's row labels.
+five twins prefixed "(2) " per string 506, No Gun), turret slots priced as turrets; hardpoints:
+the two per-wing counts 0-4 with the original's row labels.
 
 **Evidence (confidence: traced).** The 11-row model, slot titles, turret bits, hardpoint roster
 ([`org/hangar.md`](org/hangar.md)); the def mapping from A3.
@@ -381,7 +438,8 @@ this item and D32 both land.
 **Model recommendation.** medium.
 
 **Verify.** Slot titles match the stat table per airframe (Balmoral shows Nose Turret and Rear
-Turret); twin rows read "2x"; the PURCHASE screen's gun lines move when picks change.
+Turret); twin rows carry the "(2) " prefix (string 506, per A2's correction); the PURCHASE
+screen's gun lines move when picks change.
 
 **⚠ Traps.** Do not model per-airframe slot counts; wrong-claim 1. A turret slot is a title and a
 price column, not a different control.
@@ -404,6 +462,11 @@ entry with duplicate handling per B11's policy.
 
 **Verify.** The preview matches the livery lab's output for the same inputs; a saved plane
 reloads with identical paint.
+
+**⚠ Traps.** The shipped `PX_ICON_*` sets are sparse per pattern (A2): only pattern 4 exists
+for every airframe. If the screen shows the icon art, fall back to pattern 4's set for a
+pattern id with no icons; the live `PlanePainter` preview is the primary rendering and has no
+such gap.
 
 ## C26 ☐ PURCHASE review screen
 

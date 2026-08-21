@@ -48,7 +48,7 @@ All four screens, id → handler (widget dispatcher unless noted):
 | AIRFRAME | 2216 | `0x0040d28d` | set airframe: dropdown index → airframe id via `FUN_00410120`, stored to record +0x2c (`0x0064cba4`) |
 | AIRFRAME | 2217 | `0x0040d272` | get airframe |
 | AIRFRAME | 2223 | `0x0040b89b` | airframe description text |
-| GUNS | 2248 | `0x0040be1b` | gun dropdown labels (11 rows; names `langui` 3310+type, "2x" prefix format 506) |
+| GUNS | 2248 | `0x0040be1b` | gun dropdown labels (11 rows; names `langui` 3310+type, twin rows prefixed with format 506, `"(%1!d!) "`) |
 | GUNS | 2249 | `0x0040bea2` | get/set a slot's gun (record +0x84/+0x88) |
 | GUNS | 2250 | `0x0040bf72` | slot title: reads the airframe stat table's +0x1c+slot*4 string id, tail at `0x0040ef84` |
 | GUNS | 2220 | `0x0040bbe6` | titles |
