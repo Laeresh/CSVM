@@ -2967,6 +2967,10 @@ named device). `Pads` is nullable, null meaning every connected pad, which is th
 `FlightController.PadDevices` takes — a single-player session has no per-player assignment to hand
 over. `PadBack` is the pad's B alone, for a reader whose Escape is spoken for elsewhere; a board
 menu's is. Serves both the launchscreen and the in-flight board menus.
+Both cursor axes run one timing rule, `StepAxis` over a `HoldToRepeat` per axis (the shape that
+class's doc names as its second caller): a fresh press or flip fires immediately and arms the
+initial delay, a held direction repeats on the interval. Unit-tested in
+`CSVM.Tests/MenuInputTests.cs`; the raw device reads stay unreachable from any test tier.
 `MoveX` (Left/Right) is `Move`'s horizontal twin, added
 so an Instant Action wizard screen can carry a vertical list cursor and a horizontal stepper at
 once without either read starving the other: MissionType's lives, WaveEdit's four fields and
