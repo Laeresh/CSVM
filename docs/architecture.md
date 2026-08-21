@@ -64,6 +64,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Anim/` — `AnimRuntime`'s motion + light value types (`IAnimMotion` and its four implementations, `AnimLight`, the bind-census enums), split out of `AnimRuntime.cs` into their own files/namespace for size.
 - `src/Mech3/Anim/MotionSet.cs` — the live motion collection: the two registration rules, the per-frame sweep, and the pending-bounce predicate the instance walk retires on.
 - `src/Mech3/Anim/EmitterDirector.cs` — every PUFFER_STATE emitter's whole life on one runtime: the keying rule, the start, all four stops, the respawn wipe, the per-frame follow, and the census. Plus `IEmitter`/`IEmitterFactory` and the real/retired adapters.
+- `src/Mech3/Anim/SoundChannel.cs` — one runtime's `SOUND_NODE`/`SOUND` events: the pooled ambient emitters, the one-shot player, the late-failure census, and the sound half of `OBJECT_ADD_CHILD`/`OBJECT_ACTIVE_STATE`.
 - `src/Mech3/Anim/NameResolver.cs` — name→node resolution: the index, wildcard matcher, memoized `FindAll`, the three-tier scope chain (`Resolve`/`ResolveScoped` with the `ownRootsOf` hook and the `stagingAdmits` pooled-copy filter), the symbol authority, `Anchors` (narrowing + root lift) and the bind census; generic over the node type, off-engine testable.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock / LOOP / IF-ELSEIF), extracted behind the 3-member `ISequenceHost` seam; headlessly testable.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
@@ -718,8 +719,11 @@ e.g. C1's three `hangerdoors`). Every construction site hands over a sealed `Tem
 (`NewTemplateStage`/`ForEffects`/`ForCrashRig`). Sibling modules, each with its own entry: the
 sequence interpreter is `SequenceRunner.cs`, live motions are `Anim/MotionSet.cs`, name resolution
 is `Anim/NameResolver.cs` (this class forwards through `Resolve`/`ResolveScoped`/`Anchors`), puffer
-emitters are `Anim/EmitterDirector.cs`, and the effect-template pool/placement is
-`Anim/TemplateStage.cs`. `CALLBACK` raises the two vehicle-death codes through caller-supplied seams (`WreckVelocity`,
+emitters are `Anim/EmitterDirector.cs`, ambient/one-shot sound is `Anim/SoundChannel.cs`, and the
+effect-template pool/placement is `Anim/TemplateStage.cs`. The router keeps the `SOUND_NODE`/`SOUND`
+case labels and the sound reach-ins inside `OBJECT_ACTIVE_STATE`/`OBJECT_ADD_CHILD`, delegating every
+body to `Sound`; `Sounds`/`SoundHandledElsewhere` stay public fields here, since callers configure
+them, and `Sound` reads both live rather than snapshotting them. `CALLBACK` raises the two vehicle-death codes through caller-supplied seams (`WreckVelocity`,
 `StopDamageStages`) and counts every other code; decode in `docs/org/vehicleDamage.md`.
 `FBFX_COLOR_FROM_TO`/`LIGHT_ANIMATION` report their `run_time` as the
 event's duration, spacing a chain instead of firing it in one instant; decode in
@@ -735,8 +739,8 @@ the one member reached from outside this namespace without going through `AnimRu
 accumulate-from-rest decode instead of a second hand conversion; it takes a rest `Basis` and a
 rate, no `AnimRuntime`/`MotionSet` state, so the reach-in is inert to everything else here.
 `MotionSet`, `EmitterDirector`,
-`NameResolver` and `TemplateStage` share the namespace but ARE independently owned — their own
-entries below.
+`SoundChannel`, `NameResolver` and `TemplateStage` share the namespace but ARE independently owned
+— their own entries below.
 **The original's `OBJECT_MOTION` update is written up in [org/objectMotion.md](org/objectMotion.md)**
 — the function map, the flag word, the linear elevation, `delta` as an acceleration, both contact
 tiers and how they pick a surface, the landing response, the termination model, and the retired
@@ -779,6 +783,21 @@ and the `active_state` read. One director per runtime; `IEmitterFactory` is what
 `TextureArchive` and the parent node sit behind that seam), so a suite can install a fake. The
 selector/disposition split across the four stops, the emitter-keying tradeoff and the stop-family
 history live in this file's own doc comments, not here.
+
+## src/Mech3/Anim/SoundChannel.cs
+One runtime's `SOUND_NODE`/`SOUND` events as a module: `HandleSoundNode` (declare/place/start the
+pooled ambient emitter), `HandleSound` (the one-shot destruction/impact player, positioned by
+`OneShotSoundPosition`), the late-failure census (`ReportLateSoundFailure`, gated on
+`MarkCensusPrinted`), `Reset` (the crash rig's respawn) and `DiscardFor` (the teardown reach-in,
+keyed by anchor like lights). `AnimRuntime` keeps the `SOUND_NODE`/`SOUND` case labels and the two
+sound reach-ins the router still owns outright — `TrySetActive` for the `OBJECT_ACTIVE_STATE` case
+(an ordinary node event whose NAME can turn out to be a sound emitter instead) and
+`TryGetChild`/`Attach` for the sound-emitter three-quarters of `OBJECT_ADD_CHILD`. `Sounds` and
+`SoundHandledElsewhere` stay public fields on `AnimRuntime`, since callers configure them (and
+`SoundHandledElsewhere` differs between the world and effects runtimes sharing one world); the
+channel reads both through closures rather than a constructor snapshot, since `Sounds` goes
+non-null only once the world build finishes. `OneShotSoundsPlayed` is a one-line forward from
+`AnimRuntime` to the channel's own counter.
 
 ## src/Mech3/Anim/NameResolver.cs
 Name→node resolution as one public module, generic over the node type (`NameResolver<TNode>`): the

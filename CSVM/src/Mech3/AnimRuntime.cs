@@ -417,14 +417,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // per event.
     private readonly Dictionary<AnimDefinition, float> _washGates = new();
 
-    // Keyed by (sound name, anchor), like the lights and for the same reason: the anchor
-    // identifies the *instance* of the definition, so C1's four firetrucks each get their own
-    // siren rather than sharing one. It cannot be keyed by host node the way puffers are — in the
-    // reader's triple the emitter is declared BEFORE anything says where it goes.
-    private readonly Dictionary<(string Name, Node3D? Anchor), object> _soundEmitters = new();
-
-    private readonly HashSet<string> _soundFailuresReported = new(StringComparer.OrdinalIgnoreCase);
-
     // Keyed by (light name, anchor). The anchor identifies the *instance* of the definition,
     // and a definition's `lights` array is its own symbol table — so two refineries each get
     // their own orange_light. It cannot be keyed by host node the way puffers are: the flicker
@@ -506,15 +498,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // template at its gamez origin, and the goldens are byte-identical on that.
     private int _deathCallDepth;
 
-    private int _soundsUnknown, _soundsAfterBuild;
-
-    // Set once Bootstrap has printed its emitter census. After it, a failed SOUND_NODE is invisible
-    // unless reported at the point of use, because the census is a bootstrap snapshot and cannot
-    // tell "never requested" from "requested later and failed". Report once per name, not per
-    // event; a single sound name has hundreds of sites.
-    private bool _soundCensusPrinted;
-
     private EmitterDirector? _emitters;
+
+    private SoundChannel? _sound;
 
     private float _effectClock;
 
@@ -657,7 +643,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// destruction/damage/impact audio). Exposed for the damage-test harness, which cannot
     /// screenshot audio: a nonzero delta across a kill is how "the death's explosion sounded" is
     /// verified headless.</summary>
-    public int OneShotSoundsPlayed { get; private set; }
+    public int OneShotSoundsPlayed => Sound.OneShotSoundsPlayed;
 
     /// <summary>How many PUFFER_STATE emitters this runtime has actually built (not just started
     /// the owning def). The world-effects verify checks this rather than "the def ran" — a
@@ -672,6 +658,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// three before binding; flipping one afterwards does not reach the director.</summary>
     public EmitterDirector Emitters => _emitters ??= new EmitterDirector(
         EmitterFactory ?? new SpentEmitterFactory(), DefScopedPufferKeys, DebugMotions, Count);
+
+    /// <summary>This runtime's `SOUND_NODE`/`SOUND` family. Reads <see cref="Sounds"/> and
+    /// <see cref="SoundHandledElsewhere"/> live through the closures below, not a snapshot at
+    /// construction, since both change after this runtime exists (`Sounds` goes non-null once the
+    /// world build finishes; a crash runtime's `SoundHandledElsewhere` follows its aircraft).
+    /// </summary>
+    private SoundChannel Sound => _sound ??= new SoundChannel(
+        () => Sounds, () => SoundHandledElsewhere, Resolve, () => _rng, () => _opsApplied++);
 
     /// <summary>The live motion collection and its registration rules. `internal` so the
     /// `bounce-launch` suite can ask <c>OwesBounce</c>, which is the retirement hold's own
@@ -950,12 +944,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         Emitters.Reset();
         _inputNodes.Clear();
         _lights.Clear();
-        if (Sounds != null)
-        {
-            foreach (var handle in _soundEmitters.Values)
-                Sounds.SetActive(handle, false);
-        }
-        _soundEmitters.Clear();
+        Sound.Reset();
 
         foreach (var def in _program.Defs)
         {
@@ -1543,7 +1532,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // composed reports whether the ancestor chain had to be walked (the world root not yet
     // parented), so the caller can log the fallback rather than let Godot spam !is_inside_tree()
     // and return an origin transform.
-    private static Transform3D WorldTransform(Node3D node, out bool composed)
+    internal static Transform3D WorldTransform(Node3D node, out bool composed)
     {
         composed = !node.IsInsideTree();
         if (!composed)
@@ -1731,10 +1720,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         // Reported on their own line rather than through Count(), which is the "not yet acted on"
         // channel: filing a working feature there would report it as a missing one.
-        if (_soundEmitters.Count > 0 || _soundsUnknown > 0 || _soundsAfterBuild > 0)
-            Log.Info("anim", $"anim: {_soundEmitters.Count} ambient sound emitter(s): {string.Join(", ", Sounds?.Names ?? Enumerable.Empty<string>())}{(_soundsUnknown > 0 ? $" [{_soundsUnknown} unknown to sounds.json]" : "")}{(_soundsAfterBuild > 0 ? $" [{_soundsAfterBuild} requested with no audio session]" : "")}");
+        if (Sound.EmitterCount > 0 || Sound.Unknown > 0 || Sound.AfterBuild > 0)
+            Log.Info("anim", $"anim: {Sound.EmitterCount} ambient sound emitter(s): {string.Join(", ", Sound.Names)}{(Sound.Unknown > 0 ? $" [{Sound.Unknown} unknown to sounds.json]" : "")}{(Sound.AfterBuild > 0 ? $" [{Sound.AfterBuild} requested with no audio session]" : "")}");
         // Everything above is a bootstrap snapshot; from here on a failure reports itself.
-        _soundCensusPrinted = true;
+        Sound.MarkCensusPrinted();
         if (netHidden.Count > 0)
             Log.Info("anim", $"anim: safety net hid {netHidden.Count} uncovered destroyed subtree(s): {string.Join(", ", netHidden.Take(10))}{(netHidden.Count > 10 ? ", …" : "")}");
         ReportConditions();
@@ -1999,12 +1988,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         foreach (var key in _lights.Keys.Where(k => k.Anchor == anchor).ToList())
             _lights.Remove(key);
 
-        if (Sounds != null)
-            foreach (var key in _soundEmitters.Keys.Where(k => k.Anchor == anchor).ToList())
-            {
-                Sounds.SetActive(_soundEmitters[key], false);
-                _soundEmitters.Remove(key);
-            }
+        Sound.DiscardFor(anchor);
     }
 
     // Applies a list of events with no clock — the RESET_STATE path, where every op is a base state
@@ -2033,12 +2017,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // ⚠ Test for a SOUND_NODE emitter first. An ordinary OBJECT_ACTIVE_STATE switches
                 // one on, and its name is a sounds.json definition rather than a gamez node, so
                 // falling through to Targets() books it as an unresolved op.
-                if (SoundEmitter(ev, anchor) is { } emitterHandle)
-                {
-                    Sounds!.SetActive(emitterHandle, ev.Data.Bool("state"));
-                    _opsApplied++;
+                if (Sound.TrySetActive(ev, anchor))
                     return true;
-                }
                 foreach (var t in Targets(ev, def, anchor))
                 {
                     bool active = ev.Data.Bool("state");
@@ -2422,11 +2402,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "SoundNode":
-                HandleSoundNode(ev, def, anchor);
+                Sound.HandleSoundNode(ev, def, anchor);
                 return true;
 
             case "Sound":
-                HandleSound(ev, def, anchor);
+                Sound.HandleSound(ev, def, anchor);
                 return true;
 
             case "FbfxColorFromTo":
@@ -2586,139 +2566,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return governed;
     }
 
-    private void ReportLateSoundFailure(string name, string why, string kind = "SOUND_NODE")
-    {
-        if (!_soundCensusPrinted || !_soundFailuresReported.Add(name))
-        {
-            return;
-        }
-        GD.PushWarning($"anim: {kind} '{name}' requested after the world build and {why} — "
-                       + "it will be silent for the rest of the session");
-    }
-
-    // The emitter an event's NAME refers to, or null when the name isn't one this definition
-    // declared. This is what lets OBJECT_ACTIVE_STATE and OBJECT_ADD_CHILD — both perfectly
-    // ordinary node events elsewhere — address a sound emitter without either handler having to
-    // guess from the name whether `snd_waterfall` is a node or a sound.
-    private object? SoundEmitter(AnimEvent ev, Node3D? anchor)
-    {
-        if (Sounds == null || ev.Data.Str("name") is not { } name)
-            return null;
-        return _soundEmitters.TryGetValue((name, anchor), out var handle) ? handle : null;
-    }
-
-    // Declares (and for the compiled form, places and starts) one ambient emitter. The two
-    // front-ends spell it differently and both land here: a reader def writes a three-event triple
-    // where this event only declares, while a compiled event carries active_state and translate
-    // inline, but only on the events that do not leave them to OBJECT_ADD_CHILD
-    // (docs/formats/anim-definitions.md).
-    private void HandleSoundNode(AnimEvent ev, AnimDefinition def, Node3D? anchor)
-    {
-        if (SoundHandledElsewhere)
-            return;
-        if (ev.Data.Str("name") is not { } name)
-            return;
-        if (Sounds == null)
-        {
-            _soundsAfterBuild++;
-            ReportLateSoundFailure(name, "there is no audio session");
-            return;
-        }
-
-        var key = (name, anchor);
-        if (!_soundEmitters.TryGetValue(key, out var handle))
-        {
-            // Re-assertion must be a no-op, not a second emitter: the data keeps its definitions
-            // alive with `[SOUND_NODE, …, Loop{-1}]` exactly as it does for puffers.
-            if (Sounds.Create(name) is not { } created)
-            {
-                _soundsUnknown++;
-                ReportLateSoundFailure(name, "no stream could be resolved for it "
-                                             + "(unknown to sounds.json, or never prewarmed)");
-                return;
-            }
-            handle = created;
-            _soundEmitters[key] = handle;
-            _opsApplied++;
-        }
-
-        // AT_NODE — the compiled form's own placement. Absent in the reader form and in the 865
-        // compiled events that leave it to OBJECT_ADD_CHILD.
-        if (ev.Data.Obj("translate")?.Union() is { Tag: "AtNode", Value: Dictionary<string, object?> at })
-        {
-            var atData = new AnimData(at);
-            if (atData.Str("name") is { } hostName && Resolve(hostName, def, anchor) is { } host)
-                Sounds.Attach(handle, host, atData.Vec3("pos"));
-        }
-        // ⚠ An absent active_state means "leave it alone", never OFF; the reader form's ACTIVE
-        // arrives as the next event. ⚠ The compiled field is a JSON boolean here, where
-        // PUFFER_STATE's same-named field is numeric, so Num() alone switches every emitter off.
-        if (ev.Data.Has("active_state"))
-            Sounds.SetActive(handle, ev.Data.Bool("active_state") || ev.Data.Num("active_state") >= 1f);
-    }
-
-    // A one-shot SOUND event: the destruction, impact and damage audio a sequence emits. Unlike
-    // SOUND_NODE's pooled looping emitters it plays once at a world point and disposes itself.
-    // ⚠ The event's NAME is a sounds.json definition or a SOUND_GROUPS name, never a gamez node.
-    // The AT_NODE, when present, positions it; absent, it plays at the anchor.
-    private void HandleSound(AnimEvent ev, AnimDefinition def, Node3D? anchor)
-    {
-        if (SoundHandledElsewhere)
-        {
-            return;
-        }
-        if (ev.Data.Str("name") is not { } name)
-        {
-            return;
-        }
-        if (Sounds == null)
-        {
-            _soundsAfterBuild++;
-            ReportLateSoundFailure(name, "there is no audio session", "SOUND");
-            return;
-        }
-        if (Sounds.PlayOneShot(name, OneShotSoundPosition(ev, def, anchor), _rng) != null)
-        {
-            OneShotSoundsPlayed++;
-            _opsApplied++;
-        }
-        else
-        {
-            _soundsUnknown++;
-            ReportLateSoundFailure(name, "no stream could be resolved for it (unknown to "
-                                         + "sounds.json / SOUND_GROUPS, or never prewarmed)", "SOUND");
-        }
-    }
-
-    // Where a one-shot SOUND plays: its AT_NODE's world pose plus the trailing offset, or the
-    // anchor's when it names no node. The compiled form nests AT_NODE as {name, pos}; the reader
-    // form (normalized in AnimDefs) carries a flat at_node name plus a translate offset.
-    private Vector3 OneShotSoundPosition(AnimEvent ev, AnimDefinition def, Node3D? anchor)
-    {
-        Node3D? host = null;
-        Vector3 offset = Vector3.Zero;
-        if (ev.Data.Obj("at_node") is { } atObj)
-        {
-            if (atObj.Str("name") is { } hostName)
-            {
-                host = Resolve(hostName, def, anchor);
-            }
-            offset = atObj.Vec3("pos");
-        }
-        else if (ev.Data.Str("at_node") is { } atName)
-        {
-            host = Resolve(atName, def, anchor);
-            offset = ev.Data.Vec3("translate");
-        }
-        host ??= anchor;
-        if (host is not { } h || !IsInstanceValid(h))
-            return Vector3.Zero;
-        var pos = WorldTransform(h, out bool composed) * offset;
-        if (composed)
-            Log.Info("sound", $"one-shot SOUND '{ev.Data.Str("name")}' positioned by out-of-tree ancestor composition at {pos} (world root not parented at bootstrap)");
-        return pos;
-    }
-
     // The sound-emitter case of OBJECT_ADD_CHILD: attach a declared emitter to the world node that
     // positions it. Returns false for every other use, which stays counted as unhandled.
     // Deliberately only the sound subset; most of the event's other uses are cutscene machinery for
@@ -2727,14 +2574,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         if (Sounds == null || ev.Data.Str("child") is not { } child)
             return false;
-        if (!_soundEmitters.TryGetValue((child, anchor), out var handle))
+        if (!Sound.TryGetChild(child, anchor, out var handle))
             return false;
         if (ev.Data.Str("parent") is not { } parentName)
             return false;
         if (Resolve(parentName, def, anchor) is not { } host)
             return false;
-        Sounds.Attach(handle, host);
-        _opsApplied++;
+        Sound.Attach(handle, host);
         return true;
     }
 

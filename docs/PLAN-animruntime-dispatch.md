@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Sound family
 
-1. ☐ Extract the sound family (`SoundNode`/`Sound`) into `Anim/`
+1. ☑ Extract the sound family (`SoundNode`/`Sound`) into `Anim/`
 
 ### Wave B — Light family
 
@@ -124,7 +124,42 @@ ever run in parallel worktrees.
 
 # Wave A — Sound family
 
-## A1 ☐ Extract the sound family (`SoundNode`/`Sound`) into `Anim/`
+## A1 ☑ Extract the sound family (`SoundNode`/`Sound`) into `Anim/`
+
+**Landed.** `CSVM/src/Mech3/Anim/SoundChannel.cs` owns `HandleSoundNode`/`HandleSound`/
+`OneShotSoundPosition`/`ReportLateSoundFailure`, the `_soundEmitters`/`_soundFailuresReported`
+state, the census counters (`_soundsUnknown`/`_soundsAfterBuild`/`_soundCensusPrinted`) and its own
+`OneShotSoundsPlayed`. `AnimRuntime` keeps `case "SoundNode":`/`case "Sound":` delegating to a
+lazily-built `Sound` property (same `??=` pattern as `Emitters`), forwards `OneShotSoundsPlayed` to
+the channel's counter, and keeps the two reach-ins the router still needs directly: the
+`OBJECT_ACTIVE_STATE` sound-emitter test now calls `Sound.TrySetActive`, and the sound-emitter
+quarter of `OBJECT_ADD_CHILD` now calls `Sound.TryGetChild`/`Sound.Attach`. `ResetToBaseState` and
+`TearDownResourcesOf` hand their sound work to `Sound.Reset()`/`Sound.DiscardFor(anchor)`.
+`Sounds`/`SoundHandledElsewhere` stayed public fields on `AnimRuntime`; the channel takes them as
+`Func<WorldSounds?>`/`Func<bool>` closures rather than a constructor snapshot, since `Sounds` is
+null until the world build finishes and can be reassigned afterwards (`WorldEffectsFactory`'s crash
+runtime). The channel's other two dependencies are `Resolve` (an existing method-group delegate)
+and `Func<Random>` over `_rng`, plus an `Action` callback for `_opsApplied` — five dependencies
+total, matching Decision 4's "a handful". `WorldTransform` went `private static` → `internal
+static` (the same visibility `NameOf`/`VisualOriginOf` already carry) so the channel's one-shot
+positioning can call it without AnimRuntime having to forward it as a sixth delegate.
+`docs/architecture.md`'s `AnimRuntime` and `Anim/` entries, and the top-level `src/Mech3/Anim/`
+bullet list, describe the new module and the router's remaining reach-ins.
+
+**Verified.** `.\RunTests.ps1` full pass: build, 1646/1646 units, 89/89 engine suites with zero
+engine error lines, 16/16 goldens hash-identical, hitch detector healthy. `AnimRuntime`'s public
+declaration count is unchanged at 96 (`'public '` matches): this wave moved bodies and state, it
+did not touch the public surface, which is Wave D's job.
+
+**Decided along the way.** `HandleAddChild`'s two sound reach-ins (the emitter lookup and the
+`Sounds.Attach` call) are not case bodies the plan named for this item — `OBJECT_ADD_CHILD` stays a
+router case per Decision 3 — but they read `_soundEmitters` directly, so they got two narrow methods
+on the channel (`TryGetChild`, `Attach`) rather than staying reach-ins into a field that no longer
+lives on `AnimRuntime`. Same reasoning for the `OBJECT_ACTIVE_STATE` sound-emitter test: it became
+`Sound.TrySetActive`, which also folds in the `_opsApplied` bump so the router's case body is just
+`if (Sound.TrySetActive(ev, anchor)) return true;`.
+
+### Original approach (kept for reference)
 
 **Goal.** The `SoundNode` and `Sound` case bodies, their state and their teardown live in one
 internal family class in `Anim/`; the router case labels remain and call it directly. Sound becomes
