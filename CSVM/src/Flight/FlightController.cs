@@ -1233,38 +1233,29 @@ public partial class FlightController : Node3D
             var probeEnd = len > 1e-4f ? to + step / len * margin : to;
             // ⚠ The grace window suppresses the SWEEP, not just the damage: while it is live this
             // plane has no collision at all (obj+0xAC, docs/org/flightModel.md).
-            var impact = _model.Position;
-            string hitName = "";
-            string part = "";
-            var normal = Vector3.Up;
-            float stopFrac = 1f;
-            Node? hitBody = null;
             bool sweeping = _collisionGrace <= 0f;
-            bool hit = sweeping && SweepAirframe(prev, step, out impact, out hitName, out part,
-                out normal, out stopFrac, out hitBody);
-            if (!hit && sweeping && HitWorld(prev, probeEnd, out impact, out hitName, out hitBody))
-            {
-                hit = true;
-                part = "center";
-                normal = len > 1e-4f ? -step / len : Vector3.Up;
-                stopFrac = 1f;
-            }
+            ContactReport contact = default;
+            Node? hitBody = null;
+            bool hit = sweeping && SweepAirframe(prev, step, out contact, out hitBody);
+            if (!hit && sweeping)
+                hit = CenterRayContact(prev, probeEnd, step, len, out contact, out hitBody);
+            // No contact means the boxes cleared the whole motion, which is where they are drawn.
             if (_probe != null)
-                DrawProbe(prev, probeEnd, prev + step * stopFrac, hit);
+                DrawProbe(prev, probeEnd, prev + step * (hit ? contact.StopFraction : 1f), hit);
             // The decoded contact (FUN_0048d2c0): damage BOTH parties off one severity cosine,
             // then decide this plane's fate. A WeaponOrCollideHit destructible breaks and the
             // plane flies through; everything else stays solid and falls to the crash/graze below.
             if (hit)
             {
-                float severity = CollisionDamage.Severity(_model.VelocityDir, normal);
-                if (ResolveContact(severity, hitBody, impact))
+                float severity = CollisionDamage.Severity(_model.VelocityDir, contact.Normal);
+                if (ResolveContact(severity, hitBody, in contact))
                 {
                     hit = false;   // set-dressing shattered; the plane keeps its full-motion pose
                 }
             }
-            if (hit && !SurviveHit(prev, step, stopFrac, impact, hitName, part, normal, hitBody))
+            if (hit && !SurviveHit(prev, step, in contact, hitBody))
             {
-                Crash(impact, hitName, part, hitBody);
+                Crash(contact.Impact, contact.ColliderName, contact.Part, hitBody);
                 return;
             }
         }
@@ -2619,14 +2610,16 @@ public partial class FlightController : Node3D
     /// <see cref="SurviveHit"/>.
     /// ⚠ Keep the player asymmetric. It skips entity detection, so it never takes the 0.2 cut,
     /// never arms a grace window, and is never doomed (docs/org/flightModel.md).</summary>
-    private bool ResolveContact(float severity, Node? hitBody, Vector3 impact)
+    private bool ResolveContact(float severity, Node? hitBody, in ContactReport contact)
     {
+        // The node the report deliberately does not carry, held here for the applying alone; every
+        // decision below reads the report's flag instead.
         var struckRig = (hitBody as AircraftBody)?.Rig;
         // A bare suite rig has no flight model bound, so no authored ranges; the compiled
         // fallbacks in PlaneStats are what the original would stand on there too.
         var ranges = Stats ?? DefaultCollideRanges;
         // Entity detection is the non-player branch only, and only against another aeroplane.
-        bool entityImpact = !IsHumanPiloted && struckRig != null;
+        bool entityImpact = !IsHumanPiloted && contact.StruckIsAircraft;
         float cut = entityImpact ? CollisionDamage.EntityCut : 1f;
         float armorDmg =
             CollisionDamage.Term(severity, ranges.CollideArmorFloor, ranges.CollideArmorScale) * cut;
@@ -2636,13 +2629,13 @@ public partial class FlightController : Node3D
         _collideHealthDamage = healthDmg;
         // local_11 (0x0048d79e): an AI that rammed anything OTHER than an aeroplane dies outright,
         // whatever health it has left. An AI that rammed an aeroplane survives on health as usual.
-        _collideDooms = !IsHumanPiloted && struckRig == null;
+        _collideDooms = !IsHumanPiloted && !contact.StruckIsAircraft;
         if (severity <= 0f)
             return false;
 
         if (struckRig != null)
         {
-            struckRig.TakeCollisionHit(armorDmg, healthDmg, impact, PlayerIndex);
+            struckRig.TakeCollisionHit(armorDmg, healthDmg, contact.Impact, PlayerIndex);
             // Both parties go collision-free, so neither re-resolves the overlap they are still in.
             _collisionGrace = CollisionDamage.EntityGrace;
             struckRig._collisionGrace = CollisionDamage.EntityGrace;
@@ -2656,11 +2649,10 @@ public partial class FlightController : Node3D
     // the plane slides along the surface, a human-piloted aircraft additionally rebounds along
     // the contact normal, and the attitude takes a lever-arm kick. That response is
     // FlightModel.Collide; what stays here is the fate, the damage ledger and the un-embed loop.
-    private bool SurviveHit(Vector3 prev, Vector3 step, float stopFrac, Vector3 impact,
-        string hitName, string part, Vector3 normal, Node? hitBody)
+    private bool SurviveHit(Vector3 prev, Vector3 step, in ContactReport contact, Node? hitBody)
     {
         var vel = _model.VelocityDir * _model.Speed;
-        float vn = Mathf.Abs(vel.Dot(normal));
+        float vn = Mathf.Abs(vel.Dot(contact.Normal));
         if (Damage == null)
         {
             // No destroyable_parts data, so there is no health pool to survive on: fall back to
@@ -2675,14 +2667,13 @@ public partial class FlightController : Node3D
         // checks it after spending but independently of the result.
         if (_collideDooms)
         {
-            Log.Info("flight", $"AI ram into {hitName} — destroyed outright (the decoded local_11 rule)");
+            Log.Info("flight", $"AI ram into {contact.ColliderName} — destroyed outright (the decoded local_11 rule)");
             return false;
         }
 
-        float speedBefore = _model.Speed;
-        var localImpact = GlobalTransform.AffineInverse() * impact;
-        string dataPart = PlaneDamage.MapStruckPart(part, localImpact);
-        GrazeReaction(impact, hitName, hitBody);
+        var localImpact = GlobalTransform.AffineInverse() * contact.Impact;
+        string dataPart = PlaneDamage.MapStruckPart(contact.Part, localImpact);
+        GrazeReaction(contact.Impact, contact.ColliderName, hitBody);
         if (_damageCooldown <= 0f)
         {
             _damageCooldown = DamageCooldown;
@@ -2704,7 +2695,7 @@ public partial class FlightController : Node3D
             if (Damage.IsDestroyed)
             {
                 Log.Info("flight",
-                    $"vehicle health exhausted ({struckPart} last) — vn={vn:0.0} m/s into {hitName}");
+                    $"vehicle health exhausted ({struckPart} last) — vn={vn:0.0} m/s into {contact.ColliderName}");
                 return false; // the decoded kill rule: whole-vehicle health at zero (A4/D14)
             }
 
@@ -2712,13 +2703,14 @@ public partial class FlightController : Node3D
             {
                 _pilotHud.Flash($"⚠ IMPACT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%");
                 Log.Info("flight",
-                    $"graze ({part}→{struckPart}): {hitName} vn={vn:0.0} m/s dmg={dmg:0.0} armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
+                    $"graze ({contact.Part}→{struckPart}): {contact.ColliderName} vn={vn:0.0} m/s dmg={dmg:0.0} armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
             }
         }
 
         // Slide, restitution and lever-arm kick, on the plant whose fields they write. An airframe
         // already crashed is off the player path, so its gate rides the restitution's argument.
-        _model.Collide(prev, step, stopFrac, impact, normal, IsHumanPiloted && !_crashed, CrashSpeed);
+        _model.Collide(prev, step, contact.StopFraction, contact.Impact, contact.Normal,
+            IsHumanPiloted && !_crashed, CrashSpeed);
 
         // A plane ground to (near) standstill is a wreck, not a parked aircraft
         // (user-reported: it sat there collecting zero-damage kisses forever).
@@ -2760,7 +2752,7 @@ public partial class FlightController : Node3D
                     Log.Info("flight", $"embedded in terrain after a graze — destroyed");
                     return false;
                 }
-                _model.Position += normal * EmbedPushOut;
+                _model.Position += contact.Normal * EmbedPushOut;
             }
         }
         return true;
@@ -2807,30 +2799,53 @@ public partial class FlightController : Node3D
 
     // Sweeps each airframe box along this frame's motion against every solid collider —
     // world plus other aircraft's bodies (a mid-air resolves through SurviveHit/Crash like any
-    // other hit), own body excluded by RID. Reports the earliest hit's contact, normal, collider
-    // name, struck part and stop fraction. False when uncollidable or nothing is in the way.
-    private bool SweepAirframe(Vector3 from, Vector3 motion, out Vector3 impact,
-        out string hitName, out string part, out Vector3 normal, out float stopFrac, out Node? hitBody)
+    // other hit), own body excluded by RID. Fills the earliest hit's report. False when
+    // uncollidable or nothing is in the way. `hitBody` is the caller's, not the report's: the
+    // struck node stays out of the value the decision side reads.
+    private bool SweepAirframe(Vector3 from, Vector3 motion, out ContactReport contact,
+        out Node? hitBody)
     {
-        impact = _model.Position;
-        hitName = "";
-        part = "";
+        contact = default;
         hitBody = null;
-        float mLen = motion.Length();
-        normal = mLen > 1e-6f ? -motion / mLen : Vector3.Up;
-        stopFrac = 1f;
         if (Collider == null)
             return false;
         var baseXf = new Transform3D(_model.Attitude, from);
         if (!World.Sweep(Collider.Parts, baseXf, motion, CollisionLayers.WorldAndAircraft,
             Body?.ExcludeSelf, out var report))
             return false;
-        impact = report.Contact;
-        hitName = report.ColliderName;
-        part = report.Part;
-        normal = report.Normal;
-        stopFrac = report.StopFraction;
         hitBody = report.Collider;
+        contact = new ContactReport
+        {
+            Impact = report.Contact,
+            Normal = report.Normal,
+            Part = report.Part,
+            ColliderName = report.ColliderName,
+            StopFraction = report.StopFraction,
+            StruckIsAircraft = (report.Collider as AircraftBody)?.Rig != null,
+        };
+        return true;
+    }
+
+    // The anti-tunnelling backstop, filling the same report off the centre ray alone: no box
+    // reached the obstacle but the swept centre did. It has no struck box and no surface normal
+    // of its own, so the part reads `center` and the normal is the reversed motion, which makes
+    // the contact head-on; the stop fraction stays 1 because a ray reports where it hit, not
+    // where the airframe would have come to rest.
+    private bool CenterRayContact(Vector3 from, Vector3 to, Vector3 motion, float motionLen,
+        out ContactReport contact, out Node? hitBody)
+    {
+        contact = default;
+        if (!HitWorld(from, to, out var point, out var hitName, out hitBody))
+            return false;
+        contact = new ContactReport
+        {
+            Impact = point,
+            Normal = motionLen > 1e-4f ? -motion / motionLen : Vector3.Up,
+            Part = "center",
+            ColliderName = hitName,
+            StopFraction = 1f,
+            StruckIsAircraft = (hitBody as AircraftBody)?.Rig != null,
+        };
         return true;
     }
 

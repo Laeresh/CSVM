@@ -162,7 +162,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — the contact resolver
 
-9. ☐ `ContactReport` and `ContactOutcome`, and the detection half reduced to filling a report
+9. ☑ `ContactReport` and `ContactOutcome`, and the detection half reduced to filling a report
 10. ☐ `AircraftContactResolver` owns fate, the damage pair and the un-embed loop
 11. ☐ The outcome table asserted off-engine, and the cross-instance grace write replaced
 
@@ -392,7 +392,7 @@ it, so a retune does not silently void the test.
 
 # Wave E — the contact resolver
 
-## E9 ☐ `ContactReport` and `ContactOutcome`, and the detection half reduced to filling a report
+## E9 ☑ `ContactReport` and `ContactOutcome`, and the detection half reduced to filling a report
 
 **Goal.** Detection produces a value, and nothing downstream of it holds a Godot type.
 

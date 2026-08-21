@@ -161,6 +161,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` boxes on the aircraft layer; struck shape → part name.
 - `src/Flight/IWorldQuery.cs` — the one seam onto the live physics world: a shape swept along a motion, and a ray.
 - `src/Flight/GodotWorldQuery.cs` — the only adapter over `DirectSpaceState`; implements `IWorldQuery`.
+- `src/Flight/ContactReport.cs` — one detected contact as a value: impact, normal, struck part, collider name, stop fraction, and whether an aeroplane was struck.
+- `src/Flight/ContactOutcome.cs` — what a contact costs the striker: fate, the decoded damage pair, doom, the charged zone, the HUD flash, and the struck-aircraft instruction.
 - `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part; owns the whole-vehicle kill rule (`IsDestroyed`).
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
 - `src/Flight/DamageLab.cs` — the `--damage`/F5 slider UI: one HP slider per part, driving the parked plane's DamageVisuals or the flown plane's real PlaneDamage.
@@ -2549,7 +2551,11 @@ check, both turret/AI lines of sight) — goes through the one `IWorldQuery` bou
 (`GodotWorldQuery`, the sole adapter over `DirectSpaceState`); mask world+aircraft with its own
 `Body` (`AircraftBody`, built in `_Ready` from the same boxes) excluded by RID, so another plane
 is solid and a mid-air resolves through the same SurviveHit/Crash as terrain; `Crash`/`Respawn`
-toggle the body's hittability. The DEATH family (`CRASH into`, `midair aspect`, every
+toggle the body's hittability. Contact detection is two fillers of one `ContactReport` (see that
+entry): `SweepAirframe` from the sweep, and `CenterRayContact` from the anti-tunnelling centre ray
+when no box reached the obstacle. `ResolveContact` and `SurviveHit` read that report instead of
+seven threaded locals, and the struck `Node` travels beside it as the caller's own, since only the
+caller needs it. The DEATH family (`CRASH into`, `midair aspect`, every
 `vehicle health exhausted`, `graze`, `ground stop`, `AI ram`, `impact severity`) routes through
 `Log.Info("flight", …)`, so a play session's file sink carries how each aircraft died; the
 per-round weapon breadcrumbs around them are a different family and still `GD.Print`.
@@ -4291,6 +4297,27 @@ including the struck collider as a plain `Node?` so a caller builds its own name
 (`TurretController.WorldBlocksLine`), built with the `GodotWorldQuery` its `BuildCarried` makes
 from the host it is riding; a synthetic `IWorldQuery` proves the mask and the blocked/clear cases
 off-engine (`TurretLineOfSightTests`), with no live node in the process.
+
+## src/Flight/ContactReport.cs
+One detected contact, as the value both halves of detection fill: the impact, the struck surface's
+normal, which airframe box reached it first, the collider's name, how far along the frame's motion
+the airframe stopped, and `StruckIsAircraft`. `FlightController.SweepAirframe` fills it from the
+`IWorldQuery` sweep; `CenterRayContact` fills the same shape from the anti-tunnelling centre ray,
+where there is no struck box and no surface normal, so the part reads `center`, the normal is the
+reversed motion (making the contact head-on) and the stop fraction stays 1. The report holds no
+`Node` on purpose: the only question the decision side asks about the struck object is whether it
+is an aeroplane, and the caller keeps the collider for the applying (the struck rig's damage, the
+crash def's surface id, the graze reaction). The grace window is a precondition of detection rather
+than a filter on a report: while `_collisionGrace` is live no sweep runs at all.
+
+## src/Flight/ContactOutcome.cs
+What one contact costs the striking aircraft, as a value with no `Node` and no physics space behind
+it: the fate (`ContactFate.Graze` survivable, `Crash` fatal), the decoded damage pair both parties
+spend, the doom rule's answer, the zone the ledger charged (`Apply`'s answer, not the geometric
+guess), the pilot HUD's flash line, and `DamageStruckAircraft`, the instruction a caller owes
+because only it holds the struck rig: hand that aeroplane the pair and arm the collision grace on
+both parties. One value with no optional parts, so forgetting to perform it is forgetting one
+statement rather than four.
 
 ## src/Flight/GodotWorldQuery.cs
 The only adapter over Godot's `DirectSpaceState`, implementing `IWorldQuery`. Resolves the wrapped
