@@ -5,9 +5,9 @@ namespace CSVM.Utils;
 /// <see cref="Press"/> itself), and holding past <c>initialDelay</c> makes <see cref="Tick"/>
 /// start returning true every <c>repeatInterval</c> seconds until <see cref="Release"/>. A
 /// zero <c>repeatInterval</c> fires every tick once the delay has elapsed — e.g. the pause
-/// transport's "hold . to step every rendered frame" — while a nonzero one reproduces
-/// <c>MenuInput</c>'s initial-delay/repeat-rate d-pad shape, so either caller can share this
-/// instead of hand-rolling its own timer fields.
+/// transport's "hold . to step every rendered frame" — while a nonzero one is
+/// <c>MenuInput</c>'s initial-delay/repeat-rate d-pad shape, which runs both of its cursor axes
+/// through one of these via <c>MenuInput.StepAxis</c>.
 /// </summary>
 public sealed class HoldToRepeat(float initialDelay, float repeatInterval)
 {

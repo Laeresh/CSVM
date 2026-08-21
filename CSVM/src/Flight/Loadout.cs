@@ -567,8 +567,6 @@ public sealed class GunGroup : IGunSlot
     public int Ammo { get; set; }      // mutable remaining rounds
 
     public int MuzzleCount => Muzzles.Count;
-
-    public bool Empty => Ammo <= 0;
 }
 
 /// <summary>One live hardpoint (pylon): its resolved ordnance weapon and a per-pylon ammo counter
@@ -593,6 +591,4 @@ public sealed class Hardpoint : IPylonSlot
     public int Capacity { get; set; }  // CLUSTER_SIZE per pylon
 
     public int Ammo { get; set; }
-
-    public bool Empty => Ammo <= 0;
 }

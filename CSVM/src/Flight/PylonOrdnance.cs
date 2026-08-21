@@ -28,7 +28,7 @@ public sealed class PylonOrdnance
     /// nose-forward at the mount. Returns null when nothing could be mounted — no projectile pool, a
     /// view without the world scene, or a chapter whose gamez lacks the prototype roots (the round
     /// then flies its streak-only fallback and the wing simply shows no ordnance).</summary>
-    public static PylonOrdnance? Build(Loadout loadout, ProjectilePool? pool)
+    public static PylonOrdnance? Build(Loadout loadout, ProjectilePool? pool, bool infiniteAmmo)
     {
         if (pool == null)
         {
@@ -48,7 +48,7 @@ public sealed class PylonOrdnance
             // forward firing direction), tail at the mount — the same pose the round launches in, so
             // the mounted body and the fired round are seamless.
             model.Transform = Transform3D.Identity;
-            bool shown = hp.Ammo > 0;
+            bool shown = hp.Armed(infiniteAmmo);
             model.Visible = shown;
             mounts.Add(new Mount { Hardpoint = hp, Model = model, Shown = shown });
         }
@@ -69,14 +69,16 @@ public sealed class PylonOrdnance
         _mounts.Clear();
     }
 
-    /// <summary>Syncs each mounted body's visibility to its pylon's live ammo — shown while the pylon
-    /// holds ordnance, hidden at zero. Cheap: writes <see cref="Node3D.Visible"/> only on a change.
-    /// Driven each frame after the rocket-firing update; a respawn refill shows on the next frame.</summary>
-    public void Update()
+    /// <summary>Syncs each mounted body's visibility to whether its pylon is armed — the firing
+    /// path's own <see cref="AmmoSlots.Armed"/> question, <c>--infinite-ammo</c> included, so the
+    /// wing can never disagree with the trigger. Cheap: writes <see cref="Node3D.Visible"/> only on
+    /// a change. Driven each frame after the rocket-firing update; a respawn refill shows on the
+    /// next frame.</summary>
+    public void Update(bool infiniteAmmo)
     {
         foreach (var m in _mounts)
         {
-            bool want = m.Hardpoint.Ammo > 0;
+            bool want = m.Hardpoint.Armed(infiniteAmmo);
             if (want != m.Shown)
             {
                 m.Model.Visible = want;

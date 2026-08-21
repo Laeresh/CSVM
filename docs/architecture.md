@@ -131,7 +131,9 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ImpactReticle.cs` — the gun aiming pipper: 0.5 s of the selected group's flight along the nose (the original's own rule), projected each frame.
 - `src/Flight/EdgeMarker.cs` — the off-screen edge marker's placement rules, engine-free: on-screen test, behind-mirror, edge clamp (`Resolve`) and the clock-hour bearing (`ClockHour`); MarkerHud, VersusHud and TargetHud all place through it.
 - `src/Flight/MarkerHud.cs` — the stunt objective marker HUD: reticle, screen-edge arrow + o'clock bearing, run status, banners; one per player.
+- `src/Flight/ResultsBoard.cs` — the results boards' shared shell: chrome and palette, the halt-and-retire contract, and the standard Photo Mode · Restart · Exit menu.
 - `src/Flight/StuntScoreboard.cs` — end-of-run results overlay: a Godot-UI panel of per-zone splits, total, and the persisted best time.
+- `src/Flight/StuntSplits.cs` — the stunt run's splits section (zone table, total, best-time line), shared by StuntScoreboard and IaWrapupBoard.
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
 - `src/Flight/StuntRaceBoard.cs` — the race's shared ranked results overlay, on its own full-window CanvasLayer above the splitscreen panes.
 - `src/Flight/ScoreStore.cs` — stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only.
@@ -141,7 +143,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/IaWrapupBoard.cs` — Instant Action's wrap-up board: outcome headline and the per-counter score rows, summed across every seat.
 - `src/Flight/PauseState.cs` — who is holding the sim clock and why: the pause owner and the results-board halt, engine-free.
 - `src/Flight/HaltReason.cs` — why the clock is stopped; the clock advances only when no reason is set.
-- `src/Flight/PauseBoard.cs` — the shared pause board and its Resume · Restart · Exit menu, one whole-window CanvasLayer.
+- `src/Flight/PauseBoard.cs` — the shared pause board and its Resume · Photo Mode · Restart · Exit menu, one whole-window CanvasLayer.
 - `src/Flight/PhysicsConstants.cs` — `NomGravity`, the single `nom_gravity` value the flight model and its tests share.
 - `src/Flight/Weather.cs` — weather.json reader → `WeatherState`: per-zone fog, sunlight, cloud whiteout, wind, precipitation.
 - `src/Flight/FlightAudio.cs` — own-plane loops (engine, overspeed whine, rattle) + crash/prop one-shots, per-player `MixGain`.
@@ -193,7 +195,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 
 - `src/UI/MenuInput.cs` — one player's menu input source: keyboard flag + a `Pads` binding, edge/auto-repeat `Poll(dt)`.
 - `src/UI/BoardMenu.cs` — a board's cursor and item list, engine-free, so the selection rules test off engine.
-- `src/UI/BoardMenuItem.cs` — the rows a board menu can offer: Resume, Restart, Exit.
+- `src/UI/BoardMenuItem.cs` — the rows a board menu can offer: Resume, Photo Mode, Restart, Exit.
 - `src/UI/BoardMenuView.cs` — draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
@@ -246,7 +248,7 @@ instead.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
 - `src/Testing/SuiteCatalog.cs` — the ordered registry of the in-engine suites; domain scenario bodies live in `*Suites.cs` modules, while `SuiteConstants` holds their shared golden inputs. Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
-- `src/Testing/*Suites.cs` — six domain scenario modules: puffer, combat, Instant Action, AI/targeting/zeppelins, world/tools, and animation/effects.
+- `src/Testing/*Suites.cs` — eight domain scenario modules: puffer, combat, ordnance, Instant Action, AI/targeting/zeppelins, destroy choreography, world/tools, and animation/effects.
 - `src/Testing/SuiteConstants.cs` / `BurstTimeline.cs` / `SuiteViewers.cs` / `EffectStageSuiteHelper.cs` — the focused shared inputs, timeline values, pane-camera fixtures, and staged-effect fixture used by more than one suite module.
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
@@ -2014,14 +2016,31 @@ The stunt objective marker HUD: a viewport-filling `Control` drawing the on-scre
 block, the off-screen edge arrow (`EdgeMarker.Resolve` + clock-hour bearing), run status and banners
 (`CompleteBanner` branches solo vs race); one per player, sized via `HudMetrics.Scale(this)`.
 
+## src/Flight/ResultsBoard.cs
+The shared shell of the four results boards (`VersusBoard`, `StuntRaceBoard`, `StuntScoreboard`,
+`IaWrapupBoard`): the dimmed backdrop and centred styled panel, the board palette and label/cell
+factories, the window tracking, and the halt-and-retire contract — waking raises
+`HaltReason.Ended`, and the subclass's live flag (`StillEnded`) clearing retires the board and
+releases the clock from `_Process`. Owns the standard Photo Mode · Restart · Exit `BoardMenu` and
+its activation routing. A subclass keeps its Build signature, its completion event and its
+Populate content; `IaWrapupBoard` alone overrides `OnRestartChosen` to retire from the menu, and
+`StuntScoreboard` alone overrides `BoardScale`. `PauseBoard` uses the chrome statics without
+subclassing: pausing is a held clock, not an ended run. Pinned by the `results-board-shell` suite.
+
 ## src/Flight/StuntScoreboard.cs
-End-of-run results overlay: plain Godot UI (dimming backdrop → CenterContainer →
-PanelContainer → VBox + 3-column split grid) filled from `StuntMission.InCompletionOrder()`;
-wakes on `RunCompleted` (records via `ScoreStore.RecordIfBest`, logs the split table to stdout
-for headless review), branching NEW BEST vs BEST on the stored record. Raises `HaltReason.Ended`
-and carries a Restart · Exit `BoardMenu`; `_Process` releases both once `AllComplete` clears, so
-R and pad Y reach the rerun without going through the menu. Not built while Instant Action is
-active — `IaWrapupBoard` carries the splits there instead (`BL-358`).
+End-of-run results overlay for Stunt Flying, on `ResultsBoard`'s shell — the one board drawn
+inside a pilot's pane, so it alone overrides `BoardScale` with `HudMetrics`' pane damping. Wakes
+on `RunCompleted` (records via `ScoreStore.RecordIfBest`, logs the split table to stdout for
+headless review) and draws `StuntSplits` from a `StuntSummary` of the finished run. Retires once
+`AllComplete` clears, so R and pad Y reach the rerun without going through the menu. Not built
+while Instant Action is active — `IaWrapupBoard` carries the splits there instead (`BL-358`).
+
+## src/Flight/StuntSplits.cs
+The stunt run's splits section shared by `StuntScoreboard` and `IaWrapupBoard`: the zone table
+(name, split, cumulative, in the order flown, em-dash rows for zones never reached), the total,
+and the ★ NEW BEST / BEST comparison line, drawn from a `StuntSummary` snapshot (mission, total,
+previous best, whether it was beaten). The two callers' shipped layouts differ by one rule before
+the total, kept as an explicit parameter rather than silently unified.
 
 ## src/Flight/ScoreStore.cs
 Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
@@ -2038,13 +2057,12 @@ instead of a bare `GD.Print`. Off-engine coverage:
 `CSVM.Tests/StuntRaceTests.cs` (finish ordering, rematch reset, standings ties).
 
 ## src/Flight/StuntRaceBoard.cs
-The race's shared ranked results overlay: same clean-Godot-UI construction as StuntScoreboard,
-but covering the WHOLE window — on its own CanvasLayer (Layer 10, above SplitScreen's 0) under
-the session root, one row per player from `StuntRace.Standings()` (placing, tag, plane, zones,
-total + gap to the winner; DNF when unfinished). Wakes on `RaceCompleted` and raises
-`HaltReason.Ended`; `_Process` hides it and releases the clock once `AllFinished` clears, so R and
-pad Y reach the rematch without going through the menu. Carries a Restart · Exit `BoardMenu`
-driven by player 1, Exit's label following how the session was launched.
+The race's shared ranked results overlay on `ResultsBoard`'s shell, covering the WHOLE window —
+on its own CanvasLayer (Layer 10, above SplitScreen's 0) under the session root, one row per
+player from `StuntRace.Standings()` (placing, tag, plane, zones, total + gap to the winner; DNF
+when unfinished). Wakes on `RaceCompleted`; retires once `AllFinished` clears, so R and pad Y
+reach the rematch without going through the menu. Player 1 drives the standard menu, Exit's label
+following how the session was launched.
 
 ## src/Flight/VersusMatch.cs
 Dogfight deathmatch bookkeeping: `RegisterKill(shooter,
@@ -2089,21 +2107,19 @@ decode is [`org/targeting.md`](org/targeting.md); the edge placement and clock b
 
 
 ## src/Flight/VersusBoard.cs
-The dogfight's shared results overlay — `StuntRaceBoard`'s construction
-almost verbatim: winner (their own `SplitScreen.PlayerColor`, or "DRAW" on a tie) on top, then one
-ranked row per player (tag, kills, deaths) from `VersusMatch.Standings()`, covering the WHOLE
-window on its own CanvasLayer (Layer 10, above SplitScreen's 0) — the match ends for everybody at
-once, unlike a per-pane HUD element. Wakes on `MatchCompleted`, hides in `_Process` once
-`Completed` clears (a rematch); `Populate` runs ONLY from `OnMatchCompleted`, so the drawn rows
-stay the ones the match actually ended with even after `Restart()` zeroes the live state —
-`StuntRaceBoard`'s `FinishTime`-snapshot discipline, achieved here for free since `VersusStanding`
-is a value-type snapshot already. Raises `HaltReason.Ended`, so the world stops rather than leaving
-the losers to fly under a board that has already counted them. Carries a Restart · Exit
-`BoardMenu` driven by player 1; Restart routes through `GameSession.RestartMatch` (mirrors
-`RestartRace`: `VersusMatch.Restart()` then every rig respawns), which clears `Completed` and lets
-`_Process` do the hide and the clock release. R and pad Y reach the same call directly, owned only
-while the board is up via `FlightController.Match is { Completed: true }` — polled in
-`PollResultsShortcuts` off the rendered frame, since the halt means no sim step runs to read it.
+The dogfight's shared results overlay on `ResultsBoard`'s shell: winner (their own
+`SplitScreen.PlayerColor`, or "DRAW" on a tie) on top, then one ranked row per player (tag, kills,
+deaths) from `VersusMatch.Standings()`, covering the WHOLE window on its own CanvasLayer (Layer
+10, above SplitScreen's 0) — the match ends for everybody at once, unlike a per-pane HUD element.
+Wakes on `MatchCompleted`; `Populate` runs ONLY from there, so the drawn rows stay the ones the
+match actually ended with even after `Restart()` zeroes the live state — `StuntRaceBoard`'s
+`FinishTime`-snapshot discipline, achieved here for free since `VersusStanding` is a value-type
+snapshot already. Retires once `Completed` clears: the menu's Restart routes through
+`GameSession.RestartMatch` (mirrors `RestartRace`: `VersusMatch.Restart()` then every rig
+respawns), which clears `Completed` and lets the shell do the hide and the clock release. R and
+pad Y reach the same call directly, owned only while the board is up via
+`FlightController.Match is { Completed: true }` — polled in `PollResultsShortcuts` off the
+rendered frame, since the halt means no sim step runs to read it.
 
 ## src/Flight/HaltReason.cs
 Why the sim clock is stopped, as a flags set: `Paused` (a player asked, and carries an owner) and
@@ -2125,39 +2141,38 @@ go through `TryToggle`; `ForceResume` drops a pause whoever owns it, for a rerun
 from the menu. Off-engine coverage: `CSVM.Tests/PauseStateTests.cs`.
 
 ## src/Flight/PauseBoard.cs
-The shared pause overlay (`BL-373`) — `VersusBoard`'s WHOLE-window construction (pausing
-stops the game for everybody at once, not one pane), built once by `GameSession` on its own
-CanvasLayer (`UI.HudLayers.Board`, same layer the race/dogfight/wrap-up boards share) and wired to
-`PauseState.Changed` instead of a match/race completion event. Shows "PAUSED", the pausing
-player's tag in their own `SplitScreen.PlayerColor`, and a `BoardMenu` of Resume · Restart · Exit
-driven by that same player alone — `PauseState` lets only the owner resume, so binding the cursor
-to the owner keeps one rule rather than two, and stops a second pad steering a menu whose Restart
-and Exit decide the whole session. Exit's label follows how the session was launched. A fresh menu
-each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run.
-`Populate()` runs only on a fresh pause (mirrors `VersusBoard`'s snapshot discipline); `Visible`
-tracks `PauseState.Paused` on every `Changed` event, and `_Process` polls the host only to move
-the cursor.
+The shared pause overlay (`BL-373`) — `ResultsBoard`'s chrome (shell construction, panel and
+label factories) without its halt-and-retire contract: pausing is a held clock, not an ended run,
+so this board is built once by `GameSession` on the same CanvasLayer (`UI.HudLayers.Board`) and
+wired to `PauseState.Changed` instead of a completion event. Shows "PAUSED", the pausing player's
+tag in their own `SplitScreen.PlayerColor`, and its own `BoardMenu` of Resume · Photo Mode ·
+Restart · Exit driven by that same player alone — `PauseState` lets only the owner resume, so
+binding the cursor to the owner keeps one rule rather than two, and stops a second pad steering a
+menu whose Restart and Exit decide the whole session. Exit's label follows how the session was
+launched. A fresh menu each pause, so the cursor starts on Resume and a stray confirm cannot
+destroy a run. `Populate()` runs only on a fresh pause (mirrors `VersusBoard`'s snapshot
+discipline); `Visible` tracks `PauseState.Paused` on every `Changed` event, and `_Process` polls
+the host only to move the cursor.
 
 ## src/Flight/IaWrapupBoard.cs
-Instant Action's wrap-up board — `VersusBoard`'s WHOLE-window
-construction, since the mission ends for every human at once (decisions 10/14), not
-`StuntScoreboard`'s per-pane shape. Four label/value rows (Time to Complete Mission, Enemies Shot
-Down, Danger Zones Completed, Shot %) — the langui titles at ids 1134-1137, kept as literal
-strings rather than read off `ui_strings.json` at runtime, since that table is a build-time
-extraction artifact of the `.rof` archive and not one of the five archives `SessionArchives.OpenFor`
-loads. Unlike `VersusBoard`/`StuntRaceBoard` it takes no live match object at all: `Present`'s
-arguments are the caller's own snapshot, handed in once from `InstantActionRuntime.MissionEnded` —
-`GameSession` owns every source (the mission clock, the kill tally, `ProjectilePool`'s shot
-counters, the summed `StuntMission.CompletedCount`) and this class only draws what it is given.
-On a `stunt_flying` mission `Present` also takes a `StuntSummary`, and the board grows the run's
-zone splits, total and best-time row in `StuntScoreboard`'s layout; the scoreboard is then not
-built at all, which is how `BL-358`'s two stacked boards became one. Safe because the scoreboard
-only ever existed single-pane: several pilots take the race branch, which builds none.
-Raises `HaltReason.Ended` on `Present` and carries a Restart · Exit `BoardMenu` driven by player 1.
-Nothing else retires this board — a mission that has ended stays ended — so unlike the race and
-dogfight boards the hide and the clock release happen on the menu's own Restart. That Restart is a
-restart and not a rerun: it reaches the Launcher's `RestartSession`, which rebuilds the world,
-because the mission's waves, ace and zeppelin cannot be put back in place (`BL-410`).
+Instant Action's wrap-up board on `ResultsBoard`'s shell, the whole window on its own CanvasLayer,
+since the mission ends for every human at once (decisions 10/14) — not `StuntScoreboard`'s
+per-pane shape. Four label/value rows (Time to Complete Mission, Enemies Shot Down, Danger Zones
+Completed, Shot %) — the langui titles at ids 1134-1137, kept as literal strings rather than read
+off `ui_strings.json` at runtime, since that table is a build-time extraction artifact of the
+`.rof` archive and not one of the five archives `SessionArchives.OpenFor` loads. Unlike
+`VersusBoard`/`StuntRaceBoard` it takes no live match object at all: `Present`'s arguments are the
+caller's own snapshot, handed in once from `InstantActionRuntime.MissionEnded` — `GameSession`
+owns every source (the mission clock, the kill tally, `ProjectilePool`'s shot counters, the summed
+`StuntMission.CompletedCount`) and this class only draws what it is given. On a `stunt_flying`
+mission `Present` also takes a `StuntSummary` and the board grows the `StuntSplits` section; the
+scoreboard is then not built at all, which is how `BL-358`'s two stacked boards became one. Safe
+because the scoreboard only ever existed single-pane: several pilots take the race branch, which
+builds none. Nothing else retires this board — a mission that has ended stays ended, no live flag —
+so it alone overrides the shell's `OnRestartChosen`: the hide and the clock release happen on the
+menu's own Restart. That Restart is a restart and not a rerun: it reaches the Launcher's
+`RestartSession`, which rebuilds the world, because the mission's waves, ace and zeppelin cannot
+be put back in place (`BL-410`).
 
 ## src/Flight/Weather.cs
 `WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone
@@ -2924,7 +2939,7 @@ fiction. The original's own load screen, its six-lamp progress bar included, is 
 entry for the deferred-build handshake.
 
 ## src/UI/BoardMenuItem.cs
-The rows a board menu can offer — Resume, Restart, Exit. The board owning the menu decides which it
+The rows a board menu can offer — Resume, Photo Mode, Restart, Exit. The board owning the menu decides which it
 carries and what each does; Resume appears only on the pause board, and Exit's label follows
 whether the session can return to the launchscreen or only quit.
 
@@ -2962,6 +2977,10 @@ named device). `Pads` is nullable, null meaning every connected pad, which is th
 `FlightController.PadDevices` takes — a single-player session has no per-player assignment to hand
 over. `PadBack` is the pad's B alone, for a reader whose Escape is spoken for elsewhere; a board
 menu's is. Serves both the launchscreen and the in-flight board menus.
+Both cursor axes run one timing rule, `StepAxis` over a `HoldToRepeat` per axis (the shape that
+class's doc names as its second caller): a fresh press or flip fires immediately and arms the
+initial delay, a held direction repeats on the interval. Unit-tested in
+`CSVM.Tests/MenuInputTests.cs`; the raw device reads stay unreachable from any test tier.
 `MoveX` (Left/Right) is `Move`'s horizontal twin, added
 so an Instant Action wizard screen can carry a vertical list cursor and a horizontal stepper at
 once without either read starving the other: MissionType's lives, WaveEdit's four fields and
@@ -3661,8 +3680,8 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/SuiteCatalog.cs
-The ordered registry of 76 in-engine assertion suites. Scenario bodies are grouped by domain in the
-six `*Suites.cs` modules; `Names` is the registry-order test surface. It preserves the original
+The ordered registry of 90 in-engine assertion suites. Scenario bodies are grouped by domain in the
+eight `*Suites.cs` modules; `Names` is the registry-order test surface. It preserves the original
 suite order, including `emitter-lifetime` first, because that suite installs the shared C1 world's
 fake emitter factory. The suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
@@ -3759,10 +3778,11 @@ re-reset the fifth play's rings read INACTIVE at opacity 0, which is the sortie-
 symptom this suite exists to hold shut.
 
 ## src/Testing/*Suites.cs
-Six domain modules hold the in-engine scenario bodies: `PufferSuites`, `CombatSuites`,
-`InstantActionSuites`, `AiTargetingAndZeppelinSuites`, `WorldAndToolSuites`, and
-`AnimationAndEffectsSuites`. They depend on `TestHarness` through `TestContext`; shared fixtures
-are separate focused modules, not an all-purpose suite helper.
+Eight domain modules hold the in-engine scenario bodies: `PufferSuites`, `CombatSuites`,
+`OrdnanceSuites`, `InstantActionSuites`, `AiTargetingAndZeppelinSuites`,
+`DestroyChoreographySuites`, `WorldAndToolSuites`, and `AnimationAndEffectsSuites`. They depend on
+`TestHarness` through `TestContext`; shared fixtures are separate focused modules, not an
+all-purpose suite helper.
 
 ## src/Testing/SuiteConstants.cs
 The shared golden inputs used by more than one scenario module: airframe and weapon counts, puffer
