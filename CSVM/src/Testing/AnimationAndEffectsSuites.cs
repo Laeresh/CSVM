@@ -1,20 +1,25 @@
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session;
 using CSVM.UI;
-using CSVM.Utils;
 using Godot;
 
 using static CSVM.Testing.SuiteConstants;
 namespace CSVM.Testing;
 
+/// <summary>Suites asserting what a played animation puts on screen: the launches it flies
+/// and lands, the effect templates it stages and lights, the washes it paints, and the
+/// authored burst timelines it dispatches.</summary>
 internal static class AnimationAndEffectsSuites
 {
+    // ---- the full effects sweep as suite verdicts ----------------------------------------------
+
+    // Asserts every effects-test entry on a full replica stage so sweep verdicts fail the build.
+    // The fixed ~180 m play point detects a template that failed to relocate.
+    // ⚠ Puffer and mesh tallies are golden only for seed 1 with this counting factory.
     internal static void EffectsCensus(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -1040,189 +1045,941 @@ internal static class AnimationAndEffectsSuites
         }
     }
 
-    // ---- node lab tree rows must follow live Visible --------------------------------------------
+    // ---- WAIT_FOR_COMPLETION --------------------------------------------------------------------
 
-    // Hides a node through the lab's own Hide action, then re-shows it through a real RESET_STATE def,
-    // the same path a world animation uses, and checks the tree row both times, never through the
-    // button, only through Node3D.Visible. A def re-showing a node the user hid is correct behaviour,
-    // so the row must follow it. ⚠ Use a chapter other than TestContext.Chapter: that one is cached
-    // and shared with damage-hd, so the candidate search would otherwise depend on suite run order.
-    internal static void NodeLabVisibility(TestContext ctx)
+    // WAIT_FOR_COMPLETION on the authored case, with its own control beside it in the same sequence.
+    // player_crash_water's destroy_crash is the install's clean discriminator: eleven events, of which
+    // exactly one carries the flag, followed immediately by an unflagged large_steam_spray that would
+    // otherwise start with the splash instead of after it.
+    // ⚠ Assert the control too, the nine unflagged calls that must still all start at t=0. A runtime
+    // that held every call would pass the spray check and fail those.
+    internal static void WaitForCompletion(TestContext ctx)
     {
-        ctx.WithWorld("C2", collision: false, world =>
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            DestructibleRegistry.Instance? chosen = null;
-            Node3D? healthy = null;
-            foreach (var inst in world.Runtime.Destructibles.All)
-            {
-                if (inst.Def.ResetState == null)
-                {
-                    continue;
-                }
-                if (FindVariant(inst.Anchor, "healthy") is { Visible: true } found)
-                {
-                    chosen = inst;
-                    healthy = found;
-                    break;
-                }
-            }
-            ctx.Check(chosen != null,
-                $"chapter has a destructible with a visible 'healthy' variant and a RESET_STATE chapter={ctx.Chapter}");
-            if (chosen == null || healthy == null)
+            const string animName = "player_crash_water";
+            const string flagged = "plane_big_splash";
+            const string held = "large_steam_spray";
+            var program = world.Session.Program.Subset(animName);
+            var defs = program.ByAnimName(animName);
+            ctx.Check(defs.Count > 0, $"chapter program has {animName} defs={defs.Count}");
+            if (defs.Count == 0)
             {
                 return;
             }
 
-            var selection = new SelectionService(world.Session.Root, ctx.Camera);
-            var lab = new NodeLab(world.Session.Root, selection, world.Runtime, world.Session.Program,
-                world.Session.Builder.Scene, collisionBuilt: false);
-            ctx.Host.AddChild(selection);
-            ctx.Host.AddChild(lab);
-            try
+            // The caller's own nodes plus each callee's ROOT: on a flat stage a callee whose root
+            // is missing falls back to the caller's anchor, which still runs but stops being the
+            // separate instance whose lifetime is the subject here.
+            var nodes = new List<string>
             {
-                lab.Toggle();
-                selection.Select(healthy);
-                lab.RevealSelectionForTest();
-                lab.ToggleHide();
-                ctx.Check(!healthy.Visible, $"ToggleHide actually hides the node node={SelectionService.NameOf(healthy)}");
-
-                var hidden = lab.RowStateForTest(healthy);
-                ctx.Check(hidden is { Dim: true } row1 && row1.Text.Contains("(hidden)"),
-                    $"row reads hidden right after the button node={SelectionService.NameOf(healthy)} text={hidden?.Text} dim={hidden?.Dim}");
-
-                // The re-show is a real def, not the lab: RESET_STATE's OBJECT_ACTIVE_STATE events
-                // are what an animation uses to bring the healthy subtree back, with no button
-                // press and nothing telling the lab this node exists.
-                world.Runtime.ResetDestructible(chosen);
-                ctx.Check(healthy.Visible, $"RESET_STATE re-shows the node node={SelectionService.NameOf(healthy)}");
-
-                lab.RefreshStatusForTest();
-                var shown = lab.RowStateForTest(healthy);
-                ctx.Check(shown is { Dim: false } row2 && !row2.Text.Contains("(hidden)"),
-                    $"row follows the def's re-show without user input node={SelectionService.NameOf(healthy)} text={shown?.Text} dim={shown?.Dim}");
-            }
-            finally
+                "player", "healthy", "destroyed", "dontmove", "markers", "shadow", "cockpit1",
+                "huge_splash_model", "splash_polys", "sp_1", "white_water_impact",
+                "carnage_trails", "large_fire", "ripple1",
+            };
+            for (int i = 1; i <= 4; i++)
             {
-                lab.Free();
-                selection.Free();
+                nodes.Add($"piece{i}");
             }
+
+            WithEmitterStage(ctx, program, "CrashWaterStage", nodes, (stage, runtime, fake) =>
+            {
+                float clock = 0f;
+                var startedAt = new Dictionary<string, float>(System.StringComparer.OrdinalIgnoreCase);
+                runtime.OnInstanceStarted = (d, _) =>
+                {
+                    if (d.AnimName is { } name && !startedAt.ContainsKey(name))
+                    {
+                        startedAt[name] = clock;
+                    }
+                };
+                runtime.Start(defs[0], stage);
+                for (int i = 0; i < 480; i++)   // 8 s — well past the splash's authored 3.0 s
+                {
+                    clock += 1f / 60f;
+                    runtime.Advance(1f / 60f);
+                }
+                runtime.OnInstanceStarted = null;
+
+                ctx.Check(startedAt.ContainsKey(flagged), $"{flagged} became a live instance");
+                ctx.Check(startedAt.ContainsKey(held), $"{held} became a live instance");
+                if (!startedAt.TryGetValue(flagged, out float splashAt)
+                    || !startedAt.TryGetValue(held, out float sprayAt))
+                {
+                    return;
+                }
+
+                ctx.Note($"destroy_crash: {flagged} t={splashAt:0.000}s, {held} t={sprayAt:0.000}s (gap {sprayAt - splashAt:0.000}s vs the authored 3.0s), holds armed={runtime.WaitsInstalled} abandoned={runtime.WaitsAbandoned}");
+                ctx.Check(splashAt <= 2f / 60f,
+                    $"the flagged call itself is NOT delayed — the hold is on what follows it (t={splashAt:0.000})");
+                ctx.Check(sprayAt - splashAt >= 2.9f,
+                    $"{held} waits out {flagged}'s authored 3.0 s choreography (gap={sprayAt - splashAt:0.000} s)");
+                ctx.Check(sprayAt - splashAt <= 4.5f,
+                    $"...and starts when the splash ENDS, not at some ceiling (gap={sprayAt - splashAt:0.000} s)");
+
+                // The control: the unflagged calls ahead of it in the same sequence.
+                foreach (var unflagged in new[] { "call_crash_trails", "large_10sec_fire" })
+                {
+                    if (startedAt.TryGetValue(unflagged, out float t))
+                    {
+                        ctx.Check(t <= 2f / 60f,
+                            $"unflagged {unflagged} is not held (t={t:0.000}) — null and 0 are different authored states");
+                    }
+                }
+
+                ctx.Check(runtime.WaitsInstalled >= 1,
+                    $"the runtime armed the hold rather than the gap coming from somewhere else (installed={runtime.WaitsInstalled})");
+                ctx.Same(0, runtime.WaitsAbandoned,
+                    $"no hold ended at the WaitCeilingS backstop instead of at its callee");
+            },
+                asCrashRig: true);
         });
     }
 
-    // The first descendant (inclusive) whose cs_name contains the tag — "healthy"/"destroyed" name
-    // their variant subtrees exactly as CountVariants (Probes.cs) scans for, but this returns the
-    // node itself rather than a count.
-    internal static Node3D? FindVariant(Node3D node, string tag)
+    // ---- what a host deactivation may and may not stop ------------------------------------------
+
+    // An OBJECT_ACTIVE_STATE INACTIVE ends the emitters under that host, but not one that started in
+    // the same instant. ⚠ Assert BOTH halves: dropping the stop entirely passes the splash half, and
+    // shipping the stop unconditioned passes the debris half. They are the two populations the
+    // install-wide census splits, and the split is total (analysis/bl-229-emitter-host-deactivation/).
+    // SPLASH is plane_big_splash, whose emitter must survive its host's deactivation and still be gone
+    // by ~0.7 s; DEBRIS is m_build01, whose deactivation is the trail's only authored stop.
+    internal static void EmitterHostDeactivation(TestContext ctx)
     {
-        string cs = node.HasMeta(AnimRuntime.NameMeta) ? node.GetMeta(AnimRuntime.NameMeta).AsString() : node.Name.ToString();
-        if (node.HasMeta(AnimRuntime.NameMeta) && cs.Contains(tag, System.StringComparison.OrdinalIgnoreCase))
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            return node;
+            SplashSurvivesItsOwnInstant(ctx, world);
+            DebrisTrailStillEndsWithItsHost(ctx, world);
+        });
+    }
+
+    internal static void SplashSurvivesItsOwnInstant(TestContext ctx, TestWorld world)
+    {
+        const string animName = "plane_big_splash";
+        const string pufferName = "splasher";
+        var program = world.Session.Program.Subset(animName);
+        var defs = program.ByAnimName(animName);
+        ctx.Check(defs.Count > 0, $"chapter program has {animName} defs={defs.Count}");
+        if (defs.Count == 0)
+        {
+            return;
         }
-        foreach (var child in node.GetChildren())
+
+        WithEmitterStage(ctx, program, "SplashStage",
+            new[] { "huge_splash_model", "splash_polys", "sp_1", "ripple1", "ripple2", "ripple3" },
+            (stage, runtime, fake) =>
         {
-            if (child is Node3D n3d && FindVariant(n3d, tag) is { } found)
+            runtime.Start(defs[0], stage);
+            runtime.Advance(1f / 60f);
+
+            ctx.Check(fake.Built.Any(e => e.Key == pufferName),
+                $"{animName} reached the fake factory and built {pufferName}");
+            ctx.Check(EmitterOn(runtime, pufferName, "sp_1") == true,
+                $"{pufferName} survives the sp_1 deactivation it shares an instant with (BL-229)");
+
+            for (int i = 0; i < 18; i++)   // 0.3 s — inside the callee's authored 0.5 s run
             {
-                return found;
+                runtime.Advance(1f / 60f);
+            }
+            ctx.Check(EmitterOn(runtime, pufferName, "sp_1") == true,
+                $"{pufferName} is still emitting 0.3 s in");
+
+            for (int i = 0; i < 30; i++)   // out to 0.8 s, past the authored 0.5 + 0.1 s stop
+            {
+                runtime.Advance(1f / 60f);
+            }
+            ctx.Check(EmitterOn(runtime, pufferName, "sp_1") == false,
+                $"{pufferName} ends on the run hg_splasher authors, not on its host (and its row is still known, so this is a pause, not a teardown)");
+            var emitter = fake.Built.FirstOrDefault(e => e.Key == pufferName);
+            ctx.Check(emitter is { Started: > 0 }, $"{pufferName} actually sustained particles");
+        },
+            asCrashRig: true);
+    }
+
+    internal static void DebrisTrailStillEndsWithItsHost(TestContext ctx, TestWorld world)
+    {
+        const string animName = "m_build01";
+        const string pufferName = "trailpuffer3";
+        const string host = "part3";
+        const string offSequence = "sparkout3";   // where part3's own deactivation is authored
+        var program = world.Session.Program.Subset(animName);
+        var defs = program.ByAnimName(animName);
+        ctx.Check(defs.Count > 0, $"chapter program has {animName} defs={defs.Count}");
+        if (defs.Count == 0)
+        {
+            return;
+        }
+
+        // ⚠ Keep the fireball template roots on the stage. small_fireball declares a puffer also called
+        // trailpuffer2, and with its own root missing the name resolution falls back to the call anchor,
+        // so its stop lands on the building's key and ends the debris trail early, masking the assertion.
+        var nodes = new List<string>
+        {
+            "m_bld_healthy", "m_bld_destroyed", "dbase", "flame_ball_01", "flame_ball_02",
+        };
+        for (int i = 1; i <= 9; i++)
+        {
+            nodes.Add($"part{i}");
+        }
+        WithEmitterStage(ctx, program, "DebrisStage", nodes, (stage, runtime, fake) =>
+        {
+            // Asserted against the DISPATCH MOMENT, never a fixed second: part3 is a bounce-solved launch, so
+            // when it lands is computed rather than authored. The only other thing that could stop this trail,
+            // the instance retiring, happens a second later, which a wall-clock check would blur.
+            float clock = 0f;
+            float deactivatedAt = -1f;
+            float stoppedAt = -1f;
+            bool everEmitted = false;
+            runtime.OnEventDispatched = d =>
+            {
+                if (deactivatedAt < 0f && d.Sequence == offSequence && d.EventKind == "ObjectActiveState")
+                {
+                    deactivatedAt = clock;
+                }
+            };
+            runtime.Start(defs[0], stage);
+            for (int i = 0; i < 300; i++)   // 5 s — past the landing and past the instance's own end
+            {
+                clock += 1f / 60f;
+                runtime.Advance(1f / 60f);
+                bool? on = EmitterOn(runtime, pufferName, host);
+                everEmitted |= on == true;
+                if (everEmitted && stoppedAt < 0f && on == false)
+                {
+                    stoppedAt = clock;
+                }
+            }
+            runtime.OnEventDispatched = null;
+
+            ctx.Check(fake.Built.Any(e => e.Key == pufferName), $"{animName}'s death built {pufferName}");
+            ctx.Check(everEmitted, $"{pufferName} trails {host} while it flies");
+            ctx.Check(deactivatedAt > 0f, $"{offSequence} switched {host} off t={deactivatedAt:0.000}");
+            ctx.Check(stoppedAt > 0f, $"{pufferName} stopped within the 5 s window t={stoppedAt:0.000}");
+            ctx.Check(stoppedAt > 0f && deactivatedAt > 0f && Mathf.Abs(stoppedAt - deactivatedAt) <= 2f / 60f,
+                $"{pufferName} ends on {host}'s own deactivation frame, not later — BL-224's stop is dated, not dropped (off={deactivatedAt:0.000} stop={stoppedAt:0.000})");
+        });
+    }
+
+    // Is the emitter `name` ON `host` emitting? Null when
+    // no such emitter is known. Host-qualified on purpose: puffer names are NOT unique across
+    // definitions — `small_fireball` declares a `trailpuffer2` of its own, and a name-only read
+    // answers about whichever row comes first, which lets a debris assertion pass against a
+    // runtime with the stop deleted outright.
+    internal static bool? EmitterOn(AnimRuntime runtime, string name, string host)
+    {
+        foreach (var row in runtime.Emitters.Census)
+        {
+            if (row.Name == name && row.Host == host)
+            {
+                return row.Emitting;
             }
         }
         return null;
     }
 
-    // Asserts every pane of a 2-, 3- and 4-player rig is a 3D audio listener. The check reads trivial
-    // and is not: a fresh SubViewport is NOT a listener, and in splitscreen the main camera stands down,
-    // which takes it out of the World3D listener set. With no listener-enabled viewport left,
-    // AudioStreamPlayer3D finds no listener in range, clears its bus volumes, and every 3D emitter in
-    // the world is silent, with nothing logged or counted to say so.
-    internal static void SplitscreenListeners(TestContext ctx)
+    // A bare stage carrying the nodes a definition names, plus a runtime bound to it
+    // through a CountingEmitterFactory. Flat children, never a hierarchy: the point is
+    // to give each named host its own subtree, so a stop that reaches the wrong one is visible
+    // rather than being absorbed by a shared ancestor.
+    internal static void WithEmitterStage(TestContext ctx, AnimProgram program, string stageName,
+        IEnumerable<string> nodeNames,
+        System.Action<Node3D, AnimRuntime, CountingEmitterFactory> body,
+        bool asCrashRig = false)
     {
-        var main = ctx.Host.GetViewport();
-        ctx.Check(main.AudioListenerEnable3D,
-            $"the main viewport is a 3D audio listener (the untouched 1P path)");
-
-        // The default the rig has to override, proved rather than assumed.
-        using (var bare = new SubViewport())
+        var stage = new Node3D { Name = stageName };
+        foreach (var name in nodeNames)
         {
-            ctx.Check(!bare.AudioListenerEnable3D,
-                $"a fresh SubViewport is NOT an audio listener, so each pane must set it");
+            stage.AddChild(new Node3D { Name = name });
         }
-
-        for (int players = 2; players <= SplitScreen.MaxPlayers; players++)
+        var fake = new CountingEmitterFactory();
+        // The two role flags AnimRuntime.ForCrashRig sets, for a def the crash rig is the only
+        // production caller of: the splash is played by the per-player rig, which relocates its own
+        // called templates and holds no ExternalEffect, so the start and the stop meet on ONE director.
+        var runtime = new AnimRuntime(AnimRuntime.NewTemplateStage(placesCalled: asCrashRig))
         {
-            var split = SplitScreen.Build(players, main);
-            ctx.Host.AddChild(split);
-            try
-            {
-                ctx.Same(players, split.Views.Count, $"{players}P panes");
-                foreach (var view in split.Views)
-                {
-                    ctx.Check(view.AudioListenerEnable3D,
-                        $"{players}P pane {view.Name} is a 3D audio listener");
-                }
-            }
-            finally
-            {
-                ctx.Host.RemoveChild(split);
-                split.Free();
-            }
+            AutoStart = false,
+            ManualAdvance = true,
+            SoundHandledElsewhere = true,
+            EmitterFactory = fake,
+            NameResolveFallback = asCrashRig,
+        };
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(stage, program);
+            body(stage, runtime, fake);
+        }
+        finally
+        {
+            runtime.Free();
+            stage.Free();
         }
     }
 
-    // The B13 rule: WorldLights.Commit fades and ranks
-    // each light against the NEAREST of every pane's camera, not a single position. Driven
-    // straight against a real WorldLights instance with synthetic positions —
-    // there is no per-player placement flag to give two scripted panes independent spots (the
-    // same CLI gap B11/B12 hit), so the rule is pinned here instead and the visual verdict is
-    // PT-52's, alongside B11/B12's own owed at-the-controls check.
-    internal static void WorldLightsNearestViewer(TestContext ctx)
+    // ---- the template MESH half renders at the call site ----------------------------------------
+
+    // An effect's template MESHES must be visible at the call site while it plays and dark once it is
+    // over. The world-effects stage keeps every template root hidden and the engine reveals the one a
+    // call lands on (TemplateStage.Shown), so both halves are engine rules.
+    // ⚠ Assert both: revealing and never hiding leaves a mesh burning at the last hit point for the
+    // session, while hiding eagerly or never revealing shows nothing at all. The CALLED case is
+    // he_ground_effect's staged he_ring1; the ENDED case is 3040ap_gunhit's stop-retired chunk mesh.
+    internal static void EffectTemplateMesh(TestContext ctx)
     {
-        var p1 = Vector3.Zero;
-        // Well past FadeEnd (1500 m) from P1 alone, but 100 m from a second viewer.
-        var farFromP1 = new Vector3(0f, 0f, -2000f);
-        var p2 = new Vector3(0f, 0f, -2100f);
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            CalledTemplateShowsItsMesh(ctx, world);
+            EndedEffectLeavesNoMeshLit(ctx, world);
+        });
+    }
 
-        var lights = new WorldLights();
+    internal static void CalledTemplateShowsItsMesh(TestContext ctx, TestWorld world)
+    {
+        EffectStageSuiteHelper.WithEffectStage(ctx, world, "he_ground_effect", new[] { "he_ring", "he_ring1", "he_trails" },
+            (stage, runtime, point) =>
+        {
+            ctx.Check(Probes.MeshCensus.VisibleMeshes(stage) == 0,
+                $"the staged templates start hidden ({Probes.MeshCensus.VisibleMeshes(stage)} visible)");
+            runtime.PlayEffectAt("he_ground_effect", point);
+            int peak = 0;
+            for (int i = 0; i < 30; i++)
+            {
+                runtime.Advance(1f / 60f);
+                peak = Mathf.Max(peak, Probes.MeshCensus.VisibleMeshes(stage));
+            }
 
-        lights.Begin();
-        lights.Add(farFromP1, Colors.White, 1f, 10f);
-        lights.Commit(new[] { p1 });
-        ctx.Check(!lights.CommittedPositions.Contains(farFromP1),
-            $"ABLE-TO-FAIL CONTROL: 2000 m from a lone P1 is past the 1500 m FadeEnd, so the light drops");
+            ctx.Check(Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring") > 0,
+                $"he_ground_effect's own template mesh (he_ring) is visible — the PlayEffectAt half ({Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring")})");
+            ctx.Check(Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring1") > 0,
+                $"the CALLED template's mesh (he_ring1, the upper ring) is visible too — BL-061 ({Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring1")})");
+            ctx.Check(peak >= 2, $"both rings drew in the same window (peak {peak} mesh(es))");
+        });
+    }
 
-        lights.Begin();
-        lights.Add(farFromP1, Colors.White, 1f, 10f);
-        lights.Commit(new[] { p1, p2 });
-        ctx.Check(lights.CommittedPositions.Contains(farFromP1),
-            $"the same light stays committed once a second viewer sits 100 m from it — nearest, not P1 alone");
+    internal static void EndedEffectLeavesNoMeshLit(TestContext ctx, TestWorld world)
+    {
+        EffectStageSuiteHelper.WithEffectStage(ctx, world, "3040ap_gunhit", new[] { "dum_gunhit" }, (stage, runtime, point) =>
+        {
+            runtime.PlayEffectAt("3040ap_gunhit", point, null, 0.3f);
+            runtime.Advance(1f / 60f);
+            ctx.Check(Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit") > 0,
+                $"the ap gun hit's chunk mesh is visible while it plays ({Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit")})");
 
-        // The MaxActive budget's Significance rank must answer to the same nearest-viewer rule, not just
-        // the fade: the 16-slot budget is packed with filler lights strictly farther from P1 than besideP2
-        // sits from P2, so a correct nearest-viewer rank keeps besideP2 and cuts the farthest filler.
-        var besideP2 = new Vector3(0f, 5f, -2100f);
-        lights.Begin();
-        for (int i = 0; i < WorldLights.MaxActive; i++)
-            lights.Add(new Vector3(5f + i, 0f, -5f), Colors.White, 1f, 10f);
-        lights.Add(besideP2, Colors.White, 1f, 10f);
-        lights.Commit(new[] { p1 });
-        ctx.Check(lights.CommittedPositions.Count == WorldLights.MaxActive
-                  && !lights.CommittedPositions.Contains(besideP2),
-            $"ABLE-TO-FAIL CONTROL: against P1 alone the 17th light (right beside where P2 will be) is past FadeEnd and never reaches the budget");
+            // Past the def's own authored ACTIVE_STATE 0 at +0.1 s, which ends the instance well
+            // inside the 0.3 s TTL — the case that would otherwise leave the mesh lit for the session.
+            for (int i = 0; i < 30; i++)
+            {
+                runtime.Advance(1f / 60f);
+            }
 
-        lights.Begin();
-        for (int i = 0; i < WorldLights.MaxActive; i++)
-            lights.Add(new Vector3(5f + i, 0f, -5f), Colors.White, 1f, 10f);
-        lights.Add(besideP2, Colors.White, 1f, 10f);
-        lights.Commit(new[] { p1, p2 });
-        ctx.Check(lights.CommittedPositions.Count == WorldLights.MaxActive
-                  && lights.CommittedPositions.Contains(besideP2),
-            $"with P2 present the same light is nearest to a viewer and outranks the farthest filler for a slot in the budget");
+            ctx.Check(Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit") == 0,
+                $"and is dark once the effect has ended, without waiting for its TTL — BL-061 ({Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit")} still lit)");
+        });
+    }
 
-        // Single viewer must read exactly as it did before this item — the goldens' own invariant.
-        var nearP1 = new Vector3(0f, 0f, -5f);
-        lights.Begin();
-        lights.Add(nearP1, Colors.White, 1f, 10f);
-        lights.Commit(new[] { p1 });
-        ctx.Check(lights.CommittedPositions.Count == 1 && lights.CommittedPositions.Contains(nearP1),
-            $"one viewer (single player) is the unchanged, pre-B13 rule");
+    // ---- the full-screen wash reports its authored run times ------------------------------------
+
+    // he_ground_effect's frame_buffer_effects1 is six FBFX_COLOR_FROM_TO steps washing the picture over
+    // 1.2 s, reached through an If PlayerRange call. The handler must report each step's authored
+    // run_time as its duration, because that is the only thing spacing them: report 0 and all six fire
+    // in one instant. It then asserts the routing, that each step reports where the burst was and the
+    // def's own gate, and that the gate answers to the NEAREST human rather than to one camera.
+    // Full inventory: this module's docs/architecture.md entry.
+    internal static void FbfxFlash(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            EffectStageSuiteHelper.WithEffectStage(ctx, world, "he_ground_effect", new[] { "he_ring", "he_ring1", "he_trails" },
+                (stage, runtime, point) =>
+            {
+                // The authored chain, from extracted/C1/cam_anim/he_ring-he_ground_effect.json.
+                var white = new Color(1f, 1f, 1f, 0.3f);
+                var violet = new Color(0.2f, 0f, 1f, 0.2f);
+                var wantFrom = new[] { white, violet, violet, white, violet, violet };
+                var wantTo = new[] { violet, violet, white, violet, violet, white };
+                var wantRun = new[] { 0.2f, 0.4f, 0.2f, 0.1f, 0.2f, 0.1f };
+
+                const float dt = 1f / 60f;
+                float clock = 0f;
+                var fired = new List<(float T, Color From, Color To, float Run, Vector3 At, float GateSq)>();
+                runtime.ScreenFlash = (from, to, seconds, at, gateSq) =>
+                    fired.Add((clock, from, to, seconds, at, gateSq));
+
+                // At the camera, so the def's own PLAYER_RANGE 10000 gate passes.
+                runtime.PlayEffectAt("he_ground_effect", point);
+                for (int i = 0; i < 150; i++)
+                {
+                    clock += dt;
+                    runtime.Advance(dt);
+                }
+
+                string times = string.Join(", ", fired.Select(f => $"{f.T:0.####}s (run {f.Run:0.##})"));
+                ctx.Note($"the wash fired at {times}");
+                ctx.Check(fired.Count == 6, $"the six FBFX_COLOR_FROM_TO steps all fired ({fired.Count})");
+                if (fired.Count != 6)
+                    return;
+                for (int i = 0; i < 6; i++)
+                {
+                    ctx.Check(Mathf.IsEqualApprox(fired[i].Run, wantRun[i]),
+                        $"step {i + 1} reports its authored run time ({fired[i].Run:0.###} s, want {wantRun[i]:0.###})");
+                    ctx.Check(fired[i].From.IsEqualApprox(wantFrom[i]) && fired[i].To.IsEqualApprox(wantTo[i]),
+                        $"step {i + 1} ramps its authored colours ({fired[i].From} → {fired[i].To})");
+                }
+                // Each step must start one previous run time after the one before it — the
+                // collapse this suite exists to catch, which no per-step assertion above can see.
+                for (int i = 1; i < 6; i++)
+                {
+                    float gap = fired[i].T - fired[i - 1].T;
+                    ctx.Check(Mathf.Abs(gap - wantRun[i - 1]) <= 2f * dt,
+                        $"step {i + 1} waits step {i}'s run time ({gap:0.###} s, want {wantRun[i - 1]:0.###})");
+                }
+                // One step of headroom per gap: an authored run time is an exact multiple of the step here, but
+                // neither it nor the accumulated clock is exact in binary float and the misses do not cancel.
+                // Measured: three of the five gaps land one step late, 0.05 s over the chain.
+                ctx.Check(Mathf.Abs((fired[5].T - fired[0].T) - 1.1f) <= 5f * dt,
+                    $"the chain spans its authored 1.1 s first-to-last fire ({fired[5].T - fired[0].T:0.###} s)");
+
+                // The routing half at the source: every step carries the burst point and the def's OWN gate, which
+                // is what lets the overlay pick panes. 10000 is metres squared, the compiled PLAYER_RANGE
+                // convention, and all 24 shipped wash defs author exactly that one gate.
+                ctx.Check(fired.All(f => Mathf.IsEqualApprox(f.GateSq, 10000f)),
+                    $"every step reports the def's authored PlayerRange gate ({fired[0].GateSq:0.#} m², want 10000 = 100 m)");
+                float drift = fired.Max(f => f.At.DistanceTo(point));
+                ctx.Note($"the wash routes from {fired[0].At} on the def's own {fired[0].GateSq:0.#} m² gate ({Mathf.Sqrt(fired[0].GateSq):0.#} m), {drift:0.###} m off the play point");
+                ctx.Check(drift <= 1f,
+                    $"every step reports the burst's own world point ({drift:0.###} m from where it was played)");
+            });
+        });
+        WashPaintsOnlyThePanesItReached(ctx);
+        BlendWashRoutesToTheVictimsPane(ctx);
+        PlayerRangeNearestHuman(ctx);
+    }
+
+    // The victim-routed blend channel (D13): a wash addressed to player 2 paints pane 2 and leaves
+    // pane 1 untouched, whatever the cameras are doing; it composites OVER a proximity ramp already
+    // running in the pane and leaves that ramp's own picture unchanged where no wash is running.
+    // METHOD-12: the ramp readouts are the invariant, the blended pane is what moves.
+    internal static void BlendWashRoutesToTheVictimsPane(TestContext ctx)
+    {
+        const float gate = 10000f;
+        var clear = new Color(0f, 0f, 0f, 0f);
+        var white = new Color(1f, 1f, 1f, 0.3f);
+        var violet = new Color(0.2f, 0f, 1f, 0.2f);
+        var red = new Color(1f, 0f, 0f);
+
+        // Both cameras at one point: the ramp's proximity gate cannot tell the panes apart, so any
+        // difference between them below is the blend channel's routing alone.
+        var p1 = SuiteViewers.Camera(ctx, Vector3.Zero);
+        var p2 = SuiteViewers.Camera(ctx, Vector3.Zero);
+        var viewers = new ViewerSet();
+        viewers.Bind(new[] { p1, p2 });
+        var (flash, panes) = PaneFlash(ctx, viewers);
+        try
+        {
+            const float dt = 1f / 60f;
+            // A wash addressed to player 2 (pane index 1), stepped through its 0.15 × 4 s attack.
+            flash.PlayBlend(1, red, 1f, 4f);
+            for (int i = 0; i < 40; i++)
+                flash.Advance(dt);
+            var pane2 = flash.CurrentFor(1);
+            ctx.Check(pane2.A > 0.99f && pane2.R > 0.99f && pane2.G < 0.01f,
+                $"a blend wash addressed to player 2 paints pane 2 red at its full weight after the attack ({pane2})");
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(clear),
+                $"and pane 1, whose camera stands at the same point, stays clear — routed by victim, not by proximity ({flash.CurrentFor(0)})");
+            ctx.Check(!flash.RunningFor(1),
+                $"and starts no RAMP in pane 2: the two channels are separate states ({flash.RunningFor(1)})");
+
+            // A proximity ramp reaching both panes: pane 1 shows the ramp alone, pane 2 the wash
+            // over the ramp — the pixel the ramp would have painted, with red laid over it.
+            flash.Play(white, violet, 0.2f, Vector3.Zero, gate);
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(white),
+                $"an HE ramp reaching both panes paints pane 1 exactly as before the blend channel existed ({flash.CurrentFor(0)})");
+            var composite = flash.CurrentFor(1);
+            var want = BlendWash.Composite(white, red, flash.BlendFor(1)!.Weight);
+            ctx.Check(composite.IsEqualApprox(want),
+                $"and pane 2 shows the wash composited over that ramp ({composite}, want {want})");
+            ctx.Check(flash.RunningFor(0) && flash.RunningFor(1),
+                $"while the ramp itself runs in both panes, its routing untouched by the wash ({flash.RunningFor(0)}/{flash.RunningFor(1)})");
+
+            // The wash ends at its duration and pane 2 falls back to whatever the ramp channel has,
+            // which by then is nothing.
+            for (int i = 0; i < 260; i++)
+                flash.Advance(dt);
+            ctx.Check(flash.CurrentFor(1).IsEqualApprox(clear) && flash.BlendFor(1)!.Running == false,
+                $"the wash is gone at its 4 s duration and pane 2 reads clear again ({flash.CurrentFor(1)})");
+
+            // A victim with no pane (an AI's player index) addresses nothing and throws nothing.
+            flash.PlayBlend(FlightRoster.ShooterIdBase, red, 1f, 4f);
+            flash.Advance(dt);
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(clear) && flash.CurrentFor(1).IsEqualApprox(clear),
+                $"a wash addressed to an AI's player index paints no pane ({flash.CurrentFor(0)} / {flash.CurrentFor(1)})");
+        }
+        finally
+        {
+            flash.Free();
+            foreach (var pane in panes)
+                pane.Free();
+            p2.Free();
+            p1.Free();
+        }
+    }
+
+    // The wash reaches the panes the burst reached and no others: two panes 120 m apart under the
+    // authored 100 m gate, so one pane, the other pane, and both are each reachable by moving the burst.
+    // ⚠ The wash paints every player inside the burst's own authored radius, not just a hit or nearest
+    // one. That is the original's rule read literally, asked once per player here, and the two
+    // ground-effect defs carrying it play on terrain impacts with no hit aircraft to route to at all.
+    // Ramp state is per pane; within a pane it still replaces (docs/org/sequences.md).
+    internal static void WashPaintsOnlyThePanesItReached(TestContext ctx)
+    {
+        // The gate every shipped wash def authors: metres SQUARED in the compiled convention.
+        const float gate = 10000f;
+        var clear = new Color(0f, 0f, 0f, 0f);
+        var white = new Color(1f, 1f, 1f, 0.3f);
+        var violet = new Color(0.2f, 0f, 1f, 0.2f);
+        var green = new Color(0f, 1f, 0f, 0.5f);
+
+        var p1 = SuiteViewers.Camera(ctx, Vector3.Zero);
+        var p2 = SuiteViewers.Camera(ctx, new Vector3(0f, 0f, 120f));
+        var viewers = new ViewerSet();
+        viewers.Bind(new[] { p1, p2 });
+        var (flash, panes) = PaneFlash(ctx, viewers);
+        var (blind, blindPanes) = PaneFlash(ctx, null);
+        try
+        {
+            ctx.Check(flash.PaneCount == 2, $"the overlay built one ramp per pane ({flash.PaneCount})");
+
+            // 50 m ahead of P1, 170 m from P2: inside the gate for one of them only.
+            flash.Play(white, violet, 0.2f, new Vector3(0f, 0f, -50f), gate);
+            ctx.Check(flash.RunningFor(0) && flash.CurrentFor(0).IsEqualApprox(white),
+                $"a burst 50 m from P1 washes P1's pane ({flash.CurrentFor(0)})");
+            ctx.Check(!flash.RunningFor(1) && flash.CurrentFor(1).IsEqualApprox(clear),
+                $"and leaves P2's pane, 170 m away, clear — the BL-340 report ({flash.CurrentFor(1)})");
+
+            // 50 m past P2, 170 m from P1 — the same case from the other side, while P1's own ramp
+            // is still running: two panes, two independent states.
+            flash.Play(violet, white, 0.2f, new Vector3(0f, 0f, 170f), gate);
+            ctx.Check(flash.RunningFor(1) && flash.CurrentFor(1).IsEqualApprox(violet),
+                $"a second burst 50 m from P2 washes P2's pane ({flash.CurrentFor(1)})");
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(white),
+                $"without touching the ramp P1 is already watching ({flash.CurrentFor(0)}) — the state is per pane");
+
+            // Between them: 60 m from each, so BOTH are inside the burst's own radius.
+            flash.Play(green, white, 0.2f, new Vector3(0f, 0f, 60f), gate);
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(green) && flash.CurrentFor(1).IsEqualApprox(green),
+                $"a burst 60 m from both washes both panes — every player inside the radius, not just the nearest ({flash.CurrentFor(0)} / {flash.CurrentFor(1)})");
+            ctx.Check(flash.RunningFor(0) && flash.RunningFor(1),
+                $"and replaces what each pane was running rather than compositing with it ({flash.RunningFor(0)}/{flash.RunningFor(1)})");
+
+            // An ungated def (the intro cutscene's gi_scene1 authors no PlayerRange) is not a
+            // proximity effect at all, so it still paints everything.
+            flash.Play(white, violet, 0.2f, new Vector3(0f, 0f, -5000f), 0f);
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(white) && flash.CurrentFor(1).IsEqualApprox(white),
+                $"an UNGATED wash 5 km out still paints every pane ({flash.CurrentFor(0)} / {flash.CurrentFor(1)})");
+
+            // The floor: the def's gate already fired, so something was near it. If no pane's own
+            // camera agrees, the nearest pane still gets it rather than the burst washing nobody.
+            flash.Play(violet, green, 0.2f, new Vector3(0f, 0f, -5000f), gate);
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(violet) && flash.CurrentFor(1).IsEqualApprox(white),
+                $"a gated wash no pane is in range of falls to the nearest pane alone ({flash.CurrentFor(0)} / {flash.CurrentFor(1)})");
+
+            blind.Play(white, violet, 0.2f, new Vector3(0f, 0f, -50f), gate);
+            ctx.Check(blind.CurrentFor(0).IsEqualApprox(white) && blind.CurrentFor(1).IsEqualApprox(white),
+                $"ABLE-TO-FAIL CONTROL: the same burst with no viewer set bound paints both panes, which is what this did before the routing existed ({blind.CurrentFor(1)})");
+        }
+        finally
+        {
+            blind.Free();
+            foreach (var pane in blindPanes)
+                pane.Free();
+            flash.Free();
+            foreach (var pane in panes)
+                pane.Free();
+            p2.Free();
+            p1.Free();
+        }
+    }
+
+    // The wash's own gate — `If PlayerRange 10000` — answers to the NEAREST human, not
+    // one camera: a burst still fires while the camera this stage was built
+    // against sits 5 km off, as long as SOME entry in `PlayerPositions` is inside the 100 m
+    // gate. This is upstream of B12's routing (which panes a fired wash reaches) — here nothing
+    // has fired yet, so no pane would have anything to route.
+    internal static void PlayerRangeNearestHuman(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            EffectStageSuiteHelper.WithEffectStage(ctx, world, "he_ground_effect", new[] { "he_ring", "he_ring1", "he_trails" },
+                (stage, runtime, point) =>
+            {
+                const float dt = 1f / 60f;
+                var fired = new List<float>();
+                runtime.ScreenFlash = (from, to, seconds, at, gateSq) => fired.Add(seconds);
+
+                // Every known human 5 km out: nowhere near the def's own 100 m gate. 150 steps
+                // (2.5 s) is the same margin FbfxFlash drives the full chain for above — long
+                // enough that a gate wrongly left open would have fired well within it.
+                runtime.PlayerPositions = () => new[] { point + new Vector3(0f, 0f, -5000f) };
+                runtime.PlayEffectAt("he_ground_effect", point);
+                for (int i = 0; i < 150; i++)
+                    runtime.Advance(dt);
+                ctx.Check(fired.Count == 0,
+                    $"the burst's own PLAYER_RANGE gate stays closed while every PlayerPositions entry is 5 km off ({fired.Count} fired)");
+
+                // A second human standing at the burst: the NEAREST of the two is now in range,
+                // and the def's gate is asked against that one, not the far singleton.
+                runtime.PlayerPositions = () => new[] { point + new Vector3(0f, 0f, -5000f), point };
+                runtime.PlayEffectAt("he_ground_effect", point);
+                for (int i = 0; i < 150; i++)
+                    runtime.Advance(dt);
+                ctx.Check(fired.Count == 6,
+                    $"the same def fires its six-step wash once the NEAREST PlayerPositions entry stands at the burst ({fired.Count})");
+            });
+        });
+    }
+
+    // A two-pane ScreenFlash over bare HUD parents — the shape
+    // `GameSession` builds from the rigs, with nothing but the parents and the viewer set,
+    // since that is all the routing reads.
+    internal static (ScreenFlash Flash, Node[] Panes) PaneFlash(TestContext ctx, ViewerSet? viewers)
+    {
+        var panes = new[] { new Node { Name = "pane1_hud" }, new Node { Name = "pane2_hud" } };
+        foreach (var pane in panes)
+            ctx.Host.AddChild(pane);
+        var flash = ScreenFlash.Build(panes, viewers);
+        ctx.Host.AddChild(flash);
+        return (flash, panes);
+    }
+
+    // ---- three ordnance bursts, played end to end against their authored timelines -------------
+
+    // Plays he_ground_effect, flash_effect and sonic_ground_effect end to end on a fixed-dt clock and
+    // matches each one's FULL event timeline against the authored JSON. Nothing here is a membership
+    // check, which would pass a broken scheduler. Inventory: this module's docs/architecture.md entry
+    // and docs/org/sequences.md.
+    // ⚠ Derive the staged roots (EffectCatalogue.StageRootsFor), never hand-list them; a def whose
+    // anchor root was not staged plays nothing, silently. ⚠ Do not inherit --effects-test's 0.3 s TTL.
+    internal static void OrdnanceBurstTimeline(TestContext ctx)
+    {
+        var report = new System.Text.StringBuilder();
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            HeBurstTimeline(ctx, world, report);
+            FlashBurstTimeline(ctx, world, report);
+            SonicBurstTimeline(ctx, world, report);
+        });
+        ctx.WriteArtifact("ordnance-burst-timeline.txt", report.ToString());
+    }
+
+    // `he_ring-he_ground_effect.json` — five sequences, two of them unnamed and Initial,
+    // three ON_CALL — plus `flame_ball_01-large_fireball.json`, which its fourth CALL_ANIMATION
+    // reaches and which carries the parked-stopper case.
+    internal static void HeBurstTimeline(TestContext ctx, TestWorld world, System.Text.StringBuilder report)
+    {
+        // The first unnamed Initial sequence: eight events, none carrying a start, so the whole
+        // burst fires in the instant the effect starts.
+        var opening = new BurstLane("", new[]
+        {
+            new BurstStep(0, "CallSequence", "he_light_seq", 0f),
+            new BurstStep(1, "CallAnimation", "call_he_ring", 0f),
+            new BurstStep(2, "CallAnimation", "call_hetrails_up", 0f),
+            new BurstStep(3, "CallAnimation", "large_fireball", 0f),
+            new BurstStep(4, "CallAnimation", "call_he_ring1", 0f),
+            new BurstStep(5, "Sound", "ground_mixed_exp_sg", 0f),
+            new BurstStep(6, "CallAnimation", "call_hetrails_up", 0f),
+            new BurstStep(7, "CallSequence", "he_flashes", 0f),
+        });
+        // The second unnamed Initial sequence. The IF and the ENDIF are control flow the runner interprets
+        // itself and never dispatches, so #1 is the only row this lane can produce, and it produces it only
+        // because the burst is played at the camera, which is what makes the range condition true.
+        var fbfxGate = new BurstLane("", new[]
+        {
+            new BurstStep(1, "CallSequence", "frame_buffer_effects1", 0f),
+        });
+        // he_light_seq: LIGHT_STATE on, then six LIGHT_ANIMATION ramps whose run times chain
+        // (0.05, 0.025, 0.05, 0.025 → 0.15), one `Event + 0.2` gap, then 0.05 and 0.01, then off.
+        var lightSeq = new BurstLane("he_light_seq", new[]
+        {
+            new BurstStep(0, "LightState", "he_light", 0f),
+            new BurstStep(1, "LightAnimation", "he_light", 0f),
+            new BurstStep(2, "LightAnimation", "he_light", 0.05f),
+            new BurstStep(3, "LightAnimation", "he_light", 0.075f),
+            new BurstStep(4, "LightAnimation", "he_light", 0.125f),
+            new BurstStep(5, "LightAnimation", "he_light", 0.35f),
+            new BurstStep(6, "LightAnimation", "he_light", 0.4f),
+            new BurstStep(7, "LightState", "he_light", 0.41f),
+        });
+        var flashes = new BurstLane("he_flashes", new[]
+        {
+            new BurstStep(0, "LightState", "he_light1", 0f),
+            new BurstStep(1, "LightAnimation", "he_light1", 0f),
+            new BurstStep(2, "LightAnimation", "he_light1", 0.1f),
+            new BurstStep(3, "LightState", "he_light1", 0.6f),
+        });
+        // The wash: six FBFX_COLOR_FROM_TO steps. A handler reporting 0 as its duration fires all six in
+        // one instant, which is what the times here refuse. fbfx-flash asserts the colours and run times;
+        // this asserts their place in the burst.
+        var wash = new BurstLane("frame_buffer_effects1", new[]
+        {
+            new BurstStep(0, "FbfxColorFromTo", null, 0f),
+            new BurstStep(1, "FbfxColorFromTo", null, 0.2f),
+            new BurstStep(2, "FbfxColorFromTo", null, 0.6f),
+            new BurstStep(3, "FbfxColorFromTo", null, 0.8f),
+            new BurstStep(4, "FbfxColorFromTo", null, 0.9f),
+            new BurstStep(5, "FbfxColorFromTo", null, 1.1f),
+        });
+        // The callee. `activate_puffer` shows the fireball, calls `p1trail` (which starts the
+        // emitter) and then, at an authored `Event + 0.3`, STOPs `stop_p1trail` — an ON_CALL
+        // sequence nothing has called, so it is parked and the stop halts nothing.
+        var fireball = new[]
+        {
+            new BurstLane("activate_puffer", new[]
+            {
+                new BurstStep(0, "ObjectActiveState", "flame_ball_01", 0f),
+                new BurstStep(1, "CallSequence", "p1trail", 0f),
+                new BurstStep(2, "StopSequence", "stop_p1trail", 0.3f),
+            }),
+            new BurstLane("p1trail", new[]
+            {
+                new BurstStep(0, "PufferState", "fierypuffer", 0f),
+            }),
+        };
+
+        WithBurst(ctx, world, "he_ground_effect", report, fired =>
+        {
+            CheckLanes(ctx, "he_ground_effect", fired, new[] { opening, fbfxGate, lightSeq, flashes, wash }, report);
+            CheckLanes(ctx, "large_fireball", fired, fireball, report);
+            // The parked stopper, and the reason `large_fireball` is asserted here at all. Its
+            // `p1trail` lane above is the live control: without it, "the stopper fired nothing" is also what a
+            // fireball that never started reports.
+            int stopper = fired.Count(f => f.Anim == "large_fireball" && f.Sequence == "stop_p1trail");
+            ctx.Check(stopper == 0,
+                $"large_fireball's parked stop_p1trail dispatched nothing — a STOP_SEQUENCE halts and never starts (B12) ({stopper} event(s))");
+        });
+    }
+
+    // `flash_control-flash_effect.json` — the pure light case, two sequences. The one
+    // timed event in it is a `START_TIME ANIMATION 1.5`, read against the instance clock.
+    internal static void FlashBurstTimeline(TestContext ctx, TestWorld world, System.Text.StringBuilder report)
+    {
+        var lanes = new[]
+        {
+            new BurstLane("", new[]
+            {
+                new BurstStep(0, "ObjectActiveState", "lens_flash", 0f),
+                new BurstStep(1, "CallSequence", "flash_flashes", 0f),
+                new BurstStep(2, "CallAnimation", "call_flasher", 0f),
+                // `Animation + 1.5` — the instance clock, which for this Initial sequence is also
+                // its own, so the value is the assertion and the origin is not (sonic's second
+                // `sonic_light_seq` pass is where the two clocks differ).
+                new BurstStep(3, "ObjectActiveState", "lens_flash", 1.5f),
+            }),
+            new BurstLane("flash_flashes", new[]
+            {
+                new BurstStep(0, "LightState", "flash_light1", 0f),
+                new BurstStep(1, "LightAnimation", "flash_light1", 0f),
+                new BurstStep(2, "LightAnimation", "flash_light1", 0.5f),
+                new BurstStep(3, "LightState", "flash_light1", 0.75f),
+            }),
+        };
+        WithBurst(ctx, world, "flash_effect", report,
+            fired => CheckLanes(ctx, "flash_effect", fired, lanes, report));
+    }
+
+    // `sonic_effect-sonic_ground_effect.json` — four sequences, two unnamed and Initial.
+    // The repeat-call case: the first Initial sequence calls `sonic_light_seq` at #0 and again at #4,
+    // 1.2 s later.
+    internal static void SonicBurstTimeline(TestContext ctx, TestWorld world, System.Text.StringBuilder report)
+    {
+        // The 15-event Initial sequence. #3 carries `START_TIME ANIMATION 1.2`; everything behind
+        // it is untimed, so the whole second half fires in that instant.
+        var main = new BurstLane("", new[]
+        {
+            new BurstStep(0, "CallSequence", "sonic_light_seq", 0f),
+            new BurstStep(1, "CallAnimation", "sonic_puff1", 0f),
+            new BurstStep(2, "CallAnimation", "call_flare", 0f),
+            new BurstStep(3, "CallAnimation", "sonic_puff4", 1.2f),
+            new BurstStep(4, "CallSequence", "sonic_light_seq", 1.2f),
+            new BurstStep(5, "CallSequence", "sonic_growlight", 1.2f),
+            new BurstStep(6, "CallAnimation", "call_flare", 1.2f),
+            new BurstStep(7, "CallAnimation", "sonic_puff5", 1.2f),
+            new BurstStep(8, "CallAnimation", "sonic_puff6", 1.2f),
+            new BurstStep(9, "CallAnimation", "sonic_puff7", 1.2f),
+            new BurstStep(10, "CallAnimation", "sonic_puff8", 1.2f),
+            new BurstStep(11, "CallAnimation", "sonic_puff9", 1.2f),
+            new BurstStep(12, "CallAnimation", "sonic_puff10", 1.2f),
+            new BurstStep(13, "CallAnimation", "sonic_puff11", 1.2f),
+            new BurstStep(14, "CallAnimation", "sonic_emit_downer", 1.2f),
+        });
+        // The second Initial sequence: four rising rings at once, then one at `START_TIME
+        // SEQUENCE 1.2` — an absolute gate against this sequence's own clock, not the instance's.
+        var rings = new BurstLane("", new[]
+        {
+            new BurstStep(0, "CallAnimation", "ring_up1", 0f),
+            new BurstStep(1, "CallAnimation", "ring_up2", 0f),
+            new BurstStep(2, "CallAnimation", "ring_up3", 0f),
+            new BurstStep(3, "CallAnimation", "ring_up4", 0f),
+            new BurstStep(4, "CallAnimation", "ring_down1", 1.2f),
+        });
+        // Two passes of ONE sequence, 1.2 s apart. The first must have ended for the second call to find it
+        // parked and restart it: a call into a running sequence is a no-op, and a second concurrent copy is
+        // not a thing the original can express.
+        BurstLane LightPass(float from) => new("sonic_light_seq", new[]
+        {
+            new BurstStep(0, "LightState", "sonic_light", from),
+            new BurstStep(1, "LightAnimation", "sonic_light", from),
+            new BurstStep(2, "LightState", "sonic_light", from + 0.3f),
+        });
+        var grow = new BurstLane("sonic_growlight", new[]
+        {
+            new BurstStep(0, "LightState", "sonic_light1", 1.2f),
+            new BurstStep(1, "LightAnimation", "sonic_light1", 1.2f),
+            new BurstStep(2, "LightAnimation", "sonic_light1", 2.4f),
+            new BurstStep(3, "LightState", "sonic_light1", 3.2f),
+        });
+        WithBurst(ctx, world, "sonic_ground_effect", report, fired =>
+        {
+            CheckLanes(ctx, "sonic_ground_effect", fired,
+                new[] { main, rings, LightPass(0f), LightPass(1.2f), grow }, report);
+            // Stated on its own as well as through the lanes: the lane pair above proves the two
+            // passes ran, and this proves nothing else did. A third pass would be a call that
+            // found the sequence parked when the original would not have.
+            int passes = fired.Count(f => f.Anim == "sonic_ground_effect"
+                                          && f.Sequence == "sonic_light_seq" && f.Index == 0);
+            ctx.Same(2, passes, $"sonic_light_seq's two authored calls started it exactly twice (B11)");
+        });
+    }
+
+    // Plays one burst on its own miniature world-effects stage and hands the recorded dispatch log to
+    // body. The stage's template ROOTS are derived from the definition's own CALL_ANIMATION closure
+    // against the chapter gamez, the same derivation the production bind runs, so a definition whose
+    // anchor resolves nowhere throws here, naming it, instead of quietly playing nothing. Everything
+    // else is the production world-effects role, with the camera as the player position.
+    internal static void WithBurst(TestContext ctx, TestWorld world, string animName,
+        System.Text.StringBuilder report, System.Action<IReadOnlyList<BurstFire>> body)
+    {
+        var roots = Session.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
+            Session.WorldEffectsFactory.StageRootResolver(world.Gamez));
+        ctx.Check(roots.Count > 0,
+            $"{animName}: its call closure's anchor roots derived ({roots.Count}: {string.Join(", ", roots)})");
+        var stage = new Node3D { Name = $"BurstStage_{animName}" };
+        var pool = new Node3D { Name = "pool0" };
+        pool.SetMeta(AnimRuntime.PoolSlotMeta, 0);
+        stage.AddChild(pool);
+        int built = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+            world.Session.Builder.Scene, pool, roots);
+        ctx.Same(roots.Count, built, $"{animName}: template roots staged from the chapter gamez");
+        foreach (var child in pool.GetChildren())
+        {
+            if (child is Node3D root)
+            {
+                root.Visible = false;
+            }
+        }
+
+        var runtime = AnimRuntime.ForEffects(
+            AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
+            1, new CountingEmitterFactory(), false, BurstTtl,
+            () => ctx.Camera.GlobalPosition);
+        runtime.ManualAdvance = true;
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(stage, world.Session.Program.Subset(animName));
+            var fired = new List<BurstFire>();
+            float clock = 0f;
+            runtime.OnEventDispatched = d => fired.Add(new BurstFire(clock,
+                d.Def.AnimName ?? d.Def.Name, d.Sequence, d.EventIndex, d.EventKind, d.EventName));
+            // At the camera, so the definitions' own PLAYER_RANGE gates pass.
+            ctx.Check(runtime.PlayEffectAt(animName, ctx.Camera.GlobalPosition),
+                $"{animName} resolved to a definition and started");
+            int steps = Mathf.RoundToInt(BurstSeconds / BurstDt);
+            for (int i = 0; i < steps; i++)
+            {
+                clock += BurstDt;
+                runtime.Advance(BurstDt);
+            }
+
+            runtime.OnEventDispatched = null;
+            runtime.UnhandledEventCounts.TryGetValue("PufferState(no host node)", out int hostless);
+            ctx.Same(0, hostless, $"{animName}: PUFFER_STATE events that found no host node");
+            ctx.Note($"{animName}: {fired.Count} dispatch(es) over {BurstSeconds:0.#} s at {BurstDt:0.####} s steps");
+            body(fired);
+        }
+        finally
+        {
+            runtime.Free();
+            stage.Free();
+        }
+    }
+
+    // Matches a definition's recorded dispatches against its authored lanes and asserts both halves of
+    // "the timeline is right": ORDER, each lane's rows arriving in the sequence's own order with
+    // nothing unauthored arriving, and TIME, each row landing on its authored instant within
+    // BurstSlack. A row is claimed by the first lane whose next unconsumed step it matches on sequence,
+    // index, kind and name, so a row that arrives early or twice is reported stray. The four-part key
+    // is needed because a definition's sequence NAMES are not unique.
+    internal static void CheckLanes(TestContext ctx, string animName, IReadOnlyList<BurstFire> fired,
+        BurstLane[] lanes, System.Text.StringBuilder report)
+    {
+        var own = fired.Where(f => f.Anim == animName).ToList();
+        report.AppendLine($"--- {animName}: {own.Count} dispatch(es) ---");
+        foreach (var f in own)
+        {
+            report.AppendLine($"  {f.T,7:0.0000}s  [{(f.Sequence.Length == 0 ? "<unnamed>" : f.Sequence)}] "
+                              + $"#{f.Index} {f.Kind} {f.Name}");
+        }
+
+        var cursor = new int[lanes.Length];
+        var at = new float[lanes.Length][];
+        for (int i = 0; i < lanes.Length; i++)
+        {
+            at[i] = new float[lanes[i].Steps.Length];
+        }
+
+        var stray = new List<BurstFire>();
+        foreach (var f in own)
+        {
+            int lane = -1;
+            for (int l = 0; l < lanes.Length && lane < 0; l++)
+            {
+                if (cursor[l] >= lanes[l].Steps.Length)
+                {
+                    continue;
+                }
+                var step = lanes[l].Steps[cursor[l]];
+                if (lanes[l].Sequence == f.Sequence && step.Index == f.Index
+                    && step.Kind == f.Kind && step.Name == f.Name)
+                {
+                    lane = l;
+                }
+            }
+            if (lane < 0)
+            {
+                stray.Add(f);
+                continue;
+            }
+            at[lane][cursor[lane]] = f.T;
+            cursor[lane]++;
+        }
+
+        string strays = string.Join(", ",
+            stray.Select(s => $"{s.T:0.###}s [{s.Sequence}] #{s.Index} {s.Kind} {s.Name}"));
+        ctx.Check(stray.Count == 0,
+            $"{animName}: every dispatch is an authored event arriving in its sequence's order ({stray.Count} stray: {strays})");
+        for (int l = 0; l < lanes.Length; l++)
+        {
+            var lane = lanes[l];
+            string tag = $"{animName} [{(lane.Sequence.Length == 0 ? "<unnamed>" : lane.Sequence)}]";
+            ctx.Same(lane.Steps.Length, cursor[l], $"{tag}: authored events fired, in order");
+            for (int s = 0; s < cursor[l]; s++)
+            {
+                var step = lane.Steps[s];
+                ctx.Check(Mathf.Abs(at[l][s] - step.At) <= BurstSlack,
+                    $"{tag} #{step.Index} {step.Kind} fires at its authored {step.At:0.###} s ({at[l][s]:0.###} s)");
+            }
+        }
     }
 }

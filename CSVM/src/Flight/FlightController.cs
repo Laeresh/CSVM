@@ -1313,7 +1313,7 @@ public partial class FlightController : Node3D
             }
             ApplyFireOutcome(_fire.Step(dt, fireInputs));
         }
-        Ordnance?.Update();   // hide a pylon's mounted rocket the moment it fired its last
+        Ordnance?.Update(InfiniteAmmo);   // hide a pylon's mounted rocket the moment it fired its last
 
         // The carried turret gunners: each tracks and fires on its own, into the same
         // shared pool, under this pilot's shooter id. The crash branch above already returned,
@@ -2442,7 +2442,7 @@ public partial class FlightController : Node3D
             {
                 Index = i,   // the list position FireControl selects by, not the 1-based pylon number
                 DamagesZeppelin = hp.Weapon.DamagesZeppelin,
-                Armed = hp.Ammo > 0 || InfiniteAmmo,
+                Armed = hp.Armed(InfiniteAmmo),
                 MountPos = hp.Pylon.GlobalPosition,
                 RoundSpeed = hp.Weapon.Velocity ?? ProjectilePool.DefaultVelocity,
                 RoundAccel = hp.Weapon.Acceleration ?? 0f,

@@ -114,5 +114,24 @@ public class LoadoutTests
         Assert.Equal(new[] { 1, 5, 2, 6, 3, 7, 4, 8 }, Loadout.PylonFillOrder);
     }
 
+    [Fact]
+    public void ArmedIsTheOneSpellingAndHonoursInfiniteAmmo()
+    {
+        // Both slot faces answer through AmmoSlots.Armed: drained means not armed, unless
+        // --infinite-ammo makes every slot count as armed; a loaded slot is armed either way.
+        var gun = new GunGroup { Ammo = 0 };
+        var pylon = new Hardpoint { Ammo = 0 };
+
+        Assert.False(gun.Armed(infinite: false));
+        Assert.False(pylon.Armed(infinite: false));
+        Assert.True(gun.Armed(infinite: true));
+        Assert.True(pylon.Armed(infinite: true));
+
+        gun.Ammo = 1;
+        pylon.Ammo = 1;
+        Assert.True(gun.Armed(infinite: false));
+        Assert.True(pylon.Armed(infinite: false));
+    }
+
     private static StockLoadouts Load() => StockLoadouts.Load(ConfigPath);
 }

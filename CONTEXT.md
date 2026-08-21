@@ -89,6 +89,18 @@ exhausted, the ground stop, no damage data at speed). Also the ground contact th
 fall, which is the same word for the same reason.
 _Avoid_: death, destruction, fatal hit, kill (a kill is what a shooter is credited with)
 
+## Damage and death
+
+**Damage**:
+Spending armor and health, and the injure staging those ledgers fire: pools, thresholds, stage
+tears and repairs.
+_Avoid_: destruction (that is the choreography), hurt, harm
+
+**Destroy choreography**:
+Everything a death dispatches: the destroy def's arms, wreck pieces and their flights, crash rigs,
+callbacks, and the stops that end them.
+_Avoid_: death effects, destruction sequence, kill animation
+
 ## Boards and the sim clock
 
 **Board**:
@@ -136,6 +148,18 @@ _Avoid_: relaunch, reload, hard reset
 The board drawn over the whole window while a session builds. Carries no progress: a build is one
 synchronous block.
 _Avoid_: loading screen, splash, please-wait
+
+## HUD markers
+
+**Edge marker**:
+The off-screen presentation of a marked world target: the marker clamped to the margin-inset
+screen edge, with an arrow pointing outward and a clock-hour bearing.
+_Avoid_: off-screen indicator, edge arrow (that is one styled part of it), waypoint marker
+
+**Clock-hour bearing**:
+A target's bearing relative to the pilot's own heading, in clock hours: 12 ahead, 3 right,
+6 behind, 9 left. The original's "N o'clock" suffix.
+_Avoid_: o'clock value, clock direction, relative bearing in hours
 
 ## Format documentation
 

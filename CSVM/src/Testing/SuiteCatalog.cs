@@ -10,14 +10,17 @@ using CSVM.UI;
 using CSVM.Utils;
 using Godot;
 
-using static CSVM.Testing.AiTargetingAndZeppelinSuites;
+using static CSVM.Testing.AiSuites;
 using static CSVM.Testing.AnimationAndEffectsSuites;
 using static CSVM.Testing.CombatSuites;
+using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
 using static CSVM.Testing.InstantActionSuites;
 using static CSVM.Testing.OrdnanceSuites;
 using static CSVM.Testing.PufferSuites;
+using static CSVM.Testing.TargetingSuites;
 using static CSVM.Testing.WorldAndToolSuites;
+using static CSVM.Testing.ZeppelinSuites;
 namespace CSVM.Testing;
 
 public static class SuiteCatalog
@@ -55,6 +58,7 @@ public static class SuiteCatalog
         "instant-action-zeppelin",
         "instant-action-end",
         "instant-action-wrapup",
+        "results-board-shell",
         "inert-aircraft",
         "world-turrets",
         "carried-turrets",
@@ -334,6 +338,12 @@ public static class SuiteCatalog
             "fired and hit, an unscored (AI) shooter's identical shot moves neither counter, and " +
             "a scored shooter's ROCKET (not CANNON) round is excluded from both",
             InstantActionWrapup));
+        into.Add(new TestHarness.Suite("results-board-shell",
+            "the ResultsBoard shell contract, once for all four results boards: waking raises " +
+            "Ended, the resting Photo Mode row changes nothing, the standard Restart leaves the " +
+            "release to the live flag, the flag clearing retires the board and releases the " +
+            "clock — and the wrap-up board's own menu-driven retire, which no flag ever performs",
+            ResultsBoardShell));
         into.Add(new TestHarness.Suite("inert-aircraft",
             "the E10 inert state, each claim watched passing on a live aircraft first and on the " +
             "inert one AFTER activation: a plane built inert is not returned by a raycast, is " +
