@@ -125,7 +125,7 @@ public sealed class FlightRoster
                 if (controller.Loadout != null)
                 {
                     controller.Destructibles = _in.WorldRuntime?.Destructibles;
-                    controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _in.Projectiles);
+                    controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _in.Projectiles, controller.InfiniteAmmo);
                 }
             }
             catch (Exception e)

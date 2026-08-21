@@ -840,7 +840,7 @@ public sealed partial class WeaponLab : Node3D
             return;
         }
         _host.Ordnance?.Unmount();
-        _host.Ordnance = PylonOrdnance.Build(_loadout, _host.Projectiles);
+        _host.Ordnance = PylonOrdnance.Build(_loadout, _host.Projectiles, _host.InfiniteAmmo);
         Log.Debug("weapons", $"weapon lab: hardpoints -> {w.Id} ({w.Name}) flyout='{w.Flyout?.Model ?? "-"}' per_pylon={_loadout.Hardpoints[0].Ammo} mounted={_host.Ordnance?.Count ?? 0} ordnance_nodes={CountOrdnanceNodes()}");
     }
 

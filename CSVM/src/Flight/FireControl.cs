@@ -3,24 +3,30 @@ using System.Collections.Generic;
 
 namespace CSVM.Flight;
 
+/// <summary>The ammo counter every weapon slot carries, shared by the gun and pylon faces so
+/// <see cref="AmmoSlots.Armed"/> can answer for either.</summary>
+public interface IAmmoSlot
+{
+    int Ammo { get; set; }
+
+    int Capacity { get; }
+}
+
 /// <summary>A firable gun group as <see cref="FireControl"/> sees it: the weapon (fire rate, loop
 /// sound), a mutable per-group ammo counter, and how many muzzles the group alternates across.
 /// <see cref="GunGroup"/> implements it; tests hand in fakes.</summary>
-public interface IGunSlot
+public interface IGunSlot : IAmmoSlot
 {
     WeaponDef Weapon { get; }
-    int Ammo { get; set; }
-    int Capacity { get; }
+
     int MuzzleCount { get; }
 }
 
 /// <summary>One rocket pylon as <see cref="FireControl"/> sees it: the ordnance weapon and a
 /// mutable per-pylon ammo counter. <see cref="Hardpoint"/> implements it; tests hand in fakes.</summary>
-public interface IPylonSlot
+public interface IPylonSlot : IAmmoSlot
 {
     WeaponDef Weapon { get; }
-    int Ammo { get; set; }
-    int Capacity { get; }
 }
 
 /// <summary>One sim tick's raw control state, polled by the caller. Held levels, not edges — all
@@ -32,6 +38,15 @@ public struct FireInputs
     public bool RocketHeld;        // rocket trigger (F / pad A)
     public bool GunSelectHeld;     // gun-group selector (G / D-pad Left)
     public bool RocketSelectHeld;  // hardpoint selector (H / D-pad Right)
+}
+
+/// <summary>The one spelling of "is this weapon slot armed?".</summary>
+public static class AmmoSlots
+{
+    /// <summary>Whether the slot can fire: it holds rounds, or <c>--infinite-ammo</c> makes every
+    /// slot count as armed. Every caller passes its live flag, so whether a site honours
+    /// <c>InfiniteAmmo</c> is visible in the argument rather than in a private respelling.</summary>
+    public static bool Armed(this IAmmoSlot slot, bool infinite) => infinite || slot.Ammo > 0;
 }
 
 /// <summary>What one <see cref="FireControl.Step"/> decided, for the caller to perform against the
@@ -228,7 +243,7 @@ public sealed class FireControl
                 st.Accum = interval; // the first shot leaves the barrel the instant the trigger goes down
             }
             st.Accum += dt;
-            if (g.Ammo > 0 || InfiniteAmmo)
+            if (g.Armed(InfiniteAmmo))
             {
                 wantLoop = true;
                 loopSound ??= g.Weapon.LoopedSoundName;
@@ -236,7 +251,7 @@ public sealed class FireControl
             while (st.Accum >= interval)
             {
                 st.Accum -= interval;
-                if (g.Ammo > 0 || InfiniteAmmo)
+                if (g.Armed(InfiniteAmmo))
                 {
                     _outcome.GunShots.Add((gi, st.NextMuzzle % g.MuzzleCount));
                     st.NextMuzzle++;
