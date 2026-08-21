@@ -167,6 +167,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/CompassTape.cs` — the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
 - `src/Flight/GaugeCluster.cs` — the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
 - `src/Flight/FlightController.cs` — the flying-aircraft node: input → FlightModel → transform, chase camera, HUD, collision/crash, respawn; `FireControl`'s engine adapter.
+- `src/Flight/FlightHud.cs` — everything one pane draws for its pilot, fed one per-frame state struct; the controller's seven HUD collaborators live here.
 - `src/Flight/FlightControllerBuild.cs` — FlightRoster's internal, write-once construction handoff for a controller before tree attachment.
 - `src/Flight/IFlightInputSource.cs` — the seam a sim step reads this frame's pilot intent through; `Bind` resolves one of its three adapters once per aircraft.
 - `src/Flight/PlayerRig.cs` — one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
@@ -2490,11 +2491,41 @@ field once a rig is stepping, so this is never stale. Ground-blow probing and th
 write stay on `FlightController` after `Read` returns: they need the live world, which a source
 does not have.
 
+## src/Flight/FlightHud.cs
+Everything one pane draws for its pilot, in one module the flight node holds privately: the heading
+tape (`CompassTape`), the cockpit dials and their two weapon gauges (`GaugeCluster`), the gun pipper
+(`ImpactReticle`), the selected-weapon text readout (`WeaponReadout`), the stunt objective marker
+(`MarkerHud`), the targeting HUD (`TargetHud`), the `--hud-font-test` overlay (`HudFontTest`) and
+the flight text block. Nothing outside this class writes one of them.
+The per-frame entry is `Draw(in FlightHudState)`, a struct passed by `in` and never a class: this
+runs once per rendered frame per aircraft, so it allocates nothing. The struct carries aircraft
+STATE, not readout values: `Crashed`, `Halted`, `Held`, `StallWarned` and the rest arrive raw, and
+the composing into text, dial positions and gates happens here, which is what makes the mapping
+assertable with no Godot `Control` in the process. Three query properties exist so the caller can
+skip work it would only throw away: `DrawsReticle` (a muzzle midpoint costs one world transform per
+barrel), `DrawsTextBlock` (the damage ledger's `Summary` walks and joins every hurt zone) and
+`NeedsStuntStatusLine` (the marker HUD normally carries that line instead). Each guards a real
+per-frame cost on aircraft that draw nothing, AI rigs above all.
+`Attach(canvas, versusHud, scoreboard)` builds the text block and parents every readout in the
+shipped draw order; `VersusHud` and `StuntScoreboard` are still the flight node's, and are threaded
+through because their z-order slots sit INSIDE this order rather than after it. `SetVisible` is
+photo mode's hide-everything (`BL-429`, forwarded from `FlightController.SetPilotHudVisible` because
+`GameSession` drives it per rig); `SetInstrumentsVisible` is the narrower one `--debug-spectate`
+wants, which keeps the marker HUD deliberately. `StepAgl` is the altimeter's LOW ALT feed, one ray
+per physics frame through the same `IWorldQuery` seam every other aircraft query uses, and
+`AglMeters` reads it back for the flight telemetry line. `Flash` raises the impact line and `Reset`
+is what a respawn calls. The damage flash counts down on WALL time, so a halted session does not
+burn it off while nothing is drawn.
+
 ## src/Flight/FlightController.cs
-The flying-aircraft node: input → FlightModel → transform, text HUD + telemetry, weapon fire as
+The flying-aircraft node: input → FlightModel → transform, weapon fire as
 `FireControl`'s engine adapter (polls the held triggers, `Step`s the machine each sim tick,
 performs the `FireOutcome`: muzzle-transform spawns, gun-loop start/stop, dry cues, breadcrumb
-logs), crash and respawn. The camera is `CameraController`'s — this node only feeds it
+logs), crash and respawn. The pilot HUD is `FlightHud`'s (see that entry): this node holds the
+module privately, feeds it one `FlightHudState` per rendered frame, and forwards photo mode's
+`SetPilotHudVisible` because `GameSession` calls it; the seven readouts are no longer fields here.
+`VersusHud` and `Scoreboard` stay board-adjacent fields on this node.
+The camera is `CameraController`'s — this node only feeds it
 the pose, the dt and the mixed orbit axes (`OrbitInput`); on a crash it cuts to `CrashView` once,
 writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
 shows no HUD — footage), restoring it on respawn. Every physics query — the PlaneCollider boxes'

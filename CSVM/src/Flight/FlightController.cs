@@ -67,31 +67,6 @@ public partial class FlightController : Node3D
     /// advanced each frame. Null if the model has no control-surface nodes.</summary>
     public ControlSurfaceAnimator? Surfaces;
 
-    /// <summary>The original's heading tape at the top of the screen (added to the
-    /// HUD canvas, fed the heading each frame). Null if the chapter's texture
-    /// archive lacks the compass textures.</summary>
-    public CompassTape? Compass;
-
-    /// <summary>The original's cockpit dials (altimeter / speedometer / damage
-    /// display) rebuilt from the plane's own gauges subtree; added to the HUD canvas
-    /// and fed altitude/AGL/speed/stall + part-damage events. Optional.</summary>
-    public GaugeCluster? Gauges;
-
-    /// <summary>The <c>--hud-font-test</c> bitmap-font verification overlay: added to the HUD
-    /// canvas so it scales with the pane. Null unless the flag is set.</summary>
-    public HudFontTest? FontTest;
-
-    /// <summary>The selected-weapon text readout: the gun group + rocket type and their live
-    /// ammo, drawn in the game's HUD font from the <c>MSG_HUD_GUNGAUGE</c>/<c>MSG_HUD_MISSLES</c>
-    /// templates. Added to the HUD canvas and fed each frame; null (no font / no loadout) hides it.</summary>
-    public WeaponReadout? WeaponReadout;
-
-    /// <summary>The gun aiming reticle: the game's pipper drawn at the SELECTED gun group's
-    /// ballistic impact point at the convergence distance — trailing the nose in a hard turn, on the
-    /// rounds in steady flight. Added to the HUD canvas and fed the world impact point each frame;
-    /// null when the plane carries no firable gun (or the reticle texture was absent).</summary>
-    public ImpactReticle? Reticle;
-
     /// <summary>The airframe collision boxes (fuselage/wings/tail), swept along each
     /// physics frame's motion so wingtips and tail collide with obstacles. Null falls
     /// back to the center-ray-only test.</summary>
@@ -229,12 +204,6 @@ public partial class FlightController : Node3D
     /// Null in free flight.</summary>
     public StuntMission? Stunt;
 
-    /// <summary>The stunt objective marker HUD: the active zone's projected marker /
-    /// screen-edge arrow + clock bearing, the run-status line, intro/complete banners. Added to
-    /// the HUD canvas, fed the plane pose each frame; the camera + mission are bound at Build.
-    /// Null in free flight (and when --stunt found no danger zones).</summary>
-    public MarkerHud? Marker;
-
     /// <summary>The end-of-run results overlay: splits + total + best-time on
     /// AllComplete. Added to the HUD canvas last (drawn over the marker/dials); wakes itself on
     /// the run's RunCompleted. Null in free flight.</summary>
@@ -245,12 +214,6 @@ public partial class FlightController : Node3D
     /// pulls VersusMatch's own live state) beyond the kill facts GameSession pushes through its
     /// OnKill.</summary>
     public VersusHud? VersusHud;
-
-    /// <summary>The targeting HUD: the pilot's own sticky target selection, the tracked-AI-hostile
-    /// fallback marker and <c>--debug-markers</c>, built for every human pane by the rig assembler
-    /// in EVERY flight session, <c>--vs</c> included. Added to the HUD canvas; fed this pane's pose
-    /// every frame, same site as <see cref="Marker"/>'s.</summary>
-    public TargetHud? TargetHud;
 
     /// <summary>The splitscreen stunt race this plane is one seat of, or null when
     /// flying solo. Set, clearing every zone parks this player at the finish while the others fly
@@ -391,13 +354,6 @@ public partial class FlightController : Node3D
     private const float FallbackSpawnThrottle = 0.5f;
     private const float FallbackSpawnSpeed = 53.6f;
     private const float CarrierDropThrottle = 0.1f;
-    // The pipper's placement and smoothing are decoded (docs/org/aim-assist.md "What the pipper follows"); no TUNE left in it.
-    private const float ReticleFlightTime = 0.5f;      // s of flight the pipper marks
-    private const float ReticleDefaultSpeed = 860f;    // m/s used when no weapon def resolves
-    private const float ReticleAccel = 894.07996f;     // m/s² the smoother's rate builds at
-    private const float ReticleRatePerGap = 1.9848576f; // rate ceiling per metre of remaining gap
-    private const float ReticleFarGap = 900f;          // m past which the ceiling is flat
-    private const float ReticleFarRate = 1788.1599f;   // m/s that flat ceiling
     private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
     private const float AutoRespawnDelay = 1.5f; // s a HoldInput run stays crashed before auto-respawn
@@ -420,7 +376,6 @@ public partial class FlightController : Node3D
                                                       // the touchdown defs stop their own puffer at
                                                       // ANIMATION_OFFSET 1.5, so this is one whole authored
                                                       // reaction per scrape rather than a restart per frame
-    private const float DamageFlashTime = 2.5f;  // s the HUD shows the impact line
     private const int InitialTargetGrace = 300;    // frames --target= waits for the pool to fill
     private const float TargetHoldSeconds = 0.25f; // decision 7: D-pad Up past this is a HOLD,
                                                    // not a tap. ⚠ TUNE — ours, not the original's,
@@ -431,17 +386,15 @@ public partial class FlightController : Node3D
                                                  // a stopped plane sat there collecting 0-dmg kisses)
     private const float EmbedPushOut = 0.3f;     // m per un-embed attempt after a graze
     private const int EmbedTries = 3;            // attempts before giving up ⇒ explode, never tunnel
-    private const int HudFontSize = 22;         // text HUD, full-screen (shrunk per splitscreen pane)
 
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
-
-    private static readonly Vector2 HudMargin = new(16, 10);
 
     // The compiled fallback collision ranges, for a bare suite rig with no flight model bound.
     private static readonly PlaneStats DefaultCollideRanges = new();
 
-    private readonly List<float> _gunGaugeSlots = new();
-    private readonly List<float> _missileGaugeSlots = new();
+    // Everything this pane draws for its pilot. Always present, so no site has to ask whether
+    // there is a HUD: an aircraft with no readouts built simply has a module that draws nothing.
+    private readonly FlightHud _pilotHud = new();
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
     private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
     private readonly List<RocketPylonView> _pylonViews = new();          // the AI rocketeer's pylon walk
@@ -461,8 +414,6 @@ public partial class FlightController : Node3D
     private CanvasLayer? _hudCanvas;             // the whole HUD layer; hidden while crashed (the
                                                  // original's crash camera shows no HUD — footage);
                                                  // never built on an AI rig
-    private Label? _hud;
-    private float _hudPaneFactor = 1f;            // last applied splitscreen shrink (1 = single player)
     private Vector3 _spawnPos;
     private Basis _spawnAttitude;
     private float _spawnThrottle = FallbackSpawnThrottle;
@@ -499,14 +450,10 @@ public partial class FlightController : Node3D
     private float _collideArmorDamage;           // this contact's decoded pair, spent in SurviveHit
     private float _collideHealthDamage;
     private bool _collideDooms;                  // this contact kills the striker whatever its HP
-    private float _damageFlash;                  // s left on the HUD impact line
-    private string _damageFlashText = "";
     private int _projectileHitsLogged;           // verification breadcrumb: the first few hits log
     private FireControl? _fire;                  // the fire-control state machine; built in _Ready with the loadout
     private GunGroup[] _firableGuns = Array.Empty<GunGroup>(); // the firable gun groups in _fire's slot order (muzzle nodes, live ammo)
     private GunAimSlot[][] _aimSlots = Array.Empty<GunAimSlot[]>(); // per _firableGuns group, one slot per muzzle — B2's assist state
-    private float _reticleDist = ReticleDefaultSpeed * ReticleFlightTime; // m — the pipper's smoothed range
-    private float _reticleRate;                  // m/s the pipper's range is currently closing at
     private bool _aimLoggedFirst;                // verification breadcrumb: the assist's first snap logs once
     private bool _aimListsLogged;                // verification breadcrumb: the candidate list sizes log once
     private bool _groundBlowLoggedFirst;         // verification breadcrumb: ground blow's first repelling hit
@@ -525,12 +472,6 @@ public partial class FlightController : Node3D
     private bool _heldPinned;                    // the pinned pose below is valid (captured on the first held step)
     private Vector3 _heldPos;                    // the pinned position, re-applied through the model every held step
     private Basis _heldAttitude;                 // the pinned attitude, ditto
-
-    // The gungauge / missilegauge HUD state, pushed to GaugeCluster each frame. Persistent
-    // objects mutated in place (the belt-fraction lists too) so the HUD readout costs no per-frame
-    // allocation. Null until _Ready binds them, and only for a system the plane actually carries.
-    private GaugeCluster.WeaponGauge? _gunGaugeState;
-    private GaugeCluster.WeaponGauge? _missileGaugeState;
 
     // The sim advances on the 60 Hz physics tick while rendering runs at the display rate, so
     // drawing the raw sim pose stutters the plane against the smoothly-moving chase camera at
@@ -680,6 +621,11 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>This pane's pilot HUD, for the one assembler that builds its readouts and the one
+    /// debug mode that hides its instruments. Internal, not public: nothing outside this assembly
+    /// draws on a live aircraft, and the per-frame feed is this node's alone.</summary>
+    internal FlightHud PilotHud => _pilotHud;
+
     // The sweep/ray seam: set in Bind, and lazy here too so a bare test rig that never binds
     // still gets one (GetWorld3D() only needs tree membership, which Bind does not gate).
     private IWorldQuery World => _worldQuery ??= new GodotWorldQuery(this);
@@ -750,31 +696,10 @@ public partial class FlightController : Node3D
             // (UI.HudLayers.SunWash), so the HUD's own layer is load-bearing, not incidental.
             var canvas = new CanvasLayer { Layer = UI.HudLayers.Hud };
             _hudCanvas = canvas;
-            _hud = new Label { Position = HudMargin };
-            _hud.AddThemeFontSizeOverride("font_size", HudFontSize);
-            _hud.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.4f));
-            _hud.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.7f));
-            _hud.AddThemeConstantOverride("shadow_offset_y", 2);
             canvas.Name = "hud";
-            canvas.AddChild(_hud);
-            if (Compass != null)
-                canvas.AddChild(Compass);
-            if (Gauges != null)
-                canvas.AddChild(Gauges);
-            if (Reticle != null)
-                canvas.AddChild(Reticle); // gun aiming pipper, over the dials, under the text/marker
-            if (WeaponReadout != null)
-                canvas.AddChild(WeaponReadout); // selected-weapon text readout, over the dials
-            if (Marker != null)
-                canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
-            if (VersusHud != null)
-                canvas.AddChild(VersusHud); // dogfight HUD: status line, kill banner, opponent markers
-            if (TargetHud != null)
-                canvas.AddChild(TargetHud); // targeting HUD: selected target / --debug-markers
-            if (Scoreboard != null)
-                canvas.AddChild(Scoreboard); // end-of-run results, drawn over everything
-            if (FontTest != null)
-                canvas.AddChild(FontTest); // --hud-font-test: the bitmap-font proof overlay
+            // The two board-adjacent readouts this node still owns take their z-order slots inside
+            // the pilot HUD's own order, so they are handed to it rather than added around it.
+            _pilotHud.Attach(canvas, VersusHud, Scoreboard);
             // Splitscreen parents the HUD into this player's SubViewport so it draws in that pane
             // only (and scales off the pane's height); single player keeps it on this node.
             (HudParent ?? this).AddChild(canvas);
@@ -867,20 +792,7 @@ public partial class FlightController : Node3D
                 _aimSlots[gi] = slots;
             }
 
-            // Bind the two weapon gauges — only for a system this plane actually carries.
-            if (Gauges != null)
-            {
-                if (n > 0)
-                {
-                    _gunGaugeState = new GaugeCluster.WeaponGauge { Slots = _gunGaugeSlots };
-                    Gauges.GunGauge = _gunGaugeState;
-                }
-                if (Loadout.Hardpoints.Count > 0)
-                {
-                    _missileGaugeState = new GaugeCluster.WeaponGauge { Slots = _missileGaugeSlots };
-                    Gauges.MissileGauge = _missileGaugeState;
-                }
-            }
+            _pilotHud.BindWeaponGauges(n, Loadout.Hardpoints.Count);
         }
     }
 
@@ -908,7 +820,7 @@ public partial class FlightController : Node3D
         WingLights?.Reset(); // flares off; the cycle restarts from this spawn
         Surfaces?.Reset();   // control surfaces back to neutral
         Damage?.Reset();     // every part back to full HP
-        Gauges?.Reset();     // damage-dial blink timers cleared
+        _pilotHud.Reset();   // damage-dial blink timers cleared, no impact line pending
         Visuals?.Reset();    // torn panels off, healthy twins back, smoke trail cleared
         RefillWeapons();     // full ammo, dry warnings re-armed, any live tracers cleared
         if (CrashRuntime != null)
@@ -929,7 +841,6 @@ public partial class FlightController : Node3D
         }
         _damageCooldown = 0f;
         _grazeReactionCooldown = 0f;
-        _damageFlash = 0f;
         if (_hudCanvas != null)
             _hudCanvas.Visible = true;  // the crash camera hid it (footage); flying again
         // ⚠ An INERT airframe must stay off-screen and off the aircraft layer through a respawn too.
@@ -1023,11 +934,6 @@ public partial class FlightController : Node3D
     /// the trigger is pulled.</summary>
     public void SelectPylon(int index) => _fire?.SelectPylon(index);
 
-    /// <summary>Show or hide everything this pane draws for its pilot: the dial cluster, the
-    /// reticle, the weapon readout, the text block and the marker/target HUD. Photo mode hides the
-    /// lot, since instruments belonging to an aircraft you are looking at from outside are noise
-    /// in a picture (BL-429). ⚠ Not what <c>--debug-spectate</c> wants: that mode keeps the marker
-    /// HUD deliberately, so it sets the three cockpit fields itself rather than calling this.</summary>
     /// <summary>Enter photo mode: the pause key goes silent for the duration.</summary>
     public void BeginPhotoMode() => InPhotoMode = true;
 
@@ -1045,21 +951,9 @@ public partial class FlightController : Node3D
         _pausePrev = KeyDown(Key.P) || KeyDown(Key.Escape) || PadPressed(JoyButton.Start);
     }
 
-    public void SetPilotHudVisible(bool visible)
-    {
-        if (Gauges != null)
-            Gauges.Visible = visible;
-        if (Reticle != null)
-            Reticle.Visible = visible;
-        if (WeaponReadout != null)
-            WeaponReadout.Visible = visible;
-        if (_hud != null)
-            _hud.Visible = visible;
-        if (Marker != null)
-            Marker.Visible = visible;
-        if (TargetHud != null)
-            TargetHud.Visible = visible;
-    }
+    /// <summary>Photo mode's forward onto <see cref="FlightHud.SetVisible"/>: the session drives it
+    /// per rig and holds no HUD of its own.</summary>
+    public void SetPilotHudVisible(bool visible) => _pilotHud.SetVisible(visible);
 
     /// <summary>The decoded bracket gate for the targeting marker (<c>FUN_004574d0</c>): whether the
     /// SELECTED gun group could reach an intercept inside the weapon's authored <c>RANGE</c>. That,
@@ -1133,7 +1027,7 @@ public partial class FlightController : Node3D
         if (state != null)
         {
             Visuals?.OnPartDamage(struckPart, state.HealthFraction);
-            Gauges?.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
+            _pilotHud.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
         }
 
         // the def-level stages run off the hull pool even when the round went zone-less
@@ -1166,10 +1060,9 @@ public partial class FlightController : Node3D
                 ((weapon.HealthDamage ?? 0f) + (weapon.ArmorDamage ?? 0f)) * damageScale,
                 impact - _model.Position);
         }
-        _damageFlashText = state != null
+        _pilotHud.Flash(state != null
             ? $"⚠ HIT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%"
-            : $"⚠ HIT HULL {Damage.SummaryHealthFraction * 100f:0}%";
-        _damageFlash = DamageFlashTime;
+            : $"⚠ HIT HULL {Damage.SummaryHealthFraction * 100f:0}%");
     }
 
     /// <summary>The AI stun's entry for a struck aircraft (decoded: <c>FUN_004200d0</c>; a
@@ -1218,7 +1111,7 @@ public partial class FlightController : Node3D
         if (state != null)
         {
             Visuals?.OnPartDamage(struckPart, state.HealthFraction);
-            Gauges?.OnPartDamage(struckPart);
+            _pilotHud.OnPartDamage(struckPart);
         }
 
         Visuals?.OnHullDamage(Damage.SummaryHealthFraction);
@@ -1459,11 +1352,7 @@ public partial class FlightController : Node3D
 
         // height over ground for the altimeter's LOW ALT warning: one ray straight
         // down per physics frame (world + map-edge extension colliders)
-        if (Gauges != null)
-            Gauges.AglMeters = HitWorld(_model.Position,
-                _model.Position + Vector3.Down * 1000f, out var ground, out _, out _)
-                ? _model.Position.Y - ground.Y
-                : float.MaxValue;
+        _pilotHud.StepAgl(World, _model.Position, Body?.ExcludeSelf);
 
         // Backstop if the swept ray ever misses. A HELD plane is exempt: it is exactly where the lab
         // parked it (below the map is a legal place to hold), and a respawn would fling it away from
@@ -1483,8 +1372,8 @@ public partial class FlightController : Node3D
                      $"path={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(_model.VelocityDir.Y, -1f, 1f))):0}° " +
                      $"nose={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(-_model.Attitude.Z.Y, -1f, 1f))):0}° " +
                      $"wv={Mathf.Abs(_model.Attitude.Y.Dot(Vector3.Up)):0.00}" +
-                     (Gauges != null && Gauges.AglMeters < float.MaxValue
-                         ? $" agl={Gauges.AglMeters:0}" : ""));
+                     (_pilotHud.AglMeters < float.MaxValue
+                         ? $" agl={_pilotHud.AglMeters:0}" : ""));
         }
     }
 
@@ -1583,15 +1472,11 @@ public partial class FlightController : Node3D
             _cam.LogView(view, _model.Position, _model.Attitude);
         }
 
-        float mph = _model.Speed * 2.23694f;
-        float ft = _model.Position.Y * 3.28084f;
         // heading of the nose: 0 = north (−Z), 90 = east (+X) — shared by the compass and the marker
         var nose = -_model.Attitude.Z;
         float headingDeg = Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
-        if (Compass != null)
-            Compass.HeadingDeg = headingDeg;
-        // Stunt objective marker: cycle the displayed target (Tab / gamepad X, edge-detected) and
-        // feed it this frame's pose so it can project the zone and compute the clock bearing.
+        // Stunt objective marker: cycle the displayed target (Tab / gamepad X, edge-detected) before
+        // the HUD feed, so the marker and the status line show this frame's choice, not last one's.
         if (Stunt != null)
         {
             bool cycle = CycleTargetPressed();
@@ -1603,71 +1488,14 @@ public partial class FlightController : Node3D
         // per-frame candidate pass runs first and a handler then steps the list it just built.
         if (Targeting != null && IsHumanPiloted)
             StepTargeting(simDt);
-        if (Marker != null)
-        {
-            Marker.PlanePos = _model.Position;
-            Marker.HeadingDeg = headingDeg;
-        }
         // Dogfight opponent / AI hostile markers: this pane's own pose, so each HUD can compute
-        // its own target's clock bearing off it (the same feed Marker gets, for the same reason).
+        // its own target's clock bearing off it (the same feed the pilot HUD's markers get).
         if (VersusHud != null)
         {
             VersusHud.PlanePos = _model.Position;
             VersusHud.HeadingDeg = headingDeg;
         }
-        if (TargetHud != null)
-        {
-            TargetHud.PlanePos = _model.Position;
-            TargetHud.HeadingDeg = headingDeg;
-        }
-        if (Gauges != null)
-        {
-            Gauges.SpeedMph = mph;
-            Gauges.AltitudeFt = ft;
-            // A held plane sits at 0 m/s, below every stall speed, but it is pinned, not stalling.
-            Gauges.StallWarning = !_crashed && !halted && !_held && _model.IsStallWarned();
-            Gauges.StallFrac = _model.StallFraction;
-        }
-        // Feeds the weapon gauges (if built) and the text readout (if built) — both draw from the live
-        // loadout, so this runs whenever there is one, independent of the dial cluster.
-        UpdateWeaponGauges();
-        // Points the gun pipper at 0.5 s of the selected group's flight, on the nose axis (if built).
-        UpdateReticle(simDt);
-        if (_hud != null)
-        {
-            // Splitscreen: the text block shrinks with the pane, like every other HUD element
-            // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
-            // (16,10) is untouched there; re-applied only when the factor actually changes.
-            float paneFactor = HudMetrics.PaneFactor(_hud);
-            if (!Mathf.IsEqualApprox(paneFactor, _hudPaneFactor))
-            {
-                _hudPaneFactor = paneFactor;
-                _hud.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(HudFontSize * paneFactor)));
-                _hud.Position = new Vector2(HudMargin.X * paneFactor, HudMargin.Y * paneFactor);
-            }
-            // A splitscreen pane is proportionally WIDER than it is tall, so a height-scaled single
-            // line would run into the top-centre compass tape in a 4P quarter pane — break the
-            // throttle onto its own line there. Full screen keeps the one-liner.
-            string speedAlt = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT";
-            string throttle = $"THR {_model.Throttle * 100,3:0}%";
-            _hud.Text = paneFactor < 1f ? $"{speedAlt}\n{throttle}" : $"{speedAlt}   {throttle}";
-            if (!_held && _model.isStalled())
-                _hud.Text += "\n⚠ STALLED - SPEED UP";
-            if (!halted && !_crashed && _damageFlash > 0f)
-            {
-                _damageFlash -= (float)delta;
-                _hud.Text += $"\n{_damageFlashText}";
-            }
-            if (Damage?.Summary() is { Length: > 0 } dmgSummary)
-                _hud.Text += $"\nDMG {dmgSummary}";
-            // Fallback only: stunt run status normally lives in the marker HUD.
-            if (Stunt != null && Marker == null)
-                _hud.Text += $"\n{Stunt.StatusLine()}";
-            if (halted)
-                _hud.Text += "\n⏸ PAUSED — . steps one frame";   // the board's own menu says the rest
-            else if (_crashed)
-                _hud.Text += "\n⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN";
-        }
+        _pilotHud.Draw(BuildHudState((float)delta, simDt, halted, headingDeg));
         if (!halted && !_crashed)
         {
             float speedFrac = _model.Speed / _model.Stats.FdSpeed;
@@ -1737,30 +1565,6 @@ public partial class FlightController : Node3D
             ? 180f
             : Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(a.Normalized().Dot(b.Normalized()), -1f, 1f)));
 
-    // The rocket name the text readout shows: the resolved `MSG_WEAP_*` display name
-    // (e.g. "High-explosive rocket") when it resolved, else the short internal handle ("BOOM") — a
-    // raw, unresolved `MSG_*` key falls back to the handle rather than being shown verbatim.
-    private static string RocketReadoutName(WeaponDef w) =>
-        !string.IsNullOrEmpty(w.DisplayName) && !w.DisplayName.StartsWith("MSG_", StringComparison.Ordinal)
-            ? w.DisplayName
-            : w.Name;
-
-    // Where a round of `weapon` fired from `origin` along
-    // `forward` (carrying `inheritVel`, the plane's velocity) sits
-    // after travelling `distance` m of path — Ballistics.March, the
-    // SAME integration ProjectilePool steps each round with, so the reticle and the
-    // rounds agree.
-    private static Vector3 BallisticImpactPoint(WeaponDef weapon, Vector3 origin, Vector3 forward,
-        Vector3 inheritVel, float distance)
-    {
-        // A fixed integration step rather than the sim's: no weapon a gun group can resolve carries
-        // ACCELERATION or GRAVITY (the four accelerating defs of the 48 are rockets and a glide
-        // bomb), so every marched round is a straight line, on which the step size cannot move the
-        // endpoint — and a fixed step keeps the reticle from twitching with the frame rate.
-        const float dt = 1f / 120f;
-        return Ballistics.March(weapon, origin, forward, inheritVel, distance, dt);
-    }
-
     // The struck body's numeric surface id (SceneBuilder.SurfaceIdMeta,
     // stamped on every collider), or null when there is no struck body — the headless
     // `--crash` force, which is the original's null-material arm and so resolves slot 0.
@@ -1802,6 +1606,49 @@ public partial class FlightController : Node3D
     // edge-detects.
     private bool RocketSelectPressed() => KeyDown(Key.H) || PadPressed(JoyButton.DpadRight);
 
+    // This frame's pilot-HUD feed. The pipper's inputs are resolved HERE and only where there is a
+    // reticle to draw: a muzzle midpoint reads one world transform per barrel, which every aircraft
+    // drawing no reticle would otherwise pay every rendered frame.
+    private FlightHudState BuildHudState(float wallDt, float simDt, bool halted, float headingDeg)
+    {
+        GunGroup? reticleGun = null;
+        Vector3 reticleOrigin = default;
+        Vector3 reticleNose = default;
+        Vector3 inheritedVelocity = default;
+        if (_pilotHud.DrawsReticle && !_crashed && Loadout != null && _fire != null
+            && SelectedGun() is { } sel)
+        {
+            reticleGun = sel;
+            reticleOrigin = MuzzleMidpoint(sel);
+            reticleNose = -GlobalTransform.Basis.Orthonormalized().Z;
+            inheritedVelocity = _model.VelocityDir * _model.Speed;
+        }
+        return new FlightHudState
+        {
+            Position = _model.Position,
+            HeadingDeg = headingDeg,
+            SpeedMps = _model.Speed,
+            Throttle = _model.Throttle,
+            Crashed = _crashed,
+            Held = _held,
+            Halted = halted,
+            StallWarned = _model.IsStallWarned(),
+            StallFraction = _model.StallFraction,
+            Stalled = _model.isStalled(),
+            WallDt = wallDt,
+            SimDt = simDt,
+            DamageSummary = _pilotHud.DrawsTextBlock ? Damage?.Summary() : null,
+            StuntStatusLine = Stunt != null && _pilotHud.NeedsStuntStatusLine ? Stunt.StatusLine() : null,
+            Loadout = Loadout,
+            GunSelect = _fire?.GunSel ?? 0,
+            PylonSelect = _fire?.SelectedPylon ?? 0,
+            ReticleGun = reticleGun,
+            ReticleOrigin = reticleOrigin,
+            ReticleNose = reticleNose,
+            InheritedVelocity = inheritedVelocity,
+        };
+    }
+
     // Pushes InPlay into the two facts the engine can only hold as state:
     // whether the airframe is drawn, and whether its body sits on the aircraft collision layer
     // (so a ray, a sweep or a hit test can find it). Everything else consults the flag. Called by
@@ -1812,146 +1659,6 @@ public partial class FlightController : Node3D
         if (PlaneModel != null)
             PlaneModel.Visible = InPlay;
         Body?.SetHittable(InPlay);
-    }
-
-    // Feeds the two cockpit weapon gauges from the same live ammo the firing code
-    // draws down. The gun gauge shows the SELECTED group (its rounds, its short NAME, and one belt
-    // light per firable group by remaining fraction, the arrow on the selected one); the missile
-    // gauge shows the SELECTED pylon's rounds, its NAME, one belt light per pylon, and points the
-    // arrow at that pylon. With `--infinite-ammo` the counters sit at capacity (the counters
-    // never deplete), so the gauges read full and never step.
-    private void UpdateWeaponGauges()
-    {
-        if (Loadout == null)
-        {
-            return;
-        }
-        int gunSel = _fire?.GunSel ?? 0;
-
-        // Guns: the SELECTED firable group. The gauge takes the caliber+ammo short NAME and the belt
-        // fractions; the text readout takes the group's mount name and its per-group rounds.
-        GunGroup? selectedGun = null;
-        int firable = 0;
-        _gunGaugeSlots.Clear();
-        foreach (var g in Loadout.FirableGuns)
-        {
-            _gunGaugeSlots.Add(g.Capacity > 0 ? (float)g.Ammo / g.Capacity : 0f);
-            if (firable == gunSel)
-            {
-                selectedGun = g;
-            }
-            firable++;
-        }
-        if (_gunGaugeState != null)
-        {
-            _gunGaugeState.Selected = firable > 0 ? Mathf.Clamp(gunSel, 0, firable - 1) : 0;
-            _gunGaugeState.Count = selectedGun?.Ammo ?? 0;
-            _gunGaugeState.Type = selectedGun?.Weapon.Name ?? "";
-        }
-        if (WeaponReadout != null)
-        {
-            WeaponReadout.GunGroupName = firable > 0 ? selectedGun?.Mount : null;
-            WeaponReadout.GunAmmo = selectedGun?.Ammo ?? 0;
-        }
-
-        // Rockets: the SELECTED pylon. The count is that pylon's OWN rounds, per-pylon — the
-        // original's Warhawk gauge shows BOOM 3, not a 24-round sum across pylons.
-        var hps = Loadout.Hardpoints;
-        if (hps.Count > 0)
-        {
-            int sel = Mathf.Clamp(_fire?.SelectedPylon ?? 0, 0, hps.Count - 1);
-            var selectedHp = hps[sel];
-            // ⚠ Index the belt lights by PYLON NUMBER, not position in this compacted list — a
-            // partial stock fit must leave gaps at the unfitted physical positions.
-            _missileGaugeSlots.Clear();
-            for (int i = 0; i < GaugeCluster.HardpointRingSize; i++)
-            {
-                _missileGaugeSlots.Add(0f);
-            }
-            foreach (var h in hps)
-            {
-                _missileGaugeSlots[h.Index - 1] = h.Capacity > 0 ? (float)h.Ammo / h.Capacity : 0f;
-            }
-            WeaponDef typeWeapon = selectedHp.Weapon;
-            int perPylon = selectedHp.Ammo;
-            if (_missileGaugeState != null)
-            {
-                _missileGaugeState.Selected = selectedHp.Index - 1;
-                _missileGaugeState.Count = perPylon;
-                _missileGaugeState.Type = typeWeapon.Name;
-            }
-            if (WeaponReadout != null)
-            {
-                WeaponReadout.MissileName = RocketReadoutName(typeWeapon);
-                WeaponReadout.MissileAmmo = perPylon;
-            }
-        }
-        else if (WeaponReadout != null)
-        {
-            WeaponReadout.MissileName = null;
-        }
-    }
-
-    // Points the gun pipper where the original points it: at the selected gun group's
-    // muzzle midpoint, offset by ReticleFlightTime seconds of the round's flight,
-    // rate-smoothed. Decode: docs/org/aim-assist.md "What the pipper follows".
-    // ⚠ It marks the plane's NOSE axis, never the aim assist's line — the assist stays invisible
-    // by design; do not make the pipper follow the assisted line instead.
-    private void UpdateReticle(float dt)
-    {
-        if (Reticle == null)
-        {
-            return;
-        }
-        // Hidden while crashed (the airframe is gone) — a stale pipper must not hang in the sky —
-        // and when there is nothing to aim.
-        if (_crashed || Loadout == null || _fire == null)
-        {
-            Reticle.Active = false;
-            return;
-        }
-        // The selected firable gun group — the one the trigger fires. Its muzzles' averaged world
-        // pose is where THAT group's fire converges.
-        var sel = SelectedGun();
-        if (sel == null)
-        {
-            Reticle.Active = false;
-            return;
-        }
-        var origin = MuzzleMidpoint(sel);
-
-        // No weapon a gun group can resolve carries ACCELERATION or GRAVITY, so the straight line
-        // IS the round's path (see Ballistics.cs).
-        var inheritVel = _model.VelocityDir * _model.Speed;
-        var nose = -GlobalTransform.Basis.Orthonormalized().Z;
-        float speed = sel.Weapon.Velocity ?? ReticleDefaultSpeed;
-        var offset = (nose * speed + inheritVel) * ReticleFlightTime;
-        float target = offset.Length();
-        if (target < 1e-3f)
-        {
-            _reticleRate = 0f;
-            Reticle.Active = false;
-            return;
-        }
-        // Shares the rounds' own integration rather than growing a second copy of it.
-        var marched = BallisticImpactPoint(sel.Weapon, origin, nose, inheritVel, target);
-        // The range smoother: the closing rate builds at ReticleAccel, capped by the gap that is
-        // left (so it eases in rather than overshooting), then the pipper sits at the smoothed
-        // range along the same direction.
-        var toward = marched - origin;
-        float reach = toward.Length();
-        if (reach < 1e-3f)
-        {
-            _reticleRate = 0f;
-            Reticle.Active = false;
-            return;
-        }
-        float gap = Mathf.Abs(_reticleDist - reach);
-        float cap = gap >= ReticleFarGap ? ReticleFarRate : gap * ReticleRatePerGap;
-        _reticleRate = Mathf.Min(_reticleRate + dt * ReticleAccel, cap);
-        _reticleDist = Mathf.MoveToward(_reticleDist, reach, _reticleRate * dt);
-        Reticle.ImpactPoint = origin + toward / reach * _reticleDist;
-        Reticle.Active = true;
     }
 
     /// <summary>The selected firable gun group — the one the trigger fires — or null when there is
@@ -2991,7 +2698,7 @@ public partial class FlightController : Node3D
             if (state != null)
             {
                 Visuals?.OnPartDamage(struckPart, state.HealthFraction);
-                Gauges?.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
+                _pilotHud.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
             }
 
             // the def-level stages run off the hull pool even when the graze went zone-less
@@ -3006,8 +2713,7 @@ public partial class FlightController : Node3D
 
             if (state != null)
             {
-                _damageFlashText = $"⚠ IMPACT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%";
-                _damageFlash = DamageFlashTime;
+                _pilotHud.Flash($"⚠ IMPACT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%");
                 Log.Info("flight",
                     $"graze ({part}→{struckPart}): {hitName} vn={vn:0.0} m/s dmg={dmg:0.0} armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
             }

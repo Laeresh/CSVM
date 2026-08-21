@@ -106,11 +106,12 @@ The eight physics-query sites in `FlightController.cs`, which A1 routes through 
 | `WorldBlocksLine` | ray, line of sight | `TurretController` |
 | `AvoidCrashBlocksLine` | ray, line of sight with a name | `AiModeMachine.ProbeBlocked` |
 
-Public declarations at class scope: 47, of which 43 are mutable fields. The 16 this plan targets:
-`Compass`, `Gauges`, `FontTest`, `WeaponReadout`, `Reticle`, `Marker`, `TargetHud` and `Scoreboard`
+Public declarations at class scope: 47, of which 43 are mutable fields. The 15 this plan targets:
+`Compass`, `Gauges`, `FontTest`, `WeaponReadout`, `Reticle`, `Marker` and `TargetHud`
 (wave C); `Collider`, `Body`, `TouchdownDefs` (wave E); `CrashRuntime`, `CrashDefs`, `CrashAnchor`
-(wave F); `HoldSegments` (wave B). `VersusHud` is a board-adjacent readout and stays until the
-concurrent board work settles.
+(wave F); `HoldSegments` (wave B). `VersusHud` and `Scoreboard` are board-adjacent readouts, fed
+nothing per frame and parented on the HUD canvas alone, and stay until the concurrent board work
+settles.
 
 Goldens on this plan's path, of the 16: `c1-flight`, `c1-crash`, `c1-debris-rest`,
 `c1-destroy-effects`, `c1-targeting-hud`, `c1-ai-wreck`.
@@ -151,7 +152,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — the pilot HUD
 
-5. ☐ `FlightHud` fed a per-frame struct, absorbing `SetPilotHudVisible`
+5. ☑ `FlightHud` fed a per-frame struct, absorbing `SetPilotHudVisible`
 6. ☐ The HUD state-to-readout mapping asserted off-engine, including the damage flash
 
 ### Wave D — the collision response
@@ -295,7 +296,7 @@ what a held airframe looks like.
 
 # Wave C — the pilot HUD
 
-## C5 ☐ `FlightHud` fed a per-frame struct, absorbing `SetPilotHudVisible`
+## C5 ☑ `FlightHud` fed a per-frame struct, absorbing `SetPilotHudVisible`
 
 **Goal.** The pilot HUD is a module told what to draw, and the controller stops pushing text and
 numbers into seven collaborators through public fields.
