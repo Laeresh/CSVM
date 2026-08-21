@@ -142,7 +142,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the world-query seam
 
 1. ☑ `IWorldQuery` with `Sweep` and `Ray`, its Godot adapter, and all eight query sites routed
-2. ☐ `TurretController` drops its `FlightController` reference for the seam, asserted off-engine
+2. ☑ `TurretController` drops its `FlightController` reference for the seam, asserted off-engine
 
 ### Wave B — the input source
 
@@ -221,7 +221,7 @@ graze. Carry it verbatim; it is not tidyable. `HitWorld`'s three callers want di
 the same ray, so resist collapsing them into one helper with a flags argument. The ⚠ forbidding a
 swept sphere lives on the sweep and moves with it.
 
-## A2 ☐ `TurretController` drops its `FlightController` reference for the seam, asserted off-engine
+## A2 ☑ `TurretController` drops its `FlightController` reference for the seam, asserted off-engine
 
 **Goal.** A turret's line-of-sight check runs against a world it was handed, not against a 3,000-line
 node it holds a reference to, and a test can put a blocker in that world.

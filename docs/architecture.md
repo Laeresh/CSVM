@@ -1114,8 +1114,14 @@ wrap-aware directed yaw clamp + pitch clamp, bounded slew (3.0/s), pose written 
 nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution cone, cached
 1–2 s world-only line of sight, `FIRE_RATE` redraw. `PlatformOf`/`PlatformColliderRids` are what
 keep an emplacement's own mounting section out of its line-of-sight ray.
+A carried gunner's line of sight runs through `WorldBlocksLine`, a static method mirroring
+`FlightController.WorldBlocksLine`'s exact call shape against the `IWorldQuery` `BuildCarried`
+hands the constructor (a `GodotWorldQuery` over the host); `_host` itself stays for what it alone
+gives (`WorldVelocity`, `InPlay`, `PlayerIndex`). An emplacement has no host and no `IWorldQuery`
+either, so it keeps its own `WorldRayBlocked` twin, deliberately left alone: a gunner mounted on
+world geometry needs its own section excluded from the ray, which a carried gunner never does.
 Format and decode: [formats/turrets.md](formats/turrets.md). Proven by the `carried-turrets` and
-`world-turrets` suites and `TurretDefsTests`.
+`world-turrets` suites, `TurretDefsTests` and `TurretLineOfSightTests`.
 
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math (an `internal` class — nothing else may call it):
@@ -4229,7 +4235,11 @@ blast falloff share (1 = direct round).
 The one seam onto the live physics world: `Sweep` (a shape moved along a motion, earliest stop
 across a named part list) and `Ray` (one ray). `FlightController` reads the world only through
 this; nothing else may reach `DirectSpaceState`. `SweepReport`/`RayReport` carry the answer,
-including the struck collider as a plain `Node?` so a caller builds its own name.
+including the struck collider as a plain `Node?` so a caller builds its own name. A carried
+`TurretController` reads the same seam for its line-of-sight check
+(`TurretController.WorldBlocksLine`), built with the `GodotWorldQuery` its `BuildCarried` makes
+from the host it is riding; a synthetic `IWorldQuery` proves the mask and the blocked/clear cases
+off-engine (`TurretLineOfSightTests`), with no live node in the process.
 
 ## src/Flight/GodotWorldQuery.cs
 The only adapter over Godot's `DirectSpaceState`, implementing `IWorldQuery`. Resolves the wrapped
