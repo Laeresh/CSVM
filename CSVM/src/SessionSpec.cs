@@ -427,6 +427,12 @@ public sealed record SessionSpec
     /// <see cref="Flight.CameraController.PinnedBackView"/> = the look-behind, <c>--view=back</c>).
     /// The numpad views orbit a FLYING plane, so one asked for outside flight is dropped.</summary>
     public int View { get; private set; }
+    /// <summary><b>Resolved.</b> The <c>--view=</c> SELECTED view mode — <c>chase</c> (the default),
+    /// <c>cockpit</c> or <c>nose</c>. Held apart from <see cref="View"/> because the two are
+    /// different things: a numpad digit is a momentary pose held for the run, this is the view the
+    /// pilot flies in and the one the cycle key changes. Dropped outside flight, like
+    /// <see cref="View"/>.</summary>
+    public Flight.PilotViewMode ViewMode { get; private set; }
     /// <summary>Deprecated spellings seen, first-seen order, deduplicated, with their replacement.</summary>
     public IReadOnlyList<(string Old, string New)> Deprecated { get; private set; }
         = Array.Empty<(string, string)>();
@@ -1020,10 +1026,19 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--view="))
             {
                 string want = arg["--view=".Length..];
-                s.View = ParseView(want);
-                if (s.View == 0)
+                // The selected modes are checked first: they are names, so they cannot collide
+                // with a digit or with 'back', and a numpad digit means the other concept.
+                if (Flight.PilotView.Parse(want) is { } mode)
                 {
-                    notes.Add(new Note("core", $"--view={want} is not a numpad view (1-4, 6-9) or 'back' — using the chase camera"));
+                    s.ViewMode = mode;
+                }
+                else
+                {
+                    s.View = ParseView(want);
+                    if (s.View == 0)
+                    {
+                        notes.Add(new Note("core", $"--view={want} is not a numpad view (1-4, 6-9), 'back', or a view mode (chase/cockpit/nose) — using the chase camera"));
+                    }
                 }
             }
         }
@@ -1307,6 +1322,13 @@ public sealed record SessionSpec
         {
             Warn("core", $"--view={View} is a flight camera; ignoring it outside --fly/--stunt");
             View = 0;
+        }
+        // Same rule for the two first-person modes: they sit on a flown aircraft's camera.
+        if (ViewMode != Flight.PilotViewMode.Chase && !Fly)
+        {
+            Warn("core", $"--view={Flight.PilotView.Name(ViewMode)} is a flight camera; "
+                         + "ignoring it outside --fly/--stunt");
+            ViewMode = Flight.PilotViewMode.Chase;
         }
         // An unknown surface name would otherwise search for an id no collider can carry and
         // report it missing, which reads as a map fact rather than a typo.

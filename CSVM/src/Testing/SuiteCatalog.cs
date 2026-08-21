@@ -77,6 +77,7 @@ public static class SuiteCatalog
         "damage-stages",
         "damage-hd",
         "stop-sequence",
+        "first-person-condition",
         "death-slot",
         "wait-for-completion",
         "emitter-host-deactivation",
@@ -464,6 +465,8 @@ public static class SuiteCatalog
             "weapon hits destroy, swap, drop colliders, and survive destroy→reset→destroy", DamageHd));
         into.Add(new TestHarness.Suite("stop-sequence",
             "authored STOP_SEQUENCE stops run: the fireball's 0.3 s stopper and the 30 s fire's halt", StopSequenceStops));
+        into.Add(new TestHarness.Suite("first-person-condition",
+            "the PLAYER_1ST_PERSON condition follows the pilot's selected view mode: the bullethole def's else branch runs in Chase and is skipped in Cockpit and Nose (A1)", PlayerFirstPersonCondition));
         into.Add(new TestHarness.Suite("death-slot",
             "a killed destructible dispatches its compiled destruction slot — the block carrying the 30 s fire's 1,035 death calls (BL-276)", DeathSlotDispatches));
         into.Add(new TestHarness.Suite("wait-for-completion",

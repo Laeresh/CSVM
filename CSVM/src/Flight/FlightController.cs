@@ -294,6 +294,12 @@ public partial class FlightController : Node3D
     /// wins over this while it is down.</summary>
     public int PinnedView;
 
+    /// <summary>The view mode this pilot starts in (<c>--view=cockpit</c>/<c>=nose</c>); Chase, the
+    /// default, is exactly today's behaviour. The live value is the camera's
+    /// (<see cref="CameraController.ViewMode"/>) once <see cref="Setup"/> has run, because the
+    /// cycle key changes it; this field only seeds it.</summary>
+    public PilotViewMode PinnedViewMode = PilotViewMode.Chase;
+
     /// <summary>Out of lives: this pilot stays crashed for the rest of
     /// the mission — neither R nor <see cref="AutoRespawnAfter"/>'s timer brings it back — while
     /// the session hands its pane to a <see cref="SpectatorCamera"/> and the others fly on. Set by
@@ -347,6 +353,7 @@ public partial class FlightController : Node3D
     private readonly AimCandidateSet _targetScan = new();   // the targeting pass's own scan, rebuilt per frame
     private readonly List<AimCandidate> _targetParts = new(); // this frame's selectable sub-parts
     private readonly bool[] _targetKeyPrev = new bool[5];   // T/Y/U/I/O edge detection
+    private readonly bool[] _viewModeKeyPrev = new bool[2]; // F8/F6 view-selection edge detection
     private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // D-pad Up tap vs hold
 
     private bool _initialTargetDone;             // --target= has had its one chance
@@ -480,6 +487,15 @@ public partial class FlightController : Node3D
     /// choker's one observable, since nothing else on that path changes (see
     /// <see cref="TryChokeEngine"/>).</summary>
     public float EngineDeadRemainingS => _model.EngineDeadRemainingS;
+
+    /// <summary>The view this pilot has selected, live. Falls back to <see cref="PinnedViewMode"/>
+    /// before <see cref="Setup"/> has built a camera, and reads Chase on an AI rig, which has
+    /// none.</summary>
+    public PilotViewMode ViewMode => _cam?.ViewMode ?? PinnedViewMode;
+
+    /// <summary>Whether this pilot is in one of the two first-person views — the session's feed for
+    /// the anim data's <c>PLAYER_1ST_PERSON</c> condition (id 120).</summary>
+    public bool FirstPersonView => PilotView.IsFirstPerson(ViewMode);
 
     /// <summary>This airframe's stats, the flight model's own copy (jittered for an AI spawn, so it
     /// is the plane's data and not the cached def's). Read for the airframe's DISPLAY NAME
@@ -646,7 +662,9 @@ public partial class FlightController : Node3D
     {
         _model = model;
         _viewCamera = camera;
-        _cam = camera != null ? new CameraController(camera, camParams, KeyDown, PinnedView) : null;
+        _cam = camera != null
+            ? new CameraController(camera, camParams, KeyDown, PinnedView, PinnedViewMode)
+            : null;
         _spawnPos = spawnPos;
         _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
         _spawnThrottle = spawnThrottle;
@@ -1426,6 +1444,7 @@ public partial class FlightController : Node3D
         }
         else
         {
+            PollViewModeKeys();
             int view = _cam.ActiveView();
             if (view >= 0)
             {
@@ -1438,6 +1457,16 @@ public partial class FlightController : Node3D
             {
                 _cam.BackView(_renderPose);
                 view = CameraController.BackViewLog;
+            }
+            else if (_cam.FirstPerson)
+            {
+                // A1 lands the MODE, not the pose: Cockpit and Nose still take the chase camera's
+                // placement until A2 sits them on the cockpit_camera marker and A3 gives each its
+                // FOV. The breadcrumb names the mode, so a scripted run is verifiable before then.
+                _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis);
+                view = _cam.ViewMode == PilotViewMode.Nose
+                    ? CameraController.NoseViewLog
+                    : CameraController.CockpitViewLog;
             }
             else
             {
@@ -2325,6 +2354,27 @@ public partial class FlightController : Node3D
         string listed = names.Count == 0 ? "(nothing)"
             : string.Join(", ", names) + (extra > 0 ? $", +{extra} more" : "");
         Log.Warn("core", $"--target={InitialTarget}: no match — selectable now: {listed}");
+    }
+
+    /// <summary>The two view-selection keys, edge-detected: F8 cycles the first-person pair
+    /// (Cockpit ↔ Nose, entering Cockpit from Chase — the original's "Cycle Cockpit Views") and F6
+    /// selects the chase view back. The original binds a selector per view rather than one
+    /// three-stop cycle, which is why the way out of first person is its own key; F6 is this port's
+    /// choice for it, the original's own binding is not in the decoded data. No pad binding: every
+    /// button is spoken for, and this is player 1's keyboard like the numpad views.</summary>
+    private void PollViewModeKeys()
+    {
+        DispatchViewModeKey(0, Key.F8, () => _cam!.CycleCockpitViews());
+        DispatchViewModeKey(1, Key.F6, () => _cam!.SelectChase());
+    }
+
+    // Same one-action-per-press rule as DispatchTargetKey, against its own slots.
+    private void DispatchViewModeKey(int slot, Key key, System.Action act)
+    {
+        bool down = KeyDown(key);
+        if (down && !_viewModeKeyPrev[slot])
+            act();
+        _viewModeKeyPrev[slot] = down;
     }
 
     /// <summary>Edge-detects one targeting key against its own slot and runs its action once per

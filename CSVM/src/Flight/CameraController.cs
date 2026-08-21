@@ -6,6 +6,7 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// Drives the flown aircraft's camera: the roll-following chase camera, the numpad fixed views,
+/// the pilot's SELECTED view mode (<see cref="ViewMode"/>: Chase, Cockpit or Nose)
 /// and the free orbit used while the debug freeze holds the world still. Steers a
 /// <see cref="Camera3D"/> it does not own, like <see cref="CSVM.UI.OrbitCamera"/> does for the
 /// static viewer.
@@ -26,6 +27,13 @@ public sealed class CameraController
     /// <summary>LogView's marker for the pad look-around — a continuously variable
     /// twin of the numbered views rather than one of their digits.</summary>
     public const int PadLookLog = -3;
+
+    /// <summary>LogView's markers for the two SELECTED first-person views, which are modes rather
+    /// than held keys: a scripted <c>--view=cockpit</c>/<c>--view=nose</c> run reads its own mode
+    /// back off the breadcrumb, and a capture proves which view it framed.</summary>
+    public const int CockpitViewLog = -4;
+
+    public const int NoseViewLog = -5;
 
     // The chase offset's DIRECTION: behind and above the nose, at atan2(4.5, 16) ≈ 15.7° of
     // elevation. Hand-picked and still a TUNE — camparam ships a distance per plane, not an angle,
@@ -118,11 +126,13 @@ public sealed class CameraController
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
     private int _viewPrev = -1;                  // index into Views last applied (-1 = chase camera)
 
-    public CameraController(Camera3D camera, CamParams cam, Func<Key, bool> keyDown, int pinnedView)
+    public CameraController(Camera3D camera, CamParams cam, Func<Key, bool> keyDown, int pinnedView,
+        PilotViewMode viewMode = PilotViewMode.Chase)
     {
         _camera = camera;
         _keyDown = keyDown;
         _pinnedView = pinnedView;
+        ViewMode = viewMode;
         _dist = cam.Dist;
         _distFactor = cam.DistFactor;
         _radius = cam.Dist;
@@ -131,6 +141,28 @@ public sealed class CameraController
         _backMin = cam.BackDistMin;
         _backMax = cam.BackDistMax;
     }
+
+    /// <summary>Which view this pilot has SELECTED — Chase, Cockpit or Nose. State, not a held
+    /// key: it survives until the cycle key or another selection changes it, and a held numpad view
+    /// overrides it for as long as that key is down without changing it (see
+    /// <see cref="PilotView.Effective"/>). Seeded from <c>--view=cockpit</c>/<c>=nose</c>.
+    /// ⚠ Deliberately NOT a row in <see cref="Views"/>: `BL-150` rebuilds that table later and
+    /// must be able to replace it without touching these modes (PLAN-cockpit-view, Decision 2).</summary>
+    public PilotViewMode ViewMode { get; set; }
+
+    /// <summary>Whether the SELECTED view is one of the two first-person ones — what the anim
+    /// data's <c>PLAYER_1ST_PERSON</c> condition is answered with. Reads the selection, not the
+    /// momentary override: a numpad key held for a frame does not make the pilot leave the
+    /// cockpit.</summary>
+    public bool FirstPerson => PilotView.IsFirstPerson(ViewMode);
+
+    /// <summary>One press of the cycle key: Cockpit ↔ Nose, entering Cockpit from Chase, the
+    /// original's "Cycle Cockpit Views".</summary>
+    public void CycleCockpitViews() => ViewMode = PilotView.Cycle(ViewMode);
+
+    /// <summary>Select the chase view — the way back out of the first-person pair, which the
+    /// original reaches through its own view selector rather than through the cycle key.</summary>
+    public void SelectChase() => ViewMode = PilotViewMode.Chase;
 
     /// <summary>The look-behind view is on: numpad 0 held, the run pinned it with
     /// <c>--view=back</c>, or <paramref name="padClick"/> — this player's right-stick
@@ -361,6 +393,8 @@ public sealed class CameraController
         var aim = toPlane * -_camera.Basis.Z;   // the camera's forward axis, in the plane's frame
         string n = view == BackViewLog ? "back"
             : view == PadLookLog ? "padlook"
+            : view == CockpitViewLog ? PilotView.Name(PilotViewMode.Cockpit)
+            : view == NoseViewLog ? PilotView.Name(PilotViewMode.Nose)
             : (view < 0 ? "0" : Views[view].Digit.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Log.Debug("flight", $"view n={n} offset=({offset.X:0.000},{offset.Y:0.000},{offset.Z:0.000}) dist={offset.Length():0.000} aim=({aim.X:0.000},{aim.Y:0.000},{aim.Z:0.000})");
     }

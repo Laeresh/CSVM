@@ -30,6 +30,8 @@ Flags are specified in [`cli.md`](cli.md).
 | `I` | D-pad ↑ (hold 250 ms) | target whatever is nearest the crosshair — a hard 15° cone about the **nose**, 2 km max, friend or foe. Holding past the threshold fires this and the release does nothing |
 | `O` | | target nothing — clears the selection, and it **stays** cleared until one of the keys above |
 | `Tab` | | cycle stunt target |
+| `F8` | | cycle the cockpit views: Cockpit ↔ Nose, entering Cockpit from the chase view (the original's "Cycle Cockpit Views") — `--view=cockpit` / `--view=nose` |
+| `F6` | | select the chase view, the way back out of the first-person pair — `--view=chase` (the default). The original selects each view separately rather than cycling all three; which key it used is not in the decoded data, so `F6` is this port's choice |
 | `numpad 1–9` (not `5`) | | hold a fixed camera view around the plane (P1's keyboard) — `--view=` |
 | `numpad 0` | | hold the look-behind view: ahead of the nose looking back, at the authored `back_dist` range — `--view=back` |
 | | right stick | swing the external view around the plane while deflected, snapping back to the ordinary chase view the instant the stick returns to centre (`BL-372`) — not in the original, a UX call for this port |

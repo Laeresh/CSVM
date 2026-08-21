@@ -608,6 +608,30 @@ public class SessionSpecTests
         Assert.Contains(s.Warnings, w => w.Message.Contains("not a numpad view"));
     }
 
+    /// <summary>`--view=` also spells the three SELECTED views (A1), which are a different concept
+    /// from the held numpad digits and must not be read as one: naming a mode leaves
+    /// <c>View</c> at the chase camera and vice versa.</summary>
+    [Fact]
+    public void TheViewFlagAlsoSelectsCockpitAndNose()
+    {
+        var cockpit = S("--fly", "--view=cockpit");
+        Assert.Equal(CSVM.Flight.PilotViewMode.Cockpit, cockpit.ViewMode);
+        Assert.Equal(0, cockpit.View);
+        Assert.Empty(cockpit.Warnings);
+        Assert.Equal(CSVM.Flight.PilotViewMode.Nose, S("--fly", "--view=nose").ViewMode);
+        Assert.Equal(CSVM.Flight.PilotViewMode.Chase, S("--fly", "--view=2").ViewMode);
+    }
+
+    /// <summary>Same rule as the numpad digits: the first-person modes sit on a flown aircraft's
+    /// camera, so another mode is told rather than silently given a view it has no plane for.</summary>
+    [Fact]
+    public void TheSelectedViewModesAreDroppedOutsideFlight()
+    {
+        var s = S("--viewer", "--view=cockpit");
+        Assert.Equal(CSVM.Flight.PilotViewMode.Chase, s.ViewMode);
+        Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.Contains("flight camera"));
+    }
+
     /// <summary>The shared selection lives in the two world-observation modes: the viewer's LMB is
     /// already the orbit drag, and flight has no cursor.</summary>
     [Theory]

@@ -119,7 +119,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/SmokeScreens.cs` — the smoke screen's stun trap: the world's active screens, walked over the roster every sim step to stun AI and wash humans behind the layer; the cone rule, the wash cadence and the three `player.json` tunables beside it.
 - `src/Flight/BeeperTags.cs` — the beeper's paint and the seeker's pick: the world's tag list with its countdown, dead-aircraft slam and five-second tail, the tagging gate, and the per-frame query with the original's inverted-dot, squared-distance selection rule.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
-- `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, the weapon lab's held-airframe orbit. Steers a `Camera3D` it does not own.
+- `src/Flight/PilotViewMode.cs` — the three player-selectable views (Chase/Cockpit/Nose, valued as the engine's own camera modes 0/6/7) and `PilotView`, the pure rules over them: cycle, first-person test, the held-key override, the `--view=` spelling. Engine-free, so the decisions unit-test.
+- `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, the pilot's selected view mode, the weapon lab's held-airframe orbit. Steers a `Camera3D` it does not own.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, the steering step (turn clamp, speed penalty, `LOCK_ON_LEAD`, the seeker's retarget), tracers, flashes, per-surface impact, damage to destructibles, the beeper's paint.
 - `src/Flight/ProjectileFlyoutAnim.cs` — `ProjectilePool`'s `FLYOUT MODEL_ANIMATION` half: each ordnance round runs its def on the sequence interpreter, the pool as host (trail puffers, the torpedo's launch look and switch, its sounds).
@@ -740,6 +741,12 @@ it too, and both the family and the motion value types reach it only through `Re
 `FBFX_COLOR_FROM_TO`/`LIGHT_ANIMATION` report their `run_time` as the
 event's duration, spacing a chain instead of firing it in one instant; decode in
 `docs/formats/anim-definitions.md`.
+`PLAYER_1ST_PERSON` (condition 120) answers off the `FirstPersonView` seam, polled per
+evaluation: the session hands over "any human pilot is in Cockpit or Nose"
+(`GameSession.AnyPilotFirstPerson` off each rig's `FlightController.FirstPersonView`), and a
+runtime with no seam wired — a lab, a test, the bootstrap before any rig exists — reads false,
+which is what this condition answered everywhere before the view modes existed. Regression: the
+`first-person-condition` suite, over the shipped `bullet1` def.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
@@ -1351,7 +1358,17 @@ the camera meant choosing a menu row swung the view. `FlightController` writes n
 camera while a board is up, and the free look moved behind the board's Photo Mode row, which hands
 the pane to a `SpectatorCamera` instead. `Held` is the only remaining orbit source here, and no
 menu shares its keys. Steers a `Camera3D` it does not own, as `UI/OrbitCamera` does for the
-static viewer. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
+static viewer. Beside the held views it carries the pilot's SELECTED view mode (`ViewMode`,
+`FirstPerson`, `CycleCockpitViews`, `SelectChase`): Chase, Cockpit or Nose, seeded from
+`--view=cockpit`/`=nose` and changed at the controls by F8 (cycle the first-person pair) and F6
+(back to chase). The decisions themselves are `PilotView`'s, not this class's, so they are testable
+without an engine; this class holds the state and the camera. ⚠ The modes are deliberately NOT rows
+in `Views`: `BL-150` rebuilds that table later and must be able to replace it without touching them
+(PLAN-cockpit-view, Decision 2). A held numpad key overrides the mode for as long as it is down and
+leaves the selection alone, the same precedence it has over `--view=`'s pinned digit. Cockpit and
+Nose still take the chase camera's placement — A1 lands the mode, `cockpit_camera` placement (A2),
+per-mode FOV (A3) and the interior (B11) follow — but `LogView` already names them
+(`view n=cockpit`), which is what makes a scripted mode selection verifiable. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
 authored) plus a first-order acceleration transient relaxing at the MEASURED 0.65 /sim-s
 (`UpdateDynamics`, host-called once per sim step); the offset's DIRECTION (behind and above at
 ~15.7° elevation) is not in the data and stays hand-picked. Collaborators: `FlightController`
@@ -2620,7 +2637,11 @@ module privately, feeds it one `FlightHudState` per rendered frame, and forwards
 `SetPilotHudVisible` because `GameSession` calls it; the seven readouts are no longer fields here.
 `VersusHud` and `Scoreboard` stay board-adjacent fields on this node.
 The camera is `CameraController`'s — this node only feeds it
-the pose, the dt and the mixed orbit axes (`OrbitInput`); on a crash it cuts to `CrashView` once,
+the pose, the dt and the mixed orbit axes (`OrbitInput`), plus the two view-selection keys
+(`PollViewModeKeys`: F8 cycles Cockpit ↔ Nose, F6 selects chase, both edge-detected on their own
+slots like the targeting keys). `PinnedViewMode` seeds the selection from `--view=`; `ViewMode` and
+`FirstPersonView` read it back live, and the session polls the latter for the anim data's
+`PLAYER_1ST_PERSON` condition; on a crash it cuts to `CrashView` once,
 writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
 shows no HUD — footage), restoring it on respawn. Every physics query — the PlaneCollider boxes'
 sweep each physics frame plus every ray (ground AGL, the ground-blow probe, the camera's height

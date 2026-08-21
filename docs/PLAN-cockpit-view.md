@@ -146,7 +146,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — camera modes and placement
 
-1. ☐ View-mode architecture: Cockpit/Nose as camera modes beside `Views[]`, cycle key, selector
+1. ☑ View-mode architecture: Cockpit/Nose as camera modes beside `Views[]`, cycle key, selector
 2. ☐ First-person placement: `cockpit_camera` marker, −4.70° head-pitch offset, wobble inheritance
 3. ☐ Per-mode FOV: 80° H cockpit / 60° H nose, horizontal-base aspect correction (new modes only)
 
@@ -181,7 +181,55 @@ share `CameraController.cs`/`FlightController.cs` — never in parallel worktree
 
 # Wave A — camera modes and placement
 
-## A1 ☐ View-mode architecture: Cockpit/Nose as camera modes beside `Views[]`
+## A1 ☑ View-mode architecture: Cockpit/Nose as camera modes beside `Views[]`
+
+**Landed.** A pilot selects one of three views and nothing else, the set the original's selector
+accepts: `PilotViewMode` (`src/Flight/PilotViewMode.cs`) is Chase/Cockpit/Nose valued as the
+engine's own camera modes 0/6/7, and `PilotView` beside it holds the rules as pure functions —
+`Cycle` (Cockpit ↔ Nose, entering Cockpit from Chase, the original's fallback), `IsFirstPerson`,
+`Effective` (a held view key overrides the selection without changing it) and the `--view=`
+spelling. `CameraController` owns the live selection (`ViewMode`, `FirstPerson`,
+`CycleCockpitViews`, `SelectChase`) and defers every decision to those functions, so the decisions
+unit-test without an engine. `Views[]` and `ActiveView()` are untouched.
+
+**The keys are F8 and F6.** F8 cycles the first-person pair, the binding `PLAN-targeting.md:141`
+reserved for "Cycle Cockpit Views"; it was still free (`docs/controls.md` binds F5 and F10–F16 and
+F18, and no `Key.F8` existed in the tree). Cycling never returns to Chase, so F6 (also free)
+selects the chase view back. The original selects each of its three views separately rather than
+cycling all three, and which key it used for chase is not in the decoded data, so F6 is this port's
+choice and is documented as such. Both are edge-detected in `FlightController.PollViewModeKeys`,
+one slot each, the same shape the targeting keys use; no pad binding.
+
+**Scripted selection** extends `--view=` with the three mode names (`chase`/`cockpit`/`nose`),
+held on `SessionSpec.ViewMode` apart from the numpad `View` digit because the two are different
+concepts; it is dropped with a warning outside `--fly`/`--stunt` exactly as a digit is, and reaches
+the rig through `HumanFlightAdapter` → `FlightController.PinnedViewMode`. The selected mode is
+named on the existing `view n=…` breadcrumb (`view n=cockpit`), which is what makes a scripted
+selection machine-verifiable before A2/A3 give the modes a distinct pose.
+
+**`PlayerFirstPerson` (condition 120) now reads the mode.** `AnimRuntime.FirstPersonView` replaced
+the hardwired `false` field, polled per evaluation and fed by `GameSession.AnyPilotFirstPerson`
+over the rigs' `FlightController.FirstPersonView`, on both the world runtime (through
+`WorldSession.Options`) and the world-effects runtime (through `WorldEffectsFactory`). A runtime
+with no seam still reads false, so every lab and test keeps the pre-A1 answer.
+
+**Not yet different to look through:** Cockpit and Nose take the chase camera's placement until A2
+sits them on `cockpit_camera` and A3 gives each its FOV.
+
+**Tests.** `CSVM.Tests/PilotViewTests.cs` covers the cycle, the first-person test, the held-key
+override and the flag spelling; `SessionSpecTests` covers `--view=cockpit|nose` and its
+outside-flight drop; the new in-engine `first-person-condition` suite runs the shipped `bullet1`
+def (whose Initial sequence is `IF PLAYER_1ST_PERSON / ELSE CALL_ANIMATION two_bulletholes_a`) and
+asserts the call happens in Chase, is skipped in Cockpit and Nose, and returns on Chase again, with
+the def's ungated second sequence as the control.
+
+**⚠ The plan's own evidence was wrong on one point.** It said the condition-120 coverage lives in
+the sequences suites and only needed extending: there was none — condition 120 had no test
+anywhere, and `bullet1` is the first def in this project ever to take that branch.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The player can select Chase, Cockpit, or Nose; one key cycles Cockpit ↔ Nose (the
 original's "Cycle Cockpit Views"); a held numpad key still overrides the selected view exactly as

@@ -96,6 +96,7 @@ internal sealed class HumanFlightAdapter
         {
             DebugCollision = _in.DebugCollision,
             PinnedView = _spec.View,
+            PinnedViewMode = _spec.ViewMode,
             HudParent = rig.Viewport,
         };
         // Every human joins team 1 in an Instant Action mission, splitscreen included — the
