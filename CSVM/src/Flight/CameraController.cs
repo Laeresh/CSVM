@@ -75,6 +75,19 @@ public sealed class CameraController
     // a constant tilt baked into the view build, applied straight ahead until C21 lands.
     private const float HeadPitchOffsetRad = -0.08203f;
 
+    // The decoded per-mode BASE horizontal FOV, in degrees (org/cameraViews.md, "FOV constants
+    // and aspect correction": 1.0471976 rad / 1.3962634 rad, exactly 60°/80°). Only Cockpit and
+    // Nose ever read this table; every external view keeps GameSession's own 62° vertical global
+    // untouched (PLAN-cockpit-view, Decision 3 — the engine-wide migration is a filed item, not
+    // this one).
+    private const float NoseHorizontalFovDeg = 60f;
+    private const float CockpitHorizontalFovDeg = 80f;
+
+    // The engine's OWN reference aspect for the horizontal→vertical conversion (org/cameraViews.md:
+    // "the engine's assumed 4:3"). The live display/pane aspect is the other half of the formula,
+    // supplied per call so the result tracks the actual viewport, never a hardcoded 16:9.
+    private const float AssumedAspect = 4f / 3f;
+
     // The offset the direction above works out to at unit... i.e. the length of (BaseBack, BaseUp),
     // ≈ 16.62 m. Only used to normalise that direction against the data's own distance.
     private static readonly float BaseDist = Mathf.Sqrt((BaseBack * BaseBack) + (BaseUp * BaseUp));
@@ -120,6 +133,12 @@ public sealed class CameraController
     // separate nose marker (docs/org/cameraViews.md).
     private readonly Vector3 _cockpitCameraOffset;
 
+    // The FOV the owned camera carried at construction — GameSession's own 62° vertical global
+    // for every external pose (chase, fixed, back, pad-look, crash). Captured once rather than
+    // read back from GameSession, so this class restores exactly what it found and never reaches
+    // into that global's own home (PLAN-cockpit-view, A3, Decision 3).
+    private readonly float _externalFovDeg;
+
     // The dynamic chase radius: _dist + _distFactor·V + the acceleration transient. Advanced by
     // UpdateDynamics on the sim clock; read by both the chase camera and the fixed views.
     private float _radius;
@@ -151,6 +170,7 @@ public sealed class CameraController
         _backMin = cam.BackDistMin;
         _backMax = cam.BackDistMax;
         _cockpitCameraOffset = cockpitCameraOffset;
+        _externalFovDeg = camera.Fov;
     }
 
     /// <summary>Which view this pilot has SELECTED — Chase, Cockpit or Nose. State, not a held
@@ -280,6 +300,43 @@ public sealed class CameraController
         _camera.Basis = basis;
     }
 
+    // Kept beside the instance method that calls it, for the same SA1204 reason as
+    // FirstPersonPose above.
+#pragma warning disable SA1204
+    /// <summary>The decoded horizontal→vertical FOV law (org/cameraViews.md, "FOV constants and
+    /// aspect correction"): <c>vertical = atan(tan(H/2) · assumedAspect/liveAspect)</c>, doubled
+    /// for the FULL angle Godot's <see cref="Camera3D.Fov"/> expects (this project sets no
+    /// <c>keep_aspect</c> anywhere, so Fov is always the vertical angle). <paramref
+    /// name="liveAspect"/> is taken fresh every call, never assumed 16:9. At 16:9, 60°H → 46.8°V
+    /// and 80°H → 64.4°V, the plan's pinned values. Pure, so it unit-tests engine-free.</summary>
+    public static float HorizontalToVerticalFovDeg(float horizontalDeg, float liveAspect)
+    {
+        float halfH = Mathf.DegToRad(horizontalDeg) * 0.5f;
+        float halfV = Mathf.Atan(Mathf.Tan(halfH) * (AssumedAspect / liveAspect));
+        return Mathf.RadToDeg(halfV) * 2f;
+    }
+#pragma warning restore SA1204
+
+    /// <summary>Put the derived per-mode vertical FOV onto the owned camera, at ITS OWN
+    /// viewport's live aspect — the per-pane <c>SubViewport</c> in splitscreen, the window in
+    /// single-player, so each pilot's picture is correct independent of the others (Decision 5:
+    /// no splitscreen-specific code, the per-pilot camera already owns its own FOV value). Call
+    /// alongside every <see cref="FirstPersonView"/> site; <see cref="RestoreExternalFov"/> is the
+    /// undo for every other pose.</summary>
+    public void ApplyFirstPersonFov()
+    {
+        var size = _camera.GetViewport()?.GetVisibleRect().Size ?? new Vector2(16f, 9f);
+        float aspect = size.Y > 0f ? size.X / size.Y : 16f / 9f;
+        float horizontalDeg = ViewMode == PilotViewMode.Cockpit ? CockpitHorizontalFovDeg : NoseHorizontalFovDeg;
+        _camera.Fov = HorizontalToVerticalFovDeg(horizontalDeg, aspect);
+    }
+
+    /// <summary>Put the camera back on the vertical FOV it carried at construction — GameSession's
+    /// own 62° global. Every non-first-person pose calls this (a held numpad key or look-behind
+    /// while the SELECTION is Cockpit/Nose is an external pose and gets the external FOV while
+    /// held, back to first-person FOV on release, same as any other override).</summary>
+    public void RestoreExternalFov() => _camera.Fov = _externalFovDeg;
+
     /// <summary>The authored crash camera (<c>crash_horiz</c>/<c>crash_y</c>): on a fatal crash
     /// the original hard-cuts to a static elevated vantage looking down at the impact point.
     /// Framing decoded off the original's crash footage — see docs/formats/camparam.md.
@@ -287,6 +344,7 @@ public sealed class CameraController
     /// (<c>BL-260</c>); do not guess them into the pose.</summary>
     public void CrashView(Vector3 impact, Vector3 travelDir)
     {
+        RestoreExternalFov(); // the crash cut is always an external framing, whatever view was selected
         var alongH = new Vector3(travelDir.X, 0f, travelDir.Z);
         Vector3 behind;
         if (alongH.LengthSquared() > 1e-4f)
@@ -367,6 +425,7 @@ public sealed class CameraController
         _prevSpeed = speed;
         _distExcess = 0f;
         _radius = _dist + (_distFactor * speed);
+        RestoreExternalFov(); // default; the first-person arm below overrides it
         int view = ActiveView();
         if (view >= 0)
         {
@@ -384,6 +443,7 @@ public sealed class CameraController
             // for one frame — Snap is the settle-immediately path, so it needs its own first-person
             // arm rather than falling through to the chase math below (PLAN-cockpit-view, A2).
             FirstPersonView(renderPose);
+            ApplyFirstPersonFov();
             return;
         }
         _offset = DesiredOffset(attitude, out var camUp);

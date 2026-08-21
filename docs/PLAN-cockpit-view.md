@@ -152,7 +152,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ View-mode architecture: Cockpit/Nose as camera modes beside `Views[]`, cycle key, selector
 2. ☑ First-person placement: `cockpit_camera` marker, −4.70° head-pitch offset, wobble inheritance
-3. ☐ Per-mode FOV: 80° H cockpit / 60° H nose, horizontal-base aspect correction (new modes only)
+3. ☑ Per-mode FOV: 80° H cockpit / 60° H nose, horizontal-base aspect correction (new modes only)
 
 ### Wave B — rendering
 
@@ -361,7 +361,52 @@ separate half only for the chase camera because it sits outside the rocking node
 plane models; if any placement work touches node pairing, pair by mesh position, not name
 (`docs/formats/vehicle.md:236`).
 
-## A3 ☐ Per-mode FOV: 80° H cockpit / 60° H nose
+## A3 ☑ Per-mode FOV: 80° H cockpit / 60° H nose
+
+**Landed.** Cockpit renders at 80° horizontal FOV, Nose at 60°, both derived to a vertical angle
+at the OWNED camera's own live viewport aspect every time the pose is written; every external view
+(chase, fixed numpad, back, pad-look, crash) keeps GameSession's 62° vertical global untouched.
+
+`CameraController.HorizontalToVerticalFovDeg(horizontalDeg, liveAspect)` is the pure conversion
+law — `vertical = 2·atan(tan(H/2) · assumedAspect/liveAspect)` with `assumedAspect = 4/3` (the
+engine's own reference) — static and engine-free so it unit-tests without a `Camera3D`/`Viewport`,
+the same shape A2 gave `FirstPersonPose`. `ApplyFirstPersonFov()` is the thin write: it reads the
+owned camera's OWN `GetViewport().GetVisibleRect().Size` (the per-pane `SubViewport` in
+splitscreen, the window otherwise), picks 80°/60° off `ViewMode`, and sets `Camera3D.Fov`. This
+project sets no `keep_aspect` anywhere in the tree, so `Fov` stays Godot's default Keep-Height
+vertical angle everywhere, which is exactly what the conversion law produces.
+
+**Where the 62° global lives, and how this stays off it.** `GameSession.cs:475`/`:2624` and
+`Launcher.cs:490` are the only three places `Fov = 62` is written, one per owned `Camera3D` (the
+single-player main camera, each splitscreen pane's camera). `CameraController` never touches those
+sites: it captures `camera.Fov` once at construction (`_externalFovDeg`) and only ever restores
+that captured value (`RestoreExternalFov()`) or overrides it with the derived first-person value —
+it does not know 62 is the number, and the migration E41 files stays a change to those three call
+sites alone.
+
+**Wiring covers every path through the camera chain.** `FlightController._Process`'s main branch
+now calls `RestoreExternalFov()` unconditionally before deciding the frame's pose, then
+`ApplyFirstPersonFov()` only in the `FirstPerson` arm (alongside `FirstPersonView`) — so a held
+numpad key or look-behind while SELECTED Cockpit/Nose gets the external FOV for as long as it is
+held and the first-person FOV back on release, matching how those keys already override the pose.
+`CameraController.Snap` (spawn/respawn/weapon-lab re-park) got the same default-then-override
+shape on its own first-person arm. `CameraController.CrashView` restores the external FOV
+unconditionally on the crash cut, since that framing is always external regardless of the view
+that was selected when the crash happened.
+
+**Splitscreen needs no special-casing.** Each pilot's rig already owns its own `Camera3D`
+(`GameSession.BuildRigs`, one per pane), so `ApplyFirstPersonFov()` reading `_camera.GetViewport()`
+naturally picks up that pane's own size and aspect — no session-wide FOV variable to fight over,
+per Decision 5.
+
+**Tests.** `CSVM.Tests/CameraControllerFovTests.cs` asserts the plan's two pinned 16:9 results
+(46.8°/64.4°) and checks the law at a second aspect ratio (4:3, the engine's own reference, where
+the aspect factor collapses to 1 and the derived vertical equals the stored horizontal exactly) —
+confirming the law is live-aspect-driven rather than a hardcoded 16:9 table.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Cockpit renders at 80° horizontal FOV, Nose at 60° horizontal, both derived from the
 horizontal half-angle with aspect correction the original's way; external views are untouched.

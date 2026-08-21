@@ -1379,10 +1379,17 @@ law: `camera_world = plane_pos + plane_rotation × offset`, plus the fixed −4.
 tilt — `FirstPersonView` is its thin write onto the owned `Camera3D`), rigidly mounted with no
 smoothing and no camera-side shake so the camera inherits the plane node's wobble for free
 (`docs/org/shakes.md`). The offset comes in through the constructor
-(`PlaneBuilder.CockpitCameraOffset`, fallback the origin) — A3 still owes each mode its own FOV,
-and C21 still owes head-look; until then the view holds straight ahead plus the fixed offset.
-`Snap` carries the same first-person arm as `_Process`'s camera chain, so a spawn/respawn into
-Cockpit or Nose does not show one frame of the chase pose. `LogView` already names the modes
+(`PlaneBuilder.CockpitCameraOffset`, fallback the origin) — C21 still owes head-look; until then
+the view holds straight ahead plus the fixed offset. Each mode carries its own FOV
+(`HorizontalToVerticalFovDeg`, a static, engine-free law: `vertical = 2·atan(tan(H/2) ·
+(4/3)/liveAspect)`, 80°H Cockpit / 60°H Nose — `ApplyFirstPersonFov` is its thin write, reading
+the owned camera's OWN viewport for the live aspect so a splitscreen pane derives its own answer).
+Every other pose runs on the external FOV the camera carried at construction
+(`RestoreExternalFov`, captured once so this class never reaches into `GameSession`'s 62° global);
+`FlightController._Process` calls it by default and only the `FirstPerson` arm overrides it, so a
+held numpad/back key while SELECTED Cockpit/Nose gets the external FOV while held and the
+first-person FOV back on release. `Snap` and `CrashView` carry the same default/override shape, so
+a spawn/respawn/crash-cut never shows a stale FOV. `LogView` already names the modes
 (`view n=cockpit`), which is what makes a scripted mode selection verifiable. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
 authored) plus a first-order acceleration transient relaxing at the MEASURED 0.65 /sim-s
 (`UpdateDynamics`, host-called once per sim step); the offset's DIRECTION (behind and above at

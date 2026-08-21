@@ -1446,6 +1446,9 @@ public partial class FlightController : Node3D
         else
         {
             PollViewModeKeys();
+            // A3: default to the external FOV global; the FirstPerson arm below overrides it, so
+            // a held numpad/back key while SELECTED Cockpit/Nose gets it back on release.
+            _cam.RestoreExternalFov();
             int view = _cam.ActiveView();
             if (view >= 0)
             {
@@ -1462,9 +1465,10 @@ public partial class FlightController : Node3D
             else if (_cam.FirstPerson)
             {
                 // A2: both first-person views sit at the plane's cockpit_camera marker, rigidly
-                // mounted (no smoothing) so the camera inherits the plane's wobble for free —
-                // A3 still owes each mode its own FOV.
+                // mounted (no smoothing) so the camera inherits the plane's wobble for free.
+                // A3: each mode's own derived FOV rides alongside the placement.
                 _cam.FirstPersonView(_renderPose);
+                _cam.ApplyFirstPersonFov();
                 view = _cam.ViewMode == PilotViewMode.Nose
                     ? CameraController.NoseViewLog
                     : CameraController.CockpitViewLog;
