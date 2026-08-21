@@ -32,8 +32,9 @@ it). `BL-150` is referenced but not worked here, so it was not re-verified.
   inherit the plane's wobble, and carry the fixed −4.70° head-pitch offset the original applies.
 - Cockpit renders the `cockpit1` interior with its `pcdpN` damage panels driven; Nose hides the
   interior and the `markers`/`dontmove` nodes; both hide the own-plane healthy body.
-- Cockpit runs 80° horizontal FOV with head-look (snap, free-look on mouse/right stick, autohead,
-  center key); Nose runs 60° horizontal, head fixed (see the A-row nuance below).
+- Cockpit runs 80° horizontal FOV and Nose 60°; head-look (snap, free-look on mouse/right stick,
+  center key) is active in both first-person views, elevation floored at level; autohead is
+  Cockpit-only.
 - `cockpit_engine_sound` swaps onto the engine slot while in either first-person view.
 
 **The external views keep their current 62° vertical FOV and the `Views[]` numpad table keeps its
@@ -57,7 +58,7 @@ and get their own change.
 | # | The wrong claim | How it died |
 |---|---|---|
 | 1 | The engine's base FOV is 62° vertical | The 62°-in-radians constant is absent from `crimson.exe`; the real base is 60° horizontal with an 80° cockpit exception (`org/cameraViews.md`, "The headline") |
-| 2 | "In `FUN_0042d980` the head-look controller `FUN_0042d010` is forced off for mode 7" (`org/cameraViews.md:150-151`, stated without an address for the force-off) | Partially wrong per this plan's decompile of `FUN_0042d980`: it calls `FUN_0042d010` unconditionally in both modes; what mode 7 provably disables is only the **autohead** flag (the second argument, cleared when `camera+0x14c == 7`). Whether hat/key look is separately gated in mode 7 at the input layer is unresolved — see A2's TODO. Do not build "no head-look in Nose" as settled |
+| 2 | "In `FUN_0042d980` the head-look controller `FUN_0042d010` is forced off for mode 7" (`org/cameraViews.md:150-151`), and this plan's first draft carried it as "Nose: head fixed" | Dead per the decompiles: `FUN_0042d980` calls `FUN_0042d010` unconditionally in both first-person modes, gating off only the **autohead** flag for mode 7, and the chase handler `FUN_0042c7f0` calls the same controller with pitch floor **−π/2** (`0xbfc90fdb`) where first person passes 0. Head-look is one shared system: chase (full range), Cockpit and Nose (elevation floored at level); autohead is the only Cockpit-exclusive. Build Nose with head-look; the at-the-controls sitting confirms, since the page's old claim may have been a live impression |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -78,8 +79,11 @@ derived at runtime: `vertical = atan(tan(H/2) · aspect_ratio_factor)`.
 marker read from the model (`player_pfighter`: `(0, +0.75, −0.2)`; fallback `(0,0,0)`); no separate
 nose marker, no per-mode offset; wobble is inherited from the plane node, no camera-side shake.
 
-**Head-look controller** `FUN_0042d010` (decoded 2026-08-21, this plan's session; caller
-`FUN_0042d980` passes pitch-floor `0` and the autohead flag):
+**Head-look controller** `FUN_0042d010` (decoded 2026-08-21, this plan's session). Two callers:
+the first-person placement `FUN_0042d980` passes pitch-floor `0` and the autohead flag (cleared in
+mode 7); the chase handler `FUN_0042c7f0` passes pitch-floor **−π/2** (`0xbfc90fdb`) and autohead
+off, so the same look system serves the chase view with a full elevation range (out of scope here,
+filed by E41):
 
 - The look state lives at `DAT_0064ef68`: `0` snap, `1` free-look, `2` padlock (deferred).
 - Angles: `DAT_0064ef60` is elevation above level (0 = level, π/2 = straight up), `DAT_0064ef64`
@@ -289,9 +293,9 @@ written down.
 **Verify.** A scripted capture straight ahead from `player_pfighter` matches the marker: horizon
 placement consistent with a camera 0.75 up / 0.2 aft of origin, nose visible per the −4.70° tilt.
 Cite `docs/verification.md` before measuring anything in-frame.
-<TODO: whether head-look input is honoured in Nose in the original is unresolved (see the ⚠ table,
-row 2) — settle it at build time by decoding the input layer's mode gate (start at `FUN_00536c70` /
-`FUN_00440540` callers) or by a live A/B in the original, then wire Nose's head accordingly.>
+Resolved (⚠ table row 2): head-look input is honoured in Nose — `FUN_0042d980` runs the controller
+unconditionally in both modes and only autohead is mode-6-gated. Nose gets head-look; the
+at-the-controls sitting carries the confirm line.
 
 **⚠ Traps.** Do not add any camera-side shake to the first-person views; `damage_shakes` authors a
 separate half only for the chase camera because it sits outside the rocking node (`org/shakes.md`,
@@ -392,8 +396,8 @@ already participate in `effect_pools.json` counts.
 
 ## C21 ☐ Head-look controller: snap + free-look + center key
 
-**Goal.** In Cockpit, the head pans at the decoded rates on mouse or right stick, snaps on the
-snap keys with the original's direction mapping (forward = straight up, forward-diagonals = 45°
+**Goal.** In both first-person views, the head pans at the decoded rates on mouse or right stick,
+snaps on the snap keys with the original's direction mapping (forward = straight up, forward-diagonals = 45°
 up, others level), never looks below level, approaches targets with the decoded smoothing, and
 recenters on the center key.
 
@@ -409,8 +413,9 @@ same integrate path (Decision 4).
 <TODO: snap-key bindings — the original's nine key slots (indices 0x3a–0x42) are engine key
 indices, not physical keys; pick a CSVM cluster at build time against the ActionMap and the
 Tartarus layout (take the user's numbering, per the debug-keys memory).>
-<TODO: whether free-look is Cockpit-only or also Nose — same open question as A2's mode-7 gate;
-build Cockpit-only first, it matches both readings of the decode.>
+Resolved (⚠ table row 2): head-look runs in both first-person views with the elevation floor at
+level; only autohead (C22) is Cockpit-only. The original also runs this controller for the chase
+view with a −π/2 floor; that stays out of scope and is E41's filed item (7).
 
 **Model recommendation.** high — feel-adjacent behaviour with several interacting constants; wrong
 composition order (offset vs elevation vs azimuth) would read as subtly broken.
@@ -494,7 +499,9 @@ migration 62°V → 60°H base, carrying the overcast/tracer calibration warning
 cockpit behaviour (per-viewport interior cost, per-pilot engine-sound swap under `MixGain`);
 (6) HUD `POSITION_1ST` layout variant (the original places gauges differently in first person,
 `hud_v2.zrd` keys `POSITION_1ST`/`POSITION_3RD`, `org/cameraViews.md:120-128`) — whether
-`GaugeCluster` should reposition in cockpit views.
+`GaugeCluster` should reposition in cockpit views; (7) chase-view look-around — the original runs
+the same head-look controller for the chase camera with elevation floor −π/2 (`FUN_0042c7f0` →
+`FUN_0042d010(0xbfc90fdb, 0)`), which CSVM's chase view lacks entirely.
 
 **Approach.** Use `/close-backlog-item` for `BL-080`/`BL-161` (evidence and dates go in the
 closing commit message, not the files). Amend `org/cameraViews.md` per its own contract (behaviour
