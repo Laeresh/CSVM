@@ -1193,7 +1193,7 @@ internal static class OrdnanceSuites
             // 97° off the backward axis at 400 m: inside the range, outside the 85° edge.
             var aiSide = BuildRig(FlightRoster.ShooterIdBase + 1, human: false, layerPos + new Vector3(397f, 0f, -49f));
 
-            (flash, panes) = WorldAndToolSuites.PaneFlash(ctx, null);
+            (flash, panes) = AnimationAndEffectsSuites.PaneFlash(ctx, null);
             var washes = new List<(int Player, float Weight, float Time)>();
             float clock = 0f;
             var flashSink = flash;
@@ -1354,7 +1354,7 @@ internal static class OrdnanceSuites
         Node[] panes = System.Array.Empty<Node>();
         try
         {
-            (flash, panes) = WorldAndToolSuites.PaneFlash(ctx, null);
+            (flash, panes) = AnimationAndEffectsSuites.PaneFlash(ctx, null);
             var washes = new List<(int Player, Color Colour, float Weight, float Duration, float Delay)>();
             var flashSink = flash;
             var live = new ProjectilePool(textures, null, null)

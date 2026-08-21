@@ -89,6 +89,18 @@ exhausted, the ground stop, no damage data at speed). Also the ground contact th
 fall, which is the same word for the same reason.
 _Avoid_: death, destruction, fatal hit, kill (a kill is what a shooter is credited with)
 
+## Damage and death
+
+**Damage**:
+Spending armor and health, and the injure staging those ledgers fire: pools, thresholds, stage
+tears and repairs.
+_Avoid_: destruction (that is the choreography), hurt, harm
+
+**Destroy choreography**:
+Everything a death dispatches: the destroy def's arms, wreck pieces and their flights, crash rigs,
+callbacks, and the stops that end them.
+_Avoid_: death effects, destruction sequence, kill animation
+
 ## Boards and the sim clock
 
 **Board**:

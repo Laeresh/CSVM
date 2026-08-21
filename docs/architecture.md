@@ -246,7 +246,7 @@ instead.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
 - `src/Testing/SuiteCatalog.cs` — the ordered registry of the in-engine suites; domain scenario bodies live in `*Suites.cs` modules, while `SuiteConstants` holds their shared golden inputs. Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
-- `src/Testing/*Suites.cs` — six domain scenario modules: puffer, combat, Instant Action, AI/targeting/zeppelins, world/tools, and animation/effects.
+- `src/Testing/*Suites.cs` — eleven domain scenario modules: puffer, combat, ordnance, Instant Action, AI, targeting, zeppelins, damage, destroy choreography, animation/effects, and world/tools.
 - `src/Testing/SuiteConstants.cs` / `BurstTimeline.cs` / `SuiteViewers.cs` / `EffectStageSuiteHelper.cs` — the focused shared inputs, timeline values, pane-camera fixtures, and staged-effect fixture used by more than one suite module.
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
@@ -3661,8 +3661,8 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/SuiteCatalog.cs
-The ordered registry of 76 in-engine assertion suites. Scenario bodies are grouped by domain in the
-six `*Suites.cs` modules; `Names` is the registry-order test surface. It preserves the original
+The ordered registry of the in-engine assertion suites. Scenario bodies are grouped by domain in
+the `*Suites.cs` modules; `Names` is the registry-order test surface and the count's one home. It preserves the original
 suite order, including `emitter-lifetime` first, because that suite installs the shared C1 world's
 fake emitter factory. The suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
@@ -3759,10 +3759,19 @@ re-reset the fifth play's rings read INACTIVE at opacity 0, which is the sortie-
 symptom this suite exists to hold shut.
 
 ## src/Testing/*Suites.cs
-Six domain modules hold the in-engine scenario bodies: `PufferSuites`, `CombatSuites`,
-`InstantActionSuites`, `AiTargetingAndZeppelinSuites`, `WorldAndToolSuites`, and
-`AnimationAndEffectsSuites`. They depend on `TestHarness` through `TestContext`; shared fixtures
-are separate focused modules, not an all-purpose suite helper.
+Eleven domain modules hold the in-engine scenario bodies, each named for the whole of what it
+files: `PufferSuites` (the emitter model's modes, wind, fades and fire column), `CombatSuites`
+(loadouts, live fire, aim assist and the hit chain), `OrdnanceSuites` (a round's flight, guidance
+and ends), `InstantActionSuites` (the mission runtime from spawn to wrap-up), `AiSuites` (how a
+computer-controlled combatant behaves: pilots, mounted gunners, combat voice, and the inert state
+they wait in), `TargetingSuites` (the `TargetRef` abstraction, candidate pool, sticky selection,
+input decoding and marker HUD), `ZeppelinSuites` (motion, fighter launch, multi-zone damage,
+broadsides), `DamageSuites` (spending armor and health, and the injure staging those ledgers
+fire), `DestroyChoreographySuites` (the choreography a death dispatches: destroy defs, wreck
+flights, crash rigs, callbacks and stops), `AnimationAndEffectsSuites` (anim launches, effect
+templates, washes and burst timelines), and `WorldAndToolSuites` (the built world's data gates
+and censuses, lighting and viewers, and the lab surfaces). They depend on `TestHarness` through
+`TestContext`; shared fixtures are separate focused modules, not an all-purpose suite helper.
 
 ## src/Testing/SuiteConstants.cs
 The shared golden inputs used by more than one scenario module: airframe and weapon counts, puffer
