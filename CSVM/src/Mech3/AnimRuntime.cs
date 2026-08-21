@@ -316,13 +316,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // and compiled forms (docs/formats/destructibles.md).
     private const string DamageSequenceName = "DAMAGE_SEQUENCE";
 
-    // Below this alpha a faded subtree drops its colliders, mirroring the deactivation path's
-    // "invisible implies non-collidable" rule, and regains them when it fades back above.
-    // ⚠ Keep the write edge-triggered on the last collidable state per subtree root; a fade
-    // re-writes opacity every tick and re-walking the subtree each frame would thrash.
-    // Independent of SetSubtreeActive's collider toggle: separate channels, most recent event wins.
-    private const float OpacityCollisionEpsilon = 0.01f;
-
     // The deferred-EXECUTION_BY_RANGE sweep quantises the player position to this cell size and
     // re-checks the deferred list only on a cell crossing (the MapEdgeExtender cadence).
     // ⚠ Keep it well under the smallest authored radius in the install, 50 m: the sweep lags an
@@ -444,28 +437,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // order-stable.
     private readonly SortedSet<string> _anchorWarned = new(StringComparer.OrdinalIgnoreCase);
 
-    // Last opacity pushed to each subtree root. These events sit in `Loop{-1}` sequences —
-    // C1's `cloudparent#` re-asserts its 0.6 every frame — so without this the whole subtree
-    // would be re-walked and re-written ~31 times a frame to set values it already holds. Same
-    // lesson as LightState's per-light host cache, which cost ~7 ms/frame before it existed.
-    private readonly Dictionary<Node3D, float> _opacity = new();
-
-    // The fade twins a genuine partial opacity installs per instance (see EnsureOpacityPath):
-    // source material -> its translucent twin (null = cannot be made translucent), the twin
-    // set for recognising an override this runtime installed, and the shader-level cache so
-    // materials sharing one generated shader share one twin shader.
-    private readonly Dictionary<ShaderMaterial, ShaderMaterial?> _fadeTwinCache = new();
-
-    private readonly HashSet<Material> _fadeTwins = new();
-
-    // Nodes that have just landed by contact, whose NEXT ballistic launch must start from where
-    // they came to rest rather than the authored rest pose (MotionRuntime.Create's re-home rule).
-    // A bounce is a continuation, and re-basing it teleports the piece back to the crash point.
-    // ⚠ Keep this one-shot per node and consumed by the launch that follows. The re-home rule
-    // itself is what stops pooled effect templates drifting across repeat explosions.
-    private readonly HashSet<Node3D> _resumeFromLanding = new();
-
-    private readonly Dictionary<Shader, Shader?> _fadeShaderCache = new();
+    // The opacity/fade tables, the landing-resume marks and the pose helpers live in
+    // Anim/PoseChannel.cs with the rest of the object-pose family; `_rest` stays here (above)
+    // because the death flow reads it too.
 
     // ON_STARTUP defs carrying EXECUTION_BY_RANGE wait here instead of starting at bootstrap:
     // each (def, anchor) starts once, the first time the player is inside its distance band.
@@ -501,6 +475,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private SoundChannel? _sound;
 
     private LightChannel? _light;
+
+    private PoseChannel? _pose;
 
     private float _effectClock;
 
@@ -681,6 +657,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         var viewers = LightViewerPositions?.Invoke();
         return viewers != null && viewers.Count > 0 ? viewers : new[] { PlayerPos() };
     }, () => DebugMotions);
+
+    /// <summary>This runtime's object-pose/visual family: the `OBJECT_*` pose, opacity and motion
+    /// events, and the motion-builder role. It takes this runtime itself as one dependency, since
+    /// the motion value types it constructs already declare `AnimRuntime` as their host argument
+    /// and its pose helpers reach `_rest` through the same <see cref="RestOf"/> seam; everything
+    /// else arrives as its own narrow dependency below. `Emitters` and `_program` come through
+    /// closures because both are late-bound relative to this property's first use.</summary>
+    private PoseChannel Pose => _pose ??= new PoseChannel(this, Targets, Motions, () => Emitters,
+        (def, slot) => _program.ScriptFor(def, slot), Count);
 
     /// <summary>Builds a sealed <see cref="TemplateStage{TNode}"/> over the Godot adapter. ⚠ Spell
     /// the engine hooks here and nowhere else: node identity, the pool-slot ancestry walk, the
@@ -1400,6 +1385,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return xform;
     }
 
+    // INACTIVE = invisible and non-collidable, the whole subtree. Only visibility is written:
+    // world colliders derive their Disabled flag from it (WorldCollision), which is what makes
+    // an activation INSIDE an already-hidden subtree stay non-collidable. `internal` so the pose
+    // family's OBJECT_ACTIVE_STATE handler writes the same rule the bootstrap passes do.
+    internal static void SetSubtreeActive(Node3D node, bool active)
+    {
+        node.Visible = active;
+    }
+
     /// <summary>The node's authored pose, remembered the first time anything moves it, so
     /// every pose op stays an offset from the rest pose rather than compounding.</summary>
     internal Transform3D RestOf(Node3D node)
@@ -1409,40 +1403,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return rest;
     }
 
-    /// <summary>Whether this node's next ballistic launch continues from where it landed, clearing
-    /// the mark as it answers. See <see cref="_resumeFromLanding"/>.</summary>
-    internal bool ConsumeLandingResume(Node3D target) => _resumeFromLanding.Remove(target);
+    // Thin forwards into the pose family, kept here because their callers name this runtime:
+    // MotionRuntime.Create reads the landing-resume mark as `rt.ConsumeLandingResume`, the
+    // `ground-contact` suite arms it through `runtime.MarkLandingResume`, and OpacityFade
+    // writes through `rt.SetSubtreeOpacity`. The state and the bodies live in PoseChannel.
+    internal bool ConsumeLandingResume(Node3D target) => Pose.ConsumeLandingResume(target);
 
-    /// <summary>Marks a node as having just landed by contact — see
-    /// <see cref="_resumeFromLanding"/>. Called on the dispatch path, and by the
-    /// <c>ground-contact</c> suite, which drives a motion set directly.</summary>
-    internal void MarkLandingResume(Node3D target) => _resumeFromLanding.Add(target);
+    internal void MarkLandingResume(Node3D target) => Pose.MarkLandingResume(target);
 
-    // OBJECT_OPACITY_STATE applies to the whole subtree, as a per-instance shader parameter
-    // rather than a material edit: SceneBuilder's materials are cached and shared, so writing
-    // alpha into one would fade every other node that happens to use it. A partial opacity
-    // landing on an opaque-variant mesh (no alpha path in the shader) swaps that instance's
-    // surfaces to a fade-capable twin material for the duration — see EnsureOpacityPath;
-    // anything still without a path after that is counted, not swallowed.
-    internal void SetSubtreeOpacity(Node3D node, float alpha)
-    {
-        if (_opacity.TryGetValue(node, out float prev) && Mathf.IsEqualApprox(prev, alpha))
-            return;
-        _opacity[node] = alpha;
-
-        // The fade is a shader parameter, which visibility knows nothing about — so a subtree
-        // faded to nothing is marked faded and its colliders derive from that too. Reports only
-        // the crossing, not every tick of the fade.
-        bool collidable = alpha > OpacityCollisionEpsilon;
-        if (WorldCollision.SetFaded(node, !collidable))
-        {
-            Log.Info("anim", $"anim: fade {(collidable ? "restored" : "dropped")} colliders under '{node.Name}'");
-        }
-
-        int applied = ApplyOpacity(node, alpha);
-        if (applied == 0 && !Mathf.IsEqualApprox(alpha, 1f))
-            Count("ObjectOpacityState(no alpha path)");
-    }
+    internal void SetSubtreeOpacity(Node3D node, float alpha) => Pose.SetSubtreeOpacity(node, alpha);
 
     // How many of a DAMAGE_SEQUENCE's health thresholds hp has fallen at or below — the object's
     // current damage stage. Monotonic in falling HP, so it is a safe escalation gate.
@@ -1560,14 +1529,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         string.Equals(name, "INPUT_NODE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(name, "MAIN_ROOT_NODE", StringComparison.OrdinalIgnoreCase);
 
-    // INACTIVE = invisible and non-collidable, the whole subtree. Only visibility is written:
-    // world colliders derive their Disabled flag from it (WorldCollision), which is what makes
-    // an activation INSIDE an already-hidden subtree stay non-collidable.
-    private static void SetSubtreeActive(Node3D node, bool active)
-    {
-        node.Visible = active;
-    }
-
     // The stage's raw slot walk (the engine half of TemplateStage.SlotOf, which memoizes
     // it): the nearest ancestor carrying PoolSlotMeta, or -1.
     private static int SlotMarkOf(Node3D node)
@@ -1584,74 +1545,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         root.TopLevel = true;
         root.GlobalTransform = xf;
-    }
-
-    // Whether this mesh's shader reads the opacity parameter, and if not, whether a fade twin can
-    // give it one. A partial opacity installs a per-surface override on THIS instance only.
-    // ⚠ Never edit the shared material or mesh; both are cached across nodes. Opacity 1 removes
-    // the override again. ⚠ Test for the USE (SceneBuilder.OpacityTerm), never the uniform name or
-    // the include line: the uniform is declared in the shared preamble, so a name test is true even
-    // with no alpha path, and the declaration is not textually in sh.Code.
-    private bool EnsureOpacityPath(GeometryInstance3D g, float alpha)
-    {
-        if (g is not MeshInstance3D mi || mi.Mesh is not { } mesh)
-            return false;
-        bool fading = !Mathf.IsEqualApprox(alpha, 1f);
-        bool any = false;
-        for (int i = 0; i < mesh.GetSurfaceCount(); i++)
-        {
-            if (mi.GetSurfaceOverrideMaterial(i) is { } installed && _fadeTwins.Contains(installed))
-            {
-                if (fading)
-                    any = true;
-                else
-                    mi.SetSurfaceOverrideMaterial(i, null);
-                continue;
-            }
-            if (mesh.SurfaceGetMaterial(i) is not ShaderMaterial { Shader: { } sh } sm)
-                continue;
-            if (sh.Code.Contains(SceneBuilder.OpacityTerm, StringComparison.Ordinal))
-            {
-                any = true;
-                continue;
-            }
-            if (fading && FadeTwinOf(sm, sh) is { } twin)
-            {
-                mi.SetSurfaceOverrideMaterial(i, twin);
-                any = true;
-            }
-        }
-        return any;
-    }
-
-    private ShaderMaterial? FadeTwinOf(ShaderMaterial source, Shader shader)
-    {
-        if (_fadeTwinCache.TryGetValue(source, out var twin))
-            return twin;
-        if (!_fadeShaderCache.TryGetValue(shader, out var fadeShader))
-            _fadeShaderCache[shader] = fadeShader = SceneBuilder.FadeShaderFor(shader);
-        if (fadeShader != null)
-        {
-            twin = (ShaderMaterial)source.Duplicate();
-            twin.Shader = fadeShader;
-            _fadeTwins.Add(twin);
-        }
-        _fadeTwinCache[source] = twin;
-        return twin;
-    }
-
-    private int ApplyOpacity(Node node, float alpha)
-    {
-        int n = 0;
-        if (node is GeometryInstance3D g)
-        {
-            g.SetInstanceShaderParameter(SceneBuilder.OpacityParam, alpha);
-            if (EnsureOpacityPath(g, alpha))
-                n++;
-        }
-        foreach (var child in node.GetChildren())
-            n += ApplyOpacity(child, alpha);
-        return n;
     }
 
     private void Bootstrap(Node3D worldRoot, AnimProgram program)
@@ -1674,8 +1567,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         Setup?.Apply(
             (name, scope) => FindAll(name, scope),
             SetSubtreeActive,
-            (t, pos) => PoseTranslate(t, pos, relative: false),
-            PoseRotate);
+            (t, pos) => _opsApplied += Pose.PoseTranslate(t, pos, relative: false),
+            (t, r) => _opsApplied += Pose.PoseRotate(t, r));
 
         // Pass 1: base states, and the destructible registry. ⚠ Anchored defs only: a def whose
         // NAME matches nothing here must not stomp globally-resolved bare names like 'destroyed'.
@@ -2023,208 +1916,40 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // falling through to Targets() books it as an unresolved op.
                 if (Sound.TrySetActive(ev, anchor))
                     return true;
-                foreach (var t in Targets(ev, def, anchor))
-                {
-                    bool active = ev.Data.Bool("state");
-                    SetSubtreeActive(t, active);
-                    if (!active)
-                        // A played deactivation spares an emitter started in this same
-                        // instant (the splash idiom writes both halves and means the second); the
-                        // RESET_STATE path does not, being base state where the last write wins.
-                        Emitters.EndOn(t, sparingSameInstant: !instant);
-                    _opsApplied++;
-                }
+                _opsApplied += Pose.HandleActiveState(ev, def, anchor, instant);
                 return true;
 
             case "ObjectTranslateState":
-                foreach (var t in Targets(ev, def, anchor))
-                    PoseTranslate(t, ev.Data.Vec3("state"), ev.Data.Bool("relative"));
+                _opsApplied += Pose.HandleTranslateState(ev, def, anchor);
                 return true;
 
             case "ObjectRotateState":
-                foreach (var t in Targets(ev, def, anchor))
-                    PoseRotate(t, ev.Data.Vec3("state"));
+                _opsApplied += Pose.HandleRotateState(ev, def, anchor);
                 return true;
 
             case "ObjectScaleState":
-                foreach (var t in Targets(ev, def, anchor))
-                    PoseScale(t, ev.Data.Vec3("state"));
+                _opsApplied += Pose.HandleScaleState(ev, def, anchor);
                 return true;
 
             case "ObjectMotionFromTo":
-                {
-                    float runTime = ev.Data.Num("run_time") ?? 0f;
-                    foreach (var t in Targets(ev, def, anchor))
-                    {
-                        var tween = FromToMotion.Create(this, t, ev.Data, runTime);
-                        if (tween == null)
-                            continue;
-                        if (instant || runTime <= 0f)
-                            tween.Seek(runTime); // RESET_STATE / zero-length: land on the end pose
-                        else
-                            Motions.Add(tween, def, anchor);
-                        _opsApplied++;
-                    }
-                    duration = instant ? 0f : runTime;
-                    return true;
-                }
+                _opsApplied += Pose.HandleMotionFromTo(ev, def, anchor, instant, out duration);
+                return true;
 
             case "ObjectOpacityState":
-                {
-                    // ⚠ Read `state` as "translucency enabled", never as visibility: false means
-                    // render normally, not disappear (docs/formats/anim-definitions.md). Hiding is
-                    // OBJECT_ACTIVE_STATE's job, and the data uses it right alongside this.
-                    if (ev.Data.Get("state") is not bool on)
-                    {
-                        Count("ObjectOpacityState(no state)");
-                        return true;
-                    }
-                    float alpha = on ? ev.Data.Num("opacity") ?? 1f : 1f;
-                    foreach (var t in Targets(ev, def, anchor))
-                    {
-                        SetSubtreeOpacity(t, alpha);
-                        _opsApplied++;
-                    }
-                    return true;
-                }
+                _opsApplied += Pose.HandleOpacityState(ev, def, anchor);
+                return true;
 
             case "ObjectOpacityFromTo":
-                {
-                    // ⚠ Do not let the endpoint `state` flag invert the value here, as it does on
-                    // OBJECT_OPACITY_STATE; this is a literal lerp of the two opacity numbers.
-                    // `opacity_delta` never ships a value, so report one rather than ignoring it.
-                    float runTime = ev.Data.Num("run_time") ?? 0f;
-                    var from = ev.Data.Obj("opacity_from");
-                    var to = ev.Data.Obj("opacity_to");
-                    if (from == null || to == null)
-                    {
-                        Count("ObjectOpacityFromTo(no endpoints)");
-                        return true;
-                    }
-                    if (ev.Data.Has("opacity_delta"))
-                        Count("ObjectOpacityFromTo(delta)");
-                    float o0 = from.Num("opacity") ?? 1f;
-                    float o1 = to.Num("opacity") ?? 1f;
-                    foreach (var t in Targets(ev, def, anchor))
-                    {
-                        var fade = new OpacityFade(this, t, o0, o1, runTime);
-                        if (instant || runTime <= 0f)
-                            fade.Seek(runTime); // RESET_STATE / zero-length: land on the end opacity
-                        else
-                            Motions.Add(fade, def, anchor);
-                        _opsApplied++;
-                    }
-                    duration = instant ? 0f : runTime;
-                    return true;
-                }
+                _opsApplied += Pose.HandleOpacityFromTo(ev, def, anchor, instant, out duration);
+                return true;
 
             case "ObjectMotion":
-                {
-                    // OBJECT_MOTION spans two jobs (docs/org/objectMotion.md): a rotation-only event
-                    // is a steady spin, the shape every ON_STARTUP event takes; the rest pair
-                    // motion with GRAVITY/TRANSLATION/SCALE/FORWARD_ROTATION for ballistic debris.
-                    bool hasBallistic = ev.Data.Has("translation") || ev.Data.Has("translation_range")
-                                        || ev.Data.Has("scale") || ev.Data.Has("forward_rotation");
-                    if (hasBallistic)
-                    {
-                        // The full rigid-body simulation: a ballistic translate/launch, a scale ramp
-                        // and a tumble (plus any steady XYZ_ROTATION), all on one node over run_time.
-                        // See MotionRuntime for the semantics and the TUNE caveats.
-                        float authored = ev.Data.Num("run_time") ?? 0f;
-                        // ⚠ Read the flight back off each body rather than assuming it here; a
-                        // launch with no authored time solves its own from the parabola it drew.
-                        // The longest of them is what the sequence waits on.
-                        float ballTime = authored;
-                        bool bounceArmed = false;
-                        foreach (var t in Targets(ev, def, anchor))
-                        {
-                            var motion = MotionRuntime.Create(this, t, ev.Data, authored);
-                            if (motion == null)
-                                continue;
-                            float flight = motion.RunTime;
-                            // ⚠ A body runs if it has a duration OR a contact tier to end it.
-                            // Dropping the second test poses at rest every fall with no apex to
-                            // solve, a shot-down zeppelin among them. Either reports 0 anyway.
-                            if (instant || (flight <= 0f && !motion.TestsContact))
-                            {
-                                motion.Seek(0f); // RESET_STATE / zero-length: pose the launch start (rest)
-                            }
-                            else
-                            {
-                                Motions.Add(motion, def, anchor); // MotionSet.Add counts the launch
-                                ballTime = Mathf.Max(ballTime, flight);
-                                // A contact-tested body arms its bounce at contact, since the struck
-                                // surface picks the branch; the test being on is enough here.
-                                bounceArmed |= motion.PendingBounce != null || motion.TestsContact;
-                            }
-                            _opsApplied++;
-                        }
-                        // ⚠ Never file an ARMED bounce as unhandled; TickMotions dispatches it when
-                        // the body lands, and counting it reports a working feature as a missing
-                        // one. Only a fall that never arms is deferred (docs/org/objectMotion.md).
-                        if (ev.Data.Has("bounce_sequence") && !bounceArmed)
-                            Count("ObjectMotion(bounce_sequence deferred)");
-                        duration = instant ? 0f : ballTime;
-                        return true;
-                    }
-                    // No motion channel: either a steady spin (below) or a bare GRAVITY/BOUNCE stub
-                    // with nothing to drive (meaningless without translation — reported, not acted on).
-                    if (ev.Data.Obj("xyz_rotation") is not { } spin)
-                    {
-                        bool bareBallistic = ev.Data.Has("gravity") || ev.Data.Has("bounce_sequence");
-                        Count(bareBallistic ? "ObjectMotion(ballistic)" : ev.Kind);
-                        return true;
-                    }
-
-                    var rate = spin.Vec3("initial");
-                    // ⚠ Report `delta` rather than guessing at it. The data does not settle whether
-                    // it is acceleration, a decelerating ramp or a random spread, and all but one
-                    // reachable event leaves it zero.
-                    if (!spin.Vec3("delta").IsZeroApprox())
-                        Count("ObjectMotion(rotation delta)");
-                    if (rate.IsZeroApprox())
-                        return true;
-
-                    float spinFor = ev.Data.Num("run_time") ?? 0f;
-                    foreach (var t in Targets(ev, def, anchor))
-                    {
-                        // ⚠ Keep re-assertion idempotent. These sit in `Loop{-1}` sequences, and a
-                        // rebuilt spin re-reads rest from the current pose and restarts its clock,
-                        // so the prop sits almost still while the logs show it driven.
-                        if (Motions.HasSpinOn(t, rate, spinFor))
-                            continue;
-                        var motion = new SpinMotion(t, rate, spinFor);
-                        if (instant)
-                            motion.Seek(0f); // RESET_STATE poses the start; a spin starts unturned
-                        else
-                            Motions.Add(motion, def, anchor);
-                        _opsApplied++;
-                    }
-                    duration = instant ? 0f : spinFor;
-                    return true;
-                }
+                _opsApplied += Pose.HandleMotion(ev, def, anchor, instant, out duration);
+                return true;
 
             case "ObjectMotionSiScript":
-                {
-                    int slot = (int)(ev.Data.Num("index") ?? 0f);
-                    var script = _program.ScriptFor(def, slot);
-                    if (script == null)
-                    {
-                        Count("ObjectMotionSiScript(no script)");
-                        return true;
-                    }
-                    foreach (var t in Targets(ev, def, anchor))
-                    {
-                        var playback = new ScriptPlayback(this, t, script);
-                        if (instant)
-                            playback.Seek(0f); // pose at the script's first frame
-                        else
-                            Motions.Add(playback, def, anchor);
-                        _opsApplied++;
-                        duration = Mathf.Max(duration, script.Duration);
-                    }
-                    return true;
-                }
+                _opsApplied += Pose.HandleMotionSiScript(ev, def, anchor, instant, out duration);
+                return true;
 
             // Control flow is the runner's business, not the table's.
             case "Loop":
@@ -3203,35 +2928,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // owns the index, the wildcard matcher, and the memoization. Callers must treat the returned
     // list as read-only.
     private List<Node3D> FindAll(string pattern, Node3D? scope) => _resolver.FindAll(pattern, scope);
-
-    // The *_STATE poses use the same absolute-in-parent-frame convention as
-    // OBJECT_MOTION_FROM_TO — see FromToMotion's remarks for the evidence. OBJECT_TRANSLATE_STATE
-    // carries an explicit RELATIVE flag (false in all 1143 uses in this install) and
-    // OBJECT_ROTATE_STATE a BASIS of "Absolute" (6430 of ~6600), which is the data saying so
-    // outright.
-    private void PoseTranslate(Node3D target, Vector3 position, bool relative)
-    {
-        RestOf(target); // record the authored pose before we disturb it
-        target.Position = relative ? target.Position + position : position;
-        _opsApplied++;
-    }
-
-    private void PoseRotate(Node3D target, Vector3 radians)
-    {
-        var rest = RestOf(target);
-        target.Basis = Basis.FromEuler(radians, EulerOrder.Yxz)
-                            .Scaled(rest.Basis.Scale);
-        _opsApplied++;
-    }
-
-    private void PoseScale(Node3D target, Vector3 scale)
-    {
-        if (scale.LengthSquared() < 1e-9f)
-            return;
-        var rest = RestOf(target);
-        target.Basis = rest.Basis.Orthonormalized().Scaled(NonSingularScale(scale));
-        _opsApplied++;
-    }
 
     // Any still-visible node named like a destroyed variant that no definition touched:
     // hide it and report — each name is a data-coverage gap (a def we failed to anchor).

@@ -1237,7 +1237,7 @@ public sealed partial class ProjectilePool : Node3D
 
     // Poses one live splash instance at its age along the authored curves (see the Splash*
     // constants): the base disc's xz ramp and the column's collapsing Y scale. Same scale
-    // application as AnimRuntime.PoseScale (rest basis orthonormalized, then scaled). A model
+    // application as PoseChannel.PoseScale (rest basis orthonormalized, then scaled). A model
     // with neither child (not a splash) has nothing to drive and its Life stayed the short
     // static one.
     private static void AdvanceSplash(ImpactFx f)

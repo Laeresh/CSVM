@@ -61,11 +61,12 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WorldLights.cs` — packs the world's `LIGHT_STATE` point lights into the `csky_light_data` texture the fullbright world shader reads.
 - `src/Mech3/MissionSetup.cs` — parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
 - `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap, live def instances, event dispatch, motions, conditions, lights, puffers, world effects.
-- `src/Mech3/Anim/` — `AnimRuntime`'s motion value types (`IAnimMotion` and its four implementations, the bind-census enums), split out of `AnimRuntime.cs` into their own files/namespace for size; plus the sound and light dispatch-axis families.
+- `src/Mech3/Anim/` — `AnimRuntime`'s motion value types (`IAnimMotion` and its four implementations, the bind-census enums), split out of `AnimRuntime.cs` into their own files/namespace for size; plus the sound, light and pose/visual dispatch-axis families.
 - `src/Mech3/Anim/MotionSet.cs` — the live motion collection: the two registration rules, the per-frame sweep, and the pending-bounce predicate the instance walk retires on.
 - `src/Mech3/Anim/EmitterDirector.cs` — every PUFFER_STATE emitter's whole life on one runtime: the keying rule, the start, all four stops, the respawn wipe, the per-frame follow, and the census. Plus `IEmitter`/`IEmitterFactory` and the real/retired adapters.
 - `src/Mech3/Anim/SoundChannel.cs` — one runtime's `SOUND_NODE`/`SOUND` events: the pooled ambient emitters, the one-shot player, the late-failure census, and the sound half of `OBJECT_ADD_CHILD`/`OBJECT_ACTIVE_STATE`.
 - `src/Mech3/Anim/LightChannel.cs` — one runtime's `LIGHT_STATE`/`LIGHT_ANIMATION` events: the live point-light table, the signed-delta tween, and the per-frame submission to `WorldLights`. `AnimLight` stays its own value type in the same namespace.
+- `src/Mech3/Anim/PoseChannel.cs` — one runtime's object-pose/visual events (`OBJECT_ACTIVE_STATE` through `OBJECT_MOTION_SI_SCRIPT`): the pose helpers, the subtree opacity/fade machinery, and the motion-builder role that hands finished motions to `MotionSet`.
 - `src/Mech3/Anim/NameResolver.cs` — name→node resolution: the index, wildcard matcher, memoized `FindAll`, the three-tier scope chain (`Resolve`/`ResolveScoped` with the `ownRootsOf` hook and the `stagingAdmits` pooled-copy filter), the symbol authority, `Anchors` (narrowing + root lift) and the bind census; generic over the node type, off-engine testable.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock / LOOP / IF-ELSEIF), extracted behind the 3-member `ISequenceHost` seam; headlessly testable.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
@@ -721,13 +722,18 @@ e.g. C1's three `hangerdoors`). Every construction site hands over a sealed `Tem
 sequence interpreter is `SequenceRunner.cs`, live motions are `Anim/MotionSet.cs`, name resolution
 is `Anim/NameResolver.cs` (this class forwards through `Resolve`/`ResolveScoped`/`Anchors`), puffer
 emitters are `Anim/EmitterDirector.cs`, ambient/one-shot sound is `Anim/SoundChannel.cs`, point
-lights are `Anim/LightChannel.cs`, and the effect-template pool/placement is `Anim/TemplateStage.cs`.
+lights are `Anim/LightChannel.cs`, the object-pose/visual family is `Anim/PoseChannel.cs`, and the
+effect-template pool/placement is `Anim/TemplateStage.cs`.
 The router keeps the `SOUND_NODE`/`SOUND` case labels and the sound reach-ins inside
 `OBJECT_ACTIVE_STATE`/`OBJECT_ADD_CHILD`, delegating every body to `Sound`; `Sounds`/
 `SoundHandledElsewhere` stay public fields here, since callers configure them, and `Sound` reads
 both live rather than snapshotting them. The router also keeps the `LIGHT_STATE`/`LIGHT_ANIMATION`
 case labels, delegating every body to `Light`; `Lights`/`LightViewerPositions` stay public fields
-here for the same reason, and `Light` reads both live. `CALLBACK` raises the two vehicle-death codes through caller-supplied seams (`WreckVelocity`,
+here for the same reason, and `Light` reads both live. The nine `OBJECT_*` pose/visual case labels
+delegate to `Pose` the same way, each adding the handler's returned op count to the census counter;
+the `_rest` pose table stays here, since the death flow (`RestoreRestPoses`/`ApplyDeathSwap`) reads
+it too, and both the family and the motion value types reach it only through `RestOf`.
+`CALLBACK` raises the two vehicle-death codes through caller-supplied seams (`WreckVelocity`,
 `StopDamageStages`) and counts every other code; decode in `docs/org/vehicleDamage.md`.
 `FBFX_COLOR_FROM_TO`/`LIGHT_ANIMATION` report their `run_time` as the
 event's duration, spacing a chain instead of firing it in one instant; decode in
@@ -744,8 +750,8 @@ the one member reached from outside this namespace without going through `AnimRu
 accumulate-from-rest decode instead of a second hand conversion; it takes a rest `Basis` and a
 rate, no `AnimRuntime`/`MotionSet` state, so the reach-in is inert to everything else here.
 `MotionSet`, `EmitterDirector`,
-`SoundChannel`, `LightChannel`, `NameResolver` and `TemplateStage` share the namespace but ARE
-independently owned — their own entries below.
+`SoundChannel`, `LightChannel`, `PoseChannel`, `NameResolver` and `TemplateStage` share the
+namespace but ARE independently owned — their own entries below.
 **The original's `OBJECT_MOTION` update is written up in [org/objectMotion.md](org/objectMotion.md)**
 — the function map, the flag word, the linear elevation, `delta` as an acceleration, both contact
 tiers and how they pick a surface, the landing response, the termination model, and the retired
@@ -775,7 +781,7 @@ visibility rationale on their declarations — read those before touching either
 `AnimRuntime`'s live motions as a module: `Add` (owner stamp + `(Target, Channel)` eviction +
 `LaunchCount`), the per-frame `Tick` sweep, `DiscardFor`/`Reset`, and the two predicates the rest of
 the runtime asks — `OwesBounce` (the retirement hold `AnimRuntime.Retirable` consults) and
-`HasSpinOn` (the `Loop{-1}` spin re-assert guard). Never constructs a motion — `AnimRuntime` builds
+`HasSpinOn` (the `Loop{-1}` spin re-assert guard). Never constructs a motion — `PoseChannel` builds
 them and hands them over. `Node3D`-typed but never dereferenced: every operation here is identity
 comparison, so the behaviour is engine-free even though the type is not — the in-engine
 `bounce-launch` suite is what an off-engine fake cannot cover.
@@ -816,6 +822,27 @@ directly; `AnimRuntime` applies both after the call, matching what the handlers 
 them; the channel reads both through closures rather than a constructor snapshot, folding
 `LightViewerPositions`' single-camera fallback (`PlayerPos`) into the same closure. `AnimLight`
 stays its own value type in the `Anim` namespace, constructed only by this channel.
+
+## src/Mech3/Anim/PoseChannel.cs
+One runtime's object-pose/visual events as a module: the nine `OBJECT_*` handler bodies
+(`ACTIVE_STATE`'s non-sound remainder, the three `*_STATE` poses, both opacity events and the three
+motion events), the pose helpers (`PoseTranslate`/`PoseRotate`/`PoseScale`, which mission setup's
+pass 0 also drives), the subtree opacity/fade machinery (the per-root opacity cache, the fade-twin
+material tables, `SetSubtreeOpacity`), and the landing-resume marks
+(`ConsumeLandingResume`/`MarkLandingResume`). It carries the motion-BUILDER role: it parses the
+motion events into `MotionRuntime`/`FromToMotion`/`SpinMotion`/`ScriptPlayback`/`OpacityFade`
+instances and hands them to `MotionSet`, which stays a pure live-set container; the tick spine
+stays in `AnimRuntime.Advance`. Every handler returns how many ops it applied and the router adds
+that to its census counter, the same return-value shape `LightChannel` uses; multi-key unhandled
+tallies go through an `Action<string>` count dependency instead, since one return value cannot name
+them. The channel's constructor takes `AnimRuntime` itself as one dependency — the motion value
+types already declare it as their host argument, and the pose helpers reach the `_rest` table
+through the same `RestOf` seam the builders use — plus the `Targets` resolver, the `MotionSet`,
+and closures over `Emitters` and the program's `ScriptFor` (both late-bound). `_rest` itself stays
+on `AnimRuntime`, read by the death flow; `AnimRuntime` keeps thin internal forwards for
+`ConsumeLandingResume`/`MarkLandingResume`/`SetSubtreeOpacity`, whose callers (`MotionRuntime`,
+the `ground-contact` suite, `OpacityFade`) name the runtime. No teardown reach-in exists: none of
+this family's state is per-instance the way emitters, lights and sounds are.
 
 ## src/Mech3/Anim/NameResolver.cs
 Name→node resolution as one public module, generic over the node type (`NameResolver<TNode>`): the

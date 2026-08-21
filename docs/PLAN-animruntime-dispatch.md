@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Pose/visual family
 
-21. ☐ Extract the pose/visual family, with the `_rest` seam design check
+21. ☑ Extract the pose/visual family, with the `_rest` seam design check
 
 ### Wave D — Surface trim
 
@@ -252,7 +252,53 @@ singleton, not a light: leave it and the `Rgba` helper (`:2534`, used only by it
 
 # Wave C — Pose/visual family
 
-## C21 ☐ Extract the pose/visual family, with the `_rest` seam design check
+## C21 ☑ Extract the pose/visual family, with the `_rest` seam design check
+
+**Landed.** `CSVM/src/Mech3/Anim/PoseChannel.cs` owns the nine `OBJECT_*` case bodies
+(`HandleActiveState`'s non-sound remainder, `HandleTranslateState`/`HandleRotateState`/
+`HandleScaleState`, `HandleMotionFromTo`, `HandleOpacityState`/`HandleOpacityFromTo`,
+`HandleMotion`, `HandleMotionSiScript`), the pose helpers `PoseTranslate`/`PoseRotate`/`PoseScale`
+(mission setup's pass 0 drives the first two through the `Pose` property), the opacity/fade state
+(`_opacity`, `_fadeTwinCache`, `_fadeTwins`, `_fadeShaderCache`, `EnsureOpacityPath`, `FadeTwinOf`,
+`ApplyOpacity`, `SetSubtreeOpacity`, the `OpacityCollisionEpsilon` cap) and `_resumeFromLanding`
+with `ConsumeLandingResume`/`MarkLandingResume`. The router keeps every case label, delegating with
+`_opsApplied += Pose.HandleX(...)`.
+
+**The design check's outcome (the `_rest` seam).** The seam is the runtime's existing
+`internal RestOf(node)`, unchanged: record-on-first-touch and lookup are one fused operation, and
+that single method is everything the family needs, because the pose helpers use rest only as their
+offset base and the motion builders (`MotionRuntime`/`FromToMotion`/`ScriptPlayback`) already read
+it as `rt.RestOf`. No delegate pair and no interface were minted: the channel necessarily holds an
+`AnimRuntime` reference anyway (the motion value types declare `AnimRuntime` as their host
+argument, and `MotionRuntime` is off-limits to edit), so the family reaches rest through that
+reference exactly as the builders do, and its doc comment binds the reference to that seam plus
+the builder-argument role, nothing wider. `_rest` and the death-flow readers
+(`RestoreRestPoses`/`ApplyDeathSwap`) stay private on `AnimRuntime` (Decision 3b); the seam did
+not widen into a general handle because everything else the channel touches arrives as its own
+dependency: the `Targets` resolver, the `MotionSet`, `Func<EmitterDirector>` and a `ScriptFor`
+closure (both late-bound), and an `Action<string>` count for multi-key unhandled tallies. That is
+six constructor parameters, inside Decision 4's bound. `_opsApplied` needed no callback: every
+handler returns its applied-op count and the router adds it, extending B11's return-value
+precedent.
+
+**Decided along the way.** `SetSubtreeActive` went `private static` → `internal static` (the A1
+`WorldTransform` precedent) since bootstrap passes 0/4 and `ApplyDeathSwap` still use it router-side
+while the family's `HandleActiveState` writes the same rule. `AnimRuntime` keeps thin internal
+forwards for `ConsumeLandingResume`/`MarkLandingResume`/`SetSubtreeOpacity`, whose callers
+(`MotionRuntime.Create`, the `ground-contact` suite, `OpacityFade`) name the runtime; the facade
+and the motion types are untouched. No teardown/reset reach-in was added: unlike emitters, lights
+and sounds, none of this family's state is per-(def, anchor) instance state, and `ResetToBaseState`/
+`TearDownResourcesOf` never touched it. `_rangeDeferred`/`TickDeferredByRange` stay on the runtime:
+they defer whole ON_STARTUP definitions, which is bootstrap lifecycle, not pose state. `_washGates`
+stays with `FbfxColorFromTo`, a router singleton per Decision 3. `Projectile.cs`'s splash-scale
+comment now names `PoseChannel.PoseScale`.
+
+**Verified.** `.\RunTests.ps1` full pass: build, 1646/1646 units, 89/89 engine suites with zero
+engine error lines, 16/16 goldens hash-identical (the motion-heavy shots `c1-debris-rest`,
+`c1-crash`, `c1-destroy-effects` among them), hitch detector healthy. `AnimRuntime`'s public
+declaration count unchanged at 96.
+
+### Original approach (kept for reference)
 
 **Goal.** The object-pose and visual kinds (`ObjectActiveState`, `ObjectTranslateState`,
 `ObjectRotateState`, `ObjectScaleState`, `ObjectMotionFromTo`, `ObjectOpacityState`,
