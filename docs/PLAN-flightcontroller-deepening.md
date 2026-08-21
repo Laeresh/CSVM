@@ -325,7 +325,7 @@ adjacent to, with a live perf constraint.
 pause key reads `InPhotoMode`, which stays on the node, so do not let the flag follow the HUD into
 the module. `VersusHud` is board-adjacent and stays on the node this wave.
 
-## C6 ☐ The HUD state-to-readout mapping asserted off-engine, including the damage flash
+## C6 ☑ The HUD state-to-readout mapping asserted off-engine, including the damage flash
 
 **Goal.** The mapping from aircraft state to what the pilot reads is pinned by a test rather than by
 one golden frame.

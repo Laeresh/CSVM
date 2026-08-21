@@ -2522,6 +2522,15 @@ per physics frame through the same `IWorldQuery` seam every other aircraft query
 `AglMeters` reads it back for the flight telemetry line. `Flash` raises the impact line and `Reset`
 is what a respawn calls. The damage flash counts down on WALL time, so a halted session does not
 burn it off while nothing is drawn.
+The state-to-readout mapping itself is decoded into static, Control-free pieces `CSVM.Tests`
+(`FlightHudMappingTests`) drives directly: `ComputeStallWarning`, `MphFromSpeedMps`,
+`FeetFromWorldY` and `ComputeAgl` are pure functions of the struct (or a synthetic `IWorldQuery`);
+`ComputeGunGauge`/`ComputeMissileGauge` take bare `GunGroup`/`Hardpoint` lists (no bound `Loadout`
+needed) and return a `GunGaugeReadout`/`MissileGaugeReadout`, filling the reused belt-fraction list
+by pylon NUMBER, not list position; `AdvanceDamageFlash` is the wall-time countdown, gated off while
+halted or crashed, independent of whether a text block exists to show it; and `ComposeTextLines`
+returns the text block's lines as a list rather than one concatenated string. `Draw` and the three
+`Update*` helpers stay the thin writers pushing those return values onto the seven Controls.
 
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input → FlightModel → transform, weapon fire as

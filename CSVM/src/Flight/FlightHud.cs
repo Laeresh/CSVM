@@ -131,6 +131,7 @@ public sealed class FlightHud
 
     private readonly List<float> _gunGaugeSlots = new();
     private readonly List<float> _missileGaugeSlots = new();
+    private readonly List<string> _textLines = new(); // reused across frames; ComposeTextLines' return
 
     private Label? _text;                        // the flight text block; never built on an AI rig
     private float _paneFactor = 1f;              // last applied splitscreen shrink (1 = single player)
@@ -164,6 +165,82 @@ public sealed class FlightHud
     /// <see cref="float.MaxValue"/> where the ray reached nothing (or there are no dials to hold
     /// it). The flight telemetry line reads it back out.</summary>
     public float AglMeters => Gauges?.AglMeters ?? float.MaxValue;
+
+    /// <summary>The altimeter's LOW ALT ray, decoupled from <see cref="Gauges"/>: height above
+    /// whatever it hits, or <see cref="float.MaxValue"/> off a clear ray. Static so CSVM.Tests
+    /// (FlightHudMappingTests) can drive it off a synthetic <see cref="IWorldQuery"/> with no
+    /// dial Control in the process.</summary>
+    public static float ComputeAgl(IWorldQuery world, Vector3 position, Godot.Collections.Array<Rid>? exclude) =>
+        world.Ray(position, position + Vector3.Down * AglRayLength, CollisionLayers.WorldAndAircraft,
+            exclude, out var report)
+            ? position.Y - report.Position.Y
+            : float.MaxValue;
+
+    /// <summary>Whether the STALL lamp should light: the flight model's own warning, gated off
+    /// while the plane is crashed, halted or pinned by the weapon lab (a held plane sits at 0 m/s,
+    /// below every stall speed, but it is pinned, not stalling). Static so CSVM.Tests
+    /// (FlightHudMappingTests) can assert the gate directly.</summary>
+    public static bool ComputeStallWarning(in FlightHudState state) =>
+        !state.Crashed && !state.Halted && !state.Held && state.StallWarned;
+
+    /// <summary>The speedometer's mph conversion. Static so CSVM.Tests can assert it as a number
+    /// rather than through a formatted string.</summary>
+    public static float MphFromSpeedMps(float speedMps) => speedMps * 2.23694f;
+
+    /// <summary>The altimeter's feet conversion off the drawn world Y. Static so CSVM.Tests can
+    /// assert it as a number rather than through a formatted string.</summary>
+    public static float FeetFromWorldY(float y) => y * 3.28084f;
+
+    /// <summary>The gun gauge's selected-slot readout: the SELECTED firable group's ammo and short
+    /// weapon name and the belt fraction per firable group (<paramref name="slotsOut"/>, cleared
+    /// and refilled — the reused instance list a live gauge pushes each frame). Static and
+    /// Loadout-free so CSVM.Tests (FlightHudMappingTests) can drive it off bare
+    /// <see cref="GunGroup"/>s with no bound plane.</summary>
+    public static GunGaugeReadout ComputeGunGauge(IEnumerable<GunGroup> firableGuns, int gunSel, List<float> slotsOut)
+    {
+        slotsOut.Clear();
+        GunGroup? selected = null;
+        int firable = 0;
+        foreach (var g in firableGuns)
+        {
+            slotsOut.Add(g.Capacity > 0 ? (float)g.Ammo / g.Capacity : 0f);
+            if (firable == gunSel)
+            {
+                selected = g;
+            }
+            firable++;
+        }
+        int selectedIndex = firable > 0 ? Mathf.Clamp(gunSel, 0, firable - 1) : 0;
+        return new GunGaugeReadout(firable, selectedIndex, selected?.Ammo ?? 0, selected?.Weapon.Name ?? "",
+            firable > 0 ? selected?.Mount : null);
+    }
+
+    /// <summary>The missile gauge's selected-slot readout: the SELECTED pylon's rounds are its OWN,
+    /// per-pylon (the original's Warhawk gauge shows BOOM 3, not a 24-round sum across pylons).
+    /// ⚠ <paramref name="slotsOut"/> is indexed by PYLON NUMBER, not position in the compacted
+    /// <paramref name="hardpoints"/> list — a partial stock fit leaves gaps at the unfitted
+    /// physical positions. Static so CSVM.Tests can drive it off bare <see cref="Hardpoint"/>s.</summary>
+    public static MissileGaugeReadout ComputeMissileGauge(IReadOnlyList<Hardpoint> hardpoints, int pylonSelect,
+        List<float> slotsOut)
+    {
+        if (hardpoints.Count == 0)
+        {
+            return default;
+        }
+        int sel = Mathf.Clamp(pylonSelect, 0, hardpoints.Count - 1);
+        var selectedHp = hardpoints[sel];
+        slotsOut.Clear();
+        for (int i = 0; i < GaugeCluster.HardpointRingSize; i++)
+        {
+            slotsOut.Add(0f);
+        }
+        foreach (var h in hardpoints)
+        {
+            slotsOut[h.Index - 1] = h.Capacity > 0 ? (float)h.Ammo / h.Capacity : 0f;
+        }
+        return new MissileGaugeReadout(true, selectedHp.Index - 1, selectedHp.Ammo, selectedHp.Weapon.Name,
+            RocketReadoutName(selectedHp.Weapon));
+    }
 
     /// <summary>Builds the text block and parents every readout onto <paramref name="canvas"/> in
     /// the shipped draw order. <paramref name="versusHud"/> and <paramref name="scoreboard"/> are
@@ -233,14 +310,13 @@ public sealed class FlightHud
             TargetHud.PlanePos = state.Position;
             TargetHud.HeadingDeg = state.HeadingDeg;
         }
-        float mph = state.SpeedMps * 2.23694f;
-        float ft = state.Position.Y * 3.28084f;
+        float mph = MphFromSpeedMps(state.SpeedMps);
+        float ft = FeetFromWorldY(state.Position.Y);
         if (Gauges != null)
         {
             Gauges.SpeedMph = mph;
             Gauges.AltitudeFt = ft;
-            // A held plane sits at 0 m/s, below every stall speed, but it is pinned, not stalling.
-            Gauges.StallWarning = !state.Crashed && !state.Halted && !state.Held && state.StallWarned;
+            Gauges.StallWarning = ComputeStallWarning(in state);
             Gauges.StallFrac = state.StallFraction;
         }
         // Feeds the weapon gauges (if built) and the text readout (if built) — both draw from the
@@ -288,10 +364,7 @@ public sealed class FlightHud
         {
             return;
         }
-        Gauges.AglMeters = world.Ray(position, position + Vector3.Down * AglRayLength,
-            CollisionLayers.WorldAndAircraft, exclude, out var report)
-            ? position.Y - report.Position.Y
-            : float.MaxValue;
+        Gauges.AglMeters = ComputeAgl(world, position, exclude);
     }
 
     /// <summary>Raises the impact line on the text block for <see cref="DamageFlashTime"/>
@@ -300,6 +373,21 @@ public sealed class FlightHud
     {
         _damageFlashText = text;
         _damageFlash = DamageFlashTime;
+    }
+
+    /// <summary>Counts the flash down by <paramref name="wallDt"/> and returns the impact line to
+    /// show this frame, or null once it is spent. Wall time, not sim time, so a halted session
+    /// does not burn the window off while nothing is drawn; halted or crashed also freezes the
+    /// countdown outright rather than merely hiding the line. Public so CSVM.Tests
+    /// (FlightHudMappingTests) can drive the countdown with no text Control in the process.</summary>
+    public string? AdvanceDamageFlash(float wallDt, bool halted, bool crashed)
+    {
+        if (halted || crashed || _damageFlash <= 0f)
+        {
+            return null;
+        }
+        _damageFlash -= wallDt;
+        return _damageFlashText;
     }
 
     /// <summary>Blinks the damage dial's struck zone, the readout half of one hit landing.</summary>
@@ -311,6 +399,41 @@ public sealed class FlightHud
     {
         Gauges?.Reset();
         _damageFlash = 0f;
+    }
+
+    /// <summary>The flight text block's lines in the shipped order: speed/altitude/throttle, then
+    /// whichever of the stall, damage flash, damage summary, stunt status and paused/crashed lines
+    /// apply. Returns the reused instance list, valid until the next call. Public so CSVM.Tests can
+    /// assert the ordering with no text Control in the process, off the numbers
+    /// <see cref="MphFromSpeedMps"/> and <see cref="FeetFromWorldY"/> already expose.</summary>
+    public List<string> ComposeTextLines(in FlightHudState state, float mph, float ft, bool wide)
+    {
+        _textLines.Clear();
+        string speedAlt = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT";
+        string throttle = $"THR {state.Throttle * 100,3:0}%";
+        if (wide)
+        {
+            _textLines.Add(speedAlt);
+            _textLines.Add(throttle);
+        }
+        else
+        {
+            _textLines.Add($"{speedAlt}   {throttle}");
+        }
+        if (!state.Held && state.Stalled)
+            _textLines.Add("⚠ STALLED - SPEED UP");
+        if (AdvanceDamageFlash(state.WallDt, state.Halted, state.Crashed) is { } flashLine)
+            _textLines.Add(flashLine);
+        if (state.DamageSummary is { Length: > 0 } dmgSummary)
+            _textLines.Add($"DMG {dmgSummary}");
+        // Fallback only: stunt run status normally lives in the marker HUD.
+        if (state.StuntStatusLine is { } stuntStatus)
+            _textLines.Add(stuntStatus);
+        if (state.Halted)
+            _textLines.Add("⏸ PAUSED — . steps one frame");   // the board's own menu says the rest
+        else if (state.Crashed)
+            _textLines.Add("⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN");
+        return _textLines;
     }
 
     // The rocket name the text readout shows: the resolved `MSG_WEAP_*` display name
@@ -335,75 +458,42 @@ public sealed class FlightHud
         return Ballistics.March(weapon, origin, forward, inheritVel, distance, dt);
     }
 
-    // Feeds the two cockpit weapon gauges from the same live ammo the firing code draws down. The
-    // gun gauge shows the SELECTED group (its rounds, its short NAME, and one belt light per
-    // firable group by remaining fraction, the arrow on the selected one); the missile gauge shows
-    // the SELECTED pylon's rounds, its NAME, one belt light per pylon, and points the arrow at that
-    // pylon. With `--infinite-ammo` the counters sit at capacity, so the gauges read full.
+    // Feeds the two cockpit weapon gauges from the same live ammo the firing code draws down, and
+    // the text readout alongside them. With `--infinite-ammo` the counters sit at capacity, so the
+    // gauges read full.
     private void UpdateWeaponGauges(in FlightHudState state)
     {
         if (state.Loadout is not { } loadout)
         {
             return;
         }
-        int gunSel = state.GunSelect;
 
-        // Guns: the SELECTED firable group. The gauge takes the caliber+ammo short NAME and the belt
-        // fractions; the text readout takes the group's mount name and its per-group rounds.
-        GunGroup? selectedGun = null;
-        int firable = 0;
-        _gunGaugeSlots.Clear();
-        foreach (var g in loadout.FirableGuns)
-        {
-            _gunGaugeSlots.Add(g.Capacity > 0 ? (float)g.Ammo / g.Capacity : 0f);
-            if (firable == gunSel)
-            {
-                selectedGun = g;
-            }
-            firable++;
-        }
+        var gun = ComputeGunGauge(loadout.FirableGuns, state.GunSelect, _gunGaugeSlots);
         if (_gunGauge != null)
         {
-            _gunGauge.Selected = firable > 0 ? Mathf.Clamp(gunSel, 0, firable - 1) : 0;
-            _gunGauge.Count = selectedGun?.Ammo ?? 0;
-            _gunGauge.Type = selectedGun?.Weapon.Name ?? "";
+            _gunGauge.Selected = gun.Selected;
+            _gunGauge.Count = gun.Ammo;
+            _gunGauge.Type = gun.Type;
         }
         if (WeaponReadout != null)
         {
-            WeaponReadout.GunGroupName = firable > 0 ? selectedGun?.Mount : null;
-            WeaponReadout.GunAmmo = selectedGun?.Ammo ?? 0;
+            WeaponReadout.GunGroupName = gun.MountName;
+            WeaponReadout.GunAmmo = gun.Ammo;
         }
 
-        // Rockets: the SELECTED pylon. The count is that pylon's OWN rounds, per-pylon — the
-        // original's Warhawk gauge shows BOOM 3, not a 24-round sum across pylons.
-        var hps = loadout.Hardpoints;
-        if (hps.Count > 0)
+        var missile = ComputeMissileGauge(loadout.Hardpoints, state.PylonSelect, _missileGaugeSlots);
+        if (missile.HasHardpoints)
         {
-            int sel = Mathf.Clamp(state.PylonSelect, 0, hps.Count - 1);
-            var selectedHp = hps[sel];
-            // ⚠ Index the belt lights by PYLON NUMBER, not position in this compacted list — a
-            // partial stock fit must leave gaps at the unfitted physical positions.
-            _missileGaugeSlots.Clear();
-            for (int i = 0; i < GaugeCluster.HardpointRingSize; i++)
-            {
-                _missileGaugeSlots.Add(0f);
-            }
-            foreach (var h in hps)
-            {
-                _missileGaugeSlots[h.Index - 1] = h.Capacity > 0 ? (float)h.Ammo / h.Capacity : 0f;
-            }
-            WeaponDef typeWeapon = selectedHp.Weapon;
-            int perPylon = selectedHp.Ammo;
             if (_missileGauge != null)
             {
-                _missileGauge.Selected = selectedHp.Index - 1;
-                _missileGauge.Count = perPylon;
-                _missileGauge.Type = typeWeapon.Name;
+                _missileGauge.Selected = missile.Selected;
+                _missileGauge.Count = missile.Ammo;
+                _missileGauge.Type = missile.Type;
             }
             if (WeaponReadout != null)
             {
-                WeaponReadout.MissileName = RocketReadoutName(typeWeapon);
-                WeaponReadout.MissileAmmo = perPylon;
+                WeaponReadout.MissileName = missile.ReadoutName;
+                WeaponReadout.MissileAmmo = missile.Ammo;
             }
         }
         else if (WeaponReadout != null)
@@ -482,27 +572,58 @@ public sealed class FlightHud
             _text.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(TextFontSize * paneFactor)));
             _text.Position = new Vector2(TextMargin.X * paneFactor, TextMargin.Y * paneFactor);
         }
-        // A splitscreen pane is proportionally WIDER than it is tall, so a height-scaled single
-        // line would run into the top-centre compass tape in a 4P quarter pane — break the
-        // throttle onto its own line there. Full screen keeps the one-liner.
-        string speedAlt = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT";
-        string throttle = $"THR {state.Throttle * 100,3:0}%";
-        _text.Text = paneFactor < 1f ? $"{speedAlt}\n{throttle}" : $"{speedAlt}   {throttle}";
-        if (!state.Held && state.Stalled)
-            _text.Text += "\n⚠ STALLED - SPEED UP";
-        if (!state.Halted && !state.Crashed && _damageFlash > 0f)
+        // A splitscreen pane is WIDER than tall, so a height-scaled line would run into the
+        // top-centre compass tape — ComposeTextLines' wide flag splits the throttle off.
+        _text.Text = string.Join("\n", ComposeTextLines(in state, mph, ft, wide: paneFactor < 1f));
+    }
+
+    /// <summary>One frame's gun-gauge readout: how many firable groups exist, which belt index the
+    /// arrow targets, the selected group's ammo and short weapon name for the dial face, and its
+    /// mount name for the text readout (null with no firable group at all).</summary>
+    public readonly struct GunGaugeReadout
+    {
+        public GunGaugeReadout(int firableCount, int selected, int ammo, string type, string? mountName)
         {
-            _damageFlash -= state.WallDt;
-            _text.Text += $"\n{_damageFlashText}";
+            FirableCount = firableCount;
+            Selected = selected;
+            Ammo = ammo;
+            Type = type;
+            MountName = mountName;
         }
-        if (state.DamageSummary is { Length: > 0 } dmgSummary)
-            _text.Text += $"\nDMG {dmgSummary}";
-        // Fallback only: stunt run status normally lives in the marker HUD.
-        if (state.StuntStatusLine is { } stuntStatus)
-            _text.Text += $"\n{stuntStatus}";
-        if (state.Halted)
-            _text.Text += "\n⏸ PAUSED — . steps one frame";   // the board's own menu says the rest
-        else if (state.Crashed)
-            _text.Text += "\n⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN";
+
+        public int FirableCount { get; }
+
+        public int Selected { get; }
+
+        public int Ammo { get; }
+
+        public string Type { get; }
+
+        public string? MountName { get; }
+    }
+
+    /// <summary>One frame's missile-gauge readout: whether the loadout carries any hardpoint at
+    /// all, the SELECTED pylon's belt index, ammo and readout name (<see cref="RocketReadoutName"/>).
+    /// Default (<c>HasHardpoints</c> false) when the loadout carries none.</summary>
+    public readonly struct MissileGaugeReadout
+    {
+        public MissileGaugeReadout(bool hasHardpoints, int selected, int ammo, string type, string? readoutName)
+        {
+            HasHardpoints = hasHardpoints;
+            Selected = selected;
+            Ammo = ammo;
+            Type = type;
+            ReadoutName = readoutName;
+        }
+
+        public bool HasHardpoints { get; }
+
+        public int Selected { get; }
+
+        public int Ammo { get; }
+
+        public string Type { get; }
+
+        public string? ReadoutName { get; }
     }
 }
