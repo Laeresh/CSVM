@@ -2075,15 +2075,11 @@ public partial class GameSession : Node3D
         // Instant Action's actor build (director phase), at this exact point: the ace's spawn
         // draw follows the player's ChooseSpawnBase draw in the same stream, and the wingman
         // fan reads P1's built pose.
-        FlightController? iaAce = null;
-        int iaWaveEnemies = 0;
         if (_iaDirector is { } iaDirActors)
         {
             state.What += iaDirActors.BuildActors(new InstantActionDirector.ActorBuildInputs
             {
                 Rigs = _rigs,
-                Chapter = _spec.Chapter,
-                Mission = _spec.Mission,
                 ChapterZrdrPath = rigInputs.ChapterZrdrPath,
                 MissionZrdrPath = state.MissionZrdrPath,
                 ZrdrPath = state.ZrdrPath,
@@ -2097,8 +2093,6 @@ public partial class GameSession : Node3D
                         fit: fit),
                 RegisterVoice = RegisterAiVoice,
             });
-            iaAce = iaDirActors.Ace;
-            iaWaveEnemies = iaDirActors.WaveEnemyCount;
         }
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
             && _rigs[0].Controller is { } lead)
@@ -2269,142 +2263,26 @@ public partial class GameSession : Node3D
         // starting wave 1 on that mode means crediting a generator that did not exist earlier.
         _iaDirector?.ArmZeppelinRun(_generators);
 
-        // Instant Action's end conditions, lives and spectating: every signal already exists above,
-        // so this only routes them into the runtime that decides the outcome. ⚠ Each source reports
-        // the objective it satisfied and the runtime drops what this mission does not run on.
-        if (iaRt is { } iaEnd)
+        // Instant Action's end conditions, lives, spectate and wrap-up board (the director's
+        // phase): every signal already exists above, so it only routes them into the mission
+        // runtime, and its boards parent under _worldRoot like every board this method builds.
+        _iaDirector?.WireEndConditions(new InstantActionDirector.EndConditionInputs
         {
-            // "Enemies Shot Down": every EnemyTeam actor downed by an attributed shooter, on every
-            // mission type. ⚠ Keep the killer != null filter: a bare terrain or mid-air crash never
-            // reaches the take-hit body the original counts in (docs/formats/instant-action.md).
-            int enemiesShotDown = 0;
-            if (iaAce != null)
-            {
-                iaAce.Downed += (_, killer) => { if (killer != null) enemiesShotDown++; };
-            }
-            if (_iaDirector?.WaveRosters is { } endRosters)
-            {
-                foreach (var roster in endRosters)
-                {
-                    foreach (var member in roster)
-                    {
-                        member.Downed += (_, killer) => { if (killer != null) enemiesShotDown++; };
-                    }
-                }
-            }
-
-            var objective = iaEnd.Objective;
-            if (objective == InstantActionObjective.AceDown && iaAce != null)
-            {
-                iaAce.Downed += (_, _) => iaEnd.ReportObjective(InstantActionObjective.AceDown);
-            }
-            else if (objective == InstantActionObjective.WavesCleared && iaWaveEnemies > 0)
-            {
-                // Reported by StepInstantAction off InstantActionWaves.Finished — the sequencer
-                // owns "every configured wave is cleared" and nothing here re-derives it.
-            }
-            else if (objective == InstantActionObjective.ZonesFlown && stuntZones != null)
-            {
-                // ⚠ All-finished, never first past the post, and evaluated only over pilots who can
-                // still fly, so one out of lives cannot deadlock a mission the survivors finished.
-                // Checked on the two events that can make it true, never polled.
-                foreach (var rig in _rigs)
-                {
-                    if (rig.Controller?.Stunt is { } run)
-                    {
-                        run.RunCompleted += CheckInstantActionZoneSets;
-                    }
-                }
-            }
-            else if (objective == InstantActionObjective.ZeppelinDisabled && _zeppelins != null)
-            {
-                string endZep = InstantActionRuntime.SelectedZeppelinNode(iaEnd.Def);
-                Action<string> reportZeppelin = node =>
-                {
-                    // The OBJECTIVE's own signal only: a mission world may fly other zeppelins,
-                    // and disabling or shooting down one of those is not this mission's win.
-                    if (string.Equals(node, endZep, StringComparison.OrdinalIgnoreCase))
-                    {
-                        iaEnd.ReportObjective(InstantActionObjective.ZeppelinDisabled);
-                    }
-                };
-                // Both decoded paths report the ONE objective, engines first: the mode is for
-                // disabling them, and the hull dying on the gasbag threshold wins it too.
-                _zeppelins.ZeppelinEnginesDisabled += reportZeppelin;
-                _zeppelins.ZeppelinKilled += reportZeppelin;
-            }
-            else
-            {
-                // A mission that cannot be won says so at build. Deliberate, in the shape
-                // VersusMatch's disabled kill target/time limit already has — the mission still
-                // flies and can still be lost.
-                iaEnd.DisableObjective();
-                GD.PushWarning("ia: this mission has NO win condition — " + (objective switch
-                {
-                    null => $"mission type '{iaEnd.Def.MissionType}' has none in this build",
-                    InstantActionObjective.AceDown => "no ace was spawned",
-                    InstantActionObjective.WavesCleared => "no wave enemy is configured",
-                    InstantActionObjective.ZonesFlown => "this mission ships no danger zones",
-                    _ => "no zeppelin runtime was built",
-                }) + " (it can still be lost)");
-            }
-            // Lives are a remake-only rule; no ia.json key carries one. Every human seat joins the
-            // ledger, and NotifyPilotDown decides whether the crash cam ends in a respawn.
-            foreach (var rig in _rigs)
-            {
-                if (rig.Controller is not { } pilot)
-                {
-                    continue;
-                }
-                iaEnd.RegisterPilot(pilot.PlayerIndex);
-                // G14's "Shot %": the decode's "the local player" filter, generalised to every
-                // human seat for splitscreen (ProjectilePool.ScoredShooters).
-                _projectiles?.ScoredShooters.Add(pilot.PlayerIndex);
-                pilot.AutoRespawnAfter = VersusRespawnDelay; // crash cam, then back in — R skips
-                pilot.Downed += (victim, _) =>
-                {
-                    if (iaEnd.NotifyPilotDown(victim))
-                    {
-                        GD.Print($"ia: P{victim + 1} down — " + (iaEnd.Def.Lives == 0
-                            ? "unlimited lives" : $"{iaEnd.LivesLeft(victim)} life/lives left") +
-                            $", respawning in {VersusRespawnDelay:0.#} s");
-                        return;
-                    }
-                    BeginInstantActionSpectate(rig);
-                };
-            }
-            iaEnd.MissionEnded += outcome => GD.Print(
-                $"ia: mission {(outcome == InstantActionOutcome.Won ? "COMPLETE" : "FAILED")} — " +
-                $"{iaEnd.Def.MissionType} after {iaEnd.Elapsed:0.0} s");
-            GD.Print($"ia: {iaEnd.Def.MissionType} — win: " +
-                     (iaEnd.ObjectiveEnabled ? objective!.Value.ToString() : "none") +
-                     $", loss: every human out of lives ({(iaEnd.Def.Lives == 0 ? "unlimited" : iaEnd.Def.Lives.ToString())} " +
-                     $"per pilot), {iaEnd.PilotCount} human seat(s)");
-
-            // The wrap-up board, shared over the WHOLE window like the race and dogfight boards,
-            // never per pane: the mission ends for every human at once. ⚠ Danger Zones Completed
-            // and Shot % are summed across every human seat, never picked from one pane.
-            var wrapupBoard = IaWrapupBoard.Build(
-                $"{_spec.Chapter}   ·   {InstantAction.MissionTypeLabel(iaEnd.Def.MissionType)}",
-                exitsToMenu: _menuDriven,
-                _pauseState!, MenuInputFor);
-            wrapupBoard.Restart = _restartSession;
-            wrapupBoard.Exit = _exitSession;
-            // Player 1, for the same reason the race and dogfight boards are.
-            wrapupBoard.PhotoMode = () => EnterPhotoMode(0);
-            _boards.Add(wrapupBoard);
-            var wrapupLayer = new CanvasLayer { Name = "ia_wrapup_board", Layer = UI.HudLayers.Board };
-            wrapupLayer.AddChild(wrapupBoard);
-            _worldRoot!.AddChild(wrapupLayer);
-            iaEnd.MissionEnded += outcome =>
-            {
-                int zonesCompleted = _rigs.Sum(r => r.Controller?.Stunt?.CompletedCount ?? 0);
-                int shotPercent = InstantActionRuntime.ShotPercent(
-                    _projectiles?.CannonHits ?? 0, _projectiles?.CannonRoundsFired ?? 0);
-                wrapupBoard.Present(outcome == InstantActionOutcome.Won, iaEnd.Elapsed,
-                    enemiesShotDown, zonesCompleted, shotPercent, StuntSummaryFor(iaEnd));
-            };
-        }
+            StuntZones = stuntZones,
+            Zeppelins = _zeppelins,
+            Projectiles = _projectiles,
+            WorldRoot = _worldRoot!,
+            SpectatorCameras = _spectatorCameras,
+            LockCandidates = LockCandidateAircraft,
+            RespawnDelay = VersusRespawnDelay,
+            ExitsToMenu = _menuDriven,
+            RestartSession = _restartSession,
+            ExitSession = _exitSession,
+            PauseState = _pauseState!,
+            MenuInputFor = MenuInputFor,
+            EnterPhotoMode = EnterPhotoMode,
+            RegisterBoard = _boards.Add,
+        });
 
         // World AA emplacements: the standalone ai.zrd family, placed against this chapter's built
         // world unconditionally, like the original's own placement pass. Shipped ACTIVATED decides
@@ -2809,22 +2687,6 @@ public partial class GameSession : Node3D
             rig.Controller?.Rerun();
     }
 
-    // Player 1's stunt run for the wrap-up board's split section, on a stunt mission alone. The
-    // best time is recorded here rather than on the board, under the same chapter/mission/plane key
-    // the solo scoreboard uses — a different mission id, so Instant Action bests stay their own.
-    private StuntSummary? StuntSummaryFor(InstantActionRuntime runtime)
-    {
-        if (runtime.Objective != InstantActionObjective.ZonesFlown)
-            return null;
-        if (_rigs.Count == 0 || _rigs[0].Controller?.Stunt is not { } run)
-            return null;
-        var store = ScoreStore.Load();
-        string key = $"{_spec.Chapter}/{_spec.Mission}/{PlaneRoster.PlaneFor(_spec, 0)}";
-        float? prevBest = store.GetBest(key);
-        bool newBest = store.RecordIfBest(key, run.Elapsed);
-        return new StuntSummary(run, run.Elapsed, prevBest, newBest);
-    }
-
     // Rematch from the shared race board (R): every player's zones, clock and placing cleared, then
     // every plane back to its own spawn. The session owns the planes, so the restart lands here
     // rather than in the FlightController that read the button.
@@ -3039,72 +2901,6 @@ public partial class GameSession : Node3D
         _boardWasVisible.Clear();
     }
 
-    // A pilot has spent its last life. The Spectating flag pins the wreck, so neither R nor the
-    // armed respawn timer flies it again, and this pane's camera goes to a SpectatorCamera locked
-    // onto a still-flying human where there is one. Any translation input releases the lock.
-    // ⚠ Give the spectator this pilot's own device filter, so in splitscreen two downed pilots
-    // watching at once move independently rather than in lockstep.
-    private void BeginInstantActionSpectate(PlayerRig rig)
-    {
-        if (rig.Controller is not { Spectating: false } pilot)
-        {
-            return;
-        }
-        pilot.Spectating = true;
-        pilot.CameraOwned = true;   // D8's seam: this node writes nothing to the camera from here
-        FlightController? follow = null;
-        foreach (var other in _rigs)
-        {
-            if (other.Controller is { InPlay: true } live && live != pilot)
-            {
-                follow = live;
-                break;
-            }
-        }
-        var eye = rig.Camera.Position;   // where Crash's own cut left it (CameraController.CrashView)
-        var spectator = new SpectatorCamera(rig.Camera, eye,
-            follow != null ? follow.WorldPosition : eye - rig.Camera.Basis.Z,
-            pilot.PadDevices, pilot.UseKeyboard)
-        {
-            ShowReadout = false,   // the freecam's own label would sit over a splitscreen pane
-            LockCandidates = LockCandidateAircraft,
-        };
-        _worldRoot!.AddChild(spectator);
-        _spectatorCameras.Add(spectator);   // tracked so a rerun can hand the panes back
-        if (follow != null)
-        {
-            spectator.FollowNode(follow);
-        }
-        GD.Print($"ia: P{pilot.PlayerIndex + 1} is out of lives — spectating" +
-                 (follow != null ? $", following P{follow.PlayerIndex + 1}" : " from the crash camera"));
-        // One of the two events that can complete a stunt mission's zone sets: this pilot has
-        // stopped being one the mission waits for.
-        CheckInstantActionZoneSets();
-    }
-
-    // The stunt-flying end test: the zone sets are flown once every pilot who can still fly has
-    // finished. ⚠ InstantActionRuntime.ZoneSetsFlown owns the rule, so the suites test the same
-    // predicate the session runs. A no-op on every other mission type.
-    private void CheckInstantActionZoneSets()
-    {
-        if (_iaDirector?.Runtime is not { } ia)
-        {
-            return;
-        }
-        var pilots = new List<(bool OutOfLives, bool Finished)>(_rigs.Count);
-        foreach (var rig in _rigs)
-        {
-            if (rig.Controller is { } pilot)
-            {
-                pilots.Add((pilot.Spectating, pilot.Stunt is { AllComplete: true }));
-            }
-        }
-        if (InstantActionRuntime.ZoneSetsFlown(pilots))
-        {
-            ia.ReportObjective(InstantActionObjective.ZonesFlown);
-        }
-    }
-
     // Steps the consumers whose sim normally rides Godot's physics tick; they return early from
     // _PhysicsProcess whenever the clock is not realtime, since a fixed or halted sim cannot be
     // paced by a tick it does not own. ⚠ Keep the tree order those callbacks had, so a round fired
@@ -3130,26 +2926,12 @@ public partial class GameSession : Node3D
             _versusDebugKillFired = true;
             _rigs[1].Controller?.DebugForceCrash(_rigs[0].Controller?.PlayerIndex);
         }
-        // --debug-scoreboard (IA): force this mission's own win signal on the first sim step, the
-        // same single-fire shape as the two blocks above, attributed to P1 so the wrap-up board
-        // reads non-zero. Which modes have a force at all: docs/architecture.md on GameSession.cs.
-        if (_iaDirector is { DebugForceFired: false } iaDbgDir && _spec.DebugScoreboard)
+        // --debug-scoreboard (IA): the director's single-fire force, the same shape as the two
+        // blocks above, attributed to P1 so the wrap-up board reads non-zero. Which modes have a
+        // force at all: docs/architecture.md on GameSession.cs.
+        if (_spec.DebugScoreboard)
         {
-            var iaDebug = iaDbgDir.Runtime;
-            iaDbgDir.DebugForceFired = true;
-            int? attributedTo = _rigs.Count > 0 ? _rigs[0].Controller?.PlayerIndex : null;
-            if (iaDebug.Objective == InstantActionObjective.AceDown)
-            {
-                iaDbgDir.Ace?.DebugForceCrash(attributedTo);
-            }
-            else if (iaDebug.Objective == InstantActionObjective.WavesCleared && iaDbgDir.WaveRosters is { } dbgRosters)
-            {
-                // DebugForceCrash self-gates on InPlay, so this reaches only whatever wave
-                // is currently active — the rest are still parked inert awaiting their own turn.
-                foreach (var roster in dbgRosters)
-                    foreach (var member in roster)
-                        member.DebugForceCrash(attributedTo);
-            }
+            _iaDirector?.ForceDebugScoreboard();
         }
         for (int i = 0; i < clock.Steps; i++)
         {
