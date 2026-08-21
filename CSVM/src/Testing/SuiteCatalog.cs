@@ -10,14 +10,17 @@ using CSVM.UI;
 using CSVM.Utils;
 using Godot;
 
-using static CSVM.Testing.AiTargetingAndZeppelinSuites;
+using static CSVM.Testing.AiSuites;
 using static CSVM.Testing.AnimationAndEffectsSuites;
 using static CSVM.Testing.CombatSuites;
+using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
 using static CSVM.Testing.InstantActionSuites;
 using static CSVM.Testing.OrdnanceSuites;
 using static CSVM.Testing.PufferSuites;
+using static CSVM.Testing.TargetingSuites;
 using static CSVM.Testing.WorldAndToolSuites;
+using static CSVM.Testing.ZeppelinSuites;
 namespace CSVM.Testing;
 
 public static class SuiteCatalog
