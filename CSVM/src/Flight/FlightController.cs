@@ -149,20 +149,6 @@ public partial class FlightController : Node3D
     /// run can fire one group in isolation; interactively the selector cycles with G / gamepad D-pad Left.</summary>
     public int InitialGunSelect;
 
-    /// <summary>The data-driven crash: a per-player <see cref="AnimRuntime"/> bound to this plane's
-    /// scoped crash subtree, advancing itself in its own <c>_Process</c>. Plays the compiled crash
-    /// def the struck surface selects; see this module's entry in docs/architecture.md. Built by
-    /// <c>GameSession</c> for every flown plane; null only when the crash program/scene were
-    /// unavailable, in which case the plane just hides on a crash.</summary>
-    public AnimRuntime? CrashRuntime;
-
-    /// <summary>The crash-def vector the struck surface id indexes — the original's own selection
-    /// mechanism (see <see cref="SurfaceDefTable"/>). Built from the bound crash program, so it
-    /// knows which slots name a def this install actually ships. Set alongside
-    /// <see cref="CrashRuntime"/>; null when no crash rig was built, and the plane then just hides
-    /// on a crash.</summary>
-    public SurfaceDefTable? CrashDefs;
-
     /// <summary>This airframe's DESTROY def — the anim slot the original starts the instant health
     /// reaches zero (<c>fury-fury</c>, <c>player-player</c>), where <see cref="CrashDefs"/> is the
     /// GROUND-IMPACT slot. Set alongside <see cref="CrashRuntime"/>; null leaves a kill with no
@@ -174,29 +160,6 @@ public partial class FlightController : Node3D
     /// false on <c>player</c>. It says who LANDS the wreck, not who flies it: every dead hull flies
     /// itself until the def's <c>Callback 15</c>. Derived by <c>EffectCatalogue.FliesOwnHull</c>.</summary>
     public bool DestroyDefFliesWreck;
-
-    /// <summary>The def the last <see cref="Crash"/> selected off <see cref="CrashDefs"/> —
-    /// <c>player_crash_*</c> on a human rig, <c>ai_crash_*</c> on an AI plane, null before any
-    /// crash or when no crash rig was built. The prefix names the family, so a suite (or a log
-    /// reader — the CRASH line prints the same value as <c>def=</c>) can pin which family
-    /// fired. Written only by <see cref="Crash"/>.</summary>
-    public string? LastCrashDef;
-
-    /// <summary>The node the crash definition anchors to (its <c>player</c> anim-root) — passed to
-    /// <see cref="AnimRuntime.Play"/> on a crash. Set alongside <see cref="CrashRuntime"/>.</summary>
-    public Node3D? CrashAnchor;
-
-    /// <summary>The rest pose of every node the crash def flings (the <c>destroyed</c> wreck's
-    /// pieceN meshes), captured before the first crash so <see cref="Respawn"/> can re-home them —
-    /// a RESET_STATE re-poses only nodes it names, and the pieces have no reset event. Set
-    /// alongside <see cref="CrashRuntime"/>.</summary>
-    public IReadOnlyList<(Node3D Node, Transform3D RestPose)>? CrashRestPoses;
-
-    /// <summary>The BUILT visibility of every plane-model node, captured before the first crash so
-    /// <see cref="Respawn"/> can undo what the crash def hid. The def's RESET_STATE restores only
-    /// <c>dontmove</c>, so restoring this snapshot is what re-hides the built-hidden torn panels and
-    /// wingtip flares. Set alongside <see cref="CrashRuntime"/>.</summary>
-    public IReadOnlyList<(Node3D Node, bool Visible)>? CrashPlaneVisibility;
 
     /// <summary>The stunt run, when flying --stunt: danger-zone sphere
     /// detection, tested against the plane each physics frame. Deliberately NOT reset on
@@ -331,13 +294,6 @@ public partial class FlightController : Node3D
     /// wins over this while it is down.</summary>
     public int PinnedView;
 
-    /// <summary>Seconds a crash sits on the crash cam before this plane auto-respawns, or null —
-    /// the default — for manual R only. The session arms it (Versus: 3 s, every rig) so a downed
-    /// player rejoins the fight without touching a key; R still respawns early, and the timer is
-    /// armed at <see cref="Crash"/>. Scripted HoldSegments runs auto-respawn regardless, on
-    /// <see cref="AutoRespawnDelay"/> unless this says otherwise.</summary>
-    public float? AutoRespawnAfter;
-
     /// <summary>Out of lives: this pilot stays crashed for the rest of
     /// the mission — neither R nor <see cref="AutoRespawnAfter"/>'s timer brings it back — while
     /// the session hands its pane to a <see cref="SpectatorCamera"/> and the others fly on. Set by
@@ -356,7 +312,6 @@ public partial class FlightController : Node3D
     private const float CarrierDropThrottle = 0.1f;
     private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
-    private const float AutoRespawnDelay = 1.5f; // s a HoldInput run stays crashed before auto-respawn
     private const float DebugFinishStagger = 1.5f; // s between players' forced finishes (--debug-scoreboard in a race)
 
     // Collision severity (all TUNE): impact speed along the contact
@@ -380,6 +335,9 @@ public partial class FlightController : Node3D
     // Everything this pane draws for its pilot. Always present, so no site has to ask whether
     // there is a HUD: an aircraft with no readouts built simply has a module that draws nothing.
     private readonly FlightHud _pilotHud = new();
+    // Which state this aircraft is in and what moves it between them, including the spawn timers.
+    // Every transition below reports what it did and this node performs it (Decision 7).
+    private readonly AircraftLifecycle _lifecycle = new();
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
     private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
     private readonly List<RocketPylonView> _pylonViews = new();          // the AI rocketeer's pylon walk
@@ -408,13 +366,11 @@ public partial class FlightController : Node3D
     private float _keyRoll;                      // by StickRamp; a gamepad's analogue axis adds on
     private float _keyYaw;                       // top and is never ramped
     private double _sinceTelemetry;
-    private bool _crashed;                       // frozen at the impact point, waiting for respawn
-    private bool _destroyed;                     // hull spent: the destroy def is playing over the wreck
-    private bool _wreckFalling;                  // that wreck still flying itself down to its crash def
     private WarningShotCue? _warningShots;       // the near-miss cue's shipped accumulator
     private FlightInput _lastInput;              // this physics frame's stick input (drives the surfaces)
-    private float _autoRespawnIn;                // s until auto-respawn (scripted hold runs only)
-    private float _autoRestartIn = AutoRespawnDelay; // s until auto-rematch on a finished race (scripted hold runs only)
+    // s until auto-rematch on a finished race (scripted hold runs only). Not the lifecycle's
+    // respawn timer: this one belongs to a results board, which no aircraft state reaches.
+    private float _autoRestartIn = AircraftLifecycle.AutoRespawnDelay;
 
     /// <summary>When set (from <see cref="FlightControllerBuild.HoldSegments"/>), replaces keyboard
     /// input for automated screenshot/demo runs: each segment holds its input for its duration
@@ -426,13 +382,18 @@ public partial class FlightController : Node3D
     private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
     private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
     private ImmediateMesh? _probe;               // debug collision-probe line
+    // The rest pose of every node the crash def flings (the destroyed wreck's pieceN meshes) and
+    // the BUILT visibility of every plane-model node, both captured before the first crash so
+    // Respawn can undo what the def did: a RESET_STATE re-poses only the nodes it names and
+    // restores only dontmove, so neither the flung pieces nor the built-hidden torn panels and
+    // wingtip flares come back without these two snapshots. Bound with the rest of the crash rig.
+    private IReadOnlyList<(Node3D Node, Transform3D RestPose)>? _crashRestPoses;
+    private IReadOnlyList<(Node3D Node, bool Visible)>? _crashPlaneVisibility;
     private IWorldQuery? _worldQuery;             // the sweep/ray seam; bound in Bind, lazy for bare test rigs
     private AircraftContactResolver? _contacts;   // the contact rules; lazy, over the same seam
     private IFlightInputSource? _inputSource;     // which stick flies this aircraft; bound in Bind, lazy for bare test rigs
     private float _damageCooldown;               // s left before the next HP subtraction
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
-    private float _collisionGrace;               // s left with no collision at all (obj+0xAC)
-    private float _postDropGroundBlow;           // s left at the carrier-drop 0.15 multiplier
     private int _projectileHitsLogged;           // verification breadcrumb: the first few hits log
     private FireControl? _fire;                  // the fire-control state machine; built in _Ready with the loadout
     private GunGroup[] _firableGuns = Array.Empty<GunGroup>(); // the firable gun groups in _fire's slot order (muzzle nodes, live ammo)
@@ -447,7 +408,6 @@ public partial class FlightController : Node3D
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
     private int? _team;                          // Team's backing field — null until overridden (B7)
-    private bool _inert;                         // Inert's backing field — built but out of the session (E10)
     private bool _held;                          // Held's backing field — the airframe is pinned (weapon lab)
     private bool _cameraOwned;                   // CameraOwned's backing field — the lab's free camera has the view
     private bool _orbitPrev;                     // edge detection for entering the orbit (halt or hold)
@@ -528,19 +488,55 @@ public partial class FlightController : Node3D
     /// that wants a name falls back to the node's.</summary>
     public PlaneStats? Stats => _model?.Stats;
 
+    /// <summary>The data-driven crash: a per-player <see cref="AnimRuntime"/> bound to this plane's
+    /// scoped crash subtree, advancing itself in its own <c>_Process</c>. Plays the compiled crash
+    /// def the struck surface selects; see this module's entry in docs/architecture.md. Bound by
+    /// <c>WorldEffectsFactory</c> through <see cref="BindCrashRig"/> for every flown plane; null
+    /// only when the crash program/scene were unavailable, and the plane then just hides.</summary>
+    public AnimRuntime? CrashRuntime { get; private set; }
+
+    /// <summary>The node the crash definition anchors to (its <c>player</c> anim-root) — passed to
+    /// <see cref="AnimRuntime.Play"/> on a crash. Bound with <see cref="CrashRuntime"/>.</summary>
+    public Node3D? CrashAnchor { get; private set; }
+
+    /// <summary>The crash-def vector the struck surface id indexes — the original's own selection
+    /// mechanism (see <see cref="SurfaceDefTable"/>). Built from the bound crash program, so it
+    /// knows which slots name a def this install actually ships. The selection is
+    /// <see cref="AircraftLifecycle"/>'s, which holds the table; null when no crash rig was
+    /// built, and the plane then just hides on a crash.</summary>
+    public SurfaceDefTable? CrashDefs => _lifecycle.CrashDefs;
+
+    /// <summary>The def the last <see cref="Crash"/> selected off <see cref="CrashDefs"/> —
+    /// <c>player_crash_*</c> on a human rig, <c>ai_crash_*</c> on an AI plane, null before any
+    /// crash or when no crash rig was built. The prefix names the family, so a suite (or a log
+    /// reader — the CRASH line prints the same value as <c>def=</c>) can pin which family
+    /// fired.</summary>
+    public string? LastCrashDef => _lifecycle.LastCrashDef;
+
+    /// <summary>Seconds a crash sits on the crash cam before this plane auto-respawns, or null —
+    /// the default — for manual R only. The session arms it (Versus: 3 s, every rig) so a downed
+    /// player rejoins the fight without touching a key; R still respawns early, and the timer is
+    /// armed at <see cref="Crash"/>. Scripted HoldSegments runs auto-respawn regardless, on
+    /// <see cref="AircraftLifecycle.AutoRespawnDelay"/> unless this says otherwise.</summary>
+    public float? AutoRespawnAfter
+    {
+        get => _lifecycle.AutoRespawnAfter;
+        set => _lifecycle.AutoRespawnAfter = value;
+    }
+
     /// <summary>Whether this plane is crashed — frozen at the impact, airframe hidden, waiting
     /// for respawn. The fact the session (and the in-engine suites) read; only Respawn clears it.</summary>
-    public bool Crashed => _crashed;
+    public bool Crashed => _lifecycle.Crashed;
 
     /// <summary>Whether this aircraft's hull is spent and its destroy def is playing — true from
     /// the kill, through the fall, and on past the ground impact until respawn. <see cref="Crashed"/>
     /// covers a live aircraft flown into terrain as well; this is the shot-down half alone.</summary>
-    public bool Destroyed => _destroyed;
+    public bool Destroyed => _lifecycle.Destroyed;
 
     /// <summary>Whether the wreck is still falling under the flight model. True from the kill until
     /// the destroy def's <c>Callback 15</c> hands the hull to the anim, or until it lands and runs
     /// its ground-impact def, whichever the airframe authors.</summary>
-    public bool WreckFalling => _wreckFalling;
+    public bool WreckFalling => _lifecycle.WreckFalling;
 
     /// <summary>An aircraft that has been BUILT but held completely out of the session — not
     /// stepped, drawn, collidable, hittable, or a targeting candidate. The original's wave
@@ -550,12 +546,11 @@ public partial class FlightController : Node3D
     /// collide and cost a frame; every consumer reads <see cref="InPlay"/> instead.</summary>
     public bool Inert
     {
-        get => _inert;
+        get => _lifecycle.Inert;
         set
         {
-            if (_inert == value)
+            if (!_lifecycle.SetInert(value))
                 return;
-            _inert = value;
             ApplyPresence();
             InertChanged?.Invoke(this);
         }
@@ -566,7 +561,7 @@ public partial class FlightController : Node3D
     /// vehicle/turret candidate lists, the projectile pool's proximity fuse and blast pass, the D12
     /// ranking's standing-target check, the HUD hostile tracker and the E11 wave-clear walk. A
     /// consumer that tests <see cref="Crashed"/> alone silently sees inert aircraft.</summary>
-    public bool InPlay => !_crashed && !_inert;
+    public bool InPlay => _lifecycle.InPlay;
 
     /// <summary>This pane is in photo mode: the session owns its camera and its HUD is hidden,
     /// and this node's pause key is silent so Escape means "leave photo mode" and nothing else.
@@ -797,9 +792,7 @@ public partial class FlightController : Node3D
     /// stunt run alone — a mid-run crash deliberately keeps its zones and clock.</summary>
     public void Respawn()
     {
-        _crashed = false;
-        _destroyed = false;
-        _wreckFalling = false;
+        _lifecycle.Respawn();
         (_inputSource as ScriptedInputSource)?.Reset(); // scripted hold sequences restart from the spawn
         _lastInput = default;
         Pilot?.ClearStun();  // a fresh airframe never wakes up with its pilot's hands still off
@@ -815,13 +808,13 @@ public partial class FlightController : Node3D
             // Hard-stop the played def, re-hide the wreck (its RESET_STATE), and re-home the flung
             // pieces below (no reset event re-poses them; without this respawn leaves just the prop).
             CrashRuntime.ResetToBaseState();
-            if (CrashRestPoses != null)
-                foreach (var (node, rest) in CrashRestPoses)
+            if (_crashRestPoses != null)
+                foreach (var (node, rest) in _crashRestPoses)
                 {
                     node.Transform = rest;
                 }
-            if (CrashPlaneVisibility != null)
-                foreach (var (node, vis) in CrashPlaneVisibility)
+            if (_crashPlaneVisibility != null)
+                foreach (var (node, vis) in _crashPlaneVisibility)
                 {
                     node.Visible = vis;
                 }
@@ -848,18 +841,32 @@ public partial class FlightController : Node3D
             SnapCamera();
     }
 
+    /// <summary>Opens this spawn's collision-free window, and with
+    /// <paramref name="carrierDrop"/> the longer ground-blow damping a dropped aircraft needs so it
+    /// does not fight the fall it was launched into. The rules are
+    /// <see cref="AircraftLifecycle.ArmSpawnTimers"/>'s.</summary>
+    public void ArmSpawnTimers(bool carrierDrop = false) => _lifecycle.ArmSpawnTimers(carrierDrop);
+
+    /// <summary>Binds this plane's crash rig: the runtime the crash and destroy defs play on, the
+    /// def vector the struck surface indexes, the anchor they play against, and the two snapshots a
+    /// respawn restores. One call rather than six assignments, so a rig cannot be half-bound.</summary>
+    public void BindCrashRig(AnimRuntime runtime, SurfaceDefTable? defs, Node3D? anchor,
+        IReadOnlyList<(Node3D Node, Transform3D RestPose)>? restPoses,
+        IReadOnlyList<(Node3D Node, bool Visible)>? planeVisibility)
+    {
+        CrashRuntime = runtime;
+        CrashAnchor = anchor;
+        _lifecycle.CrashDefs = defs;
+        _crashRestPoses = restPoses;
+        _crashPlaneVisibility = planeVisibility;
+    }
+
     /// <summary>The inverse of building inert: re-home this aircraft at <paramref name="pos"/>
     /// with its nose on <paramref name="lookAt"/>, put it back in play and respawn it there — the
     /// original's teleport-then-reactivate, in one call. <see cref="Respawn"/> does the rest of the
     /// work it always does (spawn speed and throttle, a healthy repaired airframe, full ammo, the
     /// start choreography), so a wave arrives flying rather than parked. Calling this on an
     /// aircraft already in play is simply that teleport-and-reset.</summary>
-    public void ArmSpawnTimers(bool carrierDrop = false)
-    {
-        _collisionGrace = CollisionDamage.SpawnGrace;
-        _postDropGroundBlow = carrierDrop ? 2.5f : 0f;
-    }
-
     public void Activate(Vector3 pos, Vector3 lookAt, Vector3? launchVelocity = null,
         bool carrierDrop = false)
     {
@@ -1115,7 +1122,7 @@ public partial class FlightController : Node3D
     /// the caller arms its own side and calls this on the struck rig so neither re-resolves the
     /// overlap they are still in. Kept off <see cref="TakeCollisionHit"/> itself because that
     /// method's test callers exercise the receiving half alone, with no ram and no grace to arm.</summary>
-    public void ArmCollisionGrace() => _collisionGrace = CollisionDamage.EntityGrace;
+    public void ArmCollisionGrace() => _lifecycle.ArmCollisionGrace();
 
     public override void _PhysicsProcess(double delta)
     {
@@ -1135,7 +1142,7 @@ public partial class FlightController : Node3D
         // An inert airframe takes no step at all — no stunt clock, no input, no flight
         // model, no collision sweep, no weapons. Guarded here rather than in the session's loop so
         // every caller (the loop, this node's own _PhysicsProcess, a suite) honours it in one place.
-        if (_inert)
+        if (Inert)
             return;
 
         // Advance the stunt clock every physics frame — including through the crash freeze so the
@@ -1166,9 +1173,9 @@ public partial class FlightController : Node3D
             _simPrev = _simCurr;   // hold the finish pose — no stale pair left to interpolate
             return;
         }
-        _autoRestartIn = AutoRespawnDelay; // re-armed while the run is live
+        _autoRestartIn = AircraftLifecycle.AutoRespawnDelay; // re-armed while the run is live
 
-        if (_crashed)
+        if (Crashed)
         {
             // ⚠ Out of lives, neither R nor AutoRespawnAfter's timer may bring the pilot back;
             // check this ahead of both rather than by clearing AutoRespawnAfter, which R overrides.
@@ -1177,8 +1184,7 @@ public partial class FlightController : Node3D
                 StepWreckFall(dt);
                 return;
             }
-            if (RespawnPressed()
-                || ((_holdSegments != null || AutoRespawnAfter != null) && (_autoRespawnIn -= dt) <= 0f))
+            if (RespawnPressed() || _lifecycle.TickAutoRespawn(dt, _holdSegments != null))
             {
                 Respawn();
                 return;
@@ -1209,15 +1215,15 @@ public partial class FlightController : Node3D
             var input = InputSource.Read(dt);
             // The response is absent for 1.5 s, then AI terms run at 15% for 1 s.
             // Keep the probe off too, so the log records response rather than an inert hit.
-            bool groundBlowReady = IsHumanPiloted || _collisionGrace <= 0f;
+            bool groundBlowReady = IsHumanPiloted || !_lifecycle.CollisionGraceActive;
             if (groundBlowReady)
                 ProbeGroundBlow(ref input);  // reads the pose this step ENTERED with, as the original does
-            input.AiGroundBlowScale = !groundBlowReady ? -1f : _postDropGroundBlow > 0f ? 0.15f : 1f;
+            input.AiGroundBlowScale = !groundBlowReady ? -1f
+                : _lifecycle.PostDropGroundBlowActive ? 0.15f : 1f;
             _lastInput = input;
             _damageCooldown -= dt;
             _grazeReactionCooldown -= dt;
-            _collisionGrace -= dt;
-            _postDropGroundBlow -= dt;
+            _lifecycle.TickTimers(dt);
             _model.Step(input, dt);
 
             // The airframe boxes sweep along the frame's motion; the center ray stays as an
@@ -1229,7 +1235,7 @@ public partial class FlightController : Node3D
             var probeEnd = len > 1e-4f ? to + step / len * margin : to;
             // ⚠ The grace window suppresses the SWEEP, not just the damage: while it is live this
             // plane has no collision at all (obj+0xAC, docs/org/flightModel.md).
-            bool sweeping = _collisionGrace <= 0f;
+            bool sweeping = !_lifecycle.CollisionGraceActive;
             ContactReport contact = default;
             Node? hitBody = null;
             bool hit = sweeping && SweepAirframe(prev, step, out contact, out hitBody);
@@ -1361,16 +1367,16 @@ public partial class FlightController : Node3D
     public override void _Process(double delta)
     {
         var clock = GameClock.Current;
-        if (!_inert)
+        if (!Inert)
             PollResultsShortcuts((float)delta);
         // ⚠ Ahead of the inert return, for a rig that HAS a pause key. --debug-spectate flags
         // every human rig inert (GameSession.ApplyDebugSpectate), so swallowing the key here
         // leaves a spectated session with no way to freeze the picture at all.
         bool halted = false;
-        if (AllowPause || !_inert)
+        if (AllowPause || !Inert)
             halted = PollPauseAndHalt(clock);
         // Nothing left to draw, animate, interpolate or point a camera at while inert.
-        if (_inert)
+        if (Inert)
             return;
 
         // ⚠ A halt does NOT orbit: a board's cursor keys ARE the orbit keys, so the free look
@@ -1390,7 +1396,7 @@ public partial class FlightController : Node3D
             // Draw the plane between its last two sim poses (see the _simPrev/_simCurr fields).
             // Skipped while crashed (the sim pair is stale; the wreck owns the visuals) and on a
             // parent-driven clock, which steps the sim once per rendered frame anyway.
-            if ((clock == null || !clock.ParentDriven) && !_crashed)
+            if ((clock == null || !clock.ParentDriven) && !Crashed)
             {
                 _renderPose = _simPrev.InterpolateWith(_simCurr, (float)Engine.GetPhysicsInterpolationFraction());
                 GlobalTransform = _renderPose;
@@ -1413,7 +1419,7 @@ public partial class FlightController : Node3D
             // A board is up. Nothing is written, so the camera holds the pose it had when the
             // board appeared and the menu sits over a still frame (BL-429).
         }
-        else if (_crashed)
+        else if (Crashed)
         {
             // The authored crash camera holds the pose Crash() cut to — the original's camera
             // does not move after the cut (footage), so nothing is written here until respawn.
@@ -1477,7 +1483,7 @@ public partial class FlightController : Node3D
             VersusHud.HeadingDeg = headingDeg;
         }
         _pilotHud.Draw(BuildHudState((float)delta, simDt, halted, headingDeg));
-        if (!halted && !_crashed)
+        if (!halted && !Crashed)
         {
             float speedFrac = _model.Speed / _model.Stats.FdSpeed;
             // Zones OR the hull pair, whichever is worse: an AI airframe resolves no zones, so
@@ -1504,10 +1510,10 @@ public partial class FlightController : Node3D
         // Spin the propeller/rotor blur discs: they keep turning even at idle (windmilling)
         // and speed up with throttle. Frozen while crashed or paused (a still disc reads
         // the same at any angle, and freezing it keeps screenshots deterministic).
-        Props?.Advance(simDt, _crashed || halted ? 0f : PropIdleSpin + (1f - PropIdleSpin) * _model.Throttle);
+        Props?.Advance(simDt, Crashed || halted ? 0f : PropIdleSpin + (1f - PropIdleSpin) * _model.Throttle);
 
         // Frozen while paused (so a screenshot catches a fixed state) and while crashed.
-        if (!_crashed && !halted)
+        if (!Crashed && !halted)
         {
             WingLights?.Advance(simDt);
             Surfaces?.Advance(simDt, _lastInput, _model.ReverseAuthorityAt(_model.Speed));
@@ -1596,7 +1602,7 @@ public partial class FlightController : Node3D
         Vector3 reticleOrigin = default;
         Vector3 reticleNose = default;
         Vector3 inheritedVelocity = default;
-        if (_pilotHud.DrawsReticle && !_crashed && Loadout != null && _fire != null
+        if (_pilotHud.DrawsReticle && !Crashed && Loadout != null && _fire != null
             && SelectedGun() is { } sel)
         {
             reticleGun = sel;
@@ -1610,7 +1616,7 @@ public partial class FlightController : Node3D
             HeadingDeg = headingDeg,
             SpeedMps = _model.Speed,
             Throttle = _model.Throttle,
-            Crashed = _crashed,
+            Crashed = Crashed,
             Held = _held,
             Halted = halted,
             StallWarned = _model.IsStallWarned(),
@@ -1941,22 +1947,21 @@ public partial class FlightController : Node3D
     /// what deleted the fall, the burning wreck and the parachute (org/vehicleDamage.md).</summary>
     private void Destroy(Vector3 at, string hitName, string part, int? killer)
     {
-        if (_crashed)
-            return; // one death, one Downed report — nothing may double-fire it
-        _crashed = true;
-        _destroyed = true;
-        _autoRespawnIn = AutoRespawnAfter ?? AutoRespawnDelay;
+        // The transition decides; everything below performs what it reported.
+        var death = _lifecycle.Destroy(CrashRuntime != null ? DestroyDef : null, killer);
+        if (!death.Occurred)
+            return;
         Body?.SetHittable(false);       // a dead plane soaks no rounds and blocks no sweep
-        EndFlightSystems();
-        string? destroyDef = CrashRuntime != null ? DestroyDef : null;
+        if (death.EndFlightSystems)
+            EndFlightSystems();
+        string? destroyDef = death.DestroyDef;
         if (destroyDef != null)
         {
             // The dead hull flies itself from here; the def's own Callback 15 stops it, at 3.0 s on
             // the ten AI airframes and at once on `player`. ⚠ Wire all three seams before Play, or
             // the untimed player def raises them into nothing (docs/org/vehicleDamage.md).
-            _wreckFalling = true;
             CrashRuntime!.WreckVelocity = () => _model.VelocityDir * _model.Speed;
-            CrashRuntime.StopWreckFlying = () => _wreckFalling = false;
+            CrashRuntime.StopWreckFlying = () => _lifecycle.StopWreckFall();
             // Code 15's other half: the stages the hull was wearing end with it. Both AI stage anims
             // are LOOP -1 with NO authored exit, so nothing else can reach them and a survivor emits
             // forever at the node the wreck left behind.
@@ -1975,15 +1980,17 @@ public partial class FlightController : Node3D
             // rather than leave a pristine hull hanging in the air.
             PlaneModel.Visible = false;
         }
-        CutToCrashView(at);
+        if (death.CutCamera)
+            CutToCrashView(at);
         Log.Info("flight",
-            $"DESTROYED by {hitName} ({part}) def={destroyDef ?? "-"} wreck={(_wreckFalling ? "falling (flight model)" : "handed over on the kill frame")} lands={(DestroyDefFliesWreck ? "anim (bounce sequence)" : "ground-impact def")} pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s");
-        Downed?.Invoke(PlayerIndex, killer);
+            $"DESTROYED by {hitName} ({part}) def={destroyDef ?? "-"} wreck={(death.WreckFalling ? "falling (flight model)" : "handed over on the kill frame")} lands={(DestroyDefFliesWreck ? "anim (bounce sequence)" : "ground-impact def")} pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s");
+        if (death.Downed)
+            Downed?.Invoke(PlayerIndex, death.Killer);
     }
 
     // Everything an aircraft stops doing the moment it is out of the fight, whether it died in the
     // air or struck the world. Runs exactly once per death: the gun loop would otherwise keep
-    // playing under the wreck, since nothing else calls StopGunLoop while _crashed is true.
+    // playing under the wreck, since nothing else calls StopGunLoop while the plane is crashed.
     private void EndFlightSystems()
     {
         if (_gunLoopOn)
@@ -2022,13 +2029,13 @@ public partial class FlightController : Node3D
     // its crash def, as the original's does.
     private void StepWreckFall(float dt)
     {
-        if (!_wreckFalling)
+        if (!WreckFalling)
             return;
         var prev = _model.Position;
         _model.Step(_lastInput, dt);
         if (_model.Position.Y < UnderMapY)
         {
-            _wreckFalling = false;   // lost under the map; nothing left to strike
+            _lifecycle.StopWreckFall();   // lost under the map; nothing left to strike
             return;
         }
         if (HitWorld(prev, _model.Position, out var impact, out var hitName, out var hitBody))
@@ -2046,24 +2053,19 @@ public partial class FlightController : Node3D
     /// <see cref="CrashDefs"/> slot, which is where that family belongs.</summary>
     private void Crash(Vector3 impact, string hitName, string part, Node? hitBody, int? killer = null)
     {
-        // The falling wreck's own landing is the one re-entry allowed: it is already _crashed and
-        // already reported, and this call is the second of its two anim slots.
-        bool wreckLanding = _wreckFalling;
-        if (_crashed && !wreckLanding)
-            return; // one crash, one Downed report — nothing may double-fire the death
-        _wreckFalling = false;
-        _crashed = true;
-        if (!wreckLanding)
-            _autoRespawnIn = AutoRespawnAfter ?? AutoRespawnDelay;
-        if (PlaneModel != null)
-            PlaneModel.Visible = false; // the airframe is gone; HUD prompts for respawn
-        Body?.SetHittable(false);       // a crashed plane soaks no rounds and blocks no sweep
         // The original's selection: index by the struck material's surface id, falling back to
         // slot 0 (player_crash_default) for most of the ground (id 0 is ~98% of every chapter).
         int? surfaceId = SurfaceIdOf(hitBody);
-        string? crashDef = CrashDefs?.DefForSurfaceId(surfaceId);
-        LastCrashDef = crashDef;
-        if (!wreckLanding)
+        // The transition decides, including the guard and which of the four effects below are due;
+        // everything after this line performs what it reported.
+        var landing = _lifecycle.Crash(surfaceId, killer);
+        if (!landing.Occurred)
+            return;
+        string? crashDef = landing.CrashDef;
+        if (PlaneModel != null)
+            PlaneModel.Visible = false; // the airframe is gone; HUD prompts for respawn
+        Body?.SetHittable(false);       // a crashed plane soaks no rounds and blocks no sweep
+        if (landing.EndFlightSystems)
             EndFlightSystems();
         PlayCrashBoom(crashDef);
         if (CrashRuntime != null && crashDef != null)
@@ -2082,7 +2084,7 @@ public partial class FlightController : Node3D
         }
         // ⚠ Not on a wreck landing: the cut and the report both belong to the kill, seconds
         // earlier, and re-cutting here would swing the camera off the fall it was framing.
-        if (!wreckLanding)
+        if (landing.CutCamera)
             CutToCrashView(impact);
         string surface = surfaceId is { } sid
             ? $"{sid}/{SurfaceRegistry.NameForId(sid) ?? "?"}"
@@ -2098,9 +2100,9 @@ public partial class FlightController : Node3D
                 $"midair aspect: into {hitName} — tracks {AngleBetweenDeg(mine, theirs):0}° apart (0 = same heading, 180 = head-on), line of sight {AngleBetweenDeg(mine, los):0}° off own track, spd mine={_model.Speed:0} theirs={theirs.Length():0} m/s");
         }
         Log.Info("flight",
-            $"CRASH into {hitName} ({part}) surface={surface} def={crashDef ?? "-"} wreck={wreckLanding} impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s — waiting for respawn");
-        if (!wreckLanding)
-            Downed?.Invoke(PlayerIndex, killer);
+            $"CRASH into {hitName} ({part}) surface={surface} def={crashDef ?? "-"} wreck={landing.WreckLanding} impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s — waiting for respawn");
+        if (landing.Downed)
+            Downed?.Invoke(PlayerIndex, landing.Killer);
     }
 
     // True when the button is down on one of THIS player's gamepads. With
@@ -2621,7 +2623,7 @@ public partial class FlightController : Node3D
         {
             struckRig.TakeCollisionHit(outcome.ArmorDamage, outcome.HealthDamage, contact.Impact, PlayerIndex);
             // Both parties go collision-free, so neither re-resolves the overlap they are still in.
-            _collisionGrace = CollisionDamage.EntityGrace;
+            _lifecycle.ArmCollisionGrace();
             struckRig.ArmCollisionGrace();
         }
 
@@ -2635,7 +2637,7 @@ public partial class FlightController : Node3D
     // past the canopy is one warning, not thirty.
     private void OnNearMiss(float distance)
     {
-        if (_crashed || _warningShots == null || !_warningShots.Register())
+        if (Crashed || _warningShots == null || !_warningShots.Register())
             return;
         string? variant = Audio?.OnWarningShot();
         // The breadcrumb the cue otherwise leaves only in the speakers: which pilot, how close, and
@@ -2850,7 +2852,7 @@ public partial class FlightController : Node3D
         public ContactResponse ApplyResponse()
         {
             _rig._model.Collide(_from, _motion, _contact.StopFraction, _contact.Impact, _contact.Normal,
-                _rig.IsHumanPiloted && !_rig._crashed, AircraftContactResolver.CrashSpeed);
+                _rig.IsHumanPiloted && !_rig.Crashed, AircraftContactResolver.CrashSpeed);
             return new ContactResponse(_rig._model.Speed,
                 new Transform3D(_rig._model.Attitude, _rig._model.Position));
         }

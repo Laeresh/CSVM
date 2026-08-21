@@ -164,11 +164,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 9. ☑ `ContactReport` and `ContactOutcome`, and the detection half reduced to filling a report
 10. ☑ `AircraftContactResolver` owns fate, the damage pair and the un-embed loop
-11. ☐ The outcome table asserted off-engine, and the cross-instance grace write replaced
+11. ☑ The outcome table asserted off-engine, and the cross-instance grace write replaced
 
 ### Wave F — the aircraft lifecycle
 
-12. ☐ `AircraftLifecycle` owns `_crashed`, `_inert` and the spawn timers, and reports transitions
+12. ☑ `AircraftLifecycle` owns `_crashed`, `_inert` and the spawn timers, and reports transitions
 13. ☐ The transition table asserted off-engine, including inert and the respawn timers
 
 ## Dependency and parallelism notes
@@ -465,7 +465,7 @@ and mask the exact bug this item exists to catch.
 
 # Wave F — the aircraft lifecycle
 
-## F12 ☐ `AircraftLifecycle` owns `_crashed`, `_inert` and the spawn timers, and reports transitions
+## F12 ☑ `AircraftLifecycle` owns `_crashed`, `_inert` and the spawn timers, and reports transitions
 
 **Goal.** The states an aircraft moves between live in one module, and the node performs the effects
 of a transition rather than deciding it.

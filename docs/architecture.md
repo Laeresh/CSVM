@@ -164,6 +164,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ContactReport.cs` — one detected contact as a value: impact, normal, struck part, collider name, stop fraction, and whether an aeroplane was struck.
 - `src/Flight/ContactOutcome.cs` — what a contact costs the striker: fate, the decoded damage pair, doom, the charged zone, the HUD flash, the push-out, and the struck-aircraft instruction.
 - `src/Flight/AircraftContactResolver.cs` — the decoded contact rules for one aircraft: the damage pair, the fate, and the un-embed loop, with no `Node` in sight.
+- `src/Flight/AircraftLifecycle.cs` — the states one aircraft moves between (in play, crashed, destroyed, inert) with the spawn timers; every transition returns what the node must perform.
 - `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part; owns the whole-vehicle kill rule (`IsDestroyed`).
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
 - `src/Flight/DamageLab.cs` — the `--damage`/F5 slider UI: one HP slider per part, driving the parked plane's DamageVisuals or the flown plane's real PlaneDamage.
@@ -2559,7 +2560,12 @@ when no box reached the obstacle. Deciding what that contact does is
 a `ContactEffects` for the applying, and performs the `ContactOutcome` (the struck rig's share and
 both grace windows, the HUD flash, the un-embed push, `Crash` on a fatal fate). Arming the struck
 rig's own grace window goes through its `ArmCollisionGrace()`, a narrow public method, rather than
-a direct write to the other instance's private field. The DEATH family (`CRASH into`, `midair aspect`, every
+a direct write to the other instance's private field.
+Which state the aircraft is in, and what moves it between states, is `AircraftLifecycle`'s (see that
+entry): this node holds one privately, forwards `Crashed`/`Destroyed`/`WreckFalling`/`Inert`/`InPlay`
+onto it, and performs what a transition reports rather than deciding it. `BindCrashRig` takes the
+crash runtime, the def table, the anchor and the two respawn snapshots in one call, so the rig
+cannot be half-bound and only `CrashRuntime`/`CrashAnchor` stay readable as properties. The DEATH family (`CRASH into`, `midair aspect`, every
 `vehicle health exhausted`, `graze`, `ground stop`, `AI ram`, `impact severity`) routes through
 `Log.Info("flight", …)`, so a play session's file sink carries how each aircraft died; the
 per-round weapon breadcrumbs around them are a different family and still `GD.Print`.
@@ -2602,8 +2608,8 @@ rather than from the sim step. The board halts the clock, so the sim step no lon
 them, and the hold harness's automatic rematch would have stopped with them. The sim step keeps
 only the structural halves of those branches: the early returns, and the `_simPrev = _simCurr`
 hold that leaves no stale pair to interpolate at the finish pose.
-`Crash` reads the struck body's numeric surface id (`SceneBuilder.SurfaceIdMeta`) and indexes
-`CrashDefs` (`SurfaceDefTable`) with it, the original's own cascade: `dirt`(13) plays
+`Crash` reads the struck body's numeric surface id (`SceneBuilder.SurfaceIdMeta`) and hands it to
+the lifecycle, which indexes `CrashDefs` (`SurfaceDefTable`) with it, the original's own cascade: `dirt`(13) plays
 `player_crash_dirt` + `snd_exp_ground_a`, `water`(1) `player_crash_water` + `snd_exp_water_a`, and
 everything else — id 0 plus the ids whose def this install does not ship — falls back to slot 0,
 `player_crash_default`, which authors no surface boom of its own. `--crash` has no struck body, so
@@ -2618,7 +2624,7 @@ leaves the wreck VISIBLE, cuts the camera and raises `Downed`. `Crash` is stage 
 contact — a live aircraft flown into terrain, or that wreck landing. Which system carries the wreck
 down is asked of the data (`EffectCatalogue.FliesOwnHull`): the eleven airframe defs author an
 `ObjectMotion` on `MAIN_ROOT_NODE` with their own bounce landing and own the fall outright, so no
-`*_crash_*` follows; `player` authors none, so `_wreckFalling` keeps the hull in the flight model
+`*_crash_*` follows; `player` authors none, so the lifecycle's `WreckFalling` keeps the hull in the flight model
 (no input, no weapons) until `StepWreckFall`'s sweep reaches the world and `Crash` plays
 `player_crash_*`. That second call is the one re-entry `Crash` allows while `_crashed`, and it
 re-fires neither `Downed` nor the camera cut. The `ai-wreck-fall` suite drives both stages on one
@@ -4341,6 +4347,29 @@ AI into AI, the player's exemption from both (asserted on the damage magnitude, 
 `DamageStruckAircraft`, since the entity cut applies only on the non-player branch and only against
 another aeroplane), the ground stop reading `ContactResponse.Speed` alone, and the un-embed loop's
 three-try give-up.
+
+## src/Flight/AircraftLifecycle.cs
+The states one aircraft moves between and the rules that move it: in play, crashed, destroyed with
+its wreck still flying, inert, and back to spawned. It owns those flags plus the collision-grace,
+carrier-drop ground-blow and auto-respawn timers, holds the crash-def table and the selection off it
+(`LastCrashDef`), and holds no `Node`, so the whole table runs in a unit test. Every transition
+REPORTS what happened instead of performing it (Decision 7 of
+`docs/PLAN-flightcontroller-deepening.md`): `Crash(surfaceId, killer)` answers one `CrashOutcome`
+(did it happen, was it the wreck landing, which crash def, whether the shutdown, the camera cut and
+the `Downed` report are owed, and the killer to name) and `Destroy(destroyDef, killer)` one
+`DestroyOutcome` on the same terms, with `WreckFalling` deciding whether the hull flies itself down.
+Each is one value with no optional parts, so a caller that forgets half a crash is forgetting one
+statement rather than four. `FlightController` keeps `Crashed`, `Destroyed`, `WreckFalling`, `Inert`
+and `InPlay` as forwards onto it, so its fifteen internal readers and every session-side consumer
+read the same spellings they always did, and it keeps the `Downed`/`InertChanged`/`DamageApplied`
+events, which the session subscribes to. The guard that a crashed aircraft cannot crash again is a
+transition rule here: `Crash` refuses while `Crashed`, and the single exception is the falling
+wreck's own landing, which reports `WreckLanding` and owes neither the cut nor the report because
+the death was reported at the kill. `ArmSpawnTimers(carrierDrop)` opens the spawn's collision-free
+window (`CollisionDamage.SpawnGrace`), and the carrier-drop arm adds
+`CarrierDropGroundBlow` seconds of the 0.15 ground-blow multiplier on top; `ArmCollisionGrace` is
+the shorter window a resolved ram writes to both parties. `SetInert` answers whether the flag moved,
+which is what makes the node's presence write and its `InertChanged` raise conditional.
 
 ## src/Flight/GodotWorldQuery.cs
 The only adapter over Godot's `DirectSpaceState`, implementing `IWorldQuery`. Resolves the wrapped
