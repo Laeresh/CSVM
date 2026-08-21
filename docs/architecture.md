@@ -121,6 +121,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
 - `src/Flight/PilotViewMode.cs` — the three player-selectable views (Chase/Cockpit/Nose, valued as the engine's own camera modes 0/6/7) and `PilotView`, the pure rules over them: cycle, first-person test, the held-key override, the `--view=` spelling. Engine-free, so the decisions unit-test.
 - `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, the pilot's selected view mode, the weapon lab's held-airframe orbit. Steers a `Camera3D` it does not own.
+- `src/Flight/CockpitVisibility.cs` — the per-mode hiding of the pilot's OWN aircraft in a first-person view: interior in and body out for Cockpit, both out plus `markers`/`dontmove` for Nose, everything back for any external pose. `Rules` is pure; `Bind`/`Apply` write it onto one built plane model.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, the steering step (turn clamp, speed penalty, `LOCK_ON_LEAD`, the seeker's retarget), tracers, flashes, per-surface impact, damage to destructibles, the beeper's paint.
 - `src/Flight/ProjectileFlyoutAnim.cs` — `ProjectilePool`'s `FLYOUT MODEL_ANIMATION` half: each ordnance round runs its def on the sequence interpreter, the pool as host (trail puffers, the torpedo's launch look and switch, its sounds).
@@ -419,8 +420,32 @@ between them at spawn/engine-stop (`FlightController`), so both must exist. `sta
 autogyro) is unaffected and stays skipped in flight — that def only names propeller nodes.
 `Build` also reads `CockpitCameraOffset`, the plane-local `cockpit_camera` marker translate
 (`MarkerRig.FindNamedMarker`, fallback the origin), for `CameraController`'s first-person
-placement (PLAN-cockpit-view, A2) — `cockpit1`/`cockpit2` still skip for the model itself, but the
-marker read walks past them to the authored node in the top-level `markers` group.
+placement (PLAN-cockpit-view, A2); the marker read walks past the alternate-state subtrees to the
+authored node in the top-level `markers` group.
+
+`cockpitInterior: true` (PLAN-cockpit-view, B11) takes `cockpit1` back out of the skip list for
+that build alone and mounts it hidden as `CockpitInterior`: local transform = the
+`cockpit_camera` offset with a uniform `InteriorScale`, then `ParkInteriorStates` walks it. Only a
+human rig asks for it — an AI plane never builds a cockpit. The subtree's `pcdp4`/`pcdp6` torn-skin
+panels build hidden alongside it and are deliberately absent from `DamagePanels`, which stays the
+exterior set `DamageVisuals` drives.
+
+⚠ **The interior's off-states ship `active: true`.** Five windshield bullet-hole groups
+(`bullet1`…`bullet5`) and two warning lamps (`lowalt_on`/`stallwarning_on`) are authored visible on
+all 11 airframes and hidden engine-side until something drives them, so an unparked build paints
+bullet holes across the sky of a pristine plane and holds both lamps lit. `IsInteriorDrivenState`
+is that named set; `ParkInteriorStates` hides it plus anything the gamez marks `active: false` (the
+Devastator's `nitrogauge`, the only such node). ⚠ It is a NAMED set, not a blanket hide: the
+damage-dial zones, the belt segments and the needles are always-drawn geometry that changes
+COLOUR, which is `GaugeCluster`'s own decode of the same nodes.
+
+⚠ **The interior is authored in its own space, and the two spaces are not a similarity apart.**
+The eye sits at `cockpit1`'s origin looking down −Z (`extracted/zrdr/instruments.zrd.json` places
+the whole instrument panel at z −17.5 straight ahead of it), while the interior's own elevators sit
+at y −10.5 where the exterior's sit at −0.40 — it is a stylised model built to be looked at from
+one point, not a scaled copy of the aircraft. So the framing is scale-invariant and
+`InteriorScale` is a port TUNE choosing only how the interior composites against world geometry.
+`cockpit2` is skipped defensively and appears in no shipped tree.
 
 ## src/Mech3/PaintScheme.cs
 One aircraft livery: pattern name + three colours + three decal indices — the paint_* record a
@@ -1395,6 +1420,25 @@ authored) plus a first-order acceleration transient relaxing at the MEASURED 0.6
 (`UpdateDynamics`, host-called once per sim step); the offset's DIRECTION (behind and above at
 ~15.7° elevation) is not in the data and stays hand-picked. Collaborators: `FlightController`
 (the only host) and `CamParams`.
+
+## src/Flight/CockpitVisibility.cs
+The per-mode node hiding the original applies to the pilot's OWN aircraft while a first-person view
+is on the screen (`docs/org/cameraViews.md`, "Mode 6 = Cockpit" / "Mode 7 = Nose"): Cockpit draws
+`cockpit1` and hides the `healthy` body; Nose hides the interior, the body, and the `markers` and
+`dontmove` groups; every external pose renders the aircraft exactly as it was built. `Rules` is the
+whole decision as a pure function over `(PilotViewMode, firstPerson)`, so it unit-tests engine-free;
+`Bind` finds the four groups in a built plane model and `Apply` writes one frame's answer onto
+them. `FlightController._Process` calls it every frame beside the camera write, keyed to the pose
+that frame actually took — a held numpad key or the look-behind is an external pose and brings the
+body back while it is held, the same shape `CameraController.RestoreExternalFov` has.
+
+⚠ `Bind`'s group search is interior-blind: each gauge sub-assembly inside `cockpit1` carries its own
+`markers` child, so a plain depth-first walk can bind a gauge's instead of the airframe's.
+
+⚠ **Splitscreen is a shared scene tree.** Visibility is a property of the node, not of a viewport,
+so a pane whose pilot sits in the cockpit hides that plane's body in EVERY pane. Each rig owns its
+own plane model, so the rule is at least per-pilot rather than keyed to player 1; making it
+per-pane needs render layers, which Decision 5 defers.
 
 ## src/Flight/ImpactOutcome.cs
 "What should happen when this weapon hits this surface id" as a value — `EffectName` (the row's
@@ -2663,7 +2707,10 @@ the pose, the dt and the mixed orbit axes (`OrbitInput`), plus the two view-sele
 (`PollViewModeKeys`: F8 cycles Cockpit ↔ Nose, F6 selects chase, both edge-detected on their own
 slots like the targeting keys). `PinnedViewMode` seeds the selection from `--view=`; `ViewMode` and
 `FirstPersonView` read it back live, and the session polls the latter for the anim data's
-`PLAYER_1ST_PERSON` condition; on a crash it cuts to `CrashView` once,
+`PLAYER_1ST_PERSON` condition. `Cockpit` (a `CockpitVisibility`, null on any rig built without an
+interior) is applied in the same block, keyed to whether the pose THIS frame was a first-person
+one rather than to the selection, so a held numpad key restores the aircraft while it is down.
+On a crash it cuts to `CrashView` once,
 writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
 shows no HUD — footage), restoring it on respawn. Every physics query — the PlaneCollider boxes'
 sweep each physics frame plus every ray (ground AGL, the ground-blow probe, the camera's height

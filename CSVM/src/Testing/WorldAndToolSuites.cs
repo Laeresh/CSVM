@@ -60,6 +60,122 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // The cockpit interior's build and its per-mode hiding (PLAN-cockpit-view, B11). Two builds of
+    // the same airframe: the default one must be byte-for-byte the pre-B11 exterior (an AI plane
+    // pays nothing), the cockpitInterior one must gain the subtree, hidden, at the cockpit_camera
+    // marker. Able to fail: without the Skip arm the interior build finds no cockpit1; without the
+    // mount it sits at the plane origin at authored (~20x) scale.
+    internal static void CockpitInterior(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        Node3D? exterior = null, withInterior = null;
+        try
+        {
+            var plain = new PlaneBuilder(planesGamez, textures, spinningProps: true);
+            exterior = plain.Build(ctx.PlaneName);
+            ctx.Check(plain.CockpitInterior == null,
+                $"the default flight build carries no interior plane={ctx.PlaneName}");
+
+            var builder = new PlaneBuilder(planesGamez, textures, spinningProps: true,
+                cockpitInterior: true);
+            withInterior = builder.Build(ctx.PlaneName);
+            var interior = builder.CockpitInterior;
+            ctx.Check(interior != null, $"the interior build carries a cockpit1 subtree");
+            if (interior == null)
+                return;
+
+            ctx.Check(!interior.Visible, $"the interior is built hidden");
+            ctx.Check(interior.Position.IsEqualApprox(builder.CockpitCameraOffset),
+                $"mounted at the cockpit_camera marker pos={interior.Position}");
+            ctx.Check(interior.Scale.IsEqualApprox(Vector3.One * PlaneBuilder.InteriorScale),
+                $"scaled to the port's interior scale scale={interior.Scale.X:0.###}");
+            ctx.Check(builder.MeshInstanceCount > plain.MeshInstanceCount,
+                $"the interior adds meshes plain={plain.MeshInstanceCount} with={builder.MeshInstanceCount}");
+            // The panel the pilot reads and the two torn-skin panels B12 drives, both hidden.
+            ctx.Check(FindNamed(interior, "gauges") != null, $"the interior carries its gauges subtree");
+            foreach (var panel in new[] { "pcdp4", "pcdp6" })
+            {
+                var node = FindNamed(interior, panel);
+                ctx.Check(node != null, $"the interior carries {panel}");
+                ctx.Check(node is not { Visible: true }, $"{panel} is built hidden (torn state off)");
+            }
+            // ⚠ The five windshield bullet-hole groups and the two warning lamps ship active:true,
+            // so an unparked build renders white splats across the sky on a pristine plane.
+            foreach (var state in new[]
+                     { "bullet1", "bullet2", "bullet3", "bullet4", "bullet5", "lowalt_on", "stallwarning_on" })
+            {
+                var node = FindNamed(interior, state);
+                ctx.Check(node != null, $"the interior carries {state}");
+                ctx.Check(node is not { Visible: true }, $"{state} is parked hidden on a pristine plane");
+            }
+            // …and the panel geometry beside them is NOT parked: the states are a named set, not a
+            // blanket hide, so a wrong predicate that hid the dashboard would fail here.
+            foreach (var kept in new[] { "gauges", "structure", "nosedamage", "ggindicator0" })
+                ctx.Check(FindNamed(interior, kept) is { Visible: true }, $"{kept} still renders");
+
+            // The exterior panels stay DamageVisuals' alone: the interior pair must not join them.
+            foreach (var node in builder.DamagePanels)
+                ctx.Check(!AnimRuntime.NameOf(node).StartsWith("pcdp", System.StringComparison.OrdinalIgnoreCase),
+                    $"DamagePanels holds no cockpit panel name={AnimRuntime.NameOf(node)}");
+
+            var cockpit = CockpitVisibility.Bind(withInterior, interior);
+            ctx.Check(cockpit != null, $"the visibility rig binds to the built model");
+            if (cockpit == null)
+                return;
+            var body = FindNamed(withInterior, "healthy");
+            var markers = FindNamed(withInterior, "markers");
+            var dontmove = FindNamed(withInterior, "dontmove");
+            ctx.Check(body != null && markers != null && dontmove != null,
+                $"the airframe's own healthy/markers/dontmove groups were found");
+            // ⚠ The gauge sub-assemblies inside cockpit1 carry their own 'markers' children; the
+            // one bound must be the airframe's, which is the one holding cockpit_camera.
+            ctx.Check(markers != null && FindNamed(markers, "cockpit_camera") != null,
+                $"the bound markers group is the airframe's, not a gauge's");
+
+            cockpit.Apply(PilotViewMode.Cockpit, firstPerson: true);
+            ctx.Check(interior.Visible && body is { Visible: false }
+                && markers is { Visible: true } && dontmove is { Visible: true },
+                $"Cockpit: interior in, body out, markers/dontmove kept");
+            cockpit.Apply(PilotViewMode.Nose, firstPerson: true);
+            ctx.Check(!interior.Visible && body is { Visible: false }
+                && markers is { Visible: false } && dontmove is { Visible: false },
+                $"Nose: interior out, body out, markers/dontmove out");
+            cockpit.Apply(PilotViewMode.Cockpit, firstPerson: false);
+            ctx.Check(!interior.Visible && body is { Visible: true }
+                && markers is { Visible: true } && dontmove is { Visible: true },
+                $"a held external view restores the aircraft while Cockpit stays selected");
+        }
+        finally
+        {
+            exterior?.Free();
+            withInterior?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // The first node in the subtree carrying this ORIGINAL gamez name (SceneBuilder sanitizes and
+    // Godot renames duplicate siblings, so Node.Name is not the name the data uses).
+    internal static Node3D? FindNamed(Node3D root, string name)
+    {
+        if (AnimRuntime.NameOf(root).Equals(name, System.StringComparison.OrdinalIgnoreCase))
+        {
+            return root;
+        }
+        foreach (var child in root.GetChildren())
+        {
+            if (child is Node3D n3d && FindNamed(n3d, name) is { } hit)
+            {
+                return hit;
+            }
+        }
+        return null;
+    }
+
     // How many MeshInstance3D in the subtree carry a material with an albedo
     // texture — the glTF importer hands each surface back a StandardMaterial3D.
     internal static int CountTexturedMeshes(Node node)

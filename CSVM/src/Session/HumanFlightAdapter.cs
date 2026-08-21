@@ -84,10 +84,12 @@ internal sealed class HumanFlightAdapter
         // Every player flies the Fortune Hunters livery unless --paint says otherwise,
         // as the original's stock planes do.
         long mark = StartupProfile.Mark();
+        // cockpitInterior: a human rig is the only one whose pilot can look out of a cockpit
+        // (PLAN-cockpit-view, B11) — FlightRoster's AI builder deliberately does not ask for one.
         var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
             scheme: _liveries.SchemeFor(pi, _in.ZrdrPath, _in.PaintRng,
                 _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),
-            patterns: _liveries.Patterns);
+            patterns: _liveries.Patterns, cockpitInterior: true);
         var planeModel = planeBuilder.Build(planeName);
         StartupProfile.Record("plane", mark);
         MeshInstances += planeBuilder.MeshInstanceCount;
@@ -98,7 +100,11 @@ internal sealed class HumanFlightAdapter
             PinnedView = _spec.View,
             PinnedViewMode = _spec.ViewMode,
             HudParent = rig.Viewport,
+            // Null when the airframe ships no cockpit1 — the rig then hides nothing, as before B11.
+            Cockpit = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior),
         };
+        if (verbose && controller.Cockpit != null)
+            GD.Print($"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         // Every human joins team 1 in an Instant Action mission, splitscreen included — the
         // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
         // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.

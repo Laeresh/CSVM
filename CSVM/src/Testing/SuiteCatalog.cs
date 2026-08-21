@@ -99,6 +99,7 @@ public static class SuiteCatalog
         "sun-orientation",
         "tex-dropin",
         "gltf-export",
+        "cockpit-interior",
         "collision-visibility",
         "nodelab-visibility",
         "trail-world-anchor",
@@ -509,6 +510,8 @@ public static class SuiteCatalog
             "the census/override flatten repaints RGB and changes nothing else", TexDropIn));
         into.Add(new TestHarness.Suite("gltf-export",
             "the viewer plane exports to glTF and re-imports with a textured mesh", GltfExport));
+        into.Add(new TestHarness.Suite("cockpit-interior",
+            "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11)", CockpitInterior));
         into.Add(new TestHarness.Suite("collision-visibility",
             "nothing a chapter hides is left solid: no enabled collider under an invisible node", CollisionVisibility));
         into.Add(new TestHarness.Suite("nodelab-visibility",

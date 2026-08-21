@@ -42,6 +42,11 @@ public partial class FlightController : Node3D
     /// <summary>The visible aircraft model (a child of this node); hidden while crashed.</summary>
     public Node3D? PlaneModel;
 
+    /// <summary>The per-mode hiding of this pilot's OWN aircraft while a first-person view is on
+    /// the screen (interior in, body out; Nose also drops markers/dontmove). Null on every rig that
+    /// was not built an interior — AI planes and the labs — which then never hides anything.</summary>
+    public CockpitVisibility? Cockpit;
+
     /// <summary>The wobble oscillators and the pivot they roll — the node the assembler hung
     /// <see cref="PlaneModel"/> under. Null when no rig assembly ran (parked lab planes).</summary>
     public PlaneShake? Shake;
@@ -1449,6 +1454,7 @@ public partial class FlightController : Node3D
             // A3: default to the external FOV global; the FirstPerson arm below overrides it, so
             // a held numpad/back key while SELECTED Cockpit/Nose gets it back on release.
             _cam.RestoreExternalFov();
+            bool firstPersonPose = false;
             int view = _cam.ActiveView();
             if (view >= 0)
             {
@@ -1469,6 +1475,7 @@ public partial class FlightController : Node3D
                 // A3: each mode's own derived FOV rides alongside the placement.
                 _cam.FirstPersonView(_renderPose);
                 _cam.ApplyFirstPersonFov();
+                firstPersonPose = true;
                 view = _cam.ViewMode == PilotViewMode.Nose
                     ? CameraController.NoseViewLog
                     : CameraController.CockpitViewLog;
@@ -1490,6 +1497,9 @@ public partial class FlightController : Node3D
                     _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis);
                 }
             }
+            // B11: keyed to the pose this frame actually took, not to the selection — a held numpad
+            // key puts the camera outside the aircraft and must bring its body back while held.
+            Cockpit?.Apply(_cam.ViewMode, firstPersonPose);
             _cam.LogView(view, _model.Position, _model.Attitude);
         }
 

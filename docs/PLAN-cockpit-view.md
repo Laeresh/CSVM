@@ -156,7 +156,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — rendering
 
-11. ☐ Render the `cockpit1` interior in Cockpit only; per-mode node hiding (healthy body, `markers`/`dontmove`)
+11. ☑ Render the `cockpit1` interior in Cockpit only; per-mode node hiding (healthy body, `markers`/`dontmove`)
 12. ☐ Drive the `pcdpN` cockpit damage panels in first-person
 
 ### Wave C — head-look
@@ -432,7 +432,111 @@ horizontal; the vertical is derived, never authored.
 
 # Wave B — rendering
 
-## B11 ☐ Render the `cockpit1` interior in Cockpit only; per-mode node hiding
+## B11 ☑ Render the `cockpit1` interior in Cockpit only; per-mode node hiding
+
+**Landed.** Cockpit draws the player plane's `cockpit1` interior and hides its `healthy` body;
+Nose hides the interior, the body and the `markers`/`dontmove` groups; every external pose renders
+the aircraft exactly as it was built, and AI planes are byte-for-byte unchanged.
+
+`CockpitVisibility` (`src/Flight/CockpitVisibility.cs`) holds the rule as a pure function —
+`Rules(mode, firstPerson)` returns which of the four groups render — with `Bind`/`Apply` as the
+thin write onto one built plane model, the same shape A2 gave `FirstPersonPose` and A3
+`HorizontalToVerticalFovDeg`. `FlightController._Process` calls `Apply` once per frame beside the
+camera write, keyed to **the pose that frame actually took**, not to the selection: a held numpad
+key or the look-behind puts the camera outside the aircraft, and the original's gate is the live
+camera mode, so the body comes back for as long as the key is held. That is exactly the
+default-then-override shape A3 already gave the FOV.
+
+**The interior builds only for a human rig.** `PlaneBuilder`'s new `cockpitInterior` flag takes
+`cockpit1` back out of `SkipNames` for that one build and mounts it hidden as `CockpitInterior`;
+`HumanFlightAdapter` is the only caller that passes it, so `FlightRoster`'s AI builds and every lab
+and suite build are untouched. The subtree's `pcdp4`/`pcdp6` panels come with it, built hidden and
+deliberately kept OUT of `DamagePanels` — that list is the exterior set `DamageVisuals` drives, and
+the interior pair is B12's on its own seam. **B12's own TODO is answered on the way past:** every
+one of the 11 airframes carries exactly `pcdp4` and `pcdp6` inside `cockpit1` and no other `pcdpN`,
+and each is a mesh-bearing torn-skin panel — except the Hoplite (`player_autogyro`), whose two are
+mesh-less anchors. Reach them with a name walk under `PlaneBuilder.CockpitInterior`.
+
+**⚠ The interior's off-states ship ACTIVE, so building the subtree faithfully is not enough.**
+`cockpit1` carries five windshield bullet-hole decal groups (`bullet1`…`bullet5`, each wrapping
+3–4 `bulNx` meshes under a `gNNN` node) and two warning lamps (`lowalt_on`, `stallwarning_on`).
+All seven are on all 11 airframes and all ship `active: true` — the original hides them
+engine-side until something drives them, exactly the pattern the plan already records for the
+`_h` nodes. Left as built, a pristine plane renders every bullet hole as a white splat across the
+sky and holds both lamps lit. `PlaneBuilder.IsInteriorDrivenState` is the named set, parked hidden
+by `ParkInteriorStates` alongside the gamez `active: false` hide. **Driving them is not this
+item:** the bullet holes' driver is the `cockpit_bulletholes` def family (`two_bulletholes_a`
+and its siblings — the same defs A1's `first-person-condition` suite runs) whose anim-side trigger
+is `window_hit_sg`, recorded in `plans/PLAN-m3-polish-5.md:453` as needing a cockpit view; that is
+future work beside B12's `pcdpN` drive. The lamps belong to E41's 3D-gauge-drive item, which is
+what will light them.
+
+**⚠ The interior is authored in its own space, and the two spaces are not a similarity apart.**
+The pilot's eye is `cockpit1`'s own origin looking down −Z: `extracted/zrdr/instruments.zrd.json`
+places every instrument at z −17.5 straight ahead of it (speedometer `+9`, altimeter `−9`, compass
+`+7` up, the panel ±9 wide). But the interior's own elevators sit at y −10.5 where the exterior's
+sit at −0.40, and no uniform scale maps the two: fitting the ailerons gives 15.5, fitting the
+elevators 17.6, and the Y term comes out negative. It is a stylised model built to be looked at
+from one point, not a scaled copy of the aircraft, which is why the original draws it in its own
+pass. The mount is therefore the `cockpit_camera` offset with a uniform `PlaneBuilder.InteriorScale`
+and no rotation of its own (the −4.70° tilt is the head, and the head looks around inside a
+plane-fixed interior). Since eye-at-origin geometry subtends the same angles at any scale, **the
+framing does not depend on that constant** — only how the interior composites against world
+geometry does, so it is a port TUNE, not decoded, and 0.04 puts the panel ~0.7 m ahead of the eye.
+
+**Settled TODOs.**
+
+- **`cockpit2` is not a thing.** `planes.zbd` ships 11 `cockpit1` subtrees (one per player
+  airframe) and **zero** `cockpit2`; the eight chapter gamez files have neither. The skip entry
+  stays as defence and now says so, in `PlaneBuilder` and here.
+- **Nothing else in the subtree is a conditional state.** A census of all 210 distinct node names
+  across the 11 `cockpit1` subtrees leaves exactly three classes beyond the seven above: the
+  damage-dial zones (`nosedamage`/`taildamage`/`leftwingdamage`/`rightwingdamage`), the belt
+  segments (`ggindicatorN`/`mgindicatorN`) and the needles. All three are **always drawn and
+  recoloured** rather than shown and hidden — `GaugeCluster.ExtractDamageDial` and
+  `DrawWeaponGauge` are CSVM's own decode of that, and the same code is what classifies `*_on` as
+  an overlay. `nitrogauge` is the one node shipped `active: false`, on the Devastator only, and
+  the build honours the flag.
+- **The `gauges` child stays visible.** It is 39 meshes of authored instrument-panel geometry —
+  the dial faces, bezels and the panel they are set into — not a needle overlay, so hiding it
+  would cut a hole in the dashboard. A capture in Cockpit shows the panel reading correctly. The
+  needles do not move (`GaugeCluster` stays the live screen-space HUD, Decision 1) and the two now
+  double up: the HUD dials draw over the 3D panel. E41's 3D-gauge-drive item carries both halves —
+  drive the authored needles, and decide whether the screen-space cluster then retires or moves
+  (it already owes the `POSITION_1ST` layout question, filed item 6).
+- **`markers` and `dontmove` are resolved.** `markers` is 25 nodes, 24 of them mesh-less
+  reference points (`cockpit_camera`, `target`, `ground_level`, `pylon1-8`, `firepoint1-8`, `map`,
+  `exhaust1/2`, `ladder_pos`, `cf_light`) plus exactly one mesh: `cockpit_light`, the lamp.
+  `dontmove` is the propeller group — `wing_flare1/2`, `staticprop1`, `prop1`, `prop1b`,
+  `nitroprop1`. So mode 7's extra hiding is the prop disc plus the cockpit lamp and whatever hangs
+  on the marker nodes (mounted pylon ordnance, muzzle flashes), which is exactly "an unobstructed
+  forward look". The Nose capture confirms it: no prop, no airframe, nothing in frame.
+- **`WorldEffectsFactory.cs:41` does not double-register.** Its `CrashAnchorNodes` list builds
+  FRESH mesh-less `Node3D`s under a synthetic `player` root for the crash lab (`BuildCrashAnchorSet`);
+  it never walks a built plane, so an attached `cockpit1` adds no anchor and changes no effect-pool
+  count. The production crash rig's own `CollectVisibility` snapshot now includes the hidden
+  interior, which is the right pristine state for a respawn to restore.
+
+**Splitscreen posture (Decision 5).** Visibility is a property of a node, not of a viewport, so a
+pane whose pilot sits in the cockpit hides that aircraft's body in every pane. No per-viewport
+render-layer machinery was built. Each rig owns its own plane model and its own
+`CockpitVisibility`, so the rule is at least per-pilot rather than keyed to player 1 — the cheapest
+thing that is single-player-correct and does not have to be unpicked when splitscreen is judged.
+
+**Tests.** `CSVM.Tests/CockpitVisibilityTests.cs` covers the pure rule: the external pose, Cockpit,
+Nose, the held-key override under a first-person selection, that the two first-person views agree
+on the body and differ elsewhere, and `IsInteriorDrivenState` over both the seven driven states
+and the panel geometry that must NOT be caught by it. The new in-engine `cockpit-interior` suite
+covers what xunit cannot reach without an engine — that a default flight build gains nothing, that
+the interior build mounts the subtree hidden at the marker at `InteriorScale`, that
+`gauges`/`pcdp4`/`pcdp6` are present with the panels hidden, that all five `bulletN` groups and
+both lamps are parked while the dashboard beside them still renders, that `DamagePanels` holds no
+`pcdp` name, that `Bind` picks the airframe's `markers` group and not a gauge's, and that all
+three visibility states land on the real nodes.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Cockpit shows the plane's `cockpit1` interior; Nose hides it plus the `markers` and
 `dontmove` nodes; both first-person views hide the own-plane healthy body; external views and

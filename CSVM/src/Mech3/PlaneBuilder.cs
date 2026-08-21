@@ -16,11 +16,19 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class PlaneBuilder
 {
+    /// <summary>The uniform scale the <c>cockpit1</c> interior is mounted at. TUNE, not decoded:
+    /// the subtree is authored in its own units with the pilot's eye at its own origin, so the
+    /// FRAMING is scale-invariant and this chooses only how the interior composites against world
+    /// geometry. ⚠ The interior and the airframe are not a similarity apart — do not try to derive
+    /// this from the model; docs/architecture.md carries the decode.</summary>
+    public const float InteriorScale = 0.04f;
+
     // Non-prop subtrees that make no sense in an exterior view: cockpit interiors are
     // separate (differently-scaled) models; damage/destroyed are alternate states.
     // player_damage_off holds the intact duplicates (pdpNi) of the panels that
     // player_damage_on already provides as pdpN_h — the original engine shows exactly
     // one of the two groups (its vehicle-damage detail toggle); we model "damage on".
+    // `cockpit2` is defensive: no shipped tree carries one (docs/architecture.md).
     private static readonly HashSet<string> SkipNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "cockpit1", "cockpit2", "destroyed", "shadow", "player_damage_off",
@@ -31,6 +39,7 @@ public sealed class PlaneBuilder
     private readonly SceneBuilder _scene;
     private readonly bool _spinningProps;
     private readonly bool _withDamagePanels;
+    private readonly bool _withCockpitInterior;
     private readonly List<Node3D> _wingFlares = new();
     private readonly List<Node3D> _damagePanels = new();
     private PaintScheme? _scheme;
@@ -39,14 +48,15 @@ public sealed class PlaneBuilder
     private string? _skinPrefix;
     private StandardMaterial3D? _flareMaterial;
 
-    /// <param name="spinningProps">Spins the blur layers instead of the static disc; implies
-    /// damage panels.</param>
+    /// <param name="spinningProps">Spins the blur layers instead of the static disc; implies damage panels.</param>
     /// <param name="damagePanels">Builds exterior pdpN panels hidden, for the --damage lab.</param>
     /// <param name="scheme">Paint livery (<see cref="PlanePainter"/>); null keeps shipped skins,
     /// per builder so two players can differ.</param>
     /// <param name="patterns"><see cref="PatternLibrary"/>'s region masks; empty paints nothing.</param>
+    /// <param name="cockpitInterior">Builds <see cref="CockpitInterior"/>; a human rig only, so an AI plane never pays for a cockpit nobody sits in.</param>
     public PlaneBuilder(GameZ gamez, TextureArchive textures, bool spinningProps = false,
-        bool damagePanels = false, PaintScheme? scheme = null, PatternLibrary? patterns = null)
+        bool damagePanels = false, PaintScheme? scheme = null, PatternLibrary? patterns = null,
+        bool cockpitInterior = false)
     {
         _gamez = gamez;
         _textures = textures;
@@ -56,6 +66,7 @@ public sealed class PlaneBuilder
             textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex);
         _spinningProps = spinningProps;
         _withDamagePanels = spinningProps || damagePanels;
+        _withCockpitInterior = cockpitInterior;
     }
 
     /// <summary>The paint applied to this build, once <see cref="Build"/> has resolved the
@@ -87,6 +98,30 @@ public sealed class PlaneBuilder
     /// (docs/org/cameraViews.md, "Where the first-person camera sits").</summary>
     public Vector3 CockpitCameraOffset { get; private set; }
 
+    /// <summary>The built <c>cockpit1</c> interior inside the model <see cref="Build"/> returned,
+    /// hidden and mounted at <see cref="CockpitCameraOffset"/>; null unless the builder was asked
+    /// for one. <see cref="Flight.CockpitVisibility"/> is what shows it, per view mode.</summary>
+    public Node3D? CockpitInterior { get; private set; }
+
+    /// <summary>A <c>cockpit1</c> node whose visibility is a STATE something else drives, so a
+    /// pristine cockpit must show none of it: <c>bulletN</c>, the five windshield bullet-hole
+    /// decal groups (driver: the <c>cockpit_bulletholes</c> defs), and the two warning lamps
+    /// <c>lowalt_on</c>/<c>stallwarning_on</c>, which <see cref="Flight.GaugeCluster"/>'s own
+    /// decode already treats as overlays drawn only while their condition holds. ⚠ Everything else
+    /// on the panel is always-drawn geometry that changes COLOUR, not visibility.</summary>
+    public static bool IsInteriorDrivenState(string name)
+    {
+        if (name.EndsWith("_on", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (!name.StartsWith("bullet", StringComparison.OrdinalIgnoreCase)
+            || name.Length == "bullet".Length)
+            return false;
+        for (int i = "bullet".Length; i < name.Length; i++)
+            if (!char.IsDigit(name[i]))
+                return false;
+        return true;
+    }
+
     /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk").</summary>
     public Node3D Build(string rootName)
     {
@@ -96,6 +131,7 @@ public sealed class PlaneBuilder
         CockpitCameraOffset = MarkerRig.FindNamedMarker(_gamez, rootName, "cockpit_camera");
         var built = _scene.BuildSubtree(root, Skip)!;
         CollectWingFlares(built);
+        MountCockpitInterior(built);
         return built;
     }
 
@@ -210,10 +246,13 @@ public sealed class PlaneBuilder
                         mi.MaterialOverride = FlareMaterial();
                 _wingFlares.Add(n3d);
             }
-            else if (IsDamagePanel(n3d.Name, out bool cockpit) && !cockpit)
+            else if (IsDamagePanel(n3d.Name, out bool cockpit))
             {
                 n3d.Visible = false; // torn skin waits for DamageVisuals to flip it on
-                _damagePanels.Add(n3d);
+                // ⚠ pcdpN is deliberately not listed: DamageVisuals drives the exterior panels off
+                // this list, and the interior pair is B12's, on its own seam.
+                if (!cockpit)
+                    _damagePanels.Add(n3d);
             }
             else if (IsHealthyPanel(n3d.Name))
             {
@@ -222,6 +261,61 @@ public sealed class PlaneBuilder
         }
         foreach (var child in node.GetChildren())
             CollectWingFlares(child);
+    }
+
+    // Places the just-built interior and parks it hidden. The subtree is authored with the pilot's
+    // eye at its own origin (the instruments.zrd panel sits at z −17.5 straight ahead of it), and
+    // the eye is where CameraController.FirstPersonPose puts the camera — so the mount is exactly
+    // the cockpit_camera offset, scaled, with no rotation of its own. The −4.70° head tilt is NOT
+    // applied here: that is the head, and the head looks around inside a plane-fixed interior.
+    private void MountCockpitInterior(Node3D built)
+    {
+        if (!_withCockpitInterior)
+        {
+            return;
+        }
+        foreach (var child in built.GetChildren())
+        {
+            if (child is not Node3D n3d
+                || !AnimRuntime.NameOf(n3d).Equals("cockpit1", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            n3d.Transform = new Transform3D(
+                Basis.Identity.Scaled(Vector3.One * InteriorScale), CockpitCameraOffset);
+            n3d.Visible = false; // shown only while a first-person view is on the screen
+            ParkInteriorStates(n3d);
+            CockpitInterior = n3d;
+            return;
+        }
+    }
+
+    // ⚠ The interior's off-states ship ACTIVE. A node the build script left NodeSetActive(false)
+    // is off outright, but the state overlays are authored visible and hidden engine-side until
+    // something drives them — so a pristine cockpit renders every windshield bullet hole and both
+    // warning lamps unless they are parked here. See IsInteriorDrivenState.
+    private void ParkInteriorStates(Node3D node)
+    {
+        if (IsInteriorDrivenState(AnimRuntime.NameOf(node)) || !ActiveInGameZ(node))
+        {
+            node.Visible = false;
+        }
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node3D n3d)
+            {
+                ParkInteriorStates(n3d);
+            }
+        }
+    }
+
+    // This built node's own gamez `flags.active`; true when the node carries no index to look up.
+    private bool ActiveInGameZ(Node3D node)
+    {
+        if (!node.HasMeta(AnimRuntime.IndexMeta))
+            return true;
+        int index = (int)node.GetMeta(AnimRuntime.IndexMeta);
+        return index < 0 || index >= _gamez.Nodes.Count || _gamez.Nodes[index].Active;
     }
 
     // Shared additive glow material for every flare quad (colour/texture: WingLights.cs).
@@ -243,11 +337,17 @@ public sealed class PlaneBuilder
 
     private bool Skip(GameZNode node)
     {
+        // The interior is the one skip a caller can ask back (PLAN-cockpit-view, B11); every other
+        // name in the list stays out of an aircraft model unconditionally.
+        if (_withCockpitInterior && node.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase))
+            return false;
         if (SkipNames.Contains(node.Name))
             return true;
-        // Cockpit damage panels always skip; exterior pdpN skip only in the plain static
-        // viewer — flight and damage-lab builds construct them hidden for DamageVisuals (10c).
-        if (IsDamagePanel(node.Name, out bool cockpit) && (cockpit || !_withDamagePanels))
+        // Cockpit damage panels (pcdpN) come with the interior and nothing else; exterior pdpN skip
+        // only in the plain static viewer — flight and damage-lab builds construct them hidden for
+        // DamageVisuals (10c). Both stay hidden until something flips them.
+        if (IsDamagePanel(node.Name, out bool cockpit)
+            && (cockpit ? !_withCockpitInterior : !_withDamagePanels))
             return true;
         // Skyhook arms (zeppelin docking): every plane has a *_hook subtree (blood_hook,
         // kest_hook, gyro_hook, …) whose *_hook.json anim RESET_STATE deactivates the
