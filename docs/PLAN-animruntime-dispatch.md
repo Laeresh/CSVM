@@ -102,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Light family
 
-11. ☐ Extract the light family (`LightState`/`LightAnimation`) into `Anim/`
+11. ☑ Extract the light family (`LightState`/`LightAnimation`) into `Anim/`
 
 ### Wave C — Pose/visual family
 
@@ -194,7 +194,40 @@ the flag's semantics must move with the family intact, not be re-derived. Do not
 
 # Wave B — Light family
 
-## B11 ☐ Extract the light family (`LightState`/`LightAnimation`) into `Anim/`
+## B11 ☑ Extract the light family (`LightState`/`LightAnimation`) into `Anim/`
+
+**Landed.** `CSVM/src/Mech3/Anim/LightChannel.cs` owns `HandleLightState`/`HandleLightAnimation`/
+`Tick`/`Reset`/`DiscardFor`, the `_lights` table and the bootstrap-census accessors (`Count`/
+`ActiveCount`/`Names`). `AnimRuntime` keeps `case "LightState":`/`case "LightAnimation":` delegating
+to a lazily-built `Light` property (same `??=` pattern as `Sound`), and `ResetToBaseState`/
+`TearDownResourcesOf` hand their light work to `Light.Reset()`/`Light.DiscardFor(anchor)`. The
+`Advance` tick spine calls `Light.Tick(dt)` where it called `TickLights` (Decision 5). `Lights`/
+`LightViewerPositions` stayed public fields on `AnimRuntime`; the channel takes them as
+`Func<WorldLights?>` and a single `Func<IReadOnlyList<Vector3>>` closure that folds
+`LightViewerPositions`' null/empty fallback to `PlayerPos()` in at construction, plus `Resolve` (an
+existing method-group delegate) and `Func<bool>` over `DebugMotions` — four dependencies total,
+tighter than A1's five. `HandleLightState`/`HandleLightAnimation` report whether they applied
+through their return value instead of taking `_opsApplied`/`Count` callbacks the way `SoundChannel`
+took `recordApplied`; the router applies `_opsApplied++`/`Count("LightAnimation(no light)")` after
+the call, exactly where the handlers always did it inline, which cut two more dependencies without
+changing when either fires. `docs/architecture.md`'s `AnimRuntime` and `Anim/` entries, and a new
+`LightChannel.cs` entry mirroring `SoundChannel.cs`'s, describe the module. `AnimRuntime`'s public
+declaration count is unchanged at 96 (`'public '` matches): this wave moved bodies and state, same
+as A1.
+
+**Verified.** `.\RunTests.ps1` full pass: build, 1646/1646 units, 89/89 engine suites with zero
+engine error lines, 16/16 goldens hash-identical, hitch detector healthy. `AnimRuntime`'s public
+declaration count unchanged at 96.
+
+**Decided along the way.** Rebuilding with `-t:Rebuild` (the repo's pre-commit hook forces this)
+surfaced two `SA1202`/one `SA1204` StyleCop warnings already present on `main` before this item
+touched anything (`AnimRuntime.Motions`/`WorldTransform` out of accessibility order, and
+`SoundChannel`'s private helpers interleaved with its internal methods) — confirmed via
+`git stash` against the pre-change tree. Since the hook blocks `dotnet test`/`git commit` on any
+remaining warning regardless of who introduced it, this item also reorders those members (no
+behaviour change, StyleCop-only) so the verification step it owes can actually run.
+
+### Original approach (kept for reference)
 
 **Goal.** The `LightState` and `LightAnimation` case bodies, the `_lights` table and the per-frame
 light tick live in one internal family class; `Advance` calls the family's tick.

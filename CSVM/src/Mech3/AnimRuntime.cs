@@ -421,8 +421,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // and a definition's `lights` array is its own symbol table — so two refineries each get
     // their own orange_light. It cannot be keyed by host node the way puffers are: the flicker
     // events are partial updates carrying only {name, range}, with no AT_NODE to resolve from.
-    private readonly Dictionary<(string Name, Node3D? Anchor), AnimLight> _lights = new();
-
     private readonly List<(AnimDefinition Def, Node3D? Anchor, float Deadline)> _effectTtls = new();
 
     // Per effect anim name, the definitions one PlayEffectAt reaches through CALL_ANIMATION, the
@@ -501,6 +499,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private EmitterDirector? _emitters;
 
     private SoundChannel? _sound;
+
+    private LightChannel? _light;
 
     private float _effectClock;
 
@@ -659,6 +659,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public EmitterDirector Emitters => _emitters ??= new EmitterDirector(
         EmitterFactory ?? new SpentEmitterFactory(), DefScopedPufferKeys, DebugMotions, Count);
 
+    /// <summary>The live motion collection and its registration rules. `internal` so the
+    /// `bounce-launch` suite can ask <c>OwesBounce</c>, which is the retirement hold's own
+    /// mechanism.</summary>
+    internal MotionSet Motions { get; } = new();
+
     /// <summary>This runtime's `SOUND_NODE`/`SOUND` family. Reads <see cref="Sounds"/> and
     /// <see cref="SoundHandledElsewhere"/> live through the closures below, not a snapshot at
     /// construction, since both change after this runtime exists (`Sounds` goes non-null once the
@@ -667,10 +672,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private SoundChannel Sound => _sound ??= new SoundChannel(
         () => Sounds, () => SoundHandledElsewhere, Resolve, () => _rng, () => _opsApplied++);
 
-    /// <summary>The live motion collection and its registration rules. `internal` so the
-    /// `bounce-launch` suite can ask <c>OwesBounce</c>, which is the retirement hold's own
-    /// mechanism.</summary>
-    internal MotionSet Motions { get; } = new();
+    /// <summary>This runtime's `LIGHT_STATE`/`LIGHT_ANIMATION` family. Reads <see cref="Lights"/>
+    /// and <see cref="LightViewerPositions"/> live through the closures below, not a snapshot at
+    /// construction, for the same reason <see cref="Sound"/> does: both can be assigned or turn
+    /// non-null after this runtime already exists.</summary>
+    private LightChannel Light => _light ??= new LightChannel(() => Lights, Resolve, () =>
+    {
+        var viewers = LightViewerPositions?.Invoke();
+        return viewers != null && viewers.Count > 0 ? viewers : new[] { PlayerPos() };
+    }, () => DebugMotions);
 
     /// <summary>Builds a sealed <see cref="TemplateStage{TNode}"/> over the Godot adapter. ⚠ Spell
     /// the engine hooks here and nowhere else: node identity, the pool-slot ancestry walk, the
@@ -943,7 +953,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         Motions.Reset();
         Emitters.Reset();
         _inputNodes.Clear();
-        _lights.Clear();
+        Light.Reset();
         Sound.Reset();
 
         foreach (var def in _program.Defs)
@@ -1017,7 +1027,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // apply dt once per running sequence and run the train at 4× speed.
         TickMotions(dt);
         Emitters.Tick(dt);
-        TickLights(dt);
+        Light.Tick(dt);
         Sounds?.Tick();
         SweepEffectTtls(dt);
         _templateStage.Sweep();
@@ -1374,6 +1384,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return box.Grow(1f).HasPoint(node.GlobalPosition) ? node.GlobalPosition : box.GetCenter();
     }
 
+    // A node's world transform, valid DURING the bootstrap too — the same detached-subtree problem
+    // WorldPos solves, but keeping the basis so an AT_NODE offset still rotates into place.
+    // composed reports whether the ancestor chain had to be walked (the world root not yet
+    // parented), so the caller can log the fallback rather than let Godot spam !is_inside_tree()
+    // and return an origin transform.
+    internal static Transform3D WorldTransform(Node3D node, out bool composed)
+    {
+        composed = !node.IsInsideTree();
+        if (!composed)
+            return node.GlobalTransform;
+        var xform = node.Transform;
+        for (var p = node.GetParent() as Node3D; p != null; p = p.GetParent() as Node3D)
+            xform = p.Transform * xform;
+        return xform;
+    }
+
     /// <summary>The node's authored pose, remembered the first time anything moves it, so
     /// every pose op stays an offset from the rest pose rather than compounding.</summary>
     internal Transform3D RestOf(Node3D node)
@@ -1526,22 +1552,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         Mathf.FloorToInt(pos.X / RangeCheckCellSize),
         Mathf.FloorToInt(pos.Y / RangeCheckCellSize),
         Mathf.FloorToInt(pos.Z / RangeCheckCellSize));
-
-    // A node's world transform, valid DURING the bootstrap too — the same detached-subtree problem
-    // WorldPos solves, but keeping the basis so an AT_NODE offset still rotates into place.
-    // composed reports whether the ancestor chain had to be walked (the world root not yet
-    // parented), so the caller can log the fallback rather than let Godot spam !is_inside_tree()
-    // and return an origin transform.
-    internal static Transform3D WorldTransform(Node3D node, out bool composed)
-    {
-        composed = !node.IsInsideTree();
-        if (!composed)
-            return node.GlobalTransform;
-        var xform = node.Transform;
-        for (var p = node.GetParent() as Node3D; p != null; p = p.GetParent() as Node3D)
-            xform = p.Transform * xform;
-        return xform;
-    }
 
     // The AT_NODE and condition-node sentinels for "the node this definition was invoked on"; both
     // resolve to the anchor. The compiled u32 form and why it is matched by magnitude rather than
@@ -1713,11 +1723,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         var emitterCensus = Emitters.Census;
         if (emitterCensus.Count > 0)
             Log.Info("anim", $"anim: {emitterCensus.Count} puffer emitter(s): {string.Join(", ", emitterCensus.Select(r => r.Name).Distinct())}");
-        if (_lights.Count > 0)
-        {
-            int on = _lights.Values.Count(l => l.Active);
-            Log.Info("anim", $"anim: {_lights.Count} point light(s), {on} lit at startup: {string.Join(", ", _lights.Keys.Select(k => k.Name).Distinct().Take(10))}");
-        }
+        if (Light.Count > 0)
+            Log.Info("anim", $"anim: {Light.Count} point light(s), {Light.ActiveCount} lit at startup: {string.Join(", ", Light.Names.Take(10))}");
         // Reported on their own line rather than through Count(), which is the "not yet acted on"
         // channel: filing a working feature there would report it as a missing one.
         if (Sound.EmitterCount > 0 || Sound.Unknown > 0 || Sound.AfterBuild > 0)
@@ -1984,10 +1991,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         Motions.DiscardFor(def, anchor);
         Emitters.Discard(def, anchor);
-
-        foreach (var key in _lights.Keys.Where(k => k.Anchor == anchor).ToList())
-            _lights.Remove(key);
-
+        Light.DiscardFor(anchor);
         Sound.DiscardFor(anchor);
     }
 
@@ -2389,14 +2393,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "LightState":
-                HandleLightState(ev, def, anchor);
+                Light.HandleLightState(ev, def, anchor);
+                _opsApplied++;
                 return true;
 
             case "LightAnimation":
                 // ⚠ Report the ramp as the event's DURATION so the next step of a pulse chain waits
                 // for it. The light is tweened asynchronously here, so reporting 0 fires every step
                 // in one instant and an authored flicker collapses to a single frame.
-                HandleLightAnimation(ev, anchor, instant);
+                if (Light.HandleLightAnimation(ev, anchor, instant))
+                    _opsApplied++;
+                else
+                    Count("LightAnimation(no light)");
                 // A RESET_STATE lands the delta whole (see the handler), so it takes no time.
                 duration = instant ? 0f : ev.Data.Num("run_time") ?? 0f;
                 return true;
@@ -2582,116 +2590,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return false;
         Sound.Attach(handle, host);
         return true;
-    }
-
-    // Applies one LIGHT_STATE. ⚠ Treat it as a PARTIAL update: apply every field only when present
-    // and never default an absent one. A flicker is a stream of {name, range} events a few
-    // hundredths of a second apart that must leave position, colour and active state untouched.
-    private void HandleLightState(AnimEvent ev, AnimDefinition def, Node3D? anchor)
-    {
-        if (ev.Data.Str("name") is not { } name)
-            return;
-        var key = (name, anchor);
-        if (!_lights.TryGetValue(key, out var light))
-            _lights[key] = light = new AnimLight { Host = anchor };
-
-        // AT_NODE arrives as translate:{AtNode:{name, pos}} — node plus a local offset, the same
-        // shape (and the same frame) as a puffer's AT_NODE.
-        if (ev.Data.Obj("translate")?.Obj("AtNode") is { } at)
-        {
-            // ⚠ Resolve the host once per light, never per event. A flicker re-issues its full
-            // LIGHT_STATE every loop iteration, and the full-world scan behind an unmemoized
-            // Resolve cost tens of milliseconds a frame.
-            if (at.Str("name") is { } hostName)
-            {
-                if (light.Host == null || !string.Equals(hostName, light.HostName, StringComparison.Ordinal))
-                {
-                    if (Resolve(hostName, def, anchor) is { } host)
-                        light.Host = host;
-                    light.HostName = hostName;
-                }
-            }
-            light.Offset = at.Vec3("pos");
-        }
-        if (ev.Data.Obj("range") is { } range)
-        {
-            light.RangeMin = range.Num("min") ?? light.RangeMin;
-            light.RangeMax = range.Num("max") ?? light.RangeMax;
-        }
-        if (ev.Data.Obj("color") is { } color)
-            light.Color = new Color(color.Num("r") ?? 0f, color.Num("g") ?? 0f, color.Num("b") ?? 0f);
-        if (ev.Data.Has("active_state"))
-        {
-            light.Active = ev.Data.Bool("active_state");
-            light.TweenLeft = 0f; // switching a light re-arms it; a half-run pulse must not carry over
-        }
-        _opsApplied++;
-    }
-
-    // Applies one LIGHT_ANIMATION: signed deltas to a light's range and colour, ramped over
-    // run_time. ⚠ They are deltas, never targets; a pulse authors a negative range on its way back,
-    // which is not a value a light can hold. Under `instant` the delta lands whole, matching how
-    // timed motions collapse to their end pose there.
-    private void HandleLightAnimation(AnimEvent ev, Node3D? anchor, bool instant)
-    {
-        if (ev.Data.Str("name") is not { } name
-            || !_lights.TryGetValue((name, anchor), out var light))
-        {
-            Count("LightAnimation(no light)");
-            return;
-        }
-        var range = ev.Data.Obj("range");
-        var color = ev.Data.Obj("color");
-        float dMin = range?.Num("min") ?? 0f, dMax = range?.Num("max") ?? 0f;
-        var dColor = new Color(color?.Num("r") ?? 0f, color?.Num("g") ?? 0f, color?.Num("b") ?? 0f);
-        float runTime = ev.Data.Num("run_time") ?? 0f;
-
-        if (instant || runTime <= 0f)
-        {
-            light.RangeMin += dMin;
-            light.RangeMax += dMax;
-            light.Color += dColor;
-            light.TweenLeft = 0f;
-        }
-        else
-        {
-            light.MinRate = dMin / runTime;
-            light.MaxRate = dMax / runTime;
-            light.ColorRate = dColor / runTime;
-            light.TweenLeft = runTime;
-        }
-        _opsApplied++;
-    }
-
-    // Advances light tweens and submits every active light at its host's current world pose. Per
-    // frame, because hosts move (a muzzle flash rides its turret).
-    private void TickLights(float dt)
-    {
-        if (Lights == null)
-            return;
-        Lights.Begin();
-        foreach (var light in _lights.Values)
-        {
-            if (light.TweenLeft > 0f)
-            {
-                float step = Mathf.Min(dt, light.TweenLeft);
-                light.RangeMin += light.MinRate * step;
-                light.RangeMax += light.MaxRate * step;
-                light.Color += light.ColorRate * step;
-                light.TweenLeft -= step;
-            }
-            if (!light.Active || light.RangeMax <= 0f)
-                continue;
-            // ⚠ A light inside a deactivated subtree is off. A building's destroyed variant must
-            // not keep lighting the ground through its healthy twin.
-            if (light.Host is not { } host || !IsInstanceValid(host) || !host.IsVisibleInTree())
-                continue;
-            Lights.Add(host.GlobalTransform * light.Offset, light.Color, light.RangeMin, light.RangeMax);
-        }
-        var viewers = LightViewerPositions?.Invoke();
-        Lights.Commit(viewers != null && viewers.Count > 0 ? viewers : new[] { PlayerPos() });
-        if (DebugMotions)
-            Lights.LogOnce();
     }
 
     // Resolves a single node name for this definition — the compiled symbol table first, then the

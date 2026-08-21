@@ -72,27 +72,6 @@ internal sealed class SoundChannel
     /// itself instead of waiting for a census that has already printed.</summary>
     internal void MarkCensusPrinted() => _soundCensusPrinted = true;
 
-    private void ReportLateSoundFailure(string name, string why, string kind = "SOUND_NODE")
-    {
-        if (!_soundCensusPrinted || !_soundFailuresReported.Add(name))
-        {
-            return;
-        }
-        GD.PushWarning($"anim: {kind} '{name}' requested after the world build and {why} — "
-                       + "it will be silent for the rest of the session");
-    }
-
-    // The emitter an event's NAME refers to, or null when the name isn't one this definition
-    // declared. This is what lets OBJECT_ACTIVE_STATE and OBJECT_ADD_CHILD — both perfectly
-    // ordinary node events elsewhere — address a sound emitter without either handler having to
-    // guess from the name whether `snd_waterfall` is a node or a sound.
-    private object? Emitter(AnimEvent ev, Node3D? anchor)
-    {
-        if (_sounds() == null || ev.Data.Str("name") is not { } name)
-            return null;
-        return _soundEmitters.TryGetValue((name, anchor), out var handle) ? handle : null;
-    }
-
     /// <summary>The OBJECT_ACTIVE_STATE reach-in: switches a named sound emitter on/off instead of a
     /// gamez node. Returns false when the event's NAME names no declared emitter, so the router can
     /// fall through to its ordinary node-target handling.</summary>
@@ -202,6 +181,52 @@ internal sealed class SoundChannel
         }
     }
 
+    /// <summary>The crash rig's respawn: pauses every declared emitter and forgets it, matching
+    /// <see cref="EmitterDirector.Reset"/>'s disposition for puffers.</summary>
+    internal void Reset()
+    {
+        if (_sounds() is { } sounds)
+        {
+            foreach (var handle in _soundEmitters.Values)
+                sounds.SetActive(handle, false);
+        }
+        _soundEmitters.Clear();
+    }
+
+    /// <summary>The sound half of `TearDownResourcesOf`: every emitter this anchor's instance
+    /// declared stops and is forgotten, keyed by anchor the same way lights are.</summary>
+    internal void DiscardFor(Node3D? anchor)
+    {
+        if (_sounds() is not { } sounds)
+            return;
+        foreach (var key in _soundEmitters.Keys.Where(k => k.Anchor == anchor).ToList())
+        {
+            sounds.SetActive(_soundEmitters[key], false);
+            _soundEmitters.Remove(key);
+        }
+    }
+
+    private void ReportLateSoundFailure(string name, string why, string kind = "SOUND_NODE")
+    {
+        if (!_soundCensusPrinted || !_soundFailuresReported.Add(name))
+        {
+            return;
+        }
+        GD.PushWarning($"anim: {kind} '{name}' requested after the world build and {why} — "
+                       + "it will be silent for the rest of the session");
+    }
+
+    // The emitter an event's NAME refers to, or null when the name isn't one this definition
+    // declared. This is what lets OBJECT_ACTIVE_STATE and OBJECT_ADD_CHILD — both perfectly
+    // ordinary node events elsewhere — address a sound emitter without either handler having to
+    // guess from the name whether `snd_waterfall` is a node or a sound.
+    private object? Emitter(AnimEvent ev, Node3D? anchor)
+    {
+        if (_sounds() == null || ev.Data.Str("name") is not { } name)
+            return null;
+        return _soundEmitters.TryGetValue((name, anchor), out var handle) ? handle : null;
+    }
+
     // Where a one-shot SOUND plays: its AT_NODE's world pose plus the trailing offset, or the
     // anchor's when it names no node. The compiled form nests AT_NODE as {name, pos}; the reader
     // form (normalized in AnimDefs) carries a flat at_node name plus a translate offset.
@@ -229,30 +254,5 @@ internal sealed class SoundChannel
         if (composed)
             Log.Info("sound", $"one-shot SOUND '{ev.Data.Str("name")}' positioned by out-of-tree ancestor composition at {pos} (world root not parented at bootstrap)");
         return pos;
-    }
-
-    /// <summary>The crash rig's respawn: pauses every declared emitter and forgets it, matching
-    /// <see cref="EmitterDirector.Reset"/>'s disposition for puffers.</summary>
-    internal void Reset()
-    {
-        if (_sounds() is { } sounds)
-        {
-            foreach (var handle in _soundEmitters.Values)
-                sounds.SetActive(handle, false);
-        }
-        _soundEmitters.Clear();
-    }
-
-    /// <summary>The sound half of `TearDownResourcesOf`: every emitter this anchor's instance
-    /// declared stops and is forgotten, keyed by anchor the same way lights are.</summary>
-    internal void DiscardFor(Node3D? anchor)
-    {
-        if (_sounds() is not { } sounds)
-            return;
-        foreach (var key in _soundEmitters.Keys.Where(k => k.Anchor == anchor).ToList())
-        {
-            sounds.SetActive(_soundEmitters[key], false);
-            _soundEmitters.Remove(key);
-        }
     }
 }
