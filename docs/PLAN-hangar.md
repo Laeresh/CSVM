@@ -52,6 +52,7 @@ From the grilling that preceded this plan. The table is the authority when prose
 | 6 | Entry and reach | **IA Build button + top-level entry; customs flyable in every human picker**, after the 11 stock airframes, with the index-11 after-build auto-select contract. |
 | 7 | BL-062 rides along? | **No** — keymap problem, stays its own item. |
 | 8 | Execution and verification | **Orchestrated per-item subagents on this worktree branch, orchestrator commits; unit tests on the importer and the economy arithmetic; one owed at-the-controls closing pass.** |
+| 9 | Airframe availability in Instant Action | **All 11 offered** — the stat table's campaign-progress threshold ships in the data (B13 carries it) but gates nothing here; inventing a progress value for a sandbox mode would be a guess. The campaign gets the gate when it exists. |
 
 ## ⚠ Read this before implementing anything
 
@@ -119,7 +120,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — model, persistence, economy
 
 11. ☑ `CustomPlaneDef`: the CSVM model and its JSON persistence under `user://`
-12. ☐ The 204-byte importer, tested against real saved-plane files
+12. ☑ The 204-byte importer, tested against real saved-plane files
 13. ☑ The economy component: costs, weights, totals, and the capacity/engine gate
 
 ### Wave C — the screens
@@ -317,6 +318,31 @@ are not stored in our JSON; they are recomputed (B13). Keep the model free of th
 
 ## B12 ☐ The 204-byte importer, tested against real saved-plane files
 
+**Landed.** `CSVM/src/Flight/CustomPlaneRecord.cs` is the pure import-only reader:
+`Read(ReadOnlySpan<byte>)` maps one 204-byte record to a `CustomPlaneDef` (name at +0x04, airframe
++0x2c, engine +0x30, hardpoints +0x34/+0x38, pattern +0x40, picks +0x5c/+0x60/+0x64 carried
+opaquely, colours +0x68..+0x70 with the alpha byte ignored, armour +0x74..+0x80 divided by 5 into
+units, per-slot twin bit from +0x84, gun ids +0x88..+0x94 with 5 = empty = null calibre);
+`ReadFile` and `ImportDirectory` (absolute paths, read-only, name-sorted) wrap it with the store's
+tolerant contract: a short file, an empty name, or a field outside its decoded range reads as
+null, never a throw. Derived fields (+0x28, +0x3c, +0x98.., +0xa8..) and the undecoded dwords
+(+0x00, +0x44..+0x58, +0xc8) are ignored. Seven genuine saves from the user's installs are the
+fixtures (`CSVM.Tests/fixtures/planes204/`, original filenames kept); every field of the decoded
+table verified against them, all seven parse with name = filename and the four Fury saves all
+carry airframe 7. Tests in `CSVM.Tests/CustomPlaneRecordTests.cs`.
+
+Findings against [`formats/paint.md`](formats/paint.md): the layout holds exactly, and the four
+Fury saves (made wearing the four shipped Fury patterns) pin the pattern indices blckswan = 1,
+fortune = 4, hughes = 6, studio = 11. Their colour triples match the vehicle.json scheme table
+except that every scheme slot the table lists as `(0,0,0)` is saved as `(25,25,25)`: the paint
+UI's darkest Shade is 25/25/25, not pure black, which also refines `player_fortune`'s inferred
+trim. One record (`B`) carries stray high bits in the +0x84 twin dword (0xc3 with only two
+occupied slots), so only bit n may be read for slot n.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
+
 **Goal.** Reading a real install's `Planes\` directory (read-only, absolute path) yields
 `CustomPlaneDef`s: name, airframe, engine, armour, guns, hardpoint counts, pattern, picks,
 colours, per the decoded layout.
@@ -423,9 +449,8 @@ only through interactive menu input.
 star ratings by the decoded formulas, blueprint TGA if A2 confirmed it.
 
 **Evidence (confidence: traced).** Stat table rows and rating formulas
-([`org/hangar.md`](org/hangar.md)).
-<TODO: decision — the stat table's availability threshold (+0x14) is campaign progress; recommend
-ignoring it in Instant Action (all 11 offered) but this was not grilled.>
+([`org/hangar.md`](org/hangar.md)). Decision 9: all 11 airframes offered; the availability
+threshold gates nothing in Instant Action.
 
 **Approach.** A dropdown/list in C21's shell bound to the scratch def's airframe; changing
 airframe re-derives dependent screens' bounds (turret slots, capacity) but preserves picks where

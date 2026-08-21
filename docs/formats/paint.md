@@ -204,6 +204,14 @@ Little-endian 32-bit fields, offsets confirmed against the screen callbacks that
 | 0x98-0xa4 | per-gun-slot 4 = empty, else 0; derived at commit | case 22 of `FUN_00407670` |
 | 0xa8-0xc4 | eight per-pylon display cells: commit writes 1 if position < that wing's hardpoint count else 11; callback 2245's write refills them `rand()%20 > 10` per cell while the count is non-zero | case 22; `0x0040ad4f` |
 
+Two facts pinned by reading seven genuine saves (the `CSVM.Tests/fixtures/planes204` fixture
+set): the paint UI's darkest shade saves as **(25,25,25)**, so every scheme-table slot listed
+as (0,0,0) round-trips through a save as 25/25/25 (the four Fury fixtures, each named for a
+shipped scheme, match their scheme's triple in every other slot; their saves also pin pattern
+indices blckswan = 1, fortune = 4, hughes = 6, studio = 11). And the family-bit byte at +0x84
+can carry stray bits above the four gun slots (one fixture holds 0xc3 with only slots 0-1
+occupied), so a reader must test bit n for slot n and never the whole byte.
+
 The saved-plane name index is a separate structure: 33-byte name records at `0x648534`,
 capacity 24 (bound `0x64884c`), filled by the `Planes\*.*` directory scan `FUN_00415000`
 (screen-flow callback 1024, case 0x400 of `FUN_00407670`; widget callback 2099 counts the
