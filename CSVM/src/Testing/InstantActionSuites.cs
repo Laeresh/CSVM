@@ -997,4 +997,103 @@ internal static class InstantActionSuites
     // ⚠ Compare a live control, inert aircraft, and that aircraft activated with real physics, targeting,
     // shots, and simulation; absence alone can pass for the wrong reason (METHOD-9/METHOD-10).
 
+    // The shell contract every results board inherits, asserted once against a stub subclass, plus
+    // the one deviant: IaWrapupBoard's menu-driven retire, asserted against the real board.
+    internal static void ResultsBoardShell(TestContext ctx)
+    {
+        var state = new PauseState();
+        var stub = ShellProbeBoard.Build(state, _ => new MenuInput());
+        ctx.Host.AddChild(stub);
+        try
+        {
+            int restarts = 0, exits = 0, photos = 0;
+            stub.Restart = () => restarts++;
+            stub.Exit = () => exits++;
+            stub.PhotoMode = () => photos++;
+
+            stub.WakeWithMenu();
+            ctx.Check(stub.Visible && state.Ended,
+                $"waking shows the board and raises Ended: visible={stub.Visible} ended={state.Ended}");
+
+            stub._Process(1.0 / 60.0);
+            ctx.Check(stub.Visible && state.Ended,
+                $"a board whose run is still over survives _Process: visible={stub.Visible} ended={state.Ended}");
+
+            var menu = stub.StandardMenu!;
+            menu.Handle(0, accept: true, back: false);
+            ctx.Check(photos == 1 && restarts == 0 && exits == 0 && stub.Visible && state.Ended,
+                $"the resting row is Photo Mode and it leaves the board and the halt untouched: photos={photos} restarts={restarts} exits={exits} visible={stub.Visible} ended={state.Ended}");
+
+            menu.Handle(1, accept: true, back: false);
+            ctx.Check(restarts == 1 && stub.Visible && state.Ended,
+                $"the standard Restart invokes the callback but leaves the release to the live flag: restarts={restarts} visible={stub.Visible} ended={state.Ended}");
+
+            stub.StillOver = false;
+            stub._Process(1.0 / 60.0);
+            ctx.Check(!stub.Visible && !state.Ended,
+                $"the live flag clearing retires the board and releases the clock: visible={stub.Visible} ended={state.Ended}");
+
+            stub.WakeWithMenu();
+            menu = stub.StandardMenu!;
+            menu.Handle(1, accept: false, back: false);
+            menu.Handle(1, accept: true, back: false);
+            ctx.Check(exits == 1 && restarts == 1 && state.Ended,
+                $"Exit invokes its callback alone and leaves the halt for the session to resolve: exits={exits} restarts={restarts} ended={state.Ended}");
+        }
+        finally
+        {
+            stub.Free();
+        }
+
+        var wrapupState = new PauseState();
+        var wrapup = IaWrapupBoard.Build("test", exitsToMenu: true, wrapupState, _ => new MenuInput());
+        ctx.Host.AddChild(wrapup);
+        try
+        {
+            int restarts = 0;
+            wrapup.Restart = () => restarts++;
+            wrapup.Present(won: true, elapsedSeconds: 61f, enemiesShotDown: 3, zonesCompleted: 2, shotPercent: 50);
+            ctx.Check(wrapup.Visible && wrapupState.Ended,
+                $"Present shows the wrap-up board and raises Ended: visible={wrapup.Visible} ended={wrapupState.Ended}");
+
+            wrapup._Process(1.0 / 60.0);
+            ctx.Check(wrapup.Visible && wrapupState.Ended,
+                $"no live flag ever retires the wrap-up board: visible={wrapup.Visible} ended={wrapupState.Ended}");
+
+            wrapup.StandardMenu!.Handle(1, accept: true, back: false);
+            ctx.Check(restarts == 1 && !wrapup.Visible && !wrapupState.Ended,
+                $"the wrap-up board's Restart retires and releases itself: restarts={restarts} visible={wrapup.Visible} ended={wrapupState.Ended}");
+        }
+        finally
+        {
+            wrapup.Free();
+        }
+    }
+}
+
+/// <summary>A minimal results board for the shell-contract suite: a settable live flag and the
+/// standard menu, no content of its own.</summary>
+internal sealed partial class ShellProbeBoard : ResultsBoard
+{
+    /// <summary>The live flag under the suite's control, standing in for the match's
+    /// <c>Completed</c> or the race's <c>AllFinished</c>.</summary>
+    public bool StillOver;
+
+    protected override bool StillEnded => StillOver;
+
+    public static ShellProbeBoard Build(PauseState state, System.Func<int, MenuInput> inputFor)
+    {
+        var board = new ShellProbeBoard();
+        board.InitShell(state, exitsToMenu: true, inputFor);
+        return board;
+    }
+
+    /// <summary>What a subclass's completion handler does: populate (here just the menu), show,
+    /// halt.</summary>
+    public void WakeWithMenu()
+    {
+        StillOver = true;
+        AddStandardMenu(BeginPanel(1f), 1f);
+        Wake();
+    }
 }
