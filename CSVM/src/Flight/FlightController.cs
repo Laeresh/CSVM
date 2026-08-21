@@ -491,6 +491,7 @@ public partial class FlightController : Node3D
     private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
     private ImmediateMesh? _probe;               // debug collision-probe line
     private IWorldQuery? _worldQuery;             // the sweep/ray seam; bound in Bind, lazy for bare test rigs
+    private IFlightInputSource? _inputSource;     // which stick flies this aircraft; bound in Bind, lazy for bare test rigs
     private float _damageCooldown;               // s left before the next HP subtraction
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private float _collisionGrace;               // s left with no collision at all (obj+0xAC)
@@ -683,6 +684,17 @@ public partial class FlightController : Node3D
     // still gets one (GetWorld3D() only needs tree membership, which Bind does not gate).
     private IWorldQuery World => _worldQuery ??= new GodotWorldQuery(this);
 
+    // Which stick flies this aircraft: set in Bind, and lazy here too so a bare test rig that
+    // never binds still gets one, off whichever of HoldSegments/Pilot it already set (Decision 8,
+    // docs/PLAN-flightcontroller-deepening.md); no suite mutates either after stepping starts.
+#pragma warning disable SA1202 // kept beside World, its seam counterpart, ahead of the public method below
+    private IFlightInputSource InputSource => _inputSource ??= ResolveInputSource();
+
+    private IFlightInputSource ResolveInputSource() =>
+        HoldSegments != null ? new HoldInputSource(this)
+        : Pilot != null ? new PilotInputSource(this)
+        : new KeyboardInputSource(this);
+
     /// <summary>The direction an ordnance round leaves along, which the player and the AI decide
     /// differently in the original (docs/org/ordnanceTypes.md, "Who aims ordnance, and who does
     /// not"): a human's comes from the aircraft's own basis axis, negated, or taken as-is for a
@@ -692,6 +704,7 @@ public partial class FlightController : Node3D
     public static Vector3? OrdnanceLaunchDir(bool humanPiloted, Basis planeBasis, bool rear,
         Vector3? mountAimWorld) =>
         humanPiloted ? (rear ? planeBasis.Z : -planeBasis.Z) : mountAimWorld;
+#pragma warning restore SA1202
 
     /// <summary>Wires the flight model and (for a piloted view) the chase camera, then spawns.
     /// <paramref name="camera"/> is null on an AI rig: no camera rides the plane and every camera
@@ -1307,9 +1320,7 @@ public partial class FlightController : Node3D
         else
         {
             var prev = _model.Position;          // committed position from last frame
-            var input = HoldSegments != null ? NextHoldInput(dt)
-                : Pilot != null ? NextPilotInput(dt)
-                : ReadKeyboard(dt);
+            var input = InputSource.Read(dt);
             // The response is absent for 1.5 s, then AI terms run at 15% for 1 s.
             // Keep the probe off too, so the log records response rather than an inert hit.
             bool groundBlowReady = IsHumanPiloted || _collisionGrace <= 0f;
@@ -2637,10 +2648,14 @@ public partial class FlightController : Node3D
         _targetKeyPrev[slot] = down;
     }
 
+    // Internal rather than private: IFlightInputSource.cs's three adapters call these to keep
+    // each body exactly where it always lived among the other sim-step helpers, rather than
+    // hoisting them up next to the class's public/internal members for SA1202's sake.
+#pragma warning disable SA1202
     // Advance the scripted hold sequence by this frame and return the active
     // segment's input. Segments run for their duration in order; the last one (or a
     // duration ≤ 0) holds until respawn.
-    private FlightInput NextHoldInput(float dt)
+    internal FlightInput NextHoldInput(float dt)
     {
         var segments = HoldSegments!;
         _holdElapsed += dt;
@@ -2657,7 +2672,7 @@ public partial class FlightController : Node3D
     // The AI pilot's throttle is the desired lever (+0x124); like keyboard input, its live
     // flight-model lever (+0x128) must traverse at 0.5/s. Carrier launch seeds both at 0.1,
     // then the AI may immediately request full power without erasing the visible settling ramp.
-    private FlightInput NextPilotInput(float dt)
+    internal FlightInput NextPilotInput(float dt)
     {
         // The mode machine's obstacle probe (D11 avoid crash) is this node's world-and-aircraft
         // ray; wired lazily so a machine assigned after spawn still gets it, and never
@@ -2669,6 +2684,7 @@ public partial class FlightController : Node3D
         input.Throttle = _throttle;
         return input;
     }
+#pragma warning restore SA1202
 
     // One AI-gunner tick: keep the standing target while it is in play (re-acquiring
     // through the D12 ranking when it is gone and AiGunner.AutoTarget allows), then
@@ -2870,7 +2886,11 @@ public partial class FlightController : Node3D
         return best >= 0 ? _rankSources[best] : null;
     }
 
-    private FlightInput ReadKeyboard(float dt)
+    // Internal rather than private: HoldInputSource/PilotInputSource/KeyboardInputSource
+    // (IFlightInputSource.cs) call this and its siblings above to keep each body exactly where it
+    // always lived among the other sim-step helpers, rather than hoisting it for SA1202's sake.
+#pragma warning disable SA1202
+    internal FlightInput ReadKeyboard(float dt)
     {
         // this player's gamepad(s) fly the plane (see PadPressed/PadAxis);
         // arcade-flight standard: stick back (+Y) = nose up, stick right = bank right
@@ -2904,6 +2924,7 @@ public partial class FlightController : Node3D
             Throttle = _throttle,
         };
     }
+#pragma warning restore SA1202
 
     /// <summary>The decoded contact (<c>FUN_0048d2c0</c>): damage whatever was struck, arm the
     /// grace window, and record whether the striker is doomed. True when the struck object breaks

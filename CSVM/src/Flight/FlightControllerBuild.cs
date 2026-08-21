@@ -68,6 +68,10 @@ public partial class FlightController
             Team = team;
 
         _worldQuery = new GodotWorldQuery(this);
+        // HoldSegments (if any) is set by the caller's object initializer before this call, so it
+        // is already final by the time this reads it; resolving here rather than leaving it to the
+        // lazy InputSource fallback keeps the choice next to the rest of this method's assignments.
+        _inputSource = ResolveInputSource();
 
         Shake = build.Shake;
         var shakePivot = new Node3D { Name = "ShakePivot" };

@@ -168,6 +168,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/GaugeCluster.cs` — the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
 - `src/Flight/FlightController.cs` — the flying-aircraft node: input → FlightModel → transform, chase camera, HUD, collision/crash, respawn; `FireControl`'s engine adapter.
 - `src/Flight/FlightControllerBuild.cs` — FlightRoster's internal, write-once construction handoff for a controller before tree attachment.
+- `src/Flight/IFlightInputSource.cs` — the seam a sim step reads this frame's pilot intent through; `Bind` resolves one of its three adapters once per aircraft.
 - `src/Flight/PlayerRig.cs` — one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
 - `src/Flight/ViewerSet.cs` — session-owned "every pane's camera" registry: `GameSession` binds it once after the rigs are built; `ProjectilePool.Viewers` is its first consumer.
 
@@ -2461,7 +2462,22 @@ silent like the footage's idle floor.
 The internal construction handoff from `FlightRoster` to `FlightController`. It contains one
 resolved controller's pre-tree state from either flight adapter, and `Bind` consumes it exactly once, before tree
 attachment; a repeated or late bind is a construction error. The roster keeps the data-resolution
-and lifecycle ordering, while the controller keeps its runtime interface.
+and lifecycle ordering, while the controller keeps its runtime interface. `Bind` also resolves
+`IFlightInputSource` (below) and stores it, alongside the `IWorldQuery` seam.
+
+## src/Flight/IFlightInputSource.cs
+The seam a sim step reads this frame's pilot intent through: `Read(dt)` returns one `FlightInput`.
+Three adapters carry the ternary's old three bodies unchanged (`HoldInputSource`/
+`PilotInputSource`/`KeyboardInputSource`, each a thin wrapper calling the matching
+`FlightController` method, kept `internal` rather than `private` so the adapters can reach them).
+`FlightController.Bind` resolves which one flies a given aircraft off whichever of `HoldSegments`/
+`Pilot` is set and stores it, because that choice cannot change afterward (`Pilot` arrives only
+through the build DTO, `HoldSegments` only from the caller, both before the first sim step). A
+private `InputSource` property lazily resolves and caches the same way for a bare test rig that
+never binds, off whichever field its own object initializer already set — no suite mutates either
+field once a rig is stepping, so this is never stale. Ground-blow probing and the AI ground-blow
+write stay on `FlightController` after `Read` returns: they need the live world, which a source
+does not have.
 
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input → FlightModel → transform, text HUD + telemetry, weapon fire as
@@ -2483,8 +2499,10 @@ per-round weapon breadcrumbs around them are a different family and still `GD.Pr
 The sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). `SimStep` also ticks
 `Turrets` (the carried gunners) after the fire outcome, so the crash branch's early
-return silences them; `WorldBlocksLine` is their world-only line-of-sight ray. An AI aircraft
- is this SAME node with `Pilot` (an `AiPilot`) as its input source, `IsHumanPiloted`
+return silences them; `WorldBlocksLine` is their world-only line-of-sight ray. Which stick flies a
+given aircraft is one `IFlightInputSource` (see `src/Flight/IFlightInputSource.cs`), resolved once
+in `Bind` and read through `InputSource.Read(dt)` in place of the old per-frame ternary. An AI
+aircraft is this SAME node with `Pilot` (an `AiPilot`) driving that source, `IsHumanPiloted`
 false, `Setup(null)` for the camera (every camera write skipped, `_cam` null) and no HUD canvas
 built — flight, collision, weapons and damage are byte-for-byte the player's path.
 `TakeProjectileHit`/`SurviveHit` run the decoded damage flow (PlaneDamage: dead-zone redirect +

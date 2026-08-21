@@ -146,7 +146,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the input source
 
-3. ☐ `IFlightInputSource` and its three adapters, resolved once in `Bind`
+3. ☑ `IFlightInputSource` and its three adapters, resolved once in `Bind`
 4. ☐ A scripted adapter, and `HoldSegments` stops being a public field
 
 ### Wave C — the pilot HUD
@@ -247,7 +247,7 @@ its own comment, and merging the two is a behaviour change wearing a refactor's 
 
 # Wave B — the input source
 
-## B3 ☐ `IFlightInputSource` and its three adapters, resolved once in `Bind`
+## B3 ☑ `IFlightInputSource` and its three adapters, resolved once in `Bind`
 
 **Goal.** Which stick an aircraft flies is a value chosen at bind, and the sim step reads one source.
 
