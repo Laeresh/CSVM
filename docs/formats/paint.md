@@ -181,10 +181,34 @@ Note the yellow/olive secondary hue is partly **propeller spinners**, not paint:
 
 The player's customised aircraft are plain files (no archive) in the install's `Planes/`
 directory, named by the plane's in-game name (`Blue Streak`, `Jumping Jane`), **204 bytes**
-each. Little-endian 32-bit fields with the name as a NUL-padded string at offset 0x04; the
-three paint colours sit at **0x68 as RGBA bytes** (`df 00 29 00` = `(223,0,41)`, `19 19 19 00`,
-`ff ff ff 00`), preceded by what appear to be pattern and decal indices. Fully decoding this
-record is only needed to *import* a player's saved planes, which nothing depends on yet.
+each. The file is a verbatim dump of the engine's in-memory record: `FUN_0041a7b0` runs
+`sprintf("Planes\%s", record+0x04)`, `mkdir("Planes")`, then `fwrite(record, 0xcc, 1)`.
+The records live in an array at `0x0064b78c`, stride 0xcc; index 25 (`0x0064cb78`) is the
+build-in-progress scratch copy every hangar screen edits, and case 22 of the screen-flow
+callback dispatcher `FUN_00407670` fills the derived fields and calls the writer.
+
+Little-endian 32-bit fields, offsets confirmed against the screen callbacks that write them:
+
+| Offset | Field | Evidence |
+|---|---|---|
+| 0x04 | name, NUL-padded string | the writer's `sprintf` |
+| 0x2c | airframe id | spawn descriptor slot 0 in `FUN_00417090`; first `%d` of the icon filename `PX_Icon_%d_%d_%d.tga` (`0x61f370`) |
+| 0x34, 0x38 | hardpoint 0/1 ordnance pick, 0 = empty | callback 2245 handler at `0x0040ad0f` |
+| 0x40 | paint pattern index 0-13 (13 remaps to 11 for the icon) | handlers at `0x0040d523`/`0x0040d54d`, second `%d` of the icon filename |
+| 0x5c, 0x60 | two composite paint picks stored as `a*5 + b` (grid row/column on the decal pages) | get/set handler at `0x0040d5b7`: write is `arg1*5 + arg2`, read returns `value/10` and `value%5` |
+| 0x64 | third dword of that triple, carried into the spawn descriptor; no screen handler found | `FUN_00417090` |
+| 0x68 | the three paint colours as RGBA bytes (`df 00 29 00` = `(223,0,41)`, `19 19 19 00`, `ff ff ff 00`) | file observation, confirmed by the spawn descriptor |
+| 0x74-0x80 | four armour values, stored premultiplied by 5 | callback 2247 handler at `0x0040ac3d` divides by 5 on read |
+| 0x84 | per-gun-slot family bit byte (adds 5 to the dropdown row) | callback 2249 handler at `0x0040bea2` |
+| 0x88-0x94 | four gun ids, 5 = empty | callback 2249 |
+| 0x98-0xa4 | per-gun-slot 4 = empty, else 0; derived at commit | case 22 of `FUN_00407670` |
+| 0xa8-0xc4 | eight per-pylon display cells: commit writes 1 if position < pick else 11; callback 2245's write refills them `rand()%20 > 10` per cell while a pick is loaded | case 22; `0x0040ad4f` |
+
+The saved-plane name index is a separate structure: 33-byte name records at `0x648534`,
+capacity 24 (bound `0x64884c`), filled by the `Planes\*.*` directory scan `FUN_00415000`
+(screen-flow callback 1024, case 0x400 of `FUN_00407670`; widget callback 2099 counts the
+same table through a filter). Importing a player's saved planes needs only the table above;
+nothing depends on it yet.
 
 ## Implementing this in the remake
 

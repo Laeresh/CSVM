@@ -453,6 +453,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   counts, weapon costs and the economy are all executable-resident, so the *buying* half would
   have to be invented. The mount names are data (`IDS_AIRFRAMEGUNGROUPNAMES`, ui_strings
   3060–3079) and the per-plane stock table is authored, so the *placing* half is real.
+  **Decoded:** callbacks 2245/2249/2250 resolve through the widget dispatcher at `0x004093a0` to
+  `0x0040ad0f`/`0x0040bea2`/`0x0040bf72`: two hardpoint-pick globals and an 11-row gun model per
+  slot (five gun types, the same five with a family bit adding 5, row 10 empty; names are `langui`
+  3310+type), state living in the scratch custom-plane record
+  ([`docs/formats/paint.md`](docs/formats/paint.md) "Saved custom planes"). Per-plane slot counts
+  and costs are NOT behind these three; they sit behind unnamed `PURCHASE`/`PLANECONSTRUCTION`
+  callback ids and are still undecoded.
 
 - `BL-226` `[Feature]` `[Blocked: cockpit view]` **The incoming-fire cue set's other two halves are blocked on things that do not exist
   yet.** The near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,
@@ -2418,6 +2425,12 @@ usual.
   "Saved custom planes"). Importing a player's existing planes needs that finished; creating our own
   does not, and the two should not be conflated. (b) `PURCHASE` implies an economy, which belongs to
   the campaign and not to Instant Action.
+  **Decoded:** the 204-byte record is written verbatim by `FUN_0041a7b0` from the record array at
+  `0x0064b78c` (scratch slot 25 at `0x0064cb78`; the commit is case 22 of the screen-flow dispatcher
+  `FUN_00407670`), and `callback(1024)` is that dispatcher's case 0x400, the `Planes\*.*` directory
+  scan with a 24-plane cap. The full field layout, pattern/decal picks included, is in
+  [`docs/formats/paint.md`](docs/formats/paint.md) "Saved custom planes", so the import half is
+  unblocked.
 
 - `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
   (C1/M04 `--generators`, user-reported 2026-08-13).** The spawn position is decoded-correct: the
