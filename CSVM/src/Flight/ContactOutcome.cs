@@ -1,3 +1,5 @@
+using Godot;
+
 namespace CSVM.Flight;
 
 /// <summary>What a contact does to the striking aircraft: <c>Graze</c> is the survivable outcome,
@@ -35,6 +37,12 @@ public readonly record struct ContactOutcome
 
     /// <summary>The pilot HUD's damage-flash line, or null when this contact flashes nothing.</summary>
     public string? DamageFlashText { get; init; }
+
+    /// <summary>How far along the contact normal the caller must move the striker to stop it being
+    /// embedded in what it grazed. Zero when it came to rest free, and applied even on a
+    /// <see cref="ContactFate.Crash"/>: a plane that could not get free wrecks where the last
+    /// attempt left it.</summary>
+    public Vector3 PushOut { get; init; }
 
     /// <summary>The instruction the caller owes when it is set: hand the struck aeroplane the pair
     /// above, and arm the collision grace window on BOTH parties so neither re-resolves the overlap

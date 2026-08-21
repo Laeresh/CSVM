@@ -352,5 +352,8 @@ public class FlightHudMappingTests
             report = _hit ? new RayReport(new Vector3(from.X, _hitY, from.Z), Vector3.Up, null) : default;
             return _hit;
         }
+
+        public bool Overlaps(IReadOnlyList<PlaneCollider.Part> parts, Transform3D pose, uint mask,
+            Godot.Collections.Array<Rid>? exclude) => false;
     }
 }

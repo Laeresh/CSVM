@@ -87,4 +87,28 @@ public sealed class GodotWorldQuery : IWorldQuery
             (Vector3)hit["position"], (Vector3)hit["normal"], hit["collider"].Obj as Node);
         return true;
     }
+
+    public bool Overlaps(IReadOnlyList<PlaneCollider.Part> parts, Transform3D pose, uint mask,
+        Godot.Collections.Array<Rid>? exclude)
+    {
+        var space = _node.GetWorld3D()?.DirectSpaceState;
+        if (space == null)
+            return false;
+        foreach (var p in parts)
+        {
+            var query = new PhysicsShapeQueryParameters3D
+            {
+                Shape = p.Shape,
+                Transform = pose * p.Local,
+                CollisionMask = mask,
+            };
+            if (exclude != null)
+                query.Exclude = exclude;
+            // One hit is enough — this only asks whether the box is free.
+            if (space.IntersectShape(query, 1).Count > 0)
+                return true;
+        }
+
+        return false;
+    }
 }

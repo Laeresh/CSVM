@@ -166,8 +166,8 @@ public class BounceRestitutionTests
 /// kick's sign. Restitution itself stays <see cref="BounceRestitutionTests"/>'s; this class
 /// covers the parts D7 moved onto <c>Collide</c> alongside it.
 /// The plan text naming this item also names a ground-stop threshold: that constant
-/// (<c>GrazeStopSpeed</c>) stayed on <c>FlightController.SurviveHit</c>, a fate decision outside
-/// <c>Collide</c>, and is asserted there (E11), not here.
+/// (<c>GrazeStopSpeed</c>) is a fate decision outside <c>Collide</c>, so it sits on
+/// <see cref="AircraftContactResolver"/> and is asserted there, not here.
 /// </summary>
 public class CollideResponseTests
 {

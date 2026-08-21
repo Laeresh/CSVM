@@ -362,11 +362,8 @@ public partial class FlightController : Node3D
     // Collision severity (all TUNE): impact speed along the contact
     // normal decides between a survivable graze and a crash. A graze damages the
     // struck part (quadratic in severity), slides the velocity along the surface
-    // with some tangential loss, and kicks the attitude.
-    private const float CrashSpeed = 25f;        // m/s along the normal ⇒ outright crash, and ONLY
-                                                 // for a plane with no destroyable_parts data; a
-                                                 // plane with a ledger uses the decoded rule instead
-                                                 // (health remaining), which carries no speed term.
+    // with some tangential loss, and kicks the attitude. The thresholds that decide
+    // between the two are AircraftContactResolver's.
     private const float GrazeMaxDamage = 18f;    // HP at a just-under-crash graze (parts have 20–25)
     private const float DamageCooldown = 0.3f;   // s between HP subtractions (multi-frame scrapes)
     private const float GrazeReactionInterval = 1.5f; // s between graze reactions — NOT a tuned value:
@@ -378,16 +375,7 @@ public partial class FlightController : Node3D
                                                    // not a tap. ⚠ TUNE — ours, not the original's,
                                                    // which needs no threshold because it has a key
                                                    // per action
-    private const float GrazeStopSpeed = 12f;    // m/s — grinding to (near) standstill on the
-                                                 // ground explodes the plane (user-reported:
-                                                 // a stopped plane sat there collecting 0-dmg kisses)
-    private const float EmbedPushOut = 0.3f;     // m per un-embed attempt after a graze
-    private const int EmbedTries = 3;            // attempts before giving up ⇒ explode, never tunnel
-
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
-
-    // The compiled fallback collision ranges, for a bare suite rig with no flight model bound.
-    private static readonly PlaneStats DefaultCollideRanges = new();
 
     // Everything this pane draws for its pilot. Always present, so no site has to ask whether
     // there is a HUD: an aircraft with no readouts built simply has a module that draws nothing.
@@ -439,14 +427,12 @@ public partial class FlightController : Node3D
     private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
     private ImmediateMesh? _probe;               // debug collision-probe line
     private IWorldQuery? _worldQuery;             // the sweep/ray seam; bound in Bind, lazy for bare test rigs
+    private AircraftContactResolver? _contacts;   // the contact rules; lazy, over the same seam
     private IFlightInputSource? _inputSource;     // which stick flies this aircraft; bound in Bind, lazy for bare test rigs
     private float _damageCooldown;               // s left before the next HP subtraction
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private float _collisionGrace;               // s left with no collision at all (obj+0xAC)
     private float _postDropGroundBlow;           // s left at the carrier-drop 0.15 multiplier
-    private float _collideArmorDamage;           // this contact's decoded pair, spent in SurviveHit
-    private float _collideHealthDamage;
-    private bool _collideDooms;                  // this contact kills the striker whatever its HP
     private int _projectileHitsLogged;           // verification breadcrumb: the first few hits log
     private FireControl? _fire;                  // the fire-control state machine; built in _Ready with the loadout
     private GunGroup[] _firableGuns = Array.Empty<GunGroup>(); // the firable gun groups in _fire's slot order (muzzle nodes, live ammo)
@@ -626,6 +612,10 @@ public partial class FlightController : Node3D
     // The sweep/ray seam: set in Bind, and lazy here too so a bare test rig that never binds
     // still gets one (GetWorld3D() only needs tree membership, which Bind does not gate).
     private IWorldQuery World => _worldQuery ??= new GodotWorldQuery(this);
+
+    // The decoded contact rules, over the same seam: what a contact costs, whether this plane
+    // survives it, and how far out of the surface it has to be pushed.
+    private AircraftContactResolver Contacts => _contacts ??= new AircraftContactResolver(World);
 
     // Which stick flies this aircraft: set in Bind, and lazy here too so a bare test rig that
     // never binds still gets one, off whichever of _holdSegments/Pilot it already set (Decision 8,
@@ -986,7 +976,7 @@ public partial class FlightController : Node3D
     /// <summary>One projectile hit on this plane: maps it to the data part and spends the weapon's
     /// ARMOR_DAMAGE/HEALTH_DAMAGE through <see cref="PlaneDamage.Apply"/> — the decoded flow, see
     /// docs/org/vehicleDamage.md. Exhausted whole-vehicle health downs the plane through
-    /// <see cref="Crash"/>, as <see cref="SurviveHit"/> does. No cooldown: every round counts.
+    /// <see cref="Crash"/>, as a fatal contact does. No cooldown: every round counts.
     /// <paramref name="shooter"/> carries into <see cref="Downed"/> as the killer.
     /// <paramref name="damageScale"/>: 1 for a direct round, the blast falloff share otherwise.</summary>
     public void TakeProjectileHit(WeaponDef weapon, Vector3 impact, string colliderPart, int shooter,
@@ -1242,21 +1232,18 @@ public partial class FlightController : Node3D
             // No contact means the boxes cleared the whole motion, which is where they are drawn.
             if (_probe != null)
                 DrawProbe(prev, probeEnd, prev + step * (hit ? contact.StopFraction : 1f), hit);
-            // The decoded contact (FUN_0048d2c0): damage BOTH parties off one severity cosine,
-            // then decide this plane's fate. A WeaponOrCollideHit destructible breaks and the
-            // plane flies through; everything else stays solid and falls to the crash/graze below.
+            // The decoded contact: the resolver decides it whole (both parties' damage off one
+            // severity cosine, then this plane's fate), and what comes back is performed here.
             if (hit)
             {
-                float severity = CollisionDamage.Severity(_model.VelocityDir, contact.Normal);
-                if (ResolveContact(severity, hitBody, in contact))
+                var outcome = Contacts.Resolve(in contact, Striking(),
+                    new ContactEffects(this, hitBody, in contact, prev, step));
+                PerformContact(in outcome, in contact, hitBody);
+                if (outcome.Fate == ContactFate.Crash)
                 {
-                    hit = false;   // set-dressing shattered; the plane keeps its full-motion pose
+                    Crash(contact.Impact, contact.ColliderName, contact.Part, hitBody);
+                    return;
                 }
-            }
-            if (hit && !SurviveHit(prev, step, in contact, hitBody))
-            {
-                Crash(contact.Impact, contact.ColliderName, contact.Part, hitBody);
-                return;
             }
         }
 
@@ -2604,158 +2591,37 @@ public partial class FlightController : Node3D
     }
 #pragma warning restore SA1202
 
-    /// <summary>The decoded contact (<c>FUN_0048d2c0</c>): damage whatever was struck, arm the
-    /// grace window, and record whether the striker is doomed. True when the struck object breaks
-    /// and this plane flies THROUGH it; the striker's own share is spent in
-    /// <see cref="SurviveHit"/>.
-    /// ⚠ Keep the player asymmetric. It skips entity detection, so it never takes the 0.2 cut,
-    /// never arms a grace window, and is never doomed (docs/org/flightModel.md).</summary>
-    private bool ResolveContact(float severity, Node? hitBody, in ContactReport contact)
+    // This plane's state entering a contact, as the resolver's per-call half.
+    private ContactConditions Striking() => new()
     {
-        // The node the report deliberately does not carry, held here for the applying alone; every
-        // decision below reads the report's flag instead.
-        var struckRig = (hitBody as AircraftBody)?.Rig;
-        // A bare suite rig has no flight model bound, so no authored ranges; the compiled
-        // fallbacks in PlaneStats are what the original would stand on there too.
-        var ranges = Stats ?? DefaultCollideRanges;
-        // Entity detection is the non-player branch only, and only against another aeroplane.
-        bool entityImpact = !IsHumanPiloted && contact.StruckIsAircraft;
-        float cut = entityImpact ? CollisionDamage.EntityCut : 1f;
-        float armorDmg =
-            CollisionDamage.Term(severity, ranges.CollideArmorFloor, ranges.CollideArmorScale) * cut;
-        float healthDmg =
-            CollisionDamage.Term(severity, ranges.CollideHealthFloor, ranges.CollideHealthScale) * cut;
-        _collideArmorDamage = armorDmg;
-        _collideHealthDamage = healthDmg;
-        // local_11 (0x0048d79e): an AI that rammed anything OTHER than an aeroplane dies outright,
-        // whatever health it has left. An AI that rammed an aeroplane survives on health as usual.
-        _collideDooms = !IsHumanPiloted && !contact.StruckIsAircraft;
-        if (severity <= 0f)
-            return false;
+        IsHumanPiloted = IsHumanPiloted,
+        VelocityDir = _model.VelocityDir,
+        Speed = _model.Speed,
+        Pose = GlobalTransform,
+        Stats = Stats,
+        Ledger = Damage,
+        DamageCooldownElapsed = _damageCooldown <= 0f,
+        Parts = Collider?.Parts,
+        ExcludeSelf = Body?.ExcludeSelf,
+    };
 
-        if (struckRig != null)
+    // The outcome's instructions, which only this side can perform: the struck aeroplane's share
+    // of the pair, the pilot's impact line, and the push out of whatever the graze embedded this
+    // airframe in. One value, so forgetting it is forgetting one call rather than four.
+    private void PerformContact(in ContactOutcome outcome, in ContactReport contact, Node? hitBody)
+    {
+        // The node the report deliberately does not carry, read here for the applying alone.
+        if (outcome.DamageStruckAircraft && (hitBody as AircraftBody)?.Rig is { } struckRig)
         {
-            struckRig.TakeCollisionHit(armorDmg, healthDmg, contact.Impact, PlayerIndex);
+            struckRig.TakeCollisionHit(outcome.ArmorDamage, outcome.HealthDamage, contact.Impact, PlayerIndex);
             // Both parties go collision-free, so neither re-resolves the overlap they are still in.
             _collisionGrace = CollisionDamage.EntityGrace;
             struckRig._collisionGrace = CollisionDamage.EntityGrace;
-            return false;   // another aircraft is solid; this plane still crashes or grazes on it
         }
 
-        return CollideDamageSink != null && CollideDamageSink(hitBody, healthDmg);
-    }
-
-    // Decides a confirmed collision's outcome: false = crash, true = survivable graze —
-    // the plane slides along the surface, a human-piloted aircraft additionally rebounds along
-    // the contact normal, and the attitude takes a lever-arm kick. That response is
-    // FlightModel.Collide; what stays here is the fate, the damage ledger and the un-embed loop.
-    private bool SurviveHit(Vector3 prev, Vector3 step, in ContactReport contact, Node? hitBody)
-    {
-        var vel = _model.VelocityDir * _model.Speed;
-        float vn = Mathf.Abs(vel.Dot(contact.Normal));
-        if (Damage == null)
-        {
-            // No destroyable_parts data, so there is no health pool to survive on: fall back to
-            // the old speed threshold rather than inventing a ledger.
-            if (vn >= CrashSpeed)
-                Log.Info("flight", $"impact severity: vn={vn:0.0} m/s ≥ {CrashSpeed} — crash (no damage data)");
-            return false;
-        }
-
-        // The decoded doom rule (local_11): an AI that rammed something that is not an aeroplane
-        // dies regardless of health remaining. Checked before the pair is spent, as the original
-        // checks it after spending but independently of the result.
-        if (_collideDooms)
-        {
-            Log.Info("flight", $"AI ram into {contact.ColliderName} — destroyed outright (the decoded local_11 rule)");
-            return false;
-        }
-
-        var localImpact = GlobalTransform.AffineInverse() * contact.Impact;
-        string dataPart = PlaneDamage.MapStruckPart(contact.Part, localImpact);
-        GrazeReaction(contact.Impact, contact.ColliderName, hitBody);
-        if (_damageCooldown <= 0f)
-        {
-            _damageCooldown = DamageCooldown;
-            // The striker's own share is the SAME decoded pair the struck party took, spent
-            // armour-first through the ledger's take-hit flow (FUN_004b7f80's split), so a
-            // fully-armoured contact costs no health at all.
-            float dmg = _collideHealthDamage;
-            var state = Damage.Apply(dataPart, _collideHealthDamage, _collideArmorDamage);
-            string struckPart = state?.Def.Name ?? dataPart; // the resolver may redirect
-            if (state != null)
-            {
-                Visuals?.OnPartDamage(struckPart, state.HealthFraction);
-                _pilotHud.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
-            }
-
-            // the def-level stages run off the hull pool even when the graze went zone-less
-            Visuals?.OnHullDamage(Damage.SummaryHealthFraction);
-
-            if (Damage.IsDestroyed)
-            {
-                Log.Info("flight",
-                    $"vehicle health exhausted ({struckPart} last) — vn={vn:0.0} m/s into {contact.ColliderName}");
-                return false; // the decoded kill rule: whole-vehicle health at zero (A4/D14)
-            }
-
-            if (state != null)
-            {
-                _pilotHud.Flash($"⚠ IMPACT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%");
-                Log.Info("flight",
-                    $"graze ({contact.Part}→{struckPart}): {contact.ColliderName} vn={vn:0.0} m/s dmg={dmg:0.0} armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
-            }
-        }
-
-        // Slide, restitution and lever-arm kick, on the plant whose fields they write. An airframe
-        // already crashed is off the player path, so its gate rides the restitution's argument.
-        _model.Collide(prev, step, contact.StopFraction, contact.Impact, contact.Normal,
-            IsHumanPiloted && !_crashed, CrashSpeed);
-
-        // A plane ground to (near) standstill is a wreck, not a parked aircraft
-        // (user-reported: it sat there collecting zero-damage kisses forever).
-        if (_model.Speed < GrazeStopSpeed)
-        {
-            Log.Info("flight", $"ground stop: slid to {_model.Speed:0.0} m/s — destroyed");
-            return false;
-        }
-
-        // Un-embed: push out along the normal if any airframe box still overlaps world geometry
-        // at the new pose (V-ditches, berm backsides); explode rather than tunnel if it can't get free.
-        if (Collider != null && GetWorld3D()?.DirectSpaceState is { } space2)
-        {
-            for (int attempt = 0; ; attempt++)
-            {
-                var pose = new Transform3D(_model.Attitude, _model.Position);
-                bool overlapping = false;
-                foreach (var p in Collider.Parts)
-                {
-                    var q = new PhysicsShapeQueryParameters3D
-                    {
-                        Shape = p.Shape,
-                        Transform = pose * p.Local,
-                        CollisionMask = CollisionLayers.WorldAndAircraft,
-                    };
-                    if (Body != null)
-                        q.Exclude = Body.ExcludeSelf; // own boxes always overlap the own body
-                    // One hit is enough — this only asks whether the box is free.
-                    if (space2.IntersectShape(q, 1).Count > 0)
-                    {
-                        overlapping = true;
-                        break;
-                    }
-                }
-                if (!overlapping)
-                    break;
-                if (attempt >= EmbedTries)
-                {
-                    Log.Info("flight", $"embedded in terrain after a graze — destroyed");
-                    return false;
-                }
-                _model.Position += contact.Normal * EmbedPushOut;
-            }
-        }
-        return true;
+        if (outcome.DamageFlashText is { } flash)
+            _pilotHud.Flash(flash);
+        _model.Position += outcome.PushOut;
     }
 
     // One round passed close. The accumulator decides whether it is heard: intensity
@@ -2798,7 +2664,7 @@ public partial class FlightController : Node3D
     }
 
     // Sweeps each airframe box along this frame's motion against every solid collider —
-    // world plus other aircraft's bodies (a mid-air resolves through SurviveHit/Crash like any
+    // world plus other aircraft's bodies (a mid-air resolves through the contact rules like any
     // other hit), own body excluded by RID. Fills the earliest hit's report. False when
     // uncollidable or nothing is in the way. `hitBody` is the caller's, not the report's: the
     // struck node stays out of the value the decision side reads.
@@ -2930,4 +2796,57 @@ public partial class FlightController : Node3D
     private (float X, float Y) PadLookInput() =>
         (StickCurve(PadAxis(JoyAxis.RightX)), StickCurve(PadAxis(JoyAxis.RightY)));
 
+    // This plane's half of a contact the resolver is deciding: the engine effects it has to
+    // interleave with, plus the struck Node the report deliberately does not carry. One instance
+    // per contact, so nothing about a contact outlives the call that decided it.
+    private sealed class ContactEffects : IContactEffects
+    {
+        private readonly FlightController _rig;
+        private readonly Node? _struck;
+        private readonly ContactReport _contact;
+        private readonly Vector3 _from;
+        private readonly Vector3 _motion;
+
+        public ContactEffects(FlightController rig, Node? struck, in ContactReport contact,
+            Vector3 from, Vector3 motion)
+        {
+            _rig = rig;
+            _struck = struck;
+            _contact = contact;
+            _from = from;
+            _motion = motion;
+        }
+
+        public bool ShatterStruck(float healthDamage) =>
+            _rig.CollideDamageSink != null && _rig.CollideDamageSink(_struck, healthDamage);
+
+        public void PlayGrazeReaction() =>
+            _rig.GrazeReaction(_contact.Impact, _contact.ColliderName, _struck);
+
+        public PlaneDamage.PartState? SpendDamage(string zone, float healthDamage, float armorDamage)
+        {
+            _rig._damageCooldown = DamageCooldown;
+            var state = _rig.Damage!.Apply(zone, healthDamage, armorDamage);
+            string struckPart = state?.Def.Name ?? zone;
+            if (state != null)
+            {
+                _rig.Visuals?.OnPartDamage(struckPart, state.HealthFraction);
+                _rig._pilotHud.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
+            }
+
+            // the def-level stages run off the hull pool even when the graze went zone-less
+            _rig.Visuals?.OnHullDamage(_rig.Damage.SummaryHealthFraction);
+            return state;
+        }
+
+        // Slide, restitution and lever-arm kick, on the plant whose fields they write. An airframe
+        // already crashed is off the player path, so its gate rides the restitution's argument.
+        public ContactResponse ApplyResponse()
+        {
+            _rig._model.Collide(_from, _motion, _contact.StopFraction, _contact.Impact, _contact.Normal,
+                _rig.IsHumanPiloted && !_rig._crashed, AircraftContactResolver.CrashSpeed);
+            return new ContactResponse(_rig._model.Speed,
+                new Transform3D(_rig._model.Attitude, _rig._model.Position));
+        }
+    }
 }

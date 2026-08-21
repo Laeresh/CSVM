@@ -153,7 +153,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — the pilot HUD
 
 5. ☑ `FlightHud` fed a per-frame struct, absorbing `SetPilotHudVisible`
-6. ☐ The HUD state-to-readout mapping asserted off-engine, including the damage flash
+6. ☑ The HUD state-to-readout mapping asserted off-engine, including the damage flash
 
 ### Wave D — the collision response
 
@@ -163,7 +163,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E — the contact resolver
 
 9. ☑ `ContactReport` and `ContactOutcome`, and the detection half reduced to filling a report
-10. ☐ `AircraftContactResolver` owns fate, the damage pair and the un-embed loop
+10. ☑ `AircraftContactResolver` owns fate, the damage pair and the un-embed loop
 11. ☐ The outcome table asserted off-engine, and the cross-instance grace write replaced
 
 ### Wave F — the aircraft lifecycle
@@ -415,7 +415,7 @@ E11. This item introduces types and changes no decision, so a moved golden means
 **⚠ Traps.** The grace window suppresses the sweep, not just the damage, so `_collisionGrace` is a
 precondition of detection and not a filter on its result. Keep it on the detection side.
 
-## E10 ☐ `AircraftContactResolver` owns fate, the damage pair and the un-embed loop
+## E10 ☑ `AircraftContactResolver` owns fate, the damage pair and the un-embed loop
 
 **Goal.** A contact's outcome is computed by a module that holds no Godot type and can be run in a
 unit test with no physics world.

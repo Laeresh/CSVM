@@ -62,8 +62,9 @@ The session's aircraft set: the human field prepared at session start and the AI
 _Avoid_: AI roster (it excludes the human field)
 
 **World query**:
-The one seam onto the live physics world, `IWorldQuery`, carrying two methods: `Sweep`, a shape
-cast along a motion, and `Ray`, a single ray. The only Godot adapter over `DirectSpaceState`.
+The one seam onto the live physics world, `IWorldQuery`: `Sweep`, a shape cast along a motion,
+`Ray`, a single ray, and `Overlaps`, a standing-pose touch test. The only Godot adapter over
+`DirectSpaceState`.
 _Avoid_: probe (taken by `Testing/Probes.cs`, `ProbeGroundBlow` and `ProbeBlocked` already)
 
 ## Contact

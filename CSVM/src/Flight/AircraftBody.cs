@@ -7,7 +7,7 @@ namespace CSVM.Flight;
 /// and another plane's airframe sweep — can strike this plane. A child of its
 /// <see cref="FlightController"/>, riding exactly the transform the flight model writes: the
 /// plane stays Node3D-moved, the physics engine never pushes it, and an impact with it routes
-/// through the striking plane's own SurviveHit/Crash resolution, never a solver response.
+/// through the striking plane's own contact resolution, never a solver response.
 /// The shapes are the SAME <see cref="BoxShape3D"/> resources the terrain sweep casts —
 /// single-sourced from <see cref="PlaneCollider.Parts"/>, never a second derivation: a fidelity
 /// upgrade edits <see cref="PlaneCollider"/>, not this class. The box

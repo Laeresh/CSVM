@@ -219,7 +219,7 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Active plan:** [`docs/PLAN-flightcontroller-deepening.md`](docs/PLAN-flightcontroller-deepening.md),
 six waves taking six modules out of `FlightController`. `A1`, `A2`, `B3`, `B4`, `C5`, `C6`, `D7`,
-`D8`, `E9` landed. Next: `E10`.
+`D8`, `E9`, `E10` landed. Next: `E11`.
 
 Verify any change with **`.\RunTests.ps1`** (build → units →in-engine suites → golden hashes → one exit code); read[`docs/verification.md`](docs/verification.md) first.
 

@@ -4,8 +4,9 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>The one seam onto the live physics world every aircraft query goes through: a shape
-/// swept along a motion, and a ray. <see cref="GodotWorldQuery"/> is the only adapter over
-/// <c>DirectSpaceState</c>; nothing outside it may touch that type.</summary>
+/// swept along a motion, a ray, and a standing-still overlap test.
+/// <see cref="GodotWorldQuery"/> is the only adapter over <c>DirectSpaceState</c>; nothing outside
+/// it may touch that type.</summary>
 public interface IWorldQuery
 {
     /// <summary>Sweeps every named part along <paramref name="motion"/> from
@@ -20,6 +21,12 @@ public interface IWorldQuery
     /// way.</summary>
     bool Ray(Vector3 from, Vector3 to, uint mask, Godot.Collections.Array<Rid>? exclude,
         out RayReport report);
+
+    /// <summary>True when any named part, placed at <paramref name="pose"/> and moving nowhere,
+    /// touches something the mask carries. It asks only whether the airframe is free, so one
+    /// intersection is enough and no contact detail comes back.</summary>
+    bool Overlaps(IReadOnlyList<PlaneCollider.Part> parts, Transform3D pose, uint mask,
+        Godot.Collections.Array<Rid>? exclude);
 }
 
 /// <summary>A sweep's answer: where the earliest part stopped, its contact and normal, which of

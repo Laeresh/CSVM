@@ -65,5 +65,8 @@ public class TurretLineOfSightTests
             report = _hit ? new RayReport(to, Vector3.Up, null) : default;
             return _hit;
         }
+
+        public bool Overlaps(IReadOnlyList<PlaneCollider.Part> parts, Transform3D pose, uint mask,
+            Godot.Collections.Array<Rid>? exclude) => false;
     }
 }
