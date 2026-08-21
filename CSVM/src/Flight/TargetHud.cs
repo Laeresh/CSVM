@@ -14,9 +14,9 @@ namespace CSVM.Flight;
 /// and clock bearing. Colour is the decoded <c>Target::GetColor</c> (<see cref="MarkerColor"/>).
 /// <see cref="TrackedHostile"/> is the fallback where no selection exists at all, and
 /// <c>--debug-markers</c> (<see cref="MarkAll"/>) widens the marker to every live aircraft with a
-/// full identity string (<see cref="DebugTag"/>). The arrow/bearing drawing is copied verbatim from
-/// <see cref="VersusHud"/>'s own copy of <c>MarkerHud</c>'s, the same relationship those two
-/// already have. Decode: <see href="../../docs/org/targeting.md">org/targeting.md</see>.
+/// full identity string (<see cref="DebugTag"/>). The edge placement and clock bearing are
+/// <see cref="EdgeMarker"/>'s; only the arrow and label styling is this HUD's own.
+/// Decode: <see href="../../docs/org/targeting.md">org/targeting.md</see>.
 /// </summary>
 public sealed partial class TargetHud : Control
 {
@@ -51,7 +51,6 @@ public sealed partial class TargetHud : Control
 
     // 1440p reference metrics (scaled by HudMetrics — matches MarkerHud's/VersusHud's calibration).
     private const int RefMarkerFont = 14;
-    private const float RefEdgeMargin = 46f;  // keep edge markers this far off the screen border
     private const float RefArrowLen = 18f;
     private const float RefArrowHalf = 8f;
     private const float RefTextGap = 8f;
@@ -418,16 +417,6 @@ public sealed partial class TargetHud : Control
             DrawOpponent(font, hostile.GlobalPosition, HudRed, _hostileTag, s, markerFont);
     }
 
-    /// <summary>Screen-edge point along <paramref name="dir"/> from centre, inset by the margin —
-    /// copied verbatim from <see cref="VersusHud"/>'s own copy of MarkerHud's EdgePoint.</summary>
-    private static Vector2 EdgePoint(Vector2 center, Vector2 dir, float margin)
-    {
-        float hx = center.X - margin, hy = center.Y - margin;
-        float tx = Mathf.Abs(dir.X) > 1e-4f ? hx / Mathf.Abs(dir.X) : float.MaxValue;
-        float ty = Mathf.Abs(dir.Y) > 1e-4f ? hy / Mathf.Abs(dir.Y) : float.MaxValue;
-        return center + dir * Mathf.Min(tx, ty);
-    }
-
     // The selected target's marker: on screen, the bracket box (when the gun reaches it) over the
     // label block; off screen, the edge arrow with that block plus the clock bearing and no box.
     // The FUN_004574d0 label anchor is computed from the box whether or not the box is drawn, so an
@@ -445,10 +434,9 @@ public sealed partial class TargetHud : Control
         var color = MarkerColor(target, OwnTeam);
         bool behind = _camera.IsPositionBehind(pos);
         var sp = _camera.UnprojectPosition(pos);
-        float m = RefEdgeMargin * s;
-        var inner = new Rect2(m, m, Size.X - 2f * m, Size.Y - 2f * m);
+        var placed = EdgeMarker.Resolve(sp, behind, Size, EdgeMarker.RefEdgeMargin * s);
         _labelLines.Clear();
-        if (!behind && inner.HasPoint(sp))
+        if (placed.OnScreen)
         {
             if (_bracketed)
             {
@@ -466,17 +454,10 @@ public sealed partial class TargetHud : Control
 
         // Off screen: the edge arrow, and the label block stacked off its tail — DrawOpponent's own
         // geometry, with the tag broken onto its own lines the way HUD.png shows the original's.
-        var center = Size / 2f;
-        var dir = sp - center;
-        if (behind)
-            dir = -dir; // the projection of a point behind the camera is mirrored through centre
-        if (dir.LengthSquared() < 1f)
-            dir = Vector2.Down;
-        dir = dir.Normalized();
-        var edge = EdgePoint(center, dir, m);
-        DrawArrow(edge, dir, RefArrowLen * s, RefArrowHalf * s, s, color);
-        LabelLines(target, $"{ClockHour(pos)} o'clock", _labelLines, keepSlots: false);
-        var tail = edge - dir * (RefArrowLen + RefTextGap) * s;
+        DrawArrow(placed.Anchor, placed.Dir, RefArrowLen * s, RefArrowHalf * s, s, color);
+        LabelLines(target, $"{EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos)} o'clock",
+            _labelLines, keepSlots: false);
+        var tail = placed.Anchor - placed.Dir * (RefArrowLen + RefTextGap) * s;
         // Centred on the tail rather than hung below it: an edge tag has no box to sit under, and
         // the original clamps its block into the viewport there for the same reason.
         DrawLabelBlock(font, tail - new Vector2(0f, (_labelLines.Count - 1) * RefLabelPitch * s / 2f),
@@ -530,47 +511,26 @@ public sealed partial class TargetHud : Control
     }
 
     /// <summary>One tracked hostile's marker: on screen, its tag floats just above the projected
-    /// point; off screen (or behind), an edge arrow + "N o'clock" bearing — copied verbatim from
-    /// <see cref="VersusHud"/>'s own copy of this, plus the <paramref name="stagger"/> step
+    /// point; off screen (or behind), an edge arrow + "N o'clock" bearing —
+    /// <see cref="EdgeMarker"/>'s placement, plus the <paramref name="stagger"/> step
     /// <c>--debug-markers</c> needs when several planes share one bearing.</summary>
     private void DrawOpponent(Font font, Vector3 pos, Color color, string tag, float s, int fontSize,
         int stagger = 0)
     {
         bool behind = _camera.IsPositionBehind(pos);
         Vector2 sp = _camera.UnprojectPosition(pos);
-        float m = RefEdgeMargin * s;
-        var inner = new Rect2(m, m, Size.X - 2f * m, Size.Y - 2f * m);
-        if (!behind && inner.HasPoint(sp))
+        var placed = EdgeMarker.Resolve(sp, behind, Size, EdgeMarker.RefEdgeMargin * s);
+        if (placed.OnScreen)
         {
             DrawTag(font, sp + new Vector2(0f, -RefOnScreenLift * s), tag, color, fontSize);
             return;
         }
-        var center = Size / 2f;
-        var dir = sp - center;
-        if (behind)
-            dir = -dir; // the projection of a point behind the camera is mirrored through centre
-        if (dir.LengthSquared() < 1f)
-            dir = Vector2.Down;
-        dir = dir.Normalized();
-        var edge = EdgePoint(center, dir, m);
-        DrawArrow(edge, dir, RefArrowLen * s, RefArrowHalf * s, s, color);
+        DrawArrow(placed.Anchor, placed.Dir, RefArrowLen * s, RefArrowHalf * s, s, color);
         // Several planes on one bearing put their tags on the same pixel (--debug-markers marks
         // six at once); step each one along the screen edge so all of them stay readable.
-        var along = new Vector2(-dir.Y, dir.X) * (stagger * RefStaggerStep * s);
-        DrawTag(font, edge - dir * (RefArrowLen + RefTextGap) * s + along,
-            $"{tag}  {ClockHour(pos)} o'clock", color, fontSize);
-    }
-
-    /// <summary>Relative bearing of <paramref name="targetPos"/> from this pilot's own heading in
-    /// clock hours (12 = ahead, 3 = right, 6 = behind, 9 = left) — copied verbatim from
-    /// <see cref="VersusHud"/>'s own copy of MarkerHud.ClockHour.</summary>
-    private int ClockHour(Vector3 targetPos)
-    {
-        var d = targetPos - PlanePos;
-        float bearing = Mathf.RadToDeg(Mathf.Atan2(d.X, -d.Z)); // 0 = N (−Z), 90 = E (+X)
-        float rel = Mathf.PosMod(bearing - HeadingDeg, 360f);
-        int h = Mathf.RoundToInt(rel / 30f) % 12;
-        return h == 0 ? 12 : h;
+        var along = new Vector2(-placed.Dir.Y, placed.Dir.X) * (stagger * RefStaggerStep * s);
+        DrawTag(font, placed.Anchor - placed.Dir * (RefArrowLen + RefTextGap) * s + along,
+            $"{tag}  {EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos)} o'clock", color, fontSize);
     }
 
     private void DrawArrow(Vector2 tip, Vector2 dir, float len, float half, float s, Color color)

@@ -137,6 +137,18 @@ The board drawn over the whole window while a session builds. Carries no progres
 synchronous block.
 _Avoid_: loading screen, splash, please-wait
 
+## HUD markers
+
+**Edge marker**:
+The off-screen presentation of a marked world target: the marker clamped to the margin-inset
+screen edge, with an arrow pointing outward and a clock-hour bearing.
+_Avoid_: off-screen indicator, edge arrow (that is one styled part of it), waypoint marker
+
+**Clock-hour bearing**:
+A target's bearing relative to the pilot's own heading, in clock hours: 12 ahead, 3 right,
+6 behind, 9 left. The original's "N o'clock" suffix.
+_Avoid_: o'clock value, clock direction, relative bearing in hours
+
 ## Format documentation
 
 **Format family**:
