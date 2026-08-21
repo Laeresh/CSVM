@@ -26,7 +26,6 @@ public sealed partial class MarkerHud : Control
     private const int RefStatusFont = 19;    // the run-status line
     private const int RefBannerFont = 26;    // intro / all-complete banners
     private const float RefStatusY = 100f;   // run-status baseline y, just under the compass tape
-    private const float RefEdgeMargin = 46f; // keep edge markers this far off the screen border
     private const float RefArrowLen = 20f;   // arrowhead length
     private const float RefArrowHalf = 9f;   // arrowhead half-width
     private const float RefTextGap = 10f;    // gap from the projected point / arrow to the text
@@ -120,9 +119,7 @@ public sealed partial class MarkerHud : Control
         // Project the zone through the live camera (at draw time, so it can't lag the chase cam).
         bool behind = _camera.IsPositionBehind(zone.Position);
         Vector2 sp = _camera.UnprojectPosition(zone.Position);
-        float m = RefEdgeMargin * s;
-        var inner = new Rect2(m, m, Size.X - 2f * m, Size.Y - 2f * m);
-        bool onScreen = !behind && inner.HasPoint(sp);
+        var placed = EdgeMarker.Resolve(sp, behind, Size, EdgeMarker.RefEdgeMargin * s);
 
         var lines = new List<string>(3);
         string head = MarkerHead(zone);
@@ -130,7 +127,7 @@ public sealed partial class MarkerHud : Control
             lines.Add(head);
         lines.Add(zone.Description.Length > 0 ? zone.Description : zone.DzName);
 
-        if (onScreen)
+        if (placed.OnScreen)
         {
             lines.Add(FormatDistance(PlanePos.DistanceTo(zone.Position)));
             DrawReticle(sp, RefReticleR * s);
@@ -139,17 +136,10 @@ public sealed partial class MarkerHud : Control
         }
         else
         {
-            lines.Add($"{ClockHour(zone)} o'clock");
-            var center = Size / 2f;
-            var dir = sp - center;
-            if (behind)
-                dir = -dir; // the projection of a point behind the camera is mirrored through centre
-            if (dir.LengthSquared() < 1f)
-                dir = Vector2.Down;
-            dir = dir.Normalized();
-            var edge = EdgePoint(center, dir, m);
-            DrawArrow(edge, dir, RefArrowLen * s, RefArrowHalf * s, s);
-            DrawLinesClamped(font, edge - dir * (RefArrowLen + RefTextGap) * s, lines.ToArray(), markerFont, HudBlue);
+            lines.Add($"{EdgeMarker.ClockHour(PlanePos, HeadingDeg, zone.Position)} o'clock");
+            DrawArrow(placed.Anchor, placed.Dir, RefArrowLen * s, RefArrowHalf * s, s);
+            DrawLinesClamped(font, placed.Anchor - placed.Dir * (RefArrowLen + RefTextGap) * s,
+                lines.ToArray(), markerFont, HudBlue);
         }
     }
 
@@ -194,26 +184,6 @@ public sealed partial class MarkerHud : Control
             lines.Add(waiting == 1 ? "waiting for 1 pilot…" : $"waiting for {waiting} pilots…");
         }
         return lines.ToArray();
-    }
-
-    // Relative bearing of the zone from the plane's heading in clock hours (12 = ahead,
-    // 3 = right, 6 = behind, 9 = left) — the original's "N o'clock" suffix.
-    private int ClockHour(StuntZone z)
-    {
-        var d = z.Position - PlanePos;
-        float bearing = Mathf.RadToDeg(Mathf.Atan2(d.X, -d.Z)); // 0 = N (−Z), 90 = E (+X)
-        float rel = Mathf.PosMod(bearing - HeadingDeg, 360f);
-        int h = Mathf.RoundToInt(rel / 30f) % 12;
-        return h == 0 ? 12 : h;
-    }
-
-    // Screen-edge point along `dir` from centre, inset by the margin.
-    private Vector2 EdgePoint(Vector2 center, Vector2 dir, float margin)
-    {
-        float hx = Size.X / 2f - margin, hy = Size.Y / 2f - margin;
-        float tx = Mathf.Abs(dir.X) > 1e-4f ? hx / Mathf.Abs(dir.X) : float.MaxValue;
-        float ty = Mathf.Abs(dir.Y) > 1e-4f ? hy / Mathf.Abs(dir.Y) : float.MaxValue;
-        return center + dir * Mathf.Min(tx, ty);
     }
 
     private void DrawArrow(Vector2 tip, Vector2 dir, float len, float half, float s)
@@ -261,7 +231,7 @@ public sealed partial class MarkerHud : Control
         float maxW = 0f;
         foreach (var line in lines)
             maxW = Mathf.Max(maxW, font.GetStringSize(line, HorizontalAlignment.Left, -1f, fontSize).X);
-        float m = RefEdgeMargin * HudMetrics.Scale(this);
+        float m = EdgeMarker.RefEdgeMargin * HudMetrics.Scale(this);
         center.X = Mathf.Clamp(center.X, m + maxW / 2f, Size.X - m - maxW / 2f);
         center.Y = Mathf.Clamp(center.Y, m + totalH / 2f, Size.Y - m - totalH / 2f);
         DrawLines(font, center, lines, fontSize, color);

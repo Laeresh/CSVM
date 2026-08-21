@@ -32,7 +32,6 @@ public sealed partial class VersusHud : Control
     private const float RefBannerYFrac = 0.30f;
     private const float BannerDuration = 3f;  // s the banner shows
     private const float BannerFadeTail = 0.6f; // s of that spent fading out
-    private const float RefEdgeMargin = 46f;  // keep edge markers this far off the screen border
     private const float RefArrowLen = 18f;
     private const float RefArrowHalf = 8f;
     private const float RefTextGap = 8f;
@@ -138,16 +137,6 @@ public sealed partial class VersusHud : Control
         return $"{total / 60}:{total % 60:00}";
     }
 
-    // Screen-edge point along `dir` from centre, inset by the margin —
-    // MarkerHud's EdgePoint verbatim.
-    private static Vector2 EdgePoint(Vector2 center, Vector2 dir, float margin)
-    {
-        float hx = center.X - margin, hy = center.Y - margin;
-        float tx = Mathf.Abs(dir.X) > 1e-4f ? hx / Mathf.Abs(dir.X) : float.MaxValue;
-        float ty = Mathf.Abs(dir.Y) > 1e-4f ? hy / Mathf.Abs(dir.Y) : float.MaxValue;
-        return center + dir * Mathf.Min(tx, ty);
-    }
-
     private string StatusLine(VersusMatch match)
     {
         string time = match.TimeLimit > 0f ? $"{FormatTime(match.TimeRemaining)}   " : "";
@@ -164,43 +153,21 @@ public sealed partial class VersusHud : Control
     }
 
     // One opponent's marker: on screen, their tag floats just above the projected
-    // point; off screen (or behind), an edge arrow + "N o'clock" bearing — MarkerHud's on-screen/
-    // edge-arrow branch, one instance per opponent instead of one stunt zone. TargetHud keeps its
-    // own copy of this for the selected target and --debug-markers.
+    // point; off screen (or behind), an edge arrow + "N o'clock" bearing — EdgeMarker's placement,
+    // one instance per opponent instead of one stunt zone.
     private void DrawOpponent(Font font, Vector3 pos, Color color, string tag, float s, int fontSize)
     {
         bool behind = _camera.IsPositionBehind(pos);
         Vector2 sp = _camera.UnprojectPosition(pos);
-        float m = RefEdgeMargin * s;
-        var inner = new Rect2(m, m, Size.X - 2f * m, Size.Y - 2f * m);
-        if (!behind && inner.HasPoint(sp))
+        var placed = EdgeMarker.Resolve(sp, behind, Size, EdgeMarker.RefEdgeMargin * s);
+        if (placed.OnScreen)
         {
             DrawTag(font, sp + new Vector2(0f, -RefOnScreenLift * s), tag, color, fontSize);
             return;
         }
-        var center = Size / 2f;
-        var dir = sp - center;
-        if (behind)
-            dir = -dir; // the projection of a point behind the camera is mirrored through centre
-        if (dir.LengthSquared() < 1f)
-            dir = Vector2.Down;
-        dir = dir.Normalized();
-        var edge = EdgePoint(center, dir, m);
-        DrawArrow(edge, dir, RefArrowLen * s, RefArrowHalf * s, s, color);
-        DrawTag(font, edge - dir * (RefArrowLen + RefTextGap) * s,
-            $"{tag}  {ClockHour(pos)} o'clock", color, fontSize);
-    }
-
-    // Relative bearing of `targetPos` from this pilot's own heading in
-    // clock hours (12 = ahead, 3 = right, 6 = behind, 9 = left) — MarkerHud.ClockHour over an
-    // opponent instead of a danger zone.
-    private int ClockHour(Vector3 targetPos)
-    {
-        var d = targetPos - PlanePos;
-        float bearing = Mathf.RadToDeg(Mathf.Atan2(d.X, -d.Z)); // 0 = N (−Z), 90 = E (+X)
-        float rel = Mathf.PosMod(bearing - HeadingDeg, 360f);
-        int h = Mathf.RoundToInt(rel / 30f) % 12;
-        return h == 0 ? 12 : h;
+        DrawArrow(placed.Anchor, placed.Dir, RefArrowLen * s, RefArrowHalf * s, s, color);
+        DrawTag(font, placed.Anchor - placed.Dir * (RefArrowLen + RefTextGap) * s,
+            $"{tag}  {EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos)} o'clock", color, fontSize);
     }
 
     private void DrawArrow(Vector2 tip, Vector2 dir, float len, float half, float s, Color color)

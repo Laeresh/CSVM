@@ -129,6 +129,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/HudFont.cs` — the game's own 5px HUD bitmap font, auto-segmented from `rimage/5pointhud*.png`; `--hud-font-test` proves it.
 - `src/Flight/WeaponReadout.cs` — the selected-weapon text readout: gun group + rocket type and live ammo, in the game's own HUD font.
 - `src/Flight/ImpactReticle.cs` — the gun aiming pipper: 0.5 s of the selected group's flight along the nose (the original's own rule), projected each frame.
+- `src/Flight/EdgeMarker.cs` — the off-screen edge marker's placement rules, engine-free: on-screen test, behind-mirror, edge clamp (`Resolve`) and the clock-hour bearing (`ClockHour`); MarkerHud, VersusHud and TargetHud all place through it.
 - `src/Flight/MarkerHud.cs` — the stunt objective marker HUD: reticle, screen-edge arrow + o'clock bearing, run status, banners; one per player.
 - `src/Flight/StuntScoreboard.cs` — end-of-run results overlay: a Godot-UI panel of per-zone splits, total, and the persisted best time.
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
@@ -1999,9 +2000,18 @@ Fixed screen size scaled by `HudMetrics`; one per player pane. What the pipper f
 axis at 0.5 s of flight, range-smoothed, deliberately never the assist's line — is decoded in
 docs/org/aim-assist.md "What the gun pipper follows".
 
+## src/Flight/EdgeMarker.cs
+The off-screen edge marker's placement rules, engine-free and pure: `Resolve(projected, behind,
+paneSize, margin)` answers on-screen vs edge-clamped (the margin-inset rect test, the
+behind-the-camera mirror, the degenerate-direction fallback, the clamp along the direction to the
+inset boundary) as a `Placement`, and `ClockHour(ownPos, headingDeg, targetPos)` is the "N o'clock"
+bearing. Owns `RefEdgeMargin`. The camera stays with the callers — `MarkerHud`, `VersusHud` and
+`TargetHud` project through their own pane's camera and keep their own arrow/tag/label styling.
+Off-engine coverage: `CSVM.Tests/EdgeMarkerTests.cs`.
+
 ## src/Flight/MarkerHud.cs
 The stunt objective marker HUD: a viewport-filling `Control` drawing the on-screen reticle/text
-block, the off-screen edge arrow (`EdgePoint`, `ClockHour` bearing), run status and banners
+block, the off-screen edge arrow (`EdgeMarker.Resolve` + clock-hour bearing), run status and banners
 (`CompleteBanner` branches solo vs race); one per player, sized via `HudMetrics.Scale(this)`.
 
 ## src/Flight/StuntScoreboard.cs
@@ -2051,8 +2061,8 @@ time (omitted once `VersusMatch.TimeLimit` is disabled), this pane's own K/D, an
 leader's tag — drawn in MarkerHud's run-status slot (`RefStatusY` — Stunt and Versus are mutually
 exclusive, so the two never compete for it); a transient "P2 DOWNED P3" kill banner ("P3 DOWN"
 with no killer); and one opponent marker per living rig (`Rigs`, excluding `PlayerIndex` and any
-`Controller.Crashed` seat) — an on-screen tag at the projected point, or MarkerHud's edge-arrow +
-clock-hour bearing (`EdgePoint`/`ClockHour`, copied verbatim) when off screen/behind, in that
+`Controller.Crashed` seat) — an on-screen tag at the projected point, or the edge-arrow +
+clock-hour bearing (`EdgeMarker`'s placement) when off screen/behind, in that
 opponent's own `SplitScreen.PlayerColor`. `Build(match, playerIndex, camera)` binds the match +
 this pane's own camera (opponent markers project through it, exactly like MarkerHud's zone);
 `Rigs` is attached once by `HumanFlightAdapter` (the SAME live list `GameSession` keeps, not a
@@ -2073,9 +2083,9 @@ fallback where no selection exists, and `--debug-markers`' every-live-aircraft o
 original's bracket box, label block and off-screen edge arrow + clock bearing, and owns the colour
 table (`MarkerColor`), the label layout (`LabelLines`), the selected gun's reach gate (`GunReaches`,
 fed by `FlightController.GunReachesTarget`) and the debug identity string (`DebugTag`). The marker's
-decode is [`org/targeting.md`](org/targeting.md); the shape is copied from `VersusHud`'s own copy of
-`MarkerHud`'s. Pinned by the `hostile-marker-hud` suite, `HostileTagTests` and the
-`c1-targeting-hud` golden.
+decode is [`org/targeting.md`](org/targeting.md); the edge placement and clock bearing are
+`EdgeMarker`'s, only the styling is this HUD's own. Pinned by the `hostile-marker-hud` suite,
+`HostileTagTests` and the `c1-targeting-hud` golden.
 
 
 ## src/Flight/VersusBoard.cs
