@@ -71,8 +71,8 @@
     {
       "name": "viewer-bhawk",
       "frame": 30,
-      "hash": "9fda0b12d0c4601c9cf28b91f6ccbf47",
-      "exercises": "one aircraft built and painted: PlaneBuilder, the default Fortune Hunters livery and its decals, the orbit camera's framing, and the launcher-default light (--viewer loads no weather); static by construction, 0 px at 30 vs 360.",
+      "hash": "85f3048634bf10db933b6aec0374a509",
+      "exercises": "one aircraft built and painted: PlaneBuilder with the cockpit interior subtree the viewer lab builds, the default Fortune Hunters livery and decals, the orbit camera's framing, the launcher-default light; static by construction, 0 px at 30 vs 360.",
       "args": ["--viewer", "--plane=player_bhawk", "--det", "--mute"]
     },
     {

@@ -2136,8 +2136,9 @@ Two flavours of one airframe: `Load` resolves everything down the player chain, 
   model on the player chain. An AI aircraft is therefore **zone-less**: an authored `armor`/`health`
   pair and NO `destroyable_parts`, which is what every roster-named def chain resolves in the
   shipped game (`docs/org/vehicleDamage.md`'s 2026-08-16 correction). `DefName` stays the player
-  def on both flavours on purpose (`AiDefName`'s own doc); `damaged_engine_sound` parses fully
-  except `cockpit_engine_sound`, which needs a cockpit view (`BL-161`).
+  def on both flavours on purpose (`AiDefName`'s own doc); `damaged_engine_sound` and
+  `cockpit_engine_sound` both parse fully — `EngineAudioCurves.EngineDefFor` is what selects
+  between them and the plain `engine_sound` (see `src/Flight/EngineAudioCurves.cs` below).
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a

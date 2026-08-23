@@ -170,7 +170,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — close-out
 
-41. ☐ File the deferred backlog items; close `BL-080`/`BL-161`; fold the head-look decode into `org/cameraViews.md`
+41. ☑ File the deferred backlog items; close `BL-080`/`BL-161`; fold the head-look decode into `org/cameraViews.md`
 
 ## Dependency and parallelism notes
 
@@ -231,7 +231,10 @@ the def's ungated second sequence as the control.
 the sequences suites and only needed extending: there was none — condition 120 had no test
 anywhere, and `bullet1` is the first def in this project ever to take that branch.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the final plan tree: build clean, units 1730 passed / 0 failed,
+engine suites 93 passed / 0 failed with errors clean (the `first-person-condition` suite among
+them), goldens 15 unchanged plus `viewer-bhawk` re-pinned for the interior the viewer lab now
+builds.
 
 **Original approach (kept for reference).**
 
@@ -324,7 +327,9 @@ fixed pitch tilt's sign (it looks down, revealing the plane's own nose, matching
 text), and that the plane's attitude carries both the position offset and the aim together, not
 independently.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the final plan tree: build clean, units 1730 passed / 0 failed
+(`CameraControllerFirstPersonTests` and the decoy-marker fixture among them), engine suites
+93 passed / 0 failed with errors clean, goldens 15 unchanged plus the `viewer-bhawk` re-pin.
 
 **Original approach (kept for reference).**
 
@@ -404,7 +409,10 @@ per Decision 5.
 the aspect factor collapses to 1 and the derived vertical equals the stored horizontal exactly) —
 confirming the law is live-aspect-driven rather than a hardcoded 16:9 table.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the final plan tree: build clean, units 1730 passed / 0 failed
+(`CameraControllerFovTests` pinning 46.8°/64.4° at 16:9 and the 4:3 collapse among them), engine
+suites 93 passed / 0 failed with errors clean, goldens 15 unchanged plus the `viewer-bhawk`
+re-pin; the external views' goldens moving zero pixels is the Decision 3 boundary holding.
 
 **Original approach (kept for reference).**
 
@@ -534,7 +542,11 @@ both lamps are parked while the dashboard beside them still renders, that `Damag
 `pcdp` name, that `Bind` picks the airframe's `markers` group and not a gauge's, and that all
 three visibility states land on the real nodes.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the final plan tree: build clean, units 1730 passed / 0 failed,
+engine suites 93 passed / 0 failed with errors clean (`cockpit-interior` among them), goldens 15
+unchanged plus the `viewer-bhawk` re-pin. Orchestrator-reviewed captures at one scripted pose:
+Cockpit clean of the parked states after the bullet-hole fix, Nose unobstructed, Chase unchanged.
+The interior's world-composite scale and look in motion are `BL-436`'s sitting.
 
 **Original approach (kept for reference).**
 
@@ -627,7 +639,10 @@ Nose↔Cockpit switch; and `Reset()` clears the exterior panel and its cockpit t
 `Node3D`/`MeshInstance3D` types are not exercised in headless xunit anywhere in this codebase, so
 this is the honest check, the same family B11's `cockpit-interior` suite is in.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the final plan tree: build clean, units 1730 passed / 0 failed,
+engine suites 93 passed / 0 failed with errors clean; `cockpit-panel-staging` also ran standalone
+in the worktree ahead of the item's commit (1 passed, errors clean). Goldens 15 unchanged plus
+the `viewer-bhawk` re-pin, which is this item's own viewer-lab wiring made visible.
 
 **Original approach (kept for reference).**
 
@@ -748,7 +763,10 @@ input and its deliberate bypass of the floor, and the composition order against 
 zero-angle pose. `PilotViewTests` carries the precedence half: a held view key overrides the chase
 selection and does NOT override a first-person one, and the look-behind overrides all three.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the final plan tree: build clean, units 1730 passed / 0 failed
+(`HeadLookTests` and the split `PilotViewTests` precedence cases among them), engine suites 93
+passed / 0 failed with errors clean, goldens 15 unchanged plus the `viewer-bhawk` re-pin. The
+feel half (pan rate, smoothing, snap directions at the controls) is `BL-436`'s sitting.
 
 **Original approach (kept for reference).**
 
@@ -838,7 +856,10 @@ cap exercised on a climb well past it, an uncapped small lean passed through unc
 azimuth sign matching `SnapTargets`' own mirrored convention (drifting right reads negative,
 positive is left).
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the final plan tree: build clean, units 1730 passed / 0 failed (the
+loader-arithmetic parse against the shipped file and the −0.0524 rad floor bypass among them),
+engine suites 93 passed / 0 failed with errors clean, goldens 15 unchanged plus the `viewer-bhawk`
+re-pin. The sub-cap lean divergence is `BL-436`'s sitting.
 
 **Original approach (kept for reference).**
 
@@ -917,7 +938,11 @@ falls back to the normal loop rather than going silent. No new in-engine suite: 
 through `FlightAudio.Setup`/`Update` either — this item does not carry new obligation past the
 precedent its neighbour already set.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the final plan tree: build clean, units 1730 passed / 0 failed
+(`EngineAudioModelTests`' all-11-airframes authorship, precedence table and null fallback among
+them), engine suites 93 passed / 0 failed with errors clean, goldens 15 unchanged plus the
+`viewer-bhawk` re-pin. The listen (presence of the `_cp` def on entering first person, against
+`BL-391`'s open level question) is `BL-436`'s sitting.
 
 **Original approach (kept for reference).**
 
@@ -946,7 +971,38 @@ not a second voice; stacking both loops would be inventing content.
 
 # Wave E — close-out
 
-## E41 ☐ File the deferred items; close `BL-080`/`BL-161`; fold the decode into `org/cameraViews.md`
+## E41 ☑ File the deferred items; close `BL-080`/`BL-161`; fold the decode into `org/cameraViews.md`
+
+**Landed.** Every point this plan deliberately deferred now exists as its own `backlog.md` item —
+six new ones plus two updates to entries that already covered part of the same ground, so nothing
+duplicates: `BL-431` (in-3D gauge drive, folding in the `POSITION_1ST` HUD-layout question), an
+update to `BL-399` (padlock/Track Target, tying the look-state byte's third value to the new
+selector item), `BL-432` (the `K`/`J` snap-vs-smooth look-mode selectors), `BL-433` (the numpad
+`+`/`−` External Camera Zoom axis), an update to `BL-420` (the engine-wide 62°V→60°H FOV migration,
+recording that A3 already landed the mode-6/7 half and narrowing the remaining scope to the three
+external-FOV call sites, with the overcast/tracer warning carried forward), `BL-434` (splitscreen
+cockpit behaviour), `BL-435` (chase-view look-around, with a pointer added to `BL-150` since its
+numpad "fixed views" measurement is this same controller), and `BL-436` (one `[Owed-playtest]` item
+bundling the whole cockpit sitting: `InteriorScale`, head-look feel, the azimuth-sign and
+autohead-sub-cap port decisions, the damaged-over-cockpit precedence, the `cockpit_engine_sound`
+listen, and the Nose head-look confirm). `BL-080` and `BL-161` are deleted per the
+close-backlog-item ritual; the closing commit's message carries what settled them, not a doc line.
+
+`docs/org/cameraViews.md` gained the head-look controller's decoded behaviour (states, elevation
+convention, snap windows, smoothing rates, the autohead trio and the fixed offset, all three
+callers including the chase floor `−π/2`), corrected the mode-7 head-look claim (only autohead is
+mode-gated, not player-driven look), fixed the aspect-correction ratio (`(4/3)/liveAspect`, not the
+inverse), added the axis-convention caveat that a raw node translate lands in Godot's frame
+unswapped, resolved the `markers`/`dontmove` contents in the "Not resolved" list, added the F7
+menu-label conflict to the flyby correction block, and updated the "What this means for CSVM" table
+rows this plan's own waves now represent.
+
+**Verified.** Docs-only item; the commit hooks are its checks (duplicate-ID, encoding, prose and
+comment-cap tripwires all passed on the closing commit), and the full battery on the final plan
+tree passed around it: build clean, units 1730 passed / 0 failed, engine suites 93 passed / 0
+failed with errors clean, goldens 15 unchanged plus the `viewer-bhawk` re-pin.
+
+**Original approach (kept for reference).**
 
 **Goal.** Every deliberately deferred point exists as a `backlog.md` item; `BL-080` and `BL-161`
 are closed per the close-backlog-item ritual; the head-look decode (constants, addresses, the
