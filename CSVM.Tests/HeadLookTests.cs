@@ -14,6 +14,13 @@ public class HeadLookTests
 {
     private const float Tol = 1e-4f;
 
+    // C22: HeadLook.AutoheadTarget's shipped constants (extracted/zrdr/player.zrd.json via
+    // PlaneStatsFlightGlobalsTests' own loader assertion), reused by the pure-vector-law tests
+    // near the bottom of this file.
+    private const float ShippedTurnTime = 0.75f;
+    private const float ShippedTurnMax = 0.0998f;
+    private const float ShippedMinPitch = -0.0524f;
+
     private static HeadLookInput Idle => default;
 
     [Fact]
@@ -235,6 +242,70 @@ public class HeadLookTests
         Assert.True(position.IsEqualApprox(Vector3.One + (attitude * Vector3.Up)));
         Assert.True(basis.Z.IsEqualApprox(expected.Z));
         Assert.True(basis.X.IsEqualApprox(expected.X));
+    }
+
+    // C22: HeadLook.AutoheadTarget, the idle-frame lean law fed to IdleAim, exercised as a pure
+    // vector law directly — no PlaneStats in the loop.
+
+    [Fact]
+    public void AutoheadIsNullWhenTheLocalVelocityIsNegligible()
+    {
+        Assert.Null(HeadLook.AutoheadTarget(Vector3.Zero, ShippedTurnTime, ShippedTurnMax, ShippedMinPitch));
+        Assert.Null(HeadLook.AutoheadTarget(new Vector3(0f, 0f, -1e-5f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch));
+    }
+
+    [Fact]
+    public void AutoheadIgnoresPureForwardSpeedEntirely()
+    {
+        // Straight and level at full cruise speed, nose along the plane's own −Z: the forward
+        // component is dropped before scaling (the class doc's port decision), so this reads
+        // exactly as negligible — the same null a parked aircraft returns.
+        Assert.Null(HeadLook.AutoheadTarget(new Vector3(0f, 0f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch));
+    }
+
+    [Fact]
+    public void AutoheadPinsTheDecodedMinusThreeDegreeFloorOnAHardDive()
+    {
+        // A steep dive at speed: the raw lean angle is well past −3°, so the floor — not the
+        // magnitude cap's direction — decides the shown elevation. This is the trap's own pin:
+        // the −3° floor sits below C21's [0, π/2] input floor and must survive here.
+        var t = HeadLook.AutoheadTarget(new Vector3(0f, -50f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
+        Assert.NotNull(t);
+        Assert.Equal(ShippedMinPitch, t!.Value.Elevation, Tol);
+    }
+
+    [Fact]
+    public void AutoheadCapsTheLeanVectorsMagnitudeAtTurnMax()
+    {
+        // A climb well past the cap once scaled by turnTime (5 m/s × 0.75 = 3.75, against a
+        // 0.0998 rad cap): the resulting elevation must sit exactly at the cap, not the
+        // uncapped 3.75.
+        var t = HeadLook.AutoheadTarget(new Vector3(0f, 5f, -200f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
+        Assert.NotNull(t);
+        Assert.Equal(ShippedTurnMax, t!.Value.Elevation, Tol);
+        Assert.Equal(0f, t.Value.Azimuth, Tol);
+    }
+
+    [Fact]
+    public void AutoheadLeavesASmallLeanUncappedBelowTurnMax()
+    {
+        // Well under the cap once scaled: the components pass straight through as the direct
+        // (elevation, azimuth) angles, not through an arctangent — the cap having any effect at
+        // all on the visible angle depends on this.
+        var t = HeadLook.AutoheadTarget(new Vector3(0.01f, 0.01f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
+        Assert.NotNull(t);
+        Assert.Equal(0.01f * ShippedTurnTime, t!.Value.Elevation, Tol);
+        Assert.Equal(-0.01f * ShippedTurnTime, t.Value.Azimuth, Tol);
+    }
+
+    [Fact]
+    public void AutoheadLooksRightWhenTheVelocityDriftsRightOfTheNose()
+    {
+        // Forward with a rightward drift (local +X): the codebase's convention is positive azimuth
+        // = LEFT, so a rightward drift must read NEGATIVE, matching SnapTargets' own mirroring.
+        var t = HeadLook.AutoheadTarget(new Vector3(50f, 0f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
+        Assert.NotNull(t);
+        Assert.True(t!.Value.Azimuth < 0f);
     }
 
     private static HeadLookInput Snap(float x, float y) => new(x, y, 0f, 0f, false);

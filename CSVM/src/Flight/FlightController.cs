@@ -676,6 +676,13 @@ public partial class FlightController : Node3D
         _cam = camera != null
             ? new CameraController(camera, camParams, KeyDown, PinnedView, PinnedViewMode, cockpitCameraOffset)
             : null;
+        // C22: the idle branch of the shared head-look law — set once here, since Head lives for
+        // the controller's whole life and _model (captured by the closure) is reassigned by every
+        // respawn, not replaced.
+        if (_cam != null)
+        {
+            _cam.Head.IdleAim = AutoheadTarget;
+        }
         _spawnPos = spawnPos;
         _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
         _spawnThrottle = spawnThrottle;
@@ -2882,6 +2889,22 @@ public partial class FlightController : Node3D
         var (snapX, snapY) = SnapLookInput();
         var (freeRight, freeUp) = FreeLookRead();
         return new HeadLookInput(snapX, snapY, freeRight, freeUp, KeyDown(SnapCenterKey));
+    }
+
+    // C22's IdleAim delegate: HeadLook.Step calls this only on a frame with no look input at all.
+    // Gated on ViewMode (Cockpit only — the original's option byte AND mode ≠ 7) and the options
+    // toggle here, mirroring the original's engine option byte; the magnitude/negligible-velocity
+    // gate lives in HeadLook.AutoheadTarget itself.
+    private (float Elevation, float Azimuth)? AutoheadTarget()
+    {
+        if (_cam == null || _cam.ViewMode != PilotViewMode.Cockpit
+            || !Config.GetBool("headLook.autohead", true))
+        {
+            return null;
+        }
+        Vector3 localVelocity = _model.Attitude.Inverse() * (_model.VelocityDir * _model.Speed);
+        return HeadLook.AutoheadTarget(localVelocity, _model.Stats.AutoheadTurnTime,
+            _model.Stats.AutoheadTurnMax, _model.Stats.AutoheadTurnMinPitch);
     }
 
     // The snap cluster as a composed direction, the same shape the original composes from its nine

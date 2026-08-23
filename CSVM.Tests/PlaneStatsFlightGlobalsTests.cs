@@ -82,4 +82,42 @@ public class PlaneStatsFlightGlobalsTests
         // not that the read (versus the fallback) took effect; see the field's comment.
         Assert.Equal(40f * PhysicsConstants.MphToMs, s.DragFadeSpeed, 3);
     }
+
+    /// <summary>C22: autohead_turn_time/_max/_min_pitch reproduce the loader's own asymmetric
+    /// arithmetic — turn_max's authored degrees are converted THEN DOUBLED, where the compiled
+    /// default is already the doubled radian value and is not doubled again.</summary>
+    [ExtractedDataFact]
+    public void AutoheadReproducesTheLoadersAsymmetricArithmetic()
+    {
+        var s = PlaneStats.Load(ZrdrPath, "player_bhawk");
+
+        // autohead_turn_time 0.75 s — no unit conversion either side, and happens to equal the
+        // compiled default, so this alone only proves the read did not error.
+        Assert.Equal(0.75f, s.AutoheadTurnTime, 3);
+
+        // autohead_turn_max: authored 2.86°, converted ×π/180 THEN DOUBLED → 0.0998 rad. The
+        // compiled fallback (0.1 rad) is NOT doubled — reading it back doubled would be the bug
+        // this test exists to catch.
+        Assert.Equal(Mathf.DegToRad(2.86f) * 2f, s.AutoheadTurnMax, 4);
+        Assert.Equal(0.0998f, s.AutoheadTurnMax, 3);
+        Assert.NotEqual(0.1f, s.AutoheadTurnMax, 4);
+
+        // autohead_turn_min_pitch: authored −3.0°, converted once, no doubling — −0.0524 rad.
+        // The compiled default happens to equal it, so this alone cannot prove the read took
+        // effect over the fallback; see TheAuthoredFlightGlobalsAreLoadedNotFallenBackTo for that.
+        Assert.Equal(Mathf.DegToRad(-3f), s.AutoheadTurnMinPitch, 4);
+        Assert.Equal(-0.0524f, s.AutoheadTurnMinPitch, 3);
+    }
+
+    /// <summary>C22's compiled-default asymmetry, isolated from any file: a fresh
+    /// <c>PlaneStats</c> (no <see cref="PlaneStats.Load"/> call, so no key is ever authored) carries
+    /// turn_max already-doubled at 0.1 rad exactly, not degrees-converted-then-doubled.</summary>
+    [Fact]
+    public void AutoheadFallsBackToTheCompiledDefaultsWhenNoKeyIsPresent()
+    {
+        var s = new PlaneStats();
+        Assert.Equal(0.75f, s.AutoheadTurnTime);
+        Assert.Equal(0.1f, s.AutoheadTurnMax);
+        Assert.Equal(-0.05235988f, s.AutoheadTurnMinPitch);
+    }
 }

@@ -1443,7 +1443,12 @@ zeroes both targets at once and beats a held snap. ⚠ `ElevationFloor` is a con
 not a constant: the original's first-person caller passes 0 and its chase caller −π/2, and the
 chase look-around (a filed E41 item) is the same controller. `IdleAim` is C22's seam — consulted
 only on a frame with no look input at all, its answer becomes the targets directly, deliberately
-past the floor, because autohead's own floor is below level.
+past the floor, because autohead's own floor is below level. `AutoheadTarget` (static, engine-free)
+is that seam's law: local-frame sideways/vertical velocity only (forward speed dropped — a port
+decision, docs/formats/vehicle/player-globals.md's autohead row), scaled by `autohead_turn_time`,
+capped in magnitude at `autohead_turn_max`, its components read DIRECTLY as (elevation, azimuth)
+rather than through an arctangent. `FlightController.AutoheadTarget` is `IdleAim`'s live wiring —
+gated on `ViewMode == Cockpit` and a `Config` toggle (`headLook.autohead`, default ON).
 
 Engine-free apart from `Mathf`, so every law unit-tests without a camera. Collaborators:
 `CameraController` (owns one as `Head` and composes its shown angles into the view basis) and
@@ -2108,7 +2113,9 @@ gunner link) +
 engines.json stock engine power + player.json globals (the flight constants, the near-miss cue's
 `warning_shot_*` block, the gun aim assist's `sticky_bullet_catchup_rate`/`_forget_interval`
 (`AimAssist.cs`'s B2), `_dist_factor` (B4's scoring) and `_inaccuracy` (B5's launch scatter, stored
-in RADIANS as the original stores it), plus the decoded model's
+in RADIANS as the original stores it), the Cockpit head's `autohead_turn_time`/`_turn_max`/
+`_turn_min_pitch` (C22, `HeadLook.AutoheadTarget`'s constants — `turn_max`'s authored-vs-default
+asymmetry, docs/formats/vehicle/player-globals.md), plus the decoded model's
 lift/AoA/G, turn/yaw-curve, pitch-fade and drag-fade-speed globals — docs/org/flightModel.md; converted
 exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G; the turn/yaw
 curves are live in the model, the G limiters and the pitch fade deliberately not, being authored out
@@ -2746,7 +2753,10 @@ a held numpad key freezes the head where it was and releasing resumes it. The mo
 every other control (a screen-position delta while the right button is held, `UseKeyboard`-gated as
 player 1's) rather than event-driven, which the fixed pan rate makes safe: only the DIRECTION of
 the motion is read, so a stale delta on the frame first person is entered is worth one frame of
-2 rad/s and nothing more.
+2 rad/s and nothing more. `Head.IdleAim` is wired here too, once, in `Setup` (C22): the private
+`AutoheadTarget` reads `_model.Attitude`/`VelocityDir`/`Speed`/`Stats` and gates on `ViewMode ==
+Cockpit` plus the `headLook.autohead` `Config` toggle, so `HeadLook` itself never learns about the
+flight model or the mode.
 On a crash it cuts to `CrashView` once,
 writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
 shows no HUD — footage), restoring it on respawn. Every physics query — the PlaneCollider boxes'

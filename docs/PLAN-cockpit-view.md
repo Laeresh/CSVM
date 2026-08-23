@@ -162,7 +162,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — head-look
 
 21. ☑ Head-look controller: snap + free-look (mouse / right stick) + center key, decoded rates and clamps
-22. ☐ Autohead velocity-follow from `player.json` `autohead_*` (off in Nose)
+22. ☑ Autohead velocity-follow from `player.json` `autohead_*` (off in Nose)
 
 ### Wave D — audio
 
@@ -770,7 +770,62 @@ pitch; the original cannot look below level in first person and faithfulness win
 here (file a taste item later if it feels wrong, do not silently widen the clamp). `DAT_009ad744`
 was read as the frame dt from usage; if rates feel double or half, re-check that assumption first.
 
-## C22 ☐ Autohead velocity-follow
+## C22 ☑ Autohead velocity-follow
+
+**Landed.** With no look input in Cockpit, the head leans toward the plane's own sideways and
+vertical velocity, scaled and capped per the shipped `player.json` `autohead_*` values; Nose never
+does this (mode-gated, not just input-gated); an options-style toggle (default ON) mirrors the
+original's engine enable flag.
+
+`PlaneStats.Load` parses the three keys beside the already-parsed `sticky_bullet_*` family
+(`docs/formats/vehicle/player-globals.md`'s autohead row), reproducing the loader's own asymmetric
+arithmetic exactly: `autohead_turn_time` carries no conversion (shipped 0.75 s, equal to its
+compiled default); `autohead_turn_max` is DEGREES in the file, converted ×π/180 THEN DOUBLED
+(shipped 2.86° → 0.0998 rad stored) where the compiled fallback (0.1 rad) is *already* the doubled
+value and is not doubled again; `autohead_turn_min_pitch` converts once, no doubling (shipped
+−3.0° → −0.0524 rad, which happens to equal its own compiled fallback).
+
+`HeadLook.AutoheadTarget` (static, engine-free, the same shape `SnapTargets` already has) is the
+rule: only the plane-LOCAL-frame sideways (X) and vertical (Y) velocity components drive the lean.
+**Port decision, evidence-gapped:** the forward (Z) component, the plane's own cruise speed (tens
+of m/s even unaccelerated), is dropped before scaling. Keeping it in the magnitude cap would let
+cruise speed swamp the cap on every ordinary flight, pinning the head dead ahead whether the plane
+is flying straight or hard-turning alike, which contradicts this item's own Verify line below (a
+bounded lean specifically during a turn/climb/dive). The (X, Y) pair is scaled by `turn_time`,
+capped in MAGNITUDE at `turn_max`, and the capped components become (elevation, azimuth)
+**directly, not through an arctangent** — an arctangent of a uniformly-scaled vector returns the
+same angle at any scale, so capping before one would have no effect on the visible result.
+Elevation floors at `turn_min_pitch` directly, which sits below `HeadLook`'s own input-path floor
+(level): `HeadLook.Step`'s idle branch (built by C21) already bypasses that clamp for exactly this
+reason, so no change was needed there. The method returns null when the lean is negligible or when
+the plane is flying dead straight (forward-only velocity reads as no lean at all, since only X/Y
+drive it).
+
+`FlightController.Setup` wires `_cam.Head.IdleAim` to a private `AutoheadTarget` method once, at
+construction (`Head` lives for the controller's whole life; `_model` is reassigned by every
+respawn, not replaced, so the closure stays valid). That method gates on `_cam.ViewMode ==
+PilotViewMode.Cockpit` (mode-gated, matching the original's `mode ≠ 7` condition rather than
+relying on Nose simply never reaching an idle frame) and a `Config.GetBool("headLook.autohead",
+true)` toggle mirroring the original's engine option byte (`DAT_0071dacc`); no decoded evidence
+pins that byte's own default state, so ON is a port choice matching the shipped behaviour every
+other autohead constant already assumes is live. The local velocity itself is
+`_model.Attitude.Inverse() * (_model.VelocityDir * _model.Speed)`, the same
+`Basis.Inverse()`-as-world-to-local pattern `FlightModel`/`CameraController`/`Projectile` already
+use.
+
+**Tests.** `CSVM.Tests/PlaneStatsFlightGlobalsTests.cs` gained two cases: the loader's asymmetric
+arithmetic against the shipped file (pinning 0.75 / 0.0998 rad / −0.0524 rad, and that turn_max
+reads back doubled rather than at its un-doubled fallback), and a bare `PlaneStats()`'s
+compiled defaults in isolation, no file involved. `CSVM.Tests/HeadLookTests.cs` gained cases for
+`AutoheadTarget`: null on negligible or pure-forward velocity, the −3° floor pinned on a hard dive
+(the trap this item names — the floor sitting below C21's `[0, π/2]` input floor), the magnitude
+cap exercised on a climb well past it, an uncapped small lean passed through unchanged, and the
+azimuth sign matching `SnapTargets`' own mirrored convention (drifting right reads negative,
+positive is left).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** With no look input in Cockpit, the head leans along the velocity vector per the
 `player.json` `autohead_*` values; Nose never does this; an options-style toggle mirrors the

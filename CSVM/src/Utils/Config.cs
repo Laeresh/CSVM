@@ -221,6 +221,9 @@ public static class Config
             // the warmup never does — register them here so --dump-config still documents them.
             GetInt("weapons.gunAmmoCap", FlightController.GunAmmoCapDefault);
             GetInt("weapons.ordnanceCap", FlightController.OrdnanceCapDefault);
+            // C22's autohead toggle (default ON, a port choice — docs/formats/vehicle/player-globals.md);
+            // read only on an idle first-person frame, which the warmup never reaches.
+            GetBool("headLook.autohead", true);
             // ⚠ Do not reinstate a `flightAudio` key. All three (whineMixGain,
             // damagedEngineMixGain, engineDetuneRatio) scaled mechanisms the engine-audio decode
             // refuted, so there is nothing left for them to tune (docs/formats/vehicle.md).

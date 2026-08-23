@@ -104,6 +104,30 @@ public sealed class HeadLook
         return (elevation, Wrap(-angle));
     }
 
+    /// <summary>C22's law: the idle-frame lean into the plane's own velocity, local-frame X/Y only
+    /// (forward speed dropped — why, and the (elevation, azimuth) derivation, are
+    /// docs/formats/vehicle/player-globals.md's autohead row). Scaled by <paramref
+    /// name="turnTime"/>, capped in magnitude at <paramref name="turnMax"/>, floored at <paramref
+    /// name="minPitch"/> — below <see cref="ElevationFloor"/> on purpose, <see cref="Step"/>'s idle
+    /// branch bypasses it. Null when the lean is negligible.</summary>
+    public static (float Elevation, float Azimuth)? AutoheadTarget(
+        Vector3 localVelocity, float turnTime, float turnMax, float minPitch)
+    {
+        Vector2 lean = new Vector2(localVelocity.X, localVelocity.Y) * turnTime;
+        float mag = lean.Length();
+        if (mag <= 1e-4f)
+        {
+            return null;
+        }
+        if (mag > turnMax)
+        {
+            lean *= turnMax / mag;
+        }
+        float elevation = Mathf.Max(lean.Y, minPitch);
+        float azimuth = Wrap(-lean.X);
+        return (elevation, azimuth);
+    }
+
     /// <summary>The decoded smoothing law: <c>shown = target + (shown − target)·e^(−rate·dt)</c>.
     /// Frame-rate independent by construction, and pure so it unit-tests at the decoded
     /// rates.</summary>
