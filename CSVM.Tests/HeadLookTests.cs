@@ -23,36 +23,24 @@ public class HeadLookTests
 
     private static HeadLookInput Idle => default;
 
-    [Fact]
-    public void DeadAheadSnapsTheHeadStraightUp()
-    {
-        var t = HeadLook.SnapTargets(0f, 1f);
-        Assert.NotNull(t);
-        Assert.Equal(Mathf.Pi / 2f, t!.Value.Elevation, Tol);
-        Assert.Equal(0f, t.Value.Azimuth, Tol);
-    }
-
+    // The eight direction slots as the original's own key-binding menu labels them
+    // (OriginalScreenshots/Keybinds Views 2.png), each read as the composed direction its key
+    // contributes: the head must land where its label says. Kp1/Kp3 are "Up/…/Rear", which is what
+    // settles that ALL four diagonals lift the head, not only the forward pair.
     [Theory]
-    [InlineData(1f, 1f)]      // forward-right
-    [InlineData(-1f, 1f)]     // forward-left
-    [InlineData(1f, -1f)]     // aft-right
-    [InlineData(-1f, -1f)]    // aft-left
-    public void EveryDiagonalSnapsTo45DegreesUp(float x, float y)
+    [InlineData(-1f, 1f, Mathf.Pi / 4f, Mathf.Pi / 4f)]              // Kp7 Look Up/Left
+    [InlineData(0f, 1f, Mathf.Pi / 2f, 0f)]                          // Kp8 Look Up
+    [InlineData(1f, 1f, Mathf.Pi / 4f, -Mathf.Pi / 4f)]              // Kp9 Look Up/Right
+    [InlineData(-1f, 0f, 0f, Mathf.Pi / 2f)]                         // Kp4 Look Left
+    [InlineData(1f, 0f, 0f, -Mathf.Pi / 2f)]                         // Kp6 Look Right
+    [InlineData(-1f, -1f, Mathf.Pi / 4f, 3f * Mathf.Pi / 4f)]        // Kp1 Look Up/Left/Rear
+    [InlineData(0f, -1f, 0f, Mathf.Pi)]                              // Kp2 Look Back
+    [InlineData(1f, -1f, Mathf.Pi / 4f, -3f * Mathf.Pi / 4f)]        // Kp3 Look Up/Right/Rear
+    public void TheEightSlotsSnapWhereTheOriginalsOwnLabelsSay(float x, float y, float elevation, float azimuth)
     {
         var t = HeadLook.SnapTargets(x, y);
         Assert.NotNull(t);
-        Assert.Equal(Mathf.Pi / 4f, t!.Value.Elevation, Tol);
-    }
-
-    [Theory]
-    [InlineData(1f, 0f, -Mathf.Pi / 2f)]   // looking right is a negative azimuth
-    [InlineData(-1f, 0f, Mathf.Pi / 2f)]   // looking left is positive
-    [InlineData(0f, -1f, Mathf.Pi)]        // dead astern, either way round the wrap
-    public void TheFlanksAndAsternSnapLevelAtTheDirectionsOwnAzimuth(float x, float y, float azimuth)
-    {
-        var t = HeadLook.SnapTargets(x, y);
-        Assert.NotNull(t);
-        Assert.Equal(0f, t!.Value.Elevation, Tol);
+        Assert.Equal(elevation, t!.Value.Elevation, Tol);
         Assert.Equal(0f, HeadLook.Wrap(t.Value.Azimuth - azimuth), Tol);
     }
 

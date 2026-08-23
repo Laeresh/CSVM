@@ -343,9 +343,9 @@ public partial class FlightController : Node3D
                                                    // per action
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
 
-    // The head-look recenter key, and the middle of the number-row snap cluster around it — the
-    // original's own center slot sits in the middle of its nine direction slots the same way.
-    private const Key SnapCenterKey = Key.Key5;
+    // The head-look recenter key: the original's Kp5 "Look Forward", the middle of the numpad
+    // cluster its eight direction slots surround.
+    private const Key SnapCenterKey = Key.Kp5;
 
     // Everything this pane draws for its pilot. Always present, so no site has to ask whether
     // there is a HUD: an aircraft with no readouts built simply has a module that draws nothing.
@@ -1463,8 +1463,8 @@ public partial class FlightController : Node3D
         else
         {
             PollViewModeKeys();
-            // A3: default to the external FOV global; the FirstPerson arm below overrides it, so
-            // a held numpad/back key while SELECTED Cockpit/Nose gets it back on release.
+            // Default to the external FOV global; the FirstPerson arm below overrides it, so a
+            // look-behind while SELECTED Cockpit/Nose gets the first-person FOV back on release.
             _cam.RestoreExternalFov();
             bool firstPersonPose = false;
             int view = _cam.ActiveView();
@@ -1510,8 +1510,8 @@ public partial class FlightController : Node3D
                     _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis);
                 }
             }
-            // B11: keyed to the pose this frame actually took, not to the selection — a held numpad
-            // key puts the camera outside the aircraft and must bring its body back while held.
+            // Keyed to the pose this frame actually took, not to the selection — a look-behind
+            // puts the camera outside the aircraft and must bring its body back while held.
             Cockpit?.Apply(_cam.ViewMode, firstPersonPose);
             _cam.LogView(view, _model.Position, _model.Attitude);
         }
@@ -2907,15 +2907,15 @@ public partial class FlightController : Node3D
             _model.Stats.AutoheadTurnMax, _model.Stats.AutoheadTurnMinPitch);
     }
 
-    // The snap cluster as a composed direction, the same shape the original composes from its nine
-    // key slots: the number row read as a numpad, 7/8/9 forward, 4/6 the flanks, 1/2/3 astern.
-    // Never the numpad itself — that table is the held fixed views, and `BL-150` rebuilds it.
+    // The snap cluster as a composed direction, the original's own numpad bindings: Kp8 Look Up,
+    // Kp4/Kp6 the flanks, Kp2 Look Back, the corners the four diagonals. Only read in a
+    // first-person mode, where the numpad drives no fixed view (PilotView.HoldsFixedViews).
     private (float X, float Y) SnapLookInput()
     {
-        float x = (KeyDown(Key.Key9) || KeyDown(Key.Key6) || KeyDown(Key.Key3) ? 1f : 0f)
-                - (KeyDown(Key.Key7) || KeyDown(Key.Key4) || KeyDown(Key.Key1) ? 1f : 0f);
-        float y = (KeyDown(Key.Key7) || KeyDown(Key.Key8) || KeyDown(Key.Key9) ? 1f : 0f)
-                - (KeyDown(Key.Key1) || KeyDown(Key.Key2) || KeyDown(Key.Key3) ? 1f : 0f);
+        float x = (KeyDown(Key.Kp9) || KeyDown(Key.Kp6) || KeyDown(Key.Kp3) ? 1f : 0f)
+                - (KeyDown(Key.Kp7) || KeyDown(Key.Kp4) || KeyDown(Key.Kp1) ? 1f : 0f);
+        float y = (KeyDown(Key.Kp7) || KeyDown(Key.Kp8) || KeyDown(Key.Kp9) ? 1f : 0f)
+                - (KeyDown(Key.Kp1) || KeyDown(Key.Kp2) || KeyDown(Key.Kp3) ? 1f : 0f);
         return (x, y);
     }
 

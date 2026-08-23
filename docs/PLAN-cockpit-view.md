@@ -686,11 +686,12 @@ that: pushing right and pressing the right key must both look right. Both paths 
 convention (positive azimuth = left), which is the snap path's sign; the free-look path's is
 mirrored to match. Only the sign is a port decision, not the rates, the windows or the law.
 
-**⚠ The plan contradicts itself on the diagonals, and the data survey wins.** The C21 Goal below
-says "forward-diagonals = 45° up", but the survey's own decode of `FUN_0042d010` lists all four
-windows — 45°, 135°, 225° and 315° — so an aft diagonal lifts the head exactly as a forward one
-does. `SnapTargets` implements the survey, and the tests pin all four. A sitting at the controls is
-what could overturn this, not the prose.
+**⚠ The plan contradicts itself on the diagonals, and the data survey is right.** The C21 Goal
+below says "forward-diagonals = 45° up", but the survey's own decode of `FUN_0042d010` lists all
+four windows — 45°, 135°, 225° and 315°. The original's key-binding menu settles it in words:
+`Kp1` is **Look Up/Left/Rear** and `Kp3` **Look Up/Right/Rear** (`OriginalScreenshots/Keybinds
+Views 2.png`), so an aft diagonal lifts the head exactly as a forward one does. `SnapTargets`
+implements it and a labelled test pins all eight slots against those labels.
 
 **The composition order is azimuth, then elevation about the axis azimuth just produced.**
 `CameraController.FirstPersonPose` grew two optional angle parameters and builds
@@ -707,15 +708,27 @@ gathered and stepped inside the first-person arm only, on the SIM dt — a held 
 the head where it was and releasing resumes it, and the wall-clock mistake the chase transient
 records is avoided by construction.
 
-**Bindings (⚠ reviewable — the plan left these to build time).**
+**Bindings.** The snap cluster is **the original's own**, read off its key-binding menu
+(`OriginalScreenshots/Keybinds Views 2.png`) rather than chosen here; only the free-look devices
+are this port's call.
 
-- **Snap: the number row `1`–`9`, read as a numpad.** All nine are unbound anywhere in the tree
-  (`Key.Key1`–`Key.Key9` return no hits in `CSVM/src`), they are contiguous so a Tartarus can be
-  remapped in one block, and the numpad ordering is a layout every player already reads. Not the
-  numpad itself: that table is the held fixed views and `BL-150` rebuilds it (Decision 2).
-- **Center: number row `5`.** The middle of the cluster, which is where the original's own center
-  slot sits among its nine direction slots (`0x3e` of `0x3a`–`0x42`).
-- **Free-look: the right stick, and the mouse while its right button is held.** There is no mouse
+- **Snap: `Kp1`–`Kp9`, the original's bindings exactly.** `Kp8` Look Up, `Kp4`/`Kp6` Look
+  Left/Right, `Kp2` Look Back, `Kp7`/`Kp9` Look Up/Left and Up/Right, `Kp1`/`Kp3` Look Up/Left/Rear
+  and Up/Right/Rear. Each key is its own 2-D offset from `Kp5` and the offsets are summed, which is
+  the same composition the decode describes for the engine's nine key slots.
+- **Center: `Kp5`, the original's "Look Forward".** The middle of the cluster, and the slot the
+  decode puts in the middle of its own nine (`0x3e` of `0x3a`–`0x42`).
+- **⚠ The numpad therefore holds no fixed view in first person** — that is what makes the binding
+  possible rather than a collision. `PilotView.HoldsFixedViews` is the rule and
+  `CameraController.ActiveView` returns −1 under it, so both callers (the per-frame chain and
+  `Snap`) obey it and no `Views[]` row moved. Numpad 0's look-behind is untouched and still
+  overrides every mode: it is outside the cluster, and it frames the aircraft from ahead rather
+  than turning the pilot's head. Outside first person the numpad keeps today's held-view behaviour
+  exactly, which is `BL-150`'s to rebuild (Decision 2).
+- **Free-look: the right stick, and the mouse while its right button is held (⚠ reviewable).**
+  This half is a port choice: the original reaches its two look modes through key selectors
+  (`K` Access Snap Look Mode, `J` Access Smooth Look Mode, `OriginalScreenshots/Keybinds Views
+  1.png`) rather than by which device moved, and those selectors are a filed E41 item. There is no mouse
   input at all in flight today, so nothing had to move; hold-to-look rather than always-on because
   RMB-held IS this project's look posture already (the freecam and the spectator both use it) and
   because an always-on mouse would pan the head every time the pilot nudged a mouse they are not
@@ -725,13 +738,15 @@ records is avoided by construction.
   exactly as fast as a hard one. That is the original's hat-switch input, and it is also what makes
   polled mouse deltas safe at a screen edge.
 
-**Tests.** `CSVM.Tests/HeadLookTests.cs` (24 cases) covers the snap table (dead ahead straight up,
-all four diagonals at 45°, the flanks and astern level at their own azimuth, no direction at all),
-the release-to-ahead rule, 2 rad/s integration and its direction-only reading, the clamp at both
-ends, the parameterised floor at the chase caller's −π/2, the wrap under a full turn, the center
-key beating a held snap, the smoothing at the decoded rates and its frame-rate independence, the
-azimuth chase taking the short arc across the wrap, the idle hook's silence under input and its
-deliberate bypass of the floor, and the composition order against A2's unchanged zero-angle pose.
+**Tests.** `CSVM.Tests/HeadLookTests.cs` covers the snap table as a labelled theory over all eight
+of the original's own numpad slots (each case named for the menu label it must reproduce) plus no
+direction at all, the release-to-ahead rule, 2 rad/s integration and its direction-only reading,
+the clamp at both ends, the parameterised floor at the chase caller's −π/2, the wrap under a full
+turn, the center key beating a held snap, the smoothing at the decoded rates and its frame-rate
+independence, the azimuth chase taking the short arc across the wrap, the idle hook's silence under
+input and its deliberate bypass of the floor, and the composition order against A2's unchanged
+zero-angle pose. `PilotViewTests` carries the precedence half: a held view key overrides the chase
+selection and does NOT override a first-person one, and the look-behind overrides all three.
 
 **Verified.** <pending orchestrator run>
 
@@ -889,15 +904,34 @@ mode-7 nuance) lives in `docs/org/cameraViews.md` so no future session re-runs i
 
 **Evidence (confidence: n/a — bookkeeping).** The filed-item list, from Decisions 1/3/4/5 plus
 session findings: (1) in-3D gauge drive (and whatever B11's static-gauges TODO decided); (2)
-padlock look state (needs targeting's current-target plumbing); (3) zoom/lean axis (keys
-`0x43`/`0x44`, rate 2·dt, smoothing 1.5/s — constants ready in the plan); (4) engine-wide FOV
+padlock look state (needs targeting's current-target plumbing) — the original binds it as **Track
+Target = `L`** (`OriginalScreenshots/Keybinds Views 1.png`), which is the key `docs/controls.md`
+already reserves for it under `BL-399`; (3) zoom/lean axis (keys `0x43`/`0x44`, rate 2·dt,
+smoothing 1.5/s — constants ready in the plan), and with it the original's **numpad `+`/`−` =
+External Camera Zoom In/Out** (`Keybinds Views 2.png`): that pair is the CHASE camera's zoom, not
+the cockpit lean, so the filed item carries both and must not confuse them; (4) engine-wide FOV
 migration 62°V → 60°H base, carrying the overcast/tracer calibration warning; (5) splitscreen
 cockpit behaviour (per-viewport interior cost, per-pilot engine-sound swap under `MixGain`);
 (6) HUD `POSITION_1ST` layout variant (the original places gauges differently in first person,
 `hud_v2.zrd` keys `POSITION_1ST`/`POSITION_3RD`, `org/cameraViews.md:120-128`) — whether
 `GaugeCluster` should reposition in cockpit views; (7) chase-view look-around — the original runs
 the same head-look controller for the chase camera with elevation floor −π/2 (`FUN_0042c7f0` →
-`FUN_0042d010(0xbfc90fdb, 0)`), which CSVM's chase view lacks entirely.
+`FUN_0042d010(0xbfc90fdb, 0)`), which CSVM's chase view lacks entirely; (8) the two **look-mode
+selectors**, `K` Access Snap Look Mode and `J` Access Smooth Look Mode (`Keybinds Views 1.png`) —
+the original picks snap or free-look by key, where C21 picks by which device moved, so the state
+byte's third value (padlock, item 2) and these two selectors are one item's worth of the same
+mechanism; both keys are free in CSVM's flight scheme today.
+
+**⚠ `BL-150`'s "fixed numpad views" and this look cluster are the same control.** `BL-150` measured
+the original's numpad from `CAP-07` and derived: treat each key as its 2-D offset from `Kp5` on the
+numpad grid, sum the offsets of the held keys, and the resultant's DIRECTION selects the camera
+position, with a zero resultant giving the default chase pose and `Kp5` alone doing nothing. That
+is this item's snap composition exactly, one axis at a time, and `Kp5` "does nothing" because it is
+**Look Forward**, the default. The evidence is `Keybinds Views 2.png` plus the data survey's second
+caller: `FUN_0042c7f0` runs this same controller for the chase camera with the −π/2 floor. So the
+`Views[]` table is not a table at all — it is the head-look direction cluster driving the chase
+camera, which is why its measured law is a sum of offsets rather than nine authored poses. Item (7)
+and `BL-150` should be read together before either is built.
 
 **Approach.** Use `/close-backlog-item` for `BL-080`/`BL-161` (evidence and dates go in the
 closing commit message, not the files). Amend `org/cameraViews.md` per its own contract (behaviour

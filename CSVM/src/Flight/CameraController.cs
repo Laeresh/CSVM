@@ -212,12 +212,16 @@ public sealed class CameraController
 
     /// <summary>Which fixed view the camera should hold this frame, as an index into
     /// <see cref="Views"/>, or −1 for the chase camera. A held numpad key beats the scripted
-    /// pinned view so a pinned run can still be explored at the controls; with several keys down
-    /// the lowest digit wins, which keeps the choice deterministic. There is one keyboard, so in
-    /// splitscreen this is player 1's control — the host's key reader returns false for the
-    /// others; the D-pad is taken by the weapon selectors, so there is no pad binding.</summary>
+    /// pinned view; with several down the lowest digit wins, which keeps the choice deterministic.
+    /// One keyboard, so in splitscreen this is player 1's, and there is no pad binding.
+    /// ⚠ Always −1 in a first-person mode: the numpad is the head-look snap cluster there
+    /// (<see cref="PilotView.HoldsFixedViews"/>), as it is in the original.</summary>
     public int ActiveView()
     {
+        if (!PilotView.HoldsFixedViews(ViewMode))
+        {
+            return -1;
+        }
         for (int i = 0; i < Views.Length; i++)
         {
             if (_keyDown(Views[i].Key))

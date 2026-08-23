@@ -42,12 +42,18 @@ public static class PilotView
     public static PilotViewMode Cycle(PilotViewMode mode) =>
         mode == PilotViewMode.Cockpit ? PilotViewMode.Nose : PilotViewMode.Cockpit;
 
-    /// <summary>Which view is actually in force this frame. A held numpad key (or the look-behind)
-    /// is a momentary override and wins over the selected mode exactly as it wins over
-    /// <c>--view=</c>'s pinned digit today; releasing it returns to the selection, because the
-    /// selection is state and the key is not.</summary>
-    public static PilotViewMode Effective(PilotViewMode selected, bool heldViewActive) =>
-        heldViewActive ? PilotViewMode.Chase : selected;
+    /// <summary>Whether a held numpad 1–9 key is a camera override in this mode. It is not in
+    /// first person: there the numpad IS the head-look snap cluster, which is what the original
+    /// binds it to (<c>OriginalScreenshots/Keybinds Views 2.png</c>, <c>Kp1</c>–<c>Kp9</c> =
+    /// Look Up/Left/Rear … Look Forward … Look Up/Right).</summary>
+    public static bool HoldsFixedViews(PilotViewMode mode) => !IsFirstPerson(mode);
+
+    /// <summary>Which view is actually in force this frame. The look-behind is a momentary
+    /// override in every mode; a held numpad view key is one only where
+    /// <see cref="HoldsFixedViews"/> says the numpad still drives the camera. Either way the
+    /// selection is untouched, so releasing the key returns to the very same mode.</summary>
+    public static PilotViewMode Effective(PilotViewMode selected, bool heldViewActive, bool backActive = false) =>
+        backActive || (heldViewActive && HoldsFixedViews(selected)) ? PilotViewMode.Chase : selected;
 
     /// <summary>The <c>--view=</c> spelling of a selected mode, or null when the argument names
     /// something else (a numpad digit, <c>back</c>, a typo) and the caller should go on to parse

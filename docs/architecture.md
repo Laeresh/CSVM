@@ -119,7 +119,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/SmokeScreens.cs` — the smoke screen's stun trap: the world's active screens, walked over the roster every sim step to stun AI and wash humans behind the layer; the cone rule, the wash cadence and the three `player.json` tunables beside it.
 - `src/Flight/BeeperTags.cs` — the beeper's paint and the seeker's pick: the world's tag list with its countdown, dead-aircraft slam and five-second tail, the tagging gate, and the per-frame query with the original's inverted-dot, squared-distance selection rule.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
-- `src/Flight/PilotViewMode.cs` — the three player-selectable views (Chase/Cockpit/Nose, valued as the engine's own camera modes 0/6/7) and `PilotView`, the pure rules over them: cycle, first-person test, the held-key override, the `--view=` spelling. Engine-free, so the decisions unit-test.
+- `src/Flight/PilotViewMode.cs` — the three player-selectable views (Chase/Cockpit/Nose, valued as the engine's own camera modes 0/6/7) and `PilotView`, the pure rules over them: cycle, first-person test, the held-key override and whether the numpad holds a fixed view at all in this mode (`HoldsFixedViews` — it does not in first person, where the numpad is the head-look snap cluster), the `--view=` spelling. Engine-free, so the decisions unit-test.
 - `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, the pilot's selected view mode, the weapon lab's held-airframe orbit. Steers a `Camera3D` it does not own.
 - `src/Flight/HeadLook.cs` — the pilot's head in a first-person view: snap directions, free-look integration, the center key, and the exponential smoothing that carries the shown angles to their targets. Engine-free, so every law unit-tests.
 - `src/Flight/CockpitVisibility.cs` — the per-mode hiding of the pilot's OWN aircraft in a first-person view: interior in and body out for Cockpit, both out plus `markers`/`dontmove` for Nose, everything back for any external pose. `Rules` is pure; `Bind`/`Apply` write it onto one built plane model.
@@ -1399,8 +1399,13 @@ static viewer. Beside the held views it carries the pilot's SELECTED view mode (
 (back to chase). The decisions themselves are `PilotView`'s, not this class's, so they are testable
 without an engine; this class holds the state and the camera. ⚠ The modes are deliberately NOT rows
 in `Views`: `BL-150` rebuilds that table later and must be able to replace it without touching them
-(PLAN-cockpit-view, Decision 2). A held numpad key overrides the mode for as long as it is down and
-leaves the selection alone, the same precedence it has over `--view=`'s pinned digit. Cockpit and
+(PLAN-cockpit-view, Decision 2). ⚠ Outside first person a held numpad key overrides the mode for as
+long as it is down and leaves the selection alone, the same precedence it has over `--view=`'s
+pinned digit; INSIDE Cockpit or Nose it holds no view at all, because the numpad is the head-look
+snap cluster there, which is what the original binds it to (`OriginalScreenshots/Keybinds Views
+2.png`: `Kp1`–`Kp9` = Look Up/Left/Rear … Look Forward … Look Up/Right). `PilotView.HoldsFixedViews`
+is that rule and `ActiveView` returns −1 under it, so the per-frame chain and `Snap` obey it
+together. Numpad 0's look-behind is outside the cluster and still overrides every mode. Cockpit and
 Nose sit at the plane's authored `cockpit_camera` marker (`FirstPersonPose`, a static, engine-free
 law: `camera_world = plane_pos + plane_rotation × offset`, plus the fixed −4.70° head-pitch
 tilt — `FirstPersonView` is its thin write onto the owned `Camera3D`), rigidly mounted with no
@@ -1416,8 +1421,8 @@ the owned camera's OWN viewport for the live aspect so a splitscreen pane derive
 Every other pose runs on the external FOV the camera carried at construction
 (`RestoreExternalFov`, captured once so this class never reaches into `GameSession`'s 62° global);
 `FlightController._Process` calls it by default and only the `FirstPerson` arm overrides it, so a
-held numpad/back key while SELECTED Cockpit/Nose gets the external FOV while held and the
-first-person FOV back on release. `Snap` and `CrashView` carry the same default/override shape, so
+look-behind while SELECTED Cockpit/Nose gets the external FOV while held and the first-person FOV
+back on release. `Snap` and `CrashView` carry the same default/override shape, so
 a spawn/respawn/crash-cut never shows a stale FOV. `LogView` already names the modes
 (`view n=cockpit`), which is what makes a scripted mode selection verifiable. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
 authored) plus a first-order acceleration transient relaxing at the MEASURED 0.65 /sim-s
@@ -1463,8 +1468,9 @@ is on the screen (`docs/org/cameraViews.md`, "Mode 6 = Cockpit" / "Mode 7 = Nose
 whole decision as a pure function over `(PilotViewMode, firstPerson)`, so it unit-tests engine-free;
 `Bind` finds the four groups in a built plane model and `Apply` writes one frame's answer onto
 them. `FlightController._Process` calls it every frame beside the camera write, keyed to the pose
-that frame actually took — a held numpad key or the look-behind is an external pose and brings the
-body back while it is held, the same shape `CameraController.RestoreExternalFov` has.
+that frame actually took — the look-behind is an external pose and brings the body back while it is
+held, the same shape `CameraController.RestoreExternalFov` has. A held numpad key reaches this only
+from an external selection, since in first person it drives the head instead of the camera.
 
 ⚠ `Bind`'s group search is interior-blind: each gauge sub-assembly inside `cockpit1` carries its own
 `markers` child, so a plain depth-first walk can bind a gauge's instead of the airframe's.
@@ -2745,11 +2751,13 @@ slots like the targeting keys). `PinnedViewMode` seeds the selection from `--vie
 `FirstPersonView` read it back live, and the session polls the latter for the anim data's
 `PLAYER_1ST_PERSON` condition. `Cockpit` (a `CockpitVisibility`, null on any rig built without an
 interior) is applied in the same block, keyed to whether the pose THIS frame was a first-person
-one rather than to the selection, so a held numpad key restores the aircraft while it is down.
+one rather than to the selection, so a look-behind restores the aircraft while it is down.
 Head-look input is read here too and nowhere else (`HeadLookRead`, `SnapLookInput`, `FreeLookRead`,
 `MouseLookDelta`), for the same reason `OrbitInput` is: `CameraController` never learns about pads,
-mice or key layouts. It is gathered and stepped only inside the first-person arm, on the SIM dt, so
-a held numpad key freezes the head where it was and releasing resumes it. The mouse is polled like
+mice or key layouts. `SnapLookInput` reads `Kp1`–`Kp9` and `Kp5` recenters, the original's own
+bindings; they are only reachable in a first-person mode, where `ActiveView` holds no fixed view.
+Head-look is gathered and stepped only inside the first-person arm, on the SIM dt, so a look-behind
+freezes the head where it was and releasing resumes it. The mouse is polled like
 every other control (a screen-position delta while the right button is held, `UseKeyboard`-gated as
 player 1's) rather than event-driven, which the fixed pan rate makes safe: only the DIRECTION of
 the motion is read, so a stale delta on the frame first person is entered is worth one frame of
