@@ -48,7 +48,7 @@ For each bullet, extract:
 - **type** — the bracketed word right after the id: `Bug`, `Feature`, `Research`, `Tuning`, or
   `Cleanup`.
 - **status** — the *next* bracketed tag if one immediately follows the type tag, else `null`.
-  Keep it verbatim, including the reason (`Owed-playtest`, or `Blocked: CAP-28` /
+  Keep it verbatim, including the reason (`Owed-playtest`, or `Blocked: CAP-27` /
   `Blocked: M4` / etc. — whatever text is inside the brackets). Don't shorten `Blocked: X` to
   `Blocked`; the template already treats anything starting with `Blocked` as one status class and
   displays the tag text as-is.

@@ -1160,7 +1160,7 @@ public static class Probes
                       + $"engine power {stats.EnginePower:0.###}  gravity {stats.Gravity:0.#} m/s²");
         sb.AppendLine($"# thrust accel at fd_speed {thrustAccel:0.00} m/s²  stepped at {EnvDt * 1000f:0.0} ms");
         sb.AppendLine(bhawk
-            ? "# 'original' = decoded from cockpit-gauge video, analysis/video-flight-calibration/"
+            ? "# 'original' = read off cockpit-gauge video; ranks readings, does not confirm a decode"
             : $"# no measured original for {planeNodeName} — the Bloodhawk is the only airframe on video");
         sb.AppendLine();
         sb.AppendLine($"{"scenario",-22} {"unit",-5} {"model",10} {"original",10} {"err",8}  verdict");
@@ -1966,12 +1966,11 @@ public static class Probes
     }
 
     /// <summary>One flight scenario: what the model does, and what the original did.
-    ///
-    /// <para><see cref="Measured"/> is the original's own value, decoded from cockpit-gauge video
-    /// (see <c>analysis/video-flight-calibration/</c>) — a golden number, not a guess. A row with no
-    /// <see cref="Measured"/> value, or one flagged <see cref="Informational"/>, is reported but not
-    /// asserted: either nothing was measured to compare against, or the comparison is a known open
-    /// gap that must not gate a build until it is scoped.</para></summary>
+    /// <see cref="Measured"/> came off cockpit-gauge video, so it ranks readings rather than
+    /// confirming a decode; prefer a decoded value where one exists (docs/verification.md DET-12).
+    /// A row with no <see cref="Measured"/> value, or one flagged <see cref="Informational"/>, is
+    /// reported but not asserted: either nothing was measured, or the comparison is a known open
+    /// gap that must not gate a build until it is scoped.</summary>
     public sealed class FlightRow
     {
         public string Name = "";

@@ -70,13 +70,12 @@ __pycache__/
 HANDOFF*.md
 playtest-notes.md
 
-# Decoded per-clip sidecars written by analysis/video-flight-calibration/clipdata.py --
-# one CSV per video, mirroring the clip's repo-relative path. Bulk mechanical extractions
-# of the original game's footage, so the HARD RULE at the top of this file applies: never
-# committed. (FINDINGS.md is the opposite case and stays tracked -- it is small, curated
-# conclusions, not a dump.) Unlike .scratch/ this is NOT swept by CleanScratch.ps1: the
-# whole point is that a decode survives the session that paid for it.
-# ⚠ PowerShell must never read or write in here -- see the encoding note in CLAUDE.md.
+# Per-clip decode sidecars, one CSV per video, mirroring the clip's repo-relative path.
+# Bulk mechanical extractions of the original game's footage, so the HARD RULE at the top
+# of this file applies: never committed.
+# ⚠ INERT. The gauge-decode pipeline that wrote and read these was deleted when
+# footage-derived flight analysis was retired, so nothing consumes them. Do not read them,
+# and above all do not let PowerShell touch them -- see the encoding note in CLAUDE.md.
 /videodata/
 
 # Playtest evidence: captures staged for an at-the-controls A/B against the original,
@@ -85,10 +84,6 @@ playtest-notes.md
 # in CLAUDE.md. Unlike .scratch/ this is NOT swept by CleanScratch.ps1, so a capture
 # survives until the playtest item that owns it is closed.
 /playtest/
-
-# pitch_cadence.ahk writes its edge logs next to itself; the ones that belong to a
-# capture are kept with it under playtest/<ID>/, so this is scratch output only.
-/analysis/video-flight-calibration/cadence-logs/
 
 # alpha_census.py regenerates this from extracted/; FINDINGS.md carries the conclusions.
 /analysis/alpha-classification/alpha_census.json
