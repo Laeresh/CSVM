@@ -79,4 +79,63 @@ public class EngineAudioModelTests
 
         Assert.True(distinct.Count >= 8, $"only {distinct.Count} distinct engine definitions: {string.Join(", ", distinct)}");
     }
+
+    /// <summary>D31: every one of the eleven player airframes authors <c>cockpit_engine_sound</c>
+    /// (either its own or `basic_airplane`'s inherited fallback), so
+    /// <see cref="PlaneStats.CockpitEngineSound"/> being null is a defensive branch for a plane the
+    /// shipped install does not actually contain, not a live case any of the 11 hit.</summary>
+    [ExtractedDataFact]
+    public void EveryAirframeAuthorsACockpitEngineDefinition()
+    {
+        foreach (var node in AllPlaneNodeNames)
+        {
+            foreach (var stats in new[]
+                     {
+                         PlaneStats.Load(SharedZrdr, node), PlaneStats.LoadForAi(SharedZrdr, node),
+                     })
+            {
+                Assert.False(string.IsNullOrEmpty(stats.CockpitEngineSound),
+                    $"{node}: no cockpit_engine_sound authored");
+                Assert.EndsWith("_cp", stats.CockpitEngineSound);
+            }
+        }
+    }
+
+    /// <summary>D31's def-selection rule, pure and headless: the cockpit swap applies only when the
+    /// airframe authors it, yields to the damaged swap when both conditions are live (no def authors
+    /// a damaged-cockpit variant), and both fall back to the plain <c>engine_sound</c> definition.
+    /// <c>DamagedEnginePitchRandom</c> stays false so the random draw branch (needing a live
+    /// <c>RandomNumberGenerator</c>) is never reached — untouched by this precedence rule.</summary>
+    [Fact]
+    public void EngineDefForPicksDamagedOverCockpitOverNormal()
+    {
+        var stats = new PlaneStats
+        {
+            EngineSound = "snd_normal",
+            CockpitEngineSound = "snd_cockpit",
+            DamagedEngineSound = "snd_damaged",
+            DamagedEnginePitchRandom = false,
+        };
+
+        Assert.Equal(("snd_normal", 1f),
+            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, firstPerson: false));
+        Assert.Equal(("snd_cockpit", 1f),
+            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, firstPerson: true));
+        Assert.Equal(("snd_damaged", 1f),
+            EngineAudioCurves.EngineDefFor(stats, damaged: true, rng: null!, firstPerson: false));
+        Assert.Equal(("snd_damaged", 1f),
+            EngineAudioCurves.EngineDefFor(stats, damaged: true, rng: null!, firstPerson: true));
+    }
+
+    /// <summary>An airframe with no <c>cockpit_engine_sound</c> of its own keeps the normal loop in
+    /// first person rather than going silent or erroring — the same "keep the normal def" fallback
+    /// the plan calls for.</summary>
+    [Fact]
+    public void EngineDefForFallsBackToNormalWithNoCockpitDefinition()
+    {
+        var stats = new PlaneStats { EngineSound = "snd_normal" };
+
+        Assert.Equal(("snd_normal", 1f),
+            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, firstPerson: true));
+    }
 }

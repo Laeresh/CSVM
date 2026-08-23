@@ -166,7 +166,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — audio
 
-31. ☐ `cockpit_engine_sound` swap in both first-person views (closes `BL-161`)
+31. ☑ `cockpit_engine_sound` swap in both first-person views (closes `BL-161`)
 
 ### Wave E — close-out
 
@@ -869,7 +869,57 @@ block); keep the two floors distinct or the lean-down disappears.
 
 # Wave D — audio
 
-## D31 ☐ `cockpit_engine_sound` swap (closes `BL-161`)
+## D31 ☑ `cockpit_engine_sound` swap (closes `BL-161`)
+
+**Landed.** The engine slot now swaps onto the plane's `cockpit_engine_sound` (`snd_*_cp`) while
+the pilot's SELECTED view is Cockpit or Nose, and back on leaving either; throttle/damage curves
+and behaviour are unchanged, only the definition the slot holds differs.
+
+`EngineAudioCurves.EngineDefFor` (now `public`, alongside its containing class, so the rule
+headless-tests without an engine) gained a `firstPerson` parameter and became the one place both
+of the engine slot's swap conditions are decided: damaged wins when both are live, cockpit applies
+otherwise, and either falling through lands on the plain `engine_sound`. **Port decision, evidence-
+gapped:** `docs/formats/vehicle.md`'s slot table decodes the damaged swap and the cockpit swap as
+two independent rows and does not say which wins when both are live — no shipped def authors a
+damaged cockpit variant, so there is nothing to select instead of one or the other, and damage
+feedback (already the more load-bearing cue) keeps priority over the cosmetic view timbre change.
+
+`FlightAudio.UpdateEngineSlot` (renamed from `SetEngineDamaged`, generalised to the same shape)
+resolves a third candidate stream, `_cockpitStream`, at `Setup` exactly like `_damagedStream`
+already was, and re-evaluates the pair whenever EITHER input changes — entering a first-person
+view mid-repair, or taking damage mid-cockpit-view, both land on the right def. `FlightAudio.Update`
+gained a `bool firstPerson = false` parameter, defaulted so no other call site had to change; its
+one live call site,
+`FlightController._Process`, feeds `FirstPersonView` — the SELECTED-mode property A1 built for
+condition 120 — not the per-frame camera pose, so a held numpad key or look-behind does not
+retrigger the swap. `AiEngineAudio` is unreachable in first person by construction (it has no
+selected view at all) and needed no change beyond a stale comment fix.
+
+**The transition is a hard cut**, the same shape the damaged swap already used (`Stop`, reassign
+`Stream`, `Play` if it was playing): no crossfade is decoded anywhere in this chain, and
+`vehicle.md`'s wording ("swapped in… swapped back on leaving") names a swap, not a blend.
+
+**Per-plane authorship.** All 11 player airframes author `cockpit_engine_sound`, either their own
+`snd_<name>_cp` or `basic_airplane`'s inherited default (`extracted/zrdr/vehicle.zrd.json`,
+confirmed against every `player`/`ai` load in the new data test below); `PlaneStats.CockpitEngineSound`
+being `null` is a defensive branch for a plane the shipped install does not actually contain, not a
+live case any of the 11 hit. The stale `PlaneStats.cs:261` warning ("nothing selects it here") is
+rewritten to name the current wiring.
+
+**Tests.** `CSVM.Tests/EngineAudioModelTests.cs` gained three cases: every one of the 11 airframes
+(player and AI loaders both) authors a `cockpit_engine_sound` ending `_cp`; the pure precedence
+rule (`EngineDefFor`) picks damaged over cockpit over normal across all four flag combinations, with
+`DamagedEnginePitchRandom` held false so the random-draw branch (needing a live
+`RandomNumberGenerator`) is untouched by this test; and an airframe missing a cockpit definition
+falls back to the normal loop rather than going silent. No new in-engine suite: the wiring at
+`FlightAudio.Update`'s one call site is a single-argument pass of an already-tested property
+(`FirstPersonView`), and no existing suite exercises the sibling damaged-engine swap end to end
+through `FlightAudio.Setup`/`Update` either — this item does not carry new obligation past the
+precedent its neighbour already set.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Entering either first-person view swaps the own-ship engine loop def to the plane's
 `cockpit_engine_sound` (`snd_*_cp`); leaving swaps back; nothing else about the engine audio chain

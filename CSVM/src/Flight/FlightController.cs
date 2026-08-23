@@ -1551,7 +1551,10 @@ public partial class FlightController : Node3D
             // One drive for both paths: the original runs ONE per-frame routine for the player and
             // every AI vehicle, so the two must never read the airframe differently.
             var engineDrive = EngineAudioCurves.DriveFrom(_model);
-            Audio?.Update(simDt, engineDrive, speedFrac, damageFrac);
+            // Keyed to the SELECTED view (D31), not the per-frame pose the camera actually took —
+            // the original's swap is a camera-mode gate, and a held numpad key or look-behind is a
+            // pose, not a mode change (⚠ table row 2 traces the analogous head-look case).
+            Audio?.Update(simDt, engineDrive, speedFrac, damageFrac, FirstPersonView);
             EngineAudio?.Update(simDt, engineDrive, speedFrac, damageFrac);
             // The throttle-slam gate needs the live value every frame, not just while its plume
             // is active, so it can tell a fresh climb from one already in progress.

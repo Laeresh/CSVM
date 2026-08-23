@@ -258,9 +258,11 @@ public sealed class PlaneStats
     public SoundCurve EnginePitch = new(0.1f, 0.6f, 1f, 1f);
 
     /// <summary>vehicle.json <c>cockpit_engine_sound</c>, the engine def the original swaps onto the
-    /// engine slot in its two cockpit camera modes. ⚠ Nothing selects it here: CSVM's camera set is
-    /// external throughout, so its numpad 6/7 are flank views and not the original's modes 6/7
-    /// (<c>BL-080</c>). Read so the reader is complete; do not bind it to a numpad view.</summary>
+    /// engine slot while the pilot's SELECTED view is Cockpit or Nose (<c>FlightController.
+    /// FirstPersonView</c>, A1's mode-6/7 equivalents), and back on leaving either. Selected by
+    /// <see cref="EngineAudioCurves.EngineDefFor"/> and driven by <c>FlightAudio</c>
+    /// (<c>BL-161</c>, closed by D31); a held numpad key or look-behind is a per-frame pose and does
+    /// not retrigger the swap, only a change of selection does.</summary>
     public string? CockpitEngineSound;
 
     /// <summary>vehicle.json <c>prop_sound</c>, the overspeed dive whine's def. ⚠ Stays null

@@ -2397,8 +2397,14 @@ CHOSEN `touchdown_*` def, since the sound is authored inside that def). `OnWarni
 `bullet_warning_sg` variant per near miss (player.json `warning_shot_sound` is a SOUND_GROUPS name, so
 `Setup` takes the group table too; rate-limited by `FlightController`'s `WarningShotCue`, same split).
 The engine is ONE voice on one slot; its pitch, gain and definition all come from
-`EngineAudioCurves`, shared with `AiEngineAudio` (see that entry). `SetEngineDamaged` swaps the
-slot's stream for `damaged_engine_sound` and back, both resolved at `Setup`. `MixGain` is the only
+`EngineAudioCurves`, shared with `AiEngineAudio` (see that entry). `UpdateEngineSlot` swaps the
+slot's stream for `damaged_engine_sound` while the airframe is hurt and for `cockpit_engine_sound`
+while the pilot's SELECTED view (`FlightController.FirstPersonView`, A1's mode-6/7 equivalents) is
+Cockpit or Nose, both resolved at `Setup`; damaged takes precedence when both apply
+(`EngineAudioCurves.EngineDefFor` carries the rule — no def authors a damaged cockpit variant, and
+the plan's evidence does not decode which of the two wins, so damage feedback keeps priority as a
+port decision). The view swap keys to the SELECTED mode, not the per-frame camera pose, so a held
+numpad key or look-behind does not retrigger it (D31, closes `BL-161`). `MixGain` is the only
 own-ship scale left and stays here — splitscreen, not a fidelity knob.
 
 ## src/Flight/EngineAudioCurves.cs

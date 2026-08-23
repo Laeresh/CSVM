@@ -176,8 +176,9 @@ public sealed partial class AiEngineAudio : Node3D
             : 0f;
     }
 
-    // The engine slot's def swap, decided by the same helper the own-ship path uses so the two
-    // cannot drift; see FlightAudio.SetEngineDamaged for why any damage at all trips it.
+    // The engine slot's damage swap, decided by the same helper the own-ship path uses so the two
+    // cannot drift; see FlightAudio.UpdateEngineSlot for why any damage at all trips it. An AI rig
+    // has no selected view, so it never passes firstPerson and never reads cockpit_engine_sound.
     private void SetEngineDamaged(bool damaged)
     {
         damaged &= _damagedStream != null;
