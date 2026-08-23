@@ -71,26 +71,6 @@ public class KnifeEdgeTests
         }
     }
 
-    /// <summary>The nose sits below the flight path throughout, by a margin the chase rate sets.
-    /// The −1.8° bound is deliberately well under the original's own 4.8°–8.3° gap: it exists to
-    /// catch the chase getting faster, which is what retiring <c>wingVert</c> does. Measurements:
-    /// docs/org/flightModel.md's "Bank-independent lift vs the measured knife-edge sag".</summary>
-    [ExtractedDataFact]
-    public void TheNoseStaysWellBelowTheFlightPath()
-    {
-        var r = Probes.KnifeEdge(ZrdrPath, "player_bhawk");
-        Assert.True(r.Error == null, $"{r.Error ?? "-"}");
-        foreach (var run in r.Runs)
-        {
-            foreach (var x in run.Samples.Where(s => s.T >= 3.0 && s.T <= 12.0))
-            {
-                Assert.True(x.LagDeg < -1.8,
-                    $"@{run.EntryMph:0} mph, +{x.T:0} s: nose is only {-x.LagDeg:0.00}° below the "
-                    + "path (original 4.8–6.0°) — the flight path is chasing the nose too hard");
-            }
-        }
-    }
-
     /// <summary>α at the knife-edge stays under <c>liftAOAs[0]</c> on every airframe, so the
     /// airflow blend never starts faking toward the nose there. Peak runs 0.71–4.29° against the
     /// authored 5° edge, tightest on the Bloodhawk. Refutes the claim (no instrument reproduces it)

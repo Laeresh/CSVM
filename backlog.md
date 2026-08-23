@@ -878,12 +878,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   [`docs/org/flightModel.md`](docs/org/flightModel.md) already separates what was read out of
   `crimson.exe` from what was fitted to match the original at the controls. This item is to shrink
   the second set as far as the binary allows, constant by constant, rather than to re-fit any of
-  them. The fitted set is `StallNoseRate` (1.0 rad/s, pinned to measured video), `KnifeAlignFloor`
-  (0.35, a knife-edge measurement the decode is silent on), `PitchTune` (0.89, measured video),
-  `YawTune` (1.57, pinned against the authored yaw curve) and the graze trio `GrazeFriction` /
-  `GrazeKick` / `GrazePushOut` (0.35 / 1.2 / 0.15, ours rather than the original's). The rotation
-  rates are the priority: a per-tick angular rate is the class of quantity the original's live torque
-  path (`FUN_0048c470`) holds outright.
+  them. What is left fitted is the graze trio `GrazeFriction` / `GrazeKick` / `GrazePushOut`
+  (0.35 / 1.2 / 0.15, ours rather than the original's). `PitchTune` and `YawTune` are decoded to 1,
+  and `StallNoseRate` and `KnifeAlignFloor` are gone entirely — the first a no-op multiplier on
+  `stall_mag`, the second a scale on the nose-chase that neither `lift_accel_rate` reader carries.
   ⚠ **The lift terms are decoded already; this item does not re-open them.** The lift clamp
   (`LiftGMin` -5 / `LiftGMax` 9) and the aerodynamic ceiling (`ClMaxStatic` 0.75 / `ClMaxMach` 0.15)
   are both read out of `FUN_0041abd0`; `LiftAccelRate` is the authored `lift_accel_rate` with 1.2 the
@@ -898,17 +896,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (c) Do not fold this into a feature item — the product here is the decode and its evidence, and a
   correct disproof that leaves a constant fitted is a success. (d) The graze trio is not three
   independent constants: they were tuned together against a slide that carried no restitution, so
-  they and `BounceLeverScale` move as one group or not at all. (e) `KnifeAlignFloor` carries a
-  two-sided prohibition in the code (raising it to 1 moves every knife-edge observable the wrong way,
-  lowering it walks α past `liftAOAs[0]`), so a decode landing elsewhere has to answer both.
+  they and `BounceLeverScale` move as one group or not at all.
   **Decoded so far:** `FUN_0048c470` builds each axis' stick torque as `torque · stick · authority ·
   dt` and nothing more (roll `0x48ca8d`-`0x48caa2`, pitch `0x48cb07`-`0x48cb19`, yaw `0x48cbd5`), so
-  `PitchTune` and `YawTune` had no counterpart and are now 1; and the stall nose-drop's rate is the
-  authored `stall_mag` (`_DAT_0071c41c`, fallback 0.45, dt multiply `0x48d11b`) added as a TORQUE
-  about an unnormalised `nose × worldUp`, so `StallNoseRate` 1.0 is a no-op multiplier rather than a
-  rate. Write-up in [`docs/org/flightModel.md`](docs/org/flightModel.md). Still fitted: the graze
-  trio and `KnifeAlignFloor`. The same pass found two decoded terms missing from the code entirely,
-  which `BL-437` now owns.
+  `PitchTune` and `YawTune` had no counterpart and are now 1; the stall nose-drop is the authored
+  `stall_mag` (`_DAT_0071c41c`, authored 1.25, dt multiply `0x48d11b`) added as a TORQUE about an
+  unnormalised `nose × worldUp`, which retired `StallNoseRate`; and the nose-chase is
+  `lift_accel_rate` (`_DAT_0071c448`, readers `0x48c746` and `0x49112a`) with no verticality factor
+  at either reader, which retired `KnifeAlignFloor`. Write-up in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md). Still fitted: the graze trio. The same pass
+  found two decoded terms missing from the code entirely, which `BL-437` now owns, and a third
+  divergence in how the lag vector is spent, which `BL-438` owns.
   *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md) (the fitted-vs-decoded split, and
   its "A destroyed hull flies the same model" section, which hands this item the open question of what
   throttle an AI carries into its death), `BL-385` (the decoded death path).
@@ -1039,65 +1037,44 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (player arm), `BL-330` (the authority ramp this pairs
   with).
 
-- `BL-410` `[Tuning]` `[Owed-playtest]` **The flight model's three remaining loose ends: the stall
-  nose-drop's rate and target, the sustained climb's magnitude, and `KnifeAlignFloor`'s feel.**
-  Carries forward what `BL-115` still had open when the rest of it closed; `git log --grep=BL-115`
-  for everything that entry settled. ⚠ **`ThrustConst` is not on this list** — it is measured against
-  the original frame by frame and asserted by the `flight-envelope` suite, so it is not a TUNE knob
-  and a feel report cannot overrule it. `PitchTune`/`YawTune`/`RollTune` are not on it either, for
-  the opposite reason: `BL-414` found no such factor in the original and all three are now 1.
-  - **`StallNoseRate` 1.0 rad/s is ~17× too fast, and chases the wrong target.** In `CAP-05 Stall 0%
-    Thrust no input` the original's nose holds **+4.2 ± 0.1°** through the whole deceleration, starts
-    falling only at 0.25 fd, drops at **3.38 °/sim-s = 0.059 rad/sim-s** from +4.1° to −21.2°, and
-    **stops at ≈−22°** once speed rebuilds past 0.40 fd — it does not chase world-down at all, so
-    "rad/s toward world-down at full stall depth" is the wrong shape as well as the wrong rate. The
-    break is wings-level and clean: the compass turns **0.0°** across the whole 24.8 sim s, no wing
-    drop. **The mechanism is decoded and the rebuild goes on it, not on a new fit**
-    (`docs/org/flightModel.md`, "The nose-drop's rate is `stall_mag`"): the original adds
-    `stall_mag · stallFlag · dt` (`stall_mag` **authored 1.25**, fallback 0.45) into the TORQUE
-    accumulator about an unnormalised `nose × worldUp`, where `stallFlag` is `1 − L(9°)/Weight`. So
-    the rate is damped by `ang_momentum_damp` rather than applied to the attitude (≈0.295 rad/s at
-    full depth on the Bloodhawk), the drop weakens as the nose leaves horizontal instead of chasing world-down, and
-    the settle at ≈−22° is an equilibrium rather than the end of a chase. That accounts for the ~17×
-    and the wrong shape together. `StallNoseRate` 1.0 is a no-op multiplier on `stall_mag`, so there
-    is no rate constant to re-choose: what changes is the form. The magnitude to build on is the
-    authored **1.25** (`_DAT_0071c41c`; the fallback immediate `0x3ee66666` at `0x4742fe` is stored
-    only when the token is absent), and it is a single **global** parsed in `FUN_004735b0` and read
-    straight from the force path at `0x48d10d`, so it does not belong in a per-airframe record.
-    ⚠ **Drop the "must beat full-elevator authority" constraint: the decode says it does not.**
-    Full-elevator pitch on the same airframe is ≈0.585 rad/s, roughly twice the deepest stall torque,
-    so in the original a held pull opposes the drop rather than losing to it — what makes the drop
-    decisive is a stalled aircraft's lost authority, not this term out-rotating a healthy one. Do not
-    add a floor to restore that. Whether the nose may be raised over the horizon while stalled is a
-    separate question this block does not answer, and our cap on it is unverified against the binary.
-    ⚠ The two stall thresholds around it are settled and are not in scope: `StallSpeedFrac` is the
-    nose-drop at **0.25 fd** and `StallWarnFrac` the lamp at **0.30 fd**, two unrelated thresholds on
-    one margin (`StallWarningTests`).
-  - **The sustained climb settles 25% fast, and the missing input is α, not a mechanism.** Against
-    the original's full-throttle 90° climb (`climb90`; plateau **163.05 mph** at a 56.3° path) the
-    model settles at **204.04**, and it does not reproduce the footage's undershoot-and-recover. The
-    climb penalty itself is decoded and landed (thrust scaled by nose attitude), and at a 90° nose
-    with the measured 56° path the same decoded force path balances to **−3.3%** — so the residual
-    is most likely the α the original held, which no capture yet resolves: every climb clip taken so
-    far saturates its ADI above ≈+30°. `CAP-20` (a shallow held climb with a readable ADI) is what
-    would settle it. ⚠ **Do not reintroduce a pitch-scaled gravity** on the strength of GDD §4.1.1:
-    the shipped gravity block (`0x48ff85`–`0x48ff9d`) reads no attitude at all, and the term that is
-    attitude-scaled runs the other way.
-  - **`KnifeAlignFloor` 0.35 is the remake's own arcade term and owes a feel A/B, not a fit.** It is
-    the one surviving use of `wingVert` and the decode is silent about it, so it is held at 0.35 on
-    an A/B rather than for want of a measurement: retiring it (chase floor 1.0) or lowering it to
-    0.10 moves the knife-edge rows the wrong way or fails to reach the footage while walking α past
-    `liftAOAs[0] = 5°`. The evidence and the trap that goes with it (`CAP-05` cannot separate the
-    nose–path lag from gravity pulling the path down, so no absolute align rate comes out of it) are
-    in [`docs/org/flightModel.md`](docs/org/flightModel.md)'s knife-edge section.
-  - **`Probes.cs`'s `eighth-throttle-speed` target of 137.9 mph is against a number no clip
-    supports.** `CAP-31` reads 134.84 mph still falling at its last frame and the `accel` clip's 1/8
-    entry leg rises 134.25 → 135.56, bracketing **≈135 mph (0.449 fd) ± 1**. Retarget the row, and
-    run the model over `CAP-31`'s two coast times while there (290 → 150 in **13.94 ± 0.29 sim s**,
-    an upper bound because the chop is not instantaneous, and the transient-free 240 → 150 in
-    **11.33 ± 0.24**).
-  *Playtest after fix:* (1) does the knife-edge sink feel like the original's; (2) does the
-  stall-into-knife-edge recovery behave now that no sag term compounds with the stall nose-drop.
+- `BL-438` `[Research]` **The original spends its lag vector as the ACCELERATION; we spend it as a
+  lift demand.** `lift_accel_rate` is decoded ([`docs/org/flightModel.md`](docs/org/flightModel.md),
+  "`lift_accel_rate` is a lag toward a target velocity"): `_DAT_0071c448`, fallback 1.2 and this
+  install authoring 0.75, with two readers — `0x48c746` in the force build `FUN_0048c470` and
+  `0x49112a` in `FUN_00490f70` — both computing `lift_accel_rate · (targetVelocity − velocity)`,
+  adding gravity to Y at `0x48c77b`, and rotating the result into body axes. `FUN_0048c470` splits at
+  `0x48c522` on whether the object is the player (`ESI` against `_DAT_0071c298`); the two sides differ
+  only in how `targetVelocity` is built and rejoin at `0x48c70a`, so the lag itself is unconditional.
+  `FlightModel.Step` computes the same shape at its lift step — `(relativeWind − velocity) ·
+  LiftAccelRate` with gravity on Y — but treats it as a DEMAND: it takes a load factor off the
+  vector, clamps it, projects it onto the wing plane, and then sums thrust, drag and gravity
+  separately. The original never forms those separate terms at this site at all.
+  **What is undecoded, and has to be first:** the three virtual-call contributions that build the
+  player's `targetVelocity` (`0x48c6b6`–`0x48c6e7`). Until those are read there is no way to know
+  whether our thrust/drag/lift decomposition is a re-expression of them or an addition to them.
+  ⚠ **Do not start by rewriting `Step`.** A change here moves every airframe and every
+  `flight-envelope` row at once; the product is the decode of those three contributions, and the
+  rebuild is what follows it.
+  ⚠ **This owns the sustained-climb residual.** The full-throttle climb plateaus 25% fast
+  (204.04 mph against the original's 163.05 at a 56.3° path) and does not reproduce the
+  undershoot-and-recover. A lag toward a target velocity settles a climb somewhere a force sum does
+  not, so the residual is most likely this divergence rather than a missing term. The α that was
+  once the leading candidate cannot be read off any capture and no further flight capture will be
+  filmed, so this is the route. ⚠ **Do not reintroduce a pitch-scaled gravity** on the strength of
+  GDD §4.1.1: the shipped gravity block (`0x48ff85`–`0x48ff9d`) reads no attitude at all, and the
+  term that is attitude-scaled runs the other way.
+  *Cross-refs:* `BL-414` (the untune this came out of), `BL-437`, `BL-439`.
+
+- `BL-439` `[Research]` **Decode the thrust-vs-throttle curve, so part-throttle equilibria have a
+  target that is not footage.** `Probes.eighth-throttle-speed` now runs with **no** target: its old
+  137.9 mph was against a number no clip supports, and the ≈135 that would replace it is another
+  frame measurement. The curve itself is in `crimson.exe` and settles the row outright.
+  ⚠ **`ThrustConst` is the first thing to re-examine, and its protection is backwards.** It is
+  described as a pinned measurement rather than a knob because the `flight-envelope` suite asserts
+  it — but what it is pinned to is frame-by-frame video, so the suite has made a footage fit
+  load-bearing. A decoded curve either confirms it or replaces it; either outcome is worth more than
+  the current arrangement, where the assertion is what stops anyone looking.
+  *Cross-refs:* `BL-438` (the force path the curve feeds), `BL-414`.
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
 

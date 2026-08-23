@@ -1108,10 +1108,12 @@ public static class Probes
         m = Fresh(stats, Level(), 0.9f * fd, 0.125f);
         Run(m, 0.125f, 300f, pitch: 0f);
         double idlePath = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
+        // ⚠ NO target: every candidate came off video, and the throttle curve that would give a
+        // decoded one is not decoded yet (BL-439). A number here would be a fit, not a check.
         Row("eighth-throttle-speed", "1/8 throttle held to equilibrium", "mph",
-            m.Speed / Mph, 137.9, 6.0,
-            $"{m.Speed / fd:0.000} x fd_speed (original 0.459), settled path {idlePath:0.0}°, "
-            + $"α {m.Alpha:0.0}°",
+            m.Speed / Mph, null, 0.0,
+            $"{m.Speed / fd:0.000} x fd_speed, settled path {idlePath:0.0}°, α {m.Alpha:0.0}° — "
+            + "no decoded target exists; the thrust-vs-throttle curve is undecoded (BL-439)",
             info: true);
 
         // ⚠ ZERO throttle, not 1/8 — the footage cuts 8/8 to 0/8, so this is a pure drag probe.
@@ -1152,6 +1154,27 @@ public static class Probes
             minSpeed / Mph, 127.9, 6.0,
             $"α {alphaAtMinSpeed:0.0}° here (the wings-level pull settles lower — this loop has "
             + "carried well past that regime by its own minimum)",
+            info: true);
+
+        // --- stall departure, INFORMATIONAL and deliberately untargeted: it makes the decoded
+        // nose-drop's SHAPE visible (an equilibrium the torque settles at, not a chase toward
+        // world-down) without asserting any figure, since the only figures available are footage.
+        m = Fresh(stats, Level(), 0.9f * fd, 0f);
+        float NoseDeg() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp((-m.Attitude.Z).Y, -1f, 1f)));
+        double tBreak = RunUntil(m, 0f, 120f, () => m.isStalled(), pitch: 0f);
+        float breakNoseDeg = NoseDeg(), prevNoseDeg = breakNoseDeg, peakDropDegS = 0f;
+        for (float t = 0f; t < 30f; t += EnvDt)
+        {
+            m.Step(new FlightInput { Throttle = 0f }, EnvDt);
+            float now = NoseDeg();
+            peakDropDegS = Mathf.Max(peakDropDegS, (prevNoseDeg - now) / EnvDt);
+            prevNoseDeg = now;
+        }
+        Row("stall-departure", "0 throttle from 0.9 fd, stick centred, nose where it rests", "deg",
+            NoseDeg(), null, 0.0,
+            $"broke at {tBreak:0.0} s with the nose {breakNoseDeg:+0.0;-0.0}°, peak drop "
+            + $"{peakDropDegS:0.00} °/s, stall flag {m.StallFlag:0.00} at rest — the drop is a torque "
+            + "settling at an equilibrium, not a chase; no target, every candidate is footage",
             info: true);
 
         var sb = new StringBuilder();
