@@ -1066,8 +1066,8 @@ The sag is an immediate ≈4° step followed by an unbounded drift of 0.69–0.8
 the bounded pair is retired rather than retuned: a bounded term cannot produce a drift that never
 settles.
 
-⚠ **Do not back an absolute align rate out of this table.** `KnifeAlignFloor`'s observable here is
-the path lagging the nose (4.8° at +3 s, 7.2° at +24 s, 8.3° at +36 s), and `CAP-05` cannot separate
+⚠ **Do not back an absolute align rate out of this table**, for the retired `KnifeAlignFloor` or for
+anything replacing it. The observable here is the path lagging the nose (4.8° at +3 s, 7.2° at +24 s, 8.3° at +36 s), and `CAP-05` cannot separate
 that lag from gravity pulling the path down over the same interval. What the A/B above uses is only
 the *direction* each row moves under a change on one build, which the confound cannot reverse:
 gravity pulling the path down can only shrink the gap, so the inferred chase is an upper bound
@@ -2306,9 +2306,10 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   0.29 in exactly that attitude, so it rotated the nose down at up to **11.5 °/s** — a nose-down
   bias in every pull at any bank — the "knife-at-zero-bank leak". Also pinned: the
   knife-edge never settles on any of the eleven (a bounded sag puts almost none of its total in the
-  last third of a 36 s hold, a genuine drift about a third), the nose stays well below the path
-  (retiring `wingVert` makes the chase faster and fails it), and α stays inside `liftAOAs[0]` on
-  all eleven — peak **0.71–4.29°** against the authored 5°. That last one **replaced a lost prose
+  last third of a 36 s hold, a genuine drift about a third), and α stays inside `liftAOAs[0]` on
+  all eleven — peak **0.71–2.59°** against the authored 5°. A fourth assertion, that the nose stays
+  well below the path, is retired with `wingVert`: its bound was a footage anchor written to catch
+  the chase getting faster, which is what the decode requires. That last one **replaced a lost prose
   figure** ("the Balmoral knife-edges at α = 5.1°, 0.1° inside the ramp") that no instrument could
   reproduce: the Balmoral peaks at 1.77°, and the tightest airframe is the **Bloodhawk** at 4.29°,
   ≈0.71° clear. The probe recipe lives in `Probes.KnifeEdge` — it was lost once as prose and is

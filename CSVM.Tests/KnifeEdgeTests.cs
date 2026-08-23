@@ -8,9 +8,9 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The knife-edge: no dedicated sag term (the decoded bank→yaw coupling and the weathervane
-/// already produce the drift), and <c>wingVert</c> surviving in the nose-chase rate. Decode and
-/// measurements: docs/org/flightModel.md's "Bank-independent lift vs the measured knife-edge sag".
+/// The knife-edge: no dedicated sag term and no verticality scale on the nose-chase either — the
+/// decoded bank→yaw coupling and the weathervane produce the drift on their own. Decode:
+/// docs/org/flightModel.md's "lift_accel_rate is a lag toward a target velocity".
 /// ⚠ Do not reintroduce a nose-sag term; see that section for why it regresses the onset.
 /// The probe recipe lives in <see cref="Probes.KnifeEdge"/>, not restated here.
 /// </summary>
