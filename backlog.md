@@ -873,26 +873,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 ## Flight model & collision physics
 
 - `BL-414` `[Research]` **Untune the flight model: decode what is currently fitted.** `FlightModel.cs`
-  carries **18 `TUNE` markers** and **11 `flightModel.*` config overrides**, and
+  carries **seven fitted constants** and **11 `flightModel.*` config overrides**, and
   [`docs/org/flightModel.md`](docs/org/flightModel.md) already separates what was read out of
   `crimson.exe` from what was fitted to match the original at the controls. This item is to shrink
   the second set as far as the binary allows, constant by constant, rather than to re-fit any of
-  them. Priority targets are the ones a fitted value silently distorts: the lift clamp
-  (`LiftGMin` -5 / `LiftGMax` 9, a load factor), the aerodynamic ceiling `ClMaxStatic` /
-  `ClMaxMach`, `LiftAccelRate`, and the force/acceleration scale the lift and gravity terms share,
-  which that page records as a real unresolved conflict rather than a settled reading.
-  **Trigger:** a decoded death path (`BL-385`'s Wave D) put a dead hull under the model with no
-  thrust, and it *glided* where the original's drops, which is the kind of gap a fitted lift term
-  hides while a living aircraft still feels right.
-  ⚠ **Traps.** (a) These constants have measured provenance and A/B history at the controls; a
-  decode that replaces one must beat it on evidence, and "the number changed" is not the same as
-  "the aircraft is right" — this is the file where the user's eyes have overruled the instruments
-  before. (b) The two-integrator correction on that page is the worked example of how this goes
+  them. The fitted set is `StallNoseRate` (1.0 rad/s, pinned to measured video), `KnifeAlignFloor`
+  (0.35, a knife-edge measurement the decode is silent on), `PitchTune` (0.89, measured video),
+  `YawTune` (1.57, pinned against the authored yaw curve) and the graze trio `GrazeFriction` /
+  `GrazeKick` / `GrazePushOut` (0.35 / 1.2 / 0.15, ours rather than the original's). The rotation
+  rates are the priority: a per-tick angular rate is the class of quantity the original's live torque
+  path (`FUN_0048c470`) holds outright.
+  ⚠ **The lift terms are decoded already; this item does not re-open them.** The lift clamp
+  (`LiftGMin` -5 / `LiftGMax` 9) and the aerodynamic ceiling (`ClMaxStatic` 0.75 / `ClMaxMach` 0.15)
+  are both read out of `FUN_0041abd0`; `LiftAccelRate` is the authored `lift_accel_rate` with 1.2 the
+  parser's own fallback (`PlaneStats.cs:171`); and the force/acceleration scale is settled, the whole
+  weight chain conversion-free at `0x47ae2d`, `0x475c6a`, `0x48ff8e`, `0x41ac13` and `0x491290`. What
+  stands open there is a decode-vs-footage conflict on the drag polar that no constant in this model
+  can close, so it belongs to a re-decode of the CAP-05 clip rather than here.
+  ⚠ **Traps.** (a) The two-integrator correction on that page is the worked example of how this goes
   wrong: the provenance table named the wrong integrator for months. Confirm which function you are
-  reading before trusting an offset. (c) A change here moves every aircraft in the game; the goldens
+  reading before trusting an offset. (b) A change here moves every aircraft in the game; the goldens
   and engine suites are the net, and a moved golden hash is a finding to explain, never to re-pin.
-  (d) Do not fold this into a feature item — the product here is the decode and its evidence, and a
-  correct disproof that leaves a constant fitted is a success.
+  (c) Do not fold this into a feature item — the product here is the decode and its evidence, and a
+  correct disproof that leaves a constant fitted is a success. (d) The graze trio is not three
+  independent constants: they were tuned together against a slide that carried no restitution, so
+  they and `BounceLeverScale` move as one group or not at all. (e) `KnifeAlignFloor` carries a
+  two-sided prohibition in the code (raising it to 1 moves every knife-edge observable the wrong way,
+  lowering it walks α past `liftAOAs[0]`), so a decode landing elsewhere has to answer both.
+  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md) (the fitted-vs-decoded split, and
+  its "A destroyed hull flies the same model" section, which hands this item the open question of what
+  throttle an AI carries into its death), `BL-385` (the decoded death path).
 
 - `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
   complete and waiting, not as a discovery. Shipped: `MSG_CMD_NITROUS` ("Use Nitro-Booster") is a
@@ -2386,19 +2396,48 @@ usual.
   primarily a form: down its left side sits `ia_tl_contents`, a 14-row list of 19 named preset
   scenarios (`langui` ids 3600 to 3618: *Girl Trouble*, *Sour Grapes*, *Black Hats and Hoplites*,
   *Swan's Gauntlet*, *Manhattan Tea Party*, …). Selecting one fills every dropdown, and *View Story*
-  (`IDS_IA_B_VIEWSTORY`) opens its written setup. `IDS_IA_TABLE_INSTRUCTIONS` says so outright:
+  (`IDS_IA_B_VIEWSTORY`) opens its details page. `IDS_IA_TABLE_INSTRUCTIONS` says so outright:
   "Select a mission below and click View Story to see its details on the next page." Most players
   never touched the dropdowns at all, so this is the mode's real front door.
-  **What it needs.** The preset table is not in any shipped data file; `INSTANTACTION.SCRIPT` reaches
-  it through engine callbacks 2301 (initial index plus mission type), 2302 (index to mission type)
-  and 2353 (push the whole form), so it lives in `crimson.exe`. Decode those four callbacks and the
-  table they read, then render the presets as a first screen ahead of the wizard's step 1. The story
-  prose is a second question: it may be `langui` strings, or it may be `crimson.rof` artwork.
+  **The table is decoded.** 19 records of 0x230 bytes at `0x0061b090`, applied by `FUN_004102c0`
+  over the live setup struct at `0x0064ab5c`; the full record layout, the per-preset configuration
+  and the two derived allow masks are in
+  [`docs/formats/instant-action.md`](docs/formats/instant-action.md) ("Table of Contents presets").
+  What is left is the screen: render the presets ahead of the wizard's step 1, apply one into the
+  existing `InstantActionDef`, and run the mission-type state machine afterwards. Two questions the
+  entry used to carry are answered there and must not be re-asked: presets fly **stock** airframes
+  (the record's own plane blocks are overwritten from the stock table), so this does not wait on
+  `BL-354`; and *View Story* opens the wizard page under the preset's name, with **no per-preset
+  prose** anywhere in `langui` or `crimson.rof`, so it does not wait on `BL-427` either.
   ⚠ **Traps.** (a) `ia_tl_contents`'s selection sets the mission type, which then re-enables or hides
   the whole enemy-wave block (`if (0 == WT)`), so a preset is not just a set of dropdown values; it
   drives the screen's own state machine. (b) 19 presets against 7 environments means presets are not
-  per-environment; do not assume a mapping. (c) Blocked on nothing, but pointless before
-  `PLAN-instant-action` lands the configurable mission the presets would fill in.
+  per-environment; do not assume a mapping, which the decoded table confirms. (c) Unblocked:
+  `PLAN-instant-action` has landed the configurable mission the presets fill in.
+
+- `BL-430` `[Bug]` **The Instant Action wizard's aircraft dropdowns are not in the original's
+  order.** Found while decoding `BL-352`'s preset table. `LaunchMenu.Planes`
+  (`CSVM/src/UI/LaunchMenu.cs:110-123`) lists the eleven airframes in def order (Devastator,
+  Bloodhawk, Firebrand, …), and each militia's `Aircraft` array (`:129-144`) carries an order of its
+  own (Black Hat as Warhawk, Brigand, Autogyro). The original fills all three of these dropdowns in
+  the `langui` 3700 order: Autogyro, Hellhound, Balmoral, Bloodhawk, Brigand, Devastator, Firebrand,
+  Fury, Kestrel, Peacemaker, Warhawk. A militia's list is that order filtered by the 11-byte allow
+  mask `FUN_00410420` writes, so Black Hat reads Autogyro, Brigand, Warhawk. Membership is right in
+  all thirteen militias, the mask agrees with the `.BM` pattern reading exactly; only the order is
+  wrong.
+  **Why it is not cosmetic.** The original stores an aircraft as an index into that order. The 19
+  presets at `0x0061b090` hold the player, wingman and per-wave enemy aircraft as 3700 indices
+  ([`docs/formats/instant-action.md`](docs/formats/instant-action.md), "Table of Contents presets"),
+  so `BL-352` built against today's arrays would give every preset the wrong aircraft. The ordering
+  has to be right before the presets land, and a screenshot A/B of the wizard against the original
+  reads as a mismatch until it is.
+  ⚠ **Traps.** (a) Do not reorder `Militias` itself; that list is already in the langui 3670 order.
+  (b) Plane indices are held in live UI state (`slot.PlaneIndex`, `_wingmanPlaneIndex`) and resolved
+  through `Planes[...]` on the same frame, so reordering the array is safe, but the defaults those
+  fields start at are positional and must be re-checked. (c) Fortune Hunter's list is `PlaneNames()`
+  and inherits `Planes`'s order, so it is fixed by the same change rather than separately.
+  *Cross-refs:* `BL-352`, [`docs/formats/instant-action.md`](docs/formats/instant-action.md)
+  ("Militias and aircraft").
 
 - `BL-354` `[Feature]` **The hangar: Build Custom Plane.** Split out of
   [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing (2026-08-14) as a milestone
@@ -2775,11 +2814,10 @@ usual.
   nothing in the extracted data contains that text. It can only be in
   `CrimsonSkiesGame/GOSDATA/ASSETS/BINARIES/langui.dll`, a Win32 resource table no tool of ours
   reads.
-  **Why it is worth its own item.** It unblocks two features, not one. `BL-352`'s entry says the
-  *View Story* prose for the 19 preset scenarios "may be `langui` strings, or it may be
-  `crimson.rof` artwork", and this settles that question in the same pass. The wizard's own decoded
-  facts already cite langui ids (the thirteen militias at 3670, the presets at 3600–3618), so the
-  table is being read second-hand today from decode notes rather than from the file.
+  **Why it is worth its own item.** The wizard's own decoded facts already cite langui ids (the
+  thirteen militias at 3670, the presets at 3600–3618), so the table is being read second-hand today
+  from decode notes rather than from the file. It no longer carries `BL-352` with it: the *View
+  Story* page has no per-preset prose to find, which the decode of that screen settled.
   ⚠ **Traps.** (a) Our Ammo Selection screen ships without description panes, which is a stated
   divergence rather than an oversight; adding them is this item, not a bug fix on that screen. (b) A
   quarter-width four-player pane has no room for a prose block, so the panes are not simply "the
