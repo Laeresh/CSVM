@@ -8,9 +8,9 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The knife-edge: no dedicated sag term (the decoded bank→yaw coupling and the weathervane
-/// already produce the drift), and <c>wingVert</c> surviving in the nose-chase rate. Decode and
-/// measurements: docs/org/flightModel.md's "Bank-independent lift vs the measured knife-edge sag".
+/// The knife-edge: no dedicated sag term and no verticality scale on the nose-chase either — the
+/// decoded bank→yaw coupling and the weathervane produce the drift on their own. Decode:
+/// docs/org/flightModel.md's "lift_accel_rate is a lag toward a target velocity".
 /// ⚠ Do not reintroduce a nose-sag term; see that section for why it regresses the onset.
 /// The probe recipe lives in <see cref="Probes.KnifeEdge"/>, not restated here.
 /// </summary>
@@ -67,26 +67,6 @@ public class KnifeEdgeTests
                 Assert.True(run.SettledFrac > 0.15,
                     $"{plane} @{run.EntryMph:0} mph: only {run.SettledFrac:0.00} of the sag arrived "
                     + "in the last third — that is a bounded sag settling, not the original's drift");
-            }
-        }
-    }
-
-    /// <summary>The nose sits below the flight path throughout, by a margin the chase rate sets.
-    /// The −1.8° bound is deliberately well under the original's own 4.8°–8.3° gap: it exists to
-    /// catch the chase getting faster, which is what retiring <c>wingVert</c> does. Measurements:
-    /// docs/org/flightModel.md's "Bank-independent lift vs the measured knife-edge sag".</summary>
-    [ExtractedDataFact]
-    public void TheNoseStaysWellBelowTheFlightPath()
-    {
-        var r = Probes.KnifeEdge(ZrdrPath, "player_bhawk");
-        Assert.True(r.Error == null, $"{r.Error ?? "-"}");
-        foreach (var run in r.Runs)
-        {
-            foreach (var x in run.Samples.Where(s => s.T >= 3.0 && s.T <= 12.0))
-            {
-                Assert.True(x.LagDeg < -1.8,
-                    $"@{run.EntryMph:0} mph, +{x.T:0} s: nose is only {-x.LagDeg:0.00}° below the "
-                    + "path (original 4.8–6.0°) — the flight path is chasing the nose too hard");
             }
         }
     }

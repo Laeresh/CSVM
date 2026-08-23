@@ -42,6 +42,11 @@ public class ControlLimiterTests
         ("rudder @ fd", 1.0f, new FlightInput { Yaw = 1f, Throttle = 1f }),
     };
 
+    // The able-to-fail control's α fraction — NOT a measurement, just "a threshold the model can
+    // still cross". Was 0.5, which retiring wingVert put 0.4% out of reach (peak α 22.9° against
+    // 23.0°); pulling harder does not help, since α is a lag bounded by the chase rate.
+    private const float DisproofAoaFraction = 0.45f;
+
     private static string ZrdrPath =>
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
 
@@ -114,9 +119,9 @@ public class ControlLimiterTests
             $"player_bhawk: peak demanded load factor is only {peakG:0.00} G ({gWhere}) against "
             + $"half the authored highGs[0] ({stats.HighGStart / 2f:0.0} G) — the manoeuvre has "
             + "become too gentle to trip a limiter, so the G disproof can no longer fail");
-        Assert.True(peakAlpha > maxAoaDeg / 2f,
-            $"player_bhawk: α peaks at only {peakAlpha:0.0}° ({alphaWhere}) against half the "
-            + $"authored maxAOA ({maxAoaDeg / 2f:0.0}°) — the manoeuvre has become too gentle to "
+        Assert.True(peakAlpha > maxAoaDeg * DisproofAoaFraction,
+            $"player_bhawk: α peaks at only {peakAlpha:0.0}° ({alphaWhere}) against "
+            + $"{maxAoaDeg * DisproofAoaFraction:0.0}° — the manoeuvre has become too gentle to "
             + "trip a limiter, so the AOA disproof can no longer fail");
     }
 

@@ -2223,7 +2223,7 @@ Raises `HaltReason.Ended` on `Present` and carries a Restart · Exit `BoardMenu`
 Nothing else retires this board — a mission that has ended stays ended — so unlike the race and
 dogfight boards the hide and the clock release happen on the menu's own Restart. That Restart is a
 restart and not a rerun: it reaches the Launcher's `RestartSession`, which rebuilds the world,
-because the mission's waves, ace and zeppelin cannot be put back in place (`BL-410`).
+because the mission's waves, ace and zeppelin cannot be put back in place.
 
 ## src/Flight/Weather.cs
 `WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone

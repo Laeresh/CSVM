@@ -595,28 +595,76 @@ accumulated torque already opposes that axis, and adds along it:
 ```
 
 `stall_mag` is `_DAT_0071c41c`, authored from the `stall_mag` token (string at `0x627854`, parsed at
-`0x4742de`-`0x4742fe`), compiled fallback **0.45**. There is **no second rate constant**: the 0.45 is
-the whole of it.
+`0x4742de`-`0x4742fe`), compiled fallback **0.45** (the immediate `0x3ee66666` stored at `0x4742fe`,
+on the branch the parser takes only when the token is ABSENT). There is **no second rate constant**:
+the one scalar is the whole of it. It is also a **single global, not a per-airframe field**: the one
+write pair is in the player-globals parser `FUN_004735b0` and the force path reads the global
+directly at `0x48d10d`, so no plane record can carry its own.
+
+⚠ **This install authors 1.25, so the fallback is the wrong number to reason with** (corrections
+table below). Every figure here is the authored value's.
 
 Three consequences, and they are what separate this from the remake's version:
 
 - **It enters the torque accumulator, not the attitude.** So it is scaled by `rec_moments_inertia`
   and damped by `ang_momentum_damp` downstream, exactly as "Torques and the limiters" warns for
   anything else entering that accumulator. On the Bloodhawk (`rec_moments_inertia.x` 1.18,
-  `ang_momentum_damp` 5.0) full stall depth settles at `0.45 · 1.18 / 5.0` ≈ **0.106 rad/s**, an
-  order of magnitude under a direct 0.45 rad/s rotation.
+  `ang_momentum_damp` 5.0) full stall depth settles at `1.25 · 1.18 / 5.0` ≈ **0.295 rad/s** — under
+  the fallback it would be `0.45 · 1.18 / 5.0` ≈ 0.106, and either way an order of magnitude under a
+  direct rotation at the scalar itself.
+- **The cancellation is what holds the nose down, not the magnitude.** Full-elevator pitch authority
+  on the same airframe is ≈0.585 rad/s (`pitch-rate` 33.54 °/s), well over the deepest stall torque,
+  so a straight contest would go to the elevator. There is no contest: the `FCOMP` at `0x48d0ce`
+  tests the accumulated torque against the axis and, where it opposes, the projection
+  `−(t·a)/(a·a)` removes that component **entirely** before the drop is added. A pull along the drop
+  axis is deleted, not outvoted, so the nose cannot be raised while the flag is positive. That is
+  the original's own version of "no raising the nose over the horizon in a stall", and it needs no
+  separate cap, floor or minimum rate on top of it.
 - **The axis is not normalised**, so the rate carries a `cos(nose elevation)` factor and falls away
   as the nose leaves the horizontal. The nose is pushed down about a horizontal axis; it does not
   chase world-down, and a bounded nose-down attitude is an equilibrium between this torque and the
   restoring terms rather than the end of a chase.
 - **The depth measure is the lift-versus-weight flag**, `1 − L(9°)/Weight`, not a speed ratio.
 
-⚠ **The remake's `StallNoseRate` 1.0 is a no-op multiplier on `stall_mag`, not a rate.** Our
-`StallMag × StallNoseRate × depth × dt` rotates the attitude directly about a normalised axis with
-`depth = 1 − Speed/StallSpeed`. The scalar happens to agree; all three structural points above do
-not, which is the real content of `BL-410`'s "~17× too fast, and chases the wrong target" and of the
-CAP-05 reading that the original drops at 0.059 rad/sim-s and settles at ≈−22° instead of continuing
-down. What that item records as an untraced TUNE now has a mechanism to be rebuilt on.
+**This is what the remake flies.** `FlightModel.StallNoseTorque` builds the term above and folds it
+into the same accumulator the stick, the bank coupling and the weathervane feed, with the sign test
+and the projection intact; `FlightModel.StallFlag` is the `1 − L(9°)/Weight` depth, which is the
+already-computed lift cap subtracted from one. The `StallNoseRate` multiplier, the attitude rotation
+it scaled and the hand-rolled over-the-horizon cap that used to follow it are all retired: the first
+was a no-op on `stall_mag`, and the cancellation supersedes the third. `StallNoseDropTests` pins the
+closed form, the equilibrium and the cancelled pull.
+
+## `lift_accel_rate` is a lag toward a target velocity
+
+The nose-chase is real and authored: `lift_accel_rate` (string `0x6278b4`, global `_DAT_0071c448`,
+compiled fallback `0x3f99999a` = **1.2**, this install authoring **0.75**) has two readers,
+`0x48c746` in the force build `FUN_0048c470` and `0x49112a` in `FUN_00490f70`, and both are the same
+block:
+
+```
+a  = lift_accel_rate · (targetVelocity − velocity)     [0x48c70d-0x48c776]
+a.y += gravity                                         [0x48c77b]
+a  = a · orientation                                   [into body axes, 0x48c78a…]
+```
+
+`FUN_0048c470` splits at `0x48c522` on whether the object is the player (`ESI` against
+`_DAT_0071c298`) and the two sides differ only in how they build `targetVelocity` — the player
+accumulating `scalar × direction` through three virtual calls (`0x48c6b6`–`0x48c6e7`), everything
+else taking `−speed × nose` (`0x48c6e9`–`0x48c704`). They rejoin at `0x48c70a`, so the lag itself is
+unconditional.
+
+⚠ **Nothing at either reader touches bank or wing verticality.** The remake's `KnifeAlignFloor`
+weakened this chase by `|bodyUp·up|`; the binary has no such factor, so the constant and its
+`wingVert` input are retired and the chase runs at the authored rate alone. That the knife-edge
+nose–path gap then reads smaller than the footage's is a decode-versus-footage conflict of the same
+class as `yaw-360` and `decel-290-150`, recorded rather than tuned away.
+
+⚠ **The remake spends this vector differently, and that is undecoded work, not a landed match.**
+`FlightModel.Step` uses `(relativeWind − velocity) · LiftAccelRate` with gravity on Y as the lift
+DEMAND — deriving a load factor from it, clamping it, projecting it on the wing plane and adding
+thrust, drag and gravity separately — where the original uses the same shape AS the acceleration.
+`BL-438` owns reconciling the two, and the three target-velocity contributions above are the first
+thing it needs.
 
 ## The keyboard stick is an accumulator, not a switch (`FUN_00487460`)
 
@@ -820,6 +868,14 @@ formula above folds the two steps together, which is exact — but it matters fo
 that enters the same accumulator, because that too is scaled by the reciprocal inertia and damped
 by `ang_momentum_damp`. The bank coupling below is exactly such a term.
 
+Both are per-airframe fields of the plane record, parsed in `FUN_00479240`: `ang_momentum_damp`
+(token at `0x627fdc`) into `+0x114` at `0x47add3`, and `rec_moments_inertia` (token at `0x628020`)
+into `+0x118`/`+0x11c`/`+0x120` from list elements 0/1/2 at `0x47ae69`/`0x47ae75`/`0x47ae81` —
+pitch, yaw, roll in that order. ⚠ **Neither has a compiled fallback**: each is a single store on
+the token-present branch with no else, unlike `stall_mag`'s. `PlaneStats`' 5.0 and (0.8, 0.6, 1.3)
+are therefore not the executable's defaults for these two, and an airframe that authored neither
+would fly on whatever the record was initialised to; in practice every airframe authors both.
+
 ## Bank coupling — resolved, including the inverted case
 
 `FUN_00490f70` adds two more contributions to the same angular accumulator the stick commands
@@ -1010,8 +1066,8 @@ The sag is an immediate ≈4° step followed by an unbounded drift of 0.69–0.8
 the bounded pair is retired rather than retuned: a bounded term cannot produce a drift that never
 settles.
 
-⚠ **Do not back an absolute align rate out of this table.** `KnifeAlignFloor`'s observable here is
-the path lagging the nose (4.8° at +3 s, 7.2° at +24 s, 8.3° at +36 s), and `CAP-05` cannot separate
+⚠ **Do not back an absolute align rate out of this table**, for the retired `KnifeAlignFloor` or for
+anything replacing it. The observable here is the path lagging the nose (4.8° at +3 s, 7.2° at +24 s, 8.3° at +36 s), and `CAP-05` cannot separate
 that lag from gravity pulling the path down over the same interval. What the A/B above uses is only
 the *direction* each row moves under a change on one build, which the confound cannot reverse:
 gravity pulling the path down can only shrink the gap, so the inferred chase is an upper bound
@@ -1022,17 +1078,26 @@ nose-up attitude with the wings dead level, so it fought every pull at up to 11.
 moves `zoom-climb` toward its measured 936 ft on **all eleven** airframes (Bloodhawk 1396 → 1338 ft,
 Balmoral 3935 → 1791) and lets the Balmoral reach the altitude cap at all (4471 → 6572 ft).
 
-**`wingVert` stands, in its one surviving use, and the decode does not contradict that.** Lift has
-not read it since B11. Its only remaining reader is the rate at which the flight path chases the
-nose — an explicit kinematic slerp that is the *remake's* arcade handling and has no counterpart in
-the original's force path, so "lift is bank-independent" says nothing about it. What does speak to
-it is the footage: the original holds its nose 4.8° → 8.3° **below** its flight path across the
+**⚠ RETIRED (2026-08-24): `wingVert` is gone, and the reading below is superseded.** It survived on
+the argument that the chase rate had no counterpart in the original's force path, so only footage
+could speak to it. That argument was wrong: the chase IS in the force path — `lift_accel_rate`,
+decoded above — and neither of its two readers scales by bank or verticality. The constant and its
+input are removed, and the footage comparison in this paragraph is kept only as the record of what
+was believed. Its own numbers: the original holds its nose 4.8° → 8.3°
+**below** its flight path across the
 36 s, a gap that grows. Ours runs 2.9° → 1.2°; with `wingVert` retired (chase floor 1.0) it
 collapses to 1.9° → 0.5° and the 36 s altitude loss rises 1087 → 1334 m. Every knife-edge
 observable moves the wrong way without it. Lowering the floor instead of removing it moves every
 row toward the footage (at 0.10: gap 3.5° → 2.1°, drift 0.96 °/s, 874 m) and still cannot reach it
 — and it walks the knife-edge α up to 5.36°, past `liftAOAs[0] = 5°`, where the airflow blend
-starts engaging in a knife-edge. Left at 0.35; `KnifeEdgeTests` pins the α margin on all eleven.
+starts engaging in a knife-edge.
+
+**What the chase now reads at, with the constant gone.** The knife-edge α peak falls rather than
+rises — Bloodhawk 4.28° → 2.59° at the 143 mph entry — so the `liftAOAs[0]` boundary that argued
+against lowering the floor is further away than it ever was, not nearer. Drift holds at 1.19–1.21 °/s
+and the last-third share at 0.20–0.21, so the knife-edge still never settles; `KnifeEdgeTests` pins
+both on all eleven. The nose–path gap does shrink, which is the footage difference this section used
+to weigh, and it is now recorded as a conflict rather than closed.
 
 **The banked rotation runs ≈1.6× the footage rate, and that is a note, not a gap.** Nose drift
 1.09 °/s against a frame-measured 0.69–0.89, heading 1.7 °/s against 0.68–1.13, and
@@ -1048,10 +1113,11 @@ of a force term that would have to reach both. Nothing is tuned to close it.
 already drops the nose there, and the weathervane then pulls it onto the falling path; a second
 nose-down term double-counts what is already present and re-creates the wings-level leak above (the
 retired term rotated the nose down at up to 11.5 °/s in a plain 45° pull).
-⚠ **Do not lower `KnifeAlignFloor` to close the footage difference either.** Lowering it moves every
-row toward the footage and still cannot reach it, because what separates the two is the ROTATION
-rate — the ≈1.6× above — and retuning the chase constant would hide a rotation rate inside it. It also
-runs into a real boundary at 0.10, where the knife-edge α reaches 5.36° and crosses
+⚠ **Do not reintroduce a scale on the nose-chase to close the footage difference either.**
+`KnifeAlignFloor` was exactly that and it is retired: the decode's two `lift_accel_rate` readers
+carry no such factor. What separates the two sides is the ROTATION rate — the ≈1.6× above — and a
+scale on the chase constant would hide a rotation rate inside it. The retired constant also ran into
+a real boundary at 0.10, where the knife-edge α reached 5.36° and crossed
 `liftAOAs[0] = 5°`.
 
 ⚠ **CORRECTION (2026-08-09): the authored candidates are exhausted, and this document said
@@ -2240,9 +2306,10 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   0.29 in exactly that attitude, so it rotated the nose down at up to **11.5 °/s** — a nose-down
   bias in every pull at any bank — the "knife-at-zero-bank leak". Also pinned: the
   knife-edge never settles on any of the eleven (a bounded sag puts almost none of its total in the
-  last third of a 36 s hold, a genuine drift about a third), the nose stays well below the path
-  (retiring `wingVert` makes the chase faster and fails it), and α stays inside `liftAOAs[0]` on
-  all eleven — peak **0.71–4.29°** against the authored 5°. That last one **replaced a lost prose
+  last third of a 36 s hold, a genuine drift about a third), and α stays inside `liftAOAs[0]` on
+  all eleven — peak **0.71–2.59°** against the authored 5°. A fourth assertion, that the nose stays
+  well below the path, is retired with `wingVert`: its bound was a footage anchor written to catch
+  the chase getting faster, which is what the decode requires. That last one **replaced a lost prose
   figure** ("the Balmoral knife-edges at α = 5.1°, 0.1° inside the ramp") that no instrument could
   reproduce: the Balmoral peaks at 1.77°, and the tightest airframe is the **Bloodhawk** at 4.29°,
   ≈0.71° clear. The probe recipe lives in `Probes.KnifeEdge` — it was lost once as prose and is
