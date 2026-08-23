@@ -27,6 +27,9 @@ public sealed partial class SplitScreen : CanvasLayer
     private const uint AllLayers = 0xFFFFF;              // Godot's 20 visual layers
     private const uint PlayerBand = 0xFu << PlayerLayerBit0;
 
+    // Bit 12 (layer 13) is Mech3.PlaneBuilder.InteriorLayer, the cockpit interior, taken next
+    // below the zone band. Every cull mask here keeps it; what drops it is an effect light.
+
     // The shared zone-gate band is Mech3.ZoneGate.LayerBand (bits 13–15 = layers 14–16, zone_id
     // 1/2/3), taken immediately below the per-player band. Outside PlayerBand on purpose: every
     // cull mask below starts with all three INCLUDED, so the gate is something WeatherRig switches

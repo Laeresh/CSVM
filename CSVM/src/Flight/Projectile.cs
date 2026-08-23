@@ -2587,6 +2587,9 @@ public sealed partial class ProjectilePool : Node3D
                 {
                     ShadowEnabled = false,
                     LightEnergy = MuzzleLightEnergy,
+                    // Skips the cockpit interior: from the pilot's seat a wing muzzle is inside
+                    // the flash's own range band, so without this the panel strobes per shot.
+                    LightCullMask = Mech3.PlaneBuilder.EffectLightCullMask,
                     Visible = false,
                 },
             };
