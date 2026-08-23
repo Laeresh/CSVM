@@ -128,7 +128,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ Hangar shell and navigation: screen order, IA Build entry, top-level entry
 22. ☑ AIRFRAME screen
 23. ☑ ENGINE and ARMOR screens
-24. ☐ GUNS and HARDPOINTS screens (BL-067)
+24. ☑ GUNS and HARDPOINTS screens (BL-067)
 25. ☐ PAINT and PLANENAME screens
 26. ☐ PURCHASE review screen
 
@@ -641,6 +641,54 @@ x5 lb roster the original's callback 2246 builds.
 display units x5.
 
 ## C24 ☐ GUNS and HARDPOINTS screens (BL-067)
+
+**Landed.** `CSVM/src/UI/HangarGunsPage.cs` and `CSVM/src/UI/HangarHardpointsPage.cs` fill the
+Guns and Hardpoints slots in `HangarFlow.PageFor` (the two switch lines; nothing else in the
+shell changed, per the C21 contract).
+
+The GUNS screen is always four rows, whatever the airframe (the slot-count disproof: titles
+vary, the count does not), each titled from the airframe's stat-table slot-title string
+(`AirframeStats.SlotTitle` through langui, following the scratch airframe, so the Balmoral shows
+Nose Turret and Rear Turret on rows 2 and 3) and showing the slot's pick. The ←→ stepper walks
+the original's 11-entry dropdown (callback 2248) as a cycle: the five calibres single (langui
+3310-3314), the same five twinned through the shared `HangarFlow.GunName` (the "(2) " prefix,
+format 506, per A2's correction), then No Gun, which is langui 3315: 2248 names its rows
+3310+type and the empty gun id is 5, so the empty row has its own string, with "No Gun" as the
+plain fallback. Stepping writes the slot's `GunChoice` (calibre + twin; empty = null calibre);
+Confirm advances without editing. The detail line is the slot's decoded cost and weight from the
+gun table, the turret column when the airframe's turret bit marks the slot (0-based, no shift,
+per A3 trap b), doubled for twin, plus the calibre's magazine (A3 trap d: CLUSTER_SIZE
+2800/2400/2000/1600/1200 rounds, per gun so twinning does not change it), stated so the
+calibre-versus-rounds trade-off is visible where the pick is made. An empty slot prices at zero
+with no rounds figure.
+
+The HARDPOINTS screen is two rows, one per wing, named through langui 1176/1177 ("Left Wing:
+%1!d!" / "Right Wing: %1!d!", which carry the count themselves). The stepper walks the focused
+wing's count 0-4 with wraparound, the original's 5-row dropdown (callback 2244) as a cycle,
+writing the scratch def; Confirm advances without editing. The detail speaks that dropdown's own
+vocabulary (1165 "None", 1168 "1 Hardpoint", 1169 "%1!d! Hardpoints") and prices it: the decoded
+$410 / 480 lb per hardpoint, then the wing's line total.
+
+Gun picks store calibre + twin only; resolution to weapon defs stays at build time (D32) via
+A3's mapping. This is BL-067's landing site; its entry is deleted when this item and D32 both
+land.
+
+Tests: `CSVM.Tests/HangarGunsPageTests.cs` (`AlwaysFourRows_TitledFromTheStatTable`,
+`RowTextFallsBackWithoutStrings`, `SteppingWalksTheElevenRowCycle`, `ElevenStepsReturnToEmpty`,
+`EachRowEditsItsOwnSlot`, `TwinRowsCarryThePrefix`, `DetailShowsTheWingColumnAndRounds`,
+`DetailUsesTheTurretColumn`, `DetailDoublesForTwin_ButNotTheRounds`,
+`BiggerCalibreMeansFewerRounds`, `EmptySlotDetailIsZero`, `PickingAGunMovesTheBill` (the
+purchase-screen verify: the bill prices the same scratch def the stepper edits),
+`AcceptAdvancesWithoutEditing`, and the extracted-data `GunStringsAndSlotTitlesResolve` sweeping
+3310-3315, 506 and every airframe's four slot-title ids) and
+`CSVM.Tests/HangarHardpointsPageTests.cs` (`TwoRows_NamedFromLangui`,
+`RowTextFallsBackWithoutStrings`, `EachRowEditsItsOwnWing`, `SteppingWrapsAtBothEnds`,
+`DetailSpeaksTheDropdownVocabulary`, `DetailUsesLanguiWhenPresent`,
+`AcceptAdvancesWithoutEditing`, and the extracted-data `HardpointStringsResolve`).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Guns: four slots titled from the stat table, each an 11-row dropdown (five calibres,
 five twins prefixed "(2) " per string 506, No Gun), turret slots priced as turrets; hardpoints:
