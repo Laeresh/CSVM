@@ -1239,7 +1239,8 @@ The fix is the shared label, not a hangar special case: every screen's one-liner
 1280x720 through the new `--menu=defaults` aid: the question reads as three centred lines with
 the Hoplite blueprint beside them and the footer in place.
 
-**Verified.** <pending orchestrator run>
+**Verified.** E45-E48 closing battery: build 0/0, units 1896/1896, engine suites 90/90 with
+errors clean, 16 goldens hash-identical, exit 0.
 
 ## E46 ☐ Deleting a saved plane from the plane-selection page (the original's Sell Plane, `ps_b_sellp`)
 
@@ -1274,7 +1275,8 @@ Tests: `CustomPlaneStoreTests` gained `Delete_RemovesThatPlaneOnly`,
 `TheDeleteListClosesWhenItEmptiesAndOnCancel` and `DeletingClampsTheCursorIntoTheShorterList`;
 `EditingASavedPlaneWorksOnACopy` counts the new row.
 
-**Verified.** <pending orchestrator run>
+**Verified.** E45-E48 closing battery: build 0/0, units 1896/1896, engine suites 90/90 with
+errors clean, 16 goldens hash-identical, exit 0.
 
 ## E47 ☐ The paint preview composes correctly and sits on the screen's left
 
@@ -1334,7 +1336,8 @@ painted texel as arithmetic), added `UnclaimedTexelsStayTransparent`, kept
 as thousands of exact texels). `EveryAirframeComposesEveryPatternItsMaskAllows` now sweeps the
 icon sets.
 
-**Verified.** <pending orchestrator run>
+**Verified.** E45-E48 closing battery: build 0/0, units 1896/1896, engine suites 90/90 with
+errors clean, 16 goldens hash-identical, exit 0.
 
 ## E48 ☐ Decals pick by icon in the original's 5-wide grid, not by text row
 
@@ -1361,4 +1364,5 @@ each tile carrying its index, checked for the right slice, the right caption and
 non-decal row or the placeholder) and the extracted-data `TheShippedDecalSheetSlicesFiftyTiles`
 (all 50 tiles come out 66x66 from the shipped file).
 
-**Verified.** <pending orchestrator run>
+**Verified.** E45-E48 closing battery: build 0/0, units 1896/1896, engine suites 90/90 with
+errors clean, 16 goldens hash-identical, exit 0.
