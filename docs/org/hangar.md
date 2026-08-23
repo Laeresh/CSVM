@@ -199,9 +199,16 @@ damage-callout thresholds read `(armourCur + structCur) / (armourMax + structMax
 and HUD paths (`0x0047ee30`, `0x0049fa42`, `0x004b80d1..`, among others). The per-hit
 application order (zone vs total, armour vs structure) is not decoded here.
 
-**Engine (record +0x30).** `FUN_00416ee0` decomposes the pick: engine ids 0/1/2 are three
-power tiers, 3/4/5 the same tiers plus a **nitrous injector boolean**, 6 is stock (no offset,
-no nitrous, no cost or weight). The airframe maps to a base registry id via `FUN_00416e10`
+**Engine (record +0x30).** The registry the trace ends in is authored data, shipped and
+extracted: `extracted/zrdr/engines.zrd.json` is the `[key, name, power]` list the runtime
+vector at `0x0064fb80` loads, and `FUN_00416e10`'s base ids land exactly on its per-airframe
+"Lvl-1" rows (Bloodhawk 10, Peacemaker 13, Fury 16, Hellhound 19, Devastator 22, Brigand 25,
+Kestrel 28, Firebrand 31, Warhawk 34, Hoplite 37, Balmoral 40; generic rows 0-4 are the
+mission-side "Normal/Large/Small/Tiny/Super" engines). Power scalars run 0.23 (Balmoral
+Lvl-1) to 1.28 (Warhawk and Firebrand Lvl-3). `FUN_00416ee0` decomposes the pick: engine ids
+0/1/2 are three power tiers (base + 0/1/2 = Lvl-1/2/3), 3/4/5 the same tiers plus a
+**nitrous injector boolean**, 6 is stock (no offset, no nitrous, no cost or weight). The
+airframe maps to that base registry id via `FUN_00416e10`
 (eleven-entry switch, base 0x0a stepping by 3: airframe 0 -> 0x25, 1 -> 0x13, 2 -> 0x28,
 3 -> 0x0a, 4 -> 0x19, 5 -> 0x16, 6 -> 0x1f, 7 -> 0x10, 8 -> 0x1c, 9 -> 0x0d, 10 -> 0x22) and
 the tier adds 0/1/2. Result and nitrous flag ride globals `0x0071daf0`/`0x0071daf4` (player,

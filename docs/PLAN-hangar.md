@@ -136,7 +136,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — into flight
 
 31. ☑ Custom planes in every human plane picker, with the after-build auto-select
-32. ☐ Building a custom plane into a flying aircraft
+32. ◐ Building a custom plane into a flying aircraft
 33. ☐ The closing at-the-controls pass, and the BL-354/BL-067 closures
 
 ## Dependency and parallelism notes
@@ -943,9 +943,86 @@ decoded ([`org/hangar.md`](org/hangar.md), the 1024/2099 count callbacks).
 
 ## D32 ☐ Building a custom plane into a flying aircraft
 
-**Goal.** A picked custom plane spawns and flies: the airframe's model and stock base, A3's gun
-defs on the chosen slots, hardpoint ordnance capacity per the wing counts, paint applied, name
-shown where planes are named, and armour/engine/weight wired per A1's findings (or explicitly
+**Landed.** `CSVM/src/Flight/CustomPlaneBuild.cs` is the join, pure and engine-free: a saved
+`CustomPlaneDef` plus the airframe's stock `LoadoutDef` in, a built `LoadoutDef`, a `PaintScheme`
+and a `PlaneDamage` ledger out. The seam is `Launcher.StartSessionFromMenu`, which reads
+`PlayerChoice.CustomPlane` back into a def through `CustomPlaneStore` and carries it on
+`SessionSpec.MenuCustomPlanes` (one per pane, D31's `MenuLoadouts` pattern) for
+`HumanFlightAdapter.Assemble` to build the aircraft from. A plane whose file went away between the
+picker's listing and the launch warns and flies the stock airframe rather than refusing the
+session.
+
+- **Guns, per A3.** Calibre row c becomes `Caliber = 30 + 10c` with `WeaponId` left null, so
+  `Loadout.Bind` resolves the `wep_30..73` matrix and the Ammo Selection layer composes on top
+  unchanged (`LoadoutChoice.ApplyTo` runs over the built def, not over the stock one). A twin is
+  ONE gun over `firepoint(9-2n)`/`firepoint(10-2n)`, a single takes the low one; `Turret` and the
+  mount name come from the stock slot; an empty pick omits the slot entirely. ⚠ The stock slot's
+  own marker list narrows the pair when the rig is short of it: the Kestrel has no `firepoint8`
+  and its stock slot 1 says so by naming one marker, and binding an absent marker is a loud throw,
+  so without that narrowing a twin pick there would spawn the plane unarmed.
+- **The hardpoint join rule (the item's open TODO, now settled).** `Loadout.PylonFillOrder`
+  (`{1,5,2,6,3,7,4,8}`) alternates the wings entry by entry, so its two interleaved halves ARE the
+  wings: pylons 1-4 one side, 5-8 the other. A wing's count takes that wing's fill-order entries
+  in order, hanging the stock fit's ordnance at each entry's fill index, and **caps at the pylons
+  the stock fit authors for that wing** — the record stores counts and no weapons, so a pylon the
+  stock fit never names has nothing to hang. Worked example: the Bloodhawk's three-pylon fit
+  authors fill indices 0/1/2, so four-per-wing caps to pylons 1 and 2 on one wing and pylon 5 on
+  the other. Unchosen entries keep their place as `LoadoutChoice.None`, since dropping one would
+  slide every later pylon onto the other wing. ⚠ Which half is physically LEFT is still undecoded
+  ([`formats/markers.md`](formats/markers.md) omits the pylon positions); a swap would be
+  invisible except at the controls, which is D33's pass.
+- **Armour, per A1, on the pools' own scale.** The four zones reach
+  `PlaneDamage`'s `nose`/`tail`/`leftwing`/`rightwing` parts at five units per point, the record's
+  own premultiply, and no other rescaling is needed: CSVM's `destroyable_parts` armour pools carry
+  the shipped stock allocations 15/20/25/30/35/40 ([`formats/vehicle.md`](formats/vehicle.md)),
+  which is the same scale the original's mission loader writes its raw x5 floats onto. Only the
+  ARMOUR pool is set; structure stays the def's, as the original leaves the mission file's alone.
+  Parts are copied rather than overwritten (a `PlaneStats` is shared by every plane of that
+  airframe). The vehicle totals stay derived: no player def authors an `armor`/`health` pair, so
+  the whole pair is the sum over the rebuilt zones, which is the original's own recompute. The
+  player is never difficulty-scaled, and gets that for free — nothing in CSVM scales a human rig's
+  pools at all.
+- **Paint** is the record's pattern and three colours through the existing texture-substitution
+  path (`PlaneBuilder`'s `scheme`, the entry point the livery lab drives). The three composite
+  `a*5 + b` picks stay out: they register per-plane decal textures in the original, but the
+  encoding is undecoded ([`org/hangar.md`](org/hangar.md)'s Open list), so the three decal slots
+  keep their "leave the shipped placeholder" sentinel rather than inventing an index.
+- **The name** is the plane's own on the stunt scoreboard, the race board and the best-time key
+  (two builds on one airframe fly differently, so they rank separately). The targeting HUD still
+  prints the airframe's name, which shows only in splitscreen, where one pilot brackets another's
+  build; picked up as a follow-up rather than widened here.
+- **⚠ Engine is shipped inert for flight, deliberately, and the reason has changed.** A1 traced
+  the path (pick 0-5 decomposes into a power tier plus a nitrous flag, the tier indexes the engine
+  registry at `0x0064fb80`, whose power float lands in the vehicle's flight-tuning block) and the
+  registry's values have since been identified as shipped data:
+  [`org/hangar.md`](org/hangar.md) names them as `extracted/zrdr/engines.zrd.json`, base row per
+  airframe plus the tier, scalars 0.23 to 1.28. So the numbers are no longer missing, and the
+  reason for holding off is now scope, not evidence: that same table is where
+  `PlaneStats.EnginePower` already reads an airframe's stock row, and `FlightModel` multiplies its
+  thrust term by it, so wiring the pick is a change to how every custom plane FLIES rather than an
+  addition to this join. It wants its own item and a hand-flown check (a `FlightModel.cs` comment
+  already warns that the Lvl-1 row inflates power about 32 % over the stock Lvl-2 one, so getting
+  the tier base wrong would silently retune the aircraft). Nitrous rides the same pick and waits
+  with it. A verbose launch line names the engine as inert and says why. **No dependency on total
+  weight or the stat-table power rating exists anywhere**, per A1's two sourced dead ends.
+
+Tests in `CSVM.Tests/CustomPlaneBuildTests.cs` (17 tests):
+`ACalibreRowBecomesItsCaliberAndNeverAResolvedWeaponId`,
+`ATwinTakesBothFirepointsAndASingleTheLowOne`,
+`ASingleBarrelStockSlotNarrowsATwinPickToTheMarkerTheRigHas`, `AnEmptySlotIsOmittedEntirely`,
+`TheTurretFlagComesFromTheStockSlot`, `EachWingsCountFillsThatWingsPylonsInTheFillOrder`,
+`TheTwoWingCountsAreIndependent`, `ACountAboveTheStockFitCapsAtWhatItAuthors`,
+`NoHardpointsBoughtHangsNothing`, `APylonCarriesTheStockFitsOrdnance`,
+`TheAmmoLayerComposesOverTheBuiltDef`, `TheBuiltDefKeepsTheAirframeAndTakesTheCustomName`,
+`ArmourUnitsLandOnTheZonesArmourPoolAtFivePerUnit`, `AZoneTheRecordDoesNotNameIsUntouched`,
+`TheAirframesOwnPartsAreNeverMutated`, `TheVehicleArmourTotalIsTheSumOverTheBoughtZones`,
+`ThePaintCarriesThePatternAndColoursAndNoInventedDecals`.
+
+**Verified.** <pending orchestrator run>
+
+**Goal (original).** A picked custom plane spawns and flies: the airframe's model and stock base,
+A3's gun defs on the chosen slots, hardpoint ordnance capacity per the wing counts, paint applied,
+name shown where planes are named, and armour/engine/weight wired per A1's findings (or explicitly
 inert with the split-out BL minted).
 
 **Evidence (confidence: direction-sound, traced for the armour/engine wiring).**
@@ -960,8 +1037,8 @@ loadouts store per-pylon weapons; the join rule (first N pylons per wing?) is un
 `FUN_00443de0`, the in-mission weapon wiring, is the one flight-side reader of the plane
 record (+0x84 and the +0x88..+0xc4 runs) and is where the original makes this join.>
 
-**Approach.** A `CustomPlaneDef -> LoadoutDef` builder beside A3's mapping; spawn path otherwise
-unchanged. Wire A1's findings exactly as decoded, nothing more.
+**Approach (original).** A `CustomPlaneDef -> LoadoutDef` builder beside A3's mapping; spawn path
+otherwise unchanged. Wire A1's findings exactly as decoded, nothing more.
 
 **Model recommendation.** high — the fidelity-bearing join of the plan.
 
