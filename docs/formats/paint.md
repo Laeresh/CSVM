@@ -212,6 +212,20 @@ indices blckswan = 1, fortune = 4, hughes = 6, studio = 11). And the family-bit 
 can carry stray bits above the four gun slots (one fixture holds 0xc3 with only slots 0-1
 occupied), so a reader must test bit n for slot n and never the whole byte.
 
+**Pattern index 0-13 is a row of the engine's own 14-entry name table** at `0x0060301c`, the same
+table `FUN_00401e80` builds `assets\graphics\<pattern>\` paths from ([`org/hangar.md`](../org/hangar.md)),
+so the index names the archive folder directly:
+
+| 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `blackhat` | `blckswan` | `blake` | `british` | `fortune` | `hollywd` | `hughes` | `medusas` | `cccp` | `sactrust` | `german` | `studio` | `broadway` | `itstaxi` |
+
+The four indices the fixture saves pin (blckswan 1, fortune 4, hughes 6, studio 11) all land on
+their own name, and each airframe's shipped `PX_ICON_<af>_<pattern>_*` sets are exactly the
+pattern list `PatternsFor` gives that airframe's skin prefix (`itstaxi` aside, which ships no
+icons at all). That cross-check is also what maps airframe id to skin prefix: 0 `agyro`, 1 `hel`, 2 `bal`,
+3 `blo`, 4 `bri`, 5 `dev`, 6 `fir`, 7 `fur`, 8 `kes`, 9 `pea`, 10 `war`.
+
 The saved-plane name index is a separate structure: 33-byte name records at `0x648534`,
 capacity 24 (bound `0x64884c`), filled by the `Planes\*.*` directory scan `FUN_00415000`
 (screen-flow callback 1024, case 0x400 of `FUN_00407670`; widget callback 2099 counts the

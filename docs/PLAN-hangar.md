@@ -53,6 +53,7 @@ From the grilling that preceded this plan. The table is the authority when prose
 | 7 | BL-062 rides along? | **No** — keymap problem, stays its own item. |
 | 8 | Execution and verification | **Orchestrated per-item subagents on this worktree branch, orchestrator commits; unit tests on the importer and the economy arithmetic; one owed at-the-controls closing pass.** |
 | 9 | Airframe availability in Instant Action | **All 11 offered** — the stat table's campaign-progress threshold ships in the data (B13 carries it) but gates nothing here; inventing a progress value for a sandbox mode would be a guess. The campaign gets the gate when it exists. |
+| 10 | Running totals and the overweight gate (user, mid-run) | **A persistent second stats row on every hangar screen** (total price, weight / capacity, flagged when over) lands with C26. **Overweight purchase stays blocked**: the commit callback 2263 re-checks nothing, but `PURCHASE.SCRIPT` disables `pur_b_purchase` (mail 10018) whenever the problems callback 2264 reports, so the original hard-blocks at the button; our commit-refusal is the same rule. |
 
 ## ⚠ Read this before implementing anything
 
@@ -129,7 +130,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☑ AIRFRAME screen
 23. ☑ ENGINE and ARMOR screens
 24. ☑ GUNS and HARDPOINTS screens (BL-067)
-25. ☐ PAINT and PLANENAME screens
+25. ☑ PAINT and PLANENAME screens
 26. ☐ PURCHASE review screen
 
 ### Wave D — into flight
@@ -711,6 +712,86 @@ screen's gun lines move when picks change.
 price column, not a different control.
 
 ## C25 ☐ PAINT and PLANENAME screens
+
+**Landed.** `CSVM/src/UI/HangarPaintPage.cs` and `CSVM/src/UI/HangarNamePage.cs` fill the Paint
+and Name slots in `HangarFlow.PageFor` (the paint switch line added, C21's in-flow placeholder
+name page deleted and moved out to its own file; nothing else in the shell changed).
+
+**The pattern index is a decode, not an ordering guess.** Record +0x40's 0-13 is a row of the
+engine's 14-entry pattern-name table at `0x0060301c`, read out of `crimson.exe` and written into
+[`formats/paint.md`](formats/paint.md): `blackhat`, `blckswan`, `blake`, `british`, `fortune`,
+`hollywd`, `hughes`, `medusas`, `cccp`, `sactrust`, `german`, `studio`, `broadway`, `itstaxi`.
+The four indices the fixture saves pin (blckswan 1, fortune 4, hughes 6, studio 11) all land on
+their own name, and the same read settles airframe id to skin prefix: each airframe's shipped
+`PX_ICON_<af>_<pattern>_*` sets are exactly the pattern list `PatternLibrary.PatternsFor` gives
+that prefix, for all eleven. The PAINT screen's pattern row therefore steps the airframe's OWN
+patterns (the Fury's four, the Balmoral's two), not a dense 0-13 grid the original never offers.
+With no extraction there is no per-aircraft list to read, so the row walks the decoded table
+itself rather than guessing a subset.
+
+**The palette decision.** The three colour rows step an ordered palette rather than free RGB:
+the twelve shipped schemes' own colour triples, deduplicated in first-appearance order, with the
+table's (0,0,0) entries written as the (25,25,25) the paint UI's darkest shade actually saves
+(the B12 fixture finding). Twenty-four colours, each labelled with the scheme slot it came from
+("hughes 1" is the yellow off a Hughes Aviation plane), so every colour a pilot can reach is one
+the original's artists authored. Free RGB stays the livery lab's business: it spans more than the
+original's Colour x Shade dropdowns could, which is right for a debug tool and wrong for a screen
+that is meant to be the original's. A colour the palette does not carry (an imported original
+save, or the model's own (0,0,0) default on a fresh plane) is kept and shown as its own triple
+until that slot is stepped, which then lands on an authored colour: no read of this screen
+rewrites what was imported, and no screen writes the scratch plane on arrival.
+
+**The preview is the live composite, not the icon art.** `PaintBitmap`'s three per-texel weight
+masks blend the three colours, the pattern's shading map modulates that, its overlay composites
+over it, and the `.BM`'s bottom-up rows are flipped: exactly `PlanePainter`'s formula
+([`formats/paint.md`](formats/paint.md)), reimplemented over the raw masks because `PlanePainter`
+itself produces a Godot `ImageTexture` from a `TextureArchive` and this page must stay engine-free.
+The skin previewed is the airframe's wing where it has one and its fuselage otherwise (the Hoplite),
+probed by name against the pattern's own folder. The composite reaches C22's art seam as a 32-bit
+top-down TGA decoded back through `TgaImage`, since the seam speaks `TgaImage` and that file is
+not this item's to extend. The preview is cached on (airframe, pattern, the three colours), so the
+shell rebuilds its texture on an edit and on nothing else, and every scratch edit refreshes it.
+⚠ The sparse-icon fallback is only the last resort: a pattern that ships no `.BM` for this
+aircraft falls back to `PX_ICON_<af>_<pattern>_0.TGA`, and to pattern 4's set when that pattern
+has no icons (A2's trap).
+
+**The decal picks turned out unconsumable, so they are carried untouched.** Nothing in the remake
+reads +0x5c/+0x60/+0x64 today (`PaintScheme`'s nose/tail/wing decals come from `vehicle.json`, and
+no code maps a composite pick onto one), the `a*5 + b` encoding's per-pick meaning is still open in
+the decode ([`org/hangar.md`](org/hangar.md) "Open"), and +0x64 has no screen handler in the
+original at all. The screen edits only what the decode names: the pattern and the three colours.
+The three picks survive a flow byte for byte, which a test pins.
+
+**Name entry is per-character, and `LaunchMenu` was not touched.** The codebase's only text input
+is the debug labs' `LineEdit`s (`NodeLab`, `AnimLab`, `AiNetsOverlay`), which are mouse-and-keyboard
+tools, not a launchscreen idiom to reuse, so the pad-friendly reading of the item applies: one row
+per character stepped through `A-Z 0-9 space -`, plus a trailing length row whose stepper adds a
+character (seating an `A` under the cursor, which is then on that character's own row) and removes
+the last. The cap is 32, the original's 33-byte name-index records. Every control is the same live
+←→ stepper every other screen uses, so `Accept` still just advances and the blank-name gate stays
+where C21 put it, at the commit (langui 203); the length row's detail line says so where it can
+still be fixed. The alphabet carries no character a filename cannot hold, so
+`CustomPlaneStore.PathFor`'s sanitisation never rewrites a name this screen produced; a lower-case
+character from an imported save survives until its own cell is stepped.
+
+Tests: `CSVM.Tests/HangarPaintPageTests.cs` (`OffersThePatternAndThreeColourRows`,
+`WithoutALibraryThePatternRowWalksTheDecodedTable`, `ColoursStepTheShippedSchemesPalette`,
+`EachRowEditsItsOwnSlot`, `SteppingWrapsAtBothEnds`, `AnOffPaletteColourIsKeptUntilStepped`,
+`DetailNamesTheSchemeAColourCameFrom`, `TheCompositePicksAreCarriedUntouched`,
+`AcceptAdvancesWithoutEditing`, `ArtIsNullWithoutADataRoot`,
+`ThePreviewComposesTheMasksAndTheColours` (a hand-built 2x2 mask set whose expected pixels are
+arithmetic, pinning the blend, the shading modulation and the bottom-up flip),
+`EveryEditRefreshesThePreview`, and the extracted-data `ThePatternRowIsTheAirframesOwnList` and
+`EveryAirframeComposesItsOwnPatterns`, the sweep that would catch a wrong airframe-to-prefix row)
+and `CSVM.Tests/HangarNamePageTests.cs` (`OneRowPerCharacterPlusTheLengthRow`,
+`TheLengthRowAddsAndRemovesCharacters`, `LengthStopsAtTheRecordsCap`,
+`SteppingACellWalksTheAlphabet`, `TheAlphabetIsFilenameSafe`,
+`ImportedCharactersSurviveUntilStepped`, `DetailMarksTheFocusedCharacter`,
+`ABlankNameShowsTheOriginalsRefusal`, `TheEnteredNameIsWhatTheStoreSaves`).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Pattern, picks and three colours edited with a live `PlanePainter` preview; a name
 entered and validated (the JSON's file identity).

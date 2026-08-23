@@ -325,6 +325,7 @@ public sealed class HangarFlow
                 HangarScreen.Armour => new HangarArmourPage(this),
                 HangarScreen.Guns => new HangarGunsPage(this),
                 HangarScreen.Hardpoints => new HangarHardpointsPage(this),
+                HangarScreen.Paint => new HangarPaintPage(this),
                 HangarScreen.Name => new HangarNamePage(this),
                 HangarScreen.Purchase => new HangarPurchasePage(this),
                 _ => new HangarPlaceholderPage(this, screen),
@@ -429,65 +430,6 @@ public sealed class HangarPlaneSelectionPage : HangarPage
         }
 
         return false; // let the flow advance to the first build screen
-    }
-}
-
-/// <summary>
-/// The plane's name, which is its identity in the store. ⚠ C25 replaces this with real text
-/// entry; the stepper here walks names built off the chosen airframe so a flow can be completed
-/// and the store exercised before that lands.
-/// </summary>
-public sealed class HangarNamePage : HangarPage
-{
-    /// <summary>Binds the page to its flow.</summary>
-    public HangarNamePage(HangarFlow flow)
-        : base(flow)
-    {
-    }
-
-    /// <inheritdoc/>
-    public override HangarScreen Screen => HangarScreen.Name;
-
-    /// <inheritdoc/>
-    public override int RowCount => 1;
-
-    /// <inheritdoc/>
-    public override string RowText(int row) =>
-        Scratch.Name.Length > 0 ? Scratch.Name : "(unnamed)";
-
-    /// <inheritdoc/>
-    public override string Detail(int row) => Flow.Strings.Text(1028, "PLANE NAME:");
-
-    /// <inheritdoc/>
-    public override bool Step(int row, int dir)
-    {
-        var names = Candidates();
-        int at = names.IndexOf(Scratch.Name);
-        Scratch.Name = names[((at + dir) % names.Count + names.Count) % names.Count];
-        return true;
-    }
-
-    // The airframe's own name, then numbered variants of it. Always at least two entries, so the
-    // stepper always moves.
-    private List<string> Candidates()
-    {
-        string based = Flow.AirframeName(Scratch.Airframe);
-        var names = new List<string>();
-        if (Scratch.Name.Length > 0)
-        {
-            names.Add(Scratch.Name);
-        }
-
-        for (int i = 1; i <= 4; i++)
-        {
-            string candidate = i == 1 ? based : $"{based} {i}";
-            if (!names.Contains(candidate))
-            {
-                names.Add(candidate);
-            }
-        }
-
-        return names;
     }
 }
 

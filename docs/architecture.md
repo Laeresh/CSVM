@@ -213,6 +213,8 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/HangarArmourPage.cs` — the ARMOR screen: the four zones through their own langui formats (1191-1194), the stepper walking each zone's units 0-12, the detail keeping units, the x4 priced cost/weight and the x5 lb display figure distinct.
 - `src/UI/HangarGunsPage.cs` — the GUNS screen: always four slots titled from the stat table's slot-title strings, each stepping the original's 11-entry dropdown (five calibres single, five twinned via format 506, No Gun 3315), the detail pricing the slot's wing or turret column (doubled for twin) with the calibre's magazine rounds.
 - `src/UI/HangarHardpointsPage.cs` — the HARDPOINTS screen: the two per-wing counts through langui 1176/1177, the stepper walking 0-4, the detail speaking the dropdown's 1165/1168/1169 vocabulary with the decoded $410 / 480 lb per hardpoint and the wing's line total.
+- `src/UI/HangarPaintPage.cs` — the PAINT screen: the pattern row stepping the airframe's own pattern list (record index 0-13 through the engine's 14-entry name table), the three colour rows stepping a palette of the twelve shipped schemes' own triples, and a live preview composed from the pattern's `.BM` region masks with `PlanePainter`'s formula; the record's composite picks are carried, never written.
+- `src/UI/HangarNamePage.cs` — the PLANENAME screen: one row per character stepped through a filename-safe alphabet plus a length row that adds and removes them, capped at the original's 32-character name, with the detail line assembling the name and marking the focused character.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
@@ -3010,19 +3012,17 @@ text, plain indices and raw pixels, so a page is engine-free and testable and th
 change to draw one. `HangarFlow.DataRoot` (optional, null in tests) is where a page resolves its
 TGAs; absence reads as no art. `HangarPage` is the base carrying the flow, the scratch plane and
 the heading resolved from the screen's own langui id (1017/1004-1010/1401);
-`HangarFlow.PageFor`'s switch is the single line each of C22-C26 replaces. Until they land,
-`HangarPlaceholderPage` draws the right heading, a Continue row and a real summary of what the
-scratch plane carries for that screen. It edits nothing, so a flow walked through it produces
-exactly the plane the screens before it chose. `HangarPlaneSelectionPage`,
-`HangarAirframePage`, `HangarEnginePage`, `HangarArmourPage`, `HangarGunsPage`,
-`HangarHardpointsPage` (each its own file),
-`HangarNamePage` and
-`HangarPurchasePage` are real; the name page's stepper over airframe-derived names is a placeholder
-for C25's text entry, and the purchase page's totals line is a placeholder for C26's itemised list,
-but the commit under it is already the real one. Off-engine coverage:
+`HangarFlow.PageFor`'s switch is the single line each of C22-C26 replaces; `HangarPlaceholderPage`
+(the right heading, a Continue row and a real summary of what the scratch plane carries, editing
+nothing) stands only in the switch's default arm now that every screen has its own page.
+`HangarPlaneSelectionPage`, `HangarAirframePage`, `HangarEnginePage`, `HangarArmourPage`,
+`HangarGunsPage`, `HangarHardpointsPage`, `HangarPaintPage`, `HangarNamePage` (each its own file)
+and `HangarPurchasePage` are real; the purchase page's totals line is a placeholder for C26's
+itemised list, but the commit under it is already the real one. Off-engine coverage:
 `CSVM.Tests/HangarFlowTests.cs`, `CSVM.Tests/HangarAirframePageTests.cs`,
 `CSVM.Tests/HangarEnginePageTests.cs`, `CSVM.Tests/HangarArmourPageTests.cs`,
-`CSVM.Tests/HangarGunsPageTests.cs` and `CSVM.Tests/HangarHardpointsPageTests.cs`.
+`CSVM.Tests/HangarGunsPageTests.cs`, `CSVM.Tests/HangarHardpointsPageTests.cs`,
+`CSVM.Tests/HangarPaintPageTests.cs` and `CSVM.Tests/HangarNamePageTests.cs`.
 
 ## src/UI/BoardMenu.cs
 A board's cursor and item list, engine-free so the selection rules test off engine the way

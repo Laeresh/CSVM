@@ -162,6 +162,14 @@ cost `LEA EDX,[ECX*4]` at `0x0040b1a6`, weight `units*20/5` at `0x0040b188`). Zo
 **Hardpoints**: $410 and 480 lb each (handler `0x0040b2b4`; the constants resolve at
 `0x0040b31d`, 0x19a and 0x1e0, and reappear in both totals functions).
 
+**The purchase gate is the button, not the commit.** The commit callback 2263 (`0x0040b56c`)
+re-checks nothing: it recomputes the derived record fields, deducts the total cost from the
+funds global `0x0064b788`, copies the scratch record into its slot (`rep movsd`, 0x33 dwords)
+and selects it. The block lives in `PURCHASE.SCRIPT`: `gui_init` calls the problems callback
+2264 and mails `pur_b_purchase` 10000 (enable) on a clean answer or 10018 (disable) on
+problems, with `pur_t_problems` carrying the text. An overweight or engineless build therefore
+cannot be bought in the original; the button greys out.
+
 ## Into the mission: what the build changes on the spawned vehicle
 
 The consumer trace past the launch bridge. Armour and engine are live combat data; total
