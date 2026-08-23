@@ -1124,7 +1124,8 @@ example), `DefaultsReadTheStockFitPerAirframe` (Hoplite and Kestrel),
 `SteppingSelectsTheFocusedAirframe` now go through the ask (decline = the old behaviour), and
 every walk-through helper in the hangar test files declines it on the way past.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Wave E closing battery: build 0/0, units 1885/1885, engine suites 90/90 with
+errors clean, 16 goldens hash-identical, exit 0.
 
 ## E42 ☐ Engine screen: the None row keeps its place, relabelled to the original's 1165
 
@@ -1137,7 +1138,8 @@ row label changed (`HangarEnginePage.RowText`). Tests updated in
 and that 1171's wording no longer appears there; the extracted-data
 `EngineNamesResolveForAllAirframes` asserts both ids resolve.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Wave E closing battery: build 0/0, units 1885/1885, engine suites 90/90 with
+errors clean, 16 goldens hash-identical, exit 0.
 
 ## E43 ☐ The paint page becomes the original's model: index pairs, pattern defaults, decals
 
@@ -1194,7 +1196,8 @@ decal test with `ThePaintCarriesThePatternColoursAndDecals` and `AFreshBuildKeep
 `EveryAirframeComposesEveryPatternItsMaskAllows`, which is also the mask list checked against
 every shipped `.BM` set).
 
-**Verified.** <pending orchestrator run>
+**Verified.** Wave E closing battery: build 0/0, units 1885/1885, engine suites 90/90 with
+errors clean, 16 goldens hash-identical, exit 0.
 
 ## E44 ☐ Armour reads on the original's scale: 0-60 in fives, 1165 "None", no invented pounds
 
@@ -1213,4 +1216,5 @@ Tests: `HangarArmourPageTests` gained `TheDisplayedFigureRunsZeroToSixtyInFives`
 `HangarPurchasePageTests.ArmouredZonesRowThroughTheirLanguiFormats` and
 `RowTextFallsBackWithoutStrings` likewise.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Wave E closing battery: build 0/0, units 1885/1885, engine suites 90/90 with
+errors clean, 16 goldens hash-identical, exit 0.
