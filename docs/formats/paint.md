@@ -195,14 +195,43 @@ Little-endian 32-bit fields, offsets confirmed against the screen callbacks that
 | 0x2c | airframe id | spawn descriptor slot 0 in `FUN_00417090`; first `%d` of the icon filename `PX_Icon_%d_%d_%d.tga` (`0x61f370`) |
 | 0x34, 0x38 | left/right wing hardpoint count, 0-4 | callback 2245 handler at `0x0040ad0f`; the dropdown (callback 2244 at `0x0040b81d`) offers five rows, langui 1165/1168/1169 |
 | 0x40 | paint pattern index 0-13 (13 remaps to 11 for the icon) | handlers at `0x0040d523`/`0x0040d54d`, second `%d` of the icon filename |
-| 0x5c, 0x60 | two composite paint picks stored as `a*5 + b` (grid row/column on the decal pages) | get/set handler at `0x0040d5b7`: write is `arg1*5 + arg2`, read returns `value/10` and `value%5` |
-| 0x64 | third dword of that triple, carried into the spawn descriptor; no screen handler found | `FUN_00417090` |
-| 0x68 | the three paint colours as RGBA bytes (`df 00 29 00` = `(223,0,41)`, `19 19 19 00`, `ff ff ff 00`) | file observation, confirmed by the spawn descriptor |
+| 0x44-0x4c | per-slot colour index 0-26 into the swatch table at `0x0061dd48` (see below) | callback 2237 get/set at `0x0040d3e2` |
+| 0x50-0x58 | per-slot shade-variant index into that colour's ramp; a colour pick resets it to the colour's own default variant | callback 2236 get/set at `0x0040d437`; the reset at `0x0040d402` |
+| 0x5c, 0x60, 0x64 | the three decal indices 0-49 (nose, tail, wing). The paint screen's 5-wide decal grid stores `row*5 + col`, which IS the flat index | callback 2239 at `0x0040d5b7`; `FUN_0041a320` consumes them by indexing the decal-name table at `0x0061da20` directly |
+| 0x68 | the three paint colours as RGBA bytes (`df 00 29 00` = `(223,0,41)`, ...) — a DERIVED cache: `FUN_00406840`, its only writer, recomputes it from the colour+shade indices, including at `0x0040b5cb` just before every save | the resolver `FUN_004067c0` |
 | 0x74-0x80 | four armour values, stored premultiplied by 5 | callback 2247 handler at `0x0040ac3d` divides by 5 on read |
 | 0x84 | per-gun-slot family bit byte (adds 5 to the dropdown row) | callback 2249 handler at `0x0040bea2` |
 | 0x88-0x94 | four gun ids, 5 = empty | callback 2249 |
 | 0x98-0xa4 | per-gun-slot 4 = empty, else 0; derived at commit | case 22 of `FUN_00407670` |
 | 0xa8-0xc4 | eight per-pylon display cells: commit writes 1 if position < that wing's hardpoint count else 11; callback 2245's write refills them `rand()%20 > 10` per cell while the count is non-zero | case 22; `0x0040ad4f` |
+
+### The swatch table and the pattern defaults
+
+The paint screen's colours are index pairs, never free RGB. The swatch table at `0x0061dd48`
+(27 rows, stride 0x23, terminated by a zero count byte) holds per row: base R,G,B; a
+shade-variant count; the default variant index; then the variants as R,G,B triples, a
+dark-to-light ramp. `FUN_004067c0(record, slot, variant, flag)` resolves (colour, shade) to
+RGB; the colour dropdown (callback 2229 at `0x0040d30e`) and the three shade dropdowns
+(2232-2234 at `0x0040d388`) render chips from it. The full table is transcribed verbatim to
+`CSVM/data/hangar_swatches.json`. The shipped scheme colours corroborate it: `blackhat`'s
+(177,130,66) sits in the tan row's ramp, `blckswan`'s pair in the grey ramp.
+
+The pattern table at `0x0061daf0` (14 entries, stride 0x28) is, per entry: a ushort
+**airframe availability mask** at +0x00 (bit i = airframe i may wear it), three default
+colour indices at +0x04..+0x0c, three default shade indices at +0x10..+0x18, and unread
+padding. Setting the pattern (callback 2238's SET at `0x0040d4ba`) copies the entry's six
+defaults over the record's colour and shade indices and touches nothing else, which is why
+the original loads a pattern's own colours on selection. The pattern dropdown's labels are
+langui `3425 + patternIndex`.
+
+⚠ **The shipped table carries a one-dword shift in entries 10 and 12** (`german`,
+`broadway`): their first dword is 0 and the real mask/defaults follow one slot late. A naive
+walk that stops at the first zero mask would end at entry 10; play disproves that reading
+(the Hoplite offers four patterns including `itstaxi` = 13, and a genuine save carries
+`studio` = 11), so the walk evidently tolerates it. The corrected masks, de-shifted for
+10/12 and matching every external source (the schemes' vehicle.json users, the shipped icon
+sets, the fixtures): 0x411, 0x80, 0x208, 0x204, 0x7ff, 0x40, 0x188, 0x110, 0x20, 0x402,
+0x2, 0x81, 0x200, 0x1.
 
 Two facts pinned by reading seven genuine saves (the `CSVM.Tests/fixtures/planes204` fixture
 set): the paint UI's darkest shade saves as **(25,25,25)**, so every scheme-table slot listed

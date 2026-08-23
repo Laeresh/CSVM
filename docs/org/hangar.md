@@ -58,7 +58,16 @@ All four screens, id → handler (widget dispatcher unless noted):
 | HARDPOINTS | 2227 | `0x0040bac6` | description text |
 | ARMOR | 2246 | `0x0040b7bd` | dropdown labels (13 rows, 0–12 units shown ×5 lb via format 1170 "%d units") |
 | ARMOR | 2247 | `0x0040ac3d` | get/set the four zone values (record +0x74..+0x80, stored premultiplied by 5) |
-| PAINT | (get/set at `0x0040d5b7`, pattern handlers `0x0040d523`/`0x0040d54d`) | | see [`formats/paint.md`](../formats/paint.md) |
+| PAINT | 2229 | `0x0040d30e` | colour dropdown fill: 27 swatch chips from the table at `0x0061dd48` |
+| PAINT | 2230 | `0x0040d473` | the current effective colour chip per slot |
+| PAINT | 2232-2234 | `0x0040d388` | shade dropdown fill per slot (the colour's own ramp) |
+| PAINT | 2235 | `0x0040d2b8` | pattern dropdown fill: availability-masked rows, labels langui 3425+pattern |
+| PAINT | 2236 | `0x0040d437` | shade get/set (record +0x50 array) |
+| PAINT | 2237 | `0x0040d3e2` | colour get/set (record +0x44 array; resets the slot's shade to the colour's default) |
+| PAINT | 2238 | `0x0040d4ba` | pattern get/set: SET loads the pattern entry's six colour/shade defaults |
+| PAINT | 2239 | `0x0040d5b7` | decal get/set (record +0x5c array; grid `row*5+col` = the flat decal index) |
+| PAINT | 2240 | `0x0040d61c` | decal grid row count (`ceil(N/5)`, N = 50 shipped names at `0x0061da20`) |
+| PAINT | | | the swatch/pattern-default tables: [`formats/paint.md`](../formats/paint.md) "The swatch table and the pattern defaults" |
 | PURCHASE | 2251 | `0x0040af39` | airframe row (name `langui` 3000+af, cost/weight from the stat table) |
 | PURCHASE | 2252 | `0x0040afd8` | engine row (name `langui` 3100+af*6+engine, or 1171 "No Engine Selected") |
 | PURCHASE | 2253/2254/2255 | `0x0040b0e4` | armour rows, name/weight/cost (zone names `langui` 1191–1194) |
@@ -242,11 +251,11 @@ message.
 
 ## Open
 
-- The three paint picks at +0x5c/+0x60/+0x64 are consumed as three per-plane texture/decal
-  registrations (`FUN_0041a320`); the composite `a*5 + b` encoding's exact meaning per pick,
-  and which screen writes +0x64, are still unread.
 - The per-hit damage application order across zone/total and armour/structure pools is not
   decoded (entry points `FUN_004b9b30` / `FUN_004b9bc0` / `FUN_004b3800`).
+- (Resolved elsewhere: the paint picks at +0x44..+0x64 are the colour/shade/decal index
+  arrays, settled in [`formats/paint.md`](../formats/paint.md) "The swatch table and the
+  pattern defaults" together with the table-shift note on pattern entries 10/12.)
 - The gun table's +0x10/+0x14 stats: +0x14 matches the shipped `CLUSTER_SIZE` magazine series
   (2800/2400/2000/1600/1200) exactly; +0x10 is rate-of-fire-shaped; neither is traced to a
   combat consumer.
