@@ -209,6 +209,8 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session; also the hangar's two doors and its renderer.
 - `src/UI/HangarFlow.cs` — the Build Custom Plane flow, engine-free: the original's nine screens over one scratch `CustomPlaneDef`, back/next navigation, the `IHangarPage` mount point C22-C26 fill (rows, detail, stepper, optional `HangarArt`), and the gated commit into `CustomPlaneStore`.
 - `src/UI/HangarAirframePage.cs` — the AIRFRAME screen: all 11 airframes as rows, the ←→ stepper writing the scratch airframe and nothing else, the stat table's figures and the economy's star ratings per row, the focused airframe's blueprint TGA as page art.
+- `src/UI/HangarEnginePage.cs` — the ENGINE screen: the airframe's six engines (langui 3100+af*6+id) plus the no-engine row (1171), the pick ticked, the stepper writing the scratch engine, each row's decoded cost and weight via `HangarEconomy.EngineLine`.
+- `src/UI/HangarArmourPage.cs` — the ARMOR screen: the four zones through their own langui formats (1191-1194), the stepper walking each zone's units 0-12, the detail keeping units, the x4 priced cost/weight and the x5 lb display figure distinct.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
@@ -3010,11 +3012,13 @@ the heading resolved from the screen's own langui id (1017/1004-1010/1401);
 `HangarPlaceholderPage` draws the right heading, a Continue row and a real summary of what the
 scratch plane carries for that screen. It edits nothing, so a flow walked through it produces
 exactly the plane the screens before it chose. `HangarPlaneSelectionPage`,
-`HangarAirframePage` (its own file), `HangarNamePage` and
+`HangarAirframePage`, `HangarEnginePage`, `HangarArmourPage` (each its own file),
+`HangarNamePage` and
 `HangarPurchasePage` are real; the name page's stepper over airframe-derived names is a placeholder
 for C25's text entry, and the purchase page's totals line is a placeholder for C26's itemised list,
 but the commit under it is already the real one. Off-engine coverage:
-`CSVM.Tests/HangarFlowTests.cs` and `CSVM.Tests/HangarAirframePageTests.cs`.
+`CSVM.Tests/HangarFlowTests.cs`, `CSVM.Tests/HangarAirframePageTests.cs`,
+`CSVM.Tests/HangarEnginePageTests.cs` and `CSVM.Tests/HangarArmourPageTests.cs`.
 
 ## src/UI/BoardMenu.cs
 A board's cursor and item list, engine-free so the selection rules test off engine the way

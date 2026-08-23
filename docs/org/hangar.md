@@ -213,9 +213,10 @@ only +0x84 and the dword runs +0x88..+0xa4 / +0xa8..+0xc4). Weight is not mass, 
 drag anywhere.
 
 **The stat-table power rating (`0x00619d98+8`) is display-only**: two readers program-wide,
-the hangar's power stat line at `0x0040bb3e` (multiplied by a per-engine-id double at
-`0x00619e38`) and the star rating `FUN_0040faf0`. The sim's engine power comes from the
-separate registry above.
+the hangar's power stat line at `0x0040bb3e` and the star rating `FUN_0040faf0`. The stat
+line multiplies the rating by a per-engine-id double table at `0x00619e38`: 0.9 / 1.0 / 1.1
+for the three tiers, 1.197 / 1.33 / 1.463 for the same tiers with nitrous (exactly x1.33),
+then truncates. The sim's engine power comes from the separate registry above.
 
 **The type-8 spawn message is paint, not stats.** `FUN_004084a0(8, buf)` dispatches to
 `FUN_00401e80`, which builds `assets\graphics\<pattern>\...` texture paths from descriptor

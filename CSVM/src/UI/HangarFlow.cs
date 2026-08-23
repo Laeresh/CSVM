@@ -321,6 +321,8 @@ public sealed class HangarFlow
             {
                 HangarScreen.PlaneSelection => new HangarPlaneSelectionPage(this),
                 HangarScreen.Airframe => new HangarAirframePage(this),
+                HangarScreen.Engine => new HangarEnginePage(this),
+                HangarScreen.Armour => new HangarArmourPage(this),
                 HangarScreen.Name => new HangarNamePage(this),
                 HangarScreen.Purchase => new HangarPurchasePage(this),
                 _ => new HangarPlaceholderPage(this, screen),

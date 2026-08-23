@@ -127,7 +127,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Hangar shell and navigation: screen order, IA Build entry, top-level entry
 22. ☑ AIRFRAME screen
-23. ☐ ENGINE and ARMOR screens
+23. ☑ ENGINE and ARMOR screens
 24. ☐ GUNS and HARDPOINTS screens (BL-067)
 25. ☐ PAINT and PLANENAME screens
 26. ☐ PURCHASE review screen
@@ -586,6 +586,45 @@ valid, matching the original's scratch-record behaviour.
 formulas for hand-checked airframes (Hoplite 4 stars agility, Balmoral bottom).
 
 ## C23 ☐ ENGINE and ARMOR screens
+
+**Landed.** `CSVM/src/UI/HangarEnginePage.cs` and `CSVM/src/UI/HangarArmourPage.cs` fill the
+Engine and Armour slots in `HangarFlow.PageFor` (the two switch lines; nothing else in the shell
+changed, per the C21 contract).
+
+The ENGINE screen is seven rows: engine ids 0-5 named from langui 3100+af*6+id (each
+manufacturer's three displacements, then the same three with nitro, per A2) following the scratch
+plane's airframe, and id 6 the no-engine row from langui 1171. Selection is the airframe page's
+idiom: the pick shown ticked, the ←→ stepper making the focused row the scratch plane's engine
+(a fresh build opens with the no-engine row ticked, since `CustomPlaneDef` defaults to engine 6),
+Confirm advancing without editing. Each row's detail is the decoded cost and weight through
+`HangarEconomy.EngineLine` (per-airframe base plus per-id offsets; the no-engine row prices at
+zero). The original's power stat line is shown too: at landing the per-id factor table at
+`0x00619e38` was unread and the agent rightly omitted the line rather than invent it; the
+orchestrator then read the six doubles (0.9/1.0/1.1, then x1.33 nitrous: 1.197/1.33/1.463,
+recorded in [`org/hangar.md`](org/hangar.md)) and folded `HangarEconomy.PowerStat` plus the
+detail-line segment in as the landing's integration step.
+
+The ARMOR screen is four rows, the zones in the record's own order (nose, tail, left wing, right
+wing), each named through its own langui format 1191-1194 ("Nose: %1!d! units" and kin, which
+carry the number themselves; a missing table falls back to the same shape in plain text). The
+stepper walks the focused zone's units 0-12 with wraparound, the original's 13-row dropdown as a
+cycle, writing the scratch def; Confirm advances without editing. The detail keeps the three
+factors distinct: the units bought (through format 1170 when present, the original's dropdown
+string), cost at units x4, weight at units x4, and the units x5 lb figure the original's dropdown
+displayed, labelled as shown-only so the display factor never reads as a price.
+
+Tests: `CSVM.Tests/HangarEnginePageTests.cs` (`OffersSevenRows_NamedFromLangui`,
+`EngineNamesFollowTheAirframe`, `TheDefaultPickIsNoEngine`, `SteppingSelectsTheFocusedEngine`,
+`AcceptAdvancesWithoutEditing`, `DetailShowsTheDecodedCostAndWeight`,
+`DetailLeavesTheScratchUntouched`, and the extracted-data
+`EngineNamesResolveForAllAirframes` sweeping all 11 airframes x 6 engines plus 1171) and
+`CSVM.Tests/HangarArmourPageTests.cs` (`OffersTheFourZones_NamedFromLangui`,
+`RowTextFallsBackWithoutStrings`, `EachRowEditsItsOwnZone`, `SteppingWrapsAtBothEnds`,
+`DetailSeparatesTheThreeFactors`, `DetailUnitsUseFormat1170`, `AcceptAdvancesWithoutEditing`).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Engine: the six per-airframe engines (langui 3100+af*6+id) plus "no engine", with the
 decoded cost/weight per id; armour: the four zones (langui 1191-1194), 0-12 units shown x5 lb.

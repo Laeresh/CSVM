@@ -130,6 +130,11 @@ public static class HangarEconomy
     /// <summary>Weight offsets added to the airframe's engine base, engine ids 0-5.</summary>
     public static readonly int[] EngineWeightOffsets = { -500, 0, 500, 0, 500, 1000 };
 
+    /// <summary>The per-engine-id factors the original's power stat line multiplies the base
+    /// rating by (the double table at 0x00619e38): the three tiers, then the same three with
+    /// nitrous, exactly x1.33. Display-only, like the rating itself.</summary>
+    public static readonly double[] EnginePowerFactors = { 0.9, 1.0, 1.1, 1.197, 1.33, 1.463 };
+
     /// <summary>Prices one build. The def is read as-is; call <see cref="CustomPlaneDef.Clamp"/>
     /// first if it came from outside the screens.</summary>
     public static HangarBill Price(CustomPlaneDef def)
@@ -182,6 +187,18 @@ public static class HangarEconomy
 
         var b = EngineBases[airframe];
         return new CostWeight(b.Cost + EngineCostOffsets[engineId], b.Weight + EngineWeightOffsets[engineId]);
+    }
+
+    /// <summary>The displayed power stat for one airframe and engine id: the base rating times
+    /// the id's factor, truncated as the original truncates. Id 6 (none) is zero.</summary>
+    public static int PowerStat(int airframe, int engineId)
+    {
+        if (engineId < 0 || engineId >= EnginePowerFactors.Length)
+        {
+            return 0;
+        }
+
+        return (int)(EngineBases[airframe].Power * EnginePowerFactors[engineId]);
     }
 
     private static CostWeight GunLine(AirframeStats stats, GunChoice gun, int slot)
