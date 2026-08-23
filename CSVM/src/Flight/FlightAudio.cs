@@ -41,7 +41,7 @@ public partial class FlightAudio : Node
     private AudioStreamWav? _engineStream, _damagedStream, _cockpitStream;
     private float _damagedVol = 1f, _cockpitVol = 1f;
     private bool _engineDamaged;              // which of the three the slot currently holds
-    private bool _engineFirstPerson;
+    private bool _engineCockpitView;
     private float _enginePitchMul = 1f;       // the damaged swap's one-off pitch draw
     private AudioStreamPlayer? _crash;
     private AudioStreamPlayer? _groundExp, _waterExp;
@@ -174,22 +174,22 @@ public partial class FlightAudio : Node
 
     /// <summary>Per-frame drive: <paramref name="speedFrac"/> is speed / fd_speed,
     /// <paramref name="damageFrac"/> is accumulated damage (1 - PlaneDamage.WorstFraction, 0 when
-    /// pristine), <paramref name="firstPerson"/> is the pilot's SELECTED view
-    /// (<see cref="FlightController.FirstPersonView"/>) — a held numpad key or look-behind is a
-    /// per-frame camera pose, not a change of selection, so it does not retrigger this swap (D31).
+    /// pristine), <paramref name="cockpitView"/> is whether the pilot's SELECTED view is the full
+    /// Cockpit — the original swaps only there, not in Nose (confirmed at its controls), and a
+    /// held numpad key or look-behind is a pose, not a selection, so neither retriggers the swap.
     /// Not called while crashed, so the loops stay dead until respawn.</summary>
-    public void Update(float dt, in EngineDrive drive, float speedFrac, float damageFrac, bool firstPerson = false)
+    public void Update(float dt, in EngineDrive drive, float speedFrac, float damageFrac, bool cockpitView = false)
     {
         if (_engineRamp < 1f)
             _engineRamp = Mathf.Min(1f, _engineRamp + dt / EngineStartRamp);
-        UpdateEngineSlot(damageFrac > 0f, firstPerson);
+        UpdateEngineSlot(damageFrac > 0f, cockpitView);
         if (_engine != null)
         {
             if (!_engine.Playing)
                 StartEngine(); // respawn after a crash: propstart + fresh volume ramp-in
             var (pitch, volume) = EngineAudioCurves.Engine(_stats, drive, _enginePitchMul);
             _engine.PitchScale = pitch;
-            float baseVol = _engineDamaged ? _damagedVol : _engineFirstPerson ? _cockpitVol : _engineVol;
+            float baseVol = _engineDamaged ? _damagedVol : _engineCockpitView ? _cockpitVol : _engineVol;
             _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold,
                 volume * baseVol * _engineRamp * MixGain));
         }
@@ -357,20 +357,20 @@ public partial class FlightAudio : Node
     /// precedence), drawing the damaged swap's pitch multiplier as it goes. Damaged gates on ANY
     /// damage (the bitmask is undecoded, so any damage swaps and a full repair swaps back); either
     /// input changing re-evaluates the pair.</summary>
-    private void UpdateEngineSlot(bool damaged, bool firstPerson)
+    private void UpdateEngineSlot(bool damaged, bool cockpitView)
     {
         damaged &= _damagedStream != null;
-        firstPerson &= _cockpitStream != null;
-        if (_engine == null || (damaged == _engineDamaged && firstPerson == _engineFirstPerson))
+        cockpitView &= _cockpitStream != null;
+        if (_engine == null || (damaged == _engineDamaged && cockpitView == _engineCockpitView))
         {
             return;
         }
         _engineDamaged = damaged;
-        _engineFirstPerson = firstPerson;
+        _engineCockpitView = cockpitView;
         var (name, pitchMul) = EngineAudioCurves.EngineDefFor(
-            _stats, damaged, Rng.Stream(Rng.FlightAudio), firstPerson);
+            _stats, damaged, Rng.Stream(Rng.FlightAudio), cockpitView);
         _enginePitchMul = pitchMul;
-        var stream = damaged ? _damagedStream : firstPerson ? _cockpitStream : _engineStream;
+        var stream = damaged ? _damagedStream : cockpitView ? _cockpitStream : _engineStream;
         if (stream == null)
         {
             return;

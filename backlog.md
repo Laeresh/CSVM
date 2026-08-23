@@ -2261,9 +2261,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   plane-local X/Y velocity drives the lean, the forward (Z) component dropped before scaling, a
   port choice made without decoded evidence either way. (e) The damaged-over-cockpit engine-sound
   precedence (D31): when both the damage swap and the cockpit swap are live, damaged wins — an
-  evidence-gapped port decision, no shipped def authors the conflicting case. (f) The
-  `cockpit_engine_sound` listen (D31): confirm the `_cp` def's PRESENCE while in a first-person
-  view, not its level (`BL-391` is the level and stays separate). (g) The Nose head-look confirm:
+  evidence-gapped port decision, no shipped def authors the conflicting case. (f) Wobble in first
+  person against the original: the cockpit camera inherits the plane node's wobble by riding the
+  drawn pose (A2, `docs/org/shakes.md`) — compare amplitude and character in the cockpit at the
+  controls against the original's own cockpit view. (g) The Nose head-look confirm:
   `PLAN-cockpit-view.md`'s ⚠ table row 2 retired `docs/org/cameraViews.md`'s old "head fixed in
   Nose" reading in favour of "head-look runs, only autohead is gated" — fly Nose and confirm the
   free-look is really there, since the retired reading may have been a live impression rather than

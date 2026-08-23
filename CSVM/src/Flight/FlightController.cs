@@ -1554,7 +1554,7 @@ public partial class FlightController : Node3D
             // Keyed to the SELECTED view (D31), not the per-frame pose the camera actually took —
             // the original's swap is a camera-mode gate, and a held numpad key or look-behind is a
             // pose, not a mode change (⚠ table row 2 traces the analogous head-look case).
-            Audio?.Update(simDt, engineDrive, speedFrac, damageFrac, FirstPersonView);
+            Audio?.Update(simDt, engineDrive, speedFrac, damageFrac, ViewMode == PilotViewMode.Cockpit);
             EngineAudio?.Update(simDt, engineDrive, speedFrac, damageFrac);
             // The throttle-slam gate needs the live value every frame, not just while its plume
             // is active, so it can tell a fresh climb from one already in progress.

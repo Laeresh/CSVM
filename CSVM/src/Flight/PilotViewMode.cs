@@ -35,12 +35,16 @@ public static class PilotView
     public static bool IsFirstPerson(PilotViewMode mode) =>
         mode is PilotViewMode.Cockpit or PilotViewMode.Nose;
 
-    /// <summary>One press of the cycle key ("Cycle Cockpit Views", <c>MSG_LOOK_FORWARD</c>): it
-    /// cycles the first-person PAIR, so Cockpit and Nose swap. From Chase it enters Cockpit,
-    /// which is the fallback the original's selector applies to a request it does not
-    /// recognise.</summary>
-    public static PilotViewMode Cycle(PilotViewMode mode) =>
-        mode == PilotViewMode.Cockpit ? PilotViewMode.Nose : PilotViewMode.Cockpit;
+    /// <summary>One press of the cycle key ("Cycle Cockpit Views", <c>MSG_LOOK_FORWARD</c>): a
+    /// three-stop cycle, Cockpit → Nose → Chase → Cockpit. The original's own key walks all three
+    /// selectable views, confirmed at the controls of the original; an earlier reading that it
+    /// swaps only the first-person pair came from the binding's name and is retired.</summary>
+    public static PilotViewMode Cycle(PilotViewMode mode) => mode switch
+    {
+        PilotViewMode.Cockpit => PilotViewMode.Nose,
+        PilotViewMode.Nose => PilotViewMode.Chase,
+        _ => PilotViewMode.Cockpit,
+    };
 
     /// <summary>Whether a held numpad 1–9 key is a camera override in this mode. It is not in
     /// first person: there the numpad IS the head-look snap cluster, which is what the original

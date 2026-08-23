@@ -118,24 +118,24 @@ public class EngineAudioModelTests
         };
 
         Assert.Equal(("snd_normal", 1f),
-            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, firstPerson: false));
+            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, cockpitView: false));
         Assert.Equal(("snd_cockpit", 1f),
-            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, firstPerson: true));
+            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, cockpitView: true));
         Assert.Equal(("snd_damaged", 1f),
-            EngineAudioCurves.EngineDefFor(stats, damaged: true, rng: null!, firstPerson: false));
+            EngineAudioCurves.EngineDefFor(stats, damaged: true, rng: null!, cockpitView: false));
         Assert.Equal(("snd_damaged", 1f),
-            EngineAudioCurves.EngineDefFor(stats, damaged: true, rng: null!, firstPerson: true));
+            EngineAudioCurves.EngineDefFor(stats, damaged: true, rng: null!, cockpitView: true));
     }
 
-    /// <summary>An airframe with no <c>cockpit_engine_sound</c> of its own keeps the normal loop in
-    /// first person rather than going silent or erroring — the same "keep the normal def" fallback
-    /// the plan calls for.</summary>
+    /// <summary>An airframe with no <c>cockpit_engine_sound</c> of its own keeps the normal loop
+    /// in the Cockpit view rather than going silent or erroring — the same "keep the normal def"
+    /// fallback the plan calls for.</summary>
     [Fact]
     public void EngineDefForFallsBackToNormalWithNoCockpitDefinition()
     {
         var stats = new PlaneStats { EngineSound = "snd_normal" };
 
         Assert.Equal(("snd_normal", 1f),
-            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, firstPerson: true));
+            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, cockpitView: true));
     }
 }

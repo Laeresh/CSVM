@@ -54,13 +54,13 @@ public static class EngineAudioCurves
     private const float BoostPitchParam = 1.25f;
 
     /// <summary>The engine slot's definition and its pitch multiplier: damaged swaps onto
-    /// <c>damaged_engine_sound</c> with a drawn multiplier; else <paramref name="firstPerson"/>
-    /// (own-ship only) swaps onto <c>cockpit_engine_sound</c> at multiplier 1; else the plain
-    /// <c>engine_sound</c>. Precedence is a port decision — no def authors a damaged cockpit
-    /// variant and the interaction is not itself decoded, so damage keeps the more load-bearing
-    /// cue.</summary>
+    /// <c>damaged_engine_sound</c> with a drawn multiplier; else <paramref name="cockpitView"/>
+    /// (own-ship only, the full Cockpit view — the original leaves the Nose view on the plain def,
+    /// confirmed at the controls of the original) swaps onto <c>cockpit_engine_sound</c> at
+    /// multiplier 1; else the plain <c>engine_sound</c>. Precedence is a port decision — no def
+    /// authors a damaged cockpit variant, so damage keeps the more important cue.</summary>
     public static (string Name, float PitchMul) EngineDefFor(
-        PlaneStats stats, bool damaged, RandomNumberGenerator rng, bool firstPerson = false)
+        PlaneStats stats, bool damaged, RandomNumberGenerator rng, bool cockpitView = false)
     {
         if (damaged && stats.DamagedEngineSound is { } damagedName)
         {
@@ -70,7 +70,7 @@ public static class EngineAudioCurves
                 : 1f;
             return (damagedName, mul);
         }
-        if (firstPerson && stats.CockpitEngineSound is { } cockpitName)
+        if (cockpitView && stats.CockpitEngineSound is { } cockpitName)
         {
             return (cockpitName, 1f);
         }

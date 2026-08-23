@@ -94,8 +94,10 @@ Modes `1`, `2`, `3`, `4`, `5`, `8`, `9` are **not** reachable as player-selected
 internal / context camera modes (e.g. other aircraft, cut-scene or context poses), which is why
 `FUN_0042c210` rejects them. The controls data in `extracted/messages.json` names the two view
 bindings as **"Access Chase View"** (`MSG_LOOK_FLYBY`, the F7 flyby — see the correction below, it
-is **not** the following chase) and **"Cycle Cockpit Views"** (`MSG_LOOK_FORWARD` → cycles the 6/7
-pair). The command dispatcher `FUN_0047e080` (case `0x3`, **inferred** to be `MSG_LOOK_FLYBY` —
+is **not** the following chase) and **"Cycle Cockpit Views"** (`MSG_LOOK_FORWARD` → walks all
+three selectable views, Cockpit → Nose → Chase, per a live run of the original; the binding's name
+suggests only the 6/7 pair and an earlier draft of this page said so, but the key reaches the
+chase view too). The command dispatcher `FUN_0047e080` (case `0x3`, **inferred** to be `MSG_LOOK_FLYBY` —
 the input keymap isn't in the decoded data, and `0x3` is my best-match reading, not a read from a
 config file) forces mode `0` when the current mode is non-zero (a mode-reset), but that tells us
 nothing about which camera the F7 key actually shows; your live run settles it — the flyby. See

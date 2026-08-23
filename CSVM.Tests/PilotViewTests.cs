@@ -17,26 +17,23 @@ public sealed class PilotViewTests
         Assert.True(PilotView.IsFirstPerson(PilotViewMode.Nose));
     }
 
-    // The original's cycle key cycles the 6/7 PAIR; a request it does not recognise falls back to
-    // cockpit (FUN_004414a0), which is what entering from the chase view reads as.
+    // The original's cycle key walks all three selectable views (confirmed at the controls of the
+    // original): Cockpit, then Nose, then Chase, and around again.
     [Fact]
-    public void The_cycle_key_swaps_cockpit_and_nose_and_enters_from_chase()
+    public void The_cycle_key_walks_cockpit_nose_chase()
     {
         Assert.Equal(PilotViewMode.Cockpit, PilotView.Cycle(PilotViewMode.Chase));
         Assert.Equal(PilotViewMode.Nose, PilotView.Cycle(PilotViewMode.Cockpit));
-        Assert.Equal(PilotViewMode.Cockpit, PilotView.Cycle(PilotViewMode.Nose));
+        Assert.Equal(PilotViewMode.Chase, PilotView.Cycle(PilotViewMode.Nose));
     }
 
-    // Cycling never reaches the chase view again: leaving the pair is the other key's job, so a
-    // pilot who cycles forever stays in first person.
+    // Three presses from anywhere return to the starting view, so the cycle has no dead end.
     [Fact]
-    public void Cycling_never_lands_back_on_chase()
+    public void Three_presses_return_to_the_start()
     {
-        var mode = PilotViewMode.Chase;
-        for (int i = 0; i < 6; i++)
+        foreach (var start in new[] { PilotViewMode.Chase, PilotViewMode.Cockpit, PilotViewMode.Nose })
         {
-            mode = PilotView.Cycle(mode);
-            Assert.NotEqual(PilotViewMode.Chase, mode);
+            Assert.Equal(start, PilotView.Cycle(PilotView.Cycle(PilotView.Cycle(start))));
         }
     }
 

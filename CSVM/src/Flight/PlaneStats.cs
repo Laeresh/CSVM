@@ -257,9 +257,9 @@ public sealed class PlaneStats
     public SoundCurve EngineVolume = new(0.1f, 1f, 1f, 1f);
     public SoundCurve EnginePitch = new(0.1f, 0.6f, 1f, 1f);
 
-    /// <summary>vehicle.json <c>cockpit_engine_sound</c>, the engine def the original swaps onto the
-    /// engine slot while the pilot's SELECTED view is Cockpit or Nose (<c>FlightController.
-    /// FirstPersonView</c>, A1's mode-6/7 equivalents), and back on leaving either. Selected by
+    /// <summary>vehicle.json <c>cockpit_engine_sound</c>, the engine def the original swaps onto
+    /// the engine slot while the pilot's SELECTED view is the full Cockpit (mode 6) — not the Nose
+    /// view, confirmed at the controls of the original — and back on leaving it. Selected by
     /// <see cref="EngineAudioCurves.EngineDefFor"/> and driven by <c>FlightAudio</c>
     /// (<c>BL-161</c>, closed by D31); a held numpad key or look-behind is a per-frame pose and does
     /// not retrigger the swap, only a change of selection does.</summary>
