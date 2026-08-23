@@ -219,7 +219,7 @@ public class HangarFlowTests : IDisposable
         _store.Save(new CustomPlaneDef { Name = "Saved One", Airframe = 4, Engine = 2 });
         var flow = Open();
 
-        Assert.Equal(2, flow.Page.RowCount); // New Plane + the one saved plane
+        Assert.Equal(3, flow.Page.RowCount); // New Plane + the one saved plane + the delete row
         Assert.Equal("Saved One", flow.Page.RowText(1));
         flow.Move(1);
         flow.Accept();
@@ -246,6 +246,89 @@ public class HangarFlowTests : IDisposable
         flow.Accept();
         Assert.Equal(0, flow.Scratch.Airframe);
         Assert.Equal(CustomPlaneDef.EngineNone, flow.Scratch.Engine);
+    }
+
+    /// <summary>With nothing saved there is nothing to delete, so the screen is the New Plane row
+    /// alone and the delete stage cannot be reached at all.</summary>
+    [Fact]
+    public void AnEmptyHangarOffersNoDeleteRow()
+    {
+        var flow = Open();
+
+        Assert.Equal(1, flow.Page.RowCount);
+        Assert.Equal("New Plane", flow.Page.RowText(0));
+    }
+
+    /// <summary>The delete row opens a second list whose every row names the plane it removes, so
+    /// the press that destroys a build says which build (E46). Deleting one leaves the list up
+    /// while any remain.</summary>
+    [Fact]
+    public void TheDeleteRowOpensAListThatNamesEachPlane()
+    {
+        _store.Save(new CustomPlaneDef { Name = "Alpha" });
+        _store.Save(new CustomPlaneDef { Name = "Beta" });
+        var flow = Open();
+
+        flow.Move(3); // New Plane, Alpha, Beta, then the delete row
+        Assert.Equal("Delete a saved plane", flow.Page.RowText(3));
+        Assert.True(flow.Accept());
+        Assert.Equal(HangarScreen.PlaneSelection, flow.Screen); // its own stage, not the next screen
+
+        Assert.Equal(3, flow.Page.RowCount); // Alpha, Beta, Cancel
+        Assert.Equal("Delete Alpha", flow.Page.RowText(0));
+        Assert.Equal("Delete Beta", flow.Page.RowText(1));
+        Assert.Equal("Cancel", flow.Page.RowText(2));
+
+        Assert.True(flow.Accept()); // delete Alpha
+        Assert.Equal("Beta", Assert.Single(flow.Saved).Name);
+        Assert.Equal(2, flow.Page.RowCount); // still deleting: Beta, Cancel
+        Assert.Equal("Delete Beta", flow.Page.RowText(0));
+        Assert.Null(_store.Load("Alpha"));
+    }
+
+    /// <summary>Deleting the last saved plane returns to the pick list rather than leaving a list
+    /// of nothing, and so does Cancel.</summary>
+    [Fact]
+    public void TheDeleteListClosesWhenItEmptiesAndOnCancel()
+    {
+        _store.Save(new CustomPlaneDef { Name = "Only One" });
+        var flow = Open();
+        flow.Move(2);
+        flow.Accept();  // into the delete list
+        flow.Accept();  // delete Only One
+
+        Assert.Empty(flow.Saved);
+        Assert.Equal(1, flow.Page.RowCount);
+        Assert.Equal("New Plane", flow.Page.RowText(0));
+        Assert.Equal(0, flow.Row);
+
+        _store.Save(new CustomPlaneDef { Name = "Second" });
+        var again = Open();
+        again.Move(2);
+        again.Accept();
+        again.Move(1); // Cancel
+        Assert.True(again.Accept());
+
+        Assert.Equal("Second", Assert.Single(again.Saved).Name);
+        Assert.Equal("New Plane", again.Page.RowText(0));
+    }
+
+    /// <summary>Deleting under the cursor cannot leave it past the list's end: the flow clamps on
+    /// every roster change, which is what keeps a shrunk list navigable.</summary>
+    [Fact]
+    public void DeletingClampsTheCursorIntoTheShorterList()
+    {
+        _store.Save(new CustomPlaneDef { Name = "Alpha" });
+        _store.Save(new CustomPlaneDef { Name = "Beta" });
+        var flow = Open();
+        flow.Move(3);
+        flow.Accept();
+        flow.Move(1);   // Delete Beta, the last plane row
+        flow.Accept();
+
+        Assert.Equal("Alpha", Assert.Single(flow.Saved).Name);
+        Assert.True(flow.Row < flow.Page.RowCount);
+        Assert.Equal("Delete Alpha", flow.Page.RowText(flow.Row));
     }
 
     /// <summary>The screens C22-C26 have not landed yet edit nothing: a flow walked straight

@@ -205,6 +205,20 @@ Little-endian 32-bit fields, offsets confirmed against the screen callbacks that
 | 0x98-0xa4 | per-gun-slot 4 = empty, else 0; derived at commit | case 22 of `FUN_00407670` |
 | 0xa8-0xc4 | eight per-pylon display cells: commit writes 1 if position < that wing's hardpoint count else 11; callback 2245's write refills them `rand()%20 > 10` per cell while the count is non-zero | case 22; `0x0040ad4f` |
 
+### The paint screen's preview art
+
+The paint screen's aircraft preview is not the flying model's `.BM` composition. Each
+`PX_ICON_<airframe>_<pattern>_<n>.TGA` set (358x335, 32-bit) is a four-LAYER stack, the `_0..3`
+suffix a layer index: layer 0 is the detail plate (panel lines, canopy, prop, guns, with its
+coverage in the alpha channel) and layers 1-3 are the three colour slots' region masks, white
+RGB with the region in the **alpha**. The composite is: masks 1-3 alpha-over in slot order,
+each carrying its slot's resolved colour, then the plate over the result — no shading
+multiply and no weight normalisation, so a fully-masked texel is exactly its resolved colour.
+Sets ship for exactly the pairs the availability mask allows (only itstaxi/Hoplite has none).
+Measured against the reference screenshots, the Fury's Fortune Hunters composite agrees to a
+mean error of 4.4/255 per channel with region interiors exact. The decal picker's icons are
+`PX_P_DECALS.TGA`, 66x3300: fifty 66x66 tiles top to bottom in decal-index order.
+
 ### The swatch table and the pattern defaults
 
 The paint screen's colours are index pairs, never free RGB. The swatch table at `0x0061dd48`

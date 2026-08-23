@@ -56,9 +56,13 @@ public interface IHangarPage
     /// <summary>How many rows the page draws right now.</summary>
     int RowCount { get; }
 
-    /// <summary>The picture the shell should draw under the list right now, or null for none —
+    /// <summary>The picture the shell should draw beside the list right now, or null for none —
     /// which every screen without art, and any screen missing its extraction, simply is.</summary>
     HangarArt? Art { get; }
+
+    /// <summary>A second, smaller picture for the focused row, or null for none. Only the paint
+    /// screen's three decal rows have one: the decal's own tile out of the shipped sheet.</summary>
+    HangarArt? RowArt(int row);
 
     /// <summary>Row <paramref name="row"/>'s text.</summary>
     string RowText(int row);
@@ -151,9 +155,9 @@ public sealed class HangarFlow
     /// the plane-being-built name is the one it had then).</summary>
     public string DefaultsAskText { get; private set; } = string.Empty;
 
-    /// <summary>The saved planes as they were when the flow opened, the plane-selection roster.
-    /// Not refreshed mid-flow: the only writer is this flow's own commit, which ends it.</summary>
-    public IReadOnlyList<CustomPlaneDef> Saved { get; }
+    /// <summary>The store's saved planes, the plane-selection roster. Re-read only by
+    /// <see cref="DeleteSaved"/>: the other writer is this flow's own commit, which ends it.</summary>
+    public IReadOnlyList<CustomPlaneDef> Saved { get; private set; }
 
     /// <summary>The plane being built. Replaced outright when the plane-selection screen starts a
     /// new build or loads a saved one; edited in place by every screen after that.</summary>
@@ -346,6 +350,26 @@ public sealed class HangarFlow
         BuiltPlaneName = Scratch.Name;
         Exit = HangarExit.Built;
         return true;
+    }
+
+    /// <summary>Removes a saved plane from the store and re-reads <see cref="Saved"/>, the
+    /// original's Sell Plane (<c>ps_b_sellp</c>) in a build with no economy to sell into. Returns
+    /// whether a file went; the cursor is clamped back into the shortened list either way, and the
+    /// scratch plane is untouched (it is a copy, never the stored def).</summary>
+    public bool DeleteSaved(string name)
+    {
+        bool gone = _store.Delete(name);
+        Saved = _store.List();
+        ClampedRow();
+        return gone;
+    }
+
+    /// <summary>Puts the cursor on a row, clamped into the page's current list. A page that
+    /// changes how many rows it draws calls this so the cursor lands on something real.</summary>
+    public void FocusRow(int row)
+    {
+        Row = Math.Max(0, row);
+        ClampedRow();
     }
 
     /// <summary>Starts a fresh build (the plane-selection screen's New Plane row). The
@@ -578,15 +602,26 @@ public abstract class HangarPage : IHangarPage
 
     /// <inheritdoc/>
     public virtual bool Accept(int row) => false;
+
+    /// <inheritdoc/>
+    public virtual HangarArt? RowArt(int row) => null;
 }
 
 /// <summary>
 /// The flow's first screen: start a new plane, or load one of the store's saved planes to edit.
 /// Confirming either seats the scratch plane and lets the flow advance, so the screens after this
 /// one always have a plane to edit.
+///
+/// <para>It also removes planes, the role the original's Sell Plane button (<c>ps_b_sellp</c>)
+/// fills on its own plane-selection screen; with no economy to sell into, ours deletes. The
+/// gesture is two-stage rather than a stepper, because a stepper on a destructive action is one
+/// stray nudge away from losing a build: a trailing row opens a second list whose every row reads
+/// "Delete &lt;name&gt;", so the press that removes a plane names the plane it removes.</para>
 /// </summary>
 public sealed class HangarPlaneSelectionPage : HangarPage
 {
+    private bool _deleting;
+
     /// <summary>Binds the page to its flow.</summary>
     public HangarPlaneSelectionPage(HangarFlow flow)
         : base(flow)
@@ -597,20 +632,60 @@ public sealed class HangarPlaneSelectionPage : HangarPage
     public override HangarScreen Screen => HangarScreen.PlaneSelection;
 
     /// <inheritdoc/>
-    public override int RowCount => Flow.Saved.Count + 1;
+    public override int RowCount =>
+        _deleting ? Flow.Saved.Count + 1 : Flow.Saved.Count + (Flow.Saved.Count > 0 ? 2 : 1);
 
     /// <inheritdoc/>
-    public override string RowText(int row) => row == 0 ? "New Plane" : Flow.Saved[row - 1].Name;
+    public override string RowText(int row)
+    {
+        if (_deleting)
+        {
+            return row < Flow.Saved.Count ? "Delete " + Flow.Saved[row].Name : "Cancel";
+        }
+
+        if (row == 0)
+        {
+            return "New Plane";
+        }
+
+        return row <= Flow.Saved.Count ? Flow.Saved[row - 1].Name : "Delete a saved plane";
+    }
 
     /// <inheritdoc/>
-    public override string Detail(int row) =>
-        row == 0
-            ? "Build a plane from a bare airframe"
-            : Flow.AirframeName(Flow.Saved[row - 1].Airframe);
+    public override string Detail(int row)
+    {
+        if (_deleting)
+        {
+            return row < Flow.Saved.Count
+                ? $"Removes {Flow.Saved[row].Name} from the hangar for good"
+                : "Keep every saved plane";
+        }
+
+        if (row == 0)
+        {
+            return "Build a plane from a bare airframe";
+        }
+
+        return row <= Flow.Saved.Count
+            ? Flow.AirframeName(Flow.Saved[row - 1].Airframe)
+            : "Remove a saved plane from the hangar";
+    }
 
     /// <inheritdoc/>
     public override bool Accept(int row)
     {
+        if (_deleting)
+        {
+            return AcceptDelete(row);
+        }
+
+        if (row > Flow.Saved.Count)
+        {
+            _deleting = true;
+            Flow.FocusRow(0);
+            return true; // the delete list is this screen's own stage, not the next screen
+        }
+
         if (row == 0)
         {
             Flow.StartNewPlane();
@@ -621,6 +696,23 @@ public sealed class HangarPlaneSelectionPage : HangarPage
         }
 
         return false; // let the flow advance to the first build screen
+    }
+
+    // The delete list's own press: a Delete row removes that plane and the list stays up while
+    // any remain, Cancel (and the last plane going) returns to the pick list. Which row Cancel is
+    // has to be read BEFORE the delete, since the roster shrinks under it.
+    private bool AcceptDelete(int row)
+    {
+        bool cancel = row >= Flow.Saved.Count;
+        if (!cancel)
+        {
+            Flow.DeleteSaved(Flow.Saved[row].Name);
+        }
+
+        _deleting = !cancel && Flow.Saved.Count > 0;
+        // Stay on a plane row rather than sliding onto Cancel when the list's last one went.
+        Flow.FocusRow(_deleting ? Math.Min(row, Flow.Saved.Count - 1) : 0);
+        return true;
     }
 }
 

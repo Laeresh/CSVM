@@ -8,7 +8,9 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The PAINT screen, the original's own model: a pattern, three (colour, shade) index pairs and
-/// three decals, over a live preview composed through the original's region masks. The pattern row
+/// three decals, over a live preview composed through the original's own paint-screen region masks
+/// (<see cref="PaintIcons"/>, the plan view the blueprint page draws, not the aircraft's 3D skin,
+/// which <see cref="PlanePainter"/> paints from a different mask set entirely). The pattern row
 /// steps only the patterns this airframe's availability mask allows and loads that entry's six
 /// colour/shade defaults on the way; a colour row steps the 27-row swatch table and resets its
 /// slot's shade, a shade row walks that colour's own ramp, and the three decal rows step the
@@ -43,18 +45,13 @@ public sealed class HangarPaintPage : HangarPage
         "agyro", "hel", "bal", "blo", "bri", "dev", "fir", "fur", "kes", "pea", "war",
     };
 
-    // The skin to preview, first match wins: the wing carries all three slots on every aircraft
-    // that has one, and the Hoplite (which has no wing skin) falls through to its fuselage.
-    private static readonly string[] PreviewParts =
-    {
-        "_WING", "_WINGTOP", "_FUSALAGE1", "_FUSELAGE", "_FUSLAGE", "_FUSALAGETOP",
-    };
-
     private readonly Dictionary<int, List<int>> _rosters = new();
-    private readonly Dictionary<int, HangarArt?> _icons = new();
-    private PatternLibrary? _library;
+    private readonly Dictionary<int, PaintIcons?> _iconSets = new();
+    private readonly Dictionary<int, HangarArt?> _decalArt = new();
     private HangarArt? _art;
     private (int Airframe, int Pattern, PaintColour C1, PaintColour C2, PaintColour C3)? _artKey;
+    private TgaImage? _decalSheet;
+    private bool _decalSheetTried;
 
     /// <summary>Binds the page to its flow.</summary>
     public HangarPaintPage(HangarFlow flow)
@@ -90,26 +87,6 @@ public sealed class HangarPaintPage : HangarPage
 
     /// <summary>The swatch, pattern and decal tables every row on this screen reads.</summary>
     private static HangarPaintTables Tables => HangarPaintTables.Default;
-
-    // The masks live under a folder named for the pattern; an absent extraction is a library with
-    // no patterns rather than an error. Probed before loading because PatternLibrary reports a
-    // missing folder through Godot, and this page stays engine-free.
-    private PatternLibrary Library
-    {
-        get
-        {
-            if (_library != null)
-            {
-                return _library;
-            }
-
-            string? rof = Flow.DataRoot is { } root ? Path.Combine(root, "extracted", "rof") : null;
-            _library = rof != null && Directory.Exists(Path.Combine(rof, "ASSETS", "GRAPHICS"))
-                ? PatternLibrary.Load(rof)
-                : PatternLibrary.Empty;
-            return _library;
-        }
-    }
 
     /// <summary>The archive folder / table name for a pattern index, or "" outside 0-13.</summary>
     public static string PatternName(int pattern) =>
@@ -185,38 +162,49 @@ public sealed class HangarPaintPage : HangarPage
         return IsShadeRow(row) ? StepShade(SlotOf(row), dir) : StepColour(SlotOf(row), dir);
     }
 
-    // Exactly the original's per-texel composite (docs/formats/paint.md): the three mask weights
-    // blend the three colours, the shading map modulates the result, the pattern's overlay goes
-    // over that. ⚠ `.BM` rows are bottom-up, so destination row y reads source row h-1-y.
-    private static byte[] Compose(PaintBitmap bm, PaintColour c1, PaintColour c2, PaintColour c3)
-    {
-        int w = bm.Width, h = bm.Height;
-        var rgba = new byte[w * h * 4];
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
-            {
-                int i = ((y * w) + x) * 4;
-                int j = ((h - 1 - y) * w) + x;
-                float w1 = bm.Slot1[j], w2 = bm.Slot2[j], w3 = bm.Slot3[j];
-                int s = j * 3;
-                float r = bm.Shading[s] * (((w1 * c1.R) + (w2 * c2.R) + (w3 * c3.R)) / 255f) / 255f;
-                float g = bm.Shading[s + 1] * (((w1 * c1.G) + (w2 * c2.G) + (w3 * c3.G)) / 255f) / 255f;
-                float b = bm.Shading[s + 2] * (((w1 * c1.B) + (w2 * c2.B) + (w3 * c3.B)) / 255f) / 255f;
-                if (bm.HasOverlay)
-                {
-                    int o = j * 4;
-                    float a = bm.Overlay![o + 3] / 255f;
-                    r = (r * (1f - a)) + (bm.Overlay[o] * a);
-                    g = (g * (1f - a)) + (bm.Overlay[o + 1] * a);
-                    b = (b * (1f - a)) + (bm.Overlay[o + 2] * a);
-                }
+    /// <summary>On a decal row, the chosen decal's own tile out of the shipped 5-wide sheet, so
+    /// the three decals are picked by their artwork and not by their filename. Null on every other
+    /// row, on the keep-the-placeholder sentinel, and without an extraction.</summary>
+    public override HangarArt? RowArt(int row) =>
+        row >= NoseDecalRow && row < RowCount ? DecalArt(DecalOf(row)) : null;
 
-                rgba[i] = Round(r);
-                rgba[i + 1] = Round(g);
-                rgba[i + 2] = Round(b);
-                rgba[i + 3] = 255;
+    // The original's own paint-screen composite: four alpha-over layers on a bare page, the three
+    // region masks in slot order carrying the picked colours, then the detail plate on top. No
+    // shading multiply and no weight normalisation: a fully-masked texel IS its colour, and the
+    // panel lines, canopy and propeller are the plate showing through where no mask claims it.
+    private static byte[] Compose(PaintIcons set, PaintColour c1, PaintColour c2, PaintColour c3)
+    {
+        var plate = set.Plate;
+        int n = plate.Width * plate.Height;
+        var rgba = new byte[n * 4];
+        PaintColour[] colours = { c1, c2, c3 };
+        for (int p = 0; p < n; p++)
+        {
+            int o = p * 4;
+            float ar = 0f, ag = 0f, ab = 0f, aa = 0f;
+            for (int slot = 0; slot < colours.Length; slot++)
+            {
+                float a = set.Masks[slot].Rgba[o + 3] / 255f;
+                var c = colours[slot];
+                ar = (ar * (1f - a)) + (c.R * a);
+                ag = (ag * (1f - a)) + (c.G * a);
+                ab = (ab * (1f - a)) + (c.B * a);
+                aa = (aa * (1f - a)) + a;
             }
+
+            float pa = plate.Rgba[o + 3] / 255f;
+            ar = (ar * (1f - pa)) + (plate.Rgba[o] * pa);
+            ag = (ag * (1f - pa)) + (plate.Rgba[o + 1] * pa);
+            ab = (ab * (1f - pa)) + (plate.Rgba[o + 2] * pa);
+            aa = (aa * (1f - pa)) + pa;
+
+            // Premultiplied through, so a half-covered edge texel keeps its own colour rather
+            // than darkening towards the transparent ground it was accumulated over.
+            float scale = aa > 0.0001f ? 1f / aa : 0f;
+            rgba[o] = Round(ar * scale);
+            rgba[o + 1] = Round(ag * scale);
+            rgba[o + 2] = Round(ab * scale);
+            rgba[o + 3] = Round(aa * 255f);
         }
 
         return rgba;
@@ -394,65 +382,138 @@ public sealed class HangarPaintPage : HangarPage
         return true;
     }
 
-    // The scratch plane's paint on its own airframe, composed from the pattern's masks. Null when
-    // there is no extraction, or when the pattern ships no skin for this aircraft, which is the
-    // only case the icon fallback exists for.
+    // The scratch plane's paint on its own airframe, composed from that pair's icon layer set.
+    // Null when there is no extraction, and for the one pair that ships no set (itstaxi on the
+    // Hoplite), where the icon fallback stands in.
     private HangarArt? LivePreview()
     {
-        var library = Library;
-        if (library.IsEmpty)
+        int airframe = Math.Clamp(Scratch.Airframe, 0, SkinPrefixes.Length - 1);
+        if (IconSet(airframe, Scratch.PaintPattern) is not { } set)
         {
             return null;
         }
 
-        int airframe = Math.Clamp(Scratch.Airframe, 0, SkinPrefixes.Length - 1);
-        string folder = PatternName(Scratch.PaintPattern).ToUpperInvariant();
-        foreach (string part in PreviewParts)
-        {
-            if (library.Skin(folder, SkinPrefixes[airframe] + part) is not { } bm)
-            {
-                continue;
-            }
-
-            var rgba = Compose(bm, Scratch.Colour1, Scratch.Colour2, Scratch.Colour3);
-            if (AsImage(bm.Width, bm.Height, rgba) is { } image)
-            {
-                return new HangarArt(image, $"{PatternLabel(Scratch.PaintPattern)}   {Flow.AirframeName(airframe)}");
-            }
-        }
-
-        return null;
+        var rgba = Compose(set, Scratch.Colour1, Scratch.Colour2, Scratch.Colour3);
+        return AsImage(set.Plate.Width, set.Plate.Height, rgba) is { } image
+            ? new HangarArt(image, $"{PatternLabel(Scratch.PaintPattern)}   {Flow.AirframeName(airframe)}")
+            : null;
     }
 
-    // The shipped icon art, for the airframe/pattern pair. ⚠ The icon sets are sparse per pattern
-    // (A2): only pattern 4 exists for every airframe, so a pattern with no set of its own falls
-    // back to that one rather than showing nothing.
+    // The pattern's own plan view of this airframe unpainted, for the one pair with no set of its
+    // own: pattern 4 ships a set for all eleven aircraft, so its plate is the stand-in.
     private HangarArt? IconFor(int pattern)
     {
         int airframe = Math.Clamp(Scratch.Airframe, 0, SkinPrefixes.Length - 1);
+        var set = IconSet(airframe, 4);
+        return set == null
+            ? null
+            : new HangarArt(set.Plate, $"{PatternLabel(pattern)}   {Flow.AirframeName(airframe)}");
+    }
+
+    // One airframe/pattern icon set, decoded once and kept, misses included, so an absent
+    // extraction is probed once per pair rather than once per frame.
+    private PaintIcons? IconSet(int airframe, int pattern)
+    {
         int key = (airframe * 100) + pattern;
-        if (_icons.TryGetValue(key, out var cached))
+        if (_iconSets.TryGetValue(key, out var cached))
         {
             return cached;
         }
 
-        var art = IconAt(airframe, pattern) ?? IconAt(airframe, 4);
-        _icons[key] = art;
-        return art;
+        PaintIcons? set = null;
+        if (Flow.DataRoot is { } root)
+        {
+            var graphics = Path.Combine(root, "extracted", "rof", "ASSETS", "GRAPHICS");
+            var layers = new TgaImage?[4];
+            for (int layer = 0; layer < layers.Length; layer++)
+            {
+                layers[layer] = TgaImage.TryLoad(
+                    Path.Combine(graphics, $"PX_ICON_{airframe}_{pattern}_{layer}.TGA"));
+            }
+
+            set = PaintIcons.From(layers);
+        }
+
+        _iconSets[key] = set;
+        return set;
     }
 
-    private HangarArt? IconAt(int airframe, int pattern)
+    // One decal's own tile out of the shipped sheet: 50 tiles of 66x66 stacked top to bottom in
+    // index order, which is the 5-wide grid the original's picker lays out read row by row.
+    private HangarArt? DecalArt(int decal)
     {
-        if (Flow.DataRoot is not { } root)
+        if (decal < 0 || decal >= HangarPaintTables.DecalCount)
         {
             return null;
         }
 
-        var path = Path.Combine(root, "extracted", "rof", "ASSETS", "GRAPHICS",
-            $"PX_ICON_{airframe}_{pattern}_0.TGA");
-        return TgaImage.TryLoad(path) is { } image
-            ? new HangarArt(image, $"{PatternLabel(pattern)}   {Flow.AirframeName(airframe)}")
-            : null;
+        if (_decalArt.TryGetValue(decal, out var cached))
+        {
+            return cached;
+        }
+
+        HangarArt? art = null;
+        if (DecalSheet() is { } sheet && sheet.Height >= HangarPaintTables.DecalCount * sheet.Width)
+        {
+            int side = sheet.Width;
+            var rgba = new byte[side * side * 4];
+            Array.Copy(sheet.Rgba, decal * side * side * 4, rgba, 0, rgba.Length);
+            if (AsImage(side, side, rgba) is { } image)
+            {
+                art = new HangarArt(image, DecalLabel(decal));
+            }
+        }
+
+        _decalArt[decal] = art;
+        return art;
     }
 
+    private TgaImage? DecalSheet()
+    {
+        if (!_decalSheetTried)
+        {
+            _decalSheetTried = true;
+            _decalSheet = Flow.DataRoot is { } root
+                ? TgaImage.TryLoad(Path.Combine(root, "extracted", "rof", "ASSETS", "GRAPHICS",
+                    "PX_P_DECALS.TGA"))
+                : null;
+        }
+
+        return _decalSheet;
+    }
+}
+
+/// <summary>
+/// One airframe/pattern pair's paint-screen artwork as the original ships it:
+/// <c>PX_ICON_&lt;airframe&gt;_&lt;pattern&gt;_0..3.TGA</c>, four same-sized 32-bit plan views of
+/// the aircraft. Layer 0 is the detail plate (panel lines, canopy, propeller, guns) with the
+/// coverage in its alpha; layers 1-3 are the three paint slots' region masks, white RGB with the
+/// region in the alpha. The set is exactly the pattern-availability mask: every pair the mask
+/// allows ships one, and only itstaxi on the Hoplite does not.
+/// </summary>
+public sealed record PaintIcons(TgaImage Plate, TgaImage[] Masks)
+{
+    /// <summary>The set four decoded layers make, or null when any is missing or a different size
+    /// from the plate. A half-read set would compose a plane out of two different aircraft.</summary>
+    public static PaintIcons? From(IReadOnlyList<TgaImage?> layers)
+    {
+        if (layers.Count != 4 || layers[0] is not { } plate)
+        {
+            return null;
+        }
+
+        var masks = new TgaImage[3];
+        for (int i = 0; i < masks.Length; i++)
+        {
+            if (layers[i + 1] is not { } mask
+                || mask.Width != plate.Width || mask.Height != plate.Height)
+            {
+                return null;
+            }
+
+            masks[i] = mask;
+        }
+
+        return new PaintIcons(plate, masks);
+    }
 }

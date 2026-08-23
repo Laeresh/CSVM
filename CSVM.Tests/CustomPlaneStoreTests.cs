@@ -138,6 +138,44 @@ public class CustomPlaneStoreTests
         Assert.Equal(5, store.Load("Blue Streak")!.Engine);
     }
 
+    /// <summary>Delete removes the plane of that name and leaves the rest of the hangar alone
+    /// (E46, the original's Sell Plane in a build with no economy).</summary>
+    [Fact]
+    public void Delete_RemovesThatPlaneOnly()
+    {
+        var store = new CustomPlaneStore(TestData.TempDir());
+        store.Save(FullDef());
+        store.Save(new CustomPlaneDef { Name = "Keeper", Airframe = 2 });
+
+        Assert.True(store.Delete("Blue Streak"));
+
+        Assert.Null(store.Load("Blue Streak"));
+        Assert.Equal("Keeper", Assert.Single(store.List()).Name);
+    }
+
+    /// <summary>Deleting is sanitised exactly as saving is, so a name a filename cannot carry is
+    /// deleted by the same identity it was saved under.</summary>
+    [Fact]
+    public void Delete_SanitisesTheNameLikeSave()
+    {
+        var store = new CustomPlaneStore(TestData.TempDir());
+        store.Save(new CustomPlaneDef { Name = "Red/Blue: One" });
+
+        Assert.True(store.Delete("Red/Blue: One"));
+        Assert.Empty(store.List());
+    }
+
+    /// <summary>A name with no file is a no-op, not an error: a caller may ask twice.</summary>
+    [Fact]
+    public void Delete_MissingFile_IsANoOp()
+    {
+        var store = new CustomPlaneStore(Path.Combine(TestData.TempDir(), "never-created"));
+
+        Assert.False(store.Delete("Nobody"));
+        Assert.False(store.Delete("   "));
+        Assert.Empty(store.List());
+    }
+
     [Fact]
     public void Save_EmptyName_Throws()
     {

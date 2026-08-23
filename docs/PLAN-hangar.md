@@ -146,6 +146,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 42. ☑ Engine screen: the None row keeps its place, relabelled to the original's 1165
 43. ☑ Pattern pick loads the pattern's default colours (the `0x0061daf0` table; swatch decode)
 44. ☑ Armour displays as the original's 0-60 in steps of 5 (the x5 display scale), everywhere it shows
+45. ☑ The defaults-ask text wraps (string 206 overflows a 16:9 screen unwrapped)
+46. ☑ Deleting a saved plane from the plane-selection page (the original's Sell Plane, `ps_b_sellp`)
+47. ☑ The paint preview composes correctly (judged against `OriginalScreenshots/CustomPlane Paint*.png`) and sits on the screen's left
+48. ☑ Decals pick by icon (the focused decal's tile from `PX_P_DECALS.TGA`; the full 5-wide grid stays a possible polish)
 
 ## Dependency and parallelism notes
 
@@ -1218,3 +1222,143 @@ Tests: `HangarArmourPageTests` gained `TheDisplayedFigureRunsZeroToSixtyInFives`
 
 **Verified.** Wave E closing battery: build 0/0, units 1885/1885, engine suites 90/90 with
 errors clean, 16 goldens hash-identical, exit 0.
+
+## E45 ☐ The defaults-ask text wraps (string 206 overflows a 16:9 screen unwrapped)
+
+**Landed.** The launchscreen's detail label autowraps. String 206 is a two-sentence question and
+the label had no wrap mode, so the label's own minimum width was the whole sentence, which made
+the centred body that wide and pushed both ends off the screen. A Godot `Label` reports a minimum
+width of 1 once `AutowrapMode` is set, so it now takes the column's width instead of setting it,
+and the column is the body's own 560px minimum. `LaunchMenu.DetailBlock` is the whole change on
+the drawing side; `LayoutScale` gained `DetailLines`, which measures the detail text against that
+same 560px at the reference 720p metrics so a three-line question is budgeted for rather than
+overflowing the footer.
+
+The fix is the shared label, not a hangar special case: every screen's one-liner is unaffected
+(they are far shorter than the column), and any later long detail line wraps for free. Checked at
+1280x720 through the new `--menu=defaults` aid: the question reads as three centred lines with
+the Hoplite blueprint beside them and the footer in place.
+
+**Verified.** <pending orchestrator run>
+
+## E46 ☐ Deleting a saved plane from the plane-selection page (the original's Sell Plane, `ps_b_sellp`)
+
+**Landed.** `CustomPlaneStore.Delete(name)` removes the plane's file, sanitising the name exactly
+as `Save` does so a plane is deleted by the identity it was saved under; a missing file is a no-op
+and an unreadable one reads as nothing deleted, the store's own missing-data idiom.
+`HangarFlow.DeleteSaved` calls it, re-reads `Saved` (which is no longer fixed at construction) and
+clamps the cursor; `HangarFlow.FocusRow` is the cursor mover a page uses when it changes how many
+rows it draws.
+
+- **The gesture is two-stage, not a stepper.** A stepper on a destructive action is one stray
+  nudge away from losing a build, so the plane-selection screen grew a trailing
+  `Delete a saved plane` row, offered only while anything is saved. Confirming it turns the list
+  into `Delete <name>` per plane plus `Cancel`: the press that removes a plane names the plane it
+  removes, which is the explicit confirm without a modal the flow has no machinery for. Deleting
+  leaves the list up while any remain and the cursor on a plane row, never sliding onto Cancel
+  when the last one went; the list closes when it empties and on Cancel.
+- **The wording is ours, and deliberately so.** The original's button is Sell Plane and its
+  confirm is langui 700, "Your %1 is worth $%2. Are you sure you want to sell it?". We have no
+  economy to sell into (Decision 2), so the row says what it does. The langui strings stay
+  unused rather than being reworded into a half-truth about money.
+- **A deleted plane that some picker had selected degrades safely.** `LaunchMenu.CloseHangar`
+  runs `RefreshRoster` on every exit, cancelled included, and that already clamps every slot's
+  `PlaneIndex` into the shortened roster. Verified by reading rather than changed.
+
+Known wart, shared with E41: `Back` on the delete list cancels the whole flow rather than closing
+the list, because `HangarFlow.Back` does not consult the page. Cancel is the way out of both.
+
+Tests: `CustomPlaneStoreTests` gained `Delete_RemovesThatPlaneOnly`,
+`Delete_SanitisesTheNameLikeSave` and `Delete_MissingFile_IsANoOp`; `HangarFlowTests` gained
+`AnEmptyHangarOffersNoDeleteRow`, `TheDeleteRowOpensAListThatNamesEachPlane`,
+`TheDeleteListClosesWhenItEmptiesAndOnCancel` and `DeletingClampsTheCursorIntoTheShorterList`;
+`EditingASavedPlaneWorksOnACopy` counts the new row.
+
+**Verified.** <pending orchestrator run>
+
+## E47 ☐ The paint preview composes correctly and sits on the screen's left
+
+**Landed.** The preview was composed from the wrong artwork with the wrong formula, and it now
+uses the original's own.
+
+- **What was wrong.** The page composed the aircraft's `.BM` skin (`BLO_WING`, `FUR_WING`), the
+  UV texture the flying model wears, through `PlanePainter`'s formula: shading map times the
+  normalised mask weights, overlay over that, rows flipped bottom-up. Every part of that is right
+  for the 3D skin and none of it is what the paint screen draws. The screen is a blueprint page
+  showing the aircraft in plan and front view, so the reader recognises the plane and not a
+  rectangle of unwrapped texture.
+- **What the original uses.** `PX_ICON_<airframe>_<pattern>_0..3.TGA`, four same-sized 32-bit
+  plan views (358x335 on both the Fury and the Bloodhawk). Layer 0 is the detail plate: the panel
+  lines, canopy, propeller, gun barrels and undercarriage, RGB with its coverage in the alpha.
+  Layers 1, 2 and 3 are the three paint slots' region masks, white RGB with the region in the
+  ALPHA channel. The `_0..3` suffix is the layer index, not a variant; the sets exist for exactly
+  the pairs the availability mask allows, itstaxi on the Hoplite alone excepted.
+- **The composite is four alpha-over layers on the page.** Masks 1, 2 and 3 in slot order
+  carrying the picked colours, then the plate over them. There is no shading multiply and no
+  `/255` weight normalisation: a fully-masked texel IS its resolved colour, and the shading a
+  reader sees is the plate showing through where no mask claims the texel. Ours accumulates
+  premultiplied and divides out at the end, so the coverage carries into the image's own alpha
+  and the preview sits on the shell's ground the way the original's sits on its blueprint page.
+- **Measured against the references.** Sampling the seven `OriginalScreenshots/CustomPlane
+  Paint*.png` shots (the icon lands at 2.4x from (38.5, 103) in the 1923x1438 captures, fitted
+  off the slot-1 region's own bounding box) puts
+  the Fury/Fortune Hunters composite at a mean absolute error of 4.4/255 per channel over the
+  aircraft, and the remaining error is edge alignment on high-contrast boundaries, not colour.
+  The interior of every region is the resolved colour exactly: slot 1 reads (223,0,41), slot 2
+  (25,25,25), slot 3 (255,255,255), the three the swatch table resolves fortune's index pairs to.
+  The other six shots agree region for region; their higher raw error is the same sub-pixel
+  alignment on a checkerboard (studio) or a yellow/black boundary (hughes), plus the Bloodhawk
+  sets sitting at a slightly different screen origin than the one fitted on the Fury.
+- **The blueprint half also confirms the E43 tables from a fourth direction.** Every reference
+  shot's Color/Shade dropdowns show exactly the pair `hangar_patterns.json` carries: fortune's
+  red / white-at-black / white, blake's light blue-grey / mid blue / purple-at-white, studio's
+  teal-at-blue / white / white-at-black.
+- **Placement.** The art moved to the screen's LEFT, where the original's preview sits. The rows
+  and their detail line went into a content column of their own and the art column stands beside
+  it (`LaunchMenu.HangarArtColumn`); standing beside the rows rather than under them also let the
+  art grow from 140px to 200px tall. `LayoutScale` now counts the column only where it is taller
+  than the rows next to it, which is what buys E45's wrapped question its lines back.
+- **Residual divergence, stated honestly.** (a) The one pair with no icon set of its own, itstaxi
+  on the Hoplite, falls back to pattern 4's plate, so it previews the aircraft unpainted rather
+  than in its own colours; the original presumably draws nothing there. (b) Our preview is
+  200px tall against the original's near-half-screen blueprint, so the plan view reads as an
+  identifying thumbnail rather than a drawing. (c) `docs/formats/paint.md` is owed a section on
+  the icon layer set; this section is the decode until then.
+
+Tests: `HangarPaintPageTests` replaced its `.BM` fixture with a hand-built icon set
+(`ThePreviewComposesTheIconMasksAndTheColours` pins a fully-masked texel as its colour, a
+two-mask texel as the later slot, an unmasked one as the plate, and a half-alpha plate over a
+painted texel as arithmetic), added `UnclaimedTexelsStayTransparent`, kept
+`EveryEditRefreshesThePreview`, and added the extracted-data
+`TheFurysFortuneSchemePaintsItsRegionsExactly` (358x335, and the three resolved colours present
+as thousands of exact texels). `EveryAirframeComposesEveryPatternItsMaskAllows` now sweeps the
+icon sets.
+
+**Verified.** <pending orchestrator run>
+
+## E48 ☐ Decals pick by icon in the original's 5-wide grid, not by text row
+
+**Landed.** The three decal rows show the chosen decal's own artwork. The source is
+`ASSETS/GRAPHICS/PX_P_DECALS.TGA`, a 66x3300 strip: 50 tiles of 66x66 stacked top to bottom in
+index order, which is the 5-wide grid callback 2240 lays out read row by row. Index order was
+checked against the decoded name table (05 the black swan, 06 the hammer and sickle, 07 and 08
+the two Fortune Hunters logos, 40 the pin-up the reference shot's nose carries).
+
+**What shipped is the focused decal's tile, not the whole grid**, which the item allows as a
+first form. The grid is 330x660; letterboxed into the launchscreen's art column it would put each
+decal at about 20px, unreadable, and the shell's art seam draws one picture rather than a
+selectable mesh of them. The tile is the readable half of the same information: the row still
+names the decal and the tile beside it shows what it is.
+
+The seam is one method: `IHangarPage.RowArt(row)` returns the focused row's own picture, null by
+default on `HangarPage`, and only `HangarPaintPage` overrides it. The shell draws it under the
+page's `Art` in the same left column, with its own cached texture (a decal changes on a different
+beat from the preview, so it cannot share the one slot). The keep-the-placeholder sentinel and a
+missing extraction both read as no tile.
+
+Tests: `HangarPaintPageTests` gained `DecalRowsCarryTheirOwnTile` (a hand-built 50-tile sheet,
+each tile carrying its index, checked for the right slice, the right caption and nothing on a
+non-decal row or the placeholder) and the extracted-data `TheShippedDecalSheetSlicesFiftyTiles`
+(all 50 tiles come out 66x66 from the shipped file).
+
+**Verified.** <pending orchestrator run>

@@ -228,31 +228,49 @@ public class HangarPaintPageTests : IDisposable
     [Fact]
     public void ArtIsNullWithoutADataRoot() => Assert.Null(OpenOnPaint().Page.Art);
 
-    /// <summary>The preview is the original's own composite: the three mask weights blend the
-    /// three colours, the shading map modulates that, and the `.BM`'s bottom-up rows are flipped.
-    /// Pinned against a hand-built mask set whose expected pixels are arithmetic, not a
+    /// <summary>The preview is the original's own paint-screen composite: the three region masks
+    /// alpha-over in slot order carrying the picked colours, then the detail plate over them.
+    /// Pinned against a hand-built icon set whose expected pixels are arithmetic, not a
     /// screenshot.</summary>
     [Fact]
-    public void ThePreviewComposesTheMasksAndTheColours()
+    public void ThePreviewComposesTheIconMasksAndTheColours()
     {
         string root = Path.Combine(_dir, "root");
-        WriteMask(root, "FORTUNE", "BLO_WING");
+        WriteIconSet(root, 3, 4);
         var flow = OpenOnPaint(root);
-        flow.Scratch.Airframe = 3;          // Bloodhawk, skin prefix blo
+        flow.Scratch.Airframe = 3;          // Bloodhawk
         flow.Scratch.LoadPatternDefaults(4); // fortune: red, 25/25/25, white
 
         var art = flow.Page.Art;
         Assert.NotNull(art);
         Assert.Equal(2, art!.Image.Width);
         Assert.Equal(2, art.Image.Height);
-        Assert.Contains("FORTUNE", art.Caption, StringComparison.Ordinal);
 
-        // Top row is the mask's bottom row: slot 3 then slot 1 at full shading.
-        AssertPixel(art.Image, 0, 255, 255, 255);
-        AssertPixel(art.Image, 1, 223, 0, 41);
-        // Bottom row: slot 1 at half shading, then slot 2 at full.
-        AssertPixel(art.Image, 2, 112, 0, 21);
-        AssertPixel(art.Image, 3, 25, 25, 25);
+        // A fully-masked texel IS its colour: no shading multiply, no weight normalisation.
+        AssertPixel(art.Image, 0, 223, 0, 41, 255);
+        // Both masks claim texel 1; the later slot is drawn over the earlier one.
+        AssertPixel(art.Image, 1, 25, 25, 25, 255);
+        // No mask claims texel 2, so the opaque detail plate is all there is.
+        AssertPixel(art.Image, 2, 40, 50, 60, 255);
+        // A half-alpha plate over slot 1's red: the plate's black darkens it by its own coverage.
+        AssertPixel(art.Image, 3, 111, 0, 20, 255);
+    }
+
+    /// <summary>Coverage carries through: a texel no layer claims is transparent, so the preview
+    /// sits on the shell's own ground the way the original's sits on its blueprint page.</summary>
+    [Fact]
+    public void UnclaimedTexelsStayTransparent()
+    {
+        string root = Path.Combine(_dir, "root");
+        WriteIconSet(root, 3, 4, plateAlpha: new byte[] { 255, 255, 255, 0 }, masks: new byte[][]
+        {
+            new byte[] { 255, 0, 0, 0 }, new byte[] { 0, 255, 0, 0 }, new byte[] { 0, 0, 0, 0 },
+        });
+        var flow = OpenOnPaint(root);
+        flow.Scratch.Airframe = 3;
+        flow.Scratch.LoadPatternDefaults(4);
+
+        Assert.Equal(0, flow.Page.Art!.Image.Rgba[(3 * 4) + 3]);
     }
 
     /// <summary>Every scratch edit refreshes the preview, and nothing else does: the shell rebuilds
@@ -262,7 +280,7 @@ public class HangarPaintPageTests : IDisposable
     public void EveryEditRefreshesThePreview()
     {
         string root = Path.Combine(_dir, "root");
-        WriteMask(root, "FORTUNE", "BLO_WING");
+        WriteIconSet(root, 3, 4);
         var flow = OpenOnPaint(root);
         flow.Scratch.Airframe = 3;
         flow.Scratch.LoadPatternDefaults(4);
@@ -276,9 +294,34 @@ public class HangarPaintPageTests : IDisposable
         Assert.NotSame(first.Image, flow.Page.Art!.Image);
     }
 
-    /// <summary>The shipped masks compose for every airframe wearing every pattern its own mask
-    /// allows, which is the sweep that would catch a wrong airframe-to-skin-prefix row or a mask
-    /// offering a pattern that ships no skins for that plane.</summary>
+    /// <summary>A decal row hands the shell the decal's own tile out of the shipped sheet (E48),
+    /// sliced 66x66 in index order; no other row has one, and neither does the placeholder.</summary>
+    [Fact]
+    public void DecalRowsCarryTheirOwnTile()
+    {
+        string root = Path.Combine(_dir, "root");
+        WriteDecalSheet(root);
+        var flow = OpenOnPaint(root);
+
+        Assert.Null(flow.Page.RowArt(HangarPaintPage.PatternRow));
+        Assert.Null(flow.Page.RowArt(HangarPaintPage.NoseDecalRow)); // still the placeholder
+
+        flow.Move(HangarPaintPage.NoseDecalRow);
+        Assert.True(flow.Step(1)); // decal 0
+        var art = flow.Page.RowArt(HangarPaintPage.NoseDecalRow);
+        Assert.NotNull(art);
+        Assert.Equal(2, art!.Image.Width);
+        Assert.Equal(2, art.Image.Height);
+        Assert.Equal("00BBomber_logo1", art.Caption);
+        AssertPixel(art.Image, 0, 0, 0, 0, 255); // tile 0's own marker row
+
+        Assert.True(flow.Step(1)); // decal 1
+        AssertPixel(flow.Page.RowArt(HangarPaintPage.NoseDecalRow)!.Image, 0, 1, 0, 0, 255);
+    }
+
+    /// <summary>The shipped icon sets compose for every airframe wearing every pattern its own mask
+    /// allows, which is the sweep that would catch a wrong airframe row or a mask offering a
+    /// pattern that ships no artwork for that plane.</summary>
     [ExtractedDataFact]
     public void EveryAirframeComposesEveryPatternItsMaskAllows()
     {
@@ -300,39 +343,127 @@ public class HangarPaintPageTests : IDisposable
         }
     }
 
-    // One texel's RGB out of the composed preview.
-    private static void AssertPixel(TgaImage image, int pixel, int r, int g, int b)
+    /// <summary>The shipped Fury in Fortune Hunters colours, the reference screenshot's own build:
+    /// the plan view is 358x335 and its three regions come out as the resolved colours exactly,
+    /// with no shading term anywhere in them.</summary>
+    [ExtractedDataFact]
+    public void TheFurysFortuneSchemePaintsItsRegionsExactly()
+    {
+        var flow = OpenOnPaint(TestData.DataRoot);
+        flow.Scratch.Airframe = 7;
+        flow.Scratch.LoadPatternDefaults(4);
+
+        var image = flow.Page.Art!.Image;
+        Assert.Equal(358, image.Width);
+        Assert.Equal(335, image.Height);
+        Assert.True(Count(image, 223, 0, 41) > 8000, "the red body");
+        Assert.True(Count(image, 25, 25, 25) > 2000, "the black trim");
+        Assert.True(Count(image, 255, 255, 255) > 500, "the white pinstripe");
+    }
+
+    /// <summary>The decal sheet ships 50 tiles of 66x66, one per index, and the page slices the
+    /// focused row's own.</summary>
+    [ExtractedDataFact]
+    public void TheShippedDecalSheetSlicesFiftyTiles()
+    {
+        var flow = OpenOnPaint(TestData.DataRoot);
+        flow.Move(HangarPaintPage.NoseDecalRow);
+        for (int decal = 0; decal < HangarPaintTables.DecalCount; decal++)
+        {
+            flow.Scratch.NoseDecal = decal;
+            var art = flow.Page.RowArt(HangarPaintPage.NoseDecalRow);
+            Assert.True(art != null && art.Image.Width == 66 && art.Image.Height == 66, $"decal {decal}");
+        }
+    }
+
+    // How many opaque texels of the composed preview are exactly this colour.
+    private static int Count(TgaImage image, int r, int g, int b)
+    {
+        int n = 0;
+        for (int p = 0; p < image.Rgba.Length; p += 4)
+        {
+            if (image.Rgba[p] == r && image.Rgba[p + 1] == g && image.Rgba[p + 2] == b
+                && image.Rgba[p + 3] == 255)
+            {
+                n++;
+            }
+        }
+
+        return n;
+    }
+
+    // One texel's RGBA out of the composed preview.
+    private static void AssertPixel(TgaImage image, int pixel, int r, int g, int b, int a)
     {
         Assert.Equal(r, image.Rgba[pixel * 4]);
         Assert.Equal(g, image.Rgba[(pixel * 4) + 1]);
         Assert.Equal(b, image.Rgba[(pixel * 4) + 2]);
+        Assert.Equal(a, image.Rgba[(pixel * 4) + 3]);
     }
 
-    // A 2x2 `.BM` mask set (u16 height, u16 width, then shading RGB, then the three weight
-    // planes): bottom-left slot 1 at half shading, bottom-right slot 2, top-left slot 3,
-    // top-right slot 1. Rows are stored bottom-up, which is what the flip has to undo.
-    private static void WriteMask(string dataRoot, string pattern, string skin)
+    // A 2x2 `PX_ICON_<airframe>_<pattern>_0..3` set. Layer 0 is the detail plate (RGB plus its own
+    // coverage), layers 1-3 the three slots' region masks, white with the region in the alpha.
+    private static void WriteIconSet(string dataRoot, int airframe, int pattern,
+        byte[]? plateAlpha = null, byte[][]? masks = null)
     {
-        var dir = Path.Combine(dataRoot, "extracted", "rof", "ASSETS", "GRAPHICS", pattern);
+        var dir = Path.Combine(dataRoot, "extracted", "rof", "ASSETS", "GRAPHICS");
         Directory.CreateDirectory(dir);
-        var bytes = new byte[4 + (6 * 4)];
-        bytes[0] = 2; // height
-        bytes[2] = 2; // width
-        for (int j = 0; j < 4; j++)
+        byte[][] plateRgb =
         {
-            byte shade = j == 0 ? (byte)128 : (byte)255;
-            bytes[4 + (j * 3)] = shade;
-            bytes[5 + (j * 3)] = shade;
-            bytes[6 + (j * 3)] = shade;
+            new byte[] { 0, 0, 0 }, new byte[] { 0, 0, 0 },
+            new byte[] { 40, 50, 60 }, new byte[] { 0, 0, 0 },
+        };
+        plateAlpha ??= new byte[] { 0, 0, 255, 128 };
+        masks ??= new byte[][]
+        {
+            new byte[] { 255, 255, 0, 255 }, new byte[] { 0, 255, 0, 0 }, new byte[] { 0, 0, 0, 0 },
+        };
+        WriteTga(Path.Combine(dir, $"PX_ICON_{airframe}_{pattern}_0.TGA"), 2, 2, plateRgb, plateAlpha);
+        for (int slot = 0; slot < masks.Length; slot++)
+        {
+            byte[][] white = { new byte[] { 255, 255, 255 }, new byte[] { 255, 255, 255 },
+                new byte[] { 255, 255, 255 }, new byte[] { 255, 255, 255 } };
+            WriteTga(Path.Combine(dir, $"PX_ICON_{airframe}_{pattern}_{slot + 1}.TGA"), 2, 2, white, masks[slot]);
+        }
+    }
+
+    // A 2x50-tile decal sheet, 2x2 per tile, each tile's texels carrying its own index as red.
+    private static void WriteDecalSheet(string dataRoot)
+    {
+        var dir = Path.Combine(dataRoot, "extracted", "rof", "ASSETS", "GRAPHICS");
+        Directory.CreateDirectory(dir);
+        int tiles = HangarPaintTables.DecalCount;
+        var rgb = new byte[2 * 2 * tiles][];
+        var alpha = new byte[rgb.Length];
+        for (int i = 0; i < rgb.Length; i++)
+        {
+            rgb[i] = new byte[] { (byte)(i / 4), 0, 0 };
+            alpha[i] = 255;
         }
 
-        byte[] slot = { 1, 2, 3, 1 }; // which paint slot owns each texel
-        for (int j = 0; j < 4; j++)
+        WriteTga(Path.Combine(dir, "PX_P_DECALS.TGA"), 2, 2 * tiles, rgb, alpha);
+    }
+
+    // One uncompressed 32-bit top-down TGA (descriptor 0x28), the form TgaImage decodes.
+    private static void WriteTga(string path, int width, int height, byte[][] rgb, byte[] alpha)
+    {
+        var bytes = new byte[18 + (width * height * 4)];
+        bytes[2] = 2;
+        bytes[12] = (byte)(width & 0xff);
+        bytes[13] = (byte)(width >> 8);
+        bytes[14] = (byte)(height & 0xff);
+        bytes[15] = (byte)(height >> 8);
+        bytes[16] = 32;
+        bytes[17] = 0x28;
+        for (int p = 0; p < width * height; p++)
         {
-            bytes[4 + 12 + ((slot[j] - 1) * 4) + j] = 255;
+            bytes[18 + (p * 4)] = rgb[p][2];
+            bytes[18 + (p * 4) + 1] = rgb[p][1];
+            bytes[18 + (p * 4) + 2] = rgb[p][0];
+            bytes[18 + (p * 4) + 3] = alpha[p];
         }
 
-        File.WriteAllBytes(Path.Combine(dir, skin + ".BM"), bytes);
+        File.WriteAllBytes(path, bytes);
     }
 
     // A flow standing on the PAINT screen with a fresh scratch plane.

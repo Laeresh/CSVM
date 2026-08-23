@@ -230,6 +230,38 @@ public sealed class CustomPlaneStore
         return path;
     }
 
+    /// <summary>Removes the stored plane of that name, returning whether a file went. The name is
+    /// sanitised exactly as <see cref="Save"/> sanitises it, so a plane is deleted by the same
+    /// identity it was saved under. A name with no file is a no-op rather than an error, and an
+    /// unreadable file reads as nothing deleted, like every other read here.</summary>
+    public bool Delete(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        try
+        {
+            var path = PathFor(name);
+            if (!File.Exists(path))
+            {
+                return false;
+            }
+
+            File.Delete(path);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>The file this name persists to. Characters a filename cannot carry become '_';
     /// the original writes the raw name and simply cannot save such a plane, ours can.</summary>
     public string PathFor(string name)
