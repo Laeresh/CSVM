@@ -37,6 +37,7 @@ public sealed class PlaneBuilder
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
     private readonly SceneBuilder _scene;
+    private readonly SceneBuilder? _interiorScene;
     private readonly bool _spinningProps;
     private readonly bool _withDamagePanels;
     private readonly bool _withCockpitInterior;
@@ -65,6 +66,18 @@ public sealed class PlaneBuilder
         _patterns = patterns ?? PatternLibrary.Empty;
         _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true,
             textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex);
+        // ⚠ A builder of its own, never a field toggled on the airframe's: DepthBiasScale is baked
+        // into cached meshes and materials, so one builder switching it mid-build would hand a
+        // later caller a mesh biased for the wrong scale.
+        if (cockpitInterior)
+        {
+            _interiorScene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture,
+                cullBackfaces: true,
+                textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex)
+            {
+                DepthBiasScale = 1f / InteriorScale,
+            };
+        }
         _spinningProps = spinningProps;
         _withDamagePanels = spinningProps || damagePanels;
         _withCockpitInterior = cockpitInterior;
@@ -74,7 +87,7 @@ public sealed class PlaneBuilder
     /// aircraft's skin prefix — null when built unpainted.</summary>
     public PlanePainter? Painter => _painter;
 
-    public int MeshInstanceCount => _scene.MeshInstanceCount;
+    public int MeshInstanceCount => _scene.MeshInstanceCount + (_interiorScene?.MeshInstanceCount ?? 0);
 
     /// <summary>The wingtip flare nodes, built hidden (reset state) and re-skinned with an
     /// additive amber tint. A <see cref="Flight.WingLightBlinker"/> flashes them in flight;
@@ -139,8 +152,10 @@ public sealed class PlaneBuilder
         EnsurePainter(root);
         CockpitCameraOffset = MarkerRig.FindNamedMarker(_gamez, rootName, "cockpit_camera");
         var built = _scene.BuildSubtree(root, Skip)!;
+        // ⚠ Before the flare/panel walk, not after: that walk is what hides and collects the two
+        // cockpit damage panels (pcdp4/pcdp6), which live inside the interior.
+        MountCockpitInterior(built, root);
         CollectWingFlares(built);
-        MountCockpitInterior(built);
         return built;
     }
 
@@ -194,6 +209,7 @@ public sealed class PlaneBuilder
             ? new PlanePainter(_textures, _patterns, scheme, _skinPrefix)
             : null;
         _scene.Repaint();
+        _interiorScene?.Repaint();
     }
 
     // ⚠ Blur disc textures must alpha-blend, never scissor: their alpha peaks around 26%,
@@ -272,28 +288,37 @@ public sealed class PlaneBuilder
             CollectWingFlares(child);
     }
 
-    // Places the just-built interior and parks it hidden. The subtree is authored with the pilot's
+    // Builds the interior, places it and parks it hidden. The subtree is authored with the pilot's
     // eye at its own origin (the instruments.zrd panel sits at z −17.5 straight ahead of it), and
     // the eye is where CameraController.FirstPersonPose puts the camera — so the mount is exactly
     // the cockpit_camera offset, scaled, with no rotation of its own. The −4.70° head tilt is NOT
     // applied here: that is the head, and the head looks around inside a plane-fixed interior.
-    private void MountCockpitInterior(Node3D built)
+    // A pass of its own because the mount scale is what the depth bias must be told (_interiorScene).
+    private void MountCockpitInterior(Node3D built, GameZNode root)
     {
-        if (!_withCockpitInterior)
+        if (!_withCockpitInterior || _interiorScene == null)
         {
             return;
         }
-        foreach (var child in built.GetChildren())
+        foreach (int c in root.Children)
         {
-            if (child is not Node3D n3d
-                || !AnimRuntime.NameOf(n3d).Equals("cockpit1", StringComparison.OrdinalIgnoreCase))
+            var node = _gamez.Nodes[c];
+            if (!node.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
+            }
+            // Exempt only THIS node from the skip list: `cockpit1` is on it unconditionally now
+            // that the airframe pass never builds the interior, and it is the root here.
+            if (_interiorScene.BuildSubtree(node, n => !ReferenceEquals(n, node) && Skip(n))
+                is not { } n3d)
+            {
+                return;
             }
             n3d.Transform = new Transform3D(
                 Basis.Identity.Scaled(Vector3.One * InteriorScale), CockpitCameraOffset);
             n3d.Visible = false; // shown only while a first-person view is on the screen
             ParkInteriorStates(n3d);
+            built.AddChild(n3d);
             CockpitInterior = n3d;
             return;
         }
@@ -346,10 +371,8 @@ public sealed class PlaneBuilder
 
     private bool Skip(GameZNode node)
     {
-        // The interior is the one skip a caller can ask back (PLAN-cockpit-view, B11); every other
-        // name in the list stays out of an aircraft model unconditionally.
-        if (_withCockpitInterior && node.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase))
-            return false;
+        // ⚠ `cockpit1` is skipped here even when the caller asked for an interior: that subtree is
+        // built by its own pass, on its own builder (MountCockpitInterior).
         if (SkipNames.Contains(node.Name))
             return true;
         // Cockpit damage panels (pcdpN) come with the interior and nothing else; exterior pdpN skip

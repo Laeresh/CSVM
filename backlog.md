@@ -2392,10 +2392,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* drive the authored needles and the two lamps off the same telemetry `GaugeCluster`
   already reads, then decide whether the screen-space cluster retires in first person, moves to the
   `POSITION_1ST` layout, or keeps doubling up over the 3D panel as it does today.
+  *Residue:* nothing is hidden for this, and nothing needs to be. The instruments were reported
+  flickering, and the mechanism turned out to be the mount scale rather than the missing needle
+  drive: every depth bias `SceneBuilder` emits is a fraction of VIEW DISTANCE, so mounting the
+  interior at `PlaneBuilder.InteriorScale` (0.04) left one authored priority level worth about
+  86 µm of depth at the panel's 0.42 m, below the float noise of a view-space transform computed
+  at a chapter's world coordinates. The bezel rings that ring each instrument (`horizn` at
+  priority 1 over the `dash` panel at 0) swapped winner with the panel from frame to frame. The
+  interior now builds on its own `SceneBuilder` carrying `DepthBiasScale = 1/InteriorScale`, which
+  restores the absolute separation the authoring assumed; the airframe, the world and all four
+  plane-bearing goldens are untouched by it. What remains in a Cockpit capture is texture shimmer
+  on the finest dial markings (the compass drum's ticks, the small dials' graduations) as the
+  panel's projected position wobbles sub-pixel — an aliasing artifact of high-frequency instrument
+  textures, not a draw-order one, and driving the authored needles will not change it either way.
   *Cross-refs:* `PLAN-cockpit-view.md` B11 (parked the states; also settles that the `gauges` child
   itself must stay visible — it is not a needle overlay). The windshield bullet-hole decals
   (`bullet1`-`bullet5`) share the same parked-state mechanism but are driven by the unrelated
   `cockpit_bulletholes` anim-def family (`docs/plans/PLAN-m3-polish-5.md:453`), not this item.
+  Neither that family nor either other `PLAYER_1ST_PERSON` def (`muzzle_burst`, `player-1`'s
+  `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
+  subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
 
 ## Splitscreen
 
