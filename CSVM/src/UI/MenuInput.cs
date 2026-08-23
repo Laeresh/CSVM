@@ -46,6 +46,11 @@ public sealed class MenuInput
     /// one thing everywhere the menu offers a fit to edit.</summary>
     public bool Loadout;
 
+    /// <summary>Open the Instant Action Table of Contents (edge). INVENTED: the original picks a
+    /// preset with a mouse on a list that shares its page with the dropdowns, so there is no
+    /// decoded button here. X is the last free face button in menu context.</summary>
+    public bool Presets;
+
     /// <summary>The last of this player's pads seen actually doing something (a menu button or the
     /// stick past the deadzone) — −1 until one does. The launchscreen uses it to <i>claim</i> the
     /// pad player 1 drives the Mode/Chapter screens with, so that pad is player 1's for good and
@@ -64,7 +69,7 @@ public sealed class MenuInput
     private readonly HoldToRepeat _repeat = new(RepeatInitial, RepeatInterval);
     private readonly HoldToRepeat _repeatX = new(RepeatInitial, RepeatInterval);
 
-    private bool _acceptPrev, _backPrev, _padBackPrev, _startPrev, _loadoutPrev;
+    private bool _acceptPrev, _backPrev, _padBackPrev, _startPrev, _loadoutPrev, _presetsPrev;
     private int _dirPrev, _dirXPrev;
 
     /// <summary>The single pad this player is bound to, or −1 when it has none or several
@@ -146,6 +151,10 @@ public sealed class MenuInput
         Loadout = loadout && !_loadoutPrev;
         _loadoutPrev = loadout;
 
+        bool presets = RawPresets();
+        Presets = presets && !_presetsPrev;
+        _presetsPrev = presets;
+
         int active = ScanActivePad();
         if (active >= 0)
             LastActivePad = active;
@@ -160,6 +169,7 @@ public sealed class MenuInput
         _padBackPrev = RawPadBack();
         _startPrev = RawStart();
         _loadoutPrev = RawLoadout();
+        _presetsPrev = RawPresets();
         _dirPrev = RawDir();
         if (_dirPrev != 0)
             _repeat.Press();
@@ -172,7 +182,7 @@ public sealed class MenuInput
         else
             _repeatX.Release();
         MoveX = 0;
-        Accept = Back = PadBack = Start = Loadout = false;
+        Accept = Back = PadBack = Start = Loadout = Presets = false;
     }
 
     // The first of this player's pads currently producing menu input (excluding Start).
@@ -252,4 +262,8 @@ public sealed class MenuInput
     // adds a meaning rather than overloading one: W/A/S/D are the stepper axes and Space/Enter,
     // Escape and Start are all spoken for.
     private bool RawLoadout() => KeyDown(Key.L) || PadButton(JoyButton.Y);
+
+    // P on the keyboard beside X on the pad, the last free face button in menu context (A/B/Y and
+    // Start are all spoken for above). Same rule as RawLoadout: a new meaning, not an overload.
+    private bool RawPresets() => KeyDown(Key.P) || PadButton(JoyButton.X);
 }

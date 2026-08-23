@@ -2390,31 +2390,6 @@ usual.
   and `user://stunt_scores.json` is byte-identical afterwards; then complete one and confirm it
   does record.
 
-- `BL-352` `[Feature]` **Instant Action's Table of Contents: the 19 preset scenarios and their View
-  Story page.** Split out of [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing
-  (2026-08-14) as deliberately out of that plan's scope. The original's Instant Action screen is not
-  primarily a form: down its left side sits `ia_tl_contents`, a 14-row list of 19 named preset
-  scenarios (`langui` ids 3600 to 3618: *Girl Trouble*, *Sour Grapes*, *Black Hats and Hoplites*,
-  *Swan's Gauntlet*, *Manhattan Tea Party*, …). Selecting one fills every dropdown, and *View Story*
-  (`IDS_IA_B_VIEWSTORY`) opens its details page. `IDS_IA_TABLE_INSTRUCTIONS` says so outright:
-  "Select a mission below and click View Story to see its details on the next page." Most players
-  never touched the dropdowns at all, so this is the mode's real front door.
-  **The table is decoded.** 19 records of 0x230 bytes at `0x0061b090`, applied by `FUN_004102c0`
-  over the live setup struct at `0x0064ab5c`; the full record layout, the per-preset configuration
-  and the two derived allow masks are in
-  [`docs/formats/instant-action.md`](docs/formats/instant-action.md) ("Table of Contents presets").
-  What is left is the screen: render the presets ahead of the wizard's step 1, apply one into the
-  existing `InstantActionDef`, and run the mission-type state machine afterwards. Two questions the
-  entry used to carry are answered there and must not be re-asked: presets fly **stock** airframes
-  (the record's own plane blocks are overwritten from the stock table), so this does not wait on
-  `BL-354`; and *View Story* opens the wizard page under the preset's name, with **no per-preset
-  prose** anywhere in `langui` or `crimson.rof`, so it does not wait on `BL-427` either.
-  ⚠ **Traps.** (a) `ia_tl_contents`'s selection sets the mission type, which then re-enables or hides
-  the whole enemy-wave block (`if (0 == WT)`), so a preset is not just a set of dropdown values; it
-  drives the screen's own state machine. (b) 19 presets against 7 environments means presets are not
-  per-environment; do not assume a mapping, which the decoded table confirms. (c) Unblocked:
-  `PLAN-instant-action` has landed the configurable mission the presets fill in.
-
 - `BL-354` `[Feature]` **The hangar: Build Custom Plane.** Split out of
   [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing (2026-08-14) as a milestone
   of its own rather than a wave of that plan. `IA_B_BUILD` opens the customisation flow, which

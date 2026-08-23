@@ -2966,6 +2966,24 @@ ace/zeppelin/`disallow_missions` base — `SessionPaths.MissionZrdr(_dataRoot, c
 is why `Build` now also takes `dataRoot`. `DebugWaves(N)`/`DebugWingmen(N)` (--debug-waves=/
 --debug-wingmen=) are `DebugJoin`'s own screenshot-aid pattern, extended to the wizard's own
 screens.
+`Screen.Presets` is the Table of Contents (`BL-352`), reached from step 1 by `MenuInput.Presets`
+(P / X) and nowhere else — the original picks a preset with a mouse on a list sharing its page with
+the dropdowns, so both the button and "opt in from step 1 rather than open on it" are stated
+divergences, not oversights. Accept calls `ApplyPreset` and returns to `Screen.Environment`, which
+is the original's own page order: the contents list is page 1, and View Story opens page 2, the
+configuration screen under the preset's name. `PresetCrumb` is that heading, carried through every
+Instant Action breadcrumb from a `_presetIndex` of −1 (custom) upward; nothing clears it when a
+field is then changed by hand, matching `IDS_IA_STORYTITLE`'s one-time format. `ApplyPreset` is
+deliberately partial — it writes the environment, mission type, waves, wingman count and aircraft,
+and PLAYER 1's plane cursor only. It does not touch `_lives` (INVENTED, no preset value, and a
+setting the preset has no authority over), other players' cursors (ours, not the original's), or
+`_iaBaseDef` (still loaded by Environment's own Accept). So a preset is exactly a set of field
+values: what flies is reachable by hand, and nothing about the built def says a preset was used.
+The list is the file's only scrolling one — `PresetWindow` is `LAYOUT.CSV`'s decoded 14 visible rows
+onto 19 items, `_presetTop` follows the cursor through `ScrollPresetsToCursor`, and `Rebuild` draws
+that slice while `Row` keeps taking the absolute index. `DebugPreset(N)` (--debug-preset=) applies
+one and opens on step 1, the aid for what units cannot see: a wrong aircraft or militia looks
+entirely plausible on screen.
 
 ## src/UI/InstantActionPresets.cs
 The original's Table of Contents: the 19 preset scenarios decoded from 19 `0x230`-byte records at
