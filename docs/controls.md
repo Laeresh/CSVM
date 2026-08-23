@@ -32,10 +32,13 @@ Flags are specified in [`cli.md`](cli.md).
 | `Tab` | | cycle stunt target |
 | `F8` | | cycle the cockpit views: Cockpit ↔ Nose, entering Cockpit from the chase view (the original's "Cycle Cockpit Views") — `--view=cockpit` / `--view=nose` |
 | `F6` | | select the chase view, the way back out of the first-person pair — `--view=chase` (the default). The original selects each view separately rather than cycling all three; which key it used is not in the decoded data, so `F6` is this port's choice |
+| number row `1`–`9` (not `5`) | | first-person head-look snap: hold a direction and the head swings there, release and it returns straight ahead. Read as a numpad — `8` ahead, `4`/`6` the flanks, `2` astern, the corners diagonal. Dead ahead looks straight **up** and a diagonal 45° up, the original's own mapping; every other direction looks level. The number row, not the numpad, because the numpad holds the fixed views (`BL-150` rebuilds that table) |
+| number row `5` | | recenter the head — the middle of the snap cluster, where the original's own center slot sits among its nine |
+| RMB-held mouse | right stick | first-person free-look: the head pans at the decoded 2 rad/s in whichever direction the input points. Direction only, so a light stick deflection pans as fast as a hard one — the original's input is a hat switch. RMB-held matches the freecam's look posture; the mouse does nothing in flight otherwise |
 | `numpad 1–9` (not `5`) | | hold a fixed camera view around the plane (P1's keyboard) — `--view=` |
 | `numpad 0` | | hold the look-behind view: ahead of the nose looking back, at the authored `back_dist` range — `--view=back` |
-| | right stick | swing the external view around the plane while deflected, snapping back to the ordinary chase view the instant the stick returns to centre (`BL-372`) — not in the original, a UX call for this port |
-| | click right stick | hold to look back — the pad twin of `numpad 0` (`BL-372`) |
+| | right stick | in an external view, swing the view around the plane while deflected, snapping back to the ordinary chase view the instant the stick returns to centre (`BL-372`) — not in the original, a UX call for this port. In Cockpit or Nose the same stick free-looks the head instead |
+| | click right stick | hold to look back — the pad twin of `numpad 0` (`BL-372`). It stays the external look-behind in the first-person views too, so a click there leaves the cockpit for as long as it is held |
 | `C` | | show the built colliders, coloured by the surface id they resolve to (see `--collision`) — `--debug-colliders` |
 | `X` | | colour world objects by class (destructible/facade/clutter/scenery) — `--debug-classoverlay` |
 | `L` | | **reserved** for Track Target (the original's `Views 1 → Track Target`) — bound to nothing yet; the camera behaviour is its own item, `BL-399` |

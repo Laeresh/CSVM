@@ -181,6 +181,13 @@ public sealed class CameraController
     /// must be able to replace it without touching these modes (PLAN-cockpit-view, Decision 2).</summary>
     public PilotViewMode ViewMode { get; set; }
 
+    /// <summary>The pilot's head in the two first-person views: snap, free-look and the center key,
+    /// smoothed to the angles <see cref="FirstPersonView"/> aims with. Built with the first-person
+    /// elevation floor (level), which is the floor the original's own first-person caller passes;
+    /// the host steps it on the SIM clock. Its own state, not the camera's, so it keeps its bearing
+    /// across a held numpad key and reads the same in either first-person view.</summary>
+    public HeadLook Head { get; } = new HeadLook();
+
     /// <summary>Whether the SELECTED view is one of the two first-person ones — what the anim
     /// data's <c>PLAYER_1ST_PERSON</c> condition is answered with. Reads the selection, not the
     /// momentary override: a numpad key held for a frame does not make the pilot leave the
@@ -279,23 +286,27 @@ public sealed class CameraController
     // property, which reads worse than the one local suppression here.
 #pragma warning disable SA1204
     /// <summary>The pure first-person placement law: <c>camera_world = plane_pos + plane_rotation
-    /// × offset</c>, aimed straight down the nose plus the fixed −4.70° head-pitch offset
-    /// (<see cref="HeadPitchOffsetRad"/>) about the plane's own right axis. Static and engine-free
-    /// so the math is unit-testable without a live <see cref="Camera3D"/> — <see cref="FirstPersonView"/>
-    /// is the thin write onto one.</summary>
-    public static (Vector3 Position, Basis Basis) FirstPersonPose(Vector3 planePos, Basis attitude, Vector3 cockpitCameraOffset) =>
-        (planePos + (attitude * cockpitCameraOffset), attitude * new Basis(Vector3.Right, HeadPitchOffsetRad));
+    /// × offset</c>, aimed by the head's own angles — azimuth about the plane's up axis, then
+    /// elevation about the axis that yaw just produced, so a sideways look still pitches through
+    /// the head's own horizon. The fixed −4.70° head-pitch offset rides the same axis as elevation,
+    /// as it does in the original. Static and engine-free so the math is unit-testable without a
+    /// live <see cref="Camera3D"/> — <see cref="FirstPersonView"/> is the thin write onto one.</summary>
+    public static (Vector3 Position, Basis Basis) FirstPersonPose(Vector3 planePos, Basis attitude,
+        Vector3 cockpitCameraOffset, float elevation = 0f, float azimuth = 0f) =>
+        (planePos + (attitude * cockpitCameraOffset),
+         attitude * new Basis(Vector3.Up, azimuth) * new Basis(Vector3.Right, elevation + HeadPitchOffsetRad));
 #pragma warning restore SA1204
 
     /// <summary>First-person placement (Cockpit mode 6 / Nose mode 7): rigidly mounted at the
     /// plane's <c>cockpit_camera</c> marker via <see cref="FirstPersonPose"/>. No smoothing and no
     /// camera-side shake: riding the DRAWN pose one-to-one is what lets the camera inherit the
     /// plane node's wobble for free (docs/org/shakes.md, "two cockpit views need no separate
-    /// handling"). Head-look (C21) is not built yet — the view holds straight ahead plus the
-    /// fixed offset until then.</summary>
+    /// handling"). The aim is <see cref="Head"/>'s current angles, so a head panned away from the
+    /// nose keeps its bearing while the aircraft manoeuvres under it.</summary>
     public void FirstPersonView(in Transform3D renderPose)
     {
-        var (position, basis) = FirstPersonPose(renderPose.Origin, renderPose.Basis, _cockpitCameraOffset);
+        var (position, basis) = FirstPersonPose(renderPose.Origin, renderPose.Basis, _cockpitCameraOffset,
+            Head.Elevation, Head.Azimuth);
         _camera.Position = position;
         _camera.Basis = basis;
     }
@@ -425,6 +436,9 @@ public sealed class CameraController
         _prevSpeed = speed;
         _distExcess = 0f;
         _radius = _dist + (_distFactor * speed);
+        // A settle-immediately pose starts the pilot looking where the aircraft is going; a head
+        // left panned across a respawn would frame the spawn from over the pilot's shoulder.
+        Head.Reset();
         RestoreExternalFov(); // default; the first-person arm below overrides it
         int view = ActiveView();
         if (view >= 0)

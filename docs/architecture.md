@@ -121,6 +121,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
 - `src/Flight/PilotViewMode.cs` — the three player-selectable views (Chase/Cockpit/Nose, valued as the engine's own camera modes 0/6/7) and `PilotView`, the pure rules over them: cycle, first-person test, the held-key override, the `--view=` spelling. Engine-free, so the decisions unit-test.
 - `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, the pilot's selected view mode, the weapon lab's held-airframe orbit. Steers a `Camera3D` it does not own.
+- `src/Flight/HeadLook.cs` — the pilot's head in a first-person view: snap directions, free-look integration, the center key, and the exponential smoothing that carries the shown angles to their targets. Engine-free, so every law unit-tests.
 - `src/Flight/CockpitVisibility.cs` — the per-mode hiding of the pilot's OWN aircraft in a first-person view: interior in and body out for Cockpit, both out plus `markers`/`dontmove` for Nose, everything back for any external pose. `Rules` is pure; `Bind`/`Apply` write it onto one built plane model.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, the steering step (turn clamp, speed penalty, `LOCK_ON_LEAD`, the seeker's retarget), tracers, flashes, per-surface impact, damage to destructibles, the beeper's paint.
@@ -1405,8 +1406,10 @@ law: `camera_world = plane_pos + plane_rotation × offset`, plus the fixed −4.
 tilt — `FirstPersonView` is its thin write onto the owned `Camera3D`), rigidly mounted with no
 smoothing and no camera-side shake so the camera inherits the plane node's wobble for free
 (`docs/org/shakes.md`). The offset comes in through the constructor
-(`PlaneBuilder.CockpitCameraOffset`, fallback the origin) — C21 still owes head-look; until then
-the view holds straight ahead plus the fixed offset. Each mode carries its own FOV
+(`PlaneBuilder.CockpitCameraOffset`, fallback the origin). The aim is `Head`'s (a `HeadLook`)
+current angles, composed azimuth-about-the-plane's-up then elevation-about-the-yawed-right-axis,
+with the fixed tilt riding the elevation axis; `Snap` recenters the head, so a respawn never frames
+itself over the pilot's shoulder. Each mode carries its own FOV
 (`HorizontalToVerticalFovDeg`, a static, engine-free law: `vertical = 2·atan(tan(H/2) ·
 (4/3)/liveAspect)`, 80°H Cockpit / 60°H Nose — `ApplyFirstPersonFov` is its thin write, reading
 the owned camera's OWN viewport for the live aspect so a splitscreen pane derives its own answer).
@@ -1421,6 +1424,31 @@ authored) plus a first-order acceleration transient relaxing at the MEASURED 0.6
 (`UpdateDynamics`, host-called once per sim step); the offset's DIRECTION (behind and above at
 ~15.7° elevation) is not in the data and stays hand-picked. Collaborators: `FlightController`
 (the only host) and `CamParams`.
+
+## src/Flight/HeadLook.cs
+The pilot's head in the two first-person views, decoded from the original's shared look controller
+(`docs/PLAN-cockpit-view.md`, "What the data actually ships"). It holds two pairs of angles: the
+TARGETS the input sets, and the SHOWN angles that chase them exponentially,
+`shown = target + (shown − target)·e^(−rate·dt)`, at 3.0/s for elevation and 5.0/s for azimuth.
+Elevation is 0 at level and +π/2 straight up, clamped to `ElevationFloor`..π/2; azimuth is 0 dead
+ahead, positive to the left, wrapped to ±π. `Step` picks this frame's target and then always
+chases it, so snap, free-look, the center key and C22's autohead all reach the eye through one law.
+The three input paths are the original's: a **snap** direction maps to a target through
+`SnapTargets` (dead ahead looks straight UP, a 45° diagonal 45° up, anything else level, azimuth
+being the direction's own angle mirrored so that pointing right looks right), releasing it returns
+the targets to straight ahead; **free-look** integrates the targets at a fixed 2 rad/s along the
+input direction, which is normalised first because the rate IS the law — the original's input is a
+hat switch, so a light stick deflection pans exactly as fast as a hard one; the **center key**
+zeroes both targets at once and beats a held snap. ⚠ `ElevationFloor` is a constructor parameter,
+not a constant: the original's first-person caller passes 0 and its chase caller −π/2, and the
+chase look-around (a filed E41 item) is the same controller. `IdleAim` is C22's seam — consulted
+only on a frame with no look input at all, its answer becomes the targets directly, deliberately
+past the floor, because autohead's own floor is below level.
+
+Engine-free apart from `Mathf`, so every law unit-tests without a camera. Collaborators:
+`CameraController` (owns one as `Head` and composes its shown angles into the view basis) and
+`FlightController` (reads the devices and steps it on the SIM clock — a wall-clock step would run
+the smoothing 39% off, the same trap the chase distance transient records).
 
 ## src/Flight/CockpitVisibility.cs
 The per-mode node hiding the original applies to the pilot's OWN aircraft while a first-person view
@@ -2711,6 +2739,14 @@ slots like the targeting keys). `PinnedViewMode` seeds the selection from `--vie
 `PLAYER_1ST_PERSON` condition. `Cockpit` (a `CockpitVisibility`, null on any rig built without an
 interior) is applied in the same block, keyed to whether the pose THIS frame was a first-person
 one rather than to the selection, so a held numpad key restores the aircraft while it is down.
+Head-look input is read here too and nowhere else (`HeadLookRead`, `SnapLookInput`, `FreeLookRead`,
+`MouseLookDelta`), for the same reason `OrbitInput` is: `CameraController` never learns about pads,
+mice or key layouts. It is gathered and stepped only inside the first-person arm, on the SIM dt, so
+a held numpad key freezes the head where it was and releasing resumes it. The mouse is polled like
+every other control (a screen-position delta while the right button is held, `UseKeyboard`-gated as
+player 1's) rather than event-driven, which the fixed pan rate makes safe: only the DIRECTION of
+the motion is read, so a stale delta on the frame first person is entered is worth one frame of
+2 rad/s and nothing more.
 On a crash it cuts to `CrashView` once,
 writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
 shows no HUD — footage), restoring it on respawn. Every physics query — the PlaneCollider boxes'

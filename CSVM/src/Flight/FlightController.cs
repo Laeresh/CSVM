@@ -343,6 +343,10 @@ public partial class FlightController : Node3D
                                                    // per action
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
 
+    // The head-look recenter key, and the middle of the number-row snap cluster around it — the
+    // original's own center slot sits in the middle of its nine direction slots the same way.
+    private const Key SnapCenterKey = Key.Key5;
+
     // Everything this pane draws for its pilot. Always present, so no site has to ask whether
     // there is a HUD: an aircraft with no readouts built simply has a module that draws nothing.
     private readonly FlightHud _pilotHud = new();
@@ -427,6 +431,7 @@ public partial class FlightController : Node3D
     private bool _heldPinned;                    // the pinned pose below is valid (captured on the first held step)
     private Vector3 _heldPos;                    // the pinned position, re-applied through the model every held step
     private Basis _heldAttitude;                 // the pinned attitude, ditto
+    private Vector2 _mouseLookPrev;              // last frame's screen mouse position (head-look motion)
 
     // The sim advances on the 60 Hz physics tick while rendering runs at the display rate, so
     // drawing the raw sim pose stutters the plane against the smoothly-moving chase camera at
@@ -1470,9 +1475,10 @@ public partial class FlightController : Node3D
             }
             else if (_cam.FirstPerson)
             {
-                // A2: both first-person views sit at the plane's cockpit_camera marker, rigidly
-                // mounted (no smoothing) so the camera inherits the plane's wobble for free.
-                // A3: each mode's own derived FOV rides alongside the placement.
+                // Both first-person views sit at the plane's cockpit_camera marker, rigidly
+                // mounted (no smoothing) so the camera inherits the plane's wobble for free, at
+                // the mode's own derived FOV, aimed by the head this frame's input just moved.
+                _cam.Head.Step(simDt, HeadLookRead());
                 _cam.FirstPersonView(_renderPose);
                 _cam.ApplyFirstPersonFov();
                 firstPersonPose = true;
@@ -2868,6 +2874,54 @@ public partial class FlightController : Node3D
     // caller the look-around is inactive.
     private (float X, float Y) PadLookInput() =>
         (StickCurve(PadAxis(JoyAxis.RightX)), StickCurve(PadAxis(JoyAxis.RightY)));
+
+    // One frame of head-look input, in HeadLook's own conventions. Read here for the same reason
+    // the look-around stick is: the camera never learns about pads, mice or key layouts.
+    private HeadLookInput HeadLookRead()
+    {
+        var (snapX, snapY) = SnapLookInput();
+        var (freeRight, freeUp) = FreeLookRead();
+        return new HeadLookInput(snapX, snapY, freeRight, freeUp, KeyDown(SnapCenterKey));
+    }
+
+    // The snap cluster as a composed direction, the same shape the original composes from its nine
+    // key slots: the number row read as a numpad, 7/8/9 forward, 4/6 the flanks, 1/2/3 astern.
+    // Never the numpad itself — that table is the held fixed views, and `BL-150` rebuilds it.
+    private (float X, float Y) SnapLookInput()
+    {
+        float x = (KeyDown(Key.Key9) || KeyDown(Key.Key6) || KeyDown(Key.Key3) ? 1f : 0f)
+                - (KeyDown(Key.Key7) || KeyDown(Key.Key4) || KeyDown(Key.Key1) ? 1f : 0f);
+        float y = (KeyDown(Key.Key7) || KeyDown(Key.Key8) || KeyDown(Key.Key9) ? 1f : 0f)
+                - (KeyDown(Key.Key1) || KeyDown(Key.Key2) || KeyDown(Key.Key3) ? 1f : 0f);
+        return (x, y);
+    }
+
+    // Free-look direction: this player's right stick, or the mouse while its right button is held
+    // (the RMB-to-look posture the freecam already uses). Only the DIRECTION is read, so mouse
+    // pixels and a curved stick axis mix freely and neither needs its own sensitivity.
+    private (float Right, float Up) FreeLookRead()
+    {
+        var mouse = MouseLookDelta();
+        float right = StickCurve(PadAxis(JoyAxis.RightX));
+        float up = -StickCurve(PadAxis(JoyAxis.RightY));   // stick up = look up
+        if (right != 0f || up != 0f)
+        {
+            return (right, up);
+        }
+        return (mouse.X, -mouse.Y);                        // screen Y grows downward
+    }
+
+    // How far the mouse moved since the last read, or zero unless this player's right button is
+    // held. Polled rather than event-driven, like every other control here; the previous position
+    // is refreshed on every call, so an idle mouse reads exactly zero.
+    private Vector2 MouseLookDelta()
+    {
+        var pos = (Vector2)DisplayServer.MouseGetPosition();
+        var delta = pos - _mouseLookPrev;
+        _mouseLookPrev = pos;
+        bool looking = UseKeyboard && Input.IsMouseButtonPressed(MouseButton.Right);
+        return looking && delta.LengthSquared() > 1f ? delta : Vector2.Zero;
+    }
 
     // This plane's half of a contact the resolver is deciding: the engine effects it has to
     // interleave with, plus the struck Node the report deliberately does not carry. One instance

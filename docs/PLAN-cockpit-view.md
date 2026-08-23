@@ -161,7 +161,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — head-look
 
-21. ☐ Head-look controller: snap + free-look (mouse / right stick) + center key, decoded rates and clamps
+21. ☑ Head-look controller: snap + free-look (mouse / right stick) + center key, decoded rates and clamps
 22. ☐ Autohead velocity-follow from `player.json` `autohead_*` (off in Nose)
 
 ### Wave D — audio
@@ -659,7 +659,83 @@ already participate in `effect_pools.json` counts.
 
 # Wave C — head-look
 
-## C21 ☐ Head-look controller: snap + free-look + center key
+## C21 ☑ Head-look controller: snap + free-look + center key
+
+**Landed.** In both first-person views the head snaps to a direction, free-looks on the mouse or
+the right stick at the decoded 2 rad/s, recenters on its own key, never looks below level, and
+reaches the eye through the decoded exponential smoothing whichever path set its target.
+
+`HeadLook` (`src/Flight/HeadLook.cs`) is the whole behaviour as one engine-free class, the shape
+A2 and A3 already gave the camera math. It holds two pairs of angles — the TARGETS the input sets
+and the SHOWN angles that chase them — and `Step(dt, HeadLookInput)` picks this frame's target and
+then always chases it. That "always" is the design: snap, free-look, the center key and C22's
+autohead all reach the eye through the same law, so none of them can drift into its own feel. The
+statics (`SnapTargets`, `Approach`, `Wrap`) are the decoded laws on their own, testable without an
+instance.
+
+**The angle conventions are the original's, taken literally.** Elevation is 0 at level and +π/2
+straight up, never a signed pitch; azimuth is 0 dead ahead, positive to the LEFT, wrapped to ±π.
+The elevation clamp floor is a constructor parameter rather than a constant, because that is the
+only thing the original's two callers differ in: first person passes 0, the chase handler −π/2, and
+the chase look-around E41 files is this same class with the other floor.
+
+**⚠ The decode's two input paths disagree on the azimuth sign, and CSVM picks one.** Snap sets
+azimuth to the direction's angle NEGATED, while free-look adds `2·dt·sin(hat angle)` — read
+literally, snapping right and panning right move the azimuth opposite ways. A port cannot ship
+that: pushing right and pressing the right key must both look right. Both paths here use one
+convention (positive azimuth = left), which is the snap path's sign; the free-look path's is
+mirrored to match. Only the sign is a port decision, not the rates, the windows or the law.
+
+**⚠ The plan contradicts itself on the diagonals, and the data survey wins.** The C21 Goal below
+says "forward-diagonals = 45° up", but the survey's own decode of `FUN_0042d010` lists all four
+windows — 45°, 135°, 225° and 315° — so an aft diagonal lifts the head exactly as a forward one
+does. `SnapTargets` implements the survey, and the tests pin all four. A sitting at the controls is
+what could overturn this, not the prose.
+
+**The composition order is azimuth, then elevation about the axis azimuth just produced.**
+`CameraController.FirstPersonPose` grew two optional angle parameters and builds
+`attitude · R(up, azimuth) · R(right, elevation + fixed tilt)`. Post-multiplying is what makes the
+elevation intrinsic: looking 90° left and then up pitches through the head's own horizon rather
+than rolling the view, which is what a neck does. The fixed −4.70° offset rides the elevation axis
+because that is the axis the original applies it about, so at zero head angles the pose is A2's
+exactly, and a test pins that. `Snap` (spawn, respawn, the lab's re-park) recenters the head, so a
+settle-immediately pose never frames itself over the pilot's shoulder.
+
+**Input is read in `FlightController` and nowhere else** (`HeadLookRead` beside `PadLookInput`),
+the same rule `OrbitInput` follows: the camera never learns about pads, mice or key layouts. It is
+gathered and stepped inside the first-person arm only, on the SIM dt — a held numpad key freezes
+the head where it was and releasing resumes it, and the wall-clock mistake the chase transient
+records is avoided by construction.
+
+**Bindings (⚠ reviewable — the plan left these to build time).**
+
+- **Snap: the number row `1`–`9`, read as a numpad.** All nine are unbound anywhere in the tree
+  (`Key.Key1`–`Key.Key9` return no hits in `CSVM/src`), they are contiguous so a Tartarus can be
+  remapped in one block, and the numpad ordering is a layout every player already reads. Not the
+  numpad itself: that table is the held fixed views and `BL-150` rebuilds it (Decision 2).
+- **Center: number row `5`.** The middle of the cluster, which is where the original's own center
+  slot sits among its nine direction slots (`0x3e` of `0x3a`–`0x42`).
+- **Free-look: the right stick, and the mouse while its right button is held.** There is no mouse
+  input at all in flight today, so nothing had to move; hold-to-look rather than always-on because
+  RMB-held IS this project's look posture already (the freecam and the spectator both use it) and
+  because an always-on mouse would pan the head every time the pilot nudged a mouse they are not
+  using to fly. The stick's click keeps its E42 look-behind, which is checked before the
+  first-person arm, so a click in the cockpit leaves it for as long as it is held.
+- Direction only, on both devices: the decoded rate is fixed, so a light stick deflection pans
+  exactly as fast as a hard one. That is the original's hat-switch input, and it is also what makes
+  polled mouse deltas safe at a screen edge.
+
+**Tests.** `CSVM.Tests/HeadLookTests.cs` (24 cases) covers the snap table (dead ahead straight up,
+all four diagonals at 45°, the flanks and astern level at their own azimuth, no direction at all),
+the release-to-ahead rule, 2 rad/s integration and its direction-only reading, the clamp at both
+ends, the parameterised floor at the chase caller's −π/2, the wrap under a full turn, the center
+key beating a held snap, the smoothing at the decoded rates and its frame-rate independence, the
+azimuth chase taking the short arc across the wrap, the idle hook's silence under input and its
+deliberate bypass of the floor, and the composition order against A2's unchanged zero-angle pose.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** In both first-person views, the head pans at the decoded rates on mouse or right stick,
 snaps on the snap keys with the original's direction mapping (forward = straight up, forward-diagonals = 45°
