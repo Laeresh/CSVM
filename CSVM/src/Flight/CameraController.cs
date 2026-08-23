@@ -35,6 +35,13 @@ public sealed class CameraController
 
     public const int NoseViewLog = -5;
 
+    /// <summary>The fixed head-pitch offset <c>FUN_0042d980</c> applies about the same axis as
+    /// elevation, in both first-person views: −4.70° = −0.08203 rad (bit pattern
+    /// <c>0xbda7ff58</c>). Not head-look (C21) — a constant tilt baked into the view build.
+    /// It tilts the WORLD view alone, so <see cref="Mech3.PlaneBuilder"/> mounts the cockpit
+    /// interior carrying the same tilt to keep the gunsight on the guns.</summary>
+    public const float HeadPitchOffsetRad = -0.08203f;
+
     // The chase offset's DIRECTION: behind and above the nose, at atan2(4.5, 16) ≈ 15.7° of
     // elevation. Hand-picked and still a TUNE — camparam ships a distance per plane, not an angle,
     // so only the radius below comes from the data.
@@ -69,11 +76,6 @@ public sealed class CameraController
     private const float DistTransientPerAccel = 0.105f;
 
     private const float ChaseLogInterval = 0.25f; // sim-s between chase-distance breadcrumb lines
-
-    // The fixed head-pitch offset FUN_0042d980 applies about the same axis as elevation, in both
-    // first-person views: −4.70° = −0.08203 rad (bit pattern 0xbda7ff58). Not head-look (C21) —
-    // a constant tilt baked into the view build, applied straight ahead until C21 lands.
-    private const float HeadPitchOffsetRad = -0.08203f;
 
     // The decoded per-mode BASE horizontal FOV, in degrees (org/cameraViews.md, "FOV constants
     // and aspect correction": 1.0471976 rad / 1.3962634 rad, exactly 60°/80°). Only Cockpit and

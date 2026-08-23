@@ -426,7 +426,8 @@ authored node in the top-level `markers` group.
 
 `cockpitInterior: true` (PLAN-cockpit-view, B11) takes `cockpit1` back out of the skip list for
 that build alone and mounts it hidden as `CockpitInterior`: local transform = the
-`cockpit_camera` offset with a uniform `InteriorScale`, then `ParkInteriorStates` walks it. Only a
+`cockpit_camera` offset, a uniform `InteriorScale`, and the fixed
+`CameraController.HeadPitchOffsetRad` tilt, then `ParkInteriorStates` walks it. Only a
 human rig asks for it — an AI plane never builds a cockpit. The subtree's `pcdp4`/`pcdp6` torn-skin
 panels build hidden alongside it, kept off `DamagePanels` (the exterior set the pairing walk
 measures mesh centers over) and exposed instead on their own `CockpitDamagePanels` list, which
@@ -448,6 +449,22 @@ at y −10.5 where the exterior's sit at −0.40 — it is a stylised model buil
 one point, not a scaled copy of the aircraft. So the framing is scale-invariant and
 `InteriorScale` is a port TUNE choosing only how the interior composites against world geometry.
 `cockpit2` is skipped defensively and appears in no shipped tree.
+
+⚠ **The mount carries the −4.70° head-pitch tilt, and that is what puts the gunsight on the guns.**
+The offset tilts the WORLD view down; the pilot's relationship to his own cockpit does not tilt
+with it, because the original draws the interior in its own pass from the interior origin along the
+interior's own −Z. Mounting the subtree tilted is how a single-pass renderer says the same thing.
+Measured against `OriginalScreenshots/Videos/CAP-02 Cockpit Second10.mp4`: there the sight ring's
+crosshair sits 4.79° above screen centre and never moves by a pixel across the clip, which is the
+head-pitch offset itself — the sight is on the nose axis, and the gun pipper (which marks that same
+axis, `ImpactReticle`) sits on it in straight flight. Mounted untilted the sight rides 3.9° above
+the pipper and the two never meet. Head-look is NOT applied to the mount: the interior stays
+plane-fixed, so panning the head still swings the cockpit across the view, as the original does.
+⚠ A residual remains: the tilted mount overshoots by 0.60°, leaving the pipper ~6 px above the
+crosshair at 720p where the original has them coincident. The exact fit is a 3.82° tilt, but that
+is a Bloodhawk-fitted number with no decode behind it and the sight's height is per-airframe
+geometry, so the decoded constant is what ships. `BL-` follow-up: measure the same offset on a
+second airframe's cockpit footage before trading the constant for a TUNE.
 
 ## src/Mech3/PaintScheme.cs
 One aircraft livery: pattern name + three colours + three decal indices — the paint_* record a

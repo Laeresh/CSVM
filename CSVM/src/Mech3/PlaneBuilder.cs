@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Flight;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -288,12 +289,12 @@ public sealed class PlaneBuilder
             CollectWingFlares(child);
     }
 
-    // Builds the interior, places it and parks it hidden. The subtree is authored with the pilot's
-    // eye at its own origin (the instruments.zrd panel sits at z −17.5 straight ahead of it), and
-    // the eye is where CameraController.FirstPersonPose puts the camera — so the mount is exactly
-    // the cockpit_camera offset, scaled, with no rotation of its own. The −4.70° head tilt is NOT
-    // applied here: that is the head, and the head looks around inside a plane-fixed interior.
-    // A pass of its own because the mount scale is what the depth bias must be told (_interiorScene).
+    // Builds the interior, places it and parks it hidden, on a pass of its own because the mount
+    // scale is what the depth bias must be told (_interiorScene). The eye is cockpit1's own origin,
+    // and that is where FirstPersonPose puts the camera, so the mount position is the
+    // cockpit_camera offset. ⚠ The mount also carries the fixed head-pitch tilt, and that is what
+    // puts the gunsight on the guns — untilted the sight rides 3.9° above the pipper's nose axis
+    // and never meets it. Head-look is NOT applied: the interior stays plane-fixed. See docs.
     private void MountCockpitInterior(Node3D built, GameZNode root)
     {
         if (!_withCockpitInterior || _interiorScene == null)
@@ -315,7 +316,9 @@ public sealed class PlaneBuilder
                 return;
             }
             n3d.Transform = new Transform3D(
-                Basis.Identity.Scaled(Vector3.One * InteriorScale), CockpitCameraOffset);
+                new Basis(Vector3.Right, CameraController.HeadPitchOffsetRad)
+                    .Scaled(Vector3.One * InteriorScale),
+                CockpitCameraOffset);
             n3d.Visible = false; // shown only while a first-person view is on the screen
             ParkInteriorStates(n3d);
             built.AddChild(n3d);
