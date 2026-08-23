@@ -5,13 +5,17 @@ namespace CSVM.UI;
 /// <summary>
 /// The ARMOR screen: the four zones as rows, named through their own langui formats (1191-1194,
 /// "Nose: %1!d! units" and kin, which carry the number themselves). The ←→ stepper walks the
-/// focused zone's units 0-12 with wraparound, the original's 13-row dropdown as a cycle, writing
-/// the scratch def; Confirm advances without editing. The detail line keeps the three factors
-/// distinct: the units bought, cost at units x4, weight at units x4, and the units x5 lb figure
-/// the original's dropdown displayed (format 1170), which is display-only and never priced.
+/// focused zone the way the original's 13-row dropdown does, 0 to 60 in fives: what the screen
+/// shows is the stored figure, units x5, and row 0 of that dropdown is langui 1165 "None" rather
+/// than a count (callback 2246 at <c>0x0040b7bd</c> pushes 1165 for index 0 and format 1170 with
+/// <c>index*5</c> for the rest). Cost and weight stay on the units themselves, at x4.
 /// </summary>
 public sealed class HangarArmourPage : HangarPage
 {
+    /// <summary>The scale the record stores armour on, and the one the screen displays: the
+    /// dropdown's row n shows n x 5. It is not a weight, and nothing is priced through it.</summary>
+    public const int DisplayScale = 5;
+
     private static readonly string[] ZoneFallbacks = { "Nose", "Tail", "Left Wing", "Right Wing" };
 
     /// <summary>Binds the page to its flow.</summary>
@@ -29,23 +33,25 @@ public sealed class HangarArmourPage : HangarPage
     /// <inheritdoc/>
     public override string RowText(int row)
     {
-        int units = UnitsOf(row);
-        string text = Flow.Strings.Format(1191 + row, units);
-        return text.Length > 0 ? text : $"{ZoneFallbacks[row]}: {units} units";
+        int shown = UnitsOf(row) * DisplayScale;
+        string text = Flow.Strings.Format(1191 + row, shown);
+        return text.Length > 0 ? text : $"{ZoneFallbacks[row]}: {shown} units";
     }
 
     /// <inheritdoc/>
     public override string Detail(int row)
     {
         int units = UnitsOf(row);
-        string bought = Flow.Strings.Format(1170, units);
+        string bought = units == 0
+            ? Flow.Strings.Text(1165, "None")
+            : Flow.Strings.Format(1170, units * DisplayScale);
         if (bought.Length == 0)
         {
-            bought = $"{units} units";
+            bought = $"{units * DisplayScale} units";
         }
 
         return $"{bought}   ${units * HangarEconomy.ArmourUnitCost}   " +
-               $"{units * HangarEconomy.ArmourUnitWeight} lbs.   {units * 5} lb shown";
+               $"{units * HangarEconomy.ArmourUnitWeight} lbs.";
     }
 
     /// <inheritdoc/>

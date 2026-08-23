@@ -81,8 +81,9 @@ public class HangarPurchasePageTests : IDisposable
         Assert.Equal("$440   520 lbs.", flow.Page.Detail(2)); // the turret column
     }
 
-    /// <summary>Armour zones with units row through their own langui formats (1191-1194), priced
-    /// at the decoded units x4 for cost and weight; empty zones get no row.</summary>
+    /// <summary>Armour zones with units row through their own langui formats (1191-1194) on the
+    /// record's stored units x5 display scale, priced at the decoded units x4 for cost and
+    /// weight; empty zones get no row.</summary>
     [Fact]
     public void ArmouredZonesRowThroughTheirLanguiFormats()
     {
@@ -94,9 +95,9 @@ public class HangarPurchasePageTests : IDisposable
         flow.Scratch.ArmourLeftWing = 2;
 
         Assert.Equal(5, flow.Page.RowCount);
-        Assert.Equal("Nose: 5 units", flow.Page.RowText(1));
+        Assert.Equal("Nose: 25 units", flow.Page.RowText(1));
         Assert.Equal("$20   20 lbs.", flow.Page.Detail(1));
-        Assert.Equal("Left Wing: 2 units", flow.Page.RowText(2));
+        Assert.Equal("Left Wing: 10 units", flow.Page.RowText(2));
         Assert.Equal("$8   8 lbs.", flow.Page.Detail(2));
     }
 
@@ -123,7 +124,7 @@ public class HangarPurchasePageTests : IDisposable
         flow.Scratch.ArmourTail = 3;
         flow.Scratch.LeftHardpoints = 1;
 
-        Assert.Equal("Tail: 3 units", flow.Page.RowText(1));
+        Assert.Equal("Tail: 15 units", flow.Page.RowText(1));
         Assert.Equal("Left Wing: 1", flow.Page.RowText(2));
         Assert.Equal("Purchase Now", flow.Page.RowText(flow.Page.RowCount - 1)[^12..]);
     }

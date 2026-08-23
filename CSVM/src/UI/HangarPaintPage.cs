@@ -7,18 +7,24 @@ using CSVM.Mech3;
 namespace CSVM.UI;
 
 /// <summary>
-/// The PAINT screen: the pattern, then the three paint colours, over a live preview composed
-/// through the original's own region masks. The pattern row steps
-/// <see cref="PatternLibrary.PatternsFor"/>'s per-aircraft list, since patterns are per aircraft
-/// (docs/formats/paint.md); the three colour rows step an ordered palette built from the twelve
-/// shipped schemes' own triples, so every colour a pilot can reach is one the original's artists
-/// authored. The record's two composite picks and its third dword are carried untouched: nothing
-/// consumes them yet and the <c>a*5 + b</c> encoding's meaning is open (docs/org/hangar.md).
+/// The PAINT screen, the original's own model: a pattern, three (colour, shade) index pairs and
+/// three decals, over a live preview composed through the original's region masks. The pattern row
+/// steps only the patterns this airframe's availability mask allows and loads that entry's six
+/// colour/shade defaults on the way; a colour row steps the 27-row swatch table and resets its
+/// slot's shade, a shade row walks that colour's own ramp, and the three decal rows step the
+/// gapless 00-49 texture set. Every table is decoded data in <c>CSVM/data</c>
+/// (docs/formats/paint.md, "The swatch table and the pattern defaults").
 /// </summary>
 public sealed class HangarPaintPage : HangarPage
 {
-    /// <summary>The pattern row, then paint slots 1-3.</summary>
+    /// <summary>The pattern row; then a colour and a shade row per slot, then the three decals.</summary>
     public const int PatternRow = 0;
+
+    /// <summary>The first decal row (nose); tail and wing follow.</summary>
+    public const int NoseDecalRow = 7;
+
+    // The pattern dropdown's labels are langui 3425 + pattern index (callback 2235).
+    private const int PatternStringBase = 3425;
 
     // Pattern index 0-13 (record +0x40) is a row of the engine's 14-entry pattern-name table at
     // 0x0060301c, which is also the archive folder name. Read out of crimson.exe; the four
@@ -44,38 +50,6 @@ public sealed class HangarPaintPage : HangarPage
         "_WING", "_WINGTOP", "_FUSALAGE1", "_FUSELAGE", "_FUSLAGE", "_FUSALAGETOP",
     };
 
-    // The twelve shipped schemes' colour triples in first-appearance order, deduplicated, with
-    // the table's (0,0,0) entries written as the (25,25,25) the paint UI's darkest shade actually
-    // saves (docs/formats/paint.md). Stepping a slot therefore only ever lands on an authored
-    // colour; free RGB is the livery lab's business, not a hangar screen's.
-    private static readonly PaintOption[] Palette =
-    {
-        new(223, 0, 41, "fortune 1"),
-        new(25, 25, 25, "fortune 2, darkest shade"),
-        new(255, 255, 255, "fortune 3"),
-        new(243, 194, 0, "hughes 1"),
-        new(177, 130, 66, "blackhat 1"),
-        new(119, 74, 43, "blackhat 2"),
-        new(66, 39, 15, "blackhat 3"),
-        new(149, 163, 195, "blake 1"),
-        new(89, 114, 159, "blake 2"),
-        new(233, 228, 240, "blake 3"),
-        new(48, 47, 39, "british 2"),
-        new(23, 23, 21, "blckswan 1"),
-        new(196, 193, 186, "blckswan 3"),
-        new(57, 64, 68, "cccp 1"),
-        new(245, 211, 0, "cccp 3"),
-        new(108, 102, 169, "hollywd 1"),
-        new(67, 36, 121, "hollywd 2"),
-        new(212, 202, 225, "hollywd 3"),
-        new(95, 125, 143, "medusas 1"),
-        new(41, 14, 21, "medusas 2"),
-        new(141, 137, 93, "medusas 3"),
-        new(52, 38, 107, "sactrust 1"),
-        new(96, 115, 126, "german 1"),
-        new(32, 90, 167, "studio 1"),
-    };
-
     private readonly Dictionary<int, List<int>> _rosters = new();
     private readonly Dictionary<int, HangarArt?> _icons = new();
     private PatternLibrary? _library;
@@ -92,7 +66,7 @@ public sealed class HangarPaintPage : HangarPage
     public override HangarScreen Screen => HangarScreen.Paint;
 
     /// <inheritdoc/>
-    public override int RowCount => 4;
+    public override int RowCount => NoseDecalRow + HangarPaintTables.Slots;
 
     /// <summary>The preview of the scratch plane's own paint, recomposed whenever any of the five
     /// fields it draws from changes and handed over as the same image until then, so the shell
@@ -113,6 +87,9 @@ public sealed class HangarPaintPage : HangarPage
             return _art;
         }
     }
+
+    /// <summary>The swatch, pattern and decal tables every row on this screen reads.</summary>
+    private static HangarPaintTables Tables => HangarPaintTables.Default;
 
     // The masks live under a folder named for the pattern; an absent extraction is a library with
     // no patterns rather than an error. Probed before loading because PatternLibrary reports a
@@ -143,34 +120,70 @@ public sealed class HangarPaintPage : HangarPage
         SkinPrefixes[Math.Clamp(airframe, 0, SkinPrefixes.Length - 1)];
 
     /// <inheritdoc/>
-    public override string RowText(int row) => row switch
+    public override string RowText(int row)
     {
-        PatternRow => "Pattern: " + PatternLabel(Scratch.PaintPattern),
-        _ => $"{SlotName(row)}: {ColourLabel(ColourOf(row))}",
-    };
+        if (row == PatternRow)
+        {
+            return "Pattern: " + PatternLabel(Scratch.PaintPattern);
+        }
+
+        if (row >= NoseDecalRow)
+        {
+            int decal = DecalOf(row);
+            return $"{DecalSlotName(row)}: {DecalLabel(decal)}";
+        }
+
+        int slot = SlotOf(row);
+        if (IsShadeRow(row))
+        {
+            var rgb = Scratch.PaintColourAt(slot);
+            return $"Shade {slot + 1}: {Scratch.PaintShades[slot] + 1}/{ShadeCount(slot)}   {rgb.R},{rgb.G},{rgb.B}";
+        }
+
+        var chip = Tables.Resolve(Scratch.PaintColours[slot], Tables.DefaultShadeFor(Scratch.PaintColours[slot]));
+        return $"{SlotName(slot)}: swatch {Scratch.PaintColours[slot]}   {chip.R},{chip.G},{chip.B}";
+    }
 
     /// <inheritdoc/>
     public override string Detail(int row)
     {
-        if (row != PatternRow)
+        if (row == PatternRow)
         {
-            var colour = ColourOf(row);
-            int at = PaletteIndex(colour);
-            string source = at < 0 ? "not a shipped colour" : Palette[at].Source;
-            return $"{colour.R},{colour.G},{colour.B}   {source}";
+            var roster = Roster();
+            int seat = roster.IndexOf(Scratch.PaintPattern);
+            string where = $"{roster.Count} of {HangarPaintTables.PatternCount} patterns fit this airframe";
+            return seat < 0 ? $"{where}   (this one does not)" : $"{where}   {seat + 1}/{roster.Count}";
         }
 
-        var roster = Roster();
-        string where = Library.IsEmpty
-            ? "no pattern library: the decoded 14-entry table"
-            : $"{roster.Count} of 14 patterns ship masks for this airframe";
-        int seat = roster.IndexOf(Scratch.PaintPattern);
-        return seat < 0 ? $"{where}   (this one paints nothing here)" : $"{where}   {seat + 1}/{roster.Count}";
+        if (row >= NoseDecalRow)
+        {
+            return row == NoseDecalRow
+                ? "nose art, the 21-49 half of the set"
+                : "squadron and nation logos, the 00-20 half";
+        }
+
+        int slot = SlotOf(row);
+        var paint = Scratch.PaintColourAt(slot);
+        return IsShadeRow(row)
+            ? $"{paint.R},{paint.G},{paint.B}   the colour's own dark-to-light ramp"
+            : $"{Tables.Swatches.Count} swatches   picking one resets this slot's shade to its default";
     }
 
     /// <inheritdoc/>
-    public override bool Step(int row, int dir) =>
-        row == PatternRow ? StepPattern(dir) : StepColour(row, dir);
+    public override bool Step(int row, int dir)
+    {
+        if (row == PatternRow)
+        {
+            return StepPattern(dir);
+        }
+
+        if (row >= NoseDecalRow)
+        {
+            return StepDecal(row, dir);
+        }
+
+        return IsShadeRow(row) ? StepShade(SlotOf(row), dir) : StepColour(SlotOf(row), dir);
+    }
 
     // Exactly the original's per-texel composite (docs/formats/paint.md): the three mask weights
     // blend the three colours, the shading map modulates the result, the pattern's overlay goes
@@ -235,50 +248,61 @@ public sealed class HangarPaintPage : HangarPage
         return TgaImage.Decode(tga);
     }
 
-    private static string SlotName(int row) => row switch
+    private static string SlotName(int slot) => slot switch
     {
-        1 => "Paint 1 (body)",
-        2 => "Paint 2 (dark trim)",
+        0 => "Paint 1 (body)",
+        1 => "Paint 2 (dark trim)",
         _ => "Paint 3 (light trim)",
     };
 
-    private static string ColourLabel(PaintColour colour)
+    private static string DecalSlotName(int row) => row switch
     {
-        int at = PaletteIndex(colour);
-        return at < 0 ? $"custom {colour.R},{colour.G},{colour.B}" : Palette[at].Source;
-    }
+        NoseDecalRow => "Nose decal",
+        NoseDecalRow + 1 => "Tail decal",
+        _ => "Wing decal",
+    };
 
-    private static int PaletteIndex(PaintColour colour)
-    {
-        for (int i = 0; i < Palette.Length; i++)
-        {
-            if (Palette[i].R == colour.R && Palette[i].G == colour.G && Palette[i].B == colour.B)
-            {
-                return i;
-            }
-        }
+    // Rows 1-6 are colour, shade, colour, shade, colour, shade: each slot's pair together, the
+    // way the original's screen pairs its two dropdowns per slot.
+    private static bool IsShadeRow(int row) => row % 2 == 0;
 
-        return -1;
-    }
+    private static int SlotOf(int row) => (row - 1) / 2;
 
     private static int Wrap(int at, int dir, int count) => ((at + dir) % count + count) % count;
 
-    private PaintColour ColourOf(int row) => row switch
+    private int ShadeCount(int slot) => Math.Max(1, Tables.ShadeCount(Scratch.PaintColours[slot]));
+
+    private int DecalOf(int row) => row switch
     {
-        1 => Scratch.Colour1,
-        2 => Scratch.Colour2,
-        _ => Scratch.Colour3,
+        NoseDecalRow => Scratch.NoseDecal,
+        NoseDecalRow + 1 => Scratch.TailDecal,
+        _ => Scratch.WingDecal,
     };
 
+    private string DecalLabel(int decal)
+    {
+        if (decal < 0)
+        {
+            return "none (shipped placeholder)";
+        }
+
+        string name = Tables.DecalName(decal);
+        return name.Length == 0 ? $"Decal {decal:00}" : name;
+    }
+
+    // The dropdown's own label (langui 3425 + index); the internal name, which is also the
+    // pattern's archive folder, stands in when the string table is missing.
     private string PatternLabel(int pattern)
     {
         string name = PatternName(pattern);
-        return name.Length == 0 ? $"pattern {pattern}" : name.ToUpperInvariant();
+        return Flow.Strings.Text(
+            PatternStringBase + pattern,
+            name.Length == 0 ? $"pattern {pattern}" : name.ToUpperInvariant());
     }
 
-    // The patterns this airframe actually has masks for, as record indices, cached per airframe.
-    // With no extraction there is no per-aircraft list to read, so the whole decoded table is
-    // offered rather than a guess at which of it this plane carries.
+    // The patterns this airframe may wear, as record indices, from the pattern table's own
+    // availability masks, cached per airframe. With no table loaded every pattern is offered,
+    // which is the hangar's missing-data idiom rather than an empty screen.
     private List<int> Roster()
     {
         int airframe = Math.Clamp(Scratch.Airframe, 0, SkinPrefixes.Length - 1);
@@ -288,21 +312,11 @@ public sealed class HangarPaintPage : HangarPage
         }
 
         var roster = new List<int>();
-        foreach (string folder in Library.PatternsFor(SkinPrefixes[airframe]))
+        for (int pattern = 0; pattern < HangarPaintTables.PatternCount; pattern++)
         {
-            int index = Array.FindIndex(PatternNames, n =>
-                string.Equals(n, folder, StringComparison.OrdinalIgnoreCase));
-            if (index >= 0)
+            if (Tables.Available(pattern, airframe))
             {
-                roster.Add(index);
-            }
-        }
-
-        if (roster.Count == 0)
-        {
-            for (int i = 0; i < PatternNames.Length; i++)
-            {
-                roster.Add(i);
+                roster.Add(pattern);
             }
         }
 
@@ -310,9 +324,16 @@ public sealed class HangarPaintPage : HangarPage
         return roster;
     }
 
+    // Selecting a pattern copies its six colour/shade defaults over the plane's own and touches
+    // nothing else, which is all the original's SET handler does.
     private bool StepPattern(int dir)
     {
         var roster = Roster();
+        if (roster.Count == 0)
+        {
+            return false;
+        }
+
         int at = roster.IndexOf(Scratch.PaintPattern);
         int next = at < 0 ? (dir > 0 ? 0 : roster.Count - 1) : Wrap(at, dir, roster.Count);
         if (roster[next] == Scratch.PaintPattern)
@@ -320,35 +341,54 @@ public sealed class HangarPaintPage : HangarPage
             return false;
         }
 
-        Scratch.PaintPattern = roster[next];
+        Scratch.LoadPatternDefaults(roster[next]);
         return true;
     }
 
-    // A colour outside the palette (an imported original save, a fresh plane's default) is kept
-    // until the pilot steps it; the first step then lands on an authored colour rather than
-    // hunting for the nearest one, which would silently rewrite what was imported.
-    private bool StepColour(int row, int dir)
+    private bool StepColour(int slot, int dir)
     {
-        var current = ColourOf(row);
-        int at = PaletteIndex(current);
-        int next = at < 0 ? (dir > 0 ? 0 : Palette.Length - 1) : Wrap(at, dir, Palette.Length);
-        var chosen = new PaintColour(Palette[next].R, Palette[next].G, Palette[next].B);
-        if (chosen == current)
+        int count = Math.Max(1, Tables.Swatches.Count);
+        int next = Wrap(Scratch.PaintColours[slot], dir, count);
+        if (next == Scratch.PaintColours[slot])
         {
             return false;
         }
 
-        if (row == 1)
+        Scratch.SetPaintColour(slot, next);
+        return true;
+    }
+
+    private bool StepShade(int slot, int dir)
+    {
+        int count = ShadeCount(slot);
+        int next = Wrap(Scratch.PaintShades[slot], dir, count);
+        if (next == Scratch.PaintShades[slot])
         {
-            Scratch.Colour1 = chosen;
+            return false;
         }
-        else if (row == 2)
+
+        Scratch.PaintShades[slot] = next;
+        return true;
+    }
+
+    // A fresh build's slot holds the keep-the-placeholder sentinel, which the original cannot
+    // store: the first step enters the 0-49 set, and the cycle stays inside it after that.
+    private bool StepDecal(int row, int dir)
+    {
+        int current = DecalOf(row);
+        int next = current < 0
+            ? (dir > 0 ? 0 : HangarPaintTables.DecalCount - 1)
+            : Wrap(current, dir, HangarPaintTables.DecalCount);
+        if (next == current)
         {
-            Scratch.Colour2 = chosen;
+            return false;
         }
-        else
+
+        switch (row)
         {
-            Scratch.Colour3 = chosen;
+            case NoseDecalRow: Scratch.NoseDecal = next; break;
+            case NoseDecalRow + 1: Scratch.TailDecal = next; break;
+            default: Scratch.WingDecal = next; break;
         }
 
         return true;
@@ -415,6 +455,4 @@ public sealed class HangarPaintPage : HangarPage
             : null;
     }
 
-    /// <summary>One palette entry: an authored colour and the scheme slot it came from.</summary>
-    private readonly record struct PaintOption(byte R, byte G, byte B, string Source);
 }

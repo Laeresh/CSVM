@@ -32,12 +32,39 @@ public class CustomPlaneStoreTests
         Assert.Equal(expected.LeftHardpoints, loaded.LeftHardpoints);
         Assert.Equal(expected.RightHardpoints, loaded.RightHardpoints);
         Assert.Equal(expected.PaintPattern, loaded.PaintPattern);
-        Assert.Equal(expected.PaintPick1, loaded.PaintPick1);
-        Assert.Equal(expected.PaintPick2, loaded.PaintPick2);
-        Assert.Equal(expected.PaintPick3, loaded.PaintPick3);
+        Assert.Equal(expected.PaintColours, loaded.PaintColours);
+        Assert.Equal(expected.PaintShades, loaded.PaintShades);
+        Assert.Equal(expected.NoseDecal, loaded.NoseDecal);
+        Assert.Equal(expected.TailDecal, loaded.TailDecal);
+        Assert.Equal(expected.WingDecal, loaded.WingDecal);
         Assert.Equal(expected.Colour1, loaded.Colour1);
         Assert.Equal(expected.Colour2, loaded.Colour2);
         Assert.Equal(expected.Colour3, loaded.Colour3);
+    }
+
+    /// <summary>Version 1 files still load: their three "pick" dwords were the decal indices all
+    /// along, and each free RGB triple lands on the nearest authored swatch, which for a v1 file
+    /// written from the shipped-scheme palette is that colour exactly.</summary>
+    [Fact]
+    public void Deserialize_Version1_MapsPicksToDecalsAndRgbToSwatches()
+    {
+        string v1 = "{\"version\": 1, \"name\": \"Old Save\", \"airframe\": 7, \"engine\": 3," +
+            "\"paint\": {\"pattern\": 11, \"pick1\": 40, \"pick2\": 8, \"pick3\": 7," +
+            "\"colour1\": [32, 90, 167], \"colour2\": [255, 255, 255], \"colour3\": [25, 25, 25]}}";
+
+        var def = CustomPlaneStore.Deserialize(v1);
+
+        Assert.NotNull(def);
+        Assert.Equal(11, def!.PaintPattern);
+        Assert.Equal(40, def.NoseDecal);
+        Assert.Equal(8, def.TailDecal);
+        Assert.Equal(7, def.WingDecal);
+        Assert.Equal(new PaintColour(32, 90, 167), def.Colour1);
+        Assert.Equal(new PaintColour(255, 255, 255), def.Colour2);
+        Assert.Equal(new PaintColour(25, 25, 25), def.Colour3);
+
+        // Saving it back writes the current schema, so a file upgrades on its next save.
+        Assert.Contains("\"version\": 2", CustomPlaneStore.Serialize(def), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -72,7 +99,7 @@ public class CustomPlaneStoreTests
     {
         var store = new CustomPlaneStore(TestData.TempDir());
         var path = store.Save(FullDef());
-        File.WriteAllText(path, CustomPlaneStore.Serialize(FullDef()).Replace("\"version\": 1", "\"version\": 99"));
+        File.WriteAllText(path, CustomPlaneStore.Serialize(FullDef()).Replace("\"version\": 2", "\"version\": 99"));
 
         Assert.Null(store.Load("Blue Streak"));
     }
@@ -150,12 +177,13 @@ public class CustomPlaneStoreTests
         LeftHardpoints = 2,
         RightHardpoints = 4,
         PaintPattern = 13,
-        PaintPick1 = 12,
-        PaintPick2 = 7,
-        PaintPick3 = 42,
-        Colour1 = new PaintColour(223, 0, 41),
-        Colour2 = new PaintColour(25, 25, 25),
-        Colour3 = new PaintColour(255, 255, 255),
+        NoseDecal = 40,
+        TailDecal = 8,
+        WingDecal = 7,
+
+        // fortune's own defaults: red, the darkest shade of the white ramp, white.
+        PaintColours = { [0] = 1, [1] = 26, [2] = 26 },
+        PaintShades = { [0] = 8, [1] = 0, [2] = 9 },
         Guns =
         {
             [0] = new GunChoice(2, Twin: true),

@@ -7,7 +7,7 @@ namespace CSVM.UI;
 /// <summary>
 /// The PURCHASE screen: the itemised review the original's callbacks 2251-2262 build, one row per
 /// priced thing the scratch plane actually carries (airframe always; engine when chosen; each
-/// armed gun slot named the way the GUNS screen names it; each armoured zone via langui 1191-1194;
+/// armed gun slot as the GUNS screen names it; each armoured zone via 1191-1194 at units x5;
 /// each wing with hardpoints via 1176/1177), then the totals row (1198) and the Purchase Now row
 /// (1199). Row detail is that line's decoded cost and weight from <see cref="HangarEconomy"/>'s
 /// bill. The gate mirrors the original's button, not only its commit: `PURCHASE.SCRIPT` disables
@@ -57,7 +57,12 @@ public sealed class HangarPurchasePage : HangarPage
             Kind.Airframe => Flow.AirframeName(Scratch.Airframe),
             Kind.Engine => Flow.EngineName(Scratch.Airframe, Scratch.Engine),
             Kind.Gun => GunRowText(index),
-            Kind.Armour => Line(1191 + index, ZoneFallbacks[index] + ": {0} units", ZoneUnits(index)),
+            // The armour lines carry the record's own stored scale, units x5, as the ARMOR screen
+            // does; only cost and weight run on the units themselves.
+            Kind.Armour => Line(
+                1191 + index,
+                ZoneFallbacks[index] + ": {0} units",
+                ZoneUnits(index) * HangarArmourPage.DisplayScale),
             Kind.Hardpoint => Line(
                 1176 + index, (index == 0 ? "Left" : "Right") + " Wing: {0}", WingCount(index)),
             Kind.Totals => Flow.Strings.Text(1198, "Totals"),

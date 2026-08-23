@@ -144,8 +144,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 41. ☑ The airframe-defaults ask (string 206): default armour/engine/guns on the airframe pick, or keep
 42. ☑ Engine screen: the None row keeps its place, relabelled to the original's 1165
-43. ☐ Pattern pick loads the pattern's default colours (the `0x0061daf0` table; swatch decode)
-44. ☐ Armour displays as the original's 0-60 in steps of 5 (the x5 display scale), everywhere it shows
+43. ☑ Pattern pick loads the pattern's default colours (the `0x0061daf0` table; swatch decode)
+44. ☑ Armour displays as the original's 0-60 in steps of 5 (the x5 display scale), everywhere it shows
 
 ## Dependency and parallelism notes
 
@@ -1136,5 +1136,81 @@ row label changed (`HangarEnginePage.RowText`). Tests updated in
 `CSVM.Tests/HangarEnginePageTests.cs`: `OffersSevenRows_NamedFromLangui` pins "None" on row 6
 and that 1171's wording no longer appears there; the extracted-data
 `EngineNamesResolveForAllAirframes` asserts both ids resolve.
+
+**Verified.** <pending orchestrator run>
+
+## E43 ☐ The paint page becomes the original's model: index pairs, pattern defaults, decals
+
+**Landed.** A paint slot is an index pair, never free RGB, exactly as the original stores it.
+`CustomPlaneDef` gained `PaintColours[3]` (swatch rows 0-26, record +0x44), `PaintShades[3]`
+(record +0x50) and `NoseDecal`/`TailDecal`/`WingDecal` (0-49, record +0x5c..+0x64), and lost the
+three "composite picks", which were the decal indices all along. `Colour1..3` are now derived
+properties resolving their pair through the swatch table, mirroring the original's own record: the
+RGBA at +0x68 is a cache `FUN_00406840` recomputes from the indices before every save, so the pair
+is what a plane's paint IS. `SetPaintColour` carries the reset at `0x0040d402` (a colour pick
+resets its slot's shade to the swatch row's default) and `LoadPatternDefaults` is callback 2238's
+SET (copy the entry's six defaults, touch nothing else).
+
+- **The tables are decoded data.** `CSVM/src/Flight/HangarPaintTables.cs` reads the transcribed
+  swatch table (`CSVM/data/hangar_swatches.json`) and a new `CSVM/data/hangar_patterns.json`
+  carrying the 14 entries' availability mask and six defaults plus the 50 decal texture names
+  (the engine's name table at `0x0061da20`). `Resolve(colour, shade)` is `FUN_004067c0`,
+  `Available(pattern, airframe)` the mask, `DefaultShadeFor` the row's own variant. Engine-free
+  and pure: the files are found on disk when the repo is reachable and through `res://` in an
+  exported build, so the model resolves colours without a session and an absent pair of files
+  leaves an empty table rather than an exception.
+- **The pattern defaults are the binary's, read straight out of `0x0061daf0`** (entries 10 and 12
+  de-shifted). They cross-check four ways: `blackhat` resolves to (177,130,66)/(119,74,43)/
+  (66,39,15) and `blckswan`, `british`, `german`, `medusas`, `blake`, `sactrust` likewise land on
+  their `vehicle.json` triples; `fortune` resolves to red / (25,25,25) / white, which is
+  `player_fortune`'s inferred triple reached from a third direction; and all seven 204-byte
+  fixtures carry exactly their pattern's six defaults, with the +0x68 cache equal to what those
+  indices resolve to in every slot. Two slots differ from `vehicle.json` by a shade
+  (`hollywd` slot 2, `cccp` slot 3), which is the pattern's hangar default rather than a bug.
+- **The page's ten rows**: pattern, then each slot's colour and shade together (the way the
+  original pairs its two dropdowns per slot), then nose/tail/wing decal. The pattern row steps
+  only the airframe's mask (the Hoplite's four are blackhat/fortune/studio/itstaxi) and is
+  labelled langui 3425+index with the internal name as fallback; a colour row shows the swatch
+  chip, a shade row the resolved paint; a decal row names the texture (`40ohSoBlue`). A fresh
+  build's decals are the keep-the-placeholder sentinel, since the pattern defaults carry none.
+- **The store is version 2**, storing the indices and the three decals. Version 1 files still
+  load: their picks read as the decals they were, and each RGB triple maps to the nearest
+  authored swatch, which is exact for every colour the version-1 palette could hold. Saving one
+  writes version 2, so a file upgrades on its next save.
+- **`CustomPlaneBuild.PaintFor`** now emits the decal indices into the scheme's
+  `Nose`/`Tail`/`WingDecal`, the same 0-49 space `vehicle.json`'s `paint_decalN` uses.
+
+Tests: `CustomPlaneRecordTests` grew `ResolvedColoursMatchTheRecordsOwnCache` (all seven fixtures,
+all three slots) and `FixtureIndicesAreTheirPatternsDefaults`; `CustomPlaneStoreTests` grew
+`Deserialize_Version1_MapsPicksToDecalsAndRgbToSwatches`; `CustomPlaneBuildTests` replaced its
+decal test with `ThePaintCarriesThePatternColoursAndDecals` and `AFreshBuildKeepsThePlaceholderDecals`;
+`HangarPaintPageTests` was rebuilt around the new model
+(`OffersThePatternEachSlotsPairAndTheThreeDecals`, `ThePatternRowStepsOnlyThisAirframesPatterns`,
+`TheFuryOffersItsOwnFour`, `PickingAPatternLoadsItsSixDefaults`,
+`BlackhatsDefaultsResolveToItsShippedTriple`, `AColourPickResetsItsSlotsShade`,
+`AShadeRowWalksItsColoursOwnRamp`, `ShadeSteppingWrapsWithinTheRow`,
+`DecalRowsStepTheFiftyTextureSet`, `EachDecalRowEditsItsOwnSlot`,
+`ThePatternLabelIsLangui3425PlusTheIndex`, and the extracted-data
+`EveryAirframeComposesEveryPatternItsMaskAllows`, which is also the mask list checked against
+every shipped `.BM` set).
+
+**Verified.** <pending orchestrator run>
+
+## E44 ☐ Armour reads on the original's scale: 0-60 in fives, 1165 "None", no invented pounds
+
+**Landed.** The ARMOR screen's rows and its stepper show the record's own stored figure, units x5,
+which is the 13-row dropdown the original authors: callback 2246 at `0x0040b7bd` pushes langui
+1165 "None" for index 0 and format 1170 "%d units" of `index*5` for the rest. The zone rows
+(1191-1194) now carry that figure, the detail line leads with the dropdown's own wording, and the
+"lb shown" phrasing is gone: the x5 figure is a displayed unit count, not pounds. The PURCHASE
+screen's armour rows format 1191-1194 on the same scale. The internal model still counts units
+0-12 and the economy still prices and weighs at units x4, both untouched.
+
+Tests: `HangarArmourPageTests` gained `TheDisplayedFigureRunsZeroToSixtyInFives` and
+`DetailUsesFormat1170_AndString1165ForNone`, and
+`OffersTheFourZones_NamedFromLangui_OnTheDisplayScale`, `RowTextFallsBackWithoutStrings` and
+`DetailNamesThePickAndItsPrice` moved onto the display scale;
+`HangarPurchasePageTests.ArmouredZonesRowThroughTheirLanguiFormats` and
+`RowTextFallsBackWithoutStrings` likewise.
 
 **Verified.** <pending orchestrator run>

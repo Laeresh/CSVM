@@ -356,9 +356,14 @@ colour, and all of them are gone:
   the chosen colour.* The UI's Colour dropdown picks the hue family and Shade picks how light
   or dark it is; their product is the single RGB that ends up in `paint_colorN`. There is no
   fourth stored field and nothing extra to model — a scheme really is three colours, and the
-  masks giving each slot exactly one colour is consistent, not a contradiction. The remake
-  exposes **RGB sliders** instead of the original's two dropdowns, which spans the same space
-  and more, so any original livery is reachable by matching its colour directly.
+  masks giving each slot exactly one colour is consistent, not a contradiction. The swatch
+  table above is that Colour/Shade space made concrete, and the hangar's paint screen now
+  drives the original's own two dropdowns over it; the **livery lab** keeps its RGB sliders,
+  which span the same space and more. The pattern table's six per-pattern defaults and the
+  50 decal names are transcribed to `CSVM/data/hangar_patterns.json` beside the swatches.
+  Two shade-level divergences between a pattern's hangar defaults and its `vehicle.json` AI
+  scheme are authored, not errors: `hollywd` slot 2 defaults to (70,40,132) where the AI
+  scheme carries (67,36,121), and `cccp` slot 3 to (243,194,0) against (245,211,0).
 
   This also **independently confirms `player_fortune`'s colours**, which had been derived only
   by rendering. `CustomPlane Paint1 Bloodhawk.png` shows Colour/Shade of *red/red*,

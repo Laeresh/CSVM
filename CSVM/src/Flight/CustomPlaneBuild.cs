@@ -67,11 +67,11 @@ public static class CustomPlaneBuild
         return built;
     }
 
-    /// <summary>The livery a custom plane wears: the record's three paint colours under
-    /// <paramref name="patternName"/> (the caller resolves the record's 0-13 index through the
-    /// engine's pattern-name table). The three composite picks stay out of it: they register
-    /// per-plane decal textures in the original, but the <c>a*5 + b</c> encoding is undecoded, so
-    /// the scheme keeps its "leave the shipped placeholder" decal sentinels.</summary>
+    /// <summary>The livery a custom plane wears: the record's three resolved paint colours and its
+    /// three decals under <paramref name="patternName"/> (the caller resolves the record's 0-13
+    /// index through the engine's pattern-name table). The decal indices are the same 0-49 space
+    /// <c>vehicle.json</c>'s <c>paint_decalN</c> uses, so they carry straight over; a slot the
+    /// record leaves unchosen keeps the scheme's leave-the-placeholder sentinel.</summary>
     public static PaintScheme PaintFor(CustomPlaneDef def, string patternName)
     {
         ArgumentNullException.ThrowIfNull(def);
@@ -81,6 +81,9 @@ public static class CustomPlaneBuild
             Color1 = PaintScheme.FromBytes(def.Colour1.R, def.Colour1.G, def.Colour1.B),
             Color2 = PaintScheme.FromBytes(def.Colour2.R, def.Colour2.G, def.Colour2.B),
             Color3 = PaintScheme.FromBytes(def.Colour3.R, def.Colour3.G, def.Colour3.B),
+            NoseDecal = def.NoseDecal,
+            TailDecal = def.TailDecal,
+            WingDecal = def.WingDecal,
         };
     }
 

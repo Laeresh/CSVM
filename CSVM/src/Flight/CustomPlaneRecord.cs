@@ -30,11 +30,15 @@ public static class CustomPlaneRecord
     // Gun id 5 is the dropdown's explicit empty row, one past the last calibre.
     private const int GunEmpty = 5;
 
+    // No swatch row ships more than ten shades, so a variant past nine names no colour.
+    private const int MaxShade = 9;
+
     /// <summary>The def a 204-byte record describes, or null when the bytes are too short, carry
     /// no name, or claim a value outside the decoded ranges (airframe, engine, hardpoints,
-    /// pattern, armour, gun ids). Derived fields (+0x28, +0x3c, +0x98.., +0xa8..) and the
-    /// undecoded dwords (+0x00, +0x44..+0x58, +0xc8) are ignored; the +0x5c/+0x60 composite picks
-    /// and the +0x64 dword are carried opaquely, never interpreted.</summary>
+    /// pattern, colour, shade, decal, armour, gun ids). Derived fields (+0x28, +0x3c, +0x98..,
+    /// +0xa8..) are ignored, and so is the +0x68 RGBA: it is the engine's own cache of what the
+    /// colour and shade indices resolve to, which the def recomputes. <see cref="StoredColour"/>
+    /// reads it for the cross-check.</summary>
     public static CustomPlaneDef? Read(ReadOnlySpan<byte> bytes)
     {
         if (bytes.Length < Length)
@@ -56,6 +60,9 @@ public static class CustomPlaneRecord
         int twinBits = Dword(bytes, 0x84);
         Span<int> armour = [Dword(bytes, 0x74), Dword(bytes, 0x78), Dword(bytes, 0x7c), Dword(bytes, 0x80)];
         Span<int> gunIds = [Dword(bytes, 0x88), Dword(bytes, 0x8c), Dword(bytes, 0x90), Dword(bytes, 0x94)];
+        Span<int> colours = [Dword(bytes, 0x44), Dword(bytes, 0x48), Dword(bytes, 0x4c)];
+        Span<int> shades = [Dword(bytes, 0x50), Dword(bytes, 0x54), Dword(bytes, 0x58)];
+        Span<int> decals = [Dword(bytes, 0x5c), Dword(bytes, 0x60), Dword(bytes, 0x64)];
 
         bool inRange =
             InRange(airframe, CustomPlaneDef.MaxAirframe)
@@ -71,6 +78,21 @@ public static class CustomPlaneRecord
         foreach (int id in gunIds)
         {
             inRange &= InRange(id, GunEmpty);
+        }
+
+        foreach (int colour in colours)
+        {
+            inRange &= InRange(colour, CustomPlaneDef.MaxSwatch);
+        }
+
+        foreach (int shade in shades)
+        {
+            inRange &= InRange(shade, MaxShade);
+        }
+
+        foreach (int decal in decals)
+        {
+            inRange &= InRange(decal, CustomPlaneDef.MaxDecal);
         }
 
         if (!inRange)
@@ -90,13 +112,16 @@ public static class CustomPlaneRecord
             ArmourLeftWing = armour[2] / ArmourScale,
             ArmourRightWing = armour[3] / ArmourScale,
             PaintPattern = pattern,
-            PaintPick1 = Dword(bytes, 0x5c),
-            PaintPick2 = Dword(bytes, 0x60),
-            PaintPick3 = Dword(bytes, 0x64),
-            Colour1 = Colour(bytes, 0x68),
-            Colour2 = Colour(bytes, 0x6c),
-            Colour3 = Colour(bytes, 0x70),
+            NoseDecal = decals[0],
+            TailDecal = decals[1],
+            WingDecal = decals[2],
         };
+        for (int slot = 0; slot < HangarPaintTables.Slots; slot++)
+        {
+            def.PaintColours[slot] = colours[slot];
+            def.PaintShades[slot] = shades[slot];
+        }
+
         for (int slot = 0; slot < def.Guns.Length; slot++)
         {
             int? calibre = gunIds[slot] == GunEmpty ? null : gunIds[slot];
@@ -105,6 +130,12 @@ public static class CustomPlaneRecord
 
         return def;
     }
+
+    /// <summary>A paint slot's RGB as the record itself caches it at +0x68 (RGBA quads, the fourth
+    /// byte padding). Not read into the def: the def resolves the same colour from its index pair,
+    /// and this is what that resolution is checked against.</summary>
+    public static PaintColour StoredColour(ReadOnlySpan<byte> bytes, int slot) =>
+        new(bytes[0x68 + (slot * 4)], bytes[0x69 + (slot * 4)], bytes[0x6a + (slot * 4)]);
 
     /// <summary>The def stored in <paramref name="path"/> (absolute), or null when the file is
     /// absent, unreadable, or not a valid record.</summary>
@@ -160,10 +191,6 @@ public static class CustomPlaneRecord
 
     private static int Dword(ReadOnlySpan<byte> bytes, int offset) =>
         BinaryPrimitives.ReadInt32LittleEndian(bytes.Slice(offset, 4));
-
-    // Colours are stored as RGBA byte quads; the fourth byte is padding and is ignored.
-    private static PaintColour Colour(ReadOnlySpan<byte> bytes, int offset) =>
-        new(bytes[offset], bytes[offset + 1], bytes[offset + 2]);
 
     private static bool InRange(int value, int max) => value >= 0 && value <= max;
 

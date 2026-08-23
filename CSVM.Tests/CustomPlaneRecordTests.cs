@@ -45,9 +45,11 @@ public class CustomPlaneRecordTests
         Assert.Equal(1, def.LeftHardpoints);
         Assert.Equal(1, def.RightHardpoints);
         Assert.Equal(4, def.PaintPattern);
-        Assert.Equal(40, def.PaintPick1);
-        Assert.Equal(8, def.PaintPick2);
-        Assert.Equal(7, def.PaintPick3);
+        Assert.Equal(40, def.NoseDecal);   // 40ohSoBlue, nose art
+        Assert.Equal(8, def.TailDecal);    // 08Fhunter_logo2
+        Assert.Equal(7, def.WingDecal);    // 07Fhunter_logo1
+        Assert.Equal(new[] { 1, 26, 26 }, def.PaintColours);
+        Assert.Equal(new[] { 8, 0, 9 }, def.PaintShades);
         Assert.Equal(new PaintColour(223, 0, 41), def.Colour1);
         Assert.Equal(new PaintColour(25, 25, 25), def.Colour2);
         Assert.Equal(new PaintColour(255, 255, 255), def.Colour3);
@@ -86,6 +88,46 @@ public class CustomPlaneRecordTests
         Assert.Equal(new PaintColour((byte)r1, (byte)g1, (byte)b1), def.Colour1);
         Assert.Equal(new PaintColour((byte)r2, (byte)g2, (byte)b2), def.Colour2);
         Assert.Equal(new PaintColour((byte)r3, (byte)g3, (byte)b3), def.Colour3);
+    }
+
+    /// <summary>The colour and shade indices resolve to exactly the RGBA the record caches at
+    /// +0x68, on every fixture and every slot. That cache is the engine's own output (FUN_00406840
+    /// recomputes it from the indices before each save), so this is the swatch table, the resolver
+    /// and the importer checked against the original in one assertion.</summary>
+    [Theory]
+    [InlineData("A")]
+    [InlineData("B")]
+    [InlineData("Blue Streak")]
+    [InlineData("Fury BlackSwan")]
+    [InlineData("Fury Fortune")]
+    [InlineData("Fury Hughes")]
+    [InlineData("Fury Studio Sec")]
+    public void ResolvedColoursMatchTheRecordsOwnCache(string name)
+    {
+        var bytes = File.ReadAllBytes(TestData.Fixture("planes204", name));
+        var def = ReadFixture(name);
+
+        for (int slot = 0; slot < 3; slot++)
+        {
+            Assert.Equal(CustomPlaneRecord.StoredColour(bytes, slot), def.PaintColourAt(slot));
+        }
+    }
+
+    /// <summary>Every fixture's stored index pairs are its pattern's own six defaults, which is
+    /// the pattern table at 0x0061daf0 checked against seven genuine saves.</summary>
+    [Theory]
+    [InlineData("Fury BlackSwan", 1)]
+    [InlineData("Fury Fortune", 4)]
+    [InlineData("Fury Hughes", 6)]
+    [InlineData("Fury Studio Sec", 11)]
+    public void FixtureIndicesAreTheirPatternsDefaults(string name, int pattern)
+    {
+        var def = ReadFixture(name);
+        var entry = HangarPaintTables.Default.PatternEntry(pattern);
+
+        Assert.NotNull(entry);
+        Assert.Equal(entry!.Colours, def.PaintColours);
+        Assert.Equal(entry.Shades, def.PaintShades);
     }
 
     // Fixture B's +0x84 dword is 0xc3: bits 0-1 are its two twin mounts, bits 6-7 are stray

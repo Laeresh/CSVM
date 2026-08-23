@@ -49,6 +49,21 @@ public sealed class CustomPlaneDef
     /// <summary>Paint pattern indices run 0-13.</summary>
     public const int MaxPaintPattern = 13;
 
+    /// <summary>Swatch-table rows run 0-26 (record +0x44..+0x4c).</summary>
+    public const int MaxSwatch = 26;
+
+    /// <summary>The decal set is the gapless 00-49 texture series (record +0x5c..+0x64).</summary>
+    public const int MaxDecal = 49;
+
+    /// <summary>A decal slot keeping the aircraft's shipped placeholder texture. Not a value the
+    /// original can store: a fresh build has no authored decal (the pattern defaults carry none),
+    /// and this says so rather than claiming decal 0.</summary>
+    public const int KeepDecal = -1;
+
+    // The longest shipped ramp is ten, so this is the ceiling a shade clamps to when no swatch
+    // table loaded and the row's own length is unknown.
+    private const int MaxShadeWithoutTable = 9;
+
     /// <summary>The plane's name. Also its identity in the store: the original saves
     /// <c>Planes\%s</c> and overwrites by name, and our store keeps that contract.</summary>
     public string Name { get; set; } = string.Empty;
@@ -86,25 +101,75 @@ public sealed class CustomPlaneDef
     /// rule that stays out of the model).</summary>
     public int PaintPattern { get; set; }
 
-    /// <summary>First composite paint pick, stored as the record stores it, <c>a*5 + b</c>
-    /// (+0x5c). Decomposing it is the paint screen's business, not the model's.</summary>
-    public int PaintPick1 { get; set; }
+    /// <summary>The three paint slots' swatch rows, 0-26 (record +0x44..+0x4c). Slot 0 is the
+    /// identity/body colour, 1 the dark trim, 2 the light trim.</summary>
+    public int[] PaintColours { get; } = new int[HangarPaintTables.Slots];
 
-    /// <summary>Second composite paint pick, <c>a*5 + b</c> (record +0x60).</summary>
-    public int PaintPick2 { get; set; }
+    /// <summary>The three paint slots' shade variants within their colour's ramp (record
+    /// +0x50..+0x58). A colour pick resets its slot's shade; see <see cref="SetPaintColour"/>.</summary>
+    public int[] PaintShades { get; } = new int[HangarPaintTables.Slots];
 
-    /// <summary>The third pick dword (record +0x64). No screen handler writes it and its meaning
-    /// is undecoded, so it is carried opaquely, never interpreted.</summary>
-    public int PaintPick3 { get; set; }
+    /// <summary>Nose decal, 0-49 or <see cref="KeepDecal"/> (record +0x5c).</summary>
+    public int NoseDecal { get; set; } = KeepDecal;
 
-    /// <summary>Paint slot 1, the identity/body colour (record +0x68).</summary>
-    public PaintColour Colour1 { get; set; }
+    /// <summary>Tail decal, 0-49 or <see cref="KeepDecal"/> (record +0x60).</summary>
+    public int TailDecal { get; set; } = KeepDecal;
 
-    /// <summary>Paint slot 2, the dark trim.</summary>
-    public PaintColour Colour2 { get; set; }
+    /// <summary>Wing decal, 0-49 or <see cref="KeepDecal"/> (record +0x64).</summary>
+    public int WingDecal { get; set; } = KeepDecal;
 
-    /// <summary>Paint slot 3, the light trim.</summary>
-    public PaintColour Colour3 { get; set; }
+    /// <summary>Paint slot 1, the identity/body colour, resolved from its index pair. Derived, as
+    /// the original's own record +0x68 is: <c>FUN_00406840</c> recomputes that RGBA cache from the
+    /// colour and shade indices before every save, so the pair is what a plane's paint IS.</summary>
+    public PaintColour Colour1 => PaintColourAt(0);
+
+    /// <summary>Paint slot 2, the dark trim, resolved from its index pair.</summary>
+    public PaintColour Colour2 => PaintColourAt(1);
+
+    /// <summary>Paint slot 3, the light trim, resolved from its index pair.</summary>
+    public PaintColour Colour3 => PaintColourAt(2);
+
+    /// <summary>A slot's resolved RGB, through the swatch table (<c>FUN_004067c0</c>).</summary>
+    public PaintColour PaintColourAt(int slot) =>
+        slot >= 0 && slot < PaintColours.Length
+            ? HangarPaintTables.Default.Resolve(PaintColours[slot], PaintShades[slot])
+            : default;
+
+    /// <summary>Picks a slot's colour, resetting its shade to that swatch row's own default. The
+    /// reset is the original's (callback 2237 at <c>0x0040d402</c>) and is why picking a colour in
+    /// the paint UI lands on the artist's chosen brightness rather than keeping the old one.</summary>
+    public void SetPaintColour(int slot, int colour)
+    {
+        if (slot < 0 || slot >= PaintColours.Length)
+        {
+            return;
+        }
+
+        PaintColours[slot] = Math.Clamp(colour, 0, MaxSwatch);
+        PaintShades[slot] = HangarPaintTables.Default.DefaultShadeFor(PaintColours[slot]);
+    }
+
+    /// <summary>Loads a pattern's six colour/shade defaults over this plane's own, which is all
+    /// selecting a pattern does in the original (callback 2238's SET at <c>0x0040d4ba</c>).</summary>
+    public void LoadPatternDefaults(int pattern)
+    {
+        PaintPattern = Math.Clamp(pattern, 0, MaxPaintPattern);
+        if (HangarPaintTables.Default.PatternEntry(PaintPattern) is not { } entry)
+        {
+            return;
+        }
+
+        for (int slot = 0; slot < PaintColours.Length; slot++)
+        {
+            if (slot < entry.Colours.Count && slot < entry.Shades.Count)
+            {
+                PaintColours[slot] = entry.Colours[slot];
+                PaintShades[slot] = entry.Shades[slot];
+            }
+        }
+
+        Clamp();
+    }
 
     /// <summary>Forces every field into its decoded range, in place, and returns this. The store
     /// runs it on both load and save, so an out-of-range value from a hand-edited file (or a
@@ -129,6 +194,22 @@ public sealed class CustomPlaneDef
         LeftHardpoints = Math.Clamp(LeftHardpoints, 0, MaxHardpointsPerWing);
         RightHardpoints = Math.Clamp(RightHardpoints, 0, MaxHardpointsPerWing);
         PaintPattern = Math.Clamp(PaintPattern, 0, MaxPaintPattern);
+        for (int slot = 0; slot < PaintColours.Length; slot++)
+        {
+            PaintColours[slot] = Math.Clamp(PaintColours[slot], 0, MaxSwatch);
+
+            // Ramps are eight to ten long, so the ceiling is the row's own, not a shared one.
+            int shades = HangarPaintTables.Default.ShadeCount(PaintColours[slot]);
+            PaintShades[slot] = Math.Clamp(PaintShades[slot], 0, shades > 0 ? shades - 1 : MaxShadeWithoutTable);
+        }
+
+        NoseDecal = ClampDecal(NoseDecal);
+        TailDecal = ClampDecal(TailDecal);
+        WingDecal = ClampDecal(WingDecal);
         return this;
     }
+
+    // Anything outside the shipped set becomes the keep-the-placeholder sentinel rather than a
+    // decal nobody chose: an out-of-range index names no texture at all.
+    private static int ClampDecal(int decal) => decal >= 0 && decal <= MaxDecal ? decal : KeepDecal;
 }

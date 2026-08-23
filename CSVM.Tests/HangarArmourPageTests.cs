@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -8,10 +9,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The ARMOR screen (PLAN-hangar C23): the four zones named through their own langui formats
-/// (1191-1194, which carry the number themselves), the stepper walking each zone's units 0-12
-/// with wraparound into the scratch def, and the detail line keeping the three factors distinct:
-/// units bought, cost and weight at x4, the original's x5 lb display figure.
+/// The ARMOR screen (PLAN-hangar C23, on the original's display scale since E44): the four zones
+/// named through their own langui formats (1191-1194, which carry the number themselves) at the
+/// record's stored units x5, the stepper walking that 0-60-in-fives roster into the scratch def,
+/// and the detail line naming the pick the way the original's dropdown does (1165 "None" on zero,
+/// 1170 "%d units" of units x5) beside the cost and weight the units themselves buy at x4.
 /// </summary>
 public class HangarArmourPageTests : IDisposable
 {
@@ -34,9 +36,10 @@ public class HangarArmourPageTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>Four rows, each its zone's own langui format with the units filled in.</summary>
+    /// <summary>Four rows, each its zone's own langui format filled with the displayed figure,
+    /// the record's stored units x5.</summary>
     [Fact]
-    public void OffersTheFourZones_NamedFromLangui()
+    public void OffersTheFourZones_NamedFromLangui_OnTheDisplayScale()
     {
         var strings = UiStrings.Parse(
             "[{\"id\":1191,\"text\":\"Nose: %1!d! units\",\"dll\":\"langui\"}," +
@@ -45,7 +48,7 @@ public class HangarArmourPageTests : IDisposable
         flow.Scratch.ArmourNose = 3;
 
         Assert.Equal(4, flow.Page.RowCount);
-        Assert.Equal("Nose: 3 units", flow.Page.RowText(0));
+        Assert.Equal("Nose: 15 units", flow.Page.RowText(0));
         Assert.Equal("Right Wing: 0 units", flow.Page.RowText(3));
     }
 
@@ -56,8 +59,27 @@ public class HangarArmourPageTests : IDisposable
         var flow = OpenOnArmour(UiStrings.Empty);
         flow.Scratch.ArmourTail = 7;
 
-        Assert.Equal("Tail: 7 units", flow.Page.RowText(1));
+        Assert.Equal("Tail: 35 units", flow.Page.RowText(1));
         Assert.Equal("Left Wing: 0 units", flow.Page.RowText(2));
+    }
+
+    /// <summary>The row walks 0 to 60 in fives, the thirteen rows the original's dropdown offers
+    /// (callback 2246 at 0x0040b7bd), while the model keeps counting in units.</summary>
+    [Fact]
+    public void TheDisplayedFigureRunsZeroToSixtyInFives()
+    {
+        var flow = OpenOnArmour(UiStrings.Empty);
+        var shown = new List<string>();
+        for (int i = 0; i <= CustomPlaneDef.MaxArmourUnits; i++)
+        {
+            shown.Add(flow.Page.RowText(0));
+            flow.Page.Step(0, 1);
+        }
+
+        Assert.Equal("Nose: 0 units", shown[0]);
+        Assert.Equal("Nose: 5 units", shown[1]);
+        Assert.Equal("Nose: 60 units", shown[12]);
+        Assert.Equal(0, flow.Scratch.ArmourNose); // and back to the start
     }
 
     /// <summary>Stepping a row edits that zone alone, in the 1191-1194 order the record stores
@@ -90,36 +112,38 @@ public class HangarArmourPageTests : IDisposable
         Assert.Equal(0, flow.Scratch.ArmourNose);
     }
 
-    /// <summary>The detail keeps the three factors distinct for 3 units: the units themselves,
-    /// $12 cost and 12 lbs. weight (x4, the priced pair), and the 15 lb display figure (x5,
-    /// never priced).</summary>
+    /// <summary>The detail names the pick and what it costs: 3 units shows as 15 and buys $12 of
+    /// weight-12 armour (x4, the priced pair). Nothing is called pounds: the x5 figure is the
+    /// displayed unit count, not a weight.</summary>
     [Fact]
-    public void DetailSeparatesTheThreeFactors()
+    public void DetailNamesThePickAndItsPrice()
     {
         var flow = OpenOnArmour(UiStrings.Empty);
         flow.Scratch.ArmourNose = 3;
 
         string detail = flow.Page.Detail(0);
-        Assert.Contains("3 units", detail, StringComparison.Ordinal);
+        Assert.StartsWith("15 units", detail, StringComparison.Ordinal);
         Assert.Contains("$12", detail, StringComparison.Ordinal);
         Assert.Contains("12 lbs.", detail, StringComparison.Ordinal);
-        Assert.Contains("15 lb shown", detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("lb shown", detail, StringComparison.Ordinal);
     }
 
-    /// <summary>The units figure in the detail renders through format 1170 when present, the
-    /// string the original's dropdown labels used.</summary>
+    /// <summary>The pick renders through the dropdown's own strings: format 1170 with units x5,
+    /// and langui 1165 "None" for the zero row rather than a count of nothing.</summary>
     [Fact]
-    public void DetailUnitsUseFormat1170()
+    public void DetailUsesFormat1170_AndString1165ForNone()
     {
-        var strings = UiStrings.Parse("[{\"id\":1170,\"text\":\"%1!d! units\",\"dll\":\"langui\"}]");
+        var strings = UiStrings.Parse(
+            "[{\"id\":1170,\"text\":\"%1!d! units\",\"dll\":\"langui\"}," +
+            "{\"id\":1165,\"text\":\"None\",\"dll\":\"langui\"}]");
         var flow = OpenOnArmour(strings);
         flow.Scratch.ArmourRightWing = 12;
 
         string detail = flow.Page.Detail(3);
-        Assert.StartsWith("12 units", detail, StringComparison.Ordinal);
+        Assert.StartsWith("60 units", detail, StringComparison.Ordinal);
         Assert.Contains("$48", detail, StringComparison.Ordinal);
         Assert.Contains("48 lbs.", detail, StringComparison.Ordinal);
-        Assert.Contains("60 lb shown", detail, StringComparison.Ordinal);
+        Assert.StartsWith("None   $0", flow.Page.Detail(0), StringComparison.Ordinal);
     }
 
     /// <summary>Confirm advances to the Guns screen without touching the zones.</summary>

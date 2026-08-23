@@ -19,9 +19,14 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed class CustomPlaneStore
 {
-    /// <summary>The schema version written into every file; a file claiming any other version is
-    /// treated as malformed rather than half-read.</summary>
-    public const int Version = 1;
+    /// <summary>The schema version written into every file. Version 2 stores paint as the
+    /// original's own index pairs; a file claiming a version this reader does not know is treated
+    /// as malformed rather than half-read.</summary>
+    public const int Version = 2;
+
+    /// <summary>The first schema: paint as three RGB triples plus the three dwords then read as
+    /// opaque "picks". Still loads, mapped forward by <see cref="ReadVersion1Paint"/>.</summary>
+    public const int LegacyVersion = 1;
 
     private static readonly JsonWriterOptions WriterOptions = new() { Indented = true };
 
@@ -87,12 +92,9 @@ public sealed class CustomPlaneStore
             w.WriteEndObject();
             w.WriteStartObject("paint");
             w.WriteNumber("pattern", def.PaintPattern);
-            w.WriteNumber("pick1", def.PaintPick1);
-            w.WriteNumber("pick2", def.PaintPick2);
-            w.WriteNumber("pick3", def.PaintPick3);
-            WriteColour(w, "colour1", def.Colour1);
-            WriteColour(w, "colour2", def.Colour2);
-            WriteColour(w, "colour3", def.Colour3);
+            WriteInts(w, "colours", def.PaintColours);
+            WriteInts(w, "shades", def.PaintShades);
+            WriteInts(w, "decals", new[] { def.NoseDecal, def.TailDecal, def.WingDecal });
             w.WriteEndObject();
             w.WriteEndObject();
         }
@@ -109,7 +111,8 @@ public sealed class CustomPlaneStore
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object || ReadInt(root, "version", -1) != Version)
+            int version = ReadInt(root, "version", -1);
+            if (root.ValueKind != JsonValueKind.Object || (version != Version && version != LegacyVersion))
             {
                 return null;
             }
@@ -165,12 +168,16 @@ public sealed class CustomPlaneStore
             if (root.TryGetProperty("paint", out var paint) && paint.ValueKind == JsonValueKind.Object)
             {
                 def.PaintPattern = ReadInt(paint, "pattern", 0);
-                def.PaintPick1 = ReadInt(paint, "pick1", 0);
-                def.PaintPick2 = ReadInt(paint, "pick2", 0);
-                def.PaintPick3 = ReadInt(paint, "pick3", 0);
-                def.Colour1 = ReadColour(paint, "colour1");
-                def.Colour2 = ReadColour(paint, "colour2");
-                def.Colour3 = ReadColour(paint, "colour3");
+                if (version == LegacyVersion)
+                {
+                    ReadVersion1Paint(def, paint);
+                }
+                else
+                {
+                    ReadInts(paint, "colours", def.PaintColours);
+                    ReadInts(paint, "shades", def.PaintShades);
+                    ReadDecals(def, paint);
+                }
             }
 
             return def.Clamp();
@@ -252,13 +259,60 @@ public sealed class CustomPlaneStore
         }
     }
 
-    private static void WriteColour(Utf8JsonWriter w, string key, PaintColour colour)
+    private static void WriteInts(Utf8JsonWriter w, string key, IReadOnlyList<int> values)
     {
         w.WriteStartArray(key);
-        w.WriteNumberValue(colour.R);
-        w.WriteNumberValue(colour.G);
-        w.WriteNumberValue(colour.B);
+        foreach (int value in values)
+        {
+            w.WriteNumberValue(value);
+        }
+
         w.WriteEndArray();
+    }
+
+    private static void ReadInts(JsonElement obj, string key, int[] into)
+    {
+        if (!obj.TryGetProperty(key, out var arr) || arr.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        int i = 0;
+        foreach (var value in arr.EnumerateArray())
+        {
+            if (i >= into.Length)
+            {
+                break;
+            }
+
+            into[i++] = value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int v) ? v : 0;
+        }
+    }
+
+    private static void ReadDecals(CustomPlaneDef def, JsonElement paint)
+    {
+        int[] decals = { CustomPlaneDef.KeepDecal, CustomPlaneDef.KeepDecal, CustomPlaneDef.KeepDecal };
+        ReadInts(paint, "decals", decals);
+        def.NoseDecal = decals[0];
+        def.TailDecal = decals[1];
+        def.WingDecal = decals[2];
+    }
+
+    // Version 1 stored free RGB triples and three "pick" dwords. The picks were the decal indices
+    // all along (a genuine save's 40/8/7 are nose art plus the two Fortune Hunters logos), and a
+    // triple maps to the nearest authored swatch, since the index model has no other way to hold
+    // a colour the artists did not author.
+    private static void ReadVersion1Paint(CustomPlaneDef def, JsonElement paint)
+    {
+        def.NoseDecal = ReadInt(paint, "pick1", CustomPlaneDef.KeepDecal);
+        def.TailDecal = ReadInt(paint, "pick2", CustomPlaneDef.KeepDecal);
+        def.WingDecal = ReadInt(paint, "pick3", CustomPlaneDef.KeepDecal);
+        for (int slot = 0; slot < HangarPaintTables.Slots; slot++)
+        {
+            var (colour, shade) = HangarPaintTables.Default.Nearest(ReadColour(paint, $"colour{slot + 1}"));
+            def.PaintColours[slot] = colour;
+            def.PaintShades[slot] = shade;
+        }
     }
 
     private static int ReadInt(JsonElement obj, string key, int fallback) =>

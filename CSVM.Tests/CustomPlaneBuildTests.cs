@@ -257,16 +257,16 @@ public class CustomPlaneBuildTests
         Assert.Equal(80f, damage.WholeHealthMax);
     }
 
-    /// <summary>The paint carries the pattern and the three colours. The composite picks stay
-    /// out: they register decal textures in the original but their encoding is undecoded, so the
-    /// scheme keeps the "leave the shipped placeholder" sentinel on all three decal slots.</summary>
+    /// <summary>The paint carries the pattern, the three resolved colours and the three decals,
+    /// which are the same 0-49 index space vehicle.json's paint_decalN uses.</summary>
     [Fact]
-    public void ThePaintCarriesThePatternAndColoursAndNoInventedDecals()
+    public void ThePaintCarriesThePatternColoursAndDecals()
     {
         var def = Def();
-        def.Colour1 = new PaintColour(223, 0, 41);
-        def.Colour2 = new PaintColour(25, 25, 25);
-        def.Colour3 = new PaintColour(255, 255, 255);
+        def.LoadPatternDefaults(4); // fortune: red, darkest, white
+        def.NoseDecal = 40;
+        def.TailDecal = 8;
+        def.WingDecal = 7;
 
         var scheme = CustomPlaneBuild.PaintFor(def, "hughes");
 
@@ -274,6 +274,18 @@ public class CustomPlaneBuildTests
         Assert.Equal(PaintScheme.FromBytes(223, 0, 41), scheme.Color1);
         Assert.Equal(PaintScheme.FromBytes(25, 25, 25), scheme.Color2);
         Assert.Equal(PaintScheme.FromBytes(255, 255, 255), scheme.Color3);
+        Assert.Equal(40, scheme.NoseDecal);
+        Assert.Equal(8, scheme.TailDecal);
+        Assert.Equal(7, scheme.WingDecal);
+    }
+
+    /// <summary>A build that chose no decal keeps the shipped placeholder on every slot, since a
+    /// fresh plane has no authored decal to inherit (the pattern defaults carry none).</summary>
+    [Fact]
+    public void AFreshBuildKeepsThePlaceholderDecals()
+    {
+        var scheme = CustomPlaneBuild.PaintFor(Def(), "fortune");
+
         Assert.Equal(-1, scheme.NoseDecal);
         Assert.Equal(-1, scheme.TailDecal);
         Assert.Equal(-1, scheme.WingDecal);
