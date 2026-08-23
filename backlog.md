@@ -71,13 +71,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   value TUNE.
 - **The flight constants are coupled and `--run-tests` guards them.** Thrust sets speed, speed
   scales the yaw `eff`, so a change in one moves others; the `flight-envelope` suite asserts six
-  measured scenarios and will fail if a change breaks one. `ThrustConst` and
-  `PitchTune`/`YawTune`/`RollTune` are pinned measurements, not knobs — a fix that needs one of
-  them to move needs a new measurement first. ⚠ **They re-pin when a decoded mechanism changes the
-  steady rate they hold, and only then**: `YawTune` 1.32 → 1.33 with the authored yaw curve (C21),
-  `PitchTune` 0.75 → 0.89 and `YawTune` 1.33 → 1.57 with the weathervane torque (C23), each against
-  the same stopwatch/video figures as before. Chasing a *transient* or a feel report through them is
-  the forbidden move, not re-pinning a steady rate something else moved.
+  measured scenarios and will fail if a change breaks one. `ThrustConst` is a pinned measurement, not
+  a knob — a fix that needs it to move needs a new measurement first, and chasing a *transient* or a
+  feel report through it is the forbidden move. ⚠ **`PitchTune`/`YawTune`/`RollTune` are no longer
+  in that category: all three are 1, because `BL-414` decoded `FUN_0048c470` and found no per-axis
+  factor on any axis.** Pitch-rate survives the change at 35.26 °/s against 33.00 ± 3. **`yaw-360` is
+  now informational**: the model takes 49.12 s against the footage's 28.60 s, the slow rudder was
+  accepted at the controls, and the row is a recorded decode-vs-footage conflict like
+  `accel-150-290` and `decel-290-150`. The 28.60 was not rewritten, and `FlightScenarios` is 6.
 
 ## Damage & destruction
 
@@ -900,9 +901,50 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   they and `BounceLeverScale` move as one group or not at all. (e) `KnifeAlignFloor` carries a
   two-sided prohibition in the code (raising it to 1 moves every knife-edge observable the wrong way,
   lowering it walks α past `liftAOAs[0]`), so a decode landing elsewhere has to answer both.
+  **Decoded so far:** `FUN_0048c470` builds each axis' stick torque as `torque · stick · authority ·
+  dt` and nothing more (roll `0x48ca8d`-`0x48caa2`, pitch `0x48cb07`-`0x48cb19`, yaw `0x48cbd5`), so
+  `PitchTune` and `YawTune` had no counterpart and are now 1; and the stall nose-drop's rate is the
+  authored `stall_mag` (`_DAT_0071c41c`, fallback 0.45, dt multiply `0x48d11b`) added as a TORQUE
+  about an unnormalised `nose × worldUp`, so `StallNoseRate` 1.0 is a no-op multiplier rather than a
+  rate. Write-up in [`docs/org/flightModel.md`](docs/org/flightModel.md). Still fitted: the graze
+  trio and `KnifeAlignFloor`. The same pass found two decoded terms missing from the code entirely,
+  which `BL-437` now owns.
   *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md) (the fitted-vs-decoded split, and
   its "A destroyed hull flies the same model" section, which hands this item the open question of what
   throttle an AI carries into its death), `BL-385` (the decoded death path).
+
+- `BL-437` `[Bug]` **Two decoded control-authority terms are not implemented, and both are invisible
+  on the shipped data.** Each is traced in `crimson.exe` and absent from `FlightModel`, and neither
+  changes a number today because the authored values never reach the threshold. That is what makes
+  them worth an item rather than a doc note: the code reads as if the mechanism does not exist, so a
+  later change that makes either reachable produces a divergence nobody will connect to this.
+  - **Pitch has a second authority stage that roll does not.** `FUN_0048bdd0` fades pitch by
+    `high_speed_pitch_fade` on top of the shared base ramp: full authority until `0x0071c400`,
+    falling linearly to zero at `0x0071c404`, fallbacks **500 → 600 mph** (immediates at `0x474179`
+    and `0x474183`; the authored path parses the token at `0x6277f8` from MPH at
+    `0x4741f2`-`0x474231`). Our `RollPitchAuthorityAt` returns one curve for both axes, so the fade
+    is simply missing. It cannot bind on the shipped airframes because 500 mph is above every
+    `fd_speed`, which is also why the video reads pitch rate as flat with speed.
+  - **The opposing-command limiter is absent entirely.** `FUN_0048c470` softens a pitch or yaw
+    command whose sign opposes `unit(nose × v̂)` on the axis being commanded (`0x48ca7a` onward,
+    pitch and yaw only; roll carries no such test), by the smaller of an AOA term
+    `(cos α − maxAOACos) / (1 − maxAOACos)` and a G term ramping to zero between `highGs[0]` and
+    `highGs[1]`. So what it damps is recovery from a departure, not entry into one. Both halves are
+    authored out of reach on all eleven airframes (`ControlLimiterTests`), which is why nothing was
+    ported.
+  ⚠ **Neither is a tuning question and neither should be "fixed" by moving a constant.** The work is
+  to implement the term where the decode puts it, or to record a deliberate divergence with its
+  reason. A fade or a limiter that binds on shipped data would be a decode error, so if implementing
+  one changes any `flight-envelope` row on a stock airframe, the reading is wrong.
+  ⚠ Splitting `RollPitchAuthorityAt` touches every axis' command scaling; its own comment warns that
+  extending a curve to an axis that has its own double-fades it. Split the pitch stage off, do not
+  rebuild the base ramp.
+  *Size:* localized, and the second half may close as a recorded no-change.
+  *How you'd know it worked:* an airframe authored past the fade knee loses pitch authority and keeps
+  roll; a command opposing the flight path at a reachable `highGs` is softened while entry into the
+  same departure is not. Neither is reachable on stock data, so both need a synthetic airframe.
+  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md) ("Control authority vs speed"
+  and "Torques and the limiters"), `BL-414` (the decode pass that surfaced both).
 
 - `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
   complete and waiting, not as a discovery. Shipped: `MSG_CMD_NITROUS` ("Use Nitro-Booster") is a
@@ -1014,6 +1056,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     decode to defer to — it is chosen so the deep-stall rate beats full-elevator authority
     (~0.58 rad/s) and the drop stays decisive. Whatever replaces it must keep that property and must
     still refuse to raise the nose over the horizon while stalled.
+    ⚠ **The untraced-TUNE line above is superseded: `BL-414` decoded the mechanism.** The original
+    adds `stall_mag · stallFlag · dt` (`stall_mag` authored, fallback 0.45) into the TORQUE
+    accumulator about an unnormalised `nose × worldUp`, where `stallFlag` is `1 − L(9°)/Weight`. So
+    the rate is damped by `ang_momentum_damp` rather than applied to the attitude (≈0.106 rad/s at
+    full depth on the Bloodhawk), the drop weakens as the nose leaves horizontal instead of chasing
+    world-down, and the settle at ≈−22° is an equilibrium. That accounts for the ~17× and the wrong
+    shape together, and it is what this bullet should be rebuilt on rather than a new fit.
     ⚠ The two stall thresholds around it are settled and are not in scope: `StallSpeedFrac` is the
     nose-drop at **0.25 fd** and `StallWarnFrac` the lamp at **0.30 fd**, two unrelated thresholds on
     one margin (`StallWarningTests`).

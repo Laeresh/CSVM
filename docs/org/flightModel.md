@@ -580,11 +580,40 @@ lamp was measured at, and therefore the tolerance every period assertion gets.
 ⚠ **A wall-clock implementation lands ≈39 % short of every dwell.** Same conversion and the same
 trap as the chase camera's throttle transient ([camparam.md](../formats/camparam.md)).
 
-**The nose-drop's own rate is a remake TUNE, not a decode.** `StallNoseRate` (1 rad/s toward
-world-down at full stall depth, scaled by the authored `stall_mag`) is chosen so the deep-stall
-rate exceeds full-elevator authority (~0.58 rad/s steady) and the drop is decisive until airspeed
-recovers; while stalled the nose additionally cannot be raised over the horizon at any bank
-(user-observed behaviour of the original). Nothing in the executable has been traced to either.
+### The nose-drop's rate is `stall_mag`, and it is a TORQUE
+
+The original's nose-drop is the last block of `FUN_0048c470`, behind the player-only guard. The stall
+flag is written to the out-parameter as `1 − L(9°)/Weight`, and where it is positive the block builds
+`axis = nose × worldUp` (`DAT_006379c0` reads `(0, 1, 0)`, confirmed from memory), cancels whatever
+accumulated torque already opposes that axis, and adds along it:
+
+```
+Δ(torque accumulator) += axis · (stall_mag · stallFlag · dt)      [dt multiply at 0x48d11b]
+```
+
+`stall_mag` is `_DAT_0071c41c`, authored from the `stall_mag` token (string at `0x627854`, parsed at
+`0x4742de`-`0x4742fe`), compiled fallback **0.45**. There is **no second rate constant**: the 0.45 is
+the whole of it.
+
+Three consequences, and they are what separate this from the remake's version:
+
+- **It enters the torque accumulator, not the attitude.** So it is scaled by `rec_moments_inertia`
+  and damped by `ang_momentum_damp` downstream, exactly as "Torques and the limiters" warns for
+  anything else entering that accumulator. On the Bloodhawk (`rec_moments_inertia.x` 1.18,
+  `ang_momentum_damp` 5.0) full stall depth settles at `0.45 · 1.18 / 5.0` ≈ **0.106 rad/s**, an
+  order of magnitude under a direct 0.45 rad/s rotation.
+- **The axis is not normalised**, so the rate carries a `cos(nose elevation)` factor and falls away
+  as the nose leaves the horizontal. The nose is pushed down about a horizontal axis; it does not
+  chase world-down, and a bounded nose-down attitude is an equilibrium between this torque and the
+  restoring terms rather than the end of a chase.
+- **The depth measure is the lift-versus-weight flag**, `1 − L(9°)/Weight`, not a speed ratio.
+
+⚠ **The remake's `StallNoseRate` 1.0 is a no-op multiplier on `stall_mag`, not a rate.** Our
+`StallMag × StallNoseRate × depth × dt` rotates the attitude directly about a normalised axis with
+`depth = 1 − Speed/StallSpeed`. The scalar happens to agree; all three structural points above do
+not, which is the real content of `BL-410`'s "~17× too fast, and chases the wrong target" and of the
+CAP-05 reading that the original drops at 0.059 rad/sim-s and settles at ≈−22° instead of continuing
+down. What that item records as an untraced TUNE now has a mechanism to be rebuilt on.
 
 ## The keyboard stick is an accumulator, not a switch (`FUN_00487460`)
 
@@ -648,7 +677,14 @@ the same nine and computes the same curves.) Fallback values shown as authored (
   (**40**), then held at 1.
 - **Roll authority** = `f`. **No high-speed fade** — roll never degrades with speed.
 - **Pitch authority** = `f`, then faded by `high_speed_pitch_fade`: full until **500**, falling
-  linearly to **zero at 600 mph**.
+  linearly to **zero at 600 mph**. The fallbacks are the immediates at `0x474179` / `0x474183`, and
+  the authored path parses the `high_speed_pitch_fade` token (string at `0x6277f8`) at
+  `0x4741f2`-`0x474231`, each field converted from MPH.
+  ⚠ **Pitch and roll do NOT share one curve, though the remake's `RollPitchAuthorityAt` treats them
+  as if they did.** The second stage is pitch-only. It is invisible on the fallback numbers, since
+  500 mph is above every airframe's `fd_speed`, which is also why the video reads pitch rate as flat
+  with speed. An install that authors a lower `high_speed_pitch_fade` would bind it, and ours would
+  not follow.
 - **Yaw authority** — piecewise, and deliberately **not monotone**:
 
   | Speed (mph) | Authority |
@@ -2087,28 +2123,67 @@ the zeppelin parser nor its two part-registration helpers clears them on a part.
 at `0x00490441` but never calls `FUN_0048d2c0`, so class-1 objects take position correction and no
 collision damage at all; every write to that field found so far stores 0.
 
-## The three `*Tune` rates — what they are pinned to
+## The `*Tune` rates — none of the three exists in the executable
 
 The remake's per-axis control-rate calibration. Steady rate is
 `torque · rec_moments_inertia · Tune / ang_momentum_damp` (× the yaw authority curve on yaw), and a
 full 360° takes ≈ `1/damp` of spin-up plus `2π/rate`.
 
-| Constant | Value | Note |
-|---|---:|---|
-| `PitchTune` | **0.89** | fitted to stopwatch timings and cockpit-gauge video, sustained pitch ≈33 °/s; 0.75 before C23, the weathervane explains a little over half of what it used to absorb |
-| `YawTune` | **1.57** | pinned against the authored yaw curve, full-rudder 360° 28.6 s; 1.33 before C23 and 1.32 before C21 |
-| `RollTune` | **1.0** | **not a calibration.** The decode leaves no room for one |
+⚠ **No axis carries a calibration factor.** Read out of the LIVE force function `FUN_0048c470`, the
+three stick torques are built in three guarded blocks and each is exactly four factors, with nothing
+else multiplying in:
 
-⚠ **Roll carries no calibration factor, and a 2.12 that used to sit here is gone.** `FUN_00490f70`
-builds the roll term as `roll_torque · stick · dt · f_roll(speed)` and `FUN_00490e10` returns
-`f_roll` as the shared low-speed ramp with **no high-speed fade and no other factor** — roll is also
-the one axis with no reverse-authority test, which pitch and yaw both carry. So the authored numbers
-are the whole of it: the Bloodhawk's `roll_torque 7.5` and `rec_moments_inertia.z 1.10` against
-`ang_momentum_damp 5.0` give **90.7 °/s** and a 360° roll in **4.17 s**.
+| Axis | Guard | Chain | `dt` multiply |
+|---|---|---|---|
+| Roll | `obj+0x114` ≠ 0 | `roll_torque [+0x644] · stick [+0x114] · rollAuthority · dt` | `0x48caa2` |
+| Pitch | `obj+0x11c` ≠ 0 | `pitch_torque [+0x648] · stick [+0x11c] · pitchAuthority · dt` | `0x48cb19` |
+| Yaw | `obj+0x120` ≠ 0 | `rudder_torque [+0x64c] · stick [+0x120] · yawAuthority · dt` | `0x48cbd5` |
+
+The roll chain is visible instruction by instruction at `0x48ca8d` (`FLD [ESI+0x644]`), `0x48ca96`
+(`FMUL [ESI+0x114]`), `0x48ca9f` (`FMUL [EBP-0x18]`, the authority scalar) and `0x48caa2`; the pitch
+chain the same way at `0x48cb07` and `0x48cb19`. `rec_moments_inertia` and `ang_momentum_damp` enter
+downstream in the integrator, as "Torques and the limiters" describes. Pitch and yaw differ from roll
+only in which authority scalar `FUN_0048bdd0` hands them and in the opposing-command test, neither of
+which is a constant factor.
+
+So the authored numbers are the whole of it on every axis. The Bloodhawk's `roll_torque 7.5` and
+`rec_moments_inertia.z 1.10` against `ang_momentum_damp 5.0` give **90.7 °/s** and a 360° roll in
+**4.17 s**.
+
+| Constant | Value | Standing |
+|---|---:|---|
+| `PitchTune` | was **0.89** | fitted to stopwatch timings and cockpit-gauge video, sustained pitch ≈33 °/s. **No counterpart in the binary**, now 1: pitch-rate moves 33.54 → **35.26 °/s** against the original's 33.00, still inside the ±3 band |
+| `YawTune` | was **1.57** | pinned against the authored yaw curve, full-rudder 360° 28.6 s. **No counterpart in the binary**, now 1: yaw-360 moves 28.55 → **49.12 s** against the original's 28.60, and the row is now informational |
+| `RollTune` | **1.0** | already retired on this evidence; a 2.12 that used to sit here is gone |
 
 The 2.12 existed to reach a **2.05 s** roll timed off footage, which is 2.12× what the executable's
 own arithmetic produces. A decode is not contested with a stopwatch reading, so the multiplier went
-rather than the decode. Restoring one needs a mechanism traced in the binary.
+rather than the decode. The pitch and yaw multipliers are the same class of fit against the same
+class of evidence, and the same disposition applies. Restoring any of the three needs a mechanism
+traced in the binary.
+
+⚠ **Pitch survives its own measurement; yaw does not.** Pitch rate is NOT proportional to its
+multiplier, because the weathervane torque enters the same accumulator carrying no `*Tune` and grows
+with the resulting incidence: 0.89 → 1 moves the rate by 5%, not by 12%. At 35.26 °/s the row is
+still green against 33.00 ± 3, and the video it was fitted to reads 37.9 / 33.7 / 30.7 / 36.5 °/s
+binned round a loop, so 0.89 was fitting noise inside its own spread.
+
+Yaw is the row the decode breaks, at 49.12 s against a 28.60 s target. What it moves toward is the
+rudder this page already describes: a ground-handling control held at 10% authority for all of
+normal flight, which a 28.6 s full-rudder 360° never fitted.
+
+⚠ **`yaw-360` is now INFORMATIONAL, and the 28.6 s was NOT rewritten.** The footage figure is a
+measurement of a fixed artifact and stays exactly as measured; what disagrees with it is the decode,
+so the row joins `accel-150-290` and `decel-290-150` as a recorded decode-vs-footage conflict rather
+than a target refitted to whatever the model now produces. `FlightEnvelopeTests.FlightScenarios`
+drops 7 → 6 to make the demotion loud, which is what that constant is for. The slow rudder was read
+at the controls and accepted before the row moved. Closing this conflict means explaining where the
+footage's 28.6 s comes from, not restoring a multiplier.
+
+⚠ **One golden moved with this: `c1-flight`, re-pinned.** It flies `--hold=0.2,0.1,0,1` — held pitch
+and roll, zero rudder — so it moved on the pitch change alone, and the other fifteen shots are
+untouched, which is what confines the change to the control rates. The capture was inspected before
+the re-pin: same scene, same HUD, a different flown attitude.
 
 ⚠ **This halves the roll rate of every airframe, the player's included**, since the other ten move
 with the Bloodhawk as they always have. It is a decode correction and not a feel change, so the
