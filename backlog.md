@@ -1042,27 +1042,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-410` `[Tuning]` `[Owed-playtest]` **The flight model's three remaining loose ends: the stall
   nose-drop's rate and target, the sustained climb's magnitude, and `KnifeAlignFloor`'s feel.**
   Carries forward what `BL-115` still had open when the rest of it closed; `git log --grep=BL-115`
-  for everything that entry settled. ⚠ **`PitchTune`/`YawTune`/`RollTune`/`ThrustConst` are not on
-  this list** — all four are measured against the original frame by frame and asserted by the
-  `flight-envelope` suite, so they are not TUNE knobs and a feel report cannot overrule them.
+  for everything that entry settled. ⚠ **`ThrustConst` is not on this list** — it is measured against
+  the original frame by frame and asserted by the `flight-envelope` suite, so it is not a TUNE knob
+  and a feel report cannot overrule it. `PitchTune`/`YawTune`/`RollTune` are not on it either, for
+  the opposite reason: `BL-414` found no such factor in the original and all three are now 1.
   - **`StallNoseRate` 1.0 rad/s is ~17× too fast, and chases the wrong target.** In `CAP-05 Stall 0%
     Thrust no input` the original's nose holds **+4.2 ± 0.1°** through the whole deceleration, starts
     falling only at 0.25 fd, drops at **3.38 °/sim-s = 0.059 rad/sim-s** from +4.1° to −21.2°, and
     **stops at ≈−22°** once speed rebuilds past 0.40 fd — it does not chase world-down at all, so
     "rad/s toward world-down at full stall depth" is the wrong shape as well as the wrong rate. The
     break is wings-level and clean: the compass turns **0.0°** across the whole 24.8 sim s, no wing
-    drop. ⚠ **Nothing in the executable has been traced to this constant** (`docs/org/flightModel.md`,
-    "The nose-drop's own rate is a remake TUNE"), so unlike the rest of the stall model there is no
-    decode to defer to — it is chosen so the deep-stall rate beats full-elevator authority
-    (~0.58 rad/s) and the drop stays decisive. Whatever replaces it must keep that property and must
-    still refuse to raise the nose over the horizon while stalled.
-    ⚠ **The untraced-TUNE line above is superseded: `BL-414` decoded the mechanism.** The original
-    adds `stall_mag · stallFlag · dt` (`stall_mag` authored, fallback 0.45) into the TORQUE
-    accumulator about an unnormalised `nose × worldUp`, where `stallFlag` is `1 − L(9°)/Weight`. So
-    the rate is damped by `ang_momentum_damp` rather than applied to the attitude (≈0.106 rad/s at
-    full depth on the Bloodhawk), the drop weakens as the nose leaves horizontal instead of chasing
-    world-down, and the settle at ≈−22° is an equilibrium. That accounts for the ~17× and the wrong
-    shape together, and it is what this bullet should be rebuilt on rather than a new fit.
+    drop. **The mechanism is decoded and the rebuild goes on it, not on a new fit**
+    (`docs/org/flightModel.md`, "The nose-drop's rate is `stall_mag`"): the original adds
+    `stall_mag · stallFlag · dt` (`stall_mag` authored, fallback 0.45) into the TORQUE accumulator
+    about an unnormalised `nose × worldUp`, where `stallFlag` is `1 − L(9°)/Weight`. So the rate is
+    damped by `ang_momentum_damp` rather than applied to the attitude (≈0.106 rad/s at full depth on
+    the Bloodhawk), the drop weakens as the nose leaves horizontal instead of chasing world-down, and
+    the settle at ≈−22° is an equilibrium rather than the end of a chase. That accounts for the ~17×
+    and the wrong shape together. `StallNoseRate` 1.0 is a no-op multiplier on `stall_mag`, so there
+    is no rate constant to re-choose: what changes is the form.
+    ⚠ Whatever replaces it must still beat full-elevator authority (~0.58 rad/s) at depth so the drop
+    stays decisive, and must still refuse to raise the nose over the horizon while stalled.
     ⚠ The two stall thresholds around it are settled and are not in scope: `StallSpeedFrac` is the
     nose-drop at **0.25 fd** and `StallWarnFrac` the lamp at **0.30 fd**, two unrelated thresholds on
     one margin (`StallWarningTests`).
