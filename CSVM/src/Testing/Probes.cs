@@ -1039,15 +1039,18 @@ public static class Probes
             + $"α = {pitchAlphas[0]:0.0}/{pitchAlphas[1]:0.0}/{pitchAlphas[2]:0.0}° "
             + "(the alignment lag at this body rate — see the note above)");
 
-        // --- yaw. The one axis 'eff' scales, so it is the axis a thrust change moves: faster
-        // acceleration holds the plane nearer fd_speed, where eff is at its floor.
+        // --- yaw. The one axis 'eff' scales, so a thrust change moves it. INFORMATIONAL since the
+        // *Tune decode: no per-axis factor exists in the original's torque path, and the footage's
+        // 28.6 s stands as measured — what disagrees is the decode. docs/org/flightModel.md.
         m = Fresh(stats, Level(), 290f * Mph, 1f);
         double sumSpeed = 0, samples = 0;
         double tYaw = RunUntil(m, 1f, 60f, YawAccum(m), yaw: 1f,
                                onStep: () => { sumSpeed += m.Speed; samples++; });
         Row("yaw-360", "full rudder from 290 mph, 360°", "s", tYaw, 28.6, 3.0,
             (samples > 0 ? $"mean speed {sumSpeed / samples / Mph:0.0} mph, " : "")
-            + $"α {m.Alpha:0.0}° at finish");
+            + $"α {m.Alpha:0.0}° at finish — OPEN conflict, the torque path is the binary's and the "
+            + "footage disagrees",
+            info: true);
 
         // --- altitude cap: fixed 22° nose-up hold (attitude set once, not continuous elevator,
         // which would loop instead of climb). Without the clamp this never stops climbing (the

@@ -34,8 +34,8 @@ public struct FlightInput
 /// never the bank coupling or the weathervane.
 /// Decode: docs/org/flightModel.md. The two force paths, the plumbing and the standing
 /// decode-vs-footage gaps: this module's entry in docs/architecture.md.
-/// ⚠ Do not retune the constants marked TUNE by feel. The three *Tune rates are pinned to
-/// measured video, the graze trio on Collide is ours, and every other coefficient is the binary's.
+/// ⚠ Do not retune the constants marked TUNE by feel. The graze trio on Collide and the knife-edge
+/// floor are ours; every other coefficient here is the binary's, the three *Tune rates included.
 /// </summary>
 public sealed class FlightModel
 {
@@ -129,7 +129,13 @@ public sealed class FlightModel
     // Numerical backstop (~140 ft), NOT a modelled spring: it bounds a runaway frame to the measured
     // ballistic overshoot rather than shaping the overshoot.
     private const float AltitudeCapOvershootM = 42.8f;
-    private const float StallNoseRate = 1.0f;     // TUNE: rad/s toward world-down at full stall depth (× stall_mag)
+    // The nose-drop rate is the authored stall_mag alone, so this multiplier is 1 and is NOT a TUNE:
+    // the original adds stall_mag · stallFlag · dt into the TORQUE accumulator about an unnormalised
+    // nose × worldUp. Ours rotates the attitude directly about a normalised axis, so the scalar
+    // agrees and the shape does not. docs/org/flightModel.md, "The nose-drop's rate is stall_mag".
+    // ⚠ Do not raise this to chase the drop's shape. The divergence is the mechanism, not the rate,
+    // and BL-410 owns rebuilding it on the decoded torque form.
+    private const float StallNoseRate = 1.0f;
 
     // Fraction of the nose-chase that survives at 90° bank; the chase weakens with wing verticality,
     // which is what deepens the knife-edge sag. Kept on a measurement rather than on the decode,
@@ -173,14 +179,14 @@ public sealed class FlightModel
     private const float DragPolarQuad = 0.5f;
 
     // Per-axis control-rate calibration: steady rate = torque · recInertia · Tune / ang_momentum_damp
-    // (× eff on yaw). docs/org/flightModel.md, "The three *Tune rates".
-    // ⚠ Roll's 1.0 is the decode, not an unfitted axis. Restoring a multiplier there needs a
-    // mechanism traced in the binary, never a roll timed off footage — that is what it replaced.
-    // ⚠ Do not move the other two to chase the transient response, a narrowed but open divergence.
-    // They set the STEADY rate, which matches, and a transient chased through them breaks that.
-    private const float PitchTune = 0.89f;        // TUNE: pinned to measured video of the original
-    private const float YawTune = 1.57f;          // TUNE: pinned against the authored yaw curve below
-    private const float RollTune = 1f;            // the binary's own, not a tune
+    // (× eff on yaw). All three are 1: the original has no such factor on any axis.
+    // docs/org/flightModel.md, "The *Tune rates".
+    // ⚠ Kept as named constants, not deleted, so the config keys stay live for an A/B at the
+    // controls. Restoring a value needs a mechanism traced in the binary, never a rate timed off
+    // footage — that is what all three replaced.
+    private const float PitchTune = 1f;
+    private const float YawTune = 1f;
+    private const float RollTune = 1f;
 
     // Bank coupling, the original's coordinated-turn cheat and the only part of its rotation that no
     // airframe authors: banking yaws the nose the way the wings point and pulls it up, with a further
