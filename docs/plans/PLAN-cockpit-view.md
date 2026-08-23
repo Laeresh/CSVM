@@ -1,8 +1,7 @@
 # Cockpit view (BL-080) — the original's two first-person views
 
-**ACTIVE PLAN** (written 2026-08-21). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**✅ COMPLETE** (written 2026-08-21, completed 2026-08-23). Archived in `docs/plans/`; its row is
+in [`plans.md`](plans.md).
 
 This plan delivers the original's two first-person views: **Cockpit (mode 6)** with the interior
 model rendered, 80° horizontal FOV and head-look, and **Nose (mode 7)** with the interior hidden,
