@@ -135,7 +135,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — into flight
 
-31. ☐ Custom planes in every human plane picker, with the after-build auto-select
+31. ☑ Custom planes in every human plane picker, with the after-build auto-select
 32. ☐ Building a custom plane into a flying aircraft
 33. ☐ The closing at-the-controls pass, and the BL-354/BL-067 closures
 
@@ -445,9 +445,9 @@ armour, guns, hardpoints, paint, name, purchase), walked over one scratch `Custo
   then `CustomPlaneStore.Save`. Funds are never checked (Decision 2). Editing a saved plane starts
   from a copy made through the store's canonical serialisation, so abandoning an edit cannot touch
   what is on disk.
-- **The D31 seam** is `LaunchMenu.LastBuiltPlane`, the name a completed build hands back. Nothing
-  reads it yet, so a build today returns to an unchanged picker; D31 lists customs after the eleven
-  stock airframes and auto-selects this one (the index-11 contract).
+- **The D31 seam** was `LaunchMenu.LastBuiltPlane`, the name a completed build hands back. D31
+  has since landed and consumes it: customs list after the eleven stock airframes and
+  `CloseHangar` auto-selects the just-built plane by name (the index-11 contract).
 - **Strings** resolve through the new `CSVM/src/Mech3/UiStrings.cs`: `extracted/rof/ui_strings.json`
   under the session's own `dataRoot` (the path idiom `HudFont` already uses), langui rows only
   (ids repeat across the file's two tables), `FormatMessage` specifiers (`%1!d!`, `%1!02d!`, `%%`)
@@ -884,22 +884,62 @@ original's message strings (1227 OVERWEIGHT, 1171 No Engine Selected) and block 
 
 ## D31 ☐ Custom planes in every human plane picker, with the after-build auto-select
 
-**Goal.** Every human plane picker (IA pilot plane, chapter flow, splitscreen seats) lists saved
-customs after the 11 stock airframes; completing a build auto-selects the new plane in the picker
-the hangar was entered from (the original's index-11 `gui_continue` contract).
+**Landed.** One roster stands behind every human plane picker:
+`CSVM/src/UI/PlanePickerRoster.cs`, engine-free, building the 11 stock airframes (the
+launchscreen's curated order) then the store's saved customs in `CustomPlaneStore.List()`'s own
+name-sorted order. A row is a `PickerPlane(Name, Node, CustomName)`: `CustomName` null on a stock
+row and the store name on a custom, which is the identity every consumer distinguishes the two
+by; `Node` on a custom is its airframe's STOCK `player_*` node (`AirframeNode`, ids 0-10 in the
+stat table's row order, the Hoplite being `player_autogyro`).
+
+- **The picker sites, enumerated.** The remake has exactly two places a human picks their own
+  plane, both `Screen.Plane` in `LaunchMenu.cs`: the lone-pilot centred list (`Rebuild`/`Row`,
+  which IA, Free Flight and Dogfight's chapter flow all share as their final step) and the
+  splitscreen panes (`RebuildPanes`/`PaneBody`, one per joined seat). Both now draw
+  `LaunchMenu._roster`; the cursor wrap (`HandleInput`), the stats detail, the AMMO SELECTION
+  heading, the locked line and `FireLaunch` all index it. The third aircraft list, the Wingmen
+  step's stepper, stays on the stock `Planes` table: wingmen are AI-flown, so Decision 6's
+  "every human picker" does not reach it.
+- **Refresh and auto-select.** `ShowMenu` and `CloseHangar` both call `RefreshRoster`
+  (re-list the store, clamp every cursor into the possibly-changed list), so a save appears
+  without a menu restart. On `HangarExit.Built`, `CloseHangar` looks the built name up in the
+  refreshed roster (`PlanePickerRoster.IndexOf`, case-blind like the store's duplicate-name
+  policy) and sets player 1's `PlaneIndex` to it: entered from the IA plane pick that is the
+  visible cursor on return, entered from the Mode door it is where the pick opens later. The
+  original selects index 11, the first custom slot, after a build (`gui_continue`); ours selects
+  the just-built plane by name because our customs sort rather than filling slots.
+- **The door still cannot be read as a plane.** The Build row now trails the customs at index
+  `_roster.Count` (`PlaneRowCount`), still lone-pilot-IA-only (`HangarRowOnPlaneScreen`,
+  C21's gating untouched). C21's clamp reasoning re-checked against the grown roster: the door
+  Accept check is `PlaneIndex >= _roster.Count`, the door never locks or confirms so
+  `FireLaunch` never indexes it, `RebuildPanes` clamps joining cursors to `_roster.Count - 1`
+  (only the door is clamped away; a custom stays a valid pick in every pane, Decision 6), and
+  `RefreshRoster` clamps to `PlaneRowCount - 1` so a cancelled flow keeps the cursor on the door.
+- **⚠ The D32 seam, exactly.** A custom pick survives the menu layer as
+  `LaunchMenu.PlayerChoice.CustomPlane` (the store name; null on a stock pick).
+  `Launcher.StartSessionFromMenu` reads only `PlaneNode` and `Fit` today, so a picked custom
+  launches as its airframe's stock plane, with the airframe's stock Ammo Selection list
+  (`StockFitFor` resolves through the roster row's node). D32 reads `CustomPlane` there, loads
+  the def from `CustomPlaneStore` and builds it into the spawned aircraft. The IA wizard's
+  nominal `PlayerPlane` label gets the airframe's stock name for a custom
+  (`NominalPlaneName`): the def's consumers speak ia.json's stock vocabulary.
+- **Scripted paths untouched.** `--plane=`/`--det` name planes by node straight into
+  `SessionSpec` (`ParsePlanes`) and never see the roster; no CLI lists customs, and the hangar
+  itself remains unreachable outside interactive input (C21).
+
+Tests in `CSVM.Tests/PlanePickerRosterTests.cs` (6 tests, 16 executed cases):
+`StockRowsComeFirstInTheirGivenOrder`, `CustomsListAfterTheStockRows`,
+`ACustomRowFliesAsItsAirframesStockNodeAndKeepsItsName`, `AirframeNodesMatchTheStatTableOrder`
+(all 11 ids), `AirframeNodeClampsOutOfRangeIds`, `IndexOfFindsACustomByNameAndOnlyACustom`.
+
+**Goal (original).** Every human plane picker (IA pilot plane, chapter flow, splitscreen seats)
+lists saved customs after the 11 stock airframes; completing a build auto-selects the new plane
+in the picker the hangar was entered from (the original's index-11 `gui_continue` contract).
 
 **Evidence (confidence: traced for the contract).** The 11+customs sizing and index-11 select are
-decoded ([`org/hangar.md`](org/hangar.md), the 1024/2099 count callbacks);
-<TODO: enumerate the remake's actual picker sites in `LaunchMenu.cs` and splitscreen join UI —
-not surveyed this session.>
+decoded ([`org/hangar.md`](org/hangar.md), the 1024/2099 count callbacks).
 
-**Approach.** One roster provider (stock + B11's listing) consumed by every picker; selection
-carries an id that distinguishes stock from custom.
-
-**Model recommendation.** medium.
-
-**Verify.** A saved plane appears in all pickers; building from IA returns with it selected; a
-splitscreen seat can pick it.
+**Verified.** <pending orchestrator run>
 
 ## D32 ☐ Building a custom plane into a flying aircraft
 

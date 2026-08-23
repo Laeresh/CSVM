@@ -207,6 +207,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
 - `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session; also the hangar's two doors and its renderer.
+- `src/UI/PlanePickerRoster.cs` — the one roster every human plane picker draws: 11 stock airframes then the store's saved customs, each custom carrying its store name and its airframe's stock node (D32's launch seam); engine-free build/lookup rules.
 - `src/UI/HangarFlow.cs` — the Build Custom Plane flow, engine-free: the original's nine screens over one scratch `CustomPlaneDef`, back/next navigation, the `IHangarPage` mount point C22-C26 fill (rows, detail, stepper, optional `HangarArt`), and the gated commit into `CustomPlaneStore`.
 - `src/UI/HangarAirframePage.cs` — the AIRFRAME screen: all 11 airframes as rows, the ←→ stepper writing the scratch airframe and nothing else, the stat table's figures and the economy's star ratings per row, the focused airframe's blueprint TGA as page art.
 - `src/UI/HangarEnginePage.cs` — the ENGINE screen: the airframe's six engines (langui 3100+af*6+id) plus the no-engine row (1171), the pick ticked, the stepper writing the scratch engine, each row's decoded cost and weight via `HangarEconomy.EngineLine`.
@@ -2984,15 +2985,35 @@ non-null: the page's decoded RGBA as a fixed-height letterboxed texture with a c
 only when the page hands over a different image and counted by `LayoutScale` so the screen still
 fits 720p. Every hangar screen also carries the persistent totals line under its heading
 (`HangarFlow.TotalsLine`, PLAN-hangar Decision 10), error-coloured via `TotalsOverweight` and
-counted by `LayoutScale` the same way. A page needs no change here, art included. ⚠ The plane
-pick's
-hangar row is offered only to a lone pilot under Instant Action (`HangarRowOnPlaneScreen`): a
-splitscreen pane never draws it, and `RebuildPanes` clamps every cursor back into the roster, so
-`PlaneIndex` can never point past the eleven airframes anywhere a plane is actually read. The row
-is a door, not an aircraft, so it cannot be locked or confirmed and no launch path sees it. A
-completed build lands in `LastBuiltPlane`, which is D31's seam for the after-build auto-select and
-is read by nothing yet. The hangar is reached only through interactive menu input: no `--menu=`
-opening, no `SessionSpec` field, nothing a `--det` run can touch.
+counted by `LayoutScale` the same way. A page needs no change here, art included.
+Every human plane picker (the lone-pilot centred Plane screen and every splitscreen pane) draws
+one roster, `_roster`: the eleven stock airframes then the store's saved customs
+(`PlanePickerRoster.Build`), re-read by `ShowMenu` and by `CloseHangar` so a new save appears
+without a menu restart. A completed build lands in `LastBuiltPlane` and `CloseHangar` puts player
+1's cursor on the new plane by name (the original's index-11 after-build select). A custom pick
+survives the menu layer as `PlayerChoice.CustomPlane`; its `PlaneNode` is the airframe's stock
+node, which is what actually flies until D32 reads `CustomPlane` in
+`Launcher.StartSessionFromMenu`. Wingmen stay stock-only (`Planes`), and the scripted paths
+(`--plane=`, `--det`) never see the roster: they name planes by node in `SessionSpec` directly.
+⚠ The plane pick's hangar row is offered only to a lone pilot under Instant Action
+(`HangarRowOnPlaneScreen`): it trails the customs, a splitscreen pane never draws it, and
+`RebuildPanes` clamps every cursor back into the roster, so `PlaneIndex` can never point past the
+roster anywhere a plane is actually read. The row is a door, not an aircraft, so it cannot be
+locked or confirmed and no launch path sees it. The hangar is reached only through interactive
+menu input: no `--menu=` opening, no `SessionSpec` field, nothing a `--det` run can touch.
+
+## src/UI/PlanePickerRoster.cs
+The picker roster rule behind `LaunchMenu._roster`, engine-free so it tests without a menu
+instance. `Build(stock, customs)` lists the given stock rows first in their given order, then one
+`PickerPlane` per saved `CustomPlaneDef` in the store's own name-sorted order (the original's
+11+customs list sizing, `docs/org/hangar.md` count callback 1024). A custom row carries its store
+name in `CustomName` (the identity every consumer distinguishes stock from custom by) and its
+airframe's STOCK node in `Node`; `AirframeNode(id)` is the id 0-10 to `player_*` node table in
+the stat table's row order, the Hoplite resolving to `player_autogyro` (the shipped data's
+two-names aircraft). `IndexOf(roster, name)` is the after-build auto-select's case-blind lookup;
+-1 when absent. Deliberately NOT `Session.PlaneRoster` (which answers "which plane does player N
+fly" off a `SessionSpec`): this type is the menu-side list, that one the session-side read.
+Tests: `CSVM.Tests/PlanePickerRosterTests.cs`.
 
 ## src/UI/HangarFlow.cs
 The Build Custom Plane flow, engine-free the way `BoardMenu` is: the launchscreen owns every Godot
