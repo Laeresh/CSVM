@@ -12,10 +12,10 @@ namespace CSVM.Flight;
 /// session or a model; it starts from the airframe's stock def and overwrites only what the
 /// record chooses, leaving <c>WeaponId</c> null so <see cref="LoadoutChoice.ApplyTo"/> composes.
 ///
-/// <para>⚠ Engine and total weight reach nothing here on purpose: the engine pick indexes the
-/// <c>engines.json</c> table <see cref="PlaneStats.EnginePower"/> already reads, so wiring it
-/// moves the flight model's thrust rather than this join, and weight is hangar-only in the
-/// original (docs/org/hangar.md, "Into the mission").</para>
+/// <para>⚠ Total weight reaches nothing here on purpose: it is hangar-only in the original
+/// (docs/org/hangar.md, "Into the mission"). The engine pick reaches flight through
+/// <see cref="EnginePowerFor"/> onto <see cref="PlaneStats.EnginePower"/>, the original's own
+/// registry override with authored values; the nitrous flag stays inert (untraced).</para>
 /// </summary>
 public static class CustomPlaneBuild
 {
@@ -24,6 +24,10 @@ public static class CustomPlaneBuild
     /// (stock allocations 15/20/25/30/35/40, docs/formats/vehicle.md), so a unit count reaches
     /// the pool by this factor and no other rescaling.</summary>
     public const int ArmourUnitScale = 5;
+
+    /// <summary>Each airframe's Lvl-1 row id in engines.json, the original's own map
+    /// (FUN_00416e10, docs/org/hangar.md "Into the mission"); the picked tier adds 0/1/2.</summary>
+    public static readonly int[] EngineRegistryBase = { 37, 19, 40, 10, 25, 22, 31, 16, 28, 13, 34 };
 
     /// <summary>The four hangar zones in the record's own order, spelled as the vehicle defs
     /// spell them.</summary>
@@ -132,6 +136,30 @@ public static class CustomPlaneBuild
 
     // A copy carrying a different armour pool. InjureAnims is shared rather than cloned: it is
     // read-only once PlaneStats has loaded it, and nothing here or downstream writes to it.
+    /// <summary>The picked engine's authored power scalar out of engines.json, or null when the
+    /// pick is stock (id 6) so the airframe's own row stands. Ids 3-5 are the same tiers with
+    /// nitrous; the nitrous flag itself stays inert (its flight effect is untraced).</summary>
+    public static float? EnginePowerFor(string zrdrPath, CustomPlaneDef def)
+    {
+        if (def.Engine is < 0 or >= CustomPlaneDef.EngineNone
+            || def.Airframe < 0 || def.Airframe >= EngineRegistryBase.Length)
+        {
+            return null;
+        }
+
+        int rowId = EngineRegistryBase[def.Airframe] + (def.Engine % 3);
+        foreach (var row in Zrdr.LoadFile(zrdrPath, "engines.json"))
+        {
+            if (row is List<object?> { Count: >= 3 } r && r[0] is float id && (int)id == rowId
+                && r[2] is float power)
+            {
+                return power;
+            }
+        }
+
+        return null;
+    }
+
     private static DestroyablePart WithArmour(DestroyablePart part, float armour) => new()
     {
         Name = part.Name,

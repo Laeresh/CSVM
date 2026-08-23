@@ -136,7 +136,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — into flight
 
 31. ☑ Custom planes in every human plane picker, with the after-build auto-select
-32. ◐ Building a custom plane into a flying aircraft
+32. ☑ Building a custom plane into a flying aircraft
 33. ☐ The closing at-the-controls pass, and the BL-354/BL-067 closures
 
 ## Dependency and parallelism notes
@@ -941,7 +941,7 @@ decoded ([`org/hangar.md`](org/hangar.md), the 1024/2099 count callbacks).
 
 **Verified.** <pending orchestrator run>
 
-## D32 ☐ Building a custom plane into a flying aircraft
+## D32 ☑ Building a custom plane into a flying aircraft
 
 **Landed.** `CSVM/src/Flight/CustomPlaneBuild.cs` is the join, pure and engine-free: a saved
 `CustomPlaneDef` plus the airframe's stock `LoadoutDef` in, a built `LoadoutDef`, a `PaintScheme`
@@ -991,22 +991,24 @@ session.
   (two builds on one airframe fly differently, so they rank separately). The targeting HUD still
   prints the airframe's name, which shows only in splitscreen, where one pilot brackets another's
   build; picked up as a follow-up rather than widened here.
-- **⚠ Engine is shipped inert for flight, deliberately, and the reason has changed.** A1 traced
-  the path (pick 0-5 decomposes into a power tier plus a nitrous flag, the tier indexes the engine
-  registry at `0x0064fb80`, whose power float lands in the vehicle's flight-tuning block) and the
-  registry's values have since been identified as shipped data:
-  [`org/hangar.md`](org/hangar.md) names them as `extracted/zrdr/engines.zrd.json`, base row per
-  airframe plus the tier, scalars 0.23 to 1.28. So the numbers are no longer missing, and the
-  reason for holding off is now scope, not evidence: that same table is where
-  `PlaneStats.EnginePower` already reads an airframe's stock row, and `FlightModel` multiplies its
-  thrust term by it, so wiring the pick is a change to how every custom plane FLIES rather than an
-  addition to this join. It wants its own item and a hand-flown check (a `FlightModel.cs` comment
-  already warns that the Lvl-1 row inflates power about 32 % over the stock Lvl-2 one, so getting
-  the tier base wrong would silently retune the aircraft). Nitrous rides the same pick and waits
-  with it. A verbose launch line names the engine as inert and says why. **No dependency on total
-  weight or the stat-table power rating exists anywhere**, per A1's two sourced dead ends.
+- **⚠ Engine: wired as the orchestrator's integration step after the item landed inert.** The
+  item agent held off correctly (at its landing the registry values looked unread); they turned
+  out to be shipped data — [`org/hangar.md`](org/hangar.md) names `extracted/zrdr/engines.zrd.json`
+  as the registry the trace ends in, base row per airframe (the `FUN_00416e10` map, now
+  `CustomPlaneBuild.EngineRegistryBase`) plus the tier, scalars 0.23 to 1.28 — and CSVM already
+  consumes that very table (`PlaneStats.EnginePower` is the airframe's stock Lvl-2 row,
+  `FlightModel` multiplies thrust by it). So the wiring is the original's own override with
+  authored values, nothing invented: `CustomPlaneBuild.EnginePowerFor` resolves the pick's tier
+  row and `HumanFlightAdapter` swaps it in on a shallow `PlaneStats` copy
+  (`WithEnginePower`; the shared per-airframe cache is never mutated). Stock pick (id 6) keeps
+  the airframe's row, matching the original's id -1 no-override. **Nitrous stays inert** (the
+  `veh+0x946` consumers are untraced) and the verbose launch line says so. The tier's flight
+  effect is D33's to judge at the controls. **No dependency on total weight or the stat-table
+  power rating exists anywhere**, per A1's two sourced dead ends.
 
-Tests in `CSVM.Tests/CustomPlaneBuildTests.cs` (17 tests):
+Tests in `CSVM.Tests/CustomPlaneBuildTests.cs` (19 tests, the last two the orchestrator's
+engine-wiring additions: `TheEnginePickResolvesToItsAuthoredRegistryRow`,
+`EveryAirframesRegistryBaseRowExists`):
 `ACalibreRowBecomesItsCaliberAndNeverAResolvedWeaponId`,
 `ATwinTakesBothFirepointsAndASingleTheLowOne`,
 `ASingleBarrelStockSlotNarrowsATwinPickToTheMarkerTheRigHas`, `AnEmptySlotIsOmittedEntirely`,

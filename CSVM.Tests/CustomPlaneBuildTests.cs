@@ -279,6 +279,45 @@ public class CustomPlaneBuildTests
         Assert.Equal(-1, scheme.WingDecal);
     }
 
+    /// <summary>The engine pick resolves to its authored engines.json tier row: the Fury's Lvl-3
+    /// (registry base 16 + tier 2 = row 18, 0.755), the same tier through a nitrous id, and the
+    /// stock pick (id 6) yielding null so the airframe's own row stands. Nitrous itself changes
+    /// nothing here; its flight effect is untraced.</summary>
+    [ExtractedDataFact]
+    public void TheEnginePickResolvesToItsAuthoredRegistryRow()
+    {
+        string zrdr = Path.Combine(TestData.ExtractedRoot!, "zrdr");
+        var def = Def();
+        def.Airframe = 7;
+
+        def.Engine = 2;
+        Assert.Equal(0.755f, CustomPlaneBuild.EnginePowerFor(zrdr, def)!.Value, 3);
+        def.Engine = 5;
+        Assert.Equal(0.755f, CustomPlaneBuild.EnginePowerFor(zrdr, def)!.Value, 3);
+        def.Engine = 0;
+        Assert.Equal(0.45f, CustomPlaneBuild.EnginePowerFor(zrdr, def)!.Value, 3);
+        def.Engine = CustomPlaneDef.EngineNone;
+        Assert.Null(CustomPlaneBuild.EnginePowerFor(zrdr, def));
+    }
+
+    /// <summary>Every airframe's registry base row exists in engines.json, so no pick can read a
+    /// missing row (the map is FUN_00416e10's, base 0x0a stepping by 3).</summary>
+    [ExtractedDataFact]
+    public void EveryAirframesRegistryBaseRowExists()
+    {
+        string zrdr = Path.Combine(TestData.ExtractedRoot!, "zrdr");
+        var def = Def();
+        for (int airframe = 0; airframe <= CustomPlaneDef.MaxAirframe; airframe++)
+        {
+            def.Airframe = airframe;
+            for (int engine = 0; engine < CustomPlaneDef.EngineNone; engine++)
+            {
+                def.Engine = engine;
+                Assert.NotNull(CustomPlaneBuild.EnginePowerFor(zrdr, def));
+            }
+        }
+    }
+
     // The airframe id itself is unread by the join: the base fit is handed in, so which airframe
     // this build sits on is whichever def the Build/PylonsOf helper names.
     private static CustomPlaneDef Def() => new() { Name = "Blue Streak" };

@@ -89,6 +89,15 @@ internal sealed class HumanFlightAdapter
             ? customName
             : PlaneRoster.PlaneDisplayName(stats);
 
+        // The engine pick, the original's registry override: the authored engines.json tier row
+        // replaces the airframe's stock EnginePower on a COPY (the stats object is the shared
+        // per-airframe cache). Stock pick (id 6) keeps the airframe's own row; nitrous is inert.
+        if (custom != null
+            && Flight.CustomPlaneBuild.EnginePowerFor(_in.ZrdrPath, custom) is { } enginePower)
+        {
+            stats = stats.WithEnginePower(enginePower);
+        }
+
         // Every player flies the Fortune Hunters livery unless --paint says otherwise, as the
         // original's stock planes do; a custom plane wears the paint it was built with instead,
         // through the same substitution path the livery lab drives. --paint still wins over both.
@@ -249,14 +258,14 @@ internal sealed class HumanFlightAdapter
         }
         if (custom != null)
         {
-            // Names what the build reached and what it did not: the engine pick would move the
-            // flight model's thrust term (PlaneStats.EnginePower's own engines.json row), which
-            // is a flight change and not this join's (PLAN-hangar D32).
+            // Names what the build reached and what it did not (nitrous stays inert: its flight
+            // effect is untraced, docs/org/hangar.md "Into the mission").
             GD.Print($"{tag}custom plane: '{custom.Name}' on {planeName}, armour " +
                      $"{custom.ArmourNose}/{custom.ArmourTail}/{custom.ArmourLeftWing}/" +
                      $"{custom.ArmourRightWing} units x{Flight.CustomPlaneBuild.ArmourUnitScale}, " +
                      $"hardpoints {custom.LeftHardpoints}+{custom.RightHardpoints}, " +
-                     $"engine {custom.Engine} (inert for flight: thrust stays the airframe's)");
+                     $"engine {custom.Engine} thrust={stats.EnginePower:0.###}" +
+                     (custom.Engine >= 3 && custom.Engine <= 5 ? " (nitrous inert)" : ""));
         }
 
         // Every readout this pane draws for its pilot belongs to the controller's own FlightHud,
