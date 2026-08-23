@@ -56,6 +56,10 @@ public interface IHangarPage
     /// <summary>How many rows the page draws right now.</summary>
     int RowCount { get; }
 
+    /// <summary>The picture the shell should draw under the list right now, or null for none —
+    /// which every screen without art, and any screen missing its extraction, simply is.</summary>
+    HangarArt? Art { get; }
+
     /// <summary>Row <paramref name="row"/>'s text.</summary>
     string RowText(int row);
 
@@ -69,6 +73,10 @@ public interface IHangarPage
     /// false lets the flow advance to the next screen.</summary>
     bool Accept(int row);
 }
+
+/// <summary>One picture a page asks the shell to draw: a decoded TGA (blueprint, icon, paint
+/// preview) plus the caption under it. The page decodes; the shell owns the one Godot texture.</summary>
+public sealed record HangarArt(TgaImage Image, string Caption);
 
 /// <summary>
 /// The Build Custom Plane flow: one scratch <see cref="CustomPlaneDef"/> walked through
@@ -98,16 +106,22 @@ public sealed class HangarFlow
 
     /// <summary>Opens a flow over <paramref name="store"/>, reading its saved planes once for the
     /// plane-selection screen. <paramref name="strings"/> may be <see cref="UiStrings.Empty"/>;
-    /// every label then falls back to its own plain text.</summary>
-    public HangarFlow(CustomPlaneStore store, UiStrings strings)
+    /// every label then falls back to its own plain text. <paramref name="dataRoot"/> is where
+    /// <c>extracted/</c> lives, for the art-bearing pages; null means every page's art is null.</summary>
+    public HangarFlow(CustomPlaneStore store, UiStrings strings, string? dataRoot = null)
     {
         _store = store;
         Strings = strings;
+        DataRoot = dataRoot;
         Saved = store.List();
     }
 
     /// <summary>The langui table the screens title and label themselves from.</summary>
     public UiStrings Strings { get; }
+
+    /// <summary>The folder <c>extracted/</c> sits in, or null when the caller has none. Pages
+    /// resolve their TGAs under it and treat absence as no art.</summary>
+    public string? DataRoot { get; }
 
     /// <summary>The saved planes as they were when the flow opened, the plane-selection roster.
     /// Not refreshed mid-flow: the only writer is this flow's own commit, which ends it.</summary>
@@ -306,6 +320,7 @@ public sealed class HangarFlow
             page = screen switch
             {
                 HangarScreen.PlaneSelection => new HangarPlaneSelectionPage(this),
+                HangarScreen.Airframe => new HangarAirframePage(this),
                 HangarScreen.Name => new HangarNamePage(this),
                 HangarScreen.Purchase => new HangarPurchasePage(this),
                 _ => new HangarPlaceholderPage(this, screen),
@@ -346,6 +361,9 @@ public abstract class HangarPage : IHangarPage
 
     /// <inheritdoc/>
     public abstract int RowCount { get; }
+
+    /// <inheritdoc/>
+    public virtual HangarArt? Art => null;
 
     /// <summary>The flow this page belongs to.</summary>
     protected HangarFlow Flow { get; }

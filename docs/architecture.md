@@ -53,6 +53,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/AiSkills.cs` — the `ai_skill_parameters` endpoint pairs from player.json (1–9 ratings, linear between the decoded endpoints) + the roster accessors: the skill vector (slots 22–30 by stat name), `primary_target` (slot 6) and `rating_biases` (slot 33, `AiRatingBias` wildcards).
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
 - `src/Mech3/UiStrings.cs` — the original's UI string table (`extracted/rof/ui_strings.json`) by id: langui rows only (ids repeat across the file's two tables), `FormatMessage` placeholders (`%1!d!`) converted to composite format, leading `[FONTID]` tags stripped.
+- `src/Mech3/TgaImage.cs` — the engine-free TGA decoder behind the hangar's art (`extracted/rof/ASSETS/GRAPHICS`): types 2 and 10 (RLE) truecolour at 24/32 bits, both row orders, to top-down RGBA8; anything else, or a malformed/absent file, is null.
 - `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
 - `src/Mech3/CompiledAnim.cs` — reader for the compiled `cam_anim`/`mis_anim` archives: anim defs, sequences/events, lazy SI-script pool.
 - `src/Mech3/AnimDefs.cs` — the zrdr front-end: ANIMATION_DEFINITIONS reader files, normalized into one `AnimDefinition` model.
@@ -206,7 +207,8 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
 - `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session; also the hangar's two doors and its renderer.
-- `src/UI/HangarFlow.cs` — the Build Custom Plane flow, engine-free: the original's nine screens over one scratch `CustomPlaneDef`, back/next navigation, the `IHangarPage` mount point C22-C26 fill, and the gated commit into `CustomPlaneStore`.
+- `src/UI/HangarFlow.cs` — the Build Custom Plane flow, engine-free: the original's nine screens over one scratch `CustomPlaneDef`, back/next navigation, the `IHangarPage` mount point C22-C26 fill (rows, detail, stepper, optional `HangarArt`), and the gated commit into `CustomPlaneStore`.
+- `src/UI/HangarAirframePage.cs` — the AIRFRAME screen: all 11 airframes as rows, the ←→ stepper writing the scratch airframe and nothing else, the stat table's figures and the economy's star ratings per row, the focused airframe's blueprint TGA as page art.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
@@ -2970,7 +2972,11 @@ The hangar (`HangarFlow`) has two doors, both through `OpenHangar`, which rememb
 land back on: a trailing `Build Custom Plane` row past the three Mode rows, and the same row past
 the eleven airframes on the Instant Action plane pick (PLAN-hangar Decision 6). `Screen.Hangar`
 draws through the same centred body every other screen uses: heading, rows, detail and footer all
-read off `_hangar.Page`, so a page landing in C22-C26 needs no change here. ⚠ The plane pick's
+read off `_hangar.Page`, plus at most one art block (`HangarArtControl`) when the page's `Art` is
+non-null: the page's decoded RGBA as a fixed-height letterboxed texture with a caption, rebuilt
+only when the page hands over a different image and counted by `LayoutScale` so the screen still
+fits 720p. A page landing in C23-C26 therefore needs no change here, art included. ⚠ The plane
+pick's
 hangar row is offered only to a lone pilot under Instant Action (`HangarRowOnPlaneScreen`): a
 splitscreen pane never draws it, and `RebuildPanes` clamps every cursor back into the roster, so
 `PlaneIndex` can never point past the eleven airframes anywhere a plane is actually read. The row
@@ -2993,18 +2999,22 @@ Editing a saved plane starts from a copy made through the store's own canonical 
 abandoning an edit cannot touch what is on disk.
 
 `IHangarPage` is the mount point Wave C's remaining items fill: `Title`, `RowCount`, `RowText`,
-`Detail`, `Step` (the launchscreen's live ←→ stepper) and `Accept` (returning false hands the press
-back to the flow, which advances). All plain text and plain indices, so a page is engine-free and
-testable and the shell needs no change to draw one. `HangarPage` is the base carrying the flow, the
-scratch plane and the heading resolved from the screen's own langui id (1017/1004-1010/1401);
+`Detail`, `Step` (the launchscreen's live ←→ stepper), `Accept` (returning false hands the press
+back to the flow, which advances) and `Art`, an optional decoded `TgaImage` plus caption the shell
+renders (null by default via `HangarPage`; the C22 seam every art-bearing screen uses). All plain
+text, plain indices and raw pixels, so a page is engine-free and testable and the shell needs no
+change to draw one. `HangarFlow.DataRoot` (optional, null in tests) is where a page resolves its
+TGAs; absence reads as no art. `HangarPage` is the base carrying the flow, the scratch plane and
+the heading resolved from the screen's own langui id (1017/1004-1010/1401);
 `HangarFlow.PageFor`'s switch is the single line each of C22-C26 replaces. Until they land,
 `HangarPlaceholderPage` draws the right heading, a Continue row and a real summary of what the
 scratch plane carries for that screen. It edits nothing, so a flow walked through it produces
-exactly the plane the screens before it chose. `HangarPlaneSelectionPage`, `HangarNamePage` and
+exactly the plane the screens before it chose. `HangarPlaneSelectionPage`,
+`HangarAirframePage` (its own file), `HangarNamePage` and
 `HangarPurchasePage` are real; the name page's stepper over airframe-derived names is a placeholder
 for C25's text entry, and the purchase page's totals line is a placeholder for C26's itemised list,
 but the commit under it is already the real one. Off-engine coverage:
-`CSVM.Tests/HangarFlowTests.cs`.
+`CSVM.Tests/HangarFlowTests.cs` and `CSVM.Tests/HangarAirframePageTests.cs`.
 
 ## src/UI/BoardMenu.cs
 A board's cursor and item list, engine-free so the selection rules test off engine the way

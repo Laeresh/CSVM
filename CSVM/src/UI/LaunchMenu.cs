@@ -41,6 +41,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int DetailFont = 16;
     private const int FooterFont = 15;
     private const int ErrorFont = 15;
+
+    // The hangar art block's 720p height (C22's seam); the 358x335 TGAs letterbox into it.
+    private const int HangarArtHeight = 140;
     // Splitscreen plane select (several players): the bottom strip that keeps the breadcrumb +
     // join hint out of the panes, as a fraction of viewport height, and the pane's inner padding.
     // Reference values at 720p. Confirmed at the controls: join/lock feel
@@ -209,6 +212,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // OpenHangar, so cancelling always lands back where the pilot pressed.
     private HangarFlow? _hangar;
     private Screen _hangarReturn = Screen.Mode;
+    // The hangar page's art (C22's seam), as the one texture the shell owns: rebuilt only when
+    // the page hands over a different decoded image, since Rebuild runs on every keypress.
+    private TgaImage? _hangarArtSource;
+    private ImageTexture? _hangarArtTexture;
     // The langui table, loaded on first hangar entry (a session that never opens it never reads
     // the file). Null until then; a failed load leaves UiStrings.Empty here.
     private UiStrings? _uiStrings;
@@ -1194,7 +1201,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private void OpenHangar(Screen returnTo)
     {
         _hangarReturn = returnTo;
-        _hangar = new HangarFlow(CustomPlaneStore.UserPlanes(), HangarStrings());
+        _hangar = new HangarFlow(CustomPlaneStore.UserPlanes(), HangarStrings(), _dataRoot);
         _screen = Screen.Hangar;
         _error = "";
     }
@@ -1398,6 +1405,15 @@ public sealed partial class LaunchMenu : CanvasLayer
         _body.AddChild(Spacer((int)(10 * s)));
         _body.AddChild(DetailBlock(s));
 
+        // C22's art seam: a hangar page may hand the shell one decoded TGA with a caption
+        // (blueprint, icon, paint preview). This block and HangarArtControl are the whole
+        // rendering; nothing else in the layout moves.
+        if (_screen == Screen.Hangar && _hangar?.Page.Art is { } art)
+        {
+            _body.AddChild(Spacer((int)(6 * s)));
+            _body.AddChild(HangarArtControl(art, s));
+        }
+
         // The flown-wingmen re-clamp (decision 8a) only matters once players can actually join —
         // the Plane screen — and only under Instant Action with wingmen configured at all.
         if (_screen == Screen.Plane)
@@ -1581,13 +1597,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         // The selected-aircraft line is a second conditional pair on the same screen, so it is
         // counted the same way — a wingman-heavy locked launch adds both at once.
         bool lockedLine = _screen == Screen.Plane && _slots.Count == 1 && _slots[0].Locked;
-        int extraChildren = (wingmenLine ? 2 : 0) + (lockedLine ? 2 : 0);
+        // The hangar art block (C22's seam) is a third conditional pair, counted the same way.
+        bool artBlock = _screen == Screen.Hangar && _hangar?.Page.Art != null;
+        int extraChildren = (wingmenLine ? 2 : 0) + (lockedLine ? 2 : 0) + (artBlock ? 2 : 0);
         float refH =
             font.GetHeight(TitleFont) + font.GetHeight(CrumbFont) + font.GetHeight(FooterFont) +
             font.GetHeight(HeadingFont) + rows * font.GetHeight(RowFont) +
             font.GetHeight(DetailFont) + font.GetHeight(FooterFont) +
             (wingmenLine ? font.GetHeight(DetailFont) + 4 : 0) +
             (lockedLine ? font.GetHeight(DetailFont) + 4 : 0) +
+            (artBlock ? HangarArtHeight + font.GetHeight(FooterFont) + 6 : 0) +
             (_error.Length > 0 ? font.GetHeight(ErrorFont) + 4 : 0) +
             8 + 8 + 6 + 10 + 16 +          // the explicit spacers Rebuild adds
             6 * (10 + rows + extraChildren); // the body VBox's separation between children
@@ -1791,6 +1810,33 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The detail area: one stats line for the focused entry.
     private Control DetailBlock(float s) =>
         Label(Detail(CurrentIndex), (int)(DetailFont * s), DetailColor, HorizontalAlignment.Center);
+
+    // The one art block a hangar page may request (C22's seam): the page's decoded RGBA as a
+    // texture, letterboxed to a fixed height, its caption under it. The texture is rebuilt only
+    // when the page hands over a different image (_hangarArtSource).
+    private Control HangarArtControl(HangarArt art, float s)
+    {
+        if (!ReferenceEquals(_hangarArtSource, art.Image))
+        {
+            var image = Image.CreateFromData(art.Image.Width, art.Image.Height, false,
+                Image.Format.Rgba8, art.Image.Rgba);
+            _hangarArtTexture = ImageTexture.CreateFromImage(image);
+            _hangarArtSource = art.Image;
+        }
+
+        var box = new VBoxContainer();
+        var rect = new TextureRect
+        {
+            Texture = _hangarArtTexture,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            CustomMinimumSize = new Vector2(0, HangarArtHeight * s),
+        };
+        rect.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        box.AddChild(rect);
+        box.AddChild(Label(art.Caption, (int)(FooterFont * s), DetailColor, HorizontalAlignment.Center));
+        return box;
+    }
 
     // The join strip shown under the breadcrumb on every screen: who is in, on what
     // device, plus the hint that free pads can join with Start.

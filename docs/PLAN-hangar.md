@@ -126,7 +126,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — the screens
 
 21. ☑ Hangar shell and navigation: screen order, IA Build entry, top-level entry
-22. ☐ AIRFRAME screen
+22. ☑ AIRFRAME screen
 23. ☐ ENGINE and ARMOR screens
 24. ☐ GUNS and HARDPOINTS screens (BL-067)
 25. ☐ PAINT and PLANENAME screens
@@ -523,6 +523,51 @@ land back with the new plane selected.
 only through interactive menu input.
 
 ## C22 ☐ AIRFRAME screen
+
+**Landed.** `CSVM/src/UI/HangarAirframePage.cs` fills the Airframe slot in `HangarFlow.PageFor`
+(the one switch line). All 11 airframes are rows (Decision 9: the availability threshold gates
+nothing), named from langui 3000+id, the chosen one ticked. The ←→ stepper makes the focused row
+the scratch plane's airframe and writes nothing else: guns and hardpoints are count-valid on
+every airframe (wrong-claim 1), so no other pick needs re-clamping, and Confirm advances without
+editing, so a flow walked straight through keeps whatever airframe was chosen. Each row's detail
+line carries the stat table's cost, weight and weight capacity plus the two star ratings, priced
+through `HangarEconomy.Price` for the focused airframe wearing the scratch plane's other picks
+(armour stars therefore track the bought armour units, exactly as the decoded formula reads the
+record; the scratch plane is restored after pricing, never left edited by a read).
+
+**The art seam C23-C26 inherit (the contract extension this item added, per Decision 4).**
+
+- `CSVM/src/Mech3/TgaImage.cs` is the engine-free TGA decoder: types 2 and 10 (RLE), 24/32-bit,
+  both row orders (TGA is bottom-up unless descriptor bit 5 is set), decoding to top-down RGBA8
+  bytes plus dimensions. Anything outside that coverage, malformed or truncated decodes as null;
+  `TryLoad` reads an absent file the same way, since hangar art is optional by design.
+- `IHangarPage` gained one member: `HangarArt? Art { get; }`, a decoded `TgaImage` plus a
+  caption, null by default (`HangarPage` supplies the null, so existing pages needed no change).
+  A page wanting art overrides it; the shell draws at most one such block per screen.
+- `HangarFlow` takes an optional third constructor argument, the folder `extracted/` sits in,
+  exposed as `Flow.DataRoot`. Null (tests, a missing extraction) reads as no art anywhere.
+- `LaunchMenu.cs` was touched for exactly this and nothing else (the serial lane): `OpenHangar`
+  passes `_dataRoot`, and `Rebuild` draws `Page.Art` under the detail line through
+  `HangarArtControl`, a fixed-height letterboxed `TextureRect` with the caption under it, its
+  texture rebuilt only when the page hands over a different image; `LayoutScale` counts the
+  block so the screen still fits 720p. C23-C26 show art by overriding `Art` alone, with no
+  further `LaunchMenu` edit; C25's live paint preview hands over its composed RGBA the same way.
+
+This page's own art is the focused airframe's `PX_<af>_BLUEPRINT.TGA` (A2: 358x335, 24-bit RLE),
+captioned with the airframe's name and cached per airframe, misses included. It follows the
+cursor, not the pick, so browsing the roster previews each airframe.
+
+Tests: `CSVM.Tests/TgaImageTests.cs` (synthetic files pin the BGR order, both orientations, both
+RLE packet kinds and the null-on-malformed contract; extracted-data facts decode a real shipped
+blueprint and icon at their catalogued shape) and `CSVM.Tests/HangarAirframePageTests.cs`
+(`OffersAllElevenAirframes_NamedFromLangui`, `SteppingSelectsTheFocusedAirframe`,
+`ChangingAirframe_PreservesTheOtherPicks`, `AcceptAdvancesWithoutEditing`,
+`DetailShowsTheDecodedFigures`, `StarRatingsMatchTheEconomy`, `DetailLeavesTheScratchUntouched`,
+`ArtIsNullWithoutADataRoot`, `ArtShowsTheFocusedAirframesBlueprint`).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Pick one of the 11 airframes: name (langui 3000+af), stat-table figures, agility/armour
 star ratings by the decoded formulas, blueprint TGA if A2 confirmed it.
