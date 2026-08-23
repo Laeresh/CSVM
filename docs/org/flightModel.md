@@ -2,11 +2,11 @@
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
 `crimson.exe`, 2 580 480 bytes, `language x86:LE:32:default`), 2026-08-09, extended 2026-08-14 with
-ground blow, the collision impulse, and the live-versus-debug integrator correction. This superseded
-the figures reconstructed from video in `analysis/video-flight-calibration/FINDINGS.md`, which was
-**deleted 2026-08-14** for that reason; the executable is the authority and video calibration was a
-proxy. The scripts that produced it are still in that directory, and the file itself is recoverable
-with `git log -p -- analysis/video-flight-calibration/FINDINGS.md`.
+ground blow, the collision impulse, and the live-versus-debug integrator correction. **This is the
+authority for every flight quantity.** It superseded a set of figures reconstructed from cockpit-gauge
+video, and that whole route is retired: footage cannot confirm a decode, it only ranks readings
+(`docs/verification.md` DET-12). The reconstruction and the scripts behind it were deleted and are
+recoverable with `git log -p`; treat any number sourced from them as withdrawn.
 
 Everything below is a description of *behaviour and constants*. No decompiler output is
 reproduced; the function addresses are given so any claim can be re-checked at source.
@@ -455,8 +455,9 @@ even close.
 byte-complete — see "The force scale — settled" below.** The four zero-thrust decelerations
 (0.36/1.11/2.82/3.74 m/s² at `V/fd_speed` = 0.25/0.35/0.46/0.50) come out **≈2–3.6× too strong**
 against this curve. The earlier suspicion — a kg/lb mix-up of 2.2046 in the force→acceleration
-divisor — is **disproven at source**: `veh_weight` runs raw end to end. The residual stands as a
-recorded decode-vs-footage conflict, not as a missing term.
+divisor — is **disproven at source**: `veh_weight` runs raw end to end. The decode stands and the
+residual is not a missing term: the footage figures it disagrees with are frame-derived and cannot
+refute a decode (`docs/verification.md` DET-12).
 
 ## The force scale — settled (no conversion exists; the conflict is real)
 
@@ -479,8 +480,9 @@ term keys on, is `sqrt(vel·vel)` stored by the integrator (`0x491b1b`), i.e. th
 So the executable computes **exactly** what `FlightModel.cs` computes, constant for constant, and
 the remake's force path needs no change.
 
-**That promotes the CAP-05 residual from "suspected units bug" to a real decode-vs-footage
-conflict**, and the conflict is overdetermined — no constant can close it:
+**That settles the CAP-05 residual as a property of the footage, not a units bug in the model.**
+The decode is authoritative here (`docs/verification.md` DET-12); the deficit is recorded because
+its structure is interesting, not because a constant is owed. No constant can close it anyway:
 
 - The deficit has clean structure: measured C_D at the four points is the polar **minus a constant
   ≈ 0.112** (deficit ∝ q; −0.1085/−0.1118/−0.1122/−0.1122 across x = 0.25…0.50). Nothing decoded
@@ -544,9 +546,10 @@ fallback coincidence hides: the Bloodhawk's own data (`veh_weight` 1900, `ref_ar
 (`src/Flight/FlightModel.cs`'s stall-threshold comment). The remake's retired `StallSpeedFrac = 0.25`
 matched that clip only because 0.25 × the BLOODHAWK's fd_speed (302 mph) happens to sit close to
 the FALLBACK aircraft's own stall speed (75.5–76.3 mph) — the wing-loading coincidence this plan
-warned not to read as validation, and it does not extend to the Bloodhawk's real numbers. Recorded
-as an open decode-vs-footage conflict (`analysis/flight-model-baseline/POST-B14.md`'s B15 section
-has the full eleven-airframe table), not resolved by switching G-conventions to fit one clip.
+warned not to read as validation, and it does not extend to the Bloodhawk's real numbers. **The
+computed stall stands; the clip's ~76 mph does not contest it** — a frame-derived speed ranks
+readings, it does not confirm or refute a decode (`docs/verification.md` DET-12). Not resolved by
+switching G-conventions to fit one clip.
 
 ## The two stall cues — a lamp and a nose-drop, on two unrelated thresholds
 
@@ -1247,8 +1250,10 @@ factor of **0.563**, and no attitude in the decoded formula reaches that — 0.6
 the probe holds α = 0 (attitude set to the path), and the clip is a **90° pull**: at a 90° nose with
 the measured 56° path the same decoded force path balances to **−3.3 %**, because the attitude scale
 bottoms out *and* the nose-to-path cosine takes another 18 %. The clip's ADI saturates above ≈+30°,
-so its nose angle is **not readable** and this cannot be settled from this capture — it is exactly
-what `CAP-20` (a shallow, held climb with a readable ADI) was filed to answer. Do not close the gap
+so its nose angle is **not readable**. ⚠ **No capture can settle this and none is owed** — a
+readable ADI would still only give a frame-derived angle, which cannot confirm a decode
+(`docs/verification.md` DET-12). The open question is what α the original's climb path holds, and it
+is answered in the force path above. Do not close the gap
 by moving 0.24/0.13; they are the binary's, and the dive side of the same scale lands
 `terminal-dive` at 356.0 mph against a measured 355.2 ± 6 with nothing fitted.
 
@@ -2238,13 +2243,13 @@ Yaw is the row the decode breaks, at 49.12 s against a 28.60 s target. What it m
 rudder this page already describes: a ground-handling control held at 10% authority for all of
 normal flight, which a 28.6 s full-rudder 360° never fitted.
 
-⚠ **`yaw-360` is now INFORMATIONAL, and the 28.6 s was NOT rewritten.** The footage figure is a
-measurement of a fixed artifact and stays exactly as measured; what disagrees with it is the decode,
-so the row joins `accel-150-290` and `decel-290-150` as a recorded decode-vs-footage conflict rather
-than a target refitted to whatever the model now produces. `FlightEnvelopeTests.FlightScenarios`
-drops 7 → 6 to make the demotion loud, which is what that constant is for. The slow rudder was read
-at the controls and accepted before the row moved. Closing this conflict means explaining where the
-footage's 28.6 s comes from, not restoring a multiplier.
+⚠ **`yaw-360` is now INFORMATIONAL, and the 28.6 s was NOT rewritten.** The footage figure stays
+recorded exactly as measured, but it does not gate anything: it disagrees with the decode, and a
+frame-derived duration cannot refute one (`docs/verification.md` DET-12). The row joins
+`accel-150-290` and `decel-290-150` as informational rather than as a target refitted to whatever
+the model now produces. `FlightEnvelopeTests.FlightScenarios` drops 7 → 6 to make the demotion loud,
+which is what that constant is for. The slow rudder was read at the controls and accepted before the
+row moved. Nothing is owed here — do not restore a multiplier to chase the 28.6 s.
 
 ⚠ **One golden moved with this: `c1-flight`, re-pinned.** It flies `--hold=0.2,0.1,0,1` — held pitch
 and roll, zero rudder — so it moved on the pitch change alone, and the other fifteen shots are

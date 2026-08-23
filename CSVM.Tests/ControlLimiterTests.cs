@@ -125,9 +125,9 @@ public class ControlLimiterTests
             + "trip a limiter, so the AOA disproof can no longer fail");
     }
 
-    /// <summary>The per-airframe table behind the two disproofs, written out for
-    /// analysis/flight-model-baseline/POST-B14.md when CSVM_LIMITER_OUT names a file (the same
-    /// pattern ZzBaselineDump uses). Asserts nothing on its own.</summary>
+    /// <summary>The per-airframe table behind the two disproofs, written to whatever file
+    /// CSVM_LIMITER_OUT names (the same pattern ZzBaselineDump uses). Asserts nothing on its
+    /// own.</summary>
     [ExtractedDataFact]
     public void DumpTheLimiterMargins()
     {
