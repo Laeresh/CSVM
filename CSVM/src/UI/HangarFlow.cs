@@ -150,6 +150,27 @@ public sealed class HangarFlow
     /// <summary>The refusal line a failed commit left, or "". Cleared by any navigation.</summary>
     public string Message { get; private set; } = string.Empty;
 
+    /// <summary>The persistent second stats line every hangar screen shows under its heading
+    /// (PLAN-hangar Decision 10): the build's total price and its weight against the airframe's
+    /// capacity, recomputed from <see cref="HangarEconomy.Price"/> on demand and flagged with the
+    /// original's own word (langui 1227) when over.</summary>
+    public string TotalsLine
+    {
+        get
+        {
+            var bill = HangarEconomy.Price(Scratch);
+            string line = $"${bill.Total.Cost}   {bill.Total.Weight} / {bill.Capacity} lbs.";
+            return bill.Total.Weight > bill.Capacity
+                ? line + "   ⚠ " + Strings.Text(1227, "OVERWEIGHT")
+                : line;
+        }
+    }
+
+    /// <summary>Whether <see cref="TotalsLine"/> is over capacity, so the shell can colour the
+    /// flag as well as print it.</summary>
+    public bool TotalsOverweight =>
+        HangarEconomy.Price(Scratch).Verdict == PurchaseVerdict.Overweight;
+
     /// <summary>The heading string id for each screen, from the original's own tab labels.</summary>
     public static int TitleStringId(HangarScreen screen) => screen switch
     {
@@ -311,8 +332,8 @@ public sealed class HangarFlow
     }
 
     // The page for a screen, built on first sight and kept, so a page may hold state of its own.
-    // ⚠ This switch is the mount point: C22-C26 each replace one placeholder line with their own
-    // page type and change nothing else in the shell.
+    // Every screen's page is real and lives in its own file; the placeholder survives only as
+    // the default arm's guard.
     private IHangarPage PageFor(HangarScreen screen)
     {
         if (!_pages.TryGetValue(screen, out var page))
@@ -434,47 +455,10 @@ public sealed class HangarPlaneSelectionPage : HangarPage
 }
 
 /// <summary>
-/// The purchase review and the Build action. ⚠ C26 replaces this with the itemised list; what
-/// stands here is the totals line and the commit, so the gate and the save are already the real
-/// ones and C26 changes only what is drawn above them.
-/// </summary>
-public sealed class HangarPurchasePage : HangarPage
-{
-    /// <summary>Binds the page to its flow.</summary>
-    public HangarPurchasePage(HangarFlow flow)
-        : base(flow)
-    {
-    }
-
-    /// <inheritdoc/>
-    public override HangarScreen Screen => HangarScreen.Purchase;
-
-    /// <inheritdoc/>
-    public override int RowCount => 1;
-
-    /// <inheritdoc/>
-    public override string RowText(int row) => Flow.Strings.Text(1199, "Purchase Now");
-
-    /// <inheritdoc/>
-    public override string Detail(int row)
-    {
-        var bill = HangarEconomy.Price(Scratch);
-        return $"{Flow.Strings.Text(1198, "Totals")}   ${bill.Total.Cost}   " +
-               $"{bill.Total.Weight} / {bill.Capacity} lbs.";
-    }
-
-    /// <inheritdoc/>
-    public override bool Accept(int row)
-    {
-        Flow.Commit();
-        return true; // the last screen: a refused commit stays here with the reason showing
-    }
-}
-
-/// <summary>
-/// A screen C22-C26 has not landed yet: the right heading, a Continue row, and a summary of what
-/// the scratch plane currently carries for that screen. It edits nothing, so a flow walked through
-/// it produces exactly the plane the screens before it chose.
+/// A screen with no page of its own, which is only the switch's default arm now that every screen
+/// has one: the right heading, a Continue row, and a summary of what the scratch plane currently
+/// carries for that screen. It edits nothing, so a flow walked through it produces exactly the
+/// plane the screens before it chose.
 /// </summary>
 public sealed class HangarPlaceholderPage : HangarPage
 {

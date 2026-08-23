@@ -131,7 +131,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☑ ENGINE and ARMOR screens
 24. ☑ GUNS and HARDPOINTS screens (BL-067)
 25. ☑ PAINT and PLANENAME screens
-26. ☐ PURCHASE review screen
+26. ☑ PURCHASE review screen
 
 ### Wave D — into flight
 
@@ -816,6 +816,54 @@ pattern id with no icons; the live `PlanePainter` preview is the primary renderi
 such gap.
 
 ## C26 ☐ PURCHASE review screen
+
+**Landed.** `CSVM/src/UI/HangarPurchasePage.cs` fills the Purchase slot in `HangarFlow.PageFor`
+(C21's in-flow page deleted and moved out to its own file; the switch line was already there, so
+the flow file only shrank).
+
+The review's row set is dynamic the way the original's per-line callbacks are: one row per priced
+thing the scratch plane actually carries, absent components getting no row at all. The airframe
+row is always present (langui 3000+af); the engine row appears when the engine is not id 6
+(3100+af*6+id); each armed gun slot rows exactly as the GUNS screen names it (the stat table's
+slot title, then the shared calibre naming with its "(2) " twin prefix); each armour zone with
+units rows through its own langui format 1191-1194; each wing with hardpoints through 1176/1177.
+Every component row's detail is that line's decoded cost and weight off `HangarEconomy.Price`'s
+bill (the gun rows therefore price the turret column where the airframe's turret bit says so,
+doubled for twin), in the "$C   W lbs." shape every other screen prices in. Then the totals row
+(1198), whose detail is the flow's own totals line, and the Purchase Now row (1199), whose press
+runs `flow.Commit()` with the existing semantics: the name gate (203), then the verdict in the
+original's words. A press on a review row is a no-op; the purchase screen is the last one, so
+nothing advances past it either way.
+
+**The gate is the button, not only the commit** ([`org/hangar.md`](org/hangar.md):
+`PURCHASE.SCRIPT` disables `pur_b_purchase` via mail 10018 whenever the problems callback 2264
+reports, with `pur_t_problems` carrying the text). The page mirrors that reading: whenever the
+verdict is not Ok the Purchase Now row renders flagged ("✕  " prefixed) with the problems text
+visible in its detail (1182 + 1227 OVERWEIGHT / 1171 No Engine Selected) before any press, and
+`HangarPurchasePage.BuildEnabled` is the state a richer renderer could grey the row with. The
+press on a flagged row still runs the commit, whose refusal is the same rule in the same words,
+so the flag is a mirror of the gate and never a replacement for it.
+
+**The persistent totals row (Decision 10).** `HangarFlow.TotalsLine` is the second stats line
+every hangar screen shows: total price and weight against the airframe's capacity
+("$4980   6420 / 7610 lbs."), recomputed from `HangarEconomy.Price` on demand and flagged with
+"⚠ " plus the original's OVERWEIGHT word (1227) when over, with `TotalsOverweight` alongside as
+the colour flag. `LaunchMenu.cs` was touched for exactly this (the C22-shaped serial lane):
+`Rebuild` draws the line under the heading on `Screen.Hangar` in the detail font, error-coloured
+when over, and `LayoutScale` counts the pair; nothing else in the layout moves.
+
+Tests: `CSVM.Tests/HangarPurchasePageTests.cs` (`ABareBuildShowsOnlyAirframeTotalsAndBuild`,
+`AnEngineRowAppearsWhenChosen`, `ArmedGunSlotsRowAsTheGunsScreenNamesThem`,
+`ArmouredZonesRowThroughTheirLanguiFormats`, `WingsWithHardpointsGetTheirRows`,
+`RowTextFallsBackWithoutStrings`, `TheTotalsRowJudgesWeightAgainstCapacity`,
+`TheBuildRowIsFlaggedAndExplainsWhenBlocked`, `AnOverweightBuildFlagsWithTheOriginalsWord`,
+`TheBuildRowCommits`, `AReviewRowPressDoesNotCommit`, `ABlockedBuildPressIsStillRefused`) and,
+in `CSVM.Tests/HangarFlowTests.cs`, `TheTotalsLineCarriesPriceWeightAndCapacity` and
+`TheTotalsLineFlagsOverweight`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The itemised review: airframe, engine, per-zone armour, per-slot guns, per-wing
 hardpoints, each with the decoded cost and weight, the two totals, and the gate verdict blocking

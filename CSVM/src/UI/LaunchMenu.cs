@@ -1398,6 +1398,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         _body.AddChild(Label(heading, (int)(HeadingFont * s), HeadingColor, HorizontalAlignment.Center));
         _body.AddChild(Spacer((int)(6 * s)));
 
+        // C26's totals seam (PLAN-hangar Decision 10): every hangar screen carries the
+        // persistent price/weight line off HangarFlow.TotalsLine, error-coloured when over.
+        // This pair and its LayoutScale term are the whole rendering, like C22's art block.
+        if (_screen == Screen.Hangar && _hangar is { } hangarFlow)
+        {
+            _body.AddChild(Label(hangarFlow.TotalsLine, (int)(DetailFont * s),
+                hangarFlow.TotalsOverweight ? ErrorColor : DetailColor, HorizontalAlignment.Center));
+            _body.AddChild(Spacer((int)(4 * s)));
+        }
+
         int count = CurrentCount();
         for (int i = 0; i < count; i++)
             _body.AddChild(Row(i, s));
@@ -1599,7 +1609,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         bool lockedLine = _screen == Screen.Plane && _slots.Count == 1 && _slots[0].Locked;
         // The hangar art block (C22's seam) is a third conditional pair, counted the same way.
         bool artBlock = _screen == Screen.Hangar && _hangar?.Page.Art != null;
-        int extraChildren = (wingmenLine ? 2 : 0) + (lockedLine ? 2 : 0) + (artBlock ? 2 : 0);
+        // The hangar totals line (C26's seam, Decision 10) is a fourth, on every hangar screen.
+        bool totalsLine = _screen == Screen.Hangar && _hangar != null;
+        int extraChildren = (wingmenLine ? 2 : 0) + (lockedLine ? 2 : 0) + (artBlock ? 2 : 0) +
+            (totalsLine ? 2 : 0);
         float refH =
             font.GetHeight(TitleFont) + font.GetHeight(CrumbFont) + font.GetHeight(FooterFont) +
             font.GetHeight(HeadingFont) + rows * font.GetHeight(RowFont) +
@@ -1607,6 +1620,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             (wingmenLine ? font.GetHeight(DetailFont) + 4 : 0) +
             (lockedLine ? font.GetHeight(DetailFont) + 4 : 0) +
             (artBlock ? HangarArtHeight + font.GetHeight(FooterFont) + 6 : 0) +
+            (totalsLine ? font.GetHeight(DetailFont) + 4 : 0) +
             (_error.Length > 0 ? font.GetHeight(ErrorFont) + 4 : 0) +
             8 + 8 + 6 + 10 + 16 +          // the explicit spacers Rebuild adds
             6 * (10 + rows + extraChildren); // the body VBox's separation between children

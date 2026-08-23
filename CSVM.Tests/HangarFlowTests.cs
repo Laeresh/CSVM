@@ -84,7 +84,7 @@ public class HangarFlowTests : IDisposable
             }
         }
 
-        flow.Accept(); // the Build press: refused (no name), and it does not advance
+        flow.Accept(); // the purchase page handles the press itself, so nothing advances past it
         Assert.Equal(HangarScreen.Purchase, flow.Screen);
     }
 
@@ -257,6 +257,37 @@ public class HangarFlowTests : IDisposable
         Assert.Equal(5, flow.Scratch.Airframe);
         Assert.Equal(3, flow.Scratch.Engine);
         Assert.Equal(2, flow.Scratch.LeftHardpoints);
+    }
+
+    /// <summary>The persistent totals line (Decision 10) is the build's price and weight against
+    /// the airframe's capacity, recomputed from the economy on demand.</summary>
+    [Fact]
+    public void TheTotalsLineCarriesPriceWeightAndCapacity()
+    {
+        var flow = Open();
+        flow.Accept();
+        flow.Scratch.Engine = 1;
+
+        Assert.Equal("$7650   2400 / 4160 lbs.", flow.TotalsLine);
+        Assert.False(flow.TotalsOverweight);
+    }
+
+    /// <summary>Over capacity, the totals line is visibly flagged with the original's word and
+    /// the shell's colour flag reads true.</summary>
+    [Fact]
+    public void TheTotalsLineFlagsOverweight()
+    {
+        var flow = Open();
+        flow.Accept();
+        flow.Scratch.Airframe = 0;
+        flow.Scratch.Engine = 5;
+        flow.Scratch.LeftHardpoints = 4;
+        flow.Scratch.RightHardpoints = 4;
+
+        // Hoplite 1400 + engine 2000 + 8 hardpoints x 480 = 7240 lbs against 4160.
+        Assert.Contains("7240 / 4160 lbs.", flow.TotalsLine, StringComparison.Ordinal);
+        Assert.Contains("OVERWEIGHT", flow.TotalsLine, StringComparison.Ordinal);
+        Assert.True(flow.TotalsOverweight);
     }
 
     // Confirms forward until the flow is on `target`, so a test names the screen it cares about

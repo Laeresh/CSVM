@@ -215,6 +215,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/HangarHardpointsPage.cs` — the HARDPOINTS screen: the two per-wing counts through langui 1176/1177, the stepper walking 0-4, the detail speaking the dropdown's 1165/1168/1169 vocabulary with the decoded $410 / 480 lb per hardpoint and the wing's line total.
 - `src/UI/HangarPaintPage.cs` — the PAINT screen: the pattern row stepping the airframe's own pattern list (record index 0-13 through the engine's 14-entry name table), the three colour rows stepping a palette of the twelve shipped schemes' own triples, and a live preview composed from the pattern's `.BM` region masks with `PlanePainter`'s formula; the record's composite picks are carried, never written.
 - `src/UI/HangarNamePage.cs` — the PLANENAME screen: one row per character stepped through a filename-safe alphabet plus a length row that adds and removes them, capped at the original's 32-character name, with the detail line assembling the name and marking the focused character.
+- `src/UI/HangarPurchasePage.cs` — the PURCHASE screen: the itemised review, one row per priced thing the scratch plane carries (airframe always, engine when chosen, armed gun slots, armoured zones via 1191-1194, wings with hardpoints via 1176/1177) with its decoded cost and weight, a totals row, and the Purchase Now row that commits, flagged with the problems text (1182 + 1227 / 1171) whenever the verdict is not Ok.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
@@ -2981,7 +2982,9 @@ draws through the same centred body every other screen uses: heading, rows, deta
 read off `_hangar.Page`, plus at most one art block (`HangarArtControl`) when the page's `Art` is
 non-null: the page's decoded RGBA as a fixed-height letterboxed texture with a caption, rebuilt
 only when the page hands over a different image and counted by `LayoutScale` so the screen still
-fits 720p. A page landing in C23-C26 therefore needs no change here, art included. ⚠ The plane
+fits 720p. Every hangar screen also carries the persistent totals line under its heading
+(`HangarFlow.TotalsLine`, PLAN-hangar Decision 10), error-coloured via `TotalsOverweight` and
+counted by `LayoutScale` the same way. A page needs no change here, art included. ⚠ The plane
 pick's
 hangar row is offered only to a lone pilot under Instant Action (`HangarRowOnPlaneScreen`): a
 splitscreen pane never draws it, and `RebuildPanes` clamps every cursor back into the roster, so
@@ -3016,13 +3019,18 @@ the heading resolved from the screen's own langui id (1017/1004-1010/1401);
 (the right heading, a Continue row and a real summary of what the scratch plane carries, editing
 nothing) stands only in the switch's default arm now that every screen has its own page.
 `HangarPlaneSelectionPage`, `HangarAirframePage`, `HangarEnginePage`, `HangarArmourPage`,
-`HangarGunsPage`, `HangarHardpointsPage`, `HangarPaintPage`, `HangarNamePage` (each its own file)
-and `HangarPurchasePage` are real; the purchase page's totals line is a placeholder for C26's
-itemised list, but the commit under it is already the real one. Off-engine coverage:
+`HangarGunsPage`, `HangarHardpointsPage`, `HangarPaintPage`, `HangarNamePage` and
+`HangarPurchasePage` (each its own file) are all real; the placeholder stands only in the
+switch's default arm. `HangarFlow.TotalsLine` (with its `TotalsOverweight` colour flag) is the
+persistent second stats line the launchscreen draws under every hangar screen's heading
+(PLAN-hangar Decision 10): the build's total price and weight against the airframe's capacity,
+recomputed from `HangarEconomy.Price` on demand and carrying the original's OVERWEIGHT word
+(langui 1227) when over. Off-engine coverage:
 `CSVM.Tests/HangarFlowTests.cs`, `CSVM.Tests/HangarAirframePageTests.cs`,
 `CSVM.Tests/HangarEnginePageTests.cs`, `CSVM.Tests/HangarArmourPageTests.cs`,
 `CSVM.Tests/HangarGunsPageTests.cs`, `CSVM.Tests/HangarHardpointsPageTests.cs`,
-`CSVM.Tests/HangarPaintPageTests.cs` and `CSVM.Tests/HangarNamePageTests.cs`.
+`CSVM.Tests/HangarPaintPageTests.cs`, `CSVM.Tests/HangarNamePageTests.cs` and
+`CSVM.Tests/HangarPurchasePageTests.cs`.
 
 ## src/UI/BoardMenu.cs
 A board's cursor and item list, engine-free so the selection rules test off engine the way
