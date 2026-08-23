@@ -42,6 +42,7 @@ public sealed class PlaneBuilder
     private readonly bool _withCockpitInterior;
     private readonly List<Node3D> _wingFlares = new();
     private readonly List<Node3D> _damagePanels = new();
+    private readonly List<Node3D> _cockpitDamagePanels = new();
     private PaintScheme? _scheme;
     private PatternLibrary _patterns;
     private PlanePainter? _painter;
@@ -85,6 +86,14 @@ public sealed class PlaneBuilder
     /// healthy pdpN_h twins, built visible. A <see cref="Flight.DamageVisuals"/> flips
     /// them as part HP crosses the vehicle def's injure_anims thresholds.</summary>
     public IReadOnlyList<Node3D> DamagePanels => _damagePanels;
+
+    /// <summary>Cockpit-interior builds only: the two torn-skin cockpit panels,
+    /// <c>pcdp4</c>/<c>pcdp6</c> (PLAN-cockpit-view, B12), built HIDDEN like their exterior
+    /// counterparts. They carry no healthy twin (no <c>pcdp4_h</c>/<c>pcdp6_h</c> ships anywhere
+    /// in <c>planes.zbd</c>) — <see cref="Flight.DamageVisuals"/> flips them off the SAME
+    /// <c>pdpanel4</c>/<c>pdpanel6</c> injure entries that flip <c>pdp4</c>/<c>pdp6</c>, not a
+    /// separate cockpit rule. Empty unless the builder was asked for a cockpit interior.</summary>
+    public IReadOnlyList<Node3D> CockpitDamagePanels => _cockpitDamagePanels;
 
     /// <summary>The aircraft's skin-texture prefix, known once <see cref="Build"/> has run.
     /// Null when the model carries no decal-placeholder material to read it from.</summary>
@@ -249,10 +258,10 @@ public sealed class PlaneBuilder
             else if (IsDamagePanel(n3d.Name, out bool cockpit))
             {
                 n3d.Visible = false; // torn skin waits for DamageVisuals to flip it on
-                // ⚠ pcdpN is deliberately not listed: DamageVisuals drives the exterior panels off
-                // this list, and the interior pair is B12's, on its own seam.
-                if (!cockpit)
-                    _damagePanels.Add(n3d);
+                // pcdpN is kept off DamagePanels — that list is the exterior set the pairing walk
+                // measures mesh-AABB centers over — and collected on its own list instead (B12);
+                // DamageVisuals flips both off the same pdpanelN injure entries.
+                (cockpit ? _cockpitDamagePanels : _damagePanels).Add(n3d);
             }
             else if (IsHealthyPanel(n3d.Name))
             {

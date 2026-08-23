@@ -105,6 +105,7 @@ public static class SuiteCatalog
         "trail-world-anchor",
         "damage-template-pool",
         "damage-staging-pool",
+        "cockpit-panel-staging",
         "damage-stage-slots",
         "ai-damage-stages",
         "crash-rig-anchors",
@@ -522,6 +523,8 @@ public static class SuiteCatalog
             "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)", DamageTemplatePool));
         into.Add(new TestHarness.Suite("damage-staging-pool",
             "the injure staging reads health only: a zone stripped of armour tears no panel though its combined fraction has crossed the threshold, and the panel appears once health itself crosses (BL-384)", DamageStagingPool));
+        into.Add(new TestHarness.Suite("cockpit-panel-staging",
+            "the cockpit-interior torn panels pcdp4/pcdp6 flip off the SAME pdpanel4/pdpanel6 injure entries as their exterior namesakes, survive a CockpitVisibility view-mode switch, and clear together on respawn's Reset() (B12)", CockpitPanelStaging));
         into.Add(new TestHarness.Suite("damage-stage-slots",
             "the injure ladder stages per ENTRY: fury's six random_remote_damage thresholds each fire, a repair retracts what it lifted back over, and one entry on four zones fires four times (BL-385/BL-384)", DamageStageSlots));
         into.Add(new TestHarness.Suite("ai-damage-stages",

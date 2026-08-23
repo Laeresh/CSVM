@@ -66,7 +66,8 @@ internal sealed class HumanFlightAdapter
                 pairingDefs.AddRange(program.ByAnimName(n));
             pairing = DamageVisuals.PanelPairingSets(pairingDefs);
         }
-        return new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats, defPairing: pairing);
+        return new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats, defPairing: pairing,
+            cockpitPanels: planeBuilder.CockpitDamagePanels);
     }
 
     /// <summary>Builds player <paramref name="pi"/>'s aircraft into <paramref name="rig"/> and

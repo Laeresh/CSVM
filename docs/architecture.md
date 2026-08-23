@@ -427,8 +427,9 @@ authored node in the top-level `markers` group.
 that build alone and mounts it hidden as `CockpitInterior`: local transform = the
 `cockpit_camera` offset with a uniform `InteriorScale`, then `ParkInteriorStates` walks it. Only a
 human rig asks for it — an AI plane never builds a cockpit. The subtree's `pcdp4`/`pcdp6` torn-skin
-panels build hidden alongside it and are deliberately absent from `DamagePanels`, which stays the
-exterior set `DamageVisuals` drives.
+panels build hidden alongside it, kept off `DamagePanels` (the exterior set the pairing walk
+measures mesh centers over) and exposed instead on their own `CockpitDamagePanels` list, which
+`DamageVisuals` flips off the same `pdpanel4`/`pdpanel6` entries as the exterior pair (B12).
 
 ⚠ **The interior's off-states ship `active: true`.** Five windshield bullet-hole groups
 (`bullet1`…`bullet5`) and two warning lamps (`lowalt_on`/`stallwarning_on`) are authored visible on
@@ -2965,6 +2966,17 @@ data names a `pdpanel*` stage (`PairsPanels`); the null-sink stand-in fallback i
 `EffectCatalogue.DamageStageAnims` + `PlaneDamageEffectAnims`, curated rather than
 program-existence, so the cockpit gauge defs (`*_damage_green/yellow/red`, `*_got_hit`) can never
 play on an airframe.
+
+**The cockpit-interior twins pcdp4/pcdp6 (PLAN-cockpit-view, B12).** `PlaneBuilder.CockpitDamagePanels`
+joins `DamagePanels` in the same `_panels` table (an optional constructor param, empty outside a
+cockpit-interior build), so `ApplyPartStage`/`Retract` flip `pcdp4`/`pcdp6` alongside `pdp4`/`pdp6`
+off the identical `pdpanel4`/`pdpanel6` entries — no separate cockpit rule, and `Reset()` clears
+both together for free (neither carries the `_h` suffix that keeps a healthy skin visible). The
+pair has no healthy twin of its own to pair (no `pcdp4_h`/`pcdp6_h` ships anywhere in `planes.zbd`),
+so the crossed-numbering trap that pairs `pdpN`↔`pdpN_h` by mesh position does not extend to them —
+there is nothing to pair. `CockpitVisibility.Apply` (B11) only ever toggles the four top-level
+groups it binds, never a panel's own `Visible`, so a torn cockpit panel stays torn across a
+Cockpit↔Nose↔external switch with no extra code.
 
 ## src/Flight/DamageLab.cs
 The damage lab (F5 toggles): one armor slider (parts the data gives an armor pool) plus one health

@@ -157,7 +157,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — rendering
 
 11. ☑ Render the `cockpit1` interior in Cockpit only; per-mode node hiding (healthy body, `markers`/`dontmove`)
-12. ☐ Drive the `pcdpN` cockpit damage panels in first-person
+12. ☑ Drive the `pcdpN` cockpit damage panels in first-person
 
 ### Wave C — head-look
 
@@ -571,7 +571,65 @@ adding the subtree does not double-register effect anchors. The `markers`/`dontm
 visual role is unresolved in the decode (`org/cameraViews.md`, "Not resolved") — hide them in Nose
 because the original does, and record what they turn out to contain rather than guessing.
 
-## B12 ☐ Drive the `pcdpN` cockpit damage panels in first-person
+## B12 ☑ Drive the `pcdpN` cockpit damage panels in first-person
+
+**Landed.** `pcdp4`/`pcdp6` flip with zone damage off the SAME `pdpanel4`/`pdpanel6` injure
+entries that already flip the exterior `pdp4`/`pdp6`, and clear together on respawn — no separate
+cockpit rule, exactly the pattern the plan's Approach called for.
+
+`PlaneBuilder.CockpitDamagePanels` is `CollectWingFlares`'s cockpit half of the same walk that
+already built `DamagePanels`: both torn-skin lists get `Visible = false` at build time, but the
+cockpit pair (found only when `cockpitInterior: true`, B11's seam) lands on its own list rather
+than `DamagePanels`, since that list is the exterior set `DamageVisuals`' pairing walk measures
+mesh-AABB centers over. `DamageVisuals`'s constructor takes the new list as an optional
+`cockpitPanels` param and folds it into the SAME `_panels` table `DamagePanels` already populates
+— one dictionary, keyed by node name, so `pdp4` and `pcdp4` sit side by side with no collision.
+`ApplyPartStage`/`Retract` (the two places `pdpanelN` already flips `pdp`+n) now also look up
+`pcdp`+n in that table and flip it the same instant, off the identical threshold crossing; `Reset()`
+needed no new code at all; its existing loop over `_panels` sets `Visible = name.EndsWith("_h")`,
+which is already `false` for a name with no `_h` suffix.
+
+**The crossed-numbering trap does not extend to `pcdpN` — there is nothing to pair.** A full-text
+search of `extracted/planes/nodes.json` for `pcdp4_h`/`pcdp6_h`/`pcdp1`/`pcdp2`/`pcdp3`/`pcdp5`
+returns zero matches on all 11 airframes: `pcdp4`/`pcdp6` are the only cockpit damage nodes that
+exist, and neither carries a healthy twin the way `pdpN`/`pdpN_h` do. `PairHealthySkins`'s
+pairing walk still iterates over the cockpit pair (they share `_panels`), but `PanelPairingSets`'s
+`TornTargets` set is built from node names starting with `pdp` — `pcdp4` fails that prefix test
+(`p`-`c`-`d`-`p`, not `p`-`d`-`p`) — so the pairing walk excludes them with a log line and pairs
+nothing; the exterior set's own pairing is untouched.
+
+**The B11 visibility interplay needed no new code.** `CockpitVisibility.Apply` (B11) only ever
+writes the four top-level groups it binds (`_interior`, `_body`, `_markers`, `_dontmove`) — never
+a descendant's own `Visible` — so a torn `pcdp4`/`pcdp6` keeps its own state exactly as
+`DamageVisuals` set it across any Cockpit↔Nose↔external switch. `ParkInteriorStates` (B11) parks
+only the seven interior-driven states (`bulletN`, the two lamps); `pcdp4`/`pcdp6` are not in that
+set and never were — they get their pristine hidden state from `CollectWingFlares`'s unconditional
+`Visible = false` on every damage-panel node, the same line that already hides the exterior pair.
+
+**No effect-pool budget changed.** `pdpanel4`/`pdpanel6`'s own SEQUENCE_DEFINITION already sets
+BOTH `pdp4`/`pcdp4` (or `pdp6`/`pcdp6`) `ACTIVE` in one authored event
+(`extracted/zrdr/player-1.zrd.json`), and already calls `gimme_bigflakes`/`large_firetrail` WITH
+`pcdp4`/`pcdp6` in first person — the calls `effect_pools.json:59`'s `planeflakes2` budget already
+counts. `DamageVisuals`'s new lookup only sets `Node3D.Visible`; it plays no new anim and calls no
+new template, so no pool count moves.
+
+**The parked `--viewer`/`--damage` lab exercises the pair too.** `GameSession.BuildStaticStage`
+passes `cockpitInterior: _spec.Viewer` on the same gate as `damagePanels`, and its `DamageVisuals`
+construction now passes `builder.CockpitDamagePanels` through — the interior stays built hidden,
+like the exterior panels, so the HP sliders drive `pcdp4`/`pcdp6` identically to flight; the node
+lab can bring the interior into view for a look while a slider is dragged.
+
+**Tests.** The new in-engine `cockpit-panel-staging` suite (`DamageSuites.CockpitPanelStaging`)
+builds a plane with `cockpitInterior: true`, crosses whichever of `pdpanel4`/`pdpanel6` the
+airframe's own data authors, and checks: the cockpit panel starts hidden; it tears the instant the
+exterior panel does, off the one `OnPartDamage` call; it stays torn across a `CockpitVisibility`
+Nose↔Cockpit switch; and `Reset()` clears the exterior panel and its cockpit twin together. Godot
+`Node3D`/`MeshInstance3D` types are not exercised in headless xunit anywhere in this codebase, so
+this is the honest check, the same family B11's `cockpit-interior` suite is in.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Cockpit-interior torn-skin panels flip with zone damage the way the exterior `pdpN`
 panels already do, and reset on respawn.

@@ -11,7 +11,8 @@ namespace CSVM.Flight;
 /// fraction (<see cref="OnHullDamage"/>) each drive their own list — see
 /// <c>docs/org/vehicleDamage.md</c>'s "Damage staging" for the two pools and why armour is in
 /// neither. What each authored stage plays is on <see cref="RigAnimFor"/>; the panel-pairing
-/// traps are on <see cref="PairHealthySkins"/>.
+/// traps are on <see cref="PairHealthySkins"/>. The cockpit twins pcdp4/pcdp6 (B12) share
+/// <c>_panels</c> and flip off the same <c>pdpanelN</c> entries — no separate cockpit rule.
 /// FlightController calls <see cref="OnPartDamage"/>/<see cref="OnHullDamage"/> after each hit
 /// and <see cref="Reset"/> on respawn.
 /// </summary>
@@ -67,15 +68,17 @@ public sealed class DamageVisuals
 
     /// <param name="panels">PlaneBuilder.DamagePanels — pdpN + pdpN_h nodes.</param>
     /// <param name="planeRoot">pairing measures panel mesh centers in this frame.</param>
-    /// <param name="standInTrail">parked-viewer stand-in smoke half, burned at prop1; null in flight.</param>
-    /// <param name="standInFire">its fire half.</param>
+    /// <param name="standInTrail">parked-viewer stand-in smoke half, burned at prop1; null in flight.</param> <param name="standInFire">its fire half.</param>
     /// <param name="panelTrails">parked-viewer stand-in pool, one firepuffer per flipped panel.</param>
     /// <param name="pairing">def-derived candidate sets; null falls back to unscoped pairing, loudly.</param>
+    /// <param name="cockpitPanels">PlaneBuilder.CockpitDamagePanels — pcdp4/pcdp6, flipped off the same pdpanelN entries (B12).</param>
     public DamageVisuals(IEnumerable<Node3D> panels, Node3D planeRoot, PlaneStats stats,
         Puffer? standInTrail = null, Puffer? standInFire = null, List<Puffer>? panelTrails = null,
-        PanelPairing? defPairing = null)
+        PanelPairing? defPairing = null, IEnumerable<Node3D>? cockpitPanels = null)
     {
         foreach (var p in panels)
+            _panels[p.Name] = p;
+        foreach (var p in cockpitPanels ?? Array.Empty<Node3D>())
             _panels[p.Name] = p;
         foreach (var part in stats.DestroyableParts)
         {
@@ -384,6 +387,10 @@ public sealed class DamageVisuals
             if (_pairedHealthy.TryGetValue("pdp" + n, out var healthySkins))
                 foreach (var healthy in healthySkins)
                     healthy.Visible = false;
+            // The cockpit-interior twin — same anim, same threshold, no separate rule (B12).
+            // pcdp4/pcdp6 carry no healthy skin of their own to hide, so nothing pairs here.
+            if (_panels.TryGetValue("pcdp" + n, out var cockpitTorn))
+                cockpitTorn.Visible = true;
             PlayStage(anim, partName, healthFraction);
         }
         else if (anim.EndsWith("_damage_effects", StringComparison.OrdinalIgnoreCase))
@@ -403,7 +410,8 @@ public sealed class DamageVisuals
             return;
         if (IsPanelStage(anim))
         {
-            string torn = "pdp" + anim["pdpanel".Length..];
+            string n = anim["pdpanel".Length..];
+            string torn = "pdp" + n;
             if (_panels.TryGetValue(torn, out var panel))
             {
                 panel.Visible = false;
@@ -417,6 +425,9 @@ public sealed class DamageVisuals
             if (_pairedHealthy.TryGetValue(torn, out var healthySkins))
                 foreach (var healthy in healthySkins)
                     healthy.Visible = true;
+            // The cockpit-interior twin retracts with its exterior namesake (B12).
+            if (_panels.TryGetValue("pcdp" + n, out var cockpitTorn))
+                cockpitTorn.Visible = false;
         }
         if (anim.Equals("player_smoketrail", StringComparison.OrdinalIgnoreCase))
             _smoking = false;

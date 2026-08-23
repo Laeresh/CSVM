@@ -1397,9 +1397,10 @@ public partial class GameSession : Node3D
         var staticScheme = _liveryResolver.SchemeFor(0, state.ZrdrPath, _liveryResolver.NewPaintRng(), staticPatterns);
         // In --viewer the LIVERY LAB owns the livery and applies it itself, so the
         // model is built bare and there is one write path for paint (its Repaint).
-        // Everywhere else the builder paints at construction as usual.
+        // cockpitInterior rides the same gate as damagePanels: pcdp4/pcdp6 hidden, B12.
         var builder = new PlaneBuilder(state.Gamez, state.Textures, damagePanels: _spec.Viewer,
-            scheme: _spec.Viewer ? null : staticScheme, patterns: _liveryResolver.Patterns);
+            scheme: _spec.Viewer ? null : staticScheme, patterns: _liveryResolver.Patterns,
+            cockpitInterior: _spec.Viewer);
         _plane = builder.Build(_spec.PlaneName);
         StartupProfile.Record("plane", mark);
         state.MeshInstances = builder.MeshInstanceCount;
@@ -1432,7 +1433,7 @@ public partial class GameSession : Node3D
                 pairingDefs.AddRange(Mech3.AnimDefs.LoadFileDefs(state.ZrdrPath, "player_destruct_reset.json"));
                 pairingDefs.AddRange(Mech3.AnimDefs.LoadFileDefs(state.ZrdrPath, "player-1.json"));
                 var visuals = new DamageVisuals(builder.DamagePanels, _plane, stats, smoke, fire, panelTrails,
-                    DamageVisuals.PanelPairingSets(pairingDefs));
+                    DamageVisuals.PanelPairingSets(pairingDefs), cockpitPanels: builder.CockpitDamagePanels);
                 // the HUD gauge cluster as a lab toggle (user request): the damage
                 // dial mirrors the sliders, blinks on decreases like a flight hit
                 var labGauges = GaugeCluster.Build(state.Gamez, _spec.PlaneName, state.Textures, stats.DestroyableParts);
