@@ -566,7 +566,8 @@ blueprint and icon at their catalogued shape) and `CSVM.Tests/HangarAirframePage
 `DetailShowsTheDecodedFigures`, `StarRatingsMatchTheEconomy`, `DetailLeavesTheScratchUntouched`,
 `ArtIsNullWithoutADataRoot`, `ArtShowsTheFocusedAirframesBlueprint`).
 
-**Verified.** <pending orchestrator run>
+**Verified.** Closing orchestrator battery at D32: build 0/0, units 1861/1861, engine suites
+90/90 with errors clean, 16 goldens hash-identical, exit 0.
 
 **Original approach (kept for reference).**
 
@@ -623,7 +624,8 @@ Tests: `CSVM.Tests/HangarEnginePageTests.cs` (`OffersSevenRows_NamedFromLangui`,
 `RowTextFallsBackWithoutStrings`, `EachRowEditsItsOwnZone`, `SteppingWrapsAtBothEnds`,
 `DetailSeparatesTheThreeFactors`, `DetailUnitsUseFormat1170`, `AcceptAdvancesWithoutEditing`).
 
-**Verified.** <pending orchestrator run>
+**Verified.** Closing orchestrator battery at D32: build 0/0, units 1861/1861, engine suites
+90/90 with errors clean, 16 goldens hash-identical, exit 0.
 
 **Original approach (kept for reference).**
 
@@ -687,7 +689,8 @@ purchase-screen verify: the bill prices the same scratch def the stepper edits),
 `DetailSpeaksTheDropdownVocabulary`, `DetailUsesLanguiWhenPresent`,
 `AcceptAdvancesWithoutEditing`, and the extracted-data `HardpointStringsResolve`).
 
-**Verified.** <pending orchestrator run>
+**Verified.** Closing orchestrator battery at D32: build 0/0, units 1861/1861, engine suites
+90/90 with errors clean, 16 goldens hash-identical, exit 0.
 
 **Original approach (kept for reference).**
 
@@ -789,7 +792,8 @@ and `CSVM.Tests/HangarNamePageTests.cs` (`OneRowPerCharacterPlusTheLengthRow`,
 `ImportedCharactersSurviveUntilStepped`, `DetailMarksTheFocusedCharacter`,
 `ABlankNameShowsTheOriginalsRefusal`, `TheEnteredNameIsWhatTheStoreSaves`).
 
-**Verified.** <pending orchestrator run>
+**Verified.** Closing orchestrator battery at D32: build 0/0, units 1861/1861, engine suites
+90/90 with errors clean, 16 goldens hash-identical, exit 0.
 
 **Original approach (kept for reference).**
 
@@ -861,7 +865,8 @@ Tests: `CSVM.Tests/HangarPurchasePageTests.cs` (`ABareBuildShowsOnlyAirframeTota
 in `CSVM.Tests/HangarFlowTests.cs`, `TheTotalsLineCarriesPriceWeightAndCapacity` and
 `TheTotalsLineFlagsOverweight`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Closing orchestrator battery at D32: build 0/0, units 1861/1861, engine suites
+90/90 with errors clean, 16 goldens hash-identical, exit 0.
 
 **Original approach (kept for reference).**
 
@@ -939,7 +944,8 @@ in the picker the hangar was entered from (the original's index-11 `gui_continue
 **Evidence (confidence: traced for the contract).** The 11+customs sizing and index-11 select are
 decoded ([`org/hangar.md`](org/hangar.md), the 1024/2099 count callbacks).
 
-**Verified.** <pending orchestrator run>
+**Verified.** Closing orchestrator battery at D32: build 0/0, units 1861/1861, engine suites
+90/90 with errors clean, 16 goldens hash-identical, exit 0.
 
 ## D32 ☑ Building a custom plane into a flying aircraft
 
@@ -1020,7 +1026,8 @@ engine-wiring additions: `TheEnginePickResolvesToItsAuthoredRegistryRow`,
 `TheAirframesOwnPartsAreNeverMutated`, `TheVehicleArmourTotalIsTheSumOverTheBoughtZones`,
 `ThePaintCarriesThePatternAndColoursAndNoInventedDecals`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Closing orchestrator battery at D32: build 0/0, units 1861/1861, engine suites
+90/90 with errors clean, 16 goldens hash-identical, exit 0.
 
 **Goal (original).** A picked custom plane spawns and flies: the airframe's model and stock base,
 A3's gun defs on the chosen slots, hardpoint ordnance capacity per the wing counts, paint applied,
