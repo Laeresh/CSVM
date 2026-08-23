@@ -1054,15 +1054,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     break is wings-level and clean: the compass turns **0.0°** across the whole 24.8 sim s, no wing
     drop. **The mechanism is decoded and the rebuild goes on it, not on a new fit**
     (`docs/org/flightModel.md`, "The nose-drop's rate is `stall_mag`"): the original adds
-    `stall_mag · stallFlag · dt` (`stall_mag` authored, fallback 0.45) into the TORQUE accumulator
-    about an unnormalised `nose × worldUp`, where `stallFlag` is `1 − L(9°)/Weight`. So the rate is
-    damped by `ang_momentum_damp` rather than applied to the attitude (≈0.106 rad/s at full depth on
-    the Bloodhawk), the drop weakens as the nose leaves horizontal instead of chasing world-down, and
+    `stall_mag · stallFlag · dt` (`stall_mag` **authored 1.25**, fallback 0.45) into the TORQUE
+    accumulator about an unnormalised `nose × worldUp`, where `stallFlag` is `1 − L(9°)/Weight`. So
+    the rate is damped by `ang_momentum_damp` rather than applied to the attitude (≈0.295 rad/s at
+    full depth on the Bloodhawk), the drop weakens as the nose leaves horizontal instead of chasing world-down, and
     the settle at ≈−22° is an equilibrium rather than the end of a chase. That accounts for the ~17×
     and the wrong shape together. `StallNoseRate` 1.0 is a no-op multiplier on `stall_mag`, so there
-    is no rate constant to re-choose: what changes is the form.
-    ⚠ Whatever replaces it must still beat full-elevator authority (~0.58 rad/s) at depth so the drop
-    stays decisive, and must still refuse to raise the nose over the horizon while stalled.
+    is no rate constant to re-choose: what changes is the form. The magnitude to build on is the
+    authored **1.25** (`_DAT_0071c41c`; the fallback immediate `0x3ee66666` at `0x4742fe` is stored
+    only when the token is absent), and it is a single **global** parsed in `FUN_004735b0` and read
+    straight from the force path at `0x48d10d`, so it does not belong in a per-airframe record.
+    ⚠ **Drop the "must beat full-elevator authority" constraint: the decode says it does not.**
+    Full-elevator pitch on the same airframe is ≈0.585 rad/s, roughly twice the deepest stall torque,
+    so in the original a held pull opposes the drop rather than losing to it — what makes the drop
+    decisive is a stalled aircraft's lost authority, not this term out-rotating a healthy one. Do not
+    add a floor to restore that. Whether the nose may be raised over the horizon while stalled is a
+    separate question this block does not answer, and our cap on it is unverified against the binary.
     ⚠ The two stall thresholds around it are settled and are not in scope: `StallSpeedFrac` is the
     nose-drop at **0.25 fd** and `StallWarnFrac` the lamp at **0.30 fd**, two unrelated thresholds on
     one margin (`StallWarningTests`).

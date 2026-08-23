@@ -592,16 +592,28 @@ accumulated torque already opposes that axis, and adds along it:
 ```
 
 `stall_mag` is `_DAT_0071c41c`, authored from the `stall_mag` token (string at `0x627854`, parsed at
-`0x4742de`-`0x4742fe`), compiled fallback **0.45**. There is **no second rate constant**: the 0.45 is
-the whole of it.
+`0x4742de`-`0x4742fe`), compiled fallback **0.45** (the immediate `0x3ee66666` stored at `0x4742fe`,
+on the branch the parser takes only when the token is ABSENT). There is **no second rate constant**:
+the one scalar is the whole of it. It is also a **single global, not a per-airframe field**: the one
+write pair is in the player-globals parser `FUN_004735b0` and the force path reads the global
+directly at `0x48d10d`, so no plane record can carry its own.
+
+⚠ **This install authors 1.25, so the fallback is the wrong number to reason with** (corrections
+table below). Every figure here is the authored value's.
 
 Three consequences, and they are what separate this from the remake's version:
 
 - **It enters the torque accumulator, not the attitude.** So it is scaled by `rec_moments_inertia`
   and damped by `ang_momentum_damp` downstream, exactly as "Torques and the limiters" warns for
   anything else entering that accumulator. On the Bloodhawk (`rec_moments_inertia.x` 1.18,
-  `ang_momentum_damp` 5.0) full stall depth settles at `0.45 · 1.18 / 5.0` ≈ **0.106 rad/s**, an
-  order of magnitude under a direct 0.45 rad/s rotation.
+  `ang_momentum_damp` 5.0) full stall depth settles at `1.25 · 1.18 / 5.0` ≈ **0.295 rad/s** — under
+  the fallback it would be `0.45 · 1.18 / 5.0` ≈ 0.106, and either way an order of magnitude under a
+  direct rotation at the scalar itself.
+- **It does NOT out-rotate the elevator.** Full-elevator pitch authority on the same airframe is
+  ≈0.585 rad/s (`pitch-rate` 33.54 °/s), about twice the deepest stall torque, so in the original a
+  held pull opposes the drop rather than losing to it. A rebuild must not add a floor to make the
+  drop win; what makes it decisive is that a stalled aircraft has little authority left, not that
+  this term beats a healthy one.
 - **The axis is not normalised**, so the rate carries a `cos(nose elevation)` factor and falls away
   as the nose leaves the horizontal. The nose is pushed down about a horizontal axis; it does not
   chase world-down, and a bounded nose-down attitude is an equilibrium between this torque and the
@@ -816,6 +828,14 @@ axes, scales each by `rec_moments_inertia` (`0x4918b9`–`0x491932`) and rotates
 formula above folds the two steps together, which is exact — but it matters for anything else
 that enters the same accumulator, because that too is scaled by the reciprocal inertia and damped
 by `ang_momentum_damp`. The bank coupling below is exactly such a term.
+
+Both are per-airframe fields of the plane record, parsed in `FUN_00479240`: `ang_momentum_damp`
+(token at `0x627fdc`) into `+0x114` at `0x47add3`, and `rec_moments_inertia` (token at `0x628020`)
+into `+0x118`/`+0x11c`/`+0x120` from list elements 0/1/2 at `0x47ae69`/`0x47ae75`/`0x47ae81` —
+pitch, yaw, roll in that order. ⚠ **Neither has a compiled fallback**: each is a single store on
+the token-present branch with no else, unlike `stall_mag`'s. `PlaneStats`' 5.0 and (0.8, 0.6, 1.3)
+are therefore not the executable's defaults for these two, and an airframe that authored neither
+would fly on whatever the record was initialised to; in practice every airframe authors both.
 
 ## Bank coupling — resolved, including the inverted case
 
