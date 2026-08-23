@@ -362,7 +362,7 @@ public partial class FlightController : Node3D
     private readonly AimCandidateSet _targetScan = new();   // the targeting pass's own scan, rebuilt per frame
     private readonly List<AimCandidate> _targetParts = new(); // this frame's selectable sub-parts
     private readonly bool[] _targetKeyPrev = new bool[5];   // T/Y/U/I/O edge detection
-    private readonly bool[] _viewModeKeyPrev = new bool[2]; // F8/F6 view-selection edge detection
+    private readonly bool[] _viewModeKeyPrev = new bool[4]; // F8/F6 + pad view-selection edges
     private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // D-pad Up tap vs hold
 
     private bool _initialTargetDone;             // --target= has had its one chance
@@ -2387,22 +2387,23 @@ public partial class FlightController : Node3D
         Log.Warn("core", $"--target={InitialTarget}: no match — selectable now: {listed}");
     }
 
-    /// <summary>The two view-selection keys, edge-detected: F8 cycles the first-person pair
-    /// (Cockpit ↔ Nose, entering Cockpit from Chase — the original's "Cycle Cockpit Views") and F6
-    /// selects the chase view back. The original binds a selector per view rather than one
-    /// three-stop cycle, which is why the way out of first person is its own key; F6 is this port's
-    /// choice for it, the original's own binding is not in the decoded data. No pad binding: every
-    /// button is spoken for, and this is player 1's keyboard like the numpad views.</summary>
+    /// <summary>The view-selection inputs, edge-detected: F8 or D-pad Down cycles the first-person
+    /// pair (Cockpit ↔ Nose, entering Cockpit from Chase — the original's "Cycle Cockpit Views",
+    /// which its binding menu also puts on a joystick button), F6 or the pad's Back/Select selects
+    /// the chase view. The original binds a selector per view rather than one three-stop cycle, so
+    /// the way out of first person is its own input; F6 and Back are this port's choices for it.
+    /// The pad half makes the views reachable for a pad-only pilot (P2–P4), who has no keyboard.</summary>
     private void PollViewModeKeys()
     {
-        DispatchViewModeKey(0, Key.F8, () => _cam!.CycleCockpitViews());
-        DispatchViewModeKey(1, Key.F6, () => _cam!.SelectChase());
+        DispatchViewModeKey(0, KeyDown(Key.F8), () => _cam!.CycleCockpitViews());
+        DispatchViewModeKey(1, KeyDown(Key.F6), () => _cam!.SelectChase());
+        DispatchViewModeKey(2, PadPressed(JoyButton.DpadDown), () => _cam!.CycleCockpitViews());
+        DispatchViewModeKey(3, PadPressed(JoyButton.Back), () => _cam!.SelectChase());
     }
 
     // Same one-action-per-press rule as DispatchTargetKey, against its own slots.
-    private void DispatchViewModeKey(int slot, Key key, System.Action act)
+    private void DispatchViewModeKey(int slot, bool down, System.Action act)
     {
-        bool down = KeyDown(key);
         if (down && !_viewModeKeyPrev[slot])
             act();
         _viewModeKeyPrev[slot] = down;
