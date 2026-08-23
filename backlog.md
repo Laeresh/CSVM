@@ -253,14 +253,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
       for whoever next tunes `puffer.burstSizeScale` or the fire family's TUNE pair (D10), not
       something A1/A2 should absorb by picking a different constant than the one the disassembly
       settles.
-    - **2026-08-09, weighting this correctly:** the 9.7 m figure is a *video frame measurement*, and
-      those are weak evidence in this project — they have misled it repeatedly (standing author
-      instruction). Note that the sim disagreed with it at the old `×1` default too (16.6 m vs
-      9.7 m), so **no value of `SizeScaleDefault` ever reconciled the two** — the footage was never
-      evidence about this constant. Treat the gap as a note about sprite alpha or particle density,
-      not as an open question hanging over the decode, and do **not** re-open A1 on the strength of
-      it. Qualitative reads from the clip (is there a fireball, does it persist) remain useful; a
-      measured span from it does not.
+    - ⚠ **The 9.7 m figure is a video frame measurement and is not evidence about this constant.**
+      That governs every comparison in this entry: a frame-derived length cannot confirm a decode
+      (`docs/verification.md` DET-12), and the sim disagreed with it at the old `×1` default too
+      (16.6 m vs 9.7 m), so **no value of `SizeScaleDefault` ever reconciled the two**. Treat the
+      gap as a note about sprite alpha or particle density, not as an open question hanging over
+      the decode, and do **not** re-open A1 on the strength of it. Qualitative reads from the clip
+      (is there a fireball, does it persist) remain useful; a measured span from it does not, and
+      no re-measurement of the footage is owed.
     - Limit: the ruler only exists near ignition (the airframe is gone within ~0.5 s and no known
       length survives in frame), so this is an *early-frame* comparison. Our burst is dead by ~1.0 s
       while the original is still at full intensity 9 sim-s later — that gap is the hold time above,
@@ -878,8 +878,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   [`docs/org/flightModel.md`](docs/org/flightModel.md) already separates what was read out of
   `crimson.exe` from what was fitted to match the original at the controls. This item is to shrink
   the second set as far as the binary allows, constant by constant, rather than to re-fit any of
-  them. The fitted set is `StallNoseRate` (1.0 rad/s, pinned to measured video), `KnifeAlignFloor`
-  (0.35, a knife-edge measurement the decode is silent on), `PitchTune` (0.89, measured video),
+  them. The fitted set is `StallNoseRate` (1.0 rad/s, pinned to video and so awaiting a decode),
+  `KnifeAlignFloor` (0.35, a knife-edge measurement the decode is silent on), `PitchTune` (0.89,
+  the same, awaiting a decode),
   `YawTune` (1.57, pinned against the authored yaw curve) and the graze trio `GrazeFriction` /
   `GrazeKick` / `GrazePushOut` (0.35 / 1.2 / 0.15, ours rather than the original's). The rotation
   rates are the priority: a per-tick angular rate is the class of quantity the original's live torque
@@ -889,8 +890,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   are both read out of `FUN_0041abd0`; `LiftAccelRate` is the authored `lift_accel_rate` with 1.2 the
   parser's own fallback (`PlaneStats.cs:171`); and the force/acceleration scale is settled, the whole
   weight chain conversion-free at `0x47ae2d`, `0x475c6a`, `0x48ff8e`, `0x41ac13` and `0x491290`. What
-  stands open there is a decode-vs-footage conflict on the drag polar that no constant in this model
-  can close, so it belongs to a re-decode of the CAP-05 clip rather than here.
+  stands open there is the drag polar, which no constant in this model can close. It is a decode of
+  the drag path out of `crimson.exe`, not a re-measurement of footage: a frame-derived polar cannot
+  confirm a decode, only rank readings (`docs/verification.md` DET-12).
   ⚠ **Traps.** (a) The two-integrator correction on that page is the worked example of how this goes
   wrong: the provenance table named the wrong integrator for months. Confirm which function you are
   reading before trusting an offset. (b) A change here moves every aircraft in the game; the goldens
@@ -1108,7 +1110,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     +8.0 and −21.7 → +1.4 ft/wall-s) even though on a wall the sink is tangential, while flat-ground
     contacts preserve tangential speed almost perfectly (302 mph belly-flat costs 0.11 mph). The
     decoded impulse cannot do that: it is normal-only, with no tangential or friction term anywhere
-    in it. Unexplained, and the one live question left in that footage.
+    in it. ⚠ Those readings are observations off footage and bound nothing — the question is which
+    term in the original's contact path zeroes the sink, and it is answered in `crimson.exe`, not by
+    re-measuring the clip (`docs/verification.md` DET-12).
   - **An oblique wall scrape is a sustained multi-tick drag, not an impulse.** `CAP-14`'s only
     multi-frame contact scraped a building at 144.5 mph and lost 40 % over 0.47 s (144.5 → 86.7).
     This engine resolves one contact per frame with a fixed 0.15 m push-out and a friction-scaled
@@ -1130,10 +1134,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `GrazeKick` 1.2 rad/s, `GrazeFriction` 0.35, quadratic severity damage, "sliding below
   `GrazeStopSpeed` 12 m/s = destroyed", "3 failed embed push-outs = explode". The original
   might throw the nose differently or let a plane belly-slide to a stop ("collecting 0-dmg
-  kisses" is the user report that motivated the stop rule). `CAP-14`'s analysed graze
-  (2026-08-04) already bounds part of this — the original's graze cost ~5% speed + sink with
-  wings level, no visible attitude kick at that severity. Judge the kick and the stop rule
-  against that footage and `BL-120`'s corner feel item before tuning further.
+  kisses" is the user report that motivated the stop rule). `CAP-14`'s analysed graze already
+  bounds part of this qualitatively — the original's graze cost ~5% speed + sink with wings level,
+  no visible attitude kick at that severity. ⚠ That is an observation, not a target: the footage
+  can say a kick is *absent* at that severity, but no constant here is settled by re-measuring it
+  (`docs/verification.md` DET-12). The kick and the stop rule are judged at the controls against
+  `BL-120`'s corner feel item, and the laws themselves want a decode of the original's contact
+  response.
 
 - `BL-309` `[Feature]` **Engine torque is a designed, one-sided turn assist — unmodelled.** GDD §4.1.8
   ("Engine Torque", Motion Model/Flight Dynamics → Simulated Elements; restated, no prose): torque
@@ -1141,22 +1148,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   no effect turning *against* the torque direction, but turning *with* it is **faster**. The
   behaviour to look for is a directional asymmetry in roll/turn rate that only ever assists.
   Nothing in `CSVM/src` models it, and no shipped key is known to carry it — the `dynamics` block's
-  `pitch_torque`/`roll_torque`/`rudder_torque` are control torques, not this. A hint already on
-  film: `CAP-02 Run 5`'s banked 45° right peaked at 123.8 °/s against left's 96.0 — but that pair
-  was flown for heading calibration, the right take decodes badly outside heading, and the
-  sustained rates point the other way; a lead to re-measure, not evidence. ⚠ The suite asserts
+  `pitch_torque`/`roll_torque`/`rudder_torque` are control torques, not this. ⚠ **Do not go to the
+  footage for it.** `CAP-02 Run 5`'s banked 45° right peaked at 123.8 °/s against left's 96.0, but
+  that pair was flown for heading calibration, the right take decodes badly outside heading, and
+  the sustained rates point the other way — a difference that size is exactly what a frame-derived
+  rate invents (`docs/verification.md` DET-11, DET-12). Settle it in the torque accumulator
+  (`FUN_0048c470`) instead: either a one-sided term is there or the design document's intent never
+  shipped. ⚠ The suite asserts
   direction-blind rates measured from single-direction captures (yaw 360° to 4%, roll time to 3%) —
   if the original's assist is real, those measured rates may already *contain* it for whichever
   direction was flown. Establish the flown directions before touching any constant.
   *Needs:* an original A/B — a full roll and a full rudder 360° in **both** directions at matched
   speed (a `CAP` when scheduled).
 
-- `BL-310` `[Feature]` **Pitch-down on aileron roll is designed — unmodelled, and measurable from footage
-  we already hold.** GDD §4.1.5: a roll carries a "small but noticeable" nose-over effect. We model
-  no roll→pitch coupling. Before inventing a constant, measure it: the decoded 360° aileron-roll
-  capture (manoeuvre #4, `analysis/video-flight-calibration/`) should show the nose-over as an
-  altitude/ADI dip across the roll — if it cannot be read there, it is too small to model and this
-  closes as won't-do. ⚠ This is the cross-axis coupling, not the roll's own spin-up rate, which is
+- `BL-310` `[Feature]` **Pitch-down on aileron roll is designed — unmodelled, and a decode question.**
+  GDD §4.1.5: a roll carries a "small but noticeable" nose-over effect. We model
+  no roll→pitch coupling. Before inventing a constant, ask the binary: does the live torque path
+  (`FUN_0048c470`, the accumulator `BL-414` reads) put a pitch term in on roll input at all? If no
+  such term exists the effect is the design document's intent rather than the shipped behaviour, and
+  this closes as won't-do. ⚠ Do not settle it off the 360° aileron-roll footage — an altitude or ADI
+  dip across a roll cannot separate the coupling from the roll's own geometry, and a frame-derived
+  angle cannot confirm a decode (`docs/verification.md` DET-12).
+  ⚠ This is the cross-axis coupling, not the roll's own spin-up rate, which is
   decoded (`roll_torque` through the reciprocal inertia, damped exponentially).
 
 - `BL-311` `[Feature]` **Ambient turbulence is designed and absent.** GDD §4.1.10: subtle, random jostling
@@ -2184,15 +2197,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   eye offset along the nose. Distinct from `BL-150`, which is about the *held-numpad* views around
   the aircraft, not the main view set.
 
-- `BL-260` `[Feature]` `[Blocked: death/flyby captures]` **The death and flyby cameras stay capture-gated; two crash-camera fields unwired**
+- `BL-260` `[Feature]` `[Blocked: camparam decode]` **The death and flyby cameras stay gated on a decode; two crash-camera fields unwired**
   (partial-close 2026-08-05: the crash camera and look-behind landed — `docs/HISTORY.md`).
   `CamParams.cs` parses all four authored `camparam.zrd.json` blocks; still dormant: the **death
   camera** (`death_interval/z/x/alt/min_alt` — placement magnitudes with unknown axes, and the
   engine has no distinct shot-down state to attach it to) and the **flyby camera** (12 fields
-  describing a re-siting roadside pass; its trigger is undecodable without footage). A death and
-  a flyby capture are still owed for those two. Also unwired on the landed crash camera:
-  `crash_elev` 40 (duplicates `crash_y` 45's vertical role — the crash footage cannot separate
-  the implied 56° from 53° look-down) and `crash_chord_y` 1000 (units unknown). Details and the
+  describing a re-siting roadside pass). What gates both is the trigger and the axis assignment,
+  and both live in `crimson.exe`'s camera path — not in footage. Also unwired on the landed crash
+  camera: `crash_elev` 40 (duplicates `crash_y` 45's vertical role) and `crash_chord_y` 1000 (units
+  unknown). ⚠ Do not try to separate the implied 56° from 53° look-down by measuring frames: an
+  angle off footage cannot confirm a decode (`docs/verification.md` DET-12). A capture can still
+  show what the death and flyby shots *look* like, which is worth having once the fields are
+  decoded; it cannot supply the field values. Details and the
   decoded fields: `docs/formats/camparam.md`.
   ⚠ Trap: near-matches between authored fields and hand-picked values are suggestive, not
   decodes — wire nothing on one coincidence; each remaining camera waits for its capture.
