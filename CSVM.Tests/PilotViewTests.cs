@@ -61,16 +61,18 @@ public sealed class PilotViewTests
         Assert.Equal(PilotViewMode.Nose, PilotView.Effective(PilotViewMode.Nose, heldViewActive: true));
     }
 
-    // The look-behind is its own override and keeps working in every mode: it is numpad 0, outside
-    // the snap cluster, and it frames the aircraft from ahead rather than turning the pilot's head.
+    // The look-behind overrides the camera only in external modes. In first person it is a head
+    // look-back that never leaves the cockpit (the original's behaviour in both cockpit views,
+    // confirmed at its controls), so the effective mode stays first-person.
     [Fact]
-    public void The_look_behind_still_overrides_every_mode_including_first_person()
+    public void The_look_behind_overrides_chase_but_stays_in_cockpit_in_first_person()
     {
-        foreach (var selected in new[] { PilotViewMode.Chase, PilotViewMode.Cockpit, PilotViewMode.Nose })
-        {
-            Assert.Equal(PilotViewMode.Chase,
-                PilotView.Effective(selected, heldViewActive: false, backActive: true));
-        }
+        Assert.Equal(PilotViewMode.Chase,
+            PilotView.Effective(PilotViewMode.Chase, heldViewActive: false, backActive: true));
+        Assert.Equal(PilotViewMode.Cockpit,
+            PilotView.Effective(PilotViewMode.Cockpit, heldViewActive: false, backActive: true));
+        Assert.Equal(PilotViewMode.Nose,
+            PilotView.Effective(PilotViewMode.Nose, heldViewActive: false, backActive: true));
     }
 
     [Fact]

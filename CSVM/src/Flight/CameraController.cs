@@ -452,18 +452,18 @@ public sealed class CameraController
             FixedView(view, renderPose);
             return;
         }
+        if (FirstPerson)
+        {
+            // Snap is the settle-immediately path: without this arm a respawn into Cockpit/Nose
+            // shows one chase-pose frame. Above the look-behind on purpose — in first person that
+            // input is a head look-back, so a spawn never flashes the outside camera.
+            FirstPersonView(renderPose);
+            ApplyFirstPersonFov();
+            return;
+        }
         if (BackActive())
         {
             BackView(renderPose);
-            return;
-        }
-        if (FirstPerson)
-        {
-            // Without this arm a spawn/respawn into Cockpit or Nose would place at the chase pose
-            // for one frame — Snap is the settle-immediately path, so it needs its own first-person
-            // arm rather than falling through to the chase math below (PLAN-cockpit-view, A2).
-            FirstPersonView(renderPose);
-            ApplyFirstPersonFov();
             return;
         }
         _offset = DesiredOffset(attitude, out var camUp);

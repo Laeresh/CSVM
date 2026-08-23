@@ -1472,6 +1472,21 @@ public partial class FlightController : Node3D
             {
                 _cam.FixedView(view, _renderPose);
             }
+            else if (_cam.FirstPerson)
+            {
+                // Rigid at cockpit_camera (wobble inherited), the mode's own FOV, aimed by the
+                // head. Look-back stays IN the cockpit — head to dead astern while held, as the
+                // original does — which is why this arm sits above the look-behind branch below.
+                _cam.Head.Step(simDt, _cam.BackActive(PadPressed(JoyButton.RightStick))
+                    ? new HeadLookInput(0f, -1f, 0f, 0f, false)
+                    : HeadLookRead());
+                _cam.FirstPersonView(_renderPose);
+                _cam.ApplyFirstPersonFov();
+                firstPersonPose = true;
+                view = _cam.ViewMode == PilotViewMode.Nose
+                    ? CameraController.NoseViewLog
+                    : CameraController.CockpitViewLog;
+            }
             // E42: this player's right-stick click looks back, the pad twin of holding
             // numpad 0 — read here, not in CameraController, same "no pad devices in the camera"
             // rule OrbitInput/PadLookInput follow.
@@ -1479,19 +1494,6 @@ public partial class FlightController : Node3D
             {
                 _cam.BackView(_renderPose);
                 view = CameraController.BackViewLog;
-            }
-            else if (_cam.FirstPerson)
-            {
-                // Both first-person views sit at the plane's cockpit_camera marker, rigidly
-                // mounted (no smoothing) so the camera inherits the plane's wobble for free, at
-                // the mode's own derived FOV, aimed by the head this frame's input just moved.
-                _cam.Head.Step(simDt, HeadLookRead());
-                _cam.FirstPersonView(_renderPose);
-                _cam.ApplyFirstPersonFov();
-                firstPersonPose = true;
-                view = _cam.ViewMode == PilotViewMode.Nose
-                    ? CameraController.NoseViewLog
-                    : CameraController.CockpitViewLog;
             }
             else
             {
@@ -2902,7 +2904,7 @@ public partial class FlightController : Node3D
     private (float Elevation, float Azimuth)? AutoheadTarget()
     {
         if (_cam == null || _cam.ViewMode != PilotViewMode.Cockpit
-            || !Config.GetBool("headLook.autohead", true))
+            || !Config.GetBool("headLook.autohead", false))
         {
             return null;
         }

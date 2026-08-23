@@ -52,12 +52,13 @@ public static class PilotView
     /// Look Up/Left/Rear … Look Forward … Look Up/Right).</summary>
     public static bool HoldsFixedViews(PilotViewMode mode) => !IsFirstPerson(mode);
 
-    /// <summary>Which view is actually in force this frame. The look-behind is a momentary
-    /// override in every mode; a held numpad view key is one only where
-    /// <see cref="HoldsFixedViews"/> says the numpad still drives the camera. Either way the
-    /// selection is untouched, so releasing the key returns to the very same mode.</summary>
+    /// <summary>Which view is actually in force this frame. A held numpad view key and the
+    /// look-behind are camera overrides only where <see cref="HoldsFixedViews"/> says the numpad
+    /// still drives the camera: in first person the numpad is the snap cluster and the look-behind
+    /// is a head look-back that never leaves the cockpit (confirmed at the controls of the
+    /// original). Either way the selection is untouched, so release returns to the same mode.</summary>
     public static PilotViewMode Effective(PilotViewMode selected, bool heldViewActive, bool backActive = false) =>
-        backActive || (heldViewActive && HoldsFixedViews(selected)) ? PilotViewMode.Chase : selected;
+        (backActive || heldViewActive) && HoldsFixedViews(selected) ? PilotViewMode.Chase : selected;
 
     /// <summary>The <c>--view=</c> spelling of a selected mode, or null when the argument names
     /// something else (a numpad digit, <c>back</c>, a typo) and the caller should go on to parse

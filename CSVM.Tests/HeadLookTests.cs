@@ -110,15 +110,18 @@ public class HeadLookTests
     }
 
     [Fact]
-    public void AzimuthWrapsRatherThanWindingUp()
+    public void AzimuthStopsHardAtDeadAstern()
     {
+        // The original's head reaches directly behind and goes no further (confirmed at its
+        // controls); 8 rad of commanded left pan therefore parks the target exactly at +pi.
         var head = new HeadLook();
         for (int i = 0; i < 40; i++)
         {
-            head.Step(0.1f, Free(-1f, 0f));    // 8 rad of left pan, more than a full turn
+            head.Step(0.1f, Free(-1f, 0f));
         }
-        Assert.InRange(head.TargetAzimuth, -Mathf.Pi, Mathf.Pi);
-        Assert.Equal(HeadLook.Wrap(8f), head.TargetAzimuth, 1e-3f);
+        Assert.Equal(Mathf.Pi, head.TargetAzimuth, 1e-3f);
+        head.Step(0.1f, Free(1f, 0f));         // one step back off the stop moves it again
+        Assert.True(head.TargetAzimuth < Mathf.Pi - 0.1f);
     }
 
     [Fact]
@@ -157,17 +160,21 @@ public class HeadLookTests
     }
 
     [Fact]
-    public void AzimuthSmoothingTakesTheShortArcAcrossTheWrap()
+    public void AzimuthSwingsBackThroughTheFrontNeverAcrossTheStop()
     {
+        // A hard-stopped head cannot cross dead astern: retargeting from aft-left (+3π/4) to
+        // aft-right (−3π/4) swings the long way round through the front, so the shown azimuth
+        // moves TOWARD zero first and stays inside ±π throughout.
         var head = new HeadLook();
         for (int i = 0; i < 200; i++)
         {
-            head.Step(0.05f, Snap(-1f, -1f));  // settle looking aft-left, azimuth +3π/4
+            head.Step(0.05f, Snap(-1f, -1f));
         }
         float before = head.Azimuth;
         Assert.Equal(3f * Mathf.Pi / 4f, before, 1e-3f);
-        head.Step(0.05f, Snap(1f, -1f));       // now aft-right, −3π/4: a quarter turn the LEFT way
-        Assert.True(HeadLook.Wrap(head.Azimuth - before) > 0f);
+        head.Step(0.05f, Snap(1f, -1f));
+        Assert.True(head.Azimuth < before);
+        Assert.InRange(head.Azimuth, -Mathf.Pi, Mathf.Pi);
     }
 
     [Fact]

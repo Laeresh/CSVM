@@ -16,9 +16,11 @@ public readonly record struct HeadLookInput(
 /// set by a snap direction, integrated by free-look, or zeroed by the center key) and where it is
 /// actually looking (the SHOWN angles, chasing the targets exponentially at the decoded rates).
 /// Elevation is 0 at level and +π/2 straight up, clamped to
-/// <see cref="ElevationFloor"/>..π/2; azimuth is 0 straight ahead, positive to the left, wrapped
-/// to ±π. Engine-free apart from <see cref="Mathf"/>, so every law here unit-tests without a
-/// camera; <see cref="CameraController.FirstPersonPose"/> composes the shown angles into a basis.
+/// <see cref="ElevationFloor"/>..π/2; azimuth is 0 straight ahead, positive to the left, and
+/// CLAMPED to ±π — the head stops at dead astern and never pans past it, the original's own
+/// stop confirmed at its controls. Engine-free apart from <see cref="Mathf"/>, so every law here
+/// unit-tests without a camera; <see cref="CameraController.FirstPersonPose"/> composes the shown
+/// angles into a basis.
 /// </summary>
 public sealed class HeadLook
 {
@@ -124,7 +126,7 @@ public sealed class HeadLook
             lean *= turnMax / mag;
         }
         float elevation = Mathf.Max(lean.Y, minPitch);
-        float azimuth = Wrap(-lean.X);
+        float azimuth = ClampAzimuth(-lean.X);
         return (elevation, azimuth);
     }
 
@@ -134,8 +136,13 @@ public sealed class HeadLook
     public static float Approach(float shown, float target, float rate, float dt) =>
         target + ((shown - target) * Mathf.Exp(-rate * dt));
 
-    /// <summary>An angle folded into ±π, so the head never carries a wound-up azimuth.</summary>
+    /// <summary>An angle folded into ±π — used to normalise an INPUT angle before it becomes a
+    /// target. The live azimuth is clamped, not wrapped: see <see cref="ClampAzimuth"/>.</summary>
     public static float Wrap(float angle) => Mathf.PosMod(angle + Mathf.Pi, Mathf.Tau) - Mathf.Pi;
+
+    /// <summary>The azimuth hard stop: the head reaches dead astern (±π) and goes no further,
+    /// so free-look cannot wind past the tail and come round the other side.</summary>
+    public static float ClampAzimuth(float angle) => Mathf.Clamp(angle, -Mathf.Pi, Mathf.Pi);
 
     /// <summary>One frame: pick this frame's target from the input, then chase it. The center key
     /// beats a snap, a snap beats free-look, and a frame with none of them is the idle frame
@@ -172,13 +179,14 @@ public sealed class HeadLook
             if (idle != null)
             {
                 TargetElevation = idle.Value.Elevation;
-                TargetAzimuth = Wrap(idle.Value.Azimuth);
+                TargetAzimuth = ClampAzimuth(idle.Value.Azimuth);
             }
         }
 
         Elevation = Approach(Elevation, TargetElevation, ElevationSmoothRate, dt);
-        // Chase the SHORTEST arc: a target just past ±π would otherwise unwind the long way round.
-        Azimuth = Wrap(TargetAzimuth + (Wrap(Azimuth - TargetAzimuth) * Mathf.Exp(-AzimuthSmoothRate * dt)));
+        // A plain chase, no wrap: targets are clamped to ±π, so the head swings back through the
+        // front to reach the other side, which is exactly what a hard-stopped head does.
+        Azimuth = Approach(Azimuth, TargetAzimuth, AzimuthSmoothRate, dt);
     }
 
     /// <summary>Put the head straight ahead at once, targets and shown angles together — what a
@@ -208,6 +216,6 @@ public sealed class HeadLook
     private void SetTargets(float elevation, float azimuth)
     {
         TargetElevation = Mathf.Clamp(elevation, ElevationFloor, MaxElevation);
-        TargetAzimuth = Wrap(azimuth);
+        TargetAzimuth = ClampAzimuth(azimuth);
     }
 }
