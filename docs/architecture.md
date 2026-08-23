@@ -201,6 +201,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
 - `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session.
+- `src/UI/InstantActionPresets.cs` — the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
@@ -2965,6 +2966,23 @@ ace/zeppelin/`disallow_missions` base — `SessionPaths.MissionZrdr(_dataRoot, c
 is why `Build` now also takes `dataRoot`. `DebugWaves(N)`/`DebugWingmen(N)` (--debug-waves=/
 --debug-wingmen=) are `DebugJoin`'s own screenshot-aid pattern, extended to the wizard's own
 screens.
+
+## src/UI/InstantActionPresets.cs
+The original's Table of Contents: the 19 preset scenarios decoded from 19 `0x230`-byte records at
+`0x0061b090` and applied by `FUN_004102c0` (docs/formats/instant-action.md, "Table of Contents
+presets"). The table is transcribed by NAME, not by the record's own dropdown indices, so it diffs
+line-for-line against the decode and a roster reordering cannot silently invalidate it; `Resolve`
+does the name-to-index step against `LaunchMenu`'s public rosters, which are the screen's single
+source of order. Three things it does beyond copying fields. The mission-type cursor indexes the
+FILTERED roster for the preset's environment, so a zeppelin run on "the clouds" is row 2, not row 3.
+Unused wave slots take `FUN_004102c0`'s own sentinel substitution (Fortune Hunter / Devastator /
+veteran at 0 enemies) rather than a zeroed default: it never reaches a flown mission, since
+`FUN_004175f0` skips any wave at 0 enemies, but it is what a pilot inherits on raising an empty
+wave's count. And a wingman aircraft is reported only where there are wingmen to fly it, `null`
+otherwise, because the decode reports no value for the five presets that fly alone. An unresolvable
+name throws, the same fail-loud policy `LaunchMenu.AircraftFor` applies to wizard-only data. Presets
+fly stock airframes, so nothing here waits on the hangar. Units in
+`CSVM.Tests/InstantActionPresetsTests.cs`.
 
 ## src/UI/BoardMenu.cs
 A board's cursor and item list, engine-free so the selection rules test off engine the way

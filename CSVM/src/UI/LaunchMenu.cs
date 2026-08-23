@@ -323,6 +323,18 @@ public sealed partial class LaunchMenu : CanvasLayer
         return codes;
     }
 
+    /// <summary>The Instant Action Environment screen's roster as the display names the preset
+    /// table names an environment by, in the same decoded dropdown order
+    /// <see cref="EnvironmentCodes"/> returns codes in. Static + public so a preset resolves
+    /// against the roster rather than against a second copy of it.</summary>
+    public static string[] EnvironmentNames()
+    {
+        var names = new string[Environments.Length];
+        for (int i = 0; i < Environments.Length; i++)
+            names[i] = Environments[i].Name;
+        return names;
+    }
+
     /// <summary>The MissionType screen's roster for one chapter, as `ia.json` `mission_type` keys
     /// in the UI dropdown order, with Stunt Flying dropped where `disallow_missions` bars it — the
     /// same rule <see cref="ChapterCodesFor"/> applies via <see cref="DangerZonesFor"/>. Static
