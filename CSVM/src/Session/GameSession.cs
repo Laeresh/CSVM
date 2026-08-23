@@ -1718,6 +1718,9 @@ public partial class GameSession : Node3D
             // nearest-human snapshot shared with WorldSession and the world-effects runtime.
             MixGain = mixGain,
             PlayerPositions = PlayerPositionsSnapshot,
+            // muzzle_burst's PLAYER_1ST_PERSON: the same closure the world runtime gets, so the
+            // shot's lights pick the same testfp branch the anim data would.
+            FirstPersonView = AnyPilotFirstPerson,
             BeeperTags = _beeperTags,
             WashSink = _screenFlash != null ? _screenFlash.PlayBlend : null,
             EngineDeadBounds = TanglerChoke.EngineDeadBounds(weaponDefs),

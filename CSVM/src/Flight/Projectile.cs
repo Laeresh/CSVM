@@ -196,12 +196,12 @@ public sealed partial class ProjectilePool : Node3D
     // shared anchor under AnimRuntime's already-live gate would swallow all but one per RUN_TIME.
     private const int MaxCasings = 128;
 
-    // The muzzle light flash (muzzle_burst's `3rdperson_lts`): a real dynamic light per shot,
-    // range/colour from the def's 3-way RandomWeight variants. The data deactivates it on the next
-    // event tick, so the flash lives ~2 frames here; energy is ours to pick (TUNE).
+    // The muzzle light flash (muzzle_burst's `testfp`): real dynamic lights per shot, range/colour
+    // from the def's variants. The data deactivates them on the next event tick, so a flash lives
+    // ~2 frames here; energy is ours to pick (TUNE) for both the first- and third-person variants.
     private const int MaxMuzzleLights = 8;
     private const float MuzzleLightLife = 0.03f;   // s
-    private const float MuzzleLightEnergy = 2.5f;  // the def carries range/colour only; magnitude judged at the controls in the weapon lab
+    private const float MuzzleLightEnergy = 2.5f;  // TUNE: no def carries energy, so the big first-person pair starts at the third-person stand-in's brightness
 
     // A gun hit on a buildings-classed surface: a ricochet spark burst. Both authored assets are
     // confirmed missing from the install (`bld_damage.flt` and the `rcochet1` EFFECT are 2 of the
@@ -443,6 +443,13 @@ public sealed partial class ProjectilePool : Node3D
     /// outside a real session (the weapon bench, suite labs), where the distance term is
     /// skipped entirely rather than guessing a listener.</summary>
     public Func<IReadOnlyList<Vector3>>? PlayerPositions { get; set; }
+
+    /// <summary>The anim data's <c>PLAYER_1ST_PERSON</c> condition (<c>GameSession.AnyPilotFirstPerson</c>,
+    /// the same closure <c>AnimRuntime.FirstPersonView</c> takes), read per shot because the view
+    /// cycle key changes it mid-burst. It picks <c>muzzle_burst</c>'s <c>testfp</c> branch: the two
+    /// big first-person lights that light the cockpit, or the small third-person one. Null outside a
+    /// session (the weapon bench, suite labs), where the third-person light is the answer.</summary>
+    public Func<bool>? FirstPersonView { get; set; }
 
     /// <summary>The aircraft each round's swept step is measured against for the near-miss cue
     /// one per flight rig. Empty in every build that has no player aircraft (the weapon
@@ -985,7 +992,7 @@ public sealed partial class ProjectilePool : Node3D
         {
             SpawnCasing(muzzle);
             SpawnMuzzleSmoke(muzzle);
-            FlashMuzzleLight(muzzle.Origin);
+            FlashMuzzleLight(muzzle);
         }
     }
 
@@ -2559,42 +2566,31 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    // The dynamic muzzle-light flash: a pooled OmniLight3D set to one
-    // of the muzzle_burst def's three third-person variants — the same 3-way RandomWeight over
-    // range and colour the data rolls — shown for a couple of frames at the muzzle.
-    private void FlashMuzzleLight(Vector3 pos)
+    // The dynamic muzzle-light flash: pooled OmniLight3Ds set from the muzzle_burst def's testfp
+    // branch, shown for a couple of frames — the two big 1stperson_lts lights while a pilot is in a
+    // first-person view, otherwise one of the three small 3rdperson_lts variants at the muzzle.
+    // ⚠ A LIGHT_STATE RANGE is a falloff PAIR, not a band to roll in (WorldLights.Add): the outer
+    // value is where the pool reaches zero, which is what an OmniLight3D's range means. The
+    // first-person pair takes it fixed; a rolled range is what made the old flash pulse per shot.
+    private void FlashMuzzleLight(Transform3D muzzle)
     {
         // A pre-tree volley (the weapon lab engages while still building) has no world transform
         // to place a light in — skip the flash rather than set GlobalPosition out of tree.
         if (!IsInsideTree())
             return;
-        LightFlash? slot = null;
-        foreach (var l in _lights)
+        if (FirstPersonView?.Invoke() == true)
         {
-            if (!l.InUse)
-            {
-                slot = l;
-                break;
-            }
-        }
-        if (slot == null)
-        {
-            if (_lights.Count >= MaxMuzzleLights)
-                return;
-            slot = new LightFlash
-            {
-                Light = new OmniLight3D
-                {
-                    ShadowEnabled = false,
-                    LightEnergy = MuzzleLightEnergy,
-                    // Skips the cockpit interior: from the pilot's seat a wing muzzle is inside
-                    // the flash's own range band, so without this the panel strobes per shot.
-                    LightCullMask = Mech3.PlaneBuilder.EffectLightCullMask,
-                    Visible = false,
-                },
-            };
-            AddChild(slot.Light);
-            _lights.Add(slot);
+            // testfp's PLAYER_1ST_PERSON branch: bigmuzzle_lt and muzzle_lt, one either side of the
+            // gun line, big enough to reach the pilot — this is how the original lights the cockpit
+            // interior from a shot, strongest on the canopy struts overhead.
+            var basis = muzzle.Basis.Orthonormalized();
+            // AT_NODE's trailing offset, in the muzzle node's own frame verbatim: the extracted
+            // coordinates ARE Godot's, no axis swap (docs/formats/gotchas.md's census).
+            EmitLight(muzzle.Origin + (basis * new Vector3(11f, -1f, -5f)),
+                21.25f, new Color(0.88f, 0.78f, 0.36f));
+            EmitLight(muzzle.Origin + (basis * new Vector3(-11f, -1f, -5f)),
+                18.25f, new Color(0.93f, 0.78f, 0.36f));
+            return;
         }
         // The def's 3rdperson_lts variants: RANDOM_WEIGHT 0.333 / 0.333 / else, each a range band
         // and a colour; the range within the band is a random pick.
@@ -2615,6 +2611,38 @@ public sealed partial class ProjectilePool : Node3D
         {
             range = RandRange(2.0f, 3.75f);
             color = new Color(0.93f, 0.78f, 0.36f);
+        }
+        EmitLight(muzzle.Origin, range, color);
+    }
+
+    // Lights one pooled OmniLight3D at a world position for MuzzleLightLife. Silently drops the
+    // flash when the pool is at cap, which is what a volley past MaxMuzzleLights costs.
+    private void EmitLight(Vector3 pos, float range, Color color)
+    {
+        LightFlash? slot = null;
+        foreach (var l in _lights)
+        {
+            if (!l.InUse)
+            {
+                slot = l;
+                break;
+            }
+        }
+        if (slot == null)
+        {
+            if (_lights.Count >= MaxMuzzleLights)
+                return;
+            slot = new LightFlash
+            {
+                Light = new OmniLight3D
+                {
+                    ShadowEnabled = false,
+                    LightEnergy = MuzzleLightEnergy,
+                    Visible = false,
+                },
+            };
+            AddChild(slot.Light);
+            _lights.Add(slot);
         }
         slot.Light.OmniRange = range;
         slot.Light.LightColor = color;

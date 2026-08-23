@@ -24,18 +24,6 @@ public sealed class PlaneBuilder
     /// this from the model; docs/architecture.md carries the decode.</summary>
     public const float InteriorScale = 0.04f;
 
-    /// <summary>The visual layer the <c>cockpit1</c> interior is moved onto, so a dynamic effect
-    /// light can drop it from its cull mask. The original draws the interior in a pass of its own
-    /// (docs/org/cameraViews.md), out of reach of a world light; ours is ordinary scene geometry
-    /// a hand's width from the eye, so a muzzle flash out on the wing strobes the whole panel.
-    /// Bit 12, taken below the zone-gate band (see UI.SplitScreen's layer allocation).</summary>
-    public const uint InteriorLayer = 1u << 12;
-
-    /// <summary>Cull mask for a transient effect light — every layer but the cockpit interior's.
-    /// The sun does NOT take it: the interior's readability is the sun's, and only the per-shot
-    /// flashes are being kept off it.</summary>
-    public const uint EffectLightCullMask = 0xFFFFFu & ~InteriorLayer;
-
     // Non-prop subtrees that make no sense in an exterior view: cockpit interiors are
     // separate (differently-scaled) models; damage/destroyed are alternate states.
     // player_damage_off holds the intact duplicates (pdpNi) of the panels that
@@ -333,10 +321,6 @@ public sealed class PlaneBuilder
                 CockpitCameraOffset);
             n3d.Visible = false; // shown only while a first-person view is on the screen
             ParkInteriorStates(n3d);
-            // MOVED onto the interior layer, never added to it, exactly as SceneBuilder moves a
-            // zone-gated mesh: a light's cull mask ORs its bits, so an instance left on layer 1
-            // as well would still take every effect light that dropped the interior bit.
-            UI.SplitScreen.SetVisualLayer(n3d, InteriorLayer);
             built.AddChild(n3d);
             CockpitInterior = n3d;
             return;
