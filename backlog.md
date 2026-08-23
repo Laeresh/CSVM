@@ -2415,30 +2415,6 @@ usual.
   per-environment; do not assume a mapping, which the decoded table confirms. (c) Unblocked:
   `PLAN-instant-action` has landed the configurable mission the presets fill in.
 
-- `BL-430` `[Bug]` **The Instant Action wizard's aircraft dropdowns are not in the original's
-  order.** Found while decoding `BL-352`'s preset table. `LaunchMenu.Planes`
-  (`CSVM/src/UI/LaunchMenu.cs:110-123`) lists the eleven airframes in def order (Devastator,
-  Bloodhawk, Firebrand, …), and each militia's `Aircraft` array (`:129-144`) carries an order of its
-  own (Black Hat as Warhawk, Brigand, Autogyro). The original fills all three of these dropdowns in
-  the `langui` 3700 order: Autogyro, Hellhound, Balmoral, Bloodhawk, Brigand, Devastator, Firebrand,
-  Fury, Kestrel, Peacemaker, Warhawk. A militia's list is that order filtered by the 11-byte allow
-  mask `FUN_00410420` writes, so Black Hat reads Autogyro, Brigand, Warhawk. Membership is right in
-  all thirteen militias, the mask agrees with the `.BM` pattern reading exactly; only the order is
-  wrong.
-  **Why it is not cosmetic.** The original stores an aircraft as an index into that order. The 19
-  presets at `0x0061b090` hold the player, wingman and per-wave enemy aircraft as 3700 indices
-  ([`docs/formats/instant-action.md`](docs/formats/instant-action.md), "Table of Contents presets"),
-  so `BL-352` built against today's arrays would give every preset the wrong aircraft. The ordering
-  has to be right before the presets land, and a screenshot A/B of the wizard against the original
-  reads as a mismatch until it is.
-  ⚠ **Traps.** (a) Do not reorder `Militias` itself; that list is already in the langui 3670 order.
-  (b) Plane indices are held in live UI state (`slot.PlaneIndex`, `_wingmanPlaneIndex`) and resolved
-  through `Planes[...]` on the same frame, so reordering the array is safe, but the defaults those
-  fields start at are positional and must be re-checked. (c) Fortune Hunter's list is `PlaneNames()`
-  and inherits `Planes`'s order, so it is fixed by the same change rather than separately.
-  *Cross-refs:* `BL-352`, [`docs/formats/instant-action.md`](docs/formats/instant-action.md)
-  ("Militias and aircraft").
-
 - `BL-354` `[Feature]` **The hangar: Build Custom Plane.** Split out of
   [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing (2026-08-14) as a milestone
   of its own rather than a wave of that plan. `IA_B_BUILD` opens the customisation flow, which

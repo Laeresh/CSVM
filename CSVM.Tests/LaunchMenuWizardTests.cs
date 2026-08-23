@@ -28,14 +28,29 @@ public class LaunchMenuWizardTests
 
     /// <summary>The `.BM` pattern-coverage reading (decision 7), not vehicle.json's narrower
     /// paint_pattern one — Fortune Hunter covers all eleven airframes and Sacred Trust covers the
-    /// Warhawk, both of which the def-based reading would get wrong.</summary>
+    /// Warhawk, both of which the def-based reading would get wrong. Each roster is in the langui
+    /// 3700 order, which is FUN_00410420's mask bit order: a militia never reorders the dropdown,
+    /// it only filters it.</summary>
     [Theory]
-    [InlineData("Black Hat", new[] { "Warhawk", "Brigand", "Autogyro" })]
+    [InlineData("Black Hat", new[] { "Autogyro", "Brigand", "Warhawk" })]
     [InlineData("Black Swan", new[] { "Fury" })]
-    [InlineData("Sacred Trust", new[] { "Warhawk", "Hellhound" })]
+    [InlineData("Sacred Trust", new[] { "Hellhound", "Warhawk" })]
     [InlineData("Broadway Bomber", new[] { "Peacemaker" })]
     public void MilitiaAircraftCoverageMatchesTheDecodedTable(string militia, string[] expected) =>
         Assert.Equal(expected, UI.LaunchMenu.AircraftFor(militia));
+
+    /// <summary>The eleven airframes in the langui 3700 order (docs/formats/instant-action.md
+    /// "Option strings"), the order the original stores an aircraft as an index into. Names are
+    /// ia.json's singular vocabulary, so 3700's plural "Hoplites" reads "Autogyro" here.</summary>
+    [Fact]
+    public void TheElevenAirframesExistInLanguiOrder() =>
+        Assert.Equal(
+            new[]
+            {
+                "Autogyro", "Hellhound", "Balmoral", "Bloodhawk", "Brigand", "Devastator",
+                "Firebrand", "Fury", "Kestrel", "Peacemaker", "Warhawk",
+            },
+            UI.LaunchMenu.PlaneNames());
 
     /// <summary>Fortune Hunter, the player's own militia, is legal as an enemy militia in the
     /// original's list and is never filtered out here (trap c) — it covers all eleven airframes,
@@ -61,9 +76,9 @@ public class LaunchMenuWizardTests
     {
         var wave = UI.LaunchMenu.WaveFor(count: 5, militiaIndex: 0, aircraftIndex: 0, skillIndex: 2);
         Assert.Equal(5, wave.NumEnemies);
-        Assert.Equal("Warhawk", wave.EnemyPlane); // Black Hat's first aircraft
+        Assert.Equal("Autogyro", wave.EnemyPlane); // Black Hat's first aircraft in the 3700 order
         Assert.Equal("ace", wave.EnemySkill);
-        Assert.Equal("Black Hat Warhawk", wave.EnemyName);
+        Assert.Equal("Black Hat Autogyro", wave.EnemyName);
         Assert.Equal(-1, wave.EnemyAccentId);
     }
 

@@ -2946,7 +2946,12 @@ Scenario/Stunt, precisely, off the wizard's own pick).
 `Environments` (7 rows, the decoded dropdown order, A5 — NOT `Chapters`' alphabetic one),
 `MissionTypes` (4 rows, the UI dropdown order — NOT the internal id order), `Militias` (13 rows,
 the `.BM` pattern-coverage aircraft lists, decision 7) and `Skills` (novice/veteran/ace) are the
-wizard's own tables. `CurrentMissionTypes` filters Stunt Flying out for whichever environment's
+wizard's own tables. `Planes` is a fifth: the eleven airframes in the langui 3700 order, which the
+original stores an aircraft as an index INTO, so the order is decoded rather than cosmetic and the
+positional defaults (`slot.PlaneIndex`, `_wingmanPlaneIndex`, both index 0) resolve to the Autogyro
+that `gui_continue` itself selects. Each militia's own list is that same order filtered to
+`FUN_00410420`'s 11-byte mask, never a per-militia reordering.
+`CurrentMissionTypes` filters Stunt Flying out for whichever environment's
 chapter bars it via `disallow_missions` (decoded: only C2B, "the clouds"), read through the same
 `Chapters`-table `DangerZones` flag `ChapterCodesFor` already uses, so the two screens cannot
 disagree. `MenuInput.MoveX` also drives WaveEdit's four fields (Enemies/Militia/Aircraft/Skill, one

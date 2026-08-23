@@ -104,42 +104,47 @@ public sealed partial class LaunchMenu : CanvasLayer
         ("New York — IA: Manhattan", "C5", true),
     };
 
-    // The player-flyable roster (mirrors RunDev.ps1, the curated game order + display names — note
-    // Devastator = player_pfighter and Hellhound = player_avenger). Node = the planes.zbd root node
-    // passed on to the build; stats are loaded lazily from vehicle.json for the focused plane.
+    // The player-flyable roster in the langui 3700 dropdown order (docs/formats/instant-action.md
+    // "Option strings"), which the original stores an aircraft as an index INTO — so this order is
+    // decoded, not cosmetic, and the preset table's aircraft resolve through it. Display names are
+    // ia.json's singular vocabulary ("Autogyro", not 3700's plural "Hoplite"); note Devastator =
+    // player_pfighter and Hellhound = player_avenger. Node = the planes.zbd root node passed on to
+    // the build; stats are loaded lazily from vehicle.json for the focused plane.
     private static readonly (string Name, string Node)[] Planes =
     {
-        ("Devastator", "player_pfighter"),
-        ("Bloodhawk", "player_bhawk"),
-        ("Firebrand", "player_fbrand"),
-        ("Brigand", "player_brigand"),
-        ("Fury", "player_fury"),
         ("Autogyro", "player_autogyro"),
         ("Hellhound", "player_avenger"),
+        ("Balmoral", "player_balmoral"),
+        ("Bloodhawk", "player_bhawk"),
+        ("Brigand", "player_brigand"),
+        ("Devastator", "player_pfighter"),
+        ("Firebrand", "player_fbrand"),
+        ("Fury", "player_fury"),
         ("Kestrel", "player_kestrel"),
         ("Peacemaker", "player_peacemaker"),
-        ("Balmoral", "player_balmoral"),
         ("Warhawk", "player_warhawk"),
     };
 
     // The thirteen Instant Action militias and the aircraft each one flies, per the `.BM` pattern
-    // reading (docs/formats/instant-action.md), not vehicle.json's paint_pattern defs. Names use
+    // reading (docs/formats/instant-action.md), not vehicle.json's paint_pattern defs. Each roster
+    // is Planes's own langui 3700 order filtered to the militia's allowed flags, which is what
+    // FUN_00410420's 11-byte mask yields — the dropdown never reorders per militia. Names use
     // ia.json's singular vocabulary ("Autogyro"), matching InstantActionWave.EnemyPlane and
     // PlaneNodeFor. A militia is never filtered out here for being the player's own side.
     private static readonly (string Name, string[] Aircraft)[] Militias =
     {
-        ("Black Hat", new[] { "Warhawk", "Brigand", "Autogyro" }),
+        ("Black Hat", new[] { "Autogyro", "Brigand", "Warhawk" }),
         ("Black Swan", new[] { "Fury" }),
         ("Blake Aviation", new[] { "Bloodhawk", "Peacemaker" }),
-        ("British", new[] { "Peacemaker", "Balmoral" }),
+        ("British", new[] { "Balmoral", "Peacemaker" }),
         ("Fortune Hunter", PlaneNames()),
         ("Hollywood Knight", new[] { "Firebrand" }),
-        ("Hughes Aviation", new[] { "Bloodhawk", "Kestrel", "Fury" }),
-        ("Medusa", new[] { "Kestrel", "Brigand" }),
+        ("Hughes Aviation", new[] { "Bloodhawk", "Fury", "Kestrel" }),
+        ("Medusa", new[] { "Brigand", "Kestrel" }),
         ("Russian", new[] { "Devastator" }),
-        ("Sacred Trust", new[] { "Warhawk", "Hellhound" }),
+        ("Sacred Trust", new[] { "Hellhound", "Warhawk" }),
         ("German", new[] { "Hellhound" }),
-        ("Studio Security", new[] { "Fury", "Autogyro" }),
+        ("Studio Security", new[] { "Autogyro", "Fury" }),
         ("Broadway Bomber", new[] { "Peacemaker" }),
     };
 
@@ -181,7 +186,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     private int _environmentIndex, _missionTypeIndex;
     private int _lives = 1;
     // Steps 3-4: the wingman count + aircraft, and the cursors WaveEdit/Waves/Wingmen each
-    // read (_waves itself is above, with the other readonly fields).
+    // read (_waves itself is above, with the other readonly fields). _wingmanPlaneIndex starts at
+    // Planes's index 0, which the 3700 order makes the Autogyro — the value gui_continue selects
+    // when the player has no saved custom planes, not an arbitrary first row.
     private int _waveListIndex, _waveEditIndex, _waveFieldIndex;
     private int _numWingmen, _wingmanPlaneIndex, _wingmenFieldIndex;
     // The chosen environment's own shipped ia.zrd.json, loaded once when Environment is
@@ -327,6 +334,20 @@ public sealed partial class LaunchMenu : CanvasLayer
         for (int i = 0; i < rows.Length; i++)
             keys[i] = rows[i].Key;
         return keys;
+    }
+
+    /// <summary>The eleven airframe display names in the langui 3700 order, standing alone for
+    /// Militias' Fortune Hunter row's "all eleven" coverage — read off <c>Planes</c> rather than
+    /// duplicated, so the two rosters cannot drift apart. Callable from anywhere in the class
+    /// regardless of where it sits textually: a method body only needs <c>Planes</c> assigned by
+    /// the time it RUNS, and Militias' initializer runs after Planes' own. Static + public so the
+    /// decoded order is testable without a menu instance.</summary>
+    public static string[] PlaneNames()
+    {
+        var names = new string[Planes.Length];
+        for (int i = 0; i < Planes.Length; i++)
+            names[i] = Planes[i].Name;
+        return names;
     }
 
     /// <summary>The wave editor's Militia field roster, in the langui dropdown order (3670).
@@ -540,20 +561,6 @@ public sealed partial class LaunchMenu : CanvasLayer
     // --- players / devices ---
 
     private static int Wrap(int index, int count) => ((index % count) + count) % count;
-
-    // The eleven Planes display names, standing alone for Militias' Fortune Hunter row's "all
-    // eleven" coverage — read off Planes rather than duplicated, so the two rosters cannot drift
-    // apart. Callable from anywhere in the class regardless of where it sits textually (unlike a
-    // field initializer, a method body only needs Planes assigned by the time it RUNS, and
-    // Militias' own initializer — which calls this — runs after Planes' because Planes is
-    // declared first).
-    private static string[] PlaneNames()
-    {
-        var names = new string[Planes.Length];
-        for (int i = 0; i < Planes.Length; i++)
-            names[i] = Planes[i].Name;
-        return names;
-    }
 
     private static (string Name, string Code, bool DangerZones)[] ChaptersFor(MenuMode mode) =>
         mode == MenuMode.Stunt ? Array.FindAll(Chapters, c => c.DangerZones) : Chapters;
@@ -1842,6 +1849,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     private sealed class Slot
     {
         public readonly MenuInput Input = new();
+
+        // Starts at Planes's index 0 — the Autogyro under the 3700 order, matching gui_continue's
+        // own no-custom-planes selection rather than being positional by accident.
         public int PlaneIndex;
 
         // Browsing → Locked → Confirmed. The second stage exists so there IS a moment to open the
