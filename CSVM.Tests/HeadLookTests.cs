@@ -177,6 +177,23 @@ public class HeadLookTests
         Assert.InRange(head.Azimuth, -Mathf.Pi, Mathf.Pi);
     }
 
+    // The original's idle rule in its default snap-look mode: any look input released, snap and
+    // free-look alike, returns the head to straight ahead (a stay-parked head is the filed
+    // smooth-look mode). With no IdleAim hook the idle frame targets (0, 0).
+    [Fact]
+    public void ReleasingFreeLookReturnsTheHeadToStraightAhead()
+    {
+        var head = new HeadLook();
+        for (int i = 0; i < 10; i++)
+        {
+            head.Step(0.1f, Free(-1f, 1f));
+        }
+        Assert.NotEqual(0f, head.TargetAzimuth);
+        head.Step(0.1f, Idle);
+        Assert.Equal(0f, head.TargetElevation, Tol);
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
+    }
+
     [Fact]
     public void TheIdleHookOwnsAFrameWithNoLookInputAndBypassesTheInputFloor()
     {

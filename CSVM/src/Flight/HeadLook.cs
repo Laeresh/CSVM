@@ -49,11 +49,6 @@ public sealed class HeadLook
     private const float ForwardWindowRad = 0.001745f;
     private const float DiagonalWindowRad = 0.001571f;
 
-    // Whether the last look input was a snap direction. Releasing a snap returns the head to
-    // straight ahead, where releasing free-look leaves it where it was pointed — so the release
-    // rule needs to know which path set the targets.
-    private bool _snapping;
-
     /// <summary>The lowest elevation this head may be told to look at. First person passes 0 (the
     /// original's head never looks below level there); the chase view passes −π/2. A parameter
     /// rather than a constant because the original's two callers differ only in this.</summary>
@@ -62,7 +57,9 @@ public sealed class HeadLook
     /// <summary>C22's seam: consulted on any frame with no look input at all, and its answer
     /// becomes the targets directly. It sets elevation past <see cref="ElevationFloor"/> on
     /// purpose — autohead's own floor is below level — so the value is taken as given and only the
-    /// azimuth is wrapped. Null (the default) leaves an idle head where it was pointed.</summary>
+    /// azimuth is clamped. Null (the default) returns the idle head to straight ahead, the
+    /// original's own idle rule in its default snap-look mode; a head that stays where it was
+    /// parked is the J smooth-look mode, filed, not this.</summary>
     public Func<(float Elevation, float Azimuth)?>? IdleAim { get; set; }
 
     /// <summary>See the constructor.</summary>
@@ -154,32 +151,29 @@ public sealed class HeadLook
         if (input.Center)
         {
             SetTargets(0f, 0f);
-            _snapping = false;
         }
         else if (snap != null)
         {
             SetTargets(snap.Value.Elevation, snap.Value.Azimuth);
-            _snapping = true;
         }
         else if (input.FreeRight != 0f || input.FreeUp != 0f)
         {
             FreeLook(input.FreeRight, input.FreeUp, dt);
-            _snapping = false;
-        }
-        else if (_snapping)
-        {
-            // Letting go of a snap direction returns the head to straight ahead; the smoothing
-            // below is what makes that a swing rather than a cut.
-            SetTargets(0f, 0f);
-            _snapping = false;
         }
         else
         {
+            // No look input at all: autohead owns the frame when enabled, else the head returns
+            // to straight ahead — the original's idle rule in its default snap-look mode, for
+            // snap and free-look alike. The smoothing below makes it a swing, not a cut.
             var idle = IdleAim?.Invoke();
             if (idle != null)
             {
                 TargetElevation = idle.Value.Elevation;
                 TargetAzimuth = ClampAzimuth(idle.Value.Azimuth);
+            }
+            else
+            {
+                SetTargets(0f, 0f);
             }
         }
 
@@ -194,7 +188,6 @@ public sealed class HeadLook
     public void Reset()
     {
         SetTargets(0f, 0f);
-        _snapping = false;
         Elevation = 0f;
         Azimuth = 0f;
     }
