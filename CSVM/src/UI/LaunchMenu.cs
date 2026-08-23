@@ -1209,7 +1209,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private void OpenHangar(Screen returnTo)
     {
         _hangarReturn = returnTo;
-        _hangar = new HangarFlow(CustomPlaneStore.UserPlanes(), HangarStrings(), _dataRoot);
+        _hangar = new HangarFlow(CustomPlaneStore.UserPlanes(), HangarStrings(), _dataRoot, Fits, _zrdrPath);
         _screen = Screen.Hangar;
         _error = "";
     }

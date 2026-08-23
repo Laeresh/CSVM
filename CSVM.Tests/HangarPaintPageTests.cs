@@ -309,6 +309,7 @@ public class HangarPaintPageTests : IDisposable
         var flow = new HangarFlow(_store, UiStrings.Empty, dataRoot);
         for (int guard = 0; flow.Screen != HangarScreen.Paint && guard < HangarFlow.Order.Length; guard++)
         {
+            flow.AnswerDefaultsAsk(false); // a no-op except on the airframe-defaults ask (E41)
             flow.Accept();
         }
 

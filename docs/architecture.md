@@ -210,8 +210,8 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session; also the hangar's two doors and its renderer.
 - `src/UI/PlanePickerRoster.cs` — the one roster every human plane picker draws: 11 stock airframes then the store's saved customs, each custom carrying its store name and its airframe's stock node (D32's launch seam); engine-free build/lookup rules.
 - `src/UI/HangarFlow.cs` — the Build Custom Plane flow, engine-free: the original's nine screens over one scratch `CustomPlaneDef`, back/next navigation, the `IHangarPage` mount point C22-C26 fill (rows, detail, stepper, optional `HangarArt`), and the gated commit into `CustomPlaneStore`.
-- `src/UI/HangarAirframePage.cs` — the AIRFRAME screen: all 11 airframes as rows, the ←→ stepper writing the scratch airframe and nothing else, the stat table's figures and the economy's star ratings per row, the focused airframe's blueprint TGA as page art.
-- `src/UI/HangarEnginePage.cs` — the ENGINE screen: the airframe's six engines (langui 3100+af*6+id) plus the no-engine row (1171), the pick ticked, the stepper writing the scratch engine, each row's decoded cost and weight via `HangarEconomy.EngineLine`.
+- `src/UI/HangarAirframePage.cs` — the AIRFRAME screen: all 11 airframes as rows, the ←→ stepper writing the scratch airframe (raising the string-206 defaults ask as an inline two-row confirm, which a new plane's arrival also raises), the stat table's figures and the economy's star ratings per row, the focused airframe's blueprint TGA as page art.
+- `src/UI/HangarEnginePage.cs` — the ENGINE screen: the airframe's six engines (langui 3100+af*6+id) plus the None row (1165, the decoded dropdown's own last row; 1171 stays the purchase wording), the pick ticked, the stepper writing the scratch engine, each row's decoded cost and weight via `HangarEconomy.EngineLine`.
 - `src/UI/HangarArmourPage.cs` — the ARMOR screen: the four zones through their own langui formats (1191-1194), the stepper walking each zone's units 0-12, the detail keeping units, the x4 priced cost/weight and the x5 lb display figure distinct.
 - `src/UI/HangarGunsPage.cs` — the GUNS screen: always four slots titled from the stat table's slot-title strings, each stepping the original's 11-entry dropdown (five calibres single, five twinned via format 506, No Gun 3315), the detail pricing the slot's wing or turret column (doubled for twin) with the calibre's magazine rounds.
 - `src/UI/HangarHardpointsPage.cs` — the HARDPOINTS screen: the two per-wing counts through langui 1176/1177, the stepper walking 0-4, the detail speaking the dropdown's 1165/1168/1169 vocabulary with the decoded $410 / 480 lb per hardpoint and the wing's line total.
@@ -3093,7 +3093,17 @@ switch's default arm. `HangarFlow.TotalsLine` (with its `TotalsOverweight` colou
 persistent second stats line the launchscreen draws under every hangar screen's heading
 (PLAN-hangar Decision 10): the build's total price and weight against the airframe's capacity,
 recomputed from `HangarEconomy.Price` on demand and carrying the original's OVERWEIGHT word
-(langui 1227) when over. Off-engine coverage:
+(langui 1227) when over.
+
+The airframe-defaults ask (string 206) lives on the flow: `DefaultsAsk` names the airframe whose
+defaults are on offer and `DefaultsAskText` carries the formatted question (%1 the new airframe,
+%2 the plane being built, its name or its previous airframe's name). `StartNewPlane` raises it
+for the first arrival on the airframe screen, `HangarAirframePage.Step` raises it on a switch
+(the switch itself stands either way), and `StartFromSaved` never asks. `AnswerDefaultsAsk(true)`
+runs `LoadAirframeDefaults`: gun picks and per-wing hardpoint counts read back off the airframe's
+stock fit (`StockFits`, the A3 mapping and `StockWingCounts`, D32's wing rule reversed), engine
+id 1 (the stock Lvl-2 tier), and armour from the stock zone allocations (`ZrdrPath` through
+`PlaneStats`, pools / 5); a missing source loads that default empty. Off-engine coverage:
 `CSVM.Tests/HangarFlowTests.cs`, `CSVM.Tests/HangarAirframePageTests.cs`,
 `CSVM.Tests/HangarEnginePageTests.cs`, `CSVM.Tests/HangarArmourPageTests.cs`,
 `CSVM.Tests/HangarGunsPageTests.cs`, `CSVM.Tests/HangarHardpointsPageTests.cs`,

@@ -189,6 +189,7 @@ public class HangarNamePageTests : IDisposable
         var flow = new HangarFlow(_store, strings ?? UiStrings.Empty);
         for (int guard = 0; flow.Screen != HangarScreen.Name && guard < HangarFlow.Order.Length; guard++)
         {
+            flow.AnswerDefaultsAsk(false); // a no-op except on the airframe-defaults ask (E41)
             flow.Accept();
         }
 

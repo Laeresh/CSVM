@@ -9,9 +9,10 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The ENGINE screen (PLAN-hangar C23): seven rows (the six per-airframe engines from langui
-/// 3100+af*6+id plus the explicit no-engine row, langui 1171), the airframe page's
-/// pick-and-tick stepper writing the scratch plane's engine and nothing else, and the detail
-/// line carrying the decoded engine cost and weight through HangarEconomy.EngineLine.
+/// 3100+af*6+id plus the explicit no-engine row, langui 1165 "None" per the decoded dropdown,
+/// E42), the airframe page's pick-and-tick stepper writing the scratch plane's engine and
+/// nothing else, and the detail line carrying the decoded engine cost and weight through
+/// HangarEconomy.EngineLine.
 /// </summary>
 public class HangarEnginePageTests : IDisposable
 {
@@ -35,20 +36,23 @@ public class HangarEnginePageTests : IDisposable
     }
 
     /// <summary>Seven rows: engine ids 0-5 named from langui 3100+af*6+id, and id 6 the
-    /// no-engine row from langui 1171.</summary>
+    /// no-engine row from langui 1165 "None", the decoded dropdown's own last row (callback
+    /// 2218; 1171 "No Engine Selected" is the purchase screen's wording, E42).</summary>
     [Fact]
     public void OffersSevenRows_NamedFromLangui()
     {
         var strings = UiStrings.Parse(
             "[{\"id\":3100,\"text\":\"Fairfield 650\",\"dll\":\"langui\"}," +
             "{\"id\":3105,\"text\":\"Fairfield 1000 Nitro\",\"dll\":\"langui\"}," +
+            "{\"id\":1165,\"text\":\"None\",\"dll\":\"langui\"}," +
             "{\"id\":1171,\"text\":\"No Engine Selected\",\"dll\":\"langui\"}]");
         var flow = OpenOnEngine(strings);
 
         Assert.Equal(7, flow.Page.RowCount);
         Assert.StartsWith("Fairfield 650", flow.Page.RowText(0), StringComparison.Ordinal);
         Assert.StartsWith("Fairfield 1000 Nitro", flow.Page.RowText(5), StringComparison.Ordinal);
-        Assert.StartsWith("No Engine Selected", flow.Page.RowText(6), StringComparison.Ordinal);
+        Assert.StartsWith("None", flow.Page.RowText(6), StringComparison.Ordinal);
+        Assert.DoesNotContain("No Engine Selected", flow.Page.RowText(6), StringComparison.Ordinal);
     }
 
     /// <summary>The names follow the scratch plane's airframe: airframe 2 reads from the
@@ -166,14 +170,17 @@ public class HangarEnginePageTests : IDisposable
             }
         }
 
+        Assert.True(strings!.Has(1165));
         Assert.True(strings!.Has(1171));
     }
 
-    // A flow standing on the ENGINE screen with a fresh scratch plane.
+    // A flow standing on the ENGINE screen with a fresh scratch plane (the airframe-defaults
+    // ask declined on the way, so the engine opens unchosen).
     private HangarFlow OpenOnEngine(UiStrings strings)
     {
         var flow = new HangarFlow(_store, strings);
         flow.Accept(); // New Plane, on to Airframe
+        flow.AnswerDefaultsAsk(false);
         flow.Accept(); // on to Engine
         Assert.Equal(HangarScreen.Engine, flow.Screen);
         return flow;

@@ -13,6 +13,10 @@ namespace CSVM.UI;
 /// count-valid on every airframe (the wrong-claims disproof), so no other pick needs re-clamping.
 /// The detail line is the stat table's cost, weight and capacity plus the two star ratings, all
 /// through <see cref="HangarEconomy"/>; the art is the focused airframe's blueprint TGA.
+///
+/// <para>Picking a DIFFERENT airframe, and a new plane's first arrival, raise the defaults ask
+/// (string 206, <see cref="HangarFlow.DefaultsAsk"/>), an inline two-row confirm: OK loads the
+/// airframe's defaults, Cancel keeps every current pick; the switch stands either way.</para>
 /// </summary>
 public sealed class HangarAirframePage : HangarPage
 {
@@ -28,18 +32,31 @@ public sealed class HangarAirframePage : HangarPage
     public override HangarScreen Screen => HangarScreen.Airframe;
 
     /// <inheritdoc/>
-    public override int RowCount => HangarEconomy.Airframes.Length;
+    public override int RowCount => Flow.DefaultsAsk is null ? HangarEconomy.Airframes.Length : 2;
 
     /// <inheritdoc/>
-    public override HangarArt? Art => BlueprintFor(Math.Clamp(Flow.Row, 0, RowCount - 1));
+    public override HangarArt? Art =>
+        BlueprintFor(Flow.DefaultsAsk ?? Math.Clamp(Flow.Row, 0, HangarEconomy.Airframes.Length - 1));
 
     /// <inheritdoc/>
-    public override string RowText(int row) =>
-        Flow.AirframeName(row) + (Scratch.Airframe == row ? "  ✓" : string.Empty);
+    public override string RowText(int row)
+    {
+        if (Flow.DefaultsAsk is not null)
+        {
+            return row == 0 ? "OK" : "Cancel";
+        }
+
+        return Flow.AirframeName(row) + (Scratch.Airframe == row ? "  ✓" : string.Empty);
+    }
 
     /// <inheritdoc/>
     public override string Detail(int row)
     {
+        if (Flow.DefaultsAsk is not null)
+        {
+            return Flow.DefaultsAskText;
+        }
+
         var stats = HangarEconomy.Airframes[row];
         var bill = BillFor(row);
         return $"${stats.Cost}   {stats.Weight} lbs.   Capacity {stats.Capacity} lbs.   " +
@@ -49,12 +66,26 @@ public sealed class HangarAirframePage : HangarPage
     /// <inheritdoc/>
     public override bool Step(int row, int dir)
     {
-        if (Scratch.Airframe == row)
+        if (Flow.DefaultsAsk is not null || Scratch.Airframe == row)
         {
             return false;
         }
 
+        int was = Scratch.Airframe;
         Scratch.Airframe = row;
+        Flow.RaiseDefaultsAsk(row, was);
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public override bool Accept(int row)
+    {
+        if (Flow.DefaultsAsk is null)
+        {
+            return false; // no ask showing: the flow advances as on every other screen
+        }
+
+        Flow.AnswerDefaultsAsk(row == 0);
         return true;
     }
 

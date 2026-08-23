@@ -101,18 +101,29 @@ public sealed class HangarFlow
         HangarScreen.Purchase,
     };
 
+    // The four hangar zones in the record's own order, as the vehicle defs spell them.
+    private static readonly string[] ArmourZones = { "nose", "tail", "leftwing", "rightwing" };
+
     private readonly CustomPlaneStore _store;
     private readonly Dictionary<HangarScreen, IHangarPage> _pages = new();
+
+    // Each airframe's stock armour allocations in units, read once from the vehicle defs.
+    private readonly Dictionary<int, int[]> _stockArmour = new();
 
     /// <summary>Opens a flow over <paramref name="store"/>, reading its saved planes once for the
     /// plane-selection screen. <paramref name="strings"/> may be <see cref="UiStrings.Empty"/>;
     /// every label then falls back to its own plain text. <paramref name="dataRoot"/> is where
-    /// <c>extracted/</c> lives, for the art-bearing pages; null means every page's art is null.</summary>
-    public HangarFlow(CustomPlaneStore store, UiStrings strings, string? dataRoot = null)
+    /// <c>extracted/</c> lives, for the art-bearing pages; null means every page's art is null.
+    /// <paramref name="stockFits"/> and <paramref name="zrdrPath"/> feed the airframe-defaults
+    /// ask; either may be null, and the affected defaults then simply load as empty.</summary>
+    public HangarFlow(CustomPlaneStore store, UiStrings strings, string? dataRoot = null,
+        StockLoadouts? stockFits = null, string? zrdrPath = null)
     {
         _store = store;
         Strings = strings;
         DataRoot = dataRoot;
+        StockFits = stockFits;
+        ZrdrPath = zrdrPath;
         Saved = store.List();
     }
 
@@ -122,6 +133,23 @@ public sealed class HangarFlow
     /// <summary>The folder <c>extracted/</c> sits in, or null when the caller has none. Pages
     /// resolve their TGAs under it and treat absence as no art.</summary>
     public string? DataRoot { get; }
+
+    /// <summary>The stock-fit table the airframe-defaults ask reads its gun and hardpoint
+    /// defaults back off, or null when the caller has none (those defaults then load empty).</summary>
+    public StockLoadouts? StockFits { get; }
+
+    /// <summary>The zrdr scope <see cref="PlaneStats"/> reads vehicle defs from, for the stock
+    /// armour allocations; null or unreadable reads as armour defaults of 0.</summary>
+    public string? ZrdrPath { get; }
+
+    /// <summary>The airframe whose defaults the pending ask (langui 206) offers, or null when
+    /// none is showing. Raised by picking a different airframe on the AIRFRAME screen and by a
+    /// new plane's first arrival there; the airframe page renders it as a two-row confirm.</summary>
+    public int? DefaultsAsk { get; private set; }
+
+    /// <summary>String 206 with both names formatted in, captured when the ask was raised (so
+    /// the plane-being-built name is the one it had then).</summary>
+    public string DefaultsAskText { get; private set; } = string.Empty;
 
     /// <summary>The saved planes as they were when the flow opened, the plane-selection roster.
     /// Not refreshed mid-flow: the only writer is this flow's own commit, which ends it.</summary>
@@ -193,6 +221,33 @@ public sealed class HangarFlow
         HangarScreen.Name => "PLANE NAME",
         _ => screen.ToString(),
     };
+
+    /// <summary>D32's wing rule read backwards: the stock fit's authored pylons counted per
+    /// wing through <see cref="Loadout.PylonFillOrder"/>'s interleaved halves (pylons 1-4 one
+    /// wing, 5-8 the other).</summary>
+    public static (int Left, int Right) StockWingCounts(HardpointSpec? stock)
+    {
+        int left = 0, right = 0;
+        for (int i = 0; stock != null && i < Loadout.PylonFillOrder.Length; i++)
+        {
+            if (i >= stock.Count || i >= stock.Stock.Length
+                || string.Equals(stock.Stock[i], LoadoutChoice.None, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (Loadout.PylonFillOrder[i] <= 4)
+            {
+                left++;
+            }
+            else
+            {
+                right++;
+            }
+        }
+
+        return (left, right);
+    }
 
     /// <summary>Moves the row cursor, wrapping like every other launchscreen list.</summary>
     public bool Move(int dir)
@@ -293,13 +348,94 @@ public sealed class HangarFlow
         return true;
     }
 
-    /// <summary>Starts a fresh build (the plane-selection screen's New Plane row).</summary>
-    public void StartNewPlane() => Scratch = new CustomPlaneDef();
+    /// <summary>Starts a fresh build (the plane-selection screen's New Plane row). The
+    /// airframe-defaults ask meets it on the airframe screen: a new plane is offered its first
+    /// airframe's defaults too, and declining keeps the empty state.</summary>
+    public void StartNewPlane()
+    {
+        Scratch = new CustomPlaneDef();
+        RaiseDefaultsAsk(Scratch.Airframe, Scratch.Airframe);
+    }
 
     /// <summary>Starts from a saved plane, as a copy: editing and abandoning it must not touch
-    /// what is on disk, so the store's own canonical serialisation is the deep copy.</summary>
-    public void StartFromSaved(CustomPlaneDef saved) =>
+    /// what is on disk, so the store's own canonical serialisation is the deep copy. No
+    /// defaults ask: the plane already is what its builder chose.</summary>
+    public void StartFromSaved(CustomPlaneDef saved)
+    {
         Scratch = CustomPlaneStore.Deserialize(CustomPlaneStore.Serialize(saved)) ?? new CustomPlaneDef();
+        DefaultsAsk = null;
+        DefaultsAskText = string.Empty;
+    }
+
+    /// <summary>Raises the airframe-defaults ask, string 206's own question: %1 is the new
+    /// airframe, %2 the plane being built (its name, or its previous airframe's name while it
+    /// has none). The cursor moves onto the confirm rows.</summary>
+    public void RaiseDefaultsAsk(int airframe, int previousAirframe)
+    {
+        string plane = string.IsNullOrWhiteSpace(Scratch.Name) ? AirframeName(previousAirframe) : Scratch.Name;
+        string text = Strings.Format(206, AirframeName(airframe), plane);
+        DefaultsAskText = text.Length > 0 ? text
+            : $"Do you want the default armor, engine, and guns for this new airframe ({AirframeName(airframe)})?  " +
+              $"If you do not want to lose the changes you've made to the {plane} you were building, click Cancel.";
+        DefaultsAsk = airframe;
+        Row = 0;
+    }
+
+    /// <summary>Answers the pending ask: accepting loads the airframe's defaults into the
+    /// scratch plane, declining keeps every current pick (the airframe switch itself already
+    /// happened when the ask was raised). The cursor lands back on the chosen airframe.</summary>
+    public void AnswerDefaultsAsk(bool loadDefaults)
+    {
+        if (DefaultsAsk is not { } airframe)
+        {
+            return;
+        }
+
+        DefaultsAsk = null;
+        DefaultsAskText = string.Empty;
+        if (loadDefaults)
+        {
+            LoadAirframeDefaults(airframe);
+        }
+
+        Row = Scratch.Airframe;
+    }
+
+    /// <summary>Loads an airframe's defaults into the scratch plane, the ask's accept arm: gun
+    /// picks and per-wing hardpoint counts read back off the airframe's stock fit, engine id 1
+    /// (the stock Lvl-2 tier), armour the stock zone allocations in units. Paint and name are
+    /// not the airframe's to default and stay as they are.</summary>
+    public void LoadAirframeDefaults(int airframe)
+    {
+        Scratch.Airframe = airframe;
+        Scratch.Engine = 1;
+        var fit = StockFits?.ForModel(PlanePickerRoster.AirframeNode(airframe));
+        for (int slot = 0; slot < CustomPlaneDef.GunSlots; slot++)
+        {
+            Scratch.Guns[slot] = default;
+        }
+
+        if (fit != null)
+        {
+            // The A3 mapping read backwards: stock caliber 30..70 is calibre row 0..4, and a
+            // two-marker slot is the twin mount (one gun over both firepoints).
+            foreach (var gun in fit.Guns)
+            {
+                if (gun.Slot is >= 1 and <= CustomPlaneDef.GunSlots)
+                {
+                    Scratch.Guns[gun.Slot - 1] = new GunChoice((gun.Caliber - 30) / 10, gun.Markers.Count >= 2);
+                }
+            }
+        }
+
+        (Scratch.LeftHardpoints, Scratch.RightHardpoints) = StockWingCounts(fit?.Hardpoints);
+        int[] armour = StockArmourUnits(airframe);
+        Scratch.ArmourNose = armour[0];
+        Scratch.ArmourTail = armour[1];
+        Scratch.ArmourLeftWing = armour[2];
+        Scratch.ArmourRightWing = armour[3];
+        Scratch.Clamp();
+    }
 
     /// <summary>The airframe's own name (langui 3000 + id).</summary>
     public string AirframeName(int airframe) =>
@@ -355,6 +491,40 @@ public sealed class HangarFlow
         }
 
         return page;
+    }
+
+    // The airframe's stock zone allocations in units (the destroyable_parts armour pools / 5,
+    // docs/formats/vehicle.md), read through PlaneStats off the zrdr scope and cached. No
+    // reachable extraction reads as all zeros, the missing-data idiom every hangar source uses.
+    private int[] StockArmourUnits(int airframe)
+    {
+        if (_stockArmour.TryGetValue(airframe, out var units))
+        {
+            return units;
+        }
+
+        units = new int[ArmourZones.Length];
+        if (ZrdrPath is { } zrdr)
+        {
+            try
+            {
+                foreach (var part in PlaneStats.Load(zrdr, PlanePickerRoster.AirframeNode(airframe)).DestroyableParts)
+                {
+                    int zone = Array.IndexOf(ArmourZones, part.Name.ToLowerInvariant());
+                    if (zone >= 0)
+                    {
+                        units[zone] = (int)Math.Round(part.MaxArmor / CustomPlaneBuild.ArmourUnitScale);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // An unreadable extraction is the same as none; the zeros stand.
+            }
+        }
+
+        _stockArmour[airframe] = units;
+        return units;
     }
 
     // The focused row, kept inside the page's current list: a page whose row count shrank under

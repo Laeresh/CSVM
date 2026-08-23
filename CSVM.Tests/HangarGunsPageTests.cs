@@ -231,6 +231,7 @@ public class HangarGunsPageTests : IDisposable
     {
         var flow = new HangarFlow(_store, strings);
         flow.Accept(); // New Plane, on to Airframe
+        flow.AnswerDefaultsAsk(false); // decline the airframe-defaults ask (E41)
         flow.Accept(); // on to Engine
         flow.Accept(); // on to Armour
         flow.Accept(); // on to Guns

@@ -78,6 +78,11 @@ public class HangarFlowTests : IDisposable
         foreach (var screen in HangarFlow.Order)
         {
             Assert.Equal(screen, flow.Screen);
+            if (flow.DefaultsAsk != null)
+            {
+                flow.AnswerDefaultsAsk(false); // decline the airframe-defaults ask (E41)
+            }
+
             if (screen != HangarScreen.Purchase)
             {
                 flow.Accept();
@@ -219,6 +224,7 @@ public class HangarFlowTests : IDisposable
         flow.Move(1);
         flow.Accept();
 
+        Assert.Null(flow.DefaultsAsk); // the ask meets a new plane, never a saved one (E41)
         Assert.Equal(4, flow.Scratch.Airframe);
         flow.Scratch.Airframe = 9;
         Assert.Equal(4, _store.Load("Saved One")!.Airframe);
@@ -291,11 +297,17 @@ public class HangarFlowTests : IDisposable
     }
 
     // Confirms forward until the flow is on `target`, so a test names the screen it cares about
-    // rather than counting presses.
+    // rather than counting presses. The airframe-defaults ask is declined on the way through,
+    // which is the old pre-E41 behaviour: every pick made so far is kept.
     private static void Walk(HangarFlow flow, HangarScreen target)
     {
         for (int guard = 0; flow.Screen != target && guard < HangarFlow.Order.Length; guard++)
         {
+            if (flow.DefaultsAsk != null)
+            {
+                flow.AnswerDefaultsAsk(false);
+            }
+
             flow.Accept();
         }
 

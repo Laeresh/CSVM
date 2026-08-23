@@ -54,6 +54,7 @@ From the grilling that preceded this plan. The table is the authority when prose
 | 8 | Execution and verification | **Orchestrated per-item subagents on this worktree branch, orchestrator commits; unit tests on the importer and the economy arithmetic; one owed at-the-controls closing pass.** |
 | 9 | Airframe availability in Instant Action | **All 11 offered** — the stat table's campaign-progress threshold ships in the data (B13 carries it) but gates nothing here; inventing a progress value for a sandbox mode would be a guess. The campaign gets the gate when it exists. |
 | 10 | Running totals and the overweight gate (user, mid-run) | **A persistent second stats row on every hangar screen** (total price, weight / capacity, flagged when over) lands with C26. **Overweight purchase stays blocked**: the commit callback 2263 re-checks nothing, but `PURCHASE.SCRIPT` disables `pur_b_purchase` (mail 10018) whenever the problems callback 2264 reports, so the original hard-blocks at the button; our commit-refusal is the same rule. |
+| 11 | The first D33 pass's findings (user, at the controls) | **Wave E**: the airframe-defaults ask lands with string 206's own wording; the engine None row STAYS (the decode disproved its removal: callback 2218 authors seven rows with 1165 "None"; user accepted, our 1171 label corrected); a pattern pick loads that pattern's default colours (the `0x0061daf0` table). The "(2)" prefix was a question, not a defect: it is the original's twin-mount label. |
 
 ## ⚠ Read this before implementing anything
 
@@ -137,7 +138,14 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ Custom planes in every human plane picker, with the after-build auto-select
 32. ☑ Building a custom plane into a flying aircraft
-33. ☐ The closing at-the-controls pass, and the BL-354/BL-067 closures
+33. ◐ The closing at-the-controls pass, and the BL-354/BL-067 closures (first pass flown, findings below)
+
+### Wave E — the first pass's findings (2026-08-23, user at the controls)
+
+41. ☑ The airframe-defaults ask (string 206): default armour/engine/guns on the airframe pick, or keep
+42. ☑ Engine screen: the None row keeps its place, relabelled to the original's 1165
+43. ☐ Pattern pick loads the pattern's default colours (the `0x0061daf0` table; swatch decode)
+44. ☐ Armour displays as the original's 0-60 in steps of 5 (the x5 display scale), everywhere it shows
 
 ## Dependency and parallelism notes
 
@@ -1072,3 +1080,61 @@ Verify line; findings that are new work get minted as BLs, not fixed inline.
 **Model recommendation.** medium — orchestration and record-keeping around a human pass.
 
 **Verify.** This item is the verify. The plan completes only after it.
+
+# Wave E — the first pass's findings
+
+## E41 ☐ The airframe-defaults ask (string 206): default armour/engine/guns on the airframe pick, or keep
+
+**Landed.** The ask is string 206's own question, rendered by the airframe page as an inline
+two-row confirm in the launchscreen idiom (the flow has no modal machinery). The state lives on
+the flow: `HangarFlow.DefaultsAsk` names the airframe whose defaults are on offer and
+`DefaultsAskText` carries the formatted question, %1 the new airframe's name and %2 the plane
+being built (its name once it has one, its previous airframe's name before that), captured when
+the ask is raised. `StartNewPlane` raises it, so a new plane's first arrival on the AIRFRAME
+screen opens on the confirm; `HangarAirframePage.Step` raises it when the pick changes to a
+different airframe, with the switch itself standing either way. That is what makes Cancel keep
+every current pick, exactly as 206's wording implies, and it is the pre-E41 behaviour the Wave C
+walk-through tests now reach by declining. While the ask shows, the page draws OK and Cancel
+with the question as the detail line and the new airframe's blueprint as art; Accept answers it
+(`AnswerDefaultsAsk`), stepping is inert, and the cursor lands back on the chosen airframe.
+`StartFromSaved` never asks: the plane already is what its builder chose.
+
+- **Accepting loads the defaults** (`HangarFlow.LoadAirframeDefaults`): guns from
+  `stock_loadouts.json` read back through the A3 mapping (stock caliber 30..70 becomes calibre
+  row (caliber-30)/10, a two-marker slot is the twin mount, a slot the stock fit does not author
+  is empty, so the Kestrel's single-barrel slot 1 defaults untwinned); hardpoint counts as the
+  stock fit's authored pylons per wing (`StockWingCounts`, D32's `PylonFillOrder`
+  interleaved-halves rule read backwards: the Balmoral's eight pylons load 4/4, the Hoplite's
+  two load 1/1, the Kestrel's five load 3/2); engine id 1, the stock Lvl-2 tier that is
+  `PlaneStats`' own stock registry row; armour as the airframe's stock zone allocations in units
+  (the `destroyable_parts` armour pools / 5, read through `PlaneStats` off the flow's `ZrdrPath`,
+  the same menu-side zrdr scope the plane picker's stats detail already reads). Paint and name
+  are not the airframe's to default and stay as they are.
+- **The sources are optional in the hangar's own missing-data idiom.** `HangarFlow` gained two
+  optional constructor arguments, `StockFits` and `ZrdrPath`; `LaunchMenu.OpenHangar` passes its
+  `Fits` table and `_zrdrPath` (the one line it changed). A missing stock table loads gun and
+  hardpoint defaults empty; a missing or unreadable zrdr scope loads armour 0.
+
+Tests: `CSVM.Tests/HangarAirframePageTests.cs` grew `ANewPlanesFirstArrivalRaisesTheAsk`,
+`EditingASavedPlaneDoesNotAsk`, `SteppingTheChosenAirframeDoesNotAsk`,
+`TheAskSpeaksString206WithBothNames`, `AcceptingLoadsTheAirframeDefaults` (the Balmoral worked
+example), `DefaultsReadTheStockFitPerAirframe` (Hoplite and Kestrel),
+`DecliningKeepsTheEmptyState_AndNoStockTableDegradesQuietly` and the extracted-data
+`TheDefaultsCarryTheStockArmourAllocations`; `ChangingAirframe_PreservesTheOtherPicks` and
+`SteppingSelectsTheFocusedAirframe` now go through the ask (decline = the old behaviour), and
+every walk-through helper in the hangar test files declines it on the way past.
+
+**Verified.** <pending orchestrator run>
+
+## E42 ☐ Engine screen: the None row keeps its place, relabelled to the original's 1165
+
+**Landed.** The engine screen's row 6 reads langui 1165 "None", the decoded dropdown's own
+string: callback 2218 at `0x0040bce1` authors seven rows and names the last 1165. 1171
+"No Engine Selected" keeps its decoded places, the purchase screen's problems text and the
+commit refusal; `HangarFlow.EngineName` still answers it for id 6 and only the engine page's own
+row label changed (`HangarEnginePage.RowText`). Tests updated in
+`CSVM.Tests/HangarEnginePageTests.cs`: `OffersSevenRows_NamedFromLangui` pins "None" on row 6
+and that 1171's wording no longer appears there; the extracted-data
+`EngineNamesResolveForAllAirframes` asserts both ids resolve.
+
+**Verified.** <pending orchestrator run>
