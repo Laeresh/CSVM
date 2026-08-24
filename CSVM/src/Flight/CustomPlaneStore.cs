@@ -44,6 +44,20 @@ public sealed class CustomPlaneStore
         _dir = directory;
     }
 
+    /// <summary>The identity two names share when they persist to the same file. Characters a
+    /// filename cannot carry become '_', so two names differing only in those are one plane here;
+    /// a caller asking whether a name is free has to ask on this and not on the name itself.</summary>
+    public static string FileKey(string name)
+    {
+        var safe = name.Trim();
+        foreach (var c in Path.GetInvalidFileNameChars())
+        {
+            safe = safe.Replace(c, '_');
+        }
+
+        return safe;
+    }
+
     /// <summary>The production store, <c>user://Planes/</c> resolved to its OS path.</summary>
     public static CustomPlaneStore UserPlanes() =>
         new(Path.Combine(Godot.ProjectSettings.GlobalizePath("user://"), "Planes"));
@@ -264,16 +278,7 @@ public sealed class CustomPlaneStore
 
     /// <summary>The file this name persists to. Characters a filename cannot carry become '_';
     /// the original writes the raw name and simply cannot save such a plane, ours can.</summary>
-    public string PathFor(string name)
-    {
-        var safe = name.Trim();
-        foreach (var c in Path.GetInvalidFileNameChars())
-        {
-            safe = safe.Replace(c, '_');
-        }
-
-        return Path.Combine(_dir, safe + ".json");
-    }
+    public string PathFor(string name) => Path.Combine(_dir, FileKey(name) + ".json");
 
     private static CustomPlaneDef? TryRead(string path)
     {
