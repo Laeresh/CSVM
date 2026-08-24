@@ -148,8 +148,10 @@ reads `Zachary\0achary\0`, the tail of a longer previous name. A reader must sto
 reset, settle it: the field is set to `0` for a fresh profile, and to `250000` on the branch that
 also fills eleven plane slots with the eleven stock airframes. `FUN_00405ce0`, the
 mission-completion recorder, adds a per-objective payout to it from a table at `0x0061ae80`
-(stride 20 bytes: mission index, objective index, amount, a terminator word) and adds the same
-amount to the flown mission's result record. The sample profile holds 21840.
+(stride 20 bytes: mission ordinal, objective bit, amount, an airframe id for the five records
+that award an aircraft, a trailing pointer; [campaign-screens.md](campaign-screens.md)
+"Flight check") and adds the same amount to the flown mission's result record. The sample
+profile holds 21840.
 
 Immediately after it, `+0x44c` begins the plane array already documented in
 [paint.md](paint.md): 204-byte records, stride `0xcc`, name at `+0x04`, airframe at `+0x2c`. That
@@ -331,6 +333,8 @@ Where the decode stops:
   name buffers are identified.
 - **The two twelve-byte counter arrays** in a mission-result record.
 - **The ordnance id vocabulary** for the per-pylon cells, and the payout table's values.
-- **`UIData +0x00`, `+0x08` and `+0x340`.** Located and typed, not interpreted.
+- **`UIData +0x00` and `+0x08`.** Located and typed, not interpreted. `+0x340` is the wingman's
+  selected-plane index: the flight check resets its wingman slot from it the way the pilot slot
+  reads `+0x33c` ([campaign-screens.md](campaign-screens.md)).
 - **No writer.** Nothing here is sufficient to produce a file the original would load, and the
   60 scratch bytes per directory entry mean a byte-identical round trip is not defined.

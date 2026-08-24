@@ -74,8 +74,7 @@ missions cannot be individually verified inside one milestone (decision 6).
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A3 (landed: `docs/formats/campaign-sequence.md`), A4 (landed: `docs/formats/briefing.md`), A5 (landed: `docs/org/hangar.md` "The campaign wallet", pending only the `CAP-40` on-screen cross-check), A7 (landed: `docs/formats/anim-definitions/cutscenes.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field) | Confirm the trace, then implement. |
-| **Data present and located, vocabulary not yet decoded** | A6 | Decode first; the docs page is the deliverable, the engine item consumes it. |
+| **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A3 (landed: `docs/formats/campaign-sequence.md`), A4 (landed: `docs/formats/briefing.md`), A5 (landed: `docs/org/hangar.md` "The campaign wallet", pending only the `CAP-40` on-screen cross-check), A6 (landed: `docs/formats/campaign-screens.md`), A7 (landed: `docs/formats/anim-definitions/cutscenes.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field) | Confirm the trace, then implement. |
 | **Direction sound, magnitude or details a judgement call** | B11, B12, C21–C24, D31, D32, D33 | The shape is settled by the original's screens/data; layout metrics, timings and exact behaviours come from captures and decode, not invention. |
 | **Leads only — no mechanism yet** | D35 partials (BL-037/038 wiring points), D37 (music selection logic) | Budget for investigation; may end in a disproof. |
 
@@ -175,7 +174,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ Decode the campaign mission tree (order, branching, unlocks)
 4. ☑ Decode the briefing: `Briefing.zrd` dialog layout + the briefing map/flag animation
 5. ☑ Decode the economy constants: plane buy/sell prices, armor cost, starting funds
-6. ☐ Behavioral decode of the campaign GUI scripts (cabin, flight check, ammo, campaign intro)
+6. ☑ Behavioral decode of the campaign GUI scripts (cabin, flight check, ammo, campaign intro)
 7. ☑ Decode the `letterbox` node mechanics and the cutscene `CALLBACK` codes
 8. ☑ Mint and file the owed captures (plane construction screen, previous-missions list, briefing animation, a C1 mission intro, cabin ambience)
 
@@ -453,29 +452,56 @@ real prices on screen. Extend `docs/formats/vehicle.md` rather than opening a ne
 **⚠ Traps.** ⚠ Do not tune prices to "feel right" if the trace stalls; a missing constant stays a
 named gap, per the invented-content ground rule.
 
-## A6 ☐ Behavioral decode of the campaign GUI scripts (cabin, flight check, ammo, campaign intro)
+## A6 ☑ Behavioral decode of the campaign GUI scripts (cabin, flight check, ammo, campaign intro)
 
 **Goal.** A decode of what `PASSENGERCABIN.SCRIPT`, `FLIGHTCHECK.SCRIPT`,
 `ORDINANCELAYOUT.SCRIPT`, `CAMPAIGN.SCRIPT` and `CAMPAIGNINTRO.SCRIPT` actually do: widget
 wiring, mailbox/callback flow, screen transitions, and which engine calls they make, at the depth
 `docs/formats/instant-action.md` reached for `INSTANTACTION.SCRIPT`.
 
-**Evidence (confidence: data located, logic undecoded).** The scripts exist as raw obfuscated text
-in `extracted\rof\ASSETS\SCRIPTS\`; `docs/formats/rof.md` documents the container and widget keys
-only, and names the precedent decode.
+**Evidence (confidence: traced to code).** Landed as
+[`docs/formats/campaign-screens.md`](formats/campaign-screens.md). Every widget, list fill,
+transition and engine call of the five scripts is traced to either the script text, its
+`LAYOUT.CSV` row, or a `crimson.exe` handler, and checked against the five reference PNGs.
 
-**Approach.** Follow the `instant-action.md` method: pair the script text with the `crimson.exe`
-GUI-mailbox handlers. Prioritize what C21–C24 need (transition targets, which widget triggers
-what, list population); full obfuscated-identifier recovery is not the goal.
+**Approach (as executed).** The script text was paired with the three callback handlers
+`crimson.exe` registers for it (`uiData` at `0x004093a0`, `gosCallback` `FUN_00407670`,
+`uiControl` `FUN_00404960`). Obfuscated identifiers were deliberately not recovered: widget keys,
+callback ids, message ids and langui ids carry the meaning.
 
 **Model recommendation.** high — the obfuscation makes this judgement-heavy.
 
-**Verify.** Each documented transition is consistent with the observable original (screenshots +
-A8 captures).
+**Verify.** Done. Per-screen, what is script-proven against what the screenshots corroborate is
+tabulated in the page's Evidence section.
 
-**⚠ Traps.** This item informs the screens but must not gate them; if a behaviour is directly
-observable from captures, the screens may land on capture evidence while the script decode
-catches up.
+**What it settles for Wave C.**
+
+- **C22's cabin-art TODO is answered: it is flat 2D UI art, not a rendered 3D set.**
+  `PC_BackGround.png` at `0,0` is colour-keyed (`AlphaType 2`) with the hangar window transparent,
+  and one of eleven `PC_P_HANGAR<airframe>.JPG` photographs is drawn behind it at `46,69`. The
+  memento is `pc_memento` + `PC_Mementopicframe.png`; the map pins are frames of `PC_mappins.png`,
+  one per story chapter reached.
+- **C24's plane-change TODO is answered.** The change is disabled on campaign missions **13 and
+  17** (hard-coded in `FLIGHTCHECK.SCRIPT` and independently in `uiData` 2018's own test), and on
+  any mission while the profile owns fewer than three planes. Those two missions instead **grant** a
+  story aircraft from a table at `0x0061ae80`, which also carries the campaign's per-objective
+  payouts (input for A5).
+- **C25's ammo-description TODO is answered.** Descriptions are two langui strings each, title plus
+  body: ammunition `3350`/`3370` with list rows at `3360`, ordnance `3380`/`3410` with list rows at
+  `3395`. The ordnance list is **filtered by campaign progress** (a 12-entry availability table at
+  `0x00619efc`), so a dropdown row is not an ordnance id.
+- **C21** gets the roster capacity (24 profiles, 32-character names) and the original's own name
+  validation rule.
+- **A4/C23 bonus:** the `brief_c<NN>` briefing state key is `<campaign folder index><mission
+  number>`, which reproduces all 24 keys from `cm_sequence.zrd` and closes `briefing.md`'s open
+  question about which mission folder each briefing state belongs to.
+- **D37 bonus:** the out-of-mission screens drive one shared sound object holding
+  `music_splash.wav`, with mailbox `11003`/`11004` as stop/start. No script assigns the cabin a
+  track of its own.
+
+**⚠ Traps.** This item informs the screens but does not gate them. What stays for captures: whether
+anything in the cabin animates or loops, how the pin frames read on screen, and the disabled-state
+art of the Next Mission button when the campaign is finished.
 
 ## A7 ☑ Decode the `letterbox` node mechanics and the cutscene `CALLBACK` codes
 
@@ -629,9 +655,10 @@ so there is no depreciation rule to write, and a sell/rebuy loop is free by desi
 and rockets cost nothing, so C25 never touches the wallet. Income is a decoded table, not a
 formula: ten mission/objective pairs paying $140,900 in total, plus named unsellable aircraft,
 each granted once per profile, which B12's progression record must track alongside the tree
-position. <TODO: A5 read five aircraft awards (langui 513-517) where A3 read four non-zero plane
-indices (+0xC values 2, 3, 7, 0); re-read the reward table at 0x0061ae80 and settle the count
-before wiring the awards.>
+position. The award count is settled at five by A6's independent read of the same table through
+`uiData` 2021: missions 2, 7, 13, 17, 19 grant Balmoral, Bloodhawk, Fury, Hoplite, Warhawk
+(langui 513-517), with the langui symbol names matching the missions' chapter/mission under the
+1-based ordinal (details in `docs/formats/campaign-screens.md`).
 
 **Approach.** Read `PLAN-hangar.md` (completed, in `docs/plans/`) and the `HangarFlow.cs`
 architecture entry; add the wallet gate at the existing `Purchase` page seam, parameterized by an
