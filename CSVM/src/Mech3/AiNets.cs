@@ -201,7 +201,15 @@ public static class AiNets
                 trailer = new AiNetTrailer((int)nodeIndex, target);
         }
 
-        return new AiNet { Id = id, Name = name, Nodes = nodes, Edges = edges, Trailer = trailer };
+        return new AiNet
+        {
+            Id = id,
+            Name = name,
+            Nodes = nodes,
+            Edges = edges,
+            Trailer = trailer,
+            Volumes = AiVolumeSet.FromNetRecord(record),
+        };
     }
 }
 
@@ -233,4 +241,10 @@ public sealed class AiNet
     /// shipped shapes. Null when the record ends with a bare <c>[-1]</c> or omits the trailer
     /// entirely.</summary>
     public AiNetTrailer? Trailer { get; init; }
+
+    /// <summary>The net's own activation/attack/return volumes, record elements 2–10. A vehicle
+    /// assigned this net takes each non-zero value, and its roster block's own volumes then
+    /// outrank them (docs/org/aiPilot.md "Net assignment"). 52 of the 222 shipped nets author
+    /// one, a 700 m return radius on 46 of them.</summary>
+    public AiVolumeSet Volumes { get; init; }
 }

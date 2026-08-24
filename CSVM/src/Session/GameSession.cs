@@ -357,19 +357,24 @@ public partial class GameSession : Node3D
     /// its own textures, for an actor flying for a militia the mission data never names.</summary>
     public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt,
         AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating, bool inert = false,
-        bool shippedSkins = false, string? aiDef = null, Flight.LoadoutChoice? fit = null)
+        bool shippedSkins = false, string? aiDef = null, Flight.LoadoutChoice? fit = null,
+        AiSkillVector? rosterSkills = null, bool nitro = false)
     {
         if (_flightRoster == null)
         {
             GD.PushWarning($"ai: no spawner in this session mode — '{planeName}' not spawned");
             return null;
         }
-        // The vehicle def's own nine-slot pilot vector, when this spawn resolves one. A slot it
-        // authors is the rating that slot's consumer flies at, unless --ai-attack=N pinned one.
+        // The def's nine-slot pilot vector, when this spawn resolves one: a roster block's own
+        // slot outranks it, an unset slot falls through to it and then to the rating, and
+        // --ai-attack=N pins every slot (docs/formats/ai-rosters.md).
         var defStats = AiStatsForSpawn(planeName, aiDef);
         var defSkills = defStats?.AiPilotSkills ?? default;
-        int SkillFor(int? authored, int fallback) =>
-            _spec.AiAttackSkillExplicit || attackRating != null ? fallback : authored ?? fallback;
+        var roster = rosterSkills ?? default;
+        int SkillFor(int? authored, int fallback, int? rosterSlot = null) =>
+            rosterSlot ?? (_spec.AiAttackSkillExplicit || (attackRating != null && rosterSkills == null)
+                ? fallback
+                : authored ?? fallback);
 
         // --ai-attack arms every spawned pilot with a D14 gunner at the ordered skill rating:
         // interpolated dead-eye/quick-draw cones, nearest-hostile auto-targeting, its own
@@ -382,13 +387,13 @@ public partial class GameSession : Node3D
                 var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
                 pilot.Gunner = new AiGunner(rng)
                 {
-                    DeadEyeAngleDeg = _aiSkills.DeadEyeAngleDeg(SkillFor(defSkills.DeadEye, skill)),
-                    QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(SkillFor(defSkills.QuickDraw, skill)),
+                    DeadEyeAngleDeg = _aiSkills.DeadEyeAngleDeg(SkillFor(defSkills.DeadEye, skill, roster.DeadEye)),
+                    QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(SkillFor(defSkills.QuickDraw, skill, roster.QuickDraw)),
                 };
                 // The ordnance half rides the quick-draw slot, on its own draw off the ai stream so
                 // the launch dice and the dead-eye scatter cannot walk each other's sequence.
                 var ordRng = new RandomNumberGenerator { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
-                int quickDraw = SkillFor(defSkills.QuickDraw, skill);
+                int quickDraw = SkillFor(defSkills.QuickDraw, skill, roster.QuickDraw);
                 pilot.Rocketeer = new AiRocketeer(ordRng.Randf)
                 {
                     QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(quickDraw),
@@ -396,7 +401,7 @@ public partial class GameSession : Node3D
                 };
                 // Names the ratings actually flown, not the session default: with a def's own slots
                 // in play the two differ, and a reader comparing cones needs the numbers behind them.
-                GD.Print($"ai: gunner armed at dead-eye {SkillFor(defSkills.DeadEye, skill)} / " +
+                GD.Print($"ai: gunner armed at dead-eye {SkillFor(defSkills.DeadEye, skill, roster.DeadEye)} / " +
                          $"quick-draw {quickDraw} (dead-eye {pilot.Gunner.DeadEyeAngleDeg:0.00}°, " +
                          $"quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°, " +
                          $"ordnance roll {pilot.Rocketeer.QuickDrawChance:0.00} per {pilot.Rocketeer.RefireSeconds:0} s)");
@@ -416,15 +421,15 @@ public partial class GameSession : Node3D
                 _aiSkills ??= AiSkills.Load(_zrdrPath);
                 _aiManeuvers ??= Maneuvers.Load(_zrdrPath);
                 int rating = attackRating ?? _spec.AiAttackSkill ?? 5;
-                int sixthSense = SkillFor(defSkills.SixthSense, rating);
+                int sixthSense = SkillFor(defSkills.SixthSense, rating, roster.SixthSense);
                 pilot.Machine = new AiModeMachine(Rng.NewSystemRandom(Rng.Ai))
                 {
                     ActivationRange = _aiSkills.MinAiActiveDist,
-                    SteadyHandChance = _aiSkills.At("steady_hand_chance", SkillFor(defSkills.SteadyHand, rating)),
+                    SteadyHandChance = _aiSkills.At("steady_hand_chance", SkillFor(defSkills.SteadyHand, rating, roster.SteadyHand)),
                     SixthSenseChance = _aiSkills.At("sixth_sense_chance", sixthSense),
                     SixthSenseFactor = _aiSkills.At("sixth_sense_factor", sixthSense),
-                    StunRecoveryIntervalS = _aiSkills.At("stun_recovery_interval", SkillFor(defSkills.StunRecovery, rating)),
-                    NaturalTouch = SkillFor(defSkills.NaturalTouch, rating),
+                    StunRecoveryIntervalS = _aiSkills.At("stun_recovery_interval", SkillFor(defSkills.StunRecovery, rating, roster.StunRecovery)),
+                    NaturalTouch = SkillFor(defSkills.NaturalTouch, rating, roster.NaturalTouch),
                     Library = _aiManeuvers,
                     AssistEnabled = !_spec.NoAssist,
                 };
@@ -440,7 +445,7 @@ public partial class GameSession : Node3D
             }
         }
         var ai = _flightRoster.SpawnAi(new AiSpawn(planeName, pos, lookAt, pilot, scheme, team,
-            inert, shippedSkins, aiDef, fit));
+            inert, shippedSkins, aiDef, fit, nitro));
         _aiPlanes.Add(ai);
         ai.SmokeScreens = _smokeScreens;   // a shipped AI smoker lays through the same fire path
         // Mode transitions and reaction rolls, in the engine's own vocabulary — the D11
@@ -2209,6 +2214,33 @@ public partial class GameSession : Node3D
                 RegisterVoice = RegisterAiVoice,
             });
         }
+        // The campaign's roster build, at the same point and for the same reason: every block is
+        // placed against the built human field, and the leader pass names the player rig.
+        if (_campaign is { } campaignRoster)
+        {
+            state.What += campaignRoster.BuildRoster(new CampaignDirector.RosterInputs
+            {
+                ChapterZrdrPath = rigInputs.ChapterZrdrPath,
+                MissionZrdrPath = state.MissionZrdrPath,
+                ZrdrPath = state.ZrdrPath,
+                MinAiActiveDist = MinAiActiveDist(),
+                Player = () => _rigs.Count > 0 ? _rigs[0].Controller : null,
+                NetTrailers = netTrailers,
+                FindNodes = rigInputs.WorldRuntime is { } rosterWorld
+                    ? name => rosterWorld.FindNodes(name)
+                    : null,
+                // The block's own representative rating arms the gunner and machine; its authored
+                // slots then outrank the def's inside the spawner. A campaign enemy keeps its
+                // militia's skins; the player's side takes the default pattern like an IA wingman.
+                Spawn = (plan, pos, look, pilot) => SpawnAiAircraft(plan.PlaneNode, pos, look, pilot,
+                    scheme: null, team: plan.Team,
+                    attackRating: InstantActionRuntime.RepresentativeRating(plan.Skills),
+                    inert: plan.Inert, shippedSkins: plan.Team != AimAssist.PlayerTeam,
+                    aiDef: plan.AiDef, fit: plan.Fit, rosterSkills: plan.Skills, nitro: plan.Nitro),
+                RegisterVoice = RegisterAiVoice,
+                Rng = Rng.NewSystemRandom(Rng.Ai),
+            });
+        }
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
             && _rigs[0].Controller is { } lead)
         {
@@ -3132,6 +3164,22 @@ public partial class GameSession : Node3D
             // The weapon lab has no sim step of its own: it is hosted by player 1's
             // FlightController, which owns the fire clock, and fires into _projectiles above.
             _versus?.Advance(dt);
+        }
+    }
+
+    // player.json's activation floor, on the same lazily loaded skills table the spawner reads;
+    // the shipped default when the table cannot be read, so a roster still spawns.
+    private float MinAiActiveDist()
+    {
+        try
+        {
+            _aiSkills ??= AiSkills.Load(_zrdrPath);
+            return _aiSkills.MinAiActiveDist;
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"campaign: cannot load ai_skill_parameters: {e.Message}");
+            return 2000f;
         }
     }
 

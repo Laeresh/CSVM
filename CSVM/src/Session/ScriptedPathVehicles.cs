@@ -31,8 +31,11 @@ public sealed class ScriptedPathVehicles
     /// <summary>Places a spawned vehicle on its authored path, frozen at its own pose. False when
     /// the chapter carries no such path, which leaves the vehicle flight-simulated rather than
     /// stationary. <paramref name="onComplete"/> is the handoff: it is raised once, with the speed
-    /// the path left the vehicle at, when the last waypoint is reached.</summary>
-    public bool Place(string vehicle, string pathName, Node3D body, Action<float>? onComplete = null)
+    /// the path left the vehicle at, when the last waypoint is reached. <paramref name="setPose"/>
+    /// takes the per-tick position and heading (radians about up) in place of the body's own
+    /// transform write, for a body whose pose is owned by a simulation of its own.</summary>
+    public bool Place(string vehicle, string pathName, Node3D body, Action<float>? onComplete = null,
+        Action<Vector3, float>? setPose = null)
     {
         if (ScriptedPath.Resolve(pathName, _findNodes) is not { } path)
         {
@@ -40,7 +43,7 @@ public sealed class ScriptedPathVehicles
         }
 
         var follower = new PathFollower(path.Waypoints, body.GlobalPosition, body.GlobalRotation.Y);
-        _placed[vehicle] = new Entry(follower, body, onComplete);
+        _placed[vehicle] = new Entry(follower, body, onComplete, setPose);
         return true;
     }
 
@@ -75,8 +78,15 @@ public sealed class ScriptedPathVehicles
             }
 
             entry.Follower.Step(dt);
-            entry.Body.GlobalPosition = entry.Follower.Position;
-            entry.Body.GlobalRotation = new Vector3(0f, entry.Follower.Heading, 0f);
+            if (entry.SetPose is { } setPose)
+            {
+                setPose(entry.Follower.Position, entry.Follower.Heading);
+            }
+            else
+            {
+                entry.Body.GlobalPosition = entry.Follower.Position;
+                entry.Body.GlobalRotation = new Vector3(0f, entry.Follower.Heading, 0f);
+            }
             if (!entry.Follower.Following)
             {
                 entry.OnComplete?.Invoke(entry.Follower.Speed);
@@ -95,5 +105,6 @@ public sealed class ScriptedPathVehicles
         }
     }
 
-    private readonly record struct Entry(PathFollower Follower, Node3D Body, Action<float>? OnComplete);
+    private readonly record struct Entry(PathFollower Follower, Node3D Body, Action<float>? OnComplete,
+        Action<Vector3, float>? SetPose);
 }

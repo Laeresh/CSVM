@@ -92,6 +92,14 @@ that author `mode wingman`, and a netless `wingman` flies a formation station on
 graph like everything else. [`org/aiPilot.md`](../org/aiPilot.md) has the mechanism and the
 constants.
 
+**What CSVM reads of this.** A campaign session spawns every non-`player` block of the mission's
+roster (`Session/CampaignRoster.cs` plans it, `CampaignDirector.BuildRoster` places it). The block
+name resolves to its `vehicle.json` def by stripping trailing `_N` ordinals (`blakepeace_2_1` →
+`blakepeace_2`), and the def's `mode` plus slot 0 decide the fork above. Read at spawn: slots 0–7,
+the twelve volume slots 8–19 (over the net's own, see [ai-nets.md](ai-nets.md)), 20, 21, 22–30,
+31, 32, 33, 34, 40 and 65. A surface vehicle (`mode ship`) has no player airframe and is reported
+rather than spawned.
+
 ### `group` is a cohort id, not a formation
 
 The format is established; instrument and function addresses are in

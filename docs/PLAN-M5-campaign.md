@@ -199,7 +199,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 31. ☑ Campaign mission director: the objectives runtime (from A1) + mission end/return flow
 32. ☑ Cutscene player: intro animations, letterbox, camera control, handoff (`BL-134`)
 33. ☑ In-flight objectives display + objective sound cues
-34. ◐ Campaign wingmen: named rosters + netless station-keeping (`BL-362`, `BL-364`)
+34. ☑ Campaign wingmen: named rosters + netless station-keeping (`BL-362`, `BL-364`)
 35. ☑ Mid-mission world fidelity: `WAKE_ANIM` doors (`BL-350`), scripted-path vehicles (`BL-361`), `WorldPartitionSetActive` (`BL-037`), `FogState` (`BL-038`)
 36. ☑ AI targeting candidates beyond aircraft (`BL-363`)
 37. ☑ Music: playback subsystem + the state-driven track selection
@@ -1640,7 +1640,7 @@ untouched. `ExtraPrewarmNames`/`SoundGroupNames()` prewarm chain members too (`P
 expands a group to its members), so the chain-vs-weighted distinction only matters at *playback*
 (`SoundGroup.Pick`), not at prewarm time.
 
-## D34 ☐ Campaign wingmen: named rosters + netless station-keeping (`BL-362`, `BL-364`)
+## D34 ☑ Campaign wingmen: named rosters + netless station-keeping (`BL-362`, `BL-364`)
 
 **Goal.** Campaign missions spawn wingmen from their named rosters (`aiv.zrd`), flying the decoded
 netless `mode wingman` station-keeping (join, hold station, speed-ramped trail), commanded by the
@@ -1653,8 +1653,8 @@ its `(3 × altitude error)² + range²` to the LEADER with a HORIZONTAL range (`
 3-D `FUN_00538880` every other test uses); state 0's 1800 m test is the wingman's distance to its
 leader, not to its target; and the 106.68–259.08 m station on a selected target is placed along the
 NEGATION of the target's backward axis, so it sits that far AHEAD of the target rather than behind
-it. Nothing in `src/` read `aiv` as a spawn roster before this item and nothing does now, which is
-what leaves `BL-364`'s campaign half open.
+it. Nothing in `src/` read `aiv` as a spawn roster before this item; the spawner below is the first
+reader, and it is what closes `BL-364`'s campaign half.
 
 **Approach (landed).** The law is a module of its own, `src/Flight/AiEscort.cs`: the engine's own
 five-state machine, both body-frame stations, the speed-ramped target station, the break-off test
@@ -1667,39 +1667,38 @@ escorting pilot flies now uses that table too. **No tenth `AiMode` was invented*
 is the engine's separate `+0xd8` byte and is named as ours (`EscortState`), never printed in the
 mode readout's vocabulary.
 
-**The spawner contract (D32's / the orchestrator's follow-up, NOT landed here).** `GameSession` /
-`CampaignDirector` were untouched by this item. What a campaign roster spawner has to do:
-
-1. Read the mission's blocks with `AiSkills.LoadRoster(<mission zrdr>)`, which gives
-   `(Name, Fields)` per `aiv.json` entry. The name is the spawn node's name (`wingman_1`,
-   `bswingman_1`, `player`) and is the key everything below resolves against.
-2. Per block, the readers that exist are `AiSkills.RosterPrimaryTarget` (slot 6),
-   `AiSkills.RosterSkills` (22–30), `Maneuvers.SignatureNames` (32) and
-   `AiSkills.RosterRatingBiases` (33); `CombatVoice` reads the accent (65). The ones that do NOT
-   exist yet and this contract needs are **slot 0 `netids`**, the volume slots (8–19, twelve slots
-   for nine named volumes), `deactivated` (21) and `pref_engage_alt` (31); the slot table is
-   `docs/formats/ai-rosters.md`.
-3. Resolve the block's airframe def and its `mode` key. Nothing in `src/` reads `mode` today; the
-   twelve `mode wingman` defs are listed in `docs/org/aiPilot.md`.
-4. **The fork, decoded (`FUN_00476250`, `FUN_00475fc0`):** `mode == wingman` AND `netids < 0` gets
-   `pilot.Escort = new AiEscort { Leader = <the rig `primary_target` names> }` and no patrol net.
-   ANY authored net id demotes it: `pilot.Patrol` is that net and `Escort` stays null. There is no
-   third case, and no aircraft ever gets both.
-5. The leader reference is a SECOND pass, after every rig is built: `primary_target` names another
-   block (`wingman_1` for the 2/4 slots) or the literal `player`, resolved the way
-   `AiGunner.PrimaryTargetName` already is in `FlightController.SelectRankedTarget` (a `player`
-   assignment picking the nearest human, which is the splitscreen answer too). `InstantActionDirector`
-   already builds the name→rig map this needs.
-6. A dead leader: `AiPilot` falls back to the pilot's standing orders rather than crashing on a
-   null leader (the original dereferences it). Whether the campaign re-points a 2/4 follower at its
-   dead leader's own leader is a wiring decision, not a decode; `BL-362` trap (c) is the record.
-7. **`BL-364`'s open half is the same pass.** A campaign block takes ITS OWN authored `netids`
-   (`AiNets.ById`), never Instant Action's chapter-first rule, and then the volume order the
-   original uses: the net's volumes first, the block's own volume slots over them where the block
-   authors non-zero (a campaign block usually leaves them 0, which is why the net's reach it), and
-   `min_ai_active_dist` (2000) floored over the activation triple after each. `ApplyActorVolumes`
-   is the existing seam for the second half of that. `deactivated` spawns the rig inert, and
-   `FlightController.Activate` re-seats the net walk as the original's activation snap does.
+**Landed: the spawner.** A campaign session spawns the mission's `aiv` roster in two halves.
+`src/Session/CampaignRoster.cs` is the engine-free plan: `AiSkills.LoadRoster` gives the blocks,
+`src/Mech3/VehicleDefs.cs` resolves each block name to its def (`blakepeace_2_1` → `blakepeace_2`),
+the def's `mode` through `kind_of`, and the player airframe its model is built from (`wingman` →
+`devastator` → `pdevastator` → `player_pfighter`); the new `AiSkills` readers cover `netids` (0, a
+scalar or the exe's list, a multi-entry list drawn `rand() % count`), the spawn pose (1, 2), team,
+group, `title`, `deactivated` (21), `pref_engage_alt` (31), the signature mask (32), `taxiPath` (40)
+and the accent (65), and `src/Mech3/AiVolumes.cs` reads the twelve volume slots (8–19) and the nine
+volume floats a net record carries at elements 2–10. **The fork is applied per plan and nowhere
+else:** `Escorts` is `mode wingman` AND no authored net; `Net` is any authored net the chapter
+carries (`AiNets.ById`, never Instant Action's chapter-first rule); a plan never has both. The
+volumes are the net's overlaid by the block's own, field by field on the engine's non-zero test.
+`CampaignDirector.BuildRoster` is the thin Godot half, called by `GameSession` right after
+`InstantActionDirector.BuildActors`, where the human rigs exist: one `SpawnAiAircraft` per plan (the
+block's own skill slots outranking the def's inside the spawner, its representative rating arming
+the gunner and machine, the block's team and `nitro`, `deactivated` built inert), the merged volumes
+through `CampaignRosterPlan.ApplyVolumes` with the `min_ai_active_dist` floor, the signature
+maneuvers, the rating biases, `primary_target` as the gunner's assignment on a jet, the accent
+into the voice runtime, and a `taxiPath` block placed held on its path (`ScriptedPathVehicles.Place`
+re-pinning the aircraft through `PlaceHeld` each tick, `Activate` at the handoff speed). The leader
+pass runs SECOND, once every rig exists: `primary_target` resolves to the player rig on the literal
+`player` or to a block by name, and `pilot.Escort = new AiEscort { Leader = … }` is set only then;
+a leader that is not spawned leaves the wingman holding its course, and a leader that dies later is
+`AiPilot`'s own fallback (a 2/4 follower is not re-pointed at its dead leader's leader, the record
+`BL-362` trap (c) kept). The spawn pose is the block's own coordinates and yaw; a world node of the
+block's name, where the chapter's anim data carries one, is preferred over them, so a mission that
+animates its parked aircraft into place agrees with the roster. The profile's wingman airframe
+(`WingmanNode`/`WingmanFit`, bound by the director from the profile) replaces the `wingman_1`
+block's own def, its stats down the `w<plane>` twin so the mode stays `wingman`. Over the spawned
+roster the objectives world now answers `DEDG` (`GroupLiveCount`) and `WAKEUP_ENEMIES` (an inert
+named aircraft re-activated at its spawn pose). Not spawned: the `player` block (the human rig) and
+a surface vehicle (`mode ship`, no player airframe), both reported in the log rather than guessed.
 
 **Model recommendation.** high — touches the AI control law.
 
@@ -1720,20 +1719,45 @@ fires at the player station the commanded point alternates between the two, so t
 around the leader instead of settling. The suite's leash (600 m worst, 250 m mean) allows that
 weave and still fails the behaviour `BL-362` reports, a wingman that simply leaves.
 
-**Verified.** `RunTests.ps1` on the plan branch with D32, D33 and D34 merged: build clean, units
-2164/2164, engine suites 104/104 with errors clean, all 16 golden shots hash-identical. Locally,
-foreground: `dotnet build` clean (0 warnings),
-`RunTests.ps1 -SkipGoldens -SkipHitch` PASS with 2157/2157 unit tests and **99/99 in-engine suites**,
-engine errors clean; `CheckCommentCaps.ps1` clean on the four touched sources. `SuiteCatalogTests`
-took the new count and last name.
+**Verified (the spawner).** New suite `campaign-roster` (`src/Testing/CampaignRosterSuites.cs`,
+registered last): C1/M04's shipped roster (21 blocks) in its built world, the player a scripted
+leader at the `player` block's pose. 20 of 21 blocks get a rig (the player's is the human), 3
+escorts and 16 netted with no block carrying both, `wingman_1`'s escort leader is the player rig
+and it has no net, `wingman_3`'s leader resolves to `devastator_3`'s rig, `blakepeace_2_1` walks
+net 15 with no escort, the 9 `deactivated` blocks are inert and out of play, the 4 `taxiPath`
+blocks sit frozen on `pp1`–`pp4`, and `devastator_2` reads its net's authored 700 m return radius
+under a 2000 m activation floor. Over the two-minute flown run `wingman_1` joins the formation
+state and holds the player at mean 213 m, worst 396 m over the last minute, inside the
+`wingman-station` leash (600 m worst, 250 m mean). The flown leg lifts its pair 800 m above the
+roster's own poses first: the authored 110 m start is the spawner's business, and a scripted
+leader with no pilot flies into the terrain from there. The engine-free half is pinned by
+`CSVM.Tests/CampaignRosterPlanTests.cs` (the block-name-to-def resolution, the airframe lookup,
+the fork on a scalar and a list `netids`, the profile-airframe override, the volume overlay and
+floor, the spawn-slot readers, the net record's volume order).
+The real session path: `--menu=campaign-fly --screenshot` logs one `campaign: roster '<name>'`
+line per spawned block of the seeded profile's mission and the `campaign: roster spawned N of M
+block(s)` summary. `dotnet build` clean (0 warnings), `dotnet test` 2334/2334, `RunTests.ps1` PASS
+with the 106 in-engine suites and all 16 golden shots hash-identical (a campaign roster spawns in a
+campaign session only, so Instant Action and freecam shots do not move), `CheckCommentCaps.ps1`
+clean. `SuiteCatalogTests` took the new count and last name.
 
-**Closure.** Neither item is deleted, and both are reduced to the same one thing. `BL-362`'s open
-half was "the campaign's netless `mode wingman` station, which nothing in `src/` yet flies": the law
-now flies, pinned by the suite above, but the entry's own playtest is a CAMPAIGN flight with
-netless `wingman_N` blocks, and no session spawns one, so the item stays open on the spawner
-contract above and its entry now says exactly that. `BL-364` stays open for the same reason: its
-remaining half is a campaign roster spawner reading each block's authored `netids`. One spawner
-closes both, and both entries now point at this section for what it has to do.
+**The one `wingman-station` assertion that changed, and why.** Its leashes, its join gates, its
+geometry checks and the A/B between the two stations are untouched and still green (player leader:
+joins at 699 m, mean 153 m, worst 340 m; AI leader: mean 145 m, worst 325 m). What was replaced is
+the check that the FLOWN mean sat right and astern of the leader in the leader's frame. That number
+is a property of the limit cycle the 80 m push drives, not of the decode, and the flight model's
+own parity retune moved it (the flown mean now reads out 91 m, along −22 m). The decode pins the
+COMMANDED point, so the suite now pins that instead, on two checks: the law never leaves the
+formation state during the hold, and on every step outside the 80 m push the commanded point equals
+`AiEscort.FormationStation` for that leader kind, measured at 0.00 m of error over 2468 (player) and
+2725 (AI) sampled steps. That is the same equality the geometry block asserts statically, so a
+regression in the station offsets or in the leader frame still fails the suite; a step the escort
+did not fly is excluded, since avoid crash runs AHEAD of the escort in the decoded fork order and
+commands the climb-out rather than a station.
+
+**Closure.** `BL-362` and `BL-364` are closed by this spawner: the campaign's netless `wingman_N`
+blocks fly the escort on their `primary_target`, and every netted block walks its own authored net
+with the volume order the original uses.
 
 **⚠ Traps.** File contention with `PLAN-flight-model-parity.md` on `AiPilot`/`AiControlLaw`;
 sequence, never parallel worktrees. The station constants are decoded facts, not TUNE.

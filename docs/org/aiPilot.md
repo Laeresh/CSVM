@@ -491,6 +491,17 @@ when its target is lost (`FUN_0041f9c0` again, with its own 3600 m test and seco
 `DAT_0071c3b4`); the fire decision the law ends on, which in CSVM is the host's `AiGunner` pass;
 and the null-leader dereference, which CSVM answers by falling back to the pilot's standing orders.
 
+**The spawner.** A campaign session spawns the mission's `aiv` roster through
+`Session/CampaignRoster.cs` (the plan) and `CampaignDirector.BuildRoster` (the placement). The fork
+above is applied per block from the def's `mode` (`Mech3/VehicleDefs.cs`, resolved through
+`kind_of`) and the block's `netids`: a netless `mode wingman` block gets `AiPilot.Escort` on the rig
+its `primary_target` names (the literal `player` is the first human), resolved in a second pass once
+every rig exists; any authored net becomes `AiPilot.Patrol` on that net and no escort. The net's
+volumes (record elements 2–10) are applied first and the block's own slots 8–19 over them, each
+field on the non-zero test, then the activation radius is floored at `min_ai_active_dist`, which is
+the order decoded under "Net assignment". A `deactivated` block is built inert and `WAKEUP_ENEMIES`
+re-activates it. The `campaign-roster` suite pins all of it over C1/M04.
+
 ⚠ **A leader flying faster than 250 mph cannot be formated on at all.** The steering law caps an
 AI's desired speed at `AiControlLaw.SpeedCeiling` (111.76 m/s) whatever the airframe can do, so a
 wingman handed a faster leader falls behind for the rest of the mission. That is the original's

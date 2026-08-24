@@ -148,14 +148,19 @@ internal static class WingmanSuites
                 FlightRoster.ShooterIdBase + 1);
 
             float joinedRange = -1f;
-            bool joined = false, unjoined = false;
+            bool joined = false, unjoined = false, leftStation = false;
             float worstLate = 0f, meanRange = 0f;
             var lateOffset = Vector3.Zero;
-            int lateSamples = 0;
+            var commandedOffset = Vector3.Zero;
+            var farStationError = 0f;
+            int lateSamples = 0, farSamples = 0;
             for (int i = 0; i < (int)(120f / StepDt); i++)
             {
                 live.SimStep(StepDt);
                 leader.SimStep(StepDt);
+                // The pose the escort law read this step: the leader after its step, the wingman
+                // before its own, so the commanded-point check below rebuilds the law's inputs.
+                var wingBefore = wing.WorldPosition;
                 wing.SimStep(StepDt);
                 float range = wing.WorldPosition.DistanceTo(leader.WorldPosition);
                 if (!joined && escort.State == EscortState.Station)
@@ -179,14 +184,28 @@ internal static class WingmanSuites
                     lateSamples++;
                     worstLate = Mathf.Max(worstLate, range);
                     meanRange += range;
-                    lateOffset += leader.GlobalTransform.Basis.Inverse()
-                        * (wing.WorldPosition - leader.WorldPosition);
+                    var leaderBasis = leader.GlobalTransform.Basis;
+                    var leaderFrame = leaderBasis.Inverse();
+                    lateOffset += leaderFrame * (wing.WorldPosition - leader.WorldPosition);
+                    commandedOffset += leaderFrame * (escort.StationPoint - leader.WorldPosition);
+                    leftStation |= escort.State != EscortState.Station;
+                    // Outside the 80 m push the commanded point IS the decoded station, rebuilt
+                    // from the inputs the law read. Avoid crash runs AHEAD of the escort in the
+                    // fork order, so a step it owns commands the climb-out instead.
+                    bool escortFlew = pilot.Machine!.Mode is not (AiMode.AvoidCrash or AiMode.Stunned);
+                    if (escortFlew && wingBefore.DistanceTo(leader.WorldPosition) >= AiEscort.SeparationM)
+                    {
+                        farSamples++;
+                        var station = AiEscort.FormationStation(leader.WorldPosition, leaderBasis, playerLeader);
+                        farStationError = Mathf.Max(farStationError, escort.StationPoint.DistanceTo(station));
+                    }
                 }
             }
 
             var mean = lateOffset / Mathf.Max(1, lateSamples);
+            var meanCommanded = commandedOffset / Mathf.Max(1, lateSamples);
             meanRange /= Mathf.Max(1, lateSamples);
-            ctx.Note($"[{kind}] hold: mean range {meanRange:0} m, worst {worstLate:0} m, mean station offset out {mean.X:0.0} up {mean.Y:0.0} along {mean.Z:0.0}");
+            ctx.Note($"[{kind}] hold: mean range {meanRange:0} m, worst {worstLate:0} m, mean flown offset out {mean.X:0.0} up {mean.Y:0.0} along {mean.Z:0.0}, mean commanded offset out {meanCommanded.X:0.0} up {meanCommanded.Y:0.0} along {meanCommanded.Z:0.0}, {farSamples} samples outside the push (station error {farStationError:0.00} m)");
 
             // A player leader's wingman walks the join gate; an AI leader's is forced into the
             // engaging state every frame and, with no target, reads the formation station at once.
@@ -210,11 +229,15 @@ internal static class WingmanSuites
                 $"…and stays with it: worst {worstLate:0} m of {LeashM:0}, mean {meanRange:0} m over the last minute");
             ctx.Check(meanRange < MeanHoldM,
                 $"…averaging inside {MeanHoldM:0} m of the leader: {meanRange:0} m");
+            // The decode pins the COMMANDED station, not where the push's weave puts the flown
+            // mean (docs/PLAN-M5-campaign.md D34): the formation state is never left, and outside
+            // the push the commanded point is the body-frame station to the centimetre.
             if (playerLeader)
             {
-                ctx.Check(mean.X > 0f && mean.Z > 0f,
-                    $"…on the RIGHT and ASTERN in the leader's own frame, which is where its station is: out {mean.X:0.0} m, along {mean.Z:0.0} m");
+                ctx.Check(!leftStation, $"…never leaving the formation state during the hold");
             }
+            ctx.Check(farSamples > 0 && farStationError < 0.01f,
+                $"…commanding the decoded station whenever outside the 80 m push: {farSamples} samples, worst error {farStationError:0.000} m");
 
             return mean;
         }

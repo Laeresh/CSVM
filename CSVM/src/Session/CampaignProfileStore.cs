@@ -99,10 +99,9 @@ public sealed class CampaignProfileDef
     /// <summary>A fresh profile per the traced reset (<c>FUN_004113b0</c>, <c>docs/org/hangar.md</c>
     /// "The campaign wallet"): zero funds, two prebuilt Devastators (<c>langui</c> 511 "Gypsy
     /// Magic", 512 "The Knave"), nothing flown. The pilot flies Gypsy Magic and the wingman The
-    /// Knave, which is the pair's own division of labour (<c>docs/org/hangar.md</c>), so the two
-    /// indices differ from the start. Ammo/ordnance picks start at the hangar's own "untouched"
-    /// values (index 0, the stock fit); the campaign's Ammo Selection screen is what changes
-    /// them.</summary>
+    /// Knave, the pair's own division of labour, so the two indices differ from the start.
+    /// Ammo/ordnance picks start at the hangar's "untouched" values (index 0, the stock fit); the
+    /// campaign's Ammo Selection screen is what changes them.</summary>
     public static CampaignProfileDef NewProfile(string name)
     {
         var def = new CampaignProfileDef { Name = name, Funds = 0, SelectedPlane = 0, WingmanPlane = 1 };

@@ -1127,14 +1127,12 @@ public sealed record SessionSpec
         };
     }
 
-    /// <summary>The campaign cabin's FLY MISSION, the counterpart of <see cref="FromMenu"/> for a
-    /// story mission: the profile and story position <c>--campaign=</c> would have named, plus the
-    /// pilot's aircraft. The chapter and mission are NOT settled here — they come out of
-    /// <c>cm_sequence.zrd</c>, which this type never reads, so
-    /// <see cref="Session.CampaignDirector.ResolveSpec"/> resolves them in the session's
-    /// constructor exactly as it does for a command-line <c>--campaign=</c>.
-    /// ⚠ Derived from <paramref name="cli"/>, the pristine command line, for the same reason
-    /// <see cref="FromMenu"/> is: nothing the last session settled may leak into this one.</summary>
+    /// <summary>The campaign cabin's FLY MISSION, <see cref="FromMenu"/>'s counterpart for a story
+    /// mission: the profile and story position <c>--campaign=</c> would name, plus the pilot's
+    /// aircraft. The chapter and mission are NOT settled here: they come out of
+    /// <c>cm_sequence.zrd</c>, so <see cref="Session.CampaignDirector.ResolveSpec"/> resolves them
+    /// in the session's constructor as for a command-line <c>--campaign=</c>. ⚠ Derived from
+    /// <paramref name="cli"/>, the pristine command line, as <see cref="FromMenu"/> is.</summary>
     public static SessionSpec FromCampaign(SessionSpec cli, string profile, int seq,
         string planeNode, LoadoutChoice? fit = null, CustomPlaneDef? custom = null) =>
         cli with

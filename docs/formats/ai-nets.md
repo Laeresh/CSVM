@@ -96,7 +96,17 @@ mission uses on C5) is in [`instant-action.md`](instant-action.md).
 ```
 
 One record per file: 14 elements, or 13 on the 8 files that omit the trailer. Element 1
-is `10.0` on every file; elements 2–10 are nine floats, near-always `0.0` — undecoded.
+is `10.0` on every file; elements 2–10 are nine floats, `0.0` on 170 of the 222 files.
+
+**Elements 2–10 are read as the net's own three volumes**, activation, attack and return, each as
+radius, upper and lower altitude band, in that order: the nine consecutive vehicle fields the net
+assignment writes them into ([`org/aiPilot.md`](../org/aiPilot.md) "Net assignment", net `+0x24`
+… `+0x48`). The census fits the reading: 46 files author only element 8 (`700.0`, a return radius),
+one authors element 2 (`3000.0`, an activation radius), and the C4 nets that author more put
+positive values in the upper slots (6, 9) and negative ones in the lower slots (7, 10). `AiNet.Volumes`
+carries them; a vehicle assigned the net takes each non-zero one, and its roster block's own volume
+slots then outrank them. ⚠ A reading off the assignment's field order and the census, not off a
+named deserialiser; nothing beyond the radii has a consumer.
 
 **Element 1 is almost certainly the net's minimum arrival radius in metres.** `CCENet+0x28`
 is the floor under every edge's capture radius (`FUN_00431a90`, decoded in

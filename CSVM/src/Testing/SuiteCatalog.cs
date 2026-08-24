@@ -13,6 +13,7 @@ using Godot;
 using static CSVM.Testing.AiSuites;
 using static CSVM.Testing.AnimationAndEffectsSuites;
 using static CSVM.Testing.CampaignHudSuites;
+using static CSVM.Testing.CampaignRosterSuites;
 using static CSVM.Testing.CampaignSuites;
 using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
@@ -140,6 +141,7 @@ public static class SuiteCatalog
         "cutscene-letterbox",
         "hangar-door-wake",
         "fog-state",
+        "campaign-roster",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -723,6 +725,16 @@ public static class SuiteCatalog
             + "authored 'drop_fog' values, an event raised before the rig has built lands after "
             + "the zone, and a field the event omits is left as the zone wrote it",
             FogStateEvent));
+        into.Add(new TestHarness.Suite("campaign-roster",
+            "the campaign roster spawner (D34, BL-362/BL-364) over C1/M04's shipped aiv roster in "
+            + "its built world: every non-player block gets a rig, the decoded fork puts an escort "
+            + "on the netless wingman_1 (leader: the player rig) and on wingman_2/3 (leaders: the "
+            + "devastator blocks) and a patrol net on every netted block with no block carrying "
+            + "both, the deactivated blocks are inert, the four taxiPath vehicles are placed frozen, "
+            + "a net's authored 700 m return radius reaches its block under the min_ai_active_dist "
+            + "floor, and over a two-minute flown run wingman_1 holds the scripted player inside "
+            + "the wingman-station leash",
+            CampaignRoster));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

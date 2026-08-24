@@ -45,13 +45,15 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ClutterTemplates.cs` — the `templates.zrd` reader: each clutter decoration model's authored substitution table, scale range and fade distances, plus the five keys no chapter authors.
 - `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
-- `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer included.
+- `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer and the net's own three volumes included.
+- `src/Mech3/AiVolumes.cs` — `AiVolume`/`AiVolumeSet`: the activation/attack/return volumes as a roster block (slots 8–19) and a net record (elements 2–10) author them, with the engine's non-zero overlay.
+- `src/Mech3/VehicleDefs.cs` — the `vehicle.json` def index a roster spawn resolves a block against: the def behind a block name, its `mode` through `kind_of`, and the player airframe node its model is built from.
 - `src/Mech3/Maneuvers.cs` — the shared maneuver library (`zrdr/maneuvers.zrd`): 17 timed attitude-step programs with `natural_touch` difficulty gates, the eligibility cull, and the `signature_maneuvers` bitmask decode.
 - `src/Mech3/CampaignSequence.cs` — the shared `cm_sequence.zrd` reader: the campaign's 24 flat mission entries, each one's storage address (world folder, mission folder, `Persist.NNN`/`Mission.NNN` save id) and the backwards walk to the previous mission of the same world folder that cross-mission persistence is scoped by. Decode: `docs/formats/campaign-sequence.md`.
 - `src/Mech3/EnemyGenerators.cs` — the mission `egen.zrd.json` reader: the 23 enemy generators in their three shapes (zeppelin launch / plain / moving spawner), `[null]` files as empty.
 - `src/Mech3/Zeppelins.cs` — the mission `zeppelins.zrd.json` reader: the 58 zeppelin instances (motion limits, net, gasbags/healthy/engines, cannons), all values in authored units.
 - `src/Mech3/InstantAction.cs` — `InstantActionDef` + the `ia.zrd.json`/`--ia=` readers: mission type, wingmen, four waves, ace, with every optional key resolved to the original's own built-in default.
-- `src/Mech3/AiSkills.cs` — the `ai_skill_parameters` endpoint pairs from player.json (1–9 ratings, linear between the decoded endpoints) + the roster accessors: the skill vector (slots 22–30 by stat name), `primary_target` (slot 6) and `rating_biases` (slot 33, `AiRatingBias` wildcards).
+- `src/Mech3/AiSkills.cs` — the `ai_skill_parameters` endpoint pairs from player.json (1–9 ratings, linear between the decoded endpoints) + the roster accessors: the skill vector (slots 22–30 by stat name), `primary_target` (slot 6), `rating_biases` (slot 33, `AiRatingBias` wildcards) and the spawn-facing slots (`netids`, pose, team, group, title, `deactivated`, `pref_engage_alt`, the signature mask, `taxiPath`, the accent).
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
 - `src/Mech3/UiStrings.cs` — the original's UI string table (`extracted/rof/ui_strings.json`) by id: langui rows only (ids repeat across the file's two tables), `FormatMessage` placeholders (`%1!d!`) converted to composite format, leading `[FONTID]` tags stripped.
 - `src/Mech3/TgaImage.cs` — the engine-free TGA decoder behind the hangar's art (`extracted/rof/ASSETS/GRAPHICS`): types 2 and 10 (RLE) truecolour at 24/32 bits, both row orders, to top-down RGBA8; anything else, or a malformed/absent file, is null. `FromRgba` wraps an already-decoded buffer as one of these, which is how `PngImage` reaches the same art path.
@@ -324,6 +326,7 @@ clusters they delegate to.
 - `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll), and F12's objective-zeppelin selection.
 - `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry, pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
 - `src/Session/ScriptedPathVehicles.cs` — one mission's scripted-path vehicles: placement, the freeze, `START_TAXI`'s release, and the handoff back to the flight model.
+- `src/Session/CampaignRoster.cs` — the engine-free plan of a campaign mission's `aiv` roster: each block resolved to an airframe, its authored net or the decoded netless-wingman escort (never both), the merged volumes and the leader lookup; `CampaignDirector.BuildRoster` places it.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in and F12's wave-credit budget that switches it back off.
 - `src/Session/NetTrailerTargets.cs` — resolves a patrol net's trailer name (`player`, a zeppelin, a train) to a live position, so an anchored net rides its target (`BL-377`).
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (`--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft` — or, on an Instant Action zeppelin run (F12), releases an already-built wave member instead.
@@ -641,7 +644,8 @@ Ids 0–5 are compiled into `crimson.exe`; ids 6–13 are the `LoadSoils`-loaded
 ## src/Mech3/AiNets.cs
 The chapter patrol-net reader (`docs/formats/ai-nets.md`): every `ne0NNNNN.zrd.json` in a chapter
 zrdr scope joined with its `neindex.zrd.json` name — nodes, the explicit edge list, raw per-node
-tags, and the trailer attach target. Plus the lookups both ways the data references nets:
+tags, the trailer attach target, and the net's own three volumes (`Volumes`, record elements 2–10
+as an `AiVolumeSet`). Plus the lookups both ways the data references nets:
 `ById` (aiv field 0), `ByName` (egen/zeppelins/objectives, case-insensitive), `Resolve` (either
 spelling), and `ChapterFirst` (the net an Instant Action actor is given). Consumers:
 `UI/AiNetsOverlay.cs` and `Flight/AiNetFollower.cs`. Golden counts asserted in
@@ -713,9 +717,28 @@ The AI pilot-skill constants (docs/formats/ai-rosters.md): player.json's
 (`At`, plus named helpers for D14's two angles), the roster accessors
 (`RosterSkills`: aiv slots 22–30 by stat name, `-1`/omitted = null; `RosterPrimaryTarget`:
 slot 6; `RosterRatingBiases`: slot 33 as `AiRatingBias` — wildcard `Matches`, shipped pairs,
-a third element accepted and preserved raw, never acted on) and the thin per-mission
-roster loader (`LoadRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
-slot 6/33 census goldens in `AiTargetRankingTests`.
+a third element accepted and preserved raw, never acted on; the spawn-facing `Roster*` readers for
+slots 0–4, 20, 21, 31, 32, 40 and 65, every one defensive over a short block) and the thin
+per-mission roster loader (`LoadRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
+slot 6/33 census goldens in `AiTargetRankingTests`; the spawn slots in `CampaignRosterPlanTests`.
+
+## src/Mech3/AiVolumes.cs
+`AiVolume` (radius, upper, lower) and `AiVolumeSet` (activation, attack, return): the one shape
+both authors of an AI's range volumes are read into, a roster block's twelve slots 8–19
+(`FromRosterSlots`, three named per volume plus a flag no block authors) and a net record's nine
+floats at elements 2–10 (`FromNetRecord`). `Overlaid` is the engine's per-field non-zero test, so
+`net.Overlaid(block)` is the decoded order (docs/org/aiPilot.md "Net assignment"); the
+`min_ai_active_dist` floor is `Session/CampaignRoster.cs`'s `ApplyVolumes`. The altitude bands are
+read and carried but have no consumer: `Flight/AiModeMachine.cs` gates on radii alone.
+
+## src/Mech3/VehicleDefs.cs
+The `vehicle.json` def table as an index, next to `Flight/PlaneStats.cs`'s full read of one def:
+`DefForBlock` strips a block name's trailing `_N` ordinals until a def matches, `ModeOf` walks
+`kind_of` to the nearest authored `mode` (`jet` at the root, the engine's zero default),
+`AirframeFor` finds the player airframe node an AI def's model is built from (the `p`-prefixed twin
+of the nearest ancestor, else of the chain's `nodename`), `BaseDefForPlayerNode` is its inverse and
+`DerivesFrom` is the variant test `PlaneStats.LoadForAi` enforces. Pure over the parsed root
+(`FromRoot`), pinned in `CampaignRosterPlanTests`.
 
 ## src/Mech3/FogVolumes.cs
 The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of
@@ -4082,7 +4105,10 @@ gated on `InPlay`. `BuildFlightRigs` calls the director's `BuildActors` right af
 voice registration, handing it a lambda over that authoring overload (the same lambda rule as
 `AiGeneratorRuntime`'s constructor) — the placement is pinned, since the ace's spawn draw is one
 call after the player's own `ChooseSpawnBase` draw in the same `Rng.Spawn` stream (a `--det` run
-reproduces it) and the wingman fan reads P1's built pose. The director's other phases keep their
+reproduces it) and the wingman fan reads P1's built pose. `CampaignDirector.BuildRoster` follows
+at the same point on a campaign launch, over the same authoring overload with the block's own
+skill vector and `nitro` added (`rosterSkills`: a roster slot outranks the def's, an unset one falls
+through to the def and then to the rating). The director's other phases keep their
 old points too: `SwitchZeppelins` between the `--zeppelins` and `--generators` blocks (a held hull
 must not feed a generator's altitude gate; the switched nodes feed the turret arm inside the
 emplacement block, BEFORE `--wake-turrets`, the order the original has), `ArmZeppelinRun` after
@@ -4748,23 +4774,52 @@ Which directives reach the engine today: `INACTIVEn` (node visibility, the decod
 `ANIM_STATE` (`AnimRuntime.AnimStateOf`), the node form of `TRAVELERS`, `WAKEUP_TURRETS` /
 `WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
 (`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM`, and both sound-group directives through
-`WorldSounds.PlayOneShot`'s existing group resolution, and `START_TAXI` through the director's own
-`ScriptedPathVehicles` registry (`Paths`), which it also steps beside the graph. Everything else that
-needs a spawned `aiv` roster (`DEDG`, the group form of `TRAVELERS`, `WAKEUP_ENEMIES`, `SET_AI_*`,
-`WARP_VEHICLE`, `COMPLETED_STOPPOINT`), the untraced `COMPLETED_ZEPCANNONS` reader, and
-`STOP_QUEUED_SOUNDS` (there is no mission radio queue yet) are NAMED no-ops, each logged once per
-kind. ⚠ Never turn one of those into an invented behaviour: the missing consumer is the finding.
-`START_TAXI` is the same shape while nothing places a vehicle: the registry is empty until a roster
-spawner calls `Paths.Place`, and the directive reports itself unconsumed until then.
+`WorldSounds.PlayOneShot`'s existing group resolution, `START_TAXI` through the director's own
+`ScriptedPathVehicles` registry (`Paths`), which it also steps beside the graph, and, over the
+spawned roster, `DEDG` (`GroupLiveCount`: not-crashed members of the block group, a parked one
+counting as alive) and `WAKEUP_ENEMIES` (an inert named aircraft re-activated at its spawn pose).
+The rest (the group form of `TRAVELERS`, `SET_AI_*`, `WARP_VEHICLE`, `COMPLETED_STOPPOINT`), the
+untraced `COMPLETED_ZEPCANNONS` reader, and `STOP_QUEUED_SOUNDS` (there is no mission radio queue
+yet) are NAMED no-ops, each logged once per kind. ⚠ Never turn one of those into an invented
+behaviour: the missing consumer is the finding.
+`BuildRoster(RosterInputs)` is the roster phase, called by `GameSession` right after
+`InstantActionDirector.BuildActors` at the point where the human rigs exist: it plans the mission's
+`aiv` blocks through `Session/CampaignRoster.cs`, spawns each through the handed delegate (an
+authored `netids` becomes `AiPilot.Patrol` on the chapter's net with its trailer; a netless
+`mode wingman` block gets `AiPilot.Escort` in a SECOND pass once every rig exists, its
+`primary_target` resolving to the player rig or a block by name; never both), applies the merged
+volumes and the `min_ai_active_dist` floor, the signature maneuvers, the rating biases and the
+accent, builds a `deactivated` block inert, places a `taxiPath` block held on its path
+(`PlaceOnPath`: re-pinned through `FlightController.PlaceHeld` each tick, `Activate`d at the
+handoff speed), and logs one `campaign: roster '<name>'` line per block. A block whose
+`primary_target` is not spawned holds its course; a leader that dies later is `AiPilot`'s own
+fallback. `Roster` is the spawned map by block name; the player's block is skipped, a surface
+vehicle (`mode ship`) has no airframe and is reported, not spawned.
 `HoldForCutscene(bool)` is callback 20's objectives half: a held director advances no dormancy
 timer or reminder fuse while a cutscene owns the session (`Session/CutsceneController.cs`).
+
+## src/Session/CampaignRoster.cs
+The engine-free half of the campaign roster spawner: `CampaignRosterPlan.Build` turns
+`AiSkills.LoadRoster`'s blocks into one `RosterSpawnPlan` each, using `Mech3/VehicleDefs.cs` for
+the def behind the block name, its `mode` and its player airframe, and the chapter's `AiNet`s for
+the authored `netids` (a multi-entry list takes the handed `rand() % count` draw). The decoded fork
+is here and nowhere else: `Escorts` is `mode wingman` AND no authored net, `Net` is any authored
+net that the chapter carries, and a plan never has both (docs/org/aiPilot.md "A net demotes a
+wingman"). `Volumes` is the net's set overlaid by the block's own; `ApplyVolumes` writes the radii
+onto an `AiModeMachine` and floors activation at `min_ai_active_dist`. The profile's wingman
+airframe replaces the block's own for the named block (`wingman_1`), taking the `w<plane>` def for
+its stats; a def that is no `kind_of` variant of its airframe flies the plain base def, with the
+block's own def still deciding the mode. `ResolveLeader` is the second-pass lookup (`player` = the
+first human). Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`; the placement half is the
+`campaign-roster` suite.
 
 ## src/Session/ScriptedPathVehicles.cs
 One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored
 `ScriptedPath` frozen at its own pose, `Release` is what `START_TAXI` calls, and `Step` drives each
-follower and writes its pose onto the body. A finished vehicle raises its handoff callback with the
-speed the path left it at and leaves the registry, so nothing keeps overwriting the flight model's
-pose. The law is `Flight/PathFollower.cs` and the route `Mech3/ScriptedPath.cs`.
+follower and writes its pose onto the body, or hands it to the caller's `setPose` for a body whose
+pose a simulation of its own owns (a held `FlightController`). A finished vehicle raises its handoff
+callback with the speed the path left it at and leaves the registry, so nothing keeps overwriting
+the flight model's pose. The law is `Flight/PathFollower.cs` and the route `Mech3/ScriptedPath.cs`.
 
 ## src/Session/CutsceneController.cs
 The host a story mission's intro definition raises its `CALLBACK` codes to, and the session state

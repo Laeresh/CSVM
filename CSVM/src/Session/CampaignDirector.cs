@@ -24,15 +24,17 @@ public readonly record struct CampaignMissionResult(
 public sealed class CampaignDirector
 {
     /// <summary>The name the original registers the campaign wingman's aircraft under
-    /// (<c>docs/formats/saved-games.md</c>, <c>docs/formats/campaign-screens.md</c>). Nothing
-    /// spawns that aircraft yet; <see cref="WingmanNode"/> and <see cref="WingmanFit"/> are what a
-    /// spawn would bind, resolved here because this is where the profile already lives.</summary>
+    /// (<c>docs/formats/saved-games.md</c>, <c>docs/formats/campaign-screens.md</c>), and the
+    /// roster block <see cref="BuildRoster"/> flies the profile's <see cref="WingmanNode"/> and
+    /// <see cref="WingmanFit"/> as.</summary>
     public const string WingmanName = "wingman_1";
 
     private readonly CampaignProfileDef _profile;
     private readonly CampaignProfileStore? _store;
     private readonly CampaignMission _mission;
     private readonly HashSet<string> _gapsLogged = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, FlightController> _roster = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
     private World? _world;
     private ScriptedPathVehicles? _paths;
     private bool _cutsceneHold;
@@ -52,6 +54,11 @@ public sealed class CampaignDirector
         _profile = profile;
         _store = store;
     }
+
+    /// <summary>The authored-aircraft spawner, handed in as a delegate for the same reason
+    /// <c>InstantActionDirector</c>'s is: the spawner and its roster stay <c>GameSession</c>'s.</summary>
+    internal delegate FlightController? SpawnRosterAircraft(RosterSpawnPlan plan, Vector3 pos,
+        Vector3 lookAt, AiPilot pilot);
 
     /// <summary>Fired once the mission has ended and the profile has been written.</summary>
     public event Action<CampaignMissionResult>? MissionEnded;
@@ -76,10 +83,14 @@ public sealed class CampaignDirector
     /// <see cref="ObjectiveGraph.Rows"/> and subscribes to its wake/complete events.</summary>
     public ObjectiveGraph? Graph { get; private set; }
 
-    /// <summary>The mission's scripted-path vehicles, null until <see cref="Attach"/> has run. The
-    /// roster spawner places a vehicle carrying a <c>taxiPath</c> here; <c>START_TAXI</c> releases
-    /// it. Empty while no session spawns the <c>aiv</c> roster.</summary>
+    /// <summary>The mission's scripted-path vehicles, null until <see cref="BuildRoster"/> or
+    /// <see cref="Attach"/> has run. <see cref="BuildRoster"/> places a vehicle carrying a
+    /// <c>taxiPath</c> here; <c>START_TAXI</c> releases it.</summary>
     public ScriptedPathVehicles? Paths => _paths;
+
+    /// <summary>The spawned roster, by block name, empty until <see cref="BuildRoster"/> has run.
+    /// The player's own block is not in it.</summary>
+    public IReadOnlyDictionary<string, FlightController> Roster => _roster;
 
     /// <summary>The story position being flown.</summary>
     public int Seq => _mission.Seq;
@@ -150,12 +161,154 @@ public sealed class CampaignDirector
         CampaignProfileDef profile, CampaignProfileStore? store) =>
         new(script, mission, profile, store);
 
+    /// <summary>The roster phase: spawns every non-player block of the mission's <c>aiv</c>
+    /// roster, at the point of <c>GameSession</c>'s build where the human rigs exist. The plan is
+    /// <see cref="CampaignRosterPlan"/>; this is the placement, the leader pass and the log.
+    /// Returns the build-summary suffix, the shape <c>InstantActionDirector.BuildActors</c> has.</summary>
+    internal string BuildRoster(RosterInputs inputs)
+    {
+        List<(string Name, List<object?> Fields)> blocks;
+        List<AiNet> nets;
+        VehicleDefs defs;
+        try
+        {
+            blocks = AiSkills.LoadRoster(inputs.MissionZrdrPath);
+            nets = AiNets.Load(inputs.ChapterZrdrPath);
+            defs = VehicleDefs.Load(inputs.ZrdrPath);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"campaign: cannot read the roster ({e.Message}): no roster spawned");
+            return "";
+        }
+
+        var plan = CampaignRosterPlan.Build(blocks, defs, nets, WingmanNode, WingmanFit,
+            netDraw: count => inputs.Rng.Next(count));
+        foreach (var (name, why) in plan.Skipped)
+        {
+            if (!name.Equals(CampaignRosterPlan.PlayerBlock, StringComparison.OrdinalIgnoreCase))
+            {
+                GD.Print($"campaign: roster '{name}' not spawned: {why}");
+            }
+        }
+
+        if (_paths == null && inputs.FindNodes is { } findNodes)
+        {
+            _paths = new ScriptedPathVehicles(findNodes);
+        }
+
+        float minActive = inputs.MinAiActiveDist;
+        foreach (var spawn in plan.Spawns)
+        {
+            // The block's own coordinates and yaw, as the original's roster spawn places. A world
+            // node of the block's name is preferred where one exists, so a mission that animates
+            // the aircraft into place agrees with the roster; most blocks have none.
+            var pos = spawn.Position;
+            var fwd = spawn.Forward;
+            if (inputs.FindNodes?.Invoke(spawn.Name) is { Count: > 0 } nodes
+                && nodes[0].IsInsideTree())
+            {
+                pos = nodes[0].GlobalPosition;
+                fwd = -nodes[0].GlobalTransform.Basis.Z;
+            }
+
+            var pilot = AiPilot.HoldingCourse(pos, pos + fwd);
+            if (spawn.Net is { } net)
+            {
+                pilot.Patrol = new AiNetFollower(net, Utils.Rng.NewSystemRandom(Utils.Rng.Ai),
+                    trailerTarget: inputs.NetTrailers?.For(net));
+            }
+            var rig = inputs.Spawn(spawn, pos, pos + fwd, pilot);
+            if (rig == null)
+            {
+                continue;
+            }
+            _roster[spawn.Name] = rig;
+            _rosterPlans[spawn.Name] = spawn;
+
+            if (pilot.Machine is { } machine)
+            {
+                CampaignRosterPlan.ApplyVolumes(machine, spawn.Volumes, minActive);
+                if (spawn.SignatureMask != 0)
+                {
+                    machine.SignatureManeuvers = Maneuvers.SignatureNames(spawn.SignatureMask);
+                }
+            }
+            if (pilot.Gunner is { } gunner)
+            {
+                if (spawn.Biases.Count > 0)
+                {
+                    gunner.RatingBiases = spawn.Biases;
+                }
+                // On a jet the assignment names who to shoot; on an escort it names the leader,
+                // which the second pass below wires, and the gunner ranks on its own.
+                if (!spawn.Escorts)
+                {
+                    gunner.PrimaryTargetName = spawn.LeaderName;
+                }
+            }
+            inputs.RegisterVoice(rig, spawn.AccentId, null);
+
+            bool placed = false;
+            if (spawn.TaxiPath is { } taxi && _paths != null)
+            {
+                placed = PlaceOnPath(rig, spawn.Name, taxi);
+                if (!placed)
+                {
+                    GD.Print($"campaign: roster '{spawn.Name}' authors taxi path '{taxi}', which this world does not carry: it flies");
+                }
+            }
+
+            GD.Print($"campaign: roster '{spawn.Name}' ({spawn.Def} as {spawn.PlaneNode}, {spawn.Mode}) " +
+                     $"team={spawn.Team?.ToString() ?? "-"} group={spawn.Group} " +
+                     (spawn.Net is { } n ? $"net='{n.Name}#{n.Id}'"
+                         : spawn.MissingNetId is { } missing ? $"net #{missing} MISSING from this chapter"
+                         : spawn.Escorts ? $"escorts '{spawn.LeaderName ?? "(no leader)"}'"
+                         : "no net") +
+                     (spawn.Inert ? " DEACTIVATED" : "") +
+                     (placed ? $" on path '{spawn.TaxiPath}'" : "") +
+                     (spawn.Volumes.IsAuthored ? $" volumes act={spawn.Volumes.Activation.Radius:0} att={spawn.Volumes.Attack.Radius:0} ret={spawn.Volumes.Return.Radius:0}" : ""));
+        }
+
+        // The leader pass, once every rig exists: primary_target names a block that may be
+        // spawned after its follower (wingman_2 before devastator_2 in the shipped order).
+        int escorts = 0;
+        foreach (var (name, spawn) in _rosterPlans)
+        {
+            if (!spawn.Escorts || _roster[name].Pilot is not { } pilot)
+            {
+                continue;
+            }
+            var leader = CampaignRosterPlan.ResolveLeader(spawn.LeaderName, _roster, inputs.Player());
+            if (leader == null)
+            {
+                GD.Print($"campaign: roster '{name}' escorts '{spawn.LeaderName ?? ""}', which is not spawned: it holds its course");
+                continue;
+            }
+            pilot.Escort = new AiEscort { Leader = leader };
+            escorts++;
+        }
+
+        if (_roster.Count == 0)
+        {
+            return "";
+        }
+        int inert = 0;
+        foreach (var spawn in _rosterPlans.Values)
+        {
+            inert += spawn.Inert ? 1 : 0;
+        }
+        GD.Print($"campaign: roster spawned {_roster.Count} of {blocks.Count} block(s): " +
+                 $"{escorts} escort(s), {inert} deactivated, {_paths?.Count ?? 0} on a path");
+        return $" + {_roster.Count} roster aircraft";
+    }
+
     /// <summary>The world phase: binds the graph to the built world's runtimes. Called by
     /// <c>GameSession</c> once every runtime the objectives can touch is up.</summary>
     internal void Attach(WorldInputs inputs)
     {
         _world = new World(this, inputs);
-        _paths = inputs.Runtime is { } animRuntime
+        _paths ??= inputs.Runtime is { } animRuntime
             ? new ScriptedPathVehicles(name => animRuntime.FindNodes(name))
             : null;
         Graph = new ObjectiveGraph(Script, _world);
@@ -204,9 +357,34 @@ public sealed class CampaignDirector
         return null;
     }
 
+    // A path-driven aircraft: held (no flight integration) and re-pinned to the follower's pose
+    // every tick, which is the original's exclusive movement-law switch; the handoff un-holds it
+    // and re-activates it at the speed the path left it (docs/org/flightModel.md "The
+    // scripted-path follower").
+    private bool PlaceOnPath(FlightController rig, string name, string taxi)
+    {
+        bool placed = _paths!.Place(name, taxi, rig,
+            onComplete: speed =>
+            {
+                rig.Held = false;
+                var nose = rig.NoseDirection;
+                rig.Activate(rig.WorldPosition, rig.WorldPosition + nose, nose * speed);
+            },
+            setPose: (p, heading) =>
+            {
+                var nose = new Basis(Vector3.Up, heading) * Vector3.Forward;
+                rig.PlaceHeld(p, p + nose);
+            });
+        if (placed)
+        {
+            rig.Held = true;
+        }
+        return placed;
+    }
+
     // The wingman's aircraft and fit off the profile, for the mission that has one. Resolved here
-    // rather than by the launch shell because the profile is already open here; nothing spawns the
-    // aircraft yet, so this is a binding waiting for its consumer (D34), not a live wingman.
+    // rather than by the launch shell because the profile is already open here; BuildRoster is
+    // the consumer.
     private void BindWingman()
     {
         if (!_mission.Wingman)
@@ -224,7 +402,7 @@ public sealed class CampaignDirector
         var plane = _profile.Planes[at];
         WingmanNode = UI.PlanePickerRoster.AirframeNode(plane.Airframe);
         WingmanFit = CampaignLoadout.For(plane, StockLoadouts.Load());
-        GD.Print($"campaign: {WingmanName} flies '{plane.Name}' as {WingmanNode} — bound, not yet spawned");
+        GD.Print($"campaign: {WingmanName} flies '{plane.Name}' as {WingmanNode}, bound for the roster spawn");
     }
 
     // The music channel's battle detector: the decoded five-second proximity scan, which runs only
@@ -303,6 +481,28 @@ public sealed class CampaignDirector
         }
     }
 
+    /// <summary>What <see cref="BuildRoster"/> reads from the session's build: the data paths,
+    /// the first human, the net trailer resolver, the world's node lookup, and the two delegates
+    /// <c>GameSession</c> keeps private behaviour behind (the spawner and the voice
+    /// registration), the shape <c>InstantActionDirector.ActorBuildInputs</c> has.</summary>
+    internal sealed class RosterInputs
+    {
+        public string ChapterZrdrPath = "";
+        public string MissionZrdrPath = "";
+        public string ZrdrPath = "";
+
+        /// <summary>player.json's <c>min_ai_active_dist</c>, the floor under every activation
+        /// radius.</summary>
+        public float MinAiActiveDist = 2000f;
+
+        public Func<FlightController?> Player = () => null;
+        public NetTrailerTargets? NetTrailers;
+        public Func<string, IReadOnlyList<Node3D>>? FindNodes;
+        public SpawnRosterAircraft Spawn = null!;
+        public Action<FlightController?, int?, int?> RegisterVoice = (_, _, _) => { };
+        public Random Rng = new();
+    }
+
     /// <summary>The built world's runtimes, handed over as one value the way
     /// <c>InstantActionDirector</c>'s build inputs are. Every reference may be null: a mission
     /// built without one simply leaves the directives that need it unconsumed.</summary>
@@ -356,11 +556,27 @@ public sealed class CampaignDirector
 
         public int? GroupLiveCount(int group, string? generator)
         {
-            // The campaign's aiv roster is not spawned by any session yet, so there is no AI-group
-            // population to count. Reporting null keeps every DEDG false instead of reading an
-            // empty world as "the group is wiped out", which would win missions on the first tick.
-            _owner.Gap("DEDG", $"group {group} has no spawned aiv roster to count");
-            return null;
+            // Null while no roster is spawned keeps every DEDG false rather than reading an empty
+            // world as "the group is wiped out", which would win a mission on its first tick. A
+            // deactivated member counts as alive, as the decoded walk counts a parked one.
+            if (_owner._roster.Count == 0)
+            {
+                _owner.Gap("DEDG", $"group {group} has no spawned aiv roster to count");
+                return null;
+            }
+            int alive = 0;
+            foreach (var (name, plan) in _owner._rosterPlans)
+            {
+                if (plan.Group == group && !_owner._roster[name].Crashed)
+                {
+                    alive++;
+                }
+            }
+            if (generator != null)
+            {
+                _owner.Gap("DEDG", $"the generator form ('{generator}') adds no remaining capacity yet");
+            }
+            return alive;
         }
 
         public bool? TravelersMet(TravelersSpec spec)
@@ -396,9 +612,26 @@ public sealed class CampaignDirector
 
         public void WakeupEnemies(IReadOnlyList<string> names)
         {
-            if (names.Count > 0)
+            // The partner of the roster's deactivated flag: a named inert aircraft is put back in
+            // play at its own spawn pose (docs/formats/objectives.md). A zeppelin by that name has
+            // no seam here yet.
+            int woken = 0;
+            foreach (var name in names)
             {
-                _owner.Gap("WAKEUP_ENEMIES", $"'{names[0]}' and {names.Count - 1} more");
+                if (_owner._roster.TryGetValue(name, out var rig) && _owner._rosterPlans.TryGetValue(name, out var plan)
+                    && rig.Inert)
+                {
+                    rig.Activate(plan.Position, plan.Position + plan.Forward);
+                    woken++;
+                }
+            }
+            if (woken > 0)
+            {
+                GD.Print($"campaign: WAKEUP_ENEMIES activated {woken} of {names.Count} named aircraft");
+            }
+            else if (names.Count > 0)
+            {
+                _owner.Gap("WAKEUP_ENEMIES", $"'{names[0]}' and {names.Count - 1} more name no deactivated roster aircraft");
             }
         }
 
