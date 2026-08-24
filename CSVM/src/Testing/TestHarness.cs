@@ -522,7 +522,9 @@ public sealed class TestContext
 
     /// <summary>Leaves a suite's full report in the scratch folder, so a failure is diagnosable
     /// without re-running the equivalent <c>--dump-*</c> tool by hand. Absolute path, inside
-    /// <c>.scratch/</c> — the only place a suite may write.</summary>
+    /// <c>.scratch/</c>, where every suite artifact belongs. The one exception is a suite proving
+    /// persistence ACROSS processes: <c>.scratch/</c> is swept, so <c>campaign-loop</c> keeps its
+    /// own store under <c>user://Testing/</c>, never <c>user://Profiles</c>.</summary>
     public void WriteArtifact(string fileName, string text)
     {
         Directory.CreateDirectory(ScratchDir);

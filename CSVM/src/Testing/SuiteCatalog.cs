@@ -13,6 +13,7 @@ using Godot;
 using static CSVM.Testing.AiSuites;
 using static CSVM.Testing.AnimationAndEffectsSuites;
 using static CSVM.Testing.CampaignHudSuites;
+using static CSVM.Testing.CampaignLoopSuites;
 using static CSVM.Testing.CampaignRosterSuites;
 using static CSVM.Testing.CampaignSuites;
 using static CSVM.Testing.CombatSuites;
@@ -142,6 +143,7 @@ public static class SuiteCatalog
         "hangar-door-wake",
         "fog-state",
         "campaign-roster",
+        "campaign-loop",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -735,6 +737,18 @@ public static class SuiteCatalog
             + "floor, and over a two-minute flown run wingman_1 holds the scripted player inside "
             + "the wingman-station leash",
             CampaignRoster));
+
+        // ⚠ Keep this registered last. It leaves its own profile file behind for the next process
+        // to read, and it is the one suite whose result depends on what an earlier run left.
+        into.Add(new TestHarness.Suite("campaign-loop",
+            "the whole campaign loop on the campaign's first mission (E41): a profile created on a "
+            + "store holding none, the cabin, the briefing, the flight check, an ammunition change "
+            + "that reaches the flown aircraft's guns, the mission's intro cutscene holding the "
+            + "objectives clock, its primary objective completed by flying the approach it names, a "
+            + "track its own data cues, the authored end recorded into the profile, and the cabin "
+            + "again with Next Mission advanced; the profile is left on disk, so a second run "
+            + "reads what the first one wrote",
+            CampaignLoop));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

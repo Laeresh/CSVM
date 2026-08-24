@@ -2100,7 +2100,7 @@ load-time blind (nothing counted or logged); use `--volume=0` for tests.
 
 # Wave E — end to end and sign-off
 
-## E41 ☐ The full loop on C1
+## E41 ☑ The full loop on C1
 
 **Goal.** On a clean `user://`: create a profile, enter the cabin, brief, flight-check, change an
 ammo fit, fly the first C1 mission through its intro cutscene and objectives to completion,
@@ -2118,9 +2118,9 @@ owning item.
 **Verify.** The suite in `RunTests.ps1` green twice in a row (persistence must survive the second
 run); full golden manifest unchanged.
 
-**Groundwork already landed (the shell integration step, not this item's tick).** The loop is
-walkable end to end and the pieces below are measured; what E41 still owes is the whole loop in one
-scripted suite, run twice.
+**Groundwork (the shell integration step, not this item's own).** The loop is walkable end to end
+and the pieces below are measured on their own, beside the one scripted suite that walks all of
+them together.
 
 - **Screens.** Five scripted shots, windowed, one per screen, over the seeded scratch profile:
   `--menu=campaign-cabin`, `campaign-previous`, `campaign-briefing:24`, `campaign-flightcheck`,
@@ -2137,16 +2137,46 @@ scripted suite, run twice.
 - **Audio at `--volume=0`, from `.scratch/logs/`.** `music play cue=snd_music_splash
   wav=music_splash.wav loop=5` on the board, `music stop wav=music_splash.wav` on the launch, and
   `briefing narration start=1 wav=c1-HA-m3_briefing.wav stream=yes` on the briefing.
-- **Not yet observed: a track cued by mission data.** C3/M01 cues `music_prebattle_sg` from
-  `OBJECTIVE29`, which is `BEGIN_DORMANT` and fires its group on completion, so 40 s of unpiloted
-  straight flight never reaches it. The routing itself sits in the director's one sound-group
+- **A track cued by mission data.** C3/M01 cues `music_prebattle_sg` from `OBJECTIVE29`, which is
+  `BEGIN_DORMANT` and fires its group on completion. Woken and completed through the graph, it puts
+  `music_prebattle2.wav` on the music channel. The routing sits in the director's one sound-group
   executor, which serves both `WAKEUP_SOUND_GROUP` and `COMPLETED_SOUND_GROUP`.
-- **Not yet observed: the return to the cabin.** The path is wired end to end
-  (`MissionEnded` → `LauncherContext.ReturnToCabin` → `OpenCampaignCabin`) but reaching it needs a
-  mission actually flown to its end, which is exactly what this item's own suite is for.
+- **The return to the cabin.** `MissionEnded` → `LauncherContext.ReturnToCabin` →
+  `OpenCampaignCabin` is walked by a mission flown to its end: the cabin opens on the profile as
+  re-read from its file, with Next Mission on the following story position.
 
 **⚠ Traps.** A green first run does not prove persistence; the second, state-carrying run is the
 test.
+
+**Landed.** One suite, `campaign-loop`, walks the whole loop and is registered last in
+`SuiteCatalog`, because it is the only suite whose result depends on what an earlier process left.
+It creates its profile through the roster page's own presses on a store holding none, opens the
+cabin, presses NEXT MISSION onto the briefing, runs the reveal until the mission's narration
+uncovers its first objective line, goes to the flight check, steps a gun group's ammunition on the
+ammo screen and accepts the loadout, and reads the pick back out of the profile file. FLY MISSION
+then leaves the flow with the shell's own exit, and the mission is flown over the built C3/M01
+world: `generic_intro` is hosted through the animation runtime's callback dispatch and its hold
+keeps the objectives clock at zero, the profile's own Devastator is built and fitted with the
+ammunition the ammo screen picked, and flying the approach the primary objective's `TRAVELERS`
+condition names completes that objective off the flown position. The mission's own `INSTANTWIN`
+objective then ends it, `CampaignProgression` records the attempt, and the director writes the
+profile. A fresh flow over the store, seated on the profile as re-read, is the cabin the return
+lands on. The profile is deliberately left on disk, in the suite's own directory under `user://`
+and never in `user://Profiles`, so the next process reads what this one wrote; the checks that a
+carried-in profile still holds the flown mission run at the top of every run and report themselves
+as not run when the store is empty.
+
+**Verified.** `.\RunTests.ps1` (full, `CSVM_DATA_ROOT=Z:\CSVM`) PASS twice in a row: 109 of 109
+in-engine suites passed with 0 failed and 0 skipped, 2334 unit tests passed, all 16 goldens
+hash-identical, engine errors clean, 279.4 s then 271.6 s. `campaign-loop` took 2.82 s and 2.45 s
+and reported state carried in from an earlier process on both runs; an earlier run over an empty
+store reported no state carried in and passed everything else, which is the case the notes
+distinguish. The run's own numbers: 39 objectives armed over 6 display rows, the briefing's first
+line at 45.5 s, `dumdum` stored as the pilot's group-1 ammunition and mounted on `player_pfighter`,
+8 intro callbacks hosted, the primary completed after 3.2 s of flying at 199 m from its reference,
+`music_prebattle_sg` playing `music_prebattle2.wav`, the mission ending Won on mask 0x1, and the
+cabin reading `missionsCompleted=1` with Next Mission on seq 1. `dotnet build CSVM/CSVM.sln` clean
+(0 warnings), `.\CheckCommentCaps.ps1 -Summary` clean.
 
 ## E42 ☐ At-the-controls verdict pass
 
