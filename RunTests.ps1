@@ -10,7 +10,10 @@
                say anything useful about a tree that does not compile.
       units    dotnet test CSVM/CSVM.sln -- the xUnit project. Built already by the build
                stage, so it runs --no-build; counts are read from a TRX log rather than
-               scraped out of console text.
+               scraped out of console text. A FAILED units stage does NOT stop the run (only
+               a failed build does, above): engine, goldens and hitch all still launch, each
+               scored from its own report so a red units row can never read as green in the
+               summary block (BL-417).
       engine   Godot with --run-tests, the in-engine assertion suites. Windowed (never
                --headless: no shaders compile there, so a clean error screen would prove
                nothing) and with --log-file, which is what lets the harness screen native

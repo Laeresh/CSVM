@@ -2730,24 +2730,6 @@ usual.
   screen plus a description" once the strings exist. (c) `langui.dll` is in the game install, which
   is git-ignored and absent from worktrees — read it by absolute path.
 
-- `BL-417` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` flakes and aborts the whole battery.**
-  It asserts a `PerfSample.Scope` allocates zero bytes and intermittently reports **3984**, the same
-  value every time. Seen twice in one session on an unchanged binary, and it passes on an immediate
-  re-run both alone and in the full unit suite, so it is timing, not a real allocation regression.
-  The cost is out of proportion to the defect: `RunTests.ps1` stops at the units stage, so a flake
-  here means the engine suites, the goldens and the hitch check never run at all, and an unattended
-  run reports a red battery for a reason unrelated to whatever it was testing.
-  ⚠ **Traps.** (a) Do not "fix" it by loosening the assertion to a byte budget: zero-allocation is
-  the property the test exists to hold, and a threshold would hide the regression it guards. The
-  fault is in what makes the measurement noisy (GC timing or JIT on first entry), not in the bound.
-  (b) 3984 being byte-identical across occurrences is a lead worth following, not a coincidence to
-  average away. (c) Whatever the fix, the battery should not lose four stages to one unit flake;
-  that ordering question is worth answering separately.
-  *Status:* `BL-379` reported the same flake (at 4872 rather than 3984) and was closed by a warm-up
-  loop that excludes runtime JIT/OSR noise from the measured window. That fix plausibly covers this
-  too, so the first step is to re-verify rather than to re-diagnose; what stays open regardless is
-  (c), the battery losing four stages to one unit flake.
-
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled
   SDL (3.2.28 up to Godot 4.7.1) hard-freezes the engine when a >255-button DirectInput device
