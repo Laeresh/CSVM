@@ -980,7 +980,9 @@ placeholder's `OpeningRow` convention directly and was removed as superseded by
 registration assertion. **Scripted screenshots were not taken**: the aid values that would reach
 these two screens don't exist yet (wiring contract item 2, a `LaunchMenu.cs` edit out of bounds
 for this item), so the route/gating/list-content rules above are covered by the unit tests
-instead, per this item's own verify plan. **Verified.** <pending orchestrator run>
+instead, per this item's own verify plan. **Verified.** `RunTests.ps1` on the plan branch (D31,
+D36 and C22 together): build clean, units 2092/2092, engine suites 98/98 with errors clean, all
+16 golden shots hash-identical (one `c3-island` timeout under machine contention re-ran clean).
 
 **⚠ Traps.** `BL-181` defers HUD/scoreboard chrome "pending the menu hub"; this screen is that
 hub, so expect that item to reopen against the styling landed here. Do not silently restyle HUD
@@ -1115,7 +1117,9 @@ which is also where D37 sees `music_prebattle_sg` and kin. Mission end raises
 `CampaignDirector.ReturnToCabin` and `MissionEnded` after recording through `CampaignProgression`
 and capturing the persist log; C22 owns the screen it returns to.
 
-**Verified.** \<pending orchestrator run\>. Foreground: `dotnet build` clean (0 warnings,
+**Verified.** `RunTests.ps1` on the plan branch (D31, D36 and C22 together): build clean, units
+2092/2092, engine suites 98/98 with errors clean, all 16 golden shots hash-identical, so the
+director's session hooks moved nothing in world build. Foreground: `dotnet build` clean (0 warnings,
 StyleCop and comment caps clean), `RunTests.ps1 -SkipGoldens -SkipHitch` PASS — 2047 unit tests
 (18 new in `CSVM.Tests/ObjectiveGraphTests.cs`) and all 96 in-engine suites, engine errors clean.
 Two new suites: `campaign-objectives` drives C1/M02's own 50-objective graph headless to BOTH
@@ -1276,7 +1280,9 @@ facing `±0.2` terms stay the pre-existing cone/sign reading rather than the dec
 **Verify.** In-engine test: an AI ordered against a zeppelin target engages it; existing combat
 suites green.
 
-Verified. <pending orchestrator run>
+**Verified.** `RunTests.ps1` on the plan branch (D31, D36 and C22 together): build clean, units
+2092/2092, engine suites 98/98 with errors clean (`targeting-candidates` included), all 16 golden
+shots hash-identical.
 
 **⚠ Traps.** (a) The ranking is MINIMISED, so a large nearby structure can outrank a distant
 fighter — settled by the decoded turret/bias arithmetic already shipped (`BiasScale`/`AlwaysTarget`
