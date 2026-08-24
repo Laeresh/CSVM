@@ -110,9 +110,12 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     private bool HasWingman => _wingmanOverride ?? Mission()?.Wingman ?? false;
 
-    private CustomPlaneStore Planes => _planes ??= CustomPlaneStore.UserPlanes();
+    // The flow's hangar store, or null off-engine: every plane then reads as its stock fit.
+    private CustomPlaneStore? Planes => _planes ??= Flow.Planes;
 
-    private StockLoadouts Stock => _stock ??= StockLoadouts.Load();
+    // The flow's stock table, or null off-engine: a plane then reads as fit-less rather than the
+    // page touching Godot for the res:// default.
+    private StockLoadouts? Stock => _stock ??= Flow.Stock;
 
     /// <inheritdoc/>
     public override HangarArt? RowArt(int row)
@@ -320,7 +323,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     private FlightCheckGun?[] ResolveGuns(OwnedPlane plane)
     {
         var groups = new FlightCheckGun?[CustomPlaneDef.GunSlots];
-        if (Planes.Load(plane.Name) is { } custom)
+        if (Planes?.Load(plane.Name) is { } custom)
         {
             for (int i = 0; i < custom.Guns.Length && i < groups.Length; i++)
             {
@@ -352,7 +355,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     // half reuses HangarFlow's own fill-order-to-wing split rather than re-deriving it.
     private (int Left, int Right) ResolveHardpoints(OwnedPlane plane)
     {
-        if (Planes.Load(plane.Name) is { } custom)
+        if (Planes?.Load(plane.Name) is { } custom)
         {
             return (custom.LeftHardpoints, custom.RightHardpoints);
         }
@@ -361,7 +364,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     }
 
     private LoadoutDef? StockFor(int airframe) =>
-        Stock.For(AirframeDefKeys[Math.Clamp(airframe, 0, AirframeDefKeys.Length - 1)]);
+        Stock?.For(AirframeDefKeys[Math.Clamp(airframe, 0, AirframeDefKeys.Length - 1)]);
 
     // The mission's objectives note (uiData 2022 / gosCallback 28,
     // docs/formats/campaign-screens.md): one line per IDENTITY'd objective, sorted and numbered by

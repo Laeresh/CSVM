@@ -208,7 +208,9 @@ public class CampaignAmmoPageTests
         var planesDir = Path.Combine(TestData.TempDir(), "Planes");
         var planes = new CustomPlaneStore(planesDir);
         var stock = StockLoadouts.Load(StockLoadoutsPath);
-        var flow = new CampaignFlow(new CampaignProfileStore(profileDir), UiStrings.Empty);
+        // The flow carries both stores so the flight check the page returns to resolves fits
+        // off-engine too, the way the shell's flow does on-engine.
+        var flow = new CampaignFlow(new CampaignProfileStore(profileDir), UiStrings.Empty, null, planes, stock);
         var page = new CampaignAmmoPage(flow, planes, stock);
         return (flow, page, planes);
     }

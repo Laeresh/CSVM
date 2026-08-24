@@ -20,15 +20,20 @@ reveal order are all authored inside `Briefing.zrd` itself.
 
 ## Conceptual model
 
-`BRIEFINGDIALOG` has two parts:
+The reader's root list holds `SHARED_IMAGE_PATH`, `BRIEFINGDIALOG`, and then the 25 states as
+further top-level keys:
 
-- **`PRIMITIVES`**: the fixed screen chrome, identical for every mission, namely the parchment
-  objectives-note panel (`OBJECTIVESLIST`) and the three buttons (`BUTTONS`). Neither is
-  overridden by any mission state.
-- **A named list of `STATES`**: `"default"` plus 24 `"brief_cNN"` blocks, one per campaign
-  mission. A state supplies that mission's own `IMAGE_PATH`/`BACKGROUND_IMAGES` (the parchment map
-  art), `CURSOR`, and, for every state but `default`, a `SCRIPT`, an ordered list of drawing and
-  timing opcodes that is the map's step-by-step reveal, synced to that mission's narration wav.
+- **`BRIEFINGDIALOG`** is the fixed screen chrome, identical for every mission, and has exactly two
+  keys of its own. **`PRIMITIVES`** holds one element, the parchment objectives-note panel
+  (`OBJECTIVESLIST`). **`BUTTONS`** is its sibling, not a member of `PRIMITIVES`, and holds the
+  three buttons (`REPLAY`, `RETURNTOCABIN`, `FLIGHTCHECK`). No mission state overrides either.
+- **The states are top-level siblings of `BRIEFINGDIALOG`, not a `STATES` list inside it.** There
+  is no `STATES` key anywhere in the file: `"default"` and the 24 `"brief_cNN"` blocks sit directly
+  in the root list, each as a key followed by its own body. A state supplies that mission's own
+  `IMAGE_PATH`/`BACKGROUND_IMAGES` (the parchment map art), `CURSOR`, and, for every state but
+  `default`, a `SCRIPT`, an ordered list of drawing and timing opcodes that is the map's
+  step-by-step reveal, synced to that mission's narration wav. A reader walks the root list for
+  keys matching `brief_c*` rather than descending into the dialog.
 
 `map.zrd.json` and `location.zrd.json`, which exist in every mission folder, are **not** this
 screen's data. `map.zrd` is the in-flight cockpit map (a `MAP` node: world-to-map transform,
@@ -43,6 +48,9 @@ or the per-mission `objectives.zrd`; the map and flags the briefing screen shows
 from the shared dialog's own per-state `SCRIPT`.
 
 ## Dialog chrome: `PRIMITIVES` and `BUTTONS`
+
+Both are keys of `BRIEFINGDIALOG`. `PRIMITIVES` carries `OBJECTIVESLIST` alone; `BUTTONS` sits
+beside it.
 
 `OBJECTIVESLIST` (the parchment note, upper-left in the reference screenshot):
 
@@ -71,12 +79,13 @@ faces); that reader is otherwise undocumented and out of this page's scope.
 
 ## The 24 mission states
 
-Besides `PRIMITIVES`, `BRIEFINGDIALOG` lists 25 named states: `"default"` and 24
-`"brief_c<NN>"` blocks (`brief_c31`, `brief_c12`, `brief_c23`, ... `brief_c84`).
+The root list carries 25 named states after `BRIEFINGDIALOG`: `"default"` and 24 `"brief_c<NN>"`
+blocks (`brief_c31`, `brief_c12`, `brief_c23`, ... `brief_c84`).
 
 `"default"` is the loading placeholder shown before a mission state is selected:
-`BACKGROUND_IMAGES [["loading", 0, 0]]`, `BUTTONS null`, a plain hourglass-style cursor
-(`daglove`/`dafinger`), and **no `SCRIPT`**.
+`BACKGROUND_IMAGES [["loading", 0, 0]]`, `BUTTONS null` (the one place a state touches the
+chrome's buttons at all), a plain hourglass-style cursor (`daglove`/`dafinger`), and
+**no `SCRIPT`**. Having no script is what separates it from a mission state.
 
 Each of the 24 mission states carries:
 
@@ -124,14 +133,23 @@ and its objectives-note line together, one `WaitForMarker` apart. `Fade`/`Spin`/
 durations are authored constants in seconds (`0.5`, `0.75`, `8.0`, and so on) already in the data;
 they are not a TUNE gap for C23 to invent.
 
-**⚠ What is still open is where the `WaitForMarker` cue points themselves come from.** `markers:
-"true"` in `PlaySound` says the engine reads them off the currently-playing wav (a RIFF `cue`
-chunk is the natural place), not off any value in `Briefing.zrd`. Whether this project's
-extraction pipeline preserves that chunk on the extracted `soundsh`/`soundsl` wavs is unverified;
-check it before wiring `WaitForMarker` to real audio. This is a data-location question, not a
-timing-magnitude one, and does not need `crimson.exe`. The A8 capture (one C1 mission's briefing
-in motion) is still the right fidelity reference for how each beat looks and reads, per the
-existing plan.
+**The `WaitForMarker` cue points are the narration wav's own RIFF `cue ` chunk, and the extraction
+preserves it.** Every one of the 24 `*_briefing.wav` files under `extracted\soundsh\` still carries
+that chunk, and the counts agree exactly: a state waits on markers `0`..`n-1` for a wav holding
+exactly `n` cue points, on 23 of the 24. The one exception uses fewer, not more (`brief_c81` waits
+on 9 of `c5-MH-m1`'s 10 points and waits on marker 8 twice). `markers: "true"` in `PlaySound` is
+what selects that source; no value in `Briefing.zrd` carries a marker time.
+
+⚠ **A marker number indexes the cue points sorted by sample offset, never by cue id.** The ids run
+`1..n` in file order but the offsets do not: 13 of the 24 wavs store their points out of time
+order. In `c1-HA-m1_briefing.wav` the ids 1 to 8 sit at sample offsets 983430, 1600830, 1918350,
+3144330, 4167450, 635040, 2266740 and 2879730, so marker 0 is id 6 and the reveal's beats come out
+backwards if the id is read as the index. Within a point, `dwPosition` and `dwSampleOffset` are
+equal in all 24 files, `dwBlockStart` is always 0, and no offset exceeds the decoded sample count.
+A marker's time is `dwSampleOffset / sampleRate` against the 44100 Hz the `fmt ` chunk declares;
+the sample data itself is MS ADPCM, so the offsets are decoded-sample counts, not byte positions.
+The `CAP-42` capture (a C1 briefing in motion) shows `brief_c61`'s script executed literally in
+file order with its beats at the sorted offsets, which is the on-screen confirmation of both.
 
 ## State, wav and flag-count census
 
@@ -186,8 +204,28 @@ for every `N`.
   "chapter 1"), and the digit equals the folder's `M0n` number in every act except Hollywood,
   where `C2/M01` is tagged `MSG_BRF_HWM2_OBJ*` and `C2/M02` `MSG_BRF_HWM1_OBJ*`, each other's
   digits. No single rule covers all 24 missions, so the prefix is not a binding key.
-- **`objectives.zrd`'s objective count does not reliably match its state's `Objective` count
-  either.** See the open question below; do not use it to pair a folder with a state.
+- **An `Objective id index` opcode indexes the mission's `objectives.zrd` `IDENTITY` entries that
+  carry a `MSG_BRF_*` key, ordered by priority ascending, 0-based.** The count is exact and total:
+  on all 24 missions the state's `Objective` count equals the length of that list. Two other
+  readings are disproven by the data. Counting keyless `IDENTITY` entries as list members puts an
+  empty line first on `C5/M04`, whose single bound line is `MSG_BRF_NYM4_OBJ1` ("1) Payback
+  time!"), because that mission's priority-1 entry carries no key. Taking the keyed entries in file
+  order instead of priority order reads `C3/M02`'s "2) Dock with the PANDORA" before its target of
+  opportunity, and scrambles `C2/M03` into "9)", "10)", "1-8)", while priority order reproduces the
+  numbering the strings themselves carry. Note this binds an index to a line; it is still not
+  a way to pair a folder with a state, which only `cm_sequence` does.
+- ⚠ **One `OBJECTIVEn` block may author more than one `IDENTITY`.** `C4/M05`'s `OBJECTIVE23`
+  carries both `["PRIMARY", 3, "MSG_BRF_RMM5_OBJ3"]` and `["SECONDARY", 11]`. A reader that keeps
+  one `IDENTITY` per block (a key-to-value view collapses duplicates, last one winning) silently
+  loses that mission's third note line and leaves it one short of the four its state binds. Collect
+  every entry in the block, not the block's entry.
+- ⚠ **A reader list is not strictly alternating key/value.** A bare flag (a string with no value
+  list after it, `MISSION_TIMER` and several `OBJECTIVEn` blocks in `objectives.zrd`) shifts the
+  parity of everything following it, so a walk that steps by two starts reading bodies as keys
+  partway through the file. Step by what is actually there: take a pair only when a string is
+  followed by a list. This applies to `Briefing.zrd`'s root list and its `SCRIPT` lists as well.
+- **`WaitForMarker`'s argument indexes the narration's cue points sorted by sample offset, never
+  by cue id.** See the reveal-script section above for the evidence and the field layout.
 - `map.zrd`/`location.zrd` belong to the in-flight cockpit map, not this screen (see "Conceptual
   model"); do not route briefing map/flag work through them.
 - A `Line` element (`TLINE`, seen in `brief_c12`) is rare, at most one per mission; do not assume
@@ -206,6 +244,16 @@ the decoded button/panel positions.
 [campaign-sequence.md](campaign-sequence.md). C23 resolves a mission's state through that formula
 and takes the narration wav from the chosen state's own `PlaySound`, never by computing a wav name
 from the story position (the Hawaii act's wav numbering does not follow play order).
+
+The objectives binding is settled by a census across all 24 missions: the `Objective` count of each
+state against the `MSG_BRF_*`-keyed `IDENTITY` entries of the mission its `cm_sequence` entry names,
+equal on every one. The two disproven readings each break on a mission named in the reader rules,
+and the shipped strings' own numbering is the independent check on the order.
+
+The marker source is settled against the files themselves: the RIFF chunk walk over all 24
+`extracted\soundsh\*_briefing.wav` supplies the cue counts, the sample offsets and the field
+equalities quoted above, and the per-state `WaitForMarker` census supplies the marker numbers they
+are matched against. Nothing there needs `crimson.exe`.
 
 `fonts.zrd.json` is referenced by name only; its own field layout is undocumented and out of this
 page's scope.

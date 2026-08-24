@@ -32,8 +32,8 @@ public sealed class CampaignAmmoPage : CampaignPage
     // fallback label for when langui text is unavailable.
     private static readonly int[] OrdnanceThreshold = { 1, 1, 2, 8, 7, 12, 7, 7, 17, 17, 20, 1 };
 
-    private readonly CustomPlaneStore _planes;
-    private readonly StockLoadouts _stock;
+    private readonly CustomPlaneStore? _planes;
+    private StockLoadouts? _stock;
 
     private CampaignProfileDef? _loadedProfile;
     private int _loadedSlot = -1;
@@ -43,14 +43,15 @@ public sealed class CampaignAmmoPage : CampaignPage
     private int[] _ammo = new int[4];
     private int[] _ordnance = new int[8];
 
-    /// <summary>Binds the page to its flow, resolving builds against the production stores.</summary>
+    /// <summary>Binds the page to its flow, resolving builds against the flow's hangar store (null
+    /// off-engine, where every plane then reads as its stock fit) and the stock-loadout table.</summary>
     public CampaignAmmoPage(CampaignFlow flow)
-        : this(flow, CustomPlaneStore.UserPlanes(), StockLoadouts.Load())
+        : this(flow, flow.Planes, flow.Stock)
     {
     }
 
     /// <summary>Binds the page to its flow over explicit stores, for engine-free testing.</summary>
-    public CampaignAmmoPage(CampaignFlow flow, CustomPlaneStore planes, StockLoadouts stock)
+    public CampaignAmmoPage(CampaignFlow flow, CustomPlaneStore? planes, StockLoadouts? stock)
         : base(flow)
     {
         _planes = planes;
@@ -70,6 +71,10 @@ public sealed class CampaignAmmoPage : CampaignPage
     /// <inheritdoc/>
     public override string Footer =>
         "↑↓  Choose       ←→  Change       Enter / A  Select       Esc / B  Back";
+
+    // The stock table: the flow's, else (on-engine only, where res:// resolves) the default file.
+    // Off-engine a flow without one reads every plane as fit-less rather than touching Godot.
+    private StockLoadouts? Stock => _stock ??= Flow.Stock;
 
     /// <inheritdoc/>
     public override string RowText(int row)
@@ -352,8 +357,8 @@ public sealed class CampaignAmmoPage : CampaignPage
     }
 
     private string OrdnanceFallback(int table) =>
-        table >= 0 && table < _stock.Options.PylonOrdnance.Count
-            ? _stock.Options.PylonOrdnance[table].Label
+        Stock is { } stock && table >= 0 && table < stock.Options.PylonOrdnance.Count
+            ? stock.Options.PylonOrdnance[table].Label
             : "None";
 
     private int MissionOrdinal() => Math.Max(1, Flow.MissionSeq + 1);
@@ -363,7 +368,7 @@ public sealed class CampaignAmmoPage : CampaignPage
     // which never touch CustomPlaneStore per B13's own SellPrice fallback reasoning).
     private SlotBuild ResolveBuild(OwnedPlane plane)
     {
-        var built = _planes.Load(plane.Name);
+        var built = _planes?.Load(plane.Name);
         if (built != null)
         {
             var present = new bool[4];
@@ -377,7 +382,7 @@ public sealed class CampaignAmmoPage : CampaignPage
             return new SlotBuild(present, calibre, built.LeftHardpoints, built.RightHardpoints);
         }
 
-        var stock = _stock.ForModel(PlanePickerRoster.AirframeNode(plane.Airframe));
+        var stock = Stock?.ForModel(PlanePickerRoster.AirframeNode(plane.Airframe));
         return StockBuild(stock);
     }
 

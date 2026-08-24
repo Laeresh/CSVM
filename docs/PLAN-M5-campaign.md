@@ -190,7 +190,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Player profile screen (create, select, delete, text entry)
 22. ☑ Campaign cabin screen (Next Mission, Previous Missions, Plane Construction, Return to Main Menu)
-23. ☐ Mission briefing screen (map, flags, objectives list, narration; replay / return / flight check)
+23. ☑ Mission briefing screen (map, flags, objectives list, narration; replay / return / flight check)
 24. ☑ Flight check screen (pilot + wingmen planes and loadouts, objectives note, plane change, fly mission)
 25. ☑ Ammo selection screen (per gun caliber group, per hardpoint, descriptions) for self and wingmen
 
@@ -994,28 +994,117 @@ it. (2) The memento-filename field `CampaignProfileDef` would need if Change Mem
 un-deferred. (3) The `campaign-cabin`/`campaign-previous` `--menu=` aid values named above, for
 whoever next edits `LaunchMenu.cs`.
 
-## C23 ☐ Mission briefing screen
+## C23 ☑ Mission briefing screen
 
 **Goal.** The briefing per `Campaign Briefing.png`: the mission map with flags, the objectives
 note filled from `MSG_BRF_*`, the briefing animation (progressive reveal) with narration audio,
 and REPLAY BRIEFING / RETURN TO CABIN / GO TO FLIGHT CHECK.
 
-**Evidence (confidence: direction-sound).** A4's decode (layout + map/flag data + wav mapping);
-the A8 in-motion capture for sequence/timing fidelity; narration wavs already extracted.
+**Evidence (confidence: traced to the data for the mechanism, direction-sound for the chrome).**
+A4's decode gives the layout, the 12-opcode vocabulary and the state-to-wav pairing. Two questions
+A4 left open are settled here against the files, and neither needed `crimson.exe`.
 
-**Approach.** Board-idiom page consuming A4's page. Play narration through the existing sound
-plumbing (`SoundArchive` loads WAVs; check whether a 2D/UI channel exists or needs a small
-addition, distinct from the 3D `WorldSounds` path). Reveal sequencing driven by the decoded data;
-where only the capture attests it, mark timings TUNE.
+*The marker source.* `WaitForMarker`'s cue points are the narration wav's own RIFF `cue ` chunk,
+and the extraction preserves it: all 24 `extracted\soundsh\*_briefing.wav` carry one, and a state
+waits on markers `0`..`n-1` for a wav with exactly `n` points on 23 of the 24 (`brief_c81` uses 9
+of `c5-MH-m1`'s 10, waiting on marker 8 twice). ⚠ **The number indexes the points sorted by sample
+offset, not by cue id**: the ids run `1..n` in file order but 13 of the 24 wavs store their offsets
+out of time order, so reading the id as the index runs a reveal backwards. `CAP-42` confirms both
+on screen, `brief_c61` executed literally in file order with its beats at the sorted offsets.
+There is therefore **no degraded mode in practice and no invented timing anywhere**: every
+duration is an authored constant and every marker is a measured cue point. The degraded path is
+built and tested regardless (a wav with no cue chunk releases every marker at once, so the map
+finishes and the narration plays over it), because it is what a partial extraction earns.
 
-**Model recommendation.** medium; escalate to high only if A4 leaves the reveal mechanism open.
+*The objectives note.* An `Objective id index` opcode indexes the mission's `objectives.zrd`
+`IDENTITY` entries **that carry a `MSG_BRF_*` key, ordered by priority**, 0-based. The check is
+exact: on all 24 missions the state's `Objective` count equals that list's length. Two other
+readings are disproven. Counting keyless `IDENTITY` entries as lines puts an empty line first on
+`C5/M04`, whose one bound line is "1) Payback time!". File order instead of priority order reads
+"Dock with the PANDORA" before a mission's middle objectives, while priority order reproduces the
+numbering the strings themselves carry ("1)", "9)", "10)"). ⚠ One block authors **two** `IDENTITY`
+entries (`C4/M05`'s `OBJECTIVE23`), so a keyed view of a block silently drops one; collect every
+entry.
 
-**Verify.** Scripted screenshot per reveal stage on one C1 mission; audio verified from
-`.scratch/logs/` (not by muting, per the `--mute` blindness note); all three buttons route
-correctly.
+**Approach as built.** One page file plus one `Registry` line, per C21's contract, and three
+engine-free helpers.
 
-**⚠ Traps.** ⚠ Capture-derived timings are TUNE, never fact (A8 trap). String fallback: without
-`messages.json` extracted the screen must show raw `MSG_*` keys, not crash.
+*The page.* `CSVM/src/UI/CampaignBriefingPage.cs` resolves everything from
+`CampaignFlow.MissionSeq` alone: `cm_sequence` gives the storage address, `brief_c%d%d` gives the
+state, the state gives the map bitmap and the narration name, `sounds.zrd`'s `SETS` turns that name
+into the wav file, and the mission's own `objectives.zrd` gives the note. Nothing is computed from
+the story position. Rows 0 to 2 are REPLAY BRIEFING, RETURN TO CABIN and GO TO FLIGHT CHECK, with
+the revealed note lines under them, so the buttons' indices never move under the cursor while the
+note fills in. Labels come from `messages.json`'s own `MSG_BTN_*`, falling back to the literal;
+an unresolved objective key shows as the raw `MSG_*` key. A null `DataRoot` or a half-written
+extraction leaves the screen on its three buttons rather than throwing.
+
+*The reveal.* `CSVM/src/UI/BriefingScript.cs` is the reader (`BriefingDialog`, `BriefingState`,
+`BriefingStep`) and the interpreter (`BriefingReveal`), both engine-free. The interpreter runs the
+beat sheet against a clock the caller advances, blocking on `Wait`'s authored seconds and on
+`WaitForMarker`'s cue times, and keeps each element's opacity, rotation and position as its tweens
+land. Elements are exposed in placement order, which is the draw order `CAP-42` shows (photographs
+are never turned off and stack newest over oldest), and a `Move`'s own first path point wins over
+its `Pict` position where the two disagree. ⚠ The states sit at the reader's **top level**, beside
+`BRIEFINGDIALOG` rather than inside it, and neither that list nor an objective block is strictly
+key/value: a bare flag between two entries shifts every pair after it, so both walks step by what
+is there rather than by two.
+
+*The note.* `CSVM/src/UI/BriefingObjectives.cs` is the `IDENTITY` reading above, taking the reader
+list rather than a path so it tests without an extraction.
+
+*Audio.* **No 2D/UI playback channel exists.** `SoundArchive` decodes a WAV to an
+`AudioStreamWav`, but the only players are `WorldSounds`' 3D emitters and `FlightAudio`, both
+session-owned and both wrong for a menu. The page therefore names what it needs and plays nothing:
+`NarrationWav` is the file to play and `NarrationStarts` counts how many times the script has asked
+for it. The shell wiring is the contract below.
+
+*Art.* Map and pin art is `rimage` PNG, and nothing decoded PNG off engine. `CSVM/src/Mech3/PngImage.cs`
+covers exactly what that extraction ships (8-bit, non-interlaced, colour types 2 and 6, which is
+all 254 files) and hands back a `TgaImage` through a new `TgaImage.FromRgba`, so the art reaches
+the screen through the same `ICampaignPage.Art`/`RowArt` seam C21 wired and **no launchscreen edit
+was needed**. The page's `Art` is the state's own `BACKGROUND_IMAGES` bitmap; a note line's
+`RowArt` is the `OBJPIN<n>` picture matching its `ZEPTEXT<n>`, which is how all 24 states pair
+them. `CSVM/src/Mech3/WavCues.cs` is the cue reader, separate from `SoundArchive` because a menu
+page that only needs timings must stay engine-free.
+
+**Shell wiring contract (owed by whoever next edits `LaunchMenu.cs`).** Three lines, no new
+seams; nothing in this item touched the launchscreen.
+
+1. *Clock.* While `Screen.Campaign` is showing and `_campaign?.Page` is a `CampaignBriefingPage`,
+   call `page.Advance(delta)` once per frame from the menu's `_Process`. Without it the reveal
+   stands at its first marker, which is the honest state of a screen with no clock.
+2. *Narration.* Watch `page.NarrationStarts`. When it changes and `page.NarrationWav` is not empty,
+   restart playback: `SoundArchive.Find(page.NarrationWav, looped: false)` into a menu-owned
+   `AudioStreamPlayer` on the Master bus, stopping the previous one. Stop it when the screen
+   closes. This is the one piece of the item a page cannot own, because a page holds no Godot node.
+3. *Screenshot aid.* `OpenCampaignAid`'s list needs one more value, `campaign-briefing`: build the
+   aid store as `campaign-roster` does, `SelectProfile` the seeded profile, `SetMission(0)`,
+   `GoTo(CampaignScreen.Briefing)`, then advance the page by a `--menu-at=<seconds>` amount before
+   the shot so a stage can be framed. One `--menu=` value plus a seconds argument covers every
+   reveal stage; without it the shot is always the opening frame.
+
+**Model recommendation.** medium.
+
+**Verify.** `dotnet build` clean (0 warnings, solution-wide), `dotnet test` **2096/2096** in the
+foreground, 43 of them new: the interpreter's beat order, marker gating, `Wait` blocking, tween
+values and the move-path rule; the reader over a hand-authored dialog; the note's priority order,
+its keyless-entry and double-`IDENTITY` rules and its raw-key fallback; the cue reader's ascending
+order and its empty cases; the PNG decoder's filters and its refusals; and the page's state,
+narration, map, note, pin art and three button routes, including a census over all 24 missions
+asserting the `Objective`-count invariant. Data-backed tests run under `CSVM_DATA_ROOT` and report
+**9 skipped** without an install rather than passing on nothing. `CampaignFlowTests`'
+unregistered-screen case moved to `Ammo`, since `Briefing` now has a page. Audio was **not**
+verified from `.scratch/logs/`: with no playback path built (see the contract), there is nothing to
+log yet, and the reveal is asserted directly instead, which is silent but not blind. No screenshot
+was taken: the aid needs the `--menu=` value above and `LaunchMenu.cs` is out of this item's
+boundary. **Verified.** <pending orchestrator run>
+
+**⚠ Traps.** ⚠ Capture-derived timings would be TUNE, but none are used: every duration is an
+authored constant and every cue time is measured off the wav. String fallback holds: without
+`messages.json` the screen shows raw `MSG_*` keys, tested. The reveal takes about two minutes of
+mission time and blocks on authored `Wait`s, so a caller cannot jump its clock in one step and
+expect a finished map; advance it in frames.
 
 ## C24 ☑ Flight check screen
 

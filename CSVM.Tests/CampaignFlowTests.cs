@@ -22,20 +22,26 @@ public class CampaignFlowTests
         Assert.IsType<CampaignRosterPage>(flow.Page);
     }
 
-    /// <summary>The wave's mount point: the three screens with a page of their own draw it, and the
-    /// two still to come draw the placeholder, which edits nothing.</summary>
+    /// <summary>The wave's mount point: every screen the flow knows has a page of its own, so the
+    /// placeholder (which edits nothing) is never drawn for a shipped screen.</summary>
     [Fact]
-    public void UnregisteredScreensDrawThePlaceholder()
+    public void EveryScreenHasAPage()
     {
-        Assert.True(CampaignFlow.HasPage(CampaignScreen.Roster));
-        Assert.True(CampaignFlow.HasPage(CampaignScreen.Cabin));
-        Assert.True(CampaignFlow.HasPage(CampaignScreen.PreviousMissions));
+        var screens = new[]
+        {
+            CampaignScreen.Roster, CampaignScreen.Cabin, CampaignScreen.PreviousMissions,
+            CampaignScreen.Briefing, CampaignScreen.FlightCheck, CampaignScreen.Ammo,
+        };
+        foreach (var screen in screens)
+        {
+            Assert.True(CampaignFlow.HasPage(screen), screen.ToString());
+        }
 
         var flow = NewFlow(out _);
-        flow.GoTo(CampaignScreen.Briefing);
+        flow.GoTo(CampaignScreen.Ammo);
 
-        Assert.False(CampaignFlow.HasPage(CampaignScreen.Briefing));
-        Assert.IsType<CampaignPlaceholderPage>(flow.Page);
+        Assert.IsNotType<CampaignPlaceholderPage>(flow.Page);
+        Assert.Equal(CampaignScreen.Ammo, flow.Page.Screen);
     }
 
     [Fact]

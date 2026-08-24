@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
 
@@ -118,6 +119,7 @@ public sealed class CampaignFlow
         [CampaignScreen.Roster] = flow => new CampaignRosterPage(flow),
         [CampaignScreen.Cabin] = flow => new CampaignCabinPage(flow),
         [CampaignScreen.PreviousMissions] = flow => new CampaignPreviousMissionsPage(flow),
+        [CampaignScreen.Briefing] = flow => new CampaignBriefingPage(flow),
         [CampaignScreen.FlightCheck] = flow => new CampaignFlightCheckPage(flow),
         [CampaignScreen.Ammo] = flow => new CampaignAmmoPage(flow),
     };
@@ -128,17 +130,35 @@ public sealed class CampaignFlow
     private readonly List<CampaignScreen> _stack = new() { CampaignScreen.Roster };
 
     /// <summary>Opens a flow over <paramref name="store"/>, reading its roster once.
-    /// <paramref name="dataRoot"/> may be null; a page's art then simply loads none.</summary>
-    public CampaignFlow(CampaignProfileStore store, UiStrings strings, string? dataRoot = null)
+    /// <paramref name="dataRoot"/> may be null; a page's art then simply loads none.
+    /// <paramref name="planes"/> is the hangar's build store the flight check and ammo screens
+    /// read an owned plane's guns and hardpoints from; null (every off-engine caller) means no
+    /// hangar build exists and each plane reads as its airframe's stock fit, which is also what
+    /// the two profile-seeded starters are.</summary>
+    public CampaignFlow(CampaignProfileStore store, UiStrings strings, string? dataRoot = null,
+        CustomPlaneStore? planes = null, StockLoadouts? stock = null)
     {
         Store = store;
         Strings = strings;
         DataRoot = dataRoot;
+        Planes = planes;
+        Stock = stock;
         Roster = store.List();
     }
 
+    /// <summary>The stock-loadout table (<c>stock_loadouts.json</c>) the flight check and ammo
+    /// screens read an airframe's stock fit and the ordnance roster from, or null when the caller
+    /// has none; a page loads the default itself only when it needs it, since the default path
+    /// is <c>res://</c> and needs the engine.</summary>
+    public StockLoadouts? Stock { get; }
+
     /// <summary>The profile store this flow creates, reads and deletes through.</summary>
     public CampaignProfileStore Store { get; }
+
+    /// <summary>The hangar's build store (<c>user://Planes/</c>), or null when the caller has none.
+    /// Pages never open the store themselves: that call needs the engine, and a page must stay
+    /// constructible off it.</summary>
+    public CustomPlaneStore? Planes { get; }
 
     /// <summary>The langui table the screens label themselves from.</summary>
     public UiStrings Strings { get; }
