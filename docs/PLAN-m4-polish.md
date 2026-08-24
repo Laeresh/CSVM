@@ -74,7 +74,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☐ `BL-449` Confirm the one-sided negative `C_L` ceiling, then port or record it
 12. ☐ `BL-451` A dead AI's throttle and surfaces freeze at their last commanded values
-13. ☐ `BL-457` Port the per-contact camera shake (block 5)
+13. ☑ `BL-457` Port the per-contact camera shake (block 5)
 14. ☐ `BL-442` Decode what keys the damaged-engine swap and pitch, then port it
 
 ## Dependency and parallelism notes
@@ -285,7 +285,7 @@ dead hull's motion.
 **⚠ Traps.** The `[obj+0x384]` crashed-flag writers are `BL-456`, out of scope; do not fold that
 decode in. A3 edits `AiControlLaw.cs` too, so land A3 first.
 
-## B13 ☐ `BL-457` Port the per-contact camera shake (block 5)
+## B13 ☑ `BL-457` Port the per-contact camera shake (block 5)
 
 **Goal.** Every resolved contact, grazes included, kicks the camera the way `FUN_0048d2c0` does at
 `0x48d409`.
@@ -311,6 +311,34 @@ graze at the controls (the `BL-120`/`PT-53` corner) now moves the camera. Full 8
 **⚠ Traps.** Block 5 keeps the constructor's law constants (`shakes.md:133`); do not author a
 `turbulence` def. `CollisionDamage.cs` gates on positive severity (`flightModel.md:2650`); confirm
 whether a graze reaches `FUN_0048d2c0` at all before claiming a graze shakes.
+
+**Verified.** <pending orchestrator run>
+
+The magnitude read off `0x0048d3cc`–`0x0048d409` is `min(speed · s · 0.03, 0.15)` radians: the true
+airspeed at `obj+0x934`, the RAW severity cosine rather than the pair's cube, the literal `0.03` at
+`0x006080c4` and the ceiling `0x3e19999a` / `0x006036a8`. Two guards stand over it, the object being
+the player (`0x0048d3c4`) and its crashed flag `obj+0x384` being clear (`0x0048d3aa`), and nothing
+else. The graze half holds: the only gate on the call itself is a positive severity cosine
+(`0x48ed79` guarding `0x48ed8b`), so a graze kicks like any other contact, and at flight speed a
+cosine around 0.05 already saturates the ceiling. No residue item was minted.
+
+Ported as `CollisionDamage.ContactShake` feeding `PlaneShake.ContactHit`, carried across as
+`ContactOutcome.ShakeMagnitude` (zero on an AI) and spent in `FlightController.PerformContact` under
+the same not-crashed gate the impulse takes. Block 5 runs on the constructor's law (2 Hz, damp 4.5,
+no sawtooth) held in `PlaneShake`; no `turbulence` def was authored. `PlaneShakeTests` pins the
+saturated kick and the linear graze kick, `AircraftContactResolverTests` pins the human-pilot gate,
+and both constants have inventory rows. The ledger row moves from unsupported to decoded.
+
+⚠ **The kick's magnitude is a velocity in the original, not a displacement**: `FUN_0042be10` adds it
+to the block's velocity accumulators and `FUN_0042bec0` integrates them, where `PlaneShake` models a
+block as an envelope in radians directly. That is the same modelling gap the fire source carries and
+it belongs to `BL-266(a)`, so how loud the kick reads is the one thing that still needs the user's
+eyes at the controls (the `BL-120`/`PT-53` corner graze).
+
+**Verified (this worktree).** `.\RunTests.ps1` PASS, exit 0: units 2153 passed / 0 failed of 2153,
+engine 94 passed / 0 failed of 94 suites with errors clean, goldens 16 shots hash-identical, hitch
+awareness-only. The 8-chapter `--freecam --det` regression (C1, C1B, C1C, C2, C2B, C3, C4, C5) exits
+0 on every chapter with zero error lines.
 
 ## B14 ☐ `BL-442` Decode what keys the damaged-engine swap and pitch, then port it
 

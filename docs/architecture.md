@@ -2751,7 +2751,9 @@ Amplitude = `magnitude_factor × caliber` in radians of roll, **measured** off o
 `high_speed`'s input is speed over the plane's `fd_speed`, so the authored `min_speed` 1.0 gate
 means "beyond rated max" — the dive rattle whose magnitude is the EXCESS over the gate,
 `(speedRatio − min_speed)/quotient` (zero at rated max, gentle overspeed ramp); cruise stays
-silent like the footage's idle floor.
+silent like the footage's idle floor. `ContactHit` is block 5, the one oscillator no def authors:
+it runs on the constructor's law (2 Hz, damp 4.5) and takes its magnitude from
+`CollisionDamage.ContactShake`, which every resolved contact spends for a human pilot.
 
 ## src/Flight/FlightControllerBuild.cs
 The internal construction handoff from `FlightRoster` to `FlightController`. It contains one
@@ -4866,7 +4868,8 @@ What one contact costs the striking aircraft, as a value with no `Node` and no p
 it: the fate (`ContactFate.Graze` survivable, `Crash` fatal), the decoded damage pair both parties
 spend, the doom rule's answer, the zone the ledger charged (`Apply`'s answer, not the geometric
 guess), the pilot HUD's flash line, `PushOut` (how far along the normal the caller must move the
-striker to un-embed it, applied on a crash too), and `DamageStruckAircraft`, the instruction a
+striker to un-embed it, applied on a crash too), `ShakeMagnitude` (the block-5 camera kick, zero on
+an AI), and `DamageStruckAircraft`, the instruction a
 caller owes because only it holds the struck rig: hand that aeroplane the pair and arm the
 collision grace on both parties. One value with no optional parts, so forgetting to perform it is
 forgetting one statement rather than four. `AircraftContactResolver` fills it.
@@ -4888,7 +4891,8 @@ a scriptable `IContactEffects`: the doom rule for an AI ramming a non-aeroplane,
 AI into AI, the player's exemption from both (asserted on the damage magnitude, not just
 `DamageStruckAircraft`, since the entity cut applies only on the non-player branch and only against
 another aeroplane), a sustained slide exhausting its ledger against a control that spends nothing,
-and the un-embed loop's three-try give-up.
+the camera kick every human-piloted contact spends and an AI's spends none, and the un-embed loop's
+three-try give-up.
 
 ## src/Flight/SweepCadence.cs
 The original's alternate-step collision sweep (`FUN_0048d7f0`'s parity gate and the `obj+0x6B0`

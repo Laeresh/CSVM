@@ -85,6 +85,29 @@ public class AircraftContactResolverTests
         Assert.Equal(Scale, outcome.HealthDamage, 3);
     }
 
+    /// <summary>The block-5 camera kick (<c>0x48d409</c>): a human pilot's every contact spends it,
+    /// a graze included, and an AI's spends none. Its law is linear in speed and in the RAW cosine,
+    /// so it discriminates cases the cubic, speed-blind damage pair cannot.</summary>
+    [Fact]
+    public void EveryHumanPilotedContactKicksTheCameraAndAnAiContactKicksNothing()
+    {
+        var resolver = new AircraftContactResolver(new NeverOverlaps());
+
+        // Head-on at 50 m/s: 50 x 1 x 0.03 is ten times the ceiling, so the kick saturates.
+        var headOn = resolver.Resolve(
+            HeadOn(struckIsAircraft: false), Striker(humanPiloted: true), new FakeContactEffects());
+        Assert.Equal(CollisionDamage.ContactShakeCap, headOn.ShakeMagnitude, 4);
+
+        // The same 5.7 degree scrape, at 20 m/s: the cosine is 0.1, so the kick stays linear.
+        var slide = Striker(humanPiloted: true) with { VelocityDir = ShallowSlide, Speed = 20f };
+        var graze = resolver.Resolve(HeadOn(struckIsAircraft: false), slide, new FakeContactEffects());
+        Assert.Equal(0.06f, graze.ShakeMagnitude, 4);
+
+        var ai = resolver.Resolve(
+            HeadOn(struckIsAircraft: false), Striker(humanPiloted: false), new FakeContactEffects());
+        Assert.Equal(0f, ai.ShakeMagnitude);
+    }
+
     /// <summary>A plane grinding along the ground cannot collect endless free contacts: the decoded
     /// pair costs at least the authored floor on EVERY contact the sweep resolves (the cadence is
     /// the sweep's, <see cref="SweepCadence"/>, never a gate on the spend), so a bounded ledger runs

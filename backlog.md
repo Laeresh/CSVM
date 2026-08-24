@@ -931,12 +931,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-446` `[Cleanup]` **`ZzBaselineDump` is not throwaway any more.** The `Zz` prefix marks
   disposable instruments, but the class is the ledger's own dump path (`Probes.FlightEnvelopeAll`).
   Rename it out of the prefix.
-- `BL-447` `[Fidelity]` **The nine unsupported nitro and shake edges in the parity ledger.**
+- `BL-447` `[Fidelity]` **The eight unsupported nitro and shake edges in the parity ledger.**
   `docs/org/flightModel.md` "Parity ledger", class unsupported, beyond `BL-443`: the thin
   atmosphere band above 2000 m, the `level_off_rate` auto-level torque, the AI's `medium_aishake`
   on a nitro engage, the AI's positional `snd_nitro` blip, the nitro decay lockout on a runtime
-  callback, the mouse-flying arm's `is_autogyro` roll/yaw exchange, plus `BL-448`, `BL-450` and
-  `BL-457`. Each is small and independently landable; each names its address in the table.
+  callback, the mouse-flying arm's `is_autogyro` roll/yaw exchange, plus `BL-448` and `BL-450`.
+  Each is small and independently landable; each names its address in the table.
 - `BL-448` `[Research]` **Is the 2003 m `AltitudeCapM` the dense-band edge?** The measured
   flight ceiling (an intentional exception) sits 3 m above the decoded atmosphere band boundary
   (2000 m, `6561.6796875` ft, writer `FUN_00463640`). If the original's ceiling is the thin band's
@@ -977,10 +977,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
   so the ledger keeps "a wreck flies the near-field plant" as an exception. Decode when and by
   whom it is set so the wreck can fly the decoded arm.
-- `BL-457` `[Fidelity]` **The per-contact camera shake is not ported.** `FUN_0048d2c0` kicks shake
-  block 5 at `0x48d409` on every resolved contact, grazes included; CSVM resolves the contact
-  without a shake, so scraping a building is silent to the camera. Ledger row, unsupported;
-  `PlaneShake` has the block machinery.
 
 ## Environment & world
 

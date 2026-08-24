@@ -105,6 +105,8 @@ public class FlightConstantInventoryTests
         ("CollisionDamage", "EntityCut", 0.2, Decoded, "0x48d51a / 0x48d526"),
         ("CollisionDamage", "EntityGrace", 1.0, Decoded, "0x48d383 / 0x48d395"),
         ("CollisionDamage", "SpawnGrace", 1.5, Decoded, "the spawn write of obj+0xAC"),
+        ("CollisionDamage", "ContactShakeFactor", 0.03, Decoded, "0x6080c4, read at 0x48d3dc"),
+        ("CollisionDamage", "ContactShakeCap", 0.15, Decoded, "0x6036a8, compared at 0x48d3eb"),
         ("AircraftContactResolver", "EmbedPushOut", 0.3, ProductException,
             "m per un-embed attempt; the original's single-sphere placement cannot embed"),
         ("AircraftContactResolver", "EmbedTries", 3.0, ProductException,
