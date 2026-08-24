@@ -63,7 +63,8 @@ settles them.
 - Eleven stock player airframes author weight, area, drag, control torques, reciprocal inertia,
   angular damping, return rate, rated speed and stall magnitude.
 - `player.json` authors shared lift/AOA/G clamps, authority curves, gravity, ground blow and
-  collision ranges. Stock values leave the pitch fade and AOA/G command limiters inert.
+  collision ranges. Stock values leave the pitch fade inert and the G command limiter a graze; the
+  AOA window they author is reachable throughout normal manoeuvring.
 - The executable supplies Mach drag, attitude thrust, bank coupling, throttle slew, atmosphere
   bands, collision impulse and the far-field AI branch.
 - Nitro commands, gauges, animations, sounds and engine variants ship, but power, charge and decay
@@ -104,7 +105,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Port known control and AI mechanisms
 
-11. ☐ B11 Port the two latent control-authority terms (`BL-437`)
+11. ☑ B11 Port the two latent control-authority terms (`BL-437`)
 12. ☐ B12 Port the distant-AI simplified plant (`BL-425`)
 13. ☐ B13 Reproduce control-surface motion (`BL-393`)
 
@@ -296,7 +297,7 @@ acted on here.
 
 # Wave B — Port known control and AI mechanisms
 
-## B11 ☐ Port the two latent control-authority terms (`BL-437`)
+## B11 ☑ Port the two latent control-authority terms (`BL-437`)
 
 **Goal.** Implement pitch-only high-speed fade and asymmetric AOA/G command limiting.
 
@@ -310,6 +311,41 @@ only to pitch/yaw commands that increase nose/path separation.
 **Verify.** Synthetic airframes make each term bind; stock envelope remains byte-identical.
 
 **⚠ Traps.** Any stock-row change means the implementation or reachability reading is wrong.
+
+**Landed.** Both terms are confirmed against the binary and implemented. The pitch fade is
+`FUN_0048bdd0`'s second stage on the pitch output alone (`0x48be22`–`0x48be68`, the globals at
+`0x0071c400`/`0x0071c404`), and it is now `FlightModel.PitchAuthorityAt`, the base ramp
+(`RollAuthorityAt`, which is the whole of roll's curve) multiplied by it. The limiter is one scalar computed once per tick in `FUN_0048c470` and shared by pitch and
+yaw: `min` of an AOA window `(cos α − cos maxAOA) / (1 − cos maxAOA)` (`0x48c9f4`–`0x48ca18`,
+`0x0071c42c` confirmed as `FCOS` of the authored degrees at `0x4743a3`) and a ramp on the
+**delivered, signed** body-up load factor over `highGs` (`0x48ca1e`–`0x48ca3a`) or `lowGs`
+(`0x48ca45`–`0x48ca61`), the min at `0x48ca69`. **The sign rule is the opposite of what the dossier
+concluded.** `FUN_0053fd40` at `0x48c9ae` builds the quaternion taking the nose onto `v̂`, the same
+closing axis the weathervane uses, and the raw sign bits of the command and of that axis' component
+are compared (pitch at `0x48cb52`); opposite signs soften. So it damps ENTRY into a departure and
+leaves recovery free, not the reverse. Roll carries no test; a fourth consumer, the never-authored
+`level_off_rate` torque at `0x48cedc`, is dead and unported.
+**The reachability reading was wrong, and implementing the terms is what showed it.** Ablated one
+half at a time against the eleven-airframe dump: the pitch fade and the G ramp leave it
+SHA256-identical (`7BF4C7AE…`), the AOA window alone moves 286 of its 891 lines (`D2D682D8…`). The
+G ramp's negative side is a graze rather than unreachable — the Bloodhawk reaches −6.23 G and the
+Peacemaker −6.08 against the authored −6, 7.7 % and 2.7 % into a 3 G ramp — because the quantity is
+signed, which the old "the demand is a length" argument was not measuring. The AOA half is not a
+threshold at all: it is below 1 at every non-zero α, so at this plant's 32–38° it halves the
+elevator, and at 1 it moves `pitch-rate` 32.43 → 22.51 °/s against a filmed 33.00 while moving
+`sustained-turn-rate` 34.52 → 25.83 toward its own 18.95. It is therefore implemented and **held
+off** by `AoaLimiterFactor` 0 (config `flightModel.aoaLimiterFactor`, 1 spends it), a recorded
+divergence rather than a decode doubt: whether this plant's α is the α the original holds is a
+whole-envelope question that belongs to `E42`. `LatentControlAuthorityTests` flies synthetic
+airframes that author each term into reach and pins every shape and both sign directions, with a
+stock-side control that pitch and roll authority are the identical number at every speed up to
+`MaxDiveSpeedFrac × fd_speed` on all eleven; `ControlLimiterTests` now measures
+`FlightModel.BodyUpLoadFactor` and pins the graze as a bounded fraction with a halved-`lowGs`
+control. Dossier, inventory (+`AoaLimiterFactorDefault`, config surface 8 → 9 keys), census and
+architecture updated; `BL-437` deleted from `backlog.md`.
+
+**Verified.** Full `RunTests.ps1` battery on the lane tree: build clean, 2052/2052 units,
+93/93 engine suites with engine errors clean, 16/16 goldens hash-identical, exit 0.
 
 ## B12 ☐ Port the distant-AI simplified plant (`BL-425`)
 

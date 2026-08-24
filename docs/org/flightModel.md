@@ -796,11 +796,12 @@ the same nine and computes the same curves.) Fallback values shown as authored (
   linearly to **zero at 600 mph**. The fallbacks are the immediates at `0x474179` / `0x474183`, and
   the authored path parses the `high_speed_pitch_fade` token (string at `0x6277f8`) at
   `0x4741f2`-`0x474231`, each field converted from MPH.
-  ⚠ **Pitch and roll do NOT share one curve, though the remake's `RollPitchAuthorityAt` treats them
-  as if they did.** The second stage is pitch-only. It is invisible on the fallback numbers, since
-  500 mph is above every airframe's `fd_speed`, which is also why the video reads pitch rate as flat
-  with speed. An install that authors a lower `high_speed_pitch_fade` would bind it, and ours would
-  not follow.
+  ⚠ **Pitch and roll do NOT share one curve.** The second stage is pitch-only, and the two stages
+  multiply. It is invisible on the fallback numbers, since 500 mph is above every airframe's
+  `fd_speed`, which is also why the video reads pitch rate as flat with speed. An install that
+  authors a lower `high_speed_pitch_fade` binds it.
+  **Implemented** as `FlightModel.PitchAuthorityAt`, with `RollAuthorityAt` carrying the base ramp
+  both axes start from.
 - **Yaw authority** — piecewise, and deliberately **not monotone**:
 
   | Speed (mph) | Authority |
@@ -862,7 +863,7 @@ kinds rather than six node lists, and its ±20° angles were validated by eye (`
 
 The base ramp `f` was the one part of `FUN_0048bdd0` the remake did not carry: `FlightModel.Step`
 applied the authored yaw curve and **no speed term at all** to pitch or roll, so both held full
-authority down to zero airspeed. It is now `FlightModel.RollPitchAuthorityAt`, on the authored
+authority down to zero airspeed. It is now `FlightModel.RollAuthorityAt`, on the authored
 `turn_fade_in` 10 / `turn_fade_out` 50 mph (the executable's fallback `turn_fade_out` is 40), a
 scalar on the pitch and roll components of the stick command.
 
@@ -874,9 +875,10 @@ Three properties of the port, all read off `FUN_0048bdd0` and `FUN_0048c470` rat
   strength. A slow aeroplane loses its controls and keeps the coupling.
 - **The boundary is exclusive at the bottom.** `0x48bdd4` tests `speed > turn_fade_in`, so authority
   is exactly 0 *at* 10 mph, not merely small.
-- **Pitch and roll take the SAME scalar.** `0x48be20` writes it to the pitch output and `0x48be6c`
-  to the roll output; the pitch output is then multiplied by `high_speed_pitch_fade`
-  (`0x48be22`–`0x48be68`), which this install authors at [1000, 1001] mph and is unreachable.
+- **Pitch and roll start from the SAME scalar.** `0x48be20` writes it to the pitch output and
+  `0x48be6c` to the roll output; the pitch output is then multiplied by `high_speed_pitch_fade`
+  (`0x48be22`–`0x48be68`, the globals read at `0x48be26`/`0x48be3f`/`0x48be4c`/`0x48be56`/
+  `0x48be5c`), which this install authors at [1000, 1001] mph and is unreachable.
 
 Where 50 mph falls decides how visible this is, and it differs by airframe: nine of the eleven stall
 at 52–57 mph, i.e. *above* the ramp's top, so for them the fade bites only once already stalling;
@@ -900,29 +902,48 @@ Per axis, per tick:
 using `pitch_torque` / `rudder_torque` / `roll_torque` with the pitch / yaw / roll authority
 scalars respectively.
 
-Two further limiters multiply into **pitch and yaw only**, and — importantly — they apply **only
-when the commanded torque opposes the current rotation** (the sign test is on the command versus
-the existing angular momentum about that axis):
+One further scalar multiplies into **pitch and yaw only**, and only into a command that swings the
+nose **further off the flight path**. `FUN_0048c470` builds the quaternion taking the nose onto `v̂`
+(`FUN_0053fd40` at `0x48c9ae` on `nose` and `v̂`, converted by `FUN_0053fca0` at `0x48c9be`), which
+is the same closing axis the weathervane uses, and compares the sign bits of the commanded torque
+and of that axis' component on the axis being commanded (pitch at `0x48cb52`, yaw in the same shape
+in the block from `0x48cba0`; roll's block at `0x48ca7a` has no such test). Opposite signs multiply
+the command by the scalar; agreeing signs leave it alone.
 
-- **AOA limiter** — `(cos AOA − cos maxAOA) / (1 − cos maxAOA)`, reaching **0 at `maxAOA`**.
-  The fallback `maxAOA` cosine is **0.85** (≈ 31.8°).
-- **G limiter** — above `highGs[0]` (**5 G**) authority falls linearly to **0 at `highGs[1]`
-  (9 G)**; mirrored below `lowGs` (**−5 → −9 G**).
+The scalar is computed once per tick and shared by both axes. It starts at **zero** and is raised
+only by the AOA term, so a standstill (`speed == 0`) removes a separating command outright:
 
-The smaller of the two is used. Note that because the limiter gates *opposing* input, it damps
-recovery from a departure rather than entry into one.
+- **AOA window** — `(cos α − cos maxAOA) / (1 − cos maxAOA)` at `0x48c9f4`–`0x48ca18`, zero at and
+  beyond `maxAOA`. The fallback `maxAOA` cosine is **0.85** (≈ 31.8°); this install authors 46°.
+- **G ramp** — read on the **delivered** load factor's body-up component, the value
+  `FUN_0048fc40` writes to its seventh argument (`q · RefArea · C_L · (unit lift dir · body up) /
+  Weight`), which is **signed**. Above `highGs[0]` it falls linearly to zero at `highGs[1]`
+  (`0x48ca1e`–`0x48ca3a`); below `lowGs[0]` it mirrors to zero at `lowGs[1]`
+  (`0x48ca45`–`0x48ca61`). Between the two starts the comparison is jumped entirely
+  (`0x48ca50`), leaving the AOA term standing alone. It is **not floored at zero**: past
+  `highGs[1]` it goes negative and reverses the command.
 
-**CORRECTION (from `FUN_0048c470` directly).** The sign test is **not** against the existing
-angular momentum. `FUN_0048c470` builds `unit(nose × v̂)` — the same closing axis the weathervane
-uses — and compares the sign of the commanded torque against the sign of that axis' component on the
-axis being commanded (`0x48ca7a` onward, the pitch and yaw blocks only; roll has no such test). So
-what is softened is a command that swings the nose FURTHER off the flight path. The combined scalar
-is also computed once and shared by both axes, and the AOA half of it is literally
-`(cos α − maxAOACos) / (1 − maxAOACos)` on that same α, which is why it reads as a limiter and an
-alignment window at once. None of this changes the unreachability finding — both halves are authored
-out of reach on all eleven airframes (`ControlLimiterTests`) — and nothing is implemented.
+The smaller of the two is used (`0x48ca69`–`0x48ca78`).
+
+⚠ **It damps ENTRY into a departure, not recovery from one.** A pull that raises α is softened; a
+push that brings the nose back onto the path is not. This page carried the opposite conclusion for
+as long as it read the sign test as one against the existing angular momentum, and that conclusion
+did not survive the sign test's correction to the closing axis. Both directions are pinned in
+`LatentControlAuthorityTests`, on pitch and on yaw.
 ⚠ This is also the quantity the reverse-authority factor was wrongly identified with; see that
 bullet above.
+
+**Implemented** as `FlightModel.OpposingCommandLimitAt`, applied to the pitch and yaw stick
+components in `Step`. The **G ramp is live**; the **AOA window is held off** by
+`FlightModel.AoaLimiterFactor` (config `flightModel.aoaLimiterFactor`, 1 spends it) as a recorded
+divergence, because it is not a threshold and binds on the shipped data. The reachability
+measurements and that divergence's evidence are in "Corrected — the G ramp grazes and the AOA
+window binds" below.
+
+⚠ **A fourth consumer exists and is NOT implemented.** The same scalar multiplies the `level_off`
+torque (`obj+0x650`, the `level_off_rate` key, read at `0x48cedc`) when that torque opposes the
+closing axis. The key is accepted by the parser and **never authored**, so the term is zero and the
+remake carries neither it nor its limiter.
 
 `return_rate` is a separate centring torque, described below.
 
@@ -1790,8 +1811,8 @@ evidence of intent only.
 | `yaw_fade_out` | 45 mph | **400 mph** | The yaw curve is **not** flat across the envelope — see below |
 | `yaw_max` | 22.5 mph | **50 mph** | |
 | `yaw_low_speed` / `yaw_high_speed` | 0.05 / 0.1 | **0.0625 / 0.17** | |
-| `high_speed_pitch_fade` | [500, 600] mph | **[1000, 1001] mph** | The pitch fade is **unreachable** — inert |
-| `highGs` / `lowGs` | [5, 9] / [−5, −9] | **[9, 15] / [−6, −9]** | Both limiters sit at or past the lift clamp — inert |
+| `high_speed_pitch_fade` | [500, 600] mph | **[1000, 1001] mph** | The pitch fade is **unreachable** — implemented, inert |
+| `highGs` / `lowGs` | [5, 9] / [−5, −9] | **[9, 15] / [−6, −9]** | The positive ramp is unreachable; the negative one is grazed |
 | `lift_accel_rate` | 1.2 | **0.75** | |
 | `turn_fade_in` / `_out` | 10 / 40 mph | **10 / 50 mph** | |
 | `maxAOA` | 31.8° | **46.0°** | |
@@ -1819,7 +1840,12 @@ speed) `eff` gave 0.29 against the new curve's 0.32.
 
 **Corrected — the pitch high-speed fade never fires.** Authored at 1000/1001 mph against a maximum
 attainable dive speed of ~528 mph, it cannot engage. It is real code on a threshold this game never
-reaches.
+reaches. **It is nevertheless implemented** (`FlightModel.PitchAuthorityAt`), because the shape is
+decoded, an install authoring a lower pair binds it, and a curve that silently is not there is the
+kind of absence a later change trips over. `LatentControlAuthorityTests` pins the curve on a
+synthetic airframe that authors the window into the flyable band, and pins that on all eleven stock
+airframes pitch and roll authority are the identical number at every speed up to
+`MaxDiveSpeedFrac × fd_speed`. Landing it left the eleven-airframe dump SHA256-identical.
 
 **C24 landing note — confirmed unreachable for all eleven player airframes, and nothing was
 implemented.** `MaxDiveSpeedFrac` (1.75 × `fd_speed`) is the model's own hard numerical ceiling on
@@ -1850,11 +1876,17 @@ exercise is exactly the invented content this project's ground rules forbid; thi
 `CSVM.Tests/ControlLimiterTests` (which fails if a data edit brings one into reach) carry the closed
 finding, so a future session reading the decode does not mistake the fade for a missing feature.
 
-**Corrected — both the G and AOA limiters are inert.** The lift clamp is a hard ±5/9 G, while
-`highGs` begins at 9 G and `lowGs` at −6 G. Neither limiter can engage before lift is already
-capped, so no authored configuration in this install reaches them.
+### ⚠ Both the G and AOA limiters are inert — RETIRED (2026-08-24)
 
-**D33 landing note — measured on all eleven airframes, and nothing was implemented.** The
+The reading was that the lift clamp is a hard ±5/9 G while `highGs` begins at 9 G and `lowGs` at
+−6 G, so neither limiter can engage before lift is already capped. Two things were wrong with it.
+The G ramp reads the **signed body-up component** of the delivered load factor, not the demand's
+length, and a sustained outside push carries two airframes past `lowGs[0]`. And the AOA half is not
+a threshold at all: it is a window that is below 1 at every non-zero α, so it binds throughout
+normal manoeuvring. Both corrections and their measurements are in the next section; the margin
+table below is retained because it is the α measurement that settles the second one.
+
+**D33 landing note — measured on all eleven airframes.** The
 structural argument above is real but it is not what settles this: the delivered load factor is
 clamped at +9/−5 G, which is *exactly* where `highGs`'s ramp starts, so the argument only ever
 proves the reduction is zero at the boundary. What settles it is the measurement. The remake's
@@ -1885,9 +1917,7 @@ nose-chase used to hold every α small, so these margins are much tighter than t
 `ControlLimiterTests` still fails if one comes into reach. The suite's own instruments agree from
 the other side: the sustained pitch-rate row reports α = 32.0/32.7/33.1° at 120/200/280 mph,
 `zoom-climb` 38.2° at its minimum speed, the sustained turn 31.8°, and the knife-edge probe peaks
-at 0.77–5.68°. **The negative side is unreachable twice over:** `lowGs [−6, −9]` sits past the
-−5 G clamp, *and* the demand is the LENGTH of a projected vector, so it is never negative in this
-model at all.
+at 0.77–5.68°.
 
 ⚠ **The margin against the executable's own fallbacks is one hundredth of a G.** The Bloodhawk's
 5.01 G peak is 0.2 % **past** the compiled fallback `highGs[0] = 5` — under the fallbacks the
@@ -1895,14 +1925,56 @@ limiter would engage, but a fraction of a percent into a 4 G-wide ramp. What put
 of reach is the **authored 9**, not the model's inability to pull hard. This is the cleanest example
 in the whole decode of why a fallback is evidence of intent and not of behaviour.
 
-⚠ **If either threshold ever comes into reach, the asymmetry is the thing to get right.** The
-original gates **only input that opposes the current rotation** (the sign test is on the command
-versus the existing angular momentum about that axis), so the limiter damps *recovery* from a
-departure, not entry into one. A limiter that scales all input instead is backwards and will read
-as sluggish controls. `ControlLimiterTests` asserts each airframe's peaks against **its own loaded**
-`highGs`/`lowGs`/`maxAOA`, so a data edit or a per-plane override that brings either into reach
-fails the suite rather than passing silently — which is the condition under which the code above is
-owed.
+**Corrected — the G ramp grazes and the AOA window binds.** Both halves are now implemented
+(`FlightModel.OpposingCommandLimitAt`, "Torques and the limiters" above), and implementing them
+settled their reachability by measurement rather than by argument.
+
+**The pitch fade and the G ramp leave the stock envelope untouched.** With both live and the AOA
+window held at its neutral 1, the eleven-airframe flight dump is SHA256-identical to the tree before
+the change. Spending the AOA window instead moves 286 of its 891 lines, so the instrument sees the
+difference in both directions.
+
+**The G ramp's negative side is grazed, not unreachable.** Measured on the quantity the original
+reads — `FlightModel.BodyUpLoadFactor`, the delivered lift's signed body-up component — over the
+same five max-performance manoeuvres:
+
+| Airframe | max body-up G | `highGs[0]` | min body-up G | `lowGs[0]` | into the −6 → −9 ramp |
+|---|---:|---:|---:|---:|---:|
+| bhawk | 6.43 | 9.0 | **−6.23** | −6.0 | **7.7 %** |
+| devastator (`pfighter`) | 4.38 | 9.0 | −4.88 | −6.0 | — |
+| fury | 5.15 | 9.0 | −5.73 | −6.0 | — |
+| warhawk | 3.23 | 9.0 | −3.28 | −6.0 | — |
+| autogyro | 3.54 | 9.0 | −3.45 | −6.0 | — |
+| avenger | 4.69 | 9.0 | −5.23 | −6.0 | — |
+| balmoral | 2.60 | 9.0 | −1.47 | −6.0 | — |
+| brigand | 3.97 | 9.0 | −4.33 | −6.0 | — |
+| firebrand (`fbrand`) | 3.25 | 9.0 | −3.30 | −6.0 | — |
+| kestrel | 3.49 | 9.0 | −3.63 | −6.0 | — |
+| peacemaker | 5.77 | 9.0 | **−6.08** | −6.0 | **2.7 %** |
+
+A sustained full forward push at 1.5 × `fd_speed` carries the Bloodhawk and the Peacemaker a few
+percent into a 3 G-wide ramp, so a separating pitch or yaw command there keeps 92–97 % of its
+authority. No envelope scenario flies that manoeuvre, which is why no row moves.
+`ControlLimiterTests` pins the graze as a bounded fraction of the ramp with a halved-`lowGs` control
+that must break it, rather than pinning an unreachability that is not true.
+
+**The AOA window is not a threshold, and it binds.** `(cos α − cos maxAOA) / (1 − cos maxAOA)` is
+below 1 at every non-zero α: 0.80 at 20°, 0.56 at 30°, 0.23 at 40°, zero at the authored 46°.
+Against the α this plant reaches in a sustained pull (32.0–33.1° at 120/200/280 mph, 38.2° at the
+zoom-climb's minimum speed) that is a factor of about a half on the elevator, and spending it moves
+the envelope: sustained `pitch-rate` **32.43 → 22.51 °/s** against a filmed 33.00, `sustained-turn-rate`
+34.52 → 25.83 against 18.95, `zoom-climb` 821 → 1280 ft against 936, `zoom-climb-min-speed`
+117.9 → 143.9 mph against 127.9. Two of those move toward the original and two away, and the
+pitch-rate row is the one A2 had inside a point of its target.
+
+⚠ **The window is held off by `FlightModel.AoaLimiterFactor` (config
+`flightModel.aoaLimiterFactor`), a recorded divergence and not a decode doubt.** The arithmetic and
+the sign rule are traced and pinned; what is unsettled is whether this plant's α is the α the
+original holds. A first-order lag at the authored `lift_accel_rate` of 0.75/s puts the steady lag at
+roughly `ω / rate`, so a 33 °/s pull implies tens of degrees of α in the original too, and the
+original's own measured pitch rate would then already be a limited one. Settling that is a
+whole-envelope question (`E42`) and needs the full battery and a read at the controls, not a
+side effect of porting the term.
 
 **Two of the parsed globals are dead in the executable.** The global `drag_factor` (→ `0x71c44c`,
 fallback 3.0) and `drag_fade_speed` (→ `0x71c450`, parsed × 0.44704, fallback 40 mph) are written
@@ -2519,6 +2591,7 @@ without a provenance. Five classes are used:
 | `GroundBlowIntoFactor` | 0.05 | decoded | the immediate in the player branch of `FUN_0048c220` |
 | `GroundBlowVelocitySteer` | 2.0 | decoded | a global whose only writer is the `gbc` debug console command |
 | `NoseChaseFactor` | 0 | decoded | decoded-absent: no instruction in `FUN_0048c470`/`FUN_0048fc40`/`FUN_0048e580` rotates the velocity direction onto the nose; see "`lift_accel_rate` is a lag toward a target velocity" |
+| `AoaLimiterFactorDefault` | 0 | exception | the decoded AOA window, held off. Traced at `0x48c9f4`–`0x48ca18` and reachable, so this is a recorded divergence and not an absence; see "Corrected — the G ramp grazes and the AOA window binds" |
 | `BounceLeverScale` | 2.25 | contact | the literal at `0x00608108`, no data origin |
 | `GrazeFriction` / `GrazeKick` / `GrazePushOut` | 0.35 / 1.2 / 0.15 | contact | **fitted**, ours rather than the original's, co-tuned as one group with `BounceLeverScale`. `C22` owns them |
 | `DragPolarScale` | 0.73 | decoded | `0x603474`, shared with the thrust curve |
@@ -2532,12 +2605,13 @@ without a provenance. Five classes are used:
 | `PhysicsConstants.MphToMs` | 0.44704 | decoded | the parser's own speed-token scale |
 | `StickRamp.Rate` | 2.5 | decoded | `FUN_00487460`, 0.4 s of held key to full deflection |
 
-The `flightModel.*` config block overrides eight of these: `pitchTune`, `yawTune`, `rollTune`,
-`stallWarnFrac`, `liftGMin`, `liftGMax`, `altitudeCapM` and `noseChaseFactor`. A key is a
-development seam for an A/B at the controls and says nothing about provenance; the three `*Tune`
-keys exist so a decoded 1 can be compared against a fitted value by hand, and `noseChaseFactor` so
-the decoded 0 can be compared against the retired kinematic chase (1). The inventory test pins all
-four at their decoded values so a fit cannot return quietly. `FlightConstantInventoryTests` also asserts the block's key set,
+The `flightModel.*` config block overrides nine of these: `pitchTune`, `yawTune`, `rollTune`,
+`stallWarnFrac`, `liftGMin`, `liftGMax`, `altitudeCapM`, `noseChaseFactor` and `aoaLimiterFactor`.
+A key is a development seam for an A/B at the controls and says nothing about provenance; the three
+`*Tune` keys exist so a decoded 1 can be compared against a fitted value by hand, `noseChaseFactor`
+so the decoded 0 can be compared against the retired kinematic chase (1), and `aoaLimiterFactor` so
+the held-off AOA window (0) can be compared against the decode (1). The inventory test pins all
+five at their recorded values so a fit cannot return quietly. `FlightConstantInventoryTests` also asserts the block's key set,
 so a key added without an inventory row fails rather than appearing in a `--dump-config` template
 nobody reads.
 
@@ -2603,12 +2677,21 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   Mach floor shapes the lowest levers, and the Balmoral's 1/8 solves below its own level-flight
   floor. ⚠ Its able-to-fail control is a lever off by 5 %, which must miss the equilibrium at every
   position (`METHOD-9`); without it the tolerance could admit any curve of roughly this shape.
-- **`ControlLimiterTests`** — the two limiters are decoded, authored out of reach, and deliberately
-  NOT implemented; these tests are what keeps that decision honest, because they fail the moment a
-  data edit, a per-plane override or a model change brings either threshold into reach. ⚠ The
-  disproof carries its own able-to-fail control (`METHOD-9`): halving both authored thresholds must
-  make both checks fail, otherwise the manoeuvres have gone too gentle to trip anything and the
-  disproof has stopped measuring a margin.
+- **`ControlLimiterTests`** — the G ramp's reachability, on the signed body-up load factor the
+  implementation actually reads. The positive side stays clear of `highGs[0]` on all eleven; the
+  negative side is grazed by two airframes and is pinned as a bounded fraction of the ramp, so the
+  suite fails when the graze deepens rather than asserting an unreachability that is not true. ⚠ It
+  carries two able-to-fail controls (`METHOD-9`): halved thresholds must make the α and demand
+  disproofs fail, and a halved `lowGs` pair must break the graze bound.
+- **`LatentControlAuthorityTests`** — the pitch-only high-speed fade and the opposing-command
+  limiter, each on a SYNTHETIC airframe that authors it into reach, because no stock airframe can
+  exercise either. Pins the fade's three regions, that roll keeps what pitch loses, that the two
+  stages multiply where they overlap, and the fade reaching body rates; then the AOA window's shape
+  and floor, the G ramp mirrored about its authored band, that the SMALLER of the two applies, and
+  the sign rule flown on both pitch and yaw — a separating command is softened and the closing one
+  is untouched. ⚠ Its stock-side control is that on all eleven airframes pitch and roll authority
+  are the identical number at every speed up to `MaxDiveSpeedFrac × fd_speed`, which is what says
+  the fade cannot move an envelope row.
 - **`FlightConstantInventoryTests`** — the inventory table above, as a census over the plant's own
   const fields plus the `flightModel.*` config block. It checks provenance, not correctness: a
   constant added, dropped or moved fails until somebody classifies it, which is the step skipped
@@ -2647,16 +2730,18 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
 4. **The attitude-dependent thrust (0.24 / 0.13).** A video fit would absorb these into gravity
    or drag and then fail in the opposite manoeuvre.
 5. **Rudder at 10 % authority in flight**, full only between 22.5 and 45 mph.
-6. **Pitch authority reaching zero at 600 mph**, roll never fading.
+6. **Pitch authority reaching zero at the second `high_speed_pitch_fade` speed**, roll never fading.
+   Landed in `B11`; unreachable on this install's authored [1000, 1001] mph.
 7. **Stall speed is per-airframe** — `sqrt(2W / (0.75 ρ S))` — not a fixed fraction of `fd_speed`.
 8. **`return_rate` is a weathervane torque** toward the velocity vector, not extra axis damping on
    a released stick. Landed in `C23`; see "Weathervane centring — resolved". ⚠ It reaches every
    sustained full-stick manoeuvre, because those hold a real nose/path misalignment — it is not a
    released-stick-only term in any sense.
-9. **The G/AOA limiters gating only opposing input** — a subtle asymmetry that changes departure
-   and recovery behaviour, not steady turns. ⚠ **Authored inert and deliberately NOT implemented**
-: peak demand 2.13–5.01 G against `highGs[0] = 9`, peak α 8.9–25.6° against
-   `maxAOA = 46°`, on all eleven airframes — see the D33 landing note above.
+9. **The limiter gating only SEPARATING input** — a subtle asymmetry that damps entry into a
+   departure and leaves recovery from one free. Landed in `B11`. ⚠ The G ramp is live and grazed by
+   two airframes in a sustained outside push; the AOA window is decoded, reachable and held off by
+   `AoaLimiterFactor` as a recorded divergence — see "Corrected — the G ramp grazes and the AOA
+   window binds".
 10. **Thrust scales with `ref_area`, not `1/veh_weight`.** The remake divides engine power by
     weight; the original multiplies it by reference area, which is what makes `RefArea` cancel
     against drag. See `ThrustFactor` above.

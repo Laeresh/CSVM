@@ -9,11 +9,14 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The original's G and AOA control limiters are present in the executable and unreachable with
-/// this install's authored values, so neither is implemented. Decode and the per-airframe margin
-/// table: docs/org/flightModel.md, "Corrected — both the G and AOA limiters are inert".
-/// These tests measure the demanded load factor and α through the real model on every airframe,
-/// in the manoeuvres that produce the most of each, and fail if either threshold comes into reach.
+/// The G half of the original's opposing-command limiter is implemented and unreachable with this
+/// install's authored values, on both sides of the band. Decode and the per-airframe margin table:
+/// docs/org/flightModel.md, "Torques and the limiters". These tests fly every airframe in the
+/// manoeuvres that produce the most load factor and fail if either threshold comes into reach,
+/// which is when a stock envelope row would start moving with it.
+/// ⚠ The AOA half is NOT unreachable and is not asserted here — it is a continuous window rather
+/// than a threshold, held off by <c>FlightModel.AoaLimiterFactor</c>. The α margins below are kept
+/// because they are the measurement behind that finding, not because a threshold is being watched.
 /// </summary>
 public class ControlLimiterTests
 {
@@ -67,27 +70,63 @@ public class ControlLimiterTests
         }
     }
 
-    /// <summary>The <c>lowGs</c> side is unreachable twice over: the demand is the LENGTH of a
-    /// projected vector, so it is never negative in this model, and the authored −6 G sits past the
-    /// −5 G lift clamp besides. A full forward push is the manoeuvre that would produce it.</summary>
+    /// <summary>The <c>lowGs</c> side, measured rather than argued: the limiter reads the DELIVERED
+    /// lift's signed body-up component, which does go negative in an outside push, so the earlier
+    /// "the demand is a length" reading measured the wrong quantity (METHOD-23). This side is not
+    /// out of reach — a sustained forward push at 1.5 × <c>fd_speed</c> carries two airframes just
+    /// past the authored −6 G. What is pinned is that the engagement stays a graze; a term running
+    /// deep into the ramp would take most of a separating command and show in the envelope.</summary>
     [ExtractedDataFact]
-    public void TheNegativeGLimiterCannotEngageOnAnyAirframe()
+    public void TheNegativeGLimiterOnlyEverGrazesTheTopOfItsRamp()
     {
         foreach (string plane in AllPlanes)
         {
             var stats = PlaneStats.Load(ZrdrPath, plane);
-            var (peakG, _) = Fly(stats, stats.FdSpeed * 1.5f, new FlightInput { Pitch = -1f, Throttle = 1f });
-            Assert.True(stats.LowGStart < 0f && peakG >= 0f,
-                $"{plane}: lowGs[0] = {stats.LowGStart:0.0} G against a demanded load factor that "
-                + $"peaks at {peakG:0.00} G and cannot go negative — if either changes sign the "
-                + "negative-G limiter is back in play");
+            float most = MostNegativeBodyUpG(stats);
+            float into = Depth(most, stats.LowGStart, stats.LowGMax);
+            Assert.True(into < 0.15f,
+                $"{plane}: the delivered body-up load factor reaches {most:0.00} G, which is "
+                + $"{into:0.0%} into the ramp from lowGs[0] = {stats.LowGStart:0.0} to "
+                + $"lowGs[1] = {stats.LowGMax:0.0} — the negative-G limiter has stopped being a "
+                + "graze, and every envelope row that pushes is owed a re-read");
         }
     }
 
-    /// <summary>α is an emergent alignment lag here, and the hardest sustained pull reaches roughly
-    /// half the authored <c>maxAOA</c>. The suite's own scenarios agree from the other side: the
-    /// sustained pitch-rate row reports ≈20°, the zoom-climb ≈23°, and the knife-edge probe peaks
-    /// at 0.71–4.29° per airframe.</summary>
+    /// <summary>The able-to-fail control for the graze bound: the same measurement against a
+    /// <c>lowGs</c> pair halved toward zero, the stand-in for a data edit that brings the ramp into
+    /// real reach, must break it on the airframe with the deepest excursion (METHOD-9).</summary>
+    [ExtractedDataFact]
+    public void TheGrazeBoundIsAbleToFail()
+    {
+        var stats = PlaneStats.Load(ZrdrPath, "player_bhawk");
+        stats.LowGStart /= 2f;
+        stats.LowGMax /= 2f;
+        float into = Depth(MostNegativeBodyUpG(stats), stats.LowGStart, stats.LowGMax);
+        Assert.True(into >= 0.15f,
+            $"player_bhawk on a halved lowGs pair reaches only {into:0.0%} into the ramp — the push "
+            + "has become too gentle for the graze bound above to be measuring anything");
+    }
+
+    /// <summary>The positive side on the same delivered quantity. The demand-side check above is
+    /// the generous bound; this is the one the implementation actually reads, and the two are
+    /// separated by both clamps and by the projection onto the body-up axis.</summary>
+    [ExtractedDataFact]
+    public void TheDeliveredLoadFactorStaysInsideTheAuthoredBand()
+    {
+        foreach (string plane in AllPlanes)
+        {
+            var stats = PlaneStats.Load(ZrdrPath, plane);
+            float most = MostPositiveBodyUpG(stats);
+            Assert.True(most < stats.HighGStart,
+                $"{plane}: the delivered body-up load factor reaches {most:0.00} G against the "
+                + $"authored highGs[0] = {stats.HighGStart:0.0} G — the G limiter now engages");
+        }
+    }
+
+    /// <summary>α stays under the authored <c>maxAOA</c>, which is where the AOA window reaches
+    /// zero and a separating pitch or yaw command would be removed outright. It is NOT the point at
+    /// which that window starts to bite: the window is below 1 at every non-zero α, and this suite
+    /// asserts only that no manoeuvre reaches its floor.</summary>
     [ExtractedDataFact]
     public void TheAoaLimiterCannotEngageOnAnyAirframe()
     {
@@ -142,6 +181,7 @@ public class ControlLimiterTests
             float maxAoaDeg = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(stats.MaxAoaCos, -1f, 1f)));
             var (peakG, gWhere, peakAlpha, alphaWhere) = Worst(stats);
             rows.Add($"{plane,-19} {peakG,8:0.00} {stats.HighGStart,9:0.0} {stats.HighGStart - peakG,9:0.00} "
+                     + $"{MostPositiveBodyUpG(stats),8:0.00} {MostNegativeBodyUpG(stats),8:0.00} "
                      + $"{peakAlpha,8:0.0} {maxAoaDeg,8:0.0} {maxAoaDeg - peakAlpha,9:0.0}   "
                      + $"{gWhere} / {alphaWhere}");
         }
@@ -150,6 +190,7 @@ public class ControlLimiterTests
         {
             var sb = new StringBuilder();
             sb.AppendLine($"{"airframe",-19} {"peak G",8} {"highGs0",9} {"margin",9} "
+                          + $"{"up G max",8} {"up G min",8} "
                           + $"{"peak a",8} {"maxAOA",8} {"margin",9}   worst manoeuvre (G / a)");
             foreach (string row in rows)
                 sb.AppendLine(row);
@@ -157,6 +198,36 @@ public class ControlLimiterTests
         }
 
         Assert.Equal(AllPlanes.Length, rows.Count);
+    }
+
+    // How far past a ramp's start a reading sits, as a fraction of the ramp's width. Zero short of
+    // the start, 1 at the far end where the limiter removes a separating command entirely.
+    private static float Depth(float reading, float start, float end) =>
+        (reading - start) / (end - start) is var f && f > 0f ? f : 0f;
+
+    // The most negative and the most positive DELIVERED body-up load factor over every manoeuvre,
+    // which is the signed quantity the implemented limiter reads.
+    private static float MostNegativeBodyUpG(PlaneStats stats) => ExtremeBodyUpG(stats, negative: true);
+
+    private static float MostPositiveBodyUpG(PlaneStats stats) => ExtremeBodyUpG(stats, negative: false);
+
+    private static float ExtremeBodyUpG(PlaneStats stats, bool negative)
+    {
+        float extreme = 0f;
+        foreach (var (_, frac, input) in Manoeuvres)
+        {
+            var m = new FlightModel(stats);
+            m.Reset(Vector3.Zero, Basis.Identity, stats.FdSpeed * frac, input.Throttle);
+            for (int i = 0; i < 600; i++)
+            {
+                m.Step(input, Dt);
+                extreme = negative
+                    ? Mathf.Min(extreme, m.BodyUpLoadFactor)
+                    : Mathf.Max(extreme, m.BodyUpLoadFactor);
+            }
+        }
+
+        return extreme;
     }
 
     // Peak demanded load factor and peak α over one manoeuvre.

@@ -206,6 +206,19 @@ public sealed class FlightModel
     // ⚠ It is NOT a force term — see ReverseAuthorityAt for where the trace leads.
     private const float ReverseAuthorityFloor = 0.2f;
 
+    // How much of the opposing-command limiter's decoded AOA window is spent. Decoded PRESENT and
+    // held at 0, a recorded divergence rather than a deletion: the window is continuous rather than
+    // a threshold, and at 1 it costs the sustained pitch-rate row 32.43 → 22.51 °/s against a
+    // filmed 33.00. docs/org/flightModel.md, "Torques and the limiters".
+    // ⚠ 1 is the decode. Any value between is a blend with no original behind it.
+    private const float AoaLimiterFactorDefault = 0f;
+
+    // The delivered lift's component along the BODY UP axis, in G, as the last completed step left
+    // it — the signed load factor the original's G limiter reads, which is why it is kept rather
+    // than derived from LoadFactorDemand: that one is a length and cannot go negative, while this
+    // one goes negative in an outside pull and is the only thing that can reach lowGs.
+    private float _bodyUpLoadFactor;
+
     /// <param name="aiForcePath">Which of the original's two force paths this instance flows — see
     /// <see cref="UsesAiForcePath"/>. ⚠ Optional, and it defaults to the PLAYER path, so a
     /// production construction site added later gets the player plant silently. Two sites pass it
@@ -228,6 +241,29 @@ public sealed class FlightModel
     /// ⚠ Named for the PATH, not for the pilot; <see cref="FlightController.IsHumanPiloted"/>
     /// answers who is flying. ⚠ Immutable — a mid-flight switch breaks reproducibility.</summary>
     public bool UsesAiForcePath { get; }
+
+    /// <summary>How much of the decoded AOA window this plant spends, before the config key
+    /// <c>flightModel.aoaLimiterFactor</c> (which still wins). 0, the default, replaces the window
+    /// with 1 and is a recorded divergence; 1 is the decode. See
+    /// <see cref="AoaLimiterFactorDefault"/> for why the default is 0.
+    /// ⚠ Fixed at construction, like <see cref="UsesAiForcePath"/>: a mid-flight switch would make
+    /// a flight unreproducible.</summary>
+    public float AoaLimiterFactor { get; init; } = AoaLimiterFactorDefault;
+
+    /// <summary>The delivered lift's body-up component in G, left by the last completed step: the
+    /// signed load factor the <c>highGs</c>/<c>lowGs</c> limiter is measured on. Positive in an
+    /// ordinary pull and negative in an outside one. Reported for instruments and for
+    /// <c>ControlLimiterTests</c>' reachability measurement.
+    /// ⚠ Not interchangeable with <see cref="LoadFactorDemand"/>: this is post-clamp, signed and
+    /// projected on one axis, that one is the pre-clamp demand's length.</summary>
+    public float BodyUpLoadFactor => _bodyUpLoadFactor;
+
+    /// <summary>The opposing-command limiter's scalar as the last step computed it: the smaller of
+    /// the AOA and G terms, applied to whichever of the pitch and yaw commands swings the nose
+    /// further off the flight path. 1 leaves both commands alone.
+    /// ⚠ It is authored out of reach on every stock airframe, so it reads 1 through the whole stock
+    /// envelope. docs/org/flightModel.md, "Torques and the limiters".</summary>
+    public float CommandLimit { get; private set; } = 1f;
 
     /// <summary>Airspeed as a fraction of fd_speed — the single stall-proximity scale both stall
     /// thresholds are measured on, and the one the STALL lamp's blink rate ramps over. Every stall
@@ -314,13 +350,13 @@ public sealed class FlightModel
         return s.YawHighSpeed;
     }
 
-    /// <summary>Roll and pitch authority at an airspeed — the original's shared base ramp, taken
-    /// from AIRSPEED ALONE: 0 at or below <c>turn_fade_in</c>, linear to 1 at <c>turn_fade_out</c>,
-    /// held at 1 above. Exposed so an instrument can sample it; Step calls the same method.
-    /// docs/org/flightModel.md, "The low-speed ramp".
-    /// ⚠ ROLL AND PITCH ONLY, and keyed on airspeed rather than on stall. Extending it to the rudder
-    /// double-fades an axis that has its own, and gating it on stall makes it vanish.</summary>
-    public float RollPitchAuthorityAt(float speed)
+    /// <summary>Roll authority at an airspeed, and the base ramp pitch starts from, taken from
+    /// AIRSPEED ALONE: 0 at or below <c>turn_fade_in</c>, linear to 1 at <c>turn_fade_out</c>, held
+    /// at 1 above. docs/org/flightModel.md, "The low-speed ramp".
+    /// ⚠ Roll never fades with high speed; pitch takes a second stage on top
+    /// (<see cref="PitchAuthorityAt"/>) and the rudder runs its own curve, so extending this one to
+    /// the rudder double-fades an axis that already has one.</summary>
+    public float RollAuthorityAt(float speed)
     {
         var s = Stats;
         if (speed <= s.TurnFadeIn)
@@ -328,6 +364,24 @@ public sealed class FlightModel
         return speed < s.TurnFadeOut && s.TurnFadeOut > s.TurnFadeIn
             ? (speed - s.TurnFadeIn) / (s.TurnFadeOut - s.TurnFadeIn)
             : 1f;
+    }
+
+    /// <summary>Pitch authority at an airspeed: the base ramp above, then faded again by the
+    /// authored <c>high_speed_pitch_fade</c> pair — full to its first speed, linear to zero at its
+    /// second. docs/org/flightModel.md, "Control authority vs speed".
+    /// ⚠ PITCH ONLY, and the two stages MULTIPLY rather than replacing one another.
+    /// ⚠ This install authors the pair past any attainable speed, so the second stage returns 1 on
+    /// every stock airframe and a stock envelope row that moves means the curve is wrong.</summary>
+    public float PitchAuthorityAt(float speed)
+    {
+        var s = Stats;
+        float ramp = RollAuthorityAt(speed);
+        if (speed >= s.HighSpeedPitchFadeHi)
+            return 0f;
+        // The knees cannot cross here: reaching the divide needs lo < speed < hi.
+        return speed > s.HighSpeedPitchFadeLo
+            ? ramp * ((s.HighSpeedPitchFadeHi - speed) / (s.HighSpeedPitchFadeHi - s.HighSpeedPitchFadeLo))
+            : ramp;
     }
 
     /// <summary>The reverse-authority factor: <c>max(yawAuthority, 0.2)</c> above <c>yaw_max</c> and
@@ -338,6 +392,29 @@ public sealed class FlightModel
     /// different, local quantity, and this method exists to record that misattribution.</summary>
     public float ReverseAuthorityAt(float speed) =>
         speed > Stats.YawMax ? Mathf.Max(YawAuthorityAt(speed), ReverseAuthorityFloor) : 1f;
+
+    /// <summary>The opposing-command limiter's scalar: the smaller of an alignment window on α and a
+    /// ramp on the delivered body-up load factor. Pure in its arguments so an instrument can sample
+    /// it at a state the model is not in. docs/org/flightModel.md, "Torques and the limiters".
+    /// ⚠ It multiplies ONLY a pitch or yaw command that swings the nose FURTHER off the flight path.
+    /// Applied to every command it reads as sluggish controls and is backwards.
+    /// ⚠ Zero is its neutral value at a standstill, and the G ramp is not floored at zero.</summary>
+    public float OpposingCommandLimitAt(float speed, float cosAlpha, float bodyUpLoadFactor,
+        float aoaLimiterFactor)
+    {
+        if (speed <= 0f)
+            return 0f;
+        var s = Stats;
+        float window = cosAlpha > s.MaxAoaCos ? (cosAlpha - s.MaxAoaCos) / (1f - s.MaxAoaCos) : 0f;
+        float limit = window * aoaLimiterFactor + (1f - aoaLimiterFactor);
+        // The band between the two authored starts leaves the AOA term standing on its own; the
+        // original jumps the comparison there rather than taking a min against 1.
+        if (bodyUpLoadFactor > s.HighGStart)
+            limit = Mathf.Min(limit, (s.HighGMax - bodyUpLoadFactor) / (s.HighGMax - s.HighGStart));
+        else if (bodyUpLoadFactor < s.LowGStart)
+            limit = Mathf.Min(limit, (s.LowGMax - bodyUpLoadFactor) / (s.LowGMax - s.LowGStart));
+        return limit;
+    }
 
     /// <summary>The weathervane's restoring torque for the current attitude and flight path, in BODY
     /// axes and in the same units as the stick command — <c>return_rate · (α/2)</c> about the axis
@@ -367,6 +444,8 @@ public sealed class FlightModel
         VelocityDir = -Attitude.Z;
         Speed = speed;
         Throttle = throttle;
+        _bodyUpLoadFactor = 0f;
+        CommandLimit = 1f;
     }
 
     /// <summary>Kills the engine for <paramref name="seconds"/>, the choker's effect
@@ -413,20 +492,38 @@ public sealed class FlightModel
         float liftGMax = Config.GetFloat("flightModel.liftGMax", LiftGMax);
         float altitudeCapM = Config.GetFloat("flightModel.altitudeCapM", AltitudeCapM);
         float noseChaseFactor = Config.GetFloat("flightModel.noseChaseFactor", NoseChaseFactor);
+        float aoaLimiter = Config.GetFloat("flightModel.aoaLimiterFactor", AoaLimiterFactor);
 
         // --- rotation: torque·recInertia against momentum damping, plus the bank coupling and the
         // weathervane into the same accumulator. Each axis carries its own authored authority curve
         // from airspeed alone, which is why an aeroplane goes mushy as it slows.
         float yawEff = YawAuthorityAt(Speed);
-        float rollPitchEff = RollPitchAuthorityAt(Speed);
+        float rollEff = RollAuthorityAt(Speed);
+        float pitchEff = PitchAuthorityAt(Speed);
+
+        // The axis that closes the nose onto the flight path, in body coordinates and read off the
+        // attitude this step ENTERS with, as the original reads it. A command projecting negatively
+        // on it swings the nose further off the path, and only that kind is softened below.
+        var enteringNose = -Attitude.Z;
+        var separationAxis = enteringNose.Cross(VelocityDir);
+        float separationSin = separationAxis.Length();
+        var closingAxis = separationSin > 1e-6f
+            ? Attitude.Transposed() * (separationAxis / separationSin)
+            : Vector3.Zero;
+        CommandLimit = OpposingCommandLimitAt(Speed, enteringNose.Dot(VelocityDir), _bodyUpLoadFactor, aoaLimiter);
 
         // ⚠ The authority scalars multiply the STICK COMMAND only. The bank coupling, the
         // weathervane and the ground blow are summed in below carrying none, which is the original's
         // arrangement: a slow aircraft keeps the full coupling and the full restoring torque.
         var cmd = new Vector3(
-            Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * pitchTune * rollPitchEff,
+            Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * pitchTune * pitchEff,
             Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y * yawTune * yawEff,
-            Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z * rollTune * rollPitchEff);
+            Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z * rollTune * rollEff);
+
+        // ⚠ Pitch and yaw only, and the stick command only. Roll carries no such test in the
+        // original, and neither does anything else summed into the accumulator below.
+        cmd.X = SoftenIfOpposing(cmd.X, closingAxis.X, CommandLimit);
+        cmd.Y = SoftenIfOpposing(cmd.Y, closingAxis.Y, CommandLimit);
 
         // Bank coupling (see BankYawCoupling), read off the attitude this frame ENTERED with,
         // alongside the stick command and before anything rotates it. That ordering is the
@@ -517,6 +614,8 @@ public sealed class FlightModel
         var liftAccel = liftDir.LengthSquared() > 1e-12f
             ? liftDir.Normalized() * (loadFactor * StandardG)
             : Vector3.Zero;
+        // Kept for the next step's opposing-command limiter, which is where the original reads it.
+        _bodyUpLoadFactor = liftAccel.Dot(Attitude.Y) / StandardG;
 
         // Thrust pulls along the nose and drag opposes the motion; the along-path shares fall out of
         // the vector sum. ⚠ Gravity acts at full strength in every attitude and carries no
@@ -654,6 +753,14 @@ public sealed class FlightModel
         var kick = lever.Cross((inv * normal).Normalized());
         BodyRates += kick * (GrazeKick * vn / crashSpeed);
     }
+
+    // The sign test the opposing-command limiter gates on, on the raw sign bits as the original
+    // tests them, so a negative zero on either side reads as negative rather than as agreement.
+    private static float SoftenIfOpposing(float command, float closingComponent, float limit) =>
+        (System.BitConverter.SingleToInt32Bits(command)
+         ^ System.BitConverter.SingleToInt32Bits(closingComponent)) < 0
+            ? command * limit
+            : command;
 
     // Solves clMax(V)·q(V)·RefArea = VehWeight for V at a load factor of 1 (see StallSpeed's doc for
     // why 1, not nom_gravity/StandardG). clMax's Mach term makes this implicit; a handful of

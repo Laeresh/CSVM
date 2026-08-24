@@ -880,39 +880,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-437` `[Bug]` **Two decoded control-authority terms are not implemented, and both are invisible
-  on the shipped data.** Each is traced in `crimson.exe` and absent from `FlightModel`, and neither
-  changes a number today because the authored values never reach the threshold. That is what makes
-  them worth an item rather than a doc note: the code reads as if the mechanism does not exist, so a
-  later change that makes either reachable produces a divergence nobody will connect to this.
-  - **Pitch has a second authority stage that roll does not.** `FUN_0048bdd0` fades pitch by
-    `high_speed_pitch_fade` on top of the shared base ramp: full authority until `0x0071c400`,
-    falling linearly to zero at `0x0071c404`, fallbacks **500 → 600 mph** (immediates at `0x474179`
-    and `0x474183`; the authored path parses the token at `0x6277f8` from MPH at
-    `0x4741f2`-`0x474231`). Our `RollPitchAuthorityAt` returns one curve for both axes, so the fade
-    is simply missing. It cannot bind on the shipped airframes because 500 mph is above every
-    `fd_speed`, which is also why the video reads pitch rate as flat with speed.
-  - **The opposing-command limiter is absent entirely.** `FUN_0048c470` softens a pitch or yaw
-    command whose sign opposes `unit(nose × v̂)` on the axis being commanded (`0x48ca7a` onward,
-    pitch and yaw only; roll carries no such test), by the smaller of an AOA term
-    `(cos α − maxAOACos) / (1 − maxAOACos)` and a G term ramping to zero between `highGs[0]` and
-    `highGs[1]`. So what it damps is recovery from a departure, not entry into one. Both halves are
-    authored out of reach on all eleven airframes (`ControlLimiterTests`), which is why nothing was
-    ported.
-  ⚠ **Neither is a tuning question and neither should be "fixed" by moving a constant.** The work is
-  to implement the term where the decode puts it, or to record a deliberate divergence with its
-  reason. A fade or a limiter that binds on shipped data would be a decode error, so if implementing
-  one changes any `flight-envelope` row on a stock airframe, the reading is wrong.
-  ⚠ Splitting `RollPitchAuthorityAt` touches every axis' command scaling; its own comment warns that
-  extending a curve to an axis that has its own double-fades it. Split the pitch stage off, do not
-  rebuild the base ramp.
-  *Size:* localized, and the second half may close as a recorded no-change.
-  *How you'd know it worked:* an airframe authored past the fade knee loses pitch authority and keeps
-  roll; a command opposing the flight path at a reachable `highGs` is softened while entry into the
-  same departure is not. Neither is reachable on stock data, so both need a synthetic airframe.
-  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md) ("Control authority vs speed"
-  and "Torques and the limiters", the decode pass that surfaced both).
-
 - `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
   complete and waiting, not as a discovery. Shipped: `MSG_CMD_NITROUS` ("Use Nitro-Booster") is a
   bindable command and `MSG_HUD_NITRO` ("Nitrous: boost: %1 charge: %2") its two-value readout;
@@ -994,7 +961,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   **UP** and slow, a stall recovery, not with the nose down. That makes it a weaker candidate for a
   soft nose-down than it looked, since the reported feel is a dive and this arm does not fire in
   one; re-read it against that sign before pursuing it. (2) `C24`'s authority ramp
-  (`FlightModel.RollPitchAuthorityAt`) fades pitch alongside roll below `turn_fade_in`/`_out`; the
+  (`FlightModel.RollAuthorityAt`) fades pitch alongside roll below `turn_fade_in`/`_out`; the
   autogyro is the airframe `BL-330` measured losing the MOST authority by its own stall speed
   (~79%), so a soft nose-down there could also just be the ramp doing its authored job and reading
   unfamiliar rather than being wrong.

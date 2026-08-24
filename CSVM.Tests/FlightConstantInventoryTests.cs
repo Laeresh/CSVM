@@ -69,6 +69,7 @@ public class FlightConstantInventoryTests
         ("FlightModel", "GroundBlowIntoFactor", 0.05, Decoded),
         ("FlightModel", "GroundBlowVelocitySteer", 2.0, Decoded),
         ("FlightModel", "NoseChaseFactor", 0.0, Decoded),
+        ("FlightModel", "AoaLimiterFactorDefault", 0.0, ProductException),
         ("FlightModel", "BounceLeverScale", 2.25, Contact),
         ("FlightModel", "GrazeFriction", 0.35, Contact),
         ("FlightModel", "GrazeKick", 1.2, Contact),
@@ -94,8 +95,8 @@ public class FlightConstantInventoryTests
     // added without a constant (or a constant exposed without a doc row) fails the census below.
     private static readonly string[] ConfigKeys =
     {
-        "altitudeCapM", "liftGMax", "liftGMin", "noseChaseFactor", "pitchTune", "rollTune",
-        "stallWarnFrac", "yawTune",
+        "altitudeCapM", "aoaLimiterFactor", "liftGMax", "liftGMin", "noseChaseFactor", "pitchTune",
+        "rollTune", "stallWarnFrac", "yawTune",
     };
 
     private static readonly Type[] InventoryTypes = { typeof(FlightModel), typeof(PhysicsConstants), typeof(StickRamp) };

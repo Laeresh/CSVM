@@ -2160,8 +2160,9 @@ in RADIANS as the original stores it), the Cockpit head's `autohead_turn_time`/`
 asymmetry, docs/formats/vehicle/player-globals.md), plus the decoded model's
 lift/AoA/G, turn/yaw-curve, pitch-fade and drag-fade-speed globals — docs/org/flightModel.md; converted
 exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G; the turn/yaw
-curves are live in the model, the G limiters and the pitch fade deliberately not, being authored out
-of reach), the `crash` block's `bounce_factor` (a raw scalar, read one level down inside that block
+curves, the pitch fade and the G limiter are all live in the model, the first two neutral on the
+authored values; the AOA window is held off by `FlightModel.AoaLimiterFactor`), the `crash` block's
+`bounce_factor` (a raw scalar, read one level down inside that block
 — the collision restitution's ceiling), the `engine_sound` def name with its
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
 records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per-part
@@ -2595,7 +2596,10 @@ index (its plane gone since the last press) resolves to.
 ## src/Flight/FlightModel.cs
 The decoded, data-driven aircraft plant. Rotation sums stick torque, bank coupling, `return_rate`
 weathervane and ground blow before exponential `ang_momentum_damp` decay; authored speed curves
-scale the stick command only.
+scale the stick command only, roll on the base ramp and pitch on that ramp times the authored
+high-speed fade. `OpposingCommandLimitAt` softens the pitch and yaw commands that swing the nose
+further off the flight path, on the decoded G ramp; its AOA half is decoded, reachable and held off
+by `AoaLimiterFactor` as a recorded divergence.
 Translation composes the original's own chain: the lag vector as a clamped lift demand plus
 decoded Mach drag, thrust and gravity; the velocity direction rotates only through that lift and
 the ground-blow steer (`NoseChaseFactor` 0 pins the retired kinematic chase out, config-selectable
