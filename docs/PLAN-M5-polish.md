@@ -133,8 +133,24 @@ wreck". The player could not tell which objective had completed, because the rea
 on its line (that display half is B11). What makes this sharp rather than vague is the contrast: the
 headless `campaign-loop` suite completes C3/M01's primary by flying its `TRAVELERS` approach and
 passes three runs in a row, so the runtime works in at least one scripted case and the divergence
-lives between that case and a real flown session. <TODO: mechanism under investigation; record the
-failing condition kind and its `file:line`, and say whether it is one bug or several.>
+lives between that case and a real flown session.
+
+⚠ **The discriminating fact, from a second pass: of the three fly-to objectives, only the mountain
+village registers; the tunnel already fails.** One condition kind succeeding once and failing twice
+argues against "the kind is unimplemented" and for something per-objective: a target node that does
+not resolve, a per-objective radius or volume, or an objective that is never woken. Chase that fork
+first. <TODO: mechanism under investigation; record which side it lands on, with `file:line`, and
+say whether it is one bug or several.>
+
+**The mission's authored shape is on film**, `OriginalScreenshots\Videos\Complete Mission M02.mkv`
+(5:01, a complete run of the original by the user, key frames kept under
+`playtest\M02-complete-run\`): fly to the tunnel, the mountain village and the wreck; fly to the
+wreck again to drop Jack, which plays a short cutscene of him parachuting whose staging depends on
+the approach direction; shoot down a cargo zeppelin (destroyable tanks slung below) and three
+Kestrels; fly back to the PANDORA and dock, which the film shows as flying into the airship's lit
+hangar bay, with an auto-land button as the alternative. Two of those steps reach past this item:
+the Jack cutscene is very likely gated on the trigger C21 owns, and docking inside the PANDORA is a
+mission ending nothing in our build has been shown to do.
 
 **Approach.** <TODO: settle from the investigation. The first fork is whether a whole condition kind
 is unimplemented or mis-evaluated, or whether something upstream is wrong (the graph not stepped in

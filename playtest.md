@@ -86,7 +86,7 @@ sounds like, watched and frame-sampled, never measured into a constant.
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-45` | The **pause screen's** objectives panel | The original shows nothing about objectives on the flight HUD; the objectives live on the pause screen, and the targets themselves are selectable in the world. That much is settled and does not need filming. What is still owed is the pause screen itself: open it in the original mid-mission, with at least one objective already completed, held long enough to read it. What must be in frame: where the objectives sit on that screen, how a completed one is marked, whether completed ones stay listed or drop, and what else shares the screen with them. | `BL-454`, which moves the readout off the HUD and onto the pause screen, and then owes that screen a presentation. The five `Campaign *.png` shots are all out-of-mission, so no reference for it exists. |
+| `CAP-45` | The **pause screen's** objectives panel, with an objective already completed | Mostly answered by `Complete Mission M02.mkv` (see `BL-454`), which shows the pause screen's whole composition. One question it does not answer: nothing had completed yet when the screen was opened, so **how a completed objective is marked, and whether it stays listed or drops, is still unknown**. What is owed is one pause screen opened *after* at least one objective has completed, held long enough to read. Nothing else needs filming. | `BL-454`, whose presentation is now settled apart from the completed-row marking. |
 
 ### Camera
 

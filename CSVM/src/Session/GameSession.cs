@@ -2469,6 +2469,7 @@ public partial class GameSession : Node3D
         // The campaign objectives graph (D31): armed once every runtime a directive can touch is
         // up, which is why it sits after the emplacement block rather than with the other
         // directors. It builds no node of its own.
+        _diagRuntime = state.WorldRuntime;
         _campaign?.Attach(new CampaignDirector.WorldInputs
         {
             Runtime = state.WorldRuntime,
@@ -3165,6 +3166,79 @@ public partial class GameSession : Node3D
             // FlightController, which owns the fire clock, and fires into _projectiles above.
             _versus?.Advance(dt);
         }
+
+        DiagTraceRoster();
+    }
+
+    private int _diagTick;
+    private AnimRuntime? _diagRuntime;
+    private bool _diagRefsDone;
+
+    private void DiagTraceRoster()
+    {
+        if (_campaign?.Graph is not { } graph)
+        {
+            return;
+        }
+
+        if (!_diagRefsDone)
+        {
+            _diagRefsDone = true;
+            foreach (var def in _campaign.Script.Objectives)
+            {
+                if (def.Travelers is not { } spec)
+                {
+                    continue;
+                }
+
+                string where;
+                if (spec.WherePoint is { } pt)
+                {
+                    where = $"POINT ({pt[0]:0},{pt[1]:0},{pt[2]:0})";
+                }
+                else
+                {
+                    var found = _diagRuntime?.FindNodes(spec.WhereNode ?? "");
+                    where = found is { Count: > 0 }
+                        ? $"NODE '{spec.WhereNode}' x{found.Count} -> ({found[0].GlobalPosition.X:0},{found[0].GlobalPosition.Y:0},{found[0].GlobalPosition.Z:0}) inTree={found[0].IsInsideTree()} vis={found[0].Visible}"
+                        : $"NODE '{spec.WhereNode}' UNRESOLVED";
+                }
+
+                GD.Print($"DIAGREF OBJ{def.Number} id={def.Identity?.Class.ToString() ?? "-"}/{def.Identity?.Priority.ToString() ?? "-"} " +
+                         $"dormant={def.BeginDormant}:{def.DormantUntil} who='{spec.Who}' r={spec.Radius:0} {where}");
+            }
+        }
+
+        if ((_diagTick++ % 60) != 0)
+        {
+            return;
+        }
+
+        var p = _rigs.Count > 0 ? _rigs[0].Controller : null;
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"DIAG t={_diagTick / 60}s ");
+        if (p != null)
+        {
+            sb.Append($"player=({p.WorldPosition.X:0},{p.WorldPosition.Y:0},{p.WorldPosition.Z:0}) ");
+        }
+
+        foreach (var def in _campaign.Script.Objectives)
+        {
+            if (def.Travelers is not { } spec)
+            {
+                continue;
+            }
+
+            Vector3? refPos = spec.WherePoint is { } pt
+                ? new Vector3(pt[0], pt[1], pt[2])
+                : _diagRuntime?.FindNodes(spec.WhereNode ?? "") is { Count: > 0 } f
+                    ? f[0].GlobalPosition
+                    : null;
+            string d = refPos is { } r && p != null ? $"{p.WorldPosition.DistanceTo(r):0}" : "?";
+            sb.Append($"| O{def.Number} {graph.StateOf(def.Number)}{(graph.CompletedOf(def.Number) ? "*" : "")} d={d}/r{spec.Radius:0} ");
+        }
+
+        GD.Print(sb.ToString());
     }
 
     // player.json's activation floor, on the same lazily loaded skills table the spawner reads;

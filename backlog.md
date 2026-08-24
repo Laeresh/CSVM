@@ -1987,7 +1987,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   was not on its line, so the player could not tell which one had completed. *Fix shape:* move the
   readout to the pause screen and take it off the HUD; keep the graph binding and the completion
   marking, which are D33's and are not in question, and fix the mark's alignment while moving it.
-  *⚠ Traps:* ⚠ the completed-row marking is the half that has an in-engine proof
+  **The presentation is referenced**, from `OriginalScreenshots\Videos\Complete Mission M02.mkv` at
+  t=12 s (frame kept at `playtest\M02-complete-run\pause-screen-objectives.png`): the pause screen
+  is the mission map filling the left two thirds with its `?` flags planted (one labelled `4`, the
+  PANDORA dock), an `Objectives` parchment top-right carrying the numbered lines, a photo
+  bottom-right, a compass rose and copyright line bottom-left, and four plaque buttons in two rows
+  centre-bottom, `Resume`/`Restart` over `Preferences`/`Quit`. The same film at t=5 s shows the
+  flight HUD carrying gauges alone (rockets, altimeter, artificial horizon, guns, airspeed, a
+  compass tape) with no objectives anywhere, which is the footage confirmation that the readout does
+  not belong there.
+  *⚠ Traps:* ⚠ nothing had completed when that pause screen was opened, so how a completed line is
+  marked, and whether it stays listed, is still unknown and is what `CAP-45` still owes; do not
+  invent a checkmark idiom from the placeholder. ⚠ the completed-row marking is the half that has an
+  in-engine proof
   (`campaign-objectives-hud` asserts the readout marks its own completed line, not just the graph),
   so the move must keep that suite meaningful rather than deleting it. ⚠ Do not also remove
   in-world target selection: the same verdict says targets ARE selectable in the world, and that is
@@ -2268,8 +2280,19 @@ usual.
   completed, and "I couldn't drop Jack at the wreck". *Evidence:* the user's own pass, which is the
   only place this has been observed; the headless `campaign-loop` suite completes C3/M01's primary
   by flying its `TRAVELERS` approach and passes, so the machinery works in at least that scripted
-  case and the divergence is between the suite and a real flown session. <TODO: mechanism under
-  investigation; fill in the condition kind that fails and its `file:line`.> *⚠ Traps:* one known
+  case and the divergence is between the suite and a real flown session.
+  **The mission's authored shape is now on film**, `OriginalScreenshots\Videos\Complete Mission
+  M02.mkv` (5:01), a complete run of the original by the user: fly to three places (the tunnel, the
+  mountain village, the wreck); fly to the wreck AGAIN to drop Jack, which plays a short cutscene of
+  him parachuting down whose staging depends on the direction the player approaches from; shoot down
+  a cargo zeppelin (destroyable tanks slung below) and three Kestrels; fly back to the PANDORA and
+  dock, which the film shows as flying into the airship's lit hangar bay, with an auto-land button
+  as the alternative. The pause screen at t=12 s lists the four objectives.
+  ⚠ **The discriminating fact: of the three fly-to objectives, only the mountain village registers
+  in our build; the tunnel already fails.** One condition kind succeeding once and failing twice
+  argues against "the kind is unimplemented" and for something per-objective: a target node that
+  does not resolve, a per-objective radius or volume, or an objective never woken. <TODO: mechanism
+  under investigation; fill in which, with `file:line`.> *⚠ Traps:* one known
   class of objective is unsatisfiable by design today, `ANIM_STATE <def> EXECUTED` (`BL-448`),
   because nothing plays a mid-mission cutscene; do not fold every non-completing objective into
   that explanation before checking the condition each one actually uses. *Cross-refs:* `BL-448`;
