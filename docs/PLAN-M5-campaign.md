@@ -198,7 +198,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ Campaign mission director: the objectives runtime (from A1) + mission end/return flow
 32. ☑ Cutscene player: intro animations, letterbox, camera control, handoff (`BL-134`)
-33. ◐ In-flight objectives display + objective sound cues
+33. ☑ In-flight objectives display + objective sound cues
 34. ◐ Campaign wingmen: named rosters + netless station-keeping (`BL-362`, `BL-364`)
 35. ☑ Mid-mission world fidelity: `WAKE_ANIM` doors (`BL-350`), scripted-path vehicles (`BL-361`), `WorldPartitionSetActive` (`BL-037`), `FogState` (`BL-038`)
 36. ☑ AI targeting candidates beyond aircraft (`BL-363`)
