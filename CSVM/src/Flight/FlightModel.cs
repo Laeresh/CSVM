@@ -31,6 +31,12 @@ public struct FlightInput
     /// ⚠ Zero, the default, is "at a human", which keeps every caller that says nothing on the
     /// near-field aerodynamics.</summary>
     public float NearestHumanDistSqM;
+
+    /// <summary>The nitro boost flag, filled by the caller from its <see cref="NitroSystem"/>.
+    /// While set the thrust lever is REPLACED by <see cref="FlightModel.BoostLever"/> and the drag
+    /// coefficient scaled by <see cref="FlightModel.BoostDragFactor"/>; the throttle itself is
+    /// untouched, so the far-field cruise target and the lever slew never see it.</summary>
+    public bool Boost;
 }
 
 /// <summary>
@@ -53,6 +59,8 @@ public sealed class FlightModel
     public Vector3 VelocityDir = Vector3.Forward;
     public float Speed;                           // m/s along VelocityDir
     public float Throttle;
+    // The boost flag as of the last Step, for the instruments and the engine-audio pins that read it.
+    public bool Boosting;
     // deg: angle(nose, VelocityDir) at frame start, i.e. before this step's forces move
     // VelocityDir — see Step()'s "α" comment. An emergent LAG behind the lift demand, not a
     // modelled aerodynamic incidence. Reported for instruments only — no force term reads it.
@@ -175,6 +183,12 @@ public sealed class FlightModel
     private const float DragPolarParasite = 0.12f;
     private const float DragPolarLinear = 0.8f;
     private const float DragPolarQuad = 0.5f;
+
+    // Nitro: the boost flag substitutes a flat lever for the throttle (not a multiply, so boosting
+    // at idle is boosting at full) and scales the drag coefficient. docs/org/flightModel.md, "Nitro".
+    // ⚠ The lever substitution happens at the thrust read; the throttle and its slew are untouched.
+    private const float BoostLever = 1.8f;
+    private const float BoostDragFactor = 0.8f;
 
     // Per-axis control-rate calibration: steady rate = torque · recInertia · Tune / ang_momentum_damp
     // (× eff on yaw). All three are 1: the original has no such factor on any axis.
@@ -501,6 +515,7 @@ public sealed class FlightModel
     public void Step(FlightInput input, float dt)
     {
         Throttle = Mathf.Clamp(input.Throttle, 0f, 1f);
+        Boosting = input.Boost;
         var s = Stats;
 
         // Spent before the forces below read it, so the frame the timer runs out already has thrust.
@@ -679,12 +694,15 @@ public sealed class FlightModel
             float cd = DragPolarScale
                        * (DragPolarParasite + DragPolarLinear * mach + DragPolarQuad * mach * mach);
             // Force (weight units) → acceleration is × StandardG / Weight, the same conversion lift uses.
+            if (Boosting)
+                cd *= BoostDragFactor;
             float dragAccel = s.VehWeight > 1e-3f
                 ? qRefArea * s.DragFactor * cd * StandardG / s.VehWeight
                 : 0f;
             // A choked engine contributes no thrust and nothing else: no drag term, no lift term and no
             // airspeed clamp are touched (docs/org/ordnanceTypes.md, "The choker, settled").
-            float thrustAccel = EngineDead ? 0f : ThrustAccelAt(Speed, Throttle) * AttitudeThrustScale(Attitude.Z.Y);
+            float lever = Boosting ? BoostLever : Throttle;
+            float thrustAccel = EngineDead ? 0f : ThrustAccelAt(Speed, lever) * AttitudeThrustScale(Attitude.Z.Y);
             var accel = nose * thrustAccel
                         - VelocityDir * dragAccel
                         + Vector3.Down * s.Gravity

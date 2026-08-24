@@ -1410,8 +1410,7 @@ internal static class CombatSuites
         ctx.Check(Mathf.IsEqualApprox(Volume(level), Volume(new EngineDrive(1f, 0.3f, 1f))),
             $"neither term is audible on volume against the flat curve: {Volume(level):0.0000} either way");
 
-        // Boost REPLACES the parameters. Nothing sets it today (no nitro system), so this is the
-        // only thing that exercises the branch.
+        // Boost REPLACES the parameters (the nitro flag, FlightModel.Boosting, sets it in flight).
         float boosted = Pitch(new EngineDrive(0f, 0f, 0f, Boosting: true));
         ctx.Check(Mathf.IsEqualApprox(boosted, stats.EnginePitch.Remap(1.25f)),
             $"boost pins the pitch parameter at 1.25 regardless of a closed throttle: {boosted:0.0000}");

@@ -89,7 +89,7 @@ authored magnitude lands at its block's `[9]` (and `[10]` for the two-term sourc
 | 3 | `+0x9c` | `explosion` | `max_magnitude` `+0xc0` | the same site, index 3 | one nearby detonation |
 | 4 | `+0xc8` | `high_speed` | `min_speed` `+0xec`, `magnitude_quotient` `+0xf0` | `FUN_0048c470` at `0x48d1bc` | every frame over the gate |
 | 5 | `+0xf4` | `turbulence` | none parsed; `+0x118` is never written | `FUN_0048d2c0` at `0x48d409` | one collision contact |
-| 6 | `+0x120` | `nitro` | `magnitude` `+0x144` | `FUN_004b2131` at `0x4b21ce` | nitro engaged, player only |
+| 6 | `+0x120` | `nitro` | `magnitude` `+0x144` | `FUN_004b2131` at `0x4b21ce` | nitro engaged, player only (`PlaneShake.NitroEngaged`, every human pilot) |
 
 That table is the complete kicker list. `FUN_0042c070` is a one-line forwarder to `FUN_0042be10`,
 `FUN_0042be10` has no other caller, and the five call sites above are every xref to

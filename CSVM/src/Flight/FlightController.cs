@@ -257,6 +257,11 @@ public partial class FlightController : Node3D
     /// path off this same split (<see cref="FlightModel.UsesAiForcePath"/>).</summary>
     public AiPilot? Pilot;
 
+    /// <summary>The nitro boost lifecycle. <see cref="NitroSystem.Installed"/> is the build's
+    /// (the hangar's nitrous engine pick, or the AI spawn's roster flag); the command arm, the
+    /// AI maneuver arm, the tank and the animation edges run from <see cref="SimStep"/>.</summary>
+    public NitroSystem Nitro = new();
+
     /// <summary>Where the human pilots are, as one snapshot per call — the seam the flight model's
     /// far-field plant is selected on (<see cref="FlightModel.FarFieldPlant"/>). The session binds
     /// the same snapshot every other "who is nearest" consumer reads. Null (every rig built without
@@ -330,6 +335,9 @@ public partial class FlightController : Node3D
     private const float CarrierDropThrottle = 0.1f;
     private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
+    // The nitro_decay def's authored opacity fade (RUN_TIME 1.0), which is how long a re-engage
+    // stays refused for; the runtime has no completion callback to read it off.
+    private const float NitroDecayAnimSeconds = 1f;
     private const float DebugFinishStagger = 1.5f; // s between players' forced finishes (--debug-scoreboard in a race)
 
     private const float GrazeReactionInterval = 1.5f; // s between graze reactions — NOT a tuned value:
@@ -421,6 +429,8 @@ public partial class FlightController : Node3D
     private bool _gunnerLoggedFire;              // verification breadcrumb: the AI gunner's first open fire
     private bool _rocketeerLoggedFire;           // verification breadcrumb: the AI's first ordnance launch
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
+    private bool _aiNitroArmed;                  // the current AI nitro maneuver already engaged
+    private float _nitroDecayLeftS;              // s the nitro_decay def has left to play
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
     private int? _team;                          // Team's backing field — null until overridden (B7)
@@ -869,6 +879,9 @@ public partial class FlightController : Node3D
         // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → the spawn
         // throttle) must never itself read as a slam.
         ThrottleSmoke?.Reset(_throttle);
+        Nitro.Reset();
+        _aiNitroArmed = false;
+        _nitroDecayLeftS = 0f;
         SpeedCue?.Reset();
         _model.Reset(_spawnPos, _spawnAttitude, _spawnSpeed, _throttle);
         _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
@@ -1257,6 +1270,8 @@ public partial class FlightController : Node3D
             input.AiGroundBlowScale = !groundBlowReady ? -1f
                 : _lifecycle.PostDropGroundBlowActive ? 0.15f : 1f;
             input.NearestHumanDistSqM = NearestHumanDistSqM();
+            AdvanceNitro(dt);
+            input.Boost = Nitro.Boosting;
             _lastInput = input;
             _grazeReactionCooldown -= dt;
             // The original's sweep resolves a contact every other frame, and spends the damage pair
@@ -1556,7 +1571,7 @@ public partial class FlightController : Node3D
                 Damage?.SummaryHealthFraction ?? 1f);
             // One drive for both paths: the original runs ONE per-frame routine for the player and
             // every AI vehicle, so the two must never read the airframe differently.
-            var engineDrive = EngineAudioCurves.DriveFrom(_model);
+            var engineDrive = EngineAudioCurves.DriveFrom(_model, _model.Boosting);
             // Keyed to the SELECTED view (D31), not the per-frame pose the camera actually took —
             // the original's swap is a camera-mode gate, and a held numpad key or look-behind is a
             // pose, not a mode change (⚠ table row 2 traces the analogous head-look case).
@@ -1640,6 +1655,66 @@ public partial class FlightController : Node3D
         return Mathf.Sign(v) * t * t;
     }
 
+    // N / gamepad X — the nitro command (the original's MSG_CMD_NITROUS "Use Nitro-Booster").
+    // A level read: the command arm engages on pressed-or-held and ignores it otherwise.
+    private bool NitroPressed() => KeyDown(Key.N) || PadPressed(JoyButton.X);
+
+    // The nitro lifecycle for this step, in the original's order: the command arm (human key,
+    // or the AI's nitro-flagged maneuver), then the tank, then the edges the flag produced.
+    // Every human pilot takes the player's arms (shake, loop, animation): plan Decision 3.
+    private void AdvanceNitro(float dt)
+    {
+        bool engineOut = _model.EngineDead;
+        if (IsHumanPiloted)
+            Nitro.HumanCommand(NitroPressed(), engineOut, dt);
+        else if (Pilot?.Machine?.Executor is { Maneuver.Nitro: true })
+        {
+            // One engage per maneuver, the way the maneuver starter fires SetNitro(1) once.
+            if (!_aiNitroArmed)
+                Nitro.AiSet(true, engineOut, dt);
+            _aiNitroArmed = true;
+        }
+        else
+        {
+            _aiNitroArmed = false;
+            Nitro.AiSet(false, engineOut, dt);
+        }
+        Nitro.Advance(dt, engineOut);
+
+        if (Nitro.EngagedThisTick)
+        {
+            if (IsHumanPiloted)
+                Shake?.NitroEngaged();
+            if (PlaneModel != null)
+                CrashRuntime?.PlayWithin(PlaneModel, "nitro_boost", applyReset: false);
+            Log.Debug("flight", $"nitro engaged charge={Nitro.Charge:0.0}");
+        }
+        if (Nitro.ReleasedThisTick && PlaneModel != null && CrashRuntime != null)
+        {
+            CrashRuntime.StopWithin(PlaneModel, "nitro_boost");
+            CrashRuntime.PlayWithin(PlaneModel, "nitro_decay", applyReset: false);
+            _nitroDecayLeftS = NitroDecayAnimSeconds;
+            Log.Debug("flight", $"nitro released charge={Nitro.Charge:0.0}");
+        }
+        // The decay def has no completion callback here; its opacity fade is authored 1.0 s long.
+        if (_nitroDecayLeftS > 0f)
+        {
+            _nitroDecayLeftS -= dt;
+            if (_nitroDecayLeftS <= 0f)
+                Nitro.DecayFinished();
+        }
+        else if (Nitro.DecayAnimPlaying)
+            Nitro.DecayFinished();
+
+        if (IsHumanPiloted && Audio != null)
+        {
+            if (Nitro.BoostAnimAlive)
+                Audio.StartNitroLoop();
+            else
+                Audio.StopNitroLoop();
+        }
+    }
+
     // Space / gamepad B — the gun trigger (caller drives the fire-rate clock);
     // `--fire` holds it down for unattended runs.
     private bool FirePressed() => AutoFire || KeyDown(Key.Space) || PadPressed(JoyButton.B);
@@ -1696,6 +1771,9 @@ public partial class FlightController : Node3D
             Loadout = Loadout,
             GunSelect = _fire?.GunSel ?? 0,
             PylonSelect = _fire?.SelectedPylon ?? 0,
+            NitroInstalled = Nitro.Installed,
+            NitroBoosting = Nitro.Boosting,
+            NitroChargeFrac = Nitro.ChargeFraction,
             ReticleGun = reticleGun,
             ReticleOrigin = reticleOrigin,
             ReticleNose = reticleNose,
@@ -2087,6 +2165,7 @@ public partial class FlightController : Node3D
             _gunLoopOn = false;
             Audio?.StopGunLoop();
         }
+        Audio?.StopNitroLoop();
         Audio?.OnCrash();
         // An AI aircraft's loops end here and stay ended: the animation's own authored sound
         // events are what is audible from now on, and no wreck respawns to restart them.

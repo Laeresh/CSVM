@@ -881,22 +881,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
-  complete and waiting, not as a discovery. Shipped: `MSG_CMD_NITROUS` ("Use Nitro-Booster") is a
-  bindable command and `MSG_HUD_NITRO` ("Nitrous: boost: %1 charge: %2") its two-value readout;
-  `nitrogauge` is in `instruments.zrd.json`'s cockpit layout and all 11 planes carry
-  `nitrogauge` / `nitro_backplate` / `nitro_boost` / `nitro_charge` gauge nodes in planes.zbd;
-  `nitro_boost` / `nitro_decay` are ON_CALL anim defs in `plane_props.zrd.json` (with `ai_nitro_*`
-  wrappers) firing `snd_nitrostart` / `snd_nitrostop` at `nitroprop1` and driving `nitropuff1-4`
-  plus `spin_nitrorotor1-3`; `snd_nitro` is a LOOPED 3D loop (`RANGE [30,400]`). `PropParts`
-  already classifies `nitropropN`, and both `PlaneBuilder` and each plane's own `RESET_STATE` ship
-  it INACTIVE — so the visual half is one `Kind.Nitro` unhide away.
-  ⚠ **The numeric tuning stats did not ship.** No nitro key exists in `vehicle.json` or
-  `player.json` — boost magnitude, charge capacity, burn rate, recharge rate and the speed cap are
-  executable-resident, so this needs a hand-tuned balance pass A/B'd against the original, not a
-  data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
-  buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
-
 - `BL-388` `[Tuning]` `[Owed-playtest]` **The AI autogyro's nose-down at low speed may read softer
   than the original's — soft, single-session A/B, not a confirmed measurement.** `PT-57`
   (`docs/plans/PLAN-ai-flight.md` F52 player arm, 2026-08-15): the autogyro's authority-ramp feel

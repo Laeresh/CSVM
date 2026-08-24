@@ -159,9 +159,10 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   (426.5, 1299), speedometer mirrored ≈ 420 px from the right edge, same height as
   the altimeter. (The two reference screenshots place the cluster slightly
   differently — HUD.png is the canonical one, matching the compass metrics.)
-- Also in the subtree, still unwired in the remake: `nitrogauge`, the
-  artificial-horizon `horizn` and drum `comp` compass. The `gungauge` /
-  `missilegauge` are decoded below.
+- Also in the subtree, still unwired in the remake: the artificial-horizon `horizn` and drum
+  `comp` compass. The `gungauge` / `missilegauge` are decoded below; `nitrogauge` (face,
+  `nitro_backplate`, needles `nitro_boost` / `nitro_charge`) is driven by `GaugeCluster` off the
+  nitro decode in `docs/org/flightModel.md`, "Nitro".
 
 ## Weapon gauges
 

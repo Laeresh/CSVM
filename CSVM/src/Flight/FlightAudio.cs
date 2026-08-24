@@ -59,6 +59,8 @@ public partial class FlightAudio : Node
     private AudioStreamPlayer? _gunLoop;
     private string? _gunLoopName;
     private float _gunLoopVol = 1f;
+    private AudioStreamPlayer? _nitroLoop;
+    private float _nitroLoopVol = 1f;
     private AudioStreamPlayer? _emptyClip;
     private float _emptyClipVol = 1f;
 
@@ -166,6 +168,27 @@ public partial class FlightAudio : Node
     }
 
     public void StopGunLoop() => _gunLoop?.Stop();
+
+    /// <summary>Start (or keep playing) the <c>snd_nitro</c> sustain loop, own-ship like the gun
+    /// loop; the start and stop stings are the boost/decay defs' own sound events.</summary>
+    public void StartNitroLoop()
+    {
+        if (_nitroLoop == null && _archive != null && _defs != null
+            && _defs.TryGetValue("snd_nitro", out var def)
+            && _archive.Find(def.WavName, looped: true) is { } stream)
+        {
+            _nitroLoop = new AudioStreamPlayer { Stream = stream };
+            AddChild(_nitroLoop);
+            _nitroLoopVol = def.Volume;
+        }
+        if (_nitroLoop is { Playing: false })
+        {
+            _nitroLoop.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold, _nitroLoopVol * MixGain));
+            _nitroLoop.Play();
+        }
+    }
+
+    public void StopNitroLoop() => _nitroLoop?.Stop();
 
     /// <summary>The empty-clip cue — one shot when a dry gun's trigger is pulled.</summary>
     public void PlayEmptyClip() => PlayOneShot(_emptyClip, _emptyClipVol * MixGain);

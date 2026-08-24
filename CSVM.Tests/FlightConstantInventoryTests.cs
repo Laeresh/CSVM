@@ -87,6 +87,14 @@ public class FlightConstantInventoryTests
         ("FlightModel", "ReverseAuthorityFloor", 0.2, Decoded),
         ("FlightModel", "FarFieldRangeM", 1000.0, Decoded),
         ("FlightModel", "FarFieldAiSpeedBonus", 5.0, Decoded),
+        ("FlightModel", "BoostLever", 1.8, Decoded),
+        ("FlightModel", "BoostDragFactor", 0.8, Decoded),
+        ("NitroSystem", "Capacity", 30.0, Decoded),
+        ("NitroSystem", "BurnRate", 4.0, Decoded),
+        ("NitroSystem", "RechargeRate", 1.0, Decoded),
+        ("NitroSystem", "EngageFraction", 0.99, Decoded),
+        ("NitroSystem", "CutoffFraction", 0.05, Decoded),
+        ("NitroSystem", "MinBoostAnimSeconds", 1.0, Decoded),
         ("PhysicsConstants", "NomGravity", 20.0, Authored),
         ("PhysicsConstants", "MphToMs", 0.44704, Decoded),
         ("StickRamp", "Rate", 2.5, Decoded),
@@ -108,7 +116,7 @@ public class FlightConstantInventoryTests
     private static readonly Type[] InventoryTypes =
     {
         typeof(FlightModel), typeof(PhysicsConstants), typeof(StickRamp), typeof(CollisionDamage),
-        typeof(AircraftContactResolver),
+        typeof(AircraftContactResolver), typeof(NitroSystem),
     };
 
     private static string ZrdrPath =>

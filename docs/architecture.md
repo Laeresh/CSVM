@@ -170,7 +170,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ControlSurfaceAnimator.cs` — poses ailerons/elevators/rudders from those slot angles; `--fly` only.
 - `src/Flight/WingLightBlinker.cs` — blinks the wingtip flares 0.08 s every 1.5 s, reset off on respawn; `--fly` only.
 - `src/Flight/PylonOrdnance.cs` — the rockets under the wings: one FLYOUT-model body per loaded pylon, hidden as its ammo depletes; `--fly` only.
-- `src/Flight/PlaneShake.cs` — the plane-wobble oscillators (gunfire buzz, overspeed rattle, being-hit rocks) summed to visual-only roll on the rig's ShakePivot.
+- `src/Flight/PlaneShake.cs` — the plane-wobble oscillators (gunfire buzz, overspeed rattle, being-hit rocks, the nitro engage) summed to visual-only roll on the rig's ShakePivot.
+- `src/Flight/NitroSystem.cs` — the nitro boost lifecycle: the decoded tank, one-shot engage, cutoff, gates and animation edges, engine-free.
 - `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's triangles, with no per-plane data.
 - `src/Flight/CollisionLayers.cs` — the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.
 - `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` boxes on the aircraft layer; struck shape → part name.
@@ -2624,8 +2625,24 @@ and the remaining invented laws (`C22`) stay in `AircraftContactResolver`/`Fligh
 The choker's extend-only timer zeroes thrust alone. There is no engine torque: every write to the
 original's angular accumulator is a product of state-derived vectors and none reads the throttle,
 so the rotational plant is mirror-symmetric and `EngineTorqueAbsenceTests` pins it that way; do not
-re-chase the GDD's one-sided turn assist. Full decode, standing conflicts and deliberately
+re-chase the GDD's one-sided turn assist. `FlightInput.Boost` is the nitro flag: it REPLACES the
+lever with `BoostLever` 1.8 at the thrust read (the throttle and its slew are untouched, so an idle
+boost is a full-throttle boost) and scales the drag coefficient by `BoostDragFactor` 0.8; the
+lifecycle that sets it is `NitroSystem`. Full decode, standing conflicts and deliberately
 absent terms: [`org/flightModel.md`](org/flightModel.md); measurement rules: `verification.md`.
+
+## src/Flight/NitroSystem.cs
+The original's nitro boost lifecycle, engine-free (docs/org/flightModel.md, "Nitro"): a 30-unit
+tank burned at 4/s while boosting and refilled at 1/s always, so a burn nets 3/s and runs 9.5 s
+from full to the 5 % cutoff; the human arm (`HumanCommand`) engages on a held command only from a
+99 % tank and re-asserts the flag until the cutoff, so nothing stops a burn and the refill to
+re-arm takes 28.2 s; the AI arm (`AiSet`) has no engage line and fires once per nitro-flagged
+maneuver. Both refuse an engine-out aircraft and a re-engage while the boost or decay animation
+is alive; the boost animation lives at least 1 s after an engage. `Installed` is the injector
+(the hangar's nitrous engine ids 3-5, or the roster block's `nitro` slot); `EngagedThisTick` and
+`ReleasedThisTick` are the edges `FlightController.AdvanceNitro` turns into the shake kick, the
+`nitro_boost`/`nitro_decay` defs and the `snd_nitro` loop. Every constant is censused by
+`FlightConstantInventoryTests`; `NitroSystemTests` pins the lifecycle and the force couplings.
 
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies
@@ -2721,7 +2738,8 @@ absent sources read as null and `PlaneShake` no-ops them.
 
 ## src/Flight/PlaneShake.cs
 The plane-wobble oscillators: gunfire buzz (`fire_bullet`), overspeed rattle (`high_speed`),
-and being-hit rocks (`bullet_impact`/`missile_impact`/`explosion`), summed each sim tick into
+being-hit rocks (`bullet_impact`/`missile_impact`/`explosion`) and the nitro engage (`nitro`, one
+kick of its absolute authored `magnitude`, human pilots only), summed each sim tick into
 `Roll` — radians the controller writes to `ShakePivot`, the node the assembler hung the plane
 model under. Engine-free on purpose (unit-tested); the pivot write is the controller's one line.
 Amplitude = `magnitude_factor × caliber` in radians of roll, **measured** off original footage
@@ -3119,7 +3137,10 @@ HudMetrics.Scale; Build returns null if a texture is missing; _Process re-anchor
 
 ## src/Flight/GaugeCluster.cs
 The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, plus
-the gun + missile weapon gauges, all geometry extracted from the plane's own gauges subtree
+the gun + missile weapon gauges and the nitro dial (`nitrogauge`, drawn only with the injector
+installed; its two needles chase the decoded targets through `NitroNeedle`'s exponential at 3/s
+and 1.5/s over a 216° sweep, and its screen placement above the GUNS dial is this port's), all
+geometry extracted from the plane's own gauges subtree
 (structure/scales/quirks: docs/formats/hud.md); polys draw by data priority, rest rotations
 ignored; PartFraction binds flight or the lab; dial centres are bottom-anchored (FromBottom) so
 panes keep them on screen. `DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (`BL-085`/`BL-173`) is
@@ -4633,7 +4654,7 @@ splitscreen, where one pilot brackets another's build.
 The record of which authored anims are playable effects, and what their defs need staged: the name
 tables every effect producer must stay inside, static and engine-free. Owns `EffectAnimNames`, the
 crash-rig's own name sets (`CrashDefTable`/`AiCrashDefTable`/`TouchdownDefTable`,
-`PlaneDamageEffectAnims`, `PropChoreographyAnims`, and the two damage-stage menus
+`PlaneDamageEffectAnims`, `PropChoreographyAnims`, `NitroAnims`, and the two damage-stage menus
 `PlayerDamageStageAnims`/`AiDamageStageAnims` with their union `DamageStageAnims`), the death
 path's OTHER slot (`AirframeDestroyAnims`/`DestroyAnimFor`, the self-named destroy def, with
 `FliesOwnHull` asking the data which family owns the landing), `ResolvedSurfaceIds`

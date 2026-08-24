@@ -2780,6 +2780,122 @@ STEADY rate, which matches; a transient chased through them breaks the thing tha
 The square-wave cadence sweep is the measurement that belongs to that gap — see the stick-ramp
 section's landing note.
 
+## Nitro — the boost lifecycle, traced whole
+
+The force side was known (the flag `[obj+0x947]` replaces the lever with 1.8 and sets the drag
+multiplier to 0.8 at `0x48fcb6`–`0x48fcbd`); this section is the rest: who sets the flag, what
+charge it spends, and what the data does and does not author. The dynamics are executable-resident
+constants, and every one of them is listed here with its address.
+
+**The charge is a 30-unit tank burned at 4/s and refilled at 1/s.** The vehicle constructor
+`FUN_004aff80` writes the four slots at `0x4b02c4`–`0x4b02e9`: the cap `[obj+0x8b4]` = 30.0
+(`0x41f00000`), the charge `[obj+0x8b8]` = 30.0 (spawns full), the burn rate `[obj+0x8bc]` = 4.0
+and the recharge rate `[obj+0x8c0]` = 1.0. Nothing else writes any of the four, and no data key
+reaches them: the vehicle-def token table has no nitro token, and `vehicle.json`/`player.json`
+author none. The per-vehicle update `FUN_0049f6a0` spends them at `0x49f810`–`0x49f89f`, every
+frame for every aircraft:
+
+```
+if boosting:  charge -= dt · 4                       ; 0x49f810–0x49f826
+charge += dt · 1                                     ; 0x49f82c–0x49f83e, unconditionally
+charge = clamp(charge, 0, 30)                        ; 0x49f84a–0x49f87a
+if charge < 0.05 · 30:  SetNitro(0)                  ; 0x49f882–0x49f89f, the 5 % cutoff
+```
+
+The recharge line is not gated on the boost, so the net burn while boosting is **3/s**: a full
+tank runs 30 → 1.5 in **9.5 s**, and the refill from the cutoff back to the re-arm line (below)
+takes **28.2 s**. Boosting burns no fuel: the fuel line at `0x48e603` reads the lever, which the
+boost does not touch.
+
+**Activation is a one-shot.** The human handler `FUN_00487460` tests the command at
+`0x487e91`–`0x487efc`, after the eight-notch throttle quadrant, with command index `0x12`
+(`MSG_CMD_NITROUS`, "Use Nitro-Booster"):
+
+```
+if !installed [obj+0x946] or charge < 0.05 · cap:   SetNitro(0)       ; 0x487e91–0x487eb2, 0x487ef9
+elif charge < 0.99 · cap:                            ; 0x487eb4–0x487ecb
+    if boosting: SetNitro(1)   else: nothing         ; 0x487eeb–0x487ef7
+else (charge >= 99 %):
+    if command pressed or held: SetNitro(1)          ; 0x487ecd–0x487ee9
+```
+
+The two fractions are the literals at `0x6034d8` (0.05) and `0x6080a8` (0.99), and the same
+0.05 literal is the cutoff in the vehicle update.
+
+So the key engages the boost only from a tank at or above **99 %**, and once engaged there is no
+input that stops it: the middle arm re-asserts the flag until the 5 % cutoff turns it off, and
+releasing the key does nothing. A burn is therefore always the full 9.5 s, and the tank must refill
+to 99 % before the next one. The player-only shake (block 6, `docs/org/shakes.md`) and the
+`NitroStart` force-feedback effect (`FUN_004814f0`, `0x4b21f4`) ride the engage edge.
+
+**The state machine is `FUN_004b2110(want)`**, a vehicle method with seven callers. Per call:
+
+```
+if want and engine out ([obj+0x2dc] & 2):            refuse (return)     ; 0x4b2136
+if want and anim handle [+0x288] != 0 and !active:   want = 0            ; 0x4b2143–0x4b2153
+timer [+0x28c] += dt;  boosting [+0x947] = want                          ; 0x4b2157–0x4b2169
+if !want:                       active [+0x27c] = 0                      ; 0x4b21fb
+elif anim handle == 0:          active = 1; timer = 0                    ; 0x4b2181–0x4b219a
+    play nitro_boost def [+0x280] on the plane node;  animAlive [+0x27d] = 1
+    non-player: play medium_aishake (FUN_00473430(1))                    ; 0x4b21b2
+    player: shake block 6 with nitro.magnitude; NitroStart force feedback
+if anim handle != 0 and !active and animAlive and timer > 1.0 [def+0x188]:
+    stop the boost anim; animAlive = 0                                   ; 0x4b221b–0x4b2248
+    play nitro_decay def [+0x284], its completion clearing the handle    ; 0x4b2250–0x4b2271
+if snd_nitro [def+0x184] and animAlive:
+    keyed 3D loop at the plane, refreshed for 0.1 s (FUN_0045e470)       ; 0x4b2279–0x4b22eb
+```
+
+The two def slots are resolved at vehicle load in `FUN_0047c210` by name: `nitro_boost` and
+`nitro_decay` (`0x62836c`/`0x628378`, stored at `0x47c792`/`0x47c7a0`), the ON_CALL defs
+`plane_props.zrd` authors; `def+0x184` is `snd_nitro` looked up by literal (`0x627f5c` at
+`0x47a827`) and `def+0x188` is the constant 1.0 (`0x47a838`), the minimum life of the boost
+animation after an engage. The `ai_nitro_*` wrappers in the data are not referenced by the
+executable; the AI plays the same two defs. The loop sound expires 0.1 s after its last refresh,
+and the refresh sits inside `SetNitro`, so it plays for as long as something calls the method
+every frame: the human handler does (one of its three arms fires on every frame while the
+injector is installed), the AI path does not (below). The engage timer advances only inside the
+method as well, so for an AI the boost animation and the loop outlive the maneuver by one second
+of the per-frame release calls that follow it, and the loop is otherwise a 0.1 s blip at the
+engage. A re-engage is refused for as long as the boost or decay animation is alive.
+
+**Eligibility is the injector flag `[obj+0x946]`, set from the engine choice.** The player's
+comes from the hangar pick: engine ids 3–5 (the "… nitro" variants, `docs/org/hangar.md`) set it
+at `0x47d4f0` in `FUN_0047c210`, the wingman/MP mirror at `0x47e8d4`, and the debug console's
+"You now have the nitrous injector" at `0x43dd99`/`0x43de2c`. An AI's comes from its roster
+block's `nitro` slot, copied by the spawner `FUN_00475820` at `0x475c9a`. The gauge
+(`nitrogauge`, `FUN_00456a40` at `0x49f8b7`) is shown only when the flag is set, and
+`FUN_004aff80` zeroes both flags at `0x4b0393`/`0x4b0399`. Losing the engine
+(`FUN_004b1690` with bit 2) calls `SetNitro(0)` at `0x4b16f1`, and an engine-out aircraft cannot
+re-engage.
+
+**The AI boosts with a nitro-flagged maneuver.** The maneuver starter `FUN_004201a0` calls
+`SetNitro(1)` at `0x420928` when the chosen maneuver's `nitro` flag (`0x71b215 + 0x1c·i`, the
+library's one flagged entry is `nitro_evade`) is set; a flagged maneuver is not selectable at all
+without the injector or with the engine out (`0x4202d5`–`0x4202ea`). The per-frame vehicle loop
+`FUN_004897c0` calls `SetNitro(0)` at `0x4899d1` for every non-player aircraft in AI mode 0 or 4
+that is not executing a nitro-flagged maneuver (mode `[obj+0x358]` 1), so the AI's boost lasts
+the maneuver or the tank, whichever ends first. There is no 99 % gate on the AI arm: a
+nitro-flagged maneuver engages from any charge above the cutoff.
+
+**The gauge feed is `FUN_004568c0`**, called from the vehicle update at `0x49f8ca` with
+`charge / cap` and the boost flag, for any aircraft with the gauge node set (`[obj+0x4e0]`, the
+cockpit's `nitrogauge`). The `nitro_boost` needle's third Euler component chases −3.7699 rad
+(−216°) while boosting and 0 otherwise, through the shared exponential `FUN_00460490` at rate
+3/s; the `nitro_charge` needle chases `(1 − charge/cap) · 3.7699` at rate 1.5/s. The
+`MSG_HUD_NITRO` text ("Nitrous: boost: %1 charge: %2", id 190) is written only under the debug
+HUD flag `DAT_00624df0`, with boost as the needle angle × −26.5259 (100 at full sweep) and charge
+in percent; it is a debug readout, not a shipped HUD element.
+
+**What CSVM implements.** `Flight/NitroSystem.cs` is the state machine above, engine-free:
+tank, burn, recharge, the 99 % arm, the 5 % cutoff, the engine-out refusal and the boost-animation
+edges. The plan's Decision 3 widens the player-only arms (the human command path, the shake) to
+every human pilot. The force couplings are `FlightModel.BoostLever` 1.8 and `BoostDragFactor` 0.8,
+reached through `FlightInput.Boost`; the far-field cruise target reads the lever, not the boost,
+so a distant AI's `nitro_evade` changes nothing there, which is the decode
+(`0x48c5a0` reads `[obj+0x128]`). The injector flag is the hangar engine pick's nitrous bit for a
+human and the roster `nitro` slot for an AI.
+
 ## The plant's constant inventory
 
 Every number the live translational and rotational path and the contact rules carry that no data
@@ -2833,6 +2949,14 @@ without a provenance. Five classes are used:
 | `ReverseAuthorityFloor` | 0.2 | decoded | `0x6034fc`, `FUN_0048bdd0`'s fifth output |
 | `FarFieldRangeM` | 1000 | decoded | `0x00607a18` holds 1e6, the squared metres `FUN_00538920`'s horizontal separation is compared against at `0x48c4ee`; see "The far-field plant" |
 | `FarFieldAiSpeedBonus` | 5 | decoded | `0x006036bc`, subtracted from the negated cruise speed at `0x48c5ae` on the non-player arm |
+| `BoostLever` | 1.8 | decoded | `0x48fcb6`, the lever the boost flag substitutes for the throttle; see "Nitro" |
+| `BoostDragFactor` | 0.8 | decoded | `0x48fcbd`, the drag multiplier on the same branch (1.0 at `0x48fccf` otherwise) |
+| `NitroSystem.Capacity` | 30 | decoded | `0x4b02c4`, written to both the cap `[obj+0x8b4]` and the spawn charge `[obj+0x8b8]` |
+| `NitroSystem.BurnRate` | 4 | decoded | `0x4b02d5`, `[obj+0x8bc]`, spent at `0x49f820` while boosting |
+| `NitroSystem.RechargeRate` | 1 | decoded | `0x4b02df`/`0x4b02e9`, `[obj+0x8c0]`, added at `0x49f838` unconditionally |
+| `NitroSystem.EngageFraction` | 0.99 | decoded | `0x6080a8`, the human arm's engage line at `0x487eba` |
+| `NitroSystem.CutoffFraction` | 0.05 | decoded | `0x6034d8`, the cutoff at `0x487ea1` and `0x49f888` |
+| `NitroSystem.MinBoostAnimSeconds` | 1.0 | decoded | `0x47a838`, `def+0x188`, compared against the engage timer at `0x4b2224` |
 | `PhysicsConstants.NomGravity` | 20 | authored | `player.json`'s `nom_gravity`, mirrored for ballistics |
 | `PhysicsConstants.MphToMs` | 0.44704 | decoded | the parser's own speed-token scale |
 | `StickRamp.Rate` | 2.5 | decoded | `FUN_00487460`, 0.4 s of held key to full deflection |

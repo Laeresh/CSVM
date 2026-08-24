@@ -92,7 +92,7 @@ internal sealed class HumanFlightAdapter
 
         // The engine pick, the original's registry override: the authored engines.json tier row
         // replaces the airframe's stock EnginePower on a COPY (the stats object is the shared
-        // per-airframe cache). Stock pick (id 6) keeps the airframe's own row; nitrous is inert.
+        // per-airframe cache). Stock pick (id 6) keeps the airframe's own row.
         if (custom != null
             && Flight.CustomPlaneBuild.EnginePowerFor(_in.ZrdrPath, custom) is { } enginePower)
         {
@@ -126,6 +126,8 @@ internal sealed class HumanFlightAdapter
         };
         if (verbose && controller.Cockpit != null)
             GD.Print($"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
+        // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
+        controller.Nitro.Installed = custom != null && Flight.CustomPlaneBuild.HasNitrous(custom);
         // Every human joins team 1 in an Instant Action mission, splitscreen included — the
         // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
         // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.
@@ -266,14 +268,13 @@ internal sealed class HumanFlightAdapter
         }
         if (custom != null)
         {
-            // Names what the build reached and what it did not (nitrous stays inert: its flight
-            // effect is untraced, docs/org/hangar.md "Into the mission").
+            // Names what the build reached.
             GD.Print($"{tag}custom plane: '{custom.Name}' on {planeName}, armour " +
                      $"{custom.ArmourNose}/{custom.ArmourTail}/{custom.ArmourLeftWing}/" +
                      $"{custom.ArmourRightWing} units x{Flight.CustomPlaneBuild.ArmourUnitScale}, " +
                      $"hardpoints {custom.LeftHardpoints}+{custom.RightHardpoints}, " +
                      $"engine {custom.Engine} thrust={stats.EnginePower:0.###}" +
-                     (custom.Engine >= 3 && custom.Engine <= 5 ? " (nitrous inert)" : ""));
+                     (controller.Nitro.Installed ? " (nitrous injector)" : ""));
         }
 
         // Every readout this pane draws for its pilot belongs to the controller's own FlightHud,

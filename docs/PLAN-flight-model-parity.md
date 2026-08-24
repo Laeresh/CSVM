@@ -120,7 +120,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 31. ❌ D31 Settle one-sided engine torque (`BL-309`)
 32. ☐ D32 Settle roll-to-pitch coupling (`BL-310`)
 33. ❌ D33 Settle ambient turbulence (`BL-311`)
-34. ☐ D34 Reproduce nitro boost (`BL-089`)
+34. ☑ D34 Reproduce nitro boost (`BL-089`)
 
 ### Wave E — Prove parity
 
@@ -716,19 +716,69 @@ and are recorded, not acted on, here.
 `RunTests.ps1` battery passed (build clean, 2084/2084 units, 94/94 engine suites, 16/16 goldens
 hash-identical, exit 0).
 
-## D34 ☐ Reproduce nitro boost (`BL-089`)
+## D34 ☑ Reproduce nitro boost (`BL-089`)
 
 **Goal.** Implement the original boost, charge, decay, cap, HUD, animation and audio lifecycle.
 
 **Evidence (confidence: direction-sound).** Commands, gauges, defs, sounds and nitro engine variants ship; numeric dynamics do not exist in extracted data.
 
-**Approach.** <TODO: re-verify still-open against `git log --grep=BL-089` and current input/HUD code.> Trace executable-resident dynamics, then wire existing authored assets and engine eligibility.
+**Approach.** Trace executable-resident dynamics, then wire existing authored assets and engine eligibility.
 
 **Model recommendation.** **max** — cross-cutting reverse engineering and gameplay state.
 
 **Verify.** Compare activation, acceleration, depletion, recharge, cap and stop behavior on nitro and plain engines.
 
 **⚠ Traps.** Do not hand-balance before decoding; engine choice grants nitro, not every aircraft unconditionally.
+
+**Landed.** The re-verify found the item untouched (`git log --grep=BL-089` returns nothing, and
+no code read `ShakeDefs.Nitro`, `EngineDrive.Boosting`, `Maneuver.Nitro` or `PropParts.Kind.Nitro`).
+The executable-resident dynamics are decoded whole, no balance pass was needed, and every number
+has an address in the dossier's new "Nitro" section. The tank is four constructor constants
+(`FUN_004aff80`, `0x4b02c4`–`0x4b02e9`): cap 30, spawn charge 30, burn 4/s, refill 1/s, and the
+refill is unconditional (`0x49f832`–`0x49f83e`), so a burn nets 3/s and lasts **9.5 s** from full
+to the 5 % cutoff (`0x6034d8`), after which the refill to the **99 %** engage line (`0x6080a8`)
+takes 28.2 s. Activation is a one-shot: the human handler (`0x487e91`–`0x487efc`, command `0x12`)
+engages on a held key only from 99 %, re-asserts the flag until the cutoff, and offers no way to
+stop a burn. The state machine `FUN_004b2110` refuses an engine-out aircraft (`[obj+0x2dc] & 2`),
+plays the `nitro_boost` def and, on release after a 1.0 s minimum (`def+0x188`), stops it and plays
+`nitro_decay` with a completion callback, refuses a re-engage while either def is alive, keys the
+`snd_nitro` loop (`def+0x184`) while the boost def lives, and kicks shake block 6 and the
+`NitroStart` force-feedback effect for the player alone. Eligibility is `[obj+0x946]`: the hangar's
+engine ids 3–5 (`0x47d4f0`), the roster block's `nitro` slot for an AI (`0x475c9a`, three shipped
+blocks author it). The AI engages once at the start of a nitro-flagged maneuver (`0x420928`, the
+library's one flagged entry is `nitro_evade`, unselectable without the injector), is released every
+frame outside one (`0x4899d1`) and has no 99 % line. The gauge (`FUN_004568c0`) chases −216° on the
+boost needle at 3/s and `(1 − charge/cap) · 216°` on the charge needle at 1.5/s, and is shown only
+with the injector; `MSG_HUD_NITRO` is a debug-flag readout. The boost's own force couplings were
+already decoded (lever replaced by 1.8, drag × 0.8) and the far-field cruise target reads the
+lever, not the flag, so a distant AI's boost changes nothing there, which is the decode.
+In code: `Flight/NitroSystem.cs` is the state machine, engine-free, with every constant censused
+(`NitroSystem` joins the inventory's reflected types, eight new rows including
+`FlightModel.BoostLever`/`BoostDragFactor`, config surface unchanged at 9 keys);
+`FlightInput.Boost` reaches the two couplings in `Step`; `FlightController.AdvanceNitro` runs the
+human arm (`N` / pad X, `docs/controls.md`) or the AI arm off `AiModeMachine.Executor`'s maneuver
+flag, then the tank, then the edges: `PlaneShake.NitroEngaged` (block 6, human pilots only, plan
+Decision 3), the `nitro_boost`/`nitro_decay` defs through the crash rig runtime
+(`EffectCatalogue.NitroAnims` stages them), the `snd_nitro` loop in `FlightAudio`, and
+`EngineDrive.Boosting` for the already-decoded 1.17/1.25 engine-note pins. `PlaneBuilder` now
+builds `nitropropN` hidden for the def to reveal. The injector is `CustomPlaneBuild.HasNitrous`
+for a human and `AiSpawn.Nitro` (read by `AiSkills.RosterNitro`, slot 34) for an AI; `GaugeCluster`
+draws the `nitrogauge` subtree with both needles on the decoded exponential. Tests:
+`NitroSystemTests` (activation, the 3/s net burn and 9.5 s, the 28.2 s re-arm with the 98 %/99 %
+control, the no-stop rule, the injector and engine-out gates, the AI arm's missing line, the decay
+lockout and the 1 s minimum, plus the lever-replacement and drag-ratio pins on the Bloodhawk and
+the plain-engine bit-identity control), `NitroGaugeNeedleTests`, `PlaneShakeTests`' nitro kick and
+`AiSkillsTests`' slot reader. The eleven-airframe dump is SHA256-identical to `B11`'s
+`7BF4C7AE…` (nitro is off in every scenario), and no golden can move: no pinned shot fits a
+nitrous engine, so the dial never draws and the flag never sets. Deferred, with reasons: the
+`medium_aishake` def the original also plays on an AI engage (`FUN_00473430(1)`) and the AI's
+positional `snd_nitro` (a 0.1 s blip plus one second after the maneuver) are not wired; the
+session's mission spawner does not yet read roster blocks, so `AiSpawn.Nitro` has no live producer
+until it does; the decay lockout runs on the def's authored 1.0 s rather than a runtime callback,
+which the runtime does not offer. `BL-089` deleted from `backlog.md`.
+
+**Verified.** Full `RunTests.ps1` battery on the lane tree: build clean, 2113/2113 units,
+94/94 engine suites with engine errors clean, 16/16 goldens hash-identical, exit 0.
 
 # Wave E — Prove parity
 
