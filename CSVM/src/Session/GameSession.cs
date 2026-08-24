@@ -107,6 +107,13 @@ public partial class GameSession : Node3D
     // The boards' Restart item on an Instant Action mission: the Launcher frees this session and
     // builds a fresh one. Nothing here can put a mission's opposition back on its own.
     private readonly Action _restartSession;
+    // A campaign mission's end: the Launcher frees this session and reopens the launchscreen on
+    // the named profile's cabin. Null outside a menu-driven process (a --campaign= run from the
+    // command line has no cabin to return to and simply stays in the flown world).
+    private readonly Action<string>? _returnToCabin;
+    // The process's music channel, owned by the Launcher so one channel outlives every session.
+    // Handed to CampaignDirector, which is what routes the mission's own music cues into it.
+    private readonly MusicPlayer? _music;
     // Base (chapter-independent) paths, settled by the Launcher once per process and handed in via
     // the context; StartSession reads them each build and recomputes the chapter-dependent
     // gamez/texture/mission paths from _spec.Chapter.
@@ -296,6 +303,8 @@ public partial class GameSession : Node3D
         _menuPads = ctx.MenuPads;
         _exitSession = ctx.ExitSession;
         _restartSession = ctx.RestartSession;
+        _returnToCabin = ctx.ReturnToCabin;
+        _music = ctx.Music;
     }
 
     /// <summary>Whether the build completed — the Launcher's Esc routing reads it (return to the
@@ -539,6 +548,14 @@ public partial class GameSession : Node3D
         _iaDirector = InstantActionDirector.TryCreate(_spec);
         // The campaign's sibling, on the same "a load failure flies without a mission" contract.
         _campaign = CampaignDirector.TryCreate(_spec, _zrdrPath, state.MissionZrdrPath);
+        if (_campaign is { } campaign)
+        {
+            // The mission's own WAKEUP_SOUND_GROUP is what cues every campaign track, so the
+            // channel is handed over rather than driven from here; the end event is this
+            // session's cue to hand the player back to the cabin.
+            campaign.Music = _music;
+            campaign.MissionEnded += OnCampaignMissionEnded;
+        }
 
         Stopwatch sw;
         try
@@ -760,6 +777,21 @@ public partial class GameSession : Node3D
         int n = Math.Min(source.GetChildCount(), copy.GetChildCount());
         for (int i = 0; i < n; i++)
             CopyInstanceShaderParams(source.GetChild(i), copy.GetChild(i));
+    }
+
+    // A campaign mission has ended and its result is banked (D31 records the attempt and saves the
+    // profile before raising this). The world stays up for the rest of the frame; the Launcher
+    // frees this session and reopens the launchscreen on the cabin, which re-reads the profile
+    // this director just wrote.
+    private void OnCampaignMissionEnded(CampaignMissionResult result)
+    {
+        if (_spec.CampaignProfile is not { } profile || _returnToCabin == null)
+        {
+            return;
+        }
+
+        GD.Print($"campaign: {result.Outcome} — returning '{profile}' to the cabin");
+        _returnToCabin(profile);
     }
 
     /// <summary>Every aircraft in the session, the rigs' controllers first and then the AI
@@ -2354,6 +2386,8 @@ public partial class GameSession : Node3D
             ListenerPosition = () => _rigs.Count > 0 && _rigs[0].Controller is { } pilot
                 ? pilot.WorldPosition
                 : Vector3.Zero,
+            PlayerAircraft = () => _rigs.Count > 0 ? _rigs[0].Controller : null,
+            Aircraft = AllAircraft,
             Rng = Rng.NewSystemRandom(Rng.Ai),
         });
 

@@ -54,9 +54,9 @@ public class CampaignFlightCheckPageTests
             {
                 sawWingman = true;
 
-                // A fresh profile seeds WingmanPlane at the same index as SelectedPlane (0), a
-                // B11 gap the plan's C24 section records rather than papers over here.
-                Assert.Contains("Gypsy Magic", text);
+                // A fresh profile flies the pilot in Gypsy Magic and the wingman in The Knave,
+                // which is what NewProfile's WingmanPlane of 1 names.
+                Assert.Contains("The Knave", text);
             }
 
             if (text == "CHANGE AMMO")

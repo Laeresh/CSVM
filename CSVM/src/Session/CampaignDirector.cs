@@ -23,12 +23,24 @@ public readonly record struct CampaignMissionResult(
 /// </summary>
 public sealed class CampaignDirector
 {
+    /// <summary>The name the original registers the campaign wingman's aircraft under
+    /// (<c>docs/formats/saved-games.md</c>, <c>docs/formats/campaign-screens.md</c>). Nothing
+    /// spawns that aircraft yet; <see cref="WingmanNode"/> and <see cref="WingmanFit"/> are what a
+    /// spawn would bind, resolved here because this is where the profile already lives.</summary>
+    public const string WingmanName = "wingman_1";
+
     private readonly CampaignProfileDef _profile;
     private readonly CampaignProfileStore? _store;
     private readonly CampaignMission _mission;
     private readonly HashSet<string> _gapsLogged = new(StringComparer.Ordinal);
     private World? _world;
     private ScriptedPathVehicles? _paths;
+
+    // The proximity scan's accumulator and whether the player's damage event is subscribed yet:
+    // the player's aircraft is built after Attach runs, so the hookup is made on the first step
+    // that finds one.
+    private float _scanClock;
+    private bool _damageWired;
 
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
@@ -42,6 +54,19 @@ public sealed class CampaignDirector
 
     /// <summary>Fired once the mission has ended and the profile has been written.</summary>
     public event Action<CampaignMissionResult>? MissionEnded;
+
+    /// <summary>The process's music channel, or null when the session was built without one. The
+    /// mission's own <c>WAKEUP_SOUND_GROUP music_*_sg</c> is what cues prebattle, the stingers and
+    /// both success tracks, so nothing here hard-codes a state (<c>docs/org/music.md</c>).</summary>
+    public MusicPlayer? Music { get; set; }
+
+    /// <summary>The stock node the wingman's aircraft would fly as, or null when this mission has
+    /// no wingman. Read with <see cref="WingmanFit"/> by whoever spawns it.</summary>
+    public string? WingmanNode { get; private set; }
+
+    /// <summary>The wingman aircraft's ammunition and ordnance picks off the profile, or null when
+    /// this mission has no wingman.</summary>
+    public LoadoutChoice? WingmanFit { get; private set; }
 
     /// <summary>The mission's parsed choreography script.</summary>
     public ObjectiveScript Script { get; }
@@ -112,7 +137,9 @@ public sealed class CampaignDirector
         var script = ObjectiveScript.Load(missionZrdrPath);
         GD.Print($"campaign: '{profile.Name}' flying {mission.ChapterFolder}/{mission.MissionFolder}, " +
                  $"{script.Objectives.Count} objective(s)");
-        return new CampaignDirector(script, mission, profile, store);
+        var director = new CampaignDirector(script, mission, profile, store);
+        director.BindWingman();
+        return director;
     }
 
     /// <summary>The suite/test entry: a director over an already-loaded script, mission and
@@ -138,13 +165,14 @@ public sealed class CampaignDirector
                  $"{applied} object(s) restored from the chapter {chapter} persist log");
     }
 
-    /// <summary>One sim step of the objectives graph. ⚠ Called from BOTH of
-    /// <c>GameSession</c>'s drive paths, like the Instant Action sequencer: a realtime session
-    /// never enters the stepped path.</summary>
+    /// <summary>One sim step of the objectives graph, the scripted-path vehicles and the music
+    /// channel's own battle detector. ⚠ Called from BOTH of <c>GameSession</c>'s drive paths, like
+    /// the Instant Action sequencer: a realtime session never enters the stepped path.</summary>
     internal void Step(float dt)
     {
         Graph?.Step(dt);
         _paths?.Step(dt);
+        StepMusic(dt);
     }
 
     /// <summary>A danger zone the player completed, routed into the graph's awake objectives.</summary>
@@ -161,6 +189,63 @@ public sealed class CampaignDirector
         }
 
         return null;
+    }
+
+    // The wingman's aircraft and fit off the profile, for the mission that has one. Resolved here
+    // rather than by the launch shell because the profile is already open here; nothing spawns the
+    // aircraft yet, so this is a binding waiting for its consumer (D34), not a live wingman.
+    private void BindWingman()
+    {
+        if (!_mission.Wingman)
+        {
+            return;
+        }
+
+        int at = _profile.WingmanPlane;
+        if (at < 0 || at >= _profile.Planes.Count)
+        {
+            GD.PushWarning($"campaign: wingman plane index {at} is not one '{_profile.Name}' owns — no wingman fit bound");
+            return;
+        }
+
+        var plane = _profile.Planes[at];
+        WingmanNode = UI.PlanePickerRoster.AirframeNode(plane.Airframe);
+        WingmanFit = CampaignLoadout.For(plane, StockLoadouts.Load());
+        GD.Print($"campaign: {WingmanName} flies '{plane.Name}' as {WingmanNode} — bound, not yet spawned");
+    }
+
+    // The music channel's battle detector: the decoded five-second proximity scan, which runs only
+    // while battle music is silent, plus the player-damage ping. The player's aircraft is built
+    // after Attach, so the damage hookup waits for the first step that finds one.
+    private void StepMusic(float dt)
+    {
+        if (Music == null || _world == null)
+        {
+            return;
+        }
+
+        if (!_damageWired && _world.Player() is { } player)
+        {
+            _damageWired = true;
+            player.DamageApplied += _ => Music?.NoteCombat();
+        }
+
+        if (Music.State == MusicState.Battle)
+        {
+            return;
+        }
+
+        _scanClock += dt;
+        if (_scanClock < MusicPlayer.BattleScanSeconds)
+        {
+            return;
+        }
+
+        _scanClock = 0f;
+        if (MusicPlayer.ScanPings(_world.NearbyVehicles()))
+        {
+            Music.NoteCombat();
+        }
     }
 
     private void OnMissionEnded(MissionOutcome outcome)
@@ -216,6 +301,15 @@ public sealed class CampaignDirector
         public WorldSounds? Sounds;
         public ProjectilePool? Projectiles;
         public Func<Vector3>? ListenerPosition;
+
+        /// <summary>The player's aircraft once one exists, for the music channel's damage ping.
+        /// A delegate rather than a value because the flight rigs are built after the world.</summary>
+        public Func<FlightController?>? PlayerAircraft;
+
+        /// <summary>Every aircraft in the session, read fresh: the music channel's proximity scan
+        /// counts the ones near the player.</summary>
+        public Func<IReadOnlyList<FlightController>>? Aircraft;
+
         public Random Rng = new();
     }
 
@@ -332,8 +426,43 @@ public sealed class CampaignDirector
             GD.Print($"campaign: WAKE_ANIM '{anim}' started {started} definition(s)");
         }
 
+        public FlightController? Player() => _in.PlayerAircraft?.Invoke();
+
+        /// <summary>How many other live aircraft sit inside the decoded scan radius of the player.
+        /// Wrecks are excluded; whether the original's own skip predicate excludes more than that
+        /// is a named gap in <c>docs/org/music.md</c>.</summary>
+        public int NearbyVehicles()
+        {
+            if (Player() is not { } player || _in.Aircraft == null)
+            {
+                return 0;
+            }
+
+            int near = 0;
+            float radius = MusicPlayer.BattleScanRadiusM;
+            foreach (var craft in _in.Aircraft())
+            {
+                if (!ReferenceEquals(craft, player) && !craft.Destroyed
+                    && craft.WorldPosition.DistanceSquaredTo(player.WorldPosition) <= radius * radius)
+                {
+                    near++;
+                }
+            }
+
+            return near;
+        }
+
         public void PlaySoundGroup(string group)
         {
+            // The music channel is a routing flag on the name, not a subsystem the data asks for:
+            // a mu* group goes to the one streaming channel and never to a positional emitter
+            // (docs/org/music.md, FUN_00593590).
+            if (group.StartsWith("mu", StringComparison.OrdinalIgnoreCase))
+            {
+                _owner.Music?.Cue(group, _in.Rng);
+                return;
+            }
+
             if (_in.Sounds == null || _in.ListenerPosition == null)
             {
                 return;

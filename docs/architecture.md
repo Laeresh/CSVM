@@ -327,9 +327,10 @@ clusters they delegate to.
 - `src/Session/CampaignProfileStore.cs` — JSON persistence for a named campaign profile under `user://Profiles/<name>/profile.json`, following `ScoreStore`/`CustomPlaneStore`'s precedent: funds, owned planes (name-referenced into the global `user://Planes/` store, never a copy of it) with their per-gun ammo and per-pylon ordnance picks, mission results (the original's two halves, latest attempt and best-of merge), the completed-mission count, the granted aircraft awards and the cross-mission destruction log. `SessionSpec.CampaignProfile`/`CampaignMissionSeq` (`--campaign=<profile>:<seq>`) carry the launch-time selection as plain values; building the mission from them is the campaign director's job, not this store's.
 - `src/Session/CampaignProgression.cs` — the rules that write a profile: the best-of merge of one mission attempt (each field's rule is the original's), the monotonic position only a completed primary objective raises, the replay rule Previous Missions flies under, and the five aircraft awards granted once per profile. The cash half of the reward table stays with the hangar economy; this class banks the money an attempt reports.
 - `src/Session/CampaignPersistLog.cs` — the cross-mission state log (`BL-243`): captures what `PERSIST_LOG` defs a mission left destroyed out of `AnimRuntime.Destructibles`, keyed by chapter and by gamez node index, and re-applies it to a later mission of that chapter through `AnimRuntime.DamageAt`, so the death runs the way a weapon kill's did. Persistence is read from the READER def bound to a node, never from the compiled twin, which drops the flag.
+- `src/Session/CampaignLoadout.cs` — the bridge between a profile's stored picks and a flying aircraft's fit: one `OwnedPlane`'s ammunition indices and ordnance table indices as the `LoadoutChoice` a launch hands the session, which `Loadout.Bind` then lays over the aircraft's base fit. Engine-free, and both encodings are the campaign screens' own (the original's per-pylon ordnance id is undecoded), so an unset pylon is left to the base rather than written back.
 - `src/Session/ObjectiveScript.cs` — one mission's parsed `objectives.zrd`: the file-level keys and the contiguous `OBJECTIVEn` blocks in the typed shape the graph runs, found by exact name so every shipped misspelling lands in no field and stays dead. Decode: `docs/formats/objectives.md`.
 - `src/Session/ObjectiveGraph.cs` — the objectives runtime, engine-free: the four-state machine per objective, the rotating one-completion-per-tick scan, the chaining executor with its already-awake truncation, the nap that clears a completed flag, the condition families' OR, the mission countdown, the win/loss flags and the display rows D33 reads. Reaches the world only through `IObjectiveWorld`.
-- `src/Session/CampaignDirector.cs` — the engine side of a campaign mission and the sibling of `InstantActionDirector`: resolves a `--campaign=<profile>:<seq>` launch to its chapter/mission, arms the graph against the built world's runtimes, and at mission end records the attempt through `CampaignProgression`, folds the destruction log into the profile and raises the return-to-cabin exit.
+- `src/Session/CampaignDirector.cs` — the engine side of a campaign mission and the sibling of `InstantActionDirector`: resolves a `--campaign=<profile>:<seq>` launch to its chapter/mission, arms the graph against the built world's runtimes, and at mission end records the attempt through `CampaignProgression`, folds the destruction log into the profile and raises the return-to-cabin exit the session layer acts on. It also owns the mission's two music duties: routing a `mu*` sound group to the process music channel instead of a positional emitter, and running the decoded proximity scan and player-damage ping that put the score into battle. The wingman's aircraft and fit are resolved here too, from the profile it already has open; nothing spawns that aircraft yet.
 
 ### Session root and tests
 
@@ -3289,10 +3290,28 @@ column is shared with the hangar through `PageArt`/`PageRowArt`, so a campaign p
 a picture needs no change here. Input is player 1's alone: `HandleCampaignInput` reads `Move`/
 `MoveX` normally, and while `CampaignFlow.CapturesText` is true it reads `PadMove`/`PadMoveX`
 instead and feeds `Typed`/`Erase` into the field, because W, A, S and D are letters there. The
-flow's `Message` rides the same error line the hangar's gate uses, and any `Exit` returns to the
-Mode screen. `--menu=campaign` opens the real `user://Profiles` roster; `campaign-empty`,
-`campaign-roster` and `campaign-entry` are screenshot aids over a scratch profile directory, so
-those shots are the same on every machine and cannot write into a real campaign.
+flow's `Message` rides the same error line the hangar's gate uses. `--menu=campaign` opens the real
+`user://Profiles` roster; every other `campaign-*` value is a screenshot aid over a scratch profile
+directory, so those shots are the same on every machine and cannot write into a real campaign. The
+one exception is `campaign-fly`, which launches a mission and therefore has to use the real store,
+because the session's own director reads that one.
+
+The flow's three exits are the shell's three jobs. `Cancelled` returns to the Mode screen.
+`OpenHangar` opens `HangarFlow` over a `HangarCampaignContext` on the flow's own profile and leaves
+the campaign flow standing; `CloseHangar` calls `Resume` on it, built or cancelled alike, so a
+purchase or a sale shows on the cabin the moment the hangar closes. `FlyMission` saves the profile,
+stops the score and hands the host a `CampaignLaunch`: the profile, the story position, and the
+pilot's aircraft as its stock node, its hangar build where it has one, and the fit
+`CampaignLoadout` derives from the profile's picks. The wingman is deliberately not in it, since
+`CampaignDirector` resolves that binding from the same profile it opens anyway.
+
+Two things the campaign pages cannot own live here, because a page holds no Godot node and has no
+frame to advance on: the briefing's reveal clock (`page.Advance(delta)` once per frame while the
+briefing is the screen showing) and its narration, an `AudioStreamPlayer` of this board's own on
+the Master bus, restarted whenever the page's `NarrationStarts` moves and stopped the moment the
+briefing stops showing. The board redraws on a reveal only when it uncovered a row or changed its
+map, so a reveal waiting on a marker costs one comparison a frame. The score is the host's, entered
+on every menu and cabin entry and stopped where a launch leaves the boards.
 
 ## src/UI/PlanePickerRoster.cs
 The picker roster rule behind `LaunchMenu._roster`, engine-free so it tests without a menu
@@ -4320,6 +4339,22 @@ item, handed down through `LauncherContext`: back to the launchscreen when the p
 into it, out of the game otherwise. The routing Esc used to do — Esc now opens the pause board
 instead, so leaving a flight is reachable from a pad, and this one rule lives here rather than
 being restated per board.
+`StartCampaignFromMenu` is the cabin's own launch, deriving its spec via
+`SessionSpec.FromCampaign(_cli, ...)` from the profile and story position the campaign flow
+settled. It names no chapter and no mission: `CampaignDirector.ResolveSpec` reads those out of
+`cm_sequence` in the session's constructor, so one place resolves a story position whether it came
+from a cabin or a `--campaign=` command line. Its return leg is `ReturnToCabin`, handed down
+through `LauncherContext` and non-null only in a menu-driven process: a campaign mission's end
+queues the profile name, and the next `_Process` frees the session and reopens the launchscreen on
+that profile's cabin. Queued rather than acted on directly, because the mission ends inside the
+session's own physics step, which is no place to free it.
+The music channel is built here too, once per process and after every early-quit probe, over a
+`SoundArchive` of its own rather than the build-scoped `SessionArchives.Sounds`: one channel has to
+outlive a mission launch, or the cabin track would restart every time the player left a board. It
+is entered on every launchscreen show, stopped in `BeginLaunch` (the one place a session leaves the
+boards), and ticked on wall time from `_Process` so a paused or stepped session cannot stall a fade
+halfway. An install with no readable sound archive or sound definitions leaves it null, which is
+silence rather than a refusal to launch.
 `RestartSession` is its sibling for the boards' Restart on an Instant Action mission: `QueueFree`
 this session, step the sortie seed exactly as flying again from the menu does (so an unpinned
 restart draws a new mission and a pinned one repeats), and build a fresh session from the same

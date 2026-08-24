@@ -35,8 +35,26 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// session.</summary>
     public Action<string, IReadOnlyList<PlayerChoice>, MenuMode, InstantActionDef?>? Launch;
 
+    /// <summary>Fired when the campaign cabin's flight check presses FLY MISSION: the host derives
+    /// a campaign session spec from it and builds. Separate from <see cref="Launch"/> because a
+    /// story mission names a profile and a story position, not a chapter and a plane list.</summary>
+    public Action<CampaignLaunch>? LaunchCampaign;
+
     /// <summary>Fired when the player backs out of the Mode screen — the host quits.</summary>
     public Action? Quit;
+
+    /// <summary>The process's music channel, or null when the host built none. The board enters
+    /// <see cref="MusicState.Menu"/> on every screen it shows, which is a no-op for the track
+    /// already playing.</summary>
+    public MusicPlayer? Music;
+
+    /// <summary>The draw the music channel's own weighted picks come from, the host's.</summary>
+    public Random MusicRng = new();
+
+    /// <summary>Resolves a WAV file name into a stream, the host's process-lifetime archive. The
+    /// briefing's narration is the one thing this board plays itself: it is a menu, so no session
+    /// audio path owns it.</summary>
+    public Func<string, bool, AudioStreamWav?>? Sounds;
 
     // Base metrics at 720p, scaled up on taller viewports (like StuntScoreboard). All TUNE.
     private const int TitleFont = 40;
@@ -66,6 +84,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // onto the 19 presets (docs/formats/instant-action.md, "Screen controls"). Decoded, not a fit
     // to our own layout — do not "tidy" it to the item count.
     private const int PresetWindow = 14;
+    // How many missions the campaign screenshot aids' seeded profile has flown. Three is the
+    // smallest number that gives the previous-missions list a scrollable body and leaves the
+    // cabin's Next Mission somewhere other than the campaign's first entry.
+    private const int AidMissionsFlown = 3;
+
     // The lives stepper's range (Screen.MissionType, decision 15/18): 0 = unlimited, 1 = the
     // faithful one-life run (default), up to this cap. INVENTED — ia.json carries no such field, so
     // there is no decoded range to match; TUNE.
@@ -247,6 +270,15 @@ public sealed partial class LaunchMenu : CanvasLayer
     // OpenHangar, so cancelling always lands back where the pilot pressed.
     private HangarFlow? _hangar;
     private Screen _hangarReturn = Screen.Mode;
+    // The briefing narration, the one sound this board owns: an AudioStreamPlayer of its own on
+    // the Master bus, restarted whenever the page's NarrationStarts moves and stopped the moment
+    // the briefing stops being the screen showing (the plan's C23 wiring contract).
+    private AudioStreamPlayer _narration = null!;
+    private int _narrationStarts;
+    // What the briefing screen last drew, so a reveal that uncovered a line (or changed its map)
+    // redraws and a reveal still waiting on a marker does not rebuild the board every frame.
+    private int _briefingRows = -1;
+    private HangarArt? _briefingArt;
     // The campaign's out-of-mission flow while it is open. One door (the Mode screen's Campaign
     // row); its own screens are the flow's pages, so a new one needs no change here.
     private CampaignFlow? _campaign;
@@ -357,6 +389,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         menu._body = new VBoxContainer();
         menu._body.AddThemeConstantOverride("separation", 6);
         menu._center.AddChild(menu._body);
+
+        // The briefing's narration player. On the Master bus by default, which is where
+        // --volume=/audio.volume already applies, so it needs no gain handling of its own.
+        menu._narration = new AudioStreamPlayer { Name = "briefing_narration" };
+        menu.AddChild(menu._narration);
 
         // The splitscreen plane select lives alongside the centred layout; exactly one is visible.
         menu._paneRoot = new Control { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
@@ -566,6 +603,22 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>Hide the menu (the host is about to build a session).</summary>
     public void HideMenu() => Visible = false;
 
+    /// <summary>Opens the campaign on the named profile's cabin, the screen a flown mission
+    /// returns to. The profile is re-read from the store, so what the mission just recorded (a
+    /// completed objective, an advanced position, a paid reward) is what the cabin shows. An
+    /// unreadable profile leaves the flow on its roster rather than refusing.</summary>
+    public void OpenCampaignCabin(string profileName)
+    {
+        OpenCampaign();
+        if (_campaign is { } flow && flow.Store.Load(profileName) is { } profile)
+        {
+            flow.SelectProfile(profile);
+        }
+
+        Music?.Enter(MusicState.Menu, MusicRng);
+        Rebuild();
+    }
+
     /// <summary>Show an error line on the current screen (e.g. a failed build sent us back here).</summary>
     public void ShowError(string message)
     {
@@ -664,6 +717,9 @@ public sealed partial class LaunchMenu : CanvasLayer
         foreach (var slot in _slots)
             slot.Input.Poll((float)delta);
         dirty |= HandleInput();
+        // After the input, so a press that opened or left the briefing is already reflected: the
+        // reveal is a clock the page cannot own, and the narration is a node the page cannot hold.
+        dirty |= TickCampaignAudio(delta);
 
         // Live hotplug: redraw when the join strip's text changes even if nothing was pressed.
         if (dirty || JoinStripText() != _stripText)
@@ -1414,6 +1470,13 @@ public sealed partial class LaunchMenu : CanvasLayer
         _hangar = null;
         _error = "";
         RefreshRoster();
+        // Built or cancelled alike: the campaign flow behind the door stood still while the hangar
+        // ran, and resuming it re-reads the profile the wallet was spent from.
+        if (_hangarReturn == Screen.Campaign)
+        {
+            _campaign?.Resume();
+        }
+
         if (flow.Exit == HangarExit.Built && flow.BuiltPlaneName is { } name)
         {
             LastBuiltPlane = name;
@@ -1435,42 +1498,159 @@ public sealed partial class LaunchMenu : CanvasLayer
     // one door and one exit; every screen inside it is a page of the flow's own.
     private void OpenCampaign()
     {
-        _campaign = new CampaignFlow(CampaignProfileStore.UserProfiles(), HangarStrings(), _dataRoot);
+        _campaign = NewCampaignFlow(CampaignProfileStore.UserProfiles());
         _screen = Screen.Campaign;
         _error = "";
     }
 
+    // A campaign flow over one store, with the two stores its later screens resolve fits through:
+    // the hangar's build store for a player-built aircraft, the stock table for everything else
+    // (the two profile-seeded starters and the reward aircraft, neither of which is hangar-built).
+    // Without them the flight check and ammo screens read every plane as fit-less.
+    private CampaignFlow NewCampaignFlow(CampaignProfileStore store) =>
+        new(store, HangarStrings(), _dataRoot, CustomPlaneStore.UserPlanes(), Fits);
+
     // The campaign's screens sit behind a flow rather than behind the screen enum, so --menu=
-    // reaches them the way it reaches the hangar's. The three scripted values run over a scratch
+    // reaches them the way it reaches the hangar's. Every scripted value runs over a scratch
     // profile directory instead of user://Profiles, so the shot is the same on every machine and no
-    // aid can write into a real campaign.
+    // aid can write into a real campaign. The briefing takes a seconds argument
+    // ("campaign-briefing:20") because its screen is a two-minute reveal and every stage of it is
+    // a different picture.
     private void OpenCampaignAid(string startScreen)
     {
-        if (startScreen is not ("campaign" or "campaign-empty" or "campaign-roster" or "campaign-entry"))
+        int colon = startScreen.IndexOf(':');
+        string value = colon < 0 ? startScreen : startScreen[..colon];
+        if (value is not ("campaign" or "campaign-empty" or "campaign-roster" or "campaign-entry"
+            or "campaign-cabin" or "campaign-previous" or "campaign-briefing"
+            or "campaign-flightcheck" or "campaign-ammo" or "campaign-hangar" or "campaign-fly"))
         {
             return;
         }
 
-        if (startScreen == "campaign")
+        if (value == "campaign")
         {
             OpenCampaign();
             return;
         }
 
-        _campaign = new CampaignFlow(AidProfileStore(startScreen == "campaign-roster"),
-            HangarStrings(), _dataRoot);
+        // The one aid that runs over the REAL profile store, because it is the one that launches a
+        // mission: the session's own director reads user://Profiles, so a scratch profile would
+        // not exist by the time the world builds.
+        if (value == "campaign-fly")
+        {
+            OpenCampaign();
+            FlyFirstRealProfile();
+            return;
+        }
+
+        // Two of the aids need a roster to pick from and five need a profile part-way through the
+        // campaign; the seeded store carries both, since a second profile changes no later screen.
+        bool seeded = value != "campaign-empty" && value != "campaign-entry";
+        _campaign = NewCampaignFlow(AidProfileStore(seeded, progressed: value != "campaign-roster"));
         _screen = Screen.Campaign;
         _error = "";
-        if (startScreen == "campaign-entry" && _campaign is { } flow)
+        if (_campaign is not { } flow)
+        {
+            return;
+        }
+
+        if (value == "campaign-entry")
         {
             flow.Accept();          // arm the name field
             flow.Type("Zachary");   // a name mid-entry, caret and all
+            return;
+        }
+
+        float seconds = 0f;
+        if (colon >= 0)
+        {
+            float.TryParse(startScreen[(colon + 1)..], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out seconds);
+        }
+
+        WalkCampaignAid(flow, value, seconds);
+    }
+
+    // Walks the first stored profile to its next mission's flight check and presses FLY MISSION,
+    // the end-to-end aid: it exercises the launch the cabin performs, not a screen. A store with
+    // no profile leaves the flow on its roster, which is what a player with none would see.
+    private void FlyFirstRealProfile()
+    {
+        if (_campaign is not { } flow || flow.Roster.Count == 0
+            || flow.Store.Load(flow.Roster[0]) is not { } profile)
+        {
+            return;
+        }
+
+        flow.SelectProfile(profile);
+        flow.SetMission(CampaignProgression.NextMissionSeq(profile));
+        flow.GoTo(CampaignScreen.FlightCheck);
+        flow.FocusRow(flow.Page.RowCount - 1); // FLY MISSION is the screen's last row
+        flow.Accept();
+    }
+
+    // Walks a seeded flow to the screen an aid names. Every step is a call a player's own presses
+    // would make, so no aid can reach a state the campaign itself cannot.
+    private void WalkCampaignAid(CampaignFlow flow, string value, float seconds)
+    {
+        if (flow.Store.Load("Zachary") is not { } profile)
+        {
+            return;
+        }
+
+        flow.SelectProfile(profile);
+        switch (value)
+        {
+            case "campaign-previous":
+                flow.GoTo(CampaignScreen.PreviousMissions);
+                return;
+            case "campaign-briefing":
+                flow.SetMission(CampaignProgression.NextMissionSeq(profile));
+                flow.GoTo(CampaignScreen.Briefing);
+                AdvanceBriefing(flow, seconds);
+                return;
+            case "campaign-flightcheck":
+                flow.SetMission(CampaignProgression.NextMissionSeq(profile));
+                flow.GoTo(CampaignScreen.FlightCheck);
+                return;
+            case "campaign-ammo":
+                flow.SetMission(CampaignProgression.NextMissionSeq(profile));
+                flow.SetAmmoSlot(0);
+                flow.GoTo(CampaignScreen.Ammo);
+                return;
+            case "campaign-hangar":
+                // The cabin's own PLANE CONSTRUCTION press, so the shot is the hangar standing
+                // over this profile's wallet rather than the wallet-free door.
+                flow.FocusRow(CampaignCabinPage.PlaneConstructionRow);
+                flow.Accept();
+                return;
+            default:
+                return; // campaign-cabin: SelectProfile already landed there
+        }
+    }
+
+    // Runs the reveal forward to a stage worth photographing. ⚠ Stepped in frame-sized slices, not
+    // one jump: the script blocks on authored waits and measured cue points, so a single huge
+    // delta would leave it standing at the first of them.
+    private void AdvanceBriefing(CampaignFlow flow, float seconds)
+    {
+        if (flow.Page is not CampaignBriefingPage page || seconds <= 0f)
+        {
+            return;
+        }
+
+        const float slice = 1f / 60f;
+        for (float t = 0f; t < seconds; t += slice)
+        {
+            page.Advance(slice);
         }
     }
 
     // The scratch store the campaign screenshot aids read: emptied on every open, and seeded with
-    // two profiles for the filled-roster shot.
-    private CampaignProfileStore AidProfileStore(bool seeded)
+    // two profiles for the filled-roster shot. A progressed store additionally flies the first
+    // three missions, which is what puts rows on the previous-missions list and moves the cabin's
+    // Next Mission off the campaign's first entry.
+    private CampaignProfileStore AidProfileStore(bool seeded, bool progressed = false)
     {
         var dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "CSVM", "menu-aid-profiles");
         try
@@ -1486,12 +1666,24 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         var store = new CampaignProfileStore(dir);
-        if (seeded)
+        if (!seeded)
         {
-            store.Save(CampaignProfileDef.NewProfile("Zachary"));
-            store.Save(CampaignProfileDef.NewProfile("Nathan"));
+            return store;
         }
 
+        var first = CampaignProfileDef.NewProfile("Zachary");
+        if (progressed)
+        {
+            for (int seq = 0; seq < AidMissionsFlown; seq++)
+            {
+                CampaignProgression.Record(first, new MissionAttempt(
+                    seq, 1, 300_000 + (seq * 20_000), 400, 120, 0,
+                    first.Planes[0].Airframe, first.Planes[0].Name));
+            }
+        }
+
+        store.Save(first);
+        store.Save(CampaignProfileDef.NewProfile("Nathan"));
         return store;
     }
 
@@ -1537,15 +1729,131 @@ public sealed partial class LaunchMenu : CanvasLayer
         // A refusal (an empty name, a name the original's own rule rejects, a full roster) rides
         // the screen's error line, the same place the hangar's gate reports.
         _error = flow.Message;
-        if (flow.Exit != CampaignExit.None)
+        switch (flow.Exit)
         {
-            _screen = Screen.Mode;
-            _campaign = null;
-            _error = "";
-            return true;
+            case CampaignExit.None:
+                return dirty;
+            case CampaignExit.OpenHangar:
+                OpenCampaignHangar(flow);
+                return true;
+            case CampaignExit.FlyMission:
+                FlyCampaignMission(flow);
+                return true;
+            default:
+                StopNarration();
+                _screen = Screen.Mode;
+                _campaign = null;
+                _error = "";
+                return true;
+        }
+    }
+
+    // PLANE CONSTRUCTION: the hangar over the profile's own wallet (B13's HangarCampaignContext),
+    // with the campaign flow left standing behind it. CloseHangar resumes the flow, which re-reads
+    // the profile, so a purchase or a sale shows on the cabin the moment the hangar closes.
+    private void OpenCampaignHangar(CampaignFlow flow)
+    {
+        if (flow.Profile is not { } profile)
+        {
+            flow.Resume();
+            return;
         }
 
-        return dirty;
+        var planes = CustomPlaneStore.UserPlanes();
+        _hangarReturn = Screen.Campaign;
+        _hangar = new HangarFlow(planes, HangarStrings(), _dataRoot, Fits, _zrdrPath,
+            new HangarCampaignContext(flow.Store, profile, planes));
+        _screen = Screen.Hangar;
+        _error = "";
+    }
+
+    // FLY MISSION: the profile is saved, the board's score stops and the host builds a campaign
+    // session for this profile and story position. The pilot's aircraft goes with it — its stock
+    // node, its hangar build where it has one, and the ammunition and ordnance the ammo screen
+    // stored (the plan's C24/C25 contract). The wingman's own binding is resolved by
+    // CampaignDirector, which has the profile open anyway.
+    private void FlyCampaignMission(CampaignFlow flow)
+    {
+        if (flow.Profile is not { } profile || LaunchCampaign == null)
+        {
+            flow.Resume();
+            return;
+        }
+
+        flow.Store.Save(profile);
+        int at = Math.Clamp(profile.SelectedPlane, 0, Math.Max(0, profile.Planes.Count - 1));
+        var plane = profile.Planes.Count > 0 ? profile.Planes[at] : new OwnedPlane();
+        var custom = CustomPlaneStore.UserPlanes().Load(plane.Name);
+        var launch = new CampaignLaunch(
+            profile.Name, flow.MissionSeq, PlanePickerRoster.AirframeNode(plane.Airframe),
+            custom, CampaignLoadout.For(plane, Fits));
+        StopNarration();
+        Music?.Stop();
+        _campaign = null;
+        _screen = Screen.Mode;
+        _error = "";
+        GD.Print($"launchscreen: campaign '{profile.Name}' flying mission seq {flow.MissionSeq} in \"{plane.Name}\"");
+        LaunchCampaign(launch);
+    }
+
+    // The briefing's clock and its narration, the two things its page cannot own: a page holds no
+    // Godot node and has no frame to advance on. Returns whether the board needs redrawing, which
+    // is whenever the reveal uncovered a line or changed the map it is drawing.
+    private bool TickCampaignAudio(double delta)
+    {
+        if (_screen != Screen.Campaign || _campaign?.Page is not CampaignBriefingPage page)
+        {
+            StopNarration();
+            return false;
+        }
+
+        page.Advance(delta);
+        if (page.NarrationStarts != _narrationStarts)
+        {
+            _narrationStarts = page.NarrationStarts;
+            PlayNarration(page.NarrationWav);
+        }
+
+        int rows = page.RowCount;
+        var art = page.Art;
+        if (rows == _briefingRows && ReferenceEquals(art, _briefingArt))
+        {
+            return false;
+        }
+
+        _briefingRows = rows;
+        _briefingArt = art;
+        return true;
+    }
+
+    // Starts (or restarts) the narration. A missing stream is silence, not a refusal: the wav is
+    // one file of an extraction the rest of the screen already tolerates the absence of.
+    private void PlayNarration(string wav)
+    {
+        _narration.Stop();
+        _narration.Stream = wav.Length > 0 ? Sounds?.Invoke(wav, false) : null;
+        if (_narration.Stream != null)
+        {
+            _narration.Play();
+        }
+
+        // Through the sink, not GD.Print: a scripted run at --volume=0 has no sound to hear, and
+        // this line is what says the narration started at all.
+        string got = _narration.Stream != null ? "yes" : "no";
+        Utils.Log.Info("sound", $"briefing narration start={_narrationStarts} wav={wav} stream={got}");
+    }
+
+    private void StopNarration()
+    {
+        _narrationStarts = 0;
+        _briefingRows = -1;
+        _briefingArt = null;
+        if (_narration is { Playing: true })
+        {
+            _narration.Stop();
+        }
+
+        _narration.Stream = null;
     }
 
     // Re-reads the saved-plane store into the picker roster and keeps every cursor inside the
@@ -2550,6 +2858,15 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// builds it into the spawned aircraft.</summary>
     public readonly record struct PlayerChoice(
         string PlaneNode, int[] Pads, LoadoutChoice? Fit = null, string? CustomPlane = null);
+
+    /// <summary>What the cabin's FLY MISSION hands the host: the profile and the
+    /// <c>cm_sequence</c> story position the session is for, plus the pilot's aircraft as the
+    /// three things binding it needs — its stock node, its hangar build (null for a profile
+    /// starter or a reward aircraft, neither of which is hangar-built), and the ammunition and
+    /// ordnance the ammo screen stored. The wingman is NOT here: <c>CampaignDirector</c> resolves
+    /// its binding from the same profile it already opens.</summary>
+    public readonly record struct CampaignLaunch(
+        string Profile, int Seq, string PlaneNode, CustomPlaneDef? Custom, LoadoutChoice? Fit);
 
     // One editable line of a loadout list. Key is the gun slot (1-4) or the physical pylon
     // number (1-8) — slot identity, the same key LoadoutChoice uses, never a row index.

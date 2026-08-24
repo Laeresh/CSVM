@@ -855,6 +855,41 @@ C22's cabin art needs no launchscreen edit.
 6. Screenshot coverage: add a value to `LaunchMenu.OpenCampaignAid`'s list only if the screen needs
    a scripted state; a page reached by walking the flow needs no new flag at all.
 
+**Integration (the shell step that applied C22-C25, D31 and D37's wiring contracts).** Every
+contract those items left is now wired in `LaunchMenu.cs`, `Launcher.cs` and `GameSession.cs`'s
+campaign mission-end path, and none of them needed a new seam:
+
+- **The hangar door.** `CampaignExit.OpenHangar` opens `HangarFlow` over a `HangarCampaignContext`
+  on the flow's own profile with `_hangarReturn = Screen.Campaign`; `CloseHangar` calls
+  `Flow.Resume()`, built or cancelled alike, which re-reads the profile onto the cabin.
+- **FLY MISSION.** `CampaignExit.FlyMission` saves the profile, stops the score, and hands the host
+  a `LaunchMenu.CampaignLaunch` (profile, seq, the pilot's stock node, its `CustomPlaneStore` build
+  where it has one, and `CampaignLoadout.For`'s fit). `SessionSpec.FromCampaign` turns that into a
+  campaign spec the way `FromMenu` turns a pick into a flight one; the chapter and mission stay
+  `CampaignDirector.ResolveSpec`'s to settle, so a cabin launch and a `--campaign=` command line
+  resolve a story position in the same place.
+- **The return.** `CampaignDirector.MissionEnded` reaches `Launcher` through
+  `LauncherContext.ReturnToCabin`, which queues the profile name; the next `_Process` frees the
+  session and calls `LaunchMenu.OpenCampaignCabin`, which re-reads the profile the director just
+  wrote and enters the menu score.
+- **The briefing.** The launchscreen advances `page.Advance(delta)` per frame while the briefing
+  shows and plays `NarrationWav` through a board-owned `AudioStreamPlayer` on the Master bus,
+  restarting on a `NarrationStarts` change and stopping when the screen leaves.
+- **Music.** `Launcher` owns the player and a process-lifetime `SoundArchive`, enters
+  `MusicState.Menu` on every board show and on a cabin return, stops in `BeginLaunch`, and hands
+  the channel to `CampaignDirector`, whose sound-group executor routes a `mu*` name to `Cue` and
+  whose step runs the decoded proximity scan and player-damage ping. Instant Action names no track
+  and so stays silent.
+- **Art.** The cabin draws `PC_BACKGROUND.PNG` and the ammo screen the airframe's own frame of
+  `OL_PLANEDIAGRAMSTOP.PNG` / `OL_PLANEDIAGRAMSFRONT.PNG`, all three through `PngImage`. The
+  `PC_P_HANGAR<n>.JPG` photographs remain the named gap C22 recorded: no engine-free JPG decoder
+  exists and this step did not write one.
+- **The store seed.** `NewProfile` now seeds `WingmanPlane` at 1, so a fresh profile's wingman
+  flies The Knave rather than the pilot's own aircraft. C24's second open question (the ammo and
+  ordnance arrays defaulting to C# zero rather than the traced stock fit) is deliberately left
+  alone: `CampaignLoadout` reads an unset pylon as "leave the base's fit", which is the traced
+  universal high-explosive load, so the arrays as they stand already fly correctly.
+
 **Model recommendation.** medium.
 
 **Verify.** `dotnet build` clean (0 warnings), `dotnet test` **2053/2053** (24 new units over the
@@ -1733,6 +1768,33 @@ owning item.
 
 **Verify.** The suite in `RunTests.ps1` green twice in a row (persistence must survive the second
 run); full golden manifest unchanged.
+
+**Groundwork already landed (the shell integration step, not this item's tick).** The loop is
+walkable end to end and the pieces below are measured; what E41 still owes is the whole loop in one
+scripted suite, run twice.
+
+- **Screens.** Five scripted shots, windowed, one per screen, over the seeded scratch profile:
+  `--menu=campaign-cabin`, `campaign-previous`, `campaign-briefing:24`, `campaign-flightcheck`,
+  `campaign-ammo`. All five render their art: the cabin's `PC_BACKGROUND.PNG`, the briefing's own
+  mission map with two objective lines uncovered at 24 s, and the ammo screen's top and front
+  diagrams framed on the pilot's Devastator.
+- **The hangar door.** `--menu=campaign-hangar` makes the cabin's PLANE CONSTRUCTION press and
+  lands on the Build Custom Plane flow's plane selection, opened over the profile's own wallet.
+- **The launch.** `--menu=campaign-fly` walks the first real profile to its next mission's flight
+  check and presses FLY MISSION. The console carries the whole handoff: the launchscreen's own
+  line, `campaign: seq 0 'Hawaii mission 1' -> c3/m01`, the director armed with 39 objectives and
+  6 display rows, and `campaign: wingman_1 flies 'The Knave' as player_pfighter`. The wingman
+  binding is resolved and reported; nothing spawns that aircraft yet, which is D34's.
+- **Audio at `--volume=0`, from `.scratch/logs/`.** `music play cue=snd_music_splash
+  wav=music_splash.wav loop=5` on the board, `music stop wav=music_splash.wav` on the launch, and
+  `briefing narration start=1 wav=c1-HA-m3_briefing.wav stream=yes` on the briefing.
+- **Not yet observed: a track cued by mission data.** C3/M01 cues `music_prebattle_sg` from
+  `OBJECTIVE29`, which is `BEGIN_DORMANT` and fires its group on completion, so 40 s of unpiloted
+  straight flight never reaches it. The routing itself sits in the director's one sound-group
+  executor, which serves both `WAKEUP_SOUND_GROUP` and `COMPLETED_SOUND_GROUP`.
+- **Not yet observed: the return to the cabin.** The path is wired end to end
+  (`MissionEnded` → `LauncherContext.ReturnToCabin` → `OpenCampaignCabin`) but reaching it needs a
+  mission actually flown to its end, which is exactly what this item's own suite is for.
 
 **⚠ Traps.** A green first run does not prove persistence; the second, state-carrying run is the
 test.
