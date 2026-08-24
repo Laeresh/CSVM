@@ -14,6 +14,9 @@ public enum CampaignScreen
     /// <summary>The cabin hub the rest of the campaign hangs off.</summary>
     Cabin,
 
+    /// <summary>The scrapbook's finished-missions list, opened from the cabin.</summary>
+    PreviousMissions,
+
     /// <summary>The mission briefing.</summary>
     Briefing,
 
@@ -113,7 +116,8 @@ public sealed class CampaignFlow
     private static readonly Dictionary<CampaignScreen, Func<CampaignFlow, ICampaignPage>> Registry = new()
     {
         [CampaignScreen.Roster] = flow => new CampaignRosterPage(flow),
-        [CampaignScreen.Cabin] = flow => new CampaignCabinPlaceholderPage(flow),
+        [CampaignScreen.Cabin] = flow => new CampaignCabinPage(flow),
+        [CampaignScreen.PreviousMissions] = flow => new CampaignPreviousMissionsPage(flow),
     };
 
     private readonly Dictionary<CampaignScreen, ICampaignPage> _pages = new();

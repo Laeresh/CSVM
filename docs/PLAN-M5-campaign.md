@@ -189,7 +189,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — the out-of-mission screens
 
 21. ☑ Player profile screen (create, select, delete, text entry)
-22. ☐ Campaign cabin screen (Next Mission, Previous Missions, Plane Construction, Return to Main Menu)
+22. ☑ Campaign cabin screen (Next Mission, Previous Missions, Plane Construction, Return to Main Menu)
 23. ☐ Mission briefing screen (map, flags, objectives list, narration; replay / return / flight check)
 24. ☐ Flight check screen (pilot + wingmen planes and loadouts, objectives note, plane change, fly mission)
 25. ☐ Ammo selection screen (per gun caliber group, per hardpoint, descriptions) for self and wingmen
@@ -874,7 +874,7 @@ hash-identical.
 Both hold here, and `DeletingIsConfirmedAndTakesOnlyThatProfile` is the proof, with a sentinel file
 beside the profile store standing in for a hangar plane.
 
-## C22 ☐ Campaign cabin screen
+## C22 ☑ Campaign cabin screen
 
 **Goal.** The cabin hub per `Campaign Cabin.png`: Next Mission (jumps to briefing of the tree's
 current mission), Previous Missions (list of finished missions, pick one → its briefing),
@@ -897,14 +897,100 @@ B13, launchscreen). The cabin scene is flat rof art per A6: `PC_BackGround.png` 
 airframe photograph behind the window hole, the memento frame, and the chapter-count map pins; no
 3D set exists, so no fallback decision is needed.
 
+**Approach as built.** Two page files, following C21's plug-in contract verbatim: no
+`LaunchMenu.cs` edit beyond registering them.
+
+- **`CSVM/src/UI/CampaignCabinPage.cs`** replaces the placeholder at `[CampaignScreen.Cabin]`.
+  Four rows, the original's own order minus the unshipped CHANGE MEMENTO/deactivated SAVE GAME:
+  **NEXT MISSION** calls `Flow.SetMission(CampaignProgression.NextMissionSeq(profile))` then
+  `Flow.GoTo(CampaignScreen.Briefing)`, or, once `CampaignProgression.Complete(profile)` (the
+  decoded `MissionsCompleted >= 24` gate behind `uiData` 2600), refuses in a plain sentence and
+  leaves the screen where it is, since no `docs/formats/strings.md` id covers that reason.
+  **PREVIOUS MISSIONS** is `Flow.GoTo(CampaignScreen.PreviousMissions)`. **PLANE CONSTRUCTION** is
+  `Flow.Request(CampaignExit.OpenHangar)`, the shell wiring contract below. **RETURN TO MAIN
+  MENU** is `Flow.Cancel()`.
+- **`CSVM/src/UI/CampaignPreviousMissionsPage.cs`** is the new `[CampaignScreen.PreviousMissions]`
+  page and the enum's one new member. Rows are `CampaignProgression.CompletedSeqs(profile)`
+  (already `seq`-ordered) plus VIEW SELECTED, REPLAY MISSION, RETURN TO CABIN. A mission row's own
+  press marks it the one the two buttons act on (defaulting to the first finished mission when
+  nothing has been picked, so a press before ever selecting still does something). VIEW SELECTED
+  is a no-op per the goal statement: the detail line under the focused row already carries the
+  CAP-41 layout (`{area}   ·   {plane flown}`, area from `IDS_MISSIONAREA` 1220+seq/5, plane from
+  the mission's `Best.PlaneName`), so a second surface would only restate it. REPLAY MISSION is
+  `Flow.SetMission(seq)` + `Flow.GoTo(CampaignScreen.Briefing)`, which records a new attempt
+  through `CampaignProgression.Record` without advancing (that class's own no-advance-on-replay
+  rule, already covered by `CampaignProgressionTests.ReplayingAFinishedMissionNeverAdvances`).
+  RETURN TO CABIN is `Flow.GoTo(CampaignScreen.Cabin)`, which lands on the cabin already on the
+  stack rather than a second copy, per the flow's own `GoTo` contract.
+- **Airframe silhouette and the CAP-41 fan-of-cards "Starting My Career" first row are not
+  reproduced.** The task scope is "one row per finished mission, ordered by seq"; the silhouette
+  needs `FC_PlaneIcons.png` framed by airframe, which the art gap below also blocks, and the
+  pre-career placeholder row is scrapbook furniture outside this item's four-function goal.
+
+**Cabin art: a confirmed, named gap, not an invented fallback.** Every file A6 named exists on
+disk (`Z:\CSVM\extracted\rof\ASSETS\GRAPHICS\`: `PC_BACKGROUND.PNG`, `PC_MEMENTOPICFRAME.PNG`,
+`PC_MAPPINS.PNG`, `PC_P_HANGAR0.JPG`..`PC_P_HANGAR10.JPG`), but every one of them is PNG or JPG,
+and the engine-free `HangarArt`/`TgaImage` seam C21 generalised decodes TGA only
+(`TgaImage.Decode`'s own header check). `CampaignCabinPage.Art` resolves the pilot's own airframe
+photo path exactly the way `HangarAirframePage.BlueprintFor` resolves a blueprint's, and calls
+`TgaImage.TryLoad` on it; the call is correct and the seam works, but decode returns null for
+every cabin file today, so no picture draws. `CampaignCabinPage.MapPinCount` (one per story
+chapter reached, `NextMissionSeq(profile) / 5 + 1`) is kept as a pure, unit-tested stand-in for
+the pixel composition (background + window-hole photo + memento frame + pins) that a PNG/JPG
+decoder would need to actually draw; extending `TgaImage` or adding a sibling decoder is follow-up
+work this item does not do. The memento frame's own picture cannot be resolved at all yet:
+`CampaignProfileDef` carries no memento-filename field (`uiData` 2150's `UIData +0x344`,
+`docs/formats/saved-games.md`), which is consistent with decision 3 deferring Change Memento
+whole, but means the frame has no source image even once a decoder exists.
+
+**Wiring contract for the shell (not applied here; `LaunchMenu.cs` is out of bounds for this
+item).**
+
+1. **Opening the hangar from PLANE CONSTRUCTION.** `Flow.Exit == CampaignExit.OpenHangar` is the
+   whole signal. The shell builds a `HangarCampaignContext` (B13) over `Flow.Profile` and
+   `Flow.Store`, opens `HangarFlow` with it, and on the hangar's own exit calls `Flow.Resume()`,
+   which re-reads the profile so a purchase or sale shows on the cabin immediately. This mirrors
+   how `OpenCampaignAid` already builds `CampaignFlow` itself in `LaunchMenu.cs`.
+2. **A screenshot aid for the cabin and the previous-missions list.** `LaunchMenu.OpenCampaignAid`
+   already covers `campaign`, `campaign-empty`, `campaign-roster`, `campaign-entry` over a scratch
+   profile store. Two more values in that same list would reach this item's screens without a new
+   mechanism: `campaign-cabin` (seed one scratch profile with a few missions completed, land on
+   `CampaignScreen.Cabin`) and `campaign-previous` (the same profile, `Flow.GoTo
+   (CampaignScreen.PreviousMissions)`). Neither exists yet; this item verified through the
+   `CampaignCabinPageTests`/`CampaignPreviousMissionsPageTests` units instead, per this item's
+   verify plan below.
+3. **The JPG/PNG art decoder.** Not this item's job (`LaunchMenu.cs`/`HangarFlow.cs` are both out
+   of bounds), and not attempted: a real decoder is enough work to be its own item. Filed as an
+   open question below rather than a backlog ID, since C23-C25 will hit the same gap on their own
+   `rimage`/`rof` art and a single decoder should serve all of them.
+
 **Model recommendation.** medium.
 
-**Verify.** Scripted screenshots of each route landing on the right screen; Previous Missions
-shows exactly the B12 record.
+**Verify.** `dotnet build`/`dotnet format --verify-no-changes` clean (0 warnings), comment caps
+clean (`CheckCommentCaps.ps1 -Summary`). `dotnet test` **2073/2073** (21 new units:
+`CSVM.Tests/CampaignCabinPageTests.cs` covers the four routes, the finished-campaign refusal, the
+next-mission seq under progress, and `MapPinCount`'s chapter arithmetic across every act boundary;
+`CSVM.Tests/CampaignPreviousMissionsPageTests.cs` covers the seq-ordered finished list excluding
+an unfinished attempt, REPLAY MISSION on an explicit pick and on the no-pick fallback, the refusal
+with nothing finished, VIEW SELECTED's no-op, and RETURN TO CABIN not stacking a second cabin).
+One pre-existing unit, `CampaignFlowTests.TheCabinPlaceholderReturnsToTheMainMenu`, tested the
+placeholder's `OpeningRow` convention directly and was removed as superseded by
+`CampaignCabinPageTests.ReturnToMainMenuCancelsTheFlow`;
+`CampaignFlowTests.UnregisteredScreensDrawThePlaceholder` gained the `PreviousMissions`
+registration assertion. **Scripted screenshots were not taken**: the aid values that would reach
+these two screens don't exist yet (wiring contract item 2, a `LaunchMenu.cs` edit out of bounds
+for this item), so the route/gating/list-content rules above are covered by the unit tests
+instead, per this item's own verify plan. **Verified.** <pending orchestrator run>
 
 **⚠ Traps.** `BL-181` defers HUD/scoreboard chrome "pending the menu hub"; this screen is that
 hub, so expect that item to reopen against the styling landed here. Do not silently restyle HUD
 chrome in this item.
+
+**Open questions for follow-up.** (1) A JPG/PNG decoder so `CampaignCabinPage.Art` and a future
+`RowArt` silhouette actually draw; candidates are extending `TgaImage` or a sibling class beside
+it. (2) The memento-filename field `CampaignProfileDef` would need if Change Memento is ever
+un-deferred. (3) The `campaign-cabin`/`campaign-previous` `--menu=` aid values named above, for
+whoever next edits `LaunchMenu.cs`.
 
 ## C23 ☐ Mission briefing screen
 

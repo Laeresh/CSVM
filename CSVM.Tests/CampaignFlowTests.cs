@@ -22,13 +22,14 @@ public class CampaignFlowTests
         Assert.IsType<CampaignRosterPage>(flow.Page);
     }
 
-    /// <summary>The wave's mount point: the two screens with a page of their own draw it, and the
-    /// three still to come draw the placeholder, which edits nothing.</summary>
+    /// <summary>The wave's mount point: the three screens with a page of their own draw it, and the
+    /// two still to come draw the placeholder, which edits nothing.</summary>
     [Fact]
     public void UnregisteredScreensDrawThePlaceholder()
     {
         Assert.True(CampaignFlow.HasPage(CampaignScreen.Roster));
         Assert.True(CampaignFlow.HasPage(CampaignScreen.Cabin));
+        Assert.True(CampaignFlow.HasPage(CampaignScreen.PreviousMissions));
 
         var flow = NewFlow(out _);
         flow.GoTo(CampaignScreen.Briefing);
@@ -68,21 +69,6 @@ public class CampaignFlowTests
 
         flow.Back();
         Assert.Equal(CampaignScreen.Roster, flow.Screen);
-    }
-
-    /// <summary>The cabin placeholder's one working row leaves the campaign, so a selected profile
-    /// is never a dead end while the cabin screen itself is missing.</summary>
-    [Fact]
-    public void TheCabinPlaceholderReturnsToTheMainMenu()
-    {
-        var flow = NewFlow(out _);
-        flow.SelectProfile(CampaignProfileDef.NewProfile("Zachary"));
-
-        Assert.Equal(CampaignScreen.Cabin, flow.Screen);
-        flow.FocusRow(flow.Page.OpeningRow);
-        flow.Accept();
-
-        Assert.Equal(CampaignExit.Cancelled, flow.Exit);
     }
 
     internal static CampaignFlow NewFlow(out string dir)
