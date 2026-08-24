@@ -1421,7 +1421,8 @@ Tests: `HangarAirframePageTests` reworked its stepper tests into
 gained `ANewPlaneLeavesTheAirframeScreenOnlyThroughAPick`. Every walk-through helper in the hangar
 test files now makes the pick press before declining the ask, and `--menu=defaults` makes it too.
 
-**Verified.** <pending orchestrator run>
+**Verified.** E49-E50 closing battery: build 0/0, units 1903/1903, engine suites 90/90 with
+errors clean, 16 goldens hash-identical, exit 0.
 
 ## E50 ☐ The plane-selection screen's totals row follows the focused saved plane
 
@@ -1446,4 +1447,5 @@ Tests: `HangarFlowTests` gained `TheTotalsRowPricesTheFocusedSavedPlane` (two sa
 different airframes, each priced from its own row), `TheTotalsRowHidesWhereNoPlaneIsFocused` (the
 action rows and the whole delete stage) and `TheBuildScreensStillPriceTheScratchPlane`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** E49-E50 closing battery: build 0/0, units 1903/1903, engine suites 90/90 with
+errors clean, 16 goldens hash-identical, exit 0.
