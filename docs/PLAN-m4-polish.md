@@ -66,7 +66,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ `BL-458` `CheckCommentCaps.ps1` resolves relative paths against the current worktree
 2. ☑ `BL-446` Rename `ZzBaselineDump` out of the throwaway prefix
 3. ☑ `BL-455` Delete `AiControlLaw.Throttle`'s dead far-from-player branch
-4. ☐ `BL-444` A flight-dump hash that is the same on both hosts
+4. ☑ `BL-444` A flight-dump hash that is the same on both hosts
 5. ☐ `BL-452` Rewrite `BL-266` (b) and (d) against the decoded shake numbers
 6. ☐ `BL-417` Re-verify the perf flake, and stop one unit flake from skipping the later stages
 
@@ -181,13 +181,14 @@ any real AI path before this change, not merely shadowed by `FlightModel.FarFiel
 probe at the branch confirmed it: `dotnet test` fired it only from the two unit tests that passed
 `playerPosition` explicitly, and it never fired across the in-engine `--run-tests=Ai` battery
 (16 suites, including `ai-far-field-plant` holding an AI at 1200 m) or a 900-frame Instant Action
-`dogfight_squadron` flight. The probe was removed after confirming the disproof. `dotnet test` on
-the worktree: 2149 passed, 0 failed. The `--run-tests=Ai` suites re-ran clean after the deletion
-(same 16 suites, all PASS).
+`dogfight_squadron` flight. The probe was removed after confirming the disproof. The one deleted
+test that observed `SpeedCeiling` numerically was rewritten against the closed loop rather than
+dropped, so the unit count holds at 2150 passed, 0 failed. The `--run-tests=Ai` suites re-ran clean
+after the deletion (same 16 suites, all PASS).
 
 **Verified.** <pending orchestrator run>
 
-## A4 ☐ `BL-444` A flight-dump hash that is the same on both hosts
+## A4 ☑ `BL-444` A flight-dump hash that is the same on both hosts
 
 **Goal.** One `--dump-flight=all` hash can be quoted across the Godot runtime and `dotnet test`.
 
@@ -208,6 +209,8 @@ are re-pinned in the same commit with the diff attributed to the rounding alone.
 **⚠ Traps.** Rounding too coarsely hides a real plant change; keep the resolution where a one-unit
 change in an asserted row still shows. If the difference is in a computed intermediate rather than
 the print, rounding the print may not remove it; say so and record the finding.
+
+**Verified.** <pending orchestrator run>
 
 ## A5 ☐ `BL-452` Rewrite `BL-266` (b) and (d) against the decoded shake numbers
 
