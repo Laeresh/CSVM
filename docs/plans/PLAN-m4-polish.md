@@ -65,13 +65,17 @@ Every item's own verification is in its section; this is the one run over all te
 single agent's worktree ever held:
 
 ```
-  PASS  build       3.2s  dotnet build CSVM.sln
-  PASS  units      24.3s  2155 passed, 0 failed, 0 skipped of 2155
-  PASS  engine    125.6s  94 passed, 0 failed, 0 skipped; engine errors clean
-  PASS  goldens    96.3s  16 shot(s) hash-identical; gpu NVIDIA GeForce RTX 5080 / 1.4.341
-  TODO  hitch      17.6s  clean: 0 hitch line(s); inject: 1 hitch line(s); awareness only
-  result: PASS -- 267.0s total, exit 0
+  PASS  build       6.2s  dotnet build CSVM.sln
+  PASS  units      18.0s  2155 passed, 0 failed, 0 skipped of 2155
+  PASS  engine    120.3s  95 passed, 0 failed, 0 skipped; engine errors clean
+  PASS  goldens    94.7s  16 shot(s) hash-identical; gpu NVIDIA GeForce RTX 5080 / 1.4.341
+  TODO  hitch      17.4s  clean: 0 hitch line(s); inject: 1 hitch line(s); awareness only
+  result: PASS -- 256.6s total, exit 0
 ```
+
+That run is on the tree with `main` merged in, which is why the engine stage reads 95 suites rather
+than the 94 the ten items alone produce: `PLAN-flight-roster-assembly` landed on `main` mid-run and
+added one.
 
 A4's cross-host claim re-checked here rather than taken from its own worktree: the eleven-airframe
 dump from `--dump-flight=all` and from `FlightEnvelopeDump` both hash
