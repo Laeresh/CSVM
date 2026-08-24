@@ -263,6 +263,24 @@ reasons that have nothing to do with any of these checks.
   scale and is *correct* on combined armour+health, so a dial that disagrees with the staging here
   is not a fault.
 
+- `PT-84` `[Own]` **A graze no longer drops the engine to a sputter.** The engine slot swaps to
+  `snd_damagedengine` only once the worst zone falls below a quarter of its health, which is the
+  original's own threshold and not a tuned one, so light damage should sound completely healthy and
+  the swap when it comes should be a hard cut rather than a fade.
+  *Variations:* take a beating rather than give one, with
+  `--ai=player_pfighter,player_pfighter --ai-attack=9 --volume=1.0`. To hear the two states back to
+  back without combat, `--fly --damage=nose:0.30` then `--fly --damage=nose:0.20`.
+  *Look for:*
+  - (a) the first hits, and a scrape along a cliff, leave the engine note untouched;
+  - (b) once a zone is deep into the red the note drops and stays dropped, at one pitch rather than
+    drifting;
+  - (c) the drawn pitch is not always the same on a fresh flight, and can land anywhere from a
+    near-normal note to a barely-there rumble.
+  ⚠ The pitch is a uniform draw with nothing about the damage in it, so a run that lands a mild
+  multiplier is not evidence the gate is wrong. Judge (c) across several flights.
+  *Blocks:* nothing; a fail on (a) says the gate reads the wrong pool, a fail on (b) says something
+  is re-evaluating the swap per frame.
+
 - `PT-81` `[Own]` **A repair retracts the stage it lifted back over (F5 damage lab).** Staging used
   to latch one way; the original stops an entry's anim and clears its handle on the upward crossing.
   This one needs no AI, so it flies on the bare command:

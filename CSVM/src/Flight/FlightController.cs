@@ -1566,19 +1566,18 @@ public partial class FlightController : Node3D
         if (!halted && !Crashed)
         {
             float speedFrac = _model.Speed / _model.Stats.FdSpeed;
-            // Zones OR the hull pair, whichever is worse: an AI airframe resolves no zones, so
-            // WorstFraction alone reads 1 however hurt it is and its engine would never take the
-            // damaged swap. A player's two track each other, so this cannot move its own timing.
-            float damageFrac = 1f - Mathf.Min(Damage?.WorstFraction ?? 1f,
-                Damage?.SummaryHealthFraction ?? 1f);
+            // Zones where the airframe resolves them, the hull pair where it does not: the two
+            // arms the decoded damage-state test itself has, so nothing here picks between them.
+            float healthFrac = Damage?.WorstHealthFraction ?? 1f;
             // One drive for both paths: the original runs ONE per-frame routine for the player and
             // every AI vehicle, so the two must never read the airframe differently.
             var engineDrive = EngineAudioCurves.DriveFrom(_model, _model.Boosting);
             // Keyed to the SELECTED view (D31), not the per-frame pose the camera actually took —
             // the original's swap is a camera-mode gate, and a held numpad key or look-behind is a
             // pose, not a mode change (⚠ table row 2 traces the analogous head-look case).
-            Audio?.Update(simDt, engineDrive, speedFrac, damageFrac, ViewMode == PilotViewMode.Cockpit);
-            EngineAudio?.Update(simDt, engineDrive, speedFrac, damageFrac);
+            Audio?.Update(simDt, engineDrive, speedFrac, healthFrac, _model.EngineDead,
+                ViewMode == PilotViewMode.Cockpit);
+            EngineAudio?.Update(simDt, engineDrive, speedFrac, healthFrac, _model.EngineDead);
             // The throttle-slam gate needs the live value every frame, not just while its plume
             // is active, so it can tell a fresh climb from one already in progress.
             ThrottleSmoke?.Update(simDt, _model.Throttle);

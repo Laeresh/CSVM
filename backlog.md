@@ -144,16 +144,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   at 10%, which a graze that leaves the hull healthy never reaches — so this clip showing no
   whole-plane trail is expected, not a puzzle.
 
-- `BL-442` `[Bug]` **The engine sputters at the slightest damage.** Reported at the controls: one
-  shallow graze and the engine note drops to a sputter. `FlightAudio.UpdateEngineSlot` swaps to
-  `snd_damagedengine` on any damage at all (`damageFrac > 0`, any zone below full), and
-  `EngineAudioCurves.EngineDefFor` draws the pitch multiplier uniformly across the authored
-  `[DamagedEnginePitchLo, Hi]` range, so a single graze can land a 0.02 pitch draw. Decode what the
-  original keys the damaged-engine swap on (a health fraction, the engine zone, or a damage stage)
-  and whether the pitch is drawn or derived, then port that. ⚠ Traps: do not add a threshold by
-  feel; the damage-stage decode in `docs/org/vehicleDamage.md` is the place the gate probably
-  lives. Nitro's engine variants (`git log --grep=BL-089`) share this slot, so check both.
-
 - `BL-122` `[Tuning]` `[Owed-playtest]` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: the **debris-arc trajectory** (the executable decode is settled — `translation_range` gives
   `dirY = elevation/90` and horizontal `1 − |elevation|/90`, `initial` the launch speed, `delta` an
@@ -1688,27 +1678,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   passing plane. Treat Doppler on IA traffic as **unverified**, and measure it (same method: track a
   tonal component against the source WAV) before implementing it.
 
-- `BL-223` `[Bug]` `[Owed-playtest]` **Damaged-engine loop gates on the wrong thing: any part's worst fraction, not the
-  engine part's health pool (B5, 2026-08-01; regated per playtest 2026-08-06, PT-26).** Today
-  `PlaneStats`/`FlightAudio` blend `snd_damagedengine` from `1 - PlaneDamage.WorstFraction` across
-  ALL parts — first scratch anywhere brings the loop in. Two fixes, both data-supported:
-  1. **Gate by zone:** blend from the **engine-marked destroyable part(s)** only — the
-     `destroyable_parts` `engine` flag marks the part the engines physically live in (tail on the
-     Bloodhawk, wings on the Balmoral; `docs/formats/vehicle.md`), matching the user's read of the
-     original. Damage elsewhere leaves the engine sounding healthy.
-  2. **Gate by pool:** the loop responds to that part's **hit-point pool**, not its armor —
-     armor-only damage stays silent. Implementable now: the two-pool
-     `PlaneDamage.Apply(part, healthDamage, armorDamage)` landed 2026-08-04 (`PLAN-armour-layer`).
-  The `damaged_engine_sound` `f0/f1` fade window (`["snd_damagedengine", 0.0, 1.0]`, shared via
-  `basic_airplane`) then reads over the engine part's health fraction. A pleasant consequence:
-  with armor spent first, the loop naturally starts only once real airframe damage exists — which
-  answers the old "should it ramp rather than snap on first scratch" question by construction.
-  No capture owed: the `engine` data flag plus the user's recollection carry the zone rule, and
-  filming the original to prove armor hits don't trigger it would be trying to hear a negative.
-  The gain TUNE survives as this entry's tail: `FlightAudio.DamagedEngineMixGain` (default 1.0,
-  the def's own sounds.json volume, unattenuated) has no reference recording of its own — judge it
-  against the healthy engine at the controls after the regating. Config keys:
-  `flightAudio.damagedEngineMixGain`.
+- `BL-459` `[Feature]` **The damaged engine's re-arm delay is not ported.** When the engine slot's
+  handle is not playing and the airframe is damaged, `FUN_004b18a0` does not restart the damaged
+  loop at once: it accumulates the frame time into the airframe DEFINITION's field at `def+0x88`
+  and only starts a loop once that total passes a threshold redrawn each frame as
+  `3.0 + 2·rand()/32767` seconds, resetting the field to zero as it does
+  (`docs/formats/vehicle.md`, "What makes an airframe damaged"). CSVM restarts the loop the frame
+  the swap is decided, so a damaged aircraft coming back inside `AiEngineAudio`'s 2000 m cull is
+  audible three to five seconds earlier than the original's would be.
+  *How you would know:* an AI plane damaged below a quarter health, flown out past 2000 m and back,
+  logs its `slot 0 -> snd_damagedengine` line three to five seconds after the `audible` line rather
+  than beside it.
+  ⚠ Traps: the timer sits on the **definition**, not the instance, so every aircraft sharing an
+  airframe def shares one counter and one draw. Port that sharing or record why not, but do not
+  quietly give each aircraft its own. A looped `snd_damagedengine` that is still playing never
+  reaches the timer, so this is only reachable through the cull (or a stream that ends), which is
+  also why it is small. Rejected: treating the delay as a crossfade; the transition is a hard cut.
 
 - `BL-252` `[Tuning]` `[Owed-playtest]` **Overspeed-whine volume** (`prop_sound`). `CAP-10` plus a
   live cross-check incidentally confirmed the **gating** of the original's dive/overspeed sound and
@@ -1750,8 +1735,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-281` `[Tuning]` `[Blocked: CAP-27]` **The ricochet sounds are audible but very faint.** `PT-25` (c), 2026-08-05:
   `snd_ricochet1–4` play under the per-impact spark burst but sit too low to read. A mix-gain
-  question with no reference recording behind it — same shape as `BL-223`'s damaged-engine gain,
-  and to be judged at the controls rather than derived. ⚠ Judge only after `CAP-27` decides
+  question with no reference recording behind it, to be judged at the controls rather than derived. ⚠ Judge only after `CAP-27` decides
   whether the original has this effect at all: `BL-090` already calls the 0.99 `injure_anims`
   entry that drives it "plausibly an authoring leftover", present on 1 of 11 aircraft, so the
   capture may delete the feature rather than tune it.
@@ -1778,21 +1762,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `FlightAudio.MixGain` is `1` in 1P (no attenuation applies), so this is the vehicle.json
   `engine_sound` mix level (or the detuned dual-voice stack's combined gain, `EngineDetuneRatio`)
   read too loud on its own terms. *Fix shape:* a level match by ear against the reference video,
-  same method `BL-223` and `BL-269` already used for this signal chain.
+  the same method `BL-269` already used for this signal chain.
 
-- `BL-424` `[Feature]` **A choked engine still sounds like a running one.** `PT-69` (d): the choker
-  (`wep_12`, `TANGLER`) cuts thrust for 5–13 s and nothing in the audio chain reacts, so a choked
-  aircraft, your own included, keeps its full engine loop. `FlightAudio` drives the loop from
-  throttle and damage (`damaged_engine_sound`), never from `FlightController`'s engine-dead timer.
-  ⚠ What the original plays over the cut is **undecoded**: the `PT-69` row asserted an engine-loop
-  swap, but no `docs/org` page records one, so decode the original's behaviour (silence, a stop/start
-  pair, or a second loop) before building. Scope is every loop a session renders: the own-ship one,
-  and the AI planes' positional loops (`PLAN-ai-damage-and-engine-audio`), which read the same
-  engine model and would otherwise keep running through a choke too.
-  *Fix shape:* gate `FlightAudio`'s loop on the engine-dead timer the same way the thrust cut reads
-  it, with whatever the decode says the original plays over the gap.
-  *Cross-refs:* `BL-421` (closed; it confirmed the engine-audio model at the controls), `BL-223`/`BL-285`
-  (the loop's damage and start/stop inputs), `BL-406` (closed; the choke itself landed there).
+- `BL-424` `[Research]` **What else a choked engine does besides swap its loop.** The swap itself is
+  decoded and ported: the choker raises bit `0x2` of the disabled-systems mask, the engine-audio
+  routine tests the whole mask for nonzero, so a choked aircraft plays `snd_damagedengine` at a
+  drawn pitch exactly as a badly hurt one does (`docs/formats/vehicle.md`, "What makes an airframe
+  damaged"). Both the own-ship and the AI arm read the same gate. What is left is the pair of
+  functions the mask's bit-`0x2` edges call, `FUN_004b15c0` and `FUN_004b1630`, which
+  `docs/org/ordnanceTypes.md` names the engine stop and restart without either having been opened:
+  if they also cut a prop loop or fire a one-shot, a choke sounds like more than a definition swap.
+  *Fix shape:* open both functions, then port whatever they do beyond the swap.
+  ⚠ Traps: do not re-decode the swap, and do not read "engine stop" as an audio call on the
+  strength of its name, since it sits on the thrust path's flag and may touch no sound at all.
+  Rejected: gating the loop on `FlightController`'s engine-dead timer as a bespoke rule; the timer
+  reaches the audio through the decoded mask test and needs no second path.
+  *Cross-refs:* `BL-421` (closed; it confirmed the engine-audio model at the controls), `BL-285`
+  (the loop's start/stop inputs), `BL-406` (closed; the choke itself landed there).
 
 ## Cameras & views
 

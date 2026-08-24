@@ -75,7 +75,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☐ `BL-449` Confirm the one-sided negative `C_L` ceiling, then port or record it
 12. ☐ `BL-451` A dead AI's throttle and surfaces freeze at their last commanded values
 13. ☐ `BL-457` Port the per-contact camera shake (block 5)
-14. ☐ `BL-442` Decode what keys the damaged-engine swap and pitch, then port it
+14. ☑ `BL-442` Decode what keys the damaged-engine swap and pitch, then port it
 
 ## Dependency and parallelism notes
 
@@ -312,7 +312,7 @@ graze at the controls (the `BL-120`/`PT-53` corner) now moves the camera. Full 8
 `turbulence` def. `CollisionDamage.cs` gates on positive severity (`flightModel.md:2650`); confirm
 whether a graze reaches `FUN_0048d2c0` at all before claiming a graze shakes.
 
-## B14 ☐ `BL-442` Decode what keys the damaged-engine swap and pitch, then port it
+## B14 ☑ `BL-442` Decode what keys the damaged-engine swap and pitch, then port it
 
 **Goal.** The engine note drops to `snd_damagedengine` when the original would, and the pitch
 multiplier is derived the way the original derives it.
@@ -338,3 +338,29 @@ sputters. Unit on `EngineAudioCurves` for the pitch law.
 
 **⚠ Traps.** No threshold by feel (entry). If the original also swaps on any damage and the
 sputter is the pitch draw alone, the fix is the pitch law only; report that as the finding.
+
+**Outcome: the gate was wrong and the pitch law was already right**, the inverse of the trap's
+guess. `FUN_004b18a0` tests the vehicle's whole disabled-systems mask at `+0x2dc` for nonzero
+(`0x004b194e` player, `0x004b19e2` AI), and `FUN_004b1790` raises that mask's bit `0x1` only when
+the worst zone's **health-only** fraction falls strictly below the airframe def's `+0xbc`, which no
+reader token writes and the def constructor `FUN_00478a00` fills with 0.25. Bit `0x2` is the
+choker's engine-out, so a choked engine takes the same swap. The pitch is
+`lo + (hi - lo)·rand()/32767` drawn once and held, which is what `EngineAudioCurves` already did,
+and it is reset to 1.0 at `0x004b1b33` whenever the mask is zero, for the AI arm as well, so the
+"an AI's multiplier is forced to 1" reading in `docs/formats/vehicle.md` was wrong and is corrected.
+Ported: `EngineAudioCurves.EngineDamaged`/`DamagedPitchMul`, `PlaneDamage.WorstHealthFraction`, and
+both `FlightAudio.Update` and `AiEngineAudio.Update` taking the health fraction and the engine-dead
+flag instead of a damage fraction. `BL-223` (gate the loop on the engine-marked zone) is deleted as
+disproven by the same decode, and `BL-424` is rewritten to the part the swap does not answer.
+Not ported, filed as `BL-459`: the 3-to-5-second re-arm timer the damaged arm keeps on the
+airframe DEFINITION at `def+0x88`, reachable only through the AI cull.
+
+Headless evidence on this tree, `--stage=empty --plane=player_bhawk --fly --damage=nose:<f>`:
+0.30 and 0.26 print no swap line, 0.24 and 0.10 print
+`engine sound: slot 0 -> snd_damagedengine pitchMul=0,634`, bracketing the threshold at the decoded
+quarter. The AI arm matches: `--ai=player_fury --ai-damage=0.50` prints no swap,
+`--ai-damage=0.10` prints `ai engine ai1_player_fury slot 0 -> snd_damagedengine pitchMul=0.634`.
+Battery on this worktree with `CSVM_DATA_ROOT=Z:\CSVM`: build clean, units 2152/2152, engine
+suites 94/94 with errors clean, goldens 16/16 hash-identical, exit 0.
+
+**Verified.** <pending orchestrator run>

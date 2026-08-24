@@ -54,12 +54,19 @@ public sealed class PlaneDamage
     public float WholeHealth => _wholeHealth;
 
     /// <summary>Worst (lowest) combined armor+HP fraction across all parts — 1f (pristine) when
-    /// there are no parts or none has taken damage. Drives whole-plane damage feedback keyed to
-    /// "how hurt is the airframe" rather than any one part (e.g. FlightAudio's damaged-engine
-    /// loop). ⚠ A zone-less AI aircraft (<see cref="PlaneStats.LoadForAi"/>) always reads a
-    /// constant 1f here — read <see cref="SummaryHealthFraction"/> for a reading that works on
-    /// both flavours.</summary>
+    /// there are no parts or none has taken damage. This is the scale the def's injure_anims
+    /// thresholds are on. ⚠ A zone-less AI aircraft (<see cref="PlaneStats.LoadForAi"/>) always
+    /// reads a constant 1f here. <see cref="WorstHealthFraction"/> is the reading that works on
+    /// both flavours, and is the one the decoded damage-state test takes.</summary>
     public float WorstFraction => _parts.Count == 0 ? 1f : _parts.Values.Min(p => p.Fraction);
+
+    /// <summary>The reading the decoded damage-state test takes: the lowest HEALTH-only fraction
+    /// across the zones, or the whole-vehicle health fraction on an airframe that resolves none.
+    /// Armor is deliberately absent: the original divides part health current by part health max
+    /// and never touches the armor pool here (docs/org/vehicleDamage.md, "The damaged state").</summary>
+    public float WorstHealthFraction => _parts.Count == 0
+        ? SummaryHealthFraction
+        : _parts.Values.Min(p => p.HealthFraction);
 
     /// <summary>The whole-vehicle health fraction — the real pair's current over max, no longer
     /// a parts-derived stand-in. Fed to the DI voice thresholds and any "how dead am I" reader;
