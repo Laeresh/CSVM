@@ -2351,7 +2351,15 @@ usual.
   escort 5 km out still reads `Station` in the `wingman-station` suite), so the 200 m overfly the
   report describes belongs to a wingman that NEVER joined. The join gate is a range AND a speed,
   `< 700 m` and `> 20.576 m/s`, so establish what the wingman's speed and range actually are on the
-  first frame it is stepped after the cutscene. *⚠ Traps:* ⚠ **measure on `player_pfighter`.** The
+  first frame it is stepped after the cutscene.
+  *Two leads, one already retired:* an airframe mismatch between the pilot and the wingman is NOT
+  in play, so do not chase it: the reporting profile carries `selectedPlane 0` and `wingmanPlane 1`
+  and both are airframe 5, the Devastator, which matches the report ("i did not fly a bloodhawk but
+  a devastator same as my wingmen") and the campaign's own two-Devastator start. A probe that flew
+  the pilot on a Bloodhawk against a Devastator wingman was a test-rig artefact. Still untested:
+  `WithAiSpawnJitter` scales a spawned wingman's `fd_speed` by up to 5 % (`PlaneStats.cs:95`,
+  applied at `FlightRoster.cs:63`), worth up to 5.6 m/s on the same airframe, which the suite legs
+  do not apply. *⚠ Traps:* ⚠ **measure on `player_pfighter`.** The
   Devastator is 113 m/s against the ceiling's 111.76; the Bloodhawk is 135 m/s, which overstates the
   ceiling's share about eighteenfold, and a number quoted off it is not a statement about the
   campaign. ⚠ `BL-457`'s earlier line that the escort "re-enters `Joining`" past 700 m is WRONG: the
