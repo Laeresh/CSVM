@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -9,9 +8,9 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The PLANENAME screen (PLAN-hangar C25): per-character entry on the launchscreen's own ←→
-/// stepper, the length row that adds and removes characters, the record's own length cap, and the
-/// alphabet that keeps the store's filename sanitisation with nothing to do.
+/// The PLANENAME screen (BL-441): the name rolled onto a plane that has none, the two word
+/// steppers and the reroll that a pad names a plane with, the typing that replaces them, and the
+/// warning that stands between a stepped name and somebody else's saved plane.
 /// </summary>
 public class HangarNamePageTests : IDisposable
 {
@@ -34,159 +33,251 @@ public class HangarNamePageTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>One row per character, then the length row: a nameless plane opens on the length
-    /// row alone, which is the only control that can start a name.</summary>
+    /// <summary>The name, its two words, and the reroll: four rows whose indices are fixed, so the
+    /// cursor never lands on a row that came and went.</summary>
     [Fact]
-    public void OneRowPerCharacterPlusTheLengthRow()
+    public void FourRowsTheNameItsTwoWordsAndTheReroll()
     {
         var flow = OpenOnName();
 
-        Assert.Equal(1, flow.Page.RowCount);
-        Assert.Equal("Letters: 0", flow.Page.RowText(0));
-
-        flow.Scratch.Name = "AB";
-        Assert.Equal(3, flow.Page.RowCount);
-        Assert.Equal("1.  A", flow.Page.RowText(0));
-        Assert.Equal("2.  B", flow.Page.RowText(1));
-        Assert.Equal("Letters: 2", flow.Page.RowText(2));
+        Assert.Equal(4, flow.Page.RowCount);
+        Assert.StartsWith("Name: ", flow.Page.RowText(HangarNamePage.NameRow), StringComparison.Ordinal);
+        Assert.StartsWith("Adjective: ", flow.Page.RowText(HangarNamePage.AdjectiveRow), StringComparison.Ordinal);
+        Assert.StartsWith("Noun: ", flow.Page.RowText(HangarNamePage.NounRow), StringComparison.Ordinal);
+        Assert.Equal("Roll a new name", flow.Page.RowText(HangarNamePage.RerollRow));
     }
 
-    /// <summary>The length row's stepper is the add/remove control: right adds a character, left
-    /// takes the last one back. Adding leaves the cursor on the new character's own row, so the
-    /// next step edits it rather than adding another.</summary>
+    /// <summary>A plane with no name arrives already named, which is the whole point: a pad reaches
+    /// the build press without entering anything.</summary>
     [Fact]
-    public void TheLengthRowAddsAndRemovesCharacters()
+    public void ANamelessPlaneArrivesAlreadyNamed()
     {
         var flow = OpenOnName();
 
-        Assert.True(flow.Step(1));
-        Assert.Equal("A", flow.Scratch.Name);
-        Assert.Equal(0, flow.Row); // the cursor now stands on that character
-        Assert.True(flow.Step(1));
-        Assert.Equal("B", flow.Scratch.Name);
-
-        int length = flow.Page.RowCount - 1;
-        Assert.True(flow.Page.Step(length, 1));
-        Assert.Equal("BA", flow.Scratch.Name);
-        Assert.True(flow.Page.Step(flow.Page.RowCount - 1, -1));
-        Assert.Equal("B", flow.Scratch.Name);
-        Assert.True(flow.Page.Step(flow.Page.RowCount - 1, -1));
-        Assert.Equal(string.Empty, flow.Scratch.Name);
-        Assert.False(flow.Page.Step(0, -1));
+        Assert.False(string.IsNullOrWhiteSpace(flow.Scratch.Name));
+        Assert.Equal(2, flow.Scratch.Name.Split(' ').Length);
+        Assert.Contains(flow.Scratch.Name.Split(' ')[0], PlaneNameTables.Adjectives);
+        Assert.Contains(flow.Scratch.Name.Split(' ')[1], PlaneNameTables.Nouns);
     }
 
-    /// <summary>The cap is the original's own: its saved-plane name index is 33-byte records, so
-    /// 32 characters is the longest name that round-trips through it.</summary>
+    /// <summary>The pinned seed rolls the name the tables' own roll rolls, so the screen offers what
+    /// a --det run says it offers.</summary>
     [Fact]
-    public void LengthStopsAtTheRecordsCap()
+    public void TheRolledNameIsTheSeedsName()
     {
-        var flow = OpenOnName();
-        flow.Scratch.Name = new string('A', HangarNamePage.MaxLength);
+        var flow = OpenOnName(rng: new Random(7));
+        var expected = PlaneNameTables.Roll(new Random(7));
 
-        Assert.False(flow.Page.Step(flow.Page.RowCount - 1, 1));
-        Assert.Equal(HangarNamePage.MaxLength, flow.Scratch.Name.Length);
-        Assert.Contains("Full at 32", flow.Page.Detail(flow.Page.RowCount - 1), StringComparison.Ordinal);
+        Assert.Equal(PlaneNameTables.Compose(expected.Adjective, expected.Noun), flow.Scratch.Name);
     }
 
-    /// <summary>A character row steps its own cell through the alphabet and wraps, editing no
-    /// other cell.</summary>
+    /// <summary>A plane that already carries a name keeps it. Arriving on this screen must never
+    /// cost a pilot the name they chose, and an imported original save carries one this screen
+    /// never composed.</summary>
     [Fact]
-    public void SteppingACellWalksTheAlphabet()
+    public void AnExistingNameSurvivesArrival()
     {
-        var flow = OpenOnName();
-        flow.Scratch.Name = "AB";
-        flow.Move(1);
-
-        Assert.True(flow.Step(1));
-        Assert.Equal("AC", flow.Scratch.Name);
-        Assert.True(flow.Step(-1));
-        Assert.Equal("AB", flow.Scratch.Name);
-
-        flow.Scratch.Name = "AA";
-        Assert.True(flow.Step(-1));
-        Assert.Equal("A-", flow.Scratch.Name); // wraps onto the alphabet's last entry
-    }
-
-    /// <summary>The alphabet carries no character a filename cannot hold, so the store's
-    /// sanitisation never rewrites a name this screen produced.</summary>
-    [Fact]
-    public void TheAlphabetIsFilenameSafe()
-    {
-        var flow = OpenOnName();
-        flow.Step(1); // one character to walk
-
-        var seen = new HashSet<char>();
-        var invalid = new HashSet<char>(Path.GetInvalidFileNameChars());
-        while (seen.Add(flow.Scratch.Name[0]))
-        {
-            Assert.DoesNotContain(flow.Scratch.Name[0], invalid);
-            flow.Page.Step(0, 1);
-        }
-
-        Assert.Equal(38, seen.Count); // A-Z, 0-9, space, hyphen
-        Assert.Contains(' ', seen);
-    }
-
-    /// <summary>A character the alphabet does not carry (an imported original save's lower case)
-    /// survives until its own cell is stepped.</summary>
-    [Fact]
-    public void ImportedCharactersSurviveUntilStepped()
-    {
-        var flow = OpenOnName();
-        flow.Scratch.Name = "Blue Streak";
+        _store.Save(new CustomPlaneDef { Name = "Blue Streak", Engine = 0 });
+        var flow = OpenOnNameEditing("Blue Streak");
 
         Assert.Equal("Blue Streak", flow.Scratch.Name);
-        Assert.Equal("2.  l", flow.Page.RowText(1));
-        flow.Move(1);
-        Assert.True(flow.Step(1));
-        Assert.Equal("BAue Streak", flow.Scratch.Name);
+        Assert.True(((HangarNamePage)flow.Page).Freeform);
     }
 
-    /// <summary>The detail line assembles the whole name with the focused character marked, since
-    /// the rows themselves are a vertical column of single characters.</summary>
+    /// <summary>Each stepper walks its own word and wraps, rebuilding the name from both.</summary>
     [Fact]
-    public void DetailMarksTheFocusedCharacter()
+    public void EachStepperWalksItsOwnWord()
     {
         var flow = OpenOnName();
-        flow.Scratch.Name = "AB C";
+        string firstNoun = flow.Scratch.Name.Split(' ')[1];
 
-        Assert.Equal("A[B] C", flow.Page.Detail(1));
-        Assert.Equal("AB[ ]C", flow.Page.Detail(2));
+        Assert.True(flow.Page.Step(HangarNamePage.AdjectiveRow, 1));
+        Assert.Equal(firstNoun, flow.Scratch.Name.Split(' ')[1]);
+
+        string adjective = flow.Scratch.Name.Split(' ')[0];
+        Assert.True(flow.Page.Step(HangarNamePage.NounRow, 1));
+        Assert.Equal(adjective, flow.Scratch.Name.Split(' ')[0]);
+        Assert.NotEqual(firstNoun, flow.Scratch.Name.Split(' ')[1]);
     }
 
-    /// <summary>A blank name says so in the original's own words (langui 203) where it can still
-    /// be fixed, rather than only at the Build press.</summary>
+    /// <summary>Only the two word rows step. The name row is the typing target and the reroll is a
+    /// confirm, so a stray ←→ on either does nothing at all.</summary>
+    [Fact]
+    public void OnlyTheWordRowsStep()
+    {
+        var flow = OpenOnName();
+
+        Assert.False(flow.Page.Step(HangarNamePage.NameRow, 1));
+        Assert.False(flow.Page.Step(HangarNamePage.RerollRow, -1));
+        Assert.False(flow.Page.Step(HangarNamePage.AdjectiveRow, 0));
+    }
+
+    /// <summary>Confirm on the reroll row rolls both words and stays on the screen; confirm
+    /// anywhere else is the flow's own advance, so the row a pilot finishes on is the one that
+    /// moves them on.</summary>
+    [Fact]
+    public void ConfirmRollsOnTheRerollRowAndAdvancesElsewhere()
+    {
+        var flow = OpenOnName();
+        flow.FocusRow(HangarNamePage.RerollRow);
+        string before = flow.Scratch.Name;
+
+        Assert.True(flow.Accept());
+        Assert.Equal(HangarScreen.Name, flow.Screen);
+        Assert.NotEqual(before, flow.Scratch.Name);
+
+        flow.FocusRow(HangarNamePage.NameRow);
+        flow.Accept();
+        Assert.Equal(HangarScreen.Purchase, flow.Screen);
+    }
+
+    /// <summary>Typing replaces the rolled name rather than extending it: a pilot who types at all
+    /// wants a different name, not that one with a letter on the end.</summary>
+    [Fact]
+    public void TypingReplacesTheRolledName()
+    {
+        var flow = OpenOnName();
+        var page = (HangarNamePage)flow.Page;
+
+        Assert.True(page.Type('G'));
+        Assert.Equal("G", flow.Scratch.Name);
+        Assert.True(page.Type('o'));
+        Assert.True(page.Type('\''));
+        Assert.Equal("Go'", flow.Scratch.Name);
+        Assert.True(page.Freeform);
+    }
+
+    /// <summary>Backspace enters freeform in place instead of clearing, which is the way in for
+    /// editing a rolled name rather than starting over.</summary>
+    [Fact]
+    public void BackspaceEditsTheRolledNameInPlace()
+    {
+        var flow = OpenOnName();
+        var page = (HangarNamePage)flow.Page;
+        string rolled = flow.Scratch.Name;
+
+        Assert.True(page.Backspace());
+        Assert.Equal(rolled[..^1], flow.Scratch.Name);
+        Assert.True(page.Freeform);
+    }
+
+    /// <summary>Typing stops at the record's cap, and refuses a character the name cannot carry.
+    /// </summary>
+    [Fact]
+    public void TypingStopsAtTheCapAndFiltersTheKeystroke()
+    {
+        var flow = OpenOnName();
+        var page = (HangarNamePage)flow.Page;
+
+        Assert.False(page.Type('/'));
+        Assert.False(page.Type('\n'));
+
+        page.Type('A');
+        while (flow.Scratch.Name.Length < HangarNamePage.MaxLength)
+        {
+            Assert.True(page.Type('A'));
+        }
+
+        Assert.False(page.Type('A'));
+        Assert.Equal(HangarNamePage.MaxLength, flow.Scratch.Name.Length);
+    }
+
+    /// <summary>Stepping a word throws a typed name away, with the stepper's own detail line the
+    /// only notice given. There is no undo behind it, which is why the notice is there.</summary>
+    [Fact]
+    public void SteppingAWordDiscardsATypedName()
+    {
+        var flow = OpenOnName();
+        var page = (HangarNamePage)flow.Page;
+        page.Type('Q');
+
+        Assert.Contains("Step to drop the typed name", page.Detail(HangarNamePage.AdjectiveRow), StringComparison.Ordinal);
+        Assert.True(page.Step(HangarNamePage.AdjectiveRow, 1));
+        Assert.False(page.Freeform);
+        Assert.DoesNotContain('Q', flow.Scratch.Name);
+    }
+
+    /// <summary>The roll never offers a name the store already holds: a machine that hands a pilot
+    /// a name which eats their saved plane is a fault of the machine.</summary>
+    [Fact]
+    public void TheRollNeverOffersASavedPlanesName()
+    {
+        var first = PlaneNameTables.Roll(new Random(7));
+        _store.Save(new CustomPlaneDef { Name = PlaneNameTables.Compose(first.Adjective, first.Noun), Engine = 0 });
+
+        var flow = OpenOnName(rng: new Random(7));
+
+        Assert.NotEqual(PlaneNameTables.Compose(first.Adjective, first.Noun), flow.Scratch.Name);
+        Assert.Equal(string.Empty, flow.Page.Detail(HangarNamePage.NameRow));
+    }
+
+    /// <summary>A name landing on a saved plane's says so, since the store's save is a silent
+    /// overwrite and the steppers do not check the way the roll does.</summary>
+    [Fact]
+    public void ANameLandingOnASavedPlaneWarns()
+    {
+        _store.Save(new CustomPlaneDef { Name = "Blue Streak", Engine = 0 });
+        var flow = OpenOnName();
+        var page = (HangarNamePage)flow.Page;
+        foreach (char c in "Blue Streak")
+        {
+            page.Type(c);
+        }
+
+        Assert.Contains("replaces your saved", page.Detail(HangarNamePage.NameRow), StringComparison.Ordinal);
+    }
+
+    /// <summary>The plane being edited is exempt from that warning: writing back over its own file
+    /// is what editing a saved plane is, and a warning that fires every time is one nobody reads by
+    /// the time it means something.</summary>
+    [Fact]
+    public void EditingASavedPlaneDoesNotWarnAboutItsOwnFile()
+    {
+        _store.Save(new CustomPlaneDef { Name = "Blue Streak", Engine = 0 });
+        var flow = OpenOnNameEditing("Blue Streak");
+
+        Assert.Equal(string.Empty, flow.Page.Detail(HangarNamePage.NameRow));
+    }
+
+    /// <summary>A blank name says so in the original's own words (langui 203) where it can still be
+    /// fixed, rather than only at the Build press.</summary>
     [Fact]
     public void ABlankNameShowsTheOriginalsRefusal()
     {
         var strings = UiStrings.Parse(
             "[{\"id\":203,\"text\":\"You must enter a name for your new plane.\",\"dll\":\"langui\"}]");
         var flow = OpenOnName(strings);
+        var page = (HangarNamePage)flow.Page;
+        while (flow.Scratch.Name.Length > 0)
+        {
+            page.Backspace();
+        }
 
-        Assert.Contains("must enter a name", flow.Page.Detail(0), StringComparison.Ordinal);
+        Assert.Contains("must enter a name", page.Detail(HangarNamePage.NameRow), StringComparison.Ordinal);
+        Assert.Equal("Name: -", page.RowText(HangarNamePage.NameRow));
     }
 
-    /// <summary>Confirm advances to the purchase screen without editing the name, and the name a
-    /// flow entered here is the one the store saves.</summary>
+    /// <summary>The name showing is the name the store saves, typed or rolled.</summary>
     [Fact]
     public void TheEnteredNameIsWhatTheStoreSaves()
     {
         var flow = OpenOnName();
         flow.Scratch.Engine = 0;
-        flow.Step(1);       // "A"
-        flow.Page.Step(0, 1); // "B"
+        var page = (HangarNamePage)flow.Page;
+        foreach (char c in "Gabriels Revenge")
+        {
+            page.Type(c);
+        }
+
         flow.Accept();
 
         Assert.Equal(HangarScreen.Purchase, flow.Screen);
-        Assert.Equal("B", flow.Scratch.Name);
         Assert.True(flow.Commit());
-        Assert.Equal("B", Assert.Single(_store.List()).Name);
+        Assert.Equal("Gabriels Revenge", Assert.Single(_store.List()).Name);
     }
 
-    // A flow standing on the PLANENAME screen with a fresh scratch plane.
-    private HangarFlow OpenOnName(UiStrings? strings = null)
+    private static void WalkToName(HangarFlow flow)
     {
-        var flow = new HangarFlow(_store, strings ?? UiStrings.Empty);
         for (int guard = 0; flow.Screen != HangarScreen.Name && guard < HangarFlow.Order.Length + 3; guard++)
         {
             // A no-op except on the airframe-defaults ask (E41), which the airframe screen's own
@@ -196,6 +287,25 @@ public class HangarNamePageTests : IDisposable
         }
 
         Assert.Equal(HangarScreen.Name, flow.Screen);
+    }
+
+    // A flow standing on the PLANENAME screen with a fresh scratch plane.
+    private HangarFlow OpenOnName(UiStrings? strings = null, Random? rng = null)
+    {
+        var flow = new HangarFlow(_store, strings ?? UiStrings.Empty, nameRng: rng ?? new Random(7));
+        WalkToName(flow);
+        return flow;
+    }
+
+    // The same, but editing the store's first saved plane. Through the selection screen's own row
+    // rather than StartFromSaved: row 0 is New Plane, whose confirm would replace the scratch.
+    private HangarFlow OpenOnNameEditing(string saved)
+    {
+        var flow = new HangarFlow(_store, UiStrings.Empty, nameRng: new Random(7));
+        flow.FocusRow(1);
+        Assert.Equal(saved, flow.Page.RowText(1));
+        flow.Accept();
+        WalkToName(flow);
         return flow;
     }
 }

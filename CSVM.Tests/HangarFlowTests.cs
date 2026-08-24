@@ -226,15 +226,17 @@ public class HangarFlowTests : IDisposable
     }
 
     /// <summary>A nameless build is refused before the economy is consulted at all: the name is
-    /// the store's identity, and the original has its own string for exactly this.</summary>
+    /// the store's identity, and the original has its own string for exactly this. The name screen
+    /// rolls one onto every plane that lacks one, so the way here is a pilot who took theirs back
+    /// off again; the gate stands whatever route reached it.</summary>
     [Fact]
     public void ANamelessBuildIsRefused()
     {
         var flow = Open();
         flow.Accept();
         flow.Scratch.Engine = 0;
-        flow.Scratch.Name = "   ";
         Walk(flow, HangarScreen.Purchase);
+        flow.Scratch.Name = "   ";
 
         Assert.False(flow.Commit());
         Assert.Contains("name", flow.Message, StringComparison.OrdinalIgnoreCase);
