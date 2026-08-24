@@ -25,15 +25,18 @@ public sealed class OwnedPlane
     /// not decoded (<c>saved-games.md</c>, "Where the ammunition and ordnance picks live"), so a
     /// value here is only ever round-tripped, never interpreted.</summary>
     public int[] Ordnance { get; set; } = new int[8];
+
+    /// <summary>A campaign award (<c>docs/org/hangar.md</c>, "The mission reward table"): the
+    /// original's class-2 plane record, which the sell handler refuses. Never set on a plane the
+    /// player built.</summary>
+    public bool Special { get; set; }
 }
 
-/// <summary>One completed or attempted mission's recorded result, best-of merged the way
-/// <c>saved-games.md</c>'s mission-result array is (<c>FUN_00405ce0</c>): the fields this decode
+/// <summary>One run of a mission, the eight fields <c>saved-games.md</c>'s mission-result decode
 /// closed. The two twelve-byte counter arrays it left undecoded are not carried.</summary>
-public sealed class MissionResult
+public sealed class MissionRun
 {
-    /// <summary>The <c>cm_sequence.zrd</c> flat index, 0..23, the campaign's own mission id.</summary>
-    public int Seq { get; set; }
+    /// <summary>Completed-objective bitmask; bit 0 is the primary objective.</summary>
     public int CompletedMask { get; set; }
     public int TimeMs { get; set; }
     public int Shots { get; set; }
@@ -43,11 +46,29 @@ public sealed class MissionResult
     public string PlaneName { get; set; } = string.Empty;
 }
 
+/// <summary>One mission's record, the original's two halves (<c>saved-games.md</c>, "The
+/// mission-result array"): the most recent attempt, and the best-of merge across attempts that
+/// <see cref="CampaignProgression"/> maintains. A record whose <see cref="Best"/> mask is 0 is a
+/// mission attempted but never completed, the shape the sample profile's last record has.</summary>
+public sealed class MissionResult
+{
+    /// <summary>The <c>cm_sequence.zrd</c> flat index, 0..23, the campaign's own mission id.</summary>
+    public int Seq { get; set; }
+
+    /// <summary>The most recent attempt, written whether or not it completed anything.</summary>
+    public MissionRun Latest { get; set; } = new();
+
+    /// <summary>The merged best/cumulative result, updated only by an attempt that completed the
+    /// primary objective.</summary>
+    public MissionRun Best { get; set; } = new();
+}
+
 /// <summary>One campaign profile's persisted state: wallet, owned planes with their campaign fit,
-/// recorded mission results and how far through <c>cm_sequence.zrd</c> the player is. Fields and
-/// their defaults come from <c>docs/formats/saved-games.md</c> (structure) and
-/// <c>docs/org/hangar.md</c> "The campaign wallet" (starting funds and planes); see
-/// <see cref="NewProfile"/>.</summary>
+/// recorded mission results, how far through <c>cm_sequence.zrd</c> the player is, which aircraft
+/// awards were granted, and the cross-mission destruction log. Fields and their defaults come from
+/// <c>docs/formats/saved-games.md</c> (structure) and <c>docs/org/hangar.md</c> "The campaign
+/// wallet" (starting funds and planes); see <see cref="NewProfile"/>. Everything here is written
+/// through <see cref="CampaignProgression"/>, which owns the merge and advance rules.</summary>
 public sealed class CampaignProfileDef
 {
     public string Name { get; set; } = string.Empty;
@@ -55,11 +76,20 @@ public sealed class CampaignProfileDef
     public List<OwnedPlane> Planes { get; } = new();
     public int SelectedPlane { get; set; }
 
-    /// <summary>The count of completed missions: both the campaign's tree position (the next
+    /// <summary>The count of completed missions: both the campaign's position (the next
     /// mission is <c>cm_sequence</c> <c>seq == MissionsCompleted</c>) and the save's own field,
-    /// <c>UIData +0x338</c>.</summary>
+    /// <c>UIData +0x338</c>. Raised only by <see cref="CampaignProgression"/>'s advance rule.</summary>
     public int MissionsCompleted { get; set; }
     public List<MissionResult> MissionResults { get; } = new();
+
+    /// <summary>Airframe ids of the five campaign aircraft awards already granted. The original
+    /// marks a per-airframe byte rather than a per-mission one, so a replay of the awarding
+    /// mission grants nothing (<c>docs/org/hangar.md</c>, "The mission reward table").</summary>
+    public List<int> GrantedAircraft { get; } = new();
+
+    /// <summary>What earlier missions left destroyed, per chapter (`BL-243`). Carried into a later
+    /// mission of the same chapter; see <see cref="CampaignPersistLog"/>.</summary>
+    public CampaignPersistLog PersistLog { get; } = new();
 
     /// <summary>A fresh profile per the traced reset (<c>FUN_004113b0</c>, <c>docs/org/hangar.md</c>
     /// "The campaign wallet"): zero funds, two prebuilt Devastators (<c>langui</c> 511 "Gypsy
@@ -91,7 +121,7 @@ public sealed class CampaignProfileStore
 {
     /// <summary>The schema version written into every file. A file claiming a version this reader
     /// does not know is treated as malformed rather than half-read.</summary>
-    public const int Version = 1;
+    public const int Version = 2;
 
     private const string FileName = "profile.json";
 
@@ -135,22 +165,41 @@ public sealed class CampaignProfileStore
                 w.WriteNumber("airframe", plane.Airframe);
                 WriteInts(w, "ammo", plane.Ammo);
                 WriteInts(w, "ordnance", plane.Ordnance);
+                w.WriteBoolean("special", plane.Special);
                 w.WriteEndObject();
             }
 
             w.WriteEndArray();
+            WriteInts(w, "grantedAircraft", def.GrantedAircraft);
             w.WriteStartArray("missionResults");
             foreach (var result in def.MissionResults)
             {
                 w.WriteStartObject();
                 w.WriteNumber("seq", result.Seq);
-                w.WriteNumber("completedMask", result.CompletedMask);
-                w.WriteNumber("timeMs", result.TimeMs);
-                w.WriteNumber("shots", result.Shots);
-                w.WriteNumber("hits", result.Hits);
-                w.WriteNumber("money", result.Money);
-                w.WriteNumber("airframe", result.Airframe);
-                w.WriteString("planeName", result.PlaneName);
+                WriteRun(w, "latest", result.Latest);
+                WriteRun(w, "best", result.Best);
+                w.WriteEndObject();
+            }
+
+            w.WriteEndArray();
+            w.WriteStartArray("persistLog");
+            foreach (int chapter in def.PersistLog.Chapters)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("chapter", chapter);
+                w.WriteStartArray("objects");
+                foreach (var state in def.PersistLog.For(chapter))
+                {
+                    w.WriteStartObject();
+                    w.WriteNumber("node", state.Node);
+                    w.WriteString("def", state.Def);
+                    w.WriteString("nodeName", state.NodeName);
+                    w.WriteBoolean("destroyed", state.Destroyed);
+                    w.WriteNumber("health", state.Health);
+                    w.WriteEndObject();
+                }
+
+                w.WriteEndArray();
                 w.WriteEndObject();
             }
 
@@ -204,7 +253,21 @@ public sealed class CampaignProfileStore
                     };
                     ReadInts(p, "ammo", plane.Ammo);
                     ReadInts(p, "ordnance", plane.Ordnance);
+                    plane.Special = p.TryGetProperty("special", out var sp)
+                        && sp.ValueKind == JsonValueKind.True;
                     def.Planes.Add(plane);
+                }
+            }
+
+            if (root.TryGetProperty("grantedAircraft", out var granted)
+                && granted.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var g in granted.EnumerateArray())
+                {
+                    if (g.ValueKind == JsonValueKind.Number && g.TryGetInt32(out int airframe))
+                    {
+                        def.GrantedAircraft.Add(airframe);
+                    }
                 }
             }
 
@@ -220,19 +283,13 @@ public sealed class CampaignProfileStore
                     def.MissionResults.Add(new MissionResult
                     {
                         Seq = ReadInt(r, "seq", 0),
-                        CompletedMask = ReadInt(r, "completedMask", 0),
-                        TimeMs = ReadInt(r, "timeMs", 0),
-                        Shots = ReadInt(r, "shots", 0),
-                        Hits = ReadInt(r, "hits", 0),
-                        Money = ReadInt(r, "money", 0),
-                        Airframe = ReadInt(r, "airframe", 0),
-                        PlaneName = r.TryGetProperty("planeName", out var rn) && rn.ValueKind == JsonValueKind.String
-                            ? rn.GetString() ?? string.Empty
-                            : string.Empty,
+                        Latest = ReadRun(r, "latest"),
+                        Best = ReadRun(r, "best"),
                     });
                 }
             }
 
+            ReadPersistLog(root, def);
             return def;
         }
         catch (JsonException)
@@ -364,6 +421,83 @@ public sealed class CampaignProfileStore
             return null;
         }
     }
+
+    private static void WriteRun(Utf8JsonWriter w, string key, MissionRun run)
+    {
+        w.WriteStartObject(key);
+        w.WriteNumber("completedMask", run.CompletedMask);
+        w.WriteNumber("timeMs", run.TimeMs);
+        w.WriteNumber("shots", run.Shots);
+        w.WriteNumber("hits", run.Hits);
+        w.WriteNumber("money", run.Money);
+        w.WriteNumber("airframe", run.Airframe);
+        w.WriteString("planeName", run.PlaneName);
+        w.WriteEndObject();
+    }
+
+    private static MissionRun ReadRun(JsonElement result, string key)
+    {
+        if (!result.TryGetProperty(key, out var r) || r.ValueKind != JsonValueKind.Object)
+        {
+            return new MissionRun();
+        }
+
+        return new MissionRun
+        {
+            CompletedMask = ReadInt(r, "completedMask", 0),
+            TimeMs = ReadInt(r, "timeMs", 0),
+            Shots = ReadInt(r, "shots", 0),
+            Hits = ReadInt(r, "hits", 0),
+            Money = ReadInt(r, "money", 0),
+            Airframe = ReadInt(r, "airframe", 0),
+            PlaneName = r.TryGetProperty("planeName", out var n) && n.ValueKind == JsonValueKind.String
+                ? n.GetString() ?? string.Empty
+                : string.Empty,
+        };
+    }
+
+    private static void ReadPersistLog(JsonElement root, CampaignProfileDef def)
+    {
+        if (!root.TryGetProperty("persistLog", out var log) || log.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (var entry in log.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object
+                || !entry.TryGetProperty("objects", out var objects)
+                || objects.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            var states = new List<PersistedObject>();
+            foreach (var o in objects.EnumerateArray())
+            {
+                if (o.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                states.Add(new PersistedObject(
+                    ReadInt(o, "node", -1),
+                    ReadString(o, "def"),
+                    ReadString(o, "nodeName"),
+                    o.TryGetProperty("destroyed", out var d) && d.ValueKind == JsonValueKind.True,
+                    o.TryGetProperty("health", out var h) && h.ValueKind == JsonValueKind.Number
+                        ? h.GetSingle()
+                        : 0f));
+            }
+
+            def.PersistLog.Merge(ReadInt(entry, "chapter", 0), states);
+        }
+    }
+
+    private static string ReadString(JsonElement obj, string key) =>
+        obj.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String
+            ? v.GetString() ?? string.Empty
+            : string.Empty;
 
     private static void WriteInts(Utf8JsonWriter w, string key, IReadOnlyList<int> values)
     {

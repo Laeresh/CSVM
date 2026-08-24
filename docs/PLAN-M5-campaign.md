@@ -181,7 +181,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — campaign model and persistence
 
 11. ☑ Profile store + campaign session model (`user://Profiles/<name>/`, SessionSpec/CLI entry)
-12. ☐ Campaign progression + cross-mission persistence (`BL-243`, mission tree from A3)
+12. ☑ Campaign progression + cross-mission persistence (`BL-243`, mission tree from A3)
 13. ☑ Wallet and campaign availability wired into the hangar (buy/sell, thresholds)
 
 ### Wave C — the out-of-mission screens
@@ -623,28 +623,76 @@ deletion, so deleting must not orphan hangar planes: `Delete` removes only the p
 directory (`Directory.Delete(dir, recursive: true)`), never `user://Planes/`, proven by
 `Delete_RemovesOnlyThatProfilesDirectory`'s sentinel file outside the deleted directory.
 
-## B12 ☐ Campaign progression + cross-mission persistence (`BL-243`)
+## B12 ☑ Campaign progression + cross-mission persistence (`BL-243`)
 
-**Goal.** Completing a mission records its result in the profile, advances the tree position (per
-A3's graph, branches included), and carries the `PERSIST_LOG` destruction subset into later
-missions in the sense `BL-243` describes. Previous Missions replays any recorded mission without
-advancing the tree.
+**Goal.** Completing a mission records its result in the profile, advances the campaign position
+(A3's single monotonic counter, no branches), and carries the `PERSIST_LOG` destruction subset into
+later missions in the sense `BL-243` describes. Previous Missions replays any recorded mission
+without advancing.
 
-**Evidence (confidence: direction-sound).** `BL-243` documents the original's
-`SAVE_LOG`/`PERSIST_LOG` 62-def subset; A2 tells what per-mission state the original keeps; A3
-gives the graph. <TODO: re-verify BL-243 still-open against git log --grep + the code.>
+**Evidence (confidence: traced, for every rule implemented).** The merge rules are
+`saved-games.md`'s mission-result table, field by field (`FUN_00405ce0`); the advance rule and the
+`progress + 1` selection bound are `campaign-sequence.md`'s "Progression"; the same-chapter reload
+is `saved-games.md`'s `Mission.NNN` section (the engine's backwards walk over `cm_sequence`'s
+`campaign` field, which is the world folder, not the act); the 62-def subset and its
+"apply on every load, write only on a campaign mission, commit to the save" rule are `BL-243` and
+`anim-definitions.md`'s `SAVE_LOG`/`PERSIST_LOG` section; the five aircraft awards and their
+per-airframe once-per-profile marker are `hangar.md`'s reward table.
 
-**Approach.** Progression state lives in the B11 store; the persist-log hook sits where the anim
-runtime already knows the 62-def subset (read `BL-243`'s entry and `AnimRuntime`'s architecture
-entry before choosing the seam).
+**Approach as built.** Progression is `src/Session/CampaignProgression.cs` over the B11 store,
+which gained the fields it needs (schema version 2): mission results as the original's **two
+halves** (`MissionRun Latest` and `MissionRun Best`, so a mission attempted but never completed has
+the shape the sample profile's last record has), `GrantedAircraft`, `OwnedPlane.Special` and the
+persist log. `src/Mech3/CampaignSequence.cs` is A3's decode in code: the 24 entries, each one's
+storage address, and `PreviousInSameChapter`, the engine's own backwards walk.
+
+**Seam chosen, and why.** The persist log sits at `AnimRuntime.Destructibles`, and nothing in world
+build changed. Capture reads the live `DestructibleRegistry`; apply damages each recorded object
+back down through `AnimRuntime.DamageAt`, the same entry a weapon hit takes, so its damage stages
+and death sequence run exactly as they did the first time. Two facts forced that shape. First, a
+persisted node normally carries **two** destructible pools, the reader's wildcard def and the
+compiler's per-instance twin, and only the reader def carries `PERSIST_LOG`: the compiled
+extraction keeps `save_log` and drops the other flag. So persistence is a property of the *node*
+(any def bound to it carries the flag), read from the pool the hit path resolves to, and the def
+name is diagnostic only. Second, the key is the flat gamez node index (`AnimRuntime.IndexMeta`),
+which is stable across every build of one chapter's world and unambiguous where names repeat.
+Keying the log by chapter *is* the backwards walk: every earlier mission of a chapter has already
+merged into that chapter's entry, so "the most recent earlier mission in the same world folder" and
+"this chapter's log" name the same state. The merge escalates only, so a replay can never heal what
+an earlier mission wrecked.
+
+**Not wired into a session, deliberately.** There is no campaign mission director yet (D31), so
+nothing calls capture or apply during a normal launch and the 8-chapter freecam regression cannot
+move. D31 calls `CampaignPersistLog.Capture` + `Merge` at mission end and `ApplyTo` after the
+bootstrap; the cash half of the reward table is B13's, and this class only banks the money an
+attempt reports.
 
 **Model recommendation.** high — the persist-log seam has blast radius into world build.
 
-**Verify.** Scripted two-mission sequence: destroy a persisted object in mission 1, relaunch
-mission 2, assert its state; replay via Previous Missions asserts no tree advance.
+**Verify.** `dotnet build` clean, `dotnet test` 2022/2022 (16 new units over the progression rules,
+the log's chapter scoping and escalate-only merge, and the store round-trip; 3 more over the
+shipped `cm_sequence`). The plan's two-mission sequence is the `campaign-persistence` engine suite:
+in C1 it destroys three `PERSIST_LOG` objects in `M04` (`aagun33/35/36`) plus one save-only control
+(`air_gen`), captures the log, writes it to a profile file, reads it back through a **second** store
+instance, builds `M05` from the bootstrap, asserts all three read healthy there, applies the log and
+asserts all three are destroyed while the control is untouched and no other chapter's log moved.
+Previous Missions' no-advance half is a unit
+(`CampaignProgressionTests.ReplayingAFinishedMissionNeverAdvances`), since replaying is a rule over
+the profile and needs no world. **Deferred to D31/E41:** an actual mission-to-mission launch through
+the director, the commit point (see Traps), and anything in `Mission.NNN` beyond destruction.
+**Verified.** `RunTests.ps1` on the merged plan branch (B12 + B13 together): build clean, units
+2029/2029, engine suites 94/94 with errors clean (`campaign-persistence` included), all 16 golden
+shots hash-identical, so the persist-log seam moved nothing in world build.
 
-**⚠ Traps.** <TODO: the exact 62-def subset semantics; take them from BL-243's write-up, not from
-the def names.>
+**⚠ Traps.** The 62 `PERSIST_LOG` defs are a curated list of fixed world scenery and the flag is a
+strict subset of `SAVE_LOG`; the 506 save-only defs (zeppelin turrets, gasbags, cockpit panels) must
+not cross a mission boundary, which is what the suite's `air_gen` control proves. `fuelboxconnect*`
+is a persisted def, so the original also carries a *running* looping animation across the boundary:
+this log carries destruction only, and that gap is recorded rather than papered over. Two facts stay
+untested here as `BL-243` says: whether the original commits at damage time or at mission
+completion, and a direct A/B separating the two flags. One reading is this item's own: the whole
+best-of merge, the money, the advance and the awards are gated on objective bit 0, because the
+cumulative mask an award tests against is the best half, which itself only merges behind that gate.
 
 ## B13 ☑ Wallet and campaign availability wired into the hangar
 
@@ -717,7 +765,9 @@ untouched). `dotnet build`/`dotnet format` clean, comment caps clean. Unit cover
 `BuyWithFundsAndThresholdMetSucceeds`, `SellCreditsExactlyTheDecodedPrice`,
 `SellIsRefusedAtTheTwoPlaneFloor`, `SpecialPlanesCannotBeSold`, `InstantActionHangarStaysWalletFree`).
 Foreground `dotnet test CSVM.Tests/CSVM.Tests.csproj`: 2016/2016 passed, 0 failed. **Verified.**
-<pending orchestrator run>
+`RunTests.ps1` on the merged plan branch (B12 + B13 together, `IsSpecial` reading the record's
+`Special` flag): build clean, units 2029/2029, engine suites 94/94 with errors clean, all 16
+golden shots hash-identical, so the Instant Action hangar is unchanged.
 
 **⚠ Traps.** Engine power/weight stayed hangar-only by PLAN-hangar's explicit decision; do not
 re-open that here.

@@ -205,6 +205,15 @@ public sealed class AnimDefinition
     /// <c>finish_pzepgasbag*</c>), which is how F18 finds a zeppelin's authored death def.</summary>
     public int PrereqMinToSatisfy;
     public bool LocalNodesOnly;
+
+    /// <summary>Reader <c>PERSIST_LOG ON</c>: this def's state crosses mission boundaries, so a
+    /// later mission in the same chapter loads with it applied. 62 shipped defs carry it, all
+    /// fixed world scenery (docs/formats/anim-definitions.md). ⚠ Read a node's persistence from
+    /// the READER def bound to it, never from the compiler's per-instance twin: the compiled
+    /// extraction keeps <c>save_log</c> and drops this flag, so it is false on every compiled
+    /// def.</summary>
+    public bool PersistLog;
+
     public string Activation = "OnCall";  // OnCall / OnStartup / WeaponHit / WeaponOrCollideHit
     public float Health;
     /// <summary>EXECUTION_BY_RANGE: the def executes only while the player is within this

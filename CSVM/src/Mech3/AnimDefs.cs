@@ -146,6 +146,12 @@ public static class AnimDefs
                 // spell the same thing OnStartup / OnCall. Normalize to the compiled form.
                 case "ACTIVATION": def.Activation = PascalCase(FirstString(value) ?? "ON_CALL"); break;
                 case "LOCAL_NODES_ONLY": def.LocalNodesOnly = true; break;
+                // The cross-mission half of the state log (BL-243). SAVE_LOG is not carried:
+                // the compiled form keeps it and nothing reads it, while PERSIST_LOG survives
+                // only here (see AnimDefinition.PersistLog).
+                case "PERSIST_LOG":
+                    def.PersistLog = "ON".Equals(FirstString(value), StringComparison.OrdinalIgnoreCase);
+                    break;
                 case "HEALTH": def.Health = FirstNumber(value) ?? 0f; break;
                 // One argument, metres; the compiled form stores metres SQUARED with min 0 —
                 // the same reader↔compiled unit divergence as the PLAYER_RANGE condition,

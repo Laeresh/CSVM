@@ -12,6 +12,7 @@ using Godot;
 
 using static CSVM.Testing.AiSuites;
 using static CSVM.Testing.AnimationAndEffectsSuites;
+using static CSVM.Testing.CampaignSuites;
 using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
@@ -120,6 +121,7 @@ public static class SuiteCatalog
         "target-flag",
         "splitscreen-listeners",
         "world-lights-nearest-viewer",
+        "campaign-persistence",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -602,6 +604,14 @@ public static class SuiteCatalog
             + "light 2000 m from a lone P1 stays committed once a second viewer sits 100 m from it, "
             + "the able-to-fail control against P1 alone drops the same light, and the one-viewer "
             + "case reads exactly what it read before", WorldLightsNearestViewer));
+        into.Add(new TestHarness.Suite("campaign-persistence",
+            "the cross-mission state log (B12, BL-243): three PERSIST_LOG objects destroyed in one "
+            + "campaign mission are captured, survive the profile file and a second store instance, "
+            + "and start the next mission of the SAME chapter destroyed, while a save-only "
+            + "destructible killed alongside them never enters the log and starts that mission "
+            + "intact; the later world is built from the bootstrap, so the log is the only thing "
+            + "that could have wrecked them",
+            CampaignPersistence));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

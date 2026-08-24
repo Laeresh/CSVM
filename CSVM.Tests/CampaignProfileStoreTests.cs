@@ -36,16 +36,22 @@ public class CampaignProfileStoreTests
         def.Planes[0].Ordnance[0] = 11;
         def.Funds = 900;
         def.MissionsCompleted = 1;
+        def.GrantedAircraft.Add(2);
+        def.PersistLog.Merge(6, new[] { new PersistedObject(412, "susp_bridge", "rope1", true, 0f) });
         def.MissionResults.Add(new MissionResult
         {
             Seq = 0,
-            CompletedMask = 1,
-            TimeMs = 45000,
-            Shots = 120,
-            Hits = 30,
-            Money = 900,
-            Airframe = 5,
-            PlaneName = "Gypsy Magic",
+            Latest = new MissionRun { CompletedMask = 1, TimeMs = 45000, PlaneName = "Gypsy Magic" },
+            Best = new MissionRun
+            {
+                CompletedMask = 1,
+                TimeMs = 45000,
+                Shots = 120,
+                Hits = 30,
+                Money = 900,
+                Airframe = 5,
+                PlaneName = "Gypsy Magic",
+            },
         });
         first.Save(def);
 
@@ -59,9 +65,15 @@ public class CampaignProfileStoreTests
         Assert.Equal(11, loaded.Planes[0].Ordnance[0]);
         var result = Assert.Single(loaded.MissionResults);
         Assert.Equal(0, result.Seq);
-        Assert.Equal(1, result.CompletedMask);
-        Assert.Equal(45000, result.TimeMs);
-        Assert.Equal("Gypsy Magic", result.PlaneName);
+        Assert.Equal(1, result.Best.CompletedMask);
+        Assert.Equal(45000, result.Best.TimeMs);
+        Assert.Equal(120, result.Best.Shots);
+        Assert.Equal("Gypsy Magic", result.Latest.PlaneName);
+        Assert.Equal(new[] { 2 }, loaded.GrantedAircraft.ToArray());
+        var persisted = Assert.Single(loaded.PersistLog.For(6));
+        Assert.Equal(412, persisted.Node);
+        Assert.True(persisted.Destroyed);
+        Assert.Equal("susp_bridge", persisted.Def);
     }
 
     [Fact]
@@ -97,7 +109,7 @@ public class CampaignProfileStoreTests
         var store = new CampaignProfileStore(TestData.TempDir());
         var path = store.Save(CampaignProfileDef.NewProfile("Zachary"));
         File.WriteAllText(path, CampaignProfileStore.Serialize(CampaignProfileDef.NewProfile("Zachary"))
-            .Replace("\"version\": 1", "\"version\": 99"));
+            .Replace($"\"version\": {CampaignProfileStore.Version}", "\"version\": 99"));
 
         Assert.Null(store.Load("Zachary"));
     }

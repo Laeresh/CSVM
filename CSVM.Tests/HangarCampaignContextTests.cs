@@ -154,13 +154,13 @@ public class HangarCampaignContextTests : IDisposable
         Assert.Equal(2, profile.Planes.Count);
     }
 
-    /// <summary>The five decoded reward aircraft (docs/org/hangar.md, the mission reward table)
-    /// cannot be sold at all, even with plenty of planes to spare.</summary>
+    /// <summary>A reward aircraft (docs/org/hangar.md, the mission reward table; the record's
+    /// Special flag) cannot be sold at all, even with plenty of planes to spare.</summary>
     [Fact]
     public void SpecialPlanesCannotBeSold()
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
-        profile.Planes.Add(new OwnedPlane { Name = "Jumping Jane", Airframe = 2 });
+        profile.Planes.Add(new OwnedPlane { Name = "Jumping Jane", Airframe = 2, Special = true });
         profile.Planes.Add(new OwnedPlane { Name = "Extra", Airframe = 10 });
         var campaign = new HangarCampaignContext(_profiles, profile, _planes);
 

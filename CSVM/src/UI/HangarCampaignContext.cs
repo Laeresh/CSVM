@@ -12,22 +12,14 @@ namespace CSVM.UI;
 /// wallet-free (PLAN-hangar Decision 2). Present only when the cabin's Plane Construction opens
 /// the flow over a selected <see cref="CampaignProfileDef"/> (B13; PLAN-hangar Decision 9's seam).
 ///
-/// <para>Reads and writes the profile through <see cref="CampaignProfileStore"/>'s existing public
-/// API only — no change to that file. The five named mission-reward aircraft (docs/org/hangar.md,
-/// the reward table at <c>0x0061ae80</c>) are recognised by their decoded names pending B12's own
-/// per-plane ownership flag.</para>
+/// <para>Reads and writes the profile through <see cref="CampaignProfileStore"/>'s public API.
+/// A mission-reward aircraft (docs/org/hangar.md, the reward table at <c>0x0061ae80</c>) is
+/// recognised by the <see cref="OwnedPlane.Special"/> flag <see cref="CampaignProgression"/> sets
+/// when it grants one: the original's class-2 record, which its sell handler refuses (langui 704
+/// <c>IDS_PS_SPECIALPLANE</c>).</para>
 /// </summary>
 public sealed class HangarCampaignContext
 {
-    /// <summary>The five reward aircraft (docs/org/hangar.md, the mission reward table): class-2
-    /// specials the original refuses to sell (langui 704 <c>IDS_PS_SPECIALPLANE</c>). Named by
-    /// their decoded <c>langui</c> strings 513-517, not invented.</summary>
-    public static readonly IReadOnlySet<string> SpecialPlaneNames = new HashSet<string>(
-        StringComparer.OrdinalIgnoreCase)
-    {
-        "Jumping Jane", "Blue Streak", "Red Hot Spender", "Minx", "Accipiter Annie",
-    };
-
     private readonly CampaignProfileStore _store;
     private readonly CustomPlaneStore _planes;
 
@@ -61,8 +53,9 @@ public sealed class HangarCampaignContext
     public bool IsAirframeAvailable(int airframe) =>
         Profile.MissionsCompleted + 1 >= HangarEconomy.Airframes[airframe].Availability;
 
-    /// <summary>Whether the named owned plane is one of the five unsellable reward aircraft.</summary>
-    public bool IsSpecial(string planeName) => SpecialPlaneNames.Contains(planeName);
+    /// <summary>Whether the named owned plane is an unsellable reward aircraft.</summary>
+    public bool IsSpecial(string planeName) =>
+        Profile.Planes.Any(p => p.Special && string.Equals(p.Name, planeName, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Whether the named owned plane can be sold right now: it is actually owned, it is
     /// not one of the five unsellable reward aircraft, and at least two planes remain afterwards
