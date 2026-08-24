@@ -119,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☐ D31 Settle one-sided engine torque (`BL-309`)
 32. ☐ D32 Settle roll-to-pitch coupling (`BL-310`)
-33. ☐ D33 Settle ambient turbulence (`BL-311`)
+33. ❌ D33 Settle ambient turbulence (`BL-311`)
 34. ☐ D34 Reproduce nitro boost (`BL-089`)
 
 ### Wave E — Prove parity
@@ -618,7 +618,7 @@ separate flight; its breakup-scatter remainder stays in the backlog.
 
 **⚠ Traps.** Altitude or ADI movement during a roll cannot separate coupling from geometry.
 
-## D33 ☐ Settle ambient turbulence (`BL-311`)
+## D33 ❌ Settle ambient turbulence (`BL-311`)
 
 **Goal.** Reproduce subtle visual-only jostling if the retail game ships it; otherwise record it as unshipped intent.
 
@@ -631,6 +631,55 @@ separate flight; its breakup-scatter remainder stays in the backlog.
 **Verify.** Isolate camera/plane motion at steady flight; speed and heading remain invariant.
 
 **⚠ Traps.** If no data/mechanism exists, magnitude and cadence are TUNE and not parity facts.
+
+**Landed.** **Nothing ships, and both halves of the search are complete, so this closes as
+unshipped design intent under Decision 4 with no code added.** The re-verify found the item
+untouched since it was minted, and settling it decoded the whole shake machinery rather than one
+call. The camera object `DAT_0064ef78` carries **seven** oscillator blocks of eleven dwords each
+from `camera+0x18`, the constructor `FUN_0042bab0` fills all seven with the same defaults
+(frequency 2.0, damp 4.5, sawtooth 0, zero accumulators, zero magnitude), and the block index is
+the parser `FUN_0042bc10`'s own source order, which the magnitude-term offsets confirm by landing
+every authored magnitude at its block's `[9]`. **Block 5 is `turbulence`**, not the "impact block"
+the dossier called it: the parser looks up the key `turbulence` at `0x00621638` (referenced once in
+the whole binary, from `0x42bd93`), hands `camera+0xf4` to the shared law reader `FUN_0042bba0`,
+and stops. That reader takes `frequency`, `damp` and `sawtooth` only, so alone among the seven the
+turbulence block has **no magnitude field to parse at all**, and `camera+0x118`, the slot a
+magnitude would occupy, is written by no instruction in the executable. The caller sweep is
+exhaustive and every arm is non-ambient: `FUN_0042c070` is a one-line forwarder to `FUN_0042be10`,
+which has no other caller, and `FUN_0042c070` has exactly five xrefs, all per-event except one
+gated per-frame source. They are `FUN_004b6820` at `0x4b6e38` (block 0, one gun round fired),
+`FUN_004b9bc0` at `0x4b9d26` (blocks 1/2/3 selected in `EBX`, one gun round, rocket or nearby
+detonation taken), `FUN_0048c470` at `0x48d1bc` (block 4, per frame but only above the authored
+`min_speed` gate, which is rated max speed), `FUN_0048d2c0` at `0x48d409` (block 5, one collision
+contact, so `C21`'s contact shake is what actually occupies the turbulence slot) and
+`FUN_004b2131` at `0x4b21ce` (block 6, nitro engaged, player only, magnitude the authored
+`nitro.magnitude` at `camera+0x144`). The only other writer of any accumulator is the integrator
+`FUN_0042bec0`, whose sole caller is the render consumer `FUN_0042c0e0`, and no function outside
+the shake module stores a float at the block offsets. Steady flight kicks nothing.
+The data census is the second, independent negative: `extracted/zrdr/shakes.zrd.json` is the only
+shake-oscillator file in the tree with no per-campaign, per-mission or per-airframe override, and
+it authors six sources with no `turbulence` among them, so block 5 also keeps its default law. A
+sweep of all 61010 extracted files finds no field or token containing `turbulen`, `jostl`,
+`buffet`, `gust`, `wobble`, `vibrat`, `jitter` or `thermal`, and no shake source with an idle,
+cruise or always-on activation. The near neighbours are each something else: `player.zrd.json`'s
+`rattle` is the `snd_planeshake` volume and pitch envelope and carries no motion, the mission
+`weather.zrd.json` `WIND` block is a particle field identical across all 53 mission copies and
+reached only by `WIND_FACTOR` on dust, smoke, steam and spray emitters, `damage_shakes.zrd`'s
+`ON_CALL` defs are finite damage reactions, and every `ambient` hit in the tree is lighting. The
+rule that bites is `docs/verification.md` `SRC-3` (design documents give intent, retail evidence
+decides shipped details); `SRC-7`'s dual applies to the parser as well, since a key the executable
+reads is not a feature until something drives what it fills. The decode, the seven-block table
+with every kicker, and the disproof are in `docs/org/shakes.md`; `docs/formats/shakes.md` gains
+the pointer, and `BL-311` is deleted from `backlog.md`. Two corrections land with the block map:
+the block layout is `[3]/[4]/[5]` velocity and `[6]/[7]/[8]` position, the reverse of what the
+dossier said, and the `explosion` source's magnitude term never fills, because the parser reads
+the key `max_magnitude` (`0x6215fc`) into `+0xc0` while the data authors `magnitude_factor` there.
+That last one and the `camera+0x1c` default-versus-authored frequency reading belong to `BL-266`
+and are recorded, not acted on, here.
+
+**Verified.** No source file changed, so the lane's source tree is the one C22's full
+`RunTests.ps1` battery passed (build clean, 2084/2084 units, 94/94 engine suites, 16/16 goldens
+hash-identical, exit 0).
 
 ## D34 ☐ Reproduce nitro boost (`BL-089`)
 

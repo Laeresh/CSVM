@@ -953,14 +953,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ This is the cross-axis coupling, not the roll's own spin-up rate, which is
   decoded (`roll_torque` through the reciprocal inertia, damped exponentially).
 
-- `BL-311` `[Feature]` **Ambient turbulence is designed and absent.** GDD §4.1.10: subtle, random jostling
-  of the player's plane to sell moving through air — explicitly zero effect on speed, heading or
-  performance. Visual-only is exactly the contract of the `PlaneShake` oscillators
-  (`src/Flight/PlaneShake.cs`, visual-only roll on `ShakePivot`), so it slots in as one more
-  source. Check `shakes.zrd.json`/`docs/formats/shakes.md` for an ambient source before inventing
-  one; if no data carries it, magnitude and cadence are a TUNE against feel. Low priority; pairs
-  with `BL-266`'s open shake data questions.
-
 ## Environment & world
 
 - `BL-037` `[Feature]` {CAMPAIGN} **`WorldPartitionSetActive` is decoded and unimplemented — `NodeSetActive`
