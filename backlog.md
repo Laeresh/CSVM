@@ -70,19 +70,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   wherever either exists. Where an entry rests on the document alone, it says so and marks the
   value TUNE.
 - **The flight constants are coupled and `--run-tests` guards them.** Thrust sets speed, speed
-  scales the yaw `eff`, so a change in one moves others; the `flight-envelope` suite asserts six
-  measured scenarios and will fail if a change breaks one. There is no thrust scale left to turn:
+  scales the yaw `eff`, so a change in one moves others; `FlightEnvelopeTests` asserts five
+  decoded scenarios and will fail if a change breaks one. There is no thrust scale left to turn:
   thrust is `EnginePower · ref_area · curve(Mach) · lever`, every number in it is the executable's,
   and the level-equilibrium curve it produces is asserted per airframe and per lever position
   ([`docs/org/flightModel.md`](docs/org/flightModel.md), "Part-throttle equilibrium"). Chasing a
   *transient* or a feel report through the force path is the forbidden move. ⚠ **`PitchTune`/`YawTune`/`RollTune` are no longer
   in that category: all three are 1, because `FUN_0048c470` carries no per-axis factor on any axis
   ([`docs/org/flightModel.md`](docs/org/flightModel.md), "The `*Tune` rates"), and
-  `FlightConstantInventoryTests` now pins them there.** Pitch-rate survives the change at
-  35.26 °/s against 33.00 ± 3. **`yaw-360` is
-  now informational**: the model takes 49.12 s against the footage's 28.60 s, the slow rudder was
-  accepted at the controls, and the row is a recorded decode-vs-footage conflict like
-  `accel-150-290` and `decel-290-150`. The 28.60 was not rewritten, and `FlightScenarios` is 6.
+  `FlightConstantInventoryTests` now pins them there.** Every asserted target is the decoded
+  plant's own value or a named exception; a footage figure that disagrees (the filmed 33.00 °/s
+  pitch rate, the 28.60 s `yaw-360`, `accel-150-290`, `decel-290-150`) is discarded and kept only
+  as row prose that gates nothing ([`docs/org/flightModel.md`](docs/org/flightModel.md), "Parity
+  ledger"). `FlightScenarios` is 5.
 
 ## Damage & destruction
 
@@ -908,6 +908,79 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `bias × −750` decode), `AiTargetRanking.ObjectiveBiasFor`, `AiSkills.RosterRatingBiases`.
 
 ## Flight model & collision physics
+
+- `BL-443` `[Fidelity]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
+  late.** `FUN_0048fc40` (call `0x48c883`) writes the delivered body-up G and the ramp reads it at
+  `0x48ca1e` in the same tick, before the torques; `FlightModel.Step` rotates before it translates
+  and reads the previous step's. Porting is the force-from-entering-attitude order of `Step`, which
+  moves every envelope row, so it needs its own eleven-airframe `--dump-flight=all` A/B with each
+  moved row attributed. Bounded: the ramp bites near `highGs` (9) and the stock full pull peaks at
+  5.83 G. Ledger row "the G ramp reads the SAME tick's delivered lift" in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md).
+- `BL-444` `[Tooling]` **A flight-dump hash is host-bound.** The Godot run and the `dotnet test`
+  host differ on 9 of 1123 `--dump-flight=all` lines by one unit in the last place (knife-edge
+  samples, runtime float settings, not the plant); `docs/verification.md` `INSTR-19` says compare
+  only against a same-host hash. Round the printed values or pin the float mode so one hash can
+  be quoted across hosts.
+- `BL-445` `[Tooling]` **Dump scenarios for the plant branches the envelope dump never enters.**
+  The dump drives 7 of 16 decoded branches (8 on the autogyro). Reachable but unentered:
+  `pitch-fade`, `g-clamp`, `g-ramp` (a sustained outside push), `dive-cap`, `stall` and the
+  low-speed authority ramp (a slow-flight decay). Each already has a unit instrument; the branch
+  coverage line in the ledger names it. Add scenarios only if whole-envelope coverage is wanted;
+  do not invent a manoeuvre to raise the number.
+- `BL-446` `[Cleanup]` **`ZzBaselineDump` is not throwaway any more.** The `Zz` prefix marks
+  disposable instruments, but the class is the ledger's own dump path (`Probes.FlightEnvelopeAll`).
+  Rename it out of the prefix.
+- `BL-447` `[Fidelity]` **The nine unsupported nitro and shake edges in the parity ledger.**
+  `docs/org/flightModel.md` "Parity ledger", class unsupported, beyond `BL-443`: the thin
+  atmosphere band above 2000 m, the `level_off_rate` auto-level torque, the AI's `medium_aishake`
+  on a nitro engage, the AI's positional `snd_nitro` blip, the nitro decay lockout on a runtime
+  callback, the mouse-flying arm's `is_autogyro` roll/yaw exchange, plus `BL-448`, `BL-450` and
+  `BL-457`. Each is small and independently landable; each names its address in the table.
+- `BL-448` `[Research]` **Is the 2003 m `AltitudeCapM` the dense-band edge?** The measured
+  flight ceiling (an intentional exception) sits 3 m above the decoded atmosphere band boundary
+  (2000 m, `6561.6796875` ft, writer `FUN_00463640`). If the original's ceiling is the thin band's
+  own lift loss rather than a separate cap, the exception becomes a decoded mechanism and the cap
+  constant goes. Lead recorded in the plan's A1 section; `AtmosphereBandTests` has the band.
+- `BL-449` `[Research]` **Confirm the one-sided negative `C_L` ceiling.** `FUN_0041abd0` clamps
+  `C_L` to ±1.8 but the `min` against `0.5·FUN_0041ad80(M)` (`0.75 − 0.15M`) is applied to positive
+  lift only, so inverted or pushed-over flight can reach a larger |C_L| at the same Mach. Confirm
+  the asymmetry is the executable's and not a decompiler artefact, then port or record it (ledger
+  row "the one-sided negative `C_L` ceiling", unsupported).
+- `BL-450` `[Feature]` **Fuel burn and the empty-tank lever freeze.** `FUN_0048e580` burns
+  `[obj+0x134] −= dt · throttle · 5` (player-only, `0x48e603`), and a zero tank jumps past the
+  throttle slew (`0x48e5f7` to `0x48e6c9`), freezing the lever where it stands rather than closing
+  it. No fuel model exists here; the shipped missions never run a tank dry, so this matters only
+  for a long-flight mode. Nitro burns no fuel (`0x48e603` reads the lever, not the boost flag).
+- `BL-451` `[Research]` **A dead AI's throttle.** The death function `FUN_004b82d0` zeroes neither
+  the throttle command nor the control surfaces; they are AI-written state and the AI think is
+  what stops, so they freeze at their last commanded values. CSVM's three-second dead-hull flight
+  should freeze the same way; check what `AircraftLifecycle`'s handover leaves in the lever and
+  whether the recovery arm keeps writing it.
+- `BL-452` `[Docs]` **`BL-266` carries guessed shake constants the decode has since replaced.**
+  The plan's D34 shake pass (`docs/org/shakes.md`, `docs/formats/shakes.md`) traced the block-5 kick
+  and the impact sources; `BL-266`'s (b) and (d) text still quotes the pre-decode readings. Rewrite
+  those sub-items against the decoded numbers rather than leaving both versions live.
+- `BL-453` `[Feature]` **The mission spawner does not read roster blocks.** `AiSpawn.Nitro` reads
+  roster slot 34 (`0x475c9a`, three shipped rosters author it) but the mission spawner never
+  fills it, so an AI nitro injector has no live producer (ledger row, unsupported). Read the roster
+  block at spawn; check which other roster slots the spawner drops on the same path.
+- `BL-454` `[Owed-playtest]` **Nitro dial sweep against the original.** `NitroGaugeNeedleTests`
+  pins the needle law, but nobody has put the moving dial beside a screenshot of the original's.
+  One screenshot of each at full, half and empty tank.
+- `BL-455` `[Cleanup]` **`AiControlLaw.Throttle`'s open-loop far-from-player branch is dead.**
+  The far-field plant (`FlightModel.FarFieldPlant`, beyond 1000 m horizontal) now owns the
+  velocity-match that `farFromPlayer` (`OpenLoopPlayerRange`, `playerPosition`) approximated.
+  Confirm nothing reaches the branch with the plant live and delete it with its parameter.
+- `BL-456` `[Research]` **Trace the writers of the crashed flag `[obj+0x384]`.** Its readers are
+  decoded (`0x48c4ba` selects the far-field arm, `0x48cd4a`, `0x48dfbe` gives a crashed hull
+  severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
+  so the ledger keeps "a wreck flies the near-field plant" as an exception. Decode when and by
+  whom it is set so the wreck can fly the decoded arm.
+- `BL-457` `[Fidelity]` **The per-contact camera shake is not ported.** `FUN_0048d2c0` kicks shake
+  block 5 at `0x48d409` on every resolved contact, grazes included; CSVM resolves the contact
+  without a shake, so scraping a building is silent to the camera. Ledger row, unsupported;
+  `PlaneShake` has the block machinery.
 
 ## Environment & world
 
@@ -2658,6 +2731,11 @@ usual.
   closed as `BL-377`).
 
 ## Tooling, platform & docs
+
+- `BL-458` `[Tooling]` **`CheckCommentCaps.ps1` resolves relative paths against the wrong
+  worktree.** Run from another worktree with a relative path it scans the `flight-parity` (or
+  first) worktree instead of the current directory; absolute paths work. Resolve against
+  `$PWD`, and add a one-line note to the CLAUDE.md hook (7) entry only if the fix needs one.
 
 - `BL-427` `[Feature]` **Extract `langui.dll`'s string table.** Split out while the Ammo Selection
   screen was built (`git log --grep=BL-353`). `extracted/messages.json` carries the weapon **names**
