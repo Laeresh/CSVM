@@ -33,6 +33,13 @@ internal static class CampaignSuites
 
     private const string IntroAnim = "mission_intro_animation";
 
+    // BL-458: the mission whose SECONDARY (OBJECTIVE3, IDENTITY SECONDARY 11) and OBJECTIVE11
+    // both gate on DANGER_ZONES_COMPLETED (dzpath1, dzpath4) — the worked case that was
+    // unreachable before a campaign session armed its own dzpathN gates.
+    private const string DangerZoneChapter = "C3";
+
+    private const string DangerZoneMission = "M01";
+
     // What the definition's `callback_sequence` authors, and what its RESET_STATE asserts as the
     // gameplay end state. Both lists are the shipped data, not this engine's choice.
     private static readonly int[] MovieCodes = { 20, 2, 11, 14, 913 };
@@ -269,6 +276,96 @@ internal static class CampaignSuites
 
         ctx.WriteArtifact($"test-campaign-mission-end-{ctx.Chapter}.txt", report.ToString());
         ctx.Note($"flew {mission.ChapterFolder}/{mission.MissionFolder} to a graph-derived end");
+    }
+
+    /// <summary>BL-458: a campaign mission's own <c>dzpathN</c> gates, resolved against real
+    /// world geometry, drive the exact objectives <c>objectives.zrd</c> gates on them. Proved
+    /// over C3/M01's shipped SECONDARY (OBJECTIVE3, <c>dzpath1</c>) and OBJECTIVE11
+    /// (<c>dzpath4</c>): both gate-crossing tests and completion through the director's real
+    /// <c>NotifyDangerZoneCompleted</c> path.</summary>
+    internal static void CampaignDangerZoneObjectives(TestContext ctx)
+    {
+        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        if (MissionAt(missions, DangerZoneChapter, DangerZoneMission) is not { } mission)
+        {
+            throw new SuiteSkippedException($"{DangerZoneChapter}/{DangerZoneMission} is not in cm_sequence");
+        }
+
+        string missionZrdrPath = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
+        var script = ObjectiveScript.Load(missionZrdrPath);
+        var secondary = script.Objectives.Find(d => d.DangerZones.Contains("dzpath1"));
+        var worker = script.Objectives.Find(d => d.DangerZones.Contains("dzpath4"));
+        ctx.Check(secondary?.Identity?.Class == ObjectiveClass.Secondary,
+            $"OBJECTIVE{secondary?.Number} carries the mission's SECONDARY IDENTITY and gates on dzpath1");
+        ctx.Check(worker != null, $"a second objective gates on dzpath4");
+        if (secondary == null || worker == null)
+        {
+            return;
+        }
+
+        var report = new StringBuilder();
+        report.AppendLine($"{DangerZoneChapter}/{DangerZoneMission}: SECONDARY OBJECTIVE{secondary.Number} "
+            + $"on dzpath1, OBJECTIVE{worker.Number} on dzpath4");
+
+        ctx.WithWorld(DangerZoneChapter, collision: false, DangerZoneMission, world =>
+        {
+            var zones = CampaignDangerZones.Load(script, world.Gamez, missionZrdrPath);
+            ctx.Check(zones != null, $"the chapter world carries real dzpath1/dzpath4 gate geometry");
+            if (zones == null)
+            {
+                return;
+            }
+            ctx.Same(2, zones.Count,
+                $"exactly the two dzpathN names objectives.zrd references are armed");
+
+            var completed = new List<string>();
+            foreach (var name in new[] { "dzpath1", "dzpath4" })
+            {
+                // A fresh tracker per zone: Update tests every armed gate on every call, so one
+                // shared instance's long "prime" jump between two zones' probe points can cross
+                // the OTHER zone's gate plane too — a test-construction risk, not an engine one.
+                var solo = CampaignDangerZones.Load(script, world.Gamez, missionZrdrPath)!;
+                ctx.Check(solo.TryGateProbe(name, out var gc, out var gn, out var rc, out var rn),
+                    $"'{name}' resolved a green/red gate pair");
+                var half = new List<string>();
+                solo.Update(gc - gn * 5f, half.Add);
+                solo.Update(gc + gn * 5f, half.Add);
+                // Some authored pairs sit only metres apart (a "thin slit" aperture), so crossing
+                // green can carry this probe across red's plane too — completion, not a false one.
+                solo.Update(rc - rn * 5f, half.Add);
+                solo.Update(rc + rn * 5f, half.Add);
+                ctx.Check(half.Contains(name), $"'{name}' completed once both authored gates were crossed");
+                completed.AddRange(half);
+            }
+            report.AppendLine($"gate crossing completed: {string.Join(", ", completed)}");
+
+            var profile = CampaignProfileDef.NewProfile("Zachary");
+            var director = CampaignDirector.Create(script, mission, profile, null, missionZrdrPath);
+            director.Attach(new CampaignDirector.WorldInputs { Runtime = world.Runtime, Gamez = world.Gamez });
+            ctx.Same(zones.Count, director.ArmedDangerZones,
+                $"Attach arms the same gate count off a real Gamez, the wiring BL-458 was missing");
+
+            var graph = director.Graph!;
+            graph.Wake(secondary.Number);
+            graph.Wake(worker.Number);
+            StepDirector(director, 0.1f);
+            ctx.Check(!graph.CompletedOf(secondary.Number), $"the SECONDARY has not completed before any zone notify");
+
+            // ScanForCompletion resolves one objective per tick, round robin (ObjectiveGraph.cs):
+            // enough steps to cycle past every one of the mission's 39 armed objectives, not one.
+            director.NotifyDangerZoneCompleted("dzpath1");
+            StepDirector(director, 5f);
+            ctx.Check(graph.CompletedOf(secondary.Number),
+                $"OBJECTIVE{secondary.Number} (the SECONDARY) completes off the notify path BL-458 wired");
+
+            director.NotifyDangerZoneCompleted("dzpath4");
+            StepDirector(director, 5f);
+            ctx.Check(graph.CompletedOf(worker.Number), $"OBJECTIVE{worker.Number} completes the same way");
+            report.AppendLine($"OBJECTIVE{secondary.Number} and OBJECTIVE{worker.Number} completed via NotifyDangerZoneCompleted");
+        });
+
+        ctx.WriteArtifact("test-campaign-danger-zones.txt", report.ToString());
+        ctx.Note($"{DangerZoneChapter}/{DangerZoneMission}'s SECONDARY completed through its own dzpathN gates");
     }
 
     /// <summary>The cutscene host over the shipped intro definition: the codes the definition
@@ -572,6 +669,16 @@ internal static class CampaignSuites
         }
     }
 
+    // The director's own Step, not the graph's: it also runs the danger-zone tracker and the
+    // scripted-path/music phases, the shape a real session drives.
+    private static void StepDirector(CampaignDirector director, float seconds)
+    {
+        for (float t = 0f; t < seconds; t += 0.1f)
+        {
+            director.Step(0.1f);
+        }
+    }
+
     private static CampaignMission? FirstMissionOf(
         IReadOnlyList<CampaignMission> missions, string chapter)
     {
@@ -586,6 +693,23 @@ internal static class CampaignSuites
         }
 
         return found;
+    }
+
+    // The one mission at an exact (chapter, mission-folder) address, for a suite that names a
+    // specific worked mission rather than "the chapter's first/last".
+    private static CampaignMission? MissionAt(
+        IReadOnlyList<CampaignMission> missions, string chapter, string missionFolder)
+    {
+        foreach (var m in missions)
+        {
+            if (m.ChapterFolder.Equals(chapter, System.StringComparison.OrdinalIgnoreCase)
+                && m.MissionFolder.Equals(missionFolder, System.StringComparison.OrdinalIgnoreCase))
+            {
+                return m;
+            }
+        }
+
+        return null;
     }
 
     // The last campaign mission stored in a chapter's world folder. The suite needs two missions of

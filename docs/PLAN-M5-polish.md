@@ -244,7 +244,7 @@ never `913`, and a traced run shows `AiParked=false` throughout. ⚠ The parking
 latent for a mission whose intro does raise 913, since `Inert` un-draws an aircraft
 (`FlightController.cs:583`); file that separately if it appears rather than folding it in here.
 
-## A6 ☐ `DANGER_ZONES_COMPLETED` is never fed in a campaign mission (`BL-458`)
+## A6 ◐ `DANGER_ZONES_COMPLETED` is never fed in a campaign mission (`BL-458`)
 
 **Goal.** An objective gated on danger zones can complete.
 
@@ -253,15 +253,46 @@ fed by `CampaignDirector.NotifyDangerZoneCompleted` (`:345`), which has no calle
 session: the danger-zone module belongs to `--stunt`. C3/M01's `OBJECTIVE3` (`SECONDARY 11`) and
 `OBJECTIVE11` use it, so that row is unsatisfiable. Found while tracing A1.
 
-**Approach.** Drive the notify from whatever tracks zone completion in a mission session, or
-establish that the campaign's danger zones are a different mechanism and say so.
+**Landed.** A campaign mission's danger zones are the same physical mechanism `--stunt` reads (the
+`dzpathN` route-ribbon-plus-two-gate-polygon mesh under the chapter world's `dzpaths` subtree,
+crossed in either order), fed from a different authoring surface: a story mission carries no
+`ia.json` `dzones` list at all, and instead names `dzpathN` directly inside its own
+`objectives.zrd` `DANGER_ZONES_COMPLETED` conditions (C3/M01's `OBJECTIVE3` on `dzpath1`,
+`OBJECTIVE11` on `dzpath4`), narrowed by the mission's own `dzones.zrd` `disable` list
+(`docs/formats/missions.md` "Zone overrides" — previously decoded there as data the remake reads
+nowhere). `CampaignDangerZones` (`CSVM/src/Session/CampaignDangerZones.cs`) is a standalone reader
+of that surface: it collects every `DANGER_ZONES_COMPLETED` name the script authors, drops any
+`dzones.zrd` disables, resolves gates against a real `GameZ`, and calls back with a crossed zone's
+name. `CampaignDirector.Attach` arms it from a new `WorldInputs.Gamez` field and `Step` drives it
+off the live player position, feeding the exact `NotifyDangerZoneCompleted` entry point the graph
+already had. Kept as its own module rather than reusing `Flight.StuntMission`: the two mechanisms
+share their gate math by construction (this module mirrors `TryReadGates`/`GateCrossing` rather
+than importing them) but read different authoring surfaces and belong to different sessions, so a
+shared notify would have been a design choice, not a repair.
 
-**Model recommendation.** medium.
+**Not landed: the live wiring's last field.** `GameSession.cs`'s own `Attach` call
+(`_campaign?.Attach(new CampaignDirector.WorldInputs { … })`, around line 2473) does not set the
+new `Gamez` field — it is out of this item's file ownership (`GameSession.cs` is off-limits here).
+Until that one field is added (`Gamez = state.Gamez,`, alongside the `PlayerAircraft` delegate
+already there), a real flown campaign session still never arms `CampaignDangerZones`, and C3/M01's
+SECONDARY still cannot complete at the controls. Everything else — the decode, the module, the
+director's own wiring, and the objective completing off the real `NotifyDangerZoneCompleted` path
+— is built and proven against real C3/M01 data; only that call site is missing.
 
-**Verify.** The secondary completing in a flown C3/M01, with an in-engine assertion behind it.
+**Verify.** `campaign-danger-zones` (new suite, registered last in `SuiteCatalog.cs`) builds
+C3/M01's real world, confirms `CampaignDangerZones.Load` arms exactly the two `dzpathN` names
+`objectives.zrd` references (`dzpath1`, `dzpath4` — `dzones.zrd`'s `disable` list holds three other
+paths the script never names), drives a scripted crossing of both authored gates to completion for
+each, and confirms `CampaignDirector.Attach` arms the same count from a real `Gamez`. It then drives
+a real `CampaignDirector` over C3/M01 through `NotifyDangerZoneCompleted` and confirms `OBJECTIVE3`
+(the SECONDARY) and `OBJECTIVE11` both complete, which is BL-458's condition satisfied through the
+exact path `CampaignDirector.Step` will call once wired. `--run-tests=campaign-danger-zones`: 1
+passed, 0 failed, engine errors clean.
 
-**⚠ Traps.** ⚠ Confirm the campaign's zones really are the `--stunt` module's before wiring them
-together; sharing a notify between two mission types is a design choice, not a repair.
+**⚠ Traps.** ⚠ Confirmed: the campaign's zones ARE the `--stunt` module's gate geometry — do not
+build a second, different completion rule for them. ⚠ A `dzpathN` gate pair can sit only metres
+apart (a "thin slit" aperture): a probe built to cross one gate can legitimately cross both in the
+same segment, which is completion, not a test bug.
 
 ## A3 ☐ The campaign wingman cannot hold station on a real player (`BL-457`)
 

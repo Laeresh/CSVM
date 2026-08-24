@@ -146,6 +146,7 @@ public static class SuiteCatalog
         "campaign-roster",
         "campaign-loop",
         "campaign-zeppelins",
+        "campaign-danger-zones",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -760,6 +761,16 @@ public static class SuiteCatalog
             + "Generators off (its egen.zrd is authored empty), and the mission's own zeppelins "
             + "place live once the flag is on",
             CampaignZeppelins));
+        // Registered after campaign-loop, not because order matters to it: this suite's director
+        // uses no file-backed store (profile is in-memory), so it cannot disturb what campaign-loop
+        // left on disk for a later process.
+        into.Add(new TestHarness.Suite("campaign-danger-zones",
+            "BL-458's campaign danger zones over C3/M01's own dzpathN gates, resolved against real "
+            + "world geometry: the mission's DANGER_ZONES_COMPLETED names (dzpath1, dzpath4) are "
+            + "armed and no others, a scripted crossing of both authored gates fires each zone's "
+            + "completion, and the director's real NotifyDangerZoneCompleted path completes the "
+            + "SECONDARY (OBJECTIVE3) and OBJECTIVE11 the way a flown mission would",
+            CampaignDangerZoneObjectives));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

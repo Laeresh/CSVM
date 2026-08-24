@@ -32,11 +32,13 @@ public sealed class CampaignDirector
     private readonly CampaignProfileDef _profile;
     private readonly CampaignProfileStore? _store;
     private readonly CampaignMission _mission;
+    private readonly string _missionZrdrPath;
     private readonly HashSet<string> _gapsLogged = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FlightController> _roster = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
     private World? _world;
     private ScriptedPathVehicles? _paths;
+    private CampaignDangerZones? _dangerZones;
     private bool _cutsceneHold;
 
     // The proximity scan's accumulator and whether the player's damage event is subscribed yet:
@@ -47,12 +49,13 @@ public sealed class CampaignDirector
 
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
-        CampaignProfileDef profile, CampaignProfileStore? store)
+        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath)
     {
         Script = script;
         _mission = mission;
         _profile = profile;
         _store = store;
+        _missionZrdrPath = missionZrdrPath;
     }
 
     /// <summary>The authored-aircraft spawner, handed in as a delegate for the same reason
@@ -102,6 +105,11 @@ public sealed class CampaignDirector
     /// <summary>The result of the flown mission, null until it ends.</summary>
     public CampaignMissionResult? Result { get; private set; }
 
+    /// <summary>How many danger-zone gates <see cref="Attach"/> armed from a real
+    /// <see cref="WorldInputs.Gamez"/>. 0 before <see cref="Attach"/>, or when the mission
+    /// names no <c>DANGER_ZONES_COMPLETED</c> zone, or none resolved.</summary>
+    internal int ArmedDangerZones => _dangerZones?.Count ?? 0;
+
     /// <summary>Resolves a <c>--campaign=&lt;profile&gt;:&lt;seq&gt;</c> launch's chapter and
     /// mission out of <c>cm_sequence.zrd</c>, so the rest of the build sees an ordinary
     /// chapter/mission session. Returns the spec unchanged when no campaign mission was asked for,
@@ -149,17 +157,19 @@ public sealed class CampaignDirector
         var script = ObjectiveScript.Load(missionZrdrPath);
         GD.Print($"campaign: '{profile.Name}' flying {mission.ChapterFolder}/{mission.MissionFolder}, " +
                  $"{script.Objectives.Count} objective(s)");
-        var director = new CampaignDirector(script, mission, profile, store);
+        var director = new CampaignDirector(script, mission, profile, store, missionZrdrPath);
         director.BindWingman();
         return director;
     }
 
     /// <summary>The suite/test entry: a director over an already-loaded script, mission and
-    /// profile, with no profile file behind it unless one is handed in.</summary>
+    /// profile, with no profile file behind it unless one is handed in. <paramref
+    /// name="missionZrdrPath"/> is only needed to arm danger zones (its <c>dzones.zrd</c>
+    /// disable list); omitted, nothing is disabled.</summary>
     internal static CampaignDirector Create(
         ObjectiveScript script, CampaignMission mission,
-        CampaignProfileDef profile, CampaignProfileStore? store) =>
-        new(script, mission, profile, store);
+        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath = "") =>
+        new(script, mission, profile, store, missionZrdrPath);
 
     /// <summary>The roster phase: spawns every non-player block of the mission's <c>aiv</c>
     /// roster, at the point of <c>GameSession</c>'s build where the human rigs exist. The plan is
@@ -313,10 +323,14 @@ public sealed class CampaignDirector
             : null;
         Graph = new ObjectiveGraph(Script, _world);
         Graph.MissionEnded += OnMissionEnded;
+        _dangerZones = inputs.Gamez is { } gamez
+            ? CampaignDangerZones.Load(Script, gamez, _missionZrdrPath)
+            : null;
         int chapter = _mission.Campaign;
         int applied = inputs.Runtime != null ? _profile.PersistLog.ApplyTo(inputs.Runtime, chapter) : 0;
         GD.Print($"campaign: {Graph.Count} objective(s) armed, {Graph.Rows.Count} display row(s), " +
-                 $"{applied} object(s) restored from the chapter {chapter} persist log");
+                 $"{applied} object(s) restored from the chapter {chapter} persist log" +
+                 (_dangerZones is { } dz ? $", {dz.Count} danger zone(s) armed" : ""));
     }
 
     /// <summary>One sim step of the objectives graph, the scripted-path vehicles and the music
@@ -331,6 +345,10 @@ public sealed class CampaignDirector
         }
 
         Graph?.Step(dt);
+        if (_dangerZones != null && _world?.Player() is { } player)
+        {
+            _dangerZones.Update(player.WorldPosition, NotifyDangerZoneCompleted);
+        }
         _paths?.Step(dt);
         StepMusic(dt);
     }
@@ -514,6 +532,11 @@ public sealed class CampaignDirector
         public WorldSounds? Sounds;
         public ProjectilePool? Projectiles;
         public Func<Vector3>? ListenerPosition;
+
+        /// <summary>The chapter's parsed world geometry, for <see cref="CampaignDangerZones"/>'s
+        /// gate read. Null leaves the mission's <c>DANGER_ZONES_COMPLETED</c> conditions
+        /// unarmed, the same "no seam yet" shape as every other null here.</summary>
+        public GameZ? Gamez;
 
         /// <summary>The player's aircraft once one exists, for the music channel's damage ping.
         /// A delegate rather than a value because the flight rigs are built after the world.</summary>

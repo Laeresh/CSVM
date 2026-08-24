@@ -2318,13 +2318,19 @@ usual.
   row; `BL-454`, since the readout could not say which objective completed;
   `docs/PLAN-M5-campaign.md` D31 owns the objectives runtime.
 
-- `BL-458` `[Bug]` **`DANGER_ZONES_COMPLETED` can never be satisfied in a campaign mission.**
-  *Evidence:* the condition reads correctly (`ObjectiveGraph.cs:494`) and is fed by
-  `CampaignDirector.NotifyDangerZoneCompleted` (`:345`), which **has no caller in a campaign
-  session**: the danger-zone module belongs to `--stunt`. C3/M01's `OBJECTIVE3` (`SECONDARY 11`) and
-  `OBJECTIVE11` use it, so that secondary is unsatisfiable. Found while tracing `BL-456`.
-  *Fix shape:* drive the notify from whatever tracks zone completion in a mission session, or
-  establish that the campaign's danger zones are a different mechanism. *Cross-refs:* `BL-456`.
+- `BL-458` `[Bug]` **`DANGER_ZONES_COMPLETED` can never be satisfied in a flown campaign mission.**
+  *Evidence:* a campaign mission's danger zones are the same `dzpathN` gate geometry `--stunt`
+  reads, authored from a different surface: no `ia.json` `dzones` list, but the mission's own
+  `objectives.zrd` names `dzpathN` directly inside `DANGER_ZONES_COMPLETED` (C3/M01's `OBJECTIVE3`
+  on `dzpath1`, `OBJECTIVE11` on `dzpath4`), narrowed by `dzones.zrd`'s `disable` list.
+  `CampaignDangerZones` (new) reads that surface and calls the existing
+  `CampaignDirector.NotifyDangerZoneCompleted` (`:345`); `Attach`/`Step` wire it off a new
+  `WorldInputs.Gamez` field. Proven against real C3/M01 data (`campaign-danger-zones` suite):
+  gate-crossing completes the zone, and `OBJECTIVE3`/`OBJECTIVE11` complete off the real notify
+  path. **Still open:** `GameSession.cs`'s own `Attach` call (~line 2473) does not yet set
+  `Gamez`, so a real flown session still never arms the tracker — one field, in a file outside
+  A6's ownership when this was traced. *Fix shape:* add `Gamez = state.Gamez,` to that call's
+  `WorldInputs` initializer. *Cross-refs:* `BL-456`.
 
 - `BL-457` `[Bug]` **The campaign wingman cannot keep station and ends up high and far behind, so it
   reads as having spawned in the wrong place.** Seen at the controls: "in the original the wingman
