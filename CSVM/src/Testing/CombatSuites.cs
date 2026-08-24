@@ -1104,23 +1104,21 @@ internal static class CombatSuites
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-            var inputs = new HumanFlightAdapter.Inputs
+            var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
                 AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-                RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
                 StockLoadouts = StockLoadouts.Load(),
                 WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
                 Textures = textures,
-                Projectiles = live,
                 Shakes = ShakeDefs.Load(ctx.ZrdrPath),
             };
 
             var start = new Vector3(0f, 500f, 0f);
-            var spawner = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
+            var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
             spawned = spawner.SpawnAi(new AiSpawn("player_fury", start, start + Vector3.Forward,
                 AiPilot.HoldingCourse(start, start + Vector3.Forward)));
 
@@ -1179,20 +1177,18 @@ internal static class CombatSuites
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
             // The one cache the real session holds: every aircraft below is built from THIS object.
             var shared = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-            var inputs = new HumanFlightAdapter.Inputs
+            var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
                 StatsFor = _ => shared,
                 // The same one object on both seams: this suite measures the jitter's spread over
                 // a SHARED cache entry, so the AI flavour must not quietly become a second object.
                 AiStatsFor = (_, _) => shared,
-                RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
                 StockLoadouts = StockLoadouts.Load(),
                 WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
                 Textures = textures,
-                Projectiles = live,
                 Shakes = ShakeDefs.Load(ctx.ZrdrPath),
             };
 
@@ -1214,13 +1210,13 @@ internal static class CombatSuites
             }
 
             // Two ordinals off one spawner: two aeroplanes, same pose, same orders.
-            var spawner1 = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
+            var spawner1 = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
             var first = Fly(spawner1);
             var second = Fly(spawner1);
 
             // A fresh spawner restarts at ordinal 0, and the draw is keyed by ordinal — so this is
             // the same aircraft as `first`, which is what a --det replay reproduces.
-            var spawner2 = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
+            var spawner2 = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
             var replay = Fly(spawner2);
 
             float spread = (first - second).Length();

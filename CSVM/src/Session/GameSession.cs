@@ -76,14 +76,13 @@ public partial class GameSession : Node3D
 
     // Every AI aircraft spawned into this session — stepped in DriveSimSteps after the
     // player rigs, freed with the world subtree.
-    private readonly List<FlightController> _aiPlanes = new();
     // Scratch for LockCandidateAircraft, reused so a target-key press allocates nothing.
     private readonly List<Node3D> _lockCandidates = new();
     // The whole-window boards photo mode has to get out of the way, and what they were showing
     // before it did. Registered at build; a session that builds no board registers none.
     private readonly List<Control> _boards = new();
     private readonly List<bool> _boardWasVisible = new();
-    // scratch: the rigs' controllers plus _aiPlanes, rebuilt on every AllAircraft() call
+    // scratch: the rigs' controllers plus AiPlanes, rebuilt on every AllAircraft() call
     private readonly List<FlightController> _aircraftScan = new();
     // scratch: rig camera positions for the edge extender
     private readonly List<Vector3> _focusPoints = new();
@@ -193,13 +192,11 @@ public partial class GameSession : Node3D
     // The roster's own AI stats reader, so a spawn can consult the def it is about to fly (pilot
     // skills, accent) before the roster builds it. Same cache: the read here is not a second parse.
     private Func<string, string?, PlaneStats>? _aiStatsFor;
-    private List<Maneuver>? _aiManeuvers; // the D13 library, loaded once for the D11 machines
-    private bool _noAssistLogged; // the one-per-session --no-assist breadcrumb
     // The E16 voice dispatch (built with the rigs when the world has sounds; its mission clock
     // steps in DriveSimSteps). Null in a soundless/world-less session — chatter simply off.
     private AiVoiceRuntime? _aiVoice;
     // The egen enemy generators (--generators): loaded with the rigs, stepped in
-    // DriveSimSteps before the AI planes it spawns into _aiPlanes, freed with the world subtree.
+    // DriveSimSteps before the AI planes it spawns into AiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
     private ZeppelinRuntime? _zeppelins;
     // The active Instant Action mission's director: the mission runtime, the wave state and (as
@@ -303,6 +300,9 @@ public partial class GameSession : Node3D
     /// capture tick reads it, because CaptureDirector only shoots once a plane exists.</summary>
     internal Node3D? Plane => _plane;
 
+    private IReadOnlyList<FlightController> AiPlanes =>
+        _flightRoster?.AiAircraft ?? Array.Empty<FlightController>();
+
     // ⚠ Do not spell "does this session build colliders" any other way; this is the one definition
     // the labs and the C overlay read, so they cannot disagree with what WorldSession built.
     private bool BuildsCollision => _spec.BuildsCollision;
@@ -310,126 +310,6 @@ public partial class GameSession : Node3D
     // Whether P / . may halt this session. Splitscreen flight says no: the freeze halts the shared
     // world, so it is not one player's to press.
     private bool HaltAllowed => !_spec.Fly || _rigs.Count == 1;
-
-    /// <summary>Spawns an AI-piloted aircraft into this session at runtime, any time after the
-    /// flight build. Null when this session built no flight rigs. This is the <c>--ai=</c>
-    /// overload: no authored identity beyond <paramref name="aiDef"/>, whose militia scheme the
-    /// aircraft then wears in place of the Fortune Hunters default.
-    /// ⚠ Route an authored enemy through the other overload instead; it carries the livery, team,
-    /// rating and <c>shippedSkins</c> a mission's actor needs.</summary>
-    public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt,
-        AiPilot pilot, string? aiDef = null) =>
-        SpawnAiAircraft(planeName, pos, lookAt, pilot, scheme: null, team: null, attackRating: null,
-            aiDef: aiDef);
-
-    /// <summary>As the four-parameter overload, plus an authored actor's identity.
-    /// <paramref name="scheme"/>/<paramref name="team"/> are worn as-is, with no RNG draw;
-    /// <paramref name="attackRating"/> arms the gunner and mode machine at that rating regardless
-    /// of <c>--ai-attack=</c>; <paramref name="inert"/> builds the aircraft fully wired but taking
-    /// no step until <see cref="FlightController.Activate"/>; <paramref name="shippedSkins"/> keeps
-    /// its own textures, for an actor flying for a militia the mission data never names.</summary>
-    public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt,
-        AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating, bool inert = false,
-        bool shippedSkins = false, string? aiDef = null, Flight.LoadoutChoice? fit = null)
-    {
-        if (_flightRoster == null)
-        {
-            GD.PushWarning($"ai: no spawner in this session mode — '{planeName}' not spawned");
-            return null;
-        }
-        // The vehicle def's own nine-slot pilot vector, when this spawn resolves one. A slot it
-        // authors is the rating that slot's consumer flies at, unless --ai-attack=N pinned one.
-        var defStats = AiStatsForSpawn(planeName, aiDef);
-        var defSkills = defStats?.AiPilotSkills ?? default;
-        int SkillFor(int? authored, int fallback) =>
-            _spec.AiAttackSkillExplicit || attackRating != null ? fallback : authored ?? fallback;
-
-        // --ai-attack arms every spawned pilot with a D14 gunner at the ordered skill rating:
-        // interpolated dead-eye/quick-draw cones, nearest-hostile auto-targeting, its own
-        // seeded scatter stream. A pilot armed by its caller keeps what it was given.
-        if ((attackRating ?? _spec.AiAttackSkill) is { } skill && pilot.Gunner == null)
-        {
-            try
-            {
-                _aiSkills ??= AiSkills.Load(_zrdrPath);
-                var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
-                pilot.Gunner = new AiGunner(rng)
-                {
-                    DeadEyeAngleDeg = _aiSkills.DeadEyeAngleDeg(SkillFor(defSkills.DeadEye, skill)),
-                    QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(SkillFor(defSkills.QuickDraw, skill)),
-                };
-                // The ordnance half rides the quick-draw slot, on its own draw off the ai stream so
-                // the launch dice and the dead-eye scatter cannot walk each other's sequence.
-                var ordRng = new RandomNumberGenerator { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
-                int quickDraw = SkillFor(defSkills.QuickDraw, skill);
-                pilot.Rocketeer = new AiRocketeer(ordRng.Randf)
-                {
-                    QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(quickDraw),
-                    QuickDrawChance = _aiSkills.QuickDrawChance(quickDraw),
-                };
-                // Names the ratings actually flown, not the session default: with a def's own slots
-                // in play the two differ, and a reader comparing cones needs the numbers behind them.
-                GD.Print($"ai: gunner armed at dead-eye {SkillFor(defSkills.DeadEye, skill)} / " +
-                         $"quick-draw {quickDraw} (dead-eye {pilot.Gunner.DeadEyeAngleDeg:0.00}°, " +
-                         $"quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°, " +
-                         $"ordnance roll {pilot.Rocketeer.QuickDrawChance:0.00} per {pilot.Rocketeer.RefireSeconds:0} s)");
-            }
-            catch (Exception e)
-            {
-                GD.PushWarning($"--ai-attack: cannot load ai_skill_parameters: {e.Message}");
-            }
-        }
-        // The mode machine on every spawned pilot, unless its caller already gave it one. The
-        // spawner adds the vehicle def's attack/return ranges; the controller wires the terrain
-        // probe.
-        if (pilot.Machine == null)
-        {
-            try
-            {
-                _aiSkills ??= AiSkills.Load(_zrdrPath);
-                _aiManeuvers ??= Maneuvers.Load(_zrdrPath);
-                int rating = attackRating ?? _spec.AiAttackSkill ?? 5;
-                int sixthSense = SkillFor(defSkills.SixthSense, rating);
-                pilot.Machine = new AiModeMachine(Rng.NewSystemRandom(Rng.Ai))
-                {
-                    ActivationRange = _aiSkills.MinAiActiveDist,
-                    SteadyHandChance = _aiSkills.At("steady_hand_chance", SkillFor(defSkills.SteadyHand, rating)),
-                    SixthSenseChance = _aiSkills.At("sixth_sense_chance", sixthSense),
-                    SixthSenseFactor = _aiSkills.At("sixth_sense_factor", sixthSense),
-                    StunRecoveryIntervalS = _aiSkills.At("stun_recovery_interval", SkillFor(defSkills.StunRecovery, rating)),
-                    NaturalTouch = SkillFor(defSkills.NaturalTouch, rating),
-                    Library = _aiManeuvers,
-                    AssistEnabled = !_spec.NoAssist,
-                };
-                if (_spec.NoAssist && !_noAssistLogged)
-                {
-                    _noAssistLogged = true;
-                    GD.Print("ai assist: off (--no-assist): lay off disabled, pursue only");
-                }
-            }
-            catch (Exception e)
-            {
-                GD.PushWarning($"ai: no mode machine — cannot load skills/maneuvers: {e.Message}");
-            }
-        }
-        var ai = _flightRoster.SpawnAi(new AiSpawn(planeName, pos, lookAt, pilot, scheme, team,
-            inert, shippedSkins, aiDef, fit));
-        _aiPlanes.Add(ai);
-        ai.SmokeScreens = _smokeScreens;   // a shipped AI smoker lays through the same fire path
-        // Mode transitions and reaction rolls, in the engine's own vocabulary — the D11
-        // observability lines. Through Log (not GD.Print) so a play session's file sink
-        // (.scratch/logs/<mode>-<stamp>.log) carries them for post-flight reading.
-        if (pilot.Machine is { } modes)
-        {
-            string tag = ai.Name;
-            modes.ModeChanged += (from, to, why) => Log.Info("flight",
-                $"ai mode: {tag}: {AiModeMachine.NameOf(from)} -> {AiModeMachine.NameOf(to)} ({why})");
-            modes.RollLogged += line => Log.Info("flight", $"ai roll: {tag}: {line}");
-        }
-        ai.Downed += (victim, killer) => Log.Info("flight",
-            $"ai: {ai.Name} downed (shooter id {victim}, killer {killer?.ToString() ?? "none"})");
-        return ai;
-    }
 
     /// <summary>Builds one flight/view session from the spec (mode, chapter, plane, spawn, …)
     /// into a fresh <see cref="_worldRoot"/> so Esc-to-menu can tear it all down and a new session
@@ -594,6 +474,7 @@ public partial class GameSession : Node3D
         // _worldRoot and frees atomically with this node, so a manual null-out is dead code.
         if (what == (int)NotificationExitTree)
         {
+            _flightRoster?.ClearMembership();
             // A run that quits inside the session build (the headless probes) never renders a
             // frame, so this is the only place its startup breakdown can still be reported.
             // Idempotent: a session that did render has already emitted and this does nothing.
@@ -761,7 +642,7 @@ public partial class GameSession : Node3D
                 _aircraftScan.Add(c);
             }
         }
-        _aircraftScan.AddRange(_aiPlanes);
+        _aircraftScan.AddRange(AiPlanes);
         return _aircraftScan;
     }
 
@@ -983,7 +864,7 @@ public partial class GameSession : Node3D
                 // takes a supplier rather than a snapshot).
                 CollectLeashes = into =>
                 {
-                    foreach (var ai in _aiPlanes)
+                    foreach (var ai in AiPlanes)
                     {
                         if (ai is { InPlay: true } && ai.Pilot is { Patrol: { CurrentIndex: >= 0 } patrol } pilot)
                         {
@@ -1802,40 +1683,27 @@ public partial class GameSession : Node3D
         IFlightStarts flightStarts = race != null && !_spec.Det
             ? new RaceGrid(_spawnPicker, GroundSampler())
             : _spawnPicker;
-        var rigInputs = new HumanFlightAdapter.Inputs
+        var aircraftResources = new AircraftAssemblyResources
         {
-            Ambience = _ambience,
             PlanesGamez = planesGamez,
             StatsFor = StatsFor,
             AiStatsFor = AiStatsFor,
             CamParamsFor = CamParamsFor,
-            RigCount = _rigs.Count,
-            MixGain = mixGain,
-            PadAssignment = padAssignment,
-            PauseState = _pauseState!,
-            MenuInputFor = MenuInputFor,
-            ExitsToMenu = _menuDriven,
-            ExitSession = _exitSession,
             PaintRng = paintRng,
-            SpawnList = spawnList,
-            SpawnBase = spawnBase,
             WeaponDefs = weaponDefs,
             WeaponMessages = weaponMessages,
             StockLoadouts = stockLoadouts,
             TurretDefs = turretDefs,
             Shakes = shakeDefs,
-            Projectiles = projectiles,
             HudFont = hudFont,
             ReticleTex = reticleTex,
-            StuntZones = stuntZones,
-            Race = race,
-            VersusMatch = versus,
-            Rigs = _rigs,
-            InstantActionPlayerPlaneNode = iaPlayerNode,
-            InstantActionActive = iaRt != null,
-            Coop = _spec.Coop,
             Textures = state.Textures,
             ZrdrPath = state.ZrdrPath,
+        };
+        var worldBindings = new FlightWorldBindings
+        {
+            Ambience = _ambience,
+            Projectiles = projectiles,
             ChapterZrdrPath = SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter),
             MissionZrdrPath = state.MissionZrdrPath,
             Gamez = state.Gamez,
@@ -1849,24 +1717,35 @@ public partial class GameSession : Node3D
             SoundGroups = state.SoundGroups,
             DebugCollision = state.DebugCollision,
         };
-        var flightRoster = new FlightRoster(_spec, _liveryResolver, _worldEffectsFactory, _worldRoot!,
-            rigInputs, flightStarts);
+        var humanBindings = new HumanRosterBindings
+        {
+            RigCount = _rigs.Count,
+            MixGain = mixGain,
+            PadAssignment = padAssignment,
+            PauseState = _pauseState!,
+            MenuInputFor = MenuInputFor,
+            ExitsToMenu = _menuDriven,
+            ExitSession = _exitSession,
+            SpawnList = spawnList,
+            SpawnBase = spawnBase,
+            StuntZones = stuntZones,
+            Race = race,
+            VersusMatch = versus,
+            Rigs = _rigs,
+            InstantActionPlayerPlaneNode = iaPlayerNode,
+            InstantActionActive = iaRt != null,
+            Coop = _spec.Coop,
+            SmokeScreens = _smokeScreens,
+        };
+        var flightRoster = new FlightRoster(FlightRosterPolicy.From(_spec), _liveryResolver,
+            _worldEffectsFactory, _worldRoot!, aircraftResources, worldBindings, humanBindings,
+            flightStarts);
         var rosterBuild = flightRoster.BuildPlayers(_rigs);
         state.MeshInstances += rosterBuild.MeshInstances;
         state.What += rosterBuild.SummarySuffix;
-        // The smoke-screen registry is built before the rigs are, so the fire path is bound here
-        // rather than through the roster's inputs.
-        foreach (var rig in _rigs)
-            if (rig.Controller is { } layer)
-                layer.SmokeScreens = _smokeScreens;
-
         // One shared PauseState on every rig: any human pauses everybody, and only the pauser may
-        // resume. ⚠ Wire single player the same way, so there is one pause path and not two. The
-        // board covers the whole window on its own CanvasLayer, since a pause stops every pane.
+        // resume. The whole-window board covers every pane; single player uses the same path.
         var pauseState = _pauseState!;
-        foreach (var rig in _rigs)
-            if (rig.Controller is { } pausable)
-                pausable.PauseState = pauseState;
         var pauseBoard = PauseBoard.Build(pauseState, exitsToMenu: _menuDriven, MenuInputFor);
         pauseBoard.Restart = Rerun;
         pauseBoard.Exit = _exitSession;
@@ -2050,7 +1929,7 @@ public partial class GameSession : Node3D
                      (_spec.IncomingWeapon != null ? $" ({_spec.IncomingWeapon})" : " (their own gun)"));
         }
 
-        // The roster shares the session data the human field was built from, so SpawnAiAircraft
+        // The roster shares the session data the human field was built from, so later AI spawns
         // works from here on, at build or at any later sim step.
         _flightRoster = flightRoster;
         // The E16 voice dispatch, over B8's seam: needs the world's WorldSounds (prewarmed
@@ -2077,7 +1956,7 @@ public partial class GameSession : Node3D
             () => _rigs.Count > 0 && _rigs[0].Controller is { } trailedRig
                 ? trailedRig.WorldPosition
                 : null,
-            name => rigInputs.WorldRuntime?.FindNodes(name) is { Count: > 0 } trailerHits
+            name => worldBindings.WorldRuntime?.FindNodes(name) is { Count: > 0 } trailerHits
                 ? trailerHits[0]
                 : null);
         // Instant Action's actor build (director phase), at this exact point: the ace's spawn
@@ -2088,7 +1967,7 @@ public partial class GameSession : Node3D
             state.What += iaDirActors.BuildActors(new InstantActionDirector.ActorBuildInputs
             {
                 Rigs = _rigs,
-                ChapterZrdrPath = rigInputs.ChapterZrdrPath,
+                ChapterZrdrPath = worldBindings.ChapterZrdrPath,
                 MissionZrdrPath = state.MissionZrdrPath,
                 ZrdrPath = state.ZrdrPath,
                 MessagesPath = state.MessagesPath,
@@ -2097,8 +1976,8 @@ public partial class GameSession : Node3D
                 LiveryResolver = _liveryResolver,
                 NetTrailers = netTrailers,
                 Spawn = (plane, pos, look, pilot, scheme, team, rating, inert, shipped, fit) =>
-                    SpawnAiAircraft(plane, pos, look, pilot, scheme, team, rating, inert, shipped,
-                        fit: fit),
+                    flightRoster.SpawnAi(new AiSpawn(plane, pos, look, pilot, scheme, team,
+                        Inert: inert, ShippedSkins: shipped, Fit: fit, AttackRating: rating)),
                 RegisterVoice = RegisterAiVoice,
             });
         }
@@ -2147,15 +2026,16 @@ public partial class GameSession : Node3D
                     var look = net.Nodes.Count > 1 ? follower.NodePosition(1) : pos + fwd;
                     var pilot = AiPilot.HoldingCourse(pos, look);
                     pilot.Patrol = follower;
-                    var spawnedOnNet = SpawnAiAircraft(planeName, pos, look, pilot, aiDef: aiDef);
+                    var spawnedOnNet = flightRoster.SpawnAi(new AiSpawn(
+                        planeName, pos, look, pilot, AiDef: aiDef));
                     RegisterAiVoice(spawnedOnNet, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
                     ApplyAiHullPreset(spawnedOnNet);
                 }
                 else
                 {
                     var pos = lead.WorldPosition + fwd * 250f + right * lateral;
-                    var spawnedAhead = SpawnAiAircraft(planeName, pos, pos + fwd,
-                        AiPilot.HoldingCourse(pos, pos + fwd), aiDef: aiDef);
+                    var spawnedAhead = flightRoster.SpawnAi(new AiSpawn(planeName, pos, pos + fwd,
+                        AiPilot.HoldingCourse(pos, pos + fwd), AiDef: aiDef));
                     RegisterAiVoice(spawnedAhead, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
                     ApplyAiHullPreset(spawnedAhead);
                 }
@@ -2179,14 +2059,14 @@ public partial class GameSession : Node3D
                 GD.Print($"zep: no zeppelins file for {_spec.Chapter}/{_spec.Mission}: {e.Message}");
                 zepDefs = new List<ZeppelinDef>();
             }
-            var zepNets = AiNets.Load(rigInputs.ChapterZrdrPath);
+            var zepNets = AiNets.Load(worldBindings.ChapterZrdrPath);
             _zeppelins = new ZeppelinRuntime(zepDefs,
-                name => rigInputs.WorldRuntime?.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null,
+                name => worldBindings.WorldRuntime?.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null,
                 zepNets, netTrailers.For);
             _worldRoot!.AddChild(_zeppelins);
             // F18: the multi-zone damage half — per-part pools over the world registry, the
             // survivor-count kill, and the DAMAGES_ZEPPELIN gate on the shared pool.
-            if (rigInputs.WorldRuntime is { } zepRuntime)
+            if (worldBindings.WorldRuntime is { } zepRuntime)
             {
                 _zeppelins.WireDamage(zepRuntime);
                 if (_projectiles != null)
@@ -2205,13 +2085,7 @@ public partial class GameSession : Node3D
             // the zeppelins are built AFTER the rigs — so the feed is bound here rather than in the
             // assembler. Every pane shares the one runtime; each fills its own list from it.
             var zepTargets = _zeppelins;
-            foreach (var zepRig in _rigs)
-            {
-                if (zepRig.Controller is { } zepPlane)
-                {
-                    zepPlane.TargetSubParts = into => zepTargets.CollectTargetParts(into);
-                }
-            }
+            flightRoster.SetTargetSubParts(into => zepTargets.CollectTargetParts(into));
             GD.Print($"zep: {_zeppelins.LiveCount} of {zepDefs.Count} zeppelin(s) placed for " +
                      $"{_spec.Chapter}/{_spec.Mission}");
             state.What += $" + {_zeppelins.LiveCount} zeppelin(s)";
@@ -2220,7 +2094,7 @@ public partial class GameSession : Node3D
         // Instant Action's own zeppelin switch (the director's phase, between the --zeppelins and
         // --generators blocks so a held hull never feeds a generator's altitude gate). The switched
         // nodes feed the turret arm inside the emplacement block below.
-        var iaZepTurretSwitch = _iaDirector != null && rigInputs.WorldRuntime is { } iaZepWorld
+        var iaZepTurretSwitch = _iaDirector != null && worldBindings.WorldRuntime is { } iaZepWorld
             ? _iaDirector.SwitchZeppelins(iaZepWorld, _zeppelins, _spec.Chapter)
             : new List<(Node3D Node, bool Objective, string Name)>();
 
@@ -2239,17 +2113,17 @@ public partial class GameSession : Node3D
                 GD.Print($"egen: no generator file for {_spec.Chapter}/{_spec.Mission}: {e.Message}");
                 egenDefs = new List<EnemyGeneratorDef>();
             }
-            var chapterNets = AiNets.Load(rigInputs.ChapterZrdrPath);
-            var wr = rigInputs.WorldRuntime;
+            var chapterNets = AiNets.Load(worldBindings.ChapterZrdrPath);
+            var wr = worldBindings.WorldRuntime;
             _generators = new AiGeneratorRuntime(egenDefs,
                 wr == null ? null
                     : (name, scope) => wr.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
-                // ⚠ A lambda, not the SpawnAiAircraft method group: shippedSkins rides the authoring
+                // ⚠ A lambda: shippedSkins rides the authoring
                 // overload, and a generated aircraft is the mission's enemy, so it keeps its own
                 // textures rather than the player militia's default.
                 chapterNets, _spec.GeneratorsPlane,
-                (plane, pos, look, pilot) => SpawnAiAircraft(plane, pos, look, pilot,
-                    scheme: null, team: null, attackRating: null, shippedSkins: true),
+                (plane, pos, look, pilot) => flightRoster.SpawnAi(new AiSpawn(
+                    plane, pos, look, pilot, ShippedSkins: true)),
                 wr == null ? null : (name, host) => wr.PlayWithin(host, name, applyReset: false).Count,
                 wr == null ? null : (name, host) => wr.StopWithin(host, name),
                 netTrailers.For);
@@ -2770,7 +2644,7 @@ public partial class GameSession : Node3D
             return;
         }
         FlightController? follow = null;
-        foreach (var ai in _aiPlanes)
+        foreach (var ai in AiPlanes)
         {
             if (ai is { InPlay: true })
             {
@@ -2805,7 +2679,7 @@ public partial class GameSession : Node3D
         }
         GD.Print($"--debug-spectate: {_rigs.Count} human(s) pinned, inert and untargetable; " +
                  (follow != null ? $"camera following {follow.Name}" : "camera free at the spawn") +
-                 $" ({_aiPlanes.Count} AI aircraft flying)");
+                 $" ({AiPlanes.Count} AI aircraft flying)");
     }
 
     /// <summary>What a <see cref="SpectatorCamera"/>'s target key may lock onto: every aircraft
@@ -2816,7 +2690,7 @@ public partial class GameSession : Node3D
     private IReadOnlyList<Node3D> LockCandidateAircraft()
     {
         _lockCandidates.Clear();
-        foreach (var ai in _aiPlanes)
+        foreach (var ai in AiPlanes)
             if (ai is { InPlay: true })
                 _lockCandidates.Add(ai);
         foreach (var rig in _rigs)
@@ -2934,7 +2808,7 @@ public partial class GameSession : Node3D
             _crashFired = true;
             foreach (var rig in _rigs)
                 rig.Controller?.DebugForceCrash();
-            foreach (var plane in _aiPlanes)
+            foreach (var plane in AiPlanes)
                 plane.DebugForceCrash();
         }
         // --debug-scoreboard --vs: one scripted, ATTRIBUTED kill on the first sim step, through the
@@ -2965,12 +2839,12 @@ public partial class GameSession : Node3D
             _zeppelins?.SimStep(dt);
             // Emplacements after the zeppelins: a slung mount reads its ride's moved pose.
             _turretEmplacements?.SimStep(dt);
-            // Generators step before the AI-plane loop below: a spawn appends to _aiPlanes, which
+            // Generators step before the AI-plane loop below: a spawn appends to AiPlanes, which
             // must not happen while that list is being enumerated (the new plane ticks next step).
             _generators?.SimStep(dt);
             // AI aircraft step after the player rigs — the tree order their _PhysicsProcess
             // callbacks take on a realtime clock, since they spawn after every rig is built.
-            foreach (var ai in _aiPlanes)
+            foreach (var ai in AiPlanes)
             {
                 ai.SimStep(dt);
             }
@@ -3016,14 +2890,17 @@ public partial class GameSession : Node3D
     // accent, voice runtime or skills table means a silent pilot, never an error.
     private void RegisterAiVoice(FlightController? ai, int? accentId, int? ratingOverride = null)
     {
-        if (ai == null || accentId is not { } accent || _aiVoice == null || _aiSkills == null)
+        if (ai == null || accentId is not { } accent || _aiVoice == null)
         {
-            if (accentId != null && (_aiVoice == null || _aiSkills == null))
+            if (accentId != null && _aiVoice == null)
             {
                 GD.Print($"ai voice: accent {accentId} ignored — no voice runtime in this session");
             }
             return;
         }
+        _aiSkills ??= _flightRoster?.AiSkills;
+        if (_aiSkills == null)
+            return;
         int rating = ratingOverride ?? _spec.AiAttackSkill ?? 5;
         _aiVoice.RegisterAi(ai, accent,
             _aiSkills.At("talker_chance", rating), _aiSkills.At("constitution_chance", rating));

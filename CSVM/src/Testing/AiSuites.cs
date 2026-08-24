@@ -12,6 +12,170 @@ namespace CSVM.Testing;
 /// combat voice, and the inert state they wait in.</summary>
 internal static class AiSuites
 {
+    internal static void FlightRosterTransaction(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequireData(chapterZrdr, $"C1 zrdr");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        var pool = new ProjectilePool(textures, null, null);
+        FlightController? spawned = null;
+        SubViewport? pane = null;
+        ctx.Host.AddChild(pool);
+        try
+        {
+            var spec = SessionSpec.Parse(System.Array.Empty<string>());
+            bool failSecondHuman = true;
+            int camParamsCalls = 0;
+            var resources = new AircraftAssemblyResources
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                CamParamsFor = _ => failSecondHuman && ++camParamsCalls == 2
+                    ? throw new System.InvalidOperationException("forced second human failure")
+                    : new CamParams(),
+                PaintRng = new RandomNumberGenerator(),
+                ZrdrPath = ctx.ZrdrPath,
+                StockLoadouts = StockLoadouts.Load(),
+                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                WeaponMessages = Messages.Load(ctx.MessagesPath),
+                Textures = textures,
+                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            };
+            pane = new SubViewport();
+            ctx.Host.AddChild(pane);
+            var rigs = new[]
+            {
+                new PlayerRig { Index = 0, Camera = ctx.Camera, HudParent = pane, Viewport = pane },
+                new PlayerRig { Index = 1, Camera = ctx.Camera, HudParent = pane, Viewport = pane },
+            };
+            var pauseState = new PauseState();
+            System.Action<List<AimCandidate>> targetSource = _ => { };
+            var humanRoster = new FlightRoster(FlightRosterPolicy.From(spec),
+                new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host, resources,
+                new FlightWorldBindings
+                {
+                    Projectiles = pool,
+                    Gamez = planesGamez,
+                    ChapterZrdrPath = chapterZrdr,
+                },
+                new HumanRosterBindings
+                {
+                    RigCount = 2,
+                    Rigs = rigs,
+                    PauseState = pauseState,
+                    MenuInputFor = _ => new UI.MenuInput(),
+                    ExitSession = () => { },
+                }, new FixedFlightStarts());
+            humanRoster.SetTargetSubParts(targetSource);
+            int humanChildrenBefore = ctx.Host.GetChildCount();
+            bool humanThrew = false;
+            try
+            {
+                humanRoster.BuildPlayers(rigs);
+            }
+            catch (System.InvalidOperationException)
+            {
+                humanThrew = true;
+            }
+            ctx.Check(humanThrew, $"a late failure in the second human reports its failure");
+            ctx.Same(0, humanRoster.Humans.Count, $"failed human batch commits no members");
+            ctx.Same(humanChildrenBefore, ctx.Host.GetChildCount(),
+                $"failed human batch removes every world-root child it created");
+            ctx.Same(0, pane.GetChildCount(),
+                $"failed human batch removes its external HUD canvas");
+            ctx.Same(0, pool.NearMissTargets.Count,
+                $"failed human batch removes its projectile near-miss registration");
+            ctx.Check(pool.RigOfShooter(0) == null,
+                $"failed human batch removes its projectile shooter registration");
+            ctx.Check(rigs.All(rig => rig.Controller == null),
+                $"failed human batch leaves every adopted slot unbound");
+
+            failSecondHuman = false;
+            humanRoster.BuildPlayers(rigs);
+            ctx.Same(2, humanRoster.Humans.Count,
+                $"successful human batch commits the complete field");
+            ctx.Check(ReferenceEquals(humanRoster.Humans[0], rigs[0])
+                      && ReferenceEquals(humanRoster.Humans[1], rigs[1])
+                      && rigs[0].Controller?.PlayerIndex == 0
+                      && rigs[1].Controller?.PlayerIndex == 1,
+                $"successful human batch preserves player identity and order");
+            ctx.Check(rigs.All(rig => rig.Controller?.PauseState == pauseState
+                                      && rig.Controller.TargetSubParts == targetSource
+                                      && rig.Controller.SmokeScreens == null),
+                $"finished humans publish pause and target bindings while optional smoke stays absent");
+            var humanControllers = rigs.Select(rig => rig.Controller!).ToArray();
+            humanRoster.ClearMembership();
+            foreach (var controller in humanControllers)
+                controller.Free();
+
+            bool failAiCommit = true;
+            var roster = new FlightRoster(FlightRosterPolicy.From(spec),
+                new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                null, ctx.Host, resources,
+                new FlightWorldBindings { Projectiles = pool, Gamez = planesGamez },
+                new HumanRosterBindings(), aiAssemblyFault: () =>
+                {
+                    if (failAiCommit)
+                        throw new System.InvalidOperationException("forced late AI assembly failure");
+                });
+            int childrenBefore = ctx.Host.GetChildCount();
+            ulong paintState = resources.PaintRng.State;
+            ulong aiRngState = Utils.Rng.Stream(Utils.Rng.Ai).State;
+            ulong spawnRngState = Utils.Rng.Stream(Utils.Rng.Spawn).State;
+            var at = new Vector3(0f, 500f, 0f);
+            var pilot = AiPilot.HoldingCourse(at, at + Vector3.Forward);
+            var failedSpawn = new AiSpawn(ctx.PlaneName, at, at + Vector3.Forward, pilot);
+            bool threw = false;
+            try
+            {
+                roster.SpawnAi(failedSpawn);
+            }
+            catch (System.InvalidOperationException)
+            {
+                threw = true;
+            }
+            ctx.Check(threw, $"a failed AI assembly reports its failure");
+            ctx.Same(0, roster.AiAircraft.Count, $"failed assembly commits no roster member");
+            ctx.Same(childrenBefore, ctx.Host.GetChildCount(),
+                $"failed assembly leaves no world-root child");
+            ctx.Check(pilot.Gunner == null && pilot.Rocketeer == null && pilot.Machine == null,
+                $"failed assembly restores the caller's pilot state");
+            ctx.Check(resources.PaintRng.State == paintState
+                      && Utils.Rng.Stream(Utils.Rng.Ai).State == aiRngState
+                      && Utils.Rng.Stream(Utils.Rng.Spawn).State == spawnRngState,
+                $"failed assembly restores the paint, AI, and spawn streams");
+
+            failAiCommit = false;
+            var position = new Vector3(0f, 500f, -100f);
+            spawned = roster.SpawnAi(new AiSpawn(ctx.PlaneName, position,
+                position + Vector3.Forward,
+                AiPilot.HoldingCourse(position, position + Vector3.Forward)));
+            ctx.Same(1, roster.AiAircraft.Count, $"successful assembly commits one member");
+            ctx.Check(ReferenceEquals(spawned, roster.AiAircraft[0]),
+                $"the roster exposes the committed controller");
+            ctx.Check(spawned.PlayerIndex == FlightRoster.ShooterIdBase
+                      && spawned.Name == $"ai1_{ctx.PlaneName}",
+                $"the failed attempt consumed neither shooter id nor roster name");
+            roster.ClearMembership();
+            ctx.Same(0, roster.AiAircraft.Count, $"teardown clears roster membership");
+        }
+        finally
+        {
+            spawned?.Free();
+            pane?.Free();
+            pool.Free();
+            textures.Dispose();
+        }
+    }
+
     internal static void InertAircraft(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -38,23 +202,21 @@ internal static class AiSuites
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-            var inputs = new HumanFlightAdapter.Inputs
+            var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
                 AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-                RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
                 StockLoadouts = StockLoadouts.Load(),
                 WeaponDefs = weaponDefs,
                 Textures = textures,
-                Projectiles = live,
                 Shakes = ShakeDefs.Load(ctx.ZrdrPath),
             };
             // worldEffects null!: never dereferenced — CrashProgram/WorldScene stay null, so the
             // spawner's crash-runtime block (its only reader) is skipped.
-            var spawner = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
+            var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
 
             // One scan origin, the control dead ahead on −Z, the subject 90° off it on +X, so a
             // scan aimed at either sits well outside the other's acceptance cone.
@@ -1834,6 +1996,21 @@ internal static class AiSuites
         {
             ai?.Free();
             textures.Dispose();
+        }
+    }
+
+    private sealed class FixedFlightStarts : IFlightStarts
+    {
+        public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
+            string missionZrdrPath, int spawnBase, int playerCount)
+        {
+            var starts = new FlightStart[playerCount];
+            for (int i = 0; i < playerCount; i++)
+            {
+                var position = new Vector3(i * 60f, 500f, 0f);
+                starts[i] = new FlightStart(position, position + Vector3.Forward, 0.5f, 100f);
+            }
+            return starts;
         }
     }
 }

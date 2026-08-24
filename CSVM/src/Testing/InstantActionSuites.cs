@@ -111,23 +111,21 @@ internal static class InstantActionSuites
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-            var inputs = new HumanFlightAdapter.Inputs
+            var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
                 AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-                RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
                 StockLoadouts = stockLoadouts,
                 WeaponDefs = weaponDefs,
                 Textures = textures,
-                Projectiles = live,
                 Shakes = ShakeDefs.Load(ctx.ZrdrPath),
             };
             // worldEffects null!: never dereferenced — Inputs.CrashProgram/WorldScene stay null,
             // so Spawn's crash-runtime block (the only reader) is skipped.
-            var spawner = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
+            var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
 
             string aceNode = InstantAction.PlaneNodeFor("Warhawk")!;
             var aceLivery = new PaintScheme { Pattern = "cccp", Color1 = PaintScheme.FromBytes(200, 10, 10) };
@@ -338,21 +336,19 @@ internal static class InstantActionSuites
             ctx.Host.AddChild(live);
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-            var inputs = new HumanFlightAdapter.Inputs
+            var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
                 AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-                RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
                 StockLoadouts = StockLoadouts.Load(),
                 WeaponDefs = weaponDefs,
                 Textures = textures,
-                Projectiles = live,
                 Shakes = ShakeDefs.Load(ctx.ZrdrPath),
             };
-            var spawner = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
+            var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
 
             // Both waves built INERT at the origin, which is what the original does on this one
             // mode for wave 1 as well ("even wave 1 is built deactivated at the origin").
@@ -597,21 +593,19 @@ internal static class InstantActionSuites
             ctx.Host.AddChild(live);
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-            var inputs = new HumanFlightAdapter.Inputs
+            var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
                 AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-                RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
                 StockLoadouts = StockLoadouts.Load(),
                 WeaponDefs = weaponDefs,
                 Textures = textures,
-                Projectiles = live,
                 Shakes = ShakeDefs.Load(ctx.ZrdrPath),
             };
-            var spawner = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
+            var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
             string enemyNode = InstantAction.PlaneNodeFor("Warhawk")!;
 
             FlightController SpawnAt(Vector3 pos, int team, bool inert = false)
@@ -935,21 +929,19 @@ internal static class InstantActionSuites
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-            var inputs = new HumanFlightAdapter.Inputs
+            var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
                 AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-                RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
                 StockLoadouts = StockLoadouts.Load(),
                 WeaponDefs = weaponDefs,
                 Textures = textures,
-                Projectiles = live,
                 Shakes = ShakeDefs.Load(ctx.ZrdrPath),
             };
-            var spawner = new FlightRoster(spec, liveries, null!, ctx.Host, inputs);
+            var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
 
             var pos = new Vector3(0f, 500f, 0f);
             target = spawner.SpawnAi(new AiSpawn(ctx.PlaneName, pos, pos + Vector3.Forward,

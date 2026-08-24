@@ -27,6 +27,8 @@ public sealed class Racer
     /// rematch resets the mission.</summary>
     public float FinishTime;
 
+    internal Action? CompletionHandler;
+
     public bool Finished => Rank > 0;
 
     /// <summary>The player's identity colour + short tag, shared with the launchscreen's join
@@ -81,7 +83,8 @@ public sealed class StuntRace
     {
         var racer = new Racer { Index = index, Mission = mission, PlaneDisplay = planeDisplay };
         _racers.Add(racer);
-        mission.RunCompleted += () => OnFinished(racer);
+        racer.CompletionHandler = () => OnFinished(racer);
+        mission.RunCompleted += racer.CompletionHandler;
         return racer;
     }
 
@@ -125,6 +128,17 @@ public sealed class StuntRace
             return zones != 0 ? zones : a.Mission.Elapsed.CompareTo(b.Mission.Elapsed);
         });
         return ordered;
+    }
+
+    internal void Remove(int index)
+    {
+        int at = _racers.FindIndex(racer => racer.Index == index);
+        if (at < 0)
+            return;
+        var racer = _racers[at];
+        if (racer.CompletionHandler != null)
+            racer.Mission.RunCompleted -= racer.CompletionHandler;
+        _racers.RemoveAt(at);
     }
 
     private void OnFinished(Racer racer)

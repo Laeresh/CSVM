@@ -1234,6 +1234,8 @@ public sealed partial class ProjectilePool : Node3D
         _impactFx.Clear();
     }
 
+    internal void UnregisterAircraft(AircraftBody body) => _aircraft.Remove(body);
+
     private static int CountMeshes(Node n)
     {
         int c = n is MeshInstance3D ? 1 : 0;
