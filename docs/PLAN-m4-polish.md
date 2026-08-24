@@ -68,7 +68,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☐ `BL-455` Delete `AiControlLaw.Throttle`'s dead far-from-player branch
 4. ☐ `BL-444` A flight-dump hash that is the same on both hosts
 5. ☐ `BL-452` Rewrite `BL-266` (b) and (d) against the decoded shake numbers
-6. ☐ `BL-417` Re-verify the perf flake, and stop one unit flake from skipping the later stages
+6. ☑ `BL-417` Re-verify the perf flake, and stop one unit flake from skipping the later stages
 
 ### Wave B — decode and port
 
@@ -209,7 +209,7 @@ template's labelled form, with no dates or event narration (CLAUDE.md writing st
 **⚠ Traps.** Do not delete the still-open (c) or the `[Owed-playtest]` tag. Land alone, since every
 other item's closing commit also edits `backlog.md`.
 
-## A6 ☐ `BL-417` Re-verify the perf flake, and stop one unit flake from skipping the later stages
+## A6 ☑ `BL-417` Re-verify the perf flake, and stop one unit flake from skipping the later stages
 
 **Goal.** (1) A verdict on whether `AScopeAllocatesNothing` still flakes after the `BL-379` warm-up
 loop. (2) `RunTests.ps1` runs the engine, golden and hitch stages even when the units stage fails,
@@ -232,6 +232,24 @@ reported and exit 1; revert.
 
 **⚠ Traps.** Do not loosen the zero-allocation assertion (backlog trap (a)). A fall-through must
 not let a red units stage read as green in the summary block.
+
+**Verified.** <pending orchestrator run>
+
+`AScopeAllocatesNothing` did not flake once: 20 filtered `dotnet test --filter AScopeAllocatesNothing`
+runs plus 3 full `.\RunTests.ps1` batteries (23 executions total) all passed, each battery's units
+stage reporting `2150 passed, 0 failed, 0 skipped of 2150`, engine `94 passed, 0 failed, 0 skipped`,
+goldens `16 shot(s) hash-identical`. (a) and (b) are covered by `BL-379`'s warm-up loop; the
+zero-allocation assertion (`PerfSampleTests.cs:294`) is unchanged.
+
+(c)'s premise did not hold against the current script: `git log -p -- RunTests.ps1` shows the
+engine/goldens/hitch stages have only ever gated on `$buildOk` (a failed `dotnet build`), never on
+the units stage's own result — the backlog entry described an older or misread script. Confirmed
+behaviorally: a temporary forced-failure `[Fact]` in `PerfSampleTests.cs`, run through
+`.\RunTests.ps1`, produced `FAIL  units  ... 2150 passed, 1 failed, 0 skipped of 2151` while `engine`,
+`goldens` and `hitch` all still ran and reported their own non-zero counts, and the summary read
+`result: FAIL in units -- 264.6s total, exit 1`. The temporary test was reverted; `git diff` on
+`CSVM.Tests/PerfSampleTests.cs` is empty. No code change to the stage-gating logic was needed; the
+ordering is now stated explicitly in `RunTests.ps1`'s header and in `docs/tooling.md`'s stage table.
 
 # Wave B — decode and port
 
