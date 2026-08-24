@@ -270,6 +270,7 @@ determinism repo-wide — read `docs/verification.md` first.
 instead.
 
 - `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a verdict, shared with the suites.
+- `src/Testing/EnvelopeMargins.cs` — one flight scenario's distance from every term that could bound it, plus which decoded branches it drove; the parity ledger's coverage half.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
@@ -2605,8 +2606,8 @@ weathervane and ground blow before exponential `ang_momentum_damp` decay; author
 scale the stick command only, roll on the base ramp and pitch on that ramp times the authored
 high-speed fade. `OpposingCommandLimitAt` softens the pitch and yaw commands that swing the nose
 further off the flight path, on the decoded G ramp and the decoded AOA window; `AoaLimiterFactor`
-is the window's A/B seam (1, the default, is the decode) and the pitch-rate row it moves is a
-recorded conflict with the footage.
+is the window's A/B seam (1, the default, is the decode); the pitch rate it produces is the answer
+and the filmed 33 °/s is discarded beside it.
 Translation composes the original's own chain: the lag vector as a clamped lift demand plus
 decoded Mach drag, thrust and gravity; the velocity direction rotates only through that lift and
 the ground-blow steer (`NoseChaseFactor` 0 pins the retired kinematic chase out, config-selectable
@@ -2630,8 +2631,9 @@ so the rotational plant is mirror-symmetric and `EngineTorqueAbsenceTests` pins 
 re-chase the GDD's one-sided turn assist. `FlightInput.Boost` is the nitro flag: it REPLACES the
 lever with `BoostLever` 1.8 at the thrust read (the throttle and its slew are untouched, so an idle
 boost is a full-throttle boost) and scales the drag coefficient by `BoostDragFactor` 0.8; the
-lifecycle that sets it is `NitroSystem`. Full decode, standing conflicts and deliberately
-absent terms: [`org/flightModel.md`](org/flightModel.md); measurement rules: `verification.md`.
+lifecycle that sets it is `NitroSystem`. Full decode, and every mechanism's class (decoded, named
+product exception, or unsupported): [`org/flightModel.md`](org/flightModel.md), "Parity ledger";
+measurement rules: `verification.md`.
 
 ## src/Flight/NitroSystem.cs
 The original's nitro boost lifecycle, engine-free (docs/org/flightModel.md, "Nitro"): a 30-unit
@@ -4055,11 +4057,28 @@ The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loa
 `--dump-flight` / `--dump-mips` / `--damage-test` / `--effects-test` inspection reports. Each probe
 does the work once and returns both halves: the report text the flag prints and writes, and a
 structured verdict (counts, per-row booleans, failure strings) a `--run-tests` suite asserts on.
+`FlightEnvelopeAll` is the whole-plant instrument `--dump-flight=all` and the parity ledger share, so
+a dump diffed against an older one and the ledger published from it cannot disagree. A flight row's
+`Target` is always decoded or a named product exception; a footage figure lives in the row's text as
+a discarded annotation and gates nothing. Every scenario also carries `EnvelopeMargins`: its distance
+from each bounding term (the G clamp, the C_L ceiling, the AOA window, the stall flag, the altitude
+band, the dive cap) and which decoded branches it drove.
 `Effects` owns the effects sweep — the puffer half and the template-MESH half (`BL-061`), the
 latter counted only through `MeshCensus` (per-root per-tick PEAK + distance-to-play-point +
 post-stop residual; a final-sample census misses meshes the data turns off inside the window,
 INSTR-11). The `effect-template-mesh` suite counts through `MeshCensus` too, so the sweep's
 verdicts and the suite's assertions cannot drift apart.
+
+## src/Testing/EnvelopeMargins.cs
+The reachability half of the flight-envelope report. `Sample` reads one completed `FlightModel`
+step's public state and keeps, per scenario, the peak load-factor demand against the ±5/9 clamp, the
+peak demand over the aerodynamic C_L ceiling, the deepest opposing-command limit, the closest
+approach to the stall speed, the peak altitude against the 2000 m band boundary, the delivered
+body-up G against the authored `lowGs`/`highGs` starts, and the peak speed against the dive cap;
+`Take` formats that as the row's `margins:` line. Across the whole airframe it also records which of
+`Branches` the scenarios reached. Nothing here feeds a force. ⚠ One instance per airframe and not
+thread-safe: the probe owns it for one report. Which instrument drives each unreached branch is in
+[`org/flightModel.md`](org/flightModel.md), "Parity ledger".
 
 ## src/Testing/TestHarness.cs
 `--run-tests[=filter]`: the suite registry, `TestContext` (assert verbs, resolved data paths, a

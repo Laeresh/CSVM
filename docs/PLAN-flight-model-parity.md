@@ -27,8 +27,8 @@ out of scope.
   truth from video-derived corroboration.
 
 **Parity does not mean blindly matching every video-derived number.** A byte-verified executable
-path outranks a frame-derived measurement; conflicts remain recorded until a discriminating test
-settles them.
+path outranks a frame-derived measurement, and a frame-derived figure that disagrees with one is
+discarded and kept as an annotation beside the decoded value.
 
 ## Decisions (2026-08-24)
 
@@ -69,8 +69,9 @@ settles them.
   bands, collision impulse and the far-field AI branch.
 - Nitro commands, gauges, animations, sounds and engine variants ship, but power, charge and decay
   dynamics are executable-resident.
-- The current Bloodhawk report matches level speed, terminal dive, roll, sustained pitch and the
-  measured C1B ceiling; climb shape, deceleration, yaw, turn and knife-edge drift remain conflicts.
+- The current Bloodhawk report matches its decoded level speed, terminal dive, roll and the C1B
+  ceiling; the filmed climb shape, deceleration, yaw, turn, pitch rate and knife-edge drift
+  disagree with the decoded plant and are discarded.
 
 ## Ground rules
 
@@ -125,7 +126,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E — Prove parity
 
 41. ☑ E41 Recheck the autogyro low-speed nose-down report (`BL-388`)
-42. ☐ E42 Publish the eleven-airframe parity ledger
+42. ☑ E42 Publish the eleven-airframe parity ledger
 43. ☐ E43 Enable the decoded AOA window and settle α against the original
 
 ## Dependency and parallelism notes
@@ -910,7 +911,7 @@ autogyro pass under this item's name, which no longer has a question to answer.
 
 **Verified.** Full `RunTests.ps1` battery on the merged lane tree with `CSVM_DATA_ROOT=Z:\CSVM`: build clean, 2143/2143 units, 94/94 engine suites (errors clean), 16/16 goldens hash-identical, exit 0.
 
-## E42 ☐ Publish the eleven-airframe parity ledger
+## E42 ☑ Publish the eleven-airframe parity ledger
 
 **Goal.** End with one reproducible table classifying every mechanism and envelope row as
 decoded (the executable's value, with any disagreeing footage figure noted as discarded),
@@ -926,7 +927,75 @@ figures kept only as annotations.
 
 **Verify.** Run `RunTests.ps1`, all eleven deterministic dumps, eight chapter regressions and every owed parity playtest; perturb each ledger class's instrument once.
 
-**⚠ Traps.** Passing mechanism tests proves the port is internally consistent, not that every original-game observation agrees. Preserve conflicts verbatim.
+**⚠ Traps.** Passing mechanism tests proves the port is internally consistent, not that every original-game observation agrees. Preserve every discarded footage figure as an annotation beside the decoded value; never let one gate a test.
+
+**Landed.** The ledger is published in `docs/org/flightModel.md`, "Parity ledger", in four generated
+tables (mechanisms, envelope rows, per airframe, branch coverage) plus the constant inventory it
+points back at, and `CSVM.Tests/ParityLedgerTests` both generates it (to `CSVM_LEDGER_OUT`) and
+censuses it. Every mechanism and every envelope row is in exactly one of **decoded** (27 mechanisms,
+52 constants and 15 of the 16 envelope rows, each with an address, global or data key),
+**intentional exception** (4 mechanisms, 5 constants and the `altitude-cap` row) or **unsupported**
+(10 mechanisms). The constant inventory's four finer classes
+collapse into the ledger's three, and each inventory row now carries a short `Source` beside its
+class, so the ledger's source column is generated rather than retyped.
+
+`--dump-flight` did NOT already cover the eleven: the eleven-airframe dump was `ZzBaselineDump`, a
+throwaway test class with its own copy of the plane list, and the flag flew one airframe. Both now
+call `Probes.FlightEnvelopeAll`, reached from the CLI by the new **value** `--dump-flight=all`, so no
+flag was added and the count stays 133 (`docs/cli.md`'s reconciliation is untouched). Each row gained
+a `margins:` line from the new `Testing/EnvelopeMargins` module: peak load-factor demand against the
+±5/9 clamp, peak demand over the aerodynamic `C_L` ceiling, the deepest opposing-command limit, the
+closest approach to the stall speed, peak altitude against the 2000 m band boundary, delivered
+body-up G against the authored `lowGs`/`highGs` starts, and peak speed against the dive cap. Each
+airframe gained a branch-coverage line over sixteen decoded branches. The dump moves from
+`1175DD10…` (E43's, reproduced on this tree before any edit, 814 lines) to `572337BA…` (1034 lines).
+The CLI half is exercised: `RunProbe.ps1 --dump-flight=all` exits 0 and reports "11 airframes,
+176 rows, 5 asserted, 0 failed". ⚠ **Compare a dump hash only against one taken on the same host.**
+The Godot run's own file differs from the test host's on 9 of 1123 lines, each by one digit in the
+last place of a knife-edge sample, which is the two runtimes' float settings and not the plant.
+That is recorded as `docs/verification.md` `INSTR-19`.
+
+**The standing ruling is applied to the instruments, not only to the prose.** `FlightRow.Measured`
+is now `FlightRow.Target` and is always decoded or a named exception; three asserted rows were
+gating on footage and are re-pinned. `level-top-speed` and `level-speed-near-cap` move from the
+filmed 300.40 mph to the decoded lever-1 level-equilibrium solve (300.5, `PartThrottleEquilibriumTests`'
+own curve), and `terminal-dive` from the filmed 355.20 mph to the decoded along-path balance
+(356.0). `FlightEnvelopeTests` solves both from the thrust curve, the Mach polar and gravity in the
+test itself, so a target that drifted toward the plant it judges or back toward the footage fails
+there; its `METHOD-9` control drops the attitude-thrust term and must miss the dive target. The
+`UpperBound` row mode is gone with `sustained-turn-sink`'s footage ceiling. Eleven rows now report
+the decoded plant's number with no target at all, and every discarded footage figure stayed, in the
+row's own prose: 300.40 mph, 3.76 s, 355.20 mph, 2.05 s, 33.00 °/s, 28.60 s, 173.7 mph, 222.94 mph
+and 449.8°, 1.85 ft/s, 18.95 °/s, 7.04 s, 936 ft with its 6.5 s apex, and 127.9 mph. The word
+"conflict" is gone from the live flight prose in `Probes.cs`, `FlightEnvelopeTests`,
+`docs/org/flightModel.md`, `docs/architecture.md` and `docs/cli.md`; what remains of it there sits
+inside a `RETIRED` block or in the sentence that says a figure is discarded *rather than* carried as
+one. Two stale claims went with it: the asserted-scenario count was documented as 7 and is 5, and
+`docs/cli.md` still advertised a `--run-tests=flight-envelope` suite that moved into `CSVM.Tests`.
+
+**What the coverage measurement found.** The dump drives 7 of the 16 decoded branches on ten
+airframes and 8 on the autogyro, which is the one airframe whose scenarios enter the low-speed
+authority ramp. Three of the unreached branches are structurally out of a single-aircraft data
+probe's reach (`far-field` needs an AI and a human a kilometre apart, `boost` a nitrous injector,
+`ground-blow` terrain contact); the other five restate reachability findings this plan already
+landed (`pitch-fade` and `g-clamp` authored out of reach, `g-ramp` grazed only in a sustained
+outside push, `dive-cap` measured non-binding, `stall` needing a slower flight than any scenario
+holds). Every one of the sixteen names the instrument that does drive it, so an unreached branch is
+a statement about this scenario set and not an untested path. No scenario was added to close a gap:
+inventing a manoeuvre to make a coverage number look better would have measured the manoeuvre.
+
+**Perturbation, one per class, each restored byte-identically afterwards.** *Decoded*:
+`DragPolarQuad` 0.5 → 0.51 fails `FlightConstantInventoryTests.TheInventoryIsComplete` ("is 0.51,
+the inventory records 0.5 as decoded") while the envelope stays inside tolerance, and at 0.6 it also
+fails `FlightEnvelopeTests` with `level-top-speed model=297.09 target=300.50 tol=±0.50`. *Intentional
+exception*: `AltitudeCapM` 2003 → 1900 fails three at once — the census, `TheAltitudeCapBinds`, and
+`altitude-cap model=6235.53ft target=6571.60ft`. *Unsupported*: blanking one unsupported mechanism's
+source fails `ParityLedgerTests.EveryLedgerRowIsClassifiedAndNoClassIsEmpty` with "the per-contact
+camera shake has no source". `docs/architecture.md` gains the `EnvelopeMargins` entry and index line
+and has its `Probes.cs`/`FlightModel.cs` entries corrected; `docs/cli.md`'s `--dump-flight` bullet is
+rewritten around `=all`, the target column and the margins.
+
+**Verified.** Full `RunTests.ps1` battery on the merged lane tree with `CSVM_DATA_ROOT=Z:\CSVM`: build clean, 2150/2150 units, 94/94 engine suites (errors clean), 16/16 goldens hash-identical, exit 0.
 
 ## E43 ☑ Enable the decoded AOA window and settle α against the original
 

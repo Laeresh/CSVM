@@ -23,87 +23,95 @@ namespace CSVM.Tests;
 /// </summary>
 public class FlightConstantInventoryTests
 {
-    private const float Dt = 1f / 60f;
-
     // The four classes docs/org/flightModel.md's inventory table uses: read out of crimson.exe, a
     // mirror of an authored data key, a conversion factor, or a deliberate CSVM exception with a
     // reachability measurement behind it. The contact rules are censused with the plant, so a
     // fitted contact term cannot come back where the plant's own census cannot see it.
-    private const string Decoded = "decoded";
-    private const string Authored = "authored";
-    private const string Unit = "unit";
-    private const string ProductException = "exception";
+    internal const string Decoded = "decoded";
+    internal const string Authored = "authored";
+    internal const string Unit = "unit";
+    internal const string ProductException = "exception";
 
-    private static readonly string[] AllPlanes =
+    internal static readonly string[] AllPlanes =
     {
         "player_bhawk", "player_pfighter", "player_fury", "player_warhawk", "player_autogyro",
         "player_avenger", "player_balmoral", "player_brigand", "player_fbrand", "player_kestrel",
         "player_peacemaker",
     };
 
-    // The inventory itself: every const the plant carries, its value and its class. Evidence per
-    // row (executable address, data key or footage capture) is in docs/org/flightModel.md; this
-    // table is the machine-checked half, so a row here is a claim that the doc row still applies.
-    private static readonly (string Type, string Name, double Value, string Class)[] Inventory =
+    // The inventory itself: every const the plant carries, its value, its class and where the value
+    // comes from. The Source column is what the parity ledger publishes and is deliberately short —
+    // an address, a global or a data key. The prose behind it is docs/org/flightModel.md's own
+    // evidence column, so a row here is a claim that the doc row still applies.
+    internal static readonly (string Type, string Name, double Value, string Class, string Source)[]
+        Inventory =
     {
-        ("FlightModel", "ThrustMachFloor", 0.1, Decoded),
-        ("FlightModel", "ThrustVRefSlope", 0.84, Decoded),
-        ("FlightModel", "ThrustVRefMach", 0.112, Decoded),
-        ("FlightModel", "ThrustMachTrim", 1.0 / 60.0, Decoded),
-        ("FlightModel", "ThrustPowMach", 1.41, Decoded),
-        ("FlightModel", "ThrustPowBase", 1.33 * 0.98842078, Decoded),
-        ("FlightModel", "AttitudeThrustBoth", 0.24, Decoded),
-        ("FlightModel", "AttitudeThrustUp", 0.13, Decoded),
-        ("FlightModel", "LiftGMin", -5.0, Decoded),
-        ("FlightModel", "LiftGMax", 9.0, Decoded),
-        ("FlightModel", "ClMaxStatic", 0.75, Decoded),
-        ("FlightModel", "ClMaxMach", 0.15, Decoded),
-        ("FlightModel", "AirDensitySlugPerFt3", 2.2688e-3, Decoded),
-        ("FlightModel", "SpeedOfSoundFps", 1109.5, Decoded),
-        ("FlightModel", "FeetPerMetre", 3.28084, Unit),
-        ("FlightModel", "MetresPerFoot", 0.3048, Unit),
-        ("FlightModel", "StandardG", 9.82, Decoded),
-        ("FlightModel", "StallWarnFrac", 0.30, ProductException),
-        ("FlightModel", "MaxDiveSpeedFrac", 1.75, ProductException),
-        ("FlightModel", "AltitudeCapM", 2003.0, ProductException),
-        ("FlightModel", "GroundBlowIntoFactor", 0.05, Decoded),
-        ("FlightModel", "GroundBlowVelocitySteer", 2.0, Decoded),
-        ("FlightModel", "NoseChaseFactor", 0.0, Decoded),
-        ("FlightModel", "AoaLimiterFactorDefault", 1.0, Decoded),
-        ("FlightModel", "BounceLeverScale", 2.25, Decoded),
-        ("FlightModel", "ContactPushOut", 0.03, Decoded),
-        ("FlightModel", "BounceAngularHalf", 0.5, Decoded),
-        ("FlightModel", "DragPolarScale", 0.73, Decoded),
-        ("FlightModel", "DragPolarParasite", 0.12, Decoded),
-        ("FlightModel", "DragPolarLinear", 0.8, Decoded),
-        ("FlightModel", "DragPolarQuad", 0.5, Decoded),
-        ("FlightModel", "PitchTune", 1.0, Decoded),
-        ("FlightModel", "YawTune", 1.0, Decoded),
-        ("FlightModel", "RollTune", 1.0, Decoded),
-        ("FlightModel", "BankYawCoupling", 0.205, Decoded),
-        ("FlightModel", "BankPitchCoupling", 0.165, Decoded),
-        ("FlightModel", "WeathervaneHalfAngle", 0.5, Decoded),
-        ("FlightModel", "AiNoseSpeedFloor", 4.4704, Decoded),
-        ("FlightModel", "ReverseAuthorityFloor", 0.2, Decoded),
-        ("FlightModel", "FarFieldRangeM", 1000.0, Decoded),
-        ("FlightModel", "FarFieldAiSpeedBonus", 5.0, Decoded),
-        ("FlightModel", "BoostLever", 1.8, Decoded),
-        ("FlightModel", "BoostDragFactor", 0.8, Decoded),
-        ("NitroSystem", "Capacity", 30.0, Decoded),
-        ("NitroSystem", "BurnRate", 4.0, Decoded),
-        ("NitroSystem", "RechargeRate", 1.0, Decoded),
-        ("NitroSystem", "EngageFraction", 0.99, Decoded),
-        ("NitroSystem", "CutoffFraction", 0.05, Decoded),
-        ("NitroSystem", "MinBoostAnimSeconds", 1.0, Decoded),
-        ("PhysicsConstants", "NomGravity", 20.0, Authored),
-        ("PhysicsConstants", "MphToMs", 0.44704, Decoded),
-        ("StickRamp", "Rate", 2.5, Decoded),
-        ("CollisionDamage", "EntityCut", 0.2, Decoded),
-        ("CollisionDamage", "EntityGrace", 1.0, Decoded),
-        ("CollisionDamage", "SpawnGrace", 1.5, Decoded),
-        ("AircraftContactResolver", "EmbedPushOut", 0.3, ProductException),
-        ("AircraftContactResolver", "EmbedTries", 3.0, ProductException),
+        ("FlightModel", "ThrustMachFloor", 0.1, Decoded, "0x6034a8, written back at 0x41ad02"),
+        ("FlightModel", "ThrustVRefSlope", 0.84, Decoded, "0x60349c"),
+        ("FlightModel", "ThrustVRefMach", 0.112, Decoded, "0x603498"),
+        ("FlightModel", "ThrustMachTrim", 1.0 / 60.0, Decoded, "0x603494"),
+        ("FlightModel", "ThrustPowMach", 1.41, Decoded, "0x6034a0, the _CIpow exponent"),
+        ("FlightModel", "ThrustPowBase", 1.33 * 0.98842078, Decoded, "0x6034a4 x the dense band k"),
+        ("FlightModel", "AttitudeThrustBoth", 0.24, Decoded, "0x6080dc, applied at 0x48fd14"),
+        ("FlightModel", "AttitudeThrustUp", 0.13, Decoded, "0x6080d8, the branch at 0x48fd00"),
+        ("FlightModel", "LiftGMin", -5.0, Decoded, "the lift clamp in FUN_0041abd0"),
+        ("FlightModel", "LiftGMax", 9.0, Decoded, "the lift clamp in FUN_0041abd0"),
+        ("FlightModel", "ClMaxStatic", 0.75, Decoded, "the ceiling in FUN_0041abd0"),
+        ("FlightModel", "ClMaxMach", 0.15, Decoded, "the ceiling in FUN_0041abd0"),
+        ("FlightModel", "AirDensitySlugPerFt3", 2.2688e-3, Decoded, "FUN_0041aca0, dense band"),
+        ("FlightModel", "SpeedOfSoundFps", 1109.5, Decoded, "FUN_0041aca0, dense band"),
+        ("FlightModel", "FeetPerMetre", 3.28084, Unit, "the aero path's imperial intermediates"),
+        ("FlightModel", "MetresPerFoot", 0.3048, Unit, "the aero path's imperial intermediates"),
+        ("FlightModel", "StandardG", 9.82, Decoded, "the force-to-acceleration multiply at 0x491290"),
+        ("FlightModel", "StallWarnFrac", 0.30, ProductException,
+            "the STALL lamp read 0.2989-0.2996 over four clips; a cue no force term reads"),
+        ("FlightModel", "MaxDiveSpeedFrac", 1.75, ProductException,
+            "a CSVM numerical backstop with no counterpart; measured non-binding on all eleven"),
+        ("FlightModel", "AltitudeCapM", 2003.0, ProductException,
+            "the resting ceiling off CAP-03 / C1B IA1; it binds, deliberately"),
+        ("FlightModel", "GroundBlowIntoFactor", 0.05, Decoded, "the player branch of FUN_0048c220"),
+        ("FlightModel", "GroundBlowVelocitySteer", 2.0, Decoded, "the gbc console command's global"),
+        ("FlightModel", "NoseChaseFactor", 0.0, Decoded,
+            "decoded-absent from FUN_0048c470 / FUN_0048fc40 / FUN_0048e580"),
+        ("FlightModel", "AoaLimiterFactorDefault", 1.0, Decoded, "0x48c9f4-0x48ca18 at full strength"),
+        ("FlightModel", "BounceLeverScale", 2.25, Decoded, "0x00608108"),
+        ("FlightModel", "ContactPushOut", 0.03, Decoded, "0x006080c4, placed at 0x48dfce"),
+        ("FlightModel", "BounceAngularHalf", 0.5, Decoded, "0x006032e0, deposited at 0x48e4bc"),
+        ("FlightModel", "DragPolarScale", 0.73, Decoded, "0x603474, shared with the thrust curve"),
+        ("FlightModel", "DragPolarParasite", 0.12, Decoded, "FUN_0041ada0, the polar in Mach"),
+        ("FlightModel", "DragPolarLinear", 0.8, Decoded, "FUN_0041ada0, the polar in Mach"),
+        ("FlightModel", "DragPolarQuad", 0.5, Decoded, "FUN_0041ada0, the polar in Mach"),
+        ("FlightModel", "PitchTune", 1.0, Decoded, "decoded-absent from FUN_0048c470's torque chains"),
+        ("FlightModel", "YawTune", 1.0, Decoded, "decoded-absent from FUN_0048c470's torque chains"),
+        ("FlightModel", "RollTune", 1.0, Decoded, "decoded-absent from FUN_0048c470's torque chains"),
+        ("FlightModel", "BankYawCoupling", 0.205, Decoded, "0x6289f8, the yaw row at 0x48ccb3"),
+        ("FlightModel", "BankPitchCoupling", 0.165, Decoded, "0x6289fc, the pitch row at 0x48cd36"),
+        ("FlightModel", "WeathervaneHalfAngle", 0.5, Decoded, "the quaternion-log halving 0x4916fe-0x4917f0"),
+        ("FlightModel", "AiNoseSpeedFloor", 4.4704, Decoded, "0x608128, the block at 0x48e95e-0x48e998"),
+        ("FlightModel", "ReverseAuthorityFloor", 0.2, Decoded, "0x6034fc, FUN_0048bdd0's fifth output"),
+        ("FlightModel", "FarFieldRangeM", 1000.0, Decoded, "0x00607a18 (1e6 m2), compared at 0x48c4ee"),
+        ("FlightModel", "FarFieldAiSpeedBonus", 5.0, Decoded, "0x006036bc, spent at 0x48c5ae"),
+        ("FlightModel", "BoostLever", 1.8, Decoded, "0x48fcb6"),
+        ("FlightModel", "BoostDragFactor", 0.8, Decoded, "0x48fcbd (1.0 at 0x48fccf otherwise)"),
+        ("NitroSystem", "Capacity", 30.0, Decoded, "0x4b02c4, into [obj+0x8b4] and [obj+0x8b8]"),
+        ("NitroSystem", "BurnRate", 4.0, Decoded, "0x4b02d5, [obj+0x8bc], spent at 0x49f820"),
+        ("NitroSystem", "RechargeRate", 1.0, Decoded, "0x4b02df / 0x4b02e9, added at 0x49f838"),
+        ("NitroSystem", "EngageFraction", 0.99, Decoded, "0x6080a8, the engage line at 0x487eba"),
+        ("NitroSystem", "CutoffFraction", 0.05, Decoded, "0x6034d8, the cutoff at 0x487ea1"),
+        ("NitroSystem", "MinBoostAnimSeconds", 1.0, Decoded, "0x47a838, def+0x188, read at 0x4b2224"),
+        ("PhysicsConstants", "NomGravity", 20.0, Authored, "player.json's nom_gravity"),
+        ("PhysicsConstants", "MphToMs", 0.44704, Decoded, "the parser's speed-token scale, 0x00607b2c"),
+        ("StickRamp", "Rate", 2.5, Decoded, "FUN_00487460, 0.4 s of held key to full deflection"),
+        ("CollisionDamage", "EntityCut", 0.2, Decoded, "0x48d51a / 0x48d526"),
+        ("CollisionDamage", "EntityGrace", 1.0, Decoded, "0x48d383 / 0x48d395"),
+        ("CollisionDamage", "SpawnGrace", 1.5, Decoded, "the spawn write of obj+0xAC"),
+        ("AircraftContactResolver", "EmbedPushOut", 0.3, ProductException,
+            "m per un-embed attempt; the original's single-sphere placement cannot embed"),
+        ("AircraftContactResolver", "EmbedTries", 3.0, ProductException,
+            "attempts before the airframe is destroyed instead of left inside the world"),
     };
+
+    private const float Dt = 1f / 60f;
 
     // The plant's whole config surface. Each key read-throughs one inventory row above, so a key
     // added without a constant (or a constant exposed without a doc row) fails the census below.

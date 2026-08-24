@@ -34,6 +34,23 @@ public static class Probes
     private const float Ft = 0.3048f;           // m per foot
     private const float EnvDt = 1f / 60f;       // the sim step --det pins every session to
 
+    // The Bloodhawk's two decoded envelope targets. Kept as constants so a row states the number it
+    // is judged against instead of computing it from the plant it is judging; FlightEnvelopeTests
+    // solves both independently from the decoded constants and fails when either drifts.
+    // ⚠ Neither is a footage figure, and neither may be replaced by one.
+    private const double LevelTopSpeedMph = 300.5;
+    private const double TerminalDiveMph = 356.0;
+
+    // The eleven stock player airframes, in the order every whole-envelope dump prints them. Fixed
+    // so two dumps taken at different times diff line for line; the launchscreen's own curated
+    // order is PlanePickerRoster's, a different list for a different job.
+    private static readonly string[] StockAirframeNodes =
+    {
+        "player_bhawk", "player_pfighter", "player_fury", "player_warhawk", "player_autogyro",
+        "player_avenger", "player_balmoral", "player_brigand", "player_fbrand", "player_kestrel",
+        "player_peacemaker",
+    };
+
     // The eight chapter codes an AI dump walks — every one that ships its own
     // `&lt;Cx&gt;/zrdr/` patrol-net scope and mission dirs.
     private static readonly string[] AiChapters = { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
@@ -44,6 +61,10 @@ public static class Probes
     // scopes without a fixed mission-name table.
     private static readonly HashSet<string> AiChapterScopeDirs =
         new(StringComparer.OrdinalIgnoreCase) { "gamez", "texture", "cam_anim", "zrdr" };
+
+    /// <summary>The eleven stock player airframes in whole-envelope dump order — the set the parity
+    /// ledger classifies and <c>--dump-flight=all</c> flies.</summary>
+    public static IReadOnlyList<string> StockAirframes => StockAirframeNodes;
 
     // ---- markers -----------------------------------------------------------------------------
 
@@ -1054,6 +1075,35 @@ public static class Probes
 
     // ---- flight envelope ---------------------------------------------------------------------
 
+    /// <summary>Every stock airframe's envelope in one deterministic report — the whole-plant
+    /// instrument, since the constants are coupled and a change to one moves rows on airframes
+    /// nobody was looking at. <c>--dump-flight=all</c> and the parity ledger both run this, so the
+    /// dump a change is diffed against and the ledger published from cannot disagree.</summary>
+    public static FlightEnvelopeResult FlightEnvelopeAll(string zrdrPath)
+    {
+        var all = new FlightEnvelopeResult();
+        var sb = new StringBuilder();
+        foreach (string plane in StockAirframeNodes)
+        {
+            var one = FlightEnvelope(zrdrPath, plane);
+            sb.AppendLine(one.Error ?? one.Text);
+            sb.AppendLine();
+            all.Rows.AddRange(one.Rows);
+            all.ReachedByPlane[plane] = one.Reached;
+            if (one.Error != null)
+            {
+                all.Error ??= one.Error;
+            }
+        }
+
+        all.Text = sb.ToString();
+        all.Summary = all.Error != null
+            ? $"flight envelope: {all.Error}"
+            : $"flight envelope: {StockAirframeNodes.Length} airframes, {all.Rows.Count} rows, "
+              + $"{all.Asserted} asserted, {all.Failed} failed";
+        return all;
+    }
+
     /// <summary>Steps a throwaway <see cref="FlightModel"/> through the manoeuvres the original was
     /// measured flying, and reports both numbers side by side — see docs/cli.md's <c>--dump-flight</c>
     /// entry and docs/org/flightModel.md. No world, no scene: it constructs the model directly and
@@ -1081,21 +1131,25 @@ public static class Probes
         // Thrust is a curve in Mach, not a constant, so the header samples the model's own method at
         // fd_speed rather than keeping a second copy of the formula that could go stale.
         float thrustAccel = new FlightModel(stats).ThrustAccelAt(fd, 1f);
+        var watch = new EnvelopeMargins();
 
-        void Row(string name, string what, string unit, double model, double? measured,
-                 double tol, string detail = "", bool info = false, bool upperBound = false)
+        void Row(string name, string what, string unit, double model, double? target,
+                 double tol, string detail = "", bool info = false)
         {
             r.Rows.Add(new FlightRow
             {
+                Plane = planeNodeName,
                 Name = name,
                 What = what,
                 Unit = unit,
                 Model = model,
-                Measured = bhawk ? measured : null,
+                Target = bhawk ? target : null,
                 Tolerance = tol,
                 Detail = detail,
                 Informational = info,
-                UpperBound = upperBound,
+                // Empty for the extra rows a shared run reports (the turn trio, the zoom pair):
+                // the margins belong to the flight, so they print once, on its first row.
+                Margins = watch.Take(),
             });
         }
 
@@ -1103,115 +1157,120 @@ public static class Probes
         // so this must land on fd_speed for every airframe by construction; it is here because that
         // construction is exactly what a thrust change could break silently.
         var m = Fresh(stats, Level(), 0.5f * fd, 1f);
-        Run(m, 1f, 180f, pitch: 0f);
+        Run(m, 1f, 180f, pitch: 0f, watch: watch);
         Row("level-top-speed", "level full throttle held to equilibrium", "mph",
-            m.Speed / Mph, 300.4, 4.0, $"fd_speed = {fd / Mph:0.0} mph, α {m.Alpha:0.0}°");
+            m.Speed / Mph, LevelTopSpeedMph, 0.5,
+            $"fd_speed = {fd / Mph:0.0} mph, α {m.Alpha:0.0}° — target is the decoded lever-1 "
+            + "solve (PartThrottleEquilibriumTests); the filmed 300.40 is discarded");
 
-        // --- acceleration. ⚠ INFORMATIONAL, an open conflict with the footage: the force path is
-        // byte-verified against the binary with nothing fitted, yet this runs ~14.5% fast. Do NOT
-        // close it by scaling thrust/drag — decel-290-150 pulls the opposite way. docs/org/flightModel.md.
+        // --- acceleration. The force path is byte-verified against the binary with nothing fitted,
+        // so its own number is the answer; the filmed 3.76 s is discarded and printed as an
+        // annotation. ⚠ Do NOT close the gap by scaling thrust or drag. docs/org/flightModel.md.
         m = Fresh(stats, Level(), 150f * Mph, 1f);
-        double tAccel = RunUntil(m, 1f, 30f, () => m.Speed >= 290f * Mph);
-        Row("accel-150-290", "level full throttle, 150 -> 290 mph", "s", tAccel, 3.76, 0.40,
-            $"α {m.Alpha:0.0}° at finish — OPEN conflict, force path verified against the binary",
+        double tAccel = RunUntil(m, 1f, 30f, () => m.Speed >= 290f * Mph, watch: watch);
+        Row("accel-150-290", "level full throttle, 150 -> 290 mph", "s", tAccel, null, 0.0,
+            $"α {m.Alpha:0.0}° at finish — decoded force path; footage read 3.76 s, discarded",
             info: true);
 
         // --- terminal dive, at 70.7° — the angle the original's "vertical" clip actually came out
-        // at. The attitude-thrust scale ADDS thrust here (×1.226), carrying the row from −5.3% to
-        // +0.2% with nothing fitted. docs/org/flightModel.md.
+        // at. The attitude-thrust scale ADDS thrust here (×1.227). The target is the decoded
+        // along-path balance, not the clip's speed. docs/org/flightModel.md.
         m = Fresh(stats, Pitched(-70.7f), 0.9f * fd, 1f);
-        Run(m, 1f, 120f, pitch: 0f);
+        Run(m, 1f, 120f, pitch: 0f, watch: watch);
         double pathDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
         Row("terminal-dive", "70.7° dive at full throttle, held to terminal", "mph",
-            m.Speed / Mph, 355.2, 6.0,
+            m.Speed / Mph, TerminalDiveMph, 2.0,
             $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed, α {m.Alpha:0.0}°, "
-            + $"thrust ×{FlightModel.AttitudeThrustScale(m.Attitude.Z.Y):0.000}");
+            + $"thrust ×{FlightModel.AttitudeThrustScale(m.Attitude.Z.Y):0.000} — target is the "
+            + "decoded thrust/drag/gravity balance at this path; the filmed 355.2 is discarded");
 
         // --- roll. Accumulated body roll rate: no other axis is commanded. The target is the
         // DECODE's own — roll_torque · recInertia.z / ang_momentum_damp, 90.6 °/s steady plus the
         // spin-up — not the 2.05 s a stopwatch and the video's ADI bank centroid read off footage.
         m = Fresh(stats, Level(), fd, 1f);
-        double tRoll = RunUntil(m, 1f, 30f, RollAccum(m), roll: 1f);
+        double tRoll = RunUntil(m, 1f, 30f, RollAccum(m), roll: 1f, watch: watch);
         Row("roll-360", "full aileron from level cruise, 360°", "s", tRoll, 4.15, 0.25,
-            $"α {m.Alpha:0.0}° at finish");
+            $"α {m.Alpha:0.0}° at finish — target is the decoded steady rate "
+            + "roll_torque · recInertia.z / ang_momentum_damp with its own spin-up, not the 2.05 s "
+            + "a stopwatch read off the ADI");
 
-        // --- pitch at three speeds. ⚠ INFORMATIONAL, an open conflict: the decoded AOA window live
-        // reads 22.5 °/s against a loop-binned 33.00 with every term decoded or authored. Do NOT
-        // close it by weakening the window, the lag rate or maxAOA. docs/org/flightModel.md.
+        // --- pitch at three speeds. The AOA window and the lag rate are both the binary's, so the
+        // rate they produce is the answer and the loop-binned 33.00 is discarded. ⚠ Do NOT close
+        // the gap by weakening the window, the lag rate or maxAOA. docs/org/flightModel.md.
         var pitchRates = new List<double>();
         var pitchAlphas = new List<double>();
         foreach (float mph in new[] { 120f, 200f, 280f })
         {
             m = Fresh(stats, Level(), mph * Mph, 1f);
-            Run(m, 1f, 2f, pitch: 1f);
+            Run(m, 1f, 2f, pitch: 1f, watch: watch);
             pitchRates.Add(Mathf.RadToDeg(m.BodyRates.X));
             pitchAlphas.Add(m.Alpha);
         }
         Row("pitch-rate", "sustained full-elevator body pitch rate", "°/s",
-            pitchRates[1], 33.0, 3.0,
+            pitchRates[1], null, 0.0,
             $"at 120/200/280 mph = {pitchRates[0]:0.0}/{pitchRates[1]:0.0}/{pitchRates[2]:0.0} °/s, "
             + $"α = {pitchAlphas[0]:0.0}/{pitchAlphas[1]:0.0}/{pitchAlphas[2]:0.0}° "
-            + "(the alignment lag at this body rate — see the note above) — OPEN conflict, the AOA "
-            + "window and the lag rate are the binary's and the footage disagrees",
+            + "(the alignment lag at this body rate) — decoded window and lag rate; footage read "
+            + "33.00 °/s, discarded",
             info: true);
 
-        // --- yaw. The one axis 'eff' scales, so a thrust change moves it. INFORMATIONAL since the
-        // *Tune decode: no per-axis factor exists in the original's torque path, and the footage's
-        // 28.6 s stands as measured — what disagrees is the decode. docs/org/flightModel.md.
+        // --- yaw. The one axis 'eff' scales, so a thrust change moves it. The *Tune decode found no
+        // per-axis factor in the original's torque path, so this rate is the decoded one and the
+        // filmed 28.6 s is discarded. docs/org/flightModel.md.
         m = Fresh(stats, Level(), 290f * Mph, 1f);
         double sumSpeed = 0, samples = 0;
         double tYaw = RunUntil(m, 1f, 60f, YawAccum(m), yaw: 1f,
-                               onStep: () => { sumSpeed += m.Speed; samples++; });
-        Row("yaw-360", "full rudder from 290 mph, 360°", "s", tYaw, 28.6, 3.0,
+                               onStep: () => { sumSpeed += m.Speed; samples++; }, watch: watch);
+        Row("yaw-360", "full rudder from 290 mph, 360°", "s", tYaw, null, 0.0,
             (samples > 0 ? $"mean speed {sumSpeed / samples / Mph:0.0} mph, " : "")
-            + $"α {m.Alpha:0.0}° at finish — OPEN conflict, the torque path is the binary's and the "
-            + "footage disagrees",
+            + $"α {m.Alpha:0.0}° at finish — decoded torque path; footage read 28.6 s, discarded",
             info: true);
 
         // --- altitude cap: fixed 22° nose-up hold (attitude set once, not continuous elevator,
         // which would loop instead of climb). Without the clamp this never stops climbing (the
         // model's accepted "steep-climb equilibrium" artifact); with it, altitude settles at the cap.
         m = Fresh(stats, Pitched(22f), fd, 1f);
-        Run(m, 1f, 240f, pitch: 0f);
+        Run(m, 1f, 240f, pitch: 0f, watch: watch);
         Row("altitude-cap", "22° nose-up hold at full throttle, altitude settled against the clamp", "ft",
             m.Position.Y / Ft, 6571.6, 100.0,
-            $"{m.Speed / Mph:0.0} mph at settle (original 173.7 mph — the existing stall model owns "
-            + $"whatever bleed shape follows the clamp, not asserted here), α {m.Alpha:0.0}°");
+            $"{m.Speed / Mph:0.0} mph at settle, α {m.Alpha:0.0}° — target is the AltitudeCapM "
+            + "product exception (2003 m) itself, the one asserted row that is not decoded; the "
+            + "filmed 173.7 mph settle speed is discarded");
 
         // --- level speed 15 m under the cap: the clamp must be a no-op this close to
         // the line — the original's level equilibrium measured flat to ±0.3 mph right up to 1988 m.
         m = Fresh(stats, Level(), 0.5f * fd, 1f);
         m.Position = new Vector3(0f, 1988f, 0f);
-        Run(m, 1f, 180f, pitch: 0f);
+        Run(m, 1f, 180f, pitch: 0f, watch: watch);
         Row("level-speed-near-cap", "level full throttle at 1988 m, held to equilibrium", "mph",
-            m.Speed / Mph, 300.4, 4.0, $"altitude clamp must not leak below the cap, α {m.Alpha:0.0}°");
+            m.Speed / Mph, LevelTopSpeedMph, 0.5,
+            $"altitude clamp must not leak below the cap, α {m.Alpha:0.0}° — same decoded lever-1 "
+            + "solve as level-top-speed");
 
         // --- sustained turn: full throttle, stick full back from a 100° banked entry, settled 10 s
         // then averaged over the original's own 15.9 s window. ⚠ Bank is left FREE, never forced —
         // forcing it via atan2 breaks the moment the nose leaves horizontal. docs/org/flightModel.md.
-        var turn = SustainedTurn(stats, 100f, 298.96f * Mph, settle: 10f, window: 15.9f);
+        var turn = SustainedTurn(stats, 100f, 298.96f * Mph, settle: 10f, window: 15.9f, watch);
         Row("sustained-turn-speed", "full back stick from a banked entry, settled speed", "mph",
-            turn.SpeedMph, 222.94, 5.0,
+            turn.SpeedMph, null, 0.0,
             $"entered at 100° bank, settled at {turn.BankDeg:0.0}° (emergent, not held), "
-            + $"α {turn.Alpha:0.0}°, swept {turn.SweptDeg:0} ° (original 449.8 in the same window) — "
-            + "rides the rate row below",
+            + $"α {turn.Alpha:0.0}°, swept {turn.SweptDeg:0} ° — decoded plant; footage read "
+            + "222.94 mph and 449.8° in the same window, discarded",
             info: true);
 
-        // ⚠ An UPPER BOUND, not a band: guards against falling out of the turn, not against
-        // climbing. INFORMATIONAL — rides the turn-rate row below, not a mechanism of its own.
-        // docs/org/flightModel.md.
+        // The sink's failure direction is one-way — falling out of the turn, not climbing — which
+        // is why the row is read as a floor rather than a band. docs/org/flightModel.md.
         Row("sustained-turn-sink", "sustained max-pull turn, sink rate", "ft/s",
-            turn.SinkFtS, 1.85, 0.0,
-            $"upper bound — the failure this guards is falling out of the turn (before the B12 lift "
-            + $"re-key this read 18.29). Negative = climbing. Rides the rate row below.",
-            info: true, upperBound: true);
+            turn.SinkFtS, null, 0.0,
+            "negative = climbing; the failure this watches is falling out of the turn (before the "
+            + "B12 lift re-key this read 18.29). Footage read 1.85 ft/s, discarded",
+            info: true);
 
-        // ⚠ INFORMATIONAL, and not a target: the rotation path is decoded, while 18.95 is
-        // frame-measured, so this records a difference against video, not a defect. Do not chase
-        // the ADI's +100° — it reads attitude, not bank. docs/org/flightModel.md.
+        // The rotation path is decoded whole, so this rate is the answer and 18.95 is discarded.
+        // Do not chase the ADI's +100° — it reads attitude, not bank. docs/org/flightModel.md.
         Row("sustained-turn-rate", "sustained max-pull turn, heading rate", "°/s",
-            turn.RateDegS, 18.95, 3.0,
-            $"{turn.RateDegS / 18.95:0.00}x the footage. The footage pulls 1.6x slower BANKED than "
+            turn.RateDegS, null, 0.0,
+            $"{turn.RateDegS / 18.95:0.00}x the discarded footage. The footage pulls 1.6x slower BANKED than "
             + "wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in "
             + "both, so the difference is bank/load-factor, not pitch authority. Its 18.95 "
             + "°/sim-s at 222.94 mph implies a 58.7° bank, and CAP-33 confirmed that IS its bank — "
@@ -1219,13 +1278,13 @@ public static class Probes
             info: true);
 
         // --- part throttle: the only place the drag shape is observable (full throttle is
-        // fd_speed by construction for any curve). 1/8-throttle passes unaided; decel is the
-        // footage-vs-binary conflict, both informational. docs/org/flightModel.md.
+        // fd_speed by construction for any curve). Both rows report the decoded plant's own number;
+        // the decel row's filmed figure is discarded beside it. docs/org/flightModel.md.
         m = Fresh(stats, Level(), 0.9f * fd, 0.125f);
-        Run(m, 0.125f, 300f, pitch: 0f);
+        Run(m, 0.125f, 300f, pitch: 0f, watch: watch);
         double idlePath = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
-        // ⚠ The Measured column is footage only, and every 1/8-throttle figure ever proposed for it
-        // came off video. The decoded target is asserted in PartThrottleEquilibriumTests instead.
+        // ⚠ Every 1/8-throttle figure ever proposed for this row came off video. The decoded target
+        // is asserted in PartThrottleEquilibriumTests instead.
         Row("eighth-throttle-speed", "1/8 throttle held to equilibrium", "mph",
             m.Speed / Mph, null, 0.0,
             $"{m.Speed / fd:0.000} x fd_speed, settled path {idlePath:0.0}°, α {m.Alpha:0.0}° — "
@@ -1237,10 +1296,10 @@ public static class Probes
         // Run at 1/8 instead and the model reads 12.1 s (an artifact of the wrong throttle, not a
         // finding): 150 mph sits only 8% above that equilibrium, so the approach is asymptotic.
         m = Fresh(stats, Level(), 290f * Mph, 0f);
-        double tDecel = RunUntil(m, 0f, 60f, () => m.Speed <= 150f * Mph);
-        Row("decel-290-150", "throttle cut to ZERO, 290 -> 150 mph, level", "s", tDecel, 7.04, 1.0,
-            $"pure drag — no thrust term to assume, α {m.Alpha:0.0}° at finish — OPEN conflict, "
-            + "the polar is the binary's and the footage disagrees", info: true);
+        double tDecel = RunUntil(m, 0f, 60f, () => m.Speed <= 150f * Mph, watch: watch);
+        Row("decel-290-150", "throttle cut to ZERO, 290 -> 150 mph, level", "s", tDecel, null, 0.0,
+            $"pure drag — no thrust term to assume, α {m.Alpha:0.0}° at finish — the polar is the "
+            + "binary's; footage read 7.04 s, discarded", info: true);
 
         // --- zoom climb, INFORMATIONAL: full throttle, full back stick from the same take that
         // pinned pitch-rate, so the stick history is known. ⚠ Must be a held FULL pull — a
@@ -1257,18 +1316,18 @@ public static class Probes
                     minSpeed = m.Speed;
                     alphaAtMinSpeed = m.Alpha;
                 }
-            });
+            }, watch: watch);
         Row("zoom-climb", "full pull from 300 mph level, altitude gained", "ft",
-            apex / Ft, 936.0, 200.0,
-            $"min speed {minSpeed / Mph:0.0} mph (original 127.9), "
-            + $"apex at {tApex:0.0} s (original 6.5), α {alphaAtMinSpeed:0.0}° at min speed",
+            apex / Ft, null, 0.0,
+            $"min speed {minSpeed / Mph:0.0} mph, apex at {tApex:0.0} s, "
+            + $"α {alphaAtMinSpeed:0.0}° at min speed — decoded plant; footage read 936 ft, "
+            + "127.9 mph and an apex at 6.5 s, all discarded",
             info: true);
 
-        // ⚠ INFORMATIONAL, same loop as the row above — a direction check, not an assertion. The
-        // row above OVERSHOOTS altitude while this UNDERSHOOTS speed: the energy split still reads
-        // wrong. docs/org/flightModel.md.
+        // Same loop as the row above, printed separately because it is the energy split's other
+        // half: the row above reads the height and this one the speed the climb was bought with.
         Row("zoom-climb-min-speed", "same loop, speed at its own minimum", "mph",
-            minSpeed / Mph, 127.9, 6.0,
+            minSpeed / Mph, null, 0.0,
             $"α {alphaAtMinSpeed:0.0}° here (the wings-level pull settles lower — this loop has "
             + "carried well past that regime by its own minimum)",
             info: true);
@@ -1278,11 +1337,12 @@ public static class Probes
         // world-down) without asserting any figure, since the only figures available are footage.
         m = Fresh(stats, Level(), 0.9f * fd, 0f);
         float NoseDeg() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp((-m.Attitude.Z).Y, -1f, 1f)));
-        double tBreak = RunUntil(m, 0f, 120f, () => m.isStalled(), pitch: 0f);
+        double tBreak = RunUntil(m, 0f, 120f, () => m.isStalled(), pitch: 0f, watch: watch);
         float breakNoseDeg = NoseDeg(), prevNoseDeg = breakNoseDeg, peakDropDegS = 0f;
         for (float t = 0f; t < 30f; t += EnvDt)
         {
             m.Step(new FlightInput { Throttle = 0f }, EnvDt);
+            watch.Sample(m);
             float now = NoseDeg();
             peakDropDegS = Mathf.Max(peakDropDegS, (prevNoseDeg - now) / EnvDt);
             prevNoseDeg = now;
@@ -1299,38 +1359,59 @@ public static class Probes
         sb.AppendLine($"# fd_speed {fd:0.#} m/s ({fd / Mph:0.0} mph)  weight {stats.VehWeight:0} kg  "
                       + $"engine power {stats.EnginePower:0.###}  gravity {stats.Gravity:0.#} m/s²");
         sb.AppendLine($"# thrust accel at fd_speed {thrustAccel:0.00} m/s²  stepped at {EnvDt * 1000f:0.0} ms");
-        sb.AppendLine(bhawk
-            ? "# 'original' = read off cockpit-gauge video; ranks readings, does not confirm a decode"
-            : $"# no measured original for {planeNodeName} — the Bloodhawk is the only airframe on video");
+        sb.AppendLine("# 'target' is decoded or a named product exception, never footage; a filmed "
+                      + "figure that disagrees");
+        sb.AppendLine("# is named in the row's own text as discarded and gates nothing "
+                      + "(docs/org/flightModel.md, 'Parity ledger')");
+        sb.AppendLine("# margins: Gdem peak demand vs the ±5/9 clamp · C_L peak demand over the "
+                      + "aerodynamic ceiling (>=1 binds)");
+        sb.AppendLine("#   win min opposing-command limiter · V/Vs min speed over stall speed · "
+                      + "alt peak · Gup delivered body-up G");
+        sb.AppendLine("#   against the authored lowGs/highGs starts · V/Vd peak speed over "
+                      + "MaxDiveSpeedFrac x fd_speed");
         sb.AppendLine();
-        sb.AppendLine($"{"scenario",-22} {"unit",-5} {"model",10} {"original",10} {"err",8}  verdict");
+        sb.AppendLine($"{"scenario",-22} {"unit",-5} {"model",10} {"target",10} {"err",8}  verdict");
         foreach (var row in r.Rows)
         {
             string verdict = row.Asserted ? (row.Ok ? "ok" : "!! FAIL") : "(not asserted)";
-            // An upper-bound row's target is a ceiling, not a centre — print it as one, or a model
-            // value far BELOW it reads as a large error against a band it was never judged on.
-            string target = row.Measured is { } t
-                ? (row.UpperBound ? $"<= {t:0.00}" : t.ToString("0.00"))
-                : "-";
+            string target = row.Target is { } t ? t.ToString("0.00") : "-";
+            // The sign is written rather than left to a two-section format: .NET keeps the minus on
+            // a negative that ROUNDS to zero and then formats it with the positive section, so a
+            // −0.01 % miss printed as "-+0.0%".
+            string err = row.ErrorPct is not { } p
+                ? "-"
+                : $"{(p < 0 ? "-" : "+")}{Math.Abs(p):0.0}%";
             sb.AppendLine($"{row.Name,-22} {row.Unit,-5} {row.Model,10:0.00} "
-                          + $"{target,10} "
-                          + $"{(row.UpperBound || row.ErrorPct is not { } p ? "-" : $"{p:+0.0;-0.0}%"),8}"
-                          + $"  {verdict}");
+                          + $"{target,10} {err,8}  {verdict}");
             sb.AppendLine($"{"",-22} {row.What}{(row.Detail.Length > 0 ? $" — {row.Detail}" : "")}");
+            if (row.Margins.Length > 0)
+            {
+                sb.AppendLine($"{"",-22} margins: {row.Margins}");
+            }
         }
         // The knife-edge hold rides along rather than living as its own flag: it is a SHAPE
         // comparison over 36 s, not a single number with a tolerance, so it has no row here — but
         // every instrument that dumps the envelope should carry it, or the recipe gets lost again.
         sb.AppendLine();
-        sb.Append(KnifeEdge(zrdrPath, planeNodeName).Text);
+        sb.Append(KnifeEdge(zrdrPath, planeNodeName, watch).Text);
         // Same reasoning as the knife-edge above: a speed-against-time SHAPE rather than one number
         // with a tolerance, and the recipe belongs in code where it cannot be lost.
         sb.AppendLine();
-        sb.Append(SustainedClimb(zrdrPath, planeNodeName).Text);
+        sb.Append(SustainedClimb(zrdrPath, planeNodeName, watch).Text);
+
+        // Branch coverage last, because it is a claim about the whole report above it: which
+        // decoded branches these scenarios drove, and which the set leaves untouched.
+        r.Reached = watch.Reached.ToList();
+        r.Missed = watch.Missed.ToList();
+        sb.AppendLine();
+        sb.AppendLine($"# branch coverage — {r.Reached.Count} of {EnvelopeMargins.Branches.Length} "
+                      + "decoded branches reached by this airframe's scenarios");
+        sb.AppendLine($"#   reached: {string.Join(" ", r.Reached)}");
+        sb.AppendLine($"#   missed : {string.Join(" ", r.Missed)}");
 
         r.Text = sb.ToString();
         r.Summary = r.Failed == 0
-            ? $"flight envelope: {r.Asserted} scenario(s) asserted against the original, all within tolerance"
+            ? $"flight envelope: {r.Asserted} scenario(s) asserted against a decoded target, all within tolerance"
             : $"flight envelope: {r.Failed} of {r.Asserted} asserted scenario(s) FAILED — see the !! lines above";
         return r;
     }
@@ -1343,7 +1424,8 @@ public static class Probes
     /// own sample times. ⚠ The discriminating signature is the SHAPE, not one number: the original
     /// drifts the whole 36 s with no equilibrium, where a bounded sag settles inside a second — see
     /// <see cref="KnifeEdgeRun.DriftDegS"/>/<see cref="KnifeEdgeRun.SettledFrac"/>, docs/org/flightModel.md.</summary>
-    public static KnifeEdgeResult KnifeEdge(string zrdrPath, string planeNodeName)
+    public static KnifeEdgeResult KnifeEdge(string zrdrPath, string planeNodeName,
+                                            EnvelopeMargins? watch = null)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
         var r = new KnifeEdgeResult();
@@ -1361,7 +1443,7 @@ public static class Probes
 
         foreach (float mph in new[] { 143f, 300f })
         {
-            r.Runs.Add(KnifeEdgeHold(stats, planeNodeName, 90f, mph));
+            r.Runs.Add(KnifeEdgeHold(stats, planeNodeName, 90f, mph, watch));
         }
 
         var sb = new StringBuilder();
@@ -1401,7 +1483,8 @@ public static class Probes
     /// Entry at the footage's own 300 mph, attitude set once (<see cref="Banked"/>'s pitched twin,
     /// not a continuous pull), held 18 sim s — long enough for the plateau, short enough the
     /// altitude clamp cannot bind. Targets and the UNDERSHOOT shape: docs/org/flightModel.md.</summary>
-    public static ClimbResult SustainedClimb(string zrdrPath, string planeNodeName)
+    public static ClimbResult SustainedClimb(string zrdrPath, string planeNodeName,
+                                             EnvelopeMargins? watch = null)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
         var r = new ClimbResult { Plane = planeNodeName };
@@ -1456,6 +1539,7 @@ public static class Probes
 
             prevAlt = m.Position.Y;
             m.Step(new FlightInput { Throttle = 1f }, EnvDt);
+            watch?.Sample(m);
             elapsed += EnvDt;
             if (m.Speed / Mph < r.MinSpeedMph)
             {
@@ -1691,11 +1775,13 @@ public static class Probes
     }
 
     private static void Run(FlightModel m, float throttle, float seconds,
-                            float pitch = 0f, float roll = 0f, float yaw = 0f)
+                            float pitch = 0f, float roll = 0f, float yaw = 0f,
+                            EnvelopeMargins? watch = null)
     {
         for (float t = 0f; t < seconds; t += EnvDt)
         {
             m.Step(new FlightInput { Pitch = pitch, Roll = roll, Yaw = yaw, Throttle = throttle }, EnvDt);
+            watch?.Sample(m);
         }
     }
 
@@ -1704,11 +1790,12 @@ public static class Probes
     // reports as far off rather than as a hang).
     private static double RunUntil(FlightModel m, float throttle, float limit, Func<bool> done,
                                    float pitch = 0f, float roll = 0f, float yaw = 0f,
-                                   Action? onStep = null)
+                                   Action? onStep = null, EnvelopeMargins? watch = null)
     {
         for (float t = 0f; t < limit; t += EnvDt)
         {
             m.Step(new FlightInput { Pitch = pitch, Roll = roll, Yaw = yaw, Throttle = throttle }, EnvDt);
+            watch?.Sample(m);
             onStep?.Invoke();
             if (done())
             {
@@ -1726,10 +1813,11 @@ public static class Probes
     // gave. No roll input: see the call site for why forcing the bank cannot be measured.
     private static (double SpeedMph, double SinkFtS, double RateDegS, double Alpha, double BankDeg,
                     double SweptDeg) SustainedTurn(
-        PlaneStats stats, float entryBankDeg, float entrySpeed, float settle, float window)
+        PlaneStats stats, float entryBankDeg, float entrySpeed, float settle, float window,
+        EnvelopeMargins? watch = null)
     {
         var m = Fresh(stats, Banked(entryBankDeg), entrySpeed, 1f);
-        Run(m, 1f, settle, pitch: 1f);
+        Run(m, 1f, settle, pitch: 1f, watch: watch);
 
         double Heading() => Mathf.RadToDeg(Mathf.Atan2(m.VelocityDir.X, -m.VelocityDir.Z));
         float startY = m.Position.Y;
@@ -1739,6 +1827,7 @@ public static class Probes
         for (float t = 0f; t < window; t += EnvDt)
         {
             m.Step(new FlightInput { Pitch = 1f, Throttle = 1f }, EnvDt);
+            watch?.Sample(m);
             double step = Heading() - prev;
             if (step > 180.0) { step -= 360.0; } else if (step < -180.0) { step += 360.0; }
             swept += step;
@@ -1761,7 +1850,8 @@ public static class Probes
     // One knife-edge hold. Sink is read over the second ENDING at each sample, which is
     // what an altimeter needle gives; heading is read off the flight path over the same second and
     // unfolded, so a slow turn is not confused with a wrap.
-    private static KnifeEdgeRun KnifeEdgeHold(PlaneStats stats, string plane, float bankDeg, float entryMph)
+    private static KnifeEdgeRun KnifeEdgeHold(PlaneStats stats, string plane, float bankDeg,
+                                              float entryMph, EnvelopeMargins? watch = null)
     {
         float throttle = TrimThrottle(stats, entryMph * Mph);
         var m = Fresh(stats, Banked(bankDeg), entryMph * Mph, throttle);
@@ -1798,6 +1888,7 @@ public static class Probes
         while (elapsed < 36f + EnvDt * 0.5f && next < want.Length)
         {
             m.Step(new FlightInput { Throttle = throttle }, EnvDt);
+            watch?.Sample(m);
             elapsed += EnvDt;
             run.AlphaPeak = Math.Max(run.AlphaPeak, m.Alpha);
 
@@ -2105,49 +2196,58 @@ public static class Probes
         public bool Ok => Rows.Count > 0 && Rows.All(r => r.Resolved);
     }
 
-    /// <summary>One flight scenario: what the model does, and what the original did.
-    /// <see cref="Measured"/> came off cockpit-gauge video, so it ranks readings rather than
-    /// confirming a decode; prefer a decoded value where one exists (docs/verification.md DET-12).
-    /// A row with no <see cref="Measured"/> value, or one flagged <see cref="Informational"/>, is
-    /// reported but not asserted: either nothing was measured, or the comparison is a known open
-    /// gap that must not gate a build until it is scoped.</summary>
+    /// <summary>One flight scenario: what the model does, and the value it is judged against.
+    /// <see cref="Target"/> is always decoded or a named product exception, never a figure read off
+    /// footage — a disagreeing footage number lives in <see cref="Detail"/> as a discarded
+    /// annotation and gates nothing (the parity ledger's rule, docs/org/flightModel.md).
+    /// A row with no target, or one flagged <see cref="Informational"/>, is reported and not
+    /// asserted: the plant's own number is the finding and there is nothing to compare it to.</summary>
     public sealed class FlightRow
     {
+        public string Plane = "";
         public string Name = "";
         public string What = "";
         public string Unit = "";
         public double Model;
-        public double? Measured;
+        public double? Target;
         public double Tolerance;
         public bool Informational;
         public string Detail = "";
 
-        /// <summary>Assert an UPPER BOUND (model ≤ original + tolerance) instead of a two-sided
-        /// band. For a measurement whose failure mode is one-directional and whose other side is a
-        /// different question: the sustained turn's sink is the original's worst case, so sinking
-        /// harder is the defect this guards while sinking less is a separate divergence that this
-        /// row would misreport as the same fault.</summary>
-        public bool UpperBound;
+        /// <summary>How far this run stayed from every term that could have bounded it, as
+        /// <see cref="EnvelopeMargins"/> formats it. Empty on the extra rows a shared flight
+        /// reports, which carry the first row's margins.</summary>
+        public string Margins = "";
 
-        public bool Asserted => !Informational && Measured != null;
-        public bool Ok => !Asserted
-                          || (UpperBound
-                              ? Model <= Measured!.Value + Tolerance
-                              : Math.Abs(Model - Measured!.Value) <= Tolerance);
+        public bool Asserted => !Informational && Target != null;
+        public bool Ok => !Asserted || Math.Abs(Model - Target!.Value) <= Tolerance;
 
-        /// <summary>Signed miss against the original, as a percentage — the shape that tells a
+        /// <summary>Signed miss against the target, as a percentage — the shape that tells a
         /// scale error (constant %) from drift (sign-random).</summary>
         public double? ErrorPct =>
-            Measured is { } msd && msd != 0 ? (Model - msd) / msd * 100.0 : null;
+            Target is { } t && t != 0 ? (Model - t) / t * 100.0 : null;
     }
 
-    /// <summary>The flown envelope of one airframe against the original's measured values.</summary>
+    /// <summary>The flown envelope of one airframe (or of all eleven) against its decoded
+    /// targets.</summary>
     public sealed class FlightEnvelopeResult
     {
         public readonly List<FlightRow> Rows = new();
+
+        /// <summary>Per-airframe reached branches, filled only by <see cref="FlightEnvelopeAll"/>:
+        /// the coverage half of the parity ledger, so it is read off one whole-envelope run rather
+        /// than by flying each airframe a second time.</summary>
+        public readonly Dictionary<string, List<string>> ReachedByPlane = new(StringComparer.Ordinal);
+
         public string Text = "";
         public string Summary = "";
         public string? Error;
+
+        /// <summary>The decoded branches this report's scenarios drove, and the ones they left
+        /// untouched, both in <see cref="EnvelopeMargins.Branches"/> order. A missed branch is a
+        /// statement about the scenario set, not about whether the branch is ported.</summary>
+        public List<string> Reached = new();
+        public List<string> Missed = new();
 
         public int Asserted => Rows.Count(r => r.Asserted);
         public int Failed => Rows.Count(r => !r.Ok);
