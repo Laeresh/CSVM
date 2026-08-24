@@ -68,8 +68,8 @@ disproofs land.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A4 (landed: `docs/formats/briefing.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field) | Confirm the trace, then implement. |
-| **Data present and located, vocabulary not yet decoded** | A3, A6, A7 | Decode first; the docs page is the deliverable, the engine item consumes it. |
+| **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A4 (landed: `docs/formats/briefing.md`), A7 (landed: `docs/formats/anim-definitions/cutscenes.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field) | Confirm the trace, then implement. |
+| **Data present and located, vocabulary not yet decoded** | A3, A6 | Decode first; the docs page is the deliverable, the engine item consumes it. |
 | **Direction sound, magnitude or details a judgement call** | B11, B12, C21–C24, D31, D32, D33 | The shape is settled by the original's screens/data; layout metrics, timings and exact behaviours come from captures and decode, not invention. |
 | **Leads only — no mechanism yet** | A5 (prices), D35 partials (BL-037/038 wiring points), D37 (music selection logic) | Budget for investigation; may end in a disproof. |
 
@@ -113,8 +113,9 @@ Everything below was located on disk in this planning session (2026-08-24 survey
 - **Strings** — `docs/formats/strings.md`: ids 700–799 purchase/sell prompts, 1200–1299
   mission/campaign UI, 3500–3599 act titles, 3600–3699 mission names.
 - **Letterbox** — a `letterbox` node exists in every chapter's gamez root, one of only two nodes
-  shipped `active:false` by design (`docs/formats/gamez.md`, `world-structure.md`); nothing
-  documents how the engine drives it.
+  shipped `active:false`. Decoded by A7: two opaque black quads pinned to `camera1` by the shared
+  `zrdr/letterbox.zrd` definition, off until a cutscene calls it
+  (`docs/formats/anim-definitions/cutscenes.md`).
 - **Cutscene defs** — `BL-134`: `generic_intro` ×12 + `mission_intro_animation` ×1 across 13 of 53
   missions (all `M0x` story missions), fully decoded and playable by `AnimRuntime`; the missing
   piece is the consumer (camera, letterbox, sequencing, `CALLBACK` dispatch).
@@ -167,7 +168,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☑ Decode the briefing: `Briefing.zrd` dialog layout + the briefing map/flag animation
 5. ☐ Decode the economy constants: plane buy/sell prices, armor cost, starting funds
 6. ☐ Behavioral decode of the campaign GUI scripts (cabin, flight check, ammo, campaign intro)
-7. ☐ Decode the `letterbox` node mechanics and the cutscene `CALLBACK` codes
+7. ☑ Decode the `letterbox` node mechanics and the cutscene `CALLBACK` codes
 8. ☑ Mint and file the owed captures (plane construction screen, previous-missions list, briefing animation, a C1 mission intro, cabin ambience)
 
 ### Wave B — campaign model and persistence
@@ -418,28 +419,47 @@ A8 captures).
 observable from captures, the screens may land on capture evidence while the script decode
 catches up.
 
-## A7 ☐ Decode the `letterbox` node mechanics and the cutscene `CALLBACK` codes
+## A7 ☑ Decode the `letterbox` node mechanics and the cutscene `CALLBACK` codes
 
 **Goal.** How the original drives the `letterbox` gamez node during intro cutscenes (who
 activates it, what it draws, when it retracts) and what the 8 unanchored `CALLBACK` dispatches in
 the intro defs mean, written into the anim-definitions docs.
 
-**Evidence (confidence: data located, mechanism undocumented).** The `letterbox` node ships
-`active:false` in every chapter root (`docs/formats/gamez.md`); `BL-134`'s write-up triages the 8
-`CALLBACK` dispatches as intro-cutscene notifications (e.g. `camera1`); the defs themselves are
-fully decoded and playable.
+**Evidence (confidence: traced to an exact mechanism, with the data that proves it).** Landed in
+[`docs/formats/anim-definitions/cutscenes.md`](formats/anim-definitions/cutscenes.md).
 
-**Approach.** Trace the `CALLBACK` handler and the letterbox activation in `crimson.exe`; C1/M04
-is the named worked example. Land as a section of `docs/formats/anim-definitions.md` (or its
-subpage) per `/format-docs` conventions. D32 consumes this.
+- **Letterbox is entirely data.** The string `letterbox` occurs nowhere in `crimson.exe`. The node
+  is a parentless library root carrying one model of two opaque black quads (material 0, `Colored`
+  `rgb(0,0,0)`, alpha 255) at `z = −7.5` in the camera's frame, bit-identical in all eight
+  chapters. `zrdr/letterbox.zrd` sets it `ACTIVE` and then re-copies `camera1`'s position and
+  orientation matrix onto it every tick under `LOOP{-1}`. It ships `active:false` because that
+  definition's `RESET_STATE` asserts `INACTIVE` as its base state, so the gamez simply bakes in
+  what the def says. 27 call sites in 18 readers, only one of them an intro: the bars are the
+  engine's general cutscene idiom, shared with every mid-mission pickup and hookup.
+- **`CALLBACK` is a host notification, and the host is the `landings.zrd` trigger.** Slot 35
+  (`FUN_004ec5e0`) calls whatever native function is registered at `anim+0x74`; `FUN_004ee160` is
+  the only setter, and exactly one of its 13 call sites installs the mission-script interpreter
+  `FUN_0047e080`. All ten codes the intro defs author are read off that interpreter's switch,
+  including 20 (suspends the world and objectives updates), 913/914 (park and reveal every AI
+  vehicle), 2/1 (chrome off / control and chrome back) and 666/667 (the camera-parameter gate).
+- **The intro defs run without a host,** because `StartAnims.zrd`'s loader `FUN_0046c370` starts
+  each def with no registration, so their callbacks are no-ops in the original too; the engine
+  performs the equivalent state changes imperatively in `FUN_004654e0` immediately before that
+  call. The codes remain the authoritative description of the cutscene's shape for D32.
 
-**Model recommendation.** high — small surface but exe tracing.
+**Verify (done).** All eight `camera1-generic_intro` dispatches are named (`RESET_STATE`: 1, 914,
+10, 667; `callback_sequence`: 20, 2, 11, 14), plus C1/M04's ninth (913) and the `gi_1stperson` 666.
+Codes **14** and **123** are recorded as named gaps: they reach no case in the interpreter and no
+other installable host takes them. The `active:false` question is answered by the def's own
+`RESET_STATE`.
 
-**Verify.** The decoded callback meanings account for all 8 dispatches; the letterbox mechanism
-explains why the node ships inactive.
+**Open questions for D32.** `RESET_TIME`'s detail stays undecoded, so *when* a running letterbox
+returns to `INACTIVE` inside a mission is not established (nothing stops the def by name). How the
+original's draw traversal reaches a parentless active root was not traced; CSVM must attach its
+bars to the camera itself.
 
-**⚠ Traps.** `BL-134` records the user's ruling (2026-07-22): the M0x intro defs must play, never
-be suppressed. Any interim change that silences them regresses that ruling.
+**⚠ Traps.** `BL-134` records the user's ruling: the M0x intro defs must play, never be suppressed.
+Any interim change that silences them regresses that ruling.
 
 ## A8 ☑ Mint and file the owed captures
 
@@ -689,23 +709,42 @@ greps alone.
 decoded `CALLBACK` codes, player input suspended, then a clean handoff to gameplay. C1/M04 is the
 first worked case.
 
-**Evidence (confidence: traced for the defs, pending A7 for the consumer).** `BL-134`: the defs
-are decoded, playable by `AnimRuntime` today; the missing consumer is enumerated there. A7
-delivers letterbox + callback semantics. <TODO: re-verify BL-134 still-open against git log +
+**Evidence (confidence: traced for the defs and for the consumer's semantics).** `BL-134`: the defs
+are decoded, playable by `AnimRuntime` today; the missing consumer is enumerated there. A7 delivers
+the letterbox mechanism and the `CALLBACK` code table
+(`docs/formats/anim-definitions/cutscenes.md`). <TODO: re-verify BL-134 still-open against git log +
 code.>
 
 **Approach.** A cutscene controller in the session layer that arms before the mission director
-starts: subscribes to the anim runtime's `CALLBACK` dispatch, drives a cutscene camera, draws
-letterbox bars (the gamez `letterbox` node if A7 says so, else a UI overlay matching it), and
-hands off on the def's end.
+starts: it installs itself as the `CALLBACK` host on the def it plays (the original registers a
+host per animation; nothing is registered on a `StartAnims` def, so CSVM supplies the listener the
+codes were written for), drives a cutscene camera, draws the bars, and hands off on the def's end.
+
+Scope A7 fixes:
+- **The bars are the gamez `letterbox` node**, not a UI overlay: two opaque black quads whose
+  transform is copied from the cutscene camera every tick. The node is a parentless library root,
+  so the builder must reach it outside the `world1` walk.
+- **Code 20 suspends the world**, not just the camera: in the original the vehicle/AI update and
+  the objectives update both stop while the cutscene animation holds the active slot. Code 0
+  releases it.
+- **Codes 913/914 park and reveal every AI vehicle**; 2/11 hide the chrome and take the player out
+  of flight; 1/10 give control, chrome and in-flight systems back; 666/667 gate the camera-parameter
+  profile so the def's own `CAMERA_STATE` is not overwritten.
+- **Codes 14 and 123 are named gaps.** Do not invent behaviour for them.
+- The mid-mission pickup/hookup cutscenes (`landings.zrd`, 27 letterbox call sites across 18
+  readers) use the same machinery, so the controller should not be intro-only.
 
 **Model recommendation.** high — camera plus sequencing with visible fidelity stakes.
 
 **Verify.** Scripted `--screenshot` mid-cutscene on C1/M04 (letterbox visible, camera off the
 plane) and post-handoff (controls live); the A8 intro capture is the fidelity reference.
 
-**⚠ Traps.** The user's 2026-07-22 ruling: never suppress the M0x intro defs. Skipping a cutscene
+**⚠ Traps.** The user's ruling: never suppress the M0x intro defs. Skipping a cutscene
 (user input) must still run the def's world side effects, or the mission starts in a wrong state.
+Note what A7 found the original does on skip: `FUN_004a0220` clears the active-cutscene slot and
+force-stops the animation outright, and the handoff `FUN_00480480` does the same, so the original
+does *not* replay the remaining beats. Whatever CSVM does about the leftover state is a design
+decision here, not a fact to copy.
 
 ## D33 ☐ In-flight objectives display + objective sound cues
 

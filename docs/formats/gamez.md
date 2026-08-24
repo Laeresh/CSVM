@@ -74,8 +74,11 @@ This page documents format facts only and contains no game asset data.
   non-load-bearing bits travel with the same set: `zone_id == -1` (a world-placed node instead
   carries a real zone, 0+) and the Object3d variant's own `signs == 128` (a placed node carries
   `signs == 4108`). 164 of the 166 are `active: true`; the two `active: false` ones
-  (`letterbox`, `sunlight`) are the data's own opt-out and are never summoned. Engine-side:
-  `GameZ.IsLibraryRoot`.
+  (`letterbox`, `sunlight`) are not the data opting out: `letterbox` ships off because its own
+  definition's `RESET_STATE` asserts `INACTIVE` as the base state, and it is summoned by name,
+  `zrdr/letterbox.zrd` turning it on and pinning it to `camera1` for the length of a cutscene,
+  from 27 call sites ([cutscenes.md](anim-definitions/cutscenes.md)). Why `sunlight` ships off
+  is not decoded. Engine-side: `GameZ.IsLibraryRoot`.
   - **Several of these templates ship as N pre-built, same-shape sibling records instead of one —
     the data's OWN pooling, not a runtime invention.** Verified by comparing sibling node records
     (matching `flags`, `zone_id`, `parent_indices: []`, and — checked on `flame_ball_01`/`_02` and

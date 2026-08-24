@@ -19,6 +19,8 @@ archives. This page contains field tables and small illustrative values only.
 - [Start animations](#start-animations)
 - [Zeppelin states](#zeppelin-states)
 - [Compiled animation archives](anim-definitions/compiled-archives.md)
+- [Cutscenes: the `letterbox` node and `CALLBACK` codes](anim-definitions/cutscenes.md)
+
 ## Definition locations
 
 Three zrdr scopes are visible to a mission (the remake scans all reader files in each

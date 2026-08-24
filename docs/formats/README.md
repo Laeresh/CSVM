@@ -47,6 +47,7 @@ magnitudes and the consumer that rocks the plane, behind [shakes.md](shakes.md) 
 - [weather.md](weather.md), [anim-definitions.md](anim-definitions.md), [destructibles.md](destructibles.md), and [effects.md](effects.md).
   - [Weather atmosphere controls](weather/atmosphere.md) — cloud cover, wind, and precipitation.
   - [Compiled animation archives](anim-definitions/compiled-archives.md) — the compiled archive and SI-script reference.
+  - [Cutscenes](anim-definitions/cutscenes.md) — the `letterbox` bars and the `CALLBACK` code table.
 
 ### Aircraft and combat
 
