@@ -968,10 +968,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-454` `[Owed-playtest]` **Nitro dial sweep against the original.** `NitroGaugeNeedleTests`
   pins the needle law, but nobody has put the moving dial beside a screenshot of the original's.
   One screenshot of each at full, half and empty tank.
-- `BL-455` `[Cleanup]` **`AiControlLaw.Throttle`'s open-loop far-from-player branch is dead.**
-  The far-field plant (`FlightModel.FarFieldPlant`, beyond 1000 m horizontal) now owns the
-  velocity-match that `farFromPlayer` (`OpenLoopPlayerRange`, `playerPosition`) approximated.
-  Confirm nothing reaches the branch with the plant live and delete it with its parameter.
 - `BL-456` `[Research]` **Trace the writers of the crashed flag `[obj+0x384]`.** Its readers are
   decoded (`0x48c4ba` selects the far-field arm, `0x48cd4a`, `0x48dfbe` gives a crashed hull
   severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,

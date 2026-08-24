@@ -2035,8 +2035,10 @@ that page before changing anything here. An aim point, that point's velocity and
 parameter tables read out of the image in, one `FlightInput` out: a desired speed from the aim
 point's own speed plus range-weighted lead terms, an intercept solve (`AimAssist.TryIntercept`) for
 the direction, bank-to-turn with the elevator joining once the bank command is inside a deadband, a
-wings-level rule, a low-speed unload, and a per-axis scale/limit stage off `PlaneStats`. Engine-free
-and pure over its arguments; pinned against the decode by `AiControlLawTests`.
+wings-level rule, a low-speed unload, and a per-axis scale/limit stage off `PlaneStats`. The
+throttle lever has one path, the walk toward the desired speed; the original's distance-gated
+open-loop branch is not ported (`docs/org/aiControlLaw.md`'s throttle section says why).
+Engine-free and pure over its arguments; pinned against the decode by `AiControlLawTests`.
 
 ## src/Flight/AiModeMachine.cs
 The nine-mode AI state machine, owned by `AiPilot.Machine` and stepped from its `Next`:
