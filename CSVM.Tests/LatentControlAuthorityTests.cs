@@ -256,13 +256,13 @@ public class LatentControlAuthorityTests
 
     /// <summary>The seam's own control, flown: two plants identical but for
     /// <see cref="FlightModel.AoaLimiterFactor"/> fly the same sustained pull, and the one that
-    /// spends the window ends up pitching visibly slower. At the shipped default of 0 there is no
-    /// difference to find, which is why the stock envelope does not move.</summary>
+    /// spends the window ends up pitching visibly slower. The shipped default is 1, the decode, so
+    /// the held-off plant is the one constructed explicitly here.</summary>
     [Fact]
     public void TheAoaSeamChangesTheFlownPitchRate()
     {
-        var off = new FlightModel(Bare());
-        var on = new FlightModel(Bare()) { AoaLimiterFactor = 1f };
+        var off = new FlightModel(Bare()) { AoaLimiterFactor = 0f };
+        var on = new FlightModel(Bare());
         foreach (var m in new[] { off, on })
         {
             m.Reset(Vector3.Zero, Basis.Identity, 300f * Mph, 1f);

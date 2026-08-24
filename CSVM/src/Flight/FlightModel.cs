@@ -240,12 +240,13 @@ public sealed class FlightModel
     // Every aircraft CSVM can send far-field is a non-player one, so it is unconditional here.
     private const float FarFieldAiSpeedBonus = 5f;
 
-    // How much of the opposing-command limiter's decoded AOA window is spent. Decoded PRESENT and
-    // held at 0, a recorded divergence rather than a deletion: the window is continuous rather than
-    // a threshold, and at 1 it costs the sustained pitch-rate row 32.43 → 22.51 °/s against a
-    // filmed 33.00. docs/org/flightModel.md, "Torques and the limiters".
-    // ⚠ 1 is the decode. Any value between is a blend with no original behind it.
-    private const float AoaLimiterFactorDefault = 0f;
+    // How much of the opposing-command limiter's decoded AOA window is spent. 1 is the decode and
+    // the default; 0 is the A/B seam that holds the window off. The window is continuous rather
+    // than a threshold, so at 1 it binds on every stock airframe and the sustained pitch-rate row
+    // reads 22.51 °/s against a filmed 33.00, a recorded conflict, not a tuning input.
+    // docs/org/flightModel.md, "The α a full pull holds".
+    // ⚠ Any value between is a blend with no original behind it.
+    private const float AoaLimiterFactorDefault = 1f;
 
     // The delivered lift's component along the BODY UP axis, in G, as the last completed step left
     // it — the signed load factor the original's G limiter reads, which is why it is kept rather
@@ -277,9 +278,8 @@ public sealed class FlightModel
     public bool UsesAiForcePath { get; }
 
     /// <summary>How much of the decoded AOA window this plant spends, before the config key
-    /// <c>flightModel.aoaLimiterFactor</c> (which still wins). 0, the default, replaces the window
-    /// with 1 and is a recorded divergence; 1 is the decode. See
-    /// <see cref="AoaLimiterFactorDefault"/> for why the default is 0.
+    /// <c>flightModel.aoaLimiterFactor</c> (which still wins). 1, the default, is the decode; 0
+    /// replaces the window with 1 and is the A/B seam. See <see cref="AoaLimiterFactorDefault"/>.
     /// ⚠ Fixed at construction, like <see cref="UsesAiForcePath"/>: a mid-flight switch would make
     /// a flight unreproducible.</summary>
     public float AoaLimiterFactor { get; init; } = AoaLimiterFactorDefault;
@@ -295,8 +295,9 @@ public sealed class FlightModel
     /// <summary>The opposing-command limiter's scalar as the last step computed it: the smaller of
     /// the AOA and G terms, applied to whichever of the pitch and yaw commands swings the nose
     /// further off the flight path. 1 leaves both commands alone.
-    /// ⚠ It is authored out of reach on every stock airframe, so it reads 1 through the whole stock
-    /// envelope. docs/org/flightModel.md, "Torques and the limiters".</summary>
+    /// ⚠ The G ramp is authored out of reach on every stock airframe; the AOA window is not, and
+    /// it reads about 0.7 through a stock full pull. docs/org/flightModel.md, "Torques and the
+    /// limiters".</summary>
     public float CommandLimit { get; private set; } = 1f;
 
     /// <summary>Which plant the last step flew: true is the original's far-field speed-hold branch,
@@ -434,6 +435,22 @@ public sealed class FlightModel
     /// different, local quantity, and this method exists to record that misattribution.</summary>
     public float ReverseAuthorityAt(float speed) =>
         speed > Stats.YawMax ? Mathf.Max(YawAuthorityAt(speed), ReverseAuthorityFloor) : 1f;
+
+    /// <summary>Maximum available lift as a multiple of weight, clMax(V)·q(V)·RefArea / Weight: the
+    /// load factor ceiling, and the quantity ComputeStallSpeed inverts. Weight is the BARE authored
+    /// veh_weight (a load factor of exactly 1), which is what the original compares against. Public
+    /// so the pull instrument (<c>Probes.PullToLimit</c>) can print the ceiling beside the delivered G.</summary>
+    public float LiftCapAt(float speed)
+    {
+        var s = Stats;
+        if (s.VehWeight <= 1e-3f)
+            return 0f;
+        float speedFps = speed * FeetPerMetre;
+        float dynPressure = 0.5f * AirDensitySlugPerFt3 * speedFps * speedFps;
+        float mach = speed / (SpeedOfSoundFps * MetresPerFoot);
+        float clMax = Mathf.Max(0f, ClMaxStatic - ClMaxMach * mach);
+        return clMax * dynPressure * s.RefArea / s.VehWeight;
+    }
 
     /// <summary>The opposing-command limiter's scalar: the smaller of an alignment window on α and a
     /// ramp on the delivered body-up load factor. Pure in its arguments so an instrument can sample
@@ -852,21 +869,6 @@ public sealed class FlightModel
         float fAng = sum > 0f ? a / sum : 0f;
         var kick = Attitude.Transposed() * u * ((1f + fAng * Stats.BounceFactor) * BounceAngularHalf);
         return (vn - vpn * (1f + fLin * Stats.BounceFactor), kick);
-    }
-
-    // Maximum available lift as a multiple of weight, clMax(V)·q(V)·RefArea / Weight — the load
-    // factor ceiling, and the quantity ComputeStallSpeed above inverts. Weight is the BARE authored
-    // veh_weight (a load factor of exactly 1), which is what the original compares against.
-    private float LiftCapAt(float speed)
-    {
-        var s = Stats;
-        if (s.VehWeight <= 1e-3f)
-            return 0f;
-        float speedFps = speed * FeetPerMetre;
-        float dynPressure = 0.5f * AirDensitySlugPerFt3 * speedFps * speedFps;
-        float mach = speed / (SpeedOfSoundFps * MetresPerFoot);
-        float clMax = Mathf.Max(0f, ClMaxStatic - ClMaxMach * mach);
-        return clMax * dynPressure * s.RefArea / s.VehWeight;
     }
 
     // The stall nose-drop as the original builds it, returning the accumulator with it folded in.

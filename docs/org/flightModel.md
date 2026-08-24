@@ -1030,11 +1030,24 @@ did not survive the sign test's correction to the closing axis. Both directions 
 bullet above.
 
 **Implemented** as `FlightModel.OpposingCommandLimitAt`, applied to the pitch and yaw stick
-components in `Step`. The **G ramp is live**; the **AOA window is held off** by
-`FlightModel.AoaLimiterFactor` (config `flightModel.aoaLimiterFactor`, 1 spends it) as a recorded
-divergence, because it is not a threshold and binds on the shipped data. The reachability
-measurements and that divergence's evidence are in "Corrected — the G ramp grazes and the AOA
-window binds" below.
+components in `Step`. Both halves are live: the G ramp, and the AOA window at its decoded strength
+(`FlightModel.AoaLimiterFactor` 1, config `flightModel.aoaLimiterFactor`; 0 is the A/B seam that
+holds the window off). The window is not a threshold and binds on the shipped data; what it moves,
+and the conflict it opens with the filmed pitch rate, are in "Corrected — the G ramp grazes and the
+AOA window binds" and "The α a full pull holds" below.
+
+⚠ **The original reads the limiter's G on the SAME tick; the remake reads it one tick late.** In
+`FUN_0048c470` the force build `FUN_0048fc40` writes the delivered body-up load factor into its
+seventh argument (`&param_1`, the call at `0x48c883`) and the ramp compares that value a few
+instructions later (`0x48ca1e`), all before the torques accumulate and before the integrator runs;
+α is read from the entering velocity and attitude in the same call. `FlightModel.Step` runs the
+rotation before the translation, so its limiter reads `_bodyUpLoadFactor` as the previous step
+left it. The lag is one sim step (16.7 ms) on the G term only; α is the entering state on both.
+It is unported because the port is the whole rotation/translation order of `Step` (forces built
+from the entering attitude), which moves every row on every airframe and needs its own A/B. What
+it can cost is bounded by reach: the pull instrument below peaks at 5.83 G against `highGs[0]` 9,
+so no stock envelope row reads the G ramp at all, and the only place the delay is visible is the
+outside-push graze at −6 G, one step late on a 92–97 % factor.
 
 ⚠ **A fourth consumer exists and is NOT implemented.** The same scalar multiplies the `level_off`
 torque (`obj+0x650`, the `level_off_rate` key, read at `0x48cedc`) when that torque opposes the
@@ -2130,9 +2143,10 @@ on the rest; the α peak is the pull at 1.5 × `fd_speed` on all eleven. The ret
 nose-chase used to hold every α small, so these margins are much tighter than they once measured
 (the Bloodhawk's α margin is 5.5°), but no manoeuvre crosses either threshold and
 `ControlLimiterTests` still fails if one comes into reach. The suite's own instruments agree from
-the other side: the sustained pitch-rate row reports α = 32.0/32.7/33.1° at 120/200/280 mph,
-`zoom-climb` 38.2° at its minimum speed, the sustained turn 31.8°, and the knife-edge probe peaks
-at 0.77–5.68°.
+the other side: with the AOA window held off the sustained pitch-rate row reports
+α = 32.0/32.7/33.1° at 120/200/280 mph, `zoom-climb` 38.2° at its minimum speed, the sustained
+turn 31.8°, and the knife-edge probe peaks at 0.77–5.68°; with the window live (the shipped
+default) those read 24.5/24.8/25.0°, 25.4° and 23.7°.
 
 ⚠ **The margin against the executable's own fallbacks is one hundredth of a G.** The Bloodhawk's
 5.01 G peak is 0.2 % **past** the compiled fallback `highGs[0] = 5` — under the fallbacks the
@@ -2175,21 +2189,37 @@ that must break it, rather than pinning an unreachability that is not true.
 
 **The AOA window is not a threshold, and it binds.** `(cos α − cos maxAOA) / (1 − cos maxAOA)` is
 below 1 at every non-zero α: 0.80 at 20°, 0.56 at 30°, 0.23 at 40°, zero at the authored 46°.
-Against the α this plant reaches in a sustained pull (32.0–33.1° at 120/200/280 mph, 38.2° at the
-zoom-climb's minimum speed) that is a factor of about a half on the elevator, and spending it moves
-the envelope: sustained `pitch-rate` **32.43 → 22.51 °/s** against a filmed 33.00, `sustained-turn-rate`
-34.52 → 25.83 against 18.95, `zoom-climb` 821 → 1280 ft against 936, `zoom-climb-min-speed`
-117.9 → 143.9 mph against 127.9. Two of those move toward the original and two away, and the
-pitch-rate row is the one A2 had inside a point of its target.
+Against the α the held-off plant reaches in a sustained pull (32.0–33.1° at 120/200/280 mph,
+38.2° at the zoom-climb's minimum speed) that is a factor of about a half on the elevator, and
+with it live the pull settles at a smaller α (24.8°) where the window reads 0.70.
 
-⚠ **The window is held off by `FlightModel.AoaLimiterFactor` (config
-`flightModel.aoaLimiterFactor`), a recorded divergence and not a decode doubt.** The arithmetic and
-the sign rule are traced and pinned; what is unsettled is whether this plant's α is the α the
-original holds. A first-order lag at the authored `lift_accel_rate` of 0.75/s puts the steady lag at
-roughly `ω / rate`, so a 33 °/s pull implies tens of degrees of α in the original too, and the
-original's own measured pitch rate would then already be a limited one. Settling that is a
-whole-envelope question (`E42`) and needs the full battery and a read at the controls, not a
-side effect of porting the term.
+**The window is live at its decoded strength (`FlightModel.AoaLimiterFactor` 1), and this is
+what it moves.** The eleven-airframe dump with the window held off is SHA256 `7BF4C7AE…`; with it
+live, `D2D682D8…`, 143 of 891 lines differing. On every airframe the same seven rows move and no
+other: the pitch rate, the yaw-360 time, the sustained turn's speed, sink and rate, and the zoom
+climb's height and minimum speed. Every equilibrium row (level top speed, terminal dive, altitude
+cap, near-cap speed, eighth-throttle, decel, roll-360, stall departure, knife-edge) is unchanged,
+which is the window's shape: it multiplies only a pitch or yaw command that opens the nose/path
+angle, and those rows hold none.
+
+| Airframe | `pitch-rate` °/s | `sustained-turn-rate` °/s | `sustained-turn-speed` mph | `sustained-turn-sink` ft/s | `zoom-climb` ft | `zoom-climb-min-speed` mph | `yaw-360` s |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| bhawk | 32.43 → 22.51 | 34.52 → 25.83 | 218.03 → 249.87 | 14.26 → −7.51 | 821.44 → 1279.51 | 117.90 → 143.88 | 52.18 → 54.08 |
+| devastator (`pfighter`) | 25.65 → 20.97 | 27.12 → 22.70 | 216.70 → 228.37 | −8.25 → 2.01 | 1020.40 → 1317.53 | 126.16 → 134.93 | 38.92 → 40.47 |
+| fury | 28.91 → 21.88 | 30.55 → 24.17 | 222.89 → 244.22 | −2.08 → −2.30 | 933.55 → 1320.16 | 124.36 → 140.95 | 46.00 → 47.75 |
+| warhawk | 18.13 → 17.03 | 19.25 → 18.11 | 194.68 → 194.29 | −3.62 → −9.82 | 1396.57 → 1514.80 | 135.46 → 136.24 | 48.98 → 50.05 |
+| autogyro | 39.32 → 36.03 | 19.64 → 17.10 | 210.95 → 211.69 | −0.65 → 3.51 | 762.57 → 828.58 | 169.96 → 170.57 | 18.62 → 19.00 |
+| avenger | 26.95 → 21.29 | 28.48 → 23.21 | 216.47 → 232.66 | −7.97 → 0.81 | 963.27 → 1296.66 | 121.60 → 133.29 | 41.13 → 42.77 |
+| balmoral | 11.29 → 10.83 | 12.00 → 11.55 | 118.74 → 119.60 | −11.90 → −8.91 | 1054.52 → 1114.37 | 51.83 → 51.77 | 51.47 → 52.92 |
+| brigand | 21.62 → 18.83 | 22.73 → 20.09 | 218.99 → 222.77 | 2.73 → 0.39 | 1197.60 → 1442.24 | 126.67 → 131.42 | 36.82 → 38.30 |
+| firebrand (`fbrand`) | 18.80 → 17.67 | 20.04 → 18.91 | 200.97 → 200.62 | 0.00 → −5.72 | 1413.04 → 1528.62 | 143.58 → 144.32 | 31.07 → 32.05 |
+| kestrel | 19.42 → 17.80 | 20.63 → 19.00 | 205.87 → 205.86 | 2.05 → −5.22 | 1334.23 → 1496.23 | 135.00 → 136.72 | 32.62 → 33.83 |
+| peacemaker | 30.94 → 22.31 | 32.86 → 25.18 | 220.22 → 246.10 | 8.49 → −5.61 | 863.19 → 1286.60 | 120.48 → 141.81 | 48.67 → 50.48 |
+
+Against the Bloodhawk's footage, `sustained-turn-rate` moves toward its 18.95 and `pitch-rate`,
+`zoom-climb` and `zoom-climb-min-speed` move away from their 33.00, 936 ft and 127.9 mph. The
+pitch-rate row is now a recorded conflict (informational in `Probes.FlightEnvelope`,
+`FlightEnvelopeTests` asserting five rows); its attribution is the next section.
 
 **Two of the parsed globals are dead in the executable.** The global `drag_factor` (→ `0x71c44c`,
 fallback 3.0) and `drag_fade_speed` (→ `0x71c450`, parsed × 0.44704, fallback 40 mph) are written
@@ -2198,6 +2228,88 @@ by the `player.json` parser at `0x4744c0`/`0x4744f0` and **read by nothing anywh
 drag multiplier and no low-speed drag fade; the per-plane `drag_factor` is the only drag scale.
 Checked while hunting the CAP-05 deficit (a fade below ~300 mph would have produced exactly its
 shape); the hunt is what proved the keys dead.
+
+## The α a full pull holds
+
+With the AOA window live the Bloodhawk's sustained full-elevator pull reads 22.5 °/s against a
+filmed 33.00, and this section says what bounds α in the original's pull, measures the remake's
+pull step by step, and names where the residual lives. The instrument is
+`Probes.PullToLimit` (written by `ZzPullInstrument` to `CSVM_PULL_OUT`): full back stick and
+full throttle from 200 mph level, one line per sim step with α, the window, the limiter scalar,
+the demanded and delivered G against the lift ceiling, the nose's pitch rate, the flight path's
+turn rate and the weathervane's torque, plus the mean rate over the first 360° of nose rotation,
+which is the shape the footage's figure was binned in.
+
+**What bounds α in the original, and what does not.**
+
+- **The `liftAOAs` blend** (`_DAT_0071c430`/`_DAT_0071c434`, the cos α at `0x48c528`–`0x48c56d`)
+  is authored 5°/9°, so past 9° the target velocity is `speed · nose` in full and the demand is
+  `lift_accel_rate · speed · 2 sin(α/2)` plus weight. It sets how much path turn a given α buys,
+  not a bound on α.
+- **`FUN_0041abd0`** clamps the demanded G to −5/+9, the coefficient to ±1.8 and then takes a
+  one-sided `min` against `0.5 · FUN_0041ad80(Mach)` = `0.5 · (1.5 − 0.3 M)`, the `0.75 − 0.15 M`
+  ceiling. None of the three touches α, and in this pull none binds: the demand peaks at 4.5 G
+  with the ceiling between 12 and 16 G, so the delivered G is the demand at every step.
+- **The 8 ft/s gate** (`local_84 <= 2.4384` at the top of the near-field build, `n = 0` and a
+  placeholder direction) is a low-speed cut on the lift build. The pull never goes below 140 mph.
+- **The limiter's G read** is the same tick's delivered lift (see "Torques and the limiters"),
+  and it is out of reach here: the pull peaks at 5.83 G against `highGs[0]` 9, so the AOA window
+  is the whole of the limiter in this manoeuvre and the one-step delay in the remake's read of the
+  G term cannot move it.
+
+So nothing clamps α directly. α in a held pull is an equilibrium: the nose rate, which is the
+elevator torque times the window at α (`0x48c9f4`) minus the weathervane's `return_rate · α/2`,
+settled against `ang_momentum_damp`, must equal the path's turn rate, which the lag rate
+`lift_accel_rate` (`_DAT_0071c448`, authored 0.75/s) buys from that same α. Every term in that
+balance is decoded or authored.
+
+**The per-step readout.** Window live, 200 mph entry:
+
+| t (s) | mph | α° | window | demand G | cap G | nose °/s | path °/s |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.25 | 215.8 | 4.6 | 0.989 | 2.03 | 13.95 | 29.94 | 2.06 |
+| 0.53 | 227.2 | 12.1 | 0.928 | 3.59 | 15.42 | **35.99** | 13.48 |
+| 1.00 | 229.6 | 20.0 | 0.803 | 4.44 | 15.74 | 30.92 | 19.50 |
+| 2.00 | 204.3 | 24.8 | 0.697 | 4.07 | 12.55 | 22.56 | 21.00 |
+| 4.00 | 152.2 | 25.8 | 0.673 | 1.98 | 7.07 | 20.73 | 20.83 |
+| 6.00 | 144.9 | 24.7 | 0.700 | 0.45 | 6.41 | 23.77 | 25.01 |
+| 12.00 | 320.6 | 21.3 | 0.777 | 5.07 | 29.91 | 26.64 | 26.25 |
+
+The nose rate peaks at 35.99 °/s half a second in, while α is still 12° and the window 0.93, then
+falls as α opens and the window closes, and settles where the nose and path rates meet: 22.5 °/s at
+α 24.8° with the window at 0.70. The first 360° of nose rotation takes 14.22 s, a loop mean of
+**25.32 °/s**. Window held off (the seam at 0), the same pull peaks at 37.77 °/s, settles at
+33.9 °/s at α 26.9° and loops in 10.82 s, **33.28 °/s**.
+
+**The footage band.** The 33.00 is the mean of four bins read round a loop, 37.9 / 33.7 / 30.7 /
+36.5 °/s (see "The `*Tune` rates"), so the band the row can be judged against is 30.7–37.9 °/s, and
+the reading is a frame-derived rate that ranks readings and cannot refute a decode
+(`docs/verification.md` DET-11, DET-12). The held-off plant's 33.28 sits inside that band; the
+window-live plant's 25.32 sits 5.4 °/s below its floor, and its settled 22.5 is 8.2 below the
+lowest bin.
+
+**Attribution: a recorded conflict, owned by the α equilibrium, not by one fitted term.** With the
+window live, a 33 °/s wings-level pull at 200 mph needs a path rate of 0.576 rad/s; weight buys
+about 0.11 of that (`g / V`), so the lag must supply 0.47 rad/s, which at `lift_accel_rate` 0.75
+means `2 sin(α/2)` = 0.62, α ≈ 36°. The window at 36° is 0.37, and the weathervane at that α is
+larger than at 25°, so the elevator cannot hold the nose at 33 °/s there: the arithmetic has no
+solution at 33 °/s with these values, and the plant's 22.5 °/s at 24.8° is the balance those
+values do have. The named terms are the window at `0x48c9f4`–`0x48ca18` on the authored 46°
+`maxAOA` (`_DAT_0071c42c`) and the lag rate at `_DAT_0071c448`. Neither is weakened (plan
+Decision 1): the plant's value is the executable's, and the filmed figure is discarded rather
+than carried as a conflict, as are the filmed figures beside `yaw-360` and `decel-290-150`.
+
+**The lag-rate lead is closed by a live read.** The lag rate is the one term in the balance with
+a compiled fallback (1.2, `0x3f99999a`) far from its authored value (0.75), and a faster lag needs
+less α for the same path rate: the instrument's diagnostic run with 1.2 in place of 0.75 settles
+at 31.7 °/s at α 18.5° and loops at 29.75 °/s, inside the row's band. The retail process does not
+run it. A passive sample of a live retail process through 200 s of mission flight with full pulls
+(Bloodhawk, Mach to 0.467) reads `_DAT_0071c448` at 0.75 on every in-mission sample and the
+`liftAOAs` thresholds `_DAT_0071c430`/`_DAT_0071c434` at cos 5° and cos 9°, all three slots BSS
+that read 0.0 until a plane loads (the same shape as the atmosphere threshold, "Atmosphere"). The
+pull is therefore the executable's own and the filmed figure is discarded; the same-tick lift
+read above remains a port-fidelity difference on its own merit. The climb residual of "The sustained climb" is the same α question from
+the other side and moves with whatever settles this one.
 
 ## The resting altitude cap — measured, and traced to ONE mission
 
@@ -3016,7 +3128,7 @@ without a provenance. Five classes are used:
 | `GroundBlowIntoFactor` | 0.05 | decoded | the immediate in the player branch of `FUN_0048c220` |
 | `GroundBlowVelocitySteer` | 2.0 | decoded | a global whose only writer is the `gbc` debug console command |
 | `NoseChaseFactor` | 0 | decoded | decoded-absent: no instruction in `FUN_0048c470`/`FUN_0048fc40`/`FUN_0048e580` rotates the velocity direction onto the nose; see "`lift_accel_rate` is a lag toward a target velocity" |
-| `AoaLimiterFactorDefault` | 0 | exception | the decoded AOA window, held off. Traced at `0x48c9f4`–`0x48ca18` and reachable, so this is a recorded divergence and not an absence; see "Corrected — the G ramp grazes and the AOA window binds" |
+| `AoaLimiterFactorDefault` | 1 | decoded | the decoded AOA window at full strength, `0x48c9f4`–`0x48ca18`; 0 is the A/B seam. It binds on every stock airframe and opens the `pitch-rate` conflict; see "The α a full pull holds" |
 | `BounceLeverScale` | 2.25 | decoded | the literal at `0x00608108`, no data origin |
 | `ContactPushOut` | 0.03 | decoded | the literal at `0x006080c4`, the player placement's offset along the normal (`0x48dfce`); the non-player arm has none |
 | `BounceAngularHalf` | 0.5 | decoded | the shared literal at `0x006032e0` on the angular deposit (`0x48e4bc`) |
@@ -3189,9 +3301,9 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
    released-stick-only term in any sense.
 9. **The limiter gating only SEPARATING input** — a subtle asymmetry that damps entry into a
    departure and leaves recovery from one free. Landed in `B11`. ⚠ The G ramp is live and grazed by
-   two airframes in a sustained outside push; the AOA window is decoded, reachable and held off by
-   `AoaLimiterFactor` as a recorded divergence — see "Corrected — the G ramp grazes and the AOA
-   window binds".
+   two airframes in a sustained outside push; the AOA window is live at its decoded strength and
+   binds on every stock airframe, which is what opens the `pitch-rate` conflict — see "Corrected —
+   the G ramp grazes and the AOA window binds" and "The α a full pull holds".
 10. **Thrust scales with `ref_area`, not `1/veh_weight`.** The remake divides engine power by
     weight; the original multiplies it by reference area, which is what makes `RefArea` cancel
     against drag. See `ThrustFactor` above.

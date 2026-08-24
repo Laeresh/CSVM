@@ -34,7 +34,7 @@ settles them.
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | Footage and a complete executable trace disagree? | **The executable trace wins**; footage does not justify a fitted multiplier. |
+| 1 | Footage and a complete executable trace disagree? | **The executable trace is the answer and the footage figure is discarded.** Footage is untrustworthy; it never justifies a fitted multiplier and it never creates a "conflict" against a traced mechanism. A footage number may corroborate a decode, nothing more. |
 | 2 | Are CSVM safety nets parity behavior? | **Only as named product exceptions** whose stock-envelope reachability is tested. |
 | 3 | Does the original's single-player pointer limit four-player CSVM? | **No**; widen player-only behavior to all human pilots deliberately. |
 | 4 | A GDD-only feature is absent from executable and data? | **Close it as disproven/won't-do**; do not invent shipped behavior. |
@@ -849,6 +849,7 @@ which the runtime does not offer. `BL-089` deleted from `backlog.md`.
 **Evidence (confidence: lead-only).** One uncertain playtest report names softness; the authored low-speed authority ramp is a competing explanation.
 
 **Approach.** <TODO: re-verify still-open against `git log --grep=BL-388` and `playtest.md`.> After A2/B11, replay matched autogyro stalls and separate AI recovery commands from plant authority.
+Judge against the window-live plant `E43` shipped (`AoaLimiterFactor` 1): the autogyro's stock pull already reads 36.0 °/s there against 39.3 with the seam at 0.
 
 **Model recommendation.** **high** — coupled control-law/plant diagnosis from weak evidence.
 
@@ -858,7 +859,11 @@ which the runtime does not offer. `BL-089` deleted from `backlog.md`.
 
 ## E42 ☐ Publish the eleven-airframe parity ledger
 
-**Goal.** End with one reproducible table classifying every mechanism and envelope row as matched, intentional exception, recorded executable-vs-video conflict, or unsupported.
+**Goal.** End with one reproducible table classifying every mechanism and envelope row as
+decoded (the executable's value, with any disagreeing footage figure noted as discarded),
+intentional exception, or unsupported. Under Decision 1 there is no conflict class: a traced
+mechanism is the answer, and the instruments pin the decoded plant's own values, with footage
+figures kept only as annotations.
 
 **Evidence (confidence: traced).** Today only the Bloodhawk has video targets; mechanism tests cover decoded laws but not every combined airframe envelope.
 
@@ -870,7 +875,7 @@ which the runtime does not offer. `BL-089` deleted from `backlog.md`.
 
 **⚠ Traps.** Passing mechanism tests proves the port is internally consistent, not that every original-game observation agrees. Preserve conflicts verbatim.
 
-## E43 ☐ Enable the decoded AOA window and settle α against the original
+## E43 ☑ Enable the decoded AOA window and settle α against the original
 
 **Goal.** Ship the opposing-command limiter's AOA window at its decoded strength (user decision,
 plan Decision 1 applied strictly), then determine whether the α CSVM's plant holds in a full pull is
@@ -905,3 +910,46 @@ residual as a conflict with the term it belongs to.
 **⚠ Traps.** Do not close the gap by weakening the window, the lag rate or `maxAOA`; each is
 decoded. A pitch-rate match bought by a fitted factor fails Decision 1. Footage rates carry
 `DET-11`/`DET-12` error; state the band before declaring a match or a conflict.
+
+**Landed.** (1) `AoaLimiterFactorDefault` is 1; the config key stays as the seam. The
+eleven-airframe dump moves from `7BF4C7AE…` (held off, `B11`'s hash) to `D2D682D8…` (`B11`'s
+window-alone hash, reproduced), 143 of 891 lines: on every airframe the same seven rows
+(`pitch-rate`, `yaw-360`, the three sustained-turn rows, `zoom-climb`, `zoom-climb-min-speed`)
+and no equilibrium row, tabulated old → new in the dossier under "Corrected — the G ramp grazes
+and the AOA window binds". Inventory row (1, decoded) and census updated;
+`LatentControlAuthorityTests` passes with its held-off plant now constructed explicitly. (2) The
+decode: nothing in the original clamps α. The `liftAOAs` blend (5°/9°) sets how much path turn an
+α buys, `FUN_0041abd0`'s clamps (−5/+9 G, ±1.8, the one-sided `0.5 · (1.5 − 0.3 M)` ceiling from
+`FUN_0041ad80`) and the 8 ft/s gate never bind in the pull, and the limiter's G is the SAME
+tick's delivered lift (`FUN_0048fc40` writes it to `&param_1` at `0x48c883`, the ramp reads it at
+`0x48ca1e`, before the torques), where the remake reads it one step late because `Step` rotates
+before it translates. That ordering is not ported (it is the whole force-from-entering-attitude
+order of `Step`, a follow-up with its own A/B) and it is bounded: the pull peaks at 5.83 G against
+`highGs[0]` 9, so no stock row reads the G ramp. The instrument `Probes.PullToLimit`
+(`ZzPullInstrument`, `CSVM_PULL_OUT`) logs α, window, limiter, demanded and delivered G against the
+ceiling, nose and path rates per step and the first-360° loop mean: window live the Bloodhawk peaks
+at 35.99 °/s at α 12°, settles at 22.5 °/s at α 24.8° (window 0.70) and loops at 25.32 °/s;
+held off it settles at 33.9 and loops at 33.28. The footage's 33.00 is four loop bins spanning
+30.7–37.9 °/s; the live plant sits 5.4 °/s under that floor. The residual is a recorded conflict
+owned by the α equilibrium (window at `0x48c9f4` on the authored 46° `maxAOA`, lag rate at
+`_DAT_0071c448` 0.75/s): 33 °/s needs α ≈ 36°, where the window is 0.37, so the arithmetic has
+no solution at 33 with these values. `pitch-rate` is now informational (open conflict beside
+`yaw-360` and `decel-290-150`, `FlightEnvelopeTests` asserting five rows). One lead recorded, not
+acted on: the lag rate's compiled fallback 1.2 settles the pull at 31.7 °/s (inside ±3) and loops
+at 29.75, so a live read of `_DAT_0071c448` in flight, as `A4` did for the band, is the next
+question. Dossier section "The α a full pull holds"; goldens not re-pinned here. The final tree's
+dump is `1175DD10…`, differing from `D2D682D8…` only in the pitch-rate row's annotation lines
+(numbers identical).
+
+**Live read at the controls.** The lead that the live plant might run the lag rate at the
+compiled fallback 1.2/s is disproven: a passive sample of the retail process through 200 s of
+mission flight with full pulls (Bloodhawk, Mach to 0.467) reads `_DAT_0071c448` at the authored
+0.75 on every in-mission sample, and the `liftAOAs` thresholds at cos 5° and cos 9° as authored;
+the slots are BSS and read 0.0 until a plane loads. The plant's pull is therefore the executable's
+own, and the filmed 33 °/s is discarded under Decision 1 rather than carried as a conflict; the
+same-tick lift ordering remains a port-fidelity difference on its own merit, not a lead for
+chasing the footage.
+
+**Verified.** Full `RunTests.ps1` battery on the lane tree: build clean, 2137/2137 units,
+94/94 engine suites with engine errors clean. One golden moved, `c1-flight`, reviewed by the user
+and re-pinned; a check pass reads 16/16 hash-identical against the new pin, exit 0.

@@ -15,8 +15,9 @@ namespace CSVM.Tests;
 /// manoeuvres that produce the most load factor and fail if either threshold comes into reach,
 /// which is when a stock envelope row would start moving with it.
 /// ⚠ The AOA half is NOT unreachable and is not asserted here — it is a continuous window rather
-/// than a threshold, held off by <c>FlightModel.AoaLimiterFactor</c>. The α margins below are kept
-/// because they are the measurement behind that finding, not because a threshold is being watched.
+/// than a threshold, live at <c>FlightModel.AoaLimiterFactor</c> 1 and binding on every stock
+/// airframe. The α margins below are kept because they are the measurement behind that finding,
+/// not because a threshold is being watched.
 /// </summary>
 public class ControlLimiterTests
 {

@@ -69,7 +69,7 @@ public class FlightConstantInventoryTests
         ("FlightModel", "GroundBlowIntoFactor", 0.05, Decoded),
         ("FlightModel", "GroundBlowVelocitySteer", 2.0, Decoded),
         ("FlightModel", "NoseChaseFactor", 0.0, Decoded),
-        ("FlightModel", "AoaLimiterFactorDefault", 0.0, ProductException),
+        ("FlightModel", "AoaLimiterFactorDefault", 1.0, Decoded),
         ("FlightModel", "BounceLeverScale", 2.25, Decoded),
         ("FlightModel", "ContactPushOut", 0.03, Decoded),
         ("FlightModel", "BounceAngularHalf", 0.5, Decoded),

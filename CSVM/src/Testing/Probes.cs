@@ -938,6 +938,66 @@ public static class Probes
         return result;
     }
 
+    // ---- pull instrument ---------------------------------------------------------------------
+
+    /// <summary>The per-step readout of a held full pull: α, window, limiter, demanded and delivered
+    /// G against the ceiling, nose and path rates, and the first-360° loop mean, so the pitch-rate
+    /// residual is attributed step by step (docs/org/flightModel.md, "The α a full pull holds").
+    /// <paramref name="aoaLimiterFactor"/> is the A/B seam (1 the decode); <paramref name="liftAccelRate"/>
+    /// replaces the authored lag rate for one diagnostic run and is never a setting.
+    /// ⚠ An instrument, not an assertion: nothing here is a target.</summary>
+    public static string PullToLimit(string zrdrPath, string planeNodeName, float entryMph,
+        float seconds, float aoaLimiterFactor, float? liftAccelRate = null)
+    {
+        System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+        var stats = PlaneStats.Load(zrdrPath, planeNodeName);
+        if (liftAccelRate is float rate)
+            stats.LiftAccelRate = rate;
+        var m = new FlightModel(stats) { AoaLimiterFactor = aoaLimiterFactor };
+        m.Reset(Vector3.Zero, Level(), entryMph * Mph, 1f);
+        var sb = new StringBuilder();
+        sb.AppendLine($"pull-to-limit {planeNodeName}: full back stick and full throttle from "
+                      + $"{entryMph:0} mph level, aoaLimiterFactor {aoaLimiterFactor:0.##}, "
+                      + $"maxAOA {Mathf.RadToDeg(Mathf.Acos(stats.MaxAoaCos)):0.0}°, liftAOAs "
+                      + $"{Mathf.RadToDeg(Mathf.Acos(stats.LiftAoaCosLo)):0.0}/"
+                      + $"{Mathf.RadToDeg(Mathf.Acos(stats.LiftAoaCosHi)):0.0}°, lift_accel_rate "
+                      + $"{stats.LiftAccelRate:0.###}/s, highGs {stats.HighGStart:0.#}/{stats.HighGMax:0.#}");
+        sb.AppendLine("     t      mph     α°  window  limit  demandG  liftG  bodyUpG   capG  "
+                      + "nose°/s  path°/s  vane°/s²");
+        var prevDir = m.VelocityDir;
+        float peakNose = 0f, peakG = 0f, noseSwept = 0f, loopTime = 0f;
+        for (int i = 1; i <= (int)MathF.Round(seconds / EnvDt); i++)
+        {
+            m.Step(new FlightInput { Pitch = 1f, Throttle = 1f }, EnvDt);
+            // The footage's rate is binned round a whole loop, so the first 360° of nose rotation
+            // is the comparable figure, not the level-entry transient or the 2 s settled value.
+            noseSwept += Mathf.RadToDeg(m.BodyRates.X) * EnvDt;
+            if (loopTime == 0f && noseSwept >= 360f)
+                loopTime = i * EnvDt;
+            float cosA = Mathf.Cos(Mathf.DegToRad(m.Alpha));
+            float window = m.OpposingCommandLimitAt(m.Speed, cosA, 0f, 1f);
+            float pathRate = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(prevDir.Dot(m.VelocityDir), -1f, 1f))) / EnvDt;
+            prevDir = m.VelocityDir;
+            float noseRate = Mathf.RadToDeg(m.BodyRates.X);
+            float liftG = Mathf.Min(Mathf.Clamp(m.LoadFactorDemand, -5f, 9f), m.LiftCapAt(m.Speed));
+            float vane = Mathf.RadToDeg(m.WeathervaneTorque().X * stats.RecInertia.X);
+            peakNose = Mathf.Max(peakNose, noseRate);
+            peakG = Mathf.Max(peakG, m.BodyUpLoadFactor);
+            sb.AppendLine($"{i * EnvDt,6:0.000} {m.Speed / Mph,7:0.0} {m.Alpha,6:0.0} {window,7:0.000} "
+                          + $"{m.CommandLimit,6:0.000} {m.LoadFactorDemand,8:0.00} {liftG,6:0.00} "
+                          + $"{m.BodyUpLoadFactor,8:0.00} {m.LiftCapAt(m.Speed),6:0.00} {noseRate,8:0.00} "
+                          + $"{pathRate,8:0.00} {vane,9:0.00}");
+        }
+
+        sb.AppendLine($"peak nose rate {peakNose:0.00} °/s, final {Mathf.RadToDeg(m.BodyRates.X):0.00} °/s "
+                      + $"at α {m.Alpha:0.0}°; peak body-up G {peakG:0.00} against highGs[0] "
+                      + $"{stats.HighGStart:0.#}; nose swept {noseSwept:0} ° in {seconds:0.0} s"
+                      + (loopTime > 0f
+                          ? $", first 360° in {loopTime:0.00} s = {360f / loopTime:0.00} °/s loop mean"
+                          : ", no full loop in the run"));
+        return sb.ToString();
+    }
+
     // ---- flight envelope ---------------------------------------------------------------------
 
     /// <summary>Steps a throwaway <see cref="FlightModel"/> through the manoeuvres the original was
@@ -1021,9 +1081,9 @@ public static class Probes
         Row("roll-360", "full aileron from level cruise, 360°", "s", tRoll, 4.15, 0.25,
             $"α {m.Alpha:0.0}° at finish");
 
-        // --- pitch, at three speeds: speed-independent by construction, so the three catch
-        // anything else (stall, lift, eff) leaking in at the ends. Also the cleanest read of the
-        // alignment lag. docs/org/flightModel.md.
+        // --- pitch at three speeds. ⚠ INFORMATIONAL, an open conflict: the decoded AOA window live
+        // reads 22.5 °/s against a loop-binned 33.00 with every term decoded or authored. Do NOT
+        // close it by weakening the window, the lag rate or maxAOA. docs/org/flightModel.md.
         var pitchRates = new List<double>();
         var pitchAlphas = new List<double>();
         foreach (float mph in new[] { 120f, 200f, 280f })
@@ -1037,7 +1097,9 @@ public static class Probes
             pitchRates[1], 33.0, 3.0,
             $"at 120/200/280 mph = {pitchRates[0]:0.0}/{pitchRates[1]:0.0}/{pitchRates[2]:0.0} °/s, "
             + $"α = {pitchAlphas[0]:0.0}/{pitchAlphas[1]:0.0}/{pitchAlphas[2]:0.0}° "
-            + "(the alignment lag at this body rate — see the note above)");
+            + "(the alignment lag at this body rate — see the note above) — OPEN conflict, the AOA "
+            + "window and the lag rate are the binary's and the footage disagrees",
+            info: true);
 
         // --- yaw. The one axis 'eff' scales, so a thrust change moves it. INFORMATIONAL since the
         // *Tune decode: no per-axis factor exists in the original's torque path, and the footage's
