@@ -57,6 +57,24 @@ that would, and it is out of scope because it moves every asserted envelope row.
 - **Read the module's entry in `docs/architecture.md` before modifying it.** Dead ends are recorded
   there precisely so they are not re-chased.
 
+## Battery on the merged tree
+
+Every item's own verification is in its section; this is the one run over all of them together, on
+the branch with the nine landed items merged:
+
+```
+  PASS  build       2.6s  dotnet build CSVM.sln
+  PASS  units      19.1s  2153 passed, 0 failed, 0 skipped of 2153
+  PASS  engine    109.3s  94 passed, 0 failed, 0 skipped; engine errors clean
+  PASS  goldens    96.1s  16 shot(s) hash-identical; gpu NVIDIA GeForce RTX 5080 / 1.4.341
+  TODO  hitch      17.9s  clean: 0 hitch line(s); inject: 1 hitch line(s); awareness only
+  result: PASS -- 244.9s total, exit 0
+```
+
+A4's cross-host claim re-checked here rather than taken from its own worktree: the eleven-airframe
+dump from `--dump-flight=all` and from `FlightEnvelopeDump` both hash
+`C3050CEB6485DB29A38C5FF55044066F44EE8F2492597149D7B4337341C45C85`, zero differing lines.
+
 ## Checklist
 
 Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items land.**
@@ -120,7 +138,7 @@ worktree still runs hook (7) and reports against the worktree's files.
 find where the wrong directory actually comes from (the hook's cwd, or a relative `$Path` joined to
 `$root`) before rewriting the root logic.
 
-**Verified.** <pending orchestrator run> Two cwd bugs, both reproduced with a planted over-cap probe
+**Verified.** Two cwd bugs, both reproduced with a planted over-cap probe
 rather than diagnosed by inspection: `$root` answered for the caller's cwd rather than the script's
 tree (now `$PSScriptRoot`), and an explicit relative `$Path` reached `[IO.File]::ReadAllText`
 unresolved, which follows the process directory `Set-Location` does not move (now `Resolve-Path`).
@@ -148,7 +166,7 @@ instrument), update the env-var name only if it carries the prefix, fix the live
 
 **⚠ Traps.** A4 edits the same file; land this first.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the merged tree (see "Battery on the merged tree" above).
 
 ## A3 ☑ `BL-455` Delete `AiControlLaw.Throttle`'s dead far-from-player branch
 
@@ -186,7 +204,7 @@ test that observed `SpeedCeiling` numerically was rewritten against the closed l
 dropped, so the unit count holds at 2150 passed, 0 failed. The `--run-tests=Ai` suites re-ran clean
 after the deletion (same 16 suites, all PASS).
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the merged tree (see "Battery on the merged tree" above).
 
 ## A4 ☑ `BL-444` A flight-dump hash that is the same on both hosts
 
@@ -210,7 +228,7 @@ are re-pinned in the same commit with the diff attributed to the rounding alone.
 change in an asserted row still shows. If the difference is in a computed intermediate rather than
 the print, rounding the print may not remove it; say so and record the finding.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the merged tree (see "Battery on the merged tree" above).
 
 ## A5 ☑ `BL-452` Rewrite `BL-266` (b) and (d) against the decoded shake numbers
 
@@ -232,7 +250,7 @@ template's labelled form, with no dates or event narration (CLAUDE.md writing st
 **⚠ Traps.** Do not delete the still-open (c) or the `[Owed-playtest]` tag. Land alone, since every
 other item's closing commit also edits `backlog.md`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the merged tree (see "Battery on the merged tree" above).
 
 ## A6 ☑ `BL-417` Re-verify the perf flake, and stop one unit flake from skipping the later stages
 
@@ -258,7 +276,7 @@ reported and exit 1; revert.
 **⚠ Traps.** Do not loosen the zero-allocation assertion (backlog trap (a)). A fall-through must
 not let a red units stage read as green in the summary block.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the merged tree (see "Battery on the merged tree" above).
 
 `AScopeAllocatesNothing` did not flake once: 20 filtered `dotnet test --filter AScopeAllocatesNothing`
 runs plus 3 full `.\RunTests.ps1` batteries (23 executions total) all passed, each battery's units
@@ -303,7 +321,7 @@ only negative-lift samples. INSTR-19 applies (same-host comparison until A4 land
 **⚠ Traps.** The shipped envelope scenarios fly positive lift, so an unchanged dump is not
 evidence the port is right; add one inverted sample to the dump only if none exists.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the merged tree (see "Battery on the merged tree" above).
 
 **Outcome: a disproof, no code change.** The disassembly confirms the `min` at `0x41ac5f`–`0x41ac7b`
 is one-sided and carries no sign handling, but the asymmetry cannot be reached. Both call sites of
@@ -356,7 +374,7 @@ against an `internal LastCommand` seam. Out of scope but worth knowing:
 `ControlSurfaceAnimator`'s `animate` guard means an AI's control surfaces are never posed at all,
 alive or dead, so a dead AI's held deflection is not visible.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the merged tree (see "Battery on the merged tree" above).
 
 ## B13 ☑ `BL-457` Port the per-contact camera shake (block 5)
 
@@ -385,7 +403,7 @@ graze at the controls (the `BL-120`/`PT-53` corner) now moves the camera. Full 8
 `turbulence` def. `CollisionDamage.cs` gates on positive severity (`flightModel.md:2650`); confirm
 whether a graze reaches `FUN_0048d2c0` at all before claiming a graze shakes.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the merged tree (see "Battery on the merged tree" above).
 
 The magnitude read off `0x0048d3cc`–`0x0048d409` is `min(speed · s · 0.03, 0.15)` radians: the true
 airspeed at `obj+0x934`, the RAW severity cosine rather than the pair's cube, the literal `0.03` at
