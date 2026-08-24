@@ -944,11 +944,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   throttle slew (`0x48e5f7` to `0x48e6c9`), freezing the lever where it stands rather than closing
   it. No fuel model exists here; the shipped missions never run a tank dry, so this matters only
   for a long-flight mode. Nitro burns no fuel (`0x48e603` reads the lever, not the boost flag).
-- `BL-451` `[Research]` **A dead AI's throttle.** The death function `FUN_004b82d0` zeroes neither
-  the throttle command nor the control surfaces; they are AI-written state and the AI think is
-  what stops, so they freeze at their last commanded values. CSVM's three-second dead-hull flight
-  should freeze the same way; check what `AircraftLifecycle`'s handover leaves in the lever and
-  whether the recovery arm keeps writing it.
 - `BL-452` `[Docs]` **`BL-266` carries guessed shake constants the decode has since replaced.**
   The plan's D34 shake pass (`docs/org/shakes.md`, `docs/formats/shakes.md`) traced the block-5 kick
   and the impact sources; `BL-266`'s (b) and (d) text still quotes the pre-decode readings. Rewrite

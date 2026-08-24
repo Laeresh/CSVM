@@ -654,6 +654,12 @@ public partial class FlightController : Node3D
 #pragma warning disable SA1202 // kept beside World, its seam counterpart, ahead of the public method below
     private IFlightInputSource InputSource => _inputSource ??= ResolveInputSource();
 
+    /// <summary>The raw lever/surface command last written into <see cref="_lastInput"/>, the value
+    /// <see cref="StepWreckFall"/> replays unchanged for a dead hull: internal so a suite can
+    /// assert it is bit-identical across the death handover rather than inferring the freeze from
+    /// the wreck's retained speed alone.</summary>
+    internal FlightInput LastCommand => _lastInput;
+
     private IFlightInputSource ResolveInputSource() =>
         _holdSegments != null ? new ScriptedInputSource(_holdSegments)
         : Pilot != null ? new PilotInputSource(this)

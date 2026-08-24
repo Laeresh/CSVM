@@ -73,7 +73,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — decode and port
 
 11. ☑ `BL-449` Confirm the one-sided negative `C_L` ceiling, then port or record it
-12. ☐ `BL-451` A dead AI's throttle and surfaces freeze at their last commanded values
+12. ☑ `BL-451` A dead AI's throttle and surfaces freeze at their last commanded values
 13. ☐ `BL-457` Port the per-contact camera shake (block 5)
 14. ☐ `BL-442` Decode what keys the damaged-engine swap and pitch, then port it
 
@@ -294,7 +294,7 @@ signs at the positive ceiling is the decode, not a departure from it. The ledger
 decoded, and the "one clamp asymmetry remains unported" paragraph in `docs/org/flightModel.md` is
 rewritten as settled.
 
-## B12 ☐ `BL-451` A dead AI's throttle and surfaces freeze at their last commanded values
+## B12 ☑ `BL-451` A dead AI's throttle and surfaces freeze at their last commanded values
 
 **Goal.** During the three-second dead-hull flight, CSVM's lever and control surfaces stay where
 the AI last wrote them, as `FUN_004b82d0` leaves them.
@@ -318,6 +318,40 @@ dead hull's motion.
 
 **⚠ Traps.** The `[obj+0x384]` crashed-flag writers are `BL-456`, out of scope; do not fold that
 decode in. A3 edits `AiControlLaw.cs` too, so land A3 first.
+
+**Outcome: a disproof, no production code change.** `FlightController`'s per-frame update branches
+on `Crashed` before it ever reads `InputSource` again (`FlightController.cs`, the `if (Crashed)`
+arm ahead of the live-flight `input = InputSource.Read(dt)` line), so once the aircraft is dead
+nothing writes `_lastInput` until `Respawn` clears it. `StepWreckFall` steps the model with a copy
+of that same frozen struct every tick of the fall (only `NearestHumanDistSqM` is refreshed on it,
+because the original re-tests the far-field boundary every step regardless of who is flying); the
+death path's `EndFlightSystems` stops audio/effects and never touches it. `AircraftLifecycle` never
+gets a lever field because it never needed one: `Destroy`/`Crash` report what happened and the
+handover is `FlightController`'s alone. A `[obj+0x384]`-style recovery arm exists in the codebase
+only as `BL-456`'s undecoded crashed-flag writers, out of scope here, and does not touch
+`_lastInput`.
+
+Added `internal FlightController.LastCommand` (a test seam beside the existing internal
+`NextPilotInput`) and extended the `ai-wreck-fall` suite (`DestroyChoreographySuites.cs`,
+`WreckFallsBeforeItIsHandedOver`) to sample it every frame from the kill to the 3.0 s handover and
+assert it stays bit-identical, rather than inferring the freeze from the wreck's retained speed
+alone. Logged from a real Instant Action kill: `throttle=1.000 pitch=0.000 roll=0.000 yaw=0.000` at
+the kill, `throttle=1.000 pitch=0.000 roll=0.000 yaw=0.000` at the handover 3.02 s later — the AI
+was flying straight and level at full throttle when killed, so the pitch/roll/yaw channels read
+zero at both ends; the nonzero throttle holding exactly at 1.000 rather than decaying is what rules
+out a hidden default or a slew back to neutral, and the per-frame bit-identical assertion covers
+every channel regardless of which one the kill happens to catch nonzero. The ledger row ("a dead
+AI's throttle and surfaces freeze at their last commanded values") moves to decoded in
+`CSVM.Tests/ParityLedgerTests.cs` and `docs/org/flightModel.md`'s Mechanisms table, which already
+carried the narrative decode ("The commands freeze; they are not neutralised") with no ledger entry
+to match it. One finding outside this item's scope: `ControlSurfaceAnimator.Advance`'s `animate`
+guard means an AI aircraft's control-surface meshes are never posed at all, alive or dead (only a
+human pilot's are); the frozen *command* channels are real and asserted here, but nobody will see a
+dead AI's ailerons visibly holding a deflection at the controls because no AI's ailerons ever move
+visibly. The one item still owed to a human: watch an ace-mission AI kill at the controls to confirm
+the dead hull's flight path reads as a frozen-lever glide rather than a stall or a drop.
+
+**Verified.** <pending orchestrator run>
 
 ## B13 ☐ `BL-457` Port the per-contact camera shake (block 5)
 
