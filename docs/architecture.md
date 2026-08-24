@@ -2575,37 +2575,17 @@ neither is unreachable. A `current` that is out of range reads as no lock, which
 index (its plane gone since the last press) resolves to.
 
 ## src/Flight/FlightModel.cs
-The aircraft's plant: the arcade velocity-vector flight model, decoded from the original and
-parameterised by the vehicle's own `dynamics` block. Rotation is a spring-damper: stick torque, the
-bank→yaw/pitch coupling, the `return_rate` weathervane and the ground blow sum into one accumulator
-decayed EXPONENTIALLY by `ang_momentum_damp`, with an authored speed-authority curve on each of the
-three axes — yaw its own non-monotone table, roll and pitch the shared low-speed ramp — scaling
-the STICK COMMAND only, never the coupling or the weathervane.
-Thrust, drag, gravity and lift integrate on the velocity VECTOR, so speed passes through zero — lift
-a demanded load factor, drag a polar in MACH with no induced term, thrust a Mach curve times a
-LINEAR lever scaled by nose attitude. Nothing in that force path is fitted; the nose-chase, the
-stall nose-drop and the altitude clamp are ours. There are TWO force paths, fixed per instance at
-construction (`UsesAiForcePath`, C21/C22/C23): the AI one skips the `liftAOAs` airflow blend and the
-weathervane, floors its post-integration nose-axis velocity at 10 mph, and applies a fixed,
-command-independent ground blow instead of the player's command-proportional one; air density is NOT
-branched. The original selected inside the force function on a compare against its single global
-player (`0x48c520`, `0x48cd3e`, `0x48e925`, `0x48c317`) — not copied, because that presumes ONE
-player and this engine flies four. The collision response is the one law here that no step of the
-plant calls: `Collide` takes the contact facts (previous position, step, stop fraction, impact,
-normal, whether the pilot is human, and the caller's crash threshold) and performs the slide, the
-restitution (`BounceNormalSpeed`, still public for the tests and the instruments: `bounce_factor` ×
-the lever-arm partition) and the lever-arm attitude kick, in that order, because the kick adds to
-the body rates the restitution reads. The restitution is PLAYER-only and `Collide` holds that gate;
-its three graze constants are TUNE and ours, unlike the rest of this module. `FlightController`
-applies it for `AircraftContactResolver`, which keeps the fate decision and the un-embed loop (the
-last needs world queries, which this module deliberately has none of).
-The choker's engine cutout lives here as well (`ChokeEngine` / `ClearChoke` / `EngineDeadRemainingS`):
-an extend-only timer, spent at the top of `Step`, that zeroes the thrust term and touches nothing
-else — no drag, lift or airspeed change, so a choked aircraft decelerates on drag alone. The throttle
-lever is left where the pilot put it, which is why the engine comes back at the setting it died on.
-Every mechanism and trap is documented at the line that computes
-it; the decode, the standing decode-vs-footage gaps and the deliberately-absent limiters are
-[`org/flightModel.md`](org/flightModel.md), and the measurement rules are `verification.md`.
+The decoded, data-driven aircraft plant. Rotation sums stick torque, bank coupling, `return_rate`
+weathervane and ground blow before exponential `ang_momentum_damp` decay; authored speed curves
+scale the stick command only.
+Translation separately composes decoded Mach drag, thrust and lift around the lag vector; the
+original spends that vector directly, leaving three target-velocity calls open (`BL-438`). The
+footage altitude clamp and two numerical caps are ours.
+`UsesAiForcePath` holds near-field differences. The original's >1 km AI speed-hold branch remains
+unported (`BL-425`); player-only guards widen to all humans. `Collide` owns restitution and three
+fitted graze terms; contact lifecycle stays in `AircraftContactResolver`/`FlightController`.
+The choker's extend-only timer zeroes thrust alone. Full decode, standing conflicts and deliberately
+absent terms: [`org/flightModel.md`](org/flightModel.md); measurement rules: `verification.md`.
 
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies
