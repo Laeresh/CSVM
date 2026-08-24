@@ -1287,6 +1287,13 @@ public sealed record SessionSpec
     public SessionSpec WithCampaignMission(string chapter, string mission) =>
         this with { Chapter = chapter, Mission = mission, ChapterGiven = true };
 
+    /// <summary>A copy with <see cref="Zeppelins"/>/<see cref="Generators"/> turned on for a
+    /// campaign mission that ships the data; <see cref="Session.GameSession"/> calls this once
+    /// <see cref="WithCampaignMission"/> has settled the chapter/mission <see cref="FromCampaign"/>
+    /// could not yet know. ORs rather than overwrites, so an explicit CLI flag survives.</summary>
+    public SessionSpec WithCampaignZeppelins(bool hasZeppelins, bool hasGenerators) =>
+        this with { Zeppelins = Zeppelins || hasZeppelins, Generators = Generators || hasGenerators };
+
     private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 
     // Turns the parsed votes into the one answer each: the mode, its modifiers, the world

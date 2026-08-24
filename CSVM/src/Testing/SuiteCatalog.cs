@@ -16,6 +16,7 @@ using static CSVM.Testing.CampaignHudSuites;
 using static CSVM.Testing.CampaignLoopSuites;
 using static CSVM.Testing.CampaignRosterSuites;
 using static CSVM.Testing.CampaignSuites;
+using static CSVM.Testing.CampaignZeppelinSuites;
 using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
@@ -144,6 +145,7 @@ public static class SuiteCatalog
         "fog-state",
         "campaign-roster",
         "campaign-loop",
+        "campaign-zeppelins",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -738,8 +740,8 @@ public static class SuiteCatalog
             + "the wingman-station leash",
             CampaignRoster));
 
-        // ⚠ Keep this registered last. It leaves its own profile file behind for the next process
-        // to read, and it is the one suite whose result depends on what an earlier run left.
+        // ⚠ Keep after every other content suite: it leaves its own profile file behind for the
+        // next process to read. campaign-zeppelins below touches none of that state.
         into.Add(new TestHarness.Suite("campaign-loop",
             "the whole campaign loop on the campaign's first mission (E41): a profile created on a "
             + "store holding none, the cabin, the briefing, the flight check, an ammunition change "
@@ -749,6 +751,15 @@ public static class SuiteCatalog
             + "again with Next Mission advanced; the profile is left on disk, so a second run "
             + "reads what the first one wrote",
             CampaignLoop));
+
+        // BL-451: a --campaign= launch's SessionSpec never carried Zeppelins/Generators, so the
+        // mission's zeppelins sat deactivated at the origin.
+        into.Add(new TestHarness.Suite("campaign-zeppelins",
+            "SessionSpec.FromCampaign sets neither Zeppelins nor Generators; GameSession's "
+            + "campaign-mission peek turns Zeppelins on for C3/M01 (ships zeppelins.zrd) and leaves "
+            + "Generators off (its egen.zrd is authored empty), and the mission's own zeppelins "
+            + "place live once the flag is on",
+            CampaignZeppelins));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

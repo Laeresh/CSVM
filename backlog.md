@@ -2346,29 +2346,6 @@ usual.
   constants and the station point is computed correctly throughout. *Cross-refs:*
   `docs/org/aiPilot.md`; `docs/PLAN-M5-campaign.md` D34, whose suite this escapes.
 
-- `BL-451` `[Bug]` **A campaign session never spawns its zeppelins or generators, so the mission
-  runs without them from beginning to end.** Seen at the controls during the intro cutscene: "there
-  is no content. Missing planes and zeppelins in the scene." *Evidence:* `SessionSpec.FromCampaign`
-  (`SessionSpec.cs:1136-1153`) sets `Mode`, `WorldMode`, `Players` and `PlaneNames` and **does not
-  set `Zeppelins` or `Generators`**, which gate the placement at `GameSession.cs:2309` and `:2369`.
-  A live run logs `world: 2 unplaced entit(y/ies) left at the origin, switched off: piratezep,
-  cargozep1` (`GameSession.cs:1190-1193`): both sit at `(0,0,0)` with their subtree deactivated for
-  the whole mission, not just the cutscene. `generic_intro`'s own `ObjectActiveState piratezep =
-  true` runs during the world bootstrap and is then undone by `HideUnplacedEntities`, which runs
-  later in `BuildWorldStage`. This also breaks `OBJECTIVE20` (a `TRAVELERS` within 500 m of
-  `piratezep`), the `WAKEUP_ZEP_TURRETS [piratezep]` on `OBJECTIVE1`, and the film's "shoot down the
-  cargo zeppelin" leg, which has no zeppelin to shoot. *Fix shape:* set the two flags on
-  `FromCampaign`, ideally off the mission actually having a `zeppelins.zrd`/`egen.zrd`, so placement
-  happens before `HideUnplacedEntities`. *⚠ Traps:* ⚠ **913/914 is NOT the cause here and the
-  earlier suspicion is disproved:** `camera1-generic_intro.json` raises `20, 2, 11, 14` and carries
-  `1, 10, 914, 667` in its reset state only, never `913`, and a traced run shows `AiParked=false`
-  throughout. ⚠ But the mechanism is real and latent for a mission whose intro DOES raise 913, since
-  `Inert` un-draws an aircraft (`FlightController.cs:583`); treat that as a separate bug when it
-  appears rather than folding it in here. ⚠ It is one line to set the flags, and it changes what
-  every campaign mission builds, so verify the goldens and the other chapters. *Cross-refs:*
-  `docs/PLAN-M5-campaign.md` D32 (the host, innocent) and D34 (the roster, which is a separate
-  spawn path and does work); `BL-456`, which loses `OBJECTIVE20` to this.
-
 - `BL-452` `[Bug]` **The cutscene letterbox flickers once mid-cutscene.** Seen at the controls: the
   bars are correct from the first frame, then "flickers at a point shortly then goes back".
   *Evidence:* the user's pass. The shipped definition switches the bars on outright and re-asserts

@@ -275,6 +275,10 @@ public partial class GameSession : Node3D
     // published as StartupProfile.Current so the shared build code can record into it, and cleared
     // when the line is emitted.
     private StartupProfile? _startup;
+    // DiagTraceRoster's own state: the objective-graph campaign diagnostic below.
+    private int _diagTick;
+    private AnimRuntime? _diagRuntime;
+    private bool _diagRefsDone;
 
     /// <summary>Constructs the session node for one launch. <paramref name="spec"/> is what this
     /// session is built from (the command line verbatim, or the launchscreen's pick);
@@ -290,7 +294,7 @@ public partial class GameSession : Node3D
         Name = "GameSession";
         // ⚠ Resolved here, before any consumer reads Chapter/Mission: a --campaign= launch names a
         // story position, not a chapter, and every path below is derived from those two fields.
-        _spec = CampaignDirector.ResolveSpec(spec, ctx.ZrdrPath);
+        _spec = ResolveCampaignZeppelins(CampaignDirector.ResolveSpec(spec, ctx.ZrdrPath), ctx.DataRoot);
         _repoRoot = ctx.RepoRoot;
         _dataRoot = ctx.DataRoot;
         _planesGamezPath = ctx.PlanesGamezPath;
@@ -806,6 +810,22 @@ public partial class GameSession : Node3D
         _beeperTags?.SimStep(dt);
     }
 
+    // BL-451: a --campaign= launch never carries --zeppelins/--generators (FromCampaign resolves
+    // before the mission is known), so this peeks both loaders once ResolveSpec has settled
+    // Chapter/Mission. Internal, not private, so the campaign-zeppelins suite exercises the exact
+    // code the constructor runs rather than a copy of it. See WithCampaignZeppelins for the why.
+    internal static SessionSpec ResolveCampaignZeppelins(SessionSpec spec, string dataRoot)
+    {
+        if (spec.CampaignProfile == null)
+        {
+            return spec;
+        }
+        var missionZrdr = SessionPaths.MissionZrdr(dataRoot, spec.Chapter, spec.Mission);
+        return spec.WithCampaignZeppelins(
+            HasMissionRecords(() => Zeppelins.Load(missionZrdr)),
+            HasMissionRecords(() => EnemyGenerators.Load(missionZrdr)));
+    }
+
     private static void CopyInstanceShaderParams(Node source, Node copy)
     {
         if (source is GeometryInstance3D from && copy is GeometryInstance3D to)
@@ -818,6 +838,21 @@ public partial class GameSession : Node3D
         int n = Math.Min(source.GetChildCount(), copy.GetChildCount());
         for (int i = 0; i < n; i++)
             CopyInstanceShaderParams(source.GetChild(i), copy.GetChild(i));
+    }
+
+    // The --campaign= zeppelin/generator peek's plumbing: true when the loader's list is
+    // non-empty, false on an empty (authored [null]) or altogether missing mission file. Both
+    // loaders already tolerate [null]; only the "no file at all" case needs the catch.
+    private static bool HasMissionRecords<T>(Func<List<T>> load)
+    {
+        try
+        {
+            return load().Count > 0;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
     }
 
     // A campaign mission has ended and its result is banked (D31 records the attempt and saves the
@@ -3169,10 +3204,6 @@ public partial class GameSession : Node3D
 
         DiagTraceRoster();
     }
-
-    private int _diagTick;
-    private AnimRuntime? _diagRuntime;
-    private bool _diagRefsDone;
 
     private void DiagTraceRoster()
     {

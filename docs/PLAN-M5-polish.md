@@ -189,7 +189,7 @@ item ends at making the targets visible. ⚠ Do not invent a marker style: the o
 enemy marker in blue, `MarkerHud` already draws that, and the film shows the two-line name-over-range
 label it composes.
 
-## A2 ☐ A campaign session never spawns its zeppelins or generators (`BL-451`)
+## A2 ☑ A campaign session never spawns its zeppelins or generators (`BL-451`)
 
 **Goal.** A campaign mission's zeppelins are in the world, so the intro camera has something to
 show and the mission's zeppelin objectives and turrets exist at all.
@@ -205,15 +205,38 @@ same gap takes out `OBJECTIVE20` (a `TRAVELERS` within 500 m of `piratezep`), th
 `WAKEUP_ZEP_TURRETS [piratezep]` on `OBJECTIVE1`, and the film's whole "shoot down the cargo
 zeppelin" leg.
 
-**Approach.** Set the two flags on `FromCampaign`, ideally off the mission actually shipping a
-`zeppelins.zrd`/`egen.zrd` rather than unconditionally, so placement happens before
-`HideUnplacedEntities` runs.
+**Landed.** `GameSession`'s constructor resolves `CampaignDirector.ResolveSpec` (which settles
+Chapter/Mission for a `--campaign=` launch) and then calls the new internal
+`GameSession.ResolveCampaignZeppelins`, which peeks `Zeppelins.Load`/`EnemyGenerators.Load` against
+the resolved mission's own zrdr scope and ORs a non-empty read into `SessionSpec.Zeppelins`/
+`Generators` through the new `SessionSpec.WithCampaignZeppelins`. Peeking rather than setting both
+flags unconditionally means a mission whose generator file is authored empty (`[null]`) never spins
+up an `AiGeneratorRuntime` with nothing to generate, and an explicit `--zeppelins`/`--generators` on
+the command line survives (the OR, not an overwrite). `HideUnplacedEntities` still runs earlier in
+`BuildWorldStage` than the `--zeppelins` placement block and still logs its one transient `world: N
+unplaced entit(y/ies)` line at build time (that check is generic and runs before any
+mission-specific placement, campaign or otherwise), but the placement block now actually runs
+afterward, and the existing `RestorePlacedEntities` poll (`GameSession.cs`, `_unplacedWatch`) picks
+up the moved node within its next 1 s tick and switches it back on for good, closing `OBJECTIVE20`
+and the `WAKEUP_ZEP_TURRETS [piratezep]` gap along with it. `ResolveCampaignZeppelins` is `internal`
+rather than `private` specifically so the `campaign-zeppelins` suite exercises the exact code the
+constructor runs.
 
 **Model recommendation.** medium. The change is small; the care is all in the regression surface.
 
-**Verify.** The zeppelins present in a C3/M01 capture and the unplaced-entities log line gone; the
-16 goldens unchanged and the other chapters' freecam counts unchanged, since this changes what every
-campaign mission builds.
+**Verified (build and units only; the engine suites and goldens run centrally).**
+`dotnet build CSVM/CSVM.sln`: 0 warnings, 0 errors. `dotnet test CSVM.Tests/CSVM.Tests.csproj`:
+2334 passed, 0 failed, 0 skipped. `.\CheckCommentCaps.ps1 -Summary`: all comment blocks within cap.
+The `campaign-zeppelins` suite (registered last in `SuiteCatalog.cs`, `CSVM.Tests/SuiteCatalogTests.cs`
+updated to 110) and the 16 goldens run as part of the orchestrator's centralized, serialized battery
+rather than here, since parallel `RunTests.ps1` runs across sibling worktrees kill each other's
+stray Godot processes. A targeted `--campaign=<profile>:0` proof run on C3/M01, taken separately
+from that battery, logs `zep: 'piratezep' placed at (-1401,500,-1413) ...`, `zep: 'cargozep1' placed
+at (-6288,300,-7701) ...`, `zep: 2 of 2 zeppelin(s) placed for C3/M01`, and `world: 2 entit(y/ies)
+moved off the origin after all, restored: cargozep1, piratezep`, none of which appeared before this
+fix since the placement block never ran. A screenshot taken after the intro cutscene hands off, with
+the player aircraft placed beside `piratezep`'s authored position, shows the zeppelin's hull, gondola
+and broadside cannons rendered in the world.
 
 **⚠ Traps.** ⚠ **913/914 is disproved as the cause and must not be re-chased here:**
 `camera1-generic_intro.json` raises `20, 2, 11, 14` with `1, 10, 914, 667` in its reset state only,
