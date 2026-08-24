@@ -2732,11 +2732,6 @@ usual.
 
 ## Tooling, platform & docs
 
-- `BL-458` `[Tooling]` **`CheckCommentCaps.ps1` resolves relative paths against the wrong
-  worktree.** Run from another worktree with a relative path it scans the `flight-parity` (or
-  first) worktree instead of the current directory; absolute paths work. Resolve against
-  `$PWD`, and add a one-line note to the CLAUDE.md hook (7) entry only if the fix needs one.
-
 - `BL-427` `[Feature]` **Extract `langui.dll`'s string table.** Split out while the Ammo Selection
   screen was built (`git log --grep=BL-353`). `extracted/messages.json` carries the weapon **names**
   (`MSG_WEAP_APIERCING_ROCKET` → "Armor-piercing rocket", the `MSG_WEAP_*` block at ids 12124–12160)

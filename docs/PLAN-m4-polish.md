@@ -63,7 +63,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — tooling and cleanup
 
-1. ☐ `BL-458` `CheckCommentCaps.ps1` resolves relative paths against the current worktree
+1. ☑ `BL-458` `CheckCommentCaps.ps1` resolves relative paths against the current worktree
 2. ☐ `BL-446` Rename `ZzBaselineDump` out of the throwaway prefix
 3. ☐ `BL-455` Delete `AiControlLaw.Throttle`'s dead far-from-player branch
 4. ☐ `BL-444` A flight-dump hash that is the same on both hosts
@@ -94,7 +94,7 @@ B14 touches `FlightAudio`/`EngineAudioCurves`/`AiEngineAudio` and nothing else i
 
 # Wave A — tooling and cleanup
 
-## A1 ☐ `BL-458` `CheckCommentCaps.ps1` resolves relative paths against the current worktree
+## A1 ☑ `BL-458` `CheckCommentCaps.ps1` resolves relative paths against the current worktree
 
 **Goal.** Run from any worktree with a relative path (or no path), the script scans that worktree.
 
@@ -119,6 +119,22 @@ worktree still runs hook (7) and reports against the worktree's files.
 **⚠ Traps.** `git rev-parse --show-toplevel` in a worktree is correct when invoked from inside it;
 find where the wrong directory actually comes from (the hook's cwd, or a relative `$Path` joined to
 `$root`) before rewriting the root logic.
+
+**Verified.** <pending orchestrator run> Root cause traced by reproduction, not by inspection alone:
+`$root` was resolved from `git rev-parse --show-toplevel` against the caller's cwd, which is correct
+by itself, but a second, sharper divergence sits underneath it. Invoking the worktree's copy of the
+script by absolute path from the main checkout's cwd, `$root` resolved to the main checkout and the
+scan missed a comment block planted only in the worktree; the fix roots on `$PSScriptRoot` instead,
+which names the worktree the running file lives in regardless of the caller's location, confirmed by
+the same reproduction now catching the worktree-only block. A second divergence surfaced in the
+explicit-`$Path` argument case: after `Set-Location` into the worktree, `[IO.File]::ReadAllText`
+still read against the main checkout because PowerShell's `$PWD` and the hosted session's
+`[Environment]::CurrentDirectory` are not the same thing and `Set-Location` only moves the former;
+resolving `$Path` arguments through `Resolve-Path` (which honors `$PWD`) before they reach the .NET
+API fixed it, confirmed the same way. Hook (7)'s own `git rev-parse` stays untouched: it runs with
+the same cwd as the `git commit` it gates, which must already be inside the target worktree for the
+commit itself to land there. Build + `dotnet test` in the foreground and `.\CheckCommentCaps.ps1
+-Summary` from both the worktree and the main checkout pass clean.
 
 ## A2 ☐ `BL-446` Rename `ZzBaselineDump` out of the throwaway prefix
 
