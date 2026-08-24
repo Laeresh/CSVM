@@ -127,6 +127,65 @@ public class EngineAudioModelTests
             EngineAudioCurves.EngineDefFor(stats, damaged: true, rng: null!, cockpitView: true));
     }
 
+    /// <summary>The decoded damage gate: the swap needs the worst zone BELOW a quarter health, so a
+    /// graze keeps the healthy loop. Engine-out is the mask's other modelled bit and swaps on its
+    /// own however healthy the airframe is.</summary>
+    [Fact]
+    public void EngineDamagedNeedsAQuarterHealthOrAnEngineOut()
+    {
+        Assert.False(EngineAudioCurves.EngineDamaged(1f));
+        Assert.False(EngineAudioCurves.EngineDamaged(0.9f));
+        Assert.False(EngineAudioCurves.EngineDamaged(0.25f)); // the test is strict: at is not below
+        Assert.True(EngineAudioCurves.EngineDamaged(0.2499f));
+        Assert.True(EngineAudioCurves.EngineDamaged(0f));
+        Assert.True(EngineAudioCurves.EngineDamaged(1f, engineDead: true));
+    }
+
+    /// <summary>The pitch law is a linear DRAW across the entry's own two floats, not a derivation
+    /// from damage: the draw's ends are the range's ends, its middle is the range's middle, and a
+    /// CLEAR flag byte holds the multiplier at 1 instead of drawing. The last case is what keeps an
+    /// unflagged entry off the frequency floor rather than pinning it there.</summary>
+    [Fact]
+    public void DamagedEnginePitchIsDrawnLinearlyAcrossTheAuthoredRange()
+    {
+        var drawn = new PlaneStats
+        {
+            EngineSound = "snd_normal",
+            DamagedEngineSound = "snd_damaged",
+            DamagedEnginePitchRandom = true,
+            DamagedEnginePitchLo = 0.4f,
+            DamagedEnginePitchHi = 0.9f,
+        };
+
+        Assert.Equal(0.4f, EngineAudioCurves.DamagedPitchMul(drawn, 0f), 4);
+        Assert.Equal(0.65f, EngineAudioCurves.DamagedPitchMul(drawn, 0.5f), 4);
+        Assert.Equal(0.9f, EngineAudioCurves.DamagedPitchMul(drawn, 1f), 4);
+
+        // The shipped entry, whose range reaches the mixer's frequency floor.
+        var shipped = new PlaneStats
+        {
+            EngineSound = "snd_normal",
+            DamagedEngineSound = "snd_damagedengine",
+            DamagedEnginePitchRandom = true,
+            DamagedEnginePitchLo = 0f,
+            DamagedEnginePitchHi = 1f,
+        };
+        Assert.Equal(0.75f, EngineAudioCurves.DamagedPitchMul(shipped, 0.75f), 4);
+
+        var unflagged = new PlaneStats
+        {
+            EngineSound = "snd_normal",
+            DamagedEngineSound = "snd_damaged",
+            DamagedEnginePitchRandom = false,
+            DamagedEnginePitchLo = 0.4f,
+            DamagedEnginePitchHi = 0.9f,
+        };
+        Assert.Equal(1f, EngineAudioCurves.DamagedPitchMul(unflagged, 0f), 4);
+        Assert.Equal(1f, EngineAudioCurves.DamagedPitchMul(unflagged, 1f), 4);
+        Assert.Equal(("snd_damaged", 1f),
+            EngineAudioCurves.EngineDefFor(unflagged, damaged: true, rng: null!));
+    }
+
     /// <summary>An airframe with no <c>cockpit_engine_sound</c> of its own keeps the normal loop
     /// in the Cockpit view rather than going silent or erroring — the same "keep the normal def"
     /// fallback the plan calls for.</summary>
