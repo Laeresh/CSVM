@@ -870,6 +870,32 @@ public class SessionSpecTests
         Assert.Equal("my-mission.json", S("--ia=my-mission.json").IaPath);
     }
 
+    /// <summary>`--campaign=` is a plain value pair, parsed but not resolved into a store or a
+    /// mission — and, with no other mode vote, still resolves the session to Fly.</summary>
+    [Fact]
+    public void CampaignIsAProfileAndSeqValueOnly()
+    {
+        Assert.Null(S("--fly").CampaignProfile);
+        Assert.Null(S("--fly").CampaignMissionSeq);
+
+        var s = S("--campaign=Zachary:3");
+        Assert.Equal("Zachary", s.CampaignProfile);
+        Assert.Equal(3, s.CampaignMissionSeq);
+        Assert.Equal(SessionMode.Fly, s.Mode);
+        Assert.Empty(s.Warnings);
+    }
+
+    /// <summary>A missing or unparseable ":seq" suffix keeps the profile name and warns, rather
+    /// than dropping the whole flag.</summary>
+    [Fact]
+    public void CampaignWithNoSeq_KeepsTheProfileNameAndWarns()
+    {
+        var s = S("--campaign=Zachary");
+        Assert.Equal("Zachary", s.CampaignProfile);
+        Assert.Null(s.CampaignMissionSeq);
+        Assert.Single(s.Warnings);
+    }
+
     /// <summary>Globals are recorded, never applied — that is what keeps the type reachable from
     /// here, with no engine under it.</summary>
     [Fact]

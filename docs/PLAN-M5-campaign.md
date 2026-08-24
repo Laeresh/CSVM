@@ -181,7 +181,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — campaign model and persistence
 
-11. ☐ Profile store + campaign session model (`user://Profiles/<name>/`, SessionSpec/CLI entry)
+11. ☑ Profile store + campaign session model (`user://Profiles/<name>/`, SessionSpec/CLI entry)
 12. ☐ Campaign progression + cross-mission persistence (`BL-243`, mission tree from A3)
 13. ☐ Wallet and campaign availability wired into the hangar (buy/sell, thresholds)
 
@@ -546,7 +546,7 @@ labels), not distances or timings used as constants.
 
 # Wave B — campaign model and persistence
 
-## B11 ☐ Profile store + campaign session model
+## B11 ☑ Profile store + campaign session model
 
 **Goal.** A named profile can be created, listed, selected and deleted, persisted under
 `user://Profiles/<name>/`; a selected profile plus a mission id defines a campaign session the
@@ -557,19 +557,39 @@ engine can launch (a `--campaign` CLI entry for scripted testing, added to `docs
 closed immutable launch spec with `FromMenu`; `docs/cli.md` has no campaign concept today (checked
 2026-08-24). Store schema fields come from A2's structural answers.
 
-**Approach.** New store class following the two precedents; extend `SessionSpec`/`SessionMode`
-minimally (read `docs/architecture.md` on `src/Session/` first). Keep the schema versioned from
-day one. <TODO: settle the exact schema after A2/A3 land.>
+**Approach.** Done. `src/Session/CampaignProfileStore.cs` follows the two precedents: plain
+System.IO over an absolute directory (engine-free, unit-testable) plus a `UserProfiles()` Godot
+resolver, one JSON file per profile at `user://Profiles/<name>/profile.json`. The schema (version
+1) carries funds, an owned-plane list (name-referenced into the global `CustomPlaneStore`, never a
+copy of it, per the ownership trap below) each with its per-gun ammo and per-pylon ordnance picks,
+the mission-result list (A2's best-of-merge fields, minus the two undecoded twelve-byte counter
+arrays) and the completed-mission count as the tree position. `CampaignProfileDef.NewProfile`
+seeds the traced reset: $0 and the two prebuilt Devastators. `SessionSpec` gained two plain-value
+fields, `CampaignProfile`/`CampaignMissionSeq`, parsed from `--campaign=<profile>:<seq>`; no
+`SessionMode` change was needed: a bare `--campaign=` rides the existing "content arg with no
+other mode vote resolves to Fly" branch, the same way `--stunt`/`--vs` ride it as modifiers.
+Building the mission's world from the selection is D31's job, not this store's.
 
 **Model recommendation.** medium — pattern-following with one design seam (the schema).
 
-**Verify.** `RunTests.ps1` green; a scripted `--campaign` launch round-trips create → write →
-relaunch → read on a clean `user://`.
+**Verify.** `dotnet build`/`dotnet format` clean, comment caps clean. The round-trip (create →
+write → relaunch → read on a clean `user://`) is
+`CampaignProfileStoreTests.RoundTrip_SurvivesASimulatedRelaunch`: a second `CampaignProfileStore`
+instance over the same directory
+(standing in for a process restart) reads back funds, an owned plane's ammo/ordnance edit and a
+recorded mission result exactly as a first instance wrote them. This is an engine-free `dotnet
+test` unit, not an in-engine suite: the store is pure file I/O with no world/session dependency,
+the same class of check `CustomPlaneStoreTests.cs` already establishes for `CustomPlaneStore`.
+`dotnet test` passes 2005/2005, including 20 new store tests and 2 new `SessionSpec` parse tests
+for `--campaign=`. **Verified.** `RunTests.ps1` on the merged plan branch: build clean, units
+2009/2009, engine suites 93/93 with errors clean, all 16 golden shots hash-identical.
 
-**⚠ Traps.** Profile names are user text entry: they become directory names, so sanitize; the
-original's roster screen (reference PNG) allows deletion, so deleting must not orphan hangar
-planes (decide ownership: hangar saves stay global in `user://Planes/`, per PLAN-hangar; only
-wallet/ownership is per profile).
+**⚠ Traps.** Profile names are user text entry: they become directory names, so sanitize.
+`CampaignProfileStore.DirFor` replaces every character `Path.GetInvalidFileNameChars` rejects,
+`Delete_SanitisesTheNameLikeSave`-style. The original's roster screen (reference PNG) allows
+deletion, so deleting must not orphan hangar planes: `Delete` removes only the profile's own
+directory (`Directory.Delete(dir, recursive: true)`), never `user://Planes/`, proven by
+`Delete_RemovesOnlyThatProfilesDirectory`'s sentinel file outside the deleted directory.
 
 ## B12 ☐ Campaign progression + cross-mission persistence (`BL-243`)
 

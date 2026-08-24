@@ -193,6 +193,16 @@ public sealed record SessionSpec
     /// the path; loading it is the runtime's job, which keeps this
     /// type free of file I/O.</summary>
     public string? IaPath { get; private set; }
+    /// <summary><c>--campaign=&lt;profile&gt;:&lt;seq&gt;</c>: a campaign session, a selected
+    /// <see cref="Session.CampaignProfileStore"/> profile plus a <c>cm_sequence.zrd</c> mission
+    /// index, carried here as plain values. Null when the flag was absent; loading the profile and
+    /// building the mission are the runtime's job, the contract <see cref="IaPath"/> keeps. No new
+    /// <see cref="SessionMode"/>: a content arg with no other mode vote resolves to
+    /// <see cref="SessionMode.Fly"/>, the same way <c>--stunt</c>/<c>--vs</c> ride it.</summary>
+    public string? CampaignProfile { get; private set; }
+    /// <summary>The <c>:&lt;seq&gt;</c> half of <c>--campaign=</c>; null when it was omitted or
+    /// unparseable, in which case a warning is recorded and only the profile name is kept.</summary>
+    public int? CampaignMissionSeq { get; private set; }
     /// <summary>Set only by <see cref="FromMenu"/>: the launchscreen wizard's own built
     /// <c>InstantActionDef</c>, null on every CLI launch since <c>--ia=</c> carries a path
     /// instead. Only ever carried onto the record here, never loaded or built — the same
@@ -970,6 +980,23 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--mission=")) { s.Mission = arg["--mission=".Length..]; }
             else if (arg.StartsWith("--scenario=")) { s.Scenario = arg["--scenario=".Length..]; s.ScenarioExplicit = true; }
             else if (arg.StartsWith("--ia=")) { s.IaPath = arg["--ia=".Length..]; }
+            else if (arg.StartsWith("--campaign="))
+            {
+                string val = arg["--campaign=".Length..];
+                int lastColon = val.LastIndexOf(':');
+                if (lastColon > 0
+                    && int.TryParse(val[(lastColon + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out int seq))
+                {
+                    s.CampaignProfile = val[..lastColon];
+                    s.CampaignMissionSeq = seq;
+                }
+                else
+                {
+                    s.CampaignProfile = val;
+                    notes.Add(new Note("core", $"--campaign={val} has no ':<seq>' mission index — profile only, no mission chosen"));
+                }
+                s.HasContentArg = true;
+            }
             else if (arg.StartsWith("--spawn=")) { s.SpawnIndex = int.Parse(arg["--spawn=".Length..]); }
             else if (arg.StartsWith("--spawn-at=")) { s.SpawnAt = ParseVec3(arg["--spawn-at=".Length..]); Deprecate("--spawn-at", "--pos"); }
             else if (arg.StartsWith("--spawn-dir=")) { s.SpawnDir = ParseVec3(arg["--spawn-dir=".Length..]); Deprecate("--spawn-dir", "--direction"); }
