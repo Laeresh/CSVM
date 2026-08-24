@@ -171,8 +171,8 @@ public class BounceRestitutionTests
 /// Decode: docs/org/flightModel.md, "Collision response" — the original's whole contact path
 /// (sweep, integrator, damage) writes velocity ONLY through the normal impulse, so the filmed
 /// tangential losses are the placement, not a velocity term.
-/// The ground-stop threshold (<c>GrazeStopSpeed</c>) is a fate decision outside <c>Collide</c>;
-/// it sits on <see cref="AircraftContactResolver"/> and is asserted there, not here.
+/// A contact's fate is decided outside <c>Collide</c>; it sits on
+/// <see cref="AircraftContactResolver"/> and is asserted there, not here.
 /// </summary>
 public class CollideResponseTests
 {

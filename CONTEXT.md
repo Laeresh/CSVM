@@ -85,7 +85,7 @@ _Avoid_: scrape, glance, bump, survivable collision, minor hit
 
 **Crash**:
 A contact the striking aircraft does not survive, whatever made it fatal (the doom rule, health
-exhausted, the ground stop, no damage data at speed). Also the ground contact that ends a wreck's
+exhausted, an airframe that cannot un-embed, no damage data). Also the ground contact that ends a wreck's
 fall, which is the same word for the same reason.
 _Avoid_: death, destruction, fatal hit, kill (a kill is what a shooter is credited with)
 

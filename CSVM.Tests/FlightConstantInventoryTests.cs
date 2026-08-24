@@ -27,8 +27,8 @@ public class FlightConstantInventoryTests
 
     // The four classes docs/org/flightModel.md's inventory table uses: read out of crimson.exe, a
     // mirror of an authored data key, a conversion factor, or a deliberate CSVM exception with a
-    // reachability measurement behind it. The plant carries no fitted contact term any more; the
-    // invented contact laws left for C22 live on AircraftContactResolver/FlightController.
+    // reachability measurement behind it. The contact rules are censused with the plant, so a
+    // fitted contact term cannot come back where the plant's own census cannot see it.
     private const string Decoded = "decoded";
     private const string Authored = "authored";
     private const string Unit = "unit";
@@ -90,6 +90,11 @@ public class FlightConstantInventoryTests
         ("PhysicsConstants", "NomGravity", 20.0, Authored),
         ("PhysicsConstants", "MphToMs", 0.44704, Decoded),
         ("StickRamp", "Rate", 2.5, Decoded),
+        ("CollisionDamage", "EntityCut", 0.2, Decoded),
+        ("CollisionDamage", "EntityGrace", 1.0, Decoded),
+        ("CollisionDamage", "SpawnGrace", 1.5, Decoded),
+        ("AircraftContactResolver", "EmbedPushOut", 0.3, ProductException),
+        ("AircraftContactResolver", "EmbedTries", 3.0, ProductException),
     };
 
     // The plant's whole config surface. Each key read-throughs one inventory row above, so a key
@@ -100,7 +105,11 @@ public class FlightConstantInventoryTests
         "rollTune", "stallWarnFrac", "yawTune",
     };
 
-    private static readonly Type[] InventoryTypes = { typeof(FlightModel), typeof(PhysicsConstants), typeof(StickRamp) };
+    private static readonly Type[] InventoryTypes =
+    {
+        typeof(FlightModel), typeof(PhysicsConstants), typeof(StickRamp), typeof(CollisionDamage),
+        typeof(AircraftContactResolver),
+    };
 
     private static string ZrdrPath =>
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
@@ -236,6 +245,26 @@ public class FlightConstantInventoryTests
                 $"{plane}: the aircraft reached {overshoot:0.00} m above the 2003 m cap, more than "
                 + $"the {perFrame:0.00} m one frame of climb can carry it — something now coasts "
                 + "past the clamp and the overshoot needs a mechanism, not a constant");
+        }
+    }
+
+    /// <summary>No shipped airframe reaches the resolver's no-damage-data arm, where every contact
+    /// is fatal because there is no pool to survive on. Every player load authors zones and every AI
+    /// load a whole armour/health pair, so the arm covers a bare rig alone and carries no speed
+    /// threshold of its own.</summary>
+    [ExtractedDataFact]
+    public void NoStockAirframeFliesWithoutADamageLedger()
+    {
+        foreach (string plane in AllPlanes)
+        {
+            var player = PlaneStats.Load(ZrdrPath, plane);
+            Assert.True(player.DestroyableParts.Count > 0,
+                $"{plane}: the player load authors no destroyable_parts, so a contact would take the "
+                + "resolver's no-ledger arm and be fatal at any speed");
+            var ai = PlaneStats.LoadForAi(ZrdrPath, plane);
+            Assert.True(ai.DestroyableParts.Count > 0 || ai.VehicleHealth is > 0f,
+                $"{plane}: the AI load authors neither zones nor a whole health pair, so an AI "
+                + "contact would take the resolver's no-ledger arm");
         }
     }
 

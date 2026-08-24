@@ -332,11 +332,6 @@ public partial class FlightController : Node3D
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
     private const float DebugFinishStagger = 1.5f; // s between players' forced finishes (--debug-scoreboard in a race)
 
-    // ⚠ TUNE, ours: the original spends the damage pair on every resolved contact frame whose
-    // severity is positive, with no cooldown (its player writes no grace clock). This engine
-    // sweeps every frame where the original sweeps every other, so a bare port would double the
-    // scrape's damage rate; the cooldown stands in for that gap until C22's ablation.
-    private const float DamageCooldown = 0.3f;   // s between HP subtractions (multi-frame scrapes)
     private const float GrazeReactionInterval = 1.5f; // s between graze reactions — NOT a tuned value:
                                                       // the touchdown defs stop their own puffer at
                                                       // ANIMATION_OFFSET 1.5, so this is one whole authored
@@ -413,7 +408,7 @@ public partial class FlightController : Node3D
     private IWorldQuery? _worldQuery;             // the sweep/ray seam; bound in Bind, lazy for bare test rigs
     private AircraftContactResolver? _contacts;   // the contact rules; lazy, over the same seam
     private IFlightInputSource? _inputSource;     // which stick flies this aircraft; bound in Bind, lazy for bare test rigs
-    private float _damageCooldown;               // s left before the next HP subtraction
+    private bool _onSweepParity;                 // this step's half of the original's alternate-frame sweep
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private int _projectileHitsLogged;           // verification breadcrumb: the first few hits log
     private FireControl? _fire;                  // the fire-control state machine; built in _Ready with the loadout
@@ -860,7 +855,7 @@ public partial class FlightController : Node3D
                     node.Visible = vis;
                 }
         }
-        _damageCooldown = 0f;
+        _onSweepParity = false;
         _grazeReactionCooldown = 0f;
         if (_hudCanvas != null)
             _hudCanvas.Visible = true;  // the crash camera hid it (footage); flying again
@@ -1263,8 +1258,11 @@ public partial class FlightController : Node3D
                 : _lifecycle.PostDropGroundBlowActive ? 0.15f : 1f;
             input.NearestHumanDistSqM = NearestHumanDistSqM();
             _lastInput = input;
-            _damageCooldown -= dt;
             _grazeReactionCooldown -= dt;
+            // The original's sweep resolves a contact every other frame, and spends the damage pair
+            // on every frame it resolves. The sweep itself runs every step here, so the parity sits
+            // on the spend: a sustained scrape costs one pair per two steps.
+            _onSweepParity = !_onSweepParity;
             _lifecycle.TickTimers(dt);
             _model.Step(input, dt);
 
@@ -2725,7 +2723,7 @@ public partial class FlightController : Node3D
         Pose = GlobalTransform,
         Stats = Stats,
         Ledger = Damage,
-        DamageCooldownElapsed = _damageCooldown <= 0f,
+        OnSweepParity = _onSweepParity,
         Parts = Collider?.Parts,
         ExcludeSelf = Body?.ExcludeSelf,
     };
@@ -3014,7 +3012,6 @@ public partial class FlightController : Node3D
 
         public PlaneDamage.PartState? SpendDamage(string zone, float healthDamage, float armorDamage)
         {
-            _rig._damageCooldown = DamageCooldown;
             var state = _rig.Damage!.Apply(zone, healthDamage, armorDamage);
             string struckPart = state?.Def.Name ?? zone;
             if (state != null)
@@ -3034,8 +3031,7 @@ public partial class FlightController : Node3D
         {
             _rig._model.Collide(_from, _motion, _contact.StopFraction, _contact.Impact, _contact.Normal,
                 _rig.IsHumanPiloted && !_rig.Crashed);
-            return new ContactResponse(_rig._model.Speed,
-                new Transform3D(_rig._model.Attitude, _rig._model.Position));
+            return new ContactResponse(new Transform3D(_rig._model.Attitude, _rig._model.Position));
         }
     }
 }

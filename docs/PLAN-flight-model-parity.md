@@ -112,7 +112,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Replace invented collision behavior
 
 21. ☑ C21 Complete collision damage and sustained-contact decoding (`BL-381`)
-22. ☐ C22 Remove or justify the invented graze/stop laws (`BL-271`)
+22. ☑ C22 Remove or justify the invented graze/stop laws (`BL-271`)
 23. ☐ C23 Validate building-corner collision feel (`BL-120`)
 
 ### Wave D — Settle designed but unproven features
@@ -520,7 +520,7 @@ half rides `C23` unchanged.
 94/94 engine suites with engine errors clean, 16/16 goldens hash-identical (the scripted crash
 shots contain no survivable contact, so the placement change never fires in them), exit 0.
 
-## C22 ☐ Remove or justify the invented graze/stop laws (`BL-271`)
+## C22 ☑ Remove or justify the invented graze/stop laws (`BL-271`)
 
 **Goal.** Eliminate invented kick, friction, quadratic damage, stop-speed death and embed-count death unless explicitly retained as product exceptions.
 
@@ -533,6 +533,44 @@ shots contain no survivable contact, so the placement change never fires in them
 **Verify.** Synthetic contacts separate each law; at-controls belly-slide and corner cases cannot collect endless zero-damage kisses.
 
 **⚠ Traps.** The three graze constants were co-tuned against pre-restitution behavior; never tune one alone.
+That warning is historical: `C21` retired the trio against the decoded response, and nothing it named
+is still in the code.
+
+**Landed.** Three of the four laws are gone and the fourth is a recorded product exception. The
+decode that settles them is the destruction call at `0x48d7cc`: its only inputs are `local_11` and
+`health > 0` (`0x48d78b`), and the whole contact path reads no speed, no vertical speed, no slide
+and no overlap, so **no counterpart exists for a speed threshold, a stop rule or an embed rule**.
+`CrashSpeed` 25 is removed as already inert: it gated a log line inside the no-damage-data arm,
+which crashes at any speed, and that arm is unreachable on shipped content, which is now a
+measurement rather than an assumption (`NoStockAirframeFliesWithoutADamageLedger`: eleven player
+loads author four zones each, eleven AI loads an armour/health pair). `GrazeStopSpeed` 12 is removed
+with the regression it guarded proven unreachable on the decoded response: a contact that closes at
+all costs at least the authored 50 floor, the pair re-spends for as long as the scrape closes, and
+the pool is bounded, so a slide exhausts its ledger and dies by the decoded health rule (five
+contacts on the suite's one-zone plane) while keeping its tangential speed, since the impulse edits
+the normal component alone. The METHOD-9 control beside it spends nothing and slides for 200
+contacts without a fate, which is the "endless zero-damage kisses" report the rule was invented for.
+`DamageCooldown` 0.3 s is replaced by the decoded gating rather than kept: the original spends the
+pair on every frame its sweep resolves, gated only on a positive severity (`0x48ed79` guarding
+`0x48ed8b`), so the cadence is one pair per two frames and the wall-clock stand-in was making a
+scrape about nine times cheaper than the decode allows. The sweep parity itself is still not ported
+(`C21`'s every-step sweep stands), so its one behavioural consequence rides
+`ContactConditions.OnSweepParity`, flipped once per sim step by `FlightController`. The un-embed
+loop's destruction after three failed pushes is KEPT, as a named product exception with its reason:
+the original places one sphere exactly at its contact point and cannot leave an airframe inside
+geometry, while a swept multi-box airframe can, and without a terminal case that aircraft has no
+rule to end it. It is bound by `AnEmbeddedPlaneIsPushedOutThreeTimesThenExplodes`. `ContactResponse`
+loses its speed field with the ground stop, since nothing else read it. Inventory and census updated
+together, and both now cover the contact rules: `CollisionDamage` and `AircraftContactResolver` join
+`FlightConstantInventoryTests`' reflected types with five new rows (the three decoded grace/cut
+constants, `EmbedPushOut` 0.3 and `EmbedTries` 3 as exceptions), so a fitted contact number cannot
+come back where the plant's census cannot see it. Config surface unchanged at 9 keys. Goldens cannot
+move: `c1-crash` is `--crash=5`, whose aircraft is already crashed and never runs the resolver, and
+`c1-debris-rest` is a freecam object shot with no aircraft contact at all. `BL-271` deleted from
+`backlog.md`; `BL-121` re-tagged to `C23` alone and `PT-53`'s TUNE note rewritten.
+
+**Verified.** Full `RunTests.ps1` battery on the lane tree: build clean, 2084/2084 units,
+94/94 engine suites with engine errors clean, 16/16 goldens hash-identical, exit 0.
 
 ## C23 ☐ Validate building-corner collision feel (`BL-120`)
 

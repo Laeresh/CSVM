@@ -961,8 +961,8 @@ internal static class CombatSuites
                 return (nIn, nOut, yIn, yOut, contacted, crashed);
             }
 
-            // Flat ground: a 15 degree descent at 60 m/s puts 15.5 m/s on the normal, under the 25 m/s crash
-            // threshold, so this is the survivable graze the impulse belongs to. Started a few metres out
+            // Flat ground: a 15 degree descent at 60 m/s puts 15.5 m/s on the normal, one pair off a full
+            // ledger, so this is the survivable graze the impulse belongs to. Started a few metres out
             // because the AI plant's ground blow flies the AI rig off this trajectory over a long approach.
             surface = Plate("graze-floor", new Vector3(600f, 4f, 600f), new Vector3(0f, -2f, 0f));
             ctx.Host.AddChild(surface);

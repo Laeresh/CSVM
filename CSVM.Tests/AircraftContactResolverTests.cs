@@ -24,6 +24,10 @@ public class AircraftContactResolverTests
     private static readonly Vector3 HeadOnVelocity = Vector3.Forward;
     private static readonly Vector3 HeadOnNormal = -Vector3.Forward;
 
+    // A 5.7° scrape along a surface whose normal is +Z: severity 0.1, so both terms sit on the
+    // compiled floor (15) and the contact is as cheap as the decoded law allows.
+    private static readonly Vector3 ShallowSlide = new(-0.99499f, 0f, -0.1f);
+
     /// <summary>An AI that rams anything OTHER than an aeroplane dies outright (local_11), whatever
     /// health it carries — asserted against a striker with a live ledger so the rule is not merely
     /// unreachable through the no-ledger speed fallback above it.</summary>
@@ -81,39 +85,60 @@ public class AircraftContactResolverTests
         Assert.Equal(Scale, outcome.HealthDamage, 3);
     }
 
-    /// <summary>A plane ground to (near) standstill is destroyed rather than left parked there: the
-    /// ground stop reads <see cref="ContactResponse.Speed"/> alone, assertable with no
-    /// <c>FlightModel</c> behind it at all.</summary>
+    /// <summary>A plane grinding along the ground cannot collect endless free contacts: the decoded
+    /// pair costs at least the authored floor on every contact the sweep parity spends, so a bounded
+    /// ledger runs out and the decoded health rule ends the slide. This is what the removed
+    /// stop-speed rule guarded, proven on the decoded response instead.</summary>
     [Fact]
-    public void SlidingBelowGrazeStopSpeedDestroysThePlane()
+    public void ASustainedSlideExhaustsTheLedgerInsteadOfGrindingOnForever()
     {
         var resolver = new AircraftContactResolver(new NeverOverlaps());
-        var effects = new FakeContactEffects
+        var ledger = OneZone();
+        var effects = new LedgerContactEffects(ledger);
+        var slide = Striker(humanPiloted: true, ledger) with { VelocityDir = ShallowSlide };
+        var along = HeadOn(struckIsAircraft: false) with { Normal = new Vector3(0f, 0f, 1f) };
+
+        int contacts = 0;
+        var fate = ContactFate.Graze;
+        while (fate != ContactFate.Crash && contacts < 40)
         {
-            ApplyResponseResult = new ContactResponse(AircraftContactResolver.GrazeStopSpeed - 1f, Transform3D.Identity),
-        };
-        // A player striking terrain (StruckIsAircraft false): no doom rule, no entity cut, and the
-        // report never reaches ShatterStruck because a graze on real geometry does not shatter.
-        var striker = Striker(humanPiloted: true, ledger: OneZone());
+            contacts++;
+            fate = resolver.Resolve(along, slide with { OnSweepParity = contacts % 2 == 1 }, effects).Fate;
+        }
 
-        var outcome = resolver.Resolve(HeadOn(struckIsAircraft: false), striker, effects);
-
-        Assert.Equal(ContactFate.Crash, outcome.Fate);
-        Assert.True(effects.ApplyResponseCalled);
+        Assert.Equal(ContactFate.Crash, fate);
+        Assert.Equal(5, contacts);          // three spends on the odd steps: 20 armour, then 20 health
+        Assert.True(ledger.IsDestroyed);
     }
 
-    /// <summary>A plane that clears <see cref="AircraftContactResolver.GrazeStopSpeed"/> but is
-    /// still embedded after the response is pushed out along the contact normal, three tries at
-    /// a time; giving up EXPLODES it rather than letting it tunnel — the un-embed loop's own
-    /// worked case.</summary>
+    /// <summary>The control the row above needs (METHOD-9): with nothing spending the pair, the same
+    /// slide runs forever and never resolves a fate, which is the failure mode the stop-speed rule
+    /// was invented for.</summary>
+    [Fact]
+    public void ASlideThatSpendsNothingNeverEndsAtAll()
+    {
+        var resolver = new AircraftContactResolver(new NeverOverlaps());
+        var ledger = OneZone();
+        var effects = new LedgerContactEffects(ledger);
+        var slide = Striker(humanPiloted: true, ledger) with { VelocityDir = ShallowSlide };
+        var along = HeadOn(struckIsAircraft: false) with { Normal = new Vector3(0f, 0f, 1f) };
+
+        for (int i = 0; i < 200; i++)
+        {
+            Assert.Equal(ContactFate.Graze, resolver.Resolve(along, slide, effects).Fate);
+        }
+
+        Assert.False(ledger.IsDestroyed);
+    }
+
+    /// <summary>A plane still embedded after the response is pushed out along the contact normal,
+    /// three tries at a time; giving up destroys it rather than letting it sit inside the world —
+    /// the un-embed loop's own worked case, and the binding test for that product exception.</summary>
     [Fact]
     public void AnEmbeddedPlaneIsPushedOutThreeTimesThenExplodes()
     {
         var resolver = new AircraftContactResolver(new AlwaysOverlaps());
-        var effects = new FakeContactEffects
-        {
-            ApplyResponseResult = new ContactResponse(AircraftContactResolver.GrazeStopSpeed + 1f, Transform3D.Identity),
-        };
+        var effects = new FakeContactEffects();
         var striker = Striker(humanPiloted: true, ledger: OneZone()) with
         {
             // The fake IWorldQuery below ignores Parts entirely; a real BoxShape3D needs a live
@@ -157,11 +182,10 @@ public class AircraftContactResolverTests
         var resolver = new AircraftContactResolver(new NeverOverlaps());
         var ledger = OneZone();
         var effects = new LedgerContactEffects(ledger);
-        // A shallow scrape: severity 0.1, so both terms sit on the compiled floor (15).
         var striker = Striker(humanPiloted: true, ledger) with
         {
-            VelocityDir = new Vector3(-0.99499f, 0f, -0.1f),
-            DamageCooldownElapsed = true,
+            VelocityDir = ShallowSlide,
+            OnSweepParity = true,
         };
         var shallow = HeadOn(struckIsAircraft: false) with { Normal = new Vector3(0f, 0f, 1f) };
 
@@ -194,7 +218,7 @@ public class AircraftContactResolverTests
         Pose = Transform3D.Identity,
         Stats = null,             // falls back to the compiled Floor/Scale defaults
         Ledger = ledger,
-        DamageCooldownElapsed = false,
+        OnSweepParity = false,
         Parts = null,
         ExcludeSelf = null,
     };
@@ -212,7 +236,6 @@ public class AircraftContactResolverTests
     private sealed class FakeContactEffects : IContactEffects
     {
         public bool ShatterStruckResult;
-        public ContactResponse ApplyResponseResult;
 
         public bool ShatterStruckCalled;
         public bool PlayGrazeReactionCalled;
@@ -236,7 +259,7 @@ public class AircraftContactResolverTests
         public ContactResponse ApplyResponse()
         {
             ApplyResponseCalled = true;
-            return ApplyResponseResult;
+            return new ContactResponse(Transform3D.Identity);
         }
     }
 
@@ -262,8 +285,7 @@ public class AircraftContactResolverTests
             return LastState;
         }
 
-        public ContactResponse ApplyResponse() =>
-            new(AircraftContactResolver.GrazeStopSpeed + 30f, Transform3D.Identity);
+        public ContactResponse ApplyResponse() => new(Transform3D.Identity);
     }
 
     private sealed class NeverOverlaps : IWorldQuery

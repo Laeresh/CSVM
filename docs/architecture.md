@@ -2839,7 +2839,7 @@ entry): this node holds one privately, forwards `Crashed`/`Destroyed`/`WreckFall
 onto it, and performs what a transition reports rather than deciding it. `BindCrashRig` takes the
 crash runtime, the def table, the anchor and the two respawn snapshots in one call, so the rig
 cannot be half-bound and only `CrashRuntime`/`CrashAnchor` stay readable as properties. The DEATH family (`CRASH into`, `midair aspect`, every
-`vehicle health exhausted`, `graze`, `ground stop`, `AI ram`, `impact severity`) routes through
+`vehicle health exhausted`, `graze`, `embedded in terrain`, `AI ram`, `impact`) routes through
 `Log.Info("flight", …)`, so a play session's file sink carries how each aircraft died; the
 per-round weapon breadcrumbs around them are a different family and still `GD.Print`.
 The sim half is `SimStep(dt)`, called by
@@ -4827,20 +4827,20 @@ forgetting one statement rather than four. `AircraftContactResolver` fills it.
 
 ## src/Flight/AircraftContactResolver.cs
 The decoded contact rules for one aircraft, holding an `IWorldQuery` and no `Node`: the damage pair
-both parties spend (`FUN_0048d2c0`), the fate (the doom rule, the no-ledger speed threshold, health
-exhausted, the ground stop, an airframe that cannot un-embed), and the un-embed loop over the
+both parties spend (`FUN_0048d2c0`), the fate (the doom rule, no damage data, health
+exhausted, an airframe that cannot un-embed), and the un-embed loop over the
 seam's `Overlaps`. One call answers one contact with one `ContactOutcome` the caller performs.
 The engine effects it interleaves with, because each one's result is the next rule's premise, go
 through `IContactEffects`: the fly-through offer, the graze reaction, the ledger spend and its
 readouts, and the contact response. `FlightController` implements that as a per-contact
-`ContactEffects`, keeping the struck `Node`, the damage cooldown and the flight model on the node.
+`ContactEffects`, keeping the struck `Node`, the sweep parity and the flight model on the node.
 `ContactConditions` is the striker's state per call, `IsHumanPiloted` included.
 `AircraftContactResolverTests` pins the rule table off-engine against a synthetic `IWorldQuery` and
 a scriptable `IContactEffects`: the doom rule for an AI ramming a non-aeroplane, the entity cut for
 AI into AI, the player's exemption from both (asserted on the damage magnitude, not just
 `DamageStruckAircraft`, since the entity cut applies only on the non-player branch and only against
-another aeroplane), the ground stop reading `ContactResponse.Speed` alone, and the un-embed loop's
-three-try give-up.
+another aeroplane), a sustained slide exhausting its ledger against a control that spends nothing,
+and the un-embed loop's three-try give-up.
 
 ## src/Flight/AircraftLifecycle.cs
 The states one aircraft moves between and the rules that move it: in play, crashed, destroyed with

@@ -2316,9 +2316,11 @@ carrier grace also suppresses AI ground blow; its probe and both output terms be
 Decoded 2026-08-14, **impulse implemented 2026-08-15** (retiring `BL-172`), **completed for `C21`**
 with the placement, the angular impulse and the partition's inertia correction below (retiring
 `BL-381`): `FlightModel.BounceNormalSpeed`/`BounceRateKick` are the law and `FlightModel.Collide`
-the site, gated on `IsHumanPiloted` and not-already-crashed. The sweep's every-other-frame parity
-and the two timers below are NOT ported; this engine has its own every-frame sweep, which resolves
-a contact sooner than the original would but never differently.
+the site, gated on `IsHumanPiloted` and not-already-crashed. The sweep itself runs every step here
+rather than on the original's every-other-frame parity, which resolves a contact sooner than the
+original would but never differently; the parity's one behavioural consequence, the cadence a
+sustained scrape spends damage at, rides `ContactConditions.OnSweepParity` instead
+("What the parity is ported as" below).
 
 `bounce_factor` lives in `player.json`'s `crash` block, is a **raw scalar**, and
 lands in global `0x0071c35c` from the parser store at `0x00473c38`. Its default is pre-set at
@@ -2348,8 +2350,24 @@ constructor `FUN_004aff80`, so it differs per object and per run. On a skipped f
 not simply do nothing: it accumulates that frame's translation into `obj+0x6B0`…`obj+0x6B8` and
 returns severity `0.0`, and the next sweep that does run applies the accumulated motion. This halves
 the collision rate and is why two aircraft in the same contact do not necessarily resolve on the
-same frame. **Not ported**: our sweep runs every sim step, which resolves a contact sooner than the
-original would but never differently.
+same frame. **Not ported as a sweep**: our sweep runs every sim step, which resolves a contact
+sooner than the original would but never differently.
+
+### What the parity is ported as
+
+The parity's only behavioural consequence is the CADENCE of a sustained contact, because the
+original spends the damage pair on every frame its sweep resolves and on no other
+(`0x48ed79` gates the `FUN_0048d2c0` call at `0x48ed8b` on a positive severity, and nothing else
+gates it: there is no cooldown, no per-spend timer and no grace clock on a player). So a scrape
+costs one pair per two frames for as long as it closes. That cadence is ported on the spend rather
+than on the sweep: `FlightController` flips `_onSweepParity` once per sim step and
+`AircraftContactResolver` spends the pair only on the steps it names, so a sustained scrape costs
+one pair per two steps. The retired 0.3 s `DamageCooldown` was a wall-clock stand-in for this and
+made a scrape roughly nine times cheaper than the decode allows.
+
+⚠ **The per-second damage rate follows the step rate, in the original as here.** The original's
+cadence is frame-coupled (`fps/2` spends per second), so no port is rate-independent, and a
+constant chosen to match one frame rate is a fit rather than a decode. Do not reintroduce one.
 
 ⚠ **Only the player bounces.** The impulse branch is entered only when `obj == DAT_0071c298` and the
 player is not already crashed. AI aircraft get position correction and an impact cosine, and no
@@ -2484,8 +2502,8 @@ The section above is the response; this is the damage. `FUN_0048d7f0` returns an
 `FUN_0048d2c0` turns it into a damage pair. **Ported**, as `Flight/CollisionDamage.cs` with the
 authored ranges read in `PlaneStats` and the contact resolved in `AircraftContactResolver`;
 the struck party's damage runs through `AnimRuntime.CollideDamageAt` and the striker's through
-`PlaneDamage.Apply`. Two parts of the section below are knowingly not ported and say so where they
-appear: the object's own `+0xbc` damage reduction, and the every-other-frame sweep parity.
+`PlaneDamage.Apply`. One part of the section below is knowingly not ported and says so where it
+appears: the object's own `+0xbc` damage reduction.
 
 **The severity is a cosine.** `FUN_0048d7f0` normalises the velocity through `FUN_00422690` (at
 `0x0048df8b` on the player path, `0x0048dba0` / `0x0048dbba` otherwise) **before** dotting it with
@@ -2535,6 +2553,26 @@ remainder in aggregate (`FUN_004b8070` at `0x0048d783`). The armour-to-health sp
 `FUN_004b7f80`: with `f = min(1, armor / armorDmg)`, armour drops by `armorDmg` floored at zero and
 health drops by `(1 - f) · healthDmg`, so a **fully-armoured contact costs no health at all**.
 Survival is then `health > 0` (`obj+0x2d0`, tested `0x0048d78b`).
+
+⚠ **Those two tests are the WHOLE death rule on contact, and three CSVM inventions died against
+that.** `local_11` and `health > 0` are the only inputs to the destruction call at `0x48d7cc`;
+nothing on the path reads a speed, a vertical speed, a slide, an overlap or an attempt count.
+- **A speed threshold does not exist.** The damage law carries no airspeed term at all, and the
+  integrator hands it a cosine. CSVM's `CrashSpeed` 25 m/s is removed. It had already decayed into
+  a log line inside the no-damage-data arm, which crashes at any speed, and no shipped airframe
+  reaches that arm (`FlightConstantInventoryTests.NoStockAirframeFliesWithoutADamageLedger`: every
+  player load authors four zones, every AI load an armour/health pair).
+- **A ground-stop speed does not exist.** CSVM's `GrazeStopSpeed` 12 m/s is removed. It guarded a
+  plane grinding along the ground collecting free contacts, and the decoded law makes that
+  unreachable on its own: a contact that closes at all costs at least the authored floor (50 here),
+  the pair re-spends every parity step for as long as the scrape closes, and the striker's pool is
+  bounded, so the ledger runs out and the decoded health rule ends the slide. The impulse edits
+  only the normal component, so a slide keeps its tangential speed and dies long before it could
+  grind to a halt (`AircraftContactResolverTests`, with the spends-nothing control beside it).
+- **An embed rule does not exist**, because the original's placement cannot produce the state: it
+  lands one sphere exactly at its own contact point. A swept multi-box airframe can stay
+  overlapping, so `AircraftContactResolver`'s un-embed loop and its destruction after three
+  failed pushes are kept as a named product exception, bound by that suite's own row.
 
 ⚠ **An invulnerable striker still destroys what it hits.** The `obj+0x920` early-out at `0x0048d563`
 sits *after* the struck object has been damaged, so invulnerability protects the rammer only.
@@ -2698,8 +2736,8 @@ section's landing note.
 
 ## The plant's constant inventory
 
-Every number the live translational and rotational path carries that no data file authors, with the
-class it falls in. `CSVM.Tests/FlightConstantInventoryTests` holds the same table and fails when a
+Every number the live translational and rotational path and the contact rules carry that no data
+file authors, with the class it falls in. `CSVM.Tests/FlightConstantInventoryTests` holds the same table and fails when a
 constant is added, dropped or moved off its recorded value, so a new number cannot arrive here
 without a provenance. Five classes are used:
 
@@ -2709,10 +2747,10 @@ without a provenance. Five classes are used:
 - **unit** is a conversion factor or an arithmetic identity, with no behaviour of its own.
 - **exception** is a CSVM invention kept deliberately, with a reason and a reachability
   measurement.
-- The former **contact** class is empty: `C21` decoded the plant's contact terms, so the file
-  carries no fitted number any more. The invented contact laws that remain for `C22`'s ablation
-  (`GrazeStopSpeed`, `CrashSpeed`, the damage cooldown, the un-embed loop) live on
-  `AircraftContactResolver`/`FlightController`, outside this census, and are named in `BL-271`.
+- The former **contact** class is empty: the plant's contact terms are decoded, so the file carries
+  no fitted number any more. The contact rules' own constants are censused with the plant, on
+  `CollisionDamage` and `AircraftContactResolver`; the invented crash, stop and cooldown laws that
+  used to sit beside them are gone (the death-rule note in "Collision damage").
 
 | Constant | Value | Class | Evidence |
 |---|---:|---|---|
@@ -2752,6 +2790,11 @@ without a provenance. Five classes are used:
 | `PhysicsConstants.NomGravity` | 20 | authored | `player.json`'s `nom_gravity`, mirrored for ballistics |
 | `PhysicsConstants.MphToMs` | 0.44704 | decoded | the parser's own speed-token scale |
 | `StickRamp.Rate` | 2.5 | decoded | `FUN_00487460`, 0.4 s of held key to full deflection |
+| `CollisionDamage.EntityCut` | 0.2 | decoded | `0x48d51a`/`0x48d526`, the non-player-into-aeroplane cut |
+| `CollisionDamage.EntityGrace` | 1.0 | decoded | `0x48d383`/`0x48d395`, written to both parties |
+| `CollisionDamage.SpawnGrace` | 1.5 | decoded | the spawn write of `obj+0xAC` |
+| `AircraftContactResolver.EmbedPushOut` | 0.3 | exception | m per un-embed attempt; the loop itself has no counterpart, the original's placement cannot leave an airframe overlapping |
+| `AircraftContactResolver.EmbedTries` | 3 | exception | attempts before the airframe is destroyed instead of left inside the world; bound by `AircraftContactResolverTests` |
 
 The `flightModel.*` config block overrides nine of these: `pitchTune`, `yawTune`, `rollTune`,
 `stallWarnFrac`, `liftGMin`, `liftGMax`, `altitudeCapM`, `noseChaseFactor` and `aoaLimiterFactor`.

@@ -109,12 +109,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   only the trail shows; and the DISTANCE interval hides behind an inverted flag
   (`has_interval_value` false, key off `interval_type`).
 
-- `BL-121` `[Tuning]` `[Owed-playtest]` `[Blocked: PLAN-flight-model-parity C22]` **Damage (Run-2 item 10)** — `CrashSpeed` 25,
-  `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
-  real flight. ⚠ The remaining contact constants are owned by the active plan's Wave C: `C22`
-  (`BL-271`) decides whether `CrashSpeed`, `GrazeStopSpeed` and the other surviving invented laws
-  stand at all (the graze friction and fitted kick are already retired by the decoded response,
-  `git log --grep=BL-381`), so do not tune any of them here first.
+- `BL-121` `[Tuning]` `[Owed-playtest]` `[Blocked: PLAN-flight-model-parity C23]` **Damage (Run-2 item 10)** —
+  breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
+  real flight. ⚠ The invented contact constants this item used to name are gone: the crash speed,
+  the stop speed, the graze friction and the fitted kick are retired against the decoded response
+  and the decoded death rule (`git log --grep=BL-271`, `git log --grep=BL-381`), so there is
+  nothing to tune there.
   The at-the-controls graze-feel check rides `C23`'s corner session. What remains this item's own
   after Wave C is the breakup-scatter feel judgement.
   Rendering at real spawns is verified (the `TopLevel` anchor fix, `docs/HISTORY.md`
@@ -922,19 +922,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   with).
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
-
-- `BL-271` `[Tuning]` `[Owed-playtest]` **The remaining invented contact laws with player-facing
-  consequences** (`AircraftContactResolver`/`FlightController`, each marked TUNE where it sits):
-  the no-ledger crash threshold `CrashSpeed` 25 m/s, "sliding below `GrazeStopSpeed` 12 m/s =
-  destroyed", "3 failed embed push-outs = explode", and the 0.3 s `DamageCooldown` standing in for
-  the original's every-other-frame sweep parity. The decoded response replaced the rest
-  (`git log --grep=BL-381`): the graze friction, the fitted attitude kick and the 0.15 push-out
-  are retired, the original's contact path carrying no such terms, and the quadratic severity
-  damage went with the decoded damage law (`git log --grep=BL-302`). The original might let a
-  plane belly-slide to a stop ("collecting 0-dmg kisses" is the user report that motivated the
-  stop rule); ablate each surviving law after the decoded response and keep only what earns a
-  product-exception record. ⚠ Feel is judged at the controls against `BL-120`'s corner item, and
-  no constant here is settled by re-measuring footage (`docs/verification.md` DET-12).
 
 - `BL-309` `[Feature]` **Engine torque is a designed, one-sided turn assist — unmodelled.** GDD §4.1.8
   ("Engine Torque", Motion Model/Flight Dynamics → Simulated Elements; restated, no prose): torque
