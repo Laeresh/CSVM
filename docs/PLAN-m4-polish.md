@@ -72,7 +72,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — decode and port
 
-11. ☐ `BL-449` Confirm the one-sided negative `C_L` ceiling, then port or record it
+11. ☑ `BL-449` Confirm the one-sided negative `C_L` ceiling, then port or record it
 12. ☐ `BL-451` A dead AI's throttle and surfaces freeze at their last commanded values
 13. ☐ `BL-457` Port the per-contact camera shake (block 5)
 14. ☐ `BL-442` Decode what keys the damaged-engine swap and pitch, then port it
@@ -235,7 +235,7 @@ not let a red units stage read as green in the summary block.
 
 # Wave B — decode and port
 
-## B11 ☐ `BL-449` Confirm the one-sided negative `C_L` ceiling, then port or record it
+## B11 ☑ `BL-449` Confirm the one-sided negative `C_L` ceiling, then port or record it
 
 **Goal.** The ledger row "the one-sided negative `C_L` ceiling"
 (`docs/org/flightModel.md:3410`) reads decoded, with CSVM either matching the asymmetry or the
@@ -259,6 +259,20 @@ only negative-lift samples. INSTR-19 applies (same-host comparison until A4 land
 
 **⚠ Traps.** The shipped envelope scenarios fly positive lift, so an unchanged dump is not
 evidence the port is right; add one inverted sample to the dump only if none exists.
+
+**Verified.** <pending orchestrator run>
+
+**Outcome: a disproof, no code change.** The disassembly confirms the `min` at `0x41ac5f`–`0x41ac7b`
+is one-sided and carries no sign handling, but the asymmetry cannot be reached. Both call sites of
+`FUN_0041abd0` build its `n` argument as the length of the demand vector (`0x48c821`–`0x48c852` and
+`0x49122e`–`0x491236`: a sum of squares through the integer sqrt approximation, then `/ 9.82`) and
+apply the resulting force along that vector's own normalised direction, so `n ≥ 0`, `C_L ≥ 0`, and
+the `−5` G clamp and the `−1.8` floor are both dead. A pushover reaches the function as a positive
+coefficient and meets the same `0.75 − 0.15·M` ceiling a pull does. `FlightModel` already has the
+same structure (`LoadFactorDemand` is a `liftDir.Length()`, `:688`), so `LiftCapAt` capping both
+signs at the positive ceiling is the decode, not a departure from it. The ledger row moves to
+decoded, and the "one clamp asymmetry remains unported" paragraph in `docs/org/flightModel.md` is
+rewritten as settled.
 
 ## B12 ☐ `BL-451` A dead AI's throttle and surfaces freeze at their last commanded values
 

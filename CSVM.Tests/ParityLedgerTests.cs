@@ -67,6 +67,8 @@ public class ParityLedgerTests
         ("engine torque: none exists", Decoded, "every write to FUN_0048c470's angular accumulator"),
         ("roll-to-pitch coupling: none exists", Decoded, "every read of [obj+0x100] and [obj+0x114]"),
         ("ambient turbulence: nothing ships", Decoded, "shake block 5, the five xrefs of FUN_0042c070"),
+        ("the one-sided negative C_L ceiling is unreachable", Decoded,
+            "0x48c821-0x48c852 builds n as a vector length, so FUN_0041abd0 is never handed a negative C_L"),
 
         ("far-field range is measured to the NEAREST human pilot", Exception,
             "plan Decision 3; the original presumes one player"),
@@ -81,8 +83,6 @@ public class ParityLedgerTests
             "0x48c883 writes it before 0x48ca1e; Step rotates before it translates, so CSVM is one step late"),
         ("the thin atmosphere band above 2000 m", Unsupported,
             "FUN_0041aca0's second arm; unreachable under the 2003 m cap"),
-        ("the one-sided negative C_L ceiling", Unsupported,
-            "FUN_0041abd0's one-sided min and flat -1.8 floor"),
         ("the level_off_rate auto-level torque", Unsupported,
             "0x48cedc / 0x48cf76; decoded, and no shipped data authors the rate"),
         ("the per-contact camera shake", Unsupported, "FUN_0048d2c0's block-5 kick at 0x48d409"),

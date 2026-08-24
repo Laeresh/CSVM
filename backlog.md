@@ -942,11 +942,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (2000 m, `6561.6796875` ft, writer `FUN_00463640`). If the original's ceiling is the thin band's
   own lift loss rather than a separate cap, the exception becomes a decoded mechanism and the cap
   constant goes. Lead recorded in the plan's A1 section; `AtmosphereBandTests` has the band.
-- `BL-449` `[Research]` **Confirm the one-sided negative `C_L` ceiling.** `FUN_0041abd0` clamps
-  `C_L` to ±1.8 but the `min` against `0.5·FUN_0041ad80(M)` (`0.75 − 0.15M`) is applied to positive
-  lift only, so inverted or pushed-over flight can reach a larger |C_L| at the same Mach. Confirm
-  the asymmetry is the executable's and not a decompiler artefact, then port or record it (ledger
-  row "the one-sided negative `C_L` ceiling", unsupported).
 - `BL-450` `[Feature]` **Fuel burn and the empty-tank lever freeze.** `FUN_0048e580` burns
   `[obj+0x134] −= dt · throttle · 5` (player-only, `0x48e603`), and a zero tank jumps past the
   throttle slew (`0x48e5f7` to `0x48e6c9`), freezing the lever where it stands rather than closing
