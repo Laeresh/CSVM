@@ -33,6 +33,14 @@ public sealed class PlaneShake
     private readonly Osc _speed = new();
     private readonly Osc _nitro = new();
 
+    // Block 5 (camera+0xf4) is the one oscillator no data authors: shakes.zrd names no `turbulence`
+    // source, so the constructor's law stands and the collision path is the block's only kicker
+    // (docs/org/shakes.md). ⚠ Do not give it a def — these three constants ARE its law.
+    private readonly Osc _contact = new()
+    {
+        Src = new ShakeSource { Id = "contact", Frequency = 2f, Damp = 4.5f, Sawtooth = false },
+    };
+
     // The fire source's per-shot steps. Injected for off-engine determinism (BL-266(a) branch:
     // see the class summary); the session resolves Rng.NewSystemRandom(Rng.Shake).
     private readonly Random _fireRng;
@@ -109,6 +117,19 @@ public sealed class PlaneShake
         }
     }
 
+    /// <summary>One resolved contact rocked this plane: block 5's kick at <c>0x48d409</c>, whose
+    /// <paramref name="magnitude"/> is <see cref="CollisionDamage.ContactShake"/>'s radians.
+    /// The caller gates it on a human pilot, as the original gates it on the player, and a graze
+    /// reaches it like any other contact: the only gate the original puts on the call is a positive
+    /// severity cosine.</summary>
+    public void ContactHit(float magnitude)
+    {
+        if (magnitude > 0f)
+        {
+            _contact.Kick(magnitude);
+        }
+    }
+
     /// <summary>Per-tick overspeed drive: <paramref name="speedRatio"/> is speed over the
     /// plane's rated max, so the authored <c>min_speed</c> 1.0 gate reads "beyond rated max" —
     /// the dive rattle. Magnitude is the EXCESS over the gate <c>(speedRatio − gate)/quotient</c>,
@@ -133,7 +154,8 @@ public sealed class PlaneShake
             return;
         }
         Roll = _fire.Advance(dt) + _bulletHit.Advance(dt) + _missileHit.Advance(dt)
-               + _explosion.Advance(dt) + _speed.Advance(dt) + _nitro.Advance(dt);
+               + _explosion.Advance(dt) + _speed.Advance(dt) + _nitro.Advance(dt)
+               + _contact.Advance(dt);
     }
 
     private sealed class Osc

@@ -113,6 +113,11 @@ public sealed class AircraftContactResolver
                 CollisionDamage.Term(severity, ranges.CollideArmorFloor, ranges.CollideArmorScale) * cut,
             HealthDamage =
                 CollisionDamage.Term(severity, ranges.CollideHealthFloor, ranges.CollideHealthScale) * cut,
+            // The camera kick (0x0048d3cc), spent before the pair and on its own law: linear in
+            // speed and in the RAW cosine, where the pair is cubic in the cosine and speed-blind.
+            ShakeMagnitude = striker.IsHumanPiloted
+                ? CollisionDamage.ContactShake(striker.Speed, severity)
+                : 0f,
             // local_11 (0x0048d79e): an AI that rammed anything OTHER than an aeroplane dies
             // outright, whatever health it has left. An AI that rammed an aeroplane survives on
             // health as usual.

@@ -2825,7 +2825,20 @@ armorDmg = healthDmg = max(300 · s³, 50)          cube at 0x0048d4c1
 if the striker is not the player and it hit an aeroplane:  both × 0.2
 ```
 
-⚠ **There is no airspeed term anywhere in it.** A 400 mph belly-flop and a 90 mph belly-flop at the
+**The camera kick is the same function's other law, and it is not the pair's.** Before the pair is
+computed, `0x0048d3cc`–`0x0048d409` kicks shake block 5 with
+`min(speed · s · 0.03, 0.15)` radians: the true airspeed at `obj+0x934`, the RAW severity cosine
+rather than its cube, the literal `0.03` at `0x006080c4` and the ceiling `0.15` at `0x006036a8`. Two
+guards stand over it and nothing else does: the object is the player (`0x0048d3c4`) and its crashed
+flag `obj+0x384` is clear (`0x0048d3aa`), so every contact the caller's positive-severity gate lets
+through kicks the camera, a graze included. At any flight speed the ceiling is reached by a cosine
+around 0.05, so the shallowest contacts already saturate. **Ported** as
+`CollisionDamage.ContactShake` feeding `PlaneShake.ContactHit`, widened from the player to every
+human pilot the way the bounce is; the oscillator law block 5 kicks is in
+[`shakes.md`](shakes.md).
+
+⚠ **There is no airspeed term anywhere in the damage pair** (the shake above is the one place in
+this function that reads speed, and it spends no damage). A 400 mph belly-flop and a 90 mph belly-flop at the
 same attitude deal identical damage. The whole law is a function of the angle of incidence, which is
 why a remake that scales collision damage by closing speed cannot be made to match by retuning a
 constant. The floor dominates below `s ≈ 0.550`, so any contact shallower than about 33° off the
@@ -3225,6 +3238,8 @@ without a provenance. Five classes are used:
 | `CollisionDamage.EntityCut` | 0.2 | decoded | `0x48d51a`/`0x48d526`, the non-player-into-aeroplane cut |
 | `CollisionDamage.EntityGrace` | 1.0 | decoded | `0x48d383`/`0x48d395`, written to both parties |
 | `CollisionDamage.SpawnGrace` | 1.5 | decoded | the spawn write of `obj+0xAC` |
+| `CollisionDamage.ContactShakeFactor` | 0.03 | decoded | `0x6080c4`, read at `0x48d3dc`; the contact shake's per-m/s term |
+| `CollisionDamage.ContactShakeCap` | 0.15 | decoded | `0x6036a8`, compared at `0x48d3eb`; the shake's ceiling in radians |
 | `AircraftContactResolver.EmbedPushOut` | 0.3 | exception | m per un-embed attempt; the loop itself has no counterpart, the original's placement cannot leave an airframe overlapping |
 | `AircraftContactResolver.EmbedTries` | 3 | exception | attempts before the airframe is destroyed instead of left inside the world; bound by `AircraftContactResolverTests` |
 
@@ -3406,6 +3421,7 @@ which are findings rather than code.
 | the six-slot control-surface mix and its 2/s exponential | decoded | `FUN_004b27e0` / `FUN_004b2a40` / `FUN_004b2ca0`, smoothing `FUN_00460490` |
 | contact placement, normal impulse and angular deposit | decoded | `FUN_0048d7f0`, `0x48e4bc` |
 | collision damage, armour before health | decoded | `FUN_0048d2c0` |
+| the per-contact camera shake | decoded | `FUN_0048d2c0`'s block-5 kick at `0x48d409`, `min(speed·s·0.03, 0.15)` |
 | the every-other-frame contact sweep | decoded | the parity gate at `0x48ed79` |
 | the nitro tank and its state machine | decoded | `FUN_004aff80`, `FUN_004b2110` |
 | engine torque: none exists | decoded | every write to `FUN_0048c470`'s angular accumulator |
@@ -3419,7 +3435,6 @@ which are findings rather than code.
 | the G ramp reads the SAME tick's delivered lift | unsupported | `0x48c883` writes it before `0x48ca1e`; `Step` rotates before it translates, so CSVM is one step late |
 | the thin atmosphere band above 2000 m | unsupported | `FUN_0041aca0`'s second arm; unreachable under the 2003 m cap |
 | the `level_off_rate` auto-level torque | unsupported | `0x48cedc` / `0x48cf76`; decoded, and no shipped data authors the rate |
-| the per-contact camera shake | unsupported | `FUN_0048d2c0`'s block-5 kick at `0x48d409` |
 | the AI's `medium_aishake` on a nitro engage | unsupported | `FUN_00473430(1)` |
 | the AI's positional `snd_nitro` blip | unsupported | the 0.1 s blip plus one second after |
 | a live producer for an AI's nitro injector | unsupported | `AiSpawn.Nitro` reads roster slot 34; the mission spawner does not read roster blocks yet |
