@@ -142,6 +142,14 @@ public sealed class SceneBuilder
     /// clutter MultiMesh still be forced blue per instance.</summary>
     internal const string ClutterFlagTintLine = "    ALBEDO = mix(COLOR.rgb, csky_tint.rgb, csky_tint.a);";
 
+    /// <summary>Multiplies every depth bias this builder emits. Each is a fraction of VIEW
+    /// DISTANCE, so a subtree mounted at a scale other than 1 has all of them compressed by that
+    /// factor while the renderer's depth noise floor stays put; a caller mounting one passes the
+    /// inverse of its mount scale, and a priority level is worth the same DEPTH there as anywhere
+    /// else (<see cref="PlaneBuilder.InteriorScale"/> is why this exists). ⚠ Baked into cached
+    /// meshes and materials: set it before building, never between builds.</summary>
+    internal float DepthBiasScale = 1f;
+
     /// <summary>The world's conflict ranks (<see cref="ConflictRank"/>), set by the caller before
     /// building. Null — every aircraft, every <c>--node=</c> subtree, any build with no conflict
     /// graph — leaves the cross-node tie-break on the flat node index, which is what those builds
@@ -206,6 +214,12 @@ void fragment() {
     // its base's capped rank and z-fights it. A tenth of a level out-ranks the whole rank budget
     // and still sits under NoClutterLayerBias, so a stacked overlay stays below a flagged layer.
     private const float OverlayPassBias = DepthBiasPerLevel * 0.1f;
+    // The ceiling on the whole bias AFTER DepthBiasScale has multiplied it. ⚠ Clamp there and not
+    // before the scale: 25x (the cockpit interior's) applied to the +-0.05 priority-level clamp
+    // reaches 1.25, and a bias of 1 puts the surface exactly on the eye. A quarter of the view
+    // distance leaves the authored +-49 range intact at that scale and cannot approach the near
+    // plane. No unscaled surface comes near it (49 levels is 0.0098), so scale 1 is untouched.
+    private const float MaxScaledBias = 0.25f;
 
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
@@ -498,10 +512,10 @@ void fragment() {
     internal float NodeBiasOf(int nodeIndex)
     {
         if (ConflictRanks == null)
-            return nodeIndex * NodeOrderBias;
+            return nodeIndex * NodeOrderBias * DepthBiasScale;
         // Absent = this node conflicts with nothing, which is rank 0 by construction.
         ConflictRanks.TryGetValue(nodeIndex, out int rank);
-        return Math.Min(rank, ConflictRankCap) * ConflictRankBias;
+        return Math.Min(rank, ConflictRankCap) * ConflictRankBias * DepthBiasScale;
     }
 
     private static CylAxis GetCylindricalAxis(GameZMesh mesh) => ClassifyBillboard(mesh) switch
@@ -1235,6 +1249,7 @@ void fragment() {
         // An overlay pass shares its base's priority and no_clutter flag by construction — it is
         // the same polygon — so this term is the whole of what puts it in front (OverlayPassBias).
         bias += pass * OverlayPassBias;
+        bias = Mathf.Clamp(bias * DepthBiasScale, -MaxScaledBias, MaxScaledBias);
         mat.SetShaderParameter("depth_bias", bias);
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);

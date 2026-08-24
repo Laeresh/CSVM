@@ -49,6 +49,10 @@ public sealed class WorldEffectsFactory
     // single _playerPosition above. Null (a caller with no seam, e.g. AiCrashDefs' test rig)
     // leaves the runtime on _playerPosition alone, same as before C21.
     private readonly Func<IReadOnlyList<Vector3>>? _playerPositions;
+    // Whether any human pilot is in a first-person view, for this runtime's own
+    // PLAYER_1ST_PERSON conditions (the muzzle-burst and cockpit-bullethole defs branch on it).
+    // Null leaves them answering false, the pre-cockpit reading.
+    private readonly Func<bool>? _firstPersonView;
     // The session's wind, handed to every Puffer this factory's emitter factories build.
     private readonly EffectAmbience _ambience;
 
@@ -64,12 +68,14 @@ public sealed class WorldEffectsFactory
     private SceneBuilder? _planesScene;
 
     public WorldEffectsFactory(SessionSpec spec, Node3D worldRoot, Func<Vector3> playerPosition,
-        EffectAmbience? ambience = null, Func<IReadOnlyList<Vector3>>? playerPositions = null)
+        EffectAmbience? ambience = null, Func<IReadOnlyList<Vector3>>? playerPositions = null,
+        Func<bool>? firstPersonView = null)
     {
         _spec = spec;
         _worldRoot = worldRoot;
         _playerPosition = playerPosition;
         _playerPositions = playerPositions;
+        _firstPersonView = firstPersonView;
         _ambience = ambience ?? EffectAmbience.Still;
     }
 
@@ -585,6 +591,7 @@ public sealed class WorldEffectsFactory
             new PufferEmitterFactory(textures, _worldRoot, _ambience),
             _spec.DebugAnim, EffectRuntimeTtl, _playerPosition);
         effects.PlayerPositions = _playerPositions;
+        effects.FirstPersonView = _firstPersonView;
         effects.ScreenFlash = ScreenFlash;
         // Bind name resolution to the template stage — so the effect names resolve to these
         // templates and not to the world's or the crash roots' same-named nodes — but parent the

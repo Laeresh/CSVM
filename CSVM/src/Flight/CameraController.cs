@@ -6,6 +6,7 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// Drives the flown aircraft's camera: the roll-following chase camera, the numpad fixed views,
+/// the pilot's SELECTED view mode (<see cref="ViewMode"/>: Chase, Cockpit or Nose)
 /// and the free orbit used while the debug freeze holds the world still. Steers a
 /// <see cref="Camera3D"/> it does not own, like <see cref="CSVM.UI.OrbitCamera"/> does for the
 /// static viewer.
@@ -26,6 +27,20 @@ public sealed class CameraController
     /// <summary>LogView's marker for the pad look-around — a continuously variable
     /// twin of the numbered views rather than one of their digits.</summary>
     public const int PadLookLog = -3;
+
+    /// <summary>LogView's markers for the two SELECTED first-person views, which are modes rather
+    /// than held keys: a scripted <c>--view=cockpit</c>/<c>--view=nose</c> run reads its own mode
+    /// back off the breadcrumb, and a capture proves which view it framed.</summary>
+    public const int CockpitViewLog = -4;
+
+    public const int NoseViewLog = -5;
+
+    /// <summary>The fixed head-pitch offset <c>FUN_0042d980</c> applies about the same axis as
+    /// elevation, in both first-person views: −4.70° = −0.08203 rad (bit pattern
+    /// <c>0xbda7ff58</c>). Not head-look (C21) — a constant tilt baked into the view build.
+    /// It tilts the WORLD view alone, so <see cref="Mech3.PlaneBuilder"/> mounts the cockpit
+    /// interior carrying the same tilt to keep the gunsight on the guns.</summary>
+    public const float HeadPitchOffsetRad = -0.08203f;
 
     // The chase offset's DIRECTION: behind and above the nose, at atan2(4.5, 16) ≈ 15.7° of
     // elevation. Hand-picked and still a TUNE — camparam ships a distance per plane, not an angle,
@@ -61,6 +76,19 @@ public sealed class CameraController
     private const float DistTransientPerAccel = 0.105f;
 
     private const float ChaseLogInterval = 0.25f; // sim-s between chase-distance breadcrumb lines
+
+    // The decoded per-mode BASE horizontal FOV, in degrees (org/cameraViews.md, "FOV constants
+    // and aspect correction": 1.0471976 rad / 1.3962634 rad, exactly 60°/80°). Only Cockpit and
+    // Nose ever read this table; every external view keeps GameSession's own 62° vertical global
+    // untouched (PLAN-cockpit-view, Decision 3 — the engine-wide migration is a filed item, not
+    // this one).
+    private const float NoseHorizontalFovDeg = 60f;
+    private const float CockpitHorizontalFovDeg = 80f;
+
+    // The engine's OWN reference aspect for the horizontal→vertical conversion (org/cameraViews.md:
+    // "the engine's assumed 4:3"). The live display/pane aspect is the other half of the formula,
+    // supplied per call so the result tracks the actual viewport, never a hardcoded 16:9.
+    private const float AssumedAspect = 4f / 3f;
 
     // The offset the direction above works out to at unit... i.e. the length of (BaseBack, BaseUp),
     // ≈ 16.62 m. Only used to normalise that direction against the data's own distance.
@@ -102,6 +130,17 @@ public sealed class CameraController
     // else — they are one number, and moving only one desyncs the two cameras.
     private readonly float _dist, _distFactor;
 
+    // The plane-local offset of this aircraft's authored cockpit_camera marker (PlaneBuilder,
+    // fallback (0,0,0) when the plane has none) — both first-person views share it, there is no
+    // separate nose marker (docs/org/cameraViews.md).
+    private readonly Vector3 _cockpitCameraOffset;
+
+    // The FOV the owned camera carried at construction — GameSession's own 62° vertical global
+    // for every external pose (chase, fixed, back, pad-look, crash). Captured once rather than
+    // read back from GameSession, so this class restores exactly what it found and never reaches
+    // into that global's own home (PLAN-cockpit-view, A3, Decision 3).
+    private readonly float _externalFovDeg;
+
     // The dynamic chase radius: _dist + _distFactor·V + the acceleration transient. Advanced by
     // UpdateDynamics on the sim clock; read by both the chase camera and the fixed views.
     private float _radius;
@@ -118,11 +157,13 @@ public sealed class CameraController
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
     private int _viewPrev = -1;                  // index into Views last applied (-1 = chase camera)
 
-    public CameraController(Camera3D camera, CamParams cam, Func<Key, bool> keyDown, int pinnedView)
+    public CameraController(Camera3D camera, CamParams cam, Func<Key, bool> keyDown, int pinnedView,
+        PilotViewMode viewMode = PilotViewMode.Chase, Vector3 cockpitCameraOffset = default)
     {
         _camera = camera;
         _keyDown = keyDown;
         _pinnedView = pinnedView;
+        ViewMode = viewMode;
         _dist = cam.Dist;
         _distFactor = cam.DistFactor;
         _radius = cam.Dist;
@@ -130,7 +171,38 @@ public sealed class CameraController
         _crashY = cam.CrashY;
         _backMin = cam.BackDistMin;
         _backMax = cam.BackDistMax;
+        _cockpitCameraOffset = cockpitCameraOffset;
+        _externalFovDeg = camera.Fov;
     }
+
+    /// <summary>Which view this pilot has SELECTED — Chase, Cockpit or Nose. State, not a held
+    /// key: it survives until the cycle key or another selection changes it, and a held numpad view
+    /// overrides it for as long as that key is down without changing it (see
+    /// <see cref="PilotView.Effective"/>). Seeded from <c>--view=cockpit</c>/<c>=nose</c>.
+    /// ⚠ Deliberately NOT a row in <see cref="Views"/>: `BL-150` rebuilds that table later and
+    /// must be able to replace it without touching these modes (PLAN-cockpit-view, Decision 2).</summary>
+    public PilotViewMode ViewMode { get; set; }
+
+    /// <summary>The pilot's head in the two first-person views: snap, free-look and the center key,
+    /// smoothed to the angles <see cref="FirstPersonView"/> aims with. Built with the first-person
+    /// elevation floor (level), which is the floor the original's own first-person caller passes;
+    /// the host steps it on the SIM clock. Its own state, not the camera's, so it keeps its bearing
+    /// across a held numpad key and reads the same in either first-person view.</summary>
+    public HeadLook Head { get; } = new HeadLook();
+
+    /// <summary>Whether the SELECTED view is one of the two first-person ones — what the anim
+    /// data's <c>PLAYER_1ST_PERSON</c> condition is answered with. Reads the selection, not the
+    /// momentary override: a numpad key held for a frame does not make the pilot leave the
+    /// cockpit.</summary>
+    public bool FirstPerson => PilotView.IsFirstPerson(ViewMode);
+
+    /// <summary>One press of the cycle key: Cockpit ↔ Nose, entering Cockpit from Chase, the
+    /// original's "Cycle Cockpit Views".</summary>
+    public void CycleCockpitViews() => ViewMode = PilotView.Cycle(ViewMode);
+
+    /// <summary>Select the chase view — the way back out of the first-person pair, which the
+    /// original reaches through its own view selector rather than through the cycle key.</summary>
+    public void SelectChase() => ViewMode = PilotViewMode.Chase;
 
     /// <summary>The look-behind view is on: numpad 0 held, the run pinned it with
     /// <c>--view=back</c>, or <paramref name="padClick"/> — this player's right-stick
@@ -142,12 +214,16 @@ public sealed class CameraController
 
     /// <summary>Which fixed view the camera should hold this frame, as an index into
     /// <see cref="Views"/>, or −1 for the chase camera. A held numpad key beats the scripted
-    /// pinned view so a pinned run can still be explored at the controls; with several keys down
-    /// the lowest digit wins, which keeps the choice deterministic. There is one keyboard, so in
-    /// splitscreen this is player 1's control — the host's key reader returns false for the
-    /// others; the D-pad is taken by the weapon selectors, so there is no pad binding.</summary>
+    /// pinned view; with several down the lowest digit wins, which keeps the choice deterministic.
+    /// One keyboard, so in splitscreen this is player 1's, and there is no pad binding.
+    /// ⚠ Always −1 in a first-person mode: the numpad is the head-look snap cluster there
+    /// (<see cref="PilotView.HoldsFixedViews"/>), as it is in the original.</summary>
     public int ActiveView()
     {
+        if (!PilotView.HoldsFixedViews(ViewMode))
+        {
+            return -1;
+        }
         for (int i = 0; i < Views.Length; i++)
         {
             if (_keyDown(Views[i].Key))
@@ -211,6 +287,73 @@ public sealed class CameraController
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
     }
 
+    // Kept beside the instance method that calls it, ahead of the property it's declared after
+    // in source, rather than up with the constructor — SA1204 would put it before every instance
+    // property, which reads worse than the one local suppression here.
+#pragma warning disable SA1204
+    /// <summary>The pure first-person placement law: <c>camera_world = plane_pos + plane_rotation
+    /// × offset</c>, aimed by the head's own angles — azimuth about the plane's up axis, then
+    /// elevation about the axis that yaw just produced, so a sideways look still pitches through
+    /// the head's own horizon. The fixed −4.70° head-pitch offset rides the same axis as elevation,
+    /// as it does in the original. Static and engine-free so the math is unit-testable without a
+    /// live <see cref="Camera3D"/> — <see cref="FirstPersonView"/> is the thin write onto one.</summary>
+    public static (Vector3 Position, Basis Basis) FirstPersonPose(Vector3 planePos, Basis attitude,
+        Vector3 cockpitCameraOffset, float elevation = 0f, float azimuth = 0f) =>
+        (planePos + (attitude * cockpitCameraOffset),
+         attitude * new Basis(Vector3.Up, azimuth) * new Basis(Vector3.Right, elevation + HeadPitchOffsetRad));
+#pragma warning restore SA1204
+
+    /// <summary>First-person placement (Cockpit mode 6 / Nose mode 7): rigidly mounted at the
+    /// plane's <c>cockpit_camera</c> marker via <see cref="FirstPersonPose"/>. No smoothing and no
+    /// camera-side shake: riding the DRAWN pose one-to-one is what lets the camera inherit the
+    /// plane node's wobble for free (docs/org/shakes.md, "two cockpit views need no separate
+    /// handling"). The aim is <see cref="Head"/>'s current angles, so a head panned away from the
+    /// nose keeps its bearing while the aircraft manoeuvres under it.</summary>
+    public void FirstPersonView(in Transform3D renderPose)
+    {
+        var (position, basis) = FirstPersonPose(renderPose.Origin, renderPose.Basis, _cockpitCameraOffset,
+            Head.Elevation, Head.Azimuth);
+        _camera.Position = position;
+        _camera.Basis = basis;
+    }
+
+    // Kept beside the instance method that calls it, for the same SA1204 reason as
+    // FirstPersonPose above.
+#pragma warning disable SA1204
+    /// <summary>The decoded horizontal→vertical FOV law (org/cameraViews.md, "FOV constants and
+    /// aspect correction"): <c>vertical = atan(tan(H/2) · assumedAspect/liveAspect)</c>, doubled
+    /// for the FULL angle Godot's <see cref="Camera3D.Fov"/> expects (this project sets no
+    /// <c>keep_aspect</c> anywhere, so Fov is always the vertical angle). <paramref
+    /// name="liveAspect"/> is taken fresh every call, never assumed 16:9. At 16:9, 60°H → 46.8°V
+    /// and 80°H → 64.4°V, the plan's pinned values. Pure, so it unit-tests engine-free.</summary>
+    public static float HorizontalToVerticalFovDeg(float horizontalDeg, float liveAspect)
+    {
+        float halfH = Mathf.DegToRad(horizontalDeg) * 0.5f;
+        float halfV = Mathf.Atan(Mathf.Tan(halfH) * (AssumedAspect / liveAspect));
+        return Mathf.RadToDeg(halfV) * 2f;
+    }
+#pragma warning restore SA1204
+
+    /// <summary>Put the derived per-mode vertical FOV onto the owned camera, at ITS OWN
+    /// viewport's live aspect — the per-pane <c>SubViewport</c> in splitscreen, the window in
+    /// single-player, so each pilot's picture is correct independent of the others (Decision 5:
+    /// no splitscreen-specific code, the per-pilot camera already owns its own FOV value). Call
+    /// alongside every <see cref="FirstPersonView"/> site; <see cref="RestoreExternalFov"/> is the
+    /// undo for every other pose.</summary>
+    public void ApplyFirstPersonFov()
+    {
+        var size = _camera.GetViewport()?.GetVisibleRect().Size ?? new Vector2(16f, 9f);
+        float aspect = size.Y > 0f ? size.X / size.Y : 16f / 9f;
+        float horizontalDeg = ViewMode == PilotViewMode.Cockpit ? CockpitHorizontalFovDeg : NoseHorizontalFovDeg;
+        _camera.Fov = HorizontalToVerticalFovDeg(horizontalDeg, aspect);
+    }
+
+    /// <summary>Put the camera back on the vertical FOV it carried at construction — GameSession's
+    /// own 62° global. Every non-first-person pose calls this (a held numpad key or look-behind
+    /// while the SELECTION is Cockpit/Nose is an external pose and gets the external FOV while
+    /// held, back to first-person FOV on release, same as any other override).</summary>
+    public void RestoreExternalFov() => _camera.Fov = _externalFovDeg;
+
     /// <summary>The authored crash camera (<c>crash_horiz</c>/<c>crash_y</c>): on a fatal crash
     /// the original hard-cuts to a static elevated vantage looking down at the impact point.
     /// Framing decoded off the original's crash footage — see docs/formats/camparam.md.
@@ -218,6 +361,7 @@ public sealed class CameraController
     /// (<c>BL-260</c>); do not guess them into the pose.</summary>
     public void CrashView(Vector3 impact, Vector3 travelDir)
     {
+        RestoreExternalFov(); // the crash cut is always an external framing, whatever view was selected
         var alongH = new Vector3(travelDir.X, 0f, travelDir.Z);
         Vector3 behind;
         if (alongH.LengthSquared() > 1e-4f)
@@ -298,10 +442,23 @@ public sealed class CameraController
         _prevSpeed = speed;
         _distExcess = 0f;
         _radius = _dist + (_distFactor * speed);
+        // A settle-immediately pose starts the pilot looking where the aircraft is going; a head
+        // left panned across a respawn would frame the spawn from over the pilot's shoulder.
+        Head.Reset();
+        RestoreExternalFov(); // default; the first-person arm below overrides it
         int view = ActiveView();
         if (view >= 0)
         {
             FixedView(view, renderPose);
+            return;
+        }
+        if (FirstPerson)
+        {
+            // Snap is the settle-immediately path: without this arm a respawn into Cockpit/Nose
+            // shows one chase-pose frame. Above the look-behind on purpose — in first person that
+            // input is a head look-back, so a spawn never flashes the outside camera.
+            FirstPersonView(renderPose);
+            ApplyFirstPersonFov();
             return;
         }
         if (BackActive())
@@ -361,6 +518,8 @@ public sealed class CameraController
         var aim = toPlane * -_camera.Basis.Z;   // the camera's forward axis, in the plane's frame
         string n = view == BackViewLog ? "back"
             : view == PadLookLog ? "padlook"
+            : view == CockpitViewLog ? PilotView.Name(PilotViewMode.Cockpit)
+            : view == NoseViewLog ? PilotView.Name(PilotViewMode.Nose)
             : (view < 0 ? "0" : Views[view].Digit.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Log.Debug("flight", $"view n={n} offset=({offset.X:0.000},{offset.Y:0.000},{offset.Z:0.000}) dist={offset.Length():0.000} aim=({aim.X:0.000},{aim.Y:0.000},{aim.Z:0.000})");
     }

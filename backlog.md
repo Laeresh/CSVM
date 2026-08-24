@@ -704,12 +704,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   pile of camera decisions that plan deliberately deferred: snap vs smooth follow, override vs
   blend with the chase camera, behaviour with no target selected or a target behind the pilot, and
   interaction with the right-stick free look (`BL-372`). `L` is reserved in `docs/controls.md` but
-  bound to nothing.
+  bound to nothing. `PLAN-cockpit-view.md`'s head-look decode names the mechanism this camera would
+  ride: the look-state byte the controller reads (`DAT_0064ef68`) has a third value, `2`, for
+  padlock, sitting beside the `0`/`1` snap/free-look states `BL-432`'s selector keys pick between —
+  so `L`'s camera is this same state machine's third mode, not a bolt-on. Building it needs
+  `TargetSelection.Current` plumbed into `HeadLook`'s target so the padlock state aims the head at
+  the current target instead of reading player input.
   *Fix shape:* a camera-focused item once the questions above are settled — not a change to the
   targeting module itself, which already exposes `TargetSelection.Current` cleanly for a camera to
   read.
-  *Cross-refs:* `BL-372` (right-stick free look), `docs/org/targeting.md` "Track Target",
-  `docs/controls.md`.
+  *Cross-refs:* `BL-372` (right-stick free look), `BL-432` (the `K`/`J` mode selectors, the byte's
+  other two states), `docs/org/targeting.md` "Track Target", `docs/controls.md`,
+  `PLAN-cockpit-view.md` (`HeadLook`, `src/Flight/HeadLook.cs`).
 
 - `BL-400` `[Feature]` **`Structures` as a selectable Non-Aircraft target — needs a curated
   `targets.zrd`-equivalent list.** *Evidence:* the player-targeting plan's out-of-scope call (c),
@@ -1869,14 +1875,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   passing plane. Treat Doppler on IA traffic as **unverified**, and measure it (same method: track a
   tonal component against the source WAV) before implementing it.
 
-- `BL-161` `[Feature]` `[Blocked: cockpit view]` **`cockpit_engine_sound` ships per plane, unparsed.** `extracted/zrdr/vehicle.zrd.json`
-  carries it alongside `engine_sound` for every plane def (Devastator: `snd_devastator_cp`, lines
-  21-36; repeated for the other planes); `PlaneStats.Load` does not read it. (`damaged_engine_sound`,
-  which this entry used to bundle, is parsed and consumed since `BL-090` item 1 landed 2026-08-01 —
-  its gain TUNE is `BL-223`.)
-  *Fix shape:* out of scope until a cockpit-audio feature is scheduled; recorded here so nobody has
-  to re-derive from scratch that the *data* isn't the blocker.
-
 - `BL-223` `[Bug]` `[Owed-playtest]` **Damaged-engine loop gates on the wrong thing: any part's worst fraction, not the
   engine part's health pool (B5, 2026-08-01; regated per playtest 2026-08-06, PT-26).** Today
   `PlaneStats`/`FlightAudio` blend `snd_damagedengine` from `1 - PlaneDamage.WorstFraction` across
@@ -1985,14 +1983,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Cameras & views
 
-- `BL-080` `[Feature]` **Future cockpit view** would consume a mix of already-parsed and still-raw data: `pcdpN`
-  cockpit damage panels and the `*_damage_green/yellow/red` indicator anims are already parsed
-  (PlaneStats parses them, DamageVisuals skips them). `cockpit_engine_sound` (`*_cp` WAVs, e.g.
-  `snd_devastator_cp`) is still unparsed — see `BL-161`. `player_fuelleak` (0.85 threshold) IS
-  already parsed, as a `VehicleInjureAnims` entry.
-
 - `BL-150` `[Feature]` **plan-sized — not a TUNE. Numpad camera views — the whole scheme needs a rebuild, not a
-  retune.** Current implementation: `FlightController.cs:286-303` (`Views[]` table, keys
+  retune.** ⚠ **This IS the chase camera's head-look controller, not nine authored poses — read
+  `BL-435` first.** `PLAN-cockpit-view.md`'s decode of `FUN_0042c7f0` found the numpad views run the
+  same head-look state machine C21 ported as `HeadLook`, floored at `−π/2` instead of level; the
+  rebuild below should implement that controller, not a table of nine poses. Item (f)'s `+`/`−`
+  distance trim is the same control as `BL-433`'s External Camera Zoom axis — build them together.
+
+  Current implementation: `FlightController.cs:286-303` (`Views[]` table, keys
   Kp1/2/3/4/6/7/8/9 only — **no Kp0**), `:1653-1676` (`ActiveView()` — held key beats the scripted
   `PinnedView`, first array match wins on multiple keys down), `:1685-1690` (`ApplyFixedView` —
   instant snap, no smoothing, shares the chase camera's `ViewDist`); `--view=N` is the scripted,
@@ -2248,9 +2246,91 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   caliber law stood because the candidates separated by an order of magnitude each way).
 - `BL-420` `[Research]` **Decode the original's per-view base FOV from `crimson.exe` and record it under `docs/org/` — the engine holds a single 62° assumption that the binary refutes.** The original's camera projection has **exactly two base horizontal FOVs, 60° and 80°, both stored in radians as half-angle constants** (`1.0471976` = `92 0a 86 3f` and `1.3962634`), and **which one applies is gated per-camera-mode** (live mode at `camera+0x14c`, selected in `FUN_0042b660`): mode **6** → 80° (`FUN_006024d9`), every other mode (0–5, 7, 8, 9) → 60° (`FUN_00602508`). Modes 6 and 7 are the only two first-person views (both set the `DAT_009fd17c` first-person flag via `FUN_004e7100`, both route through the first-person placement `FUN_0042d980`, neither uses chase-position math — `FUN_0042dc20`/`FUN_0042c5c0` dispatch). So the three named views resolve definitively: **3rd Person / chase = 60°; Cockpit view = mode 6 = 80°; Nose view = mode 7 = 60°**. The cockpit/nose assignment is pinned by a direct render gate: `FUN_0049fb00` (the per-frame player render, sole caller `FUN_004a0220` = main tick) draws the cockpit interior model `cockpit1` (`DAT_0071c314`) **only when mode == 6**, so mode 6 is the interior cockpit view (80°), and mode 7 is the no-interior forward view (60°). The two first-person views also share the **same camera position** — both place the camera at the plane's `cockpit_camera` marker (`DAT_0071c328/32c/330`), so there is **no separate nose-camera offset**; mode 7 differs only in not drawing the interior/hull, not head-looking (fixed forward), and being 60°. The constants are **horizontal**; `FUN_006024d9`/`FUN_00602508` aspect-correct to stored vertical via `atan(tan(H/2) · (16:9)/(4:3))` → 60°→46.8° vertical, 80°→64.4° vertical. The project's current single **62° vertical assumption does not exist in the binary** — the 62°-in-radians constant `1.082104` (`63 82 8a 3f`) is absent, so the assumed number is unsupported and the correct base is 60°.
   *Evidence:* ghidra-mcp read of the open `crimson.exe` (`/crimson.exe`): `FUN_0049fb00` (player render; draws `cockpit1` `DAT_0071c314` only when mode==6 via `FUN_004cca30(x,1/0)` around the interior draw), `FUN_0042b660` (mode gate), `FUN_00602508` (60° H-FOV; writes `_DAT_00a1eff0`/`_DAT_00a1eff4`), `FUN_006024d9` (80° H-FOV, mode 6), `FUN_0042b570` (frustum/projection, contains `0.5235987755982` = 30° = 60°/2), plus the 60°/80°/50.0/2.5 constants side-by-side at the data table `0060409c`. FOV is stored in radians (anim loader `FUN_00502da0` converts degrees→radians via `0.017453292`). The `0x3f860a92` 60° literal is also used by `FUN_0049d940` (player aim camera) and `FUN_004a0220`. Camera object is `DAT_0064ef78`. Placing the camera: both first-person modes run the same placement `FUN_0042d980`, which sets the camera to `plane_pos + plane_rot · (DAT_0071c328,32c,330)`, i.e. the plane's `cockpit_camera` marker offset (bound in `FUN_00473480` from the `cockpit_camera` node; default fallback `DAT_0075d1b8/bc/c0` = `(0,0,0)`). Plane-model `cockpit_camera` node translations (decoded from `extracted/C1/... planes/nodes.json`) put the camera on the fuselage centerline a bit above the local origin — default fighter `player_pfighter`: `(0, +0.75, −0.2)` — with +Y up, ±X the wingspan (ailerons at ±63, elevators/tail at −Z ≈ −37), so +Z = nose/forward and the marker is centered, ~0.75 up, marginally aft of the origin. There is **no `nose_camera` node or per-mode offset** — mode 7 reuses the cockpit_camera point. The `cam_anim` ZAN cockpit sequence (`player-gi_1stperson`) carries no FOV (it shows the interior/hides the plane via `cockpit1`/`camera1`), so the base FOV is not authored in `.ani` data.
-  *Fix shape:* **done — decoded facts landed as [`docs/org/cameraViews.md`](org/cameraViews.md) (2026-08-18)**, covering both the per-view FOV model (60° base; mode-6 cockpit = 80°) and the camera-placement fact (cockpit & nose share the `cockpit_camera` marker; no separate nose offset; per-plane authored offsets like `player_pfighter` `(0,0.75,−0.2)`). Remaining fix work is the engine-side amend: change CSVM's single-FOV assumption + the `docs/formats/camparam.md`/`camparam` references to the 60°/80° model. The engine's live FOV read (`GameSession.cs` and the 62° references in `PLAN-overcast-match.md:1463` and `docs/org/tracers.md:258`) should be corrected to 60° base, with the mode-6 80° first-person variant and the per-mode gating as the full model.
+  *Fix shape:* **the decoded facts landed as [`docs/org/cameraViews.md`](org/cameraViews.md) (2026-08-18), and the mode-6/mode-7 first-person half of the model landed in code** (`PLAN-cockpit-view.md` A3): `CameraController.HorizontalToVerticalFovDeg` renders Cockpit at 80° H and Nose at 60° H, both aspect-corrected off the live viewport, deliberately scoped to those two new modes only (Decision 3, "new modes only") and never touching the engine's 62° global. **What remains is the EXTERNAL half.** `GameSession.cs:475`/`:2624` and `Launcher.cs:490` still write the single 62° vertical global to every chase/fixed-numpad/back/pad-look/crash camera. Migrating those three sites to the decoded 60° horizontal base (with the aspect-corrected 46.8° vertical this page already pins) is the remaining work, and it unsettles two judgements made against the current 62°: `PLAN-overcast-match.md:1463`'s overcast sky match and `docs/org/tracers.md:258`'s tracer calibration. Carry that warning into whichever session does the migration — both need re-judging after the base FOV moves, not just re-measuring against the same footage.
   *⚠ Traps:* (i) **The two `CAMERA_STATE`/`CAMERA_FROM_TO` functions (`FUN_00502da0`, `FUN_00503e70`) are animated/in-script FOV changes only (`.ani` H/V_FOV events) — not the base per-view FOV; do not wire the engine's base FOV to them.** (ii) **The 80° is attached to camera mode 6 specifically, not "first person" generally** — mode 7 is also first-person but is 60°, so gating on "is first person" alone would read the mode-7 number wrong. (iii) The `Virtual Cockpit` string is a HUD/perf/zoning label (`FUN_0059c340`), not a view — ruled out. (iv) ~~Which of cockpit vs nose is mode 6 (80°) vs mode 7 (60°) was not pinned~~ — **resolved**: the `FUN_0049fb00` render gate (`cockpit1` drawn only when mode==6) pins mode 6 = Cockpit (80°) and mode 7 = Nose (60°). The remaining subtlety is that **both modes share the same `cockpit_camera` position** (no separate nose offset exists), so "nose" is a render/head-look/FOV variant of the same camera point, not a physically different marker. (v) "62°" invariants elsewhere are the assumption being corrected, not corroboration.
-  *Cross-refs:* `BL-255` (the nose view that exists in the original — the cockpit/nose FOV split this item decodes feeds that entry), `BL-150` (numpad fixed-view FOV calibration is still missing — a documented 60°/80° base + the aspect conversion is the calibration input it needs), `docs/formats/camparam.md` (chase/tuning only; does not cover FOV), `PLAN-overcast-match.md:1463` and `docs/org/tracers.md:258` (the 62° assumption to correct).
+  *Cross-refs:* `BL-255` (the nose view that exists in the original — the cockpit/nose FOV split this item decodes feeds that entry), `BL-150` (numpad fixed-view FOV calibration is still missing — a documented 60°/80° base + the aspect conversion is the calibration input it needs), `docs/formats/camparam.md` (chase/tuning only; does not cover FOV), `PLAN-overcast-match.md:1463` and `docs/org/tracers.md:258` (the 62° assumption to correct), `PLAN-cockpit-view.md` A3 (landed the mode-6/7 half of this model).
+
+- `BL-432` `[Feature]` **The original selects head-look behaviour by key; CSVM infers it from which
+  device moved — a recorded behavioural difference.** `OriginalScreenshots/Keybinds Views 1.png`
+  binds `K` **Access Snap Look Mode** and `J` **Access Smooth Look Mode**, both free in CSVM's
+  flight scheme today. The look-state byte the head-look controller reads (`DAT_0064ef68`,
+  `PLAN-cockpit-view.md`'s decode of `FUN_0042d010`) is a mode selector with three values — `0`
+  snap, `1` free-look, `2` padlock (`BL-399`) — that the original's player flips explicitly with
+  these two keys. `PLAN-cockpit-view.md` C21 instead infers the mode from the input source: the
+  numpad snap cluster snaps, the mouse/right stick pans smoothly, and both are live at once rather
+  than one active mode at a time. That is a genuine behavioural difference, not just an unbound key:
+  the original's player cannot free-look while snap is the active mode (or vice versa), and CSVM's
+  player always can.
+  *Fix shape:* either wire `K`/`J` as an explicit mode toggle gating which input path
+  `HeadLook.Step` honours that frame, or judge the device-inferred behaviour as the better port and
+  record why. Build beside `BL-399` — it is the same byte's third state.
+  *Cross-refs:* `BL-399` (padlock, the byte's third state), `PLAN-cockpit-view.md` C21 (`HeadLook`,
+  `src/Flight/HeadLook.cs`).
+
+- `BL-433` `[Feature]` **Numpad `+`/`−` are unbound; the original uses them for the chase camera's
+  zoom, which CSVM has no equivalent of.** `OriginalScreenshots/Keybinds Views 2.png` labels the
+  pair **External Camera Zoom In/Out** — decoded as keys `0x43`/`0x44` moving a stored zoom value at
+  `2·dt`, clamped `[0, 1]`, smoothed at `1.5`/s (`PLAN-cockpit-view.md`, "What the data actually
+  ships"). `BL-150`'s own item (f) records the same pair, independently measured, as a "camera
+  distance trim" — read together, that trim IS this zoom axis, not a separate control. The
+  head-look controller's own center key (`0x3e`) also zeroes this same zoom value in free-look, so
+  the two features share one piece of state.
+  *Fix shape:* one zoom axis bound to numpad `+`/`−`, driving `CameraController`'s chase distance
+  with the decoded rate/clamp/smoothing; the center key's zero-the-zoom behaviour rides along once
+  `HeadLook`'s center path reaches the chase camera (`BL-435`).
+  *Cross-refs:* `BL-150` item (f) (same control, measured independently), `BL-435` (the center-key
+  zero), `PLAN-cockpit-view.md` (constants, `DAT_0064ef30`/`38`).
+
+- `BL-435` `[Feature]` **The original drives the chase camera through the same head-look controller
+  as the cockpit views; CSVM's chase view has no look-around at all.** `FUN_0042c7f0` (the chase
+  placement dispatcher) calls the identical `FUN_0042d010(0xbfc90fdb, 0)` that
+  `PLAN-cockpit-view.md` C21 already ported as `HeadLook` — same states, same snap table, same
+  2 rad/s pan, same smoothing rates — with its elevation floor at `−π/2` instead of first person's
+  level floor, so the chase
+  camera can look down as well as up. The original's numpad snap cluster (`Kp1`-`Kp9`) plus
+  `F9`-`F12` **External Camera** keys plus `F7` **Access Chase View** (menu label,
+  `OriginalScreenshots/Keybinds Views 2.png`) are this same mechanism, not a separate feature.
+  ⚠ **This is the mechanism behind `BL-150`'s numpad "fixed views."** `BL-150`'s own `CAP-07`
+  measurement found the numpad views compose as a SUM of each held key's 2-D offset from `Kp5`, with
+  a zero resultant giving the default chase pose — exactly this controller's snap-direction
+  composition, applied to the chase camera's `−π/2`-floored instance rather than a table of nine
+  authored poses. `BL-150`'s rebuild should therefore build look-around (this item), not nine
+  hand-placed camera positions.
+  ⚠ **`F7` conflicts with CSVM's own debug binding.** `docs/controls.md` already records `F7` as
+  unassigned in CSVM's flight scheme specifically because `docs/org/cameraViews.md`'s correction
+  identifies "Access Chase View" as the mode-9 FLYBY, not the following chase — a contradiction
+  between the menu label and the decoded behaviour nobody has settled. Resolve which behaviour the
+  `F7`-labelled binding actually maps to before choosing a CSVM key.
+  *Fix shape:* reuse `HeadLook` (`src/Flight/HeadLook.cs`, C21) on the chase camera with
+  `PitchFloor = -π/2` instead of building a second controller; the snap cluster becomes
+  `CameraController`'s numpad table per `BL-150`'s law once that item's rebuild lands.
+  *Cross-refs:* `BL-150` (the fixed-view numpad table this supersedes as a mental model), `BL-433`
+  (the same F9-F12/zoom cluster's `+`/`−` half), `PLAN-cockpit-view.md` (⚠ table row 2, C21
+  `HeadLook`), `docs/org/cameraViews.md` (the F7/flyby correction).
+
+- `BL-436` `[Tuning]` `[Owed-playtest]` **The cockpit view's whole feel is unjudged at the controls
+  — one sitting owes seven separate decisions `PLAN-cockpit-view.md` made without one.** (a)
+  `PlaneBuilder.InteriorScale` (B11) is a declared TUNE, framed static (0.04, "the panel ~0.7 m
+  ahead of the eye") and never flown. (b) Head-look feel (C21): the snap directions, the 2 rad/s
+  free-look pan rate, and the elevation/azimuth smoothing rates (3.0/5.0 per second) are all
+  decoded constants, none flown. (c) The azimuth-sign port decision (C21): the original's two input
+  paths disagree on sign and CSVM picked one convention for both (positive = left) — confirm it
+  reads right rather than backwards. (d) The autohead sub-cap port decision (C22): only the
+  plane-local X/Y velocity drives the lean, the forward (Z) component dropped before scaling, a
+  port choice made without decoded evidence either way. (e) The damaged-over-cockpit engine-sound
+  precedence (D31): when both the damage swap and the cockpit swap are live, damaged wins — an
+  evidence-gapped port decision, no shipped def authors the conflicting case. (f) Wobble in first
+  person against the original: the cockpit camera inherits the plane node's wobble by riding the
+  drawn pose (A2, `docs/org/shakes.md`) — compare amplitude and character in the cockpit at the
+  controls against the original's own cockpit view. (g) The Nose head-look confirm:
+  `PLAN-cockpit-view.md`'s ⚠ table row 2 retired `docs/org/cameraViews.md`'s old "head fixed in
+  Nose" reading in favour of "head-look runs, only autohead is gated" — fly Nose and confirm the
+  free-look is really there, since the retired reading may have been a live impression rather than
+  a misread decompile.
+  *Fix shape:* one cockpit sitting across a couple of airframes covers all seven; each is a
+  judgement call, not a re-decode.
+  *Cross-refs:* `PLAN-cockpit-view.md` (every decision above, by wave: B11, C21, C22, D31), `BL-391`
+  (engine level, kept separate from (f)).
 
 ## HUD & UI
 
@@ -2354,6 +2434,43 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `UI/LoadBoard.cs`, `Launcher.BeginLaunch`/`RunOwedLaunch`, `Utils/StartupProfile.cs`,
   [`docs/org/loading-screen.md`](docs/org/loading-screen.md), `docs/architecture.md`.
 
+- `BL-431` `[Feature]` **The cockpit interior's `gauges` subtree (39 meshes, `cockpit1`) renders as
+  static geometry — the needles never move, and two interior warning lamps ship parked hidden.**
+  `PLAN-cockpit-view.md` (Wave B) built the interior render but deliberately kept `GaugeCluster` as
+  the only DRIVEN instrument set (Decision 1): the in-3D dial faces, bezels and panel are authored
+  geometry with no needle animation wired to them, so a Cockpit-view capture shows the screen-space
+  HUD dials drawn over a static 3D panel holding a fixed pose. Two lamp nodes, `lowalt_on` and
+  `stallwarning_on` (present on all 11 airframes, shipped `active: true`), are parked hidden by
+  `PlaneBuilder.ParkInteriorStates`/`IsInteriorDrivenState` alongside the windshield bullet-hole
+  decals — nothing lights them. Bundled here with a second, related question: whether `GaugeCluster`
+  should reposition per `hud_v2.zrd`'s `POSITION_1ST` layout key when the pilot is in a first-person
+  view — the HUD initializer reads distinct `POSITION_1ST`/`POSITION_3RD` layout keys from the
+  archive and CSVM's `GaugeCluster` consumes neither (`docs/org/cameraViews.md`, "The in-binary
+  strings expose no view-name tokens").
+  *Fix shape:* drive the authored needles and the two lamps off the same telemetry `GaugeCluster`
+  already reads, then decide whether the screen-space cluster retires in first person, moves to the
+  `POSITION_1ST` layout, or keeps doubling up over the 3D panel as it does today.
+  *Residue:* nothing is hidden for this, and nothing needs to be. The instruments were reported
+  flickering, and the mechanism turned out to be the mount scale rather than the missing needle
+  drive: every depth bias `SceneBuilder` emits is a fraction of VIEW DISTANCE, so mounting the
+  interior at `PlaneBuilder.InteriorScale` (0.04) left one authored priority level worth about
+  86 µm of depth at the panel's 0.42 m, below the float noise of a view-space transform computed
+  at a chapter's world coordinates. The bezel rings that ring each instrument (`horizn` at
+  priority 1 over the `dash` panel at 0) swapped winner with the panel from frame to frame. The
+  interior now builds on its own `SceneBuilder` carrying `DepthBiasScale = 1/InteriorScale`, which
+  restores the absolute separation the authoring assumed; the airframe, the world and all four
+  plane-bearing goldens are untouched by it. What remains in a Cockpit capture is texture shimmer
+  on the finest dial markings (the compass drum's ticks, the small dials' graduations) as the
+  panel's projected position wobbles sub-pixel — an aliasing artifact of high-frequency instrument
+  textures, not a draw-order one, and driving the authored needles will not change it either way.
+  *Cross-refs:* `PLAN-cockpit-view.md` B11 (parked the states; also settles that the `gauges` child
+  itself must stay visible — it is not a needle overlay). The windshield bullet-hole decals
+  (`bullet1`-`bullet5`) share the same parked-state mechanism but are driven by the unrelated
+  `cockpit_bulletholes` anim-def family (`docs/plans/PLAN-m3-polish-5.md:453`), not this item.
+  Neither that family nor either other `PLAYER_1ST_PERSON` def (`muzzle_burst`, `player-1`'s
+  `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
+  subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2404,6 +2521,23 @@ usual.
   per-def volume terms feeding `Projectile.cs`'s `def.Volume * 0.2f * MixGain * distanceGain`
   (line ~2238) — not the `1/sqrt(N)` splitscreen term itself, which is confirmed correct.
 
+- `BL-434` `[Research]` **Splitscreen cockpit interior/audio behaviour is unprofiled and unjudged
+  past one pilot.** `PLAN-cockpit-view.md` (Decision 5) built cockpit rendering and the
+  `cockpit_engine_sound` swap verified single-player-only, no further. (a) **Per-viewport interior
+  draw cost is unprofiled**: each pilot's rig now carries its own `cockpit1` subtree and
+  `CockpitVisibility`, so a splitscreen session with 2-4 cockpit-view pilots draws that many
+  interiors simultaneously. (b) **The per-pilot `cockpit_engine_sound` swap against splitscreen's
+  `MixGain` term is unjudged at the controls** — `BL-391`'s "own-ship engine loop too loud" finding
+  predates the cockpit swap and never isolated the `_cp` def specifically. (c) **Today's hiding
+  mechanism is node visibility on a shared plane node, not a per-viewport render flag**:
+  `CockpitVisibility` hides the OWN rig's `healthy` body node, so a pilot sitting in the cockpit
+  hides THAT AIRCRAFT'S body in every pane that can see it, not just their own — a cross-pane effect
+  unjudged at `N > 1`.
+  *Fix shape:* profile per-viewport interior cost at 4 players; a splitscreen listen for the
+  cockpit-swap/`MixGain` interaction; confirm or fix the cross-pane body-hide visually at the
+  controls with 2+ cockpit-view pilots in the same session.
+  *Cross-refs:* `PLAN-cockpit-view.md` B11 ("Splitscreen posture"), `BL-391` (base engine level,
+  the audio half of (b)), `BL-389` (splitscreen weapon mix, same playtest family).
 
 ## Missions, modes & campaign
 

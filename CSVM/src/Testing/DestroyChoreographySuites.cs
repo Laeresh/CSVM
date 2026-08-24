@@ -213,6 +213,70 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // ---- PLAYER_1ST_PERSON follows the pilot's view mode -----------------------------------------
+
+    // Condition 120 answered a hardwired false until the Cockpit/Nose view modes existed (A1), so
+    // no branch behind it had ever been taken. Subject: the shipped `bullet1` def, whose first
+    // Initial sequence is `IF PLAYER_1ST_PERSON / ELSE CALL_ANIMATION two_bulletholes_a / ENDIF` —
+    // the exterior bulletholes are what a pilot NOT in a cockpit gets. Its second Initial sequence
+    // runs either way and is the control: it proves the def ran at all, so a zero call count reads
+    // as "the branch was taken", never as "nothing happened".
+    internal static void PlayerFirstPersonCondition(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var program = world.Session.Program.Subset("bullet1");
+            var defs = program.ByAnimName("bullet1");
+            ctx.Check(defs.Count > 0, $"the program carries the first-person-gated bullet1 def defs={defs.Count}");
+            if (defs.Count == 0)
+                return;
+
+            var stage = new Node3D { Name = "FirstPersonConditionStage" };
+            var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, program);
+                int calls = 0, other = 0;
+                runtime.OnEventDispatched = d =>
+                {
+                    if (d.EventKind == "CallAnimation")
+                        calls++;
+                    else
+                        other++;
+                };
+
+                // No seam wired: the answer every runtime without a session gives, and the answer
+                // this condition gave everywhere before A1.
+                RunBulletDef(runtime, defs[0], stage);
+                ctx.Check(calls == 1, $"with no view seam the else branch calls the exterior bulletholes calls={calls}");
+                ctx.Check(other > 0, $"and the def's ungated second sequence ran events={other}");
+
+                foreach (var mode in new[] { PilotViewMode.Cockpit, PilotViewMode.Nose })
+                {
+                    runtime.FirstPersonView = () => PilotView.IsFirstPerson(mode);
+                    calls = 0;
+                    other = 0;
+                    RunBulletDef(runtime, defs[0], stage);
+                    ctx.Check(calls == 0, $"in {PilotView.Name(mode)} the condition holds and the call is skipped calls={calls}");
+                    ctx.Check(other > 0, $"while the same def's ungated sequence still ran events={other}");
+                }
+
+                // Back to Chase on the same runtime: the condition is polled, not latched at bind.
+                runtime.FirstPersonView = () => PilotView.IsFirstPerson(PilotViewMode.Chase);
+                calls = 0;
+                RunBulletDef(runtime, defs[0], stage);
+                ctx.Check(calls == 1, $"selecting the chase view again re-opens the else branch calls={calls}");
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
+    }
+
     // ---- the compiled destruction slot dispatches at death --------------------------------------
 
     // The live-path start check the direct-Start stop-sequence suite cannot make: a real kill must
@@ -718,6 +782,15 @@ internal static class DestroyChoreographySuites
         float spend = damage.WholeHealth - (fraction * damage.WholeHealthMax);
         if (spend > 0f)
             ai.TakeCollisionHit(0f, spend, ai.GlobalPosition, 0);
+    }
+
+    // One start of the bullethole def, advanced past its authored second (its last event sits at
+    // 0.91 s), so the whole of both Initial sequences has dispatched before anything is counted.
+    private static void RunBulletDef(AnimRuntime runtime, AnimDefinition def, Node3D stage)
+    {
+        runtime.Start(def, stage);
+        for (int i = 0; i < 120; i++)
+            runtime.Advance(1f / 60f);
     }
 
     private static void CallbackSeamsReceiveTheirCodes(TestContext ctx, TestWorld world)

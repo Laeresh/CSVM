@@ -850,8 +850,8 @@ them.
   event's flags byte. `gi_1stperson` is `OnCall` and its only caller anywhere in the install is
   `camera1-generic_intro.json`'s `check_warhawk` sequence — the same unreached intro-cutscene
   machinery as `ObjectDeleteChild` above. CSVM has no scripted first-person camera to configure
-  either (`PlayerFirstPerson` reads `false` — no cockpit view — see the format doc's own condition
-  table).
+  either: the Cockpit/Nose view modes exist and `PlayerFirstPerson` follows them, but no camera node
+  is driven from animation data (see the format doc's own condition table).
 
 `AnimRuntime`'s `default:` case keeps counting all four by name (`Count(ev.Kind)`) exactly as
 before — this record is what makes that report legible, not a code change.
