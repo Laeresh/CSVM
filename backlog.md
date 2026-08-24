@@ -874,7 +874,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 ## Flight model & collision physics
 
 - `BL-414` `[Research]` **Untune the flight model: decode what is currently fitted.** `FlightModel.cs`
-  carries **seven fitted constants** and **11 `flightModel.*` config overrides**, and
+  carries **three fitted graze constants** and **eight `flightModel.*` config overrides**, and
   [`docs/org/flightModel.md`](docs/org/flightModel.md) already separates what was read out of
   `crimson.exe` from what was fitted to match the original at the controls. This item is to shrink
   the second set as far as the binary allows, constant by constant, rather than to re-fit any of

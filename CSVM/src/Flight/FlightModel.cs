@@ -34,8 +34,8 @@ public struct FlightInput
 /// never the bank coupling or the weathervane.
 /// Decode: docs/org/flightModel.md. The two force paths, the plumbing and the standing
 /// decode-vs-footage gaps: this module's entry in docs/architecture.md.
-/// ⚠ Do not retune the constants marked TUNE by feel. The graze trio on Collide and the knife-edge
-/// floor are ours; every other coefficient here is the binary's, the three *Tune rates included.
+/// ⚠ Do not retune the constants marked TUNE by feel. The graze trio on Collide is ours; the
+/// altitude clamp is footage-derived, and the dive/overshoot caps are numerical backstops.
 /// </summary>
 public sealed class FlightModel
 {
