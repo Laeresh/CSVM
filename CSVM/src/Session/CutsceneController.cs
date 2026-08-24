@@ -75,6 +75,11 @@ public sealed partial class CutsceneController : Node
     private Node3D? _card;
     private Aabb _cardBox;
 
+    // BL-452 watchdog state (WatchBars): the bars' visibility as of the last tick, and how many
+    // times it has flipped in the current episode.
+    private bool _lastBarsVisible;
+    private int _barsFlipsThisEpisode;
+
     /// <summary>Constructs the host. It ticks LAST in the frame so the rig cameras take the pose
     /// this frame's animation advance put <c>camera1</c> in; a tick before that advance would show
     /// the bars, posed inside it, against a camera one frame behind them.</summary>
@@ -200,6 +205,8 @@ public sealed partial class CutsceneController : Node
         {
             Playing = true;
             Anim = animName;
+            _barsFlipsThisEpisode = 0;
+            _lastBarsVisible = _bars?.Visible ?? false;
             GD.Print($"cutscene: '{animName}' has the session");
         }
 
@@ -222,6 +229,7 @@ public sealed partial class CutsceneController : Node
 
         MirrorCamera();
         FrameBars();
+        WatchBars();
         if (_runtime != null && Anim != null && _runtime.AnimStateOf(Anim) != AnimRunning)
         {
             Restore("its definition ended");
@@ -267,6 +275,28 @@ public sealed partial class CutsceneController : Node
         }
 
         return null;
+    }
+
+    // BL-452: the bars are separately-called data (docs/formats/anim-definitions/cutscenes.md),
+    // so this controller never turns them on or off itself except in Restore below. While Playing
+    // is true they should transition AT MOST once, false->true, from the letterbox call site(s);
+    // a second flip in either direction inside a live episode is exactly the reported flicker, and
+    // costs one bool compare a tick to catch. Quiet unless it actually happens.
+    private void WatchBars()
+    {
+        if (_bars == null || _bars.Visible == _lastBarsVisible)
+        {
+            return;
+        }
+
+        _lastBarsVisible = _bars.Visible;
+        _barsFlipsThisEpisode++;
+        if (_barsFlipsThisEpisode > 1 || !_bars.Visible)
+        {
+            GD.PrintErr($"cutscene: '{Anim}' letterbox bars flipped to {_bars.Visible} mid-episode " +
+                        $"(flip #{_barsFlipsThisEpisode}) at t={Utils.GameClock.Current?.Time ?? 0.0:0.###} " +
+                        "-- BL-452, the reported mid-cutscene flicker");
+        }
     }
 
     // The gameplay end state the intro definitions author in their own RESET_STATE, raised here

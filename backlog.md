@@ -2350,11 +2350,26 @@ usual.
   bars are correct from the first frame, then "flickers at a point shortly then goes back".
   *Evidence:* the user's pass. The shipped definition switches the bars on outright and re-asserts
   the cutscene camera's frame onto them every tick, so a single-frame gap points at one beat that
-  re-runs a base state or re-parents the card. *⚠ Traps:* the bars are pure data (`D32`): do not fix
-  a flicker by tweening them on, which would contradict the decoded "no reveal" behaviour and the
-  user's own verdict that they are present the instant the load ends. *Cross-refs:*
-  `docs/PLAN-M5-campaign.md` D32; the `cutscene-letterbox` suite pins the base state and the
-  per-tick re-assert, so it does not currently catch this.
+  re-runs a base state or re-parents the card.
+  **Ruled out, not reproduced.** The one named candidate, `CutsceneController.Tick` reading a
+  one-frame `AnimStateOf` gap between two instances of the intro definition and calling `Restore`
+  early, does not fire: two full windowed engine runs under `--det`, each with the controller
+  instrumented to log every bars-visibility change, ran the shared `generic_intro` path (`c3/m01`)
+  to its natural 40.2 s handoff and the bespoke five-call `mission_intro_animation` path (C1/M04)
+  to its natural 53.22 s handoff, and both show exactly one visibility transition, on at load and
+  off at the handoff, with nothing in between. A synthetic in-suite reproduction was also tried and
+  discarded: it gets the real 53.2 s duration right but never actually calls `letterbox` at all,
+  since the synthetic world carries no player/rig and the intro's own scene-call conditions
+  evaluate false with nobody flying, so a pass or fail from it would not be evidence either way.
+  `CutsceneController.WatchBars` (called from `Tick`) is kept as a permanent, quiet watchdog: it
+  counts every bars-visibility flip in a live episode and logs a `GD.PrintErr` (which
+  `RunTests.ps1` screens as an engine error) the moment a second flip, or an early off, actually
+  happens, so a future recurrence at the controls fails CI on its own. *⚠ Traps:* the bars are pure
+  data (`D32`): do not fix a flicker by tweening them on, which would contradict the decoded
+  "no reveal" behaviour and the user's own verdict that they are present the instant the load ends.
+  *Cross-refs:* `docs/PLAN-M5-campaign.md` D32; `docs/PLAN-M5-polish.md` A5 carries the full
+  investigation trail; the `cutscene-letterbox` suite still pins only the base state and the
+  per-tick re-assert.
 
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
   controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.

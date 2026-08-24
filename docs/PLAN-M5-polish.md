@@ -317,7 +317,7 @@ options menu itself.
 the original's mix were being matched, and do not fold it into `Gain`, which would move the decoded
 fade assertions.
 
-## A5 ☐ The cutscene letterbox flickers once (`BL-452`)
+## A5 ◐ The cutscene letterbox flickers once (`BL-452`)
 
 **Goal.** The bars hold steady for the whole cutscene.
 
@@ -325,6 +325,45 @@ fade assertions.
 from the first frame, then "flickers at a point shortly then goes back". The shipped definition
 switches the bars on outright and re-asserts the cutscene camera's frame onto them every tick, so a
 one-frame gap points at a single beat that re-runs a base state or re-parents the card.
+
+**Tried, and ruled out.** The one named candidate was `CutsceneController.Tick`
+(`CutsceneController.cs`): `_runtime.AnimStateOf(Anim) != AnimRunning` reading a one-frame gap
+between two instances of the intro definition and calling `Restore` early, retracting the bars
+while the separately-called `letterbox` definition puts them back. Two full, real, windowed engine
+runs under `--det` (a throwaway campaign profile, deleted after), each with the controller
+instrumented to log `_bars.Visible` on every change and the `AnimStateOf` verdict on every tick,
+found no such gap:
+
+- The shared `generic_intro` path (Hawaii mission 1, `c3/m01`, `--campaign=<profile>:0`): bars go
+  visible once at `t=0.017`, stay visible for the whole run, and come down exactly once at the
+  natural handoff, `t=40.2 s`, after a single `'generic_intro' has the session` line and a single
+  `its definition ended` line, matching the earlier 75 s / 40.2 s finding exactly.
+- The bespoke `mission_intro_animation` path (C1/M04, `--campaign=<profile>:8`, five separate
+  `CALL_ANIMATION letterbox` sites across its scene beats, not one): same shape, one visibility
+  transition at `t=0.017`, one natural handoff at `t=53.22 s`, no gap in between.
+
+A synthetic in-suite reproduction (`AnimRuntime` on a bare `camera1`/`letterbox` stage, driven
+`Advance`-then-`Tick` like the game, no real render) was also tried, extending
+`cutscene-letterbox`. It gets the real duration right (3193 simulated frames, 53.2 s, matching the
+live run exactly) but the bars never turn on at all: the synthetic world carries no player/rig, so
+whatever conditions gate the intro's own scene1/scene2 `CALL_ANIMATION letterbox` calls evaluate
+false with nobody flying, and the letterbox def is simply never called. A pass or fail from that
+harness would not be evidence either way, so it was not kept. The two real runs above are the
+reproduction attempt that counts.
+
+**Kept.** `CutsceneController.WatchBars`, called from `Tick` after `FrameBars`: while `Playing`,
+the bars should transition at most once (off to on, from the letterbox call site); it counts every
+`_bars.Visible` flip since the episode started and logs a `GD.PrintErr` naming the frame's sim time
+if a second flip happens, or if any flip turns the bars off before `Restore` does. Silent in both
+runs above and in every existing suite (`campaign-cutscene`, `campaign-loop`,
+`cutscene-letterbox`). `GD.PrintErr` reaches `RunTests.ps1`'s engine-error screening, so the next
+time this actually happens at the controls it fails CI on its own rather than needing another
+manual pass.
+
+**What would settle it.** A capture at the controls of the exact moment the flicker recurs (which
+mission, roughly how many seconds in) would give the frame `AnimStateOf`/`WatchBars` can be read
+against directly, replacing this open-ended two-path search with a one-mission repro. Short of
+that, `WatchBars` firing on a future engine-error-screened `RunTests.ps1` run is the next signal.
 
 **Approach.** Find the beat. The `cutscene-letterbox` suite already pins the base state and the
 per-tick re-assert and does not catch this, so whatever it is happens between those two facts.
