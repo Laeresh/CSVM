@@ -86,9 +86,10 @@ public class AircraftContactResolverTests
     }
 
     /// <summary>A plane grinding along the ground cannot collect endless free contacts: the decoded
-    /// pair costs at least the authored floor on every contact the sweep parity spends, so a bounded
-    /// ledger runs out and the decoded health rule ends the slide. This is what the removed
-    /// stop-speed rule guarded, proven on the decoded response instead.</summary>
+    /// pair costs at least the authored floor on EVERY contact the sweep resolves (the cadence is
+    /// the sweep's, <see cref="SweepCadence"/>, never a gate on the spend), so a bounded ledger runs
+    /// out and the decoded health rule ends the slide. This is what the removed stop-speed rule
+    /// guarded, proven on the decoded response instead.</summary>
     [Fact]
     public void ASustainedSlideExhaustsTheLedgerInsteadOfGrindingOnForever()
     {
@@ -103,23 +104,23 @@ public class AircraftContactResolverTests
         while (fate != ContactFate.Crash && contacts < 40)
         {
             contacts++;
-            fate = resolver.Resolve(along, slide with { OnSweepParity = contacts % 2 == 1 }, effects).Fate;
+            fate = resolver.Resolve(along, slide, effects).Fate;
         }
 
         Assert.Equal(ContactFate.Crash, fate);
-        Assert.Equal(5, contacts);          // three spends on the odd steps: 20 armour, then 20 health
+        Assert.Equal(3, contacts);          // three spends of the 15 floor: 20 armour, then 20 health
         Assert.True(ledger.IsDestroyed);
     }
 
-    /// <summary>The control the row above needs (METHOD-9): with nothing spending the pair, the same
-    /// slide runs forever and never resolves a fate, which is the failure mode the stop-speed rule
-    /// was invented for.</summary>
+    /// <summary>The control the row above needs (METHOD-9): with nothing spending the pair (the
+    /// scriptable effects take the spend and touch no ledger), the same slide runs forever and never
+    /// resolves a fate, which is the failure mode the stop-speed rule was invented for.</summary>
     [Fact]
     public void ASlideThatSpendsNothingNeverEndsAtAll()
     {
         var resolver = new AircraftContactResolver(new NeverOverlaps());
         var ledger = OneZone();
-        var effects = new LedgerContactEffects(ledger);
+        var effects = new FakeContactEffects();
         var slide = Striker(humanPiloted: true, ledger) with { VelocityDir = ShallowSlide };
         var along = HeadOn(struckIsAircraft: false) with { Normal = new Vector3(0f, 0f, 1f) };
 
@@ -128,6 +129,7 @@ public class AircraftContactResolverTests
             Assert.Equal(ContactFate.Graze, resolver.Resolve(along, slide, effects).Fate);
         }
 
+        Assert.True(effects.SpendDamageCalled);   // every contact offered the pair; none was taken
         Assert.False(ledger.IsDestroyed);
     }
 
@@ -182,11 +184,7 @@ public class AircraftContactResolverTests
         var resolver = new AircraftContactResolver(new NeverOverlaps());
         var ledger = OneZone();
         var effects = new LedgerContactEffects(ledger);
-        var striker = Striker(humanPiloted: true, ledger) with
-        {
-            VelocityDir = ShallowSlide,
-            OnSweepParity = true,
-        };
+        var striker = Striker(humanPiloted: true, ledger) with { VelocityDir = ShallowSlide };
         var shallow = HeadOn(struckIsAircraft: false) with { Normal = new Vector3(0f, 0f, 1f) };
 
         var first = resolver.Resolve(shallow, striker, effects);
@@ -218,7 +216,6 @@ public class AircraftContactResolverTests
         Pose = Transform3D.Identity,
         Stats = null,             // falls back to the compiled Floor/Scale defaults
         Ledger = ledger,
-        OnSweepParity = false,
         Parts = null,
         ExcludeSelf = null,
     };

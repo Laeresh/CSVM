@@ -8,7 +8,7 @@ namespace CSVM.Flight;
 /// resolver calls these rather than returning them because each one's result is a premise of the
 /// rule after it: the ledger answers which zone it charged, and the response answers the pose the
 /// un-embed test reads. The aircraft node implements this, so the struck <c>Node</c>, the sweep
-/// parity and the flight model stay on the side that owns them.</summary>
+/// cadence and the flight model stay on the side that owns them.</summary>
 public interface IContactEffects
 {
     /// <summary>Offers the struck object the contact's health damage: true when it breaks and the
@@ -57,11 +57,6 @@ public readonly record struct ContactConditions
     /// <summary>The striker's damage ledger, read for the kill test and the graze line; null on a
     /// plane with no <c>destroyable_parts</c> data, which has no health pool to survive on.</summary>
     public PlaneDamage? Ledger { get; init; }
-
-    /// <summary>Whether this step is on the striker's sweep parity, which is the only cadence the
-    /// original puts on a sustained scrape: it resolves a contact on alternate frames and spends
-    /// the pair on every one it resolves.</summary>
-    public bool OnSweepParity { get; init; }
 
     /// <summary>The airframe boxes the un-embed test moves. Null skips that test, as an
     /// uncollidable rig has nothing to free.</summary>
@@ -159,30 +154,27 @@ public sealed class AircraftContactResolver
         string dataPart = PlaneDamage.MapStruckPart(
             contact.Part, striker.Pose.AffineInverse() * contact.Impact);
         effects.PlayGrazeReaction();
-        if (striker.OnSweepParity)
+        // The striker's own share is the SAME decoded pair the struck party took, spent armour-first
+        // (FUN_004b7f80's split). ⚠ Every resolved contact spends: the original's cadence is its
+        // alternate-step sweep (SweepCadence), never a gate here.
+        var state = effects.SpendDamage(dataPart, outcome.HealthDamage, outcome.ArmorDamage);
+        string struckPart = state?.Def.Name ?? dataPart; // the ledger may redirect
+        outcome = outcome with { StruckPart = struckPart };
+        if (striker.Ledger.IsDestroyed)
         {
-            // The striker's own share is the SAME decoded pair the struck party took, spent
-            // armour-first through the ledger's take-hit flow (FUN_004b7f80's split), so a
-            // fully-armoured contact costs no health at all.
-            var state = effects.SpendDamage(dataPart, outcome.HealthDamage, outcome.ArmorDamage);
-            string struckPart = state?.Def.Name ?? dataPart; // the ledger may redirect
-            outcome = outcome with { StruckPart = struckPart };
-            if (striker.Ledger.IsDestroyed)
-            {
-                Log.Info("flight",
-                    $"vehicle health exhausted ({struckPart} last) — vn={vn:0.0} m/s into {contact.ColliderName}");
-                return outcome with { Fate = ContactFate.Crash }; // whole-vehicle health at zero
-            }
+            Log.Info("flight",
+                $"vehicle health exhausted ({struckPart} last) — vn={vn:0.0} m/s into {contact.ColliderName}");
+            return outcome with { Fate = ContactFate.Crash }; // whole-vehicle health at zero
+        }
 
-            if (state != null)
+        if (state != null)
+        {
+            outcome = outcome with
             {
-                outcome = outcome with
-                {
-                    DamageFlashText = $"⚠ IMPACT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%",
-                };
-                Log.Info("flight",
-                    $"graze ({contact.Part}→{struckPart}): {contact.ColliderName} vn={vn:0.0} m/s dmg={outcome.HealthDamage:0.0} armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} hull={striker.Ledger.WholeHealth:0.0}/{striker.Ledger.WholeHealthMax:0}");
-            }
+                DamageFlashText = $"⚠ IMPACT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%",
+            };
+            Log.Info("flight",
+                $"graze ({contact.Part}→{struckPart}): {contact.ColliderName} vn={vn:0.0} m/s dmg={outcome.HealthDamage:0.0} armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} hull={striker.Ledger.WholeHealth:0.0}/{striker.Ledger.WholeHealthMax:0}");
         }
 
         var response = effects.ApplyResponse();

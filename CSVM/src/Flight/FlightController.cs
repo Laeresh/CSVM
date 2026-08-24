@@ -361,6 +361,7 @@ public partial class FlightController : Node3D
     // Which state this aircraft is in and what moves it between them, including the spawn timers.
     // Every transition below reports what it did and this node performs it (Decision 7).
     private readonly AircraftLifecycle _lifecycle = new();
+    private readonly SweepCadence _sweep = new();    // the original's alternate-step sweep and its carried motion
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
     private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
     private readonly List<RocketPylonView> _pylonViews = new();          // the AI rocketeer's pylon walk
@@ -416,7 +417,6 @@ public partial class FlightController : Node3D
     private IWorldQuery? _worldQuery;             // the sweep/ray seam; bound in Bind, lazy for bare test rigs
     private AircraftContactResolver? _contacts;   // the contact rules; lazy, over the same seam
     private IFlightInputSource? _inputSource;     // which stick flies this aircraft; bound in Bind, lazy for bare test rigs
-    private bool _onSweepParity;                 // this step's half of the original's alternate-frame sweep
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private int _projectileHitsLogged;           // verification breadcrumb: the first few hits log
     private FireControl? _fire;                  // the fire-control state machine; built in _Ready with the loadout
@@ -865,7 +865,7 @@ public partial class FlightController : Node3D
                     node.Visible = vis;
                 }
         }
-        _onSweepParity = false;
+        _sweep.Reset();
         _grazeReactionCooldown = 0f;
         if (_hudCanvas != null)
             _hudCanvas.Visible = true;  // the crash camera hid it (footage); flying again
@@ -1260,8 +1260,10 @@ public partial class FlightController : Node3D
         }
         else
         {
-            var prev = _model.Position;          // committed position from last frame
             var input = InputSource.Read(dt);
+            // Read AFTER the input: R respawns inside it, and a sweep from the pose before that
+            // respawn would run the whole way to the spawn point and strike whatever lies between.
+            var entered = _model.Position;       // the position this step enters with
             // The response is absent for 1.5 s, then AI terms run at 15% for 1 s.
             // Keep the probe off too, so the log records response rather than an inert hit.
             bool groundBlowReady = IsHumanPiloted || !_lifecycle.CollisionGraceActive;
@@ -1274,14 +1276,14 @@ public partial class FlightController : Node3D
             input.Boost = Nitro.Boosting;
             _lastInput = input;
             _grazeReactionCooldown -= dt;
-            // The original's sweep resolves a contact every other frame, and spends the damage pair
-            // on every frame it resolves. The sweep itself runs every step here, so the parity sits
-            // on the spend: a sustained scrape costs one pair per two steps.
-            _onSweepParity = !_onSweepParity;
+            // The original sweeps on every other step and carries the skipped step's motion into
+            // the next sweep, so the sweep from `prev` covers two steps of motion after a skipped
+            // one. Every contact it resolves spends the pair; nothing else gates the spend.
+            bool onSweepStep = _sweep.Advance(entered, out var prev);
             _lifecycle.TickTimers(dt);
             _model.Step(input, dt);
 
-            // The airframe boxes sweep along the frame's motion; the center ray stays as an
+            // The airframe boxes sweep along the carried motion; the center ray stays as an
             // anti-tunnelling backstop. Only the shapeless fallback keeps a nose margin on it.
             var to = _model.Position;
             var step = to - prev;
@@ -1290,7 +1292,7 @@ public partial class FlightController : Node3D
             var probeEnd = len > 1e-4f ? to + step / len * margin : to;
             // ⚠ The grace window suppresses the SWEEP, not just the damage: while it is live this
             // plane has no collision at all (obj+0xAC, docs/org/flightModel.md).
-            bool sweeping = !_lifecycle.CollisionGraceActive;
+            bool sweeping = onSweepStep && !_lifecycle.CollisionGraceActive;
             ContactReport contact = default;
             Node? hitBody = null;
             bool hit = sweeping && SweepAirframe(prev, step, out contact, out hitBody);
@@ -2802,7 +2804,6 @@ public partial class FlightController : Node3D
         Pose = GlobalTransform,
         Stats = Stats,
         Ledger = Damage,
-        OnSweepParity = _onSweepParity,
         Parts = Collider?.Parts,
         ExcludeSelf = Body?.ExcludeSelf,
     };

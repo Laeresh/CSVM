@@ -2434,11 +2434,10 @@ carrier grace also suppresses AI ground blow; its probe and both output terms be
 Decoded 2026-08-14, **impulse implemented 2026-08-15** (retiring `BL-172`), **completed for `C21`**
 with the placement, the angular impulse and the partition's inertia correction below (retiring
 `BL-381`): `FlightModel.BounceNormalSpeed`/`BounceRateKick` are the law and `FlightModel.Collide`
-the site, gated on `IsHumanPiloted` and not-already-crashed. The sweep itself runs every step here
-rather than on the original's every-other-frame parity, which resolves a contact sooner than the
-original would but never differently; the parity's one behavioural consequence, the cadence a
-sustained scrape spends damage at, rides `ContactConditions.OnSweepParity` instead
-("What the parity is ported as" below).
+the site, gated on `IsHumanPiloted` and not-already-crashed. The sweep runs on every other sim
+step, as the original's does, with the skipped step's motion carried into the next sweep
+(`SweepCadence`, "What the parity is ported as" below), and every contact it resolves spends the
+damage pair.
 
 `bounce_factor` lives in `player.json`'s `crash` block, is a **raw scalar**, and
 lands in global `0x0071c35c` from the parser store at `0x00473c38`. Its default is pre-set at
@@ -2468,20 +2467,29 @@ constructor `FUN_004aff80`, so it differs per object and per run. On a skipped f
 not simply do nothing: it accumulates that frame's translation into `obj+0x6B0`…`obj+0x6B8` and
 returns severity `0.0`, and the next sweep that does run applies the accumulated motion. This halves
 the collision rate and is why two aircraft in the same contact do not necessarily resolve on the
-same frame. **Not ported as a sweep**: our sweep runs every sim step, which resolves a contact
-sooner than the original would but never differently.
+same frame. **Ported as a sweep** (`SweepCadence`): the airframe sweeps on every other sim step,
+and the sweep after a skipped step runs from the pose the skipped step entered with, so the carried
+motion is swept whole and nothing tunnels through the gap. The phase is not random here: every
+airframe starts on a sweeping step and a respawn restarts the phase.
 
 ### What the parity is ported as
 
-The parity's only behavioural consequence is the CADENCE of a sustained contact, because the
-original spends the damage pair on every frame its sweep resolves and on no other
+The original spends the damage pair on every frame its sweep resolves and on no other
 (`0x48ed79` gates the `FUN_0048d2c0` call at `0x48ed8b` on a positive severity, and nothing else
 gates it: there is no cooldown, no per-spend timer and no grace clock on a player). So a scrape
-costs one pair per two frames for as long as it closes. That cadence is ported on the spend rather
-than on the sweep: `FlightController` flips `_onSweepParity` once per sim step and
-`AircraftContactResolver` spends the pair only on the steps it names, so a sustained scrape costs
-one pair per two steps. The retired 0.3 s `DamageCooldown` was a wall-clock stand-in for this and
-made a scrape roughly nine times cheaper than the decode allows.
+costs one pair per two frames for as long as it closes, and that cadence is the sweep's alone.
+`AircraftContactResolver` spends on every contact it is handed, and the every-other-step cadence
+sits on `FlightController`'s sweep through `SweepCadence`. The retired 0.3 s `DamageCooldown` was a
+wall-clock stand-in for this and made a scrape roughly nine times cheaper than the decode allows.
+
+⚠ **The parity gates the sweep, never the spend.** An earlier port ran the sweep every step and
+gated the SPEND on the parity, reasoning that a contact resolved a step early is the same contact.
+It is not: a contact resolved on a non-spending step still got the placement and the impulse, which
+put the airframe 0.03 m off the surface with its normal velocity removed, so a single bounce off a
+building cost nothing at all and a scrape whose re-contacts landed on those steps never spent once.
+At the controls that read as an airframe that grazes once and is invulnerable afterwards
+(`SweepCadenceTests` holds the scrape and its locked-free control). The decode above was right and
+the port was wrong; the port now matches it.
 
 ⚠ **The per-second damage rate follows the step rate, in the original as here.** The original's
 cadence is frame-coupled (`fps/2` spends per second), so no port is rate-independent, and a
@@ -2683,7 +2691,7 @@ nothing on the path reads a speed, a vertical speed, a slide, an overlap or an a
 - **A ground-stop speed does not exist.** CSVM's `GrazeStopSpeed` 12 m/s is removed. It guarded a
   plane grinding along the ground collecting free contacts, and the decoded law makes that
   unreachable on its own: a contact that closes at all costs at least the authored floor (50 here),
-  the pair re-spends every parity step for as long as the scrape closes, and the striker's pool is
+  the pair re-spends on every sweep step for as long as the scrape closes, and the striker's pool is
   bounded, so the ledger runs out and the decoded health rule ends the slide. The impulse edits
   only the normal component, so a slide keeps its tangential speed and dies long before it could
   grind to a halt (`AircraftContactResolverTests`, with the spends-nothing control beside it).

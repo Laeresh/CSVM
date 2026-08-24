@@ -180,6 +180,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ContactReport.cs` — one detected contact as a value: impact, normal, struck part, collider name, stop fraction, and whether an aeroplane was struck.
 - `src/Flight/ContactOutcome.cs` — what a contact costs the striker: fate, the decoded damage pair, doom, the charged zone, the HUD flash, the push-out, and the struck-aircraft instruction.
 - `src/Flight/AircraftContactResolver.cs` — the decoded contact rules for one aircraft: the damage pair, the fate, and the un-embed loop, with no `Node` in sight.
+- `src/Flight/SweepCadence.cs` — the original's alternate-step collision sweep: which sim steps sweep, and the skipped step's motion carried into the next one.
 - `src/Flight/AircraftLifecycle.cs` — the states one aircraft moves between (in play, crashed, destroyed, inert) with the spawn timers, holding a `SurfaceDefTable` for the crash-def selection; every transition returns what the node must perform.
 - `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part; owns the whole-vehicle kill rule (`IsDestroyed`).
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
@@ -2842,7 +2843,8 @@ flight model or the mode.
 On a crash it cuts to `CrashView` once,
 writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
 shows no HUD — footage), restoring it on respawn. Every physics query — the PlaneCollider boxes'
-sweep each physics frame plus every ray (ground AGL, the ground-blow probe, the camera's height
+sweep on every other sim step (`SweepCadence`, the original's parity, the skipped step's motion
+carried into the next sweep) plus every ray (ground AGL, the ground-blow probe, the camera's height
 check, both turret/AI lines of sight) — goes through the one `IWorldQuery` bound in `Bind`
 (`GodotWorldQuery`, the sole adapter over `DirectSpaceState`); mask world+aircraft with its own
 `Body` (`AircraftBody`, built in `_Ready` from the same boxes) excluded by RID, so another plane
@@ -4857,14 +4859,26 @@ seam's `Overlaps`. One call answers one contact with one `ContactOutcome` the ca
 The engine effects it interleaves with, because each one's result is the next rule's premise, go
 through `IContactEffects`: the fly-through offer, the graze reaction, the ledger spend and its
 readouts, and the contact response. `FlightController` implements that as a per-contact
-`ContactEffects`, keeping the struck `Node`, the sweep parity and the flight model on the node.
-`ContactConditions` is the striker's state per call, `IsHumanPiloted` included.
+`ContactEffects`, keeping the struck `Node`, the sweep cadence and the flight model on the node.
+`ContactConditions` is the striker's state per call, `IsHumanPiloted` included. Every contact the
+resolver is handed spends the pair; the original's every-other-frame cadence is the sweep's
+(`SweepCadence`), never a gate on the spend.
 `AircraftContactResolverTests` pins the rule table off-engine against a synthetic `IWorldQuery` and
 a scriptable `IContactEffects`: the doom rule for an AI ramming a non-aeroplane, the entity cut for
 AI into AI, the player's exemption from both (asserted on the damage magnitude, not just
 `DamageStruckAircraft`, since the entity cut applies only on the non-player branch and only against
 another aeroplane), a sustained slide exhausting its ledger against a control that spends nothing,
 and the un-embed loop's three-try give-up.
+
+## src/Flight/SweepCadence.cs
+The original's alternate-step collision sweep (`FUN_0048d7f0`'s parity gate and the `obj+0x6B0`
+accumulator, docs/org/flightModel.md "Collision response") as a pure value with no `Node`:
+`Advance` answers whether this sim step sweeps and, after a skipped step, the origin the sweep runs
+from, so the carried motion is swept whole; `Respawn` resets the phase. The parity gates the SWEEP,
+never the spend: a contact the sweep resolves always spends the pair. `SweepCadenceTests` drives it
+with the real resolver and ledger against a kinematic wall, pinning the shallow-then-steeper sequence
+from the controls, a sustained scrape dying in three 50-floor spends, and the spend-gated control
+that locks onto the free steps and never spends.
 
 ## src/Flight/AircraftLifecycle.cs
 The states one aircraft moves between and the rules that move it: in play, crashed, destroyed with

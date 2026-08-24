@@ -588,6 +588,28 @@ separate flight; its breakup-scatter remainder stays in the backlog.
 
 **⚠ Traps.** Feel cannot override a decoded impulse; it can expose missing lifecycle behavior.
 
+**Defect found at the controls.** After a first shallow graze, steeper contacts with the same
+building cost nothing at all and only a head-on crashed the airframe. The session log shows the
+mechanism: three single-step contacts (graze reactions at 94.3 s, 111.0 s and 115.5 s, each taking
+30 to 45 m/s off the airspeed) with no spend line between them, while the contacts that did spend
+each charged the 50 floor. The root cause is a port error in how `C22` carried the sweep parity:
+the sweep ran every step and the parity gated the SPEND, so a contact resolved on a non-spending
+step still got the placement and the impulse (0.03 m off the surface, the normal velocity removed)
+and bounced away for free, and a scrape whose re-contacts landed on those steps never spent once.
+The original gates the SWEEP on the parity and spends on every contact it resolves, with the
+skipped frame's motion carried into the next sweep. The fix is that decode: `SweepCadence` puts the
+every-other-step cadence on `FlightController`'s sweep with the carried origin, and
+`AircraftContactResolver` spends on every contact it is handed (`ContactConditions.OnSweepParity`
+is gone). A second finding from the same log: two mid-flight respawns (R, or pad Y) at 59 s and
+60.5 s swept from the pre-respawn pose to the spawn point 2.6 km away, struck the building in
+between, and the placement hauled the repaired airframe back to the wall with a fresh 50-point
+dent, which is why the ledger read full again between grazes; the sweep origin is now read after
+the input, so a respawn sweeps from the spawn. `SweepCadenceTests` pins the cadence, the
+shallow-then-steeper sequence (hull 80, 60, 40), a sustained scrape dying in three spends, and the
+spend-gated control that locks onto the free steps. The dossier's "What the parity is ported as"
+is corrected as a port error, not a decode error. Owed the re-fly: corner and scrape contacts
+must now cost the 50 floor on every resolved contact, one per two sim steps in a sustained scrape.
+
 # Wave D — Settle designed but unproven features
 
 ## D31 ❌ Settle one-sided engine torque (`BL-309`)
