@@ -45,8 +45,23 @@ public sealed class HangarPurchasePage : HangarPage
     public override int RowCount => Rows().Count;
 
     /// <summary>Whether the Purchase Now row is live: the original greys the button whenever the
-    /// problems callback reports, and this is the remake's reading of that state.</summary>
-    public bool BuildEnabled => HangarEconomy.Price(Scratch).Verdict == PurchaseVerdict.Ok;
+    /// problems callback reports, and this is the remake's reading of that state. Over a campaign
+    /// flow (<see cref="HangarFlow.Campaign"/> non-null, B13) the row also greys out for an
+    /// unavailable airframe or an unaffordable total; the two wallet-free doors never see either.</summary>
+    public bool BuildEnabled
+    {
+        get
+        {
+            var bill = HangarEconomy.Price(Scratch);
+            if (bill.Verdict != PurchaseVerdict.Ok)
+            {
+                return false;
+            }
+
+            return Flow.Campaign is not { } campaign
+                || (campaign.IsAirframeAvailable(Scratch.Airframe) && campaign.CanAfford(bill.Total.Cost));
+        }
+    }
 
     /// <inheritdoc/>
     public override string RowText(int row)
@@ -89,7 +104,7 @@ public sealed class HangarPurchasePage : HangarPage
                 WingCount(index) * HangarEconomy.HardpointCost,
                 WingCount(index) * HangarEconomy.HardpointWeight)),
             Kind.Totals => Flow.TotalsLine,
-            _ => ProblemsText(bill.Verdict),
+            _ => bill.Verdict != PurchaseVerdict.Ok ? ProblemsText(bill.Verdict) : CampaignProblemsText(bill),
         };
     }
 
@@ -175,6 +190,30 @@ public sealed class HangarPurchasePage : HangarPage
         _ =>
             Flow.Strings.Text(1182, "CAN'T PURCHASE:").TrimEnd() + " " + Flow.Strings.Text(1171, "No Engine Selected"),
     };
+
+    // The campaign-only reasons (B13): the underlying verdict is Ok, but the wallet or the
+    // availability threshold still refuses. Empty over the two wallet-free doors, where
+    // Flow.Campaign is null.
+    private string CampaignProblemsText(HangarBill bill)
+    {
+        if (Flow.Campaign is not { } campaign)
+        {
+            return string.Empty;
+        }
+
+        if (!campaign.IsAirframeAvailable(Scratch.Airframe))
+        {
+            return Flow.Strings.Text(1182, "CAN'T PURCHASE:").TrimEnd() + " That airframe is not available yet.";
+        }
+
+        if (!campaign.CanAfford(bill.Total.Cost))
+        {
+            return Flow.Strings.Text(1182, "CAN'T PURCHASE:").TrimEnd() + " " +
+                Flow.Strings.Text(1226, "INSUFFICIENT FUNDS");
+        }
+
+        return string.Empty;
+    }
 
     private int ZoneUnits(int zone) => zone switch
     {

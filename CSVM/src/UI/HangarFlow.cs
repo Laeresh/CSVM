@@ -126,19 +126,20 @@ public sealed class HangarFlow
     private readonly Dictionary<int, int[]> _stockArmour = new();
 
     /// <summary>Opens a flow over <paramref name="store"/>, reading its saved planes once for the
-    /// plane-selection screen. <paramref name="strings"/> may be <see cref="UiStrings.Empty"/>;
-    /// every label then falls back to its own plain text. <paramref name="dataRoot"/> is where
-    /// <c>extracted/</c> lives, for the art-bearing pages; null means every page's art is null.
-    /// <paramref name="stockFits"/> and <paramref name="zrdrPath"/> feed the airframe-defaults
-    /// ask; either may be null, and the affected defaults then simply load as empty.</summary>
+    /// plane-selection screen. <paramref name="strings"/>, <paramref name="dataRoot"/>,
+    /// <paramref name="stockFits"/> and <paramref name="zrdrPath"/> may be null or empty; the
+    /// affected labels, art and defaults then simply fall back or load empty.
+    /// <paramref name="campaign"/> is null for both existing doors, keeping them wallet-free; only
+    /// the cabin's Plane Construction (B13) passes one.</summary>
     public HangarFlow(CustomPlaneStore store, UiStrings strings, string? dataRoot = null,
-        StockLoadouts? stockFits = null, string? zrdrPath = null)
+        StockLoadouts? stockFits = null, string? zrdrPath = null, HangarCampaignContext? campaign = null)
     {
         _store = store;
         Strings = strings;
         DataRoot = dataRoot;
         StockFits = stockFits;
         ZrdrPath = zrdrPath;
+        Campaign = campaign;
         Saved = store.List();
     }
 
@@ -156,6 +157,12 @@ public sealed class HangarFlow
     /// <summary>The zrdr scope <see cref="PlaneStats"/> reads vehicle defs from, for the stock
     /// armour allocations; null or unreadable reads as armour defaults of 0.</summary>
     public string? ZrdrPath { get; }
+
+    /// <summary>The campaign wallet this flow prices against, or null over the two existing doors
+    /// (Instant Action's Build button, the top-level entry), which stay wallet-free by construction
+    /// (PLAN-hangar Decision 2). Non-null only when the cabin's Plane Construction opened this
+    /// flow (B13).</summary>
+    public HangarCampaignContext? Campaign { get; }
 
     /// <summary>The airframe whose defaults the pending ask (langui 206) offers, or null when
     /// none is showing. Raised only by an explicit confirm on an airframe row that is not already
@@ -354,8 +361,10 @@ public sealed class HangarFlow
 
     /// <summary>Saves the scratch plane and ends the flow, or refuses and leaves
     /// <see cref="Message"/> saying why. The gate is <see cref="HangarEconomy"/>'s verdict plus a
-    /// name, in the original's own words; funds are never checked (Decision 2). Returns whether
-    /// the plane was saved.</summary>
+    /// name, in the original's own words; funds are never checked over the two IA/top-level doors
+    /// (Decision 2). Over a campaign flow (<see cref="Campaign"/> non-null, B13) the same commit
+    /// also refuses an unavailable airframe or an unaffordable total, and on success moves the
+    /// money and records ownership. Returns whether the plane was saved.</summary>
     public bool Commit()
     {
         if (string.IsNullOrWhiteSpace(Scratch.Name))
@@ -364,28 +373,68 @@ public sealed class HangarFlow
             return false;
         }
 
-        var verdict = HangarEconomy.Price(Scratch).Verdict;
-        if (verdict != PurchaseVerdict.Ok)
+        var bill = HangarEconomy.Price(Scratch);
+        if (bill.Verdict != PurchaseVerdict.Ok)
         {
-            Message = Strings.Text(1182, "CAN'T PURCHASE:") + " " + (verdict == PurchaseVerdict.Overweight
+            Message = Strings.Text(1182, "CAN'T PURCHASE:") + " " + (bill.Verdict == PurchaseVerdict.Overweight
                 ? Strings.Text(1227, "OVERWEIGHT")
                 : Strings.Text(1171, "No Engine Selected"));
             return false;
         }
 
+        if (Campaign is { } campaign)
+        {
+            if (!campaign.IsAirframeAvailable(Scratch.Airframe))
+            {
+                Message = Strings.Text(1182, "CAN'T PURCHASE:").TrimEnd() +
+                    " That airframe is not available yet.";
+                return false;
+            }
+
+            if (!campaign.CanAfford(bill.Total.Cost))
+            {
+                Message = Strings.Text(1182, "CAN'T PURCHASE:").TrimEnd() + " " +
+                    Strings.Text(1226, "INSUFFICIENT FUNDS");
+                return false;
+            }
+        }
+
         _store.Save(Scratch);
         BuiltPlaneName = Scratch.Name;
         Exit = HangarExit.Built;
+        Campaign?.Purchase(Scratch.Name, Scratch.Airframe, bill.Total.Cost);
         return true;
     }
 
-    /// <summary>Removes a saved plane from the store and re-reads <see cref="Saved"/>, the
-    /// original's Sell Plane (<c>ps_b_sellp</c>) in a build with no economy to sell into. Returns
-    /// whether a file went; the cursor is clamped back into the shortened list either way, and the
-    /// scratch plane is untouched (it is a copy, never the stored def).</summary>
+    /// <summary>Removes a saved plane from the store and re-reads <see cref="Saved"/>: the
+    /// original's Sell Plane (<c>ps_b_sellp</c>), free over the two wallet-free doors; over a
+    /// campaign flow (B13) it is an actual sale, <see cref="Campaign"/>'s decoded price crediting
+    /// the wallet, refused (nothing changed, <see cref="Message"/> says why) for a reward aircraft
+    /// or below the two-plane floor. Cursor and scratch plane are untouched either way.</summary>
     public bool DeleteSaved(string name)
     {
-        bool gone = _store.Delete(name);
+        bool gone;
+        if (Campaign is { } campaign)
+        {
+            if (campaign.IsSpecial(name))
+            {
+                Message = Strings.Text(704, "This plane cannot be sold.");
+                return false;
+            }
+
+            if (!campaign.CanSell(name))
+            {
+                Message = Strings.Text(701, "You must keep at least two planes in your hangar.");
+                return false;
+            }
+
+            gone = campaign.Sell(name);
+        }
+        else
+        {
+            gone = _store.Delete(name);
+        }
+
         Saved = _store.List();
         ClampedRow();
         return gone;

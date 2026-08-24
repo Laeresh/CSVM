@@ -182,7 +182,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Profile store + campaign session model (`user://Profiles/<name>/`, SessionSpec/CLI entry)
 12. ☐ Campaign progression + cross-mission persistence (`BL-243`, mission tree from A3)
-13. ☐ Wallet and campaign availability wired into the hangar (buy/sell, thresholds)
+13. ☑ Wallet and campaign availability wired into the hangar (buy/sell, thresholds)
 
 ### Wave C — the out-of-mission screens
 
@@ -646,7 +646,7 @@ mission 2, assert its state; replay via Previous Missions asserts no tree advanc
 **⚠ Traps.** <TODO: the exact 62-def subset semantics; take them from BL-243's write-up, not from
 the def names.>
 
-## B13 ☐ Wallet and campaign availability wired into the hangar
+## B13 ☑ Wallet and campaign availability wired into the hangar
 
 **Goal.** Plane Construction opened from the cabin shows the profile's funds; buying is gated by
 funds and by the campaign availability threshold; selling credits the wallet at the decoded sell
@@ -670,14 +670,66 @@ position. The award count is settled at five by A6's independent read of the sam
 architecture entry; add the wallet gate at the existing `Purchase` page seam, parameterized by an
 optional campaign context so the IA path is untouched.
 
+**Implementation.** `CSVM/src/UI/HangarCampaignContext.cs` (new) wraps a loaded
+`CampaignProfileDef`, reading and writing it through `CampaignProfileStore`'s existing public API
+only (`Funds`, `Planes`, `MissionsCompleted`, `Save`); no change to that file. `HangarFlow` gained
+one optional constructor parameter, `HangarCampaignContext? campaign = null`, exposed as
+`Flow.Campaign`; every existing call site (the IA Build button, the top-level entry) passes
+nothing and stays wallet-free by construction. The gate sits at `HangarFlow.Commit()`: after the
+existing overweight/no-engine verdict, a non-null `Campaign` additionally refuses an unavailable
+airframe or an unaffordable total (in the original's own words for funds, `langui` 1226
+"INSUFFICIENT FUNDS"), and on success debits the total and records ownership
+(`HangarCampaignContext.Purchase`). `HangarPurchasePage.BuildEnabled`/`Detail` read the same two
+checks so the Purchase Now row greys out and states the reason before the press, mirroring how the
+original's own gate is the button, not the commit. `HangarFlow.DeleteSaved` (the plane-selection
+screen's sell gesture) routes through `Campaign.Sell` when present: it credits the wallet at the
+decoded full build cost (no depreciation) and refuses, leaving `Message` set and nothing changed,
+for one of the five decoded reward aircraft or when fewer than two planes would remain afterward.
+
+**Threshold semantics.** `HangarCampaignContext.IsAirframeAvailable(airframe)` is
+`Profile.MissionsCompleted + 1 >= HangarEconomy.Airframes[airframe].Availability` — the same
+comparison `FUN_00410120` makes (`DAT_0064b678 + 1` against the stat table's `+0x14` field),
+with `MissionsCompleted` standing in for that global (both are the save's `UIData +0x338`
+progress counter, per B11's own field mapping). This is the wire PLAN-hangar Decision 9 left
+unconnected outside Instant Action.
+
+**Sell price.** `HangarCampaignContext.SellPrice` prices an owned plane through
+`HangarEconomy.Price` over its build in the global `CustomPlaneStore` (the same total the
+Purchase screen shows, no depreciation, per A5). The two profile-seeded starters ("Gypsy Magic",
+"The Knave") never go through the hangar flow, so they carry no `CustomPlaneStore` entry; `SellPrice`
+falls back to the decoded starting spec (airframe from the ownership record, engine 1, two
+hardpoints per wing, no armour or guns) for those.
+
+**Wiring contract for `CampaignProfileStore` (not applied — file owned elsewhere).** `OwnedPlane`
+has no "this plane cannot be sold" flag. Until B12 lands per-plane ownership tracking, the five
+decoded reward-aircraft names (`docs/org/hangar.md`, the mission reward table: Jumping Jane, Blue
+Streak, Red Hot Spender, Minx, Accipiter Annie) are recognised by name in
+`HangarCampaignContext.SpecialPlaneNames`. The clean fix once B12 owns the file: add a `bool
+Special` (or similar) to `OwnedPlane`, set it when a reward plane is granted, and have
+`HangarCampaignContext.IsSpecial` read that field instead of the name table.
+
 **Model recommendation.** medium — the seam was designed for this.
 
 **Verify.** `RunTests.ps1` green; scripted assertions: buy refused under-funds, refused
 under-threshold, sell credits exactly the decoded price; IA hangar unchanged (golden manifest
-untouched).
+untouched). `dotnet build`/`dotnet format` clean, comment caps clean. Unit coverage:
+`CSVM.Tests/HangarCampaignContextTests.cs` (`BuyIsRefusedUnderFunds`, `BuyIsRefusedUnderThreshold`,
+`BuyWithFundsAndThresholdMetSucceeds`, `SellCreditsExactlyTheDecodedPrice`,
+`SellIsRefusedAtTheTwoPlaneFloor`, `SpecialPlanesCannotBeSold`, `InstantActionHangarStaysWalletFree`).
+Foreground `dotnet test CSVM.Tests/CSVM.Tests.csproj`: 2016/2016 passed, 0 failed. **Verified.**
+<pending orchestrator run>
 
 **⚠ Traps.** Engine power/weight stayed hangar-only by PLAN-hangar's explicit decision; do not
 re-open that here.
+
+**Open questions.** (1) The refusal text for an unavailable airframe ("That airframe is not
+available yet.") is not a decoded `langui` string; none of the surveyed purchase/sell prompt ids
+(700-799) named this case, so the message is plain text rather than an invented string id — a
+real `langui` id should replace it if one turns up. (2) The original's dropdown (`FUN_00410120`)
+filters an unavailable airframe out of the AIRFRAME screen's list entirely; this item gates only
+at commit (and the Purchase row), so an unavailable airframe still appears and can be built up to
+the refusal — a smaller, later change if the row-filtering behaviour is wanted too. (3) The
+per-plane "special" flag named in the wiring contract above is B12's to add.
 
 # Wave C — the out-of-mission screens
 
