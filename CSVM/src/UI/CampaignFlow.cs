@@ -32,6 +32,14 @@ public enum CampaignExit
 
     /// <summary>Left the campaign for the launchscreen.</summary>
     Cancelled,
+
+    /// <summary>Plane Construction: the shell opens the hangar over the profile's wallet and calls
+    /// <see cref="CampaignFlow.Resume"/> when it closes, which lands back on the cabin.</summary>
+    OpenHangar,
+
+    /// <summary>FLY MISSION: the shell launches the campaign session for
+    /// <see cref="CampaignFlow.MissionSeq"/> over <see cref="CampaignFlow.Profile"/>.</summary>
+    FlyMission,
 }
 
 /// <summary>
@@ -137,6 +145,11 @@ public sealed class CampaignFlow
 
     /// <summary>The profile the player picked, or null while the roster screen is still open.</summary>
     public CampaignProfileDef? Profile { get; private set; }
+
+    /// <summary>The <c>cm_sequence.zrd</c> index (0..23) of the mission the briefing, flight check
+    /// and ammo screens are about: the profile's next mission after Next Mission, any finished one
+    /// after Previous Missions. -1 until the cabin sets it.</summary>
+    public int MissionSeq { get; private set; } = -1;
 
     /// <summary>The screen showing.</summary>
     public CampaignScreen Screen => _stack[^1];
@@ -266,6 +279,26 @@ public sealed class CampaignFlow
 
     /// <summary>Ends the flow for the launchscreen, the CANCEL and RETURN TO MAIN MENU press.</summary>
     public void Cancel() => Exit = CampaignExit.Cancelled;
+
+    /// <summary>Hands the shell a job that leaves the flow standing: the hangar, or the mission
+    /// itself. The shell reads <see cref="Exit"/>, does the job, and (for the hangar) calls
+    /// <see cref="Resume"/>.</summary>
+    public void Request(CampaignExit job) => Exit = job;
+
+    /// <summary>Back from a job the shell ran on the flow's behalf: the flow stands where it was,
+    /// its roster and profile re-read so a hangar purchase or sale shows on the cabin.</summary>
+    public void Resume()
+    {
+        Exit = CampaignExit.None;
+        Message = string.Empty;
+        if (Profile != null && Store.Load(Profile.Name) is { } fresh)
+        {
+            Profile = fresh;
+        }
+    }
+
+    /// <summary>Names the mission the screens after the cabin are about.</summary>
+    public void SetMission(int seq) => MissionSeq = seq;
 
     /// <summary>Seats the profile every screen after the roster reads, and opens the cabin.</summary>
     public void SelectProfile(CampaignProfileDef profile)
