@@ -699,8 +699,8 @@ ground-blow steer (`FUN_00460700` at `2.0 · S` per second, see "Ground blow" be
 **The "spends the lag as the acceleration" reading is true only of the far-field branch.** The
 first branch of `FUN_0048c470` (crashed player, or beyond 1 km of the player,
 `FUN_00538920 > 1e6` m²) writes `a = throttle · fd_speed · nose − velocity` directly, with no
-`lift_accel_rate`, no gravity and no force build; that is the simplified speed-hold plant `B12`
-ports. The near-field path never does this.
+`lift_accel_rate`, no gravity and no force build; that is the simplified speed-hold plant, decoded
+in full under "The far-field plant" below. The near-field path never does this.
 
 ⚠ **Nothing at either reader touches bank or wing verticality.** The remake's `KnifeAlignFloor`
 weakened a chase by `|bodyUp·up|`; the binary has no such factor, so the constant and its
@@ -734,6 +734,71 @@ the positive one is `0.75 − 0.15·M` (always below 1.8). `FlightModel.LiftCapA
 the positive ceiling, understating negative-G lift at speeds where `1.8 · q·RefArea` exceeds the
 demanded push. Recorded as an open difference; it is outside this section's acceleration-path
 question and no stock-envelope row in the dump reads it.
+
+## The far-field plant
+
+`FUN_0048c470` opens on a test that decides which of two plants the aircraft flies for this step,
+and it is not the AI/player split it resembles. The aircraft takes the **far-field** branch when its
+crashed flag `[obj+0x384]` is set (`0x48c4ba`), **or** when it is not the player and
+`FUN_00538920(obj+0x204, player+0x204)` exceeds the float at `0x00607a18` (`0x48c4e9`–`0x48c4fc`).
+That helper returns `Δx² + Δz²`, so the separation is **horizontal** and the vertical gap is dropped,
+and the constant is **1e6 m²**, which is 1000 m. The compare is a strict `>` with no hysteresis and
+no timer: an aircraft sitting on the line alternates plants frame by frame. Everything at or inside
+1000 m, AI and player alike, flies the full aerodynamic path.
+
+The far branch is a level-of-detail model rather than an AI interface. What it computes is one
+target velocity and the gap to it:
+
+```
+target = nose · (throttle · fd_speed + 5)      [0x48c593-0x48c5d4, the 5 at 0x006036bc]
+a      = target − velocity                     [0x48c5ec-0x48c603]
+```
+
+`fd_speed` is `[obj+0x668]` and the throttle is the current lever `[obj+0x128]`, so the speed the
+aircraft holds is the one the data sets times the lever. The 5 m/s is added for anything that is not
+the player (the `FCHS` at `0x48c5aa` runs before the `FSUB`, and `[obj+0x198]` is `m[2] = −nose`, so
+the subtraction raises the along-nose speed rather than lowering it). The output is the same
+linear-acceleration parameter the near path writes at `0x48c8a4`, so the lag rate is exactly **1/s**
+and the integrator spends it as `velocity += a · dt` like any other acceleration.
+
+What the far branch skips is fixed by two tests of the same flag (`[EBP+0x1b]`, set at `0x48c5a6`
+and cleared at `0x48c50b`):
+
+| Skipped | Where | Effect |
+|---|---|---|
+| the whole force build | the jump at `0x48c643` past `0x48c648`–`0x48c8c3` | no lift, no Mach drag, no thrust, no weight, and no `lift_accel_rate` |
+| gravity | `0x48c77b`, inside that range | a distant aircraft does not fall |
+| the authority curves | `0x48c8e5`, which sets all three factors and the reverse-authority factor to 1 instead of calling `FUN_0048bdd0` | no low-speed ramp and no high-speed pitch fade |
+| the opposing-command limiter | the same jump, forcing its scalar to 1 past `0x48c93c`–`0x48ca79` | neither the AOA window nor the G ramp reaches the commands |
+| bank coupling | `0x48cc56`, past `0x48cc61`–`0x48cd3d` | a distant aircraft's bank no longer turns its nose |
+
+What still runs is as decoded as what does not. The three stick torques (`0x48ca7a`, `0x48caea`,
+`0x48cba0`) accumulate normally, with their authority factors at 1; the ground blow `FUN_0048c220`
+is called at `0x48cf95` for every aircraft but a crashed player; and the integrator's own along-nose
+floor is outside this function entirely. The weathervane block at `0x48cd6c` is player-only
+(`0x48cd3e` jumps away for anything else), so a far AI losing it changes nothing: the arm a
+non-player takes instead is the never-authored `level_off_rate` auto-level at `0x48ce45`, which is
+dead. ⚠ An earlier reading of this branch said it computes "no ground blow or weathervane at all";
+the ground blow does run, and the weathervane was never the AI's to lose. ⚠ A second earlier reading
+placed `0x48c520` inside this far-field test. It is not: that compare selects the `liftAOAs` wind
+blend against the AI's saturated nose-aligned wind (`0x48c522` jumps to `0x48c6e9`), so it is a
+player compare and remains the evidence `docs/architecture.md` cites for the AI force path. The
+far-field test is the pair at `0x48c4d7` and `0x48c4e9`.
+
+**How CSVM flies it.** `FlightModel.FarFieldPlant` is re-decided every step from
+`FlightInput.NearestHumanDistSqM`, which `FlightController` fills from the session's
+`PlayerPositions` snapshot. The original measures against its single player pointer; CSVM measures
+against the **nearest human pilot**, which is `docs/PLAN-flight-model-parity.md`'s Decision 3 (widen
+a player-only behaviour to all four human pilots deliberately) and is the only difference from the
+decode. The crashed-flag arm is not ported: CSVM's own wreck fall already flies the near-field plant
+by `FUN_0048e580`'s rule, and the flag's writers are not decoded. Two constants of the plant's
+inventory come from here, `FarFieldRangeM` and `FarFieldAiSpeedBonus`.
+
+⚠ **This branch does not explain a hard-banking AI.** It was once built to test that hypothesis
+against `BL-387`'s net-follower and measured not to: mean bank 66° against the near plant's 64°,
+peak 90° on both. The bank is the AI law's direct output (`roll = −bx` rolls until the target sits
+in the vertical plane), not a response to a turn requirement, so removing lift removes the need to
+bank without touching the command to. The port stands on faithfulness alone.
 
 ## The keyboard stick is an accumulator, not a switch (`FUN_00487460`)
 
@@ -1606,12 +1671,12 @@ branch the aircraft's velocity is driven toward the nose axis at `fd_speed · th
 (`0x48c593`–`0x48c5a0`), plus a flat **5 m/s** for anything that is not the player
 (`0x48c5ae`, `[0x6036bc] = 5.0`), and the function's linear-acceleration output is set to
 `target − current` velocity rather than to a force. So distant traffic cruises along its nose at a
-speed the data sets, with no lift, drag, thrust, ground blow or weathervane computed at all.
+speed the data sets, with no lift, drag or thrust computed at all.
 
 This is a level-of-detail model, not the AI's control interface: it is keyed on distance from the
-player and applies to the player's own aircraft only when it is crashed. Nothing in the remake
-implements it, and nothing needs to: it is invisible inside 1 km, which is where every AI aircraft
-we simulate and score sits. **Decoded, unimplemented, and deliberately unowned.**
+player and applies to the player's own aircraft only when it is crashed. CSVM flies it, measured
+against the nearest human pilot rather than a single player; the branch, the terms it skips and the
+terms it keeps are in "The far-field plant" above.
 
 **The throttle slews at 0.5/s, with no idle floor** (`0x48e652`/`0x48e698`: current ±= `0.5 · dt`
 toward commanded, snapping exactly onto it when the step crosses). Cutting from full to zero takes
@@ -1712,7 +1777,8 @@ a decoded target.
 
 The far-field branch has its own, unrelated throttle equilibrium: `throttle · fd_speed` along the
 nose, plus 5 m/s for anything that is not the player, reached as a rate rather than a force
-(`0x48c593`–`0x48c5ae`). It is a different plant, and `B12` owns porting it.
+(`0x48c593`–`0x48c5ae`). It is a different plant, ported and documented under "The far-field
+plant".
 
 **This closes the eighth-throttle row's target question.** `Probes.eighth-throttle-speed` reports
 134.52 mph for the Bloodhawk against the 134.5 solved here, and both of the numbers that were
@@ -2632,6 +2698,8 @@ without a provenance. Five classes are used:
 | `WeathervaneHalfAngle` | 0.5 | decoded | the quaternion-log halving at `0x4916fe`–`0x4917f0` |
 | `AiNoseSpeedFloor` | 4.4704 | decoded | `0x608128`, the block at `0x48e95e`–`0x48e998` |
 | `ReverseAuthorityFloor` | 0.2 | decoded | `0x6034fc`, `FUN_0048bdd0`'s fifth output |
+| `FarFieldRangeM` | 1000 | decoded | `0x00607a18` holds 1e6, the squared metres `FUN_00538920`'s horizontal separation is compared against at `0x48c4ee`; see "The far-field plant" |
+| `FarFieldAiSpeedBonus` | 5 | decoded | `0x006036bc`, subtracted from the negated cruise speed at `0x48c5ae` on the non-player arm |
 | `PhysicsConstants.NomGravity` | 20 | authored | `player.json`'s `nom_gravity`, mirrored for ballistics |
 | `PhysicsConstants.MphToMs` | 0.44704 | decoded | the parser's own speed-token scale |
 | `StickRamp.Rate` | 2.5 | decoded | `FUN_00487460`, 0.4 s of held key to full deflection |
@@ -2723,6 +2791,15 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   is untouched. ⚠ Its stock-side control is that on all eleven airframes pitch and roll authority
   are the identical number at every speed up to `MaxDiveSpeedFrac × fd_speed`, which is what says
   the fade cannot move an envelope row.
+- **`FarFieldPlantTests`** — the far-field branch, each skipped term alone against a near-field
+  control in the identical state, because one trajectory difference cannot say which of the five was
+  dropped. Pins the boundary as a strict `>` at 1000 m, that a human's plant never takes the branch,
+  that it is re-decided every step in both directions, the held speed from above and below, the 1/s
+  rate on an airframe whose `lift_accel_rate` is 4, no gravity, no bank coupling, full control
+  authority, a forced limiter scalar, and the two load-factor readouts left where the last
+  near-field step put them. ⚠ Two of its cases are controls rather than claims: the ground blow
+  still runs far-field, and an AI at 999 m integrates identically to one standing on the human.
+  The in-engine half, which is the session plumbing, is the `ai-far-field-plant` suite.
 - **`FlightConstantInventoryTests`** — the inventory table above, as a census over the plant's own
   const fields plus the `flightModel.*` config block. It checks provenance, not correctness: a
   constant added, dropped or moved fails until somebody classifies it, which is the step skipped

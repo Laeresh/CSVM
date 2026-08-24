@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Port known control and AI mechanisms
 
 11. ☑ B11 Port the two latent control-authority terms (`BL-437`)
-12. ☐ B12 Port the distant-AI simplified plant (`BL-425`)
+12. ☑ B12 Port the distant-AI simplified plant (`BL-425`)
 13. ☑ B13 Reproduce control-surface motion (`BL-393`)
 
 ### Wave C — Replace invented collision behavior
@@ -347,7 +347,7 @@ architecture updated; `BL-437` deleted from `backlog.md`.
 **Verified.** Full `RunTests.ps1` battery on the lane tree: build clean, 2052/2052 units,
 93/93 engine suites with engine errors clean, 16/16 goldens hash-identical, exit 0.
 
-## B12 ☐ Port the distant-AI simplified plant (`BL-425`)
+## B12 ☑ Port the distant-AI simplified plant (`BL-425`)
 
 **Goal.** Beyond 1 km, AI uses the original speed-hold plant and returns to near-field aerodynamics inside it.
 
@@ -360,6 +360,55 @@ architecture updated; `BL-437` deleted from `backlog.md`.
 **Verify.** Spectated AI outside 1 km holds nose speed and stops bank-turning; inside is invariant.
 
 **⚠ Traps.** This did not explain `BL-387`; do not revive that hypothesis.
+
+**Landed.** The branch is confirmed against the binary and ported whole. `FUN_0048c470`'s opening
+test takes the far branch when the crashed flag `[obj+0x384]` is set (`0x48c4ba`) or when the
+aircraft is not the player and `FUN_00538920`'s **horizontal** squared separation `Δx² + Δz²`
+exceeds the `1e6` m² at `0x00607a18` (`0x48c4e9`–`0x48c4fc`), a strict `>` at **1000 m** with no
+hysteresis and no timer, so the branch is re-decided every frame in both directions. The far plant
+is `target = nose · (throttle · fd_speed + 5)` and `a = target − velocity`
+(`0x48c593`–`0x48c603`, the 5 at `0x006036bc` for anything that is not the player), written to the
+same linear-acceleration output the near path fills, so the rate is exactly **1/s** and no
+`lift_accel_rate` enters it. What it skips is fixed by two tests of one flag: the whole force build
+including gravity (the jump at `0x48c643` past `0x48c648`–`0x48c8c3`), the three authority factors
+and the reverse-authority factor, forced to 1 rather than computed (`0x48c8e5`, so `FUN_0048bdd0`
+never runs and `B11`'s pitch fade cannot bite), the opposing-command limiter's scalar, forced to 1
+past `0x48c93c`–`0x48ca79` (so neither `B11`'s AOA window nor its G ramp reaches a distant
+aircraft), and the bank coupling (`0x48cc56`, past `0x48cc61`–`0x48cd3d`). **What still runs is as
+decoded as what does not**: the three stick torques accumulate normally at authority 1, and the
+ground blow `FUN_0048c220` is called at `0x48cf95` for every aircraft but a crashed player, which
+corrects the dossier's "no ground blow or weathervane at all". The weathervane at `0x48cd6c` is
+player-only anyway, and the arm a non-player takes instead is the dead `level_off_rate` auto-level.
+A second dossier error is corrected with it: `0x48c520` is not part of the far-field test but the
+`liftAOAs` wind-blend player compare, so it stands as `docs/architecture.md`'s evidence for the AI
+force path. In code, `FlightModel.FarFieldPlant` is re-decided each `Step` from
+`FlightInput.NearestHumanDistSqM`, which `FlightController` fills from the session's
+`PlayerPositions` snapshot (the wreck fall re-reads it too, since the original re-tests the range
+whatever is flying the hull). **Distance is measured to the NEAREST human pilot**, this plan's
+Decision 3 and the single deliberate difference from the decode; the crashed-flag arm is not ported,
+since CSVM's wreck already flies the near plant and that flag's writers are undecoded. The reverted
+prototype was built to test whether this explains `BL-387` and measured that it does not (mean bank
+66° against 64°); it was reverted because nothing reached it without session plumbing. This change
+wires that plumbing, so the branch is reachable, and it lands on faithfulness alone with no bug
+riding on it. `FarFieldPlantTests` pins each skipped term alone against a near-field control in the
+identical state, plus the strict boundary, the held speed from both sides, the 1/s rate on an
+airframe whose `lift_accel_rate` is 4, and two controls: the ground blow still runs far-field, and
+an AI at 999 m integrates identically to one standing on the human. The `ai-far-field-plant` engine
+suite owns the session plumbing (horizontal-only range, nearest-of-several humans, an unbound seam
+staying near-field, the branch watched selecting in both directions). Inventory (+`FarFieldRangeM`,
++`FarFieldAiSpeedBonus`, config surface unchanged at 9 keys), census, dossier and architecture
+updated; `BL-425` deleted from `backlog.md`. Proof of invariance: the eleven-airframe dump is
+SHA256-identical to `B11`'s `7BF4C7AE…`, which it must be by construction (that dump is single-plane
+and player-path, so the branch is unreachable in it), and the instrument is live on this tree, since
+a 2 % `DragPolarQuad` perturbation moves 716 of its lines and restoring it returns the hash exactly.
+No golden can move: no shot spectates an AI beyond 1 km, the two AI shots (`c1-targeting-hud`,
+`c1-ai-wreck`) spawn their AI 250 m ahead of the player on its own heading and run 1.5 s and 4.7 s,
+so the separation cannot approach the boundary. That is reasoned from the manifest, not measured
+here.
+
+**Verified.** Full `RunTests.ps1` battery on the lane tree: build clean, 2079/2079 units,
+94/94 engine suites (the new `ai-far-field-plant` included) with engine errors clean,
+16/16 goldens hash-identical, exit 0.
 
 ## B13 ☑ Reproduce control-surface motion (`BL-393`)
 

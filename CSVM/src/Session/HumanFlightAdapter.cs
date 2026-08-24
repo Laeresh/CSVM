@@ -572,6 +572,9 @@ internal sealed class HumanFlightAdapter
         public ShakeDefs Shakes = null!;
         /// The one shared projectile/effect pool every player's guns fire into.
         public ProjectilePool Projectiles = null!;
+        /// Where the human pilots are, the same snapshot every other nearest-human consumer reads.
+        /// An AI rig is given it so its flight model can select the far-field plant.
+        public Func<IReadOnlyList<Vector3>>? HumanPositions;
         /// The game's HUD bitmap font and the reticle pipper texture — null when absent, which
         /// simply omits the readout/reticle.
         public HudFont? HudFont;

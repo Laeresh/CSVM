@@ -880,6 +880,119 @@ internal static class AiSuites
         }
     }
 
+    // The far-field plant's PLUMBING on live rigs: which aircraft is told where the humans are, how
+    // that range is measured, and that the plant switches on it. The branch's own arithmetic is
+    // engine-free in CSVM.Tests/FarFieldPlantTests; only the seam needs an engine.
+    // Inventory: this module's docs/architecture.md entry.
+    internal static void AiFarFieldPlant(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var textures = new TextureArchive(texturesPath);
+        var humanPos = new Vector3(0f, 500f, 0f);
+        var humans = new List<Vector3> { humanPos };
+
+        FlightController? near = null;
+        FlightController? far = null;
+        try
+        {
+            // One AI rig at a given offset from the human, flying its spawn course. Its own model is
+            // kept by the caller because the branch readout lives on the plant, not on the node.
+            (FlightController Rig, FlightModel Model) BuildAi(int index, Vector3 offset)
+            {
+                var model3d = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                var pos = humanPos + offset;
+                var rig = new FlightController
+                {
+                    PlaneModel = model3d,
+                    PlayerIndex = FlightRoster.ShooterIdBase + index,
+                    IsHumanPiloted = false,
+                    Pilot = AiPilot.HoldingCourse(pos, pos + Vector3.Forward),
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                    HumanPositions = () => humans,
+                };
+                rig.AddChild(model3d);
+                var plant = new FlightModel(stats, aiForcePath: true);
+                rig.Setup(plant, null, new CamParams(), pos, pos + Vector3.Forward);
+                ctx.Host.AddChild(rig);
+                return (rig, plant);
+            }
+
+            // 100 m out and 1200 m out, level with the human and on the same heading. The near rig's
+            // range grows as it flies, so it is placed to stay inside 1000 m for the whole run.
+            var (nearRig, nearPlant) = BuildAi(0, new Vector3(100f, 0f, 0f));
+            var (farRig, farPlant) = BuildAi(1, new Vector3(1200f, 0f, 0f));
+            near = nearRig;
+            far = farRig;
+            nearRig.SimStep(1f / 60f);
+            farRig.SimStep(1f / 60f);
+
+            ctx.Check(!nearPlant.FarFieldPlant,
+                $"an AI 100 m from the human flies the near-field aerodynamics");
+            ctx.Check(farPlant.FarFieldPlant,
+                $"an AI 1200 m from the human flies the far-field speed-hold plant");
+
+            // Horizontal only: 3 km of altitude between them is not range. The human is moved rather
+            // than the rig rebuilt, so nothing but the vertical separation changes.
+            humans[0] = humanPos + new Vector3(0f, 3000f, 0f);
+            nearRig.SimStep(1f / 60f);
+            ctx.Check(!nearPlant.FarFieldPlant,
+                $"3 km of vertical separation does not send an aircraft far-field: the range is horizontal");
+            humans[0] = humanPos;
+
+            // The NEAREST human decides it, which is this engine's four-player widening of the
+            // original's single player pointer. A second human beside the far rig brings it back.
+            humans.Add(farRig.WorldPosition + new Vector3(0f, 0f, 200f));
+            farRig.SimStep(1f / 60f);
+            ctx.Check(!farPlant.FarFieldPlant,
+                $"a second human 200 m from the far rig returns it to the near-field plant");
+            humans.RemoveAt(1);
+            farRig.SimStep(1f / 60f);
+            ctx.Check(farPlant.FarFieldPlant, $"and it goes far-field again when that human leaves");
+
+            // Five seconds of flight. Both rigs fly the same orders from the same relative pose, so
+            // a divergence between them is the plant and nothing else.
+            for (int i = 0; i < 300; i++)
+            {
+                nearRig.SimStep(1f / 60f);
+                farRig.SimStep(1f / 60f);
+            }
+
+            ctx.Check(!nearPlant.FarFieldPlant && farPlant.FarFieldPlant,
+                $"both rigs held their branch across the run near={nearPlant.FarFieldPlant} far={farPlant.FarFieldPlant}");
+
+            // The speed-hold: the far rig sits on throttle x fd_speed + 5 m/s, tracking its own lever
+            // through the 1/s lag, while the near rig on the identical orders is elsewhere.
+            float held = (farPlant.Throttle * stats.FdSpeed) + 5f;
+            float farErr = Mathf.Abs(farPlant.Speed - held);
+            float nearErr = Mathf.Abs(nearPlant.Speed - ((nearPlant.Throttle * stats.FdSpeed) + 5f));
+            ctx.Check(farErr < 2f,
+                $"the far rig holds throttle x fd_speed + 5 speed={farPlant.Speed:0.0} held={held:0.0} err={farErr:0.00} m/s");
+            ctx.Check(nearErr > 5f,
+                $"the near rig's aerodynamics do not put it there err={nearErr:0.0} m/s (the control)");
+
+            // A rig with no seam bound stays near-field: no snapshot means no known human, and the
+            // aerodynamics are what an aircraft with no session around it must keep flying.
+            farRig.HumanPositions = null;
+            farRig.SimStep(1f / 60f);
+            ctx.Check(!farPlant.FarFieldPlant,
+                $"an unbound HumanPositions seam leaves the aircraft on the near-field plant");
+        }
+        finally
+        {
+            near?.Free();
+            far?.Free();
+            textures.Dispose();
+        }
+    }
+
     // The AI gunnery on real engine state: an AI-piloted, stock-armed plane HELD at fixed poses against
     // a parked hostile. It pins acquisition into the gunner's mutable target field, the quick-draw
     // gate, the forward gun cone, dead-eye scatter at skill 1 against 9, the kill attributed through

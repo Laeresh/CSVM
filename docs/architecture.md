@@ -2611,8 +2611,12 @@ for A/B). The
 footage altitude clamp, the STALL lamp's fraction and the dive-speed cap are ours, and are the
 whole of what is not decoded outside `Collide`; every constant's class is in
 [`org/flightModel.md`](org/flightModel.md)'s inventory, censused by `FlightConstantInventoryTests`.
-`UsesAiForcePath` holds near-field differences. The original's >1 km AI speed-hold branch remains
-unported (`BL-425`); player-only guards widen to all humans. `Collide` owns restitution and three
+`UsesAiForcePath` holds near-field differences, and `FarFieldPlant` is the original's level-of-detail
+branch, re-decided every step: an AI aircraft more than 1 km horizontally from the NEAREST human
+pilot holds `throttle · fd_speed + 5` along its nose at a 1/s lag and skips lift, drag, thrust,
+gravity, the authority curves, the command limiter and the bank coupling, keeping its stick torques
+and the ground blow. The range arrives as `FlightInput.NearestHumanDistSqM`, which is 0 for a plant
+nobody tells; player-only guards widen to all humans. `Collide` owns restitution and three
 fitted graze terms; contact lifecycle stays in `AircraftContactResolver`/`FlightController`.
 The choker's extend-only timer zeroes thrust alone. Full decode, standing conflicts and deliberately
 absent terms: [`org/flightModel.md`](org/flightModel.md); measurement rules: `verification.md`.
@@ -2843,7 +2847,11 @@ given aircraft is one `IFlightInputSource` (see `src/Flight/IFlightInputSource.c
 in `Bind` and read through `InputSource.Read(dt)` in place of the old per-frame ternary. An AI
 aircraft is this SAME node with `Pilot` (an `AiPilot`) driving that source, `IsHumanPiloted`
 false, `Setup(null)` for the camera (every camera write skipped, `_cam` null) and no HUD canvas
-built — flight, collision, weapons and damage are byte-for-byte the player's path.
+built — flight, collision, weapons and damage are byte-for-byte the player's path. The one thing an
+AI rig is told that a human rig is not is `HumanPositions`, the session's nearest-human snapshot,
+which this node turns into a horizontal squared range every step (the wreck fall included, since the
+original re-tests it whatever is flying the aircraft) and hands the plant as
+`FlightInput.NearestHumanDistSqM` for its far-field branch.
 `TakeProjectileHit` and the contact's ledger spend run the decoded damage flow (PlaneDamage: dead-zone redirect +
 whole-pool overflow, 2026-08-14) — the struck zone is Apply's ANSWER, not the geometric guess,
 and `IsDestroyed` is tested on every hit, zone-less included; the HUD DMG line leads with the
@@ -4075,7 +4083,11 @@ exactly the shooter, killer-less and unowned-round deaths score nobody, and the 
 for R),
 the AI actor seam (`ai-actor`: an `AiPilot`-driven plane spawned into an already-stepped sim —
 present, flying its orders, retargetable mid-flight, damageable and killable with the kill
-attributed), the AI gunnery
+attributed),
+the far-field plant's session plumbing (`ai-far-field-plant`: two AI rigs at 100 m and 1200 m from
+a human, so the branch is watched selecting in both directions: the range horizontal, the NEAREST
+of several humans deciding it, an unbound seam staying near-field, and the far rig holding
+throttle × fd_speed + 5 m/s where the near rig on identical orders does not), the AI gunnery
 (`ai-gunnery`: held rigs firing through the real fire-control path — nearest-hostile
 acquisition as mutable state, the quick-draw and ±11° cone gates, dead-eye skill 1 vs 9 hit
 rates on a fixed seed, the kill under the AI's shooter id, and the IsHumanPiloted assist

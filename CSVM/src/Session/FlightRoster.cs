@@ -96,6 +96,7 @@ public sealed class FlightRoster
                 GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
                 TouchdownDefs = _in.TouchdownDefs,
                 Projectiles = _in.Projectiles,
+                HumanPositions = _in.HumanPositions,
                 PadDevices = Array.Empty<int>(),
                 Inert = spawn.Inert,
                 Team = spawn.Team,

@@ -86,6 +86,8 @@ public class FlightConstantInventoryTests
         ("FlightModel", "WeathervaneHalfAngle", 0.5, Decoded),
         ("FlightModel", "AiNoseSpeedFloor", 4.4704, Decoded),
         ("FlightModel", "ReverseAuthorityFloor", 0.2, Decoded),
+        ("FlightModel", "FarFieldRangeM", 1000.0, Decoded),
+        ("FlightModel", "FarFieldAiSpeedBonus", 5.0, Decoded),
         ("PhysicsConstants", "NomGravity", 20.0, Authored),
         ("PhysicsConstants", "MphToMs", 0.44704, Decoded),
         ("StickRamp", "Rate", 2.5, Decoded),

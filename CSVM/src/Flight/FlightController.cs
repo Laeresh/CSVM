@@ -257,6 +257,13 @@ public partial class FlightController : Node3D
     /// path off this same split (<see cref="FlightModel.UsesAiForcePath"/>).</summary>
     public AiPilot? Pilot;
 
+    /// <summary>Where the human pilots are, as one snapshot per call — the seam the flight model's
+    /// far-field plant is selected on (<see cref="FlightModel.FarFieldPlant"/>). The session binds
+    /// the same snapshot every other "who is nearest" consumer reads. Null (every rig built without
+    /// a session) leaves the distance at zero, which keeps that rig on near-field aerodynamics.
+    /// ⚠ Set on AI rigs. A human rig's nearest human is itself, so the distance is always 0.</summary>
+    public Func<IReadOnlyList<Vector3>>? HumanPositions;
+
     /// <summary>The world's destructibles, when this session has a world runtime — the aim assist's
     /// third candidate list (an approximation of the original's `targets.zrd`
     /// `MStructList`). Null in every build with no world (the weapon lab, the suites), which costs
@@ -1256,6 +1263,7 @@ public partial class FlightController : Node3D
                 ProbeGroundBlow(ref input);  // reads the pose this step ENTERED with, as the original does
             input.AiGroundBlowScale = !groundBlowReady ? -1f
                 : _lifecycle.PostDropGroundBlowActive ? 0.15f : 1f;
+            input.NearestHumanDistSqM = NearestHumanDistSqM();
             _lastInput = input;
             _damageCooldown -= dt;
             _grazeReactionCooldown -= dt;
@@ -1970,6 +1978,28 @@ public partial class FlightController : Node3D
         }
     }
 
+    // Squared HORIZONTAL range to the nearest human pilot, the quantity the flight model's
+    // far-field branch is selected on. The original measures Δx² + Δz² against its single player;
+    // this reads every human, which is this plan's Decision 3 (docs/PLAN-flight-model-parity.md).
+    // ⚠ No seam bound means no human is known, and 0 keeps the aircraft near-field.
+    private float NearestHumanDistSqM()
+    {
+        if (HumanPositions?.Invoke() is not { Count: > 0 } humans)
+            return 0f;
+        var here = _model.Position;
+        float best = float.MaxValue;
+        for (int i = 0; i < humans.Count; i++)
+        {
+            float dx = humans[i].X - here.X;
+            float dz = humans[i].Z - here.Z;
+            float d = (dx * dx) + (dz * dz);
+            if (d < best)
+                best = d;
+        }
+
+        return best;
+    }
+
     // Vertical clearance over static world collision only. Unlike HitWorld,
     // another aircraft below the camera is not ground for speed_cue's NODE_NEAR_GROUND gate.
     private float HeightAboveWorldGround(Vector3 from)
@@ -2095,7 +2125,11 @@ public partial class FlightController : Node3D
         if (!WreckFalling)
             return;
         var prev = _model.Position;
-        _model.Step(_lastInput, dt);
+        // The stick freezes, the range does not: the original re-tests the far-field boundary every
+        // step regardless of what is flying the aircraft, so a wreck drifting past it switches too.
+        var falling = _lastInput;
+        falling.NearestHumanDistSqM = NearestHumanDistSqM();
+        _model.Step(falling, dt);
         if (_model.Position.Y < UnderMapY)
         {
             _lifecycle.StopWreckFall();   // lost under the map; nothing left to strike

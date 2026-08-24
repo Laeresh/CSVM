@@ -896,44 +896,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
   buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
 
-- `BL-425` `[Bug]` **A distant AI aircraft flies a SIMPLIFIED force model in the original, and we
-  give every AI the full aerodynamic one.** `FUN_0048c470`, the live force and torque build, opens on
-  a test that is not the AI/player split it looks like: **crashed, OR not the player and further than
-  1000 m from it** (`FUN_00538920` squared separation against `1e6`, the same helper and units as the
-  law's already-decoded 2000 m throttle test). Everything inside 1000 m, AI and player alike, takes
-  the full path. Beyond it the aircraft gets:
-  - **no lift or drag solve at all.** `FUN_0048fc40` is not called; the force is
-    `−(fd_speed · obj+0x4a)` along the nose, a speed-hold pseudo-force, with a further `−5.0` for a
-    non-player aircraft;
-  - **all three authority factors and the reverse-authority factor forced to 1.0**, so `FUN_0048bdd0`
-    never runs and the low-speed ramp never bites;
-  - **no bank coupling.** The `_DAT_006289f8`/`_DAT_006289fc` block sits under the same guard, so a
-    distant aircraft's bank does not turn its nose.
-  `FlightModel` models none of this and cannot: the plant is never told where the player is
-  (`PlayerPosition` reaches `AiControlLaw`'s throttle and nothing else). Every AI in our sim flies the
-  full model at every range.
-  ⚠ **This is not one of the four divergences [`docs/architecture.md`](docs/architecture.md) records**
-  (the `liftAOAs` blend, the weathervane, the nose-speed floor, the ground blow). One address that
-  note cites as evidence for the AI force path, `0x48c520`, sits in this far-field test rather than
-  among the function's three player compares, which are at `0x48cd3e`, `0x48cf7e` and `0x48cf9d`.
-  Confirm which before editing that paragraph; the far-field branch itself is not in doubt.
-  ⚠ Sequencing: the near-field behaviour is what a player ever watches, and it is already right.
-  Porting this changes only aircraft too far away to see, so it is a faithfulness fix rather than a
-  visible one, and it needs the plant to learn a player position it currently has no reason to know.
-  *How you'd know it worked:* a spectated AI beyond 1000 m holds speed along its nose and stops
-  turning with bank; inside 1000 m nothing changes.
-  ⚠ **Implemented experimentally and reverted; it does NOT settle `BL-387`.** The whole arm was built
-  (authority forced to 1, coupling skipped, velocity dragged onto the nose at `fd_speed × lever − 5`)
-  and flown on C1's `M4ReinfAce`: mean bank **66°** against the near-field plant's 64°, peak 90° on
-  both, roll saturated on 50 % of steps against 43 %. Speed drops 111 → 98 m/s and nothing else moves.
-  The reasoning it was built on — no lift means no turn radius means no need to bank — is wrong: the
-  bank is not a RESPONSE to a turn requirement, it is the law's direct output. `roll = -bx` rolls
-  until the target sits in the vertical plane whether or not lift is what turns the aircraft.
-  So this stays a faithfulness item on its own merits, with no bug riding on it, and whoever picks it
-  up should wire the plumbing in the same change rather than leave an unreachable branch.
-  *Cross-refs:* `BL-387`, closed (`git log --grep=BL-387`) — this was found while eliminating plant
-  candidates for it, and measured not to explain it.
-
 - `BL-388` `[Tuning]` `[Owed-playtest]` **The AI autogyro's nose-down at low speed may read softer
   than the original's — soft, single-session A/B, not a confirmed measurement.** `PT-57`
   (`docs/plans/PLAN-ai-flight.md` F52 player arm, 2026-08-15): the autogyro's authority-ramp feel
