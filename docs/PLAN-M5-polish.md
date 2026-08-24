@@ -163,13 +163,21 @@ hangar bay, with an auto-land button as the alternative. Two of those steps reac
 the Jack cutscene is very likely gated on the trigger C21 owns, and docking inside the PANDORA is a
 mission ending nothing in our build has been shown to do.
 
-**Approach.** Consume the target and label store: draw a marker for each `ObjectiveTargets` entry
-and show its `HelpLabels` text, redrawing on `TargetsChanged`. This is a HUD and marker question,
-not an objectives-runtime one, and the existing hostile-marker HUD is the idiom to follow. What the
-original's objective marker looks like is the open half.
+**The marker is referenced, and the mechanism already exists.** The user, from the original: the
+objective sites are marked "same as enemies but in blue". `Complete Mission M02.mkv` at t=5 s shows
+it: a two-line blue label over the site, a name line above a range line, drawn in world over the
+terrain (magnified frame kept with the run's stills). Our `Flight/MarkerHud.cs` is already "the
+original's Stunt Flying objective marker, rebuilt as a HUD Control" and already draws in `HudBlue`
+(`MarkerHud.cs:36`), with `EdgeMarker` for the off-screen case. So this item is wiring an existing
+blue marker to a store that nobody reads, not designing a marker.
 
-**Model recommendation.** high. It is the plan's blocker, and the presentation has no reference shot
-yet, so the item carries a judgement call as well as the wiring.
+**Approach.** Consume the target and label store: a marker for each `ObjectiveTargets` entry with
+its `HelpLabels` text, redrawn on `TargetsChanged`, through `MarkerHud`'s existing idiom rather than
+a new overlay. Check what `MarkerHud` assumes about being stunt-owned before reusing it, and if it
+is too tangled to share, follow it rather than inventing a second look.
+
+**Model recommendation.** high. It is the plan's blocker and it reaches into the flight HUD, but the
+presentation question is now settled, so the risk is integration rather than judgement.
 
 **Verify.** The three sites findable at the controls without foreknowledge, plus an in-engine test
 over `ObjectiveTargets`/`HelpLabels` that fails before the fix. `campaign-loop` passing throughout
@@ -177,9 +185,9 @@ proves the existing suites cannot catch this class, so an unchanged suite result
 
 **⚠ Traps.** ⚠ Do not touch the conditions or widen a radius: they are proved correct, and widening
 one would bury the real bug. ⚠ Do not absorb the three rows C21 blocks or the one A6 blocks; this
-item ends at making the targets visible. ⚠ <TODO: no reference exists for the original's in-world
-objective marker; either find one in `Complete Mission M02.mkv` or file a capture before inventing
-a style.>
+item ends at making the targets visible. ⚠ Do not invent a marker style: the original's is the
+enemy marker in blue, `MarkerHud` already draws that, and the film shows the two-line name-over-range
+label it composes.
 
 ## A2 ☐ A campaign session never spawns its zeppelins or generators (`BL-451`)
 
