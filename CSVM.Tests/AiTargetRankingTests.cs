@@ -162,6 +162,21 @@ public class AiTargetRankingTests
     }
 
     [Fact]
+    public void TurretCandidateCarriesTheFlatHandicapOnEveryArm()
+    {
+        // D36 (BL-363): a turret's decoded +37.5 rides on top of every arm, including no match.
+        Assert.Equal(AiTargetRanking.TurretBiasFlat,
+            AiTargetRanking.ObjectiveBiasFor("aagun1", null, isTurret: true), 1);
+        Assert.Equal(-300f + AiTargetRanking.TurretBiasFlat,
+            AiTargetRanking.ObjectiveBiasFor("x", new List<AiRatingBias> { new("x", 0.4f, null) },
+                isTurret: true), 1);
+        Assert.Equal(AiTargetRanking.AlwaysTarget + AiTargetRanking.TurretBiasFlat,
+            AiTargetRanking.ObjectiveBiasFor("x", new List<AiRatingBias> { new("x", 1f, null) },
+                isTurret: true), 1);
+        Assert.Equal(0f, AiTargetRanking.ObjectiveBiasFor("aagun1", null), 1);
+    }
+
+    [Fact]
     public void AnExcludedTargetIsNeverPickedEvenWhenItIsTheOnlyCandidate()
     {
         // The whole point of the exclusion: a −1.0 target is not merely deprioritised.

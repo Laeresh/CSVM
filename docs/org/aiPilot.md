@@ -196,6 +196,21 @@ engines, turrets and cannons, which are ordinary members of the turret and struc
 `object+0x4` is a live count of how many AI hold that target and the scorer simply excludes its own
 contribution. There is no drop-and-reselect pass.
 
+### What CSVM ports of this (D36)
+
+`FlightController.SelectRankedTarget` sweeps `TargetVehicle`/`TargetTurret`/`TargetStruct` (the
+gun aim assist's own three lists) for one global minimum, and `AiTargetRanking.ObjectiveBiasFor`
+carries the turret's flat `+37.5`. Routed into `AiGunner.GroundTarget` rather than the
+aircraft-only `Target` field, so `AiPilot`'s flight law never chases a turret or structure through
+the sky — it keeps flying its assigned course while the gunner alone aims and fires at it.
+
+Unmodelled, named rather than guessed: the `wingman` **+0.4** de-prioritisation and the zeppelin
+gasbag **−0.5**/ordnance-gated admission (`TargetStruct`'s `+0x65` members) both need a `mode`
+field and a gasbag identity CSVM's session wiring does not carry into `FlightController` yet; the
+ahead/behind deadband, altitude sign and facing ±0.2 terms stay the pre-D36 cone/sign reading
+rather than the decoded half-metre-deadband geometry above; and `TargetProjectile` is not part of
+the acquisition sweep at all.
+
 ## The chapter's net table, and what "the first net" means
 
 `DAT_0064f610` points at a 16-byte header built by `FUN_004311c0`: an allocation figure at `+0x00`,

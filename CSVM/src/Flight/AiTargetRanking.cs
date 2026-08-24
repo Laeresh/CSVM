@@ -95,6 +95,11 @@ public static class AiTargetRanking
     /// <summary>The rank a bias of 1.0 or more collapses to: always target.</summary>
     public const float AlwaysTarget = -100000f;
 
+    /// <summary>A turret candidate's flat objectiveBias addition, on top of every arm including the
+    /// no-match case (docs/formats/ai-rosters.md, `FUN_0041ae40`). Independent of
+    /// <c>rating_biases</c>: it applies whether or not the roster names the turret at all.</summary>
+    public const float TurretBiasFlat = 37.5f;
+
     /// <summary>One candidate's rank and its inputs. <paramref name="ownForward"/> must be
     /// unit-length (a basis column).</summary>
     public static TargetScore Score(Vector3 ownPos, Vector3 ownForward, float activationRange,
@@ -157,25 +162,27 @@ public static class AiTargetRanking
 
     /// <summary>The objectiveBias term for a named candidate, from the FIRST matching
     /// <c>rating_biases</c> entry; 0 with no list or no match. The ends saturate rather than scale:
-    /// 1.0 or more is always-target, −1.0 or less a hard exclusion.
-    /// ⚠ An authored −1.0 means NEVER target, not a penalty. It is the dominant shipped value, so
-    /// reading it as a penalty inverts the intent across most of the install.
-    /// ⚠ The turret's flat term is not implemented; no caller distinguishes one.</summary>
-    public static float ObjectiveBiasFor(string name, IReadOnlyList<AiRatingBias>? biases)
+    /// 1.0 or more is always-target, −1.0 or less a hard exclusion — an authored −1.0 means NEVER
+    /// target, not a penalty, and is the dominant shipped value. <paramref name="isTurret"/> adds
+    /// <see cref="TurretBiasFlat"/> on top of every arm above, including the no-match case — the
+    /// decoded flat term a turret candidate always carries.</summary>
+    public static float ObjectiveBiasFor(string name, IReadOnlyList<AiRatingBias>? biases,
+        bool isTurret = false)
     {
+        float flat = isTurret ? TurretBiasFlat : 0f;
         if (biases == null)
-            return 0f;
+            return flat;
         foreach (var b in biases)
         {
             if (!b.Matches(name))
                 continue;
             if (b.Bias >= 1f)
-                return AlwaysTarget;
+                return AlwaysTarget + flat;
             if (b.Bias <= -1f)
-                return NotRanked;
-            return b.Bias * BiasScale;
+                return NotRanked + flat;
+            return b.Bias * BiasScale + flat;
         }
 
-        return 0f;
+        return flat;
     }
 }

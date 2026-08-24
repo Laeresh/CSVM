@@ -20,6 +20,7 @@ using static CSVM.Testing.InstantActionSuites;
 using static CSVM.Testing.MusicSuites;
 using static CSVM.Testing.OrdnanceSuites;
 using static CSVM.Testing.PufferSuites;
+using static CSVM.Testing.TargetingCandidateSuites;
 using static CSVM.Testing.TargetingSuites;
 using static CSVM.Testing.WorldAndToolSuites;
 using static CSVM.Testing.ZeppelinSuites;
@@ -126,6 +127,7 @@ public static class SuiteCatalog
         "music-states",
         "campaign-objectives",
         "campaign-mission-end",
+        "targeting-candidates",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -637,6 +639,13 @@ public static class SuiteCatalog
             + "the result reaches the profile through CampaignProgression with the destruction log "
             + "captured and the return-to-cabin exit raised",
             CampaignMissionEnd));
+        into.Add(new TestHarness.Suite("targeting-candidates",
+            "the D36 widened AI acquisition (BL-363): a same-team registered structure is refused, " +
+            "a real team's AI routes a winning structure candidate into AiGunner.GroundTarget " +
+            "rather than the aircraft-only Target field (so AiPilot's flight law sees nothing new), " +
+            "and the gunner fires real rounds at a zeppelin structure with no aircraft in the scan " +
+            "at all",
+            TargetingCandidates));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

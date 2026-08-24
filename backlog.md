@@ -591,49 +591,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `BL-296` (ActionMap/rebinding seam), `git log --grep=BL-062` for what settled the
   per-hardpoint half.
 
-- `BL-363` `[Bug]` **Only aircraft are AI targeting candidates, so an escort with no enemy planes
-  has nothing to do.** *Evidence:* the user at the controls, 2026-08-15, flying a zeppelin run
-  configured with no enemy planes: the wingmen never engaged the zeppelin and flew straight away.
-  `FlightController.SelectRankedTarget` (`FlightController.cs:2233`) builds its candidate list from
-  `Projectiles.CollectAircraft` alone and then drops any candidate whose source is not a
-  `FlightController`. A zeppelin is a kinematic world node owned by `ZeppelinRuntime` (F17), never a
-  `FlightController`, so it cannot be ranked, cannot resolve as a `primary_target`, and cannot put
-  an AI into pursue. The same holds for every world destructible and turret emplacement. The decoded
-  ranking already expects these candidates: `AiTargetRanking`'s own module doc names the "+0.4
-  dynamics / −0.5 structure terms unmodelled (no non-aircraft candidates reach this path)", which is
-  exactly this gap.
-  *Fix shape:* widen the collector to the roster the aim assist already scans (it lists vehicles and
-  turrets, not just aircraft), keeping the `Live` and team gates as they are, then wire the two
-  unmodelled class terms in `AiTargetRanking`.
-  ⚠ *Traps.* (a) **The ranking is MINIMISED**, so a large nearby structure can outrank a distant
-  fighter for every pilot at once. Settle the structure term's sign and scale before widening the
-  pool, or one zeppelin becomes the whole sky's target. (b) `AiGunner` solves its intercept from the
-  target's `WorldVelocity` and gates on an aircraft-sized cone; a zeppelin also needs
-  `DAMAGES_ZEPPELIN` ordnance (F18) or every round is refused, so a wingman with the stock fit would
-  fly a pursuit it can never convert. (c) **Attacking the objective is not automatic in the
-  original**: it is assigned through `primary_target` and `rating_biases`. Widening the candidate
-  pool must not turn every AI into a zeppelin attacker.
-  ✔ **DECODED 2026-08-15**, in [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "Target acquisition".
-  The pool is four typed lists, not one: `TargetVehicle` (`DAT_0071dabc`), `TargetTurret`
-  (`DAT_0071d914`), `TargetStruct` (`DAT_0071d33c`) and `TargetProjectile` (`DAT_0064f78c`), swept
-  by `FUN_0041f9c0` for one global minimum. Both unmodelled terms are named: **+0.4** is a candidate
-  whose `mode` (`+0x67c`) is 4, a `wingman`, so enemy wingmen are de-prioritised by 480 m; **−0.5**
-  is a **zeppelin gasbag** and nothing else, worth 600 m in its favour, reached through the `Target`
-  virtual at vtable `+0x1c` (`0x004227a0`, the same one the overlay prints `Gasbag targeted` from).
-  Trap (a) is smaller than feared and trap (b) is answered at admission: the struct list is always
-  swept (the literal `1` at `0x00420002`), and its gasbag members are admitted only for a pilot
-  carrying loaded `DAMAGES_ZEPPELIN` ordnance (`FUN_00420070`, flag bit `0x1000`), so a stock fit is
-  never offered a gasbag. **Three constants we already ship are wrong** and are independent of the
-  widening: `AiTargetRanking.BiasScale` is `+1200` where `FUN_0041ae40` returns `bias × −750` with
-  `≤ −1.0` a hard exclusion, `≥ 1.0` = `−100000` and a flat `+37.5` on turrets; the bearing term's
-  sign is inverted and its ±0.5 is a half-metre ahead/behind deadband, not `cos 60°`; and the ±0.2
-  terms are aircraft-only (`FUN_00421950` has none). Acquisition also has a sticky standing target
-  and a real attacker count our invented deconfliction does not match.
-  *Cross-refs:* `BL-362` (the wingmen half of the same playtest), `AiTargetRanking`,
-  [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) "AI modes, engine-side" (whose "+0.4
-  for one dynamics class" and "−0.5 for one structure case" are now named, and whose "dynamics" is
-  the `mode` field), [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode).
-
 - `BL-364` `[Bug]` `[Blocked: campaign missions]` **Our AI aircraft have no patrol net, and the original gives
   every one of them one. DECODED and the Instant Action half LANDED 2026-08-15; what is left is
   the campaign roster path, which has no spawner to plumb into yet.** *Evidence:* the user at the controls,
@@ -877,15 +834,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   it by copying the human-piloted fallback into `ObjectiveBiasFor`: it would paper over the
   general naming problem while leaving every non-`player` pattern broken. (b) Renaming the spawned
   nodes is not the fix. `player` is `EffectCatalogue.CrashAnimRoot` and the crash-scaffold anchor,
-  and the `ai{n}_` prefix is what `TargetHud.HostileTag` reads for the marker tag. (c) Only
-  aircraft are candidates today (`BL-363`), so the ground and zeppelin patterns cannot match
-  regardless of naming; fixing names alone will not make `fuel_truck*` reachable. (d) First match
+  and the `ai{n}_` prefix is what `TargetHud.HostileTag` reads for the marker tag. (c) The
+  candidate pool now also covers turrets and structures (D36 widened it past aircraft-only), so
+  this naming mismatch is what would still keep `fuel_truck*`/`aagun*` unreachable; fixing names
+  is necessary but was never sufficient on its own. (d) First match
   wins per block, so a pattern's position matters once names do resolve — do not sort them.
   *Playtest after fix:* an Instant Action wave whose roster authors `["player", 1.0]`; the pilot
   carrying it should come for the player over a nearer AI, and the `target rank` breadcrumb should
   show the `-100000` saturation rather than `0`.
-  *Cross-refs:* `BL-363` (the candidate pool is aircraft-only, the other half of why the biases do
-  nothing), [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) (slot 33 and the
+  *Cross-refs:* [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) (slot 33 and the
   `bias × −750` decode), `AiTargetRanking.ObjectiveBiasFor`, `AiSkills.RosterRatingBiases`.
 
 ## Flight model & collision physics
@@ -2922,9 +2879,9 @@ usual.
   *Playtest after fix:* fly a CAMPAIGN mission whose roster has netless `wingman_N` blocks and watch
   one hold the decoded body-frame station on its leader, 6 m out and 18 m astern of the player, from
   the 700 m join threshold inward, and trail at the speed-ramped distance when it is chasing.
-  *Cross-refs:* [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode), `BL-363` (the other half
-  of the same playtest: an escort with nothing targetable), `BL-364` (the patrol nets, and the
-  correction to `instant-action.md` this rests on),
+  *Cross-refs:* [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode, "What CSVM ports of this"
+  is the other half of the same playtest: an escort's candidate pool, landed D36), `BL-364` (the
+  patrol nets, and the correction to `instant-action.md` this rests on),
   [`docs/formats/ai-nets.md`](docs/formats/ai-nets.md) (the anchored net that delivers the IA half,
   closed as `BL-377`).
 

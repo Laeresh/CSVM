@@ -107,10 +107,10 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver: mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
 - `src/Flight/AiControlLaw.cs` — the original's own AI steering law (decoded in `docs/org/aiControlLaw.md`): aim point + that point's velocity + one of four decoded parameter tables → stick and throttle lever. Engine-free and pure.
 - `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine, the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
-- `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: intercept lead via `AimAssist.TryIntercept`, the quick-draw cone and the engagement window as fire gates, the ±11° traverse clamp with its 10° residual gate, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
-- `src/Flight/AiRocketeer.cs` — the AI's ordnance employment: the quick-draw cone over the whole pass, then per pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the 200–800 m band and the traverse clamp with its 5° residual gate (tighter than the gun's 10°), then the vehicle-wide lockout stamped ahead of the `quick_draw_chance` roll; the lead is per pylon, a motor round on its `ACCELERATION` ramp in the launcher's frame and a round without one at `VELOCITY` in the world's. Holds no target of its own: the host walks it against `AiGunner.Target`.
+- `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: intercept lead via `AimAssist.TryIntercept`, the quick-draw cone and the engagement window as fire gates, the ±11° traverse clamp with its 10° residual gate, per-shot dead-eye scatter; two mutable target fields (D36, `BL-363`) — aircraft-only `Target`, `AiPilot`'s own pursuit quarry, and non-aircraft `GroundTarget` (a turret or a world/zeppelin structure) so the flight law never chases what it cannot dogfight — plus primary-target name and rating biases (the D12 script seams).
+- `src/Flight/AiRocketeer.cs` — the AI's ordnance employment: the quick-draw cone over the whole pass, then per pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the 200–800 m band and the traverse clamp with its 5° residual gate (tighter than the gun's 10°), then the vehicle-wide lockout stamped ahead of the `quick_draw_chance` roll; the lead is per pylon, a motor round on its `ACCELERATION` ramp in the launcher's frame and a round without one at `VELOCITY` in the world's. Holds no target of its own: the host walks it against `FlightController`'s standing-target lookup (`AiGunner.Target` or `GroundTarget`).
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch, engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
-- `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula: rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching and the allied-attacker deconfliction pick.
+- `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula: rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching (a turret's flat `+37.5` handicap included, D36) and the allied-attacker deconfliction pick.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints: nearest node first, then edge-list neighbours, seeded branch draws, and an anchored net offset onto its live trailer target (`BL-377`); aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
 - `src/Flight/ZeppelinBroadside.cs` — the pure broadside law (M4 F19): the decoded 90° side arc (dot > 0.707 on the moving hull's lateral axis), the per-cannon stowed→deploy→ready→fire machine with its own re-fire timer, the ballistic lead solve (skip on no solution) and the seeded gasbag pick.
 - `src/Flight/ZeppelinDamage.cs` — the pure zeppelin kill arithmetic (M4 F18): the decoded survivor threshold over the `healthy` list, the engine recount, the DAMAGES_ZEPPELIN gasbag gate, the record-stage crossing helper.
@@ -2906,11 +2906,12 @@ share for a splash hit, 1 for a direct round). The weapon/graze kill test is
 old any-critical-part kill; the `critical` flag stays parsed, nothing consults it). An AI
 pilot's trigger and lead are its `AiPilot.Gunner`: `SimStep` drives the gunner before
 the fire step (`DriveAiGunner` — standing target kept while live, else re-acquired through
-`SelectRankedTarget`, D12's decoded ranking over the pool roster with the same team gate:
-primary_target outranks — by NAME the first match, by the `player` token the human NEAREST this
-attacker so a wave spreads over the panes instead of converging on P1 (BL-367) — ranking otherwise,
-activation-cutoff candidates never picked, first
-acquisition logged with its rank inputs; with a
+`SelectRankedTarget`, D12/D36's decoded ranking over aircraft, turrets and structures (`BL-363`)
+with the same team gate: primary_target outranks — by NAME the first match, by the `player` token
+the human NEAREST this attacker so a wave spreads over the panes instead of converging on P1
+(BL-367), both aircraft-only — ranking otherwise, activation-cutoff candidates never picked, a
+non-aircraft winner routed to `AiGunner.GroundTarget` rather than `Target` so `AiPilot` never sees
+it, first acquisition logged with its rank inputs; with a
 mode machine a standing target is kept in every mode but only pursue/lay off solve and shoot),
 the fire inputs read `WantsFire` instead of the raw controls, and `AssistedGunDirection`'s
 non-human arm fires the gunner's per-shot dead-eye scatter — an AI plane NEVER ticks or reads
@@ -3693,7 +3694,7 @@ than under it (the anim lab's `--plane=` prop), each also capping its own ancest
 
 ## src/UI/TargetingOverlay.cs
 The targeting overlay (F15, `--debug-targets`): a per-frame line from every turret gunner
-(`TurretController.TargetPosition`) and AI gunner (`AiGunner.Target`) to its acquired target,
+(`TurretController.TargetPosition`) and AI gunner (`AiGunner.Target`/`GroundTarget`, D36) to its acquired target,
 coloured by the gate holding the trigger (`TurretController.Gate`), with that gate named per shooter
 in the HUD. Depth test off, since the line into a hull is the one worth seeing. In splitscreen the
 world-space lines draw in every pane on their own (default render layer, in every camera's
@@ -4190,13 +4191,15 @@ re-reset the fifth play's rings read INACTIVE at opacity 0, which is the sortie-
 symptom this suite exists to hold shut.
 
 ## src/Testing/*Suites.cs
-Eleven domain modules hold the in-engine scenario bodies, each named for the whole of what it
+Twelve domain modules hold the in-engine scenario bodies, each named for the whole of what it
 files: `PufferSuites` (the emitter model's modes, wind, fades and fire column), `CombatSuites`
 (loadouts, live fire, aim assist and the hit chain), `OrdnanceSuites` (a round's flight, guidance
 and ends), `InstantActionSuites` (the mission runtime from spawn to wrap-up), `AiSuites` (how a
 computer-controlled combatant behaves: pilots, mounted gunners, combat voice, and the inert state
 they wait in), `TargetingSuites` (the `TargetRef` abstraction, candidate pool, sticky selection,
-input decoding and marker HUD), `ZeppelinSuites` (motion, fighter launch, multi-zone damage,
+input decoding and marker HUD), `TargetingCandidateSuites` (D36's widened AI acquisition,
+`BL-363`: the team gate over a registered structure and the win routed to `GroundTarget`, never
+`Target`), `ZeppelinSuites` (motion, fighter launch, multi-zone damage,
 broadsides), `DamageSuites` (spending armor and health, and the injure staging those ledgers
 fire), `DestroyChoreographySuites` (the choreography a death dispatches: destroy defs, wreck
 flights, crash rigs, callbacks and stops), `AnimationAndEffectsSuites` (anim launches, effect

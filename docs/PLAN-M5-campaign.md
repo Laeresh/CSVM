@@ -201,7 +201,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 33. ☐ In-flight objectives display + objective sound cues
 34. ☐ Campaign wingmen: named rosters + netless station-keeping (`BL-362`, `BL-364`)
 35. ☐ Mid-mission world fidelity: `WAKE_ANIM` doors (`BL-350`), scripted-path vehicles (`BL-361`), `WorldPartitionSetActive` (`BL-037`), `FogState` (`BL-038`)
-36. ☐ AI targeting candidates beyond aircraft (`BL-363`)
+36. ☑ AI targeting candidates beyond aircraft (`BL-363`)
 37. ☑ Music: playback subsystem + the state-driven track selection
 
 ### Wave E — end to end and sign-off
@@ -1157,24 +1157,48 @@ the affected site plus the 8-chapter freecam regression with unchanged counts el
 **⚠ Traps.** BL-038 fires inside D32's cutscene on C1/M04; land D32 first or verify on a
 non-cutscene fog use if one exists.
 
-## D36 ☐ AI targeting candidates beyond aircraft (`BL-363`)
+## D36 ☑ AI targeting candidates beyond aircraft (`BL-363`)
 
 **Goal.** AI target selection considers zeppelins, turrets and structures where the mission's
 data says so, making escort/defend campaign objectives functional.
 
-**Evidence (confidence: decoded per the BL).** `BL-363` records the decode; today only aircraft
-are candidates. <TODO: re-verify against git log + code, and re-read the BL for the decoded
-candidate rules.>
+**Evidence (confidence: decoded, docs/org/aiPilot.md "Target acquisition").** The candidate pool
+is four typed lists (`TargetVehicle`/`TargetTurret`/`TargetStruct`/`TargetProjectile`), swept for
+one global minimum; a turret carries a flat `+37.5` rank-unit handicap on top of its
+`rating_biases` match; the struct list is always swept, and only its zeppelin-gasbag members are
+gated on the shooter carrying loaded `DAMAGES_ZEPPELIN` ordnance.
 
-**Approach.** Read `docs/org/targeting.md` and the BL entry; widen the candidate set in the
-targeting module per the decoded rules.
+**Landed.** `FlightController.SelectRankedTarget` now sweeps aircraft, turrets and structures
+(mirroring the human aim assist's own three lists) for one global minimum;
+`AiTargetRanking.ObjectiveBiasFor` carries the turret's flat `+37.5`. The winner routes into a new
+`AiGunner.GroundTarget` field rather than the aircraft-only `Target` field, so `AiPilot`'s flight
+law (D34's file, untouched) never sees a turret or structure as a pursuit quarry — it keeps flying
+its assigned course while the gunner independently aims and fires. Verified in-engine
+(`targeting-candidates` suite): a same-team structure is refused, a real team's AI routes a
+winning structure into `GroundTarget`, and the gunner fires real rounds at it with no aircraft in
+the scan at all.
+
+**Left unmodelled, named rather than guessed** (docs/org/aiPilot.md "What CSVM ports of this"):
+the `wingman` `+0.4` de-prioritisation and the zeppelin-gasbag `+0x65` ordnance gate both need a
+`mode` field and a gasbag identity that do not reach `FlightController` without new session-level
+wiring (`GameSession.cs`, out of this item's scope); the ahead/behind deadband, altitude-sign and
+facing `±0.2` terms stay the pre-existing cone/sign reading rather than the decoded geometry; and
+`TargetProjectile` is not part of the AI sweep.
 
 **Model recommendation.** medium.
 
 **Verify.** In-engine test: an AI ordered against a zeppelin target engages it; existing combat
 suites green.
 
-**⚠ Traps.** <TODO: take from BL-363's entry when re-verified.>
+Verified. <pending orchestrator run>
+
+**⚠ Traps.** (a) The ranking is MINIMISED, so a large nearby structure can outrank a distant
+fighter — settled by the decoded turret/bias arithmetic already shipped (`BiasScale`/`AlwaysTarget`
+match the decode), not invented here. (b) A wingman's stock loadout has no `DAMAGES_ZEPPELIN`
+ordnance, so it can acquire a gasbag structure but never spend a round on it profitably; the
+ordnance gate that would prevent that admission is the named unmodelled gap above. (c) Widening
+the pool must not turn every AI into a zeppelin attacker on its own — that stays governed by
+`primary_target`/`rating_biases`, unchanged by this item.
 
 ## D37 ☑ Music: playback subsystem + the state-driven track selection
 

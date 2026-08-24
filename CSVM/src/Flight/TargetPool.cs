@@ -103,17 +103,12 @@ public sealed class TargetPool
         }
     }
 
-    /// <summary>Whether a turret candidate stands in the world rather than being carried by an
-    /// aircraft. Only emplacements are selectable: a carried gunner's host is already a target in
-    /// its own right, and offering both would put two entries on one silhouette. An emplacement is
-    /// the one with a placement <see cref="TurretController.Site"/>.</summary>
-    private static bool IsEmplacement(object? source) =>
-        source is TurretController { Site: not null };
-
     /// <summary>The IDENTITY name for a source: the plain node/label name. What <c>--target=</c>
     /// matches and what the breadcrumbs print — see <see cref="TargetRef.DisplayName"/> for what the
-    /// marker prints instead.</summary>
-    private static string NameOf(object? source) => source switch
+    /// marker prints instead. Internal rather than private: <c>FlightController.SelectRankedTarget</c>
+    /// (D12/D36) reuses this same identity for a turret/structure candidate's
+    /// <c>rating_biases</c> name match, rather than growing a second name-of-source switch.</summary>
+    internal static string NameOf(object? source) => source switch
     {
         FlightController fc => fc.Name,
         TurretController t => t.Label,
@@ -122,6 +117,13 @@ public sealed class TargetPool
             GodotObject.IsInstanceValid(inst.Anchor) ? inst.Anchor.Name : inst.Def.Name,
         _ => "",
     };
+
+    /// <summary>Whether a turret candidate stands in the world rather than being carried by an
+    /// aircraft. Only emplacements are selectable: a carried gunner's host is already a target in
+    /// its own right, and offering both would put two entries on one silhouette. An emplacement is
+    /// the one with a placement <see cref="TurretController.Site"/>.</summary>
+    private static bool IsEmplacement(object? source) =>
+        source is TurretController { Site: not null };
 
     /// <summary>Wraps one classed candidate as a <see cref="TargetRef"/>. The KIND picks the shape
     /// (which is why an unrecognised source still lands in the right cycle with an empty name rather

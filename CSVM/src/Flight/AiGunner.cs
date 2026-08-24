@@ -1,3 +1,4 @@
+using CSVM.Mech3;
 using Godot;
 
 namespace CSVM.Flight;
@@ -26,10 +27,21 @@ public sealed class AiGunner
     /// class — ordnance takes the tighter <see cref="AiRocketeer.AimQualityCos"/>.</summary>
     public const float AimQualityCos = 0.9848f;
 
-    /// <summary>The standing target — mutable at any time (the mission-script seam). Null with
-    /// <see cref="AutoTarget"/> set lets the host re-acquire through the D12 target ranking
-    /// (<see cref="AiTargetRanking"/>).</summary>
+    /// <summary>The standing AIRCRAFT target — mutable at any time (the mission-script seam). Null
+    /// with <see cref="AutoTarget"/> set lets the host re-acquire through the D12/D36 target ranking
+    /// (<see cref="AiTargetRanking"/>). Stays <see cref="FlightController"/>-typed on purpose:
+    /// <see cref="AiPilot.Next"/> reads this as its pursuit "quarry" to fly an intercept, and a
+    /// turret/structure is never something the flight law chases through the sky. See
+    /// <see cref="GroundTarget"/> for the D36-widened non-aircraft half.</summary>
     public FlightController? Target;
+
+    /// <summary>The standing NON-aircraft target (<c>BL-363</c>'s <c>TargetTurret</c>/
+    /// <c>TargetStruct</c> pools): a <see cref="TurretController"/> or a world structure/zeppelin
+    /// part (<see cref="DestructibleRegistry.Instance"/>). Set only when <see cref="Target"/> is
+    /// null, so <see cref="AiPilot"/>'s flight law sees an aircraft or nothing and keeps flying its
+    /// assigned course while the gunner independently aims and fires at this — the D36 widening's
+    /// non-aircraft half. See docs/org/aiPilot.md "What CSVM ports of this".</summary>
+    public object? GroundTarget;
 
     /// <summary>Re-acquire through the D12 ranking when <see cref="Target"/> is null or dead.
     /// Off, a cleared target simply holds fire — an explicitly ordered gunner.</summary>
