@@ -181,10 +181,99 @@ Note the yellow/olive secondary hue is partly **propeller spinners**, not paint:
 
 The player's customised aircraft are plain files (no archive) in the install's `Planes/`
 directory, named by the plane's in-game name (`Blue Streak`, `Jumping Jane`), **204 bytes**
-each. Little-endian 32-bit fields with the name as a NUL-padded string at offset 0x04; the
-three paint colours sit at **0x68 as RGBA bytes** (`df 00 29 00` = `(223,0,41)`, `19 19 19 00`,
-`ff ff ff 00`), preceded by what appear to be pattern and decal indices. Fully decoding this
-record is only needed to *import* a player's saved planes, which nothing depends on yet.
+each. The file is a verbatim dump of the engine's in-memory record: `FUN_0041a7b0` runs
+`sprintf("Planes\%s", record+0x04)`, `mkdir("Planes")`, then `fwrite(record, 0xcc, 1)`.
+The records live in an array at `0x0064b78c`, stride 0xcc; index 25 (`0x0064cb78`) is the
+build-in-progress scratch copy every hangar screen edits, and case 22 of the screen-flow
+callback dispatcher `FUN_00407670` fills the derived fields and calls the writer.
+
+Little-endian 32-bit fields, offsets confirmed against the screen callbacks that write them:
+
+| Offset | Field | Evidence |
+|---|---|---|
+| 0x04 | name, NUL-padded string | the writer's `sprintf` |
+| 0x2c | airframe id | spawn descriptor slot 0 in `FUN_00417090`; first `%d` of the icon filename `PX_Icon_%d_%d_%d.tga` (`0x61f370`) |
+| 0x34, 0x38 | left/right wing hardpoint count, 0-4 | callback 2245 handler at `0x0040ad0f`; the dropdown (callback 2244 at `0x0040b81d`) offers five rows, langui 1165/1168/1169 |
+| 0x40 | paint pattern index 0-13 (13 remaps to 11 for the icon) | handlers at `0x0040d523`/`0x0040d54d`, second `%d` of the icon filename |
+| 0x44-0x4c | per-slot colour index 0-26 into the swatch table at `0x0061dd48` (see below) | callback 2237 get/set at `0x0040d3e2` |
+| 0x50-0x58 | per-slot shade-variant index into that colour's ramp; a colour pick resets it to the colour's own default variant | callback 2236 get/set at `0x0040d437`; the reset at `0x0040d402` |
+| 0x5c, 0x60, 0x64 | the three decal indices 0-49 (nose, tail, wing). The paint screen's 5-wide decal grid stores `row*5 + col`, which IS the flat index | callback 2239 at `0x0040d5b7`; `FUN_0041a320` consumes them by indexing the decal-name table at `0x0061da20` directly |
+| 0x68 | the three paint colours as RGBA bytes (`df 00 29 00` = `(223,0,41)`, ...) — a DERIVED cache: `FUN_00406840`, its only writer, recomputes it from the colour+shade indices, including at `0x0040b5cb` just before every save | the resolver `FUN_004067c0` |
+| 0x74-0x80 | four armour values, stored premultiplied by 5 | callback 2247 handler at `0x0040ac3d` divides by 5 on read |
+| 0x84 | per-gun-slot family bit byte (adds 5 to the dropdown row) | callback 2249 handler at `0x0040bea2` |
+| 0x88-0x94 | four gun ids, 5 = empty | callback 2249 |
+| 0x98-0xa4 | per-gun-slot 4 = empty, else 0; derived at commit | case 22 of `FUN_00407670` |
+| 0xa8-0xc4 | eight per-pylon display cells: commit writes 1 if position < that wing's hardpoint count else 11; callback 2245's write refills them `rand()%20 > 10` per cell while the count is non-zero | case 22; `0x0040ad4f` |
+
+### The paint screen's preview art
+
+The paint screen's aircraft preview is not the flying model's `.BM` composition. Each
+`PX_ICON_<airframe>_<pattern>_<n>.TGA` set (358x335, 32-bit) is a four-LAYER stack, the `_0..3`
+suffix a layer index: layer 0 is the detail plate (panel lines, canopy, prop, guns, with its
+coverage in the alpha channel) and layers 1-3 are the three colour slots' region masks, white
+RGB with the region in the **alpha**. The composite is: masks 1-3 alpha-over in slot order,
+each carrying its slot's resolved colour, then the plate over the result — no shading
+multiply and no weight normalisation, so a fully-masked texel is exactly its resolved colour.
+Sets ship for exactly the pairs the availability mask allows (only itstaxi/Hoplite has none).
+Measured against the reference screenshots, the Fury's Fortune Hunters composite agrees to a
+mean error of 4.4/255 per channel with region interiors exact. The decal picker's icons are
+`PX_P_DECALS.TGA`, 66x3300: fifty 66x66 tiles top to bottom in decal-index order.
+
+### The swatch table and the pattern defaults
+
+The paint screen's colours are index pairs, never free RGB. The swatch table at `0x0061dd48`
+(27 rows, stride 0x23, terminated by a zero count byte) holds per row: base R,G,B; a
+shade-variant count; the default variant index; then the variants as R,G,B triples, a
+dark-to-light ramp. `FUN_004067c0(record, slot, variant, flag)` resolves (colour, shade) to
+RGB; the colour dropdown (callback 2229 at `0x0040d30e`) and the three shade dropdowns
+(2232-2234 at `0x0040d388`) render chips from it. The full table is transcribed verbatim to
+`CSVM/data/hangar_swatches.json`. The shipped scheme colours corroborate it: `blackhat`'s
+(177,130,66) sits in the tan row's ramp, `blckswan`'s pair in the grey ramp.
+
+The pattern table at `0x0061daf0` (14 entries, stride 0x28) is, per entry: a ushort
+**airframe availability mask** at +0x00 (bit i = airframe i may wear it), three default
+colour indices at +0x04..+0x0c, three default shade indices at +0x10..+0x18, and unread
+padding. Setting the pattern (callback 2238's SET at `0x0040d4ba`) copies the entry's six
+defaults over the record's colour and shade indices and touches nothing else, which is why
+the original loads a pattern's own colours on selection. The pattern dropdown's labels are
+langui `3425 + patternIndex`.
+
+⚠ **The shipped table carries a one-dword shift in entries 10 and 12** (`german`,
+`broadway`): their first dword is 0 and the real mask/defaults follow one slot late. A naive
+walk that stops at the first zero mask would end at entry 10; play disproves that reading
+(the Hoplite offers four patterns including `itstaxi` = 13, and a genuine save carries
+`studio` = 11), so the walk evidently tolerates it. The corrected masks, de-shifted for
+10/12 and matching every external source (the schemes' vehicle.json users, the shipped icon
+sets, the fixtures): 0x411, 0x80, 0x208, 0x204, 0x7ff, 0x40, 0x188, 0x110, 0x20, 0x402,
+0x2, 0x81, 0x200, 0x1.
+
+Two facts pinned by reading seven genuine saves (the `CSVM.Tests/fixtures/planes204` fixture
+set): the paint UI's darkest shade saves as **(25,25,25)**, so every scheme-table slot listed
+as (0,0,0) round-trips through a save as 25/25/25 (the four Fury fixtures, each named for a
+shipped scheme, match their scheme's triple in every other slot; their saves also pin pattern
+indices blckswan = 1, fortune = 4, hughes = 6, studio = 11). And the family-bit byte at +0x84
+can carry stray bits above the four gun slots (one fixture holds 0xc3 with only slots 0-1
+occupied), so a reader must test bit n for slot n and never the whole byte.
+
+**Pattern index 0-13 is a row of the engine's own 14-entry name table** at `0x0060301c`, the same
+table `FUN_00401e80` builds `assets\graphics\<pattern>\` paths from ([`org/hangar.md`](../org/hangar.md)),
+so the index names the archive folder directly:
+
+| 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `blackhat` | `blckswan` | `blake` | `british` | `fortune` | `hollywd` | `hughes` | `medusas` | `cccp` | `sactrust` | `german` | `studio` | `broadway` | `itstaxi` |
+
+The four indices the fixture saves pin (blckswan 1, fortune 4, hughes 6, studio 11) all land on
+their own name, and each airframe's shipped `PX_ICON_<af>_<pattern>_*` sets are exactly the
+pattern list `PatternsFor` gives that airframe's skin prefix (`itstaxi` aside, which ships no
+icons at all). That cross-check is also what maps airframe id to skin prefix: 0 `agyro`, 1 `hel`, 2 `bal`,
+3 `blo`, 4 `bri`, 5 `dev`, 6 `fir`, 7 `fur`, 8 `kes`, 9 `pea`, 10 `war`.
+
+The saved-plane name index is a separate structure: 33-byte name records at `0x648534`,
+capacity 24 (bound `0x64884c`), filled by the `Planes\*.*` directory scan `FUN_00415000`
+(screen-flow callback 1024, case 0x400 of `FUN_00407670`; widget callback 2099 counts the
+same table through a filter). Importing a player's saved planes needs only the table above;
+nothing depends on it yet.
 
 ## Implementing this in the remake
 
@@ -281,9 +370,14 @@ colour, and all of them are gone:
   the chosen colour.* The UI's Colour dropdown picks the hue family and Shade picks how light
   or dark it is; their product is the single RGB that ends up in `paint_colorN`. There is no
   fourth stored field and nothing extra to model — a scheme really is three colours, and the
-  masks giving each slot exactly one colour is consistent, not a contradiction. The remake
-  exposes **RGB sliders** instead of the original's two dropdowns, which spans the same space
-  and more, so any original livery is reachable by matching its colour directly.
+  masks giving each slot exactly one colour is consistent, not a contradiction. The swatch
+  table above is that Colour/Shade space made concrete, and the hangar's paint screen now
+  drives the original's own two dropdowns over it; the **livery lab** keeps its RGB sliders,
+  which span the same space and more. The pattern table's six per-pattern defaults and the
+  50 decal names are transcribed to `CSVM/data/hangar_patterns.json` beside the swatches.
+  Two shade-level divergences between a pattern's hangar defaults and its `vehicle.json` AI
+  scheme are authored, not errors: `hollywd` slot 2 defaults to (70,40,132) where the AI
+  scheme carries (67,36,121), and `cccp` slot 3 to (243,194,0) against (245,211,0).
 
   This also **independently confirms `player_fortune`'s colours**, which had been derived only
   by rendering. `CustomPlane Paint1 Bloodhawk.png` shows Colour/Shade of *red/red*,

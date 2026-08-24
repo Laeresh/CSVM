@@ -1,0 +1,33 @@
+{
+  "patterns": [
+    {"name": "blackhat", "mask": 1041, "colours": [21, 23, 23], "shades": [6, 4, 2]},
+    {"name": "blckswan", "mask": 128, "colours": [24, 24, 24], "shades": [0, 1, 7]},
+    {"name": "blake", "mask": 520, "colours": [13, 14, 19], "shades": [5, 4, 8]},
+    {"name": "british", "mask": 516, "colours": [21, 24, 26], "shades": [6, 1, 9]},
+    {"name": "fortune", "mask": 2047, "colours": [1, 26, 26], "shades": [8, 0, 9]},
+    {"name": "hollywd", "mask": 64, "colours": [16, 19, 24], "shades": [8, 4, 9]},
+    {"name": "hughes", "mask": 392, "colours": [6, 26, 26], "shades": [6, 0, 9]},
+    {"name": "medusas", "mask": 272, "colours": [25, 20, 8], "shades": [5, 1, 4]},
+    {"name": "cccp", "mask": 32, "colours": [25, 1, 6], "shades": [2, 8, 6]},
+    {"name": "sactrust", "mask": 1026, "colours": [16, 6, 24], "shades": [3, 6, 0]},
+    {"name": "german", "mask": 2, "colours": [25, 26, 24], "shades": [4, 0, 1]},
+    {"name": "studio", "mask": 129, "colours": [12, 26, 26], "shades": [8, 9, 0]},
+    {"name": "broadway", "mask": 512, "colours": [19, 26, 7], "shades": [4, 0, 7]},
+    {"name": "itstaxi", "mask": 1, "colours": [7, 26, 26], "shades": [8, 9, 0]}
+  ],
+  "decals": [
+    "00BBomber_logo1", "01BBomber_logo2", "02BlackHat_logo1", "03Blake_logo1",
+    "04British_logo1", "05BSwan_logo1", "06CCCP_logo1", "07Fhunter_logo1",
+    "08Fhunter_logo2", "09Hknights_logo1", "10Hknights_logo2", "11Hughes_logo1",
+    "12ITS_logo1", "13Luftwaffe_logo1", "14Medusa_logo1", "15Sacredtrust_logo1",
+    "16Colorado_logo1", "17Hawaii_logo1", "18Pacifica_logo1", "19Texas_logo1",
+    "20Dixie_logo1", "21Ace_star", "22AintyerHoney", "23BigHairy",
+    "24BigLug", "25bigstink", "26biscuit", "27bushpilots",
+    "28Crusher", "29DaddyO", "30FourofaKind", "31Fury",
+    "32Giveemhell", "33GreenwEnvy", "34HaveaDay", "35hawgwild",
+    "36joker", "37Lacey", "38LittleGreenMen", "39MissTake",
+    "40ohSoBlue", "41SheerJoy", "42sittinDuck", "43SkyPirate",
+    "44speeddemon", "45SuckerPunch", "46TomCat", "47Viking",
+    "48Gypsy", "49Ace_Star2"
+  ]
+}

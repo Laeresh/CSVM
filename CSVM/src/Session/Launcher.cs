@@ -831,12 +831,33 @@ public partial class Launcher : Node3D
         // menu-settable field explicitly, so a chosen loadout has to be handed over here or it
         // would be dropped exactly like any other field left out of that factory.
         var fits = new List<Flight.LoadoutChoice?>(players.Count);
+        // A custom pick reaches the session as its def, loaded here: the menu carries only the
+        // store name (PlanePickerRoster), and PlaneNode is the airframe's stock node, so without
+        // this read a custom plane would fly as the stock aircraft it is built on.
+        var customs = new List<Flight.CustomPlaneDef?>(players.Count);
+        Flight.CustomPlaneStore? store = null;
         foreach (var p in players)
         {
             planes.Add(p.PlaneNode);
             fits.Add(p.Fit);
+            Flight.CustomPlaneDef? custom = null;
+            if (p.CustomPlane is { } customName)
+            {
+                store ??= Flight.CustomPlaneStore.UserPlanes();
+                custom = store.Load(customName);
+                if (custom == null)
+                {
+                    // The file went away (or turned unreadable) between the picker's listing and
+                    // the launch. Flying the stock airframe is the honest fallback: PlaneNode is
+                    // already that aircraft, so the session builds rather than refusing.
+                    GD.PushWarning($"custom plane '{customName}' could not be loaded, " +
+                                   $"flying the stock {p.PlaneNode}");
+                }
+            }
+
+            customs.Add(custom);
         }
-        _spec = SessionSpec.FromMenu(_cli, chapter, planes, mode, iaDef, fits);
+        _spec = SessionSpec.FromMenu(_cli, chapter, planes, mode, iaDef, fits, customs);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.

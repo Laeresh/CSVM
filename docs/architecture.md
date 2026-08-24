@@ -52,6 +52,8 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/InstantAction.cs` — `InstantActionDef` + the `ia.zrd.json`/`--ia=` readers: mission type, wingmen, four waves, ace, with every optional key resolved to the original's own built-in default.
 - `src/Mech3/AiSkills.cs` — the `ai_skill_parameters` endpoint pairs from player.json (1–9 ratings, linear between the decoded endpoints) + the roster accessors: the skill vector (slots 22–30 by stat name), `primary_target` (slot 6) and `rating_biases` (slot 33, `AiRatingBias` wildcards).
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
+- `src/Mech3/UiStrings.cs` — the original's UI string table (`extracted/rof/ui_strings.json`) by id: langui rows only (ids repeat across the file's two tables), `FormatMessage` placeholders (`%1!d!`) converted to composite format, leading `[FONTID]` tags stripped.
+- `src/Mech3/TgaImage.cs` — the engine-free TGA decoder behind the hangar's art (`extracted/rof/ASSETS/GRAPHICS`): types 2 and 10 (RLE) truecolour at 24/32 bits, both row orders, to top-down RGBA8; anything else, or a malformed/absent file, is null.
 - `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
 - `src/Mech3/CompiledAnim.cs` — reader for the compiled `cam_anim`/`mis_anim` archives: anim defs, sequences/events, lazy SI-script pool.
 - `src/Mech3/AnimDefs.cs` — the zrdr front-end: ANIMATION_DEFINITIONS reader files, normalized into one `AnimDefinition` model.
@@ -141,6 +143,11 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
 - `src/Flight/StuntRaceBoard.cs` — the race's shared ranked results overlay, on its own full-window CanvasLayer above the splitscreen panes.
 - `src/Flight/ScoreStore.cs` — stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only.
+- `src/Flight/CustomPlaneDef.cs` — a custom-built plane as a pure model: the decoded 204-byte record's chosen fields (airframe, engine, armour x4, guns x4 with twin bits, hardpoint counts x2, paint pattern/picks/colours, name), none of its derived fields; engine-free.
+- `src/Flight/CustomPlaneStore.cs` — one JSON file per custom plane under `user://Planes/` (versioned schema, name = identity, same name overwrites); list/load/save/delete over a plain absolute directory so it unit-tests, `UserPlanes()` resolves the `user://` scheme. `Delete(name)` sanitises the name exactly as `Save` does and treats a missing file as a no-op. Version 2 stores paint as the original's index pairs plus three decals; a version-1 file still loads, its "picks" read as the decals they were and each RGB triple mapped to the nearest authored swatch, and upgrades on its next save.
+- `src/Flight/CustomPlaneRecord.cs` — import-only reader for the original's 204-byte saved-plane files (`docs/formats/paint.md` "Saved custom planes"): one record or a whole install `Planes\` directory to `CustomPlaneDef`s; every paint field read as the indices it is (colour, shade, decal), the +0x68 RGBA left out as the engine's own cache and exposed by `StoredColour` for the cross-check, derived fields ignored, an unreadable file reads as null.
+- `src/Flight/CustomPlaneBuild.cs` — the join from a saved `CustomPlaneDef` to what a spawn consumes: a `LoadoutDef` over the airframe's stock fit (calibre + twin onto slot markers, hardpoint counts onto the two wings' pylons), a `PaintScheme` from the record's pattern and colours, and a `PlaneDamage` ledger with the bought armour on the four zones; engine and weight deliberately reach nothing.
+- `src/Flight/HangarEconomy.cs` — the hangar's decoded economy over a `CustomPlaneDef`: the airframe/gun/engine tables as data, per-line costs and weights, the two totals, the capacity/engine purchase verdict, and the display-only star ratings; pure, provenance in `docs/org/hangar.md`.
 - `src/Flight/VersusMatch.cs` — Dogfight deathmatch bookkeeping: per-player kills/deaths, the host-fed match clock, threshold/time-out completion, ranked standings.
 - `src/Flight/VersusHud.cs` — per-pane Dogfight status line: remaining time, this player's kills, the leader, and the hostile marker.
 - `src/Flight/VersusBoard.cs` — the Dogfight results overlay, one whole-window CanvasLayer above the splitscreen panes.
@@ -203,8 +210,19 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BoardMenuView.cs` — draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
-- `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session.
+- `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session; also the hangar's two doors and its renderer.
 - `src/UI/InstantActionPresets.cs` — the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
+- `src/UI/PlanePickerRoster.cs` — the one roster every human plane picker draws: 11 stock airframes then the store's saved customs, each custom carrying its store name and its airframe's stock node (D32's launch seam); engine-free build/lookup rules.
+- `src/UI/HangarFlow.cs` — the Build Custom Plane flow, engine-free: the original's nine screens over one scratch `CustomPlaneDef`, back/next navigation, the `IHangarPage` mount point C22-C26 fill (rows, detail, stepper, optional page `HangarArt` and a per-row one), the plane-selection screen's two-stage delete (the original's Sell Plane with no economy to sell into), and the gated commit into `CustomPlaneStore`.
+- `src/UI/HangarAirframePage.cs` — the AIRFRAME screen: all 11 airframes as rows, focus previewing one and confirm picking it (raising the string-206 defaults ask as an inline two-row confirm), the stat table's figures and the economy's star ratings per row, the focused airframe's blueprint TGA as page art; nothing is ticked until a pick is made and the ←→ stepper is inert.
+- `src/UI/HangarEnginePage.cs` — the ENGINE screen: the airframe's six engines (langui 3100+af*6+id) plus the None row (1165, the decoded dropdown's own last row; 1171 stays the purchase wording), the pick ticked and opened on, confirm writing the scratch engine and the stepper inert, each row's decoded cost and weight via `HangarEconomy.EngineLine`.
+- `src/UI/HangarArmourPage.cs` — the ARMOR screen: the four zones through their own langui formats (1191-1194) on the record's own units x5 display scale (0 to 60 in fives, the original's 13-row dropdown), the detail naming the pick as that dropdown does (1165 "None" on zero, else 1170 of units x5) beside the x4 priced cost and weight.
+- `src/UI/HangarGunsPage.cs` — the GUNS screen: always four slots titled from the stat table's slot-title strings, each stepping the original's 11-entry dropdown (five calibres single, five twinned via format 506, No Gun 3315), the detail pricing the slot's wing or turret column (doubled for twin) with the calibre's magazine rounds.
+- `src/UI/HangarHardpointsPage.cs` — the HARDPOINTS screen: the two per-wing counts through langui 1176/1177, the stepper walking 0-4, the detail speaking the dropdown's 1165/1168/1169 vocabulary with the decoded $410 / 480 lb per hardpoint and the wing's line total.
+- `src/UI/HangarPaintPage.cs` — the PAINT screen on the original's own model: the pattern row stepping only the patterns this airframe's availability mask allows (labels langui 3425+index) and loading that entry's six colour/shade defaults, a colour row and a shade row per slot over the 27-row swatch table and its ramps, three decal rows each showing the chosen decal's own tile out of the shipped `PX_P_DECALS.TGA` sheet, and a live preview composed from the pair's own paint-screen artwork (`PaintIcons`, `PX_ICON_<airframe>_<pattern>_0..3.TGA`: the detail plate plus three region masks in their alphas, alpha-over in slot order then the plate on top). That is a different mask set from the `.BM` skins `PlanePainter` paints the flying aircraft with, and a different formula: no shading multiply and no weight normalisation, so a fully-masked texel IS its resolved colour.
+- `src/Flight/HangarPaintTables.cs` — the paint screen's decoded tables as CSVM data: the swatch table (`data/hangar_swatches.json`, 27 rows of base colour, default variant and shade ramp) and the pattern table plus the 50 decal names (`data/hangar_patterns.json`). `Resolve(colour, shade)` is the original's own resolver; `Available(pattern, airframe)` is the availability mask; `Nearest(rgb)` maps a version-1 store file's free triple onto an authored swatch. Engine-free and pure, so the whole colour model resolves without a session.
+- `src/UI/HangarNamePage.cs` — the PLANENAME screen: one row per character stepped through a filename-safe alphabet plus a length row that adds and removes them, capped at the original's 32-character name, with the detail line assembling the name and marking the focused character.
+- `src/UI/HangarPurchasePage.cs` — the PURCHASE screen: the itemised review, one row per priced thing the scratch plane carries (airframe always, engine when chosen, armed gun slots, armoured zones via 1191-1194, wings with hardpoints via 1176/1177) with its decoded cost and weight, a totals row, and the Purchase Now row that commits, flagged with the problems text (1182 + 1227 / 1171) whenever the verdict is not Ok.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
@@ -3162,6 +3180,165 @@ name throws, the same fail-loud policy `LaunchMenu.AircraftFor` applies to wizar
 fly stock airframes, so nothing here waits on the hangar. Units in
 `CSVM.Tests/InstantActionPresetsTests.cs`.
 
+The hangar (`HangarFlow`) has two doors, both through `OpenHangar`, which remembers the screen to
+land back on: a trailing `Build Custom Plane` row past the three Mode rows, and the same row past
+the eleven airframes on the Instant Action plane pick (PLAN-hangar Decision 6). `Screen.Hangar`
+draws through the same centred body every other screen uses: heading, rows, detail and footer all
+read off `_hangar.Page`. The rows and their detail line live in a content column of their own, so
+that when the page's `Art` is non-null an art column (`HangarArtColumn`) stands to its LEFT, the
+side the original's own paint screen puts its preview on: the page's decoded RGBA as a
+letterboxed texture with a caption, and under it the focused row's own smaller picture when
+`RowArt` returns one (the paint screen's decal tile). Each texture is rebuilt only when the page
+hands over a different image, and `LayoutScale` counts the column only where it is taller than the
+rows it stands beside. The detail label autowraps in that 560px content column, which is what
+keeps the airframe-defaults ask (langui 206, a two-sentence question) on a 16:9 screen instead of
+stretching the centred body past its edges. Every hangar screen also carries the persistent totals line under its heading
+(`HangarFlow.TotalsLine`, PLAN-hangar Decision 10), error-coloured via `TotalsOverweight` and
+counted by `LayoutScale` the same way. A page needs no change here, art included. The hangar's
+screens sit behind a flow rather than behind the screen enum, so `--menu=` reaches them through
+`OpenHangarAid`: `hangar` the plane list, `defaults` the airframe-defaults ask, `paint` the
+preview on a Fury in Fortune Hunters colours with a nose decal chosen. A screenshot aid only.
+Every human plane picker (the lone-pilot centred Plane screen and every splitscreen pane) draws
+one roster, `_roster`: the eleven stock airframes then the store's saved customs
+(`PlanePickerRoster.Build`), re-read by `ShowMenu` and by `CloseHangar` so a new save appears
+without a menu restart. A completed build lands in `LastBuiltPlane` and `CloseHangar` puts player
+1's cursor on the new plane by name (the original's index-11 after-build select). A custom pick
+survives the menu layer as `PlayerChoice.CustomPlane`; its `PlaneNode` is the airframe's stock
+node, and `Launcher.StartSessionFromMenu` reads the name back into a def through
+`CustomPlaneStore` and carries it on `SessionSpec.MenuCustomPlanes`, one entry per pane, for
+`HumanFlightAdapter.Assemble` to build the aircraft from (`CustomPlaneBuild`). A plane whose file
+went away between the listing and the launch warns and flies the stock airframe rather than
+refusing the session. Wingmen stay stock-only (`Planes`), and the scripted paths
+(`--plane=`, `--det`) never see the roster: they name planes by node in `SessionSpec` directly.
+⚠ The plane pick's hangar row is offered only to a lone pilot under Instant Action
+(`HangarRowOnPlaneScreen`): it trails the customs, a splitscreen pane never draws it, and
+`RebuildPanes` clamps every cursor back into the roster, so `PlaneIndex` can never point past the
+roster anywhere a plane is actually read. The row is a door, not an aircraft, so it cannot be
+locked or confirmed and no launch path sees it. Outside `OpenHangarAid`'s scripted-screenshot
+values, the hangar is reached only through interactive menu input — no `SessionSpec` field,
+nothing a `--det` run can touch.
+
+## src/UI/PlanePickerRoster.cs
+The picker roster rule behind `LaunchMenu._roster`, engine-free so it tests without a menu
+instance. `Build(stock, customs)` lists the given stock rows first in their given order, then one
+`PickerPlane` per saved `CustomPlaneDef` in the store's own name-sorted order (the original's
+11+customs list sizing, `docs/org/hangar.md` count callback 1024). A custom row carries its store
+name in `CustomName` (the identity every consumer distinguishes stock from custom by) and its
+airframe's STOCK node in `Node`; `AirframeNode(id)` is the id 0-10 to `player_*` node table in
+the stat table's row order, the Hoplite resolving to `player_autogyro` (the shipped data's
+two-names aircraft). `IndexOf(roster, name)` is the after-build auto-select's case-blind lookup;
+-1 when absent. Deliberately NOT `Session.PlaneRoster` (which answers "which plane does player N
+fly" off a `SessionSpec`): this type is the menu-side list, that one the session-side read.
+Tests: `CSVM.Tests/PlanePickerRosterTests.cs`.
+
+## src/Flight/CustomPlaneBuild.cs
+The fidelity-bearing join: a saved `CustomPlaneDef` onto the three things a spawn consumes. Pure
+and engine-free — every input is handed in, so nothing here looks up an airframe, a store or a
+session.
+
+`LoadoutFor(def, stockBase)` builds over the airframe's stock fit, which stays unmutated.
+**Guns**: slot n's calibre row c becomes `Caliber = 30 + 10c` with `WeaponId` left null, so
+`Loadout.Bind` resolves `wep_{caliber + ammoIndex}` and the Ammo Selection layer still composes on
+top (`LoadoutChoice.ApplyTo` over the result). A twin mount is ONE gun over `firepoint(9-2n)` and
+`firepoint(10-2n)`, a single takes the low one; the stock slot's own marker list narrows that pair
+when the rig is short of it, which is what keeps a twin pick on the Kestrel's slot 1 off the
+`firepoint8` it does not have (binding an absent marker is a loud throw). `Turret` and `Mount` come
+from the stock slot; an empty pick (the dropdown's id 5) omits the slot entirely rather than
+building it with no rounds. **Hardpoints**: the record counts pylons per wing and the stock fit says
+what hangs on each. `Loadout.PylonFillOrder` alternates the wings entry by entry, so its two
+interleaved halves are the wings (1-4 and 5-8; which is physically left is undecoded, `markers.md`
+omits the pylon positions). A wing's count takes that wing's fill-order entries in order and **caps
+at the pylons the stock fit authors** — the record names no ordnance of its own, so a fourth pylon
+on a Bloodhawk wing has nothing to hang. Unchosen entries keep their place as
+`LoadoutChoice.None`, since dropping one would slide every later pylon onto the other wing.
+
+`PaintFor(def, patternName)` is the record's three resolved colours and its three decals under a
+pattern name the caller resolves from the 0-13 index (`HangarPaintPage.PatternName`). The decals
+are the same 0-49 index space `vehicle.json`'s `paint_decalN` uses, so they carry straight over; a
+slot the build never chose keeps the `-1` "leave the shipped placeholder" sentinel, which a fresh
+plane has on all three (the pattern defaults carry no decals).
+
+`ArmouredParts` / `DamageFor` put the bought armour on the damage zones. Armour units reach the
+pool at `ArmourUnitScale` = 5, the record's own premultiply, and **no other rescaling**: CSVM's
+`destroyable_parts` armour pools are the shipped stock allocations (15/20/25/30/35/40,
+`docs/formats/vehicle.md`), the same scale the original's hangar writes its raw x5 floats onto. Only
+the ARMOUR pool is set; structure (`MaxHp`) stays the def's, exactly as the original leaves the
+mission file's structure alone. Parts are **copied**, never overwritten: a `PlaneStats` is cached
+and shared by every plane of that airframe. A zone the record does not name is carried across
+untouched. The vehicle totals stay derived — no player def authors an `armor`/`health` pair, so
+`PlaneDamage` sums the rebuilt zones, which is the original's own recompute-on-every-zone-write.
+
+⚠ **Engine and weight reach nothing.** The engine pick decomposes into a power tier and a nitrous
+flag; the tier indexes the same shipped `engines.json` table `PlaneStats.EnginePower` already reads
+an airframe's stock row from, so wiring it means moving `FlightModel`'s thrust term rather than
+adding anything here, and it is deliberately not part of this join. Total weight and the stat-table
+power rating are hangar-only in the original and must never gain a flight dependency
+(`docs/org/hangar.md`, "Into the mission").
+
+## src/UI/HangarFlow.cs
+The Build Custom Plane flow, engine-free the way `BoardMenu` is: the launchscreen owns every Godot
+control and this file owns the order, the state and the rules. `HangarFlow.Order` is the original's
+nine screens (plane selection, airframe, engine, armour, guns, hardpoints, paint, name, purchase;
+`docs/org/hangar.md`), walked over one scratch `CustomPlaneDef`. Nothing is written until
+`Commit()`, which is what makes cancelling from any screen residue-free by construction rather than
+by an undo path: `Back()` off the first screen sets `Exit = Cancelled` and the scratch is simply
+dropped. `Commit()` is the whole gate in one place: a name (langui 203), then
+`HangarEconomy.Price`'s verdict in the original's own words (1182 + 1227 OVERWEIGHT, 1182 + 1171 No
+Engine Selected), then `CustomPlaneStore.Save`; funds are never checked (PLAN-hangar Decision 2).
+Editing a saved plane starts from a copy made through the store's own canonical serialisation, so
+abandoning an edit cannot touch what is on disk. `DeleteSaved(name)` is the plane-selection
+screen's Sell Plane (`ps_b_sellp`) in a build with no economy: it removes the file, re-reads
+`Saved` and clamps the cursor back into the shortened list. `HangarPlaneSelectionPage` reaches it
+through a two-stage gesture rather than a stepper, since a stepper on a destructive action is one
+stray nudge from losing a build: a trailing `Delete a saved plane` row (offered only while
+anything is saved) opens a second list whose every row reads `Delete <name>`, plus Cancel, so the
+press that removes a plane names the plane it removes. The list closes when it empties. The
+launchscreen's own `RefreshRoster`, which `CloseHangar` runs on every exit, is what keeps a
+picker cursor inside the shortened roster afterwards.
+
+`IHangarPage` is the mount point Wave C's remaining items fill: `Title`, `RowCount`, `RowText`,
+`Detail`, `Step` (the launchscreen's live ←→ stepper), `Accept` (returning false hands the press
+back to the flow, which advances), `OpeningRow` (the row the cursor lands on when the flow arrives,
+0 for most screens and the current pick on the two pick screens), `TotalsPlane(row)` (which plane
+the shell's totals row prices while that row is focused, the scratch plane by default and null to
+hide the row), `Art`, an optional decoded `TgaImage` plus caption the shell
+renders (null by default via `HangarPage`; the C22 seam every art-bearing screen uses), and
+`RowArt(row)`, the same thing again for the focused row alone (only the paint screen's decal rows
+have one). All plain
+text, plain indices and raw pixels, so a page is engine-free and testable and the shell needs no
+change to draw one. `HangarFlow.DataRoot` (optional, null in tests) is where a page resolves its
+TGAs; absence reads as no art. `HangarPage` is the base carrying the flow, the scratch plane and
+the heading resolved from the screen's own langui id (1017/1004-1010/1401);
+`HangarFlow.PageFor`'s switch is the single line each of C22-C26 replaces; `HangarPlaceholderPage`
+(the right heading, a Continue row and a real summary of what the scratch plane carries, editing
+nothing) stands only in the switch's default arm now that every screen has its own page.
+`HangarPlaneSelectionPage`, `HangarAirframePage`, `HangarEnginePage`, `HangarArmourPage`,
+`HangarGunsPage`, `HangarHardpointsPage`, `HangarPaintPage`, `HangarNamePage` and
+`HangarPurchasePage` (each its own file) are all real; the placeholder stands only in the
+switch's default arm. `HangarFlow.TotalsLine` (with its `TotalsOverweight` colour flag) is the
+persistent second stats line the launchscreen draws under every hangar screen's heading
+(PLAN-hangar Decision 10): the build's total price and weight against the airframe's capacity,
+recomputed from `HangarEconomy.Price` on demand and carrying the original's OVERWEIGHT word
+(langui 1227) when over. Which plane it prices is the page's answer, through `TotalsPlane`: the
+plane-selection screen prices the saved plane under the cursor and hands back null on its action
+rows (New Plane, the delete stage, Cancel), where the line is "" and the shell draws nothing.
+
+The airframe-defaults ask (string 206) lives on the flow: `DefaultsAsk` names the airframe whose
+defaults are on offer and `DefaultsAskText` carries the formatted question (%1 the new airframe,
+%2 the plane being built, its name or its previous airframe's name). `PickAirframe` raises it, so
+only an explicit confirm on a row that is not already the pick asks (the switch itself stands
+either way); a new plane arrives with `AirframeChosen` false, nothing ticked and nothing asked,
+and `StartFromSaved` starts chosen and never asks. `AnswerDefaultsAsk(true)`
+runs `LoadAirframeDefaults`: gun picks and per-wing hardpoint counts read back off the airframe's
+stock fit (`StockFits`, the A3 mapping and `StockWingCounts`, D32's wing rule reversed), engine
+id 1 (the stock Lvl-2 tier), and armour from the stock zone allocations (`ZrdrPath` through
+`PlaneStats`, pools / 5); a missing source loads that default empty. Off-engine coverage:
+`CSVM.Tests/HangarFlowTests.cs`, `CSVM.Tests/HangarAirframePageTests.cs`,
+`CSVM.Tests/HangarEnginePageTests.cs`, `CSVM.Tests/HangarArmourPageTests.cs`,
+`CSVM.Tests/HangarGunsPageTests.cs`, `CSVM.Tests/HangarHardpointsPageTests.cs`,
+`CSVM.Tests/HangarPaintPageTests.cs`, `CSVM.Tests/HangarNamePageTests.cs` and
+`CSVM.Tests/HangarPurchasePageTests.cs`.
+
 ## src/UI/BoardMenu.cs
 A board's cursor and item list, engine-free so the selection rules test off engine the way
 `PauseState` does. Holds no input source: the board polls its menu owner through `MenuInput` and
@@ -4397,6 +4574,19 @@ of `Loadout.Bind`, so the lab panel can arm a mount the stock file never names. 
 called `Respawn` (which plays `startprops` on `CrashRuntime` if one exists) before the crash runtime
 is built below — so this method plays `startprops` once more right after
 `BuildFlightCrashRuntime`, the only way the very first spawn's choreography is not silently skipped.
+
+**A custom-built plane** (`SessionSpec.MenuCustomPlanes[pi]`, null on every stock pick and empty
+outside a launchscreen launch) changes four things here and nothing else. The `PlaneBuilder`'s
+`scheme` becomes `CustomPlaneBuild.PaintFor` instead of the livery resolver's pick, so the paint
+reaches the model through the same texture-substitution path the livery lab drives; the loadout
+base becomes `CustomPlaneBuild.LoadoutFor` over the airframe's stock def, with the menu's
+`LoadoutChoice` still composing on top of THAT; `Damage` becomes `CustomPlaneBuild.DamageFor`, the
+same zones with the bought armour; and the display name (stunt scoreboard, race board, best-time
+key) becomes the plane's own name. `--paint=` and `--loadout=` each still win over their half,
+being about this run rather than about the aircraft. The engine pick reaches nothing — a verbose
+line names it as inert and says why. The targeting HUD still prints the AIRFRAME's name for a
+custom plane (`PlaneRoster.PlaneDisplayName` off `FlightController.Stats`), which only shows in
+splitscreen, where one pilot brackets another's build.
 
 ## src/Session/EffectCatalogue.cs
 The record of which authored anims are playable effects, and what their defs need staged: the name

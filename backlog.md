@@ -446,15 +446,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   risk:** the pickup entities have not been located, and they may be mission-scripted rather
   than placed in the world data. Locate them before scheduling.
 
-- `BL-067` `[Feature]` **The gun/hardpoint configurator UI** (deferred from M3, decision 9 — M3 flies stock loadouts
-  only, but its loadout model is data-driven so this drops in without rework). The original's
-  screens are `GUNS.SCRIPT` (4 gun slots, `gn_d_gun0..3`, engine callbacks 2249/2250) and
-  `HARDPOINTS.SCRIPT` (2 hardpoint slots, `hp_d_point0..1`, callback 2245), plus
-  `PLANECONSTRUCTION.SCRIPT` / `PURCHASE.SCRIPT`. Both are **pure UI layout** — per-plane slot
-  counts, weapon costs and the economy are all executable-resident, so the *buying* half would
-  have to be invented. The mount names are data (`IDS_AIRFRAMEGUNGROUPNAMES`, ui_strings
-  3060–3079) and the per-plane stock table is authored, so the *placing* half is real.
-
 - `BL-226` `[Feature]` `[Blocked: cockpit view]` **The incoming-fire cue set's other two halves are blocked on things that do not exist
   yet.** The near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,
   `player.json`'s `bullet_hit_sound`) and `window_hit_sg` (= `snd_windowhit1-3`, non-3D) did not.
@@ -576,8 +567,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the analogous case but was not observed, so do not assume it cycles both ways either.
   (c) Empty-slot skipping is not in question and must survive the change: both directions land on
   an armed slot.
-  *Cross-refs:* `BL-067` (the configurator, where mixed loadouts finally make the direction
-  matter), `BL-296` (ActionMap/rebinding seam), `git log --grep=BL-062` for what settled the
+  *Cross-refs:* the hangar's custom loadouts (`docs/plans/PLAN-hangar.md`, landed) are where
+  mixed fits make the direction matter, so this item's value went up when that shipped;
+  `BL-296` (ActionMap/rebinding seam), `git log --grep=BL-062` for what settled the
   per-hardpoint half.
 
 - `BL-363` `[Bug]` **Only aircraft are AI targeting candidates, so an escort with no enemy planes
@@ -2571,25 +2563,6 @@ usual.
   *How you'd know it worked:* fail a stunt mission deliberately, confirm the wrap-up claims no best
   and `user://stunt_scores.json` is byte-identical afterwards; then complete one and confirm it
   does record.
-
-- `BL-354` `[Feature]` **The hangar: Build Custom Plane.** Split out of
-  [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing (2026-08-14) as a milestone
-  of its own rather than a wave of that plan. `IA_B_BUILD` opens the customisation flow, which
-  `crimson.rof` ships whole: `PLANESELECTION`, `PLANECONSTRUCTION`, `AIRFRAME`, `ARMOR`, `ENGINE`,
-  `GUNS`, `HARDPOINTS`, `PAINT`, `PLANENAME`, `PURCHASE`. Instant Action's pilot-plane dropdown is
-  sized `callback(1024) + 11`, the eleven stock airframes plus however many custom planes the player
-  has saved, and `gui_continue` selects index 11 (the first custom plane) after a build returns.
-  **What already exists here.** The paint half is decoded and implemented: the `.BM` region masks,
-  the three-slot colour formula, the decal set and the per-aircraft pattern lists all live in
-  [`docs/formats/paint.md`](docs/formats/paint.md) and `Mech3/PatternLibrary` + `Mech3/PlanePainter`,
-  and the livery lab already steps them. The armour, engine, guns and hardpoints screens have no
-  decode yet.
-  ⚠ **Traps.** (a) Saved custom planes are 204-byte files in the install's `Planes/` directory and
-  are only **partly** decoded: the name at 0x04 and the three colours at 0x68 as RGBA, with the
-  pattern and decal indices immediately before them unread ([`docs/formats/paint.md`](docs/formats/paint.md),
-  "Saved custom planes"). Importing a player's existing planes needs that finished; creating our own
-  does not, and the two should not be conflated. (b) `PURCHASE` implies an economy, which belongs to
-  the campaign and not to Instant Action.
 
 - `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
   (C1/M04 `--generators`, user-reported 2026-08-13).** The spawn position is decoded-correct: the

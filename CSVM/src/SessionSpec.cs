@@ -271,6 +271,14 @@ public sealed record SessionSpec
     /// or <see cref="RocketOverride"/> beats these: both are testing flags reaching nothing a player
     /// has, and a playtest row's evidence depends on getting the fit it names.</summary>
     public IReadOnlyList<LoadoutChoice?> MenuLoadouts { get; private set; } = Array.Empty<LoadoutChoice?>();
+
+    /// <summary>The custom plane each player picked, one per pane and null where a pane took a
+    /// stock airframe; empty outside a menu launch. The def rides here rather than its store name
+    /// because the launch reads it four times (guns, pylons, paint, armour) and a plane deleted
+    /// mid-session must not change what is flying.</summary>
+    public IReadOnlyList<CustomPlaneDef?> MenuCustomPlanes { get; private set; } =
+        Array.Empty<CustomPlaneDef?>();
+
     public int GunSelect { get; private set; }
 
     /// <summary><c>--target=</c>: the scripted twin of the targeting keys.
@@ -1063,12 +1071,14 @@ public sealed record SessionSpec
     /// — the &gt;= 2-player Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. <paramref
     /// name="iaDef"/>, when given, decides <see cref="Scenario"/>/<see cref="Stunt"/> instead.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
-        MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null)
+        MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
+        IReadOnlyList<CustomPlaneDef?>? customPlanes = null)
     {
         var names = planeNodes.ToArray();
         return cli with
         {
             MenuLoadouts = loadouts ?? Array.Empty<LoadoutChoice?>(),
+            MenuCustomPlanes = customPlanes ?? Array.Empty<CustomPlaneDef?>(),
             Chapter = chapter,
             PlaneNames = names,
             // An empty pick cannot come from the launchscreen (it launches only when every joined

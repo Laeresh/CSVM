@@ -82,14 +82,34 @@ internal sealed class HumanFlightAdapter
         string planeName = _in.InstantActionPlayerPlaneNode ?? PlaneRoster.PlaneFor(_spec, pi);
         var stats = _in.StatsFor(planeName);
 
-        // Every player flies the Fortune Hunters livery unless --paint says otherwise,
-        // as the original's stock planes do.
+        // The plane this pilot BUILT, when they picked one: its guns, pylons, paint and armour
+        // replace the airframe's stock ones below. Null on every stock pick, and empty outside a
+        // launchscreen launch, so no scripted path ever sees one.
+        var custom = CustomPlaneFor(pi);
+        string planeDisplay = custom?.Name is { Length: > 0 } customName
+            ? customName
+            : PlaneRoster.PlaneDisplayName(stats);
+
+        // The engine pick, the original's registry override: the authored engines.json tier row
+        // replaces the airframe's stock EnginePower on a COPY (the stats object is the shared
+        // per-airframe cache). Stock pick (id 6) keeps the airframe's own row; nitrous is inert.
+        if (custom != null
+            && Flight.CustomPlaneBuild.EnginePowerFor(_in.ZrdrPath, custom) is { } enginePower)
+        {
+            stats = stats.WithEnginePower(enginePower);
+        }
+
+        // Every player flies the Fortune Hunters livery unless --paint says otherwise, as the
+        // original's stock planes do; a custom plane wears the paint it was built with instead,
+        // through the same substitution path the livery lab drives. --paint still wins over both.
         long mark = StartupProfile.Mark();
         // cockpitInterior: a human rig is the only one whose pilot can look out of a cockpit
         // (PLAN-cockpit-view, B11) — FlightRoster's AI builder deliberately does not ask for one.
         var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
-            scheme: _liveries.SchemeFor(pi, _in.ZrdrPath, _in.PaintRng,
-                _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),
+            scheme: custom != null && !_liveries.PaintRequested
+                ? Flight.CustomPlaneBuild.PaintFor(custom, UI.HangarPaintPage.PatternName(custom.PaintPattern))
+                : _liveries.SchemeFor(pi, _in.ZrdrPath, _in.PaintRng,
+                    _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),
             patterns: _liveries.Patterns, cockpitInterior: true);
         var planeModel = planeBuilder.Build(planeName);
         StartupProfile.Record("plane", mark);
@@ -121,7 +141,12 @@ internal sealed class HumanFlightAdapter
             WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod),
             Surfaces = ControlSurfaceAnimator.Build(planeModel),
             Collider = PlaneCollider.Build(planeModel),
-            Damage = stats.DestroyableParts.Count > 0 ? PlaneDamage.For(stats) : null,
+            // A custom plane's four bought zones stand in for the airframe's stock ARMOUR pools,
+            // on those pools' own scale; structure stays the def's and the vehicle totals stay
+            // the sum over zones. Nothing scales a human rig's pools, so the player never is.
+            Damage = stats.DestroyableParts.Count == 0 ? null
+                : custom != null ? Flight.CustomPlaneBuild.DamageFor(stats, custom)
+                : PlaneDamage.For(stats),
             CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
             GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
             TouchdownDefs = _in.TouchdownDefs,
@@ -141,7 +166,13 @@ internal sealed class HumanFlightAdapter
         var loadoutDefName = _spec.LoadoutOverride ?? stats.DefName;
         if (_in.StockLoadouts.For(loadoutDefName) is { } stockDef)
         {
-            var ldef = MenuFitFor(pi) is { } choice ? choice.ApplyTo(stockDef) : stockDef;
+            // A custom plane's guns and hardpoints replace the stock ones and the Ammo Selection
+            // layer composes over THAT (the built def leaves WeaponId null so a picked ammo still
+            // resolves). --loadout= names a def outright, so it takes the whole fit either way.
+            var baseDef = custom != null && _spec.LoadoutOverride == null
+                ? Flight.CustomPlaneBuild.LoadoutFor(custom, stockDef)
+                : stockDef;
+            var ldef = MenuFitFor(pi) is { } choice ? choice.ApplyTo(baseDef) : baseDef;
             try
             {
                 // The weapon lab flies the FULL-RIG loadout instead: every firepoint and
@@ -232,6 +263,17 @@ internal sealed class HumanFlightAdapter
             foreach (var p in stats.DestroyableParts)
                 partDescs.Add($"{p.Name} {p.MaxHp:0}hp{(p.Critical ? "*" : "")}{(p.Engine ? " engine" : "")}");
             GD.Print($"damage parts: {string.Join(", ", partDescs)} (* = critical)");
+        }
+        if (custom != null)
+        {
+            // Names what the build reached and what it did not (nitrous stays inert: its flight
+            // effect is untraced, docs/org/hangar.md "Into the mission").
+            GD.Print($"{tag}custom plane: '{custom.Name}' on {planeName}, armour " +
+                     $"{custom.ArmourNose}/{custom.ArmourTail}/{custom.ArmourLeftWing}/" +
+                     $"{custom.ArmourRightWing} units x{Flight.CustomPlaneBuild.ArmourUnitScale}, " +
+                     $"hardpoints {custom.LeftHardpoints}+{custom.RightHardpoints}, " +
+                     $"engine {custom.Engine} thrust={stats.EnginePower:0.###}" +
+                     (custom.Engine >= 3 && custom.Engine <= 5 ? " (nitrous inert)" : ""));
         }
 
         // Every readout this pane draws for its pilot belongs to the controller's own FlightHud,
@@ -333,7 +375,7 @@ internal sealed class HumanFlightAdapter
                 // Racing: no per-player splits board — the shared ranked board
                 // below covers the whole window when the last pilot is in. The marker
                 // HUD shows this player's placing meanwhile.
-                race.Add(pi, controller.Stunt, PlaneRoster.PlaneDisplayName(stats));
+                race.Add(pi, controller.Stunt, planeDisplay);
                 controller.Race = race;
                 marker.Race = race;
                 marker.PlayerIndex = pi;
@@ -348,9 +390,9 @@ internal sealed class HumanFlightAdapter
                 // Solo: the end-of-run scoreboard — per-zone splits + total +
                 // persisted best time, keyed chapter/mission/plane in
                 // user://stunt_scores.json (race totals are deliberately not recorded).
-                var scoreKey = $"{_spec.Chapter}/{_spec.Mission}/{planeName}";
+                var scoreKey = $"{_spec.Chapter}/{_spec.Mission}/{custom?.Name ?? planeName}";
                 var scoreboard = StuntScoreboard.Build(controller.Stunt,
-                    PlaneRoster.PlaneDisplayName(stats), $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
+                    planeDisplay, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
                     ScoreStore.Load(), scoreKey, _in.ExitsToMenu, _in.PauseState, _in.MenuInputFor);
                 scoreboard.Restart = controller.Rerun;
                 scoreboard.Exit = _in.ExitSession;
@@ -476,6 +518,12 @@ internal sealed class HumanFlightAdapter
 
         return _spec.MenuLoadouts[pi];
     }
+
+    /// <summary>Pane <paramref name="pi"/>'s custom-built plane, or null to fly the stock
+    /// airframe. Empty on every launch that did not come off the launchscreen, so the scripted
+    /// paths (<c>--plane=</c>, <c>--det</c>) never see one.</summary>
+    private Flight.CustomPlaneDef? CustomPlaneFor(int pi) =>
+        pi >= 0 && pi < _spec.MenuCustomPlanes.Count ? _spec.MenuCustomPlanes[pi] : null;
 
     /// <summary>The session-wide flight data every rig reads — loaded once by
     /// <c>GameSession.BuildFlightRigs</c> and shared, in contrast to the per-player nodes
