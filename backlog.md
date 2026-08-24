@@ -1996,7 +1996,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   flight HUD carrying gauges alone (rockets, altimeter, artificial horizon, guns, airspeed, a
   compass tape) with no objectives anywhere, which is the footage confirmation that the readout does
   not belong there.
-  *⚠ Traps:* ⚠ nothing had completed when that pause screen was opened, so how a completed line is
+  **Why the tick was not on the line, traced.** Two independent causes. (1) C3/M01 builds **six**
+  display rows, not the four the pause screen lists: `OBJECTIVE3` authors `IDENTITY [SECONDARY, 11]`
+  and `OBJECTIVE31` authors `IDENTITY [SECONDARY, 12]`, two fields with **no message key**, so
+  `ObjectivesHud.cs:65` asks `Messages.Get(null)`, gets `""` (`Messages.cs:88`), and a completed
+  secondary renders as a bare tick with no text (`ObjectivesHud.cs:117`). (2) The readout is placed
+  at `(24, 64) * windowH/1080` (`ObjectivesHud.cs:123`), which on a 1280x720 window puts the first
+  line at y=43, overlapping the flight HUD's own `SPD / ALT / THR` strip.
+  *⚠ Traps:* ⚠ a two-field `IDENTITY` is the data's own shape, not a parse bug, so decide what an
+  unkeyed row should show rather than treating the empty string as a defect. ⚠ nothing had completed
+  when that pause screen was opened, so how a completed line is
   marked, and whether it stays listed, is still unknown and is what `CAP-45` still owes; do not
   invent a checkmark idiom from the placeholder. ⚠ the completed-row marking is the half that has an
   in-engine proof
@@ -2288,38 +2297,77 @@ usual.
   a cargo zeppelin (destroyable tanks slung below) and three Kestrels; fly back to the PANDORA and
   dock, which the film shows as flying into the airship's lit hangar bay, with an auto-land button
   as the alternative. The pause screen at t=12 s lists the four objectives.
-  ⚠ **The discriminating fact: of the three fly-to objectives, only the mountain village registers
-  in our build; the tunnel already fails.** One condition kind succeeding once and failing twice
-  argues against "the kind is unimplemented" and for something per-objective: a target node that
-  does not resolve, a per-objective radius or volume, or an objective never woken. <TODO: mechanism
-  under investigation; fill in which, with `file:line`.> *⚠ Traps:* one known
-  class of objective is unsatisfiable by design today, `ANIM_STATE <def> EXECUTED` (`BL-448`),
-  because nothing plays a mid-mission cutscene; do not fold every non-completing objective into
-  that explanation before checking the condition each one actually uses. *Cross-refs:* `BL-448`;
-  `BL-454`, since the readout not marking the completed line is why the user could not tell WHICH
-  objective completed; `docs/PLAN-M5-campaign.md` D31 owns the objectives runtime.
+  ⚠ **The conditions are not broken. The player is never told where to go.** Traced against a live
+  `--campaign=<profile>:0` session (the mission is `C3/M01`, "Hawaii mission 1"; the user's "M02" is
+  their own naming). All six `TRAVELERS` references resolve, and placing the aircraft at each site
+  completes that site's objective on the first unheld tick: the tunnel (`t_chamber`, r=200) at
+  d=75, the village (a bare point, r=200) at d=147, the wreck (`shipwreck`, r=200) at d=115. The
+  kind is implemented at `CampaignDirector.cs:582` and `ObjectiveGraph.cs:518` and works. What is
+  missing is the presentation: `ObjectiveGraph` maintains `ObjectiveTargets` (`ObjectiveGraph.cs:205`),
+  `OtherTargets` (`:208`) and `HelpLabels` (`:211`) and raises `TargetsChanged` (`:171`), and
+  **nothing in `CSVM/src` consumes any of them** outside one suite assertion. `ADD_OBJECTIVE_TARGET`
+  and `SET_HELP_LABEL`, which is how the original puts a marker and a label on `t_chamber`,
+  `grasshut2` and `shipwreck`, are a write-only store. The briefing map does not draw its flags
+  either (`BL-450`), so the sites are not learnable before takeoff. The player had four sentences of
+  text and nothing else, and found one site of three by luck. *Fix shape:* consume the target and
+  label store, which is a HUD/marker question, not an objectives-runtime one.
+  *⚠ Traps:* ⚠ do not "fix" the conditions or widen a radius: they are proved correct, and widening
+  one would hide the real bug. ⚠ Three of the mission's six display rows are blocked on something
+  else entirely (`BL-448`, below), so making the targets visible does not by itself make the mission
+  finishable. *Cross-refs:* `BL-448` for the three blocked rows, and `BL-458` for the danger-zone
+  row; `BL-454`, since the readout could not say which objective completed;
+  `docs/PLAN-M5-campaign.md` D31 owns the objectives runtime.
 
-- `BL-457` `[Bug]` **The campaign wingman spawns far from the player instead of beside them.** Seen
-  at the controls: "in the original the wingman spawns beside me. here he spawns above the island
-  flying towards me." *Evidence:* the user's pass. The roster spawner places each block at its
-  authored spawn pose (`docs/PLAN-M5-campaign.md` D34); whether a `mode wingman` block is supposed
-  to take an authored world pose at all, or to be placed relative to its leader, is the open
-  question. <TODO: mechanism under investigation; fill in where the pose comes from and what the
-  data authors for that mission's `wingman_1`.> *⚠ Traps:* do not "fix" this by teleporting the
-  wingman next to the player if the data authors a world pose; that would be inventing placement.
-  Settle what the original does first. *Cross-refs:* `docs/org/aiPilot.md` for the escort law, which
-  is not at fault here (the wingman does fly to the player, just from the wrong place).
+- `BL-458` `[Bug]` **`DANGER_ZONES_COMPLETED` can never be satisfied in a campaign mission.**
+  *Evidence:* the condition reads correctly (`ObjectiveGraph.cs:494`) and is fed by
+  `CampaignDirector.NotifyDangerZoneCompleted` (`:345`), which **has no caller in a campaign
+  session**: the danger-zone module belongs to `--stunt`. C3/M01's `OBJECTIVE3` (`SECONDARY 11`) and
+  `OBJECTIVE11` use it, so that secondary is unsatisfiable. Found while tracing `BL-456`.
+  *Fix shape:* drive the notify from whatever tracks zone completion in a mission session, or
+  establish that the campaign's danger zones are a different mechanism. *Cross-refs:* `BL-456`.
 
-- `BL-451` `[Bug]` **The intro cutscene plays over an empty world: no aircraft, no zeppelins.**
-  Seen at the controls: "the cutscene camera functions but there is no content. Missing planes and
-  zeppelins in the scene." *Evidence:* the user's pass. The camera work and the letterbox are
-  right, so this is about what is in the world when the cutscene runs, not about the cutscene host.
-  <TODO: mechanism under investigation; establish whether the roster and zeppelins are spawned
-  before or after the cutscene, and whether callback codes 913/914 park things that are never
-  restored.> *⚠ Traps:* D32 decoded 913/914 as "park and reveal the AI, and only what it parked
-  comes back", so a restore that misses is a live candidate; do not assume nothing was spawned
-  before checking. *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md`;
-  `docs/PLAN-M5-campaign.md` D32 (the host) and D34 (the spawner).
+- `BL-457` `[Bug]` **The campaign wingman cannot keep station and ends up high and far behind, so it
+  reads as having spawned in the wrong place.** Seen at the controls: "in the original the wingman
+  spawns beside me. here he spawns above the island flying towards me." *Evidence:* **the spawn is
+  correct and this is not a placement bug.** `C3/M01`'s `aiv.zrd` authors `player` at
+  `[-1426, 150, -1813]` yaw 40 and `wingman_1` at `[-1378, 150, -1706]` yaw 40, 117 m apart at the
+  same altitude and heading, and the spawner puts it exactly there (`CampaignRoster.cs:191-192`,
+  confirmed in a live run). The failure is station-keeping after the handoff. Traced four times a
+  second from the intro's end, with the escort in `Station` from the first frame and computing a
+  correct 19 m station point: separation runs 117 m, 95 m, 102 m, 133 m at t=0/1/3/5 s, then 289 m
+  at 10 s, 597 m at 20 s and 838 m at 26 s, ending 130 m above the player. ⚠ Past 700 m the escort
+  re-enters `Joining`, whose commanded point is `AiEscort.LeaderOverflyM = 200f` **directly above
+  the leader**, which is the reported symptom word for word and is self-reinforcing once entered.
+  *Fix shape:* the driver, `AiPilot` through `AiControlLaw` on the `Wingman` table, not the escort
+  law's geometry and not the spawner. *⚠ Traps:* ⚠ the `wingman-station` suite passes (mean 213 m,
+  worst 396 m) because it flies a SCRIPTED leader on a cruise lever; a real player accelerating away
+  is the case it does not cover, so its leash is not evidence here and the fix needs a test that can
+  fail. ⚠ Do not re-tune the decoded station offsets or the 700 m join gate: those are decoded
+  constants and the station point is computed correctly throughout. *Cross-refs:*
+  `docs/org/aiPilot.md`; `docs/PLAN-M5-campaign.md` D34, whose suite this escapes.
+
+- `BL-451` `[Bug]` **A campaign session never spawns its zeppelins or generators, so the mission
+  runs without them from beginning to end.** Seen at the controls during the intro cutscene: "there
+  is no content. Missing planes and zeppelins in the scene." *Evidence:* `SessionSpec.FromCampaign`
+  (`SessionSpec.cs:1136-1153`) sets `Mode`, `WorldMode`, `Players` and `PlaneNames` and **does not
+  set `Zeppelins` or `Generators`**, which gate the placement at `GameSession.cs:2309` and `:2369`.
+  A live run logs `world: 2 unplaced entit(y/ies) left at the origin, switched off: piratezep,
+  cargozep1` (`GameSession.cs:1190-1193`): both sit at `(0,0,0)` with their subtree deactivated for
+  the whole mission, not just the cutscene. `generic_intro`'s own `ObjectActiveState piratezep =
+  true` runs during the world bootstrap and is then undone by `HideUnplacedEntities`, which runs
+  later in `BuildWorldStage`. This also breaks `OBJECTIVE20` (a `TRAVELERS` within 500 m of
+  `piratezep`), the `WAKEUP_ZEP_TURRETS [piratezep]` on `OBJECTIVE1`, and the film's "shoot down the
+  cargo zeppelin" leg, which has no zeppelin to shoot. *Fix shape:* set the two flags on
+  `FromCampaign`, ideally off the mission actually having a `zeppelins.zrd`/`egen.zrd`, so placement
+  happens before `HideUnplacedEntities`. *⚠ Traps:* ⚠ **913/914 is NOT the cause here and the
+  earlier suspicion is disproved:** `camera1-generic_intro.json` raises `20, 2, 11, 14` and carries
+  `1, 10, 914, 667` in its reset state only, never `913`, and a traced run shows `AiParked=false`
+  throughout. ⚠ But the mechanism is real and latent for a mission whose intro DOES raise 913, since
+  `Inert` un-draws an aircraft (`FlightController.cs:583`); treat that as a separate bug when it
+  appears rather than folding it in here. ⚠ It is one line to set the flags, and it changes what
+  every campaign mission builds, so verify the goldens and the other chapters. *Cross-refs:*
+  `docs/PLAN-M5-campaign.md` D32 (the host, innocent) and D34 (the roster, which is a separate
+  spawn path and does work); `BL-456`, which loses `OBJECTIVE20` to this.
 
 - `BL-452` `[Bug]` **The cutscene letterbox flickers once mid-cutscene.** Seen at the controls: the
   bars are correct from the first frame, then "flickers at a point shortly then goes back".
@@ -2523,10 +2571,30 @@ usual.
   node. Nothing plays that definition in a session, so the condition never becomes true and the
   suite wakes `INSTANTWIN` through the graph directly, exactly as `campaign-mission-end` does.
   The engine is not wrong here: the missing piece is whatever starts a mid-mission cutscene.
-  *⚠ Traps:* do not satisfy the condition by treating an unplayed definition as executed; that
-  would fire every such objective at mission start. *Cross-refs:* `BL-035` carries the same
-  blocker from the animation side (the `landings.zrd` mid-mission cutscenes and their approach-cone
-  trigger); one trigger unblocks both.
+  **The missing mechanism is now identified exactly, and it is narrower than "play mid-mission
+  cutscenes".** `C3/zrdr/landings.zrd.json` is a table of approach triggers:
+  `anim[do_approach1] node[do_approach1] angle[45] speed[50, 320]` six times over, plus
+  `anim[hooked_to_klondike] node[pz_manual_land] angle[35] speed[50, 220]` and
+  `anim[hooked_to_klondike] node[pz_auto_land] auto`. **Nothing in `CSVM/src` reads
+  `landings.zrd`.** The decode is already written up in
+  `docs/formats/anim-definitions/cutscenes.md` (`FUN_0045df60`): every frame, with no cutscene
+  running and the player controllable, the engine tests the player against the named approach node's
+  condition object and speed band, starts the named animation, and registers the mission-script host
+  on it. The six `do_approachN` defs each set `ObjectRotateState do_direction` and then
+  `CallAnimation texdrop`, which is why the film's Jack drop is staged off the approach direction;
+  `player-texdrop.json` is `ON_CALL`, `has_callbacks`, and opens with `Callback 11` plus
+  `CallObjectConnector letterbox`, so it is a letterboxed cutscene built exactly like the intro.
+  The `auto` row is the film's auto-land button. **Consequence:** on C3/M01 this one gap blocks
+  `PRIMARY 2` (Drop off Jack, via `OBJECTIVE21`'s `ANIM_STATE texdrop EXECUTED`), `PRIMARY 4` (Dock
+  with the PANDORA) and, transitively, `PRIMARY 3`, which is woken only through `PRIMARY 2`. *Fix
+  shape:* read `landings.zrd`, tick the cone/angle/speed test, `CALL_ANIMATION` the named def, and
+  route its callbacks through the existing `CutsceneController.Host`.
+  *⚠ Traps:* ⚠ do not satisfy the condition by treating an unplayed definition as executed; that
+  would fire every such objective at mission start. ⚠ Not every `ANIM_STATE` objective is blocked:
+  C3/M01's `OBJECTIVE26`/`OBJECTIVE30` name `volcano1`, which is `ON_STARTUP` and does reach
+  EXECUTED, so they are fine. Check the named def's trigger kind before filing one under this.
+  *Cross-refs:* `BL-035` carries the same blocker from the animation side; one trigger unblocks
+  both. `BL-456`, three of whose six display rows are blocked on this.
 
 ## Tooling, platform & docs
 

@@ -11,9 +11,11 @@ headless, but the pass found that a mission cannot in fact be flown to its end a
 Wave A is about play and not about polish; the presentation items the pass also raised sit behind
 it in Wave B.
 
-⚠ **Wave A's items were found by a human at the controls and their mechanisms are still being
-traced**, so their Evidence is honest about which half is known: the symptom is certain, the cause
-is a `<TODO>` until the trace lands. Do not implement one of them from the symptom alone. Every
+⚠ **Wave A's items were found by a human at the controls and then traced, and three of them are not
+what the symptom said.** The objectives register correctly and the player simply cannot find the
+sites (A1); the empty cutscene is a session that never spawns its zeppelins at all (A2); the wingman
+spawns exactly where the data says and then fails to keep station (A3). Read each item's Evidence
+before acting on its title. Every
 other item was re-verified still-open against both the record (`git log --grep`) and the code before
 it was written down, and carries the `file:line` that check produced. Two entries did not survive
 that check and are closed rather than planned (E43). **Out of scope:**
@@ -62,11 +64,12 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — what stops the campaign being playable
 
-1. ☐ Campaign objectives do not register in a flown mission (`BL-456`)
-2. ☐ The intro cutscene plays over an empty world (`BL-451`)
-3. ☐ The campaign wingman spawns far from the player (`BL-457`)
+1. ☐ Objective targets and help labels are never drawn, so the sites cannot be found (`BL-456`)
+2. ☐ A campaign session never spawns its zeppelins or generators (`BL-451`)
+3. ☐ The campaign wingman cannot hold station on a real player (`BL-457`)
 4. ☑ The music channel drowns the briefing (`BL-455`)
 5. ☐ The cutscene letterbox flickers once (`BL-452`)
+6. ☐ `DANGER_ZONES_COMPLETED` is never fed in a campaign mission (`BL-458`)
 
 ### Wave B — where things are shown, and where they are heard
 
@@ -77,7 +80,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — the gaps M5 named
 
-21. ☐ The mid-mission cutscene trigger (`BL-448`, `BL-035`)
+21. ☐ The `landings.zrd` approach trigger, which is the mid-mission cutscene gate (`BL-448`, `BL-035`)
 22. ☐ The VO dialogue chain player (`BL-443`)
 23. ☐ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
 
@@ -135,12 +138,20 @@ headless `campaign-loop` suite completes C3/M01's primary by flying its `TRAVELE
 passes three runs in a row, so the runtime works in at least one scripted case and the divergence
 lives between that case and a real flown session.
 
-⚠ **The discriminating fact, from a second pass: of the three fly-to objectives, only the mountain
-village registers; the tunnel already fails.** One condition kind succeeding once and failing twice
-argues against "the kind is unimplemented" and for something per-objective: a target node that does
-not resolve, a per-objective radius or volume, or an objective that is never woken. Chase that fork
-first. <TODO: mechanism under investigation; record which side it lands on, with `file:line`, and
-say whether it is one bug or several.>
+⚠ **Traced, and the conditions are not the bug: the player is simply never told where to go.** All
+six of `C3/M01`'s `TRAVELERS` references resolve, and placing the aircraft at each site completes
+that site's objective on the first unheld tick (tunnel `t_chamber` r=200 at d=75, the village's bare
+point r=200 at d=147, the wreck `shipwreck` r=200 at d=115). The kind is implemented at
+`CampaignDirector.cs:582` / `ObjectiveGraph.cs:518` and works. What is missing is presentation:
+`ObjectiveGraph` maintains `ObjectiveTargets` (`:205`), `OtherTargets` (`:208`) and `HelpLabels`
+(`:211`) and raises `TargetsChanged` (`:171`), and nothing in `CSVM/src` consumes any of them
+outside one suite assertion, so `ADD_OBJECTIVE_TARGET`/`SET_HELP_LABEL` is a write-only store. With
+the briefing map also not drawing its flags (B14), the sites are unlearnable before takeoff too. The
+user found one site of three by luck, which is the whole symptom.
+
+⚠ **Making the targets visible does not by itself finish the mission.** Of the mission's six display
+rows, one is reachable today, three are blocked on C21's `landings.zrd` trigger, one on the
+danger-zone feed (A6) and one is reachable. This item owns the targets; it must not absorb the rest.
 
 **The mission's authored shape is on film**, `OriginalScreenshots\Videos\Complete Mission M02.mkv`
 (5:01, a complete run of the original by the user, key frames kept under
@@ -152,71 +163,105 @@ hangar bay, with an auto-land button as the alternative. Two of those steps reac
 the Jack cutscene is very likely gated on the trigger C21 owns, and docking inside the PANDORA is a
 mission ending nothing in our build has been shown to do.
 
-**Approach.** <TODO: settle from the investigation. The first fork is whether a whole condition kind
-is unimplemented or mis-evaluated, or whether something upstream is wrong (the graph not stepped in
-a real session, objectives never woken, the wrong mission loaded).>
+**Approach.** Consume the target and label store: draw a marker for each `ObjectiveTargets` entry
+and show its `HelpLabels` text, redrawing on `TargetsChanged`. This is a HUD and marker question,
+not an objectives-runtime one, and the existing hostile-marker HUD is the idiom to follow. What the
+original's objective marker looks like is the open half.
 
-**Model recommendation.** high. It is the plan's blocker, the symptom is a divergence between a
-passing suite and a real session, and a wrong fix here silently breaks every mission.
+**Model recommendation.** high. It is the plan's blocker, and the presentation has no reference shot
+yet, so the item carries a judgement call as well as the wiring.
 
-**Verify.** The first campaign mission flown to its end at the controls, which is the check that
-failed; plus an in-engine test that fails before the fix, since `campaign-loop` passing throughout
-proves the existing suites cannot catch this class.
+**Verify.** The three sites findable at the controls without foreknowledge, plus an in-engine test
+over `ObjectiveTargets`/`HelpLabels` that fails before the fix. `campaign-loop` passing throughout
+proves the existing suites cannot catch this class, so an unchanged suite result is not evidence.
 
-**⚠ Traps.** ⚠ One class of objective is unsatisfiable by design today, `ANIM_STATE <def> EXECUTED`
-(C21, because nothing plays a mid-mission cutscene). Do not file every non-completing objective
-under that explanation before checking the condition each one actually uses; if the mission's
-objectives are mostly that class, C21 is a dependency and this item must say so rather than
-inventing a workaround. ⚠ An unchanged suite result is not evidence here: `campaign-loop` was green
-while the bug was live.
+**⚠ Traps.** ⚠ Do not touch the conditions or widen a radius: they are proved correct, and widening
+one would bury the real bug. ⚠ Do not absorb the three rows C21 blocks or the one A6 blocks; this
+item ends at making the targets visible. ⚠ <TODO: no reference exists for the original's in-world
+objective marker; either find one in `Complete Mission M02.mkv` or file a capture before inventing
+a style.>
 
-## A2 ☐ The intro cutscene plays over an empty world (`BL-451`)
+## A2 ☐ A campaign session never spawns its zeppelins or generators (`BL-451`)
 
-**Goal.** The aircraft and zeppelins a mission opens with are in the world while its intro cutscene
-plays, so the camera has something to show.
+**Goal.** A campaign mission's zeppelins are in the world, so the intro camera has something to
+show and the mission's zeppelin objectives and turrets exist at all.
 
-**Evidence (confidence: lead-only on the mechanism, certain on the symptom).** From the E42 pass:
-"the cutscene camera functions but there is no content. Missing planes and zeppelins in the scene."
-The camera work, the letterbox and the handoff are all right, so the question is what is in the
-world when the cutscene runs, not the cutscene host. Two candidates are already on the table from
-the decode: the roster and the zeppelins may be placed after the cutscene rather than before it, or
-codes 913/914 may park things that are never restored, since D32 decoded those as "park and reveal
-the AI, and only what it parked comes back". <TODO: mechanism under investigation; record which,
-with `file:line`.>
+**Evidence (confidence: traced).** The symptom was reported as an empty cutscene, but the cause is
+not the cutscene: `SessionSpec.FromCampaign` (`SessionSpec.cs:1136-1153`) sets `Mode`, `WorldMode`,
+`Players` and `PlaneNames` and never sets `Zeppelins` or `Generators`, which gate placement at
+`GameSession.cs:2309` and `:2369`. A live run logs `world: 2 unplaced entit(y/ies) left at the
+origin, switched off: piratezep, cargozep1` (`GameSession.cs:1190-1193`), so both sit at the origin
+deactivated for the whole mission. `generic_intro`'s own `ObjectActiveState piratezep = true` runs
+during the bootstrap and is then undone by `HideUnplacedEntities` later in `BuildWorldStage`. The
+same gap takes out `OBJECTIVE20` (a `TRAVELERS` within 500 m of `piratezep`), the
+`WAKEUP_ZEP_TURRETS [piratezep]` on `OBJECTIVE1`, and the film's whole "shoot down the cargo
+zeppelin" leg.
 
-**Approach.** <TODO: from the investigation.>
+**Approach.** Set the two flags on `FromCampaign`, ideally off the mission actually shipping a
+`zeppelins.zrd`/`egen.zrd` rather than unconditionally, so placement happens before
+`HideUnplacedEntities` runs.
 
-**Model recommendation.** high. It spans the cutscene host and the spawner, two subsystems that
-landed separately and have never been exercised together outside a suite.
+**Model recommendation.** medium. The change is small; the care is all in the regression surface.
 
-**Verify.** A scripted capture of the C1 intro with the mission's own aircraft and zeppelins visible
-in frame, against the same shot today; the 16 goldens unchanged.
+**Verify.** The zeppelins present in a C3/M01 capture and the unplaced-entities log line gone; the
+16 goldens unchanged and the other chapters' freecam counts unchanged, since this changes what every
+campaign mission builds.
 
-**⚠ Traps.** ⚠ Do not assume nothing was spawned before checking that something was parked: a
-restore that misses is the decoded failure mode and looks identical from the cockpit.
+**⚠ Traps.** ⚠ **913/914 is disproved as the cause and must not be re-chased here:**
+`camera1-generic_intro.json` raises `20, 2, 11, 14` with `1, 10, 914, 667` in its reset state only,
+never `913`, and a traced run shows `AiParked=false` throughout. ⚠ The parking mechanism is real and
+latent for a mission whose intro does raise 913, since `Inert` un-draws an aircraft
+(`FlightController.cs:583`); file that separately if it appears rather than folding it in here.
 
-## A3 ☐ The campaign wingman spawns far from the player (`BL-457`)
+## A6 ☐ `DANGER_ZONES_COMPLETED` is never fed in a campaign mission (`BL-458`)
 
-**Goal.** The wingman starts the mission where the original starts it, beside the player.
+**Goal.** An objective gated on danger zones can complete.
 
-**Evidence (confidence: lead-only on the mechanism, certain on the symptom).** From the E42 pass:
-"in the original the wingman spawns beside me. here he spawns above the island flying towards me."
-The escort law is not at fault, since the wingman does fly to the player; the placement is. The open
-question is whether a `mode wingman` block takes an authored world pose at all, or is placed
-relative to its leader. <TODO: mechanism under investigation; record where the pose comes from and
-what the data authors for that mission's `wingman_1`.>
+**Evidence (confidence: traced).** The condition reads correctly (`ObjectiveGraph.cs:494`) and is
+fed by `CampaignDirector.NotifyDangerZoneCompleted` (`:345`), which has no caller in a campaign
+session: the danger-zone module belongs to `--stunt`. C3/M01's `OBJECTIVE3` (`SECONDARY 11`) and
+`OBJECTIVE11` use it, so that row is unsatisfiable. Found while tracing A1.
 
-**Approach.** <TODO: from the investigation, and note which of the two the data supports.>
+**Approach.** Drive the notify from whatever tracks zone completion in a mission session, or
+establish that the campaign's danger zones are a different mechanism and say so.
 
-**Model recommendation.** medium, unless the investigation turns it into a decode question, in which
-case high.
+**Model recommendation.** medium.
 
-**Verify.** The first campaign mission started at the controls with the wingman in frame beside the
-player; the `campaign-roster` and `wingman-station` suites green.
+**Verify.** The secondary completing in a flown C3/M01, with an in-engine assertion behind it.
 
-**⚠ Traps.** ⚠ Do not teleport the wingman next to the player if the data authors a world pose:
-that is inventing placement, which is the failure mode this project guards hardest against. Settle
-what the original does first.
+**⚠ Traps.** ⚠ Confirm the campaign's zones really are the `--stunt` module's before wiring them
+together; sharing a notify between two mission types is a design choice, not a repair.
+
+## A3 ☐ The campaign wingman cannot hold station on a real player (`BL-457`)
+
+**Goal.** The wingman stays with the player instead of falling behind and climbing away.
+
+**Evidence (confidence: traced).** The reported symptom was a spawn in the wrong place; **the spawn
+is correct**. `C3/M01`'s `aiv.zrd` authors `player` at `[-1426, 150, -1813]` yaw 40 and `wingman_1`
+at `[-1378, 150, -1706]` yaw 40, 117 m apart at the same altitude and heading, and the spawner
+places it exactly there (`CampaignRoster.cs:191-192`, confirmed in a live run). The failure is
+station-keeping after the handoff: traced four times a second with the escort in `Station` from the
+first frame and computing a correct 19 m station point, the separation runs 117 m, 95 m, 102 m,
+133 m at t=0/1/3/5 s, then 289 m at 10 s, 597 m at 20 s and 838 m at 26 s, ending 130 m above the
+player. ⚠ Past 700 m the escort re-enters `Joining`, whose commanded point is
+`AiEscort.LeaderOverflyM = 200f` **directly above the leader**, which is the reported symptom word
+for word and is self-reinforcing once entered.
+
+**Approach.** The driver, `AiPilot` through `AiControlLaw` on the `Wingman` table. Not the escort
+law's geometry, which computes the right point throughout, and not the spawner.
+
+**Model recommendation.** high. It is a control-law failure on a table shared with other AI
+behaviour, so the blast radius reaches beyond the campaign.
+
+**Verify.** The wingman still beside the player a minute into a flown C3/M01, plus a test that can
+fail: fly a leader that accelerates and manoeuvres as a player does, since the existing suite's
+scripted leader is exactly the case that hides this.
+
+**⚠ Traps.** ⚠ The `wingman-station` suite passes (mean 213 m, worst 396 m) because it flies a
+SCRIPTED leader on a cruise lever. Its leash is not evidence here, and D34's own landed note that
+the commanded point equals the decoded station to 0.00 m is also not evidence: the point is right
+and the aircraft does not reach it. ⚠ Do not re-tune the decoded station offsets or the 700 m join
+gate.
 
 ## A4 ☑ The music channel drowns the briefing (`BL-455`)
 
@@ -273,13 +318,24 @@ question was waiting on).** From the E42 pass: "in the original the in-flight ob
 seen in the pause screen. but the targets are selectable in world." That answers the question
 `CAP-45` was minted to film, so the capture is re-pointed at the pause screen's own presentation,
 which still has no reference. Ours mounts `ObjectivesHud` on the world root for every campaign
-session (D33's `GameSession` mount), so it is up for the whole flight. The same pass reports the
-completion tick not sitting on its line, which is why the player could not tell which objective had
-completed.
+session (D33's `GameSession` mount), so it is up for the whole flight. The presentation is now
+referenced from `Complete Mission M02.mkv` at t=12 s (kept at
+`playtest\M02-complete-run\pause-screen-objectives.png`): the mission map fills the left two thirds
+with its `?` flags planted, an `Objectives` parchment sits top-right, a photo bottom-right, a
+compass rose bottom-left, and four plaques run centre-bottom, `Resume`/`Restart` over
+`Preferences`/`Quit`. The same film at t=5 s shows the flight HUD carrying gauges alone.
+
+**Why the tick was not on the line, traced.** Two independent causes, both cheap. (1) C3/M01 builds
+**six** display rows, not the four the pause screen lists: `OBJECTIVE3` authors
+`IDENTITY [SECONDARY, 11]` and `OBJECTIVE31` authors `IDENTITY [SECONDARY, 12]`, two fields with no
+message key, so `ObjectivesHud.cs:65` asks `Messages.Get(null)`, gets `""` (`Messages.cs:88`), and a
+completed secondary renders as a bare tick with no text (`ObjectivesHud.cs:117`). (2) The readout
+sits at `(24, 64) * windowH/1080` (`ObjectivesHud.cs:123`), which on a 1280x720 window puts line 1
+at y=43, over the flight HUD's own `SPD / ALT / THR` strip.
 
 **Approach.** Move the readout to the pause screen and take it off the HUD, keeping the graph
-binding and the completion marking, which are D33's and are not in question. Fix the mark's
-alignment while moving it.
+binding and the completion marking, which are D33's and are not in question. Decide what an unkeyed
+row shows, and fix the mark's alignment while moving it.
 
 **Model recommendation.** medium.
 
@@ -393,7 +449,7 @@ text rows in the list; it draws none of the elements. The art ships: per-mission
 (`extracted/rimage/ha-m1map.png` and siblings), the pinups (`ms_p_*pinup*.png`), the flags.
 
 **Approach.** Execute the reveal script as authored, placing each `Pict` at its own coordinates on
-A1's board surface and running the `Fade`/`Spin`/`Move` tweens over their authored durations. The
+B13's board surface and running the `Fade`/`Spin`/`Move` tweens over their authored durations. The
 durations are authored constants in the data and `docs/formats/briefing.md` states explicitly that
 they are not a TUNE gap to invent. The marker timing already works and is not this item's subject.
 
