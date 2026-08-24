@@ -67,7 +67,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ `BL-446` Rename `ZzBaselineDump` out of the throwaway prefix
 3. ☑ `BL-455` Delete `AiControlLaw.Throttle`'s dead far-from-player branch
 4. ☑ `BL-444` A flight-dump hash that is the same on both hosts
-5. ☐ `BL-452` Rewrite `BL-266` (b) and (d) against the decoded shake numbers
+5. ☑ `BL-452` Rewrite `BL-266` (b) and (d) against the decoded shake numbers
 6. ☑ `BL-417` Re-verify the perf flake, and stop one unit flake from skipping the later stages
 
 ### Wave B — decode and port
@@ -212,7 +212,7 @@ the print, rounding the print may not remove it; say so and record the finding.
 
 **Verified.** <pending orchestrator run>
 
-## A5 ☐ `BL-452` Rewrite `BL-266` (b) and (d) against the decoded shake numbers
+## A5 ☑ `BL-452` Rewrite `BL-266` (b) and (d) against the decoded shake numbers
 
 **Goal.** `backlog.md`'s `BL-266` quotes only the decoded impact and high-speed shake values.
 
@@ -231,6 +231,8 @@ template's labelled form, with no dates or event narration (CLAUDE.md writing st
 
 **⚠ Traps.** Do not delete the still-open (c) or the `[Owed-playtest]` tag. Land alone, since every
 other item's closing commit also edits `backlog.md`.
+
+**Verified.** <pending orchestrator run>
 
 ## A6 ☑ `BL-417` Re-verify the perf flake, and stop one unit flake from skipping the later stages
 

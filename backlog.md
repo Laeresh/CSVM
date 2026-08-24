@@ -939,10 +939,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   throttle slew (`0x48e5f7` to `0x48e6c9`), freezing the lever where it stands rather than closing
   it. No fuel model exists here; the shipped missions never run a tank dry, so this matters only
   for a long-flight mode. Nitro burns no fuel (`0x48e603` reads the lever, not the boost flag).
-- `BL-452` `[Docs]` **`BL-266` carries guessed shake constants the decode has since replaced.**
-  The plan's D34 shake pass (`docs/org/shakes.md`, `docs/formats/shakes.md`) traced the block-5 kick
-  and the impact sources; `BL-266`'s (b) and (d) text still quotes the pre-decode readings. Rewrite
-  those sub-items against the decoded numbers rather than leaving both versions live.
 - `BL-453` `[Feature]` **The mission spawner does not read roster blocks.** `AiSpawn.Nitro` reads
   roster slot 34 (`0x475c9a`, three shipped rosters author it) but the mission spawner never
   fills it, so an AI nitro injector has no live producer (ledger row, unsupported). Read the roster
@@ -2000,24 +1996,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     `FIRE_RATE` (8.0 for wep_40) — the "12–13/s" was a redraw-window artifact — and 60 fps
     pose-interpolated render loss tested NEGATIVE.)
   **Still open, all data/fidelity questions:**
-  - (b) the impact sources' per-event quantities are stand-ins declared TUNE (gun hits reuse
-    caliber, rockets use armor damage) — a being-hit capture pins them.
+  - (b) the impact sources' `magnitude_factor` constants are decoded (`bullet_impact` 5e-4,
+    `missile_impact` 1e-3 plus `he_factor` 2.0 on HE rounds, both read at `FUN_004b9bc0`'s block
+    1/2 kicks), but what each multiplies is not: the per-event drive quantity `FUN_004b9bc0` passes
+    alongside `magnitude_factor` is undecoded, so CSVM's stand-ins (an incoming gun round reusing
+    the caliber law, a rocket's armor damage doubled by `he_factor`) stay TUNE. A being-hit capture
+    pins them; a further decode of `FUN_004b9bc0`'s own multiplicand would settle it without one.
+    The `explosion` source's magnitude term is decoded as never filling in the original: the parser
+    reads the key `max_magnitude` into block 3's slot while `shakes.zrd` authors `magnitude_factor`
+    instead, so the retail explosion shake is zero regardless of blast damage
+    ([`docs/org/shakes.md`](docs/org/shakes.md)). `PlaneShake.ExplosionAt` still kicks the authored
+    `magnitude_factor` against a damage stand-in, so the port and the decode now disagree here;
+    matching the original means zeroing that kick, not tuning it.
   - (c) the `ON_CALL` `small/medium/large` `damage_shakes` defs stay unwired — unknown caller,
     likely script/set-piece.
-  - **(d) high_speed shares the gun's random-walk accumulator — decoded, engine port now owed.**
-    The 2026-08-18 excess-over-gate correction (`(speedRatio − gate)/quotient`, `554edcee`) returned
-    the dive rattle to ~zero at rated max, but the ported gun buzz (~7× louder) exposes it as ~6× muted
-    vs the original's dive. **2026-08-19 the binary settled the open hypothesis: the original drives
-    `high_speed` through the SAME random-walk accumulator as the gun** — `FUN_0048c470` (per-frame
-    player updater) reads `camera+0xec/0xf0` (`min_speed`/`magnitude_quotient`) and calls
-    `FUN_0042c070(4, mag)` = the identical `FUN_0042be10` accumulator the `fire_bullet` path uses
-    (component index 4 vs 0, kicking 3-axis accumulators `camera+0xd4/+0xd8/+0xdc` per frame). So the
-    original is NOT the remake's damped sawtooth — it is a second random-walk accumulator fed by the
-    existing excess-over-gate `SetSpeedRatio` law. That mechanism mismatch (sawtooth vs random-walk) is
-    the root cause of the ~6× muted dive. Trace: `analysis/gun-wobble-shake/FINDINGS.md` (high_speed
-    section) and `docs/formats/shakes.md`. **Open/fidelity action:** port `PlaneShake`'s `_speed` path
-    to a `_fire`-style random-walk accumulator (tune `GunBuzzKickScale`-equivalent knob), then playtest
-    the dive against the original clip.
+  - **(d) `high_speed` drives the same random-walk accumulator as the gun, decoded; the engine
+    port is owed.** The per-frame player updater `FUN_0048c470` reads block 4's `min_speed`/
+    `magnitude_quotient` fields and calls the identical `FUN_0042c070`/`FUN_0042be10` dispatcher the
+    `fire_bullet` path uses, just on component index 4 (`camera+0xd4/+0xd8/+0xdc`) instead of 0,
+    every frame the excess-over-gate law (`(speedRatio − min_speed)/magnitude_quotient`,
+    `PlaneShake.SetSpeedRatio`) is positive. CSVM's `_speed` oscillator is a deterministic damped
+    sawtooth, a different mechanism from the original's random walk, and next to the gun buzz now
+    ported to its own random-walk step, the sawtooth dive rattle reads muted. **Open/fidelity
+    action:** give `_speed` a random-walk accumulator on the pattern of `_fire` (a
+    `GunBuzzKickScale`-equivalent tune knob), fed by the existing `SetSpeedRatio` law, then playtest
+    the dive against the original clip to judge the ported magnitude. Trace:
+    `analysis/gun-wobble-shake/FINDINGS.md` (high_speed section) and
+    [`docs/org/shakes.md`](docs/org/shakes.md).
   - **(fidelity) judge the port, then dial.** Playtest owed: fly the merged build and judge
     `GunBuzzKickScale` (1.0 default = faithful step) against the original clip before touching it.
     Two honest caveats: the random-walk **decay model (τ≈80 ms) is an engineering guess, not a
