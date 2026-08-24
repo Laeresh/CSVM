@@ -35,6 +35,7 @@ public sealed class CampaignDirector
     private readonly HashSet<string> _gapsLogged = new(StringComparer.Ordinal);
     private World? _world;
     private ScriptedPathVehicles? _paths;
+    private bool _cutsceneHold;
 
     // The proximity scan's accumulator and whether the player's damage event is subscribed yet:
     // the player's aircraft is built after Attach runs, so the hookup is made on the first step
@@ -167,13 +168,25 @@ public sealed class CampaignDirector
 
     /// <summary>One sim step of the objectives graph, the scripted-path vehicles and the music
     /// channel's own battle detector. ⚠ Called from BOTH of <c>GameSession</c>'s drive paths, like
-    /// the Instant Action sequencer: a realtime session never enters the stepped path.</summary>
+    /// the Instant Action sequencer: a realtime session never enters the stepped path. Under a
+    /// cutscene hold nothing advances, which is callback 20's objectives half.</summary>
     internal void Step(float dt)
     {
+        if (_cutsceneHold)
+        {
+            return;
+        }
+
         Graph?.Step(dt);
         _paths?.Step(dt);
         StepMusic(dt);
     }
+
+    /// <summary>The cutscene hold: while a cutscene owns the session the objectives update stops
+    /// with the rest of the world, which is what callback 20 does in the original
+    /// (docs/formats/anim-definitions/cutscenes.md). Dormancy timers and reminder fuses do not
+    /// advance under the movie.</summary>
+    internal void HoldForCutscene(bool held) => _cutsceneHold = held;
 
     /// <summary>A danger zone the player completed, routed into the graph's awake objectives.</summary>
     internal void NotifyDangerZoneCompleted(string zone) => Graph?.NotifyDangerZoneCompleted(zone);

@@ -218,6 +218,10 @@ public partial class GameSession : Node3D
     // end/return flow (see CampaignDirector). Built at the top of StartSession alongside the
     // Instant Action one — null outside a --campaign= launch.
     private CampaignDirector? _campaign;
+    // The cutscene host: built for any flown chapter session, since a story mission's intro
+    // definition starts itself out of startanims and needs its CALLBACK codes hosted from the
+    // bootstrap on. Null everywhere else, which leaves the world build's node census untouched.
+    private CutsceneController? _cutscene;
     // The world AA emplacements: built with the rigs whenever a chapter world and the
     // shared pool exist, stepped in DriveSimSteps after the zeppelins (slung mounts read the
     // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
@@ -557,6 +561,15 @@ public partial class GameSession : Node3D
             campaign.MissionEnded += OnCampaignMissionEnded;
         }
 
+        // The cutscene host, before the world build hands it to the animation runtime. Its world
+        // hold stops the objectives update as well as the per-step world update (callback 20).
+        _cutscene = _spec.Fly && _spec.WorldMode ? new CutsceneController() : null;
+        if (_cutscene != null)
+        {
+            _cutscene.WorldHeld = held => _campaign?.HoldForCutscene(held);
+            AddChild(_cutscene);
+        }
+
         Stopwatch sw;
         try
         {
@@ -589,6 +602,9 @@ public partial class GameSession : Node3D
             {
                 BuildFlightRigs(state);
                 ApplyDebugSpectate();
+                // AFTER the rigs, for the same reason the spectate override is: a cutscene that
+                // started during the world build has nothing to hide until they exist.
+                _cutscene?.BindRigs(_rigs, () => _aiPlanes);
             }
             ApplyDestroyOverride(state);
             LogBuildSummary(state, sw);
@@ -647,6 +663,16 @@ public partial class GameSession : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        // A cutscene skips on any input, as the original's state core does. ⚠ Escape is exempt: it
+        // is the way out of the session. ⚠ Pads count only where this session reads pads at all,
+        // since a connected pad reports button 0 pressed as it arrives.
+        if (_cutscene is { Playing: true }
+            && (@event is InputEventKey { Pressed: true, Echo: false, Keycode: not Key.Escape }
+                || (!_spec.PadsDisabled && @event is InputEventJoypadButton { Pressed: true }))
+            && _cutscene.Skip())
+        {
+            return;
+        }
         // P halts the sim and . steps it one frame, in freecam and the static viewer. ⚠ Do not
         // handle either for flight or the animation lab; both own their own transport.
         if (!_spec.AnimLab && @event is InputEventKey { Pressed: true, Echo: false } clockKey
@@ -753,6 +779,13 @@ public partial class GameSession : Node3D
         float dt = _clock?.PhysicsDt(delta) ?? (float)delta;
         if (dt <= 0f)
             return;
+        // ⚠ A cutscene holds the world in BOTH drive paths, the way callback 20 stops the
+        // original's per-frame world update and its objectives update together. The animation
+        // runtime is deliberately outside the hold: the movie is animation.
+        if (_cutscene is { HoldsWorld: true })
+        {
+            return;
+        }
         _versus?.Advance(dt);
         // ⚠ Step the mission director from BOTH drive paths, like the match clock above: a
         // realtime session never enters DriveSimSteps, so a sequencer stepped only there
@@ -986,6 +1019,10 @@ public partial class GameSession : Node3D
                 RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
                 // --node=: one subtree instead of the whole world (null = the full build).
                 NodeSubtree = state.NodeSubtree,
+                // The cutscene seam, wired before the bootstrap because an intro definition raises
+                // its codes the instant startanims starts it, long before a rig exists.
+                CutsceneRoots = _cutscene != null,
+                CallbackHost = _cutscene != null ? _cutscene.Host : null,
             },
             state.Gamez, state.Textures, state.Sounds, state.SoundDefs, state.SoundGroups);
         _plane = session.Root;
@@ -999,6 +1036,9 @@ public partial class GameSession : Node3D
         state.CrashProgram = session.Program;
         state.WorldScene = session.Builder.Scene;
         state.WorldRuntime = session.Runtime;
+        // After the bootstrap: an intro definition has already raised its codes, and this is where
+        // the host picks up the two nodes it drives.
+        _cutscene?.BindWorld(session.Runtime);
         // The screen wash. Set here rather than inside WorldSession for the same reason the
         // contact mask below is: the overlay is a session-owned surface and WorldSession builds
         // runtimes for the test harness too, where there is no session to own one.
@@ -3015,6 +3055,12 @@ public partial class GameSession : Node3D
         if (_spec.DebugScoreboard)
         {
             _iaDirector?.ForceDebugScoreboard();
+        }
+        // The cutscene's world hold, the same one _PhysicsProcess takes: nothing below this line
+        // steps while a definition owns the session.
+        if (_cutscene is { HoldsWorld: true })
+        {
+            return;
         }
         for (int i = 0; i < clock.Steps; i++)
         {

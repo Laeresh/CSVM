@@ -257,12 +257,14 @@ public static class AnimDefs
             case "ObjectScaleState":
                 if (Vec(fields, "STATE") is { } pose)
                     data["state"] = pose;
+                AddAtNode(data, fields, "AT_NODE", degToRad: false);
                 break;
             case "ObjectRotateState":
                 // Reader rotations are degrees; compiled is radians (docs/formats/
                 // anim-definitions.md). Unconverted, C2's roadblock spun ~21 turns.
                 if (Vec(fields, "STATE", degToRad: true) is { } rotPose)
                     data["state"] = rotPose;
+                AddAtNode(data, fields, "AT_NODE_MATRIX", degToRad: true);
                 break;
             case "ObjectMotionFromTo":
                 if (Num(fields, "RUN_TIME") is { } rt)
@@ -608,6 +610,30 @@ public static class AnimDefs
 
     private static float? Num(Dictionary<string, List<object?>?> fields, string key) =>
         AnimData.AsNum(First(fields, key));
+
+    // AT_NODE / AT_NODE_MATRIX: the pose is taken from another node's frame, with STATE read as an
+    // offset inside it rather than as an absolute pose. Emitted in the COMPILED shape (a flat
+    // `at_node` for the translation, a `basis.AtNodeMatrix` for the rotation), so both front-ends
+    // hand the handlers one thing. Trailing numbers are the offset, in the channel's own units.
+    private static void AddAtNode(Dictionary<string, object?> data,
+        Dictionary<string, List<object?>?> fields, string key, bool degToRad)
+    {
+        if (!fields.TryGetValue(key, out var v) || v is not { Count: > 0 } || v[0] is not string host)
+            return;
+        if (degToRad)
+            data["basis"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+            { ["AtNodeMatrix"] = host };
+        else
+            data["at_node"] = host;
+        if (v.Count >= 4 && AnimData.AsNum(v[1]) is { } x && AnimData.AsNum(v[2]) is { } y
+            && AnimData.AsNum(v[3]) is { } z)
+            data["state"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["x"] = degToRad ? Mathf.DegToRad(x) : x,
+                ["y"] = degToRad ? Mathf.DegToRad(y) : y,
+                ["z"] = degToRad ? Mathf.DegToRad(z) : z,
+            };
+    }
 
     // A vec3 in the compiled payload shape, so both front-ends hand handlers the same thing.
     private static Dictionary<string, object?>? Vec(Dictionary<string, List<object?>?> fields, string key,

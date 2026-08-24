@@ -84,7 +84,11 @@ ANIMATION_DEFINITION NAME[letterbox] ACTIVATION[ON_CALL] EXECUTION_PRIORITY[5] R
                        LOOP LOOP_COUNT[-1]
 ```
 
-The first sequence turns the bars on. The second is the `LOOP{-1}` re-assert idiom: every tick it
+The first sequence turns the bars on, in one event with no tween: **the bars are simply there from
+the moment the mission load ends**, and the intro's own `fadefromblack` FBFX then fades up behind
+them. There is no bars-in animation to reproduce (answered at the controls against the original).
+
+The second is the `LOOP{-1}` re-assert idiom: every tick it
 copies `camera1`'s position onto the node and adopts `camera1`'s orientation matrix with a zero
 offset. **The node is never reparented** (no `OBJECT_ADD_CHILD` anywhere targets it), so the bars
 stay a parentless root that tracks the camera by transform copy, and the quads' authored `z = −7.5`
@@ -229,6 +233,16 @@ count it. It sits immediately before a `CAMERA_STATE` that pulls `camera1`'s nea
 which is exactly the case where the automatic camera-parameter profile must not overwrite the
 authored value.
 
+### ⚠ The codes do not identify a cutscene
+
+`camera1-player_setup` authors **the same nine codes** (1, 10, 914, 20, 2, 11, 14, 913 plus the
+`RESET_STATE` ordering), and every Instant Action mission bootstraps it out of its own
+`startanims.zrd`; C1/M04 lists it under `LOAD_GAME_START`. What the original does with it is
+undecoded, and it is not one of the 13 story-mission intros the `generic_intro` /
+`mission_intro_animation` census counts. **A consumer that decides "this is a cutscene" from the
+authored codes therefore gives every mission in the install a letterbox and a suspended world.**
+Ask by definition name.
+
 Reading the eight as a pair of state transitions:
 
 - `RESET_STATE` (applied at load) asserts the **gameplay** end state: hand control back and restore
@@ -269,6 +283,19 @@ beat deactivating it; the smooth phase between them is
   `flags.lighting`/`flags.fog` both true; at 7.5 m the fog contribution is negligible, and the def
   pins the node's full orientation to `camera1` every tick regardless of the facade mode, so a
   builder should copy the transform and not rely on billboarding to keep the bars square.
+- **`AT_NODE` on a pose event is spelled differently in each front-end.** The reader writes
+  `OBJECT_TRANSLATE_STATE … AT_NODE [camera1]` and `OBJECT_ROTATE_STATE … AT_NODE_MATRIX
+  [camera1, 0, 0, 0]`; the compiled twin writes a flat `at_node: "camera1"` on the translation and a
+  nested `basis: { AtNodeMatrix: "camera1" }` on the rotation, with `state` carrying the offset
+  inside that frame (zero for the bars) rather than an absolute pose. **The compiled def wins**, so
+  a consumer that reads only the reader spelling sees the target teleported to its parent's origin.
+  Install-wide there are 190 non-null `at_node` translations and 8 `AtNodeMatrix` rotations (the
+  eight chapters' letterbox); `INPUT_NODE` appears as an `at_node` value and is a sentinel, not a
+  node name.
+- **A change to `generic_intro` is verified by what disappears, not by what looks right.** Twelve
+  missions share it, and an 8-chapter freecam regression cannot see any of it: no Instant Action or
+  multiplayer mission bootstraps an intro, so that regression is inert here by construction
+  (`docs/verification.md` DIAG-10). Check per mission.
 - **The letterbox node is a library root.** Parentless, no spatial-partition reference, and the def
   never reparents it, so a renderer that only walks `world1` will never reach it. See
   [`world-structure.md`](../world-structure.md) for the library-root test.
@@ -293,7 +320,15 @@ beat deactivating it; the smooth phase between them is
   sites were each read.
 - **Undecoded: `RESET_TIME`.** The letterbox def's `RESET_TIME [0]` is the scheduling field the
   landing page also marks undecoded, so *when* a running letterbox returns to its `INACTIVE` base
-  state inside a mission is not established here. Nothing stops the def by name.
+  state inside a mission is not established here. Nothing stops the def by name, so a consumer has
+  to retract the bars itself at the handoff (`CutsceneController`, `docs/architecture.md`).
+- **Undecoded: what field of view a cutscene is framed at.** The bars are a fixed card 7.5 m ahead
+  of the eye, 13.2924 by 8.0948, so the frame they letterbox is 56.7° vertical at 4:3 and the card
+  overhangs it horizontally. `camera1`'s own gamez `Camera` record carries `fov_h_base` /
+  `fov_v_base` of 0 (runtime-filled), and the `CAMERA_STATE` events in the intro readers set only
+  `NEAR_CLIP` and `LOD_MULTIPLIER`, so the number itself is not in the data.
+- **Undecoded: what `camera1-player_setup` is for.** It carries the whole cutscene vocabulary and
+  every Instant Action mission starts it; nothing establishes what the original shows while it runs.
 - **Undecoded: how the original draws a parentless active root.** `gwNodeSetActive`
   (`FUN_004cca30`) only flips the node's active bit; the traversal that reaches `letterbox` without
   it being anyone's child was not traced.

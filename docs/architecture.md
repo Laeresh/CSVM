@@ -332,7 +332,8 @@ clusters they delegate to.
 - `src/Session/CampaignLoadout.cs` — the bridge between a profile's stored picks and a flying aircraft's fit: one `OwnedPlane`'s ammunition indices and ordnance table indices as the `LoadoutChoice` a launch hands the session, which `Loadout.Bind` then lays over the aircraft's base fit. Engine-free, and both encodings are the campaign screens' own (the original's per-pylon ordnance id is undecoded), so an unset pylon is left to the base rather than written back.
 - `src/Session/ObjectiveScript.cs` — one mission's parsed `objectives.zrd`: the file-level keys and the contiguous `OBJECTIVEn` blocks in the typed shape the graph runs, found by exact name so every shipped misspelling lands in no field and stays dead. Decode: `docs/formats/objectives.md`.
 - `src/Session/ObjectiveGraph.cs` — the objectives runtime, engine-free: the four-state machine per objective, the rotating one-completion-per-tick scan, the chaining executor with its already-awake truncation, the nap that clears a completed flag, the condition families' OR, the mission countdown, the win/loss flags and the display rows D33 reads. Reaches the world only through `IObjectiveWorld`.
-- `src/Session/CampaignDirector.cs` — the engine side of a campaign mission and the sibling of `InstantActionDirector`: resolves a `--campaign=<profile>:<seq>` launch to its chapter/mission, arms the graph against the built world's runtimes, and at mission end records the attempt through `CampaignProgression`, folds the destruction log into the profile and raises the return-to-cabin exit the session layer acts on. It also owns the mission's two music duties: routing a `mu*` sound group to the process music channel instead of a positional emitter, and running the decoded proximity scan and player-damage ping that put the score into battle. The wingman's aircraft and fit are resolved here too, from the profile it already has open; nothing spawns that aircraft yet.
+- `src/Session/CampaignDirector.cs` — the engine side of a campaign mission and the sibling of `InstantActionDirector`: resolves a `--campaign=<profile>:<seq>` launch to its chapter/mission, arms the graph against the built world's runtimes, and at mission end records the attempt through `CampaignProgression`, folds the destruction log into the profile and raises the return-to-cabin exit the session layer acts on. It also owns the mission's two music duties: routing a `mu*` sound group to the process music channel instead of a positional emitter, and running the decoded proximity scan and player-damage ping that put the score into battle. The wingman's aircraft and fit are resolved here too, from the profile it already has open; nothing spawns that aircraft yet. A cutscene hold (callback 20) stops its whole step.
+- `src/Session/CutsceneController.cs` — the host a story mission's intro definition raises its `CALLBACK` codes to: the letterbox bars and the cutscene camera the definition itself drives, the world/objectives hold, the player out of flight with the chrome off, the AI parked, then one hard cut back to gameplay on the definition's end or on a skip.
 
 ### Session root and tests
 
@@ -854,8 +855,11 @@ here for the same reason, and `Light` reads both live. The nine `OBJECT_*` pose/
 delegate to `Pose` the same way, each adding the handler's returned op count to the census counter;
 the `_rest` pose table stays here, since the death flow (`RestoreRestPoses`/`ApplyDeathSwap`) reads
 it too, and both the family and the motion value types reach it only through `RestOf`.
-`CALLBACK` raises the two vehicle-death codes through caller-supplied seams (`WreckVelocity`,
-`StopDamageStages`) and counts every other code; decode in `docs/org/vehicleDamage.md`.
+`CALLBACK` offers each code to `CallbackHost` first (the mission-script host, given the raising
+definition's animation name — `Session/CutsceneController.cs`), then raises the two vehicle-death
+codes through caller-supplied seams (`WreckVelocity`, `StopDamageStages`) and counts every other
+one; decodes in `docs/org/vehicleDamage.md` and
+`docs/formats/anim-definitions/cutscenes.md`.
 `FBFX_COLOR_FROM_TO`/`LIGHT_ANIMATION` report their `run_time` as the
 event's duration, spacing a chain instead of firing it in one instant; decode in
 `docs/formats/anim-definitions.md`.
@@ -970,6 +974,10 @@ on `AnimRuntime`, read by the death flow; `AnimRuntime` keeps thin internal forw
 `ConsumeLandingResume`/`MarkLandingResume`/`SetSubtreeOpacity`, whose callers (`MotionRuntime`,
 the `ground-contact` suite, `OpacityFade`) name the runtime. No teardown reach-in exists: none of
 this family's state is per-instance the way emitters, lights and sounds are.
+The `AT_NODE` form of the translate and rotate poses (`PoseAtNode`) takes another node's world
+frame with `state` as an offset inside it, rather than an absolute pose; the host is resolved by
+name over the whole index because it is a root of its own, not something the event's anchor
+contains. Spellings and census: docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/Anim/NameResolver.cs
 Name→node resolution as one public module, generic over the node type (`NameResolver<TNode>`): the
@@ -2823,8 +2831,9 @@ per-frame cost on aircraft that draw nothing, AI rigs above all.
 `Attach(canvas, versusHud, scoreboard)` builds the text block and parents every readout in the
 shipped draw order; `VersusHud` and `StuntScoreboard` are still the flight node's, and are threaded
 through because their z-order slots sit INSIDE this order rather than after it. `SetVisible` is
-photo mode's hide-everything (`BL-429`, forwarded from `FlightController.SetPilotHudVisible` because
-`GameSession` drives it per rig); `SetInstrumentsVisible` is the narrower one `--debug-spectate`
+the hide-everything a cutscene's chrome-off and photo mode both take (`BL-429`, forwarded from
+`FlightController.SetPilotHudVisible` because `GameSession` drives it per rig; the compass tape goes
+with the rest); `SetInstrumentsVisible` is the narrower one `--debug-spectate`
 wants, which keeps the marker HUD deliberately. `StepAgl` is the altimeter's LOW ALT feed, one ray
 per physics frame through the same `IWorldQuery` seam every other aircraft query uses, and
 `AglMeters` reads it back for the flight telemetry line. `Flash` raises the impact line and `Reset`
@@ -3916,6 +3925,11 @@ repaint the ground with them. `Options.ExtraPrewarmNames` (D33) prewarms sound-g
 `AnimProgram` never sees on its own (`ObjectiveScript.SoundGroupNames()` is the only caller today)
 before the build's sound archive closes; without it a campaign mission's `WAKEUP_SOUND_GROUP`/
 `COMPLETED_SOUND_GROUP` cue decodes to nothing the moment the archive that could decode it is gone.
+`Options.CallbackHost` is installed on the runtime BEFORE the bind, since a bootstrapped intro
+raises its codes the instant it starts, and `Options.CutsceneRoots` builds the two roots the
+`world1` walk never reaches (`camera1`, and the `letterbox` bars, switched off) — only for a
+mission whose start-anims name one of `CutsceneController.IntroAnims`, so every other session's
+node census is exactly what it was.
 
 ## src/Mech3/SessionArchives.cs
 `OpenFor(ArchiveIntent, gamezPath, texturesPath, soundsPath, zrdrPath, mute)` opens the five
@@ -4029,6 +4043,14 @@ kept. It runs AFTER `BuildFlightRigs` because the wingman fan, the ace's spawn d
 what is being watched. The mission's own end conditions are untouched, so a squadron mission whose
 enemies have nobody to shoot never resolves, which is the expected outcome of taking the target
 away rather than a hang.
+`_cutscene` (`CutsceneController?`) is built beside the two directors for any flown chapter session
+and added as a child of this node: the world build takes its `Host` as the runtime's callback host
+and its intro test as the gate on the cutscene roots, `BindWorld` runs once the world is up and
+`BindRigs` AFTER `BuildFlightRigs` (a cutscene that started during the world build has nothing to
+hide until the rigs exist). Its world hold is read at the top of BOTH drive paths — nothing below
+that line steps while a definition owns the session — and the animation runtime is deliberately
+outside it, since the movie is animation. `_UnhandledInput` routes the skip, exempting Escape and
+ignoring pads wherever this session does not read pads.
 An `--ia=` `stunt_flying` mission also loads the
 danger zones itself, `--stunt` or not — the mission type is what asks for them, the way a zeppelin
 run asks for the zeppelin and generator runtimes.
@@ -4647,6 +4669,8 @@ needs a spawned `aiv` roster (`DEDG`, the group form of `TRAVELERS`, `WAKEUP_ENE
 kind. ⚠ Never turn one of those into an invented behaviour: the missing consumer is the finding.
 `START_TAXI` is the same shape while nothing places a vehicle: the registry is empty until a roster
 spawner calls `Paths.Place`, and the directive reports itself unconsumed until then.
+`HoldForCutscene(bool)` is callback 20's objectives half: a held director advances no dormancy
+timer or reminder fuse while a cutscene owns the session (`Session/CutsceneController.cs`).
 
 ## src/Session/ScriptedPathVehicles.cs
 One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored
@@ -4654,6 +4678,26 @@ One campaign mission's scripted-path vehicles: `Place` binds a spawned body to i
 follower and writes its pose onto the body. A finished vehicle raises its handoff callback with the
 speed the path left it at and leaves the registry, so nothing keeps overwriting the flight model's
 pose. The law is `Flight/PathFollower.cs` and the route `Mech3/ScriptedPath.cs`.
+
+## src/Session/CutsceneController.cs
+The host a story mission's intro definition raises its `CALLBACK` codes to, and the session state
+those codes describe. A `Node` only so it can tick LAST in the frame (`ProcessPriority` 1000): the
+rig cameras take the pose that frame's animation advance put `camera1` in, so the bars, posed inside
+that advance, never sit against a camera one frame behind them. Hosted: 20 world+objectives hold
+(`GameSession`'s drive paths and `CampaignDirector.HoldForCutscene` read it), 2 chrome off and the
+view off the aircraft (`FlightController.CameraOwned`, which also stops the cockpit rules being
+re-asserted), 11 the player out of flight (`Held` + `Inert` + engine audio paused), 913/914 park and
+reveal the AI (only what this controller parked comes back), 666/667 the camera-parameter gate
+(tracked, not acted on — this engine applies that profile once per rig and never on a view change),
+1/10 the handoff and the in-flight systems; 14 and 123 are named gaps with one log line each. The
+handoff raises the gameplay state the definition's own `RESET_STATE` asserts, because a CSVM
+`RESET_STATE` dispatch deliberately raises no callbacks and `RESET_TIME` is undecoded; it also
+retracts the bars and parks `camera1` back at the origin, which other definitions pose against.
+Skip is any key (not Escape) or pad button: force-stop the definition, then the same restore, so
+dropping the remaining beats cannot leave the mission held, hidden or unflyable.
+⚠ `IntroAnims` is the scope, and it is a NAME test: Instant Action's `player_setup` authors the same
+nine codes, so a code test would give every mission a letterbox and a suspended world. Decode:
+`docs/formats/anim-definitions/cutscenes.md`.
 
 ## src/Session/GeneratorCycle.cs
 The decoded egen launch timing law for ONE generator (M4 B6 + F20), pure over `Step` calls (no

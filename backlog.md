@@ -1585,7 +1585,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   lens flare's anchor (`BL-165`, closed; `analysis/bl-165-lens-flare/FINDINGS.md`,
   `CSVM/src/Session/LensFlareRig.cs`).
 
-- `BL-035` `[Feature]` `[Blocked: cutscene player]` **Animation event kinds that need weapons or cutscenes — `CALLBACK`, `OBJECT_CYCLE_TEXTURE`,
+- `BL-035` `[Feature]` **Animation event kinds that need weapons or cutscenes — `CALLBACK`, `OBJECT_CYCLE_TEXTURE`,
   one-shot `SOUND`** (triaged 2026-07-22, the last of `docs/plans/PLAN-anim-rendering-followups.md`
   item 2 after `OBJECT_MOTION` landed). All three still dispatch at bootstrap, so the counts in
   the "not yet acted on" report look like open work — **they are not**. Each was probed at the
@@ -1595,11 +1595,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
   | Kind | Count | Why it cannot do anything |
   |---|---|---|
-  | `Callback` | ×8 every chapter | Every dispatch is `def=camera1`, **unanchored**, values 1/2/10/11/14/20/913/914 — engine notifications for the intro **cutscene** camera. This project has no cutscenes, and a callback's whole purpose is to notify mission logic that does not exist here. |
+  | `Callback` | ×8 every chapter | **Answered.** The values 1/2/10/11/14/20/913/914 are the cutscene vocabulary, decoded in `docs/formats/anim-definitions/cutscenes.md`, and `CutsceneController` is the host a story mission's intro raises them to. What is left here is every OTHER code the mission-script host reads (the `landings.zrd` cutscenes' 3/12/13/86/701/702/800–803/950/951/965–968), which needs the approach-cone trigger that starts a mid-mission cutscene at all. |
   | `ObjectCycleTexture` | ×1–2 per chapter | Every dispatch is `node=taildamage` with **`targets=0`** — the node never resolves, so there is nothing to cycle. The one real use of this mechanism (the cockpit damage-indicator hilite) is already a build-time material swap in `GaugeCluster.cs`. |
 
-  **Pick these up when the thing they depend on exists** — a cutscene player for `Callback` — not
-  before. `ObjectCycleTexture` needs neither; it needs a mission that
+  **Pick these up when the thing they depend on exists** — the mid-mission cutscene trigger for the
+  rest of `Callback` — not before. `ObjectCycleTexture` needs neither; it needs a mission that
   actually builds a `taildamage` node, which none of the ones this project defaults to do.
 
 - `BL-218` `[Tuning]` `[Owed-playtest]` **Puffer `NUMBER` default (2026-08-01)** — `NUMBER` is absent from 680 of C1's 721
@@ -2624,83 +2624,6 @@ usual.
   selected only when a race exists, so Dogfight still walks the scattered `dogfight_ace` list.
   Spawn spacing here stays this item's call from `PT-43`, and copying the grid over is the wrong
   reflex: four dogfighters 60 m apart on one heading is an instant head-on merge every round.
-
-- `BL-134` `[Feature]` **Cutscene player — the missing consumer (M04's zeppelin, `letterbox`, `CALLBACK`).**
-  **This is a missing subsystem, not a bug.** The cutscene defs run because nothing tells them they
-  are cutscenes. What is absent is a **cutscene player** owning camera control, the `letterbox`
-  bars, scene sequencing, and the end-of-cutscene handoff to gameplay. Same dependency as the
-  `CALLBACK` event kind (see `BL-035` — all 8
-  dispatches are `def=camera1`, unanchored, triaged as intro-cutscene notifications). **Pick the two
-  up together.**
-
-  **⚠ Traps — read before touching this.**
-
-  1. **Do NOT skip the cutscene defs at bootstrap.** That fix was proposed, scoped, and
-     **REJECTED by the user 2026-07-22**: *"the M0x missions are campaign missions and we need those
-     animations if we want to restore the campaign."* `generic_intro` ×12 and
-     `mission_intro_animation` ×1 are decoded, working **assets** — the missions' authored intro
-     movies. Deleting their bootstrap throws away campaign capability to suppress a cosmetic symptom.
-  2. **C1/M04's pirate zeppelin flying above the overcast is an ACCEPTED artifact**, not a defect to
-     work around. Do not lower the zeppelin, do not suppress the def, do not "fix" `letterbox` bars
-     if they appear. Lowering it is content invention — the same trap as the C3 palms.
-  3. **An 8-chapter regression is inert here by construction.** The default mission is IA1, which
-     has no intro at all; no `IA1` and no `MP` mission bootstraps a cutscene def. Verify per-mission
-     or not at all (`docs/verification.md` DIAG-10).
-  4. **Verify by what disappears, not by what looks right** — `generic_intro` is shared across 12
-     missions and may currently be driving things nobody has looked at.
-
-  **M04 is the ready-made first test case.**
-
-  Its data is fully decoded, so it is an end-to-end exercise for free. The symptom that exposed all
-  of this: the pirate zeppelin builds, renders complete and flies — it is simply **above the
-  clouds**, at y 1505→1546 while C1's opaque `cloudlayer` deck sits at y = 960 and the player spawns
-  at y ≈ 110. Freecam onto it with `--freecam --chapter=C1 --mission=M04
-  "--pos=-5358,1505,-2200" "--lookat=-5358,1505,-1810" --no-fog`.
-
-  **Confirmed 2026-07-22 from the script data — the "jumps" are cutscene cuts, not waypoints.**
-  The user watched it move smoothly for ~20 s, jump twice about 10 s apart, then vanish, and asked
-  whether the jumps were AI waypoints. They are not:
-
-  - `data-c1-m04-zrdr-introanm-pzep1-piratezep.zan.json` is **48 frames at exactly 1/3 s apart, a
-    uniform straight line**: each frame steps a constant (−13.4, +2.1, −17.3), from
-    (−5352, 1504, −1802) to (−5981, 1602, −2611) over **15.67 s** (≈66 units/s). Frame 0 and frame
-    47 carry translate+rotate+scale; all 46 between are translate-only. There is no dwell, no
-    branch and no waypoint structure anywhere in it — so the smooth phase is this script, and it
-    simply **ends**.
-  - The jumps are therefore what happens *after* it runs out, and the dispatch graph says what
-    that is: `camera1-scene1` and `piratezep-scene2` **both call `letterbox`** — the cinematic
-    black-bars overlay — and `scene2` also calls `pfighter11` and `open_pzeplaunchdoors`, while
-    `piratezep-pzep_launch_player` calls `pz_open_hanger_doors` / `pz_deploy_hook` /
-    `pz_retract_hook`. That is the M04 **intro movie**: zeppelin flies in, cut, launch doors open,
-    a fighter launches.
-
-  So each jump is a **hard cut between cutscene beats** — correct for a movie, nonsense as
-  gameplay — and "then it's gone" is the last beat deactivating it. **User-confirmed 2026-07-22:**
-  *"Yeah those are the cut scenes."* The same def demonstrably drives `letterbox` too, so a useful
-  open check remains: **are we currently drawing letterbox bars in M04?** If so that is the same
-  missing consumer with a far more visible symptom, and a good first target for the player.
-
-  **Scope, surveyed across all 53 missions' `startanims.zrd.json`: 13 bootstrap a cutscene def.**
-
-  | def | missions |
-  |---|---|
-  | `generic_intro` | 12 — C1/M05, C1B/M03, C1C/M01, C2B/M04, C3/M01, C3/M02, C3/M05, C4/M01, C4/M02, C4/M04, C5/M01, C5/M04 |
-  | `mission_intro_animation` | 1 — C1/M04 (the bespoke one) |
-
-  **No `IA1` and no `MP` mission names one** — all 13 are `M0x` story missions, so this is invisible
-  in instant action and multiplayer, which is what the project defaults to. That bounds the blast
-  radius neatly and explains why it went unnoticed until someone flew `--mission=M04`.
-
-  **❌ The fix this evidence originally led to was REJECTED — see Trap 1.** For the record, it was:
-  skip those two def names when the animation bootstrap walks `startanims`. Small and data-driven, a
-  name check against the start-anim list rather than a new subsystem — and wrong, because it buys a
-  cosmetic fix with campaign capability. Kept here so nobody re-derives it and thinks it is new.
-
-  **Verification note that outlives the rejected fix:** verify *by what disappears, not by what
-  looks right*. `generic_intro` is shared across 12 missions and may currently be driving things
-  nobody has looked at, so a change here is checked by enumerating removed motion per mission. An
-  8-chapter regression cannot catch any of it: the default mission is IA1, which has no intro at
-  all, so the regression is inert here by construction (`docs/verification.md` DIAG-10).
 
 - `BL-243` `[Feature]` **The original carries destruction across missions in a state log; CSVM has no log, so a
   warm instant action starts clean where the original does not.** Decoded 2026-08-02 out of

@@ -11,10 +11,10 @@ public sealed class SuiteCatalogTests
     {
         string[] names = TestHarness.All.Select(suite => suite.Name).ToArray();
 
-        Assert.Equal(102, names.Length);
+        Assert.Equal(104, names.Length);
         Assert.Equal(SuiteCatalog.Names, names);
         Assert.Equal("emitter-lifetime", names[0]);
-        Assert.Equal("campaign-objectives-hud", names[^1]);
+        Assert.Equal("cutscene-letterbox", names[^1]);
         Assert.Equal(names.Length, names.Distinct().Count());
     }
 }

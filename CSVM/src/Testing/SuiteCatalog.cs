@@ -135,6 +135,8 @@ public static class SuiteCatalog
         "scripted-path",
         "wingman-station",
         "campaign-objectives-hud",
+        "campaign-cutscene",
+        "cutscene-letterbox",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -683,6 +685,19 @@ public static class SuiteCatalog
             "the mission authors start a real AudioStreamPlayer3D through WorldSounds (D31's " +
             "existing routing, counted rather than duplicated)",
             CampaignObjectivesHud));
+        into.Add(new TestHarness.Suite("campaign-cutscene",
+            "the cutscene host over C1/M04's shipped intro definition (D32): its authored callback "
+            + "codes reach the host through the runtime's own dispatch, the world and the "
+            + "objectives update stop while callback 20 holds them, the vehicle-death codes are "
+            + "declined, and the definition's end hands off with every piece of cutscene state put "
+            + "back",
+            CampaignCutscene));
+        into.Add(new TestHarness.Suite("cutscene-letterbox",
+            "the letterbox bars are data (D32): the chapter ships the node switched off as its "
+            + "definition's base state, calling the definition switches it on outright with no "
+            + "reveal, and the AT_NODE re-assert copies the cutscene camera's whole frame onto it "
+            + "every tick",
+            CutsceneLetterbox));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

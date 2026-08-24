@@ -162,6 +162,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// Which panes the wash reaches is the sink's decision, not this runtime's.</summary>
     public Action<Color, Color, float, Vector3, float>? ScreenFlash;
 
+    /// <summary>The mission-script host a <c>CALLBACK</c> code is offered to first, with the
+    /// raising definition's animation name: the cutscene vocabulary (presentation, world hold, AI
+    /// park, handoff) belongs to the session, not to this runtime. Returning false leaves the code
+    /// to the two vehicle-death seams below and to the census, which is what every runtime with no
+    /// host wired reports. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public Func<int, string?, bool>? CallbackHost;
+
     /// <summary>The world velocity a <c>Callback 16</c> hands the running instance, which is how a
     /// wreck inherits the aircraft's motion (docs/org/vehicleDamage.md). Supplied by the rig,
     /// because only the rig knows which vehicle is dying and how fast; null leaves the code
@@ -2201,7 +2208,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // A callback is a thing that happens, not a pose, so a RESET_STATE raises none.
                 // The two codes acted on are authored in sequences alone, never in a reset block.
                 if (!instant)
-                    HandleCallback(ev);
+                    HandleCallback(ev, def);
                 return true;
 
             case "ObjectAddChild":
@@ -2225,9 +2232,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // test can stand in for reading the value.
     // ⚠ An unrecognised code is counted under its own key and nothing else. Codes outside the two
     // below belong to the original's mission-script handler, and guessing at one invents behaviour.
-    private void HandleCallback(AnimEvent ev)
+    private void HandleCallback(AnimEvent ev, AnimDefinition def)
     {
         int code = (int)(ev.Data.Num("value") ?? -1f);
+        // The mission-script host first: its vocabulary is the session's, and it declines every
+        // code it does not own, so the two seams below keep the codes they always had.
+        if (CallbackHost != null && CallbackHost(code, def.AnimName))
+        {
+            _opsApplied++;
+            return;
+        }
+
         switch (code)
         {
             case CallbackWreckVelocity when WreckVelocity != null:

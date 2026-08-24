@@ -233,6 +233,11 @@ public sealed class WorldSession
             SuppressRootLift = o.NodeSubtree != null,
         };
         s.Runtime = animRuntime;
+        animRuntime.CallbackHost = o.CallbackHost;
+        if (o.CutsceneRoots && BootstrapsCutscene(animProgram))
+        {
+            BuildCutsceneRoots(root, gamez, builder);
+        }
         // The emitter pool has to be in the tree before the bootstrap builds into it.
         if (animRuntime.Sounds is { } worldSounds)
         {
@@ -329,6 +334,45 @@ public sealed class WorldSession
         root.AddChild(animRuntime);
 
         return s;
+    }
+
+    // Does this mission bootstrap one of the story-mission intros? ⚠ Ask by name, not by the
+    // callback codes: Instant Action's own `player_setup` authors the same nine, so a code test
+    // would give every mission in the install a cutscene camera and a held world.
+    private static bool BootstrapsCutscene(AnimProgram program)
+    {
+        foreach (string name in program.StartAnims)
+        {
+            if (Session.CutsceneController.IsIntro(name))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // The two roots a cutscene definition drives, neither of which the world1 walk reaches: the
+    // bodiless `camera1` the definitions pose, and the parentless `letterbox` bars, built here so
+    // the bind anchors both and the shared letterbox definition's own base state switches the bars
+    // off. Standing them up before the bind is what makes the bars data rather than an overlay
+    // (docs/formats/anim-definitions/cutscenes.md).
+    private static void BuildCutsceneRoots(Node3D root, GameZ gamez, WorldBuilder builder)
+    {
+        root.AddChild(new Node3D { Name = Session.CutsceneController.CameraNode });
+        if (gamez.FindByName(Session.CutsceneController.BarsNode) is not { } bars)
+        {
+            return;
+        }
+
+        if (builder.Scene.BuildSubtree(bars, collisionSkip: _ => true) is not { } built)
+        {
+            return;
+        }
+
+        built.Transform = Transform3D.Identity;
+        AnimRuntime.SetSubtreeActive(built, false);
+        root.AddChild(built);
     }
 
     // Stamps SceneBuilder.ClutterColor onto every clutter draw under
@@ -471,6 +515,17 @@ public sealed class WorldSession
         /// construction — sealed onto the runtime's template stage, not writable
         /// afterwards.</summary>
         public bool PlacesCalledTemplates { get; init; }
+
+        /// <summary>Build the two roots a cutscene definition drives (<c>camera1</c> and the
+        /// <c>letterbox</c> bars), which the <c>world1</c> walk never reaches. False (default)
+        /// leaves every session's node census exactly as it was; a flown chapter session sets it,
+        /// because that is where an intro definition can play.</summary>
+        public bool CutsceneRoots { get; init; }
+
+        /// <summary>The <c>CALLBACK</c> host installed on the world runtime before the bootstrap
+        /// starts anything, since an intro definition raises its codes the instant it starts. Null
+        /// leaves every code to the runtime's own two seams and its census.</summary>
+        public Func<int, string?, bool>? CallbackHost { get; init; }
 
         /// <summary>Pins the runtime's RNG for a reproducible run (see
         /// <see cref="AnimRuntime.Seed"/>). Null — the default — leaves it unseeded: the game.</summary>

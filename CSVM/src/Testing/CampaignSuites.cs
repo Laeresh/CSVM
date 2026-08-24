@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -22,6 +23,21 @@ internal static class CampaignSuites
     private const string GraphChapter = "C1";
 
     private const string GraphMission = "M02";
+
+    // The one mission with a bespoke intro definition, and the worked case of the whole cutscene
+    // decode (docs/formats/anim-definitions/cutscenes.md). The other twelve share `generic_intro`,
+    // which authors the same eight codes in the same two places.
+    private const string IntroChapter = "C1";
+
+    private const string IntroMission = "M04";
+
+    private const string IntroAnim = "mission_intro_animation";
+
+    // What the definition's `callback_sequence` authors, and what its RESET_STATE asserts as the
+    // gameplay end state. Both lists are the shipped data, not this engine's choice.
+    private static readonly int[] MovieCodes = { 20, 2, 11, 14, 913 };
+
+    private static readonly int[] RestoreCodes = { 1, 10, 914, 667 };
 
     internal static void CampaignPersistence(TestContext ctx)
     {
@@ -253,6 +269,146 @@ internal static class CampaignSuites
 
         ctx.WriteArtifact($"test-campaign-mission-end-{ctx.Chapter}.txt", report.ToString());
         ctx.Note($"flew {mission.ChapterFolder}/{mission.MissionFolder} to a graph-derived end");
+    }
+
+    /// <summary>The cutscene host over the shipped intro definition: the codes the definition
+    /// raises reach it through the runtime's own dispatch, the world and the objectives update
+    /// stop while it holds them, and the handoff puts every piece of session state back.</summary>
+    internal static void CampaignCutscene(TestContext ctx)
+    {
+        var host = new CutsceneController();
+        var held = new List<bool>();
+        host.WorldHeld = h => held.Add(h);
+        ctx.Host.AddChild(host);
+        ctx.WithWorld(IntroChapter, collision: false, IntroMission, world =>
+        {
+            var stage = new Node3D { Name = "CutsceneStage" };
+            var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+            runtime.CallbackHost = host.Host;
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, world.Session.Program.Subset(IntroAnim));
+                host.BindWorld(runtime);
+                ctx.Check(!host.Playing, $"nothing owns the session until a definition raises a code");
+                runtime.Play(IntroAnim);
+
+                ctx.Check(host.Playing && host.Anim == IntroAnim,
+                    $"'{IntroAnim}' took the session through the runtime's own CALLBACK dispatch");
+                ctx.Same(20, host.Codes.Count > 0 ? host.Codes[0] : 0,
+                    $"the movie state opens by holding the world");
+                foreach (int code in MovieCodes)
+                {
+                    ctx.Check(host.Codes.Contains(code), $"the definition's authored callback {code} was hosted");
+                }
+
+                ctx.Check(host.HoldsWorld && host.Presenting && host.OutOfFlight && host.AiParked,
+                    $"the world is held, the chrome is off, the player is out of flight and the AI is parked");
+                ctx.Check(held.Count == 1 && held[0], $"the world hold reached the session once");
+                ctx.Check(!host.Host(15, IntroAnim) && !host.Host(16, IntroAnim),
+                    $"the vehicle-death codes are declined, so they keep the seams they had");
+
+                // The definition still running is not a handoff; its end is.
+                host.Tick();
+                ctx.Check(host.Playing, $"a tick while the definition runs holds the cutscene");
+                runtime.Stop(IntroAnim);
+                host.Tick();
+                ctx.Check(!host.Playing && !host.HoldsWorld && !host.Presenting && !host.OutOfFlight
+                          && !host.AiParked && !host.CamParamsFree,
+                    $"the definition ending hands off: every piece of cutscene state is back");
+                ctx.Check(held.Count == 2 && !held[1], $"and the world hold was released");
+                foreach (int code in RestoreCodes)
+                {
+                    ctx.Check(host.Codes.Contains(code),
+                        $"the handoff raised the gameplay state the definition's RESET_STATE asserts ({code})");
+                }
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
+
+        CutsceneHoldsObjectives(ctx);
+        ctx.Note($"hosted {IntroChapter}/{IntroMission}'s '{IntroAnim}' from its first code to the handoff");
+    }
+
+    /// <summary>The bars are data: the shared <c>letterbox</c> definition switches the node on and
+    /// copies the cutscene camera's whole frame onto it every tick, so they hold their place in the
+    /// frame through any camera path.</summary>
+    internal static void CutsceneLetterbox(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var gamezBars = world.Gamez.FindByName(CutsceneController.BarsNode);
+            ctx.Check(gamezBars != null && !gamezBars.Active,
+                $"the chapter ships a {CutsceneController.BarsNode} node, switched off as its definition's base state");
+
+            var stage = new Node3D { Name = "LetterboxStage" };
+            var camera = new Node3D { Name = CutsceneController.CameraNode };
+            var bars = new Node3D { Name = CutsceneController.BarsNode };
+            stage.AddChild(camera);
+            stage.AddChild(bars);
+            var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, world.Session.Program.Subset(CutsceneController.BarsNode));
+                ctx.Check(!bars.Visible, $"the bind applies the definition's INACTIVE base state");
+
+                var pose = new Transform3D(
+                    Basis.FromEuler(new Vector3(0.21f, 0.73f, 0f)), new Vector3(120f, 240f, -360f));
+                camera.GlobalTransform = pose;
+                runtime.Play(CutsceneController.BarsNode);
+                ctx.Check(bars.Visible, $"calling the definition switches the bars on outright, with no reveal");
+                ctx.Check(bars.GlobalPosition.IsEqualApprox(pose.Origin),
+                    $"and pins them to the cutscene camera's position");
+                ctx.Check(bars.GlobalBasis.Z.IsEqualApprox(pose.Basis.Z),
+                    $"including its facing, which is what holds the bars square to the frame");
+
+                // The re-assert loop is what keeps them there while the camera flies its splines.
+                camera.GlobalTransform = new Transform3D(pose.Basis, new Vector3(900f, 30f, 40f));
+                runtime.Advance(1f / 60f);
+                ctx.Check(bars.GlobalPosition.IsEqualApprox(camera.GlobalPosition),
+                    $"the LOOP re-assert follows the camera on the next tick");
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
+
+        ctx.Note($"the {ctx.Chapter} letterbox card tracks the cutscene camera by transform copy");
+    }
+
+    // The objectives half of callback 20: a held director advances no dormancy timer, which is what
+    // stops a mission's reminder fuses burning down behind the movie.
+    private static void CutsceneHoldsObjectives(TestContext ctx)
+    {
+        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        if (FirstMissionOf(missions, IntroChapter) is not { } mission)
+        {
+            return;
+        }
+
+        var script = ObjectiveScript.Load(
+            SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder));
+        var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
+        director.Attach(new CampaignDirector.WorldInputs());
+        director.HoldForCutscene(true);
+        for (int i = 0; i < 600; i++)
+        {
+            director.Step(1f);
+        }
+
+        ctx.Same(0, (long)director.Graph!.Elapsed, $"a held objectives graph does not advance under the movie");
+        director.HoldForCutscene(false);
+        director.Step(1f);
+        ctx.Check(director.Graph!.Elapsed > 0f, $"and runs again once the cutscene hands off");
     }
 
     // Runs the loss fuse the mission authors: nothing is satisfied, OBJECTIVE19 wakes at its 300 s

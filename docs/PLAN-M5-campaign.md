@@ -39,7 +39,7 @@ readers (`BL-299`), and Instant Action fixes (`BL-426`). Decisions 2 and 3 below
   cues, objective chaining, target-list edits, completion audio, and an in-flight objectives
   display; mission end returns to the cabin and advances or records progress.
 - Story-mission intro animations play as cutscenes with letterbox bars and camera control, then
-  hand off to gameplay (`BL-134`).
+  hand off to gameplay.
 - The state-driven score plays: menu splash, cabin, prebattle → battle transitions, objective
   stingers, and the success music, from the extracted `music_*` tracks.
 - Campaign wingmen fly the decoded netless station-keeping and are spawned from the mission's
@@ -120,9 +120,9 @@ Everything below was located on disk in this planning session (2026-08-24 survey
   shipped `active:false`. Decoded by A7: two opaque black quads pinned to `camera1` by the shared
   `zrdr/letterbox.zrd` definition, off until a cutscene calls it
   (`docs/formats/anim-definitions/cutscenes.md`).
-- **Cutscene defs** — `BL-134`: `generic_intro` ×12 + `mission_intro_animation` ×1 across 13 of 53
-  missions (all `M0x` story missions), fully decoded and playable by `AnimRuntime`; the missing
-  piece is the consumer (camera, letterbox, sequencing, `CALLBACK` dispatch).
+- **Cutscene defs** — `generic_intro` ×12 + `mission_intro_animation` ×1 across 13 of 53
+  missions (all `M0x` story missions), fully decoded and playable by `AnimRuntime`. D32 landed the
+  consumer (camera, letterbox, sequencing, `CALLBACK` dispatch) as `CutsceneController`.
 - **Wingman constants** — `BL-362`: decoded body-frame stations (6 m out / 18 m astern of the
   player leader; 8/−2/−8 of an AI leader), 700 m join threshold, speed-ramped trail
   106.68–259.08 m.
@@ -197,7 +197,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — in-mission campaign machinery
 
 31. ☑ Campaign mission director: the objectives runtime (from A1) + mission end/return flow
-32. ☐ Cutscene player: intro animations, letterbox, camera control, handoff (`BL-134`)
+32. ☑ Cutscene player: intro animations, letterbox, camera control, handoff (`BL-134`)
 33. ◐ In-flight objectives display + objective sound cues
 34. ◐ Campaign wingmen: named rosters + netless station-keeping (`BL-362`, `BL-364`)
 35. ◐ Mid-mission world fidelity: `WAKE_ANIM` doors (`BL-350`), scripted-path vehicles (`BL-361`), `WorldPartitionSetActive` (`BL-037`), `FogState` (`BL-038`)
@@ -548,8 +548,9 @@ returns to `INACTIVE` inside a mission is not established (nothing stops the def
 original's draw traversal reaches a parentless active root was not traced; CSVM must attach its
 bars to the camera itself.
 
-**⚠ Traps.** `BL-134` records the user's ruling: the M0x intro defs must play, never be suppressed.
-Any interim change that silences them regresses that ruling.
+**⚠ Traps.** The user's ruling, now recorded in
+[`cutscenes.md`](formats/anim-definitions/cutscenes.md): the M0x intro defs must play, never be
+suppressed. Any interim change that silences them regresses that ruling.
 
 ## A8 ☑ Mint and file the owed captures
 
@@ -1404,17 +1405,19 @@ one thing `docs/formats/saved-games.md` does state. The order the chaining lists
 (wake, kill, nap, sleep) is not pinned by the decode either. Which flag a `MISSION_TIMER` expiry
 sets is untraced; CSVM ends the mission lost.
 
-## D32 ☐ Cutscene player (`BL-134`)
+## D32 ☑ Cutscene player (`BL-134`)
 
 **Goal.** The 13 story-mission intro defs play as cutscenes: letterbox bars, camera driven by the
 decoded `CALLBACK` codes, player input suspended, then a clean handoff to gameplay. C1/M04 is the
 first worked case.
 
-**Evidence (confidence: traced for the defs and for the consumer's semantics).** `BL-134`: the defs
-are decoded, playable by `AnimRuntime` today; the missing consumer is enumerated there. A7 delivers
+**Evidence (confidence: traced for the defs and for the consumer's semantics).** The defs are
+decoded and were already playable by `AnimRuntime`; what was missing was the consumer. A7 delivers
 the letterbox mechanism and the `CALLBACK` code table
-(`docs/formats/anim-definitions/cutscenes.md`). <TODO: re-verify BL-134 still-open against git log +
-code.>
+(`docs/formats/anim-definitions/cutscenes.md`). `BL-134` is closed by this item and deleted from
+`backlog.md`; its two standing caveats (the M0x defs must play, and C1/M04's pirate zeppelin above
+the overcast is an accepted artifact) are restated on that page, as is its "verify by what
+disappears" rule.
 
 **Approach.** A cutscene controller in the session layer that arms before the mission director
 starts: it installs itself as the `CALLBACK` host on the def it plays (the original registers a
@@ -1446,6 +1449,75 @@ Note what A7 found the original does on skip: `FUN_004a0220` clears the active-c
 force-stops the animation outright, and the handoff `FUN_00480480` does the same, so the original
 does *not* replay the remaining beats. Whatever CSVM does about the leftover state is a design
 decision here, not a fact to copy.
+
+**User's verdict on the bars (CAP-43's one gap).** There is **no letterbox bars-in animation**: the
+bars are simply there the moment the mission load ends, before anything else, and the intro then
+fades from black behind them. That matches the data (`letterbox.zrd`'s first sequence sets the node
+`ACTIVE` outright, with no tween) and is what shipped: the bars are up on the first rendered frame.
+
+**Landed.** One new file, `src/Session/CutsceneController.cs`, plus the seams it needs.
+
+- **The bars and the camera are the definition's own data.** `WorldSession` builds the two roots the
+  `world1` walk never reaches (`camera1`, a bodiless marker, and the `letterbox` card, switched off
+  by its own definition's base state) and installs the callback host on the runtime BEFORE the bind,
+  because a bootstrapped intro raises its codes the instant `startanims` starts it. The bars then
+  need no engine support at all: the shared `letterbox` definition switches them on and re-asserts
+  `camera1`'s frame onto them every tick, which is the `AT_NODE` pose form this landed with
+  (`OBJECT_TRANSLATE_STATE at_node` / `OBJECT_ROTATE_STATE basis.AtNodeMatrix`, previously parsed
+  away, so the node was posed to its parent's origin). The controller mirrors `camera1` onto every
+  rig camera, ticking last in the frame so the bars and the view never disagree by a frame.
+- **Every code is hosted where the decode puts it**: 20 holds the world (both of `GameSession`'s
+  drive paths early-out, and `CampaignDirector.HoldForCutscene` stops the objectives update with
+  it, so no dormancy timer or reminder fuse burns down behind the movie), 2 takes the chrome off
+  and the view off the aircraft, 11 takes the player out of flight, 913/914 park and reveal the AI,
+  666/667 the camera-parameter gate, 1/10 the handoff and the in-flight systems. 14 and 123 stay
+  named gaps with one log line each.
+- **Handoff and skip are one code path.** The definition's end raises the gameplay state its own
+  `RESET_STATE` asserts (1, 10, 914, 667), retracts the bars and parks `camera1`; a skip force-stops
+  the definition first, exactly as `FUN_004a0220` does, and then runs the same restore. That is how
+  dropping the remaining beats cannot leave the mission held, hidden or unflyable. Skip is any key
+  but Escape, or any pad button where the session reads pads.
+- **⚠ The authored codes do not identify a cutscene.** Instant Action's own `camera1-player_setup`
+  raises the same nine, and every IA mission bootstraps it. Hosting by code gave every flight
+  session a letterbox and a suspended world, and moved five goldens; the scope is the two decoded
+  intro definition names, and what `player_setup` is for is recorded as undecoded.
+
+**Verified (this item's own foreground run).** `dotnet build` clean (0 warnings, StyleCop and
+comment caps clean). Foreground: in-engine suites 100/100 with errors clean, all 16 golden shots hash-identical (so the cutscene
+roots reach no session without an intro), units 2092/2092. Two new suites: `campaign-cutscene`
+drives C1/M04's shipped intro through the runtime's own `CALLBACK` dispatch and asserts the code
+sequence, the world hold reaching a real objectives graph, the declined vehicle-death codes and the
+handoff state; `cutscene-letterbox` asserts the shipped node's base state and the bars taking the
+cutscene camera's whole frame, tick after tick. Two scripted shots, both
+`RunProbe.ps1 --chapter=C1 --mission=M04 --fly --plane=player_bhawk --mute --screenshot=<abs>`: at
+`--frames=60` the bars are up, the camera is off the plane along the pirate zeppelin and no HUD is
+drawn; at `--frames=3260`, 1.1 s after the definition ends at t=53.2 s, the bars are gone, the full
+HUD is back, the chase camera is behind the player and the plane is flying at 128 mph.
+`generic_intro` was checked the same way on C1/M05. No golden re-pin was needed and none was taken. ⚠ The units stage needs a filter to run at
+all on this branch: `CampaignFlightCheckPageTests` and `CampaignAmmoPageTests` crash the test host
+in `CustomPlaneStore.UserPlanes` → Godot `ProjectSettings` outside the engine, which predates this
+item and belongs to C24/C25.
+
+**Verified.** <pending orchestrator run>
+
+**Open.**
+- **The mid-mission `landings.zrd` cutscenes are not reachable yet.** The controller is not
+  intro-only by construction (it plays whatever definition it is armed for), but the trigger is:
+  `FUN_0045df60` tests the player against an approach node's *condition object* and a speed band
+  every frame, and that condition object is not decoded. The codes those cutscenes add (951's
+  teleport-to-camera, 965–967's airframe swap, 3/12/13/86/701/702/800–803) are unhosted, and
+  `BL-035` now carries that remainder.
+- **A definition that never ends never hands off.** The end test is `AnimStateOf`, so a cutscene
+  whose sequences do not complete would hold the session until the player skips. C1/M04's runs
+  53.2 s and ends on its own.
+- **The frame the bars letterbox is inferred, not decoded.** The card's own height is taken as the
+  frame height (the only reading under which the geometry is a letterbox), which fixes the cutscene
+  field of view at 56.7° vertical; on a frame wider than the card's 5:3 the width becomes the
+  binding dimension instead, so the bars still meet every edge. `camera1`'s gamez record carries no
+  field of view.
+- **`camera1` now exists in a story mission's session, and the bullethole definitions pose against
+  it too.** They are parked back at the origin on the handoff so a stale cutscene pose cannot place
+  them; what the original does with that node between cutscenes is not decoded.
 
 ## D33 ☐ In-flight objectives display + objective sound cues
 
