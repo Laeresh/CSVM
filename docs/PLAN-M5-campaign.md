@@ -160,7 +160,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☐ Decode the `objectives.zrd` choreography vocabulary → `docs/formats/objectives.md`
 2. ☐ Decode the original save/profile format far enough to answer the structural questions
 3. ☐ Decode the campaign mission tree (order, branching, unlocks)
-4. ☐ Decode the briefing: `Briefing.zrd` dialog layout + the briefing map/flag animation
+4. ☑ Decode the briefing: `Briefing.zrd` dialog layout + the briefing map/flag animation
 5. ☐ Decode the economy constants: plane buy/sell prices, armor cost, starting funds
 6. ☐ Behavioral decode of the campaign GUI scripts (cabin, flight check, ammo, campaign intro)
 7. ☐ Decode the `letterbox` node mechanics and the cutscene `CALLBACK` codes
@@ -292,32 +292,51 @@ in the user's save, with no orphans in either direction.
 **⚠ Traps.** The user's save reflects one play-through; a branch not taken there is not evidence
 the branch doesn't exist.
 
-## A4 ☐ Decode the briefing: `Briefing.zrd` dialog layout + the briefing map/flag animation
+## A4 ☑ Decode the briefing: `Briefing.zrd` dialog layout + the briefing map/flag animation
 
 **Goal.** A formats page for the shared `Briefing.zrd` dialog definition (panels, fonts,
 positions, buttons, `MSG_BRF_*` linkage) and for how a mission's briefing is assembled: which data
 places the map, the red flags, and the step-by-step reveal the original animates, and which
 narration wav belongs to which mission.
 
-**Evidence (confidence: data located, format undocumented).** `extracted\zrdr\Briefing.zrd.json`
-(316 KB) with `BRIEFINGDIALOG`/`PRIMITIVES`/`BUTTONS` observed; per-mission `map.zrd.json` and
-`location.zrd.json` exist in every mission's zrdr folder (contents unread); narration wavs
-enumerated in the data survey; `OriginalScreenshots\Campaign Briefing.png` shows the assembled
-screen.
+**Evidence (confidence: traced).** Landed as [`docs/formats/briefing.md`](formats/briefing.md).
+`Briefing.zrd.json` (20,470 lines) holds `BRIEFINGDIALOG` with fixed `PRIMITIVES`/`BUTTONS` chrome
+plus 25 named `STATES` (`default` and 24 `brief_cNN` mission states), each carrying its own
+background map art and, for every mission state, a `SCRIPT`: an ordered opcode list
+(`PlaySound`/`WaitForMarker`/`Pict`/`Fade`/`Spin`/`Move`/`Line`/`On`/`Off`/`Objective`/`Wait`/
+`ToBack`, 12 opcodes total, fully censused) that is itself the map's step-by-step reveal, synced to
+that mission's narration wav via `WaitForMarker`. `map.zrd.json` and `location.zrd.json` turned out
+to be unrelated: `map.zrd` is the in-flight cockpit map overlay (a `MAP` node with a `player_icon`
+marker) and `location.zrd` is a per-mission list of named world points (some byte-identical across
+chapters, one authored `null`); neither is read by `Briefing.zrd`, `sounds.zrd`'s briefing `SETS`,
+or any mission's `objectives.zrd`. The reveal mechanism (the SCRIPT itself) and the wav pairing
+(each state's `PlaySound` sound name, corroborated by `sounds.zrd.json`'s `SETS` carrying the same
+state key over the same sound file) were both fully recoverable from the data, so no
+`crimson.exe` trace was needed for either.
 
-**Approach.** Document `Briefing.zrd` structurally from the JSON (it is a layout, mostly
-self-describing once the key families are censused); read `map.zrd`/`location.zrd` for the
-per-mission map/flag data; take the animation timing from the A8 capture, and only go into
-`crimson.exe` if the reveal order is not in the data.
+**Approach.** Done as scoped: `Briefing.zrd` documented structurally from the JSON census;
+`map.zrd`/`location.zrd` read and found not to be the briefing's data; reveal order came straight
+out of the SCRIPT vocabulary, so the `crimson.exe` escalation condition never triggered.
 
-**Model recommendation.** medium — mostly structural JSON documentation; escalate only if the exe
-trace becomes necessary.
+**Model recommendation.** medium, as scoped; the exe trace was not needed.
 
-**Verify.** The documented layout reproduces the reference screenshot's panel and button
-placement; every C1 mission maps to exactly one narration wav and one flag set.
+**Verify.** The documented chrome positions (buttons at `y=560`, the objectives note at
+`[0,295]`/`[35,315]`/`[35,335]`) reproduce `Campaign Briefing.png`'s layout. Every one of the 24
+mission states maps to exactly one narration wav with no sharing or gaps (censused table on the
+page); which *shipped mission folder* each state belongs to is not decodable from this item's
+sources and is called out as an open dependency on A3 below, rather than closed here.
 
-**⚠ Traps.** <TODO: unknown until the map/location readers are opened; note anything misleading
-here for C23.>
+**⚠ Traps.** The `brief_cNN` state key looks like a chapter/mission encoding and is not one:
+`brief_c31` plays chapter 2 mission 1's narration and map art, `brief_c12` plays chapter 2 mission
+2's. C23 must key off the `SCRIPT`'s `PlaySound` sound name or the `BACKGROUND_IMAGES` bitmap name,
+never the state key. A second, independent trap sits inside each mission's own `objectives.zrd`:
+its `MSG_BRF_*` prefix names a *different* chapter's abbreviation than the one it ships in (all
+five C1 story missions are tagged `NWM<n>`, `NW` being chapter 2's abbreviation) and is not even
+internally consistent within one chapter (`C2/M01` is tagged `HWM2`, `C2/M02` is tagged `HWM1`,
+swapped). Do not use that prefix, or its objective count, to pair a mission folder with a
+`Briefing.zrd` state; neither lines up (worked out in full on the formats page's "Evidence &
+limits"). C23 needs an explicit folder-to-state lookup from A3's mission tree, not a formula
+derived from any of these internal names.
 
 ## A5 ☐ Decode the economy constants: plane buy/sell prices, armor cost, starting funds
 

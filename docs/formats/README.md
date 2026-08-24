@@ -64,7 +64,7 @@ magnitudes and the consumer that rocks the plane, behind [shakes.md](shakes.md) 
 
 ### Presentation and UI
 
-- [hud.md](hud.md), [rof.md](rof.md), and [strings.md](strings.md).
+- [hud.md](hud.md), [rof.md](rof.md), [strings.md](strings.md), and [briefing.md](briefing.md).
 ## Shared conventions (zrdr readers)
 
 The zrdr "reader" files are the engine's config/script lists; mech3ax extracts each to a
