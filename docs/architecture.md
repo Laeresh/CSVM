@@ -140,13 +140,14 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WarningShotCue.cs` — the shipped near-miss accumulator (player.json `warning_shot_*`) + swept-segment/point distance; engine-free so it unit-tests.
 - `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig — a phantom shooter on each player's six, so the cue is reachable deterministically without an AI gunner.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
-- `src/Flight/MissionTargets.cs` — mission `targets.json` loader: world-node name → objective display keys, resolved through `Messages`.
+- `src/Flight/MissionTargets.cs` — mission `targets.json` loader: world-node name → objective display keys and the `objective`/`other_target` marker flags a mission starts with, resolved through `Messages`.
 - `src/Flight/StuntMission.cs` — Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
 - `src/Flight/HudMetrics.cs` — the one rule for HUD sizing: window height / 1440, damped by `sqrt(paneH/windowH)` for splitscreen.
 - `src/Flight/HudFont.cs` — the game's own 5px HUD bitmap font, auto-segmented from `rimage/5pointhud*.png`; `--hud-font-test` proves it.
 - `src/Flight/WeaponReadout.cs` — the selected-weapon text readout: gun group + rocket type and live ammo, in the game's own HUD font.
 - `src/Flight/ImpactReticle.cs` — the gun aiming pipper: 0.5 s of the selected group's flight along the nose (the original's own rule), projected each frame.
 - `src/Flight/EdgeMarker.cs` — the off-screen edge marker's placement rules, engine-free: on-screen test, behind-mirror, edge clamp (`Resolve`) and the clock-hour bearing (`ClockHour`); MarkerHud, VersusHud and TargetHud all place through it.
+- `src/Flight/MarkerDraw.cs` — the world marker's drawing primitives, engine-side but camera-free: reticle, edge arrow, centred text block and its clamped variant, plus the marker blue and the drop shadow. `EdgeMarker` places a marker; this draws it, so `MarkerHud` and the campaign's `ObjectiveMarkerHud` share one look.
 - `src/Flight/MarkerHud.cs` — the stunt objective marker HUD: reticle, screen-edge arrow + o'clock bearing, run status, banners; one per player.
 - `src/Flight/StuntScoreboard.cs` — end-of-run results overlay: a Godot-UI panel of per-zone splits, total, and the persisted best time.
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
@@ -245,6 +246,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`/`BriefingState`/`BriefingStep`, walking the root list where the 24 states actually live) and `BriefingReveal`, the interpreter that runs a state's 12-opcode beat sheet against a caller-advanced clock, blocking on `Wait`'s authored seconds and `WaitForMarker`'s cue times and keeping each element's opacity, rotation and position as its tweens land. Elements come out in placement order, which is draw order. With no cue points every marker releases at once, so the map finishes under the narration rather than a timing being invented. Decode: `docs/formats/briefing.md`.
 - `src/UI/BriefingObjectives.cs` — the briefing's parchment note from a mission's `objectives.zrd`: every `IDENTITY` carrying a `MSG_BRF_*` key, ordered by priority ascending, which is the list an `Objective id index` opcode indexes 0-based. Takes the reader list rather than a path, so it tests without an extraction; resolves text through `Messages`, leaving the raw key visible when the table cannot.
 - `src/UI/ObjectivesHud.cs` — the in-flight objectives display (D33): reads `CampaignDirector`'s `ObjectiveGraph.Rows` directly (not a re-parse), text through `Messages`, and shows every row rather than gating on the row's own `Awake` flag (an objective authored with no `BEGIN_DORMANT` starts awake without ever running a wake action, so its row's `Awake` flag never turns on even though it is live from the mission's first tick, C1/M02's own primary OBJECTIVE3, and filtering on it would hide exactly the objective a player needs to see first). This also matches the original's own decoded display mechanism (`docs/formats/objectives.md`, `FUN_004acc20`/`FUN_004ad240`): every `IDENTITY` row is built once and shown unconditionally, only the completion mark toggles. Self-mounting like `PerfHud` (its own `CanvasLayer` on `HudLayers.Hud`), so nothing here reaches `GameSession`; mounting it into a real session is a one-line wiring contract `PLAN-M5-campaign.md`'s D33 section names, deferred because `GameSession.cs` was off limits to a concurrent item while this one landed. No reference screenshot covers the original's in-flight layout, so every metric is TUNE; the still-owed capture is named in the plan.
+- `src/UI/ObjectiveMarkerHud.cs` — the flown campaign mission's objective-site markers, the only thing that tells the player where to go: the marker set is `targets.zrd`'s own `objective` entries edited by `objectives.zrd`'s `ADD_`/`REMOVE_OBJECTIVE_TARGET`, the label and colour are `TargetRef`'s decoded ones, the placement is `EdgeMarker`'s and the drawing is `MarkerDraw`'s. A site the mission names by a bare `TRAVELERS` point is marked at that point, not at the world node of the same name. Self-mounting like `ObjectivesHud`.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
@@ -2295,8 +2297,17 @@ only IA1 folders have one, the original picks one at random per launch) and `Loa
 
 ## src/Flight/MissionTargets.cs
 Loads a mission's targets.json: world-node NAME → objective display keys
-(`description`/`category_label`/`help_label`), resolved through `Messages`. Generic across
-mission types; a missing file yields an empty set. Schema: docs/formats/missions.md.
+(`description`/`category_label`/`help_label`), resolved through `Messages`, plus the valueless
+`objective`/`other_target` marker flags a mission starts with. Generic across mission types; a
+missing file yields an empty set. `ByNode` exposes the whole table for a consumer that needs the
+starting flags rather than one node's keys. Schema: docs/formats/missions.md.
+
+## src/Flight/MarkerDraw.cs
+The world marker's drawing primitives, shared by `MarkerHud` and `UI/ObjectiveMarkerHud`: the
+shadowed reticle, the edge arrow with its tail stroke, and the centred text block (`Lines`) with
+the pane-clamped variant (`LinesClamped`) an off-screen marker needs. Owns the marker blue and
+the drop shadow; colour and scaled sizes stay with the caller, since each HUD scales through its
+own `HudMetrics.Scale`. Where a marker GOES is `EdgeMarker`'s; this is only what it looks like.
 
 ## src/Flight/StuntMission.cs
 Stunt Flying state: `Load` builds the ordered zone list from ia.json `dzones` (HUD positions via
@@ -2350,6 +2361,17 @@ Off-engine coverage: `CSVM.Tests/EdgeMarkerTests.cs`.
 The stunt objective marker HUD: a viewport-filling `Control` drawing the on-screen reticle/text
 block, the off-screen edge arrow (`EdgeMarker.Resolve` + clock-hour bearing), run status and banners
 (`CompleteBanner` branches solo vs race); one per player, sized via `HudMetrics.Scale(this)`.
+
+## src/UI/ObjectiveMarkerHud.cs
+The flown campaign mission's objective-site markers. The set is `targets.zrd`'s own `objective`
+entries minus those a completed objective's `REMOVE_OBJECTIVE_TARGET` names, plus whatever
+`ADD_OBJECTIVE_TARGET` has added: `ObjectiveGraph.ObjectiveTargets` alone starts empty and a
+mission that only ever REMOVES its sites would draw nothing. Label and colour come from
+`TargetRef`'s decoded format strings and `TargetHud.MarkerColor` (category line over the site name,
+blue unless the category is destructive), placement from `EdgeMarker`, drawing from `MarkerDraw`.
+`PointFor` prefers the bare `TRAVELERS` point of the objective that edits a target over the world
+node of the same name, because C3/M01's village node stands at the world origin. Self-mounting the
+way `ObjectivesHud` is, so `GameSession` only adds it. Pinned by `campaign-objective-markers`.
 
 ## src/Flight/StuntScoreboard.cs
 End-of-run results overlay: plain Godot UI (dimming backdrop → CenterContainer →

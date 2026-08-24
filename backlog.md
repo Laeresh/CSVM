@@ -2013,8 +2013,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   so the move must keep that suite meaningful rather than deleting it. ⚠ Do not also remove
   in-world target selection: the same verdict says targets ARE selectable in the world, and that is
   a different subsystem. *Cross-refs:* `CAP-45`, re-pointed at the pause screen's presentation,
-  which has no reference shot; `BL-456`, since an unmarked line is why the failing objectives were
-  hard to diagnose at the controls.
+  which has no reference shot.
 
 - `BL-449` `[Bug]` **The campaign screens are the shared list menu, not the original's full-screen
   boards, and the original's own buttons are not on them.** Seen at the controls: the campaign
@@ -2284,40 +2283,6 @@ usual.
 
 ## Missions, modes & campaign
 
-- `BL-456` `[Bug]` **Campaign objectives do not register in a flown mission, so the first mission
-  cannot be finished.** Seen at the controls on the first campaign mission: only one objective ever
-  completed, and "I couldn't drop Jack at the wreck". *Evidence:* the user's own pass, which is the
-  only place this has been observed; the headless `campaign-loop` suite completes C3/M01's primary
-  by flying its `TRAVELERS` approach and passes, so the machinery works in at least that scripted
-  case and the divergence is between the suite and a real flown session.
-  **The mission's authored shape is now on film**, `OriginalScreenshots\Videos\Complete Mission
-  M02.mkv` (5:01), a complete run of the original by the user: fly to three places (the tunnel, the
-  mountain village, the wreck); fly to the wreck AGAIN to drop Jack, which plays a short cutscene of
-  him parachuting down whose staging depends on the direction the player approaches from; shoot down
-  a cargo zeppelin (destroyable tanks slung below) and three Kestrels; fly back to the PANDORA and
-  dock, which the film shows as flying into the airship's lit hangar bay, with an auto-land button
-  as the alternative. The pause screen at t=12 s lists the four objectives.
-  ⚠ **The conditions are not broken. The player is never told where to go.** Traced against a live
-  `--campaign=<profile>:0` session (the mission is `C3/M01`, "Hawaii mission 1"; the user's "M02" is
-  their own naming). All six `TRAVELERS` references resolve, and placing the aircraft at each site
-  completes that site's objective on the first unheld tick: the tunnel (`t_chamber`, r=200) at
-  d=75, the village (a bare point, r=200) at d=147, the wreck (`shipwreck`, r=200) at d=115. The
-  kind is implemented at `CampaignDirector.cs:582` and `ObjectiveGraph.cs:518` and works. What is
-  missing is the presentation: `ObjectiveGraph` maintains `ObjectiveTargets` (`ObjectiveGraph.cs:205`),
-  `OtherTargets` (`:208`) and `HelpLabels` (`:211`) and raises `TargetsChanged` (`:171`), and
-  **nothing in `CSVM/src` consumes any of them** outside one suite assertion. `ADD_OBJECTIVE_TARGET`
-  and `SET_HELP_LABEL`, which is how the original puts a marker and a label on `t_chamber`,
-  `grasshut2` and `shipwreck`, are a write-only store. The briefing map does not draw its flags
-  either (`BL-450`), so the sites are not learnable before takeoff. The player had four sentences of
-  text and nothing else, and found one site of three by luck. *Fix shape:* consume the target and
-  label store, which is a HUD/marker question, not an objectives-runtime one.
-  *⚠ Traps:* ⚠ do not "fix" the conditions or widen a radius: they are proved correct, and widening
-  one would hide the real bug. ⚠ Three of the mission's six display rows are blocked on something
-  else entirely (`BL-448`, below), so making the targets visible does not by itself make the mission
-  finishable. *Cross-refs:* `BL-448` for the three blocked rows, and `BL-458` for the danger-zone
-  row; `BL-454`, since the readout could not say which objective completed;
-  `docs/PLAN-M5-campaign.md` D31 owns the objectives runtime.
-
 - `BL-458` `[Bug]` **`DANGER_ZONES_COMPLETED` can never be satisfied in a flown campaign mission.**
   *Evidence:* a campaign mission's danger zones are the same `dzpathN` gate geometry `--stunt`
   reads, authored from a different surface: no `ia.json` `dzones` list, but the mission's own
@@ -2325,12 +2290,14 @@ usual.
   on `dzpath1`, `OBJECTIVE11` on `dzpath4`), narrowed by `dzones.zrd`'s `disable` list.
   `CampaignDangerZones` (new) reads that surface and calls the existing
   `CampaignDirector.NotifyDangerZoneCompleted` (`:345`); `Attach`/`Step` wire it off a new
-  `WorldInputs.Gamez` field. Proven against real C3/M01 data (`campaign-danger-zones` suite):
-  gate-crossing completes the zone, and `OBJECTIVE3`/`OBJECTIVE11` complete off the real notify
-  path. **Still open:** `GameSession.cs`'s own `Attach` call (~line 2473) does not yet set
-  `Gamez`, so a real flown session still never arms the tracker — one field, in a file outside
-  A6's ownership when this was traced. *Fix shape:* add `Gamez = state.Gamez,` to that call's
-  `WorldInputs` initializer. *Cross-refs:* `BL-456`.
+  `WorldInputs.Gamez` field, which `GameSession`'s own `Attach` call now passes. Proven against real
+  C3/M01 data (`campaign-danger-zones` suite): gate-crossing completes the zone, and
+  `OBJECTIVE3`/`OBJECTIVE11` complete off the real notify path. **Still open** until the secondary
+  is seen to complete in a mission flown at the controls, which is the one thing no suite can show.
+  *⚠ Traps:* ⚠ `ObjectiveGraph.ScanForCompletion` resolves one objective per tick round-robin, so a
+  single step after a notify is not enough to see a completion; step several seconds. ⚠ C3's gate
+  pairs sit close enough that one crossing can legitimately complete both zones, which is correct
+  behaviour rather than a test defect.
 
 - `BL-457` `[Bug]` **The campaign wingman ends up high and far behind, so it reads as having spawned
   in the wrong place.** Seen at the controls: "in the original the wingman spawns beside me. here he
@@ -2612,7 +2579,7 @@ usual.
   C3/M01's `OBJECTIVE26`/`OBJECTIVE30` name `volcano1`, which is `ON_STARTUP` and does reach
   EXECUTED, so they are fine. Check the named def's trigger kind before filing one under this.
   *Cross-refs:* `BL-035` carries the same blocker from the animation side; one trigger unblocks
-  both. `BL-456`, three of whose six display rows are blocked on this.
+  both. Three of C3/M01's six display rows are blocked on this.
 
 ## Tooling, platform & docs
 

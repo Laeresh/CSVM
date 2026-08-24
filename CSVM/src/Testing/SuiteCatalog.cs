@@ -14,6 +14,7 @@ using static CSVM.Testing.AiSuites;
 using static CSVM.Testing.AnimationAndEffectsSuites;
 using static CSVM.Testing.CampaignHudSuites;
 using static CSVM.Testing.CampaignLoopSuites;
+using static CSVM.Testing.CampaignMarkerSuites;
 using static CSVM.Testing.CampaignRosterSuites;
 using static CSVM.Testing.CampaignSuites;
 using static CSVM.Testing.CampaignZeppelinSuites;
@@ -147,6 +148,7 @@ public static class SuiteCatalog
         "campaign-loop",
         "campaign-zeppelins",
         "campaign-danger-zones",
+        "campaign-objective-markers",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -771,6 +773,15 @@ public static class SuiteCatalog
             + "completion, and the director's real NotifyDangerZoneCompleted path completes the "
             + "SECONDARY (OBJECTIVE3) and OBJECTIVE11 the way a flown mission would",
             CampaignDangerZoneObjectives));
+
+        // BL-456: the objective-target store had no consumer, so a flown mission never showed the
+        // player where its sites were.
+        into.Add(new TestHarness.Suite("campaign-objective-markers",
+            "the campaign's objective markers over the first story mission's BUILT world: every "
+            + "site its targets.zrd flags carries a marker with the original's category line over "
+            + "the site name, in the decoded blue, sitting on the world node the mission named, "
+            + "and flying one site's own TRAVELERS approach retires that marker alone",
+            CampaignObjectiveMarkers));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

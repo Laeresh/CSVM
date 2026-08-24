@@ -2533,11 +2533,16 @@ public partial class GameSession : Node3D
             DebugShow = _spec.DebugTargets,
         });
 
-        // The in-flight objectives readout (D33), mounted only for a campaign session; it polls
-        // _campaign.Graph itself once Attach (above) has built it.
+        // The in-flight objectives readout (D33) and the objective-site markers, mounted only for a
+        // campaign session; both poll _campaign.Graph themselves once Attach (above) has built it.
+        // The markers are what tells the player where the mission's sites are.
         if (_campaign is { } campaign)
         {
-            _worldRoot!.AddChild(UI.ObjectivesHud.Build(campaign, Messages.Load(state.MessagesPath)));
+            var objectiveMessages = Messages.Load(state.MessagesPath);
+            _worldRoot!.AddChild(UI.ObjectivesHud.Build(campaign, objectiveMessages));
+            _worldRoot!.AddChild(UI.ObjectiveMarkerHud.Build(campaign, objectiveMessages,
+                MissionTargets.Load(state.MissionZrdrPath), state.WorldRuntime,
+                () => _rigs.Count > 0 ? _rigs[0].Controller : null));
         }
 
         if (_rigs.Count > 1)

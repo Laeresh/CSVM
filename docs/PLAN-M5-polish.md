@@ -64,7 +64,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — what stops the campaign being playable
 
-1. ☐ Objective targets and help labels are never drawn, so the sites cannot be found (`BL-456`)
+1. ☑ Objective targets and help labels are never drawn, so the sites cannot be found (`BL-456`)
 2. ☐ A campaign session never spawns its zeppelins or generators (`BL-451`)
 3. ☐ The campaign wingman cannot hold station on a real player (`BL-457`)
 4. ☑ The music channel drowns the briefing (`BL-455`)
@@ -125,7 +125,7 @@ keeps the backlog honest while the rest runs.
 
 # Wave A — what stops the campaign being playable
 
-## A1 ☐ Campaign objectives do not register in a flown mission (`BL-456`)
+## A1 ☑ Campaign objectives do not register in a flown mission (`BL-456`)
 
 **Goal.** A campaign mission's objectives complete when the player does what they ask, so the first
 mission can be flown to its end at the controls.
@@ -188,6 +188,31 @@ one would bury the real bug. ⚠ Do not absorb the three rows C21 blocks or the 
 item ends at making the targets visible. ⚠ Do not invent a marker style: the original's is the
 enemy marker in blue, `MarkerHud` already draws that, and the film shows the two-line name-over-range
 label it composes.
+
+**Landed.** A flown campaign mission marks every objective site the mission flags, in world, in the
+marker blue: a reticle at the site with the original's category line over the site's own name
+(`[Examine] -` over `Site #1`), and off screen the edge arrow with the clock bearing. The set is
+`targets.zrd`'s own `objective` entries, edited by `objectives.zrd`'s `ADD_`/`REMOVE_OBJECTIVE_TARGET`
+as objectives complete, so flying a site's approach retires that site's marker and leaves the rest
+standing. `ObjectiveGraph.ObjectiveTargets` is not the whole store: C3/M01 never ADDs its three
+sites, it only REMOVES them, so a set built from the script's adds alone stays empty for the whole
+mission, and `MissionTargets` now reads the valueless `objective` flag that seeds it. A site the
+mission names by a bare `TRAVELERS` point is marked at that point rather than at the world node of
+the same name, because C3/M01's village node stands at the world origin, 7.9 km from the point its
+own objective tests. `MarkerHud` stays stunt-owned; its drawing primitives moved to `MarkerDraw`, so
+the two markers share one look rather than a copy, and the label and colour are `TargetRef`'s
+already-decoded ones. `ObjectiveMarkerHud` self-mounts the way `ObjectivesHud` does, one line in
+`GameSession`. The conditions, the radii and the three rows C21 blocks are untouched.
+
+**Verified.** `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors; `CSVM.Tests` 2334 passed, 0
+failed (111 suite names, `campaign-objective-markers` last); `CheckCommentCaps.ps1 -Summary` reports
+all comment blocks within cap. The new in-engine suite `campaign-objective-markers` drives C3/M01's
+real director against its BUILT world: 9 checks green, and with the marker set reduced to
+`ObjectiveGraph.ObjectiveTargets` alone it fails on the first one (`0 passed, 1 failed`), which is
+the bug it exists to catch. A scripted `--campaign=<profile>:0 --screenshot` run over C3/M01 shows
+the three sites marked in blue over the island with their labels
+(`.scratch/a1-objective-marker.png`). The engine suites and the golden battery are the orchestrator's
+to run after the merge.
 
 ## A2 ☑ A campaign session never spawns its zeppelins or generators (`BL-451`)
 
