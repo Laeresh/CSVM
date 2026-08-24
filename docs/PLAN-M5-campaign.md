@@ -1564,8 +1564,11 @@ runway of C1/M04's airfield, which corroborates the takeoff-run reading. `dotnet
 worktree crashes the test host with an `AccessViolationException` at a different, randomly varying
 test each run and zero assertion failures; **the same crash reproduces on this worktree at HEAD with
 none of these changes applied**, and the main checkout passes all 2003. Pre-existing, and not this
-item's. **Verified.** <pending orchestrator run: the 8-chapter freecam regression and the full
-battery>
+item's (on the plan branch the same suite passes in full). **Verified.** `RunTests.ps1` on the plan
+branch with these two sub-changes and the shell integration merged: build clean, units 2164/2164
+once the suite-count test learned the two new suites, engine suites 100/100 with errors clean
+(`partition-areas` and `scripted-path` included), all 16 golden shots across the 8 chapters
+hash-identical, so the partition grid and the path follower moved nothing in world build.
 
 **⚠ Traps.** BL-038 fires inside D32's cutscene on C1/M04; land D32 first or verify on a
 non-cutscene fog use if one exists. ⚠ C3/M01 and C3/M04 BOTH switch area 3 off, so the A/B for that
