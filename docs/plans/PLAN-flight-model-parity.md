@@ -1,8 +1,7 @@
 # Flight Model Parity
 
-**ACTIVE PLAN** (written 2026-08-24). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's Current status names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**✅ COMPLETE** (written 2026-08-24, completed 2026-08-24). Every item landed; archived in
+`docs/plans/` and indexed in [`plans.md`](plans.md).
 
 This plan brings aircraft dynamics, control response, flight-adjacent animation and collision
 physics to the closest reproducible match to the retail original. It schedules all fourteen open items

@@ -847,7 +847,7 @@ far-field test is the pair at `0x48c4d7` and `0x48c4e9`.
 **How CSVM flies it.** `FlightModel.FarFieldPlant` is re-decided every step from
 `FlightInput.NearestHumanDistSqM`, which `FlightController` fills from the session's
 `PlayerPositions` snapshot. The original measures against its single player pointer; CSVM measures
-against the **nearest human pilot**, which is `docs/PLAN-flight-model-parity.md`'s Decision 3 (widen
+against the **nearest human pilot**, which is `docs/plans/PLAN-flight-model-parity.md`'s Decision 3 (widen
 a player-only behaviour to all four human pilots deliberately) and is the only difference from the
 decode. The crashed-flag arm is not ported: CSVM's own wreck fall already flies the near-field plant
 by `FUN_0048e580`'s rule, and the flag's writers are not decoded. Two constants of the plant's
