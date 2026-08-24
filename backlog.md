@@ -917,11 +917,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   moved row attributed. Bounded: the ramp bites near `highGs` (9) and the stock full pull peaks at
   5.83 G. Ledger row "the G ramp reads the SAME tick's delivered lift" in
   [`docs/org/flightModel.md`](docs/org/flightModel.md).
-- `BL-444` `[Tooling]` **A flight-dump hash is host-bound.** The Godot run and the `dotnet test`
-  host differ on 9 of 1123 `--dump-flight=all` lines by one unit in the last place (knife-edge
-  samples, runtime float settings, not the plant); `docs/verification.md` `INSTR-19` says compare
-  only against a same-host hash. Round the printed values or pin the float mode so one hash can
-  be quoted across hosts.
 - `BL-445` `[Tooling]` **Dump scenarios for the plant branches the envelope dump never enters.**
   The dump drives 7 of 16 decoded branches (8 on the autogyro). Reachable but unentered:
   `pitch-fade`, `g-clamp`, `g-ramp` (a sustained outside push), `dive-cap`, `stall` and the
