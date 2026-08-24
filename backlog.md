@@ -909,30 +909,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-388` `[Tuning]` `[Owed-playtest]` **The AI autogyro's nose-down at low speed may read softer
-  than the original's — soft, single-session A/B, not a confirmed measurement.** `PT-57`
-  (`docs/plans/PLAN-ai-flight.md` F52 player arm, 2026-08-15): the autogyro's authority-ramp feel
-  otherwise matched the original directly at the controls; the one residual is "the nose pulling
-  down is not as hard as in the original", offered with a "perhaps".
-  *Evidence:* two candidate mechanisms, neither pinned to the report yet. (1) `AiControlLaw`'s
-  low-speed recovery: below `RecoveryNoseY` and `RecoverySpeed` (60 mph) the law firewalls pitch
-  nose-down and the throttle to `SpeedCap`. ⚠ `noseY` is the BACKWARD axis's Y
-  ([`docs/org/aiControlLaw.md`](docs/org/aiControlLaw.md) step 4), so this arms with the nose ~30°
-  **UP** and slow, a stall recovery, not with the nose down. That makes it a weaker candidate for a
-  soft nose-down than it looked, since the reported feel is a dive and this arm does not fire in
-  one; re-read it against that sign before pursuing it. (2) `C24`'s authority ramp
-  (`FlightModel.RollAuthorityAt`) fades pitch alongside roll below `turn_fade_in`/`_out`; the
-  autogyro is the airframe `BL-330` measured losing the MOST authority by its own stall speed
-  (~79%), so a soft nose-down there could also just be the ramp doing its authored job and reading
-  unfamiliar rather than being wrong.
-  ⚠ Do not tune either candidate from this report alone — it is one flight, phrased as uncertain by
-  the reporter, and PT-57 also confirmed the airframe reads correctly everywhere else.
-  *Playtest after fix (or before touching anything):* a second `PT-57` autogyro pass, ideally with
-  the original open side by side, isolating whether the softness is in the recovery arm timing or
-  the authority ramp itself.
-  *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (player arm), `BL-330` (the authority ramp this pairs
-  with).
-
 ## Environment & world
 
 - `BL-037` `[Feature]` {CAMPAIGN} **`WorldPartitionSetActive` is decoded and unimplemented — `NodeSetActive`

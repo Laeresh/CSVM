@@ -124,7 +124,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — Prove parity
 
-41. ☐ E41 Recheck the autogyro low-speed nose-down report (`BL-388`)
+41. ☑ E41 Recheck the autogyro low-speed nose-down report (`BL-388`)
 42. ☐ E42 Publish the eleven-airframe parity ledger
 43. ☐ E43 Enable the decoded AOA window and settle α against the original
 
@@ -858,13 +858,13 @@ which the runtime does not offer. `BL-089` deleted from `backlog.md`.
 
 # Wave E — Prove parity
 
-## E41 ☐ Recheck the autogyro low-speed nose-down report (`BL-388`)
+## E41 ☑ Recheck the autogyro low-speed nose-down report (`BL-388`)
 
 **Goal.** Decide whether the autogyro's softer low-speed nose-down is a real residual after the settled plant.
 
 **Evidence (confidence: lead-only).** One uncertain playtest report names softness; the authored low-speed authority ramp is a competing explanation.
 
-**Approach.** <TODO: re-verify still-open against `git log --grep=BL-388` and `playtest.md`.> After A2/B11, replay matched autogyro stalls and separate AI recovery commands from plant authority.
+**Approach.** After A2/B11, replay matched autogyro stalls and separate AI recovery commands from plant authority.
 Judge against the window-live plant `E43` shipped (`AoaLimiterFactor` 1): the autogyro's stock pull already reads 36.0 °/s there against 39.3 with the seam at 0.
 
 **Model recommendation.** **high** — coupled control-law/plant diagnosis from weak evidence.
@@ -872,6 +872,43 @@ Judge against the window-live plant `E43` shipped (`AoaLimiterFactor` 1): the au
 **Verify.** Side-by-side original and CSVM entries at matched speed and attitude, with recovery-arm state logged.
 
 **⚠ Traps.** The recovery arm keys on the backward axis: nose-up-and-slow, not nose-down.
+
+**Landed.** ANSWERED BY THE DECODE, and `BL-388` closes: every term the autogyro's low-speed
+nose-down passes through is decoded and authored, so no at-the-controls comparison is owed. The
+re-verify found the item still open (`git log --grep=BL-388` returns nothing, and `playtest.md`'s
+`PT-57` is the flight the report came from). **Nothing in the nose-drop is per-airframe except where
+the stall flag turns on.** `stall_mag` is a single global (`_DAT_0071c41c`, 1.25 authored, the torque
+at `0x48d158`), the axis and its cancellation are state-derived, and the two numbers an airframe
+could differ on are authored identical to the Bloodhawk's: `rec_moments_inertia.x` 1.18 and
+`ang_momentum_damp` 5.0. What differs is the wing loading, `veh_weight` 500 over `ref_area` 800
+against 1900 over 330, a ninth of the Bloodhawk's, which puts the autogyro's computed stall at
+**18.5 mph against 56.5**. So through the 20–55 mph band a pilot calls low the autogyro is not
+stalled at all and its drop term is exactly zero, where the Bloodhawk at 40 mph is at flag 0.50; and
+below its break the authored ramp has left it 21 % of pitch authority against the Bloodhawk's 100 %
+at its own break, so it mushes rather than pitching hard either way. The ramp scales the STICK only,
+which is the second candidate the item named settled. What actually carries the nose over on both
+airframes is the weathervane, 144 °/s² on the autogyro and 85 °/s² on the Bloodhawk in a matched
+70 mph nose-high idle entry against a 33 °/s² drop on either. The AOA window at its `E43` strength
+touches neither: it scales an opposing pitch or yaw stick command, so a centred stick never sees it.
+The first candidate is settled by the guard rather than by the sign alone: the drop and the
+weathervane are both player-only, so an AI autogyro has NO plant nose-down to soften and every
+degree it flies is the recovery arm's command, while a player-flown autogyro never runs that law.
+One new decode lands with it, the complete consumer list of the authored `is_autogyro` flag (parsed
+to the vehicle record's byte `+0x21c` at `0x4792c4`): the byte is read exactly twice, at `0x4876f4`
+in the mouse-flying arm of `FUN_00487460`, where it exchanges and negates the roll and yaw sources
+after the pitch write, and at `0x420205` in the AI maneuver chooser `FUN_004201a0`, where it gates
+each row of the 17-entry `maneuvers.zrd` table (base `0x71b210`, stride `0x1c`) on that row's byte
+`+0x06`. Neither reaches a torque, an authority curve or the stall, and the class dispatch does not
+single the airframe out either, since `pautogyro` authors no `mode` and inherits `basic_airplane`'s
+`mode jet`. No code changed. `AutogyroStallNoseDownTests` pins the equal-depth equality with a
+softer-inertia control, the empty nose-drop at 40 mph beside the Bloodhawk's, the ramp scaling the
+stick and not the drop, the recovery arm's nose-high-only trigger, and the AI path holding its nose
+where the player path drops it; `Probes.StallEntry` with `ZzAutogyroStallInstrument` is the per-step
+readout the figures come from. Dossier section "Why the autogyro's low-speed nose-down is softer,
+term by term"; `BL-388` deleted from `backlog.md`. `playtest.md`'s `PT-57` still carries a second
+autogyro pass under this item's name, which no longer has a question to answer.
+
+**Verified.** Full `RunTests.ps1` battery on the merged lane tree with `CSVM_DATA_ROOT=Z:\CSVM`: build clean, 2143/2143 units, 94/94 engine suites (errors clean), 16/16 goldens hash-identical, exit 0.
 
 ## E42 ☐ Publish the eleven-airframe parity ledger
 

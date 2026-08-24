@@ -113,8 +113,10 @@ public class SweepCadenceTests
         private readonly int? _spendPhase;
         private readonly PlaneStats _stats = new()
         {
-            CollideArmorFloor = 50f, CollideArmorScale = 300f,
-            CollideHealthFloor = 50f, CollideHealthScale = 300f,
+            CollideArmorFloor = 50f,
+            CollideArmorScale = 300f,
+            CollideHealthFloor = 50f,
+            CollideHealthScale = 300f,
         };
 
         private Vector3 _from;

@@ -998,6 +998,60 @@ public static class Probes
         return sb.ToString();
     }
 
+    // ---- stall entry -------------------------------------------------------------------------
+
+    /// <summary>The per-step readout of a decelerating stall entry, stick centred: the stall flag,
+    /// the low-speed authority ramp, the AOA window, the decoded nose-drop term, the weathervane and
+    /// the pitch rate. The AI law's low-speed recovery arm is READ at each state and logged
+    /// (<c>arm</c>, <c>cmdPitch</c>) without flying the aeroplane, so the arm's command and the
+    /// plant's own authority stay separable; <paramref name="aiPath"/> runs the plant's AI arm, which
+    /// carries neither drop nor weathervane. ⚠ An instrument, not an assertion.</summary>
+    public static string StallEntry(string zrdrPath, string planeNodeName, float entryMph,
+        float noseDeg, float seconds, bool aiPath)
+    {
+        System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+        var stats = PlaneStats.Load(zrdrPath, planeNodeName);
+        var m = new FlightModel(stats, aiPath);
+        m.Reset(Vector3.Zero, Pitched(noseDeg), entryMph * Mph, 0f);
+        var sb = new StringBuilder();
+        sb.AppendLine($"stall-entry {planeNodeName}: {entryMph:0} mph, nose {noseDeg:0}°, throttle 0, "
+                      + "stick centred, " + (aiPath ? "AI force path" : "player force path")
+                      + $"; stall {m.StallSpeed / Mph:0.0} mph, fd_speed {stats.FdSpeed / Mph:0.0} mph, "
+                      + $"stall_mag {stats.StallMag:0.##}, recInertia.x {stats.RecInertia.X:0.##}, "
+                      + $"damp {stats.AngMomentumDamp:0.#}, return_rate {stats.ReturnRate:0.##}, "
+                      + $"turn_fade {stats.TurnFadeIn / Mph:0.#}/{stats.TurnFadeOut / Mph:0.#} mph");
+        sb.AppendLine("     t      mph   nose°    flag   ramp  window  drop°/s²  vane°/s²"
+                      + "  pitch°/s  arm  armPitch");
+        for (int i = 1; i <= (int)MathF.Round(seconds / EnvDt); i++)
+        {
+            m.Step(new FlightInput(), EnvDt);
+
+            // Ten steps to the printed line: the plant runs at the full step and the readout is
+            // sampled, because a stall entry is seconds long and every step of it is one shape.
+            if (i % 10 != 0)
+                continue;
+
+            var aim = m.Position + new Vector3(0f, 0f, -1000f);
+            var steer = AiControlLaw.Steer(m, aim, Vector3.Zero, AiLawParams.Cruise, 0f, EnvDt);
+            bool armed = m.Attitude.Z.Y < AiControlLaw.RecoveryNoseY
+                         && m.Speed < AiControlLaw.RecoverySpeed;
+            float flag = m.StallFlag;
+            float drop = aiPath
+                ? 0f
+                : Mathf.RadToDeg(Mathf.Max(0f, flag) * stats.StallMag * stats.RecInertia.X);
+            float vane = aiPath ? 0f : Mathf.RadToDeg(m.WeathervaneTorque().X * stats.RecInertia.X);
+            float window = m.OpposingCommandLimitAt(
+                m.Speed, Mathf.Cos(Mathf.DegToRad(m.Alpha)), 0f, 1f);
+            float nose = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp((-m.Attitude.Z).Y, -1f, 1f)));
+            sb.AppendLine($"{i * EnvDt,6:0.000} {m.Speed / Mph,8:0.0} {nose,7:0.0} {flag,7:0.000} "
+                          + $"{m.PitchAuthorityAt(m.Speed),6:0.000} {window,7:0.000} "
+                          + $"{drop,9:0.00} {vane,9:0.00} {Mathf.RadToDeg(m.BodyRates.X),9:0.00} "
+                          + $"{(armed ? "yes" : "no"),4} {steer.Pitch,9:0.00}");
+        }
+
+        return sb.ToString();
+    }
+
     // ---- flight envelope ---------------------------------------------------------------------
 
     /// <summary>Steps a throwaway <see cref="FlightModel"/> through the manoeuvres the original was

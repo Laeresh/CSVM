@@ -273,7 +273,10 @@ public class FarFieldPlantTests
         m.Reset(Vector3.Zero, Basis.Identity, entryMs, 1f);
         var input = new FlightInput
         {
-            Throttle = 1f, Pitch = pitch, Roll = roll, NearestHumanDistSqM = distSq,
+            Throttle = 1f,
+            Pitch = pitch,
+            Roll = roll,
+            NearestHumanDistSqM = distSq,
         };
         for (int i = 0; i < steps; i++)
             m.Step(input, Dt);

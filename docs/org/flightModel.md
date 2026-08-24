@@ -645,6 +645,64 @@ it scaled and the hand-rolled over-the-horizon cap that used to follow it are al
 was a no-op on `stall_mag`, and the cancellation supersedes the third. `StallNoseDropTests` pins the
 closed form, the equilibrium and the cancelled pull.
 
+### Why the autogyro's low-speed nose-down is softer, term by term
+
+The Hoplite autogyro's nose-down at low speed reads softer than another airframe's, and every term
+it passes through is decoded and authored. **Nothing in the drop is per-airframe except where the
+flag turns on.** `stall_mag` is a single global (1.25 here), the axis and the cancellation are
+state-derived, and the two numbers an airframe could differ on are authored identical to the
+Bloodhawk's:
+
+| Authored | autogyro | Bloodhawk |
+|---|---|---|
+| `veh_weight` / `ref_area` | 500 / 800 | 1900 / 330 |
+| wing loading (lb/ft²) | **0.625** | **5.76** |
+| computed stall speed | **18.5 mph** | **56.5 mph** |
+| `rec_moments_inertia.x` | 1.18 | 1.18 |
+| `ang_momentum_damp` | 5.0 | 5.0 |
+| `return_rate` | 3.0 | 3.0 |
+| `pitch_torque` | 3.4 | 3.3 |
+
+So at the same depth of its own stall the two airframes drop at the same rate to within the lift
+cap's Mach term, and the whole of the difference is that the autogyro's ninth of the wing loading
+puts its break at 18.5 mph. Through the 20–55 mph band a pilot calls low, the autogyro is not
+stalled at all and its nose-drop term is exactly zero, where the Bloodhawk at 40 mph is already at
+flag 0.50. Below the break the authored low-speed ramp has taken most of its elevator (21 % of pitch
+and roll authority at 18.5 mph, against the Bloodhawk's 100 % at 56.5), so the aeroplane mushes with
+neither a firm pull nor a hard break. The ramp scales the STICK only, so it never softens the drop.
+
+**What actually carries the nose over is the weathervane**, not the drop, on both airframes. In a
+matched 70 mph nose-high entry at idle the drop peaks at 33 °/s² on either aeroplane while the
+weathervane reaches 144 °/s² on the autogyro and 85 °/s² on the Bloodhawk, both at
+`return_rate · α/2 · rec_moments_inertia.x`. The AOA window is at its decoded strength through all
+of it and touches neither term: it scales a pitch or yaw STICK command that opposes the closing
+axis, so it cannot soften a centred stick.
+
+**The AI arm has no plant nose-down to soften.** The drop (`0x48d158`) and the weathervane
+(`0x48ce3d`) are both behind the player guard, so an AI-flown autogyro holds its attitude through a
+stall with a centred stick and every degree of nose-down it flies is the control law's command. The
+law's low-speed recovery arm keys on the BACKWARD axis's Y (`noseY < −0.5` and under 60 mph), so it
+fires nose-UP and slow and commands the nose down there, and never in a dive.
+
+**`is_autogyro` reaches no flight-plant term.** The authored flag (string `0x627d68`) parses to the
+vehicle record's byte `+0x21c` at `0x4792c4`, and the whole program reads that byte twice. At
+`0x4876f4`, inside the mouse-flying arm of `FUN_00487460` (reached only with the mouse control bit
+of `DAT_0071c2a0` set and the free-look flag `DAT_00654120` clear), it exchanges and negates the
+roll and yaw sources, so an autogyro yaws with sideways mouse motion where an aeroplane rolls; the
+pitch write at `0x4876e1` has already happened and is untouched. At `0x420205`, in the AI maneuver
+chooser `FUN_004201a0`, it gates each row of the 17-entry `maneuvers.zrd` table (base `0x71b210`,
+stride `0x1c`) on that row's byte `+0x06`, dropping maneuvers an autogyro may not fly from the
+candidate list. Neither reaches a torque, an authority curve or the stall. The class dispatch does
+not single it out either: `pautogyro` authors no `mode` and inherits `basic_airplane`'s `mode jet`,
+so the Hoplite flies the class-0 aeroplane arm like the other ten and the class-1 arm
+`FUN_0048ffe0` never sees it.
+
+`AutogyroStallNoseDownTests` pins the equal-depth equality with a softer-inertia control, the empty
+nose-drop at 40 mph beside the Bloodhawk's, the ramp scaling the stick and not the drop, the
+recovery arm's nose-high-only trigger, and the AI path holding its nose where the player path drops
+it. `Probes.StallEntry` (`ZzAutogyroStallInstrument`) is the per-step readout the paragraphs above
+quote.
+
 ## `lift_accel_rate` is a lag toward a target velocity
 
 The nose-chase is real and authored: `lift_accel_rate` (string `0x6278b4`, global `_DAT_0071c448`,
