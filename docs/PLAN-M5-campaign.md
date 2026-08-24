@@ -2194,6 +2194,28 @@ verdicts into corrective items (a Wave F if needed, as PLAN-hangar's Wave E was)
 
 **Model recommendation.** medium, low effort — orchestration only.
 
+**Staged.** The build is the plan branch itself, run from its worktree:
+`cd Z:\CSVM\.claude\worktrees\m5-campaign; .\RunGame.ps1` and take Campaign from the Mode screen.
+A campaign profile is created in the flow; the scripted `--campaign=<profile>:<seq>` and
+`--menu=campaign-*` entries exist for jumping to one screen, but the pass is the loop played
+through. Nothing here writes `CrimsonSkiesGame\SavedGames\`; profiles live under `user://Profiles`.
+
+**The what-to-check list, keyed to the item that owns each answer.** A verdict of "wrong" on any
+line is a corrective item with its own traps section, never a silent re-edit.
+
+| # | What to look at | Owner | The reference to judge it against |
+|---|---|---|---|
+| 1 | Player Profile, Cabin, Briefing, Flight Check, Ammo Selection: layout, art, fonts, row wording | C21-C25 | `OriginalScreenshots\Campaign *.png`, the five shots |
+| 2 | The briefing playing: the reveal order and pace against the narration, and whether the map reads | C23 | `CAP-42`, and the narration's own markers |
+| 3 | The intro cutscene: the letterbox present the instant the load ends, the camera beats, one hard cut to the controls | D32 | `CAP-43`, and your own verdict, which already settled the bars |
+| 4 | The in-flight objectives readout: whether it belongs there at all, and where | D33 | **Nothing yet.** `CAP-45` is owed and its styling is a placeholder marked TUNE |
+| 5 | Wingmen: that they are there, hold station and behave like the original's | D34 | `docs/org/aiPilot.md`'s decoded station; a wingman that simply leaves is the old `BL-362` symptom |
+| 6 | Music: the cabin track, prebattle, the stingers on a completed objective, the end of a mission | D37 | The decode says Instant Action ships silent; ours does too. Say if that reads wrong |
+| 7 | The wallet: what a mission pays, what an airframe costs, what the hangar refuses | B13 | The decoded reward table (five aircraft awards, missions 2, 7, 13, 17, 19) |
+| 8 | The loop: fly a mission to its end, return to the cabin, quit, relaunch, and find the state intact | E41 | The suite proves this headless; this is the same claim at the controls |
+
 **Verify.** The user's verdict, recorded in the closing commits.
 
-**⚠ Traps.** Findings become items with their own traps sections, not silent re-edits.
+**⚠ Traps.** Findings become items with their own traps sections, not silent re-edits. ⚠ A
+mission's own choreography beyond C1 is out of scope by Decision 6: mechanisms ship for every
+chapter, the sign-off is C1.
