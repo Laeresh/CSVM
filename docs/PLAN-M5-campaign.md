@@ -164,7 +164,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 5. ☐ Decode the economy constants: plane buy/sell prices, armor cost, starting funds
 6. ☐ Behavioral decode of the campaign GUI scripts (cabin, flight check, ammo, campaign intro)
 7. ☐ Decode the `letterbox` node mechanics and the cutscene `CALLBACK` codes
-8. ☐ Mint and file the owed captures (plane construction screen, previous-missions list, briefing animation, a C1 mission intro, cabin ambience)
+8. ☑ Mint and file the owed captures (plane construction screen, previous-missions list, briefing animation, a C1 mission intro, cabin ambience)
 
 ### Wave B — campaign model and persistence
 
@@ -387,7 +387,7 @@ explains why the node ships inactive.
 **⚠ Traps.** `BL-134` records the user's ruling (2026-07-22): the M0x intro defs must play, never
 be suppressed. Any interim change that silences them regresses that ruling.
 
-## A8 ☐ Mint and file the owed captures
+## A8 ☑ Mint and file the owed captures
 
 **Goal.** `playtest.md` carries CAP items (ids minted with `New-ItemId.ps1 -Kind CAP -Count 5`)
 for: the Plane Construction screen with visible prices, the Previous Missions list, the briefing
@@ -404,8 +404,9 @@ filing the requests, not the footage.
 
 **Model recommendation.** medium, low effort — mechanical filing.
 
-**Verify.** `playtest.md` lists the five CAPs, each naming its blocked items; the duplicate-ID
-pre-commit hook passes.
+**Verify.** `playtest.md` lists the five CAPs (`CAP-40` plane construction, `CAP-41` previous
+missions, `CAP-42` briefing animation, `CAP-43` C1 intro cutscene, `CAP-44` cabin ambience), each
+naming its blocked items; the duplicate-ID pre-commit hook passes.
 
 **⚠ Traps.** ⚠ Footage-derived *measurements* are inadmissible in this repo
 (`docs/verification.md`); the captures are for layout, sequence and on-screen values (prices,
