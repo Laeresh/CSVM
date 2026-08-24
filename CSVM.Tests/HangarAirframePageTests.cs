@@ -8,12 +8,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The AIRFRAME screen (PLAN-hangar C22): all 11 airframes offered (Decision 9), the stepper
-/// writing the scratch plane's airframe and nothing else, the detail line carrying the stat
-/// table's figures and the economy's own star ratings, and the focused airframe's blueprint
-/// through the page-art seam. E41's airframe-defaults ask (string 206) meets a new plane's
-/// arrival and every switch to a different airframe: OK loads the airframe's defaults, Cancel
-/// keeps every current pick.
+/// The AIRFRAME screen (PLAN-hangar C22): all 11 airframes offered (Decision 9), confirm writing
+/// the scratch plane's airframe and nothing else (E49: the pick is on Enter, the stepper is
+/// inert), the detail line carrying the stat table's figures and the economy's own star ratings,
+/// and the focused airframe's blueprint through the page-art seam. E41's airframe-defaults ask
+/// (string 206) meets every pick of an airframe that is not already the pick: OK loads the
+/// airframe's defaults, Cancel keeps every current pick.
 /// </summary>
 public class HangarAirframePageTests : IDisposable
 {
@@ -52,21 +52,56 @@ public class HangarAirframePageTests : IDisposable
         Assert.StartsWith("Blackflag Balmoral", flow.Page.RowText(2), StringComparison.Ordinal);
     }
 
-    /// <summary>The ←→ stepper makes the focused row the pick (raising the defaults ask, here
-    /// declined) and ticks it; stepping a row that already is the pick changes nothing.</summary>
+    /// <summary>E49: confirm makes the focused row the pick (raising the defaults ask, here
+    /// declined) and ticks it; the ←→ stepper does nothing at all on this screen, so a pick can
+    /// only be made deliberately.</summary>
     [Fact]
-    public void SteppingSelectsTheFocusedAirframe()
+    public void ConfirmSelectsTheFocusedAirframe_AndTheStepperIsInert()
     {
         var flow = OpenOnAirframe(UiStrings.Empty);
         flow.Move(1);
         flow.Move(1);
 
-        Assert.True(flow.Step(1));
+        Assert.False(flow.Step(1));
+        Assert.False(flow.Step(-1));
+        Assert.False(flow.AirframeChosen);
+
+        Assert.True(flow.Accept());
         Assert.Equal(2, flow.Scratch.Airframe);
         flow.AnswerDefaultsAsk(false);
         Assert.EndsWith("✓", flow.Page.RowText(2), StringComparison.Ordinal);
         Assert.False(flow.Page.RowText(0).EndsWith("✓", StringComparison.Ordinal));
-        Assert.False(flow.Step(1));
+    }
+
+    /// <summary>E49, the user's finding: a new plane arrives with nothing committed. No row is
+    /// ticked, no question is asked, and the model's own default airframe stays silent until the
+    /// pilot picks one.</summary>
+    [Fact]
+    public void ANewPlaneArrivesWithNothingChosenAndNothingAsked()
+    {
+        var flow = OpenOnAirframe(UiStrings.Empty);
+
+        Assert.Null(flow.DefaultsAsk);
+        Assert.False(flow.AirframeChosen);
+        Assert.Equal(11, flow.Page.RowCount);
+        Assert.All(
+            new[] { 0, 1, 5, 10 },
+            row => Assert.False(flow.Page.RowText(row).EndsWith("✓", StringComparison.Ordinal)));
+    }
+
+    /// <summary>E49: picking row 0 is still an explicit pick, so it ticks the row and raises the
+    /// ask even though the model was already carrying airframe 0 underneath.</summary>
+    [Fact]
+    public void PickingTheOpeningRowStillCountsAsAPick()
+    {
+        var flow = OpenOnAirframe(UiStrings.Empty);
+
+        Assert.True(flow.Accept());
+        Assert.Equal(HangarScreen.Airframe, flow.Screen);
+        Assert.Equal(0, flow.DefaultsAsk);
+        flow.AnswerDefaultsAsk(false);
+        Assert.True(flow.AirframeChosen);
+        Assert.EndsWith("✓", flow.Page.RowText(0), StringComparison.Ordinal);
     }
 
     /// <summary>Changing airframe through the ask's Cancel row preserves every other pick, the
@@ -82,7 +117,7 @@ public class HangarAirframePageTests : IDisposable
         flow.Scratch.ArmourTail = 7;
 
         flow.Move(1);
-        Assert.True(flow.Step(1));
+        Assert.True(flow.Accept());
 
         Assert.Equal(1, flow.DefaultsAsk); // the switch itself already stands; the ask offers defaults
         Assert.Equal(1, flow.Scratch.Airframe);
@@ -97,15 +132,21 @@ public class HangarAirframePageTests : IDisposable
         Assert.Equal(7, flow.Scratch.ArmourTail);
     }
 
-    /// <summary>Confirm advances to the Engine screen without touching the pick, so walking the
-    /// flow straight through keeps whatever airframe was chosen.</summary>
+    /// <summary>E49's double-enter idiom: the confirm that picks an airframe stays on the screen
+    /// (through the ask), and the next confirm, now on the picked row, advances to the Engine
+    /// screen without touching anything.</summary>
     [Fact]
-    public void AcceptAdvancesWithoutEditing()
+    public void ConfirmingThePickAdvancesWithoutEditing()
     {
         var flow = OpenOnAirframe(UiStrings.Empty);
-        flow.Scratch.Airframe = 5;
-        flow.Accept();
+        flow.FocusRow(5);
 
+        Assert.True(flow.Accept()); // picks the Fury; the ask opens
+        flow.AnswerDefaultsAsk(false);
+        Assert.Equal(HangarScreen.Airframe, flow.Screen);
+        Assert.Equal(5, flow.Row); // the cursor lands back on the pick
+
+        Assert.True(flow.Accept());
         Assert.Equal(HangarScreen.Engine, flow.Screen);
         Assert.Equal(5, flow.Scratch.Airframe);
     }
@@ -173,8 +214,7 @@ public class HangarAirframePageTests : IDisposable
     public void ArtShowsTheFocusedAirframesBlueprint()
     {
         var flow = new HangarFlow(_store, UiStrings.Empty, TestData.DataRoot);
-        flow.Accept();
-        flow.AnswerDefaultsAsk(false);
+        flow.Accept(); // New Plane, on to Airframe
 
         var art = flow.Page.Art;
         Assert.NotNull(art);
@@ -186,13 +226,14 @@ public class HangarAirframePageTests : IDisposable
         Assert.Equal("Airframe 1", flow.Page.Art!.Caption);
     }
 
-    /// <summary>E41: a new plane's first arrival on the airframe screen raises the defaults ask
-    /// as the inline two-row confirm, offering the opening airframe's own defaults.</summary>
+    /// <summary>E41 through E49: the first explicit pick raises the defaults ask as the inline
+    /// two-row confirm, offering the picked airframe's own defaults.</summary>
     [Fact]
-    public void ANewPlanesFirstArrivalRaisesTheAsk()
+    public void TheFirstPickRaisesTheAsk()
     {
         var flow = new HangarFlow(_store, UiStrings.Empty);
         flow.Accept(); // New Plane, on to Airframe
+        flow.Accept(); // pick the focused airframe
 
         Assert.Equal(HangarScreen.Airframe, flow.Screen);
         Assert.Equal(0, flow.DefaultsAsk);
@@ -203,7 +244,7 @@ public class HangarAirframePageTests : IDisposable
     }
 
     /// <summary>E41: editing a saved plane never asks; the plane already is what its builder
-    /// chose, and the screen opens straight onto the airframe list.</summary>
+    /// chose, so the screen opens on that airframe's row, ticked (E49).</summary>
     [Fact]
     public void EditingASavedPlaneDoesNotAsk()
     {
@@ -215,17 +256,26 @@ public class HangarAirframePageTests : IDisposable
         Assert.Equal(HangarScreen.Airframe, flow.Screen);
         Assert.Null(flow.DefaultsAsk);
         Assert.Equal(11, flow.Page.RowCount);
+        Assert.True(flow.AirframeChosen);
+        Assert.Equal(4, flow.Row);
+        Assert.EndsWith("✓", flow.Page.RowText(4), StringComparison.Ordinal);
     }
 
-    /// <summary>E41: stepping the airframe that already is the pick raises nothing, exactly as
-    /// the original only asks when the airframe pick changes.</summary>
+    /// <summary>E49: a saved plane's own airframe is already the pick, so confirming it asks
+    /// nothing and simply advances. Only a pick of a DIFFERENT airframe asks.</summary>
     [Fact]
-    public void SteppingTheChosenAirframeDoesNotAsk()
+    public void ConfirmingASavedPlanesAirframeAdvancesWithoutAsking()
     {
-        var flow = OpenOnAirframe(UiStrings.Empty);
+        _store.Save(new CustomPlaneDef { Name = "Kept", Airframe = 4, Engine = 2 });
+        var flow = new HangarFlow(_store, UiStrings.Empty);
+        flow.Move(1);
+        flow.Accept(); // load the saved plane, on to Airframe
 
-        Assert.False(flow.Step(1)); // the cursor sits on the chosen airframe after the decline
+        Assert.True(flow.Accept());
         Assert.Null(flow.DefaultsAsk);
+        Assert.Equal(HangarScreen.Engine, flow.Screen);
+        Assert.Equal(4, flow.Scratch.Airframe);
+        Assert.Equal(2, flow.Scratch.Engine);
     }
 
     /// <summary>E41: the ask speaks string 206 with both names formatted in; %2 is the plane's
@@ -241,13 +291,13 @@ public class HangarAirframePageTests : IDisposable
         flow.Scratch.Name = "My Crate";
 
         flow.Move(1);
-        Assert.True(flow.Step(1));
+        Assert.True(flow.Accept());
         Assert.Equal("Defaults for HELLHOUND? You were building the My Crate.", flow.Page.Detail(0));
 
         flow.AnswerDefaultsAsk(false);
         flow.Scratch.Name = string.Empty;
         flow.Move(-1); // back onto the Hoplite row
-        Assert.True(flow.Step(1));
+        Assert.True(flow.Accept());
         Assert.Equal("Defaults for HOPLITE? You were building the HELLHOUND.", flow.Page.Detail(0));
     }
 
@@ -264,7 +314,7 @@ public class HangarAirframePageTests : IDisposable
 
         flow.Move(1);
         flow.Move(1); // onto the Balmoral
-        Assert.True(flow.Step(1));
+        Assert.True(flow.Accept()); // picks it, raising the ask
         flow.Accept(); // the cursor sits on OK when the ask is raised
 
         Assert.Null(flow.DefaultsAsk);
@@ -307,7 +357,8 @@ public class HangarAirframePageTests : IDisposable
     public void DecliningKeepsTheEmptyState_AndNoStockTableDegradesQuietly()
     {
         var flow = new HangarFlow(_store, UiStrings.Empty);
-        flow.Accept();
+        flow.Accept(); // New Plane
+        flow.Accept(); // pick the focused airframe, raising the ask
         flow.AnswerDefaultsAsk(false);
         Assert.Equal(CustomPlaneDef.EngineNone, flow.Scratch.Engine);
         Assert.All(flow.Scratch.Guns, gun => Assert.True(gun.IsEmpty));
@@ -328,7 +379,8 @@ public class HangarAirframePageTests : IDisposable
     {
         string zrdr = SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
         var flow = new HangarFlow(_store, UiStrings.Empty, null, null, zrdr);
-        flow.Accept(); // New Plane; the arrival ask offers the Hoplite's defaults
+        flow.Accept(); // New Plane, on to Airframe
+        flow.Accept(); // pick the Hoplite, which raises its defaults ask
         flow.Accept(); // OK
 
         var stats = PlaneStats.Load(zrdr, "player_autogyro");
@@ -350,14 +402,14 @@ public class HangarAirframePageTests : IDisposable
         }
     }
 
-    // A flow standing on the AIRFRAME screen with a fresh scratch plane, the arrival's
-    // defaults ask declined so the plane keeps its empty state.
+    // A flow standing on the AIRFRAME screen with a fresh scratch plane: nothing picked, nothing
+    // asked, which is what a new build now arrives as (E49).
     private HangarFlow OpenOnAirframe(UiStrings strings, StockLoadouts? stockFits = null)
     {
         var flow = new HangarFlow(_store, strings, null, stockFits);
         flow.Accept(); // New Plane, on to Airframe
-        flow.AnswerDefaultsAsk(false);
         Assert.Equal(HangarScreen.Airframe, flow.Screen);
+        Assert.Null(flow.DefaultsAsk);
         return flow;
     }
 }

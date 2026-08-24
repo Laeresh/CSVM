@@ -78,13 +78,17 @@ public class HangarFlowTests : IDisposable
         foreach (var screen in HangarFlow.Order)
         {
             Assert.Equal(screen, flow.Screen);
-            if (flow.DefaultsAsk != null)
+            if (screen == HangarScreen.Purchase)
             {
-                flow.AnswerDefaultsAsk(false); // decline the airframe-defaults ask (E41)
+                break;
             }
 
-            if (screen != HangarScreen.Purchase)
+            flow.Accept();
+            if (flow.DefaultsAsk != null)
             {
+                // E49: the airframe screen's first confirm picks and asks, and the confirm after
+                // the decline is the one that advances.
+                flow.AnswerDefaultsAsk(false);
                 flow.Accept();
             }
         }
@@ -379,16 +383,95 @@ public class HangarFlowTests : IDisposable
         Assert.True(flow.TotalsOverweight);
     }
 
+    /// <summary>E49: a new plane leaves the airframe screen only through a pick, so the flow
+    /// cannot reach the engine screen on one press. A saved plane's airframe is already the pick,
+    /// so it does leave on one.</summary>
+    [Fact]
+    public void ANewPlaneLeavesTheAirframeScreenOnlyThroughAPick()
+    {
+        var flow = Open();
+        flow.Accept(); // New Plane, on to Airframe
+
+        flow.Accept();
+        Assert.Equal(HangarScreen.Airframe, flow.Screen); // the press became a pick, not an advance
+        Assert.NotNull(flow.DefaultsAsk);
+        flow.AnswerDefaultsAsk(false);
+        flow.Accept();
+        Assert.Equal(HangarScreen.Engine, flow.Screen);
+
+        _store.Save(new CustomPlaneDef { Name = "Saved", Airframe = 3 });
+        var edit = Open();
+        edit.Move(1);
+        edit.Accept(); // load the saved plane, on to Airframe
+        edit.Accept();
+        Assert.Equal(HangarScreen.Engine, edit.Screen);
+    }
+
+    /// <summary>E50: on the plane-selection screen the totals row prices the saved plane under
+    /// the cursor, not the scratch plane, which this screen has not started building yet.</summary>
+    [Fact]
+    public void TheTotalsRowPricesTheFocusedSavedPlane()
+    {
+        _store.Save(new CustomPlaneDef { Name = "Hoplite One", Airframe = 0, Engine = 1 });
+        _store.Save(new CustomPlaneDef { Name = "Zeppelin", Airframe = 2, Engine = 1 });
+        var flow = Open();
+
+        flow.Move(1);
+        Assert.Equal("$7650   2400 / 4160 lbs.", flow.TotalsLine);
+        flow.Move(1);
+        Assert.Equal("$4420   8460 / 15760 lbs.", flow.TotalsLine);
+        Assert.False(flow.TotalsOverweight);
+    }
+
+    /// <summary>E50: every row here that is not a saved plane (New Plane, the delete row, the
+    /// delete list, its Cancel) has no plane to price, so the totals row hides.</summary>
+    [Fact]
+    public void TheTotalsRowHidesWhereNoPlaneIsFocused()
+    {
+        _store.Save(new CustomPlaneDef { Name = "Only One", Airframe = 0, Engine = 1 });
+        var flow = Open();
+
+        Assert.Equal(string.Empty, flow.TotalsLine); // New Plane
+        Assert.False(flow.TotalsOverweight);
+        flow.Move(2); // the delete row
+        Assert.Equal(string.Empty, flow.TotalsLine);
+
+        flow.Accept(); // into the delete list
+        Assert.Equal("Delete Only One", flow.Page.RowText(0));
+        Assert.Equal(string.Empty, flow.TotalsLine);
+        flow.Move(1); // Cancel
+        Assert.Equal(string.Empty, flow.TotalsLine);
+    }
+
+    /// <summary>E50 leaves the build screens alone: from the airframe screen on, the totals row
+    /// is the scratch plane's, as Decision 10 has it.</summary>
+    [Fact]
+    public void TheBuildScreensStillPriceTheScratchPlane()
+    {
+        _store.Save(new CustomPlaneDef { Name = "Zeppelin", Airframe = 2, Engine = 1 });
+        var flow = Open();
+        flow.Accept(); // New Plane, on to Airframe
+
+        Assert.Equal("$6800   1400 / 4160 lbs.", flow.TotalsLine);
+    }
+
     // Confirms forward until the flow is on `target`, so a test names the screen it cares about
-    // rather than counting presses. The airframe-defaults ask is declined on the way through,
-    // which is the old pre-E41 behaviour: every pick made so far is kept.
+    // rather than counting presses. The walk keeps the plane the caller set up: the airframe
+    // screen picks on confirm since E49, so the cursor is put on the plane's own airframe first,
+    // and the defaults ask that pick raises is declined (the pre-E41 behaviour).
     private static void Walk(HangarFlow flow, HangarScreen target)
     {
-        for (int guard = 0; flow.Screen != target && guard < HangarFlow.Order.Length; guard++)
+        for (int guard = 0; flow.Screen != target && guard < HangarFlow.Order.Length + 3; guard++)
         {
             if (flow.DefaultsAsk != null)
             {
                 flow.AnswerDefaultsAsk(false);
+                continue;
+            }
+
+            if (flow.Screen == HangarScreen.Airframe)
+            {
+                flow.FocusRow(flow.Scratch.Airframe);
             }
 
             flow.Accept();

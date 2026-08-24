@@ -210,8 +210,8 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session; also the hangar's two doors and its renderer.
 - `src/UI/PlanePickerRoster.cs` — the one roster every human plane picker draws: 11 stock airframes then the store's saved customs, each custom carrying its store name and its airframe's stock node (D32's launch seam); engine-free build/lookup rules.
 - `src/UI/HangarFlow.cs` — the Build Custom Plane flow, engine-free: the original's nine screens over one scratch `CustomPlaneDef`, back/next navigation, the `IHangarPage` mount point C22-C26 fill (rows, detail, stepper, optional page `HangarArt` and a per-row one), the plane-selection screen's two-stage delete (the original's Sell Plane with no economy to sell into), and the gated commit into `CustomPlaneStore`.
-- `src/UI/HangarAirframePage.cs` — the AIRFRAME screen: all 11 airframes as rows, the ←→ stepper writing the scratch airframe (raising the string-206 defaults ask as an inline two-row confirm, which a new plane's arrival also raises), the stat table's figures and the economy's star ratings per row, the focused airframe's blueprint TGA as page art.
-- `src/UI/HangarEnginePage.cs` — the ENGINE screen: the airframe's six engines (langui 3100+af*6+id) plus the None row (1165, the decoded dropdown's own last row; 1171 stays the purchase wording), the pick ticked, the stepper writing the scratch engine, each row's decoded cost and weight via `HangarEconomy.EngineLine`.
+- `src/UI/HangarAirframePage.cs` — the AIRFRAME screen: all 11 airframes as rows, focus previewing one and confirm picking it (raising the string-206 defaults ask as an inline two-row confirm), the stat table's figures and the economy's star ratings per row, the focused airframe's blueprint TGA as page art; nothing is ticked until a pick is made and the ←→ stepper is inert.
+- `src/UI/HangarEnginePage.cs` — the ENGINE screen: the airframe's six engines (langui 3100+af*6+id) plus the None row (1165, the decoded dropdown's own last row; 1171 stays the purchase wording), the pick ticked and opened on, confirm writing the scratch engine and the stepper inert, each row's decoded cost and weight via `HangarEconomy.EngineLine`.
 - `src/UI/HangarArmourPage.cs` — the ARMOR screen: the four zones through their own langui formats (1191-1194) on the record's own units x5 display scale (0 to 60 in fives, the original's 13-row dropdown), the detail naming the pick as that dropdown does (1165 "None" on zero, else 1170 of units x5) beside the x4 priced cost and weight.
 - `src/UI/HangarGunsPage.cs` — the GUNS screen: always four slots titled from the stat table's slot-title strings, each stepping the original's 11-entry dropdown (five calibres single, five twinned via format 506, No Gun 3315), the detail pricing the slot's wing or turret column (doubled for twin) with the calibre's magazine rounds.
 - `src/UI/HangarHardpointsPage.cs` — the HARDPOINTS screen: the two per-wing counts through langui 1176/1177, the stepper walking 0-4, the detail speaking the dropdown's 1165/1168/1169 vocabulary with the decoded $410 / 480 lb per hardpoint and the wing's line total.
@@ -3095,7 +3095,10 @@ picker cursor inside the shortened roster afterwards.
 
 `IHangarPage` is the mount point Wave C's remaining items fill: `Title`, `RowCount`, `RowText`,
 `Detail`, `Step` (the launchscreen's live ←→ stepper), `Accept` (returning false hands the press
-back to the flow, which advances), `Art`, an optional decoded `TgaImage` plus caption the shell
+back to the flow, which advances), `OpeningRow` (the row the cursor lands on when the flow arrives,
+0 for most screens and the current pick on the two pick screens), `TotalsPlane(row)` (which plane
+the shell's totals row prices while that row is focused, the scratch plane by default and null to
+hide the row), `Art`, an optional decoded `TgaImage` plus caption the shell
 renders (null by default via `HangarPage`; the C22 seam every art-bearing screen uses), and
 `RowArt(row)`, the same thing again for the focused row alone (only the paint screen's decal rows
 have one). All plain
@@ -3113,13 +3116,16 @@ switch's default arm. `HangarFlow.TotalsLine` (with its `TotalsOverweight` colou
 persistent second stats line the launchscreen draws under every hangar screen's heading
 (PLAN-hangar Decision 10): the build's total price and weight against the airframe's capacity,
 recomputed from `HangarEconomy.Price` on demand and carrying the original's OVERWEIGHT word
-(langui 1227) when over.
+(langui 1227) when over. Which plane it prices is the page's answer, through `TotalsPlane`: the
+plane-selection screen prices the saved plane under the cursor and hands back null on its action
+rows (New Plane, the delete stage, Cancel), where the line is "" and the shell draws nothing.
 
 The airframe-defaults ask (string 206) lives on the flow: `DefaultsAsk` names the airframe whose
 defaults are on offer and `DefaultsAskText` carries the formatted question (%1 the new airframe,
-%2 the plane being built, its name or its previous airframe's name). `StartNewPlane` raises it
-for the first arrival on the airframe screen, `HangarAirframePage.Step` raises it on a switch
-(the switch itself stands either way), and `StartFromSaved` never asks. `AnswerDefaultsAsk(true)`
+%2 the plane being built, its name or its previous airframe's name). `PickAirframe` raises it, so
+only an explicit confirm on a row that is not already the pick asks (the switch itself stands
+either way); a new plane arrives with `AirframeChosen` false, nothing ticked and nothing asked,
+and `StartFromSaved` starts chosen and never asks. `AnswerDefaultsAsk(true)`
 runs `LoadAirframeDefaults`: gun picks and per-wing hardpoint counts read back off the airframe's
 stock fit (`StockFits`, the A3 mapping and `StockWingCounts`, D32's wing rule reversed), engine
 id 1 (the stock Lvl-2 tier), and armour from the stock zone allocations (`ZrdrPath` through

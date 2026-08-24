@@ -43,7 +43,8 @@ public enum HangarExit
 /// indices, so a page is engine-free and testable: the shell owns every Godot control. A page
 /// edits <see cref="HangarFlow.Scratch"/> in place through <see cref="Step"/>, which is the
 /// launchscreen's live-stepper idiom; <see cref="Accept"/> returning false hands the press back to
-/// the flow, which advances to the next screen.
+/// the flow, which advances to the next screen. The pick screens (airframe, engine) select on
+/// <see cref="Accept"/> instead and leave <see cref="Step"/> inert (E49).
 /// </summary>
 public interface IHangarPage
 {
@@ -55,6 +56,11 @@ public interface IHangarPage
 
     /// <summary>How many rows the page draws right now.</summary>
     int RowCount { get; }
+
+    /// <summary>The row the cursor lands on when the flow arrives, 0 for most screens. A screen
+    /// whose rows ARE the picks opens on its current pick, so confirming twice walks the flow
+    /// through without rewriting anything (E49's double-enter idiom).</summary>
+    int OpeningRow { get; }
 
     /// <summary>The picture the shell should draw beside the list right now, or null for none —
     /// which every screen without art, and any screen missing its extraction, simply is.</summary>
@@ -69,6 +75,11 @@ public interface IHangarPage
 
     /// <summary>The detail line under the list for the focused row, or "" for none.</summary>
     string Detail(int row);
+
+    /// <summary>The plane the shell's totals row prices while <paramref name="row"/> is focused:
+    /// the scratch plane on every build screen, and null where the row is an action rather than a
+    /// plane, which hides the row (E50).</summary>
+    CustomPlaneDef? TotalsPlane(int row);
 
     /// <summary>The horizontal stepper on the focused row. Returns whether anything changed.</summary>
     bool Step(int row, int dir);
@@ -147,8 +158,8 @@ public sealed class HangarFlow
     public string? ZrdrPath { get; }
 
     /// <summary>The airframe whose defaults the pending ask (langui 206) offers, or null when
-    /// none is showing. Raised by picking a different airframe on the AIRFRAME screen and by a
-    /// new plane's first arrival there; the airframe page renders it as a two-row confirm.</summary>
+    /// none is showing. Raised only by an explicit confirm on an airframe row that is not already
+    /// the pick (E49); the airframe page renders it as a two-row confirm.</summary>
     public int? DefaultsAsk { get; private set; }
 
     /// <summary>String 206 with both names formatted in, captured when the ask was raised (so
@@ -185,12 +196,19 @@ public sealed class HangarFlow
     /// <summary>The persistent second stats line every hangar screen shows under its heading
     /// (PLAN-hangar Decision 10): the build's total price and its weight against the airframe's
     /// capacity, recomputed from <see cref="HangarEconomy.Price"/> on demand and flagged with the
-    /// original's own word (langui 1227) when over.</summary>
+    /// original's own word (langui 1227) when over. Which plane it prices is the page's to say
+    /// (<see cref="IHangarPage.TotalsPlane"/>): the plane-selection screen prices the saved plane
+    /// under the cursor, and "" hides the line where the focused row is not a plane at all.</summary>
     public string TotalsLine
     {
         get
         {
-            var bill = HangarEconomy.Price(Scratch);
+            if (Page.TotalsPlane(RowInPage()) is not { } plane)
+            {
+                return string.Empty;
+            }
+
+            var bill = HangarEconomy.Price(plane);
             string line = $"${bill.Total.Cost}   {bill.Total.Weight} / {bill.Capacity} lbs.";
             return bill.Total.Weight > bill.Capacity
                 ? line + "   ⚠ " + Strings.Text(1227, "OVERWEIGHT")
@@ -201,7 +219,14 @@ public sealed class HangarFlow
     /// <summary>Whether <see cref="TotalsLine"/> is over capacity, so the shell can colour the
     /// flag as well as print it.</summary>
     public bool TotalsOverweight =>
-        HangarEconomy.Price(Scratch).Verdict == PurchaseVerdict.Overweight;
+        Page.TotalsPlane(RowInPage()) is { } plane
+        && HangarEconomy.Price(plane).Verdict == PurchaseVerdict.Overweight;
+
+    /// <summary>Whether an airframe has been picked outright on the AIRFRAME screen. A new plane
+    /// starts false, so nothing reads as chosen before the pilot chooses (E49): the model still
+    /// carries airframe 0 underneath, but no row is ticked and the first confirm is a pick rather
+    /// than an advance. Loading a saved plane starts true.</summary>
+    public bool AirframeChosen { get; private set; }
 
     /// <summary>The heading string id for each screen, from the original's own tab labels.</summary>
     public static int TitleStringId(HangarScreen screen) => screen switch
@@ -307,7 +332,8 @@ public sealed class HangarFlow
         }
 
         Screen = Order[at - 1];
-        Row = 0;
+        Row = Page.OpeningRow;
+        ClampedRow();
         return true;
     }
 
@@ -321,7 +347,8 @@ public sealed class HangarFlow
         }
 
         Screen = Order[at + 1];
-        Row = 0;
+        Row = Page.OpeningRow;
+        ClampedRow();
         return true;
     }
 
@@ -372,23 +399,46 @@ public sealed class HangarFlow
         ClampedRow();
     }
 
-    /// <summary>Starts a fresh build (the plane-selection screen's New Plane row). The
-    /// airframe-defaults ask meets it on the airframe screen: a new plane is offered its first
-    /// airframe's defaults too, and declining keeps the empty state.</summary>
+    /// <summary>Starts a fresh build (the plane-selection screen's New Plane row) with nothing
+    /// committed: no airframe is chosen, so the airframe screen opens on a plain list with no row
+    /// ticked and no question asked (E49). The defaults ask waits for the pilot's own pick.</summary>
     public void StartNewPlane()
     {
         Scratch = new CustomPlaneDef();
-        RaiseDefaultsAsk(Scratch.Airframe, Scratch.Airframe);
+        AirframeChosen = false;
+        DefaultsAsk = null;
+        DefaultsAskText = string.Empty;
     }
 
     /// <summary>Starts from a saved plane, as a copy: editing and abandoning it must not touch
     /// what is on disk, so the store's own canonical serialisation is the deep copy. No
-    /// defaults ask: the plane already is what its builder chose.</summary>
+    /// defaults ask: the plane already is what its builder chose, and its airframe is already
+    /// chosen, so the screen opens on that row ticked.</summary>
     public void StartFromSaved(CustomPlaneDef saved)
     {
         Scratch = CustomPlaneStore.Deserialize(CustomPlaneStore.Serialize(saved)) ?? new CustomPlaneDef();
+        AirframeChosen = true;
         DefaultsAsk = null;
         DefaultsAskText = string.Empty;
+    }
+
+    /// <summary>The AIRFRAME screen's confirm on a row: picking an airframe that is not already
+    /// the pick switches to it and raises the defaults ask, and returns true so the press stays on
+    /// the screen. Confirming the row that already IS the pick returns false, which is what lets
+    /// the flow advance (E49's double-enter idiom). A new plane's first confirm always picks, even
+    /// on the airframe the model was carrying underneath.</summary>
+    public bool PickAirframe(int airframe)
+    {
+        if (AirframeChosen && Scratch.Airframe == airframe)
+        {
+            return false;
+        }
+
+        int was = Scratch.Airframe;
+        Scratch.Airframe = airframe;
+        AirframeChosen = true;
+        RaiseDefaultsAsk(airframe, was);
+        return true;
     }
 
     /// <summary>Raises the airframe-defaults ask, string 206's own question: %1 is the new
@@ -559,6 +609,10 @@ public sealed class HangarFlow
         Row = Math.Clamp(Row, 0, Math.Max(0, Page.RowCount - 1));
         return Row;
     }
+
+    // The same clamp for a reader that must not move the cursor while answering: the totals line
+    // is drawn every frame, and a getter that writes Row would fight the pilot's own navigation.
+    private int RowInPage() => Math.Clamp(Row, 0, Math.Max(0, Page.RowCount - 1));
 }
 
 /// <summary>
@@ -583,6 +637,9 @@ public abstract class HangarPage : IHangarPage
     public abstract int RowCount { get; }
 
     /// <inheritdoc/>
+    public virtual int OpeningRow => 0;
+
+    /// <inheritdoc/>
     public virtual HangarArt? Art => null;
 
     /// <summary>The flow this page belongs to.</summary>
@@ -596,6 +653,9 @@ public abstract class HangarPage : IHangarPage
 
     /// <inheritdoc/>
     public virtual string Detail(int row) => string.Empty;
+
+    /// <inheritdoc/>
+    public virtual CustomPlaneDef? TotalsPlane(int row) => Scratch;
 
     /// <inheritdoc/>
     public virtual bool Step(int row, int dir) => false;
@@ -670,6 +730,14 @@ public sealed class HangarPlaneSelectionPage : HangarPage
             ? Flow.AirframeName(Flow.Saved[row - 1].Airframe)
             : "Remove a saved plane from the hangar";
     }
+
+    /// <inheritdoc/>
+    /// <remarks>E50: the totals row prices the saved plane under the cursor, so the roster reads
+    /// as a hangar rather than as a list of names. Every other row here is an action (New Plane,
+    /// the delete stage, Cancel) and has no plane to price, so the row hides: the scratch plane's
+    /// own totals would be a stale figure from a build this screen has not started yet.</remarks>
+    public override CustomPlaneDef? TotalsPlane(int row) =>
+        !_deleting && row >= 1 && row <= Flow.Saved.Count ? Flow.Saved[row - 1] : null;
 
     /// <inheritdoc/>
     public override bool Accept(int row)

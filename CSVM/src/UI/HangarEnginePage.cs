@@ -6,9 +6,11 @@ namespace CSVM.UI;
 /// The ENGINE screen: the airframe's six engines (langui 3100+af*6+id: each manufacturer's three
 /// displacements, then the same three with nitro) plus the explicit no-engine row, langui 1165
 /// "None" (the decoded dropdown's own last row, callback 2218; 1171 "No Engine Selected" is the
-/// PURCHASE screen's wording, not this one's), the chosen one ticked. The ←→ stepper makes the
-/// focused row the scratch plane's engine and Confirm advances without editing, the airframe
-/// page's idiom. The detail line is the engine's decoded cost and weight through
+/// PURCHASE screen's wording, not this one's), the chosen one ticked. Selection is the airframe
+/// page's idiom (E49): moving the cursor previews an engine's figures, confirm on a row that is
+/// not the pick selects it, confirm on the pick advances, and the ←→ stepper is inert. The screen
+/// opens on the standing pick, so walking the flow through never rewrites it. The detail line is
+/// the engine's decoded cost and weight through
 /// <see cref="HangarEconomy.EngineLine"/>, plus the original's power stat (the stat-table rating
 /// times the decoded per-id factor, display-only).
 /// </summary>
@@ -25,6 +27,9 @@ public sealed class HangarEnginePage : HangarPage
 
     /// <inheritdoc/>
     public override int RowCount => CustomPlaneDef.EngineNone + 1;
+
+    /// <inheritdoc/>
+    public override int OpeningRow => Scratch.Engine;
 
     /// <inheritdoc/>
     public override string RowText(int row)
@@ -48,11 +53,11 @@ public sealed class HangarEnginePage : HangarPage
     }
 
     /// <inheritdoc/>
-    public override bool Step(int row, int dir)
+    public override bool Accept(int row)
     {
         if (Scratch.Engine == row)
         {
-            return false;
+            return false; // already the pick: the press belongs to the flow's advance
         }
 
         Scratch.Engine = row;

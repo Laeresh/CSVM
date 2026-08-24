@@ -1241,7 +1241,8 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        flow.Accept(); // New Plane, which raises the defaults ask on the airframe screen
+        flow.Accept(); // New Plane, on to the airframe screen
+        flow.Accept(); // pick the focused airframe, which is what raises the defaults ask (E49)
         if (startScreen == "defaults")
         {
             return;
@@ -1501,10 +1502,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         _body.AddChild(Label(heading, (int)(HeadingFont * s), HeadingColor, HorizontalAlignment.Center));
         _body.AddChild(Spacer((int)(6 * s)));
 
-        // C26's totals seam (PLAN-hangar Decision 10): every hangar screen carries the
-        // persistent price/weight line off HangarFlow.TotalsLine, error-coloured when over.
-        // This pair and its LayoutScale term are the whole rendering, like C22's art block.
-        if (_screen == Screen.Hangar && _hangar is { } hangarFlow)
+        // C26's totals seam (PLAN-hangar Decision 10): the persistent price/weight line off
+        // HangarFlow.TotalsLine, error-coloured when over and empty where the focused row has no
+        // plane to price (E50). This pair and its LayoutScale term are the whole rendering.
+        if (_screen == Screen.Hangar && _hangar is { } hangarFlow && hangarFlow.TotalsLine.Length > 0)
         {
             _body.AddChild(Label(hangarFlow.TotalsLine, (int)(DetailFont * s),
                 hangarFlow.TotalsOverweight ? ErrorColor : DetailColor, HorizontalAlignment.Center));
@@ -1723,7 +1724,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         // counted the same way — a wingman-heavy locked launch adds both at once.
         bool lockedLine = _screen == Screen.Plane && _slots.Count == 1 && _slots[0].Locked;
         // The hangar totals line (C26's seam, Decision 10) is a third, on every hangar screen.
-        bool totalsLine = _screen == Screen.Hangar && _hangar != null;
+        bool totalsLine = _screen == Screen.Hangar && _hangar is { } totalsFlow
+            && totalsFlow.TotalsLine.Length > 0;
         int extraChildren = (wingmenLine ? 2 : 0) + (lockedLine ? 2 : 0) + (totalsLine ? 2 : 0);
         // The hangar art column (C22's seam) stands BESIDE the rows since E47b, so it only adds
         // height where it is taller than the rows it sits next to, not on top of them.
@@ -2071,7 +2073,21 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         if (_screen == Screen.Hangar)
         {
-            return "↑↓  Choose       ←→  Change       Enter / A  Continue       Esc / B  Back";
+            // Name the presses this hangar screen actually has: the two pick screens select on
+            // Enter and have no stepper at all (E49), and the defaults ask is two answers.
+            if (_hangar?.DefaultsAsk != null)
+            {
+                return "↑↓  Choose       Enter / A  Answer       Esc / B  Back";
+            }
+
+            if (_hangar?.Screen == HangarScreen.PlaneSelection)
+            {
+                return "↑↓  Choose       Enter / A  Select       Esc / B  Back";
+            }
+
+            return _hangar?.Screen is HangarScreen.Airframe or HangarScreen.Engine
+                ? "↑↓  Choose       Enter / A  Select, again to continue       Esc / B  Back"
+                : "↑↓  Choose       ←→  Change       Enter / A  Continue       Esc / B  Back";
         }
 
         string back = _screen == Screen.Mode ? "Esc / B  Quit" : "Esc / B  Back";

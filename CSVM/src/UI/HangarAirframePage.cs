@@ -8,15 +8,15 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The AIRFRAME screen: all 11 airframes as rows (the availability threshold gates nothing here,
-/// PLAN-hangar Decision 9), named from langui 3000+id, the chosen one ticked. The ←→ stepper makes
-/// the focused row the scratch plane's airframe and touches nothing else: guns and hardpoints are
-/// count-valid on every airframe (the wrong-claims disproof), so no other pick needs re-clamping.
-/// The detail line is the stat table's cost, weight and capacity plus the two star ratings, all
-/// through <see cref="HangarEconomy"/>; the art is the focused airframe's blueprint TGA.
+/// PLAN-hangar Decision 9), named from langui 3000+id, the chosen one ticked. Moving the cursor
+/// previews an airframe (detail figures, stars and blueprint follow focus) and confirm picks it,
+/// which is E49: the ←→ stepper is inert here.
 ///
-/// <para>Picking a DIFFERENT airframe, and a new plane's first arrival, raise the defaults ask
-/// (string 206, <see cref="HangarFlow.DefaultsAsk"/>), an inline two-row confirm: OK loads the
-/// airframe's defaults, Cancel keeps every current pick; the switch stands either way.</para>
+/// <para>Confirming an airframe that is not already the pick raises the defaults ask (string 206,
+/// <see cref="HangarFlow.DefaultsAsk"/>), an inline two-row confirm: OK loads the airframe's
+/// defaults, Cancel keeps every current pick; the switch stands either way. Confirming the row
+/// that already is the pick advances instead, so a new plane leaves this screen only through a
+/// pick.</para>
 /// </summary>
 public sealed class HangarAirframePage : HangarPage
 {
@@ -35,6 +35,9 @@ public sealed class HangarAirframePage : HangarPage
     public override int RowCount => Flow.DefaultsAsk is null ? HangarEconomy.Airframes.Length : 2;
 
     /// <inheritdoc/>
+    public override int OpeningRow => Flow.AirframeChosen ? Scratch.Airframe : 0;
+
+    /// <inheritdoc/>
     public override HangarArt? Art =>
         BlueprintFor(Flow.DefaultsAsk ?? Math.Clamp(Flow.Row, 0, HangarEconomy.Airframes.Length - 1));
 
@@ -46,7 +49,10 @@ public sealed class HangarAirframePage : HangarPage
             return row == 0 ? "OK" : "Cancel";
         }
 
-        return Flow.AirframeName(row) + (Scratch.Airframe == row ? "  ✓" : string.Empty);
+        // Nothing is ticked until an airframe is picked: a new plane carries airframe 0 in the
+        // model, and ticking it would tell the pilot a choice was made for them (E49).
+        bool chosen = Flow.AirframeChosen && Scratch.Airframe == row;
+        return Flow.AirframeName(row) + (chosen ? "  ✓" : string.Empty);
     }
 
     /// <inheritdoc/>
@@ -64,29 +70,17 @@ public sealed class HangarAirframePage : HangarPage
     }
 
     /// <inheritdoc/>
-    public override bool Step(int row, int dir)
-    {
-        if (Flow.DefaultsAsk is not null || Scratch.Airframe == row)
-        {
-            return false;
-        }
-
-        int was = Scratch.Airframe;
-        Scratch.Airframe = row;
-        Flow.RaiseDefaultsAsk(row, was);
-        return true;
-    }
-
-    /// <inheritdoc/>
     public override bool Accept(int row)
     {
-        if (Flow.DefaultsAsk is null)
+        if (Flow.DefaultsAsk is not null)
         {
-            return false; // no ask showing: the flow advances as on every other screen
+            Flow.AnswerDefaultsAsk(row == 0);
+            return true;
         }
 
-        Flow.AnswerDefaultsAsk(row == 0);
-        return true;
+        // A pick keeps the press (and raises the ask); confirming the standing pick hands it back,
+        // and the flow advances.
+        return Flow.PickAirframe(row);
     }
 
     private static string Stars(int filled) => new string('★', filled) + new string('☆', 4 - filled);

@@ -10,9 +10,9 @@ namespace CSVM.Tests;
 /// <summary>
 /// The ENGINE screen (PLAN-hangar C23): seven rows (the six per-airframe engines from langui
 /// 3100+af*6+id plus the explicit no-engine row, langui 1165 "None" per the decoded dropdown,
-/// E42), the airframe page's pick-and-tick stepper writing the scratch plane's engine and
-/// nothing else, and the detail line carrying the decoded engine cost and weight through
-/// HangarEconomy.EngineLine.
+/// E42), the airframe page's pick-and-tick idiom writing the scratch plane's engine and nothing
+/// else (E49: confirm selects, the stepper is inert), and the detail line carrying the decoded
+/// engine cost and weight through HangarEconomy.EngineLine.
 /// </summary>
 public class HangarEnginePageTests : IDisposable
 {
@@ -78,32 +78,55 @@ public class HangarEnginePageTests : IDisposable
         Assert.False(flow.Page.RowText(0).EndsWith("✓", StringComparison.Ordinal));
     }
 
-    /// <summary>The ←→ stepper makes the focused row the pick and ticks it; stepping a row that
-    /// already is the pick changes nothing.</summary>
+    /// <summary>E49: confirm makes the focused row the pick and ticks it, and the ←→ stepper does
+    /// nothing at all on this screen.</summary>
     [Fact]
-    public void SteppingSelectsTheFocusedEngine()
+    public void ConfirmSelectsTheFocusedEngine_AndTheStepperIsInert()
     {
         var flow = OpenOnEngine(UiStrings.Empty);
-        flow.Move(1);
-        flow.Move(1);
+        flow.FocusRow(2);
 
-        Assert.True(flow.Step(1));
+        Assert.False(flow.Step(1));
+        Assert.False(flow.Step(-1));
+        Assert.Equal(CustomPlaneDef.EngineNone, flow.Scratch.Engine);
+
+        Assert.True(flow.Accept());
+        Assert.Equal(HangarScreen.Engine, flow.Screen); // the pick keeps the press
         Assert.Equal(2, flow.Scratch.Engine);
         Assert.EndsWith("✓", flow.Page.RowText(2), StringComparison.Ordinal);
         Assert.False(flow.Page.RowText(6).EndsWith("✓", StringComparison.Ordinal));
-        Assert.False(flow.Step(1));
     }
 
-    /// <summary>Confirm advances to the Armour screen without touching the pick.</summary>
+    /// <summary>E49's double-enter idiom: the second confirm, now on the picked row, advances to
+    /// the Armour screen without touching the pick.</summary>
     [Fact]
-    public void AcceptAdvancesWithoutEditing()
+    public void ConfirmingThePickAdvancesWithoutEditing()
     {
         var flow = OpenOnEngine(UiStrings.Empty);
-        flow.Scratch.Engine = 4;
-        flow.Accept();
+        flow.FocusRow(4);
+        Assert.True(flow.Accept());
 
+        Assert.True(flow.Accept());
         Assert.Equal(HangarScreen.Armour, flow.Screen);
         Assert.Equal(4, flow.Scratch.Engine);
+    }
+
+    /// <summary>E49: the screen opens on the standing pick, so walking the flow through with
+    /// confirm alone never rewrites the engine an earlier screen chose (the defaults ask's own
+    /// engine id 1, here). Row 0 is a real engine, and arriving on it would sell it.</summary>
+    [Fact]
+    public void TheScreenOpensOnTheStandingPick()
+    {
+        var flow = OpenOnEngine(UiStrings.Empty);
+        flow.Scratch.Engine = 1;
+        flow.Back();
+        flow.Accept(); // the airframe pick is already made, so this advances back onto Engine
+
+        Assert.Equal(HangarScreen.Engine, flow.Screen);
+        Assert.Equal(1, flow.Row);
+        Assert.True(flow.Accept());
+        Assert.Equal(HangarScreen.Armour, flow.Screen);
+        Assert.Equal(1, flow.Scratch.Engine);
     }
 
     /// <summary>Each row's detail is the decoded engine line: the airframe's base plus the
@@ -174,14 +197,15 @@ public class HangarEnginePageTests : IDisposable
         Assert.True(strings!.Has(1171));
     }
 
-    // A flow standing on the ENGINE screen with a fresh scratch plane (the airframe-defaults
-    // ask declined on the way, so the engine opens unchosen).
+    // A flow standing on the ENGINE screen with a fresh scratch plane: the airframe picked on the
+    // screen before (E49's Enter-pick) and its defaults ask declined, so the engine opens unchosen.
     private HangarFlow OpenOnEngine(UiStrings strings)
     {
         var flow = new HangarFlow(_store, strings);
         flow.Accept(); // New Plane, on to Airframe
+        flow.Accept(); // pick the focused airframe, raising the defaults ask
         flow.AnswerDefaultsAsk(false);
-        flow.Accept(); // on to Engine
+        flow.Accept(); // the pick is focused, so this advances to Engine
         Assert.Equal(HangarScreen.Engine, flow.Screen);
         return flow;
     }

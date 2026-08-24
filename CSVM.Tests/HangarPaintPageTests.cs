@@ -470,9 +470,11 @@ public class HangarPaintPageTests : IDisposable
     private HangarFlow OpenOnPaint(string? dataRoot = null, UiStrings? strings = null)
     {
         var flow = new HangarFlow(_store, strings ?? UiStrings.Empty, dataRoot);
-        for (int guard = 0; flow.Screen != HangarScreen.Paint && guard < HangarFlow.Order.Length; guard++)
+        for (int guard = 0; flow.Screen != HangarScreen.Paint && guard < HangarFlow.Order.Length + 3; guard++)
         {
-            flow.AnswerDefaultsAsk(false); // a no-op except on the airframe-defaults ask (E41)
+            // A no-op except on the airframe-defaults ask (E41), which the airframe screen's own
+            // confirm raises before the next confirm advances (E49).
+            flow.AnswerDefaultsAsk(false);
             flow.Accept();
         }
 

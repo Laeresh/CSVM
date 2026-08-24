@@ -150,6 +150,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 46. ☑ Deleting a saved plane from the plane-selection page (the original's Sell Plane, `ps_b_sellp`)
 47. ☑ The paint preview composes correctly (judged against `OriginalScreenshots/CustomPlane Paint*.png`) and sits on the screen's left
 48. ☑ Decals pick by icon (the focused decal's tile from `PX_P_DECALS.TGA`; the full 5-wide grid stays a possible polish)
+49. ☑ Airframe and engine select on Enter (focus previews automatically; the defaults ask fires only on an explicit pick, never unprompted on entry)
+50. ☑ The plane-selection screen's totals row follows the focused saved plane, or hides where no plane is focused
 
 ## Dependency and parallelism notes
 
@@ -542,7 +544,9 @@ only through interactive menu input.
 nothing), named from langui 3000+id, the chosen one ticked. The ←→ stepper makes the focused row
 the scratch plane's airframe and writes nothing else: guns and hardpoints are count-valid on
 every airframe (wrong-claim 1), so no other pick needs re-clamping, and Confirm advances without
-editing, so a flow walked straight through keeps whatever airframe was chosen. Each row's detail
+editing, so a flow walked straight through keeps whatever airframe was chosen. (Superseded by
+E49: the pick is made by the confirm press, the stepper is inert here, and nothing is ticked until
+a pick is made.) Each row's detail
 line carries the stat table's cost, weight and weight capacity plus the two star ratings, priced
 through `HangarEconomy.Price` for the focused airframe wearing the scratch plane's other picks
 (armour stars therefore track the bought armour units, exactly as the decoded formula reads the
@@ -610,7 +614,8 @@ manufacturer's three displacements, then the same three with nitro, per A2) foll
 plane's airframe, and id 6 the no-engine row from langui 1171. Selection is the airframe page's
 idiom: the pick shown ticked, the ←→ stepper making the focused row the scratch plane's engine
 (a fresh build opens with the no-engine row ticked, since `CustomPlaneDef` defaults to engine 6),
-Confirm advancing without editing. Each row's detail is the decoded cost and weight through
+Confirm advancing without editing. (Superseded by E49, on both screens at once: Confirm on a row
+that is not the pick selects it, Confirm on the pick advances, and the stepper is inert.) Each row's detail is the decoded cost and weight through
 `HangarEconomy.EngineLine` (per-airframe base plus per-id offsets; the no-engine row prices at
 zero). The original's power stat line is shown too: at landing the per-id factor table at
 `0x00619e38` was unread and the agent rightly omitted the line rather than invent it; the
@@ -1096,7 +1101,9 @@ the flow: `HangarFlow.DefaultsAsk` names the airframe whose defaults are on offe
 being built (its name once it has one, its previous airframe's name before that), captured when
 the ask is raised. `StartNewPlane` raises it, so a new plane's first arrival on the AIRFRAME
 screen opens on the confirm; `HangarAirframePage.Step` raises it when the pick changes to a
-different airframe, with the switch itself standing either way. That is what makes Cancel keep
+different airframe, with the switch itself standing either way. (Superseded by E49: the arrival
+raises nothing and `HangarFlow.PickAirframe` raises the ask, so it fires only on an explicit
+Enter-pick of an airframe that is not already the pick. The ask's own content and arms stand.) That is what makes Cancel keep
 every current pick, exactly as 206's wording implies, and it is the pre-E41 behaviour the Wave C
 walk-through tests now reach by declining. While the ask shows, the page draws OK and Cancel
 with the question as the detail line and the new airframe's blueprint as art; Accept answers it
@@ -1366,3 +1373,77 @@ non-decal row or the placeholder) and the extracted-data `TheShippedDecalSheetSl
 
 **Verified.** E45-E48 closing battery: build 0/0, units 1896/1896, engine suites 90/90 with
 errors clean, 16 goldens hash-identical, exit 0.
+
+## E49 ☐ Airframe and engine select on Enter, and a new plane arrives with nothing chosen
+
+**Landed.** The two pick screens (AIRFRAME, ENGINE) moved their selection from the ←→ stepper onto
+the confirm press. The finding was that a new plane read as already decided: the Hoplite came up
+ticked with the defaults ask over it before any key was pressed, and a sideways nudge changed the
+build.
+
+The rules now, on both screens:
+
+- **Focus previews, and only previews.** Moving the cursor updates the detail figures, the star
+  ratings and the blueprint art exactly as before; none of it writes the scratch plane.
+- **The ←→ stepper is inert.** Both pages dropped their `Step` override, so the flow's stepper
+  reaches nothing on these two screens. It was not rebound to move focus: a horizontal key that
+  scrolls a vertical list reads as a second, differently-behaved cursor. The other screens
+  (armour, guns, hardpoints, paint, name) keep the stepper idiom untouched, and the launchscreen
+  footer now names ←→ only where the screen showing has one.
+- **Confirm on a row that is not the pick selects it.** On the airframe screen that is
+  `HangarFlow.PickAirframe`, which switches the airframe and raises E41's defaults ask (its text
+  and its two arms unchanged); on the engine screen it just sets the engine. The press stays on
+  the screen.
+- **Confirm on the row that IS the pick advances**, the double-enter idiom, through the flow's own
+  generic advance. `HangarFlow.Advance` and `Back` land the cursor on the arriving page's
+  `OpeningRow`, which on these two screens is the standing pick, so walking the flow through with
+  the confirm key alone can never rewrite a pick made earlier (arriving on row 0 of the engine
+  screen would otherwise have sold engine id 0 to anyone who pressed Enter twice).
+- **A new plane arrives with nothing committed.** `HangarFlow.AirframeChosen` starts false on
+  `StartNewPlane`, which no longer raises the ask at all: no row is ticked, no question is asked,
+  and the model's default airframe 0 stays silent underneath. The first confirm is a pick even on
+  row 0, and it raises the ask like any other. `StartFromSaved` starts chosen, so a saved plane's
+  airframe is ticked and the screen opens on it.
+
+**Advancing past the airframe screen is blocked for a new plane and allowed for a saved one**, and
+that falls out of the rules rather than needing a message: with nothing picked, every confirm on
+that screen is a pick, so a new build cannot leave the screen without choosing an airframe and
+answering the ask; a saved plane's airframe is already the pick, so its first confirm advances. No
+hint line was added, since there is no press that quietly does nothing. The purchase gate still
+backstops an engineless build, which is the one pick this screen pair does not force.
+
+Tests: `HangarAirframePageTests` reworked its stepper tests into
+`ConfirmSelectsTheFocusedAirframe_AndTheStepperIsInert`, `ConfirmingThePickAdvancesWithoutEditing`,
+`TheFirstPickRaisesTheAsk` and `ConfirmingASavedPlanesAirframeAdvancesWithoutAsking`, and gained
+`ANewPlaneArrivesWithNothingChosenAndNothingAsked` and `PickingTheOpeningRowStillCountsAsAPick`;
+`HangarEnginePageTests` gained `ConfirmSelectsTheFocusedEngine_AndTheStepperIsInert`,
+`ConfirmingThePickAdvancesWithoutEditing` and `TheScreenOpensOnTheStandingPick`; `HangarFlowTests`
+gained `ANewPlaneLeavesTheAirframeScreenOnlyThroughAPick`. Every walk-through helper in the hangar
+test files now makes the pick press before declining the ask, and `--menu=defaults` makes it too.
+
+**Verified.** <pending orchestrator run>
+
+## E50 ☐ The plane-selection screen's totals row follows the focused saved plane
+
+**Landed.** The persistent totals row (Decision 10) showed the scratch plane's figures on the
+plane-selection screen, where the scratch plane is whatever the last visit left behind and no
+build has started. Which plane the row prices is now the page's answer: `IHangarPage.TotalsPlane`
+returns the scratch plane by default (every build screen unchanged), and
+`HangarPlaneSelectionPage` overrides it to return the saved plane under the cursor and null on its
+action rows. Null renders as an empty `TotalsLine`, and the shell draws no row for one, in
+`Rebuild` and in `LayoutScale` alike, so nothing shifts on a screen with no figures to show.
+
+- Focusing a saved plane shows that plane's price, weight and its own airframe's capacity, priced
+  through `HangarEconomy.Price` off the def the flow already holds in `Saved` (that roster is a
+  list of whole defs, not names, so no store read and no per-name cache are needed).
+- New Plane, the `Delete a saved plane` row, every `Delete <name>` row and the delete list's
+  Cancel hide the row.
+- `HangarFlow.TotalsLine` and `TotalsOverweight` read the cursor through a clamp that does not
+  write it: the shell asks for the line every frame, and a getter that moved the cursor would
+  fight the pilot's own navigation.
+
+Tests: `HangarFlowTests` gained `TheTotalsRowPricesTheFocusedSavedPlane` (two saved planes on
+different airframes, each priced from its own row), `TheTotalsRowHidesWhereNoPlaneIsFocused` (the
+action rows and the whole delete stage) and `TheBuildScreensStillPriceTheScratchPlane`.
+
+**Verified.** <pending orchestrator run>
