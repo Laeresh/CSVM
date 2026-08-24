@@ -125,13 +125,6 @@ sounds like, watched and frame-sampled, never measured into a constant.
 |---|---|---|---|
 | `CAP-37` | An AI aircraft flying a patrol/attack loop, unprompted by the player | An AI-controlled aircraft in external/chase view, held long enough to cover a sustained turn, a low-speed moment and a patrol leg's end, with the player's own aircraft in frame where possible for a same-shot comparison. Behavioural and comparative questions only, **no absolute distances or speeds read off this footage** (`docs/verification.md`; a decode is never contested with a footage-derived measurement): does it gain altitude through a sustained turn or hold it; is its turn tighter or wider than the player's in the same airframe; does it hold a speed through manoeuvres or bleed and recover like a lever-driven aircraft; does it wallow at low speed or stay crisp; what does it do at the end of a patrol leg | `docs/plans/PLAN-ai-flight.md` F52 (the AI-side at-the-controls verdict for waves C and E) |
 
-### Campaign
-
-| ID | Capture | What must be in frame | Unblocks |
-|---|---|---|---|
-| `CAP-42` | The briefing animation in motion, one C1 mission | Trigger one C1 mission's briefing and film it start to finish: the full map/flag reveal and the narration playing over it, uncut. Existing captures are all stills; none show the briefing's choreography running. ⚠ This is for sequence, not for timing constants: what reveals in what order and what the narration says over each beat, never a stopwatch reading off the footage (`docs/verification.md`) | `A4` (timing), `C23` |
-| `CAP-43` | A C1 story-mission intro cutscene, through the handoff to gameplay | Start a C1 story mission and film its intro cutscene uncut, from before the letterbox bars appear through the cutscene itself to the moment control hands back to the player and the letterbox clears. ⚠ For sequence and layout (when the bars appear, what the camera does, how the handoff reads), not for cutscene timing used as a constant | `D32`, `A7` |
-
 ---
 
 ## 1 · Actionable now (`PT-nn`)

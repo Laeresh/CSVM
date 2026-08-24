@@ -569,11 +569,13 @@ filing the requests, not the footage.
 
 **Model recommendation.** medium, low effort — mechanical filing.
 
-**Verify.** Three of the five CAPs are delivered and closed: `CAP-40` (plane-construction
-screenshots, consumed by A5's price cross-check), `CAP-41` (previous-missions screenshots, C22's
-layout evidence), `CAP-44` (answered at the controls: the cabin has no idle behaviour, only
-background music over static art). `CAP-42` and `CAP-43` stay owed in `playtest.md`, each naming
-its blocked items; the duplicate-ID pre-commit hook passes.
+**Verify.** All five CAPs are delivered and closed: `CAP-40` (plane-construction screenshots,
+consumed by A5's price cross-check), `CAP-41` (previous-missions screenshots, C22's layout
+evidence), `CAP-42` (the briefing in motion, the `brief_c61` reveal script on film beat for beat,
+which settled the cue-marker ordering C23 reads), `CAP-43` (a story intro through the handoff,
+consumed by D32, with the user's verdict that the bars are simply present when the load ends),
+`CAP-44` (answered at the controls: the cabin has no idle behaviour, only background music over
+static art). `playtest.md` carries none of them any longer.
 
 **⚠ Traps.** ⚠ Footage-derived *measurements* are inadmissible in this repo
 (`docs/verification.md`); the captures are for layout, sequence and on-screen values (prices,
@@ -1498,7 +1500,9 @@ all on this branch: `CampaignFlightCheckPageTests` and `CampaignAmmoPageTests` c
 in `CustomPlaneStore.UserPlanes` → Godot `ProjectSettings` outside the engine, which predates this
 item and belongs to C24/C25.
 
-**Verified.** <pending orchestrator run>
+**Verified.** `RunTests.ps1` on the plan branch with D32, D33 and D34 merged: build clean, units
+2164/2164, engine suites 104/104 with errors clean (`campaign-cutscene` and `cutscene-letterbox`
+included), all 16 golden shots hash-identical.
 
 **Open.**
 - **The mid-mission `landings.zrd` cutscenes are not reachable yet.** The controller is not
@@ -1616,7 +1620,9 @@ the same objective, since a completing objective's own group can be a VO chain).
 was taken; see the wiring contract and capture above. Foreground `RunTests.ps1` on this worktree
 (D33 alone, ahead of the plan branch merge): build clean, units 2164/2164, engine suites 101/101
 with errors clean, all 16 golden shots hash-identical, so the prewarm plumbing and the new suite
-moved nothing in world build. **Verified.** <pending orchestrator run>
+moved nothing in world build. **Verified.** `RunTests.ps1` on the plan branch with D32, D33 and
+D34 merged: build clean, units 2164/2164, engine suites 104/104 with errors clean, all 16 golden
+shots hash-identical.
 
 **⚠ Traps.** Do not filter the readout on `ObjectiveGraph.Rows[i].Awake`; see Evidence. Do not
 add a second `PlaySoundGroup` path for "D33's own" cues; the routing is D31's and stays
@@ -1704,7 +1710,9 @@ fires at the player station the commanded point alternates between the two, so t
 around the leader instead of settling. The suite's leash (600 m worst, 250 m mean) allows that
 weave and still fails the behaviour `BL-362` reports, a wingman that simply leaves.
 
-**Verified.** <pending orchestrator run>. Locally, foreground: `dotnet build` clean (0 warnings),
+**Verified.** `RunTests.ps1` on the plan branch with D32, D33 and D34 merged: build clean, units
+2164/2164, engine suites 104/104 with errors clean, all 16 golden shots hash-identical. Locally,
+foreground: `dotnet build` clean (0 warnings),
 `RunTests.ps1 -SkipGoldens -SkipHitch` PASS with 2157/2157 unit tests and **99/99 in-engine suites**,
 engine errors clean; `CheckCommentCaps.ps1` clean on the four touched sources. `SuiteCatalogTests`
 took the new count and last name.
