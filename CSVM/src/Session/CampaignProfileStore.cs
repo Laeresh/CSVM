@@ -76,6 +76,11 @@ public sealed class CampaignProfileDef
     public List<OwnedPlane> Planes { get; } = new();
     public int SelectedPlane { get; set; }
 
+    /// <summary>The wingman's plane, an index into <see cref="Planes"/>: the save's
+    /// <c>UIData +0x340</c>, which the flight check's wingman row resets from the way the pilot row
+    /// reads <see cref="SelectedPlane"/> (<c>docs/formats/campaign-screens.md</c>).</summary>
+    public int WingmanPlane { get; set; }
+
     /// <summary>The count of completed missions: both the campaign's position (the next
     /// mission is <c>cm_sequence</c> <c>seq == MissionsCompleted</c>) and the save's own field,
     /// <c>UIData +0x338</c>. Raised only by <see cref="CampaignProgression"/>'s advance rule.</summary>
@@ -156,6 +161,7 @@ public sealed class CampaignProfileStore
             w.WriteString("name", def.Name);
             w.WriteNumber("funds", def.Funds);
             w.WriteNumber("selectedPlane", def.SelectedPlane);
+            w.WriteNumber("wingmanPlane", def.WingmanPlane);
             w.WriteNumber("missionsCompleted", def.MissionsCompleted);
             w.WriteStartArray("planes");
             foreach (var plane in def.Planes)
@@ -232,6 +238,7 @@ public sealed class CampaignProfileStore
                     : string.Empty,
                 Funds = ReadInt(root, "funds", 0),
                 SelectedPlane = ReadInt(root, "selectedPlane", 0),
+                WingmanPlane = ReadInt(root, "wingmanPlane", 0),
                 MissionsCompleted = ReadInt(root, "missionsCompleted", 0),
             };
 

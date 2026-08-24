@@ -151,6 +151,11 @@ public sealed class CampaignFlow
     /// after Previous Missions. -1 until the cabin sets it.</summary>
     public int MissionSeq { get; private set; } = -1;
 
+    /// <summary>Whose aircraft the ammo screen edits: 0 the pilot's, 1 the wingman's (the flight
+    /// check's two rows, <c>docs/formats/campaign-screens.md</c>). The flight check sets it before
+    /// opening the ammo screen.</summary>
+    public int AmmoSlot { get; private set; }
+
     /// <summary>The screen showing.</summary>
     public CampaignScreen Screen => _stack[^1];
 
@@ -299,6 +304,9 @@ public sealed class CampaignFlow
 
     /// <summary>Names the mission the screens after the cabin are about.</summary>
     public void SetMission(int seq) => MissionSeq = seq;
+
+    /// <summary>Points the ammo screen at the pilot's (0) or the wingman's (1) aircraft.</summary>
+    public void SetAmmoSlot(int slot) => AmmoSlot = slot;
 
     /// <summary>Seats the profile every screen after the roster reads, and opens the cabin.</summary>
     public void SelectProfile(CampaignProfileDef profile)
