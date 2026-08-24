@@ -6,13 +6,17 @@ a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/pl
 
 This plan finishes what [`PLAN-M5-campaign.md`](PLAN-M5-campaign.md) started. It carries two kinds
 of item: the corrective items from that plan's E42 at-the-controls pass, and the gaps the milestone
-deliberately named rather than built. The campaign loop works end to end and is pinned by the
-`campaign-loop` suite; what this plan fixes is that it does not yet **look** like the original's
-campaign, plus the named remainders behind it.
+deliberately named rather than built. The loop is walkable and the `campaign-loop` suite pins it
+headless, but the pass found that a mission cannot in fact be flown to its end at the controls, so
+Wave A is about play and not about polish; the presentation items the pass also raised sit behind
+it in Wave B.
 
-Every item here was re-verified still-open against both the record (`git log --grep`) and the code
-before it was written down, and each item's Evidence carries the `file:line` that check produced.
-Two entries did not survive that check and are closed rather than planned (D33). **Out of scope:**
+⚠ **Wave A's items were found by a human at the controls and their mechanisms are still being
+traced**, so their Evidence is honest about which half is known: the symptom is certain, the cause
+is a `<TODO>` until the trace lands. Do not implement one of them from the symptom alone. Every
+other item was re-verified still-open against both the record (`git log --grep`) and the code before
+it was written down, and carries the `file:line` that check produced. Two entries did not survive
+that check and are closed rather than planned (E43). **Out of scope:**
 `BL-447` (Change Memento) rests on `BL-256`, which the user deferred by explicit decision, so it
 cannot be scheduled without reopening that decision; multiplayer and netcode; the flight model,
 whose own parity plan just closed; anything blocked on a capture that does not exist, including the
@@ -20,6 +24,8 @@ whose own parity plan just closed; anything blocked on a capture that does not e
 
 ## Milestone goal
 
+- The first campaign mission can be flown to its end at the controls, with its objectives
+  registering, its world populated and its wingman where the original puts it.
 - The campaign screens fill the window and carry the original's own buttons, worked with a
   controller.
 - The briefing plays: flags planted, photos changing, objective lines written onto the parchment,
@@ -54,51 +60,251 @@ plan's Decision 6 set it; per-mission choreography beyond C1 is not this plan's 
 
 Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items land.**
 
-### Wave A — the verdict
+### Wave A — what stops the campaign being playable
 
-1. ☐ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
-2. ☐ The briefing reveal, drawn as authored (`BL-450`)
+1. ☐ Campaign objectives do not register in a flown mission (`BL-456`)
+2. ☐ The intro cutscene plays over an empty world (`BL-451`)
+3. ☐ The campaign wingman spawns far from the player (`BL-457`)
+4. ☑ The music channel drowns the briefing (`BL-455`)
+5. ☐ The cutscene letterbox flickers once (`BL-452`)
 
-### Wave B — the gaps M5 named
+### Wave B — where things are shown, and where they are heard
 
-11. ☐ The mid-mission cutscene trigger (`BL-448`, `BL-035`)
-12. ☐ The VO dialogue chain player (`BL-443`)
-13. ☐ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
+11. ☐ The objectives readout belongs on the pause screen (`BL-454`)
+12. ☐ Radio calls play positionally (`BL-453`)
+13. ☐ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
+14. ☐ The briefing reveal, drawn as authored (`BL-450`)
 
-### Wave C — the campaign's own rough edges
+### Wave C — the gaps M5 named
 
-21. ☐ The load screen's composed artwork (`BL-409`)
-22. ☐ Spawn node names defeat `rating_biases` on the campaign path (`BL-401`)
-23. ☐ World objects are hostile to everyone (`BL-407`)
+21. ☐ The mid-mission cutscene trigger (`BL-448`, `BL-035`)
+22. ☐ The VO dialogue chain player (`BL-443`)
+23. ☐ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
 
-### Wave D — answers and housekeeping
+### Wave D — the campaign's own rough edges
 
-31. ☐ Decode the original's per-pylon ordnance id (`BL-445`)
-32. ☐ Decide how the MPG cinemas would play, before any code (`BL-446`)
-33. ☐ Close what is already done, fix what is merely stale (`BL-243`, `BL-427`, `BL-426`)
+31. ☐ The load screen's composed artwork (`BL-409`)
+32. ☐ Spawn node names defeat `rating_biases` on the campaign path (`BL-401`)
+33. ☐ World objects are hostile to everyone (`BL-407`)
+
+### Wave E — answers and housekeeping
+
+41. ☐ Decode the original's per-pylon ordnance id (`BL-445`)
+42. ☐ Decide how the MPG cinemas would play, before any code (`BL-446`)
+43. ☐ Close what is already done, fix what is merely stale (`BL-243`, `BL-427`, `BL-426`)
 
 ## Dependency and parallelism notes
 
-A1 and A2 touch the same screen and the same files (`CampaignBriefingPage`, and A1 every other
-campaign page); **run them in sequence, never as parallel worktrees**, and land A1 first, since A2's
-drawing needs a surface to draw on. A1 is the largest item here and everything in Wave A is
-player-visible, which is why the wave leads.
+**A1 comes first and alone.** Until objectives register, no mission can be flown to its end, which
+blocks the user's own verdict on the wallet (`PLAN-M5-campaign.md` E42 line 7) and on everything
+downstream of a completed mission. Nothing else in this plan is worth starting ahead of it.
 
-B11 unblocks two backlog items at once and nothing else depends on it, so it can run beside Wave A.
-B12 and B13 are independent of everything, including each other. C22 and C23 both touch AI-adjacent
-files (`FlightRoster`, `AimAssist`) but different ones; check for contention with any live flight
-worktree before starting either. C21 touches `Launcher`, which A1 may also touch for the board
-presentation, so sequence C21 after A1 or agree a file boundary first.
+A2 and A3 both sit in the campaign spawn path (`CampaignDirector`, `GameSession`, the roster
+spawner) and are being traced together, so run them as one piece of work or in sequence, never as
+parallel worktrees. A5 is small and touches the cutscene host alone. A4 has landed.
 
-D31 and D32 are research items whose deliverable is an answer, and D33 is housekeeping; all three
-can run at any point. D33 is the cheapest thing in the plan and closing two stale entries early
+B11 and B14 both touch a campaign page, and B13 touches all six of them, so **B13 and B14 run in
+sequence with B13 first**: B14's drawing needs the board surface B13 builds. B11 moves a readout off
+the HUD and onto the pause screen, which is nobody else's file. B12 is a routing question that
+should be settled from the decode before any code moves, and it will decide the channel C22
+inherits, so run B12 before C22 or accept that C22 may have to move again.
+
+C21 unblocks two backlog items at once and nothing else depends on it. C23 is independent.
+D32 and D33 both touch AI-adjacent files (`FlightRoster`, `AimAssist`) but different ones; check for
+contention with any live flight worktree before starting either. D31 touches `Launcher`, which B13
+may also touch for the board presentation, so sequence D31 after B13 or agree a file boundary first.
+
+E41 and E42 are research items whose deliverable is an answer, and E43 is housekeeping; all three
+can run at any point. E43 is the cheapest thing in the plan and closing two stale entries early
 keeps the backlog honest while the rest runs.
 
 ---
 
-# Wave A — the verdict
+# Wave A — what stops the campaign being playable
 
-## A1 ☐ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
+## A1 ☐ Campaign objectives do not register in a flown mission (`BL-456`)
+
+**Goal.** A campaign mission's objectives complete when the player does what they ask, so the first
+mission can be flown to its end at the controls.
+
+**Evidence (confidence: lead-only on the mechanism, certain on the symptom).** From the E42 pass on
+the first campaign mission: only one objective ever completed, and "I couldn't drop Jack at the
+wreck". The player could not tell which objective had completed, because the readout's tick was not
+on its line (that display half is B11). What makes this sharp rather than vague is the contrast: the
+headless `campaign-loop` suite completes C3/M01's primary by flying its `TRAVELERS` approach and
+passes three runs in a row, so the runtime works in at least one scripted case and the divergence
+lives between that case and a real flown session. <TODO: mechanism under investigation; record the
+failing condition kind and its `file:line`, and say whether it is one bug or several.>
+
+**Approach.** <TODO: settle from the investigation. The first fork is whether a whole condition kind
+is unimplemented or mis-evaluated, or whether something upstream is wrong (the graph not stepped in
+a real session, objectives never woken, the wrong mission loaded).>
+
+**Model recommendation.** high. It is the plan's blocker, the symptom is a divergence between a
+passing suite and a real session, and a wrong fix here silently breaks every mission.
+
+**Verify.** The first campaign mission flown to its end at the controls, which is the check that
+failed; plus an in-engine test that fails before the fix, since `campaign-loop` passing throughout
+proves the existing suites cannot catch this class.
+
+**⚠ Traps.** ⚠ One class of objective is unsatisfiable by design today, `ANIM_STATE <def> EXECUTED`
+(C21, because nothing plays a mid-mission cutscene). Do not file every non-completing objective
+under that explanation before checking the condition each one actually uses; if the mission's
+objectives are mostly that class, C21 is a dependency and this item must say so rather than
+inventing a workaround. ⚠ An unchanged suite result is not evidence here: `campaign-loop` was green
+while the bug was live.
+
+## A2 ☐ The intro cutscene plays over an empty world (`BL-451`)
+
+**Goal.** The aircraft and zeppelins a mission opens with are in the world while its intro cutscene
+plays, so the camera has something to show.
+
+**Evidence (confidence: lead-only on the mechanism, certain on the symptom).** From the E42 pass:
+"the cutscene camera functions but there is no content. Missing planes and zeppelins in the scene."
+The camera work, the letterbox and the handoff are all right, so the question is what is in the
+world when the cutscene runs, not the cutscene host. Two candidates are already on the table from
+the decode: the roster and the zeppelins may be placed after the cutscene rather than before it, or
+codes 913/914 may park things that are never restored, since D32 decoded those as "park and reveal
+the AI, and only what it parked comes back". <TODO: mechanism under investigation; record which,
+with `file:line`.>
+
+**Approach.** <TODO: from the investigation.>
+
+**Model recommendation.** high. It spans the cutscene host and the spawner, two subsystems that
+landed separately and have never been exercised together outside a suite.
+
+**Verify.** A scripted capture of the C1 intro with the mission's own aircraft and zeppelins visible
+in frame, against the same shot today; the 16 goldens unchanged.
+
+**⚠ Traps.** ⚠ Do not assume nothing was spawned before checking that something was parked: a
+restore that misses is the decoded failure mode and looks identical from the cockpit.
+
+## A3 ☐ The campaign wingman spawns far from the player (`BL-457`)
+
+**Goal.** The wingman starts the mission where the original starts it, beside the player.
+
+**Evidence (confidence: lead-only on the mechanism, certain on the symptom).** From the E42 pass:
+"in the original the wingman spawns beside me. here he spawns above the island flying towards me."
+The escort law is not at fault, since the wingman does fly to the player; the placement is. The open
+question is whether a `mode wingman` block takes an authored world pose at all, or is placed
+relative to its leader. <TODO: mechanism under investigation; record where the pose comes from and
+what the data authors for that mission's `wingman_1`.>
+
+**Approach.** <TODO: from the investigation, and note which of the two the data supports.>
+
+**Model recommendation.** medium, unless the investigation turns it into a decode question, in which
+case high.
+
+**Verify.** The first campaign mission started at the controls with the wingman in frame beside the
+player; the `campaign-roster` and `wingman-station` suites green.
+
+**⚠ Traps.** ⚠ Do not teleport the wingman next to the player if the data authors a world pose:
+that is inventing placement, which is the failure mode this project guards hardest against. Settle
+what the original does first.
+
+## A4 ☑ The music channel drowns the briefing (`BL-455`)
+
+**Goal.** Music sits under the briefing narration instead of over it.
+
+**Evidence (confidence: certain).** From the E42 pass: music "works but too loud. Especially in
+briefing", with the user's own instruction to set it to 0.2 until an options menu exists.
+
+**Landed.** `MusicPlayer.ChannelLevel` (0.2) multiplies into the mixer in `SetGain` alone.
+`MusicPlayer.Gain` deliberately keeps the fade's own 0..1 value, so every assertion about the
+decoded ramp still reads what the decode describes and the `music-states` suite is unaffected. The
+constant carries a doc comment saying it is a stand-in for a control that does not exist and is to
+be removed, not re-tuned, once an options menu can hold a music level. `BL-455` is filed for the
+options menu itself.
+
+**Model recommendation.** medium, low effort.
+
+**Verify.** The briefing heard at the controls with the narration intelligible over the score.
+<TODO: the user's confirmation at the controls; the value is theirs, so their ear is the check.>
+
+**⚠ Traps.** ⚠ `ChannelLevel` is a placeholder, not a fidelity constant. Do not tune it as though
+the original's mix were being matched, and do not fold it into `Gain`, which would move the decoded
+fade assertions.
+
+## A5 ☐ The cutscene letterbox flickers once (`BL-452`)
+
+**Goal.** The bars hold steady for the whole cutscene.
+
+**Evidence (confidence: lead-only, certain on the symptom).** From the E42 pass: the bars are right
+from the first frame, then "flickers at a point shortly then goes back". The shipped definition
+switches the bars on outright and re-asserts the cutscene camera's frame onto them every tick, so a
+one-frame gap points at a single beat that re-runs a base state or re-parents the card.
+
+**Approach.** Find the beat. The `cutscene-letterbox` suite already pins the base state and the
+per-tick re-assert and does not catch this, so whatever it is happens between those two facts.
+
+**Model recommendation.** medium.
+
+**Verify.** A frame-stepped capture across the beat that flickers, plus the suite extended to cover
+it, since its current coverage demonstrably misses it.
+
+**⚠ Traps.** ⚠ Do not fix a flicker by tweening the bars in: that contradicts both the decode ("no
+reveal") and the user's own verdict that the bars are present the instant the load ends.
+
+# Wave B — where things are shown, and where they are heard
+
+## B11 ☐ The objectives readout belongs on the pause screen (`BL-454`)
+
+**Goal.** The objectives are read on the pause screen, as in the original, and not on the flight
+HUD.
+
+**Evidence (confidence: traced to the user's knowledge of the original, which is the authority this
+question was waiting on).** From the E42 pass: "in the original the in-flight objectives are only
+seen in the pause screen. but the targets are selectable in world." That answers the question
+`CAP-45` was minted to film, so the capture is re-pointed at the pause screen's own presentation,
+which still has no reference. Ours mounts `ObjectivesHud` on the world root for every campaign
+session (D33's `GameSession` mount), so it is up for the whole flight. The same pass reports the
+completion tick not sitting on its line, which is why the player could not tell which objective had
+completed.
+
+**Approach.** Move the readout to the pause screen and take it off the HUD, keeping the graph
+binding and the completion marking, which are D33's and are not in question. Fix the mark's
+alignment while moving it.
+
+**Model recommendation.** medium.
+
+**Verify.** A capture of the pause screen mid-mission with a completed objective marked on its own
+line, and a flight capture showing nothing on the HUD.
+
+**⚠ Traps.** ⚠ `campaign-objectives-hud` asserts the readout marks its own completed line rather
+than only the graph, which is the one proof that this half works; the move must keep that suite
+meaningful, not delete it. ⚠ Do not also remove in-world target selection: the same verdict says
+targets are selectable in the world, and that is a different subsystem.
+
+## B12 ☐ Radio calls play positionally (`BL-453`)
+
+**Goal.** A mission callout is heard in full wherever the player flies.
+
+**Evidence (confidence: traced for the routing, contested for the intent).** From the E42 pass, the
+lines "are not 3D placed but directly played... if they are 3d i'm gone before they are finished.
+They are radio calls so no location is needed." The routing today is positional: an objective's
+`WAKEUP_SOUND_GROUP`/`COMPLETED_SOUND_GROUP` goes through `CampaignDirector`'s one sound-group
+executor to `WorldSounds.PlayOneShot`, which starts an `AudioStreamPlayer3D` (D33's suite counts
+exactly that). ⚠ The decode as written disagrees with the conclusion: `docs/formats/sounds.md`
+records the original's channel split as `MUSIC`-flagged definitions and `mu`-prefixed groups to the
+streaming channel and **everything else to the positional path**, which would put these lines in 3D.
+
+**Approach.** Settle the contradiction from the data before moving any code. If the original really
+routes callouts positionally, the finding is that it places them where distance never matters, and
+the fix is the placement rather than the channel. If a second non-positional class exists in the
+decode, route to it. `MusicPlayer` is the precedent for a channel that sits beside `WorldSounds`
+rather than inside it.
+
+**Model recommendation.** high. It is a decode question first, and the wrong call moves every
+mission's audio.
+
+**Verify.** A callout heard end to end while flying away from wherever it started, plus whichever
+in-engine counter the settled routing makes assertable.
+
+**⚠ Traps.** ⚠ Do not change both the channel and the placement; one of them is the answer. ⚠ C22
+(the VO chain player) will inherit whatever channel this settles on, so run this first or accept
+that C22 may have to move again.
+
+## B13 ☐ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
 
 **Goal.** Each campaign screen fills the window as one composed board, with its art at the size the
 original draws it and the original's own button plaques along the bottom, and the pad moves focus
@@ -149,7 +355,7 @@ size; a soft upscale of authored art reads as a bug at the controls. ⚠ `BL-181
 entry blocked on "the menu hub", and its blocker is arguably discharged by this work; decide that
 explicitly rather than leaving the tag stale.
 
-## A2 ☐ The briefing reveal, drawn as authored (`BL-450`)
+## B14 ☐ The briefing reveal, drawn as authored (`BL-450`)
 
 **Goal.** The briefing plays the way the original's does: flags planted on the map one at a time,
 the photos changing through the narration, each objective line written onto the parchment as the
@@ -188,9 +394,9 @@ briefing backwards). The shipped page gets this right; do not regress it while m
 ⚠ This item is drawing, not timing: if a beat lands at the wrong moment, that is a marker bug and
 belongs to whoever owns the timing, not to a fudge factor here.
 
-# Wave B — the gaps M5 named
+# Wave C — the gaps M5 named
 
-## B11 ☐ The mid-mission cutscene trigger (`BL-448`, `BL-035`)
+## C21 ☐ The mid-mission cutscene trigger (`BL-448`, `BL-035`)
 
 **Goal.** A mission can start a cutscene while it is being flown, which makes an objective gated on
 that definition satisfiable and gives the remaining mission-script callback codes somewhere to land.
@@ -222,7 +428,7 @@ definition as executed: every such objective would fire at mission start. ⚠ D3
 that authored callback codes do not identify a cutscene (Instant Action's `player_setup` raises the
 same nine), so scope by definition, never by code.
 
-## B12 ☐ The VO dialogue chain player (`BL-443`)
+## C22 ☐ The VO dialogue chain player (`BL-443`)
 
 **Goal.** A cue naming a VO dialogue chain plays the chain instead of silence.
 
@@ -251,7 +457,7 @@ members, so adding chains to a prewarm list changes nothing. ⚠ Do not make `So
 a random chain member; a chain is a script, not a draw, and that change would move every existing
 weighted-sound suite.
 
-## B13 ☐ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
+## C23 ☐ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
 
 **Goal.** The hangar's art seam draws the PNG art that ships, and the JPEG-only art has a recorded
 decision rather than a silent blank.
@@ -275,9 +481,9 @@ diagrams drawn, plus the census result written down.
 **⚠ Traps.** ⚠ Returning a placeholder image is worse than returning null: a wrong picture reads as
 a fidelity verdict. Keep the never-invent behaviour for anything still undecodable.
 
-# Wave C — the campaign's own rough edges
+# Wave D — the campaign's own rough edges
 
-## C21 ☐ The load screen's composed artwork (`BL-409`)
+## D31 ☐ The load screen's composed artwork (`BL-409`)
 
 **Goal.** The load screen draws the original's composed artwork instead of a plain panel.
 
@@ -298,7 +504,7 @@ description; goldens unchanged.
 **⚠ Traps.** ⚠ Do not take the progress bar on as a bonus: it needs the build decoupled from the
 draw, which is a different item with its own blast radius.
 
-## C22 ☐ Spawn node names defeat `rating_biases` on the campaign path (`BL-401`)
+## D32 ☐ Spawn node names defeat `rating_biases` on the campaign path (`BL-401`)
 
 **Goal.** An AI spawned into a campaign mission matches its roster's `rating_biases` patterns, so
 the authored bias term does something.
@@ -322,7 +528,7 @@ green.
 **⚠ Traps.** ⚠ Node names are used for more than bias matching (the wingman binding and the
 `primary_target` resolution read names too); change the name in one place and check every reader.
 
-## C23 ☐ World objects are hostile to everyone (`BL-407`)
+## D33 ☐ World objects are hostile to everyone (`BL-407`)
 
 **Goal.** World scenery is neutral unless the data says otherwise, as the original has it.
 
@@ -343,9 +549,9 @@ neutral structure are both refused where the data says they should be.
 because the ranking is minimised, so a change here must not be judged by "the AI stopped shooting
 buildings" alone.
 
-# Wave D — answers and housekeeping
+# Wave E — answers and housekeeping
 
-## D31 ☐ Decode the original's per-pylon ordnance id (`BL-445`)
+## E41 ☐ Decode the original's per-pylon ordnance id (`BL-445`)
 
 **Goal.** An answer: what the original writes into a plane record's ordnance field, and how it maps
 to weapon defs.
@@ -369,7 +575,7 @@ from cited.
 target. ⚠ Decision 1 of the campaign plan puts writing the original save format out of scope, so
 this item stops at the answer.
 
-## D32 ☐ Decide how the MPG cinemas would play, before any code (`BL-446`)
+## E42 ☐ Decide how the MPG cinemas would play, before any code (`BL-446`)
 
 **Goal.** A recorded decision: whether Godot's own video playback can take the shipped files, or
 whether they need transcoding at extract time.
@@ -389,7 +595,7 @@ accept, and write the decision down. No player code until the decision exists.
 **⚠ Traps.** ⚠ Do not start with a transcode pipeline; if the engine plays the files as they ship,
 the pipeline is the expensive wrong answer.
 
-## D33 ☐ Close what is already done, fix what is merely stale (`BL-243`, `BL-427`, `BL-426`)
+## E43 ☐ Close what is already done, fix what is merely stale (`BL-243`, `BL-427`, `BL-426`)
 
 **Goal.** Three backlog entries stop lying: two are closed because the work landed, one keeps its
 bug and loses its wrong file reference.

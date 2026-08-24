@@ -56,6 +56,13 @@ public sealed partial class MusicPlayer : Node
     /// silent, from the shared sound object <c>GLOBALS.SCRIPT</c> creates.</summary>
     public const int MenuLoopCount = 5;
 
+    /// <summary>⚠ TUNE, and a stand-in for a control that does not exist yet. The music channel is
+    /// mixed this far below the master bus because at full gain it drowns the briefing narration at
+    /// the controls. The original mixes music against a user setting; until an options menu exists
+    /// there is nothing to read, so the level is fixed here. Remove it, do not re-tune it, once the
+    /// options menu can carry a music slider.</summary>
+    public const float ChannelLevel = 0.2f;
+
     /// <summary>Resolves a definition's WAV into a stream, the same seam
     /// <see cref="WorldSounds.Loader"/> uses. The bool is the stream's own forward-loop flag.</summary>
     public Func<SoundDef, bool, AudioStreamWav?>? Loader;
@@ -330,7 +337,9 @@ public sealed partial class MusicPlayer : Node
 
     private void SetGain(float gain)
     {
+        // Gain stays the fade's own 0..1 value, so every assertion about the ramp reads what the
+        // decode describes; ChannelLevel is applied at the mixer alone.
         _gain = gain;
-        _player.VolumeDb = Mathf.LinearToDb(Math.Max(gain, 0.0001f));
+        _player.VolumeDb = Mathf.LinearToDb(Math.Max(gain * ChannelLevel, 0.0001f));
     }
 }

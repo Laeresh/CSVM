@@ -1461,6 +1461,35 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
+- `BL-453` `[Bug]` **Mission callouts and objective cues play positionally, but they are radio
+  calls and should not be.** Seen at the controls: the lines "are not 3D placed but directly
+  played... if they are 3d i'm gone before they are finished. They are radio calls so no location is
+  needed." *Evidence:* the user's pass, plus the routing: a campaign objective's
+  `WAKEUP_SOUND_GROUP`/`COMPLETED_SOUND_GROUP` goes through `CampaignDirector`'s one sound-group
+  executor to `WorldSounds.PlayOneShot`, which starts an `AudioStreamPlayer3D` (the D33 suite counts
+  exactly that). A positional line attenuates and falls behind as the player flies on, so a callout
+  is half-heard. *Fix shape:* route the radio-call classes to a non-positional channel, beside
+  `MusicPlayer` rather than inside `WorldSounds`, which is the seam the music channel already
+  established. *⚠ Traps:* ⚠ this is a routing question with a decoded answer available, so settle it
+  from the data before moving anything: `docs/formats/sounds.md` records that the original's own
+  channel split sends `MUSIC`-flagged definitions and `mu`-prefixed groups to the streaming channel
+  and **everything else to the positional path**, which as written would put these lines in 3D. If
+  the decode really says positional, the finding is that the original's callouts are positional at a
+  distance that never matters, and the fix is the placement, not the channel. Do not change both.
+  *Cross-refs:* `BL-443` (VO chains), which will inherit whatever channel this settles on;
+  `docs/org/music.md` for the existing two-channel precedent.
+
+- `BL-455` `[Feature]` **There is no audio options menu, so the music level is a hard-coded
+  stand-in.** *Evidence:* at the controls the music drowned the briefing narration, so
+  `MusicPlayer.ChannelLevel` now mixes the channel at 0.2 of the master bus. That constant is a
+  stand-in for a control, not a tuned value: the original mixes music against a user setting, and
+  with no options menu there is nothing to read. *Fix shape:* an options menu carrying at least a
+  music level, then delete `ChannelLevel` and read the setting. *⚠ Traps:* do not re-tune
+  `ChannelLevel` as if it were a fidelity constant; it is a placeholder and its own doc comment says
+  to remove rather than adjust it. `MusicPlayer.Gain` deliberately stays the fade's own 0..1 value
+  so the decoded ramp assertions still read what the decode describes. *Cross-refs:*
+  `docs/org/music.md` for the fade rates the level does not affect.
+
 - `BL-443` `[Feature]` **VO dialogue chains are decoded and prewarmed but nothing plays one.**
   *Evidence:* `docs/formats/sounds.md` records the chain shape (`[name, [dialogueRoot, [line],
   [line], …]]`, "a VO chain, NOT a weighted group") and `WorldSounds.Prewarm` decodes a chain's
@@ -1950,6 +1979,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-454` `[Bug]` **The objectives readout is on the flight HUD; in the original it is on the
+  pause screen.** *Evidence:* the user, from the original: "in the original the in-flight objectives
+  are only seen in the pause screen. but the targets are selectable in world." Ours mounts
+  `ObjectivesHud` on the world root for every campaign session (`GameSession`, D33's mount), so it
+  is up the whole flight. A second symptom from the same pass: when an objective completed, the tick
+  was not on its line, so the player could not tell which one had completed. *Fix shape:* move the
+  readout to the pause screen and take it off the HUD; keep the graph binding and the completion
+  marking, which are D33's and are not in question, and fix the mark's alignment while moving it.
+  *⚠ Traps:* ⚠ the completed-row marking is the half that has an in-engine proof
+  (`campaign-objectives-hud` asserts the readout marks its own completed line, not just the graph),
+  so the move must keep that suite meaningful rather than deleting it. ⚠ Do not also remove
+  in-world target selection: the same verdict says targets ARE selectable in the world, and that is
+  a different subsystem. *Cross-refs:* `CAP-45`, re-pointed at the pause screen's presentation,
+  which has no reference shot; `BL-456`, since an unmarked line is why the failing objectives were
+  hard to diagnose at the controls.
+
 - `BL-449` `[Bug]` **The campaign screens are the shared list menu, not the original's full-screen
   boards, and the original's own buttons are not on them.** Seen at the controls: the campaign
   screens should fill the screen and offer the original's buttons, selectable on a controller.
@@ -2217,6 +2262,51 @@ usual.
   the audio half of (b)), `BL-389` (splitscreen weapon mix, same playtest family).
 
 ## Missions, modes & campaign
+
+- `BL-456` `[Bug]` **Campaign objectives do not register in a flown mission, so the first mission
+  cannot be finished.** Seen at the controls on the first campaign mission: only one objective ever
+  completed, and "I couldn't drop Jack at the wreck". *Evidence:* the user's own pass, which is the
+  only place this has been observed; the headless `campaign-loop` suite completes C3/M01's primary
+  by flying its `TRAVELERS` approach and passes, so the machinery works in at least that scripted
+  case and the divergence is between the suite and a real flown session. <TODO: mechanism under
+  investigation; fill in the condition kind that fails and its `file:line`.> *⚠ Traps:* one known
+  class of objective is unsatisfiable by design today, `ANIM_STATE <def> EXECUTED` (`BL-448`),
+  because nothing plays a mid-mission cutscene; do not fold every non-completing objective into
+  that explanation before checking the condition each one actually uses. *Cross-refs:* `BL-448`;
+  `BL-454`, since the readout not marking the completed line is why the user could not tell WHICH
+  objective completed; `docs/PLAN-M5-campaign.md` D31 owns the objectives runtime.
+
+- `BL-457` `[Bug]` **The campaign wingman spawns far from the player instead of beside them.** Seen
+  at the controls: "in the original the wingman spawns beside me. here he spawns above the island
+  flying towards me." *Evidence:* the user's pass. The roster spawner places each block at its
+  authored spawn pose (`docs/PLAN-M5-campaign.md` D34); whether a `mode wingman` block is supposed
+  to take an authored world pose at all, or to be placed relative to its leader, is the open
+  question. <TODO: mechanism under investigation; fill in where the pose comes from and what the
+  data authors for that mission's `wingman_1`.> *⚠ Traps:* do not "fix" this by teleporting the
+  wingman next to the player if the data authors a world pose; that would be inventing placement.
+  Settle what the original does first. *Cross-refs:* `docs/org/aiPilot.md` for the escort law, which
+  is not at fault here (the wingman does fly to the player, just from the wrong place).
+
+- `BL-451` `[Bug]` **The intro cutscene plays over an empty world: no aircraft, no zeppelins.**
+  Seen at the controls: "the cutscene camera functions but there is no content. Missing planes and
+  zeppelins in the scene." *Evidence:* the user's pass. The camera work and the letterbox are
+  right, so this is about what is in the world when the cutscene runs, not about the cutscene host.
+  <TODO: mechanism under investigation; establish whether the roster and zeppelins are spawned
+  before or after the cutscene, and whether callback codes 913/914 park things that are never
+  restored.> *⚠ Traps:* D32 decoded 913/914 as "park and reveal the AI, and only what it parked
+  comes back", so a restore that misses is a live candidate; do not assume nothing was spawned
+  before checking. *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md`;
+  `docs/PLAN-M5-campaign.md` D32 (the host) and D34 (the spawner).
+
+- `BL-452` `[Bug]` **The cutscene letterbox flickers once mid-cutscene.** Seen at the controls: the
+  bars are correct from the first frame, then "flickers at a point shortly then goes back".
+  *Evidence:* the user's pass. The shipped definition switches the bars on outright and re-asserts
+  the cutscene camera's frame onto them every tick, so a single-frame gap points at one beat that
+  re-runs a base state or re-parents the card. *⚠ Traps:* the bars are pure data (`D32`): do not fix
+  a flicker by tweening them on, which would contradict the decoded "no reveal" behaviour and the
+  user's own verdict that they are present the instant the load ends. *Cross-refs:*
+  `docs/PLAN-M5-campaign.md` D32; the `cutscene-letterbox` suite pins the base state and the
+  per-tick re-assert, so it does not currently catch this.
 
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
   controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.
