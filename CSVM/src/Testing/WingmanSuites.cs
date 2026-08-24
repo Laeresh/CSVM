@@ -18,10 +18,9 @@ internal static class WingmanSuites
 
     private const float StepDt = 1f / 60f;
 
-    // The scripted leader's lever and spawn speed. It flies with no pilot at all, stick centred,
-    // so it holds a straight course at a speed a wingman can match: the decoded law caps an AI's
-    // own demand at 250 mph (AiControlLaw.SpeedCeiling), so a leader flown flat out cannot be
-    // formated on at all, which is a property of the original and not of this suite.
+    // Every rig's spawn lever and speed, the value a mission's PLAYER_INIT would give. The scripted
+    // legs below never move off this lever, so their leader holds one straight cruise; the flown leg
+    // firewalls from it, which is the case those legs cannot fail on.
     private const float LeaderThrottle = 0.3f;
     private const float LeaderSpeedMps = 55f;
 
@@ -32,6 +31,25 @@ internal static class WingmanSuites
     private const float HoldFromS = 60f;
     private const float LeashM = 600f;
     private const float MeanHoldM = 250f;
+
+    // The campaign's own starting airframe, which is what C3/M01 gives the player and wingman_1.
+    // ⚠ Its fd_speed is 113 m/s against the law's 111.76 m/s ceiling, a 1.24 m/s margin, where the
+    // suite's default Bloodhawk has 23 m/s. Quote a campaign figure off this one only.
+    private const string FlownPlaneNode = "player_pfighter";
+
+    // The flown-leader leg: its spawn altitude, how long it runs, and from when it is judged. The
+    // first seconds are the leader's own acceleration off the spawn lever, which no station-keeper
+    // can be inside of, so the hold is judged after them.
+    private const float FlownLeaderAltitudeM = 1200f;
+    private const float FlownRunS = 120f;
+    private const float FlownHoldFromS = 10f;
+
+    // The flown leg's leash IS the join gate, because an escort that has never joined commands a
+    // point 200 m above its leader and that is the reported symptom. ⚠ It is not an exit: the
+    // formation state is never left once entered, so crossing this line matters at the FIRST join,
+    // not later. The mean allows for the gap the leader opens firewalling from its spawn lever.
+    private const float FlownLeashM = AiEscort.JoinRangeM;
+    private const float FlownMeanHoldM = 400f;
 
     internal static void WingmanStation(TestContext ctx)
     {
@@ -47,6 +65,11 @@ internal static class WingmanSuites
         var textures = new TextureArchive(texturesPath);
         try
         {
+            // Twice, and the pair is the point: the campaign's own airframe is the case that
+            // matters, and the suite's default is the same leg with the mechanism eighteen times
+            // larger. ⚠ A number off the default describes the mechanism, never the campaign.
+            FlyFlownLeaderLeg(ctx, planesGamez, textures, FlownPlaneNode);
+            FlyFlownLeaderLeg(ctx, planesGamez, textures, ctx.PlaneName);
             var behindPlayer = FlyLeg(ctx, planesGamez, textures, stats, playerLeader: true);
             var withAi = FlyLeg(ctx, planesGamez, textures, stats, playerLeader: false);
 
@@ -117,6 +140,140 @@ internal static class WingmanSuites
         escort.Next(new Vector3(0f, 0f, 699f), 21f, leader, null, out _);
         ctx.Check(escort.State == EscortState.Station,
             $"…and inside 700 m above 20.576 m/s it joins: {escort.State}");
+
+        // What an escort that has NOT joined commands, which is the reported symptom's own shape:
+        // a point 200 m directly above the leader. The formation state is never left inside the
+        // law, so this is reachable only before the first join, never after it.
+        var unjoined = new AiEscort();
+        var overfly = unjoined.Next(new Vector3(0f, 0f, 100f), 5f, leader, null, out _);
+        ctx.Check(unjoined.State == EscortState.Joining
+            && Mathf.IsEqualApprox(overfly.Y - leader.Position.Y, AiEscort.LeaderOverflyM, 0.01f),
+            $"a wingman below the join speed commands {AiEscort.LeaderOverflyM:0} m ABOVE its leader: {unjoined.State}, {overfly.Y - leader.Position.Y:0.0} m up");
+
+        // …and the formation state, once entered, is never left however far the wingman strays.
+        var joined = new AiEscort();
+        joined.Next(new Vector3(0f, 0f, 100f), 60f, leader, null, out _);
+        joined.Next(new Vector3(0f, 0f, 5000f), 60f, leader, null, out _);
+        ctx.Check(joined.State == EscortState.Station,
+            $"…and a joined wingman 5 km out is still in the formation state, not re-joining: {joined.State}");
+    }
+
+    // The leader's stick for the flown leg: a human profile, not a cruise lever. Full throttle
+    // throughout, a right turn, a climb, a level-off and a left turn, which is the speed and
+    // altitude range a flown mission covers. Holding a straight cruise lever is not station-keeping
+    // on a player, so the scripted legs cannot fail on it.
+    private static (FlightInput Input, float Duration)[] FlownLeaderProfile() => new[]
+    {
+        (new FlightInput { Throttle = 1f }, 20f),
+        (new FlightInput { Throttle = 1f, Roll = 0.6f }, 1.5f),
+        (new FlightInput { Throttle = 1f, Pitch = 0.35f }, 8f),
+        (new FlightInput { Throttle = 1f, Roll = -0.6f }, 1.5f),
+        (new FlightInput { Throttle = 1f }, 5f),
+        (new FlightInput { Throttle = 1f, Pitch = 0.15f }, 6f),
+        (new FlightInput { Throttle = 1f, Pitch = -0.15f }, 6f),
+        (new FlightInput { Throttle = 1f }, 5f),
+        (new FlightInput { Throttle = 1f, Roll = -0.6f }, 1.5f),
+        (new FlightInput { Throttle = 1f, Pitch = 0.35f }, 8f),
+        (new FlightInput { Throttle = 1f, Roll = 0.6f }, 1.5f),
+        (new FlightInput { Throttle = 1f }, 0f),
+    };
+
+    // The leg the scripted one cannot fail on: a leader flown the way a player flies, on a human
+    // stick at full throttle, with the wingman on the AI force path the live roster gives it. Both
+    // fly the CAMPAIGN's own airframe, not the suite's default: the Devastator's fd_speed sits
+    // 1.24 m/s above the decoded ceiling, where a Bloodhawk's sits 23 m/s above it, so the default
+    // would measure a far larger effect than a campaign wingman ever meets.
+    private static void FlyFlownLeaderLeg(TestContext ctx, GameZ planesGamez, TextureArchive textures,
+        string planeNode)
+    {
+        var stats = PlaneStats.Load(ctx.ZrdrPath, planeNode);
+        var aiStats = PlaneStats.LoadForAi(ctx.ZrdrPath, planeNode);
+        ctx.Note($"[flown {planeNode}] leader fd_speed {stats.FdSpeed:0.0} m/s, wingman fd_speed {aiStats.FdSpeed:0.0} m/s, ceiling {AiControlLaw.SpeedCeiling:0.0} m/s, margin {stats.FdSpeed - AiControlLaw.SpeedCeiling:0.0} m/s");
+        ProjectilePool? pool = null;
+        FlightController? leader = null;
+        FlightController? wing = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var leaderPos = new Vector3(0f, FlownLeaderAltitudeM, 0f);
+            leader = Rig(ctx, planesGamez, textures, stats, live, leaderPos, true, null,
+                FlightRoster.ShooterIdBase, FlownLeaderProfile(), null, out _, planeNode);
+
+            // Spawned on its own decoded station, which is where the campaign's aiv puts it: this
+            // leg is about holding the station, not about reaching it.
+            var wingPos = AiEscort.FormationStation(leaderPos, Basis.Identity, playerLeader: true);
+            var escort = new AiEscort { Leader = leader };
+            var pilot = AiPilot.HoldingCourse(wingPos, wingPos + Vector3.Forward);
+            pilot.Escort = escort;
+            pilot.Machine = new AiModeMachine(new System.Random(7));
+            // The human field a live session binds, so the wingman reaches the far-field plant as
+            // it does in the game. That plant is no escape from the ceiling: it holds the LEVER
+            // times fd_speed, and the lever already carries the cap. The readout below proves it.
+            var leaderRig = leader;
+            var humans = new Vector3[1];
+            wing = Rig(ctx, planesGamez, textures, aiStats, live, wingPos, false, pilot,
+                FlightRoster.ShooterIdBase + 1, null,
+                () => { humans[0] = leaderRig.WorldPosition; return humans; }, out var wingPlant,
+                planeNode);
+
+            float worst = 0f, meanRange = 0f, worstAbove = 0f, worstLeaderSpeed = 0f;
+            float farFastest = 0f, nearFastest = 0f;
+            bool leftStation = false, everCrashed = false;
+            int samples = 0, farSteps = 0, allSteps = 0;
+            for (int i = 0; i < (int)(FlownRunS / StepDt); i++)
+            {
+                live.SimStep(StepDt);
+                leader.SimStep(StepDt);
+                wing.SimStep(StepDt);
+                float range = wing.WorldPosition.DistanceTo(leader.WorldPosition);
+                worstLeaderSpeed = Mathf.Max(worstLeaderSpeed, leader.WorldVelocity.Length());
+                everCrashed |= wing.Crashed || leader.Crashed;
+                allSteps++;
+                float wingSpeed = wing.WorldVelocity.Length();
+                if (wingPlant.FarFieldPlant)
+                {
+                    farSteps++;
+                    farFastest = Mathf.Max(farFastest, wingSpeed);
+                }
+                else
+                {
+                    nearFastest = Mathf.Max(nearFastest, wingSpeed);
+                }
+                if (i % 900 == 0)
+                {
+                    ctx.Note($"[flown {planeNode}] t={i * StepDt:0}s range={range:0} escort={escort.State} mode={AiModeMachine.NameOf(pilot.Machine!.Mode)} dY={wing.WorldPosition.Y - leader.WorldPosition.Y:0} wingV={wing.WorldVelocity.Length():0} leadV={leader.WorldVelocity.Length():0} lever={pilot.Throttle:0.00}");
+                }
+
+                if (i * StepDt < FlownHoldFromS)
+                    continue;
+                samples++;
+                worst = Mathf.Max(worst, range);
+                meanRange += range;
+                worstAbove = Mathf.Max(worstAbove, wing.WorldPosition.Y - leader.WorldPosition.Y);
+                leftStation |= escort.State != EscortState.Station;
+            }
+
+            meanRange /= Mathf.Max(1, samples);
+            ctx.Note($"[flown {planeNode}] hold: mean {meanRange:0} m, worst {worst:0} m, worst above {worstAbove:0} m, leader peak {worstLeaderSpeed:0} m/s");
+            ctx.Note($"[flown {planeNode}] plant: far-field {farSteps} of {allSteps} steps ({100f * farSteps / Mathf.Max(1, allSteps):0.0}%), fastest far {farFastest:0.0} m/s, fastest near {nearFastest:0.0} m/s, ceiling {AiControlLaw.SpeedCeiling:0.0}, fd_speed {stats.FdSpeed:0.0}");
+            ctx.Check(!everCrashed,
+                $"[flown leader] neither aircraft goes in over the {FlownRunS:0} s the leader is flown");
+            ctx.Check(!leftStation,
+                $"…the wingman never falls out of the formation state, which commands {AiEscort.LeaderOverflyM:0} m above the leader");
+            ctx.Check(worst > 0f && worst < FlownLeashM,
+                $"…and stays with a leader flown on a human stick: worst {worst:0} m of {FlownLeashM:0}");
+            ctx.Check(meanRange < FlownMeanHoldM,
+                $"…averaging inside {FlownMeanHoldM:0} m: {meanRange:0} m");
+        }
+        finally
+        {
+            wing?.Free();
+            leader?.Free();
+            pool?.Free();
+        }
     }
 
     // One leader/wingman pair, flown, reporting the wingman's mean offset in the leader's frame.
@@ -138,14 +295,14 @@ internal static class WingmanSuites
             var leaderPos = new Vector3(0f, 500f, 0f);
             var wingPos = leaderPos + new Vector3(StartAbeamM, 0f, 0f);
             leader = Rig(ctx, planesGamez, textures, stats, live, leaderPos, playerLeader, null,
-                FlightRoster.ShooterIdBase);
+                FlightRoster.ShooterIdBase, null, null, out _);
 
             var escort = new AiEscort { Leader = leader };
             var pilot = AiPilot.HoldingCourse(wingPos, wingPos + Vector3.Forward);
             pilot.Escort = escort;
             pilot.Machine = new AiModeMachine(new System.Random(7));
             wing = Rig(ctx, planesGamez, textures, stats, live, wingPos, false, pilot,
-                FlightRoster.ShooterIdBase + 1);
+                FlightRoster.ShooterIdBase + 1, null, null, out _);
 
             float joinedRange = -1f;
             bool joined = false, unjoined = false, leftStation = false;
@@ -249,13 +406,18 @@ internal static class WingmanSuites
         }
     }
 
-    // One AI-flown aircraft on the suite's own stage: no camera, no HUD, no devices, exactly what
-    // FlightRoster builds for an AI actor.
+    // One aircraft on the suite's own stage: no camera, no HUD, no devices, exactly what
+    // FlightRoster builds for an actor, the AI force path included. `holdSegments` gives the
+    // leader a scripted human stick; null leaves it on its spawn lever with the stick centred.
     private static FlightController Rig(TestContext ctx, GameZ planesGamez, TextureArchive textures,
-        PlaneStats stats, ProjectilePool live, Vector3 pos, bool human, AiPilot? pilot, int shooterId)
+        PlaneStats stats, ProjectilePool live, Vector3 pos, bool human, AiPilot? pilot, int shooterId,
+        (FlightInput Input, float Duration)[]? holdSegments,
+        System.Func<System.Collections.Generic.IReadOnlyList<Vector3>>? humanPositions,
+        out FlightModel plant, string? planeNode = null)
     {
-        var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
-        var rig = new FlightController
+        var model = new PlaneBuilder(planesGamez, textures).Build(planeNode ?? ctx.PlaneName);
+        var rig = new FlightController();
+        rig.Bind(new FlightControllerBuild
         {
             PlaneModel = model,
             Collider = PlaneCollider.Build(model),
@@ -263,13 +425,15 @@ internal static class WingmanSuites
             PlayerIndex = shooterId,
             IsHumanPiloted = human,
             Pilot = pilot,
+            HoldSegments = holdSegments,
+            HumanPositions = humanPositions,
             Projectiles = live,
             UseKeyboard = false,
             PadDevices = System.Array.Empty<int>(),
             AllowPause = false,
-        };
-        rig.AddChild(model);
-        rig.Setup(new FlightModel(stats), null, new CamParams(), pos, pos + Vector3.Forward,
+        });
+        plant = new FlightModel(stats, aiForcePath: pilot != null);
+        rig.Setup(plant, null, new CamParams(), pos, pos + Vector3.Forward,
             LeaderThrottle, LeaderSpeedMps);
         ctx.Host.AddChild(rig);
         return rig;

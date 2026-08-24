@@ -312,18 +312,69 @@ for word and is self-reinforcing once entered.
 **Approach.** The driver, `AiPilot` through `AiControlLaw` on the `Wingman` table. Not the escort
 law's geometry, which computes the right point throughout, and not the spawner.
 
+**Partial: one contributing cause fixed, the reported magnitude still unexplained.**
+`AiControlLaw.Steer` clamps an AI's desired speed to `SpeedCeiling`, 111.76 m/s (250 mph), which the
+def initialiser writes into every airframe's `def+0x1e8` (`FUN_00478a00` at `0x478d52`,
+`MOV dword ptr [EBP+0x1e8], 0x42df851e`, re-read out of the image; nothing else writes the slot but
+the `kind_of` copy). The campaign's own airframe, `player_pfighter`, has `fd_speed` 113 m/s, so an
+escort's demand is capped 1.24 m/s BELOW what its leader cruises at and it holds no closure margin:
+any ground lost in a turn is never regained. `AiPilot.FlyEscort` now passes `stationKeeping`, which
+swaps the clamp for `AiControlLaw.StationCeiling`, the decoded ceiling or the leader's own speed
+plus the law's own decoded `DesiredSpeedBand` when the leader is faster. The lift is bounded by
+decoded quantities on both ends, still capped by `fd_speed · SpeedCap`, and is the escort
+dispatch's alone, so pursue, patrol, evade, lay off and the climb-out read the decoded ceiling
+unchanged. Nothing in `AiEscort` moved.
+
+**What this does NOT explain, and what the evidence now says instead.** On the campaign airframe the
+ceiling is a secondary effect: unfixed, the wingman recovers to about 105 m and holds, so it cannot
+produce the traced 838 m at 26 s. Two further findings redirect the remainder. The far-field plant
+is not the original's answer to a fast leader: its target is `fd_speed · lever + 5` reading the
+lever at `[obj+0x128]` (`0x48c593`-`0x48c5ae`), that lever slews toward the commanded `[obj+0x124]`
+(`FUN_0048e580` at `0x48e58f`/`0x48e59b`), and `[obj+0x124]` is exactly what the ceiling clamps, so
+the cap reaches both plants and a far-field escort holds at most `ceiling + 5`. And the escort law
+never leaves the formation state once joined, in the decode and in the port, so the 200 m overfly
+the report describes is reachable ONLY by a wingman that never joined. The join gate is a range AND
+a speed, `< 700 m` and `> 20.576 m/s`, which points the remainder at the handoff at the intro's
+end rather than at the cruise.
+
 **Model recommendation.** high. It is a control-law failure on a table shared with other AI
 behaviour, so the blast radius reaches beyond the campaign.
 
-**Verify.** The wingman still beside the player a minute into a flown C3/M01, plus a test that can
-fail: fly a leader that accelerates and manoeuvres as a player does, since the existing suite's
-scripted leader is exactly the case that hides this.
+**Verified.** `wingman-station` gained a `[flown]` leg that flies the leader the way a player does:
+a human stick on a `ScriptedInputSource` at full throttle from the spawn lever, a right turn, a
+climb and a left turn, the wingman on the AI force path and against the human field a live session
+binds. It runs on two airframes, and the pair is what makes the size of the effect readable.
 
-**⚠ Traps.** ⚠ The `wingman-station` suite passes (mean 213 m, worst 396 m) because it flies a
-SCRIPTED leader on a cruise lever. Its leash is not evidence here, and D34's own landed note that
-the commanded point equals the decoded station to 0.00 m is also not evidence: the point is right
-and the aircraft does not reach it. ⚠ Do not re-tune the decoded station offsets or the 700 m join
-gate.
+| leg | margin over the ceiling | unfixed mean / worst | fixed mean / worst |
+|---|---|---|---|
+| `player_pfighter` (the campaign's) | 1.2 m/s | 296 m / 702 m | 256 m / 590 m |
+| `player_bhawk` (the mechanism's control) | 23.2 m/s | 1200 m / 2064 m | 328 m / 584 m |
+
+Both fail unfixed against the 700 m leash, the campaign airframe by 2 m and the control outright,
+and both pass fixed. On the campaign airframe the unfixed wingman recovers to about 105 m and holds,
+so the ceiling is the difference between touching the join gate and not, and nothing larger. The
+far-field plant was measured rather than argued: with the human field bound and the lift off, the
+control leg is on that plant for 54.3 % of its run (3911 of 7199 steps) and its fastest speed there
+is 114.0 m/s, the ceiling plus the plant's own 5 m/s. Two geometry checks pin the state machine: an
+escort below the join speed commands exactly 200 m above its leader, and a joined one 5 km out is
+still in the formation state. `dotnet build` carries no new warning and `dotnet test` is green at
+2334. A live `--campaign=<profile>:0` session builds `c3/m01` and logs
+`campaign: roster 'wingman_1' … escorts 'player'`. The engine suites and the goldens ride the
+orchestrator's serialized battery.
+
+**⚠ Traps.** ⚠ **The airframe decides the magnitude, so measure on `player_pfighter`.** The
+Devastator's `fd_speed` is 113 m/s against the ceiling's 111.76, a 1.24 m/s deficit; the suite's
+default Bloodhawk is 135 m/s, a 23 m/s one, which overstates the ceiling's share about eighteenfold.
+A result quoted off the default is not a statement about the campaign. ⚠ The escort law NEVER leaves
+the formation state once joined, so `BL-457`'s own line that it "re-enters `Joining`" past 700 m is
+wrong: the 200 m overfly belongs to a wingman that never joined, and the remainder should be looked
+for at the handoff, not in the cruise. ⚠ The far-field plant is ruled out at the image and by
+measurement; do not re-derive it. ⚠ The two SCRIPTED legs fly a leader on a cruise lever, a speed
+any escort can match, so their leashes say nothing here and neither does D34's note that the
+commanded point equals the decoded station to 0.00 m. ⚠ `AiControlLaw.StationCeiling` is a
+remake-only lift and the escort dispatch's alone; extending it to pursue or patrol would make every
+AI in the game faster than the decode allows. ⚠ Do not re-tune the decoded station offsets, the
+700 m join gate, or `SpeedCeiling` itself, which is confirmed against the image.
 
 ## A4 ☑ The music channel drowns the briefing (`BL-455`)
 

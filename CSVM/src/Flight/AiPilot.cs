@@ -321,10 +321,12 @@ public sealed class AiPilot
     // The skill factor is the machine's `sixth_sense_factor`, which the decode shows
     // multiplies all three channels every step; a pilot with no machine gets a neutral 1.
     private FlightInput Fly(FlightModel model, float dt, Vector3 aimPoint, Vector3 aimVelocity,
-        in AiLawParams p, bool emergency = false, bool engaged = false, bool gunLead = false)
+        in AiLawParams p, bool emergency = false, bool engaged = false, bool gunLead = false,
+        bool stationKeeping = false)
     {
         var input = AiControlLaw.Steer(model, aimPoint, aimVelocity, p, Throttle, dt,
-            emergency, engaged, gunLead, Machine?.SixthSenseFactor ?? 1f, PlayerPosition);
+            emergency, engaged, gunLead, Machine?.SixthSenseFactor ?? 1f, PlayerPosition,
+            stationKeeping);
         Throttle = input.Throttle;
         return input;
     }
@@ -371,6 +373,9 @@ public sealed class AiPilot
 
     // The formation escort: the station AiEscort computes, flown on the wingman table. The
     // leader's frame comes off its published transform, the sim pose between sim steps.
+    // ⚠ The one call that lifts the desired-speed ceiling (AiControlLaw.StationCeiling): a leader
+    // cruising above 250 mph is faster than anything the decoded ceiling lets an escort ask for,
+    // so under it the escort throttles back while behind and the station is never regained.
     private FlightInput FlyEscort(FlightModel model, float dt, AiEscort escort,
         FlightController? quarry)
     {
@@ -399,7 +404,7 @@ public sealed class AiPilot
         if (new Vector2(toStation.X, toStation.Z).LengthSquared() > 1f)
             TargetHeadingDeg = HeadingDegOf(toStation);
         TargetAltitude = station.Y;
-        return Fly(model, dt, station, aimVelocity, AiLawParams.Wingman);
+        return Fly(model, dt, station, aimVelocity, AiLawParams.Wingman, stationKeeping: true);
     }
 
     // Lay off (the rubber-band assist): steers the course captured at mode entry on the cruise

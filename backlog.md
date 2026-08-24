@@ -2332,25 +2332,37 @@ usual.
   A6's ownership when this was traced. *Fix shape:* add `Gamez = state.Gamez,` to that call's
   `WorldInputs` initializer. *Cross-refs:* `BL-456`.
 
-- `BL-457` `[Bug]` **The campaign wingman cannot keep station and ends up high and far behind, so it
-  reads as having spawned in the wrong place.** Seen at the controls: "in the original the wingman
-  spawns beside me. here he spawns above the island flying towards me." *Evidence:* **the spawn is
-  correct and this is not a placement bug.** `C3/M01`'s `aiv.zrd` authors `player` at
-  `[-1426, 150, -1813]` yaw 40 and `wingman_1` at `[-1378, 150, -1706]` yaw 40, 117 m apart at the
-  same altitude and heading, and the spawner puts it exactly there (`CampaignRoster.cs:191-192`,
-  confirmed in a live run). The failure is station-keeping after the handoff. Traced four times a
-  second from the intro's end, with the escort in `Station` from the first frame and computing a
-  correct 19 m station point: separation runs 117 m, 95 m, 102 m, 133 m at t=0/1/3/5 s, then 289 m
-  at 10 s, 597 m at 20 s and 838 m at 26 s, ending 130 m above the player. ⚠ Past 700 m the escort
-  re-enters `Joining`, whose commanded point is `AiEscort.LeaderOverflyM = 200f` **directly above
-  the leader**, which is the reported symptom word for word and is self-reinforcing once entered.
-  *Fix shape:* the driver, `AiPilot` through `AiControlLaw` on the `Wingman` table, not the escort
-  law's geometry and not the spawner. *⚠ Traps:* ⚠ the `wingman-station` suite passes (mean 213 m,
-  worst 396 m) because it flies a SCRIPTED leader on a cruise lever; a real player accelerating away
-  is the case it does not cover, so its leash is not evidence here and the fix needs a test that can
-  fail. ⚠ Do not re-tune the decoded station offsets or the 700 m join gate: those are decoded
-  constants and the station point is computed correctly throughout. *Cross-refs:*
-  `docs/org/aiPilot.md`; `docs/PLAN-M5-campaign.md` D34, whose suite this escapes.
+- `BL-457` `[Bug]` **The campaign wingman ends up high and far behind, so it reads as having spawned
+  in the wrong place.** Seen at the controls: "in the original the wingman spawns beside me. here he
+  spawns above the island flying towards me." *Evidence:* **the spawn is correct and this is not a
+  placement bug.** `C3/M01`'s `aiv.zrd` authors `player` at `[-1426, 150, -1813]` yaw 40 and
+  `wingman_1` at `[-1378, 150, -1706]` yaw 40, 117 m apart at the same altitude and heading, and the
+  spawner puts it exactly there (`CampaignRoster.cs:191-192`, confirmed in a live run). Traced from
+  the intro's end, separation runs 117 m, 95 m, 102 m, 133 m at t=0/1/3/5 s, then 289 m at 10 s,
+  597 m at 20 s and 838 m at 26 s, ending 130 m above the player. **One contributing cause is fixed
+  and does not account for that magnitude:** the decoded 250 mph desired-speed ceiling
+  (`AiControlLaw.SpeedCeiling`, `def+0x1e8`, written by `FUN_00478a00` at `0x478d52`) sits 1.24 m/s
+  below the Devastator's own 113 m/s cruise, so an escort holds no closure margin and never regains
+  ground lost in a turn; `AiPilot.FlyEscort` now lifts it through `AiControlLaw.StationCeiling`, and
+  on `player_pfighter` that moves a flown hold from mean 296 m / worst 702 m to mean 256 m /
+  worst 590 m. *What is still unexplained:* the 838 m at 26 s and the 130 m of altitude. *Fix shape:*
+  look at the HANDOFF at the intro's end, not the cruise. The escort law never leaves the formation
+  state once joined (decode: "nothing inside it leaves state 1"; `AiEscort.cs:233-235`, and a joined
+  escort 5 km out still reads `Station` in the `wingman-station` suite), so the 200 m overfly the
+  report describes belongs to a wingman that NEVER joined. The join gate is a range AND a speed,
+  `< 700 m` and `> 20.576 m/s`, so establish what the wingman's speed and range actually are on the
+  first frame it is stepped after the cutscene. *⚠ Traps:* ⚠ **measure on `player_pfighter`.** The
+  Devastator is 113 m/s against the ceiling's 111.76; the Bloodhawk is 135 m/s, which overstates the
+  ceiling's share about eighteenfold, and a number quoted off it is not a statement about the
+  campaign. ⚠ `BL-457`'s earlier line that the escort "re-enters `Joining`" past 700 m is WRONG: the
+  law has no such transition. ⚠ The far-field plant is not the original's answer to a fast leader and
+  must not be re-derived as one: its target is `fd_speed · lever + 5` off the lever at `[obj+0x128]`
+  (`0x48c593`-`0x48c5ae`), which slews toward the ceiling-clamped `[obj+0x124]`, so the cap reaches
+  both plants; measured, an escort is far-field for 54.3 % of a flown run and holds 114.0 m/s there.
+  ⚠ The two SCRIPTED `wingman-station` legs fly a cruise lever, a speed any escort matches, so their
+  leashes are not evidence here; the `[flown]` leg is. ⚠ Do not re-tune the decoded station offsets,
+  the 700 m join gate, or `SpeedCeiling`. *Cross-refs:* `docs/org/aiPilot.md`,
+  `docs/org/aiControlLaw.md`; `docs/PLAN-M5-polish.md` A3.
 
 - `BL-452` `[Bug]` **The cutscene letterbox flickers once mid-cutscene.** Seen at the controls: the
   bars are correct from the first frame, then "flickers at a point shortly then goes back".
