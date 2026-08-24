@@ -63,16 +63,19 @@ missions cannot be individually verified inside one milestone (decision 6).
 
 ## ⚠ Read this before implementing anything
 
-Disproofs landed so far:
+**Disproven so far:**
 
-- **A5.** The original charges nothing for ammunition or rockets, sells a plane back at its full
-  build cost with no depreciation, and starts the campaign with **$0** and two aircraft rather than
-  with a purse. The $250,000 in the image is the `fAllowAll` unlock mode's budget.
+| Claim | Status |
+|---|---|
+| "The mission tree branches at `C1B`/`C1C`/`C2B`, which fork and rejoin" | **Disproven (A3).** `cm_sequence.zrd` is a flat 24-entry list with no predicate and no alternates. `C1B`/`C1C`/`C2B` are terrain splits inside an act, sitting in the linear order. Model campaign position as one integer. |
+| "Strings 3500–3599 are act titles and 3600–3699 mission names" | **Disproven (A3).** Mission names are 3450–3473 (long) and 3480–3503 (short), indexed by story position; act names are 1220–1224. 3600+ is Instant Action content. `docs/formats/strings.md` is corrected. |
+| "Ammo has prices, planes depreciate, the campaign starts with a purse" | **Disproven (A5).** Ammunition and rockets are free, selling refunds the full build cost, and the campaign starts with $0 and two aircraft. The $250,000 belongs to the `fAllowAll` unlock mode. |
+| "The `MSG_BRF_*` prefixes in `objectives.zrd` are copy-paste leftovers naming the wrong chapter" (A4's reading) | **Corrected (A3 + a full census).** The abbreviation is the act name, not a wrong chapter. The digit equals the folder's `M0n` number everywhere except the Hollywood pair `C2/M01`/`C2/M02`, which carry each other's digits. Still the wrong key for picking a briefing state; `cm_sequence` is the key. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A4 (landed: `docs/formats/briefing.md`), A5 (landed: `docs/org/hangar.md` "The campaign wallet", pending only the `CAP-40` on-screen cross-check), A7 (landed: `docs/formats/anim-definitions/cutscenes.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field) | Confirm the trace, then implement. |
-| **Data present and located, vocabulary not yet decoded** | A3, A6 | Decode first; the docs page is the deliverable, the engine item consumes it. |
+| **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A3 (landed: `docs/formats/campaign-sequence.md`), A4 (landed: `docs/formats/briefing.md`), A5 (landed: `docs/org/hangar.md` "The campaign wallet", pending only the `CAP-40` on-screen cross-check), A7 (landed: `docs/formats/anim-definitions/cutscenes.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field) | Confirm the trace, then implement. |
+| **Data present and located, vocabulary not yet decoded** | A6 | Decode first; the docs page is the deliverable, the engine item consumes it. |
 | **Direction sound, magnitude or details a judgement call** | B11, B12, C21–C24, D31, D32, D33 | The shape is settled by the original's screens/data; layout metrics, timings and exact behaviours come from captures and decode, not invention. |
 | **Leads only — no mechanism yet** | D35 partials (BL-037/038 wiring points), D37 (music selection logic) | Budget for investigation; may end in a disproof. |
 
@@ -105,16 +108,15 @@ Everything below was located on disk in this planning session (2026-08-24 survey
   mission id, ASCII tag `zSaveHeader`), `Mission.NNN` (24–148 KB), `Snap_*.png` scrapbook shots.
   Decoded to the structural depth A2 asked for:
   [`docs/formats/saved-games.md`](formats/saved-games.md).
-- **Mission order** — `extracted\zrdr\cm_sequence.zrd.json`: 24 flat entries (`seq` 0..23), each
-  naming a `campaign` (a `ZBD` world-folder index), a `mission`, an `area` and a `wingman` flag.
-  There is no branching. The sparse `ZBD` folders (`C1` has `M02,M04,M05`; `C1B` and `C1C` hold one
-  each) are world/terrain splits of a single chapter's five missions, and the 24 briefing wavs
-  `c1-HA-m1` … `c5-MH-m4` follow the sequence exactly. See `saved-games.md`, "Mission ids and the
-  campaign sequence".
+- **Mission order** — `extracted\zrdr\cm_sequence.zrd.json`, a flat 24-entry list binding each story
+  position to a `ZBD\` world folder and `M0n` subfolder. The folders are sparse because an act's
+  missions are split across terrain folders (`C1`/`C1B`/`C1C` are all act 2), not because the
+  campaign branches. Decoded in A3, see [`docs/formats/campaign-sequence.md`](formats/campaign-sequence.md).
 - **UI art** — `extracted\rimage\` (255 PNGs, e.g. `brief_button1.png`) extracted but consumed by
   nothing; `.BM` paint masks and `ui_strings.json` come from `ExtractRof.ps1`.
-- **Strings** — `docs/formats/strings.md`: ids 700–799 purchase/sell prompts, 1200–1299
-  mission/campaign UI, 3500–3599 act titles, 3600–3699 mission names.
+- **Strings** — `docs/formats/strings.md`: ids 700–799 purchase/sell prompts, 1200–1219
+  mission-results UI, 1220–1224 act names, 3450–3473 and 3480–3503 the campaign mission names
+  (long and short, indexed by story position).
 - **Letterbox** — a `letterbox` node exists in every chapter's gamez root, one of only two nodes
   shipped `active:false`. Decoded by A7: two opaque black quads pinned to `camera1` by the shared
   `zrdr/letterbox.zrd` definition, off until a cutscene calls it
@@ -170,7 +172,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Decode the `objectives.zrd` choreography vocabulary → `docs/formats/objectives.md`
 2. ☑ Decode the original save/profile format far enough to answer the structural questions
-3. ☐ Decode the campaign mission tree (order, branching, unlocks)
+3. ☑ Decode the campaign mission tree (order, branching, unlocks)
 4. ☑ Decode the briefing: `Briefing.zrd` dialog layout + the briefing map/flag animation
 5. ☑ Decode the economy constants: plane buy/sell prices, armor cost, starting funds
 6. ☐ Behavioral decode of the campaign GUI scripts (cabin, flight check, ammo, campaign intro)
@@ -310,29 +312,47 @@ is a single profile and the original cannot be run here, so "play, change one th
 never available; the page's diffs are across the 20 `Persist` files, the 9 plane records and the 21
 populated mission records instead.
 
-## A3 ☐ Decode the campaign mission tree (order, branching, unlocks)
+## A3 ☑ Decode the campaign mission order and unlocks → `docs/formats/campaign-sequence.md`
 
-**Goal.** The full mission graph: which mission follows which, where the branches
-(`C1B`/`C1C`/`C2B`) fork and rejoin, what unlocks Next Mission, and each mission's id ↔ chapter
-folder ↔ display-name string id.
+**Goal.** The full mission order, what unlocks Next Mission, and each mission's id ↔ chapter folder
+↔ display-name string id. **Delivered** as [`docs/formats/campaign-sequence.md`](formats/campaign-sequence.md).
 
-**Evidence (confidence: data located, mechanism unknown).** The ZBD chapter folders are sparse and
-branching (survey above); `Persist.NNN`/`Mission.NNN` ids (102…705) imply a numeric mission-id
-scheme; strings 3500–3599 are act titles and 3600–3699 mission names. No reader found so far holds
-the graph; `CAMPAIGN.SCRIPT` and `crimson.exe` are the two candidate homes.
+**Evidence (confidence: traced to an exact mechanism, with the data that proves it).** The order is
+`extracted\zrdr\cm_sequence.zrd.json`: 24 flat entries, `seq` 0…23, each carrying `campaign`
+(ZBD world-folder number 1…8), `mission` (`M0n` number), `area` and a `wingman` flag. `crimson.exe`
+supplies the folder-name switches (`1 = c1 … 8 = c5`), the `Persist.%1d%02d` / `Mission.%1d%02d` id
+format (`campaign * 100 + mission`), the `brief_c%d%d` briefing-state key, and the progression rule.
+Cross-checked with no orphan on any side against the 24 `M0n` folders on disk, the 24 `brief_c<NN>`
+states in `Briefing.zrd.json`, and the 20 save ids in the user's profile (exactly `seq` 0…19).
 
-**Approach.** Read `extracted\rof\ASSETS\SCRIPTS\CAMPAIGN.SCRIPT` and `CAMPAIGNINTRO.SCRIPT`
-first; if the graph is not there, trace the Next Mission selection in `crimson.exe`. Cross-check
-the result against the save's `Persist.NNN` id set and the chapter folders on disk. Land the graph
-on a formats page (or as a section of A2's page if it turns out to live in the save).
+**⚠ Disproof landed: the campaign does not branch.** `cm_sequence.zrd` is a flat list with no
+predicate and no alternates. `C1B`, `C1C` and `C2B` are terrain splits of an act's map area sitting
+in the linear sequence (act 2 spans `C1`/`C1B`/`C1C`, act 3 spans `C2`/`C2B`), not story forks.
+B12 and C22 should model a single integer position, not a graph.
 
-**Model recommendation.** high — tracing, with a cross-check against three independent sources.
+**⚠ Disproof landed: the string ids in this plan's survey were wrong.** Mission names are
+`IDS_MISSIONLONGNAME` 3450–3473 and `IDS_MISSIONSHORTNAME` 3480–3503, both indexed by `seq`; act
+names are `IDS_MISSIONAREA` 1220–1224. Ids 3500–3599 hold the tail of the short-name block and
+3600–3699 are Instant Action content, not act titles and mission names.
+[`docs/formats/strings.md`](formats/strings.md)'s ID map is corrected.
 
-**Verify.** The decoded graph accounts for every mission folder on disk and every `Persist.NNN` id
-in the user's save, with no orphans in either direction.
+**Also delivered.** A4's open folder-to-briefing-state question: the state key is
+`"brief_c" + campaign + mission`, formatted from the two `cm_sequence` fields. The narration wav is
+**not** derivable by formula (the Hawaii act's wav numbers follow the folder, not the story
+position, so `seq/5`, `seq%5` is right for 20 of 24 and wrong for 4); take the wav from the state's
+own `PlaySound`.
 
-**⚠ Traps.** The user's save reflects one play-through; a branch not taken there is not evidence
-the branch doesn't exist.
+**Verify (done).** Every mission folder on disk and every `Persist.NNN` id in the save is accounted
+for, in both directions, with the table on the page.
+
+**Reconciled with A5.** The campaign reward table is keyed by the 1-based mission ordinal
+(`seq + 1`), settled by the completion handler and corroborated by record 24 landing on the final
+mission. C24's plane-change rule falls out of the same reading: the two missions that bar CHANGE
+PLANE, ordinals 13 and 17, are `seq` 12 (`C2/M03`) and `seq` 16 (`C4/M02`), which are exactly the
+two reward records that award an aircraft instead of cash.
+
+**⚠ Traps.** The user's save reflects one play-through; it is consistent with the decoded order but
+does not by itself prove the order. The three-way cross-check on the page is what does.
 
 ## A4 ☑ Decode the briefing: `Briefing.zrd` dialog layout + the briefing map/flag animation
 

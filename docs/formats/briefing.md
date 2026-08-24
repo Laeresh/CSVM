@@ -86,14 +86,15 @@ Each of the 24 mission states carries:
 - `CURSOR`, the same pointer/rollover bitmap pair as `default`.
 - `SCRIPT`, the reveal script (next section).
 
-⚠ **The `brief_cNN` state key does not encode "chapter N, mission N".** `brief_c31`'s script plays
-narration `briefing_c2m1` (chapter 2, mission 1) and draws `NW-m1MAP` (`NW` is chapter 2's
-abbreviation); `brief_c12`'s script plays `briefing_c2m2`. The state names are internal
-identifiers assigned in some other order (the same order also appears, key for key, in
-`sounds.zrd.json`'s `SETS`: `"brief_c31"` there wraps the same `"briefing_c2m1"` sound file, which
-independently confirms the naming is a shared identifier, not a chapter/mission-number encoding).
-**A state's real chapter and mission are read from its `SCRIPT`'s `PlaySound` sound name and its
-`BACKGROUND_IMAGES` bitmap name, never from the state key itself.**
+⚠ **The `brief_cNN` state key encodes the ZBD world folder and folder mission, not the story
+chapter.** The engine builds the key as `sprintf("brief_c%d%d", campaign, mission)` from the
+mission's `cm_sequence.zrd` entry ([campaign-sequence.md](campaign-sequence.md)): the first digit
+is the world-folder number (1 = `C1`, 2 = `C1B`, 3 = `C1C`, 4 = `C2`, 5 = `C2B`, 6 = `C3`,
+7 = `C4`, 8 = `C5`), the second the folder's `M0n` number. `brief_c31` is `C1C/M01`, the
+Northwest act's first mission, which is why its script plays `briefing_c2m1` (`c2` in the wav
+naming is the second act) and draws `NW-m1MAP`. Read the key as chapter/mission and every act
+but Colorado and Manhattan comes out wrong. The same folder-keyed name appears, key for key, in
+`sounds.zrd.json`'s `SETS` wrapping the same sound file.
 
 ## The reveal script vocabulary
 
@@ -175,19 +176,16 @@ for every `N`.
 
 ## Reader rules and edge cases
 
-- **Never derive a mission's chapter/mission number from the `brief_cNN` state key.** Use the
-  `PlaySound` sound name (`briefing_c<N>m<M>`) or the `BACKGROUND_IMAGES` bitmap name instead; both
-  agree with each other and with `sounds.zrd`'s `SETS` entry of the same key.
-- **The per-mission `objectives.zrd`'s own `MSG_BRF_*` id prefix is not reliable evidence for
-  which chapter or mission a file belongs to, and must not be used to cross-reference a mission
-  folder against a `Briefing.zrd` state.** Every one of C1's five story missions (`C1/M02`,
-  `C1/M04`, `C1/M05`, `C1B/M03`, `C1C/M01`) authors `MSG_BRF_NWM<n>_OBJ*`, and `NW` is chapter 2's
-  abbreviation, not chapter 1's. C2's own missions are internally inconsistent with themselves
-  too: `C2/M01`'s objectives are tagged `MSG_BRF_HWM2_OBJ*` while `C2/M02`'s are tagged
-  `MSG_BRF_HWM1_OBJ*` (`HW` is chapter 3's abbreviation), so the trailing digit is swapped
-  between the two folders. These prefixes read as leftover authoring codenames, most likely
-  copy-pasted from another mission's file as a starting point and only partly renamed, not a
-  parallel numbering scheme worth decoding.
+- **A mission's state is picked by the `brief_c%d%d` formula over its `cm_sequence.zrd`
+  `campaign`/`mission` pair** ([campaign-sequence.md](campaign-sequence.md)); the state's own
+  `PlaySound` sound name and `BACKGROUND_IMAGES` bitmap agree with it and with `sounds.zrd`'s
+  `SETS` entry of the same key. Do not read the key's digits as story chapter and act position.
+- **The per-mission `objectives.zrd`'s own `MSG_BRF_*` id prefix must still not be used to
+  cross-reference a mission folder against a `Briefing.zrd` state.** The abbreviation is the act
+  name (`NW` on the `C1` folder family is correct: those folders are the Northwest act, not
+  "chapter 1"), and the digit equals the folder's `M0n` number in every act except Hollywood,
+  where `C2/M01` is tagged `MSG_BRF_HWM2_OBJ*` and `C2/M02` `MSG_BRF_HWM1_OBJ*`, each other's
+  digits. No single rule covers all 24 missions, so the prefix is not a binding key.
 - **`objectives.zrd`'s objective count does not reliably match its state's `Objective` count
   either.** See the open question below; do not use it to pair a folder with a state.
 - `map.zrd`/`location.zrd` belong to the in-flight cockpit map, not this screen (see "Conceptual
@@ -203,18 +201,11 @@ come from a full read of `Briefing.zrd.json` (20,470 lines) and `sounds.zrd.json
 `extracted\rimage\`. The reference screenshot (`OriginalScreenshots\Campaign Briefing.png`) matches
 the decoded button/panel positions.
 
-**Open: which shipped mission folder each state belongs to is not decodable from this data.** The
-five `C1`-family folders (`C1/M02`, `C1/M04`, `C1/M05`, `C1B/M03`, `C1C/M01`) match the five `c1m1`
-through `c1m5` states in *count* only. Matching them by each folder's own `MSG_BRF` trailing digit
-(`C1C/M01` to 1, `C1/M02` to 2, `C1B/M03` to 3, `C1/M04` to 4, `C1/M05` to 5, a clean 1:1) looked
-promising until checked against the flag count: the `c1mN` states show 4, 3, 2, 2, 4 flags in that
-order, while the folders' own objective counts are 4, 4, 5, 3, 2; only `C1C/M01`'s 4 lines up with
-`c1m1`'s 4. C2's folders show the same non-alignment. So neither the `MSG_BRF` digit nor the
-objective count is proof of the folder to state binding; it needs the campaign mission tree (this
-plan's item A3, or a `crimson.exe`/`CAMPAIGN.SCRIPT` trace of wherever the briefing launch selects
-a state) to close. This does not block documenting `Briefing.zrd` itself, but it does block C23
-from picking a mission's state by any naming convention: C23 needs an explicit lookup, not a
-formula, and A3 is where that lookup is expected to come from.
+**The folder-to-state binding is the `brief_c%d%d` formula** over the mission's `cm_sequence.zrd`
+`campaign`/`mission` pair, traced to an exe `sprintf` and documented with the full 24-row order in
+[campaign-sequence.md](campaign-sequence.md). C23 resolves a mission's state through that formula
+and takes the narration wav from the chosen state's own `PlaySound`, never by computing a wav name
+from the story position (the Hawaii act's wav numbering does not follow play order).
 
 `fonts.zrd.json` is referenced by name only; its own field layout is undocumented and out of this
 page's scope.

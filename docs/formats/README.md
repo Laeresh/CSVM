@@ -64,6 +64,8 @@ magnitudes and the consumer that rocks the plane, behind [shakes.md](shakes.md) 
 - [ai-nets.md](ai-nets.md), [ai-rosters.md](ai-rosters.md), and [combat-voice.md](combat-voice.md).
 - [saved-games.md](saved-games.md) — the `SavedGames\` container, the campaign profile, and what
   `Persist.NNN` and `Mission.NNN` carry.
+- [campaign-sequence.md](campaign-sequence.md) — the campaign's 24-mission order, its mission ids,
+  and the progression rule.
 
 ### Presentation and UI
 

@@ -87,7 +87,9 @@ Blocks are contiguous and stable, which is what makes the unnamed ranges usable:
 | 700–799 | Purchase / sell prompts |
 | 1000–1099 | Hangar and plane-customisation labels |
 | 1100–1199 | Options screens (graphics, audio, controls) |
-| 1200–1299 | Mission / campaign UI |
+| 1200–1219 | Mission-results / scrapbook UI |
+| **1220–1224** | **Campaign act names** — `IDS_MISSIONAREA`: Hawaii, Northwest, Hollywood, Rocky Mountains, Manhattan |
+| 1225–1299 | Purchase, inventory and key-binding labels |
 | **3000–3010** | **Aircraft full names** — "Hughes Bloodhawk", "Curtiss-Wright J2 Fury" |
 | **3020–3030** | **Aircraft short names** — "Bloodhawk", "Fury" |
 | **3040–3050** | **Aircraft descriptions** — the customisation screen's flavour text |
@@ -95,12 +97,21 @@ Blocks are contiguous and stable, which is what makes the unnamed ranges usable:
 | 3100–3199 | Engine names (`Ford v-8`, `Junkers Jumo 230B`, `Bristol Mercury VI`) |
 | 3200–3299 | Gun and ammunition names |
 | 3300–3399 | Engine / component descriptions |
-| 3400–3499 | Hardpoint and effect names |
-| 3500–3599 | Campaign act titles |
-| 3600–3699 | Mission names |
+| 3400–3424 | Rocket names and descriptions |
+| 3425–3438 | Militia long names (`IDS_PAINTLONGNAME`) |
+| **3450–3473** | **Campaign mission long names** — `IDS_MISSIONLONGNAME`, one per mission in story order, each prefixed with its act ("Hawaii - The Lost Treasure of Sir Francis Drake") |
+| **3480–3503** | **Campaign mission short names** — `IDS_MISSIONSHORTNAME`, the same 24 in the same order |
+| 3600–3618 | Instant Action mission names (`IDS_IA_CONTENTS`) |
+| 3650–3697 | Instant Action environments, mission types, militias, difficulties |
 | 3700–3799 | Squadron names (`Hoplites`, `Hellhounds`) |
 | 10000–10599 | Multiplayer: lobby, game types, chat notices |
 | 20000+ | Key names for the controls screen |
+
+Both campaign mission blocks are indexed by the mission's story position, so the long name is
+`3450 + seq` and the short name `3480 + seq`, with `seq` as
+[campaign-sequence.md](campaign-sequence.md) defines it. `RESOURCE.H` also declares
+`IDS_MISSIONDATE` (3510) and `IDS_MISSIONOBJECTIVES` (3540), but the shipped `langui.dll` has no
+strings at either id; treat those symbols as unused.
 
 The three aircraft blocks are **parallel and in the same order**, so
 `full_name = 3000 + i`, `short_name = 3020 + i`, `description = 3040 + i` for the same
