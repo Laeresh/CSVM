@@ -64,7 +64,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — tooling and cleanup
 
 1. ☐ `BL-458` `CheckCommentCaps.ps1` resolves relative paths against the current worktree
-2. ☐ `BL-446` Rename `ZzBaselineDump` out of the throwaway prefix
+2. ☑ `BL-446` Rename `ZzBaselineDump` out of the throwaway prefix
 3. ☐ `BL-455` Delete `AiControlLaw.Throttle`'s dead far-from-player branch
 4. ☐ `BL-444` A flight-dump hash that is the same on both hosts
 5. ☐ `BL-452` Rewrite `BL-266` (b) and (d) against the decoded shake numbers
@@ -120,7 +120,7 @@ worktree still runs hook (7) and reports against the worktree's files.
 find where the wrong directory actually comes from (the hook's cwd, or a relative `$Path` joined to
 `$root`) before rewriting the root logic.
 
-## A2 ☐ `BL-446` Rename `ZzBaselineDump` out of the throwaway prefix
+## A2 ☑ `BL-446` Rename `ZzBaselineDump` out of the throwaway prefix
 
 **Goal.** The eleven-airframe dump class carries a name that says it is the ledger's permanent
 instrument.
@@ -141,6 +141,8 @@ instrument), update the env-var name only if it carries the prefix, fix the live
 `docs/plans/` and commit history.
 
 **⚠ Traps.** A4 edits the same file; land this first.
+
+**Verified.** <pending orchestrator run>
 
 ## A3 ☐ `BL-455` Delete `AiControlLaw.Throttle`'s dead far-from-player branch
 

@@ -928,9 +928,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   low-speed authority ramp (a slow-flight decay). Each already has a unit instrument; the branch
   coverage line in the ledger names it. Add scenarios only if whole-envelope coverage is wanted;
   do not invent a manoeuvre to raise the number.
-- `BL-446` `[Cleanup]` **`ZzBaselineDump` is not throwaway any more.** The `Zz` prefix marks
-  disposable instruments, but the class is the ledger's own dump path (`Probes.FlightEnvelopeAll`).
-  Rename it out of the prefix.
 - `BL-447` `[Fidelity]` **The nine unsupported nitro and shake edges in the parity ledger.**
   `docs/org/flightModel.md` "Parity ledger", class unsupported, beyond `BL-443`: the thin
   atmosphere band above 2000 m, the `level_off_rate` auto-level torque, the AI's `medium_aishake`

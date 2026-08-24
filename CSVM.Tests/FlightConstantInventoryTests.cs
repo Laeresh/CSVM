@@ -285,7 +285,7 @@ public class FlightConstantInventoryTests
     }
 
     /// <summary>The per-airframe margins behind the two safeguard disproofs, written to whatever
-    /// file CSVM_SAFEGUARD_OUT names (the pattern ZzBaselineDump and ControlLimiterTests use).
+    /// file CSVM_SAFEGUARD_OUT names (the pattern FlightEnvelopeDump and ControlLimiterTests use).
     /// Asserts only that every airframe was flown.</summary>
     [ExtractedDataFact]
     public void DumpTheSafeguardMargins()

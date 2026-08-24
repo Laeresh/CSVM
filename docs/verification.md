@@ -460,7 +460,7 @@ is only interpretable if it names the quantity it multiplies at the right point 
   seconds, a dead hull gliding rather than dropping.
 - **INSTR-19** — **A flight-dump hash compares only against one taken on the same host: the Godot
   runtime and the `dotnet test` host do not agree to the last digit.** The eleven-airframe dump from
-  `--dump-flight=all` and from `ZzBaselineDump` differs on 9 of 1123 lines, each by one unit in the
+  `--dump-flight=all` and from `FlightEnvelopeDump` differs on 9 of 1123 lines, each by one unit in the
   last place of a knife-edge sample, on identical code. Take the before and after of an A/B the same
   way, or the diff reports the runtimes.
 
