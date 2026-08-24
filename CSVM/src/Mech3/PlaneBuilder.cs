@@ -13,7 +13,7 @@ namespace CSVM.Mech3;
 /// The default (exterior) build keeps the still <c>staticpropN</c> disc and drops the blur
 /// layers; the <c>spinningProps</c> build (free flight) does the reverse — it hides the
 /// static disc and keeps the blur discs so a <see cref="Flight.PropAnimator"/> can spin them.
-/// Either way the <c>nitropropN</c> boost disc stays hidden (no nitro system yet).
+/// The <c>nitropropN</c> boost disc is built hidden in a flight build, for the nitro_boost def.
 /// </summary>
 public sealed class PlaneBuilder
 {
@@ -272,6 +272,10 @@ public sealed class PlaneBuilder
                         mi.MaterialOverride = FlareMaterial();
                 _wingFlares.Add(n3d);
             }
+            else if (PropParts.Classify(n3d.Name) == PropParts.Kind.Nitro)
+            {
+                n3d.Visible = false; // the nitro disc waits for the nitro_boost def to activate it
+            }
             else if (IsDamagePanel(n3d.Name, out bool cockpit))
             {
                 n3d.Visible = false; // torn skin waits for DamageVisuals to flip it on
@@ -393,10 +397,8 @@ public sealed class PlaneBuilder
         // Exterior shows only the static disc.
         if (!_spinningProps)
             return PropParts.IsDynamic(kind);
-        // ⚠ nitropropN stays hidden even here: a non-spinning blur disc overlaid on the
-        // spinning ones shimmers.
-        if (kind == PropParts.Kind.Nitro)
-            return true;
+        // nitropropN is built hidden (CollectWingFlares): the nitro_boost def activates and fades
+        // it in over the spinning discs, and nitro_decay parks it again.
         // staticprop-vs-staticrotor build rule: this module's docs/architecture.md entry.
         return kind == PropParts.Kind.Static
             && !node.Name.StartsWith("staticprop", StringComparison.OrdinalIgnoreCase);

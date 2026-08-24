@@ -6,9 +6,9 @@ namespace CSVM.Flight;
 
 /// <summary>The engine effects one contact runs, in the order the decode spends them. The
 /// resolver calls these rather than returning them because each one's result is a premise of the
-/// rule after it: the ledger answers which zone it charged, and the response answers the speed and
-/// pose the ground stop and the un-embed read. The aircraft node implements this, so the struck
-/// <c>Node</c>, the damage cooldown and the flight model stay on the side that owns them.</summary>
+/// rule after it: the ledger answers which zone it charged, and the response answers the pose the
+/// un-embed test reads. The aircraft node implements this, so the struck <c>Node</c>, the sweep
+/// cadence and the flight model stay on the side that owns them.</summary>
 public interface IContactEffects
 {
     /// <summary>Offers the struck object the contact's health damage: true when it breaks and the
@@ -24,8 +24,8 @@ public interface IContactEffects
     /// redirect off a dead one, or null when the plane carries no zones.</summary>
     PlaneDamage.PartState? SpendDamage(string zone, float healthDamage, float armorDamage);
 
-    /// <summary>Applies the contact response (slide, restitution, the lever-arm kick) and reports
-    /// the speed and pose it left behind.</summary>
+    /// <summary>Applies the contact response (the decoded placement and, for a human pilot, the
+    /// normal-only impulse) and reports the pose it left behind.</summary>
     ContactResponse ApplyResponse();
 }
 
@@ -58,10 +58,6 @@ public readonly record struct ContactConditions
     /// plane with no <c>destroyable_parts</c> data, which has no health pool to survive on.</summary>
     public PlaneDamage? Ledger { get; init; }
 
-    /// <summary>Whether the striker's damage cooldown has run out, so this contact spends the pair
-    /// rather than riding out a multi-frame scrape.</summary>
-    public bool DamageCooldownElapsed { get; init; }
-
     /// <summary>The airframe boxes the un-embed test moves. Null skips that test, as an
     /// uncollidable rig has nothing to free.</summary>
     public IReadOnlyList<PlaneCollider.Part>? Parts { get; init; }
@@ -70,9 +66,9 @@ public readonly record struct ContactConditions
     public Godot.Collections.Array<Rid>? ExcludeSelf { get; init; }
 }
 
-/// <summary>What the contact response left the striker with: the speed the ground stop reads, and
-/// the pose the un-embed test starts from.</summary>
-public readonly record struct ContactResponse(float Speed, Transform3D Pose);
+/// <summary>What the contact response left the striker with: the pose the un-embed test starts
+/// from.</summary>
+public readonly record struct ContactResponse(Transform3D Pose);
 
 /// <summary>The decoded contact rules for one aircraft: what the contact costs both parties
 /// (<c>FUN_0048d2c0</c>), whether the striker survives it, and how far it has to be pushed to stop
@@ -84,18 +80,11 @@ public readonly record struct ContactResponse(float Speed, Transform3D Pose);
 /// struck party beyond the pair the caller hands over.</summary>
 public sealed class AircraftContactResolver
 {
-    /// <summary>m/s along the normal for an outright crash, and ONLY for a plane with no
-    /// <c>destroyable_parts</c> data; a plane with a ledger uses the decoded health rule instead,
-    /// which carries no speed term. TUNE, and also the speed the contact response scales the
-    /// player's rebound against.</summary>
-    public const float CrashSpeed = 25f;
-
-    /// <summary>m/s below which grinding along the ground destroys the plane instead of leaving it
-    /// parked there collecting zero-damage contacts. TUNE, remake-only.</summary>
-    public const float GrazeStopSpeed = 12f;
-
-    private const float EmbedPushOut = 0.3f; // m per un-embed attempt after a graze
-    private const int EmbedTries = 3;        // attempts before giving up ⇒ explode, never tunnel
+    // m per un-embed attempt after a graze, and the attempts before the airframe is destroyed
+    // instead. A product exception: the original places one sphere at its own contact point, which
+    // cannot leave it inside geometry, while a swept multi-box airframe can. See UnEmbed.
+    private const float EmbedPushOut = 0.3f;
+    private const int EmbedTries = 3;
 
     // The compiled fallback collision ranges, for a bare suite rig with no flight model bound.
     private static readonly PlaneStats DefaultCollideRanges = new();
@@ -148,10 +137,9 @@ public sealed class AircraftContactResolver
         float vn = Mathf.Abs((striker.VelocityDir * striker.Speed).Dot(contact.Normal));
         if (striker.Ledger == null)
         {
-            // No destroyable_parts data, so there is no health pool to survive on: fall back to
-            // the old speed threshold rather than inventing a ledger.
-            if (vn >= CrashSpeed)
-                Log.Info("flight", $"impact severity: vn={vn:0.0} m/s ≥ {CrashSpeed} — crash (no damage data)");
+            // Neither zones nor an authored whole pair, so there is no health pool to survive on
+            // and every contact is fatal. No shipped load lands here.
+            Log.Info("flight", $"impact into {contact.ColliderName} at vn={vn:0.0} m/s — crash (no damage data)");
             return outcome with { Fate = ContactFate.Crash };
         }
 
@@ -166,46 +154,37 @@ public sealed class AircraftContactResolver
         string dataPart = PlaneDamage.MapStruckPart(
             contact.Part, striker.Pose.AffineInverse() * contact.Impact);
         effects.PlayGrazeReaction();
-        if (striker.DamageCooldownElapsed)
+        // The striker's own share is the SAME decoded pair the struck party took, spent armour-first
+        // (FUN_004b7f80's split). ⚠ Every resolved contact spends: the original's cadence is its
+        // alternate-step sweep (SweepCadence), never a gate here.
+        var state = effects.SpendDamage(dataPart, outcome.HealthDamage, outcome.ArmorDamage);
+        string struckPart = state?.Def.Name ?? dataPart; // the ledger may redirect
+        outcome = outcome with { StruckPart = struckPart };
+        if (striker.Ledger.IsDestroyed)
         {
-            // The striker's own share is the SAME decoded pair the struck party took, spent
-            // armour-first through the ledger's take-hit flow (FUN_004b7f80's split), so a
-            // fully-armoured contact costs no health at all.
-            var state = effects.SpendDamage(dataPart, outcome.HealthDamage, outcome.ArmorDamage);
-            string struckPart = state?.Def.Name ?? dataPart; // the ledger may redirect
-            outcome = outcome with { StruckPart = struckPart };
-            if (striker.Ledger.IsDestroyed)
-            {
-                Log.Info("flight",
-                    $"vehicle health exhausted ({struckPart} last) — vn={vn:0.0} m/s into {contact.ColliderName}");
-                return outcome with { Fate = ContactFate.Crash }; // whole-vehicle health at zero
-            }
+            Log.Info("flight",
+                $"vehicle health exhausted ({struckPart} last) — vn={vn:0.0} m/s into {contact.ColliderName}");
+            return outcome with { Fate = ContactFate.Crash }; // whole-vehicle health at zero
+        }
 
-            if (state != null)
+        if (state != null)
+        {
+            outcome = outcome with
             {
-                outcome = outcome with
-                {
-                    DamageFlashText = $"⚠ IMPACT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%",
-                };
-                Log.Info("flight",
-                    $"graze ({contact.Part}→{struckPart}): {contact.ColliderName} vn={vn:0.0} m/s dmg={outcome.HealthDamage:0.0} armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} hull={striker.Ledger.WholeHealth:0.0}/{striker.Ledger.WholeHealthMax:0}");
-            }
+                DamageFlashText = $"⚠ IMPACT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%",
+            };
+            Log.Info("flight",
+                $"graze ({contact.Part}→{struckPart}): {contact.ColliderName} vn={vn:0.0} m/s dmg={outcome.HealthDamage:0.0} armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} hull={striker.Ledger.WholeHealth:0.0}/{striker.Ledger.WholeHealthMax:0}");
         }
 
         var response = effects.ApplyResponse();
-        // A plane ground to (near) standstill is a wreck, not a parked aircraft.
-        if (response.Speed < GrazeStopSpeed)
-        {
-            Log.Info("flight", $"ground stop: slid to {response.Speed:0.0} m/s — destroyed");
-            return outcome with { Fate = ContactFate.Crash };
-        }
-
         return UnEmbed(in contact, in striker, outcome, response.Pose);
     }
 
     // Push out along the contact normal while any airframe box still overlaps solid geometry at
-    // the pose the response left (V-ditches, berm backsides). A plane that cannot get free within
-    // EmbedTries explodes rather than tunnelling, keeping the pushes it already earned.
+    // the pose the response left (V-ditches, berm backsides). ⚠ Destroying the airframe after
+    // EmbedTries is ours and stays: without a terminal case, boxes the pushes cannot free leave the
+    // aircraft inside the world with no rule to end it. It keeps the pushes it already earned.
     private ContactOutcome UnEmbed(in ContactReport contact, in ContactConditions striker,
         ContactOutcome outcome, Transform3D pose)
     {

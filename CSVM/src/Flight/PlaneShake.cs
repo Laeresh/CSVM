@@ -5,7 +5,7 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// The plane-wobble oscillators (<c>shakes.json</c> via <see cref="ShakeDefs"/>): gunfire buzz,
-/// overspeed rattle, and being-hit rocks, summed into <see cref="Roll"/> — radians the flight
+/// overspeed rattle, being-hit rocks and the nitro engage, summed into <see cref="Roll"/> — radians the flight
 /// rig applies to a pivot node between the <see cref="FlightController"/> and its plane model.
 /// Decode: docs/org/shakes.md, which carries the random-walk law the FIRE source runs and what
 /// the other sources still do. Engine-free on purpose: the pivot write is the controller's one
@@ -31,6 +31,7 @@ public sealed class PlaneShake
     private readonly Osc _missileHit = new();
     private readonly Osc _explosion = new();
     private readonly Osc _speed = new();
+    private readonly Osc _nitro = new();
 
     // The fire source's per-shot steps. Injected for off-engine determinism (BL-266(a) branch:
     // see the class summary); the session resolves Rng.NewSystemRandom(Rng.Shake).
@@ -48,6 +49,7 @@ public sealed class PlaneShake
         _missileHit.Src = defs.MissileImpact;
         _explosion.Src = defs.Explosion;
         _speed.Src = defs.HighSpeed;
+        _nitro.Src = defs.Nitro;
         _fireRng = rng ?? Rng.NewSystemRandom(Rng.Shake);
     }
 
@@ -96,6 +98,17 @@ public sealed class PlaneShake
         }
     }
 
+    /// <summary>The nitro engaged on this plane: one kick of the source's absolute authored
+    /// <c>magnitude</c> (block 6 at <c>0x4b21ce</c>, docs/org/shakes.md), decaying at its damp.
+    /// The caller gates it on a human pilot, as the original gates it on the player.</summary>
+    public void NitroEngaged()
+    {
+        if (_nitro.Src is { Magnitude: { } m })
+        {
+            _nitro.Kick(m);
+        }
+    }
+
     /// <summary>Per-tick overspeed drive: <paramref name="speedRatio"/> is speed over the
     /// plane's rated max, so the authored <c>min_speed</c> 1.0 gate reads "beyond rated max" —
     /// the dive rattle. Magnitude is the EXCESS over the gate <c>(speedRatio − gate)/quotient</c>,
@@ -120,7 +133,7 @@ public sealed class PlaneShake
             return;
         }
         Roll = _fire.Advance(dt) + _bulletHit.Advance(dt) + _missileHit.Advance(dt)
-               + _explosion.Advance(dt) + _speed.Advance(dt);
+               + _explosion.Advance(dt) + _speed.Advance(dt) + _nitro.Advance(dt);
     }
 
     private sealed class Osc

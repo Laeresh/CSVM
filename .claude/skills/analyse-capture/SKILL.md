@@ -18,7 +18,7 @@ reported as one.
 off the cockpit panel or measured between two frames does not settle a flight constant: footage
 cannot confirm a decode, it only ranks readings, and it will happily rank one nobody has thought of
 (`docs/verification.md` DET-12; DET-11 on the sim clock that makes every wall-clock rate wrong by
-39 %). Numbers come out of `crimson.exe` — see `BL-414`. The gauge-decode pipeline this skill once
+39 %). Numbers come out of `crimson.exe` — see `docs/org/flightModel.md`. The gauge-decode pipeline this skill once
 carried was retired for exactly this reason; do not rebuild it, and do not quote a figure from the
 `videodata/` sidecars it left behind. If a capture's question turns out to be numeric, say so and
 send it to a decode instead of measuring frames.

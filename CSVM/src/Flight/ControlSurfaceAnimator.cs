@@ -4,28 +4,22 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>Deflects the flying aircraft's control surfaces (ailerons, elevators, rudders) with
-/// stick input, PropAnimator-style: a flat list of hinged nodes the flight loop advances each
-/// frame. Deflection is an absolute pose, not an incremental spin: each surface stores its
-/// build-time local basis and gets <c>Basis = base · Rot(hingeAxis, angle)</c>, so it tracks the
-/// input without accumulating. The original drives this procedurally with no zrdr anim, so the max
-/// angles and slew rate are TUNE, validated visually (<c>BL-393</c>): its six node lists do not
-/// map onto our four kinds, and the whole surface block is player-only there, so the original's AI
-/// aircraft fly with frozen surfaces and ours do not — a deliberate divergence, not a missing
-/// guard.</summary>
+/// <summary>Poses the flying aircraft's control surfaces from <see cref="ControlSurfaceMix"/>,
+/// PropAnimator-style: a flat list of hinged nodes the flight loop advances each frame. Deflection
+/// is an absolute pose, not an incremental spin: each surface stores its build-time local basis and
+/// gets <c>Basis = base · Rot(hingeAxis, angle)</c>, so it tracks the input without accumulating.
+/// The original drives this procedurally with no zrdr anim, over six node lists collected by name
+/// (<c>l_aileronN</c>, <c>r_aileronN</c>, <c>l_elevatorN</c>, <c>r_elevatorN</c>, <c>l_rudderN</c>,
+/// <c>r_rudderN</c>), one angle slot each. This class owns the node side of that: which slot a node
+/// takes and which way its hinge faces. The angles themselves are the mix's.</summary>
 public sealed class ControlSurfaceAnimator
 {
-    private const float MaxAileronDeg = 20f;  // TUNE: full-stick deflection
-    private const float MaxElevatorDeg = 20f; // TUNE
-    private const float MaxRudderDeg = 20f;   // TUNE
-    private const float SlewPerSec = 3f;      // TUNE: normalized deflection units/s
-                                              // (center → full stop in ~1/3 s)
     private const float CanardMaxZ = -1f;     // hinge this far toward the nose (−Z) = canard
                                               // (Bloodhawk elevators at z −4.2; every
                                               // conventional tail surface sits at z ≥ 0.19)
 
     private readonly List<Surface> _surfaces;
-    private Vector3 _defl; // slewed deflection (pitch, roll, yaw), each in [-1,1]
+    private ControlSurfaceMix _mix;
 
     private ControlSurfaceAnimator(List<Surface> surfaces) => _surfaces = surfaces;
 
@@ -42,26 +36,22 @@ public sealed class ControlSurfaceAnimator
         return surfaces.Count > 0 ? new ControlSurfaceAnimator(surfaces) : null;
     }
 
-    /// <summary>Slews the deflection toward this frame's stick input and poses every
-    /// surface. Skip while crashed/paused (the pose then just holds).</summary>
+    /// <summary>Advances the six angle slots and poses every surface. Skip while crashed/paused
+    /// (the pose then just holds).</summary>
+    /// <param name="animate">The original's player-only guard, widened to every human pilot: an
+    /// AI aircraft's slots are never written, so its surfaces stay where they are.</param>
     /// <param name="reverseAuthority">The reverse-authority factor at this airspeed
-    /// (<see cref="FlightModel.ReverseAuthorityAt"/>), scaling the RUDDER target only
-    /// (docs/architecture.md). Defaults to 1 for callers with no plant to ask.</param>
-    public void Advance(double delta, FlightInput input, float reverseAuthority = 1f)
+    /// (<see cref="FlightModel.ReverseAuthorityAt"/>), scaling the RUDDER target only.</param>
+    public void Advance(double delta, FlightInput input, bool animate, float reverseAuthority = 1f)
     {
-        float step = SlewPerSec * (float)delta;
-        _defl.X = Mathf.MoveToward(_defl.X, Mathf.Clamp(input.Pitch, -1f, 1f), step);
-        _defl.Y = Mathf.MoveToward(_defl.Y, Mathf.Clamp(input.Roll, -1f, 1f), step);
-        // Scaled BEFORE the slew, as the original scales its target before smoothing toward it:
-        // the deflection then settles at the scaled angle instead of passing through it.
-        _defl.Z = Mathf.MoveToward(_defl.Z, Mathf.Clamp(input.Yaw, -1f, 1f) * reverseAuthority, step);
+        _mix.Advance((float)delta, input, reverseAuthority, animate);
         Apply();
     }
 
     /// <summary>Snap every surface back to neutral (respawn).</summary>
     public void Reset()
     {
-        _defl = Vector3.Zero;
+        _mix.Reset();
         Apply();
     }
 
@@ -75,36 +65,36 @@ public sealed class ControlSurfaceAnimator
             if (kind != ControlSurfaces.Kind.None)
             {
                 var axis = ControlSurfaces.HingeAxis(kind);
-                // The final sign bakes three flips: the stick convention below, a canard flip
-                // (nose-mounted elevator reverses pitch), and this frame flip for a rotated mount
-                // (canard groups carry yaw π). Account for all three before touching any sign.
+                // The slot angle already carries the original's sign. Two frame flips remain: a
+                // rotated mount (canard groups carry yaw π), and a nose-mounted elevator, which
+                // raises the nose the other way. Account for both before touching any sign.
                 float d = (acc.Basis * axis).Dot(axis);
-                float flip = d < 0f ? -1f : 1f;
-                float sign; float maxDeg; int channel;
+                float scale = d < 0f ? -1f : 1f;
+                SurfaceSlot slot;
                 switch (kind)
                 {
-                    // Roll + = bank left: left aileron trailing edge up (−, TE rises
-                    // for a negative hinge angle about +X), right TE down (+).
                     case ControlSurfaces.Kind.AileronLeft:
-                        (channel, sign, maxDeg) = (1, -1f, MaxAileronDeg);
+                        slot = SurfaceSlot.AileronLeft;
                         break;
                     case ControlSurfaces.Kind.AileronRight:
-                        (channel, sign, maxDeg) = (1, 1f, MaxAileronDeg);
+                        slot = SurfaceSlot.AileronRight;
                         break;
-                    // Pitch + = pull: conventional tail TE up (−); a canard raises
-                    // the nose the other way — TE down (+).
-                    case ControlSurfaces.Kind.Elevator:
-                        bool canard = acc.Origin.Z < CanardMaxZ;
-                        (channel, sign, maxDeg) = (0, canard ? 1f : -1f, MaxElevatorDeg);
+                    case ControlSurfaces.Kind.ElevatorLeft:
+                    case ControlSurfaces.Kind.ElevatorRight:
+                        slot = kind == ControlSurfaces.Kind.ElevatorLeft
+                            ? SurfaceSlot.ElevatorLeft : SurfaceSlot.ElevatorRight;
+                        if (acc.Origin.Z < CanardMaxZ)
+                            scale = -scale;
                         break;
-                    // Yaw + = nose left: rudder TE left (− about +Y).
                     default:
-                        (channel, sign, maxDeg) = (2, -1f, MaxRudderDeg);
+                        slot = SurfaceSlot.Rudder;
                         break;
                 }
-                surfaces.Add(new Surface(n3d, axis, channel, sign * flip * Mathf.DegToRad(maxDeg)));
+
+                surfaces.Add(new Surface(n3d, axis, slot, scale));
             }
         }
+
         foreach (var child in node.GetChildren())
             Collect(child, acc, surfaces);
     }
@@ -112,7 +102,7 @@ public sealed class ControlSurfaceAnimator
     private void Apply()
     {
         foreach (var s in _surfaces)
-            s.Node.Basis = s.BaseBasis * new Basis(s.Axis, _defl[s.Channel] * s.SignedMaxRad);
+            s.Node.Basis = s.BaseBasis * new Basis(s.Axis, _mix[s.Slot] * s.Scale);
     }
 
     private readonly struct Surface
@@ -120,15 +110,16 @@ public sealed class ControlSurfaceAnimator
         public readonly Node3D Node;
         public readonly Basis BaseBasis;  // build-time local basis; deflection composes on top
         public readonly Vector3 Axis;     // hinge axis in the node's local frame
-        public readonly int Channel;      // 0 pitch, 1 roll, 2 yaw
-        public readonly float SignedMaxRad; // input [-1,1] → hinge angle, all sign factors baked in
-        public Surface(Node3D node, Vector3 axis, int channel, float signedMaxRad)
+        public readonly SurfaceSlot Slot;
+        public readonly float Scale;      // the mount's frame flips, ±1
+
+        public Surface(Node3D node, Vector3 axis, SurfaceSlot slot, float scale)
         {
             Node = node;
             BaseBasis = node.Basis;
             Axis = axis;
-            Channel = channel;
-            SignedMaxRad = signedMaxRad;
+            Slot = slot;
+            Scale = scale;
         }
     }
 }

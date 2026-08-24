@@ -14,8 +14,8 @@ namespace CSVM.Flight;
 ///
 /// <para>⚠ Total weight reaches nothing here on purpose: it is hangar-only in the original
 /// (docs/org/hangar.md, "Into the mission"). The engine pick reaches flight through
-/// <see cref="EnginePowerFor"/> onto <see cref="PlaneStats.EnginePower"/>, the original's own
-/// registry override with authored values; the nitrous flag stays inert (untraced).</para>
+/// <see cref="EnginePowerFor"/> (the original's registry override) and <see cref="HasNitrous"/>
+/// (the injector, <see cref="NitroSystem.Installed"/>).</para>
 /// </summary>
 public static class CustomPlaneBuild
 {
@@ -141,7 +141,7 @@ public static class CustomPlaneBuild
     // read-only once PlaneStats has loaded it, and nothing here or downstream writes to it.
     /// <summary>The picked engine's authored power scalar out of engines.json, or null when the
     /// pick is stock (id 6) so the airframe's own row stands. Ids 3-5 are the same tiers with
-    /// nitrous; the nitrous flag itself stays inert (its flight effect is untraced).</summary>
+    /// nitrous (<see cref="HasNitrous"/>).</summary>
     public static float? EnginePowerFor(string zrdrPath, CustomPlaneDef def)
     {
         if (def.Engine is < 0 or >= CustomPlaneDef.EngineNone
@@ -151,6 +151,15 @@ public static class CustomPlaneBuild
         }
 
         int rowId = EngineRegistryBase[def.Airframe] + (def.Engine % 3);
+        return EnginePowerForRow(zrdrPath, rowId);
+    }
+
+    /// <summary>The engine pick's nitrous injector bit: ids 3-5 are the three tiers with it, and
+    /// nothing else (the original's <c>FUN_00416ee0</c> decomposition, docs/org/hangar.md).</summary>
+    public static bool HasNitrous(CustomPlaneDef def) => def.Engine is >= 3 and <= 5;
+
+    private static float? EnginePowerForRow(string zrdrPath, int rowId)
+    {
         foreach (var row in Zrdr.LoadFile(zrdrPath, "engines.json"))
         {
             if (row is List<object?> { Count: >= 3 } r && r[0] is float id && (int)id == rowId

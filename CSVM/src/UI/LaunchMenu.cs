@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI;
@@ -282,6 +283,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The campaign's out-of-mission flow while it is open. One door (the Mode screen's Campaign
     // row); its own screens are the flow's pages, so a new one needs no change here.
     private CampaignFlow? _campaign;
+    // A character reached a plane's name since the last frame, so the menu owes a redraw that no
+    // polled input asked for.
+    private bool _typed;
     // The hangar page's art (C22's seam), as the one texture the shell owns: rebuilt only when
     // the page hands over a different decoded image, since Rebuild runs on every keypress.
     private TgaImage? _hangarArtSource;
@@ -714,18 +718,46 @@ public sealed partial class LaunchMenu : CanvasLayer
         bool dirty = SyncDevices();
         dirty |= ScanJoins();
 
+        // Before the poll, not after: the PLANENAME screen takes typed characters, and player 1's
+        // letter aliases have to be dead for the frame that reads them (MenuInput.TextEntry).
+        _slots[0].Input.TextEntry = NamePage() != null;
         foreach (var slot in _slots)
             slot.Input.Poll((float)delta);
         dirty |= HandleInput();
         // After the input, so a press that opened or left the briefing is already reflected: the
         // reveal is a clock the page cannot own, and the narration is a node the page cannot hold.
         dirty |= TickCampaignAudio(delta);
+        dirty |= _typed;
+        _typed = false;
 
         // Live hotplug: redraw when the join strip's text changes even if nothing was pressed.
         if (dirty || JoinStripText() != _stripText)
         {
             if (Visible) // a launch during HandleInput hides us; don't rebuild a dead menu
                 Rebuild();
+        }
+    }
+
+    /// <summary>Typed characters for the PLANENAME screen, the one place the launchscreen takes
+    /// text. An event rather than the raw polling everything else here uses, because only the event
+    /// carries the character the pilot's own keyboard layout produced; held keys arrive as echoes,
+    /// which is where typing gets its auto-repeat.</summary>
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (!Visible || NamePage() is not { } page || @event is not InputEventKey { Pressed: true } key)
+        {
+            return;
+        }
+
+        bool typed = key.Keycode == Key.Backspace
+            ? page.Backspace()
+            : key.Unicode > 0 && page.Type((char)key.Unicode);
+        if (typed)
+        {
+            // Redrawn on the next frame rather than here: Rebuild replaces the very controls this
+            // event is being dispatched through.
+            _typed = true;
+            GetViewport().SetInputAsHandled();
         }
     }
 
@@ -1372,13 +1404,19 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     // --- the hangar ---
 
+    // The PLANENAME page, when it is the one showing. Every typed-character path asks through here,
+    // so nothing reaches a plane's name from another screen.
+    private HangarNamePage? NamePage() =>
+        _screen == Screen.Hangar && _hangar?.Page is HangarNamePage page ? page : null;
+
     // Opens the Build Custom Plane flow, remembering the screen to land back on. Both doors
     // (the Mode screen's trailing row and the Instant Action plane pick) come through here, so
     // there is one entry, one exit and one place the scratch plane lives.
     private void OpenHangar(Screen returnTo)
     {
         _hangarReturn = returnTo;
-        _hangar = new HangarFlow(CustomPlaneStore.UserPlanes(), HangarStrings(), _dataRoot, Fits, _zrdrPath);
+        _hangar = new HangarFlow(CustomPlaneStore.UserPlanes(), HangarStrings(), _dataRoot, Fits, _zrdrPath,
+            nameRng: Rng.NewSystemRandom(Rng.PlaneName));
         _screen = Screen.Hangar;
         _error = "";
     }
@@ -1388,7 +1426,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // preview on a Fury in Fortune Hunters colours. A screenshot/verification aid only.
     private void OpenHangarAid(string startScreen)
     {
-        if (startScreen is not ("hangar" or "defaults" or "paint"))
+        if (startScreen is not ("hangar" or "defaults" or "paint" or "name"))
         {
             return;
         }
@@ -1407,9 +1445,15 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         flow.AnswerDefaultsAsk(false);
-        for (int guard = 0; flow.Screen != HangarScreen.Paint && guard < HangarFlow.Order.Length; guard++)
+        var stopAt = startScreen == "name" ? HangarScreen.Name : HangarScreen.Paint;
+        for (int guard = 0; flow.Screen != stopAt && guard < HangarFlow.Order.Length; guard++)
         {
             flow.Accept();
+        }
+
+        if (startScreen == "name")
+        {
+            return;
         }
 
         flow.Scratch.Airframe = 7;
@@ -1762,7 +1806,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         var planes = CustomPlaneStore.UserPlanes();
         _hangarReturn = Screen.Campaign;
         _hangar = new HangarFlow(planes, HangarStrings(), _dataRoot, Fits, _zrdrPath,
-            new HangarCampaignContext(flow.Store, profile, planes));
+            new HangarCampaignContext(flow.Store, profile, planes), Rng.NewSystemRandom(Rng.PlaneName));
         _screen = Screen.Hangar;
         _error = "";
     }
@@ -2702,6 +2746,13 @@ public sealed partial class LaunchMenu : CanvasLayer
             if (_hangar?.Screen == HangarScreen.PlaneSelection)
             {
                 return "↑↓  Choose       Enter / A  Select       Esc / B  Back";
+            }
+
+            if (_hangar?.Screen == HangarScreen.Name)
+            {
+                // W/A/S/D are dead here (MenuInput.TextEntry), so the arrows are named alone.
+                return "↑↓  Choose       ←→  Change word       Type / Backspace  Rename"
+                    + "       Enter / A  Continue       Esc / B  Back";
             }
 
             return _hangar?.Screen is HangarScreen.Airframe or HangarScreen.Engine

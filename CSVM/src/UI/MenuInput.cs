@@ -20,6 +20,12 @@ public sealed class MenuInput
     /// <summary>Whether this player also flies the keyboard (player 1 only).</summary>
     public bool Keyboard;
 
+    /// <summary>Whether the screen showing is taking typed text from this player's keyboard. The
+    /// letter aliases below (W/A/S/D, Space, L, P) then read as dead, because otherwise typing a
+    /// name would also walk the cursor and confirm the screen. The arrows, Enter and Escape stay
+    /// live, and the pad is untouched: it types nothing and so collides with nothing.</summary>
+    public bool TextEntry;
+
     /// <summary>The gamepad devices this player reads, or null for every connected pad — the same
     /// binding <see cref="CSVM.Flight.FlightController"/> takes. A joined player has exactly one
     /// (the pad they pressed Start on); <b>player 1 holds every pad nobody has claimed</b>, which
@@ -306,6 +312,10 @@ public sealed class MenuInput
 
     private bool KeyDown(Key key) => Keyboard && Input.IsKeyPressed(key);
 
+    // A key that means something here only because nothing else claimed it. A screen taking typed
+    // text claims it, so these go quiet there while the dedicated keys carry on.
+    private bool AliasDown(Key key) => !TextEntry && KeyDown(key);
+
     // Button pressed on ANY of this player's pads (a set of one for a joined player,
     // every unclaimed device for player 1). Through `CSVM.Pads.For` rather than the
     // Pads field directly, so the read is gated on window focus and on
@@ -352,21 +362,21 @@ public sealed class MenuInput
     private int RawDir()
     {
         int pad = RawPadDir();
-        bool up = KeyDown(Key.Up) || KeyDown(Key.W) || pad < 0;
-        bool down = KeyDown(Key.Down) || KeyDown(Key.S) || pad > 0;
+        bool up = KeyDown(Key.Up) || AliasDown(Key.W) || pad < 0;
+        bool down = KeyDown(Key.Down) || AliasDown(Key.S) || pad > 0;
         return up ? -1 : down ? 1 : 0;
     }
 
     private int RawDirX()
     {
         int pad = RawPadDirX();
-        bool left = KeyDown(Key.Left) || KeyDown(Key.A) || pad < 0;
-        bool right = KeyDown(Key.Right) || KeyDown(Key.D) || pad > 0;
+        bool left = KeyDown(Key.Left) || AliasDown(Key.A) || pad < 0;
+        bool right = KeyDown(Key.Right) || AliasDown(Key.D) || pad > 0;
         return left ? -1 : right ? 1 : 0;
     }
 
     private bool RawAccept() =>
-        KeyDown(Key.Enter) || KeyDown(Key.KpEnter) || KeyDown(Key.Space) || PadButton(JoyButton.A);
+        KeyDown(Key.Enter) || KeyDown(Key.KpEnter) || AliasDown(Key.Space) || PadButton(JoyButton.A);
 
     private bool RawBack() => KeyDown(Key.Escape) || RawPadBack();
 
@@ -379,9 +389,9 @@ public sealed class MenuInput
     // L on the keyboard beside Y on the pad. Both are otherwise unread in menu context, so this
     // adds a meaning rather than overloading one: W/A/S/D are the stepper axes and Space/Enter,
     // Escape and Start are all spoken for.
-    private bool RawLoadout() => KeyDown(Key.L) || PadButton(JoyButton.Y);
+    private bool RawLoadout() => AliasDown(Key.L) || PadButton(JoyButton.Y);
 
     // P on the keyboard beside X on the pad, the last free face button in menu context (A/B/Y and
     // Start are all spoken for above). Same rule as RawLoadout: a new meaning, not an overload.
-    private bool RawPresets() => KeyDown(Key.P) || PadButton(JoyButton.X);
+    private bool RawPresets() => AliasDown(Key.P) || PadButton(JoyButton.X);
 }

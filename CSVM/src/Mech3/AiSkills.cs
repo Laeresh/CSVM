@@ -107,6 +107,9 @@ public sealed class AiSkills
     // Roster slot 33: rating_biases, [pattern, bias, ?] triples feeding target ranking.
     private const int RatingBiasesSlot = 33;
 
+    // Roster slot 34: nitro, the nitrous injector flag the spawner copies onto the vehicle.
+    private const int NitroSlot = 34;
+
     private readonly Dictionary<string, (float At1, float At9)> _params =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -182,6 +185,11 @@ public sealed class AiSkills
         fields.Count > PrimaryTargetSlot && fields[PrimaryTargetSlot] is string { Length: > 0 } s
             ? s
             : null;
+
+    /// <summary>Reads a roster block's <c>nitro</c> flag (slot 34): true on the three shipped
+    /// blocks that author 1, false on -1, 0, a short block or a non-numeric slot.</summary>
+    public static bool RosterNitro(IReadOnlyList<object?> fields) =>
+        fields.Count > NitroSlot && fields[NitroSlot] is float f && f >= 1f;
 
     /// <summary>Reads a roster block's <c>rating_biases</c> (slot 33): the authored
     /// [pattern, bias, ?] entries in order, or an empty list when the slot is null, omitted or

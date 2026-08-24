@@ -45,6 +45,10 @@ public static class Rng
     // branch). Its own stream so a draw here never shifts what another subsystem rolls; under
     // --det it is a pure function of the master, so the gun-buzz wobble replays exactly.
     public const string Shake = "shake";
+    // The hangar's rolled plane names (PlaneNameTables). Its own stream so naming a plane never
+    // shifts what the paint or spawn code rolls; under --det the offered name replays exactly,
+    // which is what makes a hangar screenshot reproducible.
+    public const string PlaneName = "planename";
 
     private static readonly Dictionary<string, RandomNumberGenerator> Streams = new(StringComparer.Ordinal);
 

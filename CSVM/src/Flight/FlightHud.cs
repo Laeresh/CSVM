@@ -66,6 +66,12 @@ public struct FlightHudState
     /// <summary>Fire control's pylon cursor, as the missile gauge's selected slot.</summary>
     public int PylonSelect;
 
+    /// <summary>The nitro gauge's feed: shown only with the injector installed, the boost needle
+    /// on the flag, the charge needle on the tank fraction.</summary>
+    public bool NitroInstalled;
+    public bool NitroBoosting;
+    public float NitroChargeFrac;
+
     /// <summary>The gun group the pipper marks, or null to hide it — the caller resolves this,
     /// since reaching a muzzle's world pose costs engine interop no other rig should pay.</summary>
     public GunGroup? ReticleGun;
@@ -318,6 +324,9 @@ public sealed class FlightHud
             Gauges.AltitudeFt = ft;
             Gauges.StallWarning = ComputeStallWarning(in state);
             Gauges.StallFrac = state.StallFraction;
+            Gauges.NitroInstalled = state.NitroInstalled;
+            Gauges.NitroBoosting = state.NitroBoosting;
+            Gauges.NitroChargeFrac = state.NitroChargeFrac;
         }
         // Feeds the weapon gauges (if built) and the text readout (if built) — both draw from the
         // live loadout, so this runs whenever there is one, independent of the dial cluster.

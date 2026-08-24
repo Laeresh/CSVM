@@ -24,6 +24,12 @@ public sealed partial class GaugeCluster : Control
     // 168.7 ± 1.6 °/sim-s, linear — the ~2-frame ease at each end is within noise and NOT a smoothstep).
     // Public so CSVM.Tests (GaugeArrowTweenTests) can assert the rate directly.
     public const float ArrowSweepDegPerSimS = 168.7f;
+    // The two nitro needles' decoded law: each chases its target through the shared exponential
+    // (slot = target + (slot − target)·exp(−rate·dt)), full sweep 3.7699 rad = 216°, the boost
+    // needle at 3/s and the charge needle at 1.5/s (FUN_004568c0).
+    public const float NitroNeedleSweepDeg = 216f;
+    public const float NitroBoostNeedleRate = 3f;
+    public const float NitroChargeNeedleRate = 1.5f;
 
     // ---- state fed by the FlightController ----
     public float AltitudeFt;               // above sea level (the dial is in feet)
@@ -43,6 +49,13 @@ public sealed partial class GaugeCluster : Control
     public WeaponGauge? GunGauge;
     /// <summary>The missile gauge's per-frame state (selected ordnance type). Null hides it.</summary>
     public WeaponGauge? MissileGauge;
+
+    /// <summary>The nitro gauge's feed: drawn only with the injector installed, as the original
+    /// shows the dial only with the nitrous engine. The boost needle chases full sweep while
+    /// boosting, the charge needle the tank's empty fraction (docs/org/flightModel.md, "Nitro").</summary>
+    public bool NitroInstalled;
+    public bool NitroBoosting;
+    public float NitroChargeFrac = 1f;
 
     // ---- tuning ----
     // The hardpoint dial's belt-light ring is 8 positions on every airframe regardless of the
@@ -81,6 +94,9 @@ public sealed partial class GaugeCluster : Control
     // above the speedometer. Same radius as the other dials.
     private const float MissileRadius = 85f;
     private const float GunCenterFromRight = 420f, GunCenterY = 918f, GunRadius = 85f;
+    // The nitro dial: one dial-pitch above the GUNS dial, the same radius. This port's placement
+    // (no reference shot carries the dial), TUNE.
+    private const float NitroCenterFromRight = 420f, NitroCenterY = 727.5f, NitroRadius = 85f;
 
     private static readonly Vector2 AltCenter = new(425.5f, 1108.5f);
     private static readonly Vector2 DmgCenter = new(426.5f, 1299f);
@@ -110,6 +126,8 @@ public sealed partial class GaugeCluster : Control
     private readonly Texture2D?[] _hatch = new Texture2D?[4];
     private readonly GaugeGeom _gunGaugeGeom = new();
     private readonly GaugeGeom _missileGaugeGeom = new();
+    private readonly List<GaugePoly> _nitroFace = new();
+    private readonly List<GaugePoly> _nitroWarn = new();  // no *_on child ships; kept for the shared extractor
     // Glyph atlas for the digit/type cycles: char → texture (zero..nine, A..Z; space/unknown = null).
     private readonly Dictionary<char, Texture2D?> _glyphs = new();
     // Belt-indicator colour variants (0 green / 1 yellow / 2 red) — the hilite bar and the light.
@@ -118,6 +136,9 @@ public sealed partial class GaugeCluster : Control
 
     private GaugePoly? _altHundreds, _altThousands;
     private GaugePoly? _spdNeedle;
+    private GaugePoly? _nitroBoostPoly, _nitroChargePoly;
+    private NitroNeedle _nitroBoostNeedle = new(NitroBoostNeedleRate);
+    private NitroNeedle _nitroChargeNeedle = new(NitroChargeNeedleRate);
     private double _time;
     // Live sweep state of each weapon-gauge pointer and the STALL lamp's blink — plain structs
     // so CSVM.Tests can drive them without a live Control.
@@ -175,6 +196,13 @@ public sealed partial class GaugeCluster : Control
                     break;
                 case "missilegauge":
                     cluster.ExtractWeaponGauge(planes, textures, dial, cluster._missileGaugeGeom, "mg");
+                    break;
+                case "nitrogauge":
+                    // nitro_backplate and the dial face follow the face rule; the two needles by name.
+                    cluster.ExtractInstrument(planes, textures, dial,
+                        cluster._nitroFace, cluster._nitroWarn,
+                        ("nitro_boost", p => cluster._nitroBoostPoly = p),
+                        ("nitro_charge", p => cluster._nitroChargePoly = p));
                     break;
             }
         }
@@ -275,6 +303,8 @@ public sealed partial class GaugeCluster : Control
         if (MissileGauge is { } mg)
             _missileArrow.Advance(TargetArrowAngle(_missileGaugeGeom.Positions, mg.Selected), simDt);
         _stallLamp.Advance(StallWarning, StallFrac, SpeedMph, simDt);
+        _nitroBoostNeedle.Advance(NitroBoosting ? -NitroNeedleSweepDeg : 0f, simDt);
+        _nitroChargeNeedle.Advance((1f - Mathf.Clamp(NitroChargeFrac, 0f, 1f)) * NitroNeedleSweepDeg, simDt);
         foreach (var z in _zones)
             z.BlinkLeft = Mathf.Max(0f, z.BlinkLeft - (float)delta);
         QueueRedraw();
@@ -340,6 +370,19 @@ public sealed partial class GaugeCluster : Control
         {
             var c = new Vector2(vp.X - GunCenterFromRight * s, FromBottom(GunCenterY, s, vp.Y));
             DrawWeaponGauge(_gunGaugeGeom, gg, c, GunRadius * s, isGun: true, _gunArrow.Angle);
+        }
+
+        // The nitro dial, only with the injector installed (the original hides the node otherwise).
+        if (NitroInstalled && _nitroFace.Count > 0)
+        {
+            var c = new Vector2(vp.X - NitroCenterFromRight * s, FromBottom(NitroCenterY, s, vp.Y));
+            float r = NitroRadius * s;
+            foreach (var p in _nitroFace)
+                DrawGaugePoly(p, c, r);
+            if (_nitroChargePoly != null)
+                DrawGaugePoly(_nitroChargePoly, c, r, _nitroChargeNeedle.Angle);
+            if (_nitroBoostPoly != null)
+                DrawGaugePoly(_nitroBoostPoly, c, r, _nitroBoostNeedle.Angle);
         }
     }
 
@@ -686,6 +729,24 @@ public sealed partial class GaugeCluster : Control
         /// <summary>Clears to NaN so the next <see cref="Advance"/> snaps instead of sweeping in
         /// (gauge just appeared, or a respawn).</summary>
         public void Reset() => Angle = float.NaN;
+    }
+
+    /// <summary>One nitro needle's angle (degrees), chasing its target through the original's
+    /// shared exponential smoother at a fixed rate. A plain struct so CSVM.Tests can drive it.</summary>
+    public struct NitroNeedle
+    {
+        private readonly float _rate;
+
+        public NitroNeedle(float rate)
+        {
+            _rate = rate;
+            Angle = 0f;
+        }
+
+        public float Angle { get; private set; }
+
+        public void Advance(float target, float simDt) =>
+            Angle = target + (Angle - target) * Mathf.Exp(-_rate * simDt);
     }
 
     /// <summary>The STALL lamp's blink: binary brightness, duty 0.50, integrated on

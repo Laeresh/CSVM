@@ -1911,6 +1911,7 @@ public partial class GameSession : Node3D
             TurretDefs = turretDefs,
             Shakes = shakeDefs,
             Projectiles = projectiles,
+            HumanPositions = PlayerPositionsSnapshot,
             HudFont = hudFont,
             ReticleTex = reticleTex,
             StuntZones = stuntZones,

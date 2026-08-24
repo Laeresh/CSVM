@@ -13,10 +13,11 @@ public readonly record struct FlightRosterBuild(int MeshInstances, string Summar
 /// <summary>One AI aircraft's authored identity and launch facts. <c>AiDef</c> names the militia
 /// variant it flies (<c>bhatwarhawk</c>); null takes the airframe's base def. <c>Fit</c> is a
 /// menu-chosen loadout laid over the stock table's, set only by the wingman spawns: the stock-table
-/// branch below also catches enemies flying player airframes, which must keep their own fit.</summary>
+/// branch below also catches enemies flying player airframes, which must keep their own fit.
+/// <c>Nitro</c> is the roster block's injector flag (<see cref="AiSkills.RosterNitro"/>).</summary>
 public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector3 LookAt, AiPilot Pilot,
     PaintScheme? Scheme = null, int? Team = null, bool Inert = false, bool ShippedSkins = false,
-    string? AiDef = null, LoadoutChoice? Fit = null);
+    string? AiDef = null, LoadoutChoice? Fit = null, bool Nitro = false);
 
 /// <summary>The session's aircraft set: builds the human field in deterministic player order and
 /// introduces AI aircraft later for missions, waves, and generators. The roster is the assembly
@@ -96,11 +97,14 @@ public sealed class FlightRoster
                 GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
                 TouchdownDefs = _in.TouchdownDefs,
                 Projectiles = _in.Projectiles,
+                HumanPositions = _in.HumanPositions,
                 PadDevices = Array.Empty<int>(),
                 Inert = spawn.Inert,
                 Team = spawn.Team,
                 Shake = new PlaneShake(_in.Shakes),
             });
+            // The roster block's nitro slot: the injector an AI's nitro_evade needs.
+            controller.Nitro.Installed = spawn.Nitro;
 
             // The AI def's own fit when it authors one, the player stock table otherwise. Both
             // paths say so when they come up empty: an AI plane that flies unarmed is a bug that

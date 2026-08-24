@@ -87,6 +87,11 @@ public interface IHangarPage
     /// <summary>The confirm press on the focused row. Returns true when the page handled it;
     /// false lets the flow advance to the next screen.</summary>
     bool Accept(int row);
+
+    /// <summary>The flow has just arrived on this screen, before its opening row is read. A page
+    /// is built once and kept, so this is the only place it can act on the scratch plane it is
+    /// being shown this time rather than the one it was built over.</summary>
+    void Entered();
 }
 
 /// <summary>One picture a page asks the shell to draw: a decoded TGA (blueprint, icon, paint
@@ -132,10 +137,12 @@ public sealed class HangarFlow
     /// <paramref name="campaign"/> is null for both existing doors, keeping them wallet-free; only
     /// the cabin's Plane Construction (B13) passes one.</summary>
     public HangarFlow(CustomPlaneStore store, UiStrings strings, string? dataRoot = null,
-        StockLoadouts? stockFits = null, string? zrdrPath = null, HangarCampaignContext? campaign = null)
+        StockLoadouts? stockFits = null, string? zrdrPath = null, HangarCampaignContext? campaign = null,
+        Random? nameRng = null)
     {
         _store = store;
         Strings = strings;
+        NameRng = nameRng ?? new Random();
         DataRoot = dataRoot;
         StockFits = stockFits;
         ZrdrPath = zrdrPath;
@@ -145,6 +152,11 @@ public sealed class HangarFlow
 
     /// <summary>The langui table the screens title and label themselves from.</summary>
     public UiStrings Strings { get; }
+
+    /// <summary>The generator the PLANENAME screen rolls names from. Handed in rather than drawn
+    /// here so the flow stays engine-free: the session's own stream (<c>Rng.PlaneName</c>) lives
+    /// behind Godot's generator, and a test wants a pinned seed and an exact name.</summary>
+    public Random NameRng { get; }
 
     /// <summary>The folder <c>extracted/</c> sits in, or null when the caller has none. Pages
     /// resolve their TGAs under it and treat absence as no art.</summary>
@@ -180,6 +192,11 @@ public sealed class HangarFlow
     /// <summary>The plane being built. Replaced outright when the plane-selection screen starts a
     /// new build or loads a saved one; edited in place by every screen after that.</summary>
     public CustomPlaneDef Scratch { get; private set; } = new();
+
+    /// <summary>The saved plane this flow opened to edit, or null for a new build. The commit
+    /// writes over that file by design, so it is the one name the PLANENAME screen must not warn
+    /// about overwriting.</summary>
+    public string? EditingName { get; private set; }
 
     /// <summary>The screen showing.</summary>
     public HangarScreen Screen { get; private set; } = HangarScreen.PlaneSelection;
@@ -339,6 +356,7 @@ public sealed class HangarFlow
         }
 
         Screen = Order[at - 1];
+        Page.Entered();
         Row = Page.OpeningRow;
         ClampedRow();
         return true;
@@ -354,6 +372,7 @@ public sealed class HangarFlow
         }
 
         Screen = Order[at + 1];
+        Page.Entered();
         Row = Page.OpeningRow;
         ClampedRow();
         return true;
@@ -454,6 +473,7 @@ public sealed class HangarFlow
     public void StartNewPlane()
     {
         Scratch = new CustomPlaneDef();
+        EditingName = null;
         AirframeChosen = false;
         DefaultsAsk = null;
         DefaultsAskText = string.Empty;
@@ -466,6 +486,7 @@ public sealed class HangarFlow
     public void StartFromSaved(CustomPlaneDef saved)
     {
         Scratch = CustomPlaneStore.Deserialize(CustomPlaneStore.Serialize(saved)) ?? new CustomPlaneDef();
+        EditingName = saved.Name;
         AirframeChosen = true;
         DefaultsAsk = null;
         DefaultsAskText = string.Empty;
@@ -734,6 +755,11 @@ public abstract class HangarPage : IHangarPage
 
     /// <inheritdoc/>
     public virtual bool Accept(int row) => false;
+
+    /// <inheritdoc/>
+    public virtual void Entered()
+    {
+    }
 
     /// <inheritdoc/>
     public virtual HangarArt? RowArt(int row) => null;
