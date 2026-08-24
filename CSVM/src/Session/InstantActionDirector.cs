@@ -67,7 +67,7 @@ public sealed class InstantActionDirector
         _spec = spec;
     }
 
-    /// <summary>The authoring SpawnAiAircraft overload, handed in as a lambda for the same reason
+    /// <summary>The roster's authoring spawn operation, handed in as a lambda for the same reason
     /// AiGeneratorRuntime takes one: the spawner and its roster stay GameSession's.</summary>
     internal delegate FlightController? SpawnAuthoredAircraft(string planeName, Vector3 pos,
         Vector3 lookAt, AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating,
@@ -259,7 +259,7 @@ public sealed class InstantActionDirector
                             : "player";
                     }
                     // An Instant Action actor's volumes are all authored far wider than the airframe
-                    // defaults SpawnAiAircraft arms (docs/formats/instant-action.md).
+                    // defaults the roster spawn arms (docs/formats/instant-action.md).
                     InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
                     inputs.RegisterVoice(wingman, slot.AccentId, null);
                 }
@@ -819,7 +819,7 @@ public sealed class InstantActionDirector
     }
 
     /// <summary>What BuildActors reads from the session's build, in the shape of
-    /// HumanFlightAdapter.Inputs: stable references plus the two delegates GameSession keeps
+    /// stable mission references plus the two delegates GameSession keeps
     /// private behaviour behind (the spawner and the voice registration).</summary>
     internal sealed class ActorBuildInputs
     {

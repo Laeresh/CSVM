@@ -1606,6 +1606,26 @@ public partial class FlightController : Node3D
         }
     }
 
+    internal void DetachRosterBindings(ProjectilePool pool)
+    {
+        pool.NearMissTargets.RemoveAll(target => target.ShooterId == PlayerIndex);
+        if (Body != null)
+            pool.UnregisterAircraft(Body);
+        if (_hudCanvas != null && GodotObject.IsInstanceValid(_hudCanvas))
+        {
+            _hudCanvas.GetParent()?.RemoveChild(_hudCanvas);
+            _hudCanvas.QueueFree();
+            _hudCanvas = null;
+        }
+        SpeedCue?.Dispose();
+        SpeedCue = null;
+        Race?.Remove(PlayerIndex);
+        Race = null;
+        SmokeScreens = null;
+        PauseState = null;
+        TargetSubParts = null;
+    }
+
     /// <summary>Whether static world geometry blocks the segment — the turret gunners' cached
     /// line-of-sight test. World layer only: another aircraft in the way is not cover, which is
     /// also why <see cref="HitWorld"/> (world + aircraft) is not reused here.</summary>

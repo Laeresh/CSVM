@@ -302,13 +302,15 @@ clusters they delegate to.
 - `src/Session/WorldEffectsFactory.cs` — builds the impact/destruction effect stages and the per-plane crash runtime.
 - `src/Session/LensFlareRig.cs` — the sun's lens flare: screen-space sprites along the sun→centre line, occlusion-tested.
 - `src/Session/FlightRoster.cs` — the session's aircraft set: builds the human field in player order and introduces AI aircraft later through one assembly seam.
+- `src/Session/FlightRosterInputs.cs` — the roster's three grouped dependency contracts: aircraft resources, world bindings, and human-session bindings, plus the copied flight policy.
 - `src/Session/HumanFlightAdapter.cs` — the FlightRoster's internal human-rig adapter: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
+- `src/Session/AiFlightAssembler.cs` — the FlightRoster's internal AI path: pilot preparation, model/controller/loadout, damage/crash runtime, and placement.
 - `src/Session/InstantActionDirector.cs` — the engine-side sequencing of one Instant Action mission: construction, the actor build phases, the zeppelin switch and wave arm, the sequencer tick and the end-condition/wrap-up wiring, called by `GameSession` at its pinned build and drive points.
 - `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll), and F12's objective-zeppelin selection.
 - `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry, pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in and F12's wave-credit budget that switches it back off.
 - `src/Session/NetTrailerTargets.cs` — resolves a patrol net's trailer name (`player`, a zeppelin, a train) to a live position, so an anchored net rides its target (`BL-377`).
-- `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (`--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft` — or, on an Instant Action zeppelin run (F12), releases an already-built wave member instead.
+- `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (`--generators`): load-time drop rules, per-cycle stepping, spawns through the handed roster callback — or, on an Instant Action zeppelin run (F12), releases an already-built wave member instead.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
 - `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17+F18+F19, `--zeppelins`): places each record's world node at its authored pose, flies it along its net through `ZeppelinMotion`, owns the multi-zone damage (per-part registry pools, the survivor-count kill, the authored hull death) and fires the broadside (`ZeppelinRuntime.Cannons.cs`: real unowned `wep_28` rounds through `ZeppelinBroadside`).
 - `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements: the standalone `ai.zrd` family placed at its `NODES` patterns against the built chapter world, shipped `ACTIVATED` honoured, `SetActivatedUnder` the Instant Action builder's subtree activation (what arms the objective zeppelin's rings), `--wake-turrets` the `WAKEUP_TURRETS` stand-in.
@@ -2264,6 +2266,9 @@ Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
 new best — never worsens a record).
 
 ## src/Flight/StuntRace.cs
+The internal `Remove` operation is compensation for an uncommitted roster build, including removal
+of that racer's completion subscription; normal race membership remains append-only.
+
 Splitscreen race bookkeeping: one `Racer` per player (own `StuntMission`, `Rank`, `FinishTime`);
 finishing stamps the next placing, `RaceCompleted` fires when the last pilot is in; `Standings()`
 orders finishers by placing then in-flight players by progress; `Restart()` (rematch) resets
@@ -2672,6 +2677,8 @@ not a time-interval burst. `Reset(throttle)` (crash/respawn) hard-stops any plum
 climb tracker so the throttle jump those moments make is never itself read as a slam.
 
 ## src/Flight/SpeedCue.cs
+Its internal `Dispose` removes every puffer node when roster assembly is rolled back.
+
 Loads `cuepuffer1..3` directly from the chapter's `speed_cue.zrd` and drives exactly one through
 `Puffer.Emit` at the aircraft pose. Camera altitude selects the authored 30/15/8/15 m density
 bands; within 50 m AGL none emits, while the script's empty branch above 1500 m preserves the
@@ -2735,7 +2742,7 @@ Single-sourced: the terrain sweep casts these boxes AND `AircraftBody` mounts th
 ## src/Flight/ShakeDefs.cs
 Typed reader over the shared `shakes.zrd.json` — the six shake-oscillator sources
 (`docs/formats/shakes.md`), modelled on `WeaponDefs`: load once (`GameSession` →
-`HumanFlightAdapter.Inputs.Shakes`), named accessors per source, unhandled-key tripwire.
+`AircraftAssemblyResources.Shakes`), named accessors per source, unhandled-key tripwire.
 Each source is one law (frequency/damp/sawtooth) plus exactly one magnitude-term variant
 (`magnitude_factor` [+ `he_factor`], `min_speed`+`magnitude_quotient`, or absolute `magnitude`);
 absent sources read as null and `PlaneShake` no-ops them.
@@ -3859,101 +3866,16 @@ The `--stage=empty` test stage: a flat collidable 20 km ground plane under a 100
 for a chapter world so flight/ballistics runs boot in ~2 s with nothing else in the frame.
 
 ## src/Session/GameSession.cs
-The per-launch session node: `Session.Launcher` instantiates one per launch with
-`(SessionSpec, LauncherContext)` and runs `StartSession()` — an ordered sequence of phase methods
-sharing one `BuildState`; menu and CLI share that one build path. Owns the session `GameClock`,
-`StartupProfile` and the `UI.ScreenFlash` overlay (built with the rigs, since it needs one surface
-per view and the `ViewerSet` that routes a wash to them, and handed as a sink to the world runtime
-and — via `WorldEffectsFactory.ScreenFlash` — the world-effects one); delegates to the `src/Session/` clusters (LiveryResolver, SpawnPicker,
-PlaneRoster, FlightRoster, WorldEffectsFactory, WeatherRig, LensFlareRig) and to `Testing.ProbeRunner`/
-`CaptureDirector` on the Launcher — read `src/Session/Launcher.cs`'s entry too before touching the
-build's edges. `BuildsCollision` is the only spelling of "does this session build colliders".
-`LoadArchives` opens the five session archives through `SessionArchives.OpenFor` (`ArchiveIntent.Lab`
-when `_spec.AnimLab`, else `.Session`), which is also where `TexturesOutliveBuild`/
-`SoundsOutliveBuild` come from now — `BuildWorldStage`'s `WorldSession.Options` reads them off
-`BuildState`, it does not set them by hand. In `--vs`, `BuildFlightRigs` builds one `VersusMatch`
-(`VsKills`, `VsTimeMinutes`×60 s) BEFORE the rig loop — same reason `StuntRace` is built early —
-so `HumanFlightAdapter` can bind every pane's `VersusHud` to it; once every rig exists it
-forwards each one's `Downed` into TWO independent subscriptions: the scoring one (a killer inside
-the roster is `RegisterKill`, anything else — terrain, mid-air, unowned or `IncomingFire` rounds —
-is a plain `RegisterDeath`) and a kill-banner broadcast that pushes the same fact to every pane's
-`VersusHud.OnKill` (never piggybacked on the scoring handler); arms every rig's 3 s auto-respawn
-(`VersusRespawnDelay`, R skips); sets `Controller.Match` + `Controller.RestartMatch` on every rig
-(C25 — the R-ownership seam, mirroring `Race`/`RestartRace`); and builds `VersusBoard` on its own
-CanvasLayer, same construction as the race board just above it. `RestartMatch(match)` (private,
-invoked through the delegate above) mirrors `RestartRace`: `match.Restart()` then every rig
-respawns. The match clock advances on sim dt only (`_PhysicsProcess` realtime, `DriveSimSteps`
-when parent-driven), so a halt freezes the match with the sim. `DriveSimSteps` also carries
-`--debug-scoreboard --vs`'s one-shot forced kill (`_versusDebugKillFired`, same single-fire shape
-as `--crash`'s `_crashFired`): P1 downs P2 through the real `DebugForceCrash(killer)` → `Crash` →
-`Downed` path on the first sim step, so a scripted screenshot has a real, attributed kill without
-scripting an actual shot. `BuildFlightRigs` also constructs `FlightRoster` over the same rig
-`Inputs`; `SpawnAiAircraft` (public — the M4 A2 actor seam, called by `--ai=` at build and by
-later waves mid-session) adds each AI plane to `_aiPlanes`, stepped in `DriveSimSteps` after the
-rigs (a realtime clock lets them tick themselves, like the rigs). `AllAircraft()` is the one
-roster read (the rigs' controllers, then `_aiPlanes`, in a reused list rebuilt per call) behind
-both the targeting overlay and `_smokeScreens` (`SmokeScreens`, built beside `_screenFlash` with
-`SmokeScreenTunables.Load` off `player.json`, image defaults with a warning if that fails, washing
-through `_screenFlash.PlayBlend`); the screens step after every aircraft in `DriveSimSteps` and at
-the end of `_PhysicsProcess` on a realtime clock. The registry is handed to every aircraft that can
-lay one, on `FlightController.SmokeScreens`: to each AI as it is spawned, and to each rig's
-controller as the assembler builds it, since the registry exists before either. `_beeperTags`
-(`BeeperTags<FlightController>`, a fresh list per build beside `_smokeScreens`) is handed to the
-projectile pool as `ProjectilePool.BeeperTags` and stepped at the same two points, after the smoke
-screens: after the pool has hit and the aircraft have died this step, so a tag on a crashed
-aircraft collapses on the same step's tick and the one-tag-per-step gate re-arms only once the
-step's hits are in. Nothing tags or seeks yet: the `BEEPER` hit's `TryTag` and the
-`BEEPER_SEEKER` round's per-frame `PickTarget` are the projectile lane's. `_iaDirector`
-(`InstantActionDirector?`) builds at the very top of `StartSession` through
-`InstantActionDirector.TryCreate` — before any archive, since loading its source is a bare value
-read — and stays null on a load failure or when no mission was given, which is what keeps every
-other mode untouched by its existence. The mission's own state and sequencing are the director's
-(its entry below); what stays here is the call order its phases are pinned to.
-`SpawnAiAircraft` has a second overload
-(`string, Vector3, Vector3, AiPilot, PaintScheme?, int?, int?, bool inert = false,
-bool shippedSkins = false`) for this; the four-parameter one is the `--ai=` route, for an aircraft
-with no authored identity, and `ApplyAiHullPreset` is `--ai-damage=`'s spend on whatever it returns
-— hull-pool only, since an AI airframe resolves no zones, and never down to zero. `AiGeneratorRuntime`'s constructor takes a LAMBDA over the authoring
-overload rather than that method group (a generated enemy needs `shippedSkins: true`), so the
-four-parameter one no longer has to stay free of optional parameters — C# does not extend a
-method-group-to-delegate conversion over trailing optional ones, which is why the lambda is
-required. That overload's `inert:`
- forwards to `FlightRoster.SpawnAi` and is how a wave is built at session time and arrives
-later; `--crash`'s sweep over `_aiPlanes` leaves an inert plane alone, since `DebugForceCrash` is
-gated on `InPlay`. `BuildFlightRigs` calls the director's `BuildActors` right after the player
-voice registration, handing it a lambda over that authoring overload (the same lambda rule as
-`AiGeneratorRuntime`'s constructor) — the placement is pinned, since the ace's spawn draw is one
-call after the player's own `ChooseSpawnBase` draw in the same `Rng.Spawn` stream (a `--det` run
-reproduces it) and the wingman fan reads P1's built pose. The director's other phases keep their
-old points too: `SwitchZeppelins` between the `--zeppelins` and `--generators` blocks (a held hull
-must not feed a generator's altitude gate; the switched nodes feed the turret arm inside the
-emplacement block, BEFORE `--wake-turrets`, the order the original has), `ArmZeppelinRun` after
-the generator block, `WireEndConditions` near the method's end once every signal source exists,
-`Step` from BOTH drive paths (`DriveSimSteps` after the AI planes have taken the step's crashes,
-and `_PhysicsProcess` on a realtime clock, like the match clock), and `ForceDebugScoreboard` from
-`DriveSimSteps`'s `--debug-scoreboard` block. `BuildFlightRigs` builds one `PauseState` (`BL-373`) and one
-`MenuInput` per player AHEAD of the rig loop, since the assembler hands both to the per-pane stunt
-board, then assigns the state to every rig's `FlightController.PauseState` and `PauseBoard.Build`s
-the shared pause board — single player included, so there is one pause path rather than a solo one
-plus a splitscreen one. `MenuInputFor(playerIndex)` is the seam every board menu takes its owner's
-reader from. `Rerun()` is the Restart item's session-wide arm, and it routes by mode: an Instant
-Action mission calls the Launcher's `RestartSession` (the world is rebuilt — the waves, the ace and
-a killed zeppelin cannot be put back in place), the race and the match reset their own bookkeeping,
-anything else resets per plane.
-`ApplyDebugSpectate` (`--debug-spectate`) is the deliberate twin of the director's out-of-lives
-spectate hand-off, for watching the AI
-with nobody provoking it: every human aircraft goes `Held` + `Inert` (pinned, undrawn, and absent
-from every candidate scan's live set, which is what stops the pursuit) and its pane takes a
-`SpectatorCamera` following the first AI aircraft, cockpit instruments hidden and the marker HUD
-kept. It runs AFTER `BuildFlightRigs` because the wingman fan, the ace's spawn draw and wave 1's
-500-m-from-a-human placement all read the player's position; removing the player earlier would move
-what is being watched. The mission's own end conditions are untouched, so a squadron mission whose
-enemies have nobody to shoot never resolves, which is the expected outcome of taking the target
-away rather than a hang.
-An `--ia=` `stunt_flying` mission also loads the
-danger zones itself, `--stunt` or not — the mission type is what asks for them, the way a zeppelin
-run asks for the zeppelin and generator runtimes.
-
+The per-launch orchestrator: `Launcher` constructs it from `(SessionSpec, LauncherContext)`, then
+`StartSession` runs ordered build phases over one local `BuildState`. It owns the session clock,
+world root, panes, mode runtimes and archive/resource lifetimes, while delegating aircraft assembly
+and membership to `FlightRoster`, world construction to `WorldSession`, effects/crash staging to
+`WorldEffectsFactory`, and scripted probes/captures to the Launcher-owned testing services.
+`BuildFlightRigs` translates resolved session facts into the roster's four grouped contracts; all
+initial humans and later command-line/mission/wave/generator AI enter through that aggregate.
+`AllAircraft` combines the ordered rig controllers with the roster's AI view for simulation-facing
+consumers. Exit frees the session subtree atomically, asks the roster to release non-node membership,
+and disposes only the non-node resources this orchestrator owns.
 ## src/Utils/GameClock.cs
 The session's simulation clock: `BeginFrame(wallDelta)` (first thing in `GameSession._Process`)
 sets `Steps` + `Dt`; consumers read `FrameDt`, or loop `Steps` times on `Dt`. Modes: Realtime,
@@ -4442,9 +4364,9 @@ is where they meet the engine, and it owns every "ia:" log line.
 first, else `--ia=<path>` through `InstantAction.LoadFromJson`; both producers converge on the one
 `new InstantActionRuntime(def)` call (⚠ in the code — two similar calls is the failure it avoids),
 and a load failure warns and returns null rather than aborting the launch.
-`BuildActors(ActorBuildInputs)` is the contiguous actor phase, its inputs in
-`HumanFlightAdapter.Inputs`' shape (stable references plus the two delegates `GameSession` keeps
-private behaviour behind, the authoring `SpawnAiAircraft` lambda and `RegisterAiVoice`): the
+`BuildActors(ActorBuildInputs)` is the contiguous actor phase: stable mission references plus the
+two delegates `GameSession` keeps private behaviour behind, the roster-spawn lambda and
+`RegisterAiVoice`: the
 chapter's FIRST patrol net armed on every actor, the `dogfight_ace` ace (spawn draw
 `ChooseAceSpawn`, authored livery/team/rating), D9's wingmen (`FlownWingmen` clamp,
 `WingmanSlotFor` fan off P1's pose, `player_fortune` livery, explicit `attackRating: 5`, the
@@ -4530,7 +4452,7 @@ Pinned by `NetTrailerTargetsTests` + the `ai-net-follow` suite.
 ## src/Session/AiGeneratorRuntime.cs
 Runs a mission's egen generators (M4 B6 + F20, behind `--generators[=plane]`): one
 `GeneratorCycle` per surviving `EnemyGeneratorDef`, host altitude read live off the resolved host
-node, spawns through `GameSession.SpawnAiAircraft` at the origin node's LIVE position (it rides
+node, spawns through the handed roster callback at the origin node's LIVE position (it rides
 F17's moving zeppelin) in the authored `rotation` drop attitude, each pilot patrolling the cyclic
 net pick through `AiNetFollower` (`SpawnedNet`). Door transitions play the authored
 `open_anim`/`close_anim` through host-scoped hooks (`AnimRuntime.PlayWithin`/`StopWithin`);
@@ -4618,60 +4540,38 @@ is the only place the two meet. An INERT aircraft is registered in speaker order
 is simply not eligible until its wave launches.
 
 ## src/Session/FlightRoster.cs
-The session-owned assembly seam for the flight roster: `BuildPlayers` constructs the whole human
-field in ascending player order and returns its build-summary facts; `SpawnAi` introduces one
-fully configured AI aircraft later. `GameSession` is its only caller. It preserves the shared
-livery stream, spawn-list order, and existing optional-feature fallbacks while keeping callers
-away from partially configured `FlightController` nodes. `HumanFlightAdapter` is its human
-implementation; AI policy stays private to the roster.
-`SpawnAi` builds an AI plane's visible damage in two phases:
-`HumanFlightAdapter.BuildDamageVisuals` for the object itself, then the sink and the stops inside
-`BuildFlightCrashRuntime`, which is the seam the `ai-damage-stages` suite drives end to end
-(`--ai-damage=` is its CLI probe). It passes the planes gamez in exactly as the human rig does,
-since the destroy def's `chuteman` is a template root of planes.zbd and an asymmetry there would
-give the parachute to one kind of kill only.
+The session-owned aircraft aggregate. `BuildPlayers` commits the whole human field in ascending
+player order; `SpawnAi` commits one later mission/wave/generator aircraft. Both paths publish only
+finished controllers, preserve the shared livery and spawn streams, and roll back new world nodes
+on failure. Rollback tracks each created controller and releases its external HUD, projectile,
+speed-cue and race registrations; it also restores human paint/start state, while an AI failure
+restores caller pilot state and the paint/AI/spawn streams and leaves its shooter id/name
+unconsumed. The aggregate owns the live
+human/AI membership views, fans target-source updates to present and future members, and drops its
+non-node bindings in `ClearMembership`; the session subtree remains the aircraft node owner.
+`HumanFlightAdapter` and `AiFlightAssembler` are the two private assembly implementations.
+
+## src/Session/FlightRosterInputs.cs
+The grouped construction facts accepted by `FlightRoster`: copied `FlightRosterPolicy`, immutable
+aircraft/archive resources, live world services, and human-session bindings. These contracts keep
+the roster from accepting all of `SessionSpec` or exposing either internal assembler while making
+required dependencies explicit at the production seam.
+
+## src/Session/AiFlightAssembler.cs
+The roster's private AI assembly path. It prepares authored/fallback pilot skills and maneuvers,
+builds the model, controller, livery, loadout/ordnance, damage visuals and optional crash runtime,
+then places the finished node. The assembler owns the one AI skills cache; `FlightRoster` lends
+that already-loaded table to the session's voice adapter without reopening the archive.
 
 ## src/Session/HumanFlightAdapter.cs
-Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung
-on it — loadout/ordnance (and, with them, the aim assist's structure candidates: the world runtime's
-`DestructibleRegistry`, when this session built a world), the carried turret gunners
-(`TurretController.BuildCarried` off `Inputs.TurretDefs`, independent of the loadout bind), compass, gauges, HUD font test/weapon
-readout/reticle, damage visuals,
-audio, the throttle-slam exhaust smoke and chapter-authored `SpeedCue` (private visual layer per
-rig), this player's stunt run + marker/scoreboard/race entry
-(in `--vs`, its `VersusHud` bound to `Inputs.VersusMatch` + `Inputs.Rigs` for the opponent markers;
-and, unconditionally in EVERY flight session, its `TargetHud` over `Inputs.Projectiles`, so every
-human pane tracks its nearest AI hostile whether or not the session has a match), the spawn
-placement, and the crash runtime built after the controller joins the tree. An active Instant
-Action mission overrides two things here: `Inputs.InstantActionPlayerPlaneNode`, when set, replaces
-`PlaneRoster.PlaneFor` for every human alike (the def carries one `player_plane`, not a per-player
-list), and `Inputs.InstantActionActive` puts every human on `AimAssist.PlayerTeam` (Decision 8)
-regardless of pilot index. Plain flight's `--coop` gives every human the same team the same way —
-the two flags are independent inputs to one `if`, since Instant Action always implies its own
-co-op regardless of `--coop`. Constructed once per session build from
-`(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
-`Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the
-caller's build summary. `--weapon-lab` sets `FlightController.Held` on every rig right after `Setup`
-(which places the plane) — the pin is captured at the first held sim step, so it takes the spawn pose
-— and binds `Loadout.ForRig` (every firepoint + every pylon, seeded from the same stock fit) in place
-of `Loadout.Bind`, so the lab panel can arm a mount the stock file never names. `Setup` itself already
-called `Respawn` (which plays `startprops` on `CrashRuntime` if one exists) before the crash runtime
-is built below — so this method plays `startprops` once more right after
-`BuildFlightCrashRuntime`, the only way the very first spawn's choreography is not silently skipped.
-
-**A custom-built plane** (`SessionSpec.MenuCustomPlanes[pi]`, null on every stock pick and empty
-outside a launchscreen launch) changes four things here and nothing else. The `PlaneBuilder`'s
-`scheme` becomes `CustomPlaneBuild.PaintFor` instead of the livery resolver's pick, so the paint
-reaches the model through the same texture-substitution path the livery lab drives; the loadout
-base becomes `CustomPlaneBuild.LoadoutFor` over the airframe's stock def, with the menu's
-`LoadoutChoice` still composing on top of THAT; `Damage` becomes `CustomPlaneBuild.DamageFor`, the
-same zones with the bought armour; and the display name (stunt scoreboard, race board, best-time
-key) becomes the plane's own name. `--paint=` and `--loadout=` each still win over their half,
-being about this run rather than about the aircraft. The engine pick reaches nothing — a verbose
-line names it as inert and says why. The targeting HUD still prints the AIRFRAME's name for a
-custom plane (`PlaneRoster.PlaneDisplayName` off `FlightController.Stats`), which only shows in
-splitscreen, where one pilot brackets another's build.
-
+The roster's private human-aircraft implementation. One `Assemble(pi, rig)` builds the painted
+model, `FlightController`, loadout/ordnance, carried turrets, HUD/instruments, damage visuals,
+audio, stunt/match bindings, target selection, authored start placement and crash runtime.
+It reads only the roster's copied policy plus grouped aircraft, world and human-session contracts;
+it never receives `SessionSpec` or publishes a partially configured controller to the caller.
+Player order remains load-bearing for the shared paint and spawn streams. `BuildDamageVisuals` is
+also the common first phase for AI damage; `WorldEffectsFactory.BuildFlightCrashRuntime` supplies
+the optional second phase once a controller is in the tree.
 ## src/Session/EffectCatalogue.cs
 The record of which authored anims are playable effects, and what their defs need staged: the name
 tables every effect producer must stay inside, static and engine-free. Owns `EffectAnimNames`, the
