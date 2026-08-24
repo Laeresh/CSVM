@@ -2313,20 +2313,32 @@ carrier grace also suppresses AI ground blow; its probe and both output terms be
 
 ## Collision response and `bounce_factor` (`FUN_0048d7f0`)
 
-Decoded 2026-08-14, **impulse implemented 2026-08-15** (retiring `BL-172`):
-`FlightModel.BounceNormalSpeed` is the law and `FlightModel.Collide` the site, gated on
-`IsHumanPiloted` and not-already-crashed. The sweep, the placement and the two timers below are
-NOT ported — this engine has its own collision sweep, and what C25 bound is the impulse alone.
+Decoded 2026-08-14, **impulse implemented 2026-08-15** (retiring `BL-172`), **completed for `C21`**
+with the placement, the angular impulse and the partition's inertia correction below (retiring
+`BL-381`): `FlightModel.BounceNormalSpeed`/`BounceRateKick` are the law and `FlightModel.Collide`
+the site, gated on `IsHumanPiloted` and not-already-crashed. The sweep's every-other-frame parity
+and the two timers below are NOT ported; this engine has its own every-frame sweep, which resolves
+a contact sooner than the original would but never differently.
 
 `bounce_factor` lives in `player.json`'s `crash` block, is a **raw scalar**, and
 lands in global `0x0071c35c` from the parser store at `0x00473c38`. Its default is pre-set at
 `0x00473bb5` *before* the block is looked up, so an absent `crash` block leaves the fallback
 standing. Fallback **0.8**, this install authors **0.6**.
 
-`FUN_0048d7f0` sweeps the aircraft's contact spheres (`obj[0x1a9]..obj[0x1aa]`, stride `0x24`)
-through the world and resolves the **single deepest** contact. On a contact frame it **replaces** the
-frame's translation with a placement at the contact point plus a fixed **0.03** along the normal,
-rather than moving by `v·dt`. One resolution per aircraft per sweep, no sub-stepping.
+`FUN_0048d7f0` overlap-tests the aircraft's contact spheres (`obj[0x1a9]..obj[0x1aa]`, stride
+`0x24`) at this frame's moved position and resolves the **single deepest** contact. On a contact
+frame it **rewrites the caller's translation vector in place** (`0x48e065`–`0x48e0bb` player,
+`0x48db30`–`0x48db7c` non-player): the frame's whole motion is replaced by whatever lands the
+struck sphere exactly at its contact point, plus **0.03 m** along the normal for the player alone
+(the literal at `0x006080c4`, applied `0x48dfce`–`0x48e020`; a non-player rests exactly at the
+point, and the byte at `obj+0x920` skips even that at `0x48dac1`). The skipped-frame accumulator
+at `obj+0x6b0` is subtracted so the placement holds across the parity, and a crashed player
+(`obj+0x384`, tested `0x48dfbe`) gets severity and no placement or impulse at all. One resolution
+per aircraft per sweep, no sub-stepping. **Ported** as `Collide`'s placement: the swept stop plus
+`ContactPushOut` 0.03 for a human pilot, the stop exactly for an AI. The fitted graze trio
+(`GrazeFriction` 0.35, `GrazeKick` 1.2, `GrazePushOut` 0.15) is retired with it: the push-out's
+decoded value replaces the 0.15, and the other two stood in for terms the original does not have
+(the disproof below).
 
 ⚠ **An object sweeps only every OTHER frame, on a random per-object phase.** The sentence above
 said "per tick", which is wrong. `FUN_0048d7f0` returns immediately unless
@@ -2352,30 +2364,45 @@ With `r` the contact point minus `obj+0x204`, `ω` the body rates at `obj+0x16c`
 ```
 vp    = v + 2·(ω × r)                        contact-point velocity, rotational term DOUBLED
 J     = −(n · vp) · n                        normal only; no tangential or friction term
-Δω    = R · I⁻¹ · Rᵀ · [ (r × J) / |r|² ]    zero vector if |r|² == 0
+u     = (r × J) / |r|²                       zero vector if |r|² == 0
+ΔL    = R-sandwiched  u / recI               the deposit is INERTIA-multiplied (FDIVs at
+                                             0x48e2e9/0x48e2fb/0x48e307 by obj[0x197..0x199])
 L     = 2.25 · |J|   (literal at 0x00608108, hardcoded, no data origin)
-A     = |Δω|
+A     = |ΔL|
 f_lin = L/(L+A) ,  f_ang = A/(L+A)           L == 0 → 0/1 ;  A == 0 → 1/0
 
 v          += J  · (1 + f_lin · bounce_factor)                    0x0048e429
-obj+0x160  += Δω · (1 + f_ang · bounce_factor) · 0.5              0x0048e4bc
+obj+0x160  += ΔL · (1 + f_ang · bounce_factor) · 0.5              0x0048e4bc
 ```
 
-The `0.5` is the shared literal at `0x006032e0`, also hardcoded. The angular impulse goes into
-`obj+0x160`, the same accumulator the stick and ground blow write to.
+The `0.5` is the shared literal at `0x006032e0`, also hardcoded. The angular deposit goes into
+`obj+0x160`, the same accumulator the stick and ground blow write to; the next frame's integrator
+multiplies that accumulator back by the reciprocal moments to make rates, so the inertia weighting
+cancels and the NET body-rate change is `u · (1 + f_ang · bounce_factor) · 0.5` exactly.
+
+⚠ **The partition's angular share is the inertia-MULTIPLIED (angular-momentum-like) vector, and
+the earlier `Δω = R·I⁻¹·Rᵀ·u` reading of it is withdrawn (corrected 2026-08-24 while porting the
+kick for `C21`).** The three instructions are `FDIV`s by the slots `rec_moments_inertia` lands in,
+so a stiff axis weighs the angular share heavier, not lighter. The partition therefore compares
+two momenta, `2.25·|J|` against `|I·u|`, which is also the physically coherent reading. With the
+Bloodhawk's reciprocal moments near 1.1 the correction moves `f_lin` a few points up
+(`f_lin = 2.25/(2.25 + sinθ/(recI·|r|))`: ≈0.93 at a 5 m arm, ≈0.71 at 1 m), so every direction
+claim below survives it unchanged. Ported: `BounceImpulse` divides by `RecInertia` for the share
+and applies the net kick with no inertia factor; `BounceRateKick` exposes it and `Collide` spends
+it on the body rates in place of the retired fitted `GrazeKick`.
 
 Effective normal restitution for a non-rotating contact is **`f_lin · bounce_factor`**, bounded by
 `[0, 0.6]` as authored.
 
 ⚠ **The partition runs the opposite way round to the summary sentence this decode has been quoted
 with ("a short lever arm rebounds at up to 0.6 while a wingtip throws most of the impact into
-rotation"). Corrected 2026-08-15 while implementing it.** `Δω = (r × J)/|r|²` has magnitude
-`|I⁻¹|·|J|·sinθ/|r|`, which **falls as 1/|r|**: the `/|r|²` is a point-mass moment of inertia, not a
+rotation"). Corrected 2026-08-15 while implementing it.** `u = (r × J)/|r|²` has magnitude
+`|J|·sinθ/|r|`, which **falls as 1/|r|**: the `/|r|²` is a point-mass moment of inertia, not a
 lever. So `A` shrinks as the arm lengthens and `f_lin = L/(L+A)` rises toward 1 — a wingtip rebounds
 HARDER than a contact near the centre, and nothing here converts a wingtip strike into spin. With
-`I⁻¹ ≈ 1.1` it reads `f_lin = 2.25/(2.25 + 1.1·sinθ/|r|)`: ≈0.91 at a 5 m arm, ≈0.67 at 1 m, exactly
-1 when `r ∥ n` (a contact directly under the centre of mass, where `r × J` vanishes). The formulas
-above are unchanged; only their reading was wrong.
+the inertia-multiplied share it reads `f_lin = 2.25/(2.25 + sinθ/(recI·|r|))`: ≈0.93 at a 5 m arm,
+≈0.71 at 1 m, exactly 1 when `r ∥ n` (a contact directly under the centre of mass, where `r × J`
+vanishes). The formulas above are unchanged; only their reading was wrong.
 
 ⚠ **The impulse is not a rigid-body impulse, and that defect is the mechanism behind `CAP-14`'s
 split.** It is computed from the *contact point's* velocity, with the rotational term doubled, then
@@ -2397,11 +2424,30 @@ a per-surface coefficient.
 ⚠ **The lever-arm partition does not produce that split either, and the claim that it does was
 withdrawn 2026-08-15 on the arithmetic above.** With `A ∝ 1/|r|`, `f_lin` is ≈0.9 in both
 orientations at any contact geometry an airframe actually presents, so the two rebound at nearly the
-same coefficient: the `graze-bounce` suite flies both and measures `e = 0.56` on flat ground against
-`e = 0.59` on a vertical face. What differs on a wall is the AXIS — the rebound is horizontal, so an
+same coefficient: the `graze-bounce` suite flies both and measures `e ≈ 0.56` on flat ground against
+`e ≈ 0.59` on a vertical face (both move a point or two with the partition's inertia correction
+above). What differs on a wall is the AXIS — the rebound is horizontal, so an
 altimeter reads nothing across the contact (measured `vy 0.00 → 0.00` there) — and that, not a
 coefficient, is what a vertical-face clip shows. The flat-ground magnitude above `bounce_factor`
 still comes from the doubled rotational term, which `bounce_factor` cannot produce.
+
+⚠ **The contact path has no tangential term, no friction and no vertical-speed edit anywhere, and
+that closes `BL-381`'s open question as a disproof.** The path is traced end to end: the per-frame
+integrator `FUN_0048e580` builds forces (`FUN_0048c470`), integrates `v += a·dt` into `obj+0x924`,
+turns it into the frame's translation, calls the sweep at `0x48ea17` (which may rewrite that
+translation and change `v` only through the normal impulse above), adds the translation to the
+position, and hands the returned severity to the damage law `FUN_0048d2c0` at the very end, which
+writes no velocity at all. So nothing in the executable removes a wall-tangential sink from the
+VELOCITY: what `CAP-14` measured is position-derived, and the placement rewrite is what produces
+it, cancelling the whole frame's motion against the (drifting) contact point while the stored
+velocity keeps only its normal edit. The filmed multi-tick scrape (144.5 → 86.7 mph over 0.47 s)
+is the same two mechanisms iterated: the plant keeps steering into the wall, each resolved sweep
+frame re-places the aircraft at the surface and the impulse re-spends the re-accumulated closing
+component, with no per-contact friction anywhere. `CollideResponseTests` pins the exact per-tick
+outcome (`speed' = speed·√(cos²θ + (bounce_factor·sinθ)²)`), the tangential exactness a friction
+term of any size fails, and the no-re-steer control that stops bleeding entirely. Damage repeats
+only while the severity cosine stays positive, so a scrape that has stopped closing spends
+nothing further.
 
 **Ruled out as sources of the excess, each traced:** multiple resolutions per frame (one per aircraft
 per tick, `FUN_004897c0`'s head); successive-frame stacking (once the contact velocity is outgoing
@@ -2663,8 +2709,10 @@ without a provenance. Five classes are used:
 - **unit** is a conversion factor or an arithmetic identity, with no behaviour of its own.
 - **exception** is a CSVM invention kept deliberately, with a reason and a reachability
   measurement.
-- **contact** belongs to the collision response, which `C21`/`C22` own; the graze trio there is the
-  only fitted group left in the file.
+- The former **contact** class is empty: `C21` decoded the plant's contact terms, so the file
+  carries no fitted number any more. The invented contact laws that remain for `C22`'s ablation
+  (`GrazeStopSpeed`, `CrashSpeed`, the damage cooldown, the un-embed loop) live on
+  `AircraftContactResolver`/`FlightController`, outside this census, and are named in `BL-271`.
 
 | Constant | Value | Class | Evidence |
 |---|---:|---|---|
@@ -2689,8 +2737,9 @@ without a provenance. Five classes are used:
 | `GroundBlowVelocitySteer` | 2.0 | decoded | a global whose only writer is the `gbc` debug console command |
 | `NoseChaseFactor` | 0 | decoded | decoded-absent: no instruction in `FUN_0048c470`/`FUN_0048fc40`/`FUN_0048e580` rotates the velocity direction onto the nose; see "`lift_accel_rate` is a lag toward a target velocity" |
 | `AoaLimiterFactorDefault` | 0 | exception | the decoded AOA window, held off. Traced at `0x48c9f4`–`0x48ca18` and reachable, so this is a recorded divergence and not an absence; see "Corrected — the G ramp grazes and the AOA window binds" |
-| `BounceLeverScale` | 2.25 | contact | the literal at `0x00608108`, no data origin |
-| `GrazeFriction` / `GrazeKick` / `GrazePushOut` | 0.35 / 1.2 / 0.15 | contact | **fitted**, ours rather than the original's, co-tuned as one group with `BounceLeverScale`. `C22` owns them |
+| `BounceLeverScale` | 2.25 | decoded | the literal at `0x00608108`, no data origin |
+| `ContactPushOut` | 0.03 | decoded | the literal at `0x006080c4`, the player placement's offset along the normal (`0x48dfce`); the non-player arm has none |
+| `BounceAngularHalf` | 0.5 | decoded | the shared literal at `0x006032e0` on the angular deposit (`0x48e4bc`) |
 | `DragPolarScale` | 0.73 | decoded | `0x603474`, shared with the thrust curve |
 | `DragPolarParasite` / `Linear` / `Quad` | 0.12 / 0.8 / 0.5 | decoded | `FUN_0041ada0`, the polar in Mach |
 | `PitchTune` / `YawTune` / `RollTune` | 1 / 1 / 1 | decoded | absent from `FUN_0048c470`'s torque chains; see "The `*Tune` rates" |
@@ -2925,6 +2974,11 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
 - **Read directly from the executable, 2026-08-15:** the per-spawn jitter's full eleven-slot list,
   its three gates and the `mode`→`obj+0x67c` class table (`jet`/`heli`/`tank`/`ship`/`wingman`/
   `plane` = 0/1/2/3/4/5), which also settles what was recorded below as an undetermined data token.
+- **Read directly from the executable, 2026-08-24:** the contact placement's in-place translation
+  rewrite with its player-only 0.03 m offset and skipped-frame accumulator; the partition's
+  inertia-multiplied angular share (the `I⁻¹` reading withdrawn); and the end-to-end trace showing
+  the contact path carries no tangential, friction or vertical-speed term, which closed `BL-381`'s
+  sink-removal question as a disproof.
 - **Not determined:** which registry entities keep the `+0xcc` emitter flag set permanently, so the
   GDD's naming of zeppelins as ground-blow emitters is neither confirmed nor refuted; which axes the
   reverse-authority factor reaches.

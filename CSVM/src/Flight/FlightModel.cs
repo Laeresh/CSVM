@@ -156,13 +156,14 @@ public sealed class FlightModel
     // from the doubled contact-point term, which is not restitution and is unbounded.
     private const float BounceLeverScale = 2.25f;
 
-    // The graze response's three constants (see Collide), all TUNE and ours rather than the
-    // original's. They were tuned together against a slide that carried no restitution yet, so they
-    // and BounceLeverScale above are not independent of one another.
-    // ⚠ Do not retune one alone; the friction and the kick share one severity, vn / crashSpeed.
-    private const float GrazeFriction = 0.35f;   // tangential speed kill at full severity
-    private const float GrazeKick = 1.2f;        // rad/s attitude kick at full severity
-    private const float GrazePushOut = 0.15f;    // m off the surface after a graze (no sticky slide)
+    // The decoded contact placement (see Collide): a human-piloted contact rests 0.03 m off the
+    // surface along the normal; anything else rests exactly at the sweep's stop. The angular
+    // impulse's shared half-weight rides the same decode.
+    // ⚠ The original has NO tangential, friction or vertical-speed term on contact; the filmed
+    // losses are the placement plus repeated impulses, so do not re-add a speed-loss term here.
+    // Decode and addresses: docs/org/flightModel.md, "Collision response".
+    private const float ContactPushOut = 0.03f;    // m along the normal, human contacts only
+    private const float BounceAngularHalf = 0.5f;  // the angular impulse's shared 0.5
 
     // Drag is a parabolic polar in MACH: C_D = DragPolarScale · (parasite + linear·M + quad·M²),
     // opposing the velocity in weight units. All four numbers are shared by every aircraft, which
@@ -753,61 +754,37 @@ public sealed class FlightModel
     /// friction — so a flat-versus-vertical split must not be implemented as one.</summary>
     /// <param name="contactArm">NOT normalised: its length sets the rebound/spin partition, and a
     /// LONG arm rebounds harder than a short one.</param>
-    public float BounceNormalSpeed(Vector3 velocity, Vector3 normal, Vector3 contactArm)
-    {
-        float vn = normal.Dot(velocity);
-        var omegaWorld = Attitude * BodyRates;
-        float vpn = vn + 2f * normal.Dot(omegaWorld.Cross(contactArm));
-        var j = -vpn * normal;
-        float r2 = contactArm.LengthSquared();
-        // Δω is the impulse's angular share, in body axes here — |Δω| is all this needs, and a
-        // rotation back to world could not change it.
-        var dOmega = r2 > 1e-12f
-            ? Attitude.Transposed() * (contactArm.Cross(j) / r2) * Stats.RecInertia
-            : Vector3.Zero;
-        float l = BounceLeverScale * j.Length();
-        float a = dOmega.Length();
-        float fLin = l + a > 0f ? l / (l + a) : 0f;   // L == 0 → 0, the original's own degenerate arm
-        return vn - vpn * (1f + fLin * Stats.BounceFactor);
-    }
+    public float BounceNormalSpeed(Vector3 velocity, Vector3 normal, Vector3 contactArm) =>
+        BounceImpulse(velocity, normal, contactArm).NormalSpeed;
 
-    /// <summary>The decoded collision response: the slide along the struck surface, the restitution
-    /// (<see cref="BounceNormalSpeed"/>) and the lever-arm attitude kick, in that order.
-    /// <paramref name="crashSpeed"/> is the caller's crash threshold, the divisor both severity
-    /// terms read; it belongs to the contact, not to the plant, so it is passed rather than copied.
-    /// ⚠ The restitution is PLAYER-only, as the original is; an AI gets the position correction alone.
-    /// ⚠ Keep it before the kick, which adds to the body rates the restitution reads.</summary>
+    /// <summary>The decoded angular half of the same impulse: what the contact adds to the body
+    /// rates, net of the original's accumulator round-trip (the inertia weighting cancels between
+    /// the deposit and the next frame's integration, so the applied kick is the raw
+    /// <c>(r × J) / |r|²</c> scaled by the partition's angular share and the shared 0.5).</summary>
+    public Vector3 BounceRateKick(Vector3 velocity, Vector3 normal, Vector3 contactArm) =>
+        BounceImpulse(velocity, normal, contactArm).RateKick;
+
+    /// <summary>The decoded collision response: the placement at the sweep's stop and, for a human
+    /// pilot, the normal-only impulse on velocity and body rates. Nothing else: the original edits
+    /// no tangential speed, no friction and no vertical component on contact, so a sustained scrape
+    /// bleeds speed only through repeated impulses as the plant steers back into the surface.
+    /// ⚠ The impulse is PLAYER-only, as the original is; an AI gets the position correction alone,
+    /// resting exactly at the stop with no push-out.</summary>
     public void Collide(Vector3 prev, Vector3 step, float stopFrac, Vector3 impact, Vector3 normal,
-        bool humanPiloted, float crashSpeed)
+        bool humanPiloted)
     {
+        Position = prev + step * stopFrac + (humanPiloted ? normal * ContactPushOut : Vector3.Zero);
+        if (!humanPiloted)
+            return;
+
         var vel = VelocityDir * Speed;
-        float vn = Mathf.Abs(vel.Dot(normal));
-
-        // Place at the safe pose just off the surface and keep the tangential velocity, less a
-        // severity-scaled loss; the impulse direction is the surface normal at the impact point.
-        Position = prev + step * stopFrac + normal * GrazePushOut;
-        var slide = vel - normal * vel.Dot(normal);
-        float slideLen = slide.Length();
-        Speed = slideLen * (1f - GrazeFriction * vn / crashSpeed);
-        if (slideLen > 1e-4f)
-            VelocityDir = slide / slideLen;
-
-        if (humanPiloted)
-        {
-            float rebound = BounceNormalSpeed(vel, normal, impact - Position);
-            var bounced = VelocityDir * Speed + normal * rebound;
-            float bouncedLen = bounced.Length();
-            if (bouncedLen > 1e-4f)
-            {
-                Speed = bouncedLen;
-                VelocityDir = bounced / bouncedLen;
-            }
-        }
-
-        var inv = Attitude.Inverse();
-        var lever = (inv * (impact - Position)).Normalized();
-        var kick = lever.Cross((inv * normal).Normalized());
-        BodyRates += kick * (GrazeKick * vn / crashSpeed);
+        var (rebound, rateKick) = BounceImpulse(vel, normal, impact - Position);
+        var bounced = vel - normal * vel.Dot(normal) + normal * rebound;
+        float bouncedLen = bounced.Length();
+        Speed = bouncedLen;
+        if (bouncedLen > 1e-4f)
+            VelocityDir = bounced / bouncedLen;
+        BodyRates += rateKick;
     }
 
     // The sign test the opposing-command limiter gates on, on the raw sign bits as the original
@@ -835,6 +812,28 @@ public sealed class FlightModel
             vFps = Mathf.Sqrt(2f * stats.VehWeight / (clMax * AirDensitySlugPerFt3 * stats.RefArea));
         }
         return vFps * MetresPerFoot;
+    }
+
+    // Both halves of the decoded impulse from one computation, since the partition is shared.
+    // The angular share's weight is the INERTIA-multiplied (momentum-like) vector: the original
+    // divides (r × J)/|r|² by the authored reciprocal moments before measuring it, so a stiff axis
+    // weighs heavier, not lighter. Reading that divide as ×I⁻¹ is the error this replaced.
+    private (float NormalSpeed, Vector3 RateKick) BounceImpulse(
+        Vector3 velocity, Vector3 normal, Vector3 contactArm)
+    {
+        float vn = normal.Dot(velocity);
+        var omegaWorld = Attitude * BodyRates;
+        float vpn = vn + 2f * normal.Dot(omegaWorld.Cross(contactArm));
+        var j = -vpn * normal;
+        float r2 = contactArm.LengthSquared();
+        var u = r2 > 1e-12f ? contactArm.Cross(j) / r2 : Vector3.Zero;
+        float l = BounceLeverScale * j.Length();
+        float a = (Attitude.Transposed() * u / Stats.RecInertia).Length();
+        float sum = l + a;
+        float fLin = sum > 0f ? l / sum : 0f;   // L == 0 → 0, the original's own degenerate arm
+        float fAng = sum > 0f ? a / sum : 0f;
+        var kick = Attitude.Transposed() * u * ((1f + fAng * Stats.BounceFactor) * BounceAngularHalf);
+        return (vn - vpn * (1f + fLin * Stats.BounceFactor), kick);
     }
 
     // Maximum available lift as a multiple of weight, clMax(V)·q(V)·RefArea / Weight — the load

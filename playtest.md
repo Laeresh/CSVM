@@ -444,10 +444,11 @@ reasons that have nothing to do with any of these checks.
     wall reads as a graze rather than as a bounce off a trampoline;
   - (c) **a building corner** — `CAP-14` shows the original surviving a 144.5 mph graze on a C5
     skyscraper and dying at 144.2 against another, so survival there is geometry, not speed.
-  ⚠ The three graze constants (`GrazeKick`, `GrazeFriction`, `GrazeStopSpeed`, `BL-271`) were tuned
-  against the OLD no-bounce slide and were not re-tuned when the impulse landed. If a graze feels
-  wrong, they are the first suspects — not `bounce_factor`, which is authored data.
-  *Blocks:* `BL-271`'s re-tune, `BL-381`'s multi-tick scrape (a fail on (b) is evidence for it), and
+  ⚠ The decoded response has since replaced the fitted graze friction and kick
+  (`git log --grep=BL-381`): what remains TUNE is `GrazeStopSpeed`/`CrashSpeed` (`BL-271`). If a
+  graze feels wrong, those and the decoded response's own feel are the suspects — not
+  `bounce_factor`, which is authored data.
+  *Blocks:* `BL-271`'s ablation (a fail on (b) is evidence for it), and
   `docs/plans/PLAN-ai-flight.md` F52's player-side graze check (C25) — no separate PT item repeats it.
 
 ### AI flight — external view, own build (F52 AI arm)

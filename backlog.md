@@ -109,11 +109,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   only the trail shows; and the DISTANCE interval hides behind an inverted flag
   (`has_interval_value` false, key off `interval_type`).
 
-- `BL-121` `[Tuning]` `[Owed-playtest]` `[Blocked: PLAN-flight-model-parity C21-C22]` **Damage (Run-2 item 10)** — `CrashSpeed` 25, graze friction + attitude kick,
+- `BL-121` `[Tuning]` `[Owed-playtest]` `[Blocked: PLAN-flight-model-parity C22]` **Damage (Run-2 item 10)** — `CrashSpeed` 25,
   `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
-  real flight. ⚠ The graze/crash-constant half is owned by the active plan's Wave C: `C22`
-  (`BL-271`) decides whether the graze friction, attitude kick and `GrazeStopSpeed` laws survive
-  at all, and `C21` (`BL-381`) decodes the crash threshold, so do not tune any of them here first.
+  real flight. ⚠ The remaining contact constants are owned by the active plan's Wave C: `C22`
+  (`BL-271`) decides whether `CrashSpeed`, `GrazeStopSpeed` and the other surviving invented laws
+  stand at all (the graze friction and fitted kick are already retired by the decoded response,
+  `git log --grep=BL-381`), so do not tune any of them here first.
   The at-the-controls graze-feel check rides `C23`'s corner session. What remains this item's own
   after Wave C is the breakup-scatter feel judgement.
   Rendering at real spawns is verified (the `TopLevel` anchor fix, `docs/HISTORY.md`
@@ -922,51 +923,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
 
-- `BL-381` `[Feature]` `[Owed-playtest]` **What `BL-172` left behind: the crash block's two damage
-  ranges, and an unexplained vertical-speed kill on contact.** `PLAN-ai-flight` `C25` landed that
-  item's fix shape — the decoded normal-direction restitution off `bounce_factor`, player-only
-  (`git log --grep=BL-172`) — and three things it named are still not built:
-  - **`armor_damage_range [50,300]` / `health_damage_range [50,300]` are still unconsumed.** A
-    collision spends no armour and no health through `PlaneDamage.Apply(part, healthDamage,
-    armorDamage)`; `SurviveHit` deals its own invented `GrazeMaxDamage` quadratic instead, and
-    `Crash` consults the ledger not at all. `PLAN-armour-layer` left the whole `crash` block
-    deliberately unconsumed (its Decision 4) and `BL-172` owned it; nothing owns it now.
-  - **Something removes vertical speed on contact regardless of the surface's orientation, and it is
-    not the restitution.** On BOTH of `CAP-14`'s vertical-face contacts the sink is killed (−45.9 →
-    +8.0 and −21.7 → +1.4 ft/wall-s) even though on a wall the sink is tangential, while flat-ground
-    contacts preserve tangential speed almost perfectly (302 mph belly-flat costs 0.11 mph). The
-    decoded impulse cannot do that: it is normal-only, with no tangential or friction term anywhere
-    in it. ⚠ Those readings are observations off footage and bound nothing — the question is which
-    term in the original's contact path zeroes the sink, and it is answered in `crimson.exe`, not by
-    re-measuring the clip (`docs/verification.md` DET-12).
-  - **An oblique wall scrape is a sustained multi-tick drag, not an impulse.** `CAP-14`'s only
-    multi-frame contact scraped a building at 144.5 mph and lost 40 % over 0.47 s (144.5 → 86.7).
-    This engine resolves one contact per frame with a fixed 0.15 m push-out and a friction-scaled
-    slide, which is a different shape.
-  ⚠ **`GrazeStopSpeed`/`GrazeFriction`/`GrazeKick` were tuned against the old no-bounce slide**
-  (`BL-271` owns them), so they are the first suspects if grazes now feel wrong — the restitution
-  landed on top of them unchanged.
-  ⚠ **Do not chase the flat-ground magnitude with a bigger `bounce_factor`.** The decoded impulse's
-  doubled rotational term is what exceeds 0.6, and it is already implemented; the constant is
-  authored data. See [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Collision response and
-  `bounce_factor`", which also carries the `CAP-14` reading and the correction `C25` made to the
-  lever-arm partition.
-  *How you'd know it worked:* a graze spends real armour before health on the struck zone, and an
-  oblique scrape along a building bleeds speed over several ticks rather than one.
-  *Playtest after fix:* `PT-53`.
-
-- `BL-271` `[Tuning]` `[Owed-playtest]` **The survivable-graze and stop laws are invented physics with player-facing
-  consequences** (`FlightController.cs:271-295,1652-1672`, header "all TUNE"): attitude kick
-  `GrazeKick` 1.2 rad/s, `GrazeFriction` 0.35, quadratic severity damage, "sliding below
-  `GrazeStopSpeed` 12 m/s = destroyed", "3 failed embed push-outs = explode". The original
-  might throw the nose differently or let a plane belly-slide to a stop ("collecting 0-dmg
-  kisses" is the user report that motivated the stop rule). `CAP-14`'s analysed graze already
-  bounds part of this qualitatively — the original's graze cost ~5% speed + sink with wings level,
-  no visible attitude kick at that severity. ⚠ That is an observation, not a target: the footage
-  can say a kick is *absent* at that severity, but no constant here is settled by re-measuring it
-  (`docs/verification.md` DET-12). The kick and the stop rule are judged at the controls against
-  `BL-120`'s corner feel item, and the laws themselves want a decode of the original's contact
-  response.
+- `BL-271` `[Tuning]` `[Owed-playtest]` **The remaining invented contact laws with player-facing
+  consequences** (`AircraftContactResolver`/`FlightController`, each marked TUNE where it sits):
+  the no-ledger crash threshold `CrashSpeed` 25 m/s, "sliding below `GrazeStopSpeed` 12 m/s =
+  destroyed", "3 failed embed push-outs = explode", and the 0.3 s `DamageCooldown` standing in for
+  the original's every-other-frame sweep parity. The decoded response replaced the rest
+  (`git log --grep=BL-381`): the graze friction, the fitted attitude kick and the 0.15 push-out
+  are retired, the original's contact path carrying no such terms, and the quadratic severity
+  damage went with the decoded damage law (`git log --grep=BL-302`). The original might let a
+  plane belly-slide to a stop ("collecting 0-dmg kisses" is the user report that motivated the
+  stop rule); ablate each surviving law after the decoded response and keep only what earns a
+  product-exception record. ⚠ Feel is judged at the controls against `BL-120`'s corner item, and
+  no constant here is settled by re-measuring footage (`docs/verification.md` DET-12).
 
 - `BL-309` `[Feature]` **Engine torque is a designed, one-sided turn assist — unmodelled.** GDD §4.1.8
   ("Engine Torque", Motion Model/Flight Dynamics → Simulated Elements; restated, no prose): torque

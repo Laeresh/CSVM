@@ -2609,15 +2609,18 @@ decoded Mach drag, thrust and gravity; the velocity direction rotates only throu
 the ground-blow steer (`NoseChaseFactor` 0 pins the retired kinematic chase out, config-selectable
 for A/B). The
 footage altitude clamp, the STALL lamp's fraction and the dive-speed cap are ours, and are the
-whole of what is not decoded outside `Collide`; every constant's class is in
+whole of what is not decoded in the file; every constant's class is in
 [`org/flightModel.md`](org/flightModel.md)'s inventory, censused by `FlightConstantInventoryTests`.
 `UsesAiForcePath` holds near-field differences, and `FarFieldPlant` is the original's level-of-detail
 branch, re-decided every step: an AI aircraft more than 1 km horizontally from the NEAREST human
 pilot holds `throttle · fd_speed + 5` along its nose at a 1/s lag and skips lift, drag, thrust,
 gravity, the authority curves, the command limiter and the bank coupling, keeping its stick torques
 and the ground blow. The range arrives as `FlightInput.NearestHumanDistSqM`, which is 0 for a plant
-nobody tells; player-only guards widen to all humans. `Collide` owns restitution and three
-fitted graze terms; contact lifecycle stays in `AircraftContactResolver`/`FlightController`.
+nobody tells; player-only guards widen to all humans. `Collide` is the decoded contact response
+whole: the placement (0.03 m off the surface for a human, the sweep's stop exactly for an AI) and
+the human-only normal impulse on velocity and body rates, with NO tangential, friction or
+vertical-speed term, so a scrape bleeds speed only through repeated impulses; contact lifecycle
+and the remaining invented laws (`C22`) stay in `AircraftContactResolver`/`FlightController`.
 The choker's extend-only timer zeroes thrust alone. Full decode, standing conflicts and deliberately
 absent terms: [`org/flightModel.md`](org/flightModel.md); measurement rules: `verification.md`.
 

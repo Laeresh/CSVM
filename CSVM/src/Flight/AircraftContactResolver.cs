@@ -24,8 +24,8 @@ public interface IContactEffects
     /// redirect off a dead one, or null when the plane carries no zones.</summary>
     PlaneDamage.PartState? SpendDamage(string zone, float healthDamage, float armorDamage);
 
-    /// <summary>Applies the contact response (slide, restitution, the lever-arm kick) and reports
-    /// the speed and pose it left behind.</summary>
+    /// <summary>Applies the contact response (the decoded placement and, for a human pilot, the
+    /// normal-only impulse) and reports the speed and pose it left behind.</summary>
     ContactResponse ApplyResponse();
 }
 

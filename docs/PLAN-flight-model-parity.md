@@ -111,7 +111,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Replace invented collision behavior
 
-21. ☐ C21 Complete collision damage and sustained-contact decoding (`BL-381`)
+21. ☑ C21 Complete collision damage and sustained-contact decoding (`BL-381`)
 22. ☐ C22 Remove or justify the invented graze/stop laws (`BL-271`)
 23. ☐ C23 Validate building-corner collision feel (`BL-120`)
 
@@ -461,7 +461,7 @@ hash-identical against the new pin, exit 0.
 
 # Wave C — Replace invented collision behavior
 
-## C21 ☐ Complete collision damage and sustained-contact decoding (`BL-381`)
+## C21 ☑ Complete collision damage and sustained-contact decoding (`BL-381`)
 
 **Goal.** Consume authored armour/health ranges and reproduce vertical-speed kill and multi-tick scrapes.
 
@@ -476,6 +476,49 @@ Trace the remaining contact path, then route damage through `PlaneDamage` and po
 **Verify.** Graze spends armour before health; a scripted oblique wall scrape bleeds speed across ticks; `PT-53`.
 
 **⚠ Traps.** Do not raise `bounce_factor` or preserve old graze tuning by default.
+
+**Landed.** The re-verify found the item's first bullet already built: `BL-302`/`BL-402` routed
+collision damage through the decoded law (`FUN_0048d2c0`, `Flight/CollisionDamage.cs`) with the
+authored `armor_damage_range`/`health_damage_range` consumed and the pair spent armour-first
+through `PlaneDamage.Apply`, so the backlog text was stale on that point. What was still open is
+now decoded, and the answer is a DISPROOF of any missing velocity term: the whole contact path is
+traced end to end (`FUN_0048e580` integrator → `FUN_0048d7f0` sweep → `FUN_0048d2c0` damage) and
+the executable's only velocity edit on contact is the known normal impulse. What `CAP-14` filmed
+is position-derived: `FUN_0048d7f0` REWRITES the frame's translation in place
+(`0x48e065`–`0x48e0bb` player, `0x48db30`–`0x48db7c` non-player), landing the struck sphere
+exactly at its contact point plus 0.03 m along the normal for the player alone (`0x006080c4`; a
+non-player gets no offset, a crashed player no placement at all, `0x48dfbe`). That placement
+cancels the whole frame's motion against the contact point, which is the filmed wall "sink
+removal", and a sustained scrape is the placement plus the re-spent closing component iterated,
+with damage repeating only while the severity cosine stays positive. Two decode corrections
+landed with it: the partition's angular share is the inertia-MULTIPLIED momentum vector (the
+`FDIV`s by `rec_moments_inertia` at `0x48e2e9`/`0x48e2fb`/`0x48e307`; the dossier's `I⁻¹` reading
+and the port's `×RecInertia` were both inverted), and the angular deposit's inertia weighting
+cancels through the accumulator round-trip, so the net body-rate kick is
+`(r×J)/|r|² · (1 + f_ang·bounce_factor) · 0.5` with no inertia factor. In code `Collide` is now
+the decoded response whole: placement (0.03 human / exact stop AI), the human-only normal impulse,
+and the decoded angular kick via the shared `BounceImpulse`; the fitted graze trio
+(`GrazeFriction`/`GrazeKick`/`GrazePushOut`) is retired, `BounceLeverScale` reclassified decoded,
+and `ContactPushOut` 0.03 plus `BounceAngularHalf` 0.5 join the inventory as decoded rows (census
+updated, config surface unchanged at 9 keys). The invented laws left for `C22`'s ablation are
+named in the re-scoped `BL-271`: `CrashSpeed`, `GrazeStopSpeed`, the un-embed death and the 0.3 s
+`DamageCooldown` (standing in for the unported every-other-frame sweep parity). Tests:
+`CollideResponseTests` pins both placements, the tangential exactness a friction term of any size
+fails, the decoded kick's shape and sign, the multi-tick scrape's exact per-tick bleed
+(`speed' = speed·√(cos²θ + (bf·sinθ)²)`, 24 % over ten ticks at 20°) and its no-re-steer control
+(METHOD-9); `AircraftContactResolverTests` adds the armour-before-health graze through a real
+ledger with the armour-exhausted control; `BounceRestitutionTests`' partition pins move to the
+corrected shares (12.8/16.7). The eleven-airframe dump cannot see this change (no collision
+scenario, `Step` untouched); the instruments are those unit pins plus the `graze-bounce` engine
+suite, whose measured `e` values shift a point or two with the partition correction. The
+`c1-crash`/`c1-debris-rest` goldens may move if their scripted crashes include a survivable
+contact before the fatal one; they are NOT re-pinned here. `BL-381` deleted from `backlog.md`;
+`BL-121`/`BL-271`/`PT-53` cross-references updated to the remainder. `PT-53`'s at-the-controls
+half rides `C23` unchanged.
+
+**Verified.** Full `RunTests.ps1` battery on the lane tree: build clean, 2082/2082 units,
+94/94 engine suites with engine errors clean, 16/16 goldens hash-identical (the scripted crash
+shots contain no survivable contact, so the placement change never fires in them), exit 0.
 
 ## C22 ☐ Remove or justify the invented graze/stop laws (`BL-271`)
 

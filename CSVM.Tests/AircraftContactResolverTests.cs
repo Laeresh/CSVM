@@ -147,6 +147,35 @@ public class AircraftContactResolverTests
         Assert.False(effects.ApplyResponseCalled);
     }
 
+    /// <summary>A graze spends real armour before health on the struck zone: the decoded pair runs
+    /// through <see cref="PlaneDamage.Apply"/>'s armour-first split, so a fully-armoured zone loses
+    /// no health at all, and only once the armour is gone does health start to drain — the control
+    /// half, which a symmetric or health-first spend fails.</summary>
+    [Fact]
+    public void AGrazeSpendsArmourBeforeHealthOnTheStruckZone()
+    {
+        var resolver = new AircraftContactResolver(new NeverOverlaps());
+        var ledger = OneZone();
+        var effects = new LedgerContactEffects(ledger);
+        // A shallow scrape: severity 0.1, so both terms sit on the compiled floor (15).
+        var striker = Striker(humanPiloted: true, ledger) with
+        {
+            VelocityDir = new Vector3(-0.99499f, 0f, -0.1f),
+            DamageCooldownElapsed = true,
+        };
+        var shallow = HeadOn(struckIsAircraft: false) with { Normal = new Vector3(0f, 0f, 1f) };
+
+        var first = resolver.Resolve(shallow, striker, effects);
+        Assert.Equal(ContactFate.Graze, first.Fate);
+        Assert.Equal(5f, effects.LastState!.Armor, 3);            // 20 − 15: armour spent
+        Assert.Equal(20f, effects.LastState!.Hp, 3);              // health untouched behind it
+
+        var second = resolver.Resolve(shallow, striker, effects);
+        Assert.Equal(ContactFate.Graze, second.Fate);
+        Assert.Equal(0f, effects.LastState!.Armor, 3);            // the remaining 5 absorbs a third
+        Assert.Equal(10f, effects.LastState!.Hp, 3);              // 20 − 15·(1 − 5/15)
+    }
+
     private static ContactReport HeadOn(bool struckIsAircraft) => new()
     {
         Impact = Vector3.Zero,
@@ -209,6 +238,32 @@ public class AircraftContactResolverTests
             ApplyResponseCalled = true;
             return ApplyResponseResult;
         }
+    }
+
+    /// <summary>Effects whose damage spend routes into a REAL <see cref="PlaneDamage"/>, so the
+    /// armour-before-health row asserts the ledger's split rather than a stub's echo.</summary>
+    private sealed class LedgerContactEffects : IContactEffects
+    {
+        private readonly PlaneDamage _ledger;
+
+        public LedgerContactEffects(PlaneDamage ledger) => _ledger = ledger;
+
+        public PlaneDamage.PartState? LastState { get; private set; }
+
+        public bool ShatterStruck(float healthDamage) => false;
+
+        public void PlayGrazeReaction()
+        {
+        }
+
+        public PlaneDamage.PartState? SpendDamage(string zone, float healthDamage, float armorDamage)
+        {
+            LastState = _ledger.Apply(zone, healthDamage, armorDamage);
+            return LastState;
+        }
+
+        public ContactResponse ApplyResponse() =>
+            new(AircraftContactResolver.GrazeStopSpeed + 30f, Transform3D.Identity);
     }
 
     private sealed class NeverOverlaps : IWorldQuery

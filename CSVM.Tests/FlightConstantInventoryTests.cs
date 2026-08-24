@@ -25,14 +25,14 @@ public class FlightConstantInventoryTests
 {
     private const float Dt = 1f / 60f;
 
-    // The five classes docs/org/flightModel.md's inventory table uses: read out of crimson.exe, a
-    // mirror of an authored data key, a conversion factor, a deliberate CSVM exception with a
-    // reachability measurement behind it, or a collision term C21/C22 own.
+    // The four classes docs/org/flightModel.md's inventory table uses: read out of crimson.exe, a
+    // mirror of an authored data key, a conversion factor, or a deliberate CSVM exception with a
+    // reachability measurement behind it. The plant carries no fitted contact term any more; the
+    // invented contact laws left for C22 live on AircraftContactResolver/FlightController.
     private const string Decoded = "decoded";
     private const string Authored = "authored";
     private const string Unit = "unit";
     private const string ProductException = "exception";
-    private const string Contact = "contact";
 
     private static readonly string[] AllPlanes =
     {
@@ -70,10 +70,9 @@ public class FlightConstantInventoryTests
         ("FlightModel", "GroundBlowVelocitySteer", 2.0, Decoded),
         ("FlightModel", "NoseChaseFactor", 0.0, Decoded),
         ("FlightModel", "AoaLimiterFactorDefault", 0.0, ProductException),
-        ("FlightModel", "BounceLeverScale", 2.25, Contact),
-        ("FlightModel", "GrazeFriction", 0.35, Contact),
-        ("FlightModel", "GrazeKick", 1.2, Contact),
-        ("FlightModel", "GrazePushOut", 0.15, Contact),
+        ("FlightModel", "BounceLeverScale", 2.25, Decoded),
+        ("FlightModel", "ContactPushOut", 0.03, Decoded),
+        ("FlightModel", "BounceAngularHalf", 0.5, Decoded),
         ("FlightModel", "DragPolarScale", 0.73, Decoded),
         ("FlightModel", "DragPolarParasite", 0.12, Decoded),
         ("FlightModel", "DragPolarLinear", 0.8, Decoded),

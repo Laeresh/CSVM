@@ -332,12 +332,10 @@ public partial class FlightController : Node3D
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
     private const float DebugFinishStagger = 1.5f; // s between players' forced finishes (--debug-scoreboard in a race)
 
-    // Collision severity (all TUNE): impact speed along the contact
-    // normal decides between a survivable graze and a crash. A graze damages the
-    // struck part (quadratic in severity), slides the velocity along the surface
-    // with some tangential loss, and kicks the attitude. The thresholds that decide
-    // between the two are AircraftContactResolver's.
-    private const float GrazeMaxDamage = 18f;    // HP at a just-under-crash graze (parts have 20–25)
+    // ⚠ TUNE, ours: the original spends the damage pair on every resolved contact frame whose
+    // severity is positive, with no cooldown (its player writes no grace clock). This engine
+    // sweeps every frame where the original sweeps every other, so a bare port would double the
+    // scrape's damage rate; the cooldown stands in for that gap until C22's ablation.
     private const float DamageCooldown = 0.3f;   // s between HP subtractions (multi-frame scrapes)
     private const float GrazeReactionInterval = 1.5f; // s between graze reactions — NOT a tuned value:
                                                       // the touchdown defs stop their own puffer at
@@ -3030,12 +3028,12 @@ public partial class FlightController : Node3D
             return state;
         }
 
-        // Slide, restitution and lever-arm kick, on the plant whose fields they write. An airframe
-        // already crashed is off the player path, so its gate rides the restitution's argument.
+        // Placement and the decoded impulse, on the plant whose fields they write. An airframe
+        // already crashed is off the player path, so its gate rides the impulse's argument.
         public ContactResponse ApplyResponse()
         {
             _rig._model.Collide(_from, _motion, _contact.StopFraction, _contact.Impact, _contact.Normal,
-                _rig.IsHumanPiloted && !_rig.Crashed, AircraftContactResolver.CrashSpeed);
+                _rig.IsHumanPiloted && !_rig.Crashed);
             return new ContactResponse(_rig._model.Speed,
                 new Transform3D(_rig._model.Attitude, _rig._model.Position));
         }
