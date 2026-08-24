@@ -1039,15 +1039,18 @@ public static class Probes
             + $"α = {pitchAlphas[0]:0.0}/{pitchAlphas[1]:0.0}/{pitchAlphas[2]:0.0}° "
             + "(the alignment lag at this body rate — see the note above)");
 
-        // --- yaw. The one axis 'eff' scales, so it is the axis a thrust change moves: faster
-        // acceleration holds the plane nearer fd_speed, where eff is at its floor.
+        // --- yaw. The one axis 'eff' scales, so a thrust change moves it. INFORMATIONAL since the
+        // *Tune decode: no per-axis factor exists in the original's torque path, and the footage's
+        // 28.6 s stands as measured — what disagrees is the decode. docs/org/flightModel.md.
         m = Fresh(stats, Level(), 290f * Mph, 1f);
         double sumSpeed = 0, samples = 0;
         double tYaw = RunUntil(m, 1f, 60f, YawAccum(m), yaw: 1f,
                                onStep: () => { sumSpeed += m.Speed; samples++; });
         Row("yaw-360", "full rudder from 290 mph, 360°", "s", tYaw, 28.6, 3.0,
             (samples > 0 ? $"mean speed {sumSpeed / samples / Mph:0.0} mph, " : "")
-            + $"α {m.Alpha:0.0}° at finish");
+            + $"α {m.Alpha:0.0}° at finish — OPEN conflict, the torque path is the binary's and the "
+            + "footage disagrees",
+            info: true);
 
         // --- altitude cap: fixed 22° nose-up hold (attitude set once, not continuous elevator,
         // which would loop instead of climb). Without the clamp this never stops climbing (the
@@ -1105,10 +1108,12 @@ public static class Probes
         m = Fresh(stats, Level(), 0.9f * fd, 0.125f);
         Run(m, 0.125f, 300f, pitch: 0f);
         double idlePath = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
+        // ⚠ NO target: every candidate came off video, and the throttle curve that would give a
+        // decoded one is not decoded yet (BL-439). A number here would be a fit, not a check.
         Row("eighth-throttle-speed", "1/8 throttle held to equilibrium", "mph",
-            m.Speed / Mph, 137.9, 6.0,
-            $"{m.Speed / fd:0.000} x fd_speed (original 0.459), settled path {idlePath:0.0}°, "
-            + $"α {m.Alpha:0.0}°",
+            m.Speed / Mph, null, 0.0,
+            $"{m.Speed / fd:0.000} x fd_speed, settled path {idlePath:0.0}°, α {m.Alpha:0.0}° — "
+            + "no decoded target exists; the thrust-vs-throttle curve is undecoded (BL-439)",
             info: true);
 
         // ⚠ ZERO throttle, not 1/8 — the footage cuts 8/8 to 0/8, so this is a pure drag probe.
@@ -1151,13 +1156,34 @@ public static class Probes
             + "carried well past that regime by its own minimum)",
             info: true);
 
+        // --- stall departure, INFORMATIONAL and deliberately untargeted: it makes the decoded
+        // nose-drop's SHAPE visible (an equilibrium the torque settles at, not a chase toward
+        // world-down) without asserting any figure, since the only figures available are footage.
+        m = Fresh(stats, Level(), 0.9f * fd, 0f);
+        float NoseDeg() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp((-m.Attitude.Z).Y, -1f, 1f)));
+        double tBreak = RunUntil(m, 0f, 120f, () => m.isStalled(), pitch: 0f);
+        float breakNoseDeg = NoseDeg(), prevNoseDeg = breakNoseDeg, peakDropDegS = 0f;
+        for (float t = 0f; t < 30f; t += EnvDt)
+        {
+            m.Step(new FlightInput { Throttle = 0f }, EnvDt);
+            float now = NoseDeg();
+            peakDropDegS = Mathf.Max(peakDropDegS, (prevNoseDeg - now) / EnvDt);
+            prevNoseDeg = now;
+        }
+        Row("stall-departure", "0 throttle from 0.9 fd, stick centred, nose where it rests", "deg",
+            NoseDeg(), null, 0.0,
+            $"broke at {tBreak:0.0} s with the nose {breakNoseDeg:+0.0;-0.0}°, peak drop "
+            + $"{peakDropDegS:0.00} °/s, stall flag {m.StallFlag:0.00} at rest — the drop is a torque "
+            + "settling at an equilibrium, not a chase; no target, every candidate is footage",
+            info: true);
+
         var sb = new StringBuilder();
         sb.AppendLine($"# flight envelope — {planeNodeName} ({stats.DefName})");
         sb.AppendLine($"# fd_speed {fd:0.#} m/s ({fd / Mph:0.0} mph)  weight {stats.VehWeight:0} kg  "
                       + $"engine power {stats.EnginePower:0.###}  gravity {stats.Gravity:0.#} m/s²");
         sb.AppendLine($"# thrust accel at fd_speed {thrustAccel:0.00} m/s²  stepped at {EnvDt * 1000f:0.0} ms");
         sb.AppendLine(bhawk
-            ? "# 'original' = decoded from cockpit-gauge video, analysis/video-flight-calibration/"
+            ? "# 'original' = read off cockpit-gauge video; ranks readings, does not confirm a decode"
             : $"# no measured original for {planeNodeName} — the Bloodhawk is the only airframe on video");
         sb.AppendLine();
         sb.AppendLine($"{"scenario",-22} {"unit",-5} {"model",10} {"original",10} {"err",8}  verdict");
@@ -1963,12 +1989,11 @@ public static class Probes
     }
 
     /// <summary>One flight scenario: what the model does, and what the original did.
-    ///
-    /// <para><see cref="Measured"/> is the original's own value, decoded from cockpit-gauge video
-    /// (see <c>analysis/video-flight-calibration/</c>) — a golden number, not a guess. A row with no
-    /// <see cref="Measured"/> value, or one flagged <see cref="Informational"/>, is reported but not
-    /// asserted: either nothing was measured to compare against, or the comparison is a known open
-    /// gap that must not gate a build until it is scoped.</para></summary>
+    /// <see cref="Measured"/> came off cockpit-gauge video, so it ranks readings rather than
+    /// confirming a decode; prefer a decoded value where one exists (docs/verification.md DET-12).
+    /// A row with no <see cref="Measured"/> value, or one flagged <see cref="Informational"/>, is
+    /// reported but not asserted: either nothing was measured, or the comparison is a known open
+    /// gap that must not gate a build until it is scoped.</summary>
     public sealed class FlightRow
     {
         public string Name = "";

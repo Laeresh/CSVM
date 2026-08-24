@@ -552,6 +552,10 @@ public sealed record SessionSpec
     /// Action wizard's wingman count (clamped 0-5), so the plane screen's flown-wingmen re-clamp
     /// (decision 8a) is screenshot-able alongside <c>--debug-join=</c>.</summary>
     public int DebugWingmen { get; private set; }
+    /// <summary><c>--debug-preset=N</c> (launchscreen only): apply Table of Contents preset N and
+    /// open on the wizard's step 1, so the FILLED wizard is screenshot-able. −1 = not asked for,
+    /// since preset 0 ("Girl Trouble") is a real request unlike a 0 wave or wingman count.</summary>
+    public int DebugPreset { get; private set; } = -1;
     public bool MarkersOverlay { get; private set; }
     public bool WeaponLab { get; private set; }
     public string? WeaponSelect { get; private set; }
@@ -736,6 +740,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-join=")) { s.DebugJoin = int.Parse(arg["--debug-join=".Length..]); }
             else if (arg.StartsWith("--debug-waves=")) { s.DebugWaves = int.Parse(arg["--debug-waves=".Length..]); }
             else if (arg.StartsWith("--debug-wingmen=")) { s.DebugWingmen = int.Parse(arg["--debug-wingmen=".Length..]); }
+            else if (arg.StartsWith("--debug-preset=")) { s.DebugPreset = int.Parse(arg["--debug-preset=".Length..]); }
             else if (arg.StartsWith("--paint=")) { s.PaintNames = arg["--paint=".Length..].Split(',', StringSplitOptions.TrimEntries); }
             else if (arg.StartsWith("--paint-color=")) { s.PaintColorOverride = ParsePaintColors(arg["--paint-color=".Length..]); }
             else if (arg.StartsWith("--paint-decal=")) { s.PaintDecalOverride = ParsePaintDecals(arg["--paint-decal=".Length..]); }

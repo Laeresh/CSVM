@@ -79,6 +79,8 @@ public partial class Launcher : Node3D
     // --debug-waves=/--debug-wingmen=, the same one-shot hold as _pendingJoin above but for the
     // Instant Action wizard's own screenshot aids.
     private int _pendingWaves, _pendingWingmen;
+    // --debug-preset=, same one-shot hold. −1 rather than 0 because preset 0 is a real request.
+    private int _pendingPreset = -1;
     // The --screenshot=/--shots=/--frames= state machine and F11/F12's placement print and
     // ad-hoc save — see src/Testing/CaptureDirector.cs's entry. Process-scoped: constructed once
     // from the launch spec, never re-armed by a menu relaunch.
@@ -269,6 +271,7 @@ public partial class Launcher : Node3D
         _pendingJoin = _spec.DebugJoin;
         _pendingWaves = _spec.DebugWaves;
         _pendingWingmen = _spec.DebugWingmen;
+        _pendingPreset = _spec.DebugPreset;
         // Built alongside the other process-scoped services, ahead of every probe's early quit
         // and of --dump-config: its constructor is what registers the five hitchMonitor.* keys.
         // See this file's docs/architecture.md entry.
@@ -804,6 +807,13 @@ public partial class Launcher : Node3D
         {
             _menu.DebugWingmen(_pendingWingmen);
             _pendingWingmen = 0;
+        }
+        // Last, so it overwrites the two above rather than being half-overwritten by them: a
+        // preset fills the wave and wingman fields itself and asking for both is a contradiction.
+        if (_pendingPreset >= 0)
+        {
+            _menu.DebugPreset(_pendingPreset);
+            _pendingPreset = -1;
         }
     }
 

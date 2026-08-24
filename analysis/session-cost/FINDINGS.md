@@ -9,11 +9,14 @@ Clips are revisited constantly, so there is a second visit for a cache to serve.
 makes that second visit cheaper was never tested — `BL-308` was retired on 2026-08-07 by user
 decision, because the measurement work kept costing more than the answer was worth.
 
-⚠ **This file is a record, not a task list.** The cache itself stays: `clipdata.py`, `videodata/`
-and the `/analyse-capture` §2b read-first / §7b write-back steps are unchanged and still in force.
-What was dropped is the effort to prove its value. The A/B design below is kept only so that anyone
-who revives the question does not re-derive the contaminated version of it — **it is not owed
-work**, and nothing is waiting on it.
+⚠ **This file is a record, not a task list, and the subject it measured no longer exists.** The
+sidecar cache is gone with the rest of the gauge-decode pipeline: `clipdata.py` and the
+`/analyse-capture` read-first / write-back steps were removed when footage-derived flight analysis
+was retired (`docs/verification.md` DET-12; recover them with `git log -p`). The `videodata/` CSVs
+remain on disk, unread by anything. What is kept here is the **cost baseline** below, which is
+about how a capture session spends context and is still true of the qualitative captures. The A/B
+design is kept only so that anyone who revives the question does not re-derive the contaminated
+version of it — **it is not owed work**, and nothing is waiting on it.
 
 ## The measured baseline: `CAP-14`, session `3ca1a395`
 

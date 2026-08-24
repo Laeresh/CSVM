@@ -42,6 +42,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // reads right at 2P and 4P, no retune owed.
     private const float StripHeightFrac = 0.12f;
     private const int PanePad = 10;
+    // How many Table of Contents rows the list shows at once. `ia_tl_contents` is one of only two
+    // LAYOUT.CSV rows whose last column is a visible-row WINDOW rather than an item count: 14 rows
+    // onto the 19 presets (docs/formats/instant-action.md, "Screen controls"). Decoded, not a fit
+    // to our own layout — do not "tidy" it to the item count.
+    private const int PresetWindow = 14;
     // The lives stepper's range (Screen.MissionType, decision 15/18): 0 = unlimited, 1 = the
     // faithful one-life run (default), up to this cap. INVENTED — ia.json carries no such field, so
     // there is no decoded range to match; TUNE.
@@ -104,42 +109,47 @@ public sealed partial class LaunchMenu : CanvasLayer
         ("New York — IA: Manhattan", "C5", true),
     };
 
-    // The player-flyable roster (mirrors RunDev.ps1, the curated game order + display names — note
-    // Devastator = player_pfighter and Hellhound = player_avenger). Node = the planes.zbd root node
-    // passed on to the build; stats are loaded lazily from vehicle.json for the focused plane.
+    // The player-flyable roster in the langui 3700 dropdown order (docs/formats/instant-action.md
+    // "Option strings"), which the original stores an aircraft as an index INTO — so this order is
+    // decoded, not cosmetic, and the preset table's aircraft resolve through it. Display names are
+    // ia.json's singular vocabulary ("Autogyro", not 3700's plural "Hoplite"); note Devastator =
+    // player_pfighter and Hellhound = player_avenger. Node = the planes.zbd root node passed on to
+    // the build; stats are loaded lazily from vehicle.json for the focused plane.
     private static readonly (string Name, string Node)[] Planes =
     {
-        ("Devastator", "player_pfighter"),
-        ("Bloodhawk", "player_bhawk"),
-        ("Firebrand", "player_fbrand"),
-        ("Brigand", "player_brigand"),
-        ("Fury", "player_fury"),
         ("Autogyro", "player_autogyro"),
         ("Hellhound", "player_avenger"),
+        ("Balmoral", "player_balmoral"),
+        ("Bloodhawk", "player_bhawk"),
+        ("Brigand", "player_brigand"),
+        ("Devastator", "player_pfighter"),
+        ("Firebrand", "player_fbrand"),
+        ("Fury", "player_fury"),
         ("Kestrel", "player_kestrel"),
         ("Peacemaker", "player_peacemaker"),
-        ("Balmoral", "player_balmoral"),
         ("Warhawk", "player_warhawk"),
     };
 
     // The thirteen Instant Action militias and the aircraft each one flies, per the `.BM` pattern
-    // reading (docs/formats/instant-action.md), not vehicle.json's paint_pattern defs. Names use
+    // reading (docs/formats/instant-action.md), not vehicle.json's paint_pattern defs. Each roster
+    // is Planes's own langui 3700 order filtered to the militia's allowed flags, which is what
+    // FUN_00410420's 11-byte mask yields — the dropdown never reorders per militia. Names use
     // ia.json's singular vocabulary ("Autogyro"), matching InstantActionWave.EnemyPlane and
     // PlaneNodeFor. A militia is never filtered out here for being the player's own side.
     private static readonly (string Name, string[] Aircraft)[] Militias =
     {
-        ("Black Hat", new[] { "Warhawk", "Brigand", "Autogyro" }),
+        ("Black Hat", new[] { "Autogyro", "Brigand", "Warhawk" }),
         ("Black Swan", new[] { "Fury" }),
         ("Blake Aviation", new[] { "Bloodhawk", "Peacemaker" }),
-        ("British", new[] { "Peacemaker", "Balmoral" }),
+        ("British", new[] { "Balmoral", "Peacemaker" }),
         ("Fortune Hunter", PlaneNames()),
         ("Hollywood Knight", new[] { "Firebrand" }),
-        ("Hughes Aviation", new[] { "Bloodhawk", "Kestrel", "Fury" }),
-        ("Medusa", new[] { "Kestrel", "Brigand" }),
+        ("Hughes Aviation", new[] { "Bloodhawk", "Fury", "Kestrel" }),
+        ("Medusa", new[] { "Brigand", "Kestrel" }),
         ("Russian", new[] { "Devastator" }),
-        ("Sacred Trust", new[] { "Warhawk", "Hellhound" }),
+        ("Sacred Trust", new[] { "Hellhound", "Warhawk" }),
         ("German", new[] { "Hellhound" }),
-        ("Studio Security", new[] { "Fury", "Autogyro" }),
+        ("Studio Security", new[] { "Autogyro", "Fury" }),
         ("Broadway Bomber", new[] { "Peacemaker" }),
     };
 
@@ -180,8 +190,16 @@ public sealed partial class LaunchMenu : CanvasLayer
     // (decision 18).
     private int _environmentIndex, _missionTypeIndex;
     private int _lives = 1;
+    // The Table of Contents: which preset is applied (-1 = none, the custom path), the list cursor
+    // and the first visible row of its 14-row window. Applying one writes the wizard's own fields
+    // and nothing else, so _presetIndex is a LABEL for the breadcrumb — the mission that flies is
+    // whatever the fields say, byte-identical to the same configuration entered by hand.
+    private int _presetIndex = -1;
+    private int _presetCursor, _presetTop;
     // Steps 3-4: the wingman count + aircraft, and the cursors WaveEdit/Waves/Wingmen each
-    // read (_waves itself is above, with the other readonly fields).
+    // read (_waves itself is above, with the other readonly fields). _wingmanPlaneIndex starts at
+    // Planes's index 0, which the 3700 order makes the Autogyro — the value gui_continue selects
+    // when the player has no saved custom planes, not an arbitrary first row.
     private int _waveListIndex, _waveEditIndex, _waveFieldIndex;
     private int _numWingmen, _wingmanPlaneIndex, _wingmenFieldIndex;
     // The chosen environment's own shipped ia.zrd.json, loaded once when Environment is
@@ -211,7 +229,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // instead of _center on the Plane screen once more than one player has joined.
     private Control _paneRoot = null!;
 
-    private enum Screen { Mode, Chapter, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout }
+    private enum Screen { Mode, Chapter, Presets, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout }
 
     // What a fit row edits. The reset row carries no slot of its own and is the only one Accept
     // does anything on, since every other row is a live stepper.
@@ -234,6 +252,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         Screen.Mode => _modeIndex,
         Screen.Chapter => _chapterIndex,
+        Screen.Presets => _presetCursor,
         Screen.Environment => _environmentIndex,
         Screen.MissionType => _missionTypeIndex,
         Screen.Waves => _waveListIndex,
@@ -316,6 +335,18 @@ public sealed partial class LaunchMenu : CanvasLayer
         return codes;
     }
 
+    /// <summary>The Instant Action Environment screen's roster as the display names the preset
+    /// table names an environment by, in the same decoded dropdown order
+    /// <see cref="EnvironmentCodes"/> returns codes in. Static + public so a preset resolves
+    /// against the roster rather than against a second copy of it.</summary>
+    public static string[] EnvironmentNames()
+    {
+        var names = new string[Environments.Length];
+        for (int i = 0; i < Environments.Length; i++)
+            names[i] = Environments[i].Name;
+        return names;
+    }
+
     /// <summary>The MissionType screen's roster for one chapter, as `ia.json` `mission_type` keys
     /// in the UI dropdown order, with Stunt Flying dropped where `disallow_missions` bars it — the
     /// same rule <see cref="ChapterCodesFor"/> applies via <see cref="DangerZonesFor"/>. Static
@@ -327,6 +358,20 @@ public sealed partial class LaunchMenu : CanvasLayer
         for (int i = 0; i < rows.Length; i++)
             keys[i] = rows[i].Key;
         return keys;
+    }
+
+    /// <summary>The eleven airframe display names in the langui 3700 order, standing alone for
+    /// Militias' Fortune Hunter row's "all eleven" coverage — read off <c>Planes</c> rather than
+    /// duplicated, so the two rosters cannot drift apart. Callable from anywhere in the class
+    /// regardless of where it sits textually: a method body only needs <c>Planes</c> assigned by
+    /// the time it RUNS, and Militias' initializer runs after Planes' own. Static + public so the
+    /// decoded order is testable without a menu instance.</summary>
+    public static string[] PlaneNames()
+    {
+        var names = new string[Planes.Length];
+        for (int i = 0; i < Planes.Length; i++)
+            names[i] = Planes[i].Name;
+        return names;
     }
 
     /// <summary>The wave editor's Militia field roster, in the langui dropdown order (3670).
@@ -377,13 +422,14 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// button still held from the transition here (the Esc that left a flight, the Start that
     /// joined a player) does not fire immediately. Joined players survive a return from flight;
     /// their plane locks do not. <paramref name="startScreen"/>
-    /// ("chapter"/"environment"/"missiontype"/"waves"/"wingmen"/"plane"/"loadout"/"wingmanloadout")
-    /// opens on a later screen — a screenshot/verification aid (--menu=plane, --menu=loadout).</summary>
+    /// ("chapter"/"presets"/"environment"/"missiontype"/"waves"/"wingmen"/"plane"/"loadout"/
+    /// "wingmanloadout") opens on a later screen — a screenshot aid (--menu=plane).</summary>
     public void ShowMenu(string startScreen = "")
     {
         _screen = startScreen switch
         {
             "chapter" => Screen.Chapter,
+            "presets" => Screen.Presets,
             "environment" => Screen.Environment,
             "missiontype" => Screen.MissionType,
             "waves" => Screen.Waves,
@@ -395,8 +441,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         // Environment/MissionType/Waves/Wingmen only exist under Instant Action — force it so a
         // --menu= opening straight onto one of them (a screenshot aid) renders the right
         // roster/filter rather than whatever _mode was last left at.
-        if (_screen is Screen.Environment or Screen.MissionType or Screen.Waves or Screen.WaveEdit
-            or Screen.Wingmen or Screen.WingmanLoadout)
+        if (_screen is Screen.Presets or Screen.Environment or Screen.MissionType or Screen.Waves
+            or Screen.WaveEdit or Screen.Wingmen or Screen.WingmanLoadout)
         {
             _modeIndex = (int)MenuMode.Stunt;
             _mode = MenuMode.Stunt;
@@ -500,6 +546,26 @@ public sealed partial class LaunchMenu : CanvasLayer
             Rebuild();
     }
 
+    /// <summary>Debug/verification aid (--debug-preset=N): apply Table of Contents preset N and
+    /// open on the wizard's step 1, so the FILLED wizard is screenshot-able with nobody at the
+    /// controls. This is the aid for the failure mode units cannot see — a preset that applies the
+    /// wrong aircraft or the wrong militia looks entirely plausible on screen. Forces Instant
+    /// Action mode, since presets exist nowhere else.</summary>
+    public void DebugPreset(int index)
+    {
+        _modeIndex = (int)MenuMode.Stunt;
+        _mode = MenuMode.Stunt;
+        int n = Math.Clamp(index, 0, InstantActionPresets.All.Count - 1);
+        ApplyPreset(n);
+        _presetCursor = n;
+        ScrollPresetsToCursor();
+        // The base def is normally loaded by Environment's own Accept, which this aid skips.
+        _iaBaseDef = LoadEnvironmentDef(Environments[_environmentIndex].Code);
+        GD.Print($"launchscreen: --debug-preset → '{InstantActionPresets.All[n].Name}' applied");
+        if (Visible)
+            Rebuild();
+    }
+
     /// <summary>Debug/verification aid (--debug-wingmen=N): pre-configure the Instant Action
     /// wizard's own wingman count (clamped 0-5) and a non-default aircraft, so the plane screen's
     /// flown-wingmen re-clamp (decision 8a) is screenshot-able alongside --debug-join=. Forces
@@ -540,20 +606,6 @@ public sealed partial class LaunchMenu : CanvasLayer
     // --- players / devices ---
 
     private static int Wrap(int index, int count) => ((index % count) + count) % count;
-
-    // The eleven Planes display names, standing alone for Militias' Fortune Hunter row's "all
-    // eleven" coverage — read off Planes rather than duplicated, so the two rosters cannot drift
-    // apart. Callable from anywhere in the class regardless of where it sits textually (unlike a
-    // field initializer, a method body only needs Planes assigned by the time it RUNS, and
-    // Militias' own initializer — which calls this — runs after Planes' because Planes is
-    // declared first).
-    private static string[] PlaneNames()
-    {
-        var names = new string[Planes.Length];
-        for (int i = 0; i < Planes.Length; i++)
-            names[i] = Planes[i].Name;
-        return names;
-    }
 
     private static (string Name, string Code, bool DangerZones)[] ChaptersFor(MenuMode mode) =>
         mode == MenuMode.Stunt ? Array.FindAll(Chapters, c => c.DangerZones) : Chapters;
@@ -746,6 +798,10 @@ public sealed partial class LaunchMenu : CanvasLayer
                 {
                     case Screen.Mode: _modeIndex = Wrap(_modeIndex + p1.Move, n); break;
                     case Screen.Chapter: _chapterIndex = Wrap(_chapterIndex + p1.Move, n); break;
+                    case Screen.Presets:
+                        _presetCursor = Wrap(_presetCursor + p1.Move, n);
+                        ScrollPresetsToCursor();
+                        break;
                     case Screen.Environment: _environmentIndex = Wrap(_environmentIndex + p1.Move, n); break;
                     case Screen.MissionType: _missionTypeIndex = Wrap(_missionTypeIndex + p1.Move, n); break;
                     case Screen.Waves: _waveListIndex = Wrap(_waveListIndex + p1.Move, n); break;
@@ -758,6 +814,17 @@ public sealed partial class LaunchMenu : CanvasLayer
             if (p1.MoveX != 0)
             {
                 dirty |= HandleMoveX(p1.MoveX);
+            }
+            // X on the wizard's step 1 opens the Table of Contents. Step 1 only: the presets are
+            // the mode's front door, and a jump back to step 1 from deeper in the wizard would have
+            // to explain why picking a scenario threw the pilot three screens backwards.
+            if (p1.Presets && _screen == Screen.Environment)
+            {
+                _screen = Screen.Presets;
+                // Re-open on the applied preset, so backing in and out does not lose the place.
+                _presetCursor = _presetIndex >= 0 ? _presetIndex : 0;
+                ScrollPresetsToCursor();
+                return true;
             }
             // Y on the Wingmen step opens the flight's one fit — the same meaning Y carries on a
             // plane pane. Gated on there being wingmen to arm, like the Aircraft row above it.
@@ -780,6 +847,9 @@ public sealed partial class LaunchMenu : CanvasLayer
                 else
                     _screen = _screen switch
                     {
+                        // Backing out of the contents list leaves the wizard's fields as they were:
+                        // a preset is applied on Accept, never on the cursor passing over it.
+                        Screen.Presets => Screen.Environment,
                         Screen.Environment => Screen.Mode,
                         Screen.MissionType => Screen.Environment,
                         Screen.Waves => Screen.MissionType,
@@ -1082,6 +1152,13 @@ public sealed partial class LaunchMenu : CanvasLayer
                     _chapterIndex = Wrap(_chapterIndex, CurrentChapters.Length);
                 }
                 break;
+            case Screen.Presets:
+                ApplyPreset(_presetCursor);
+                // The original's own page order: the contents list is page 1 and View Story opens
+                // page 2, the configuration screen under the preset's name. Our wizard is that
+                // second page unrolled into five screens, so Accept lands on the first of them.
+                _screen = Screen.Environment;
+                break;
             case Screen.Environment:
                 _screen = Screen.MissionType;
                 // The mission-type roster depends on the environment just picked (Stunt Flying
@@ -1133,6 +1210,58 @@ public sealed partial class LaunchMenu : CanvasLayer
                 PrimeJoins();
                 break;
         }
+    }
+
+    /// <summary>Writes one Table of Contents preset over the wizard's own fields. Deliberately
+    /// partial: the lives stepper is INVENTED and has no preset value, other players' plane cursors
+    /// are ours and not the original's, and `_iaBaseDef` is left to Environment's own Accept — so
+    /// what flies is exactly what these fields say, reachable by hand as well as by preset.</summary>
+    private void ApplyPreset(int index)
+    {
+        var applied = InstantActionPresets.Resolve(index, _waves.Length);
+        _presetIndex = index;
+        _environmentIndex = applied.EnvironmentIndex;
+        _missionTypeIndex = applied.MissionTypeIndex;
+        _numWingmen = applied.NumWingmen;
+        // Only where the preset flies wingmen: at 0 the decode reports no aircraft and the Wingmen
+        // screen hides the row, so moving that cursor would be inventing a value.
+        if (applied.WingmanPlaneIndex is { } wingman)
+        {
+            _wingmanPlaneIndex = wingman;
+            _wingmanFit.ResetToStock();
+        }
+
+        // Player 1 only. The original has one pilot and one aircraft dropdown; players 2-4 are our
+        // own divergence and the preset has nothing to say about them. It is a cursor position, not
+        // a lock — presets are picked back at step 1, so no slot has selected anything yet.
+        _slots[0].PlaneIndex = applied.PlayerPlaneIndex;
+        _slots[0].Fit.ResetToStock();
+
+        for (int i = 0; i < _waves.Length; i++)
+        {
+            var wave = applied.Waves[i];
+            _waves[i] = new WaveSlot
+            {
+                Count = wave.Count,
+                MilitiaIndex = wave.MilitiaIndex,
+                AircraftIndex = wave.AircraftIndex,
+                SkillIndex = wave.SkillIndex,
+            };
+        }
+    }
+
+    // Keeps the 14-row window over the cursor, and never scrolls past the end of the list. The
+    // cursor wraps (Wrap, like every other screen), so top-to-bottom jumps both ways are normal
+    // here rather than an edge case.
+    private void ScrollPresetsToCursor()
+    {
+        int last = Math.Max(0, InstantActionPresets.All.Count - PresetWindow);
+        int top = Math.Clamp(_presetTop, 0, last);
+        if (_presetCursor < top)
+            top = _presetCursor;
+        else if (_presetCursor >= top + PresetWindow)
+            top = _presetCursor - PresetWindow + 1;
+        _presetTop = Math.Clamp(top, 0, last);
     }
 
     // The chosen Instant Action environment's own shipped ia.zrd.json, for the fields the
@@ -1236,6 +1365,9 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             Screen.Mode => "SELECT MODE",
             Screen.Chapter => "SELECT MAP",
+            // The window shows 14 of 19, so the position has to be on screen somewhere or the
+            // list looks like it ends where the window does.
+            Screen.Presets => $"TABLE OF CONTENTS  ({_presetCursor + 1}/{CurrentCount()})",
             Screen.Environment => "SELECT ENVIRONMENT",
             Screen.MissionType => "SELECT MISSION",
             Screen.Waves => "CONFIGURE WAVES",
@@ -1250,8 +1382,13 @@ public sealed partial class LaunchMenu : CanvasLayer
         _body.AddChild(Label(heading, (int)(HeadingFont * s), HeadingColor, HorizontalAlignment.Center));
         _body.AddChild(Spacer((int)(6 * s)));
 
+        // Every screen but the contents list draws its whole roster; that one is a 14-row window
+        // onto 19, so it draws a slice and Row keeps taking the ABSOLUTE index (which is what the
+        // cursor comparison and the row text both read).
         int count = CurrentCount();
-        for (int i = 0; i < count; i++)
+        int first = _screen == Screen.Presets ? _presetTop : 0;
+        int last = _screen == Screen.Presets ? Math.Min(count, _presetTop + PresetWindow) : count;
+        for (int i = first; i < last; i++)
             _body.AddChild(Row(i, s));
 
         _body.AddChild(Spacer((int)(10 * s)));
@@ -1568,6 +1705,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         Screen.Mode => Modes.Length,
         Screen.Chapter => CurrentChapters.Length,
+        Screen.Presets => InstantActionPresets.All.Count,
         Screen.Environment => Environments.Length,
         Screen.MissionType => CurrentMissionTypes.Length,
         Screen.Waves => _waves.Length + 1, // + the trailing "Continue" row
@@ -1592,6 +1730,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             Screen.Mode => Modes[index].Label,
             Screen.Chapter => CurrentChapters[index].Name,
+            Screen.Presets => InstantActionPresets.All[index].Name,
             Screen.Environment => Environments[index].Name,
             Screen.MissionType => CurrentMissionTypes[index].Label,
             Screen.Waves => WaveListRowText(index),
@@ -1719,13 +1858,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         string fit = _screen == Screen.Plane || (_screen == Screen.Wingmen && _numWingmen > 0)
             ? "       L / Y  Weapons"
             : "";
+        // Same rule for the contents list, and the same reason: an unbound face button nobody can
+        // guess at. Named on step 1, the one screen it opens from.
+        string presets = _screen == Screen.Environment ? "       P / X  Scenarios" : "";
         // Name the press that is actually next. Before the lock that is "select"; after it, "fly"
         // — a footer still offering "select" on an already-selected plane is why the second press
         // was not obvious in the first place.
         string select = _screen != Screen.Plane ? "Enter / A  Select"
             : _slots.Count == 1 && _slots[0].Locked ? "Enter / A  FLY"
             : "Enter / A  Select";
-        return $"{nav}       {select}{fit}       {back}{who}";
+        return $"{nav}       {select}{fit}{presets}       {back}{who}";
     }
 
     private string Breadcrumb()
@@ -1735,21 +1877,29 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             Screen.Mode => "Mode  ›  Map  ›  Aircraft",
             Screen.Chapter => $"{mode}  ›  Map  ›  Aircraft",
-            Screen.Environment => $"{mode}  ›  Environment  ›  Mission  ›  Aircraft",
-            Screen.MissionType => $"{mode}  ›  {Environments[_environmentIndex].Name}  ›  Mission  ›  Aircraft",
+            Screen.Presets => $"{mode}  ›  Table of Contents",
+            Screen.Environment => $"{mode}{PresetCrumb()}  ›  Environment  ›  Mission  ›  Aircraft",
+            Screen.MissionType => $"{mode}{PresetCrumb()}  ›  {Environments[_environmentIndex].Name}  ›  Mission  ›  Aircraft",
             Screen.Waves or Screen.WaveEdit =>
-                $"{mode}  ›  {Environments[_environmentIndex].Name}  ›  {CurrentMissionTypes[_missionTypeIndex].Label}  ›  Waves  ›  Aircraft",
+                $"{mode}{PresetCrumb()}  ›  {Environments[_environmentIndex].Name}  ›  {CurrentMissionTypes[_missionTypeIndex].Label}  ›  Waves  ›  Aircraft",
             Screen.Wingmen or Screen.WingmanLoadout =>
-                $"{mode}  ›  {Environments[_environmentIndex].Name}  ›  {CurrentMissionTypes[_missionTypeIndex].Label}  ›  Wingmen  ›  Aircraft",
+                $"{mode}{PresetCrumb()}  ›  {Environments[_environmentIndex].Name}  ›  {CurrentMissionTypes[_missionTypeIndex].Label}  ›  Wingmen  ›  Aircraft",
             _ when _mode == MenuMode.Stunt =>
-                $"{mode}  ›  {Environments[_environmentIndex].Name}  ›  {CurrentMissionTypes[_missionTypeIndex].Label}  ›  Aircraft",
+                $"{mode}{PresetCrumb()}  ›  {Environments[_environmentIndex].Name}  ›  {CurrentMissionTypes[_missionTypeIndex].Label}  ›  Aircraft",
             _ => $"{mode}  ›  {CurrentChapters[_chapterIndex].Name}  ›  Aircraft",
         };
     }
 
+    // The applied preset's name, as the configuration page's own heading crumb — the original's
+    // View Story formats it through IDS_IA_STORYTITLE, whose whole text is `%1!s!`, and nothing
+    // clears it when a dropdown is then changed by hand. Empty on the custom path.
+    private string PresetCrumb() =>
+        _presetIndex >= 0 ? $"  ›  {InstantActionPresets.All[_presetIndex].Name}" : "";
+
     private string Detail(int focus) => _screen switch
     {
         Screen.Mode => Modes[focus].Detail,
+        Screen.Presets => PresetDetail(focus),
         Screen.Chapter => $"Region {CurrentChapters[focus].Code}",
         Screen.Environment => $"Region {Environments[focus].Code}",
         Screen.MissionType => LivesDetail(),
@@ -1760,6 +1910,19 @@ public sealed partial class LaunchMenu : CanvasLayer
         _ when CentredFitRows() != null => "",
         _ => PlaneStat(Planes[focus].Node),
     };
+
+    // The focused preset's own line: what picking it would fill the wizard with. The enemy total
+    // is the sum of its waves, which is 0 for the five ace presets — a duel, not an empty mission.
+    private string PresetDetail(int focus)
+    {
+        var preset = InstantActionPresets.All[focus];
+        int enemies = 0;
+        foreach (var wave in preset.Waves)
+            enemies += wave.Count;
+        string label = Mech3.InstantAction.MissionTypeLabel(preset.MissionType);
+        string wingmen = preset.NumWingmen == 0 ? "alone" : $"{preset.NumWingmen} wingmen";
+        return $"{label} over {preset.Environment}   ·   {preset.PlayerPlane}, {wingmen}   ·   {enemies} enemies";
+    }
 
     // The lives stepper's own line, shown where the other screens show the focused row's
     // stat/region — it is not per-row, so it does not vary with the mission-type cursor.
@@ -1842,6 +2005,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     private sealed class Slot
     {
         public readonly MenuInput Input = new();
+
+        // Starts at Planes's index 0 — the Autogyro under the 3700 order, matching gui_continue's
+        // own no-custom-planes selection rather than being positional by accident.
         public int PlaneIndex;
 
         // Browsing → Locked → Confirmed. The second stage exists so there IS a moment to open the

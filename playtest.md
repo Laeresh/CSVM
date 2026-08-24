@@ -75,23 +75,12 @@ hypothesis to check, not a target to build against.
 Most of the items below and a large part of `backlog.md` are blocked on one of these, so filming
 them in a batch unblocks far more than doing them one at a time.
 
-⚠ **Validity gate for every cockpit-gauge clip: auto head turn must be OFF, or the clip is
-unusable.** This already cost two takes. The capture spec and the clip-validity rules were in
-`analysis/video-flight-calibration/FINDINGS.md`, deleted 2026-08-14; recover them with
-`git log -p -- analysis/video-flight-calibration/FINDINGS.md`.
-
-### Flight model — cockpit gauges in frame, head turn off
-
-| ID | Capture | What must be in frame | Unblocks |
-|---|---|---|---|
-| `CAP-20` | Throttle equilibria + a shallow held climb | Two level runs held to equilibrium at **1/4** and **1/2** throttle (the thrust-vs-throttle curve), then a **shallow, steady climb** at fixed throttle — shallow enough that the ADI does **not** saturate, i.e. keep the nose under ~+25°, and hold it 10 s+. `CAP-05`'s 50%-throttle clip failed on exactly this: it was a zoom, the ADI pinned at sky fraction 0.730, and the nose angle became unreadable. ⚠ Still owed after D32, and now the ONLY thing that can settle the climb residual: the 90° climb clip gives a clean speed plateau (163.05 mph at a 56.3° path) but its ADI saturates too, so the nose angle — and with it α, the leading candidate for the model's remaining +25% — is unreadable in every climb capture taken so far | `BL-410` (the sustained-climb residual; `ClimbGravityScale` itself is retired) |
-
-⚠ **Partial STICK deflection cannot be captured: the controls are keyboard, so pitch, roll and
-yaw are 100 % or 0 %.** Any capture asking for "a light, steady pull" or any other intermediate
-*axis* position is unfilmable by construction, not merely unflown — do not file one, ask the binary
-instead. This retired `CAP-32` (2026-08-15). **Throttle is not affected**: it is a stepped setting
-and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 and `CAP-05` flew
-50 %, so `CAP-20`'s 1/4 and 1/2 runs above remain perfectly filmable.
+⚠ **No capture here answers a flight-model question, and none may be filed.** A number off the
+cockpit panel does not settle a flight quantity: footage cannot confirm a decode, it only ranks
+readings, and it will rank a reading nobody has thought of (`docs/verification.md` DET-12, and
+DET-11 on the sim clock that makes every wall-clock rate wrong by 39 %). Flight questions go to
+`crimson.exe` — see `BL-414`. The captures below are **qualitative**: what a thing looks and
+sounds like, watched and frame-sampled, never measured into a constant.
 
 ### HUD — ammo gauge in frame
 
