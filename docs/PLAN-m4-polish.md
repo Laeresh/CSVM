@@ -63,7 +63,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — tooling and cleanup
 
-1. ☐ `BL-458` `CheckCommentCaps.ps1` resolves relative paths against the current worktree
+1. ☑ `BL-458` `CheckCommentCaps.ps1` resolves relative paths against the current worktree
 2. ☑ `BL-446` Rename `ZzBaselineDump` out of the throwaway prefix
 3. ☐ `BL-455` Delete `AiControlLaw.Throttle`'s dead far-from-player branch
 4. ☐ `BL-444` A flight-dump hash that is the same on both hosts
@@ -94,7 +94,7 @@ B14 touches `FlightAudio`/`EngineAudioCurves`/`AiEngineAudio` and nothing else i
 
 # Wave A — tooling and cleanup
 
-## A1 ☐ `BL-458` `CheckCommentCaps.ps1` resolves relative paths against the current worktree
+## A1 ☑ `BL-458` `CheckCommentCaps.ps1` resolves relative paths against the current worktree
 
 **Goal.** Run from any worktree with a relative path (or no path), the script scans that worktree.
 
@@ -119,6 +119,12 @@ worktree still runs hook (7) and reports against the worktree's files.
 **⚠ Traps.** `git rev-parse --show-toplevel` in a worktree is correct when invoked from inside it;
 find where the wrong directory actually comes from (the hook's cwd, or a relative `$Path` joined to
 `$root`) before rewriting the root logic.
+
+**Verified.** <pending orchestrator run> Two cwd bugs, both reproduced with a planted over-cap probe
+rather than diagnosed by inspection: `$root` answered for the caller's cwd rather than the script's
+tree (now `$PSScriptRoot`), and an explicit relative `$Path` reached `[IO.File]::ReadAllText`
+unresolved, which follows the process directory `Set-Location` does not move (now `Resolve-Path`).
+Hook (7) is unchanged. `-Summary` clean from both the worktree and the main checkout.
 
 ## A2 ☑ `BL-446` Rename `ZzBaselineDump` out of the throwaway prefix
 
