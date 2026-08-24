@@ -130,7 +130,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☑ AIRFRAME screen
 23. ☑ ENGINE and ARMOR screens
 24. ☑ GUNS and HARDPOINTS screens (BL-067)
-25. ☑ PAINT and PLANENAME screens
+25. ☑ PAINT and PLANENAME screens (PLANENAME now names a plane from two word lists, BL-441)
 26. ☑ PURCHASE review screen
 
 ### Wave D — into flight
@@ -492,14 +492,10 @@ is not touched by C22-C26 at all, which is what lets them run concurrently. Scre
 the codebase does not have and this shell deliberately did not invent: that page brings its own,
 plus whatever extension to the page contract it needs.
 
-What stands in each screen today: `HangarPlaceholderPage` for airframe, engine, armour, guns,
-hardpoints and paint. The right heading, a Continue row, and a real summary of what the scratch
-plane carries there (langui names, stat-table slot titles, the economy's own figures). It edits
-nothing, so a flow walked straight through produces exactly the plane the screens before it chose.
-`HangarPlaneSelectionPage` is real (New Plane, or one of the store's saved planes to edit).
-`HangarNamePage`'s stepper over airframe-derived names is a placeholder for C25's text entry, and
-`HangarPurchasePage`'s totals line is a placeholder for C26's itemised list, but the gate and the
-save under it are already the real ones.
+What stands in each screen: a real page of its own, in its own file. `HangarPlaceholderPage`
+survives only as the `PageFor` switch's default arm, the guard for a screen nobody has written yet.
+Each page carries the right heading, its own rows, and a real summary of what the scratch plane
+carries there (langui names, stat-table slot titles, the economy's own figures).
 
 Tests in `CSVM.Tests/HangarFlowTests.cs` (14 cases): `ScreenOrderIsTheOriginals`,
 `AFlowOpensOnPlaneSelection`, `EveryScreenTitlesItselfFromLangui`,

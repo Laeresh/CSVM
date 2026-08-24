@@ -281,22 +281,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   turns out to be the binding constraint when tuning. Otherwise what remains is the **A/B against
   our build at the controls**, with the reference numbers above to judge against.
 
-- `BL-291` `[Feature]` **A way to spawn/damage a zeppelin — the thin harness that finishes `BL-239`'s in-game
-  verification** (PT-36, 2026-08-06). Splash damage reads right at the controls, but nothing in
-  C1 shows damage registering on the zeppelin, so `BL-239`'s one unverified picture — a gasbag
-  taking blast damage from a hit well off its centre — still has nowhere to be seen. Wanted: a
-  `--damage-test`-style spawn of a damageable `hk_zep`, or a debug damage readout on the existing
-  C1 one — just enough to watch blast numbers score to the gasbag. Acceptance test: a TORPEDO
-  (`wep_14`) into one END of a gasbag, away from dead centre, damages it (the
-  nearest-collision-shape falloff, landed 2026-08-05). Reworded 2026-08-14 from "a rocket": the
-  decoded `DAMAGES_ZEPPELIN` gate (M4 F18) admits only `wep_14` (the aerial torpedo, the designed
-  zeppelin killer) and `wep_28` (the broadside cannonball) — rockets bounce off gasbags by
-  design. No stock loadout carries `wep_14` (checked 2026-08-14), but no loadout knob is needed:
-  `--weapon-lab=wep_14 --chapter=C1 --mission=M04 --zeppelins` is the harness — the held plane
-  fires torpedoes at the moored `hk_zep` with F18's per-zone pools live. Explicitly out of scope: the authored destruction sequence (`breakupzep` →
-  13 `break*`, the crash-sink motions) — that is its own M4-sized feature for when zeppelins
-  matter to gameplay, not this item.
-
 - `BL-297` `[Research]` `[Owed-playtest]` **Panel-damage semantics: what the original actually
   shows when a part is damaged — the user's re-test verdict is that our authored-data reading has
   the feature wrong.** User at the controls 2026-08-06, after `BL-288`'s pooling fix landed
@@ -426,6 +410,41 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   lockout that blocks ordnance of any kind and the launching slot's own next-ready. `AiGunner` takes
   a bound group's window the same way. Launch rates are worth tuning from here, and the
   `DAMAGES_ZEPPELIN` rule is exercisable in the cockpit rather than only in `AiRocketeerTests`.
+
+- `BL-440` `[Feature]` **A downed zeppelin never comes apart: the authored breakup stalls on an
+  unimplemented `NodeUndercover` gate.** *Evidence:* the kill already plays the authored hull-death
+  def (`ZeppelinRuntime.PlayHullDeath` → `killpzep`, e.g.
+  `extracted/C1/M04/mis_anim/piratezep-killpzep.json`), and that def's `main_altitude_check`
+  sequence is `Initial`, so it runs from the moment the def starts: it tests
+  `If NodeUndercover(rock_zeppelin)` and, on the else branch, loops forever (`Loop -1`).
+  `AnimRuntime.cs:2476` stubs `NodeUndercover` to a constant `false`. The gate therefore never
+  opens, `rotatezep` and `breakupzep` are never called, and nothing reaches the `StopSequence` that
+  ends `floatdown`'s −3.5 gravity descent, so the hull sinks intact instead of pitching over and
+  breaking up.
+  *What the data authors:* `rotatezepdown` pitches `rock_zeppelin` 0 → −15° over 8 s and
+  `rotatezep` eases it −15° → −7° over 0.5 s at the break; `breakupzep` then fans out 13 same-tick
+  CALLs (the deepest authored fan-out in the game, the one that sized `SequenceRunner`'s cap) —
+  `break1`…`break6` drop each gasbag under −9.8 gravity with a slow forward tumble and a
+  `bounce_sequence.water` of `hit_waterN` (a `huge_splash`, then `huge_ripple` 0.5 s later at that
+  gasbag), `breakunder` translates `underneath` −35 m over 2 s and deactivates it, and six
+  `break_[lr]eng[123]1` each gate on their own `NodeUndercover` before calling `destroy_pz…`.
+  *Fix shape:* the gate is the whole feature — a real ground/occlusion probe behind
+  `NodeUndercover`, since the motions themselves are `ObjectMotion`/`ObjectMotionFromTo`, which
+  `MotionRuntime`/`PoseChannel` already run.
+  *⚠ Traps:* (a) the stub is global and its own comment justifies itself by "all 473 uses sit in
+  `OnCall` definitions the bootstrap never reaches" — that premise no longer holds for `killpzep`,
+  and making the condition real changes every other def that reaches it, so the goldens are the
+  check. (b) the condition's `distance` operand arrives as a raw u32 (`3263299584` on the hull
+  test, `3229614080` on the engines) and is not a length until decoded. (c) effect templates snap
+  to absolute world points and never track a moving host (`ZeppelinRuntime.cs:524`), so a splash
+  authored at a falling gasbag has to be placed from that gasbag's position at the moment of the
+  call.
+  *Status of the symptom:* read out of the data and the stub, not yet watched at the controls.
+  *Playtest after fix:* an Instant Action `zeppelin_run`, torpedo the hull down, and watch it pitch
+  over, shed six gasbags with splashes, and drop the gondola.
+  *Cross-refs:* `BL-291` (closed — Instant Action's `zeppelin_run` plus a `wep_14` pylon is the
+  spawn-and-kill harness this needs, `git log --grep=BL-291`), `docs/architecture.md`'s
+  `ZeppelinDamage.cs` bullet (the survivor-count kill that fires the def).
 
 ## Weapons & combat
 
