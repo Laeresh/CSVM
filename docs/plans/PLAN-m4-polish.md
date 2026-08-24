@@ -1,8 +1,10 @@
 # Milestone 4 polish — ten small follow-ups
 
-**ACTIVE PLAN** (written 2026-08-24). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE.** All ten items landed. Five of them are disproofs that landed no behaviour change:
+`BL-455` and `BL-449` (the code was dead or unreachable), `BL-451` (CSVM already matched),
+and both halves of `BL-417` (the flake does not reproduce and the stage short-circuit never
+existed). Two ported new behaviour, `BL-457`'s per-contact camera shake and `BL-442`'s
+quarter-health engine gate. `PT-84` and the `BL-120`/`PT-53` corner graze are the playtests owed.
 
 This plan clears ten of the newest, smallest open items in `backlog.md`: the tooling and cleanup
 follow-ups filed when `PLAN-flight-model-parity` closed (`BL-444`, `BL-446`, `BL-452`, `BL-455`,
@@ -59,16 +61,16 @@ that would, and it is out of scope because it moves every asserted envelope row.
 
 ## Battery on the merged tree
 
-Every item's own verification is in its section; this is the one run over all of them together, on
-the branch with the nine landed items merged:
+Every item's own verification is in its section; this is the one run over all ten together, which no
+single agent's worktree ever held:
 
 ```
-  PASS  build       2.6s  dotnet build CSVM.sln
-  PASS  units      19.1s  2153 passed, 0 failed, 0 skipped of 2153
-  PASS  engine    109.3s  94 passed, 0 failed, 0 skipped; engine errors clean
-  PASS  goldens    96.1s  16 shot(s) hash-identical; gpu NVIDIA GeForce RTX 5080 / 1.4.341
-  TODO  hitch      17.9s  clean: 0 hitch line(s); inject: 1 hitch line(s); awareness only
-  result: PASS -- 244.9s total, exit 0
+  PASS  build       3.2s  dotnet build CSVM.sln
+  PASS  units      24.3s  2155 passed, 0 failed, 0 skipped of 2155
+  PASS  engine    125.6s  94 passed, 0 failed, 0 skipped; engine errors clean
+  PASS  goldens    96.3s  16 shot(s) hash-identical; gpu NVIDIA GeForce RTX 5080 / 1.4.341
+  TODO  hitch      17.6s  clean: 0 hitch line(s); inject: 1 hitch line(s); awareness only
+  result: PASS -- 267.0s total, exit 0
 ```
 
 A4's cross-host claim re-checked here rather than taken from its own worktree: the eleven-airframe
