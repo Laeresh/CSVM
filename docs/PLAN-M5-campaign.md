@@ -192,7 +192,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☑ Campaign cabin screen (Next Mission, Previous Missions, Plane Construction, Return to Main Menu)
 23. ☐ Mission briefing screen (map, flags, objectives list, narration; replay / return / flight check)
 24. ☐ Flight check screen (pilot + wingmen planes and loadouts, objectives note, plane change, fly mission)
-25. ☐ Ammo selection screen (per gun caliber group, per hardpoint, descriptions) for self and wingmen
+25. ☑ Ammo selection screen (per gun caliber group, per hardpoint, descriptions) for self and wingmen
 
 ### Wave D — in-mission campaign machinery
 
@@ -1042,7 +1042,7 @@ flown loadout matches the screen for player and one wingman.
 art. Ammo lists number to 8 slots with blanks; blanks are data (absent guns), not padding to
 invent.
 
-## C25 ☐ Ammo selection screen
+## C25 ☑ Ammo selection screen
 
 **Goal.** Per `Campaign Ammo Selection.png`: ammunition pick per gun caliber group, rocket pick
 per underwing hardpoint pair, the description text panel, top/bottom plane views, ACCEPT/CANCEL
@@ -1052,19 +1052,75 @@ binds in flight.
 **Evidence (confidence: traced for the base).** `Loadout.cs`/`WeaponDefs.cs`/`WeaponBench.cs` and
 the hangar's guns/hardpoints pages already model calibers, pylons and fills;
 `docs/formats/loadouts.md` documents resolution rules and confirms no on-disk player-loadout
-format (persistence goes through B11's store, informed by A2). Ammo descriptions:
-<TODO: locate the description strings (likely langui ids) during A6.>
+format (persistence goes through B11's store, informed by A2). Ammo descriptions: **resolved by
+A6.** `docs/formats/campaign-screens.md` "Ammo selection": ammunition is per gun group (four
+dropdowns, one per `CustomPlaneDef.Guns` slot, greyed when the slot's gun id is 5); ordnance is
+per pylon (eight cells, four per wing, deactivated past that wing's hardpoint count); description
+strings are ammunition title/body `3350`/`3370` with list rows `3360`, ordnance title/body
+`3380`/`3410` with list rows `3395`; the ordnance dropdown row is a position in a 12-row table
+filtered by campaign progress against a per-row mission threshold (AP/HE 1, Flak 2, Sonic 8,
+Flash/Smoke/Choker 7, Rear flash 12, Beeper/Seeker 17, Torpedo 20, None 1), not an ordnance id.
 
-**Approach.** Extend the hangar's guns/hardpoints page pattern into a campaign ammo page keyed by
-caliber group; write the selection into the profile store; bind on launch via the existing
-`Loadout.Bind`.
+**Implementation.** `CSVM/src/UI/CampaignAmmoPage.cs` (new), one `Registry` line in
+`CampaignFlow.cs`. Fourteen rows: four ammo groups, eight pylon cells (0-3 the left wing, 4-7 the
+right, campaign-screens.md's own cell model), then ACCEPT LOADOUT / CANCEL LOADOUT. A gun group's
+build (which slots mount a gun, at what calibre) and a wing's hardpoint count come from the target
+plane's own `CustomPlaneDef` (`CustomPlaneStore.Load(plane.Name)`) when it went through the
+hangar, else from the airframe's plain stock fit (`StockLoadouts.ForModel` over
+`PlanePickerRoster.AirframeNode(airframe)`) for the two profile-seeded starters, which never touch
+`CustomPlaneStore` (B13's own `HangarCampaignContext.SellPrice` fallback makes the same call). A
+starter's per-wing hardpoint split is derived from `Loadout.PylonFillOrder`'s first `Count`
+entries (1-4 left, 5-8 right), the same split `CustomPlaneBuild.HardpointsFor` uses for a built
+plane, so both plane kinds resolve through one `SlotBuild` shape. The page edits a **working copy**
+(local `_ammo`/`_ordnance` arrays), the original's own `uiData` 2035/2034 model: nothing reaches
+`Flow.Profile` until ACCEPT (`Flow.Store.Save`), and CANCEL or backing out drops the copy. A
+re-entry onto the same (profile, slot, plane) after a cancel re-reads the still-unedited stored
+fit rather than the discarded edits (`EnsureLoaded`'s own identity check, forced to reload whenever
+`Discard` last ran). Which aircraft: `Flow.AmmoSlot` 0 reads/writes `Profile.Planes[SelectedPlane]`,
+1 reads/writes `Profile.Planes[WingmanPlane]`, per the shared field C24 also reads.
+
+**Ordnance encoding (CSVM-side, not the save's).** `saved-games.md` states the original's per-pylon
+ordnance id is undecoded. `OwnedPlane.Ordnance[cell]` here instead holds a **table index into
+`stock_loadouts.json`'s `pylon_ordnance` list**, which is already ordered row-for-row identically
+to campaign-screens.md's threshold table (AP, HE, Flak, Sonic, Flash, Rear flash, Smoke, Choker,
+Beeper, Seeker, Torpedo, None): `0` means unset, defaulting to the documented universal stock fit
+(HE, table index 1, `wep_06`, per loadouts.md's Stock table note that "every pylon carries
+`wep_06` in stock fit"); `1..12` is table index `0..11` plus one. `OwnedPlane.Ammo[slot]` keeps B11's
+already-shipped convention unchanged: `0..3` the ammunition index (slug/dumdum/ap/magnesium),
+`4` no gun. **Candidate backlog item:** decode the original's own per-pylon ordnance id (the
+CSVM-side table index above is a deliberate stand-in, not a recovery of it), which would let a
+future writer round-trip an original `SavedGames\` plane record's ordnance field losslessly.
+
+**Art.** `extracted\rimage\OL_PLANEDIAGRAMSTOP.PNG` / `OL_PLANEDIAGRAMSFRONT.PNG` are the top/front
+plane views `ol_p_planetopicon`/`ol_p_planefrticon` draw (frame = airframe index, the same
+multi-frame idiom `FC_PlaneIcons.png` uses). Both ship as PNG; `TgaImage` (the hangar art seam's
+only decoder) covers TGA alone. Rather than invent a PNG decoder outside this item's file
+boundary, `Art`/`RowArt` return null (never invented). **Candidate backlog item:** a PNG decoder
+for `HangarArt`'s art seam, which would also unblock any other `rimage\*.PNG` art no page draws
+yet.
+
+**Wiring contract for flight (not applied; `Loadout.Bind`/C24/D31 own it).** The fields C24/D31
+bind into a flying loadout are exactly `OwnedPlane.Ammo`/`OwnedPlane.Ordnance` on
+`Profile.Planes[SelectedPlane]` (pilot) and `Profile.Planes[WingmanPlane]` (wingman), read the same
+way this page's `EnsureLoaded` reads them. Turning an ammo index into a `wep_*` id is
+`StockLoadouts.GunWeaponId(caliber, ammoName)`, already shipped; turning an ordnance table index
+into a `wep_*` id is a lookup into `StockLoadouts.Load().Options.PylonOrdnance[index].Id`, the same
+list this page reads its labels from.
 
 **Model recommendation.** medium.
 
-**Verify.** Scripted flow: change one caliber's ammo and one hardpoint, ACCEPT, launch, assert the
-bound weapons via the in-engine harness; CANCEL leaves the stored fit untouched.
+**Verify.** `dotnet build`/`dotnet format` clean (0 warnings), comment caps clean. `dotnet test`
+**2059/2059**, six new units in `CampaignAmmoPageTests.cs`: group/hardpoint derivation from a
+hangar-built plane and from a starter's stock fit, a greyed no-gun group's Step being a no-op, the
+ordnance filter honouring the mission-threshold table at ordinal 1 (only AP/HE/None reachable) and
+ordinal 20 (torpedoes reachable), ACCEPT persisting into the store while CANCEL (and a re-entry
+after it) leaves the stored fit untouched, and the wingman slot editing `Profile.Planes[WingmanPlane]`
+rather than the pilot's plane. **Verified.** <pending orchestrator run>
 
-**⚠ Traps.** Which ammo types exist per caliber is data (`WeaponDefs`), not a list to author.
+**⚠ Traps.** Which ammo types exist per caliber is data (`WeaponDefs`), not a list to author. A
+rocket dropdown's row is a position in the campaign-progress-filtered table, never an ordnance id
+straight off the row index (A6's trap, `campaign-screens.md`). Ammunition and rockets are free
+(A5's disproof): this screen never touches `Flow.Profile.Funds` or any wallet path.
 
 # Wave D — in-mission campaign machinery
 

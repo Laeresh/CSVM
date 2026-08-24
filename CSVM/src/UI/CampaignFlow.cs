@@ -118,6 +118,7 @@ public sealed class CampaignFlow
         [CampaignScreen.Roster] = flow => new CampaignRosterPage(flow),
         [CampaignScreen.Cabin] = flow => new CampaignCabinPage(flow),
         [CampaignScreen.PreviousMissions] = flow => new CampaignPreviousMissionsPage(flow),
+        [CampaignScreen.Ammo] = flow => new CampaignAmmoPage(flow),
     };
 
     private readonly Dictionary<CampaignScreen, ICampaignPage> _pages = new();
