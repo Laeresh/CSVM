@@ -126,13 +126,15 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 41. ☐ E41 Recheck the autogyro low-speed nose-down report (`BL-388`)
 42. ☐ E42 Publish the eleven-airframe parity ledger
+43. ☐ E43 Enable the decoded AOA window and settle α against the original
 
 ## Dependency and parallelism notes
 
 A1 precedes every edit to `FlightModel.cs`. A2 blocks A3 and the final envelope verdict. A4 may
 run beside A2. B11-B13 are independent after A2, but B11 and B12 contend on `FlightModel.cs`.
 C21 → C22 → C23 is a chain. D31 and D32 share the torque accumulator and run serially; D33 and
-D34 are independent. E41 follows A2/B11, and E42 follows every other item.
+D34 are independent. E43 follows B11 and precedes E41 and E42, which both judge the plant with
+the AOA window live; E42 follows every other item.
 
 ---
 
@@ -867,3 +869,39 @@ which the runtime does not offer. `BL-089` deleted from `backlog.md`.
 **Verify.** Run `RunTests.ps1`, all eleven deterministic dumps, eight chapter regressions and every owed parity playtest; perturb each ledger class's instrument once.
 
 **⚠ Traps.** Passing mechanism tests proves the port is internally consistent, not that every original-game observation agrees. Preserve conflicts verbatim.
+
+## E43 ☐ Enable the decoded AOA window and settle α against the original
+
+**Goal.** Ship the opposing-command limiter's AOA window at its decoded strength (user decision,
+plan Decision 1 applied strictly), then determine whether the α CSVM's plant holds in a full pull is
+the α the original holds, so the window's effect on the pitch rate is judged against the right
+plant rather than tuned away.
+
+**Evidence (confidence: traced for the window, lead-only for α).** `B11` decoded the window
+(`(cos α − cos maxAOA)/(1 − cos maxAOA)`, `0x48c9f4`–`0x48ca18`) and measured it non-inert: at
+this plant's 32–38° full-pull α it roughly halves the elevator, moving the Bloodhawk pitch rate
+32.43 → 22.51 °/s against the filmed 33.00, the sustained turn 34.5 → 25.8 °/s toward its 18.95,
+and the zoom climb 821 → 1280 ft away from its 936. The original reaches 33 °/s with this window
+live, which is evidence about α, not about the window: `A2`'s lag reader at 0.75/s structurally
+implies tens of degrees of nose–path separation at 33 °/s, and `B11`'s limiter reads the previous
+tick's lift.
+
+**Approach.** Two halves in order. (1) Set `AoaLimiterFactor` to 1 (inventory row and census
+updated, the seam kept), A/B the eleven-airframe dump and record every moved row in the dossier
+as a decoded change; the six flight goldens re-pin only after the user has reviewed the montage.
+(2) Decode what bounds α in the original in a full pull: the `liftAOAs` blend thresholds, the AOA
+clamp in `FUN_0041abd0`, the 8 ft/s low-speed lift gate, and whether the limiter reads the same
+tick's lift or the previous tick's; then replay the pull on both plants and attribute the residual
+to a named term or record it as a conflict.
+
+**Model recommendation.** **max** — the plant's highest-coupling question, with a FAIL row at
+stake and every earlier disproof as a constraint.
+
+**Verify.** With the window live, `LatentControlAuthorityTests` still passes; the dump's moved
+rows are each attributed; a pull-to-limit scenario on the Bloodhawk logs α, the window factor and
+the pitch rate per step, and either matches 33 °/s within the footage rule's error or records the
+residual as a conflict with the term it belongs to.
+
+**⚠ Traps.** Do not close the gap by weakening the window, the lag rate or `maxAOA`; each is
+decoded. A pitch-rate match bought by a fitted factor fails Decision 1. Footage rates carry
+`DET-11`/`DET-12` error; state the band before declaring a match or a conflict.
