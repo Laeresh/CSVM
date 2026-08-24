@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ C21 Complete collision damage and sustained-contact decoding (`BL-381`)
 22. ☑ C22 Remove or justify the invented graze/stop laws (`BL-271`)
-23. ☐ C23 Validate building-corner collision feel (`BL-120`)
+23. ☑ C23 Validate building-corner collision feel (`BL-120`)
 
 ### Wave D — Settle designed but unproven features
 
@@ -574,13 +574,13 @@ move: `c1-crash` is `--crash=5`, whose aircraft is already crashed and never run
 **Verified.** Full `RunTests.ps1` battery on the lane tree: build clean, 2084/2084 units,
 94/94 engine suites with engine errors clean, 16/16 goldens hash-identical, exit 0.
 
-## C23 ☐ Validate building-corner collision feel (`BL-120`)
+## C23 ☑ Validate building-corner collision feel (`BL-120`)
 
 **Goal.** Confirm the settled collision plant feels like the original at building corners.
 
 **Evidence (confidence: lead-only).** The backlog records an owed at-controls comparison, not a mechanism.
 
-**Approach.** <TODO: re-verify still-open against `git log --grep=BL-120` and `playtest.md`.> Run matched original/CSVM corner approaches after C21-C22. The same sitting covers `BL-121`'s
+**Approach.** Run matched original/CSVM corner approaches after C21-C22. The same sitting covers `BL-121`'s
 owed graze-feel check (kick, friction, stop behavior as settled by C21-C22), so that item needs no
 separate flight; its breakup-scatter remainder stays in the backlog.
 
@@ -609,8 +609,24 @@ dent, which is why the ledger read full again between grazes; the sweep origin i
 the input, so a respawn sweeps from the spawn. `SweepCadenceTests` pins the cadence, the
 shallow-then-steeper sequence (hull 80, 60, 40), a sustained scrape dying in three spends, and the
 spend-gated control that locks onto the free steps. The dossier's "What the parity is ported as"
-is corrected as a port error, not a decode error. Owed the re-fly: corner and scrape contacts
-must now cost the 50 floor on every resolved contact, one per two sim steps in a sustained scrape.
+is corrected as a port error, not a decode error.
+
+**Landed.** Judged at the controls on the fixed build (C5, Bloodhawk, the frozen sitting worktree),
+five strikes against the original's `CAP-14` behavior: a mild corner kiss reads as a graze with
+enough push-back to clear the wall and no trampoline rebound; the hard corner flips between
+survival and death on angle the way the original's does; a head-on corner strike dies at once with
+no slide or bounce; the shallow belly skim comes off the ground and flies on, and a sustained wall
+scrape kills in roughly three spends on the 80-point hull; and no kick or drag reads as invented.
+The regression the first sitting found is gone: a second, steeper contact on the same wall after a
+shallow graze now spends into the hull. `BL-120` and `PT-53` close on that verdict; `BL-121` loses
+its blocked tag and keeps only its breakup-scatter judgement. One thing the sitting could not judge:
+the original's per-contact camera shake (`FUN_0048d2c0`'s block-5 kick, decoded in `C21`) is not
+ported, so CSVM's strikes read slightly quieter than the original's for a reason outside the
+contact physics.
+
+**Verified.** The fixed build's code is the lane commit whose full `RunTests.ps1` battery read
+2136/2136 units, 94/94 engine suites, 16/16 goldens hash-identical; this item adds no code, and
+its evidence is the at-the-controls verdict above.
 
 # Wave D — Settle designed but unproven features
 

@@ -434,24 +434,6 @@ reasons that have nothing to do with any of these checks.
   *Variations:* one flight each — repeat with `--chapter=C3`, then `--chapter=C2`; (d)'s four
   untouched chapters need only a glance in each.
 
-- `PT-53` `[Own]` **Graze feel now that a graze bounces (`docs/plans/PLAN-ai-flight.md` `C25`, landed
-  2026-08-15, closing `BL-172`).** A survivable scrape now rebounds along the contact normal off the
-  shipped `bounce_factor` 0.6, where before it only slid. Three surfaces, at speed, in C1 or C5:
-  - (a) **a shallow belly skim over flat ground** — the plane should come off the ground and fly on,
-    not skip like a stone or bury itself. This is the case the suite measures at `e = 0.56`;
-  - (b) **an oblique scrape along a building wall or a cliff face** — the rebound there is
-    horizontal, so the altimeter should barely move; what to judge is whether being pushed off the
-    wall reads as a graze rather than as a bounce off a trampoline;
-  - (c) **a building corner** — `CAP-14` shows the original surviving a 144.5 mph graze on a C5
-    skyscraper and dying at 144.2 against another, so survival there is geometry, not speed.
-  ⚠ The decoded response has since replaced the fitted graze friction and kick, and the invented
-  crash, stop and cooldown laws are retired against the decoded death rule
-  (`git log --grep=BL-381`, `git log --grep=BL-271`), so no contact constant is TUNE any more. If a
-  graze feels wrong, the decoded response and the parity cadence a sustained scrape spends damage at
-  are the suspects — not `bounce_factor`, which is authored data.
-  *Blocks:* `docs/plans/PLAN-ai-flight.md` F52's player-side graze check (C25) — no separate PT item
-  repeats it.
-
 ### AI flight — external view, own build (F52 AI arm)
 
 - `PT-54` `[Own]` **AI plant A/B against the old plant (`docs/plans/PLAN-ai-flight.md` C21–C24, F52 AI

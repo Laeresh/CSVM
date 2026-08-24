@@ -109,14 +109,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   only the trail shows; and the DISTANCE interval hides behind an inverted flag
   (`has_interval_value` false, key off `interval_type`).
 
-- `BL-121` `[Tuning]` `[Owed-playtest]` `[Blocked: PLAN-flight-model-parity C23]` **Damage (Run-2 item 10)** —
-  breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
-  real flight. ⚠ The invented contact constants this item used to name are gone: the crash speed,
-  the stop speed, the graze friction and the fitted kick are retired against the decoded response
-  and the decoded death rule (`git log --grep=BL-271`, `git log --grep=BL-381`), so there is
-  nothing to tune there.
-  The at-the-controls graze-feel check rides `C23`'s corner session. What remains this item's own
-  after Wave C is the breakup-scatter feel judgement.
+- `BL-121` `[Tuning]` `[Owed-playtest]` **Damage (Run-2 item 10)** — breakup scatter, and whether
+  the 10c panel-flip and smoke-trail look right in real flight. ⚠ The invented contact constants
+  this item used to name are gone: the crash speed, the stop speed, the graze friction and the
+  fitted kick are retired against the decoded response and the decoded death rule
+  (`git log --grep=BL-271`, `git log --grep=BL-381`), and the graze feel is judged at the controls
+  as matching (`git log --grep=BL-120`), so nothing contact-side remains here. What is this item's
+  own is the breakup-scatter feel judgement.
   Rendering at real spawns is verified (the `TopLevel` anchor fix, `docs/HISTORY.md`
   2026-08-03, `trail-world-anchor` suite); this item is a magnitude/feel judgement. Tree softness is retired dead code
   (`docs/HISTORY.md` 2026-07-23), not a TUNE — do not re-add it here.
@@ -933,8 +932,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the authority ramp itself.
   *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (player arm), `BL-330` (the authority ramp this pairs
   with).
-
-- `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
 
 ## Environment & world
 
