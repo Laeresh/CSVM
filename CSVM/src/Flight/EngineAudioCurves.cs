@@ -21,7 +21,7 @@ public readonly record struct EngineDrive(
 /// The curves themselves are player.json globals carried on <see cref="PlaneStats"/>; the
 /// definition names are the airframe's own vehicle.json keys (docs/formats/vehicle.md).
 /// </summary>
-internal static class EngineAudioCurves
+public static class EngineAudioCurves
 {
     /// <summary>Distance from the listener past which an AI aircraft's engine and whine are both
     /// stopped, and inside which they start again: 2000 world units, the square root of the
@@ -53,21 +53,28 @@ internal static class EngineAudioCurves
     private const float BoostVolumeParam = 1.17f;
     private const float BoostPitchParam = 1.25f;
 
-    /// <summary>The engine slot's definition and its pitch multiplier. A damaged airframe swaps the
-    /// slot onto <c>damaged_engine_sound</c> and draws the multiplier once, so it holds for as long
-    /// as the swap does; an undamaged one runs its own <c>engine_sound</c> at multiplier 1.</summary>
-    internal static (string Name, float PitchMul) EngineDefFor(
-        PlaneStats stats, bool damaged, RandomNumberGenerator rng)
+    /// <summary>The engine slot's definition and its pitch multiplier: damaged swaps onto
+    /// <c>damaged_engine_sound</c> with a drawn multiplier; else <paramref name="cockpitView"/>
+    /// (own-ship only, the full Cockpit view — the original leaves the Nose view on the plain def,
+    /// confirmed at the controls of the original) swaps onto <c>cockpit_engine_sound</c> at
+    /// multiplier 1; else the plain <c>engine_sound</c>. Precedence is a port decision — no def
+    /// authors a damaged cockpit variant, so damage keeps the more important cue.</summary>
+    public static (string Name, float PitchMul) EngineDefFor(
+        PlaneStats stats, bool damaged, RandomNumberGenerator rng, bool cockpitView = false)
     {
-        if (!damaged || stats.DamagedEngineSound is not { } damagedName)
+        if (damaged && stats.DamagedEngineSound is { } damagedName)
         {
-            return (stats.EngineSound, 1f);
+            float mul = stats.DamagedEnginePitchRandom
+                ? stats.DamagedEnginePitchLo
+                  + ((stats.DamagedEnginePitchHi - stats.DamagedEnginePitchLo) * rng.Randf())
+                : 1f;
+            return (damagedName, mul);
         }
-        float mul = stats.DamagedEnginePitchRandom
-            ? stats.DamagedEnginePitchLo
-              + ((stats.DamagedEnginePitchHi - stats.DamagedEnginePitchLo) * rng.Randf())
-            : 1f;
-        return (damagedName, mul);
+        if (cockpitView && stats.CockpitEngineSound is { } cockpitName)
+        {
+            return (cockpitName, 1f);
+        }
+        return (stats.EngineSound, 1f);
     }
 
     /// <summary>The two quantities the engine slot reads off the airframe, in the original's own

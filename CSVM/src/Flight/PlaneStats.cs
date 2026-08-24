@@ -240,6 +240,16 @@ public sealed class PlaneStats
     // pi/180 on the way in. The shipped 1.0 is a 1-degree cone.
     public float StickyBulletInaccuracy = Mathf.Pi / 180f;
 
+    // C22's autohead velocity-follow (docs/formats/vehicle/player-globals.md): the idle-frame
+    // lean into the plane's own velocity that HeadLook.IdleAim drives in Cockpit only. All three
+    // fallbacks are the executable's own compiled defaults, not this install's authored values —
+    // ⚠ turn_max's asymmetry is the trap: the AUTHORED path converts degrees to radians and then
+    // DOUBLES the result (the loader's own arithmetic), where the compiled DEFAULT is already the
+    // doubled radian value stored directly, with no further doubling applied to it.
+    public float AutoheadTurnTime = 0.75f;          // autohead_turn_time, s — no conversion
+    public float AutoheadTurnMax = 0.1f;            // autohead_turn_max fallback, RADIANS already
+    public float AutoheadTurnMinPitch = -0.05235988f; // autohead_turn_min_pitch fallback, RADIANS already
+
     // sound: the three engine-slot def names are vehicle.json keys, the curves are player.json
     // blocks every airframe indexes. Engine curves run on throttle [0..1]; the whine ('prop_sound')
     // and rattle run on speed/fd_speed. Slot assignment: docs/formats/vehicle.md.
@@ -247,10 +257,12 @@ public sealed class PlaneStats
     public SoundCurve EngineVolume = new(0.1f, 1f, 1f, 1f);
     public SoundCurve EnginePitch = new(0.1f, 0.6f, 1f, 1f);
 
-    /// <summary>vehicle.json <c>cockpit_engine_sound</c>, the engine def the original swaps onto the
-    /// engine slot in its two cockpit camera modes. ⚠ Nothing selects it here: CSVM's camera set is
-    /// external throughout, so its numpad 6/7 are flank views and not the original's modes 6/7
-    /// (<c>BL-080</c>). Read so the reader is complete; do not bind it to a numpad view.</summary>
+    /// <summary>vehicle.json <c>cockpit_engine_sound</c>, the engine def the original swaps onto
+    /// the engine slot while the pilot's SELECTED view is the full Cockpit (mode 6) — not the Nose
+    /// view, confirmed at the controls of the original — and back on leaving it. Selected by
+    /// <see cref="EngineAudioCurves.EngineDefFor"/> and driven by <c>FlightAudio</c>
+    /// (<c>BL-161</c>, closed by D31); a held numpad key or look-behind is a per-frame pose and does
+    /// not retrigger the swap, only a change of selection does.</summary>
     public string? CockpitEngineSound;
 
     /// <summary>vehicle.json <c>prop_sound</c>, the overspeed dive whine's def. ⚠ Stays null
@@ -694,6 +706,16 @@ public sealed class PlaneStats
             // writes catchup_rate's global); the shipped player.json always carries the key.
             stats.StickyBulletInaccuracy = Mathf.DegToRad(
                 player.Float("sticky_bullet_inaccuracy", Mathf.RadToDeg(stats.StickyBulletInaccuracy)));
+
+            // autohead_* (C22, docs/formats/vehicle/player-globals.md): turn_max's authored
+            // degrees are converted THEN DOUBLED, unlike its already-doubled compiled default.
+            stats.AutoheadTurnTime = player.Float("autohead_turn_time", stats.AutoheadTurnTime);
+            stats.AutoheadTurnMax = player.TryFloat("autohead_turn_max", out var turnMaxDeg)
+                ? Mathf.DegToRad(turnMaxDeg) * 2f
+                : stats.AutoheadTurnMax;
+            stats.AutoheadTurnMinPitch = player.TryFloat("autohead_turn_min_pitch", out var minPitchDeg)
+                ? Mathf.DegToRad(minPitchDeg)
+                : stats.AutoheadTurnMinPitch;
 
             // Flight globals for the decoded model — see the field comments above for units and
             // fallback provenance. Not yet read by FlightModel.cs.

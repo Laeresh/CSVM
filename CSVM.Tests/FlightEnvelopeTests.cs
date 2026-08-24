@@ -8,15 +8,16 @@ namespace CSVM.Tests;
 /// The Bloodhawk's flown envelope against the original's, measured off cockpit-gauge video
 /// (engine-free: <c>Probes.FlightEnvelope</c> touches no live Node). These are golden numbers:
 /// the original is a fixed artifact, so each measured figure is an invariant of it.
-/// The probe's informational rows are deliberately not asserted; the three recorded as conflicts
-/// rather than open questions, and why, are in docs/org/flightModel.md's C23 landing note.
+/// The probe's informational rows are deliberately not asserted; those recorded as conflicts
+/// rather than open questions, and why, are in docs/org/flightModel.md's C23 landing note and its
+/// "The *Tune rates" section, which owns yaw-360's demotion.
 /// A demotion to informational is never the quiet way to make a run green.
 /// </summary>
 public class FlightEnvelopeTests
 {
     // How many flight scenarios carry a measured target to assert. Pinned so that
     // silently demoting one to informational cannot read as a green run.
-    private const int FlightScenarios = 7;
+    private const int FlightScenarios = 6;
 
     private static string ZrdrPath =>
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));

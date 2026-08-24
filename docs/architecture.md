@@ -121,7 +121,10 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/SmokeScreens.cs` — the smoke screen's stun trap: the world's active screens, walked over the roster every sim step to stun AI and wash humans behind the layer; the cone rule, the wash cadence and the three `player.json` tunables beside it.
 - `src/Flight/BeeperTags.cs` — the beeper's paint and the seeker's pick: the world's tag list with its countdown, dead-aircraft slam and five-second tail, the tagging gate, and the per-frame query with the original's inverted-dot, squared-distance selection rule.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
-- `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, the weapon lab's held-airframe orbit. Steers a `Camera3D` it does not own.
+- `src/Flight/PilotViewMode.cs` — the three player-selectable views (Chase/Cockpit/Nose, valued as the engine's own camera modes 0/6/7) and `PilotView`, the pure rules over them: cycle, first-person test, the held-key override and whether the numpad holds a fixed view at all in this mode (`HoldsFixedViews` — it does not in first person, where the numpad is the head-look snap cluster), the `--view=` spelling. Engine-free, so the decisions unit-test.
+- `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, the pilot's selected view mode, the weapon lab's held-airframe orbit. Steers a `Camera3D` it does not own.
+- `src/Flight/HeadLook.cs` — the pilot's head in a first-person view: snap directions, free-look integration, the center key, and the exponential smoothing that carries the shown angles to their targets. Engine-free, so every law unit-tests.
+- `src/Flight/CockpitVisibility.cs` — the per-mode hiding of the pilot's OWN aircraft in a first-person view: interior in and body out for Cockpit, both out plus `markers`/`dontmove` for Nose, everything back for any external pose. `Rules` is pure; `Bind`/`Apply` write it onto one built plane model.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, the steering step (turn clamp, speed penalty, `LOCK_ON_LEAD`, the seeker's retarget), tracers, flashes, per-surface impact, damage to destructibles, the beeper's paint.
 - `src/Flight/ProjectileFlyoutAnim.cs` — `ProjectilePool`'s `FLYOUT MODEL_ANIMATION` half: each ordnance round runs its def on the sequence interpreter, the pool as host (trail puffers, the torpedo's launch look and switch, its sounds).
@@ -208,6 +211,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
 - `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session; also the hangar's two doors and its renderer.
+- `src/UI/InstantActionPresets.cs` — the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
 - `src/UI/PlanePickerRoster.cs` — the one roster every human plane picker draws: 11 stock airframes then the store's saved customs, each custom carrying its store name and its airframe's stock node (D32's launch seam); engine-free build/lookup rules.
 - `src/UI/HangarFlow.cs` — the Build Custom Plane flow, engine-free: the original's nine screens over one scratch `CustomPlaneDef`, back/next navigation, the `IHangarPage` mount point C22-C26 fill (rows, detail, stepper, optional page `HangarArt` and a per-row one), the plane-selection screen's two-stage delete (the original's Sell Plane with no economy to sell into), and the gated commit into `CustomPlaneStore`.
 - `src/UI/HangarAirframePage.cs` — the AIRFRAME screen: all 11 airframes as rows, focus previewing one and confirm picking it (raising the string-206 defaults ask as an inline two-row confirm), the stat table's figures and the economy's star ratings per row, the focused airframe's blueprint TGA as page art; nothing is ticked until a pick is made and the ←→ stepper is inert.
@@ -434,6 +438,52 @@ Flight (`spinningProps`) now builds the static `staticpropN` disc alongside the 
 it always built, not just one or the other — the startprops/stopprops choreography cross-fades
 between them at spawn/engine-stop (`FlightController`), so both must exist. `staticrotorN` (the
 autogyro) is unaffected and stays skipped in flight — that def only names propeller nodes.
+`Build` also reads `CockpitCameraOffset`, the plane-local `cockpit_camera` marker translate
+(`MarkerRig.FindNamedMarker`, fallback the origin), for `CameraController`'s first-person
+placement (PLAN-cockpit-view, A2); the marker read walks past the alternate-state subtrees to the
+authored node in the top-level `markers` group.
+
+`cockpitInterior: true` (PLAN-cockpit-view, B11) takes `cockpit1` back out of the skip list for
+that build alone and mounts it hidden as `CockpitInterior`: local transform = the
+`cockpit_camera` offset, a uniform `InteriorScale`, and the fixed
+`CameraController.HeadPitchOffsetRad` tilt, then `ParkInteriorStates` walks it. Only a
+human rig asks for it — an AI plane never builds a cockpit. The subtree's `pcdp4`/`pcdp6` torn-skin
+panels build hidden alongside it, kept off `DamagePanels` (the exterior set the pairing walk
+measures mesh centers over) and exposed instead on their own `CockpitDamagePanels` list, which
+`DamageVisuals` flips off the same `pdpanel4`/`pdpanel6` entries as the exterior pair (B12).
+
+⚠ **The interior's off-states ship `active: true`.** Five windshield bullet-hole groups
+(`bullet1`…`bullet5`) and two warning lamps (`lowalt_on`/`stallwarning_on`) are authored visible on
+all 11 airframes and hidden engine-side until something drives them, so an unparked build paints
+bullet holes across the sky of a pristine plane and holds both lamps lit. `IsInteriorDrivenState`
+is that named set; `ParkInteriorStates` hides it plus anything the gamez marks `active: false` (the
+Devastator's `nitrogauge`, the only such node). ⚠ It is a NAMED set, not a blanket hide: the
+damage-dial zones, the belt segments and the needles are always-drawn geometry that changes
+COLOUR, which is `GaugeCluster`'s own decode of the same nodes.
+
+⚠ **The interior is authored in its own space, and the two spaces are not a similarity apart.**
+The eye sits at `cockpit1`'s origin looking down −Z (`extracted/zrdr/instruments.zrd.json` places
+the whole instrument panel at z −17.5 straight ahead of it), while the interior's own elevators sit
+at y −10.5 where the exterior's sit at −0.40 — it is a stylised model built to be looked at from
+one point, not a scaled copy of the aircraft. So the framing is scale-invariant and
+`InteriorScale` is a port TUNE choosing only how the interior composites against world geometry.
+`cockpit2` is skipped defensively and appears in no shipped tree.
+
+⚠ **The mount carries the −4.70° head-pitch tilt, and that is what puts the gunsight on the guns.**
+The offset tilts the WORLD view down; the pilot's relationship to his own cockpit does not tilt
+with it, because the original draws the interior in its own pass from the interior origin along the
+interior's own −Z. Mounting the subtree tilted is how a single-pass renderer says the same thing.
+Measured against `OriginalScreenshots/Videos/CAP-02 Cockpit Second10.mp4`: there the sight ring's
+crosshair sits 4.79° above screen centre and never moves by a pixel across the clip, which is the
+head-pitch offset itself — the sight is on the nose axis, and the gun pipper (which marks that same
+axis, `ImpactReticle`) sits on it in straight flight. Mounted untilted the sight rides 3.9° above
+the pipper and the two never meet. Head-look is NOT applied to the mount: the interior stays
+plane-fixed, so panning the head still swings the cockpit across the view, as the original does.
+⚠ A residual remains: the tilted mount overshoots by 0.60°, leaving the pipper ~6 px above the
+crosshair at 720p where the original has them coincident. The exact fit is a 3.82° tilt, but that
+is a Bloodhawk-fitted number with no decode behind it and the sight's height is per-airframe
+geometry, so the decoded constant is what ships. `BL-` follow-up: measure the same offset on a
+second airframe's cockpit footage before trading the constant for a TUNE.
 
 ## src/Mech3/PaintScheme.cs
 One aircraft livery: pattern name + three colours + three decal indices — the paint_* record a
@@ -653,6 +703,10 @@ root, accumulating locals down to each `firepoint*`/`pylon*`/`target`, and repor
 positions + co-located groups (two gun groups on one mount). `Format` prints one dump block per
 plane; `PlayerAirframes` is the model→display list. The committed instrument `docs/formats/markers.md`
 regenerates from, and the source of truth `--dump-markers` and `UI.MarkerOverlay` share.
+`FindNamedMarker` is the sibling read for one non-weapon node by name (e.g. `cockpit_camera`,
+`PlaneBuilder.CockpitCameraOffset`'s reader): the same accumulate-below-root walk, skipping
+`cockpit1`/`cockpit2`/`destroyed`/`player_damage_off` so a plane whose interior/wreck carries its
+own same-named node still resolves to the authored one in the top-level `markers` group.
 
 ## src/Mech3/CompiledAnim.cs
 Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): typed defs, events,
@@ -758,6 +812,12 @@ it too, and both the family and the motion value types reach it only through `Re
 `FBFX_COLOR_FROM_TO`/`LIGHT_ANIMATION` report their `run_time` as the
 event's duration, spacing a chain instead of firing it in one instant; decode in
 `docs/formats/anim-definitions.md`.
+`PLAYER_1ST_PERSON` (condition 120) answers off the `FirstPersonView` seam, polled per
+evaluation: the session hands over "any human pilot is in Cockpit or Nose"
+(`GameSession.AnyPilotFirstPerson` off each rig's `FlightController.FirstPersonView`), and a
+runtime with no seam wired — a lab, a test, the bootstrap before any rig exists — reads false,
+which is what this condition answered everywhere before the view modes existed. Regression: the
+`first-person-condition` suite, over the shipped `bullet1` def.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
@@ -1369,11 +1429,92 @@ the camera meant choosing a menu row swung the view. `FlightController` writes n
 camera while a board is up, and the free look moved behind the board's Photo Mode row, which hands
 the pane to a `SpectatorCamera` instead. `Held` is the only remaining orbit source here, and no
 menu shares its keys. Steers a `Camera3D` it does not own, as `UI/OrbitCamera` does for the
-static viewer. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
+static viewer. Beside the held views it carries the pilot's SELECTED view mode (`ViewMode`,
+`FirstPerson`, `CycleCockpitViews`, `SelectChase`): Chase, Cockpit or Nose, seeded from
+`--view=cockpit`/`=nose` and changed at the controls by F8 (cycle the first-person pair) and F6
+(back to chase). The decisions themselves are `PilotView`'s, not this class's, so they are testable
+without an engine; this class holds the state and the camera. ⚠ The modes are deliberately NOT rows
+in `Views`: `BL-150` rebuilds that table later and must be able to replace it without touching them
+(PLAN-cockpit-view, Decision 2). ⚠ Outside first person a held numpad key overrides the mode for as
+long as it is down and leaves the selection alone, the same precedence it has over `--view=`'s
+pinned digit; INSIDE Cockpit or Nose it holds no view at all, because the numpad is the head-look
+snap cluster there, which is what the original binds it to (`OriginalScreenshots/Keybinds Views
+2.png`: `Kp1`–`Kp9` = Look Up/Left/Rear … Look Forward … Look Up/Right). `PilotView.HoldsFixedViews`
+is that rule and `ActiveView` returns −1 under it, so the per-frame chain and `Snap` obey it
+together. Numpad 0's look-behind is outside the cluster and still overrides every mode. Cockpit and
+Nose sit at the plane's authored `cockpit_camera` marker (`FirstPersonPose`, a static, engine-free
+law: `camera_world = plane_pos + plane_rotation × offset`, plus the fixed −4.70° head-pitch
+tilt — `FirstPersonView` is its thin write onto the owned `Camera3D`), rigidly mounted with no
+smoothing and no camera-side shake so the camera inherits the plane node's wobble for free
+(`docs/org/shakes.md`). The offset comes in through the constructor
+(`PlaneBuilder.CockpitCameraOffset`, fallback the origin). The aim is `Head`'s (a `HeadLook`)
+current angles, composed azimuth-about-the-plane's-up then elevation-about-the-yawed-right-axis,
+with the fixed tilt riding the elevation axis; `Snap` recenters the head, so a respawn never frames
+itself over the pilot's shoulder. Each mode carries its own FOV
+(`HorizontalToVerticalFovDeg`, a static, engine-free law: `vertical = 2·atan(tan(H/2) ·
+(4/3)/liveAspect)`, 80°H Cockpit / 60°H Nose — `ApplyFirstPersonFov` is its thin write, reading
+the owned camera's OWN viewport for the live aspect so a splitscreen pane derives its own answer).
+Every other pose runs on the external FOV the camera carried at construction
+(`RestoreExternalFov`, captured once so this class never reaches into `GameSession`'s 62° global);
+`FlightController._Process` calls it by default and only the `FirstPerson` arm overrides it, so a
+look-behind while SELECTED Cockpit/Nose gets the external FOV while held and the first-person FOV
+back on release. `Snap` and `CrashView` carry the same default/override shape, so
+a spawn/respawn/crash-cut never shows a stale FOV. `LogView` already names the modes
+(`view n=cockpit`), which is what makes a scripted mode selection verifiable. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
 authored) plus a first-order acceleration transient relaxing at the MEASURED 0.65 /sim-s
 (`UpdateDynamics`, host-called once per sim step); the offset's DIRECTION (behind and above at
 ~15.7° elevation) is not in the data and stays hand-picked. Collaborators: `FlightController`
 (the only host) and `CamParams`.
+
+## src/Flight/HeadLook.cs
+The pilot's head in the two first-person views, decoded from the original's shared look controller
+(`docs/PLAN-cockpit-view.md`, "What the data actually ships"). It holds two pairs of angles: the
+TARGETS the input sets, and the SHOWN angles that chase them exponentially,
+`shown = target + (shown − target)·e^(−rate·dt)`, at 3.0/s for elevation and 5.0/s for azimuth.
+Elevation is 0 at level and +π/2 straight up, clamped to `ElevationFloor`..π/2; azimuth is 0 dead
+ahead, positive to the left, wrapped to ±π. `Step` picks this frame's target and then always
+chases it, so snap, free-look, the center key and C22's autohead all reach the eye through one law.
+The three input paths are the original's: a **snap** direction maps to a target through
+`SnapTargets` (dead ahead looks straight UP, a 45° diagonal 45° up, anything else level, azimuth
+being the direction's own angle mirrored so that pointing right looks right), releasing it returns
+the targets to straight ahead; **free-look** integrates the targets at a fixed 2 rad/s along the
+input direction, which is normalised first because the rate IS the law — the original's input is a
+hat switch, so a light stick deflection pans exactly as fast as a hard one; the **center key**
+zeroes both targets at once and beats a held snap. ⚠ `ElevationFloor` is a constructor parameter,
+not a constant: the original's first-person caller passes 0 and its chase caller −π/2, and the
+chase look-around (a filed E41 item) is the same controller. `IdleAim` is C22's seam — consulted
+only on a frame with no look input at all, its answer becomes the targets directly, deliberately
+past the floor, because autohead's own floor is below level. `AutoheadTarget` (static, engine-free)
+is that seam's law: local-frame sideways/vertical velocity only (forward speed dropped — a port
+decision, docs/formats/vehicle/player-globals.md's autohead row), scaled by `autohead_turn_time`,
+capped in magnitude at `autohead_turn_max`, its components read DIRECTLY as (elevation, azimuth)
+rather than through an arctangent. `FlightController.AutoheadTarget` is `IdleAim`'s live wiring —
+gated on `ViewMode == Cockpit` and a `Config` toggle (`headLook.autohead`, default ON).
+
+Engine-free apart from `Mathf`, so every law unit-tests without a camera. Collaborators:
+`CameraController` (owns one as `Head` and composes its shown angles into the view basis) and
+`FlightController` (reads the devices and steps it on the SIM clock — a wall-clock step would run
+the smoothing 39% off, the same trap the chase distance transient records).
+
+## src/Flight/CockpitVisibility.cs
+The per-mode node hiding the original applies to the pilot's OWN aircraft while a first-person view
+is on the screen (`docs/org/cameraViews.md`, "Mode 6 = Cockpit" / "Mode 7 = Nose"): Cockpit draws
+`cockpit1` and hides the `healthy` body; Nose hides the interior, the body, and the `markers` and
+`dontmove` groups; every external pose renders the aircraft exactly as it was built. `Rules` is the
+whole decision as a pure function over `(PilotViewMode, firstPerson)`, so it unit-tests engine-free;
+`Bind` finds the four groups in a built plane model and `Apply` writes one frame's answer onto
+them. `FlightController._Process` calls it every frame beside the camera write, keyed to the pose
+that frame actually took — the look-behind is an external pose and brings the body back while it is
+held, the same shape `CameraController.RestoreExternalFov` has. A held numpad key reaches this only
+from an external selection, since in first person it drives the head instead of the camera.
+
+⚠ `Bind`'s group search is interior-blind: each gauge sub-assembly inside `cockpit1` carries its own
+`markers` child, so a plain depth-first walk can bind a gauge's instead of the airframe's.
+
+⚠ **Splitscreen is a shared scene tree.** Visibility is a property of the node, not of a viewport,
+so a pane whose pilot sits in the cockpit hides that plane's body in EVERY pane. Each rig owns its
+own plane model, so the rule is at least per-pilot rather than keyed to player 1; making it
+per-pane needs render layers, which Decision 5 defers.
 
 ## src/Flight/ImpactOutcome.cs
 "What should happen when this weapon hits this surface id" as a value — `EffectName` (the row's
@@ -2014,7 +2155,9 @@ gunner link) +
 engines.json stock engine power + player.json globals (the flight constants, the near-miss cue's
 `warning_shot_*` block, the gun aim assist's `sticky_bullet_catchup_rate`/`_forget_interval`
 (`AimAssist.cs`'s B2), `_dist_factor` (B4's scoring) and `_inaccuracy` (B5's launch scatter, stored
-in RADIANS as the original stores it), plus the decoded model's
+in RADIANS as the original stores it), the Cockpit head's `autohead_turn_time`/`_turn_max`/
+`_turn_min_pitch` (C22, `HeadLook.AutoheadTarget`'s constants — `turn_max`'s authored-vs-default
+asymmetry, docs/formats/vehicle/player-globals.md), plus the decoded model's
 lift/AoA/G, turn/yaw-curve, pitch-fade and drag-fade-speed globals — docs/org/flightModel.md; converted
 exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G; the turn/yaw
 curves are live in the model, the G limiters and the pitch fade deliberately not, being authored out
@@ -2029,8 +2172,9 @@ Two flavours of one airframe: `Load` resolves everything down the player chain, 
   model on the player chain. An AI aircraft is therefore **zone-less**: an authored `armor`/`health`
   pair and NO `destroyable_parts`, which is what every roster-named def chain resolves in the
   shipped game (`docs/org/vehicleDamage.md`'s 2026-08-16 correction). `DefName` stays the player
-  def on both flavours on purpose (`AiDefName`'s own doc); `damaged_engine_sound` parses fully
-  except `cockpit_engine_sound`, which needs a cockpit view (`BL-161`).
+  def on both flavours on purpose (`AiDefName`'s own doc); `damaged_engine_sound` and
+  `cockpit_engine_sound` both parse fully — `EngineAudioCurves.EngineDefFor` is what selects
+  between them and the plain `engine_sound` (see `src/Flight/EngineAudioCurves.cs` below).
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a
@@ -2240,7 +2384,7 @@ Raises `HaltReason.Ended` on `Present` and carries a Restart · Exit `BoardMenu`
 Nothing else retires this board — a mission that has ended stays ended — so unlike the race and
 dogfight boards the hide and the clock release happen on the menu's own Restart. That Restart is a
 restart and not a rerun: it reaches the Launcher's `RestartSession`, which rebuilds the world,
-because the mission's waves, ace and zeppelin cannot be put back in place (`BL-410`).
+because the mission's waves, ace and zeppelin cannot be put back in place.
 
 ## src/Flight/Weather.cs
 `WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone
@@ -2290,8 +2434,14 @@ CHOSEN `touchdown_*` def, since the sound is authored inside that def). `OnWarni
 `bullet_warning_sg` variant per near miss (player.json `warning_shot_sound` is a SOUND_GROUPS name, so
 `Setup` takes the group table too; rate-limited by `FlightController`'s `WarningShotCue`, same split).
 The engine is ONE voice on one slot; its pitch, gain and definition all come from
-`EngineAudioCurves`, shared with `AiEngineAudio` (see that entry). `SetEngineDamaged` swaps the
-slot's stream for `damaged_engine_sound` and back, both resolved at `Setup`. `MixGain` is the only
+`EngineAudioCurves`, shared with `AiEngineAudio` (see that entry). `UpdateEngineSlot` swaps the
+slot's stream for `damaged_engine_sound` while the airframe is hurt and for `cockpit_engine_sound`
+while the pilot's SELECTED view (`FlightController.FirstPersonView`, A1's mode-6/7 equivalents) is
+Cockpit or Nose, both resolved at `Setup`; damaged takes precedence when both apply
+(`EngineAudioCurves.EngineDefFor` carries the rule — no def authors a damaged cockpit variant, and
+the plan's evidence does not decode which of the two wins, so damage feedback keeps priority as a
+port decision). The view swap keys to the SELECTED mode, not the per-frame camera pose, so a held
+numpad key or look-behind does not retrigger it (D31, closes `BL-161`). `MixGain` is the only
 own-ship scale left and stays here — splitscreen, not a fidelity knob.
 
 ## src/Flight/EngineAudioCurves.cs
@@ -2443,37 +2593,17 @@ neither is unreachable. A `current` that is out of range reads as no lock, which
 index (its plane gone since the last press) resolves to.
 
 ## src/Flight/FlightModel.cs
-The aircraft's plant: the arcade velocity-vector flight model, decoded from the original and
-parameterised by the vehicle's own `dynamics` block. Rotation is a spring-damper: stick torque, the
-bank→yaw/pitch coupling, the `return_rate` weathervane and the ground blow sum into one accumulator
-decayed EXPONENTIALLY by `ang_momentum_damp`, with an authored speed-authority curve on each of the
-three axes — yaw its own non-monotone table, roll and pitch the shared low-speed ramp — scaling
-the STICK COMMAND only, never the coupling or the weathervane.
-Thrust, drag, gravity and lift integrate on the velocity VECTOR, so speed passes through zero — lift
-a demanded load factor, drag a polar in MACH with no induced term, thrust a Mach curve times a
-LINEAR lever scaled by nose attitude. Nothing in that force path is fitted; the nose-chase, the
-stall nose-drop and the altitude clamp are ours. There are TWO force paths, fixed per instance at
-construction (`UsesAiForcePath`, C21/C22/C23): the AI one skips the `liftAOAs` airflow blend and the
-weathervane, floors its post-integration nose-axis velocity at 10 mph, and applies a fixed,
-command-independent ground blow instead of the player's command-proportional one; air density is NOT
-branched. The original selected inside the force function on a compare against its single global
-player (`0x48c520`, `0x48cd3e`, `0x48e925`, `0x48c317`) — not copied, because that presumes ONE
-player and this engine flies four. The collision response is the one law here that no step of the
-plant calls: `Collide` takes the contact facts (previous position, step, stop fraction, impact,
-normal, whether the pilot is human, and the caller's crash threshold) and performs the slide, the
-restitution (`BounceNormalSpeed`, still public for the tests and the instruments: `bounce_factor` ×
-the lever-arm partition) and the lever-arm attitude kick, in that order, because the kick adds to
-the body rates the restitution reads. The restitution is PLAYER-only and `Collide` holds that gate;
-its three graze constants are TUNE and ours, unlike the rest of this module. `FlightController`
-applies it for `AircraftContactResolver`, which keeps the fate decision and the un-embed loop (the
-last needs world queries, which this module deliberately has none of).
-The choker's engine cutout lives here as well (`ChokeEngine` / `ClearChoke` / `EngineDeadRemainingS`):
-an extend-only timer, spent at the top of `Step`, that zeroes the thrust term and touches nothing
-else — no drag, lift or airspeed change, so a choked aircraft decelerates on drag alone. The throttle
-lever is left where the pilot put it, which is why the engine comes back at the setting it died on.
-Every mechanism and trap is documented at the line that computes
-it; the decode, the standing decode-vs-footage gaps and the deliberately-absent limiters are
-[`org/flightModel.md`](org/flightModel.md), and the measurement rules are `verification.md`.
+The decoded, data-driven aircraft plant. Rotation sums stick torque, bank coupling, `return_rate`
+weathervane and ground blow before exponential `ang_momentum_damp` decay; authored speed curves
+scale the stick command only.
+Translation separately composes decoded Mach drag, thrust and lift around the lag vector; the
+original spends that vector directly, leaving three target-velocity calls open (`BL-438`). The
+footage altitude clamp and two numerical caps are ours.
+`UsesAiForcePath` holds near-field differences. The original's >1 km AI speed-hold branch remains
+unported (`BL-425`); player-only guards widen to all humans. `Collide` owns restitution and three
+fitted graze terms; contact lifecycle stays in `AircraftContactResolver`/`FlightController`.
+The choker's extend-only timer zeroes thrust alone. Full decode, standing conflicts and deliberately
+absent terms: [`org/flightModel.md`](org/flightModel.md); measurement rules: `verification.md`.
 
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies
@@ -2638,7 +2768,27 @@ module privately, feeds it one `FlightHudState` per rendered frame, and forwards
 `SetPilotHudVisible` because `GameSession` calls it; the seven readouts are no longer fields here.
 `VersusHud` and `Scoreboard` stay board-adjacent fields on this node.
 The camera is `CameraController`'s — this node only feeds it
-the pose, the dt and the mixed orbit axes (`OrbitInput`); on a crash it cuts to `CrashView` once,
+the pose, the dt and the mixed orbit axes (`OrbitInput`), plus the two view-selection keys
+(`PollViewModeKeys`: F8 cycles Cockpit ↔ Nose, F6 selects chase, both edge-detected on their own
+slots like the targeting keys). `PinnedViewMode` seeds the selection from `--view=`; `ViewMode` and
+`FirstPersonView` read it back live, and the session polls the latter for the anim data's
+`PLAYER_1ST_PERSON` condition. `Cockpit` (a `CockpitVisibility`, null on any rig built without an
+interior) is applied in the same block, keyed to whether the pose THIS frame was a first-person
+one rather than to the selection, so a look-behind restores the aircraft while it is down.
+Head-look input is read here too and nowhere else (`HeadLookRead`, `SnapLookInput`, `FreeLookRead`,
+`MouseLookDelta`), for the same reason `OrbitInput` is: `CameraController` never learns about pads,
+mice or key layouts. `SnapLookInput` reads `Kp1`–`Kp9` and `Kp5` recenters, the original's own
+bindings; they are only reachable in a first-person mode, where `ActiveView` holds no fixed view.
+Head-look is gathered and stepped only inside the first-person arm, on the SIM dt, so a look-behind
+freezes the head where it was and releasing resumes it. The mouse is polled like
+every other control (a screen-position delta while the right button is held, `UseKeyboard`-gated as
+player 1's) rather than event-driven, which the fixed pan rate makes safe: only the DIRECTION of
+the motion is read, so a stale delta on the frame first person is entered is worth one frame of
+2 rad/s and nothing more. `Head.IdleAim` is wired here too, once, in `Setup` (C22): the private
+`AutoheadTarget` reads `_model.Attitude`/`VelocityDir`/`Speed`/`Stats` and gates on `ViewMode ==
+Cockpit` plus the `headLook.autohead` `Config` toggle, so `HeadLook` itself never learns about the
+flight model or the mode.
+On a crash it cuts to `CrashView` once,
 writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
 shows no HUD — footage), restoring it on respawn. Every physics query — the PlaneCollider boxes'
 sweep each physics frame plus every ray (ground AGL, the ground-blow probe, the camera's height
@@ -2894,6 +3044,17 @@ data names a `pdpanel*` stage (`PairsPanels`); the null-sink stand-in fallback i
 program-existence, so the cockpit gauge defs (`*_damage_green/yellow/red`, `*_got_hit`) can never
 play on an airframe.
 
+**The cockpit-interior twins pcdp4/pcdp6 (PLAN-cockpit-view, B12).** `PlaneBuilder.CockpitDamagePanels`
+joins `DamagePanels` in the same `_panels` table (an optional constructor param, empty outside a
+cockpit-interior build), so `ApplyPartStage`/`Retract` flip `pcdp4`/`pcdp6` alongside `pdp4`/`pdp6`
+off the identical `pdpanel4`/`pdpanel6` entries — no separate cockpit rule, and `Reset()` clears
+both together for free (neither carries the `_h` suffix that keeps a healthy skin visible). The
+pair has no healthy twin of its own to pair (no `pcdp4_h`/`pcdp6_h` ships anywhere in `planes.zbd`),
+so the crossed-numbering trap that pairs `pdpN`↔`pdpN_h` by mesh position does not extend to them —
+there is nothing to pair. `CockpitVisibility.Apply` (B11) only ever toggles the four top-level
+groups it binds, never a panel's own `Visible`, so a torn cockpit panel stays torn across a
+Cockpit↔Nose↔external switch with no extra code.
+
 ## src/Flight/DamageLab.cs
 The damage lab (F5 toggles): one armor slider (parts the data gives an armor pool) plus one health
 slider per destroyable part — `PartFrac` (Health, Armor, Combined) is what an `IDamageLabTarget`
@@ -2964,7 +3125,12 @@ Scenario/Stunt, precisely, off the wizard's own pick).
 `Environments` (7 rows, the decoded dropdown order, A5 — NOT `Chapters`' alphabetic one),
 `MissionTypes` (4 rows, the UI dropdown order — NOT the internal id order), `Militias` (13 rows,
 the `.BM` pattern-coverage aircraft lists, decision 7) and `Skills` (novice/veteran/ace) are the
-wizard's own tables. `CurrentMissionTypes` filters Stunt Flying out for whichever environment's
+wizard's own tables. `Planes` is a fifth: the eleven airframes in the langui 3700 order, which the
+original stores an aircraft as an index INTO, so the order is decoded rather than cosmetic and the
+positional defaults (`slot.PlaneIndex`, `_wingmanPlaneIndex`, both index 0) resolve to the Autogyro
+that `gui_continue` itself selects. Each militia's own list is that same order filtered to
+`FUN_00410420`'s 11-byte mask, never a per-militia reordering.
+`CurrentMissionTypes` filters Stunt Flying out for whichever environment's
 chapter bars it via `disallow_missions` (decoded: only C2B, "the clouds"), read through the same
 `Chapters`-table `DangerZones` flag `ChapterCodesFor` already uses, so the two screens cannot
 disagree. `MenuInput.MoveX` also drives WaveEdit's four fields (Enemies/Militia/Aircraft/Skill, one
@@ -2978,6 +3144,42 @@ ace/zeppelin/`disallow_missions` base — `SessionPaths.MissionZrdr(_dataRoot, c
 is why `Build` now also takes `dataRoot`. `DebugWaves(N)`/`DebugWingmen(N)` (--debug-waves=/
 --debug-wingmen=) are `DebugJoin`'s own screenshot-aid pattern, extended to the wizard's own
 screens.
+`Screen.Presets` is the Table of Contents (`BL-352`), reached from step 1 by `MenuInput.Presets`
+(P / X) and nowhere else — the original picks a preset with a mouse on a list sharing its page with
+the dropdowns, so both the button and "opt in from step 1 rather than open on it" are stated
+divergences, not oversights. Accept calls `ApplyPreset` and returns to `Screen.Environment`, which
+is the original's own page order: the contents list is page 1, and View Story opens page 2, the
+configuration screen under the preset's name. `PresetCrumb` is that heading, carried through every
+Instant Action breadcrumb from a `_presetIndex` of −1 (custom) upward; nothing clears it when a
+field is then changed by hand, matching `IDS_IA_STORYTITLE`'s one-time format. `ApplyPreset` is
+deliberately partial — it writes the environment, mission type, waves, wingman count and aircraft,
+and PLAYER 1's plane cursor only. It does not touch `_lives` (INVENTED, no preset value, and a
+setting the preset has no authority over), other players' cursors (ours, not the original's), or
+`_iaBaseDef` (still loaded by Environment's own Accept). So a preset is exactly a set of field
+values: what flies is reachable by hand, and nothing about the built def says a preset was used.
+The list is the file's only scrolling one — `PresetWindow` is `LAYOUT.CSV`'s decoded 14 visible rows
+onto 19 items, `_presetTop` follows the cursor through `ScrollPresetsToCursor`, and `Rebuild` draws
+that slice while `Row` keeps taking the absolute index. `DebugPreset(N)` (--debug-preset=) applies
+one and opens on step 1, the aid for what units cannot see: a wrong aircraft or militia looks
+entirely plausible on screen.
+
+## src/UI/InstantActionPresets.cs
+The original's Table of Contents: the 19 preset scenarios decoded from 19 `0x230`-byte records at
+`0x0061b090` and applied by `FUN_004102c0` (docs/formats/instant-action.md, "Table of Contents
+presets"). The table is transcribed by NAME, not by the record's own dropdown indices, so it diffs
+line-for-line against the decode and a roster reordering cannot silently invalidate it; `Resolve`
+does the name-to-index step against `LaunchMenu`'s public rosters, which are the screen's single
+source of order. Three things it does beyond copying fields. The mission-type cursor indexes the
+FILTERED roster for the preset's environment, so a zeppelin run on "the clouds" is row 2, not row 3.
+Unused wave slots take `FUN_004102c0`'s own sentinel substitution (Fortune Hunter / Devastator /
+veteran at 0 enemies) rather than a zeroed default: it never reaches a flown mission, since
+`FUN_004175f0` skips any wave at 0 enemies, but it is what a pilot inherits on raising an empty
+wave's count. And a wingman aircraft is reported only where there are wingmen to fly it, `null`
+otherwise, because the decode reports no value for the five presets that fly alone. An unresolvable
+name throws, the same fail-loud policy `LaunchMenu.AircraftFor` applies to wizard-only data. Presets
+fly stock airframes, so nothing here waits on the hangar. Units in
+`CSVM.Tests/InstantActionPresetsTests.cs`.
+
 The hangar (`HangarFlow`) has two doors, both through `OpenHangar`, which remembers the screen to
 land back on: a trailing `Build Custom Plane` row past the three Mode rows, and the same row past
 the eleven airframes on the Instant Action plane pick (PLAN-hangar Decision 6). `Screen.Hangar`
@@ -3012,8 +3214,9 @@ refusing the session. Wingmen stay stock-only (`Planes`), and the scripted paths
 (`HangarRowOnPlaneScreen`): it trails the customs, a splitscreen pane never draws it, and
 `RebuildPanes` clamps every cursor back into the roster, so `PlaneIndex` can never point past the
 roster anywhere a plane is actually read. The row is a door, not an aircraft, so it cannot be
-locked or confirmed and no launch path sees it. The hangar is reached only through interactive
-menu input: no `--menu=` opening, no `SessionSpec` field, nothing a `--det` run can touch.
+locked or confirmed and no launch path sees it. Outside `OpenHangarAid`'s scripted-screenshot
+values, the hangar is reached only through interactive menu input — no `SessionSpec` field,
+nothing a `--det` run can touch.
 
 ## src/UI/PlanePickerRoster.cs
 The picker roster rule behind `LaunchMenu._roster`, engine-free so it tests without a menu

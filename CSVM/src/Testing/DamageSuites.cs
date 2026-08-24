@@ -238,6 +238,93 @@ internal static class DamageSuites
         }
     }
 
+    // ---- the cockpit-interior torn panels flip off the SAME injure entries (PLAN-cockpit-view, B12) --
+
+    // pcdp4/pcdp6 are driven off the very pdpanel4/pdpanel6 entries that already flip pdp4/pdp6 —
+    // no separate cockpit rule. Built with cockpitInterior:true so the pair exists, this crosses
+    // whichever of the two the plane's own data authors (not every plane necessarily carries
+    // both), checks the cockpit panel tears alongside its exterior namesake, survives a
+    // CockpitVisibility view-mode switch (the group hide/show never touches a child's own Visible),
+    // and clears on Reset() exactly like the exterior panel.
+    internal static void CockpitPanelStaging(TestContext ctx)
+    {
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+
+        DestroyablePart? part = null;
+        float threshold = 0f;
+        string panelAnim = "";
+        string cockpitNode = "";
+        foreach (var p in stats.DestroyableParts)
+            foreach (var (frac, anim) in p.InjureAnims)
+                if ((anim.Equals("pdpanel4", System.StringComparison.OrdinalIgnoreCase)
+                        || anim.Equals("pdpanel6", System.StringComparison.OrdinalIgnoreCase))
+                    && frac > threshold)
+                {
+                    part = p;
+                    threshold = frac;
+                    panelAnim = anim;
+                    cockpitNode = "pcdp" + anim["pdpanel".Length..];
+                }
+
+        ctx.Check(part != null, $"{ctx.PlaneName} authors a pdpanel4/pdpanel6 entry on some zone");
+        if (part == null)
+            return;
+
+        var textures = new TextureArchive(texturesPath);
+        var builder = new PlaneBuilder(planesGamez, textures, damagePanels: true, cockpitInterior: true);
+        var model = builder.Build(ctx.PlaneName);
+        ctx.Host.AddChild(model);
+        try
+        {
+            var interior = builder.CockpitInterior;
+            ctx.Check(interior != null, $"{ctx.PlaneName} built its cockpit1 interior");
+            if (interior == null)
+                return;
+            var cockpit = WorldAndToolSuites.FindNamed(interior, cockpitNode);
+            ctx.Check(cockpit != null, $"the interior carries {cockpitNode}, {panelAnim}'s cockpit twin");
+            if (cockpit == null)
+                return;
+            ctx.Check(!cockpit.Visible, $"{cockpitNode} starts hidden, same as its exterior twin");
+
+            var visuals = new DamageVisuals(builder.DamagePanels, model, stats,
+                cockpitPanels: builder.CockpitDamagePanels);
+            var torn = builder.DamagePanels
+                .Where(p => AnimRuntime.NameOf(p).Equals("pdp" + panelAnim["pdpanel".Length..],
+                    System.StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            ctx.Check(torn.Count > 0, $"the exterior twin pdp{panelAnim["pdpanel".Length..]} was built");
+
+            float target = (threshold - 0.02f) * part.MaxHp;
+            visuals.OnPartDamage(part.Name, target / part.MaxHp);
+            ctx.Check(torn.All(p => p.Visible),
+                $"…{panelAnim} tore its exterior panel once health crossed {threshold:0.00}");
+            ctx.Check(cockpit.Visible,
+                $"…and {cockpitNode} tore alongside it — the same injure entry, not a separate rule");
+
+            // A view-mode switch only ever hides/shows the interior GROUP root; a child's own
+            // Visible must ride through unchanged (B11's CockpitVisibility.Apply, four nodes only).
+            var pilotView = CockpitVisibility.Bind(model, interior);
+            ctx.Check(pilotView != null, $"the visibility rig binds to the built model");
+            if (pilotView == null)
+                return;
+            pilotView.Apply(PilotViewMode.Nose, firstPerson: true);
+            ctx.Check(cockpit.Visible, $"{cockpitNode} stays torn while the interior group itself hides (Nose)");
+            pilotView.Apply(PilotViewMode.Cockpit, firstPerson: true);
+            ctx.Check(cockpit.Visible, $"…and still torn once Cockpit shows the group again");
+
+            visuals.Reset();
+            ctx.Check(torn.All(p => !p.Visible) && !cockpit.Visible,
+                $"respawn's Reset() clears the exterior panel and its cockpit twin together");
+        }
+        finally
+        {
+            model.Free();
+        }
+    }
+
     // ---- the injure ladder stages per ENTRY, and retracts on the upward crossing ---------------
 
     // fury's AI ladder names random_remote_damage at six of its seven thresholds, so a latch keyed

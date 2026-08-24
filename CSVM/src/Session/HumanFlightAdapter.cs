@@ -66,7 +66,8 @@ internal sealed class HumanFlightAdapter
                 pairingDefs.AddRange(program.ByAnimName(n));
             pairing = DamageVisuals.PanelPairingSets(pairingDefs);
         }
-        return new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats, defPairing: pairing);
+        return new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats, defPairing: pairing,
+            cockpitPanels: planeBuilder.CockpitDamagePanels);
     }
 
     /// <summary>Builds player <paramref name="pi"/>'s aircraft into <paramref name="rig"/> and
@@ -102,12 +103,14 @@ internal sealed class HumanFlightAdapter
         // original's stock planes do; a custom plane wears the paint it was built with instead,
         // through the same substitution path the livery lab drives. --paint still wins over both.
         long mark = StartupProfile.Mark();
+        // cockpitInterior: a human rig is the only one whose pilot can look out of a cockpit
+        // (PLAN-cockpit-view, B11) — FlightRoster's AI builder deliberately does not ask for one.
         var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
             scheme: custom != null && !_liveries.PaintRequested
                 ? Flight.CustomPlaneBuild.PaintFor(custom, UI.HangarPaintPage.PatternName(custom.PaintPattern))
                 : _liveries.SchemeFor(pi, _in.ZrdrPath, _in.PaintRng,
                     _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),
-            patterns: _liveries.Patterns);
+            patterns: _liveries.Patterns, cockpitInterior: true);
         var planeModel = planeBuilder.Build(planeName);
         StartupProfile.Record("plane", mark);
         MeshInstances += planeBuilder.MeshInstanceCount;
@@ -116,8 +119,13 @@ internal sealed class HumanFlightAdapter
         {
             DebugCollision = _in.DebugCollision,
             PinnedView = _spec.View,
+            PinnedViewMode = _spec.ViewMode,
             HudParent = rig.Viewport,
+            // Null when the airframe ships no cockpit1 — the rig then hides nothing, as before B11.
+            Cockpit = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior),
         };
+        if (verbose && controller.Cockpit != null)
+            GD.Print($"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         // Every human joins team 1 in an Instant Action mission, splitscreen included — the
         // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
         // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.
@@ -448,7 +456,7 @@ internal sealed class HumanFlightAdapter
         // rather than the original's own pointer-compare-against-the-player test.
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
             rig.Camera, _in.CamParamsFor(planeName), start.Pos, start.LookAt,
-            start.ThrottleFrac, start.SpeedMps);
+            start.ThrottleFrac, start.SpeedMps, cockpitCameraOffset: planeBuilder.CockpitCameraOffset);
         // --weapon-lab: a flight session whose aircraft is pinned at the spawn pose. Set after
         // Setup, so the pin, captured at the first held sim step, takes the pose Setup just wrote.
         if (_spec.WeaponLab)

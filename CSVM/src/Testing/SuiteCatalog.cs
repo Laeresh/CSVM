@@ -77,6 +77,7 @@ public static class SuiteCatalog
         "damage-stages",
         "damage-hd",
         "stop-sequence",
+        "first-person-condition",
         "death-slot",
         "wait-for-completion",
         "emitter-host-deactivation",
@@ -98,11 +99,13 @@ public static class SuiteCatalog
         "sun-orientation",
         "tex-dropin",
         "gltf-export",
+        "cockpit-interior",
         "collision-visibility",
         "nodelab-visibility",
         "trail-world-anchor",
         "damage-template-pool",
         "damage-staging-pool",
+        "cockpit-panel-staging",
         "damage-stage-slots",
         "ai-damage-stages",
         "crash-rig-anchors",
@@ -464,6 +467,8 @@ public static class SuiteCatalog
             "weapon hits destroy, swap, drop colliders, and survive destroy→reset→destroy", DamageHd));
         into.Add(new TestHarness.Suite("stop-sequence",
             "authored STOP_SEQUENCE stops run: the fireball's 0.3 s stopper and the 30 s fire's halt", StopSequenceStops));
+        into.Add(new TestHarness.Suite("first-person-condition",
+            "the PLAYER_1ST_PERSON condition follows the pilot's selected view mode: the bullethole def's else branch runs in Chase and is skipped in Cockpit and Nose (A1)", PlayerFirstPersonCondition));
         into.Add(new TestHarness.Suite("death-slot",
             "a killed destructible dispatches its compiled destruction slot — the block carrying the 30 s fire's 1,035 death calls (BL-276)", DeathSlotDispatches));
         into.Add(new TestHarness.Suite("wait-for-completion",
@@ -506,6 +511,8 @@ public static class SuiteCatalog
             "the census/override flatten repaints RGB and changes nothing else", TexDropIn));
         into.Add(new TestHarness.Suite("gltf-export",
             "the viewer plane exports to glTF and re-imports with a textured mesh", GltfExport));
+        into.Add(new TestHarness.Suite("cockpit-interior",
+            "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11)", CockpitInterior));
         into.Add(new TestHarness.Suite("collision-visibility",
             "nothing a chapter hides is left solid: no enabled collider under an invisible node", CollisionVisibility));
         into.Add(new TestHarness.Suite("nodelab-visibility",
@@ -516,6 +523,8 @@ public static class SuiteCatalog
             "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)", DamageTemplatePool));
         into.Add(new TestHarness.Suite("damage-staging-pool",
             "the injure staging reads health only: a zone stripped of armour tears no panel though its combined fraction has crossed the threshold, and the panel appears once health itself crosses (BL-384)", DamageStagingPool));
+        into.Add(new TestHarness.Suite("cockpit-panel-staging",
+            "the cockpit-interior torn panels pcdp4/pcdp6 flip off the SAME pdpanel4/pdpanel6 injure entries as their exterior namesakes, survive a CockpitVisibility view-mode switch, and clear together on respawn's Reset() (B12)", CockpitPanelStaging));
         into.Add(new TestHarness.Suite("damage-stage-slots",
             "the injure ladder stages per ENTRY: fury's six random_remote_damage thresholds each fire, a repair retracts what it lifted back over, and one entry on four zones fires four times (BL-385/BL-384)", DamageStageSlots));
         into.Add(new TestHarness.Suite("ai-damage-stages",

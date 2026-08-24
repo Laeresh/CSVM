@@ -71,13 +71,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   value TUNE.
 - **The flight constants are coupled and `--run-tests` guards them.** Thrust sets speed, speed
   scales the yaw `eff`, so a change in one moves others; the `flight-envelope` suite asserts six
-  measured scenarios and will fail if a change breaks one. `ThrustConst` and
-  `PitchTune`/`YawTune`/`RollTune` are pinned measurements, not knobs — a fix that needs one of
-  them to move needs a new measurement first. ⚠ **They re-pin when a decoded mechanism changes the
-  steady rate they hold, and only then**: `YawTune` 1.32 → 1.33 with the authored yaw curve (C21),
-  `PitchTune` 0.75 → 0.89 and `YawTune` 1.33 → 1.57 with the weathervane torque (C23), each against
-  the same stopwatch/video figures as before. Chasing a *transient* or a feel report through them is
-  the forbidden move, not re-pinning a steady rate something else moved.
+  measured scenarios and will fail if a change breaks one. `ThrustConst` is a pinned measurement, not
+  a knob — a fix that needs it to move needs a new measurement first, and chasing a *transient* or a
+  feel report through it is the forbidden move. ⚠ **`PitchTune`/`YawTune`/`RollTune` are no longer
+  in that category: all three are 1, because `BL-414` decoded `FUN_0048c470` and found no per-axis
+  factor on any axis.** Pitch-rate survives the change at 35.26 °/s against 33.00 ± 3. **`yaw-360` is
+  now informational**: the model takes 49.12 s against the footage's 28.60 s, the slow rudder was
+  accepted at the controls, and the row is a recorded decode-vs-footage conflict like
+  `accel-150-290` and `decel-290-150`. The 28.60 was not rewritten, and `FlightScenarios` is 6.
 
 ## Damage & destruction
 
@@ -252,14 +253,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
       for whoever next tunes `puffer.burstSizeScale` or the fire family's TUNE pair (D10), not
       something A1/A2 should absorb by picking a different constant than the one the disassembly
       settles.
-    - **2026-08-09, weighting this correctly:** the 9.7 m figure is a *video frame measurement*, and
-      those are weak evidence in this project — they have misled it repeatedly (standing author
-      instruction). Note that the sim disagreed with it at the old `×1` default too (16.6 m vs
-      9.7 m), so **no value of `SizeScaleDefault` ever reconciled the two** — the footage was never
-      evidence about this constant. Treat the gap as a note about sprite alpha or particle density,
-      not as an open question hanging over the decode, and do **not** re-open A1 on the strength of
-      it. Qualitative reads from the clip (is there a fireball, does it persist) remain useful; a
-      measured span from it does not.
+    - ⚠ **The 9.7 m figure is a video frame measurement and is not evidence about this constant.**
+      That governs every comparison in this entry: a frame-derived length cannot confirm a decode
+      (`docs/verification.md` DET-12), and the sim disagreed with it at the old `×1` default too
+      (16.6 m vs 9.7 m), so **no value of `SizeScaleDefault` ever reconciled the two**. Treat the
+      gap as a note about sprite alpha or particle density, not as an open question hanging over
+      the decode, and do **not** re-open A1 on the strength of it. Qualitative reads from the clip
+      (is there a fireball, does it persist) remain useful; a measured span from it does not, and
+      no re-measurement of the footage is owed.
     - Limit: the ruler only exists near ignition (the airframe is gone within ~0.5 s and no known
       length survives in frame), so this is an *early-frame* comparison. Our burst is dead by ~1.0 s
       while the original is still at full intensity 9 sim-s later — that gap is the hold time above,
@@ -695,12 +696,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   pile of camera decisions that plan deliberately deferred: snap vs smooth follow, override vs
   blend with the chase camera, behaviour with no target selected or a target behind the pilot, and
   interaction with the right-stick free look (`BL-372`). `L` is reserved in `docs/controls.md` but
-  bound to nothing.
+  bound to nothing. `PLAN-cockpit-view.md`'s head-look decode names the mechanism this camera would
+  ride: the look-state byte the controller reads (`DAT_0064ef68`) has a third value, `2`, for
+  padlock, sitting beside the `0`/`1` snap/free-look states `BL-432`'s selector keys pick between —
+  so `L`'s camera is this same state machine's third mode, not a bolt-on. Building it needs
+  `TargetSelection.Current` plumbed into `HeadLook`'s target so the padlock state aims the head at
+  the current target instead of reading player input.
   *Fix shape:* a camera-focused item once the questions above are settled — not a change to the
   targeting module itself, which already exposes `TargetSelection.Current` cleanly for a camera to
   read.
-  *Cross-refs:* `BL-372` (right-stick free look), `docs/org/targeting.md` "Track Target",
-  `docs/controls.md`.
+  *Cross-refs:* `BL-372` (right-stick free look), `BL-432` (the `K`/`J` mode selectors, the byte's
+  other two states), `docs/org/targeting.md` "Track Target", `docs/controls.md`,
+  `PLAN-cockpit-view.md` (`HeadLook`, `src/Flight/HeadLook.cs`).
 
 - `BL-400` `[Feature]` **`Structures` as a selectable Non-Aircraft target — needs a curated
   `targets.zrd`-equivalent list.** *Evidence:* the player-targeting plan's out-of-scope call (c),
@@ -865,26 +872,76 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 ## Flight model & collision physics
 
 - `BL-414` `[Research]` **Untune the flight model: decode what is currently fitted.** `FlightModel.cs`
-  carries **18 `TUNE` markers** and **11 `flightModel.*` config overrides**, and
+  carries **three fitted graze constants** and **eight `flightModel.*` config overrides**, and
   [`docs/org/flightModel.md`](docs/org/flightModel.md) already separates what was read out of
   `crimson.exe` from what was fitted to match the original at the controls. This item is to shrink
   the second set as far as the binary allows, constant by constant, rather than to re-fit any of
-  them. Priority targets are the ones a fitted value silently distorts: the lift clamp
-  (`LiftGMin` -5 / `LiftGMax` 9, a load factor), the aerodynamic ceiling `ClMaxStatic` /
-  `ClMaxMach`, `LiftAccelRate`, and the force/acceleration scale the lift and gravity terms share,
-  which that page records as a real unresolved conflict rather than a settled reading.
-  **Trigger:** a decoded death path (`BL-385`'s Wave D) put a dead hull under the model with no
-  thrust, and it *glided* where the original's drops, which is the kind of gap a fitted lift term
-  hides while a living aircraft still feels right.
-  ⚠ **Traps.** (a) These constants have measured provenance and A/B history at the controls; a
-  decode that replaces one must beat it on evidence, and "the number changed" is not the same as
-  "the aircraft is right" — this is the file where the user's eyes have overruled the instruments
-  before. (b) The two-integrator correction on that page is the worked example of how this goes
+  them. What is left fitted is the graze trio `GrazeFriction` / `GrazeKick` / `GrazePushOut`
+  (0.35 / 1.2 / 0.15, ours rather than the original's). `PitchTune` and `YawTune` are decoded to 1,
+  and `StallNoseRate` and `KnifeAlignFloor` are gone entirely — the first a no-op multiplier on
+  `stall_mag`, the second a scale on the nose-chase that neither `lift_accel_rate` reader carries.
+  ⚠ **The lift terms are decoded already; this item does not re-open them.** The lift clamp
+  (`LiftGMin` -5 / `LiftGMax` 9) and the aerodynamic ceiling (`ClMaxStatic` 0.75 / `ClMaxMach` 0.15)
+  are both read out of `FUN_0041abd0`; `LiftAccelRate` is the authored `lift_accel_rate` with 1.2 the
+  parser's own fallback (`PlaneStats.cs:171`); and the force/acceleration scale is settled, the whole
+  weight chain conversion-free at `0x47ae2d`, `0x475c6a`, `0x48ff8e`, `0x41ac13` and `0x491290`. What
+  stands open there is the drag polar, which no constant in this model can close. It is a decode of
+  the drag path out of `crimson.exe`, not a re-measurement of footage: a frame-derived polar cannot
+  confirm a decode, only rank readings (`docs/verification.md` DET-12).
+  ⚠ **Traps.** (a) The two-integrator correction on that page is the worked example of how this goes
   wrong: the provenance table named the wrong integrator for months. Confirm which function you are
-  reading before trusting an offset. (c) A change here moves every aircraft in the game; the goldens
+  reading before trusting an offset. (b) A change here moves every aircraft in the game; the goldens
   and engine suites are the net, and a moved golden hash is a finding to explain, never to re-pin.
-  (d) Do not fold this into a feature item — the product here is the decode and its evidence, and a
-  correct disproof that leaves a constant fitted is a success.
+  (c) Do not fold this into a feature item — the product here is the decode and its evidence, and a
+  correct disproof that leaves a constant fitted is a success. (d) The graze trio is not three
+  independent constants: they were tuned together against a slide that carried no restitution, so
+  they and `BounceLeverScale` move as one group or not at all.
+  **Decoded so far:** `FUN_0048c470` builds each axis' stick torque as `torque · stick · authority ·
+  dt` and nothing more (roll `0x48ca8d`-`0x48caa2`, pitch `0x48cb07`-`0x48cb19`, yaw `0x48cbd5`), so
+  `PitchTune` and `YawTune` had no counterpart and are now 1; the stall nose-drop is the authored
+  `stall_mag` (`_DAT_0071c41c`, authored 1.25, dt multiply `0x48d11b`) added as a TORQUE about an
+  unnormalised `nose × worldUp`, which retired `StallNoseRate`; and the nose-chase is
+  `lift_accel_rate` (`_DAT_0071c448`, readers `0x48c746` and `0x49112a`) with no verticality factor
+  at either reader, which retired `KnifeAlignFloor`. Write-up in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md). Still fitted: the graze trio. The same pass
+  found two decoded terms missing from the code entirely, which `BL-437` now owns, and a third
+  divergence in how the lag vector is spent, which `BL-438` owns.
+  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md) (the fitted-vs-decoded split, and
+  its "A destroyed hull flies the same model" section, which hands this item the open question of what
+  throttle an AI carries into its death), `BL-385` (the decoded death path).
+
+- `BL-437` `[Bug]` **Two decoded control-authority terms are not implemented, and both are invisible
+  on the shipped data.** Each is traced in `crimson.exe` and absent from `FlightModel`, and neither
+  changes a number today because the authored values never reach the threshold. That is what makes
+  them worth an item rather than a doc note: the code reads as if the mechanism does not exist, so a
+  later change that makes either reachable produces a divergence nobody will connect to this.
+  - **Pitch has a second authority stage that roll does not.** `FUN_0048bdd0` fades pitch by
+    `high_speed_pitch_fade` on top of the shared base ramp: full authority until `0x0071c400`,
+    falling linearly to zero at `0x0071c404`, fallbacks **500 → 600 mph** (immediates at `0x474179`
+    and `0x474183`; the authored path parses the token at `0x6277f8` from MPH at
+    `0x4741f2`-`0x474231`). Our `RollPitchAuthorityAt` returns one curve for both axes, so the fade
+    is simply missing. It cannot bind on the shipped airframes because 500 mph is above every
+    `fd_speed`, which is also why the video reads pitch rate as flat with speed.
+  - **The opposing-command limiter is absent entirely.** `FUN_0048c470` softens a pitch or yaw
+    command whose sign opposes `unit(nose × v̂)` on the axis being commanded (`0x48ca7a` onward,
+    pitch and yaw only; roll carries no such test), by the smaller of an AOA term
+    `(cos α − maxAOACos) / (1 − maxAOACos)` and a G term ramping to zero between `highGs[0]` and
+    `highGs[1]`. So what it damps is recovery from a departure, not entry into one. Both halves are
+    authored out of reach on all eleven airframes (`ControlLimiterTests`), which is why nothing was
+    ported.
+  ⚠ **Neither is a tuning question and neither should be "fixed" by moving a constant.** The work is
+  to implement the term where the decode puts it, or to record a deliberate divergence with its
+  reason. A fade or a limiter that binds on shipped data would be a decode error, so if implementing
+  one changes any `flight-envelope` row on a stock airframe, the reading is wrong.
+  ⚠ Splitting `RollPitchAuthorityAt` touches every axis' command scaling; its own comment warns that
+  extending a curve to an axis that has its own double-fades it. Split the pitch stage off, do not
+  rebuild the base ramp.
+  *Size:* localized, and the second half may close as a recorded no-change.
+  *How you'd know it worked:* an airframe authored past the fade knee loses pitch authority and keeps
+  roll; a command opposing the flight path at a reachable `highGs` is softened while entry into the
+  same departure is not. Neither is reachable on stock data, so both need a synthetic airframe.
+  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md) ("Control authority vs speed"
+  and "Torques and the limiters"), `BL-414` (the decode pass that surfaced both).
 
 - `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
   complete and waiting, not as a discovery. Shipped: `MSG_CMD_NITROUS` ("Use Nitro-Booster") is a
@@ -979,51 +1036,44 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (player arm), `BL-330` (the authority ramp this pairs
   with).
 
-- `BL-410` `[Tuning]` `[Owed-playtest]` **The flight model's three remaining loose ends: the stall
-  nose-drop's rate and target, the sustained climb's magnitude, and `KnifeAlignFloor`'s feel.**
-  Carries forward what `BL-115` still had open when the rest of it closed; `git log --grep=BL-115`
-  for everything that entry settled. ⚠ **`PitchTune`/`YawTune`/`RollTune`/`ThrustConst` are not on
-  this list** — all four are measured against the original frame by frame and asserted by the
-  `flight-envelope` suite, so they are not TUNE knobs and a feel report cannot overrule them.
-  - **`StallNoseRate` 1.0 rad/s is ~17× too fast, and chases the wrong target.** In `CAP-05 Stall 0%
-    Thrust no input` the original's nose holds **+4.2 ± 0.1°** through the whole deceleration, starts
-    falling only at 0.25 fd, drops at **3.38 °/sim-s = 0.059 rad/sim-s** from +4.1° to −21.2°, and
-    **stops at ≈−22°** once speed rebuilds past 0.40 fd — it does not chase world-down at all, so
-    "rad/s toward world-down at full stall depth" is the wrong shape as well as the wrong rate. The
-    break is wings-level and clean: the compass turns **0.0°** across the whole 24.8 sim s, no wing
-    drop. ⚠ **Nothing in the executable has been traced to this constant** (`docs/org/flightModel.md`,
-    "The nose-drop's own rate is a remake TUNE"), so unlike the rest of the stall model there is no
-    decode to defer to — it is chosen so the deep-stall rate beats full-elevator authority
-    (~0.58 rad/s) and the drop stays decisive. Whatever replaces it must keep that property and must
-    still refuse to raise the nose over the horizon while stalled.
-    ⚠ The two stall thresholds around it are settled and are not in scope: `StallSpeedFrac` is the
-    nose-drop at **0.25 fd** and `StallWarnFrac` the lamp at **0.30 fd**, two unrelated thresholds on
-    one margin (`StallWarningTests`).
-  - **The sustained climb settles 25% fast, and the missing input is α, not a mechanism.** Against
-    the original's full-throttle 90° climb (`climb90`; plateau **163.05 mph** at a 56.3° path) the
-    model settles at **204.04**, and it does not reproduce the footage's undershoot-and-recover. The
-    climb penalty itself is decoded and landed (thrust scaled by nose attitude), and at a 90° nose
-    with the measured 56° path the same decoded force path balances to **−3.3%** — so the residual
-    is most likely the α the original held, which no capture yet resolves: every climb clip taken so
-    far saturates its ADI above ≈+30°. `CAP-20` (a shallow held climb with a readable ADI) is what
-    would settle it. ⚠ **Do not reintroduce a pitch-scaled gravity** on the strength of GDD §4.1.1:
-    the shipped gravity block (`0x48ff85`–`0x48ff9d`) reads no attitude at all, and the term that is
-    attitude-scaled runs the other way.
-  - **`KnifeAlignFloor` 0.35 is the remake's own arcade term and owes a feel A/B, not a fit.** It is
-    the one surviving use of `wingVert` and the decode is silent about it, so it is held at 0.35 on
-    an A/B rather than for want of a measurement: retiring it (chase floor 1.0) or lowering it to
-    0.10 moves the knife-edge rows the wrong way or fails to reach the footage while walking α past
-    `liftAOAs[0] = 5°`. The evidence and the trap that goes with it (`CAP-05` cannot separate the
-    nose–path lag from gravity pulling the path down, so no absolute align rate comes out of it) are
-    in [`docs/org/flightModel.md`](docs/org/flightModel.md)'s knife-edge section.
-  - **`Probes.cs`'s `eighth-throttle-speed` target of 137.9 mph is against a number no clip
-    supports.** `CAP-31` reads 134.84 mph still falling at its last frame and the `accel` clip's 1/8
-    entry leg rises 134.25 → 135.56, bracketing **≈135 mph (0.449 fd) ± 1**. Retarget the row, and
-    run the model over `CAP-31`'s two coast times while there (290 → 150 in **13.94 ± 0.29 sim s**,
-    an upper bound because the chop is not instantaneous, and the transient-free 240 → 150 in
-    **11.33 ± 0.24**).
-  *Playtest after fix:* (1) does the knife-edge sink feel like the original's; (2) does the
-  stall-into-knife-edge recovery behave now that no sag term compounds with the stall nose-drop.
+- `BL-438` `[Research]` **The original spends its lag vector as the ACCELERATION; we spend it as a
+  lift demand.** `lift_accel_rate` is decoded ([`docs/org/flightModel.md`](docs/org/flightModel.md),
+  "`lift_accel_rate` is a lag toward a target velocity"): `_DAT_0071c448`, fallback 1.2 and this
+  install authoring 0.75, with two readers — `0x48c746` in the force build `FUN_0048c470` and
+  `0x49112a` in `FUN_00490f70` — both computing `lift_accel_rate · (targetVelocity − velocity)`,
+  adding gravity to Y at `0x48c77b`, and rotating the result into body axes. `FUN_0048c470` splits at
+  `0x48c522` on whether the object is the player (`ESI` against `_DAT_0071c298`); the two sides differ
+  only in how `targetVelocity` is built and rejoin at `0x48c70a`, so the lag itself is unconditional.
+  `FlightModel.Step` computes the same shape at its lift step — `(relativeWind − velocity) ·
+  LiftAccelRate` with gravity on Y — but treats it as a DEMAND: it takes a load factor off the
+  vector, clamps it, projects it onto the wing plane, and then sums thrust, drag and gravity
+  separately. The original never forms those separate terms at this site at all.
+  **What is undecoded, and has to be first:** the three virtual-call contributions that build the
+  player's `targetVelocity` (`0x48c6b6`–`0x48c6e7`). Until those are read there is no way to know
+  whether our thrust/drag/lift decomposition is a re-expression of them or an addition to them.
+  ⚠ **Do not start by rewriting `Step`.** A change here moves every airframe and every
+  `flight-envelope` row at once; the product is the decode of those three contributions, and the
+  rebuild is what follows it.
+  ⚠ **This owns the sustained-climb residual.** The full-throttle climb plateaus 25% fast
+  (204.04 mph against the original's 163.05 at a 56.3° path) and does not reproduce the
+  undershoot-and-recover. A lag toward a target velocity settles a climb somewhere a force sum does
+  not, so the residual is most likely this divergence rather than a missing term. The α that was
+  once the leading candidate cannot be read off any capture and no further flight capture will be
+  filmed, so this is the route. ⚠ **Do not reintroduce a pitch-scaled gravity** on the strength of
+  GDD §4.1.1: the shipped gravity block (`0x48ff85`–`0x48ff9d`) reads no attitude at all, and the
+  term that is attitude-scaled runs the other way.
+  *Cross-refs:* `BL-414` (the untune this came out of), `BL-437`, `BL-439`.
+
+- `BL-439` `[Research]` **Decode the thrust-vs-throttle curve, so part-throttle equilibria have a
+  target that is not footage.** `Probes.eighth-throttle-speed` now runs with **no** target: its old
+  137.9 mph was against a number no clip supports, and the ≈135 that would replace it is another
+  frame measurement. The curve itself is in `crimson.exe` and settles the row outright.
+  ⚠ **`ThrustConst` is the first thing to re-examine, and its protection is backwards.** It is
+  described as a pinned measurement rather than a knob because the `flight-envelope` suite asserts
+  it — but what it is pinned to is frame-by-frame video, so the suite has made a footage fit
+  load-bearing. A decoded curve either confirms it or replaces it; either outcome is worth more than
+  the current arrangement, where the assertion is what stops anyone looking.
+  *Cross-refs:* `BL-438` (the force path the curve feeds), `BL-414`.
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
 
@@ -1041,7 +1091,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     +8.0 and −21.7 → +1.4 ft/wall-s) even though on a wall the sink is tangential, while flat-ground
     contacts preserve tangential speed almost perfectly (302 mph belly-flat costs 0.11 mph). The
     decoded impulse cannot do that: it is normal-only, with no tangential or friction term anywhere
-    in it. Unexplained, and the one live question left in that footage.
+    in it. ⚠ Those readings are observations off footage and bound nothing — the question is which
+    term in the original's contact path zeroes the sink, and it is answered in `crimson.exe`, not by
+    re-measuring the clip (`docs/verification.md` DET-12).
   - **An oblique wall scrape is a sustained multi-tick drag, not an impulse.** `CAP-14`'s only
     multi-frame contact scraped a building at 144.5 mph and lost 40 % over 0.47 s (144.5 → 86.7).
     This engine resolves one contact per frame with a fixed 0.15 m push-out and a friction-scaled
@@ -1063,10 +1115,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `GrazeKick` 1.2 rad/s, `GrazeFriction` 0.35, quadratic severity damage, "sliding below
   `GrazeStopSpeed` 12 m/s = destroyed", "3 failed embed push-outs = explode". The original
   might throw the nose differently or let a plane belly-slide to a stop ("collecting 0-dmg
-  kisses" is the user report that motivated the stop rule). `CAP-14`'s analysed graze
-  (2026-08-04) already bounds part of this — the original's graze cost ~5% speed + sink with
-  wings level, no visible attitude kick at that severity. Judge the kick and the stop rule
-  against that footage and `BL-120`'s corner feel item before tuning further.
+  kisses" is the user report that motivated the stop rule). `CAP-14`'s analysed graze already
+  bounds part of this qualitatively — the original's graze cost ~5% speed + sink with wings level,
+  no visible attitude kick at that severity. ⚠ That is an observation, not a target: the footage
+  can say a kick is *absent* at that severity, but no constant here is settled by re-measuring it
+  (`docs/verification.md` DET-12). The kick and the stop rule are judged at the controls against
+  `BL-120`'s corner feel item, and the laws themselves want a decode of the original's contact
+  response.
 
 - `BL-309` `[Feature]` **Engine torque is a designed, one-sided turn assist — unmodelled.** GDD §4.1.8
   ("Engine Torque", Motion Model/Flight Dynamics → Simulated Elements; restated, no prose): torque
@@ -1074,22 +1129,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   no effect turning *against* the torque direction, but turning *with* it is **faster**. The
   behaviour to look for is a directional asymmetry in roll/turn rate that only ever assists.
   Nothing in `CSVM/src` models it, and no shipped key is known to carry it — the `dynamics` block's
-  `pitch_torque`/`roll_torque`/`rudder_torque` are control torques, not this. A hint already on
-  film: `CAP-02 Run 5`'s banked 45° right peaked at 123.8 °/s against left's 96.0 — but that pair
-  was flown for heading calibration, the right take decodes badly outside heading, and the
-  sustained rates point the other way; a lead to re-measure, not evidence. ⚠ The suite asserts
+  `pitch_torque`/`roll_torque`/`rudder_torque` are control torques, not this. ⚠ **Do not go to the
+  footage for it.** `CAP-02 Run 5`'s banked 45° right peaked at 123.8 °/s against left's 96.0, but
+  that pair was flown for heading calibration, the right take decodes badly outside heading, and
+  the sustained rates point the other way — a difference that size is exactly what a frame-derived
+  rate invents (`docs/verification.md` DET-11, DET-12). Settle it in the torque accumulator
+  (`FUN_0048c470`) instead: either a one-sided term is there or the design document's intent never
+  shipped. ⚠ The suite asserts
   direction-blind rates measured from single-direction captures (yaw 360° to 4%, roll time to 3%) —
   if the original's assist is real, those measured rates may already *contain* it for whichever
   direction was flown. Establish the flown directions before touching any constant.
   *Needs:* an original A/B — a full roll and a full rudder 360° in **both** directions at matched
   speed (a `CAP` when scheduled).
 
-- `BL-310` `[Feature]` **Pitch-down on aileron roll is designed — unmodelled, and measurable from footage
-  we already hold.** GDD §4.1.5: a roll carries a "small but noticeable" nose-over effect. We model
-  no roll→pitch coupling. Before inventing a constant, measure it: the decoded 360° aileron-roll
-  capture (manoeuvre #4, `analysis/video-flight-calibration/`) should show the nose-over as an
-  altitude/ADI dip across the roll — if it cannot be read there, it is too small to model and this
-  closes as won't-do. ⚠ This is the cross-axis coupling, not the roll's own spin-up rate, which is
+- `BL-310` `[Feature]` **Pitch-down on aileron roll is designed — unmodelled, and a decode question.**
+  GDD §4.1.5: a roll carries a "small but noticeable" nose-over effect. We model
+  no roll→pitch coupling. Before inventing a constant, ask the binary: does the live torque path
+  (`FUN_0048c470`, the accumulator `BL-414` reads) put a pitch term in on roll input at all? If no
+  such term exists the effect is the design document's intent rather than the shipped behaviour, and
+  this closes as won't-do. ⚠ Do not settle it off the 360° aileron-roll footage — an altitude or ADI
+  dip across a roll cannot separate the coupling from the roll's own geometry, and a frame-derived
+  angle cannot confirm a decode (`docs/verification.md` DET-12).
+  ⚠ This is the cross-axis coupling, not the roll's own spin-up rate, which is
   decoded (`roll_torque` through the reciprocal inertia, damped exponentially).
 
 - `BL-311` `[Feature]` **Ambient turbulence is designed and absent.** GDD §4.1.10: subtle, random jostling
@@ -1806,14 +1867,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   passing plane. Treat Doppler on IA traffic as **unverified**, and measure it (same method: track a
   tonal component against the source WAV) before implementing it.
 
-- `BL-161` `[Feature]` `[Blocked: cockpit view]` **`cockpit_engine_sound` ships per plane, unparsed.** `extracted/zrdr/vehicle.zrd.json`
-  carries it alongside `engine_sound` for every plane def (Devastator: `snd_devastator_cp`, lines
-  21-36; repeated for the other planes); `PlaneStats.Load` does not read it. (`damaged_engine_sound`,
-  which this entry used to bundle, is parsed and consumed since `BL-090` item 1 landed 2026-08-01 —
-  its gain TUNE is `BL-223`.)
-  *Fix shape:* out of scope until a cockpit-audio feature is scheduled; recorded here so nobody has
-  to re-derive from scratch that the *data* isn't the blocker.
-
 - `BL-223` `[Bug]` `[Owed-playtest]` **Damaged-engine loop gates on the wrong thing: any part's worst fraction, not the
   engine part's health pool (B5, 2026-08-01; regated per playtest 2026-08-06, PT-26).** Today
   `PlaneStats`/`FlightAudio` blend `snd_damagedengine` from `1 - PlaneDamage.WorstFraction` across
@@ -1922,14 +1975,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Cameras & views
 
-- `BL-080` `[Feature]` **Future cockpit view** would consume a mix of already-parsed and still-raw data: `pcdpN`
-  cockpit damage panels and the `*_damage_green/yellow/red` indicator anims are already parsed
-  (PlaneStats parses them, DamageVisuals skips them). `cockpit_engine_sound` (`*_cp` WAVs, e.g.
-  `snd_devastator_cp`) is still unparsed — see `BL-161`. `player_fuelleak` (0.85 threshold) IS
-  already parsed, as a `VehicleInjureAnims` entry.
-
 - `BL-150` `[Feature]` **plan-sized — not a TUNE. Numpad camera views — the whole scheme needs a rebuild, not a
-  retune.** Current implementation: `FlightController.cs:286-303` (`Views[]` table, keys
+  retune.** ⚠ **This IS the chase camera's head-look controller, not nine authored poses — read
+  `BL-435` first.** `PLAN-cockpit-view.md`'s decode of `FUN_0042c7f0` found the numpad views run the
+  same head-look state machine C21 ported as `HeadLook`, floored at `−π/2` instead of level; the
+  rebuild below should implement that controller, not a table of nine poses. Item (f)'s `+`/`−`
+  distance trim is the same control as `BL-433`'s External Camera Zoom axis — build them together.
+
+  Current implementation: `FlightController.cs:286-303` (`Views[]` table, keys
   Kp1/2/3/4/6/7/8/9 only — **no Kp0**), `:1653-1676` (`ActiveView()` — held key beats the scripted
   `PinnedView`, first array match wins on multiple keys down), `:1685-1690` (`ApplyFixedView` —
   instant snap, no smoothing, shares the chase camera's `ViewDist`); `--view=N` is the scripted,
@@ -2117,15 +2170,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   eye offset along the nose. Distinct from `BL-150`, which is about the *held-numpad* views around
   the aircraft, not the main view set.
 
-- `BL-260` `[Feature]` `[Blocked: death/flyby captures]` **The death and flyby cameras stay capture-gated; two crash-camera fields unwired**
+- `BL-260` `[Feature]` `[Blocked: camparam decode]` **The death and flyby cameras stay gated on a decode; two crash-camera fields unwired**
   (partial-close 2026-08-05: the crash camera and look-behind landed — `docs/HISTORY.md`).
   `CamParams.cs` parses all four authored `camparam.zrd.json` blocks; still dormant: the **death
   camera** (`death_interval/z/x/alt/min_alt` — placement magnitudes with unknown axes, and the
   engine has no distinct shot-down state to attach it to) and the **flyby camera** (12 fields
-  describing a re-siting roadside pass; its trigger is undecodable without footage). A death and
-  a flyby capture are still owed for those two. Also unwired on the landed crash camera:
-  `crash_elev` 40 (duplicates `crash_y` 45's vertical role — the crash footage cannot separate
-  the implied 56° from 53° look-down) and `crash_chord_y` 1000 (units unknown). Details and the
+  describing a re-siting roadside pass). What gates both is the trigger and the axis assignment,
+  and both live in `crimson.exe`'s camera path — not in footage. Also unwired on the landed crash
+  camera: `crash_elev` 40 (duplicates `crash_y` 45's vertical role) and `crash_chord_y` 1000 (units
+  unknown). ⚠ Do not try to separate the implied 56° from 53° look-down by measuring frames: an
+  angle off footage cannot confirm a decode (`docs/verification.md` DET-12). A capture can still
+  show what the death and flyby shots *look* like, which is worth having once the fields are
+  decoded; it cannot supply the field values. Details and the
   decoded fields: `docs/formats/camparam.md`.
   ⚠ Trap: near-matches between authored fields and hand-picked values are suggestive, not
   decodes — wire nothing on one coincidence; each remaining camera waits for its capture.
@@ -2182,9 +2238,91 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   caliber law stood because the candidates separated by an order of magnitude each way).
 - `BL-420` `[Research]` **Decode the original's per-view base FOV from `crimson.exe` and record it under `docs/org/` — the engine holds a single 62° assumption that the binary refutes.** The original's camera projection has **exactly two base horizontal FOVs, 60° and 80°, both stored in radians as half-angle constants** (`1.0471976` = `92 0a 86 3f` and `1.3962634`), and **which one applies is gated per-camera-mode** (live mode at `camera+0x14c`, selected in `FUN_0042b660`): mode **6** → 80° (`FUN_006024d9`), every other mode (0–5, 7, 8, 9) → 60° (`FUN_00602508`). Modes 6 and 7 are the only two first-person views (both set the `DAT_009fd17c` first-person flag via `FUN_004e7100`, both route through the first-person placement `FUN_0042d980`, neither uses chase-position math — `FUN_0042dc20`/`FUN_0042c5c0` dispatch). So the three named views resolve definitively: **3rd Person / chase = 60°; Cockpit view = mode 6 = 80°; Nose view = mode 7 = 60°**. The cockpit/nose assignment is pinned by a direct render gate: `FUN_0049fb00` (the per-frame player render, sole caller `FUN_004a0220` = main tick) draws the cockpit interior model `cockpit1` (`DAT_0071c314`) **only when mode == 6**, so mode 6 is the interior cockpit view (80°), and mode 7 is the no-interior forward view (60°). The two first-person views also share the **same camera position** — both place the camera at the plane's `cockpit_camera` marker (`DAT_0071c328/32c/330`), so there is **no separate nose-camera offset**; mode 7 differs only in not drawing the interior/hull, not head-looking (fixed forward), and being 60°. The constants are **horizontal**; `FUN_006024d9`/`FUN_00602508` aspect-correct to stored vertical via `atan(tan(H/2) · (16:9)/(4:3))` → 60°→46.8° vertical, 80°→64.4° vertical. The project's current single **62° vertical assumption does not exist in the binary** — the 62°-in-radians constant `1.082104` (`63 82 8a 3f`) is absent, so the assumed number is unsupported and the correct base is 60°.
   *Evidence:* ghidra-mcp read of the open `crimson.exe` (`/crimson.exe`): `FUN_0049fb00` (player render; draws `cockpit1` `DAT_0071c314` only when mode==6 via `FUN_004cca30(x,1/0)` around the interior draw), `FUN_0042b660` (mode gate), `FUN_00602508` (60° H-FOV; writes `_DAT_00a1eff0`/`_DAT_00a1eff4`), `FUN_006024d9` (80° H-FOV, mode 6), `FUN_0042b570` (frustum/projection, contains `0.5235987755982` = 30° = 60°/2), plus the 60°/80°/50.0/2.5 constants side-by-side at the data table `0060409c`. FOV is stored in radians (anim loader `FUN_00502da0` converts degrees→radians via `0.017453292`). The `0x3f860a92` 60° literal is also used by `FUN_0049d940` (player aim camera) and `FUN_004a0220`. Camera object is `DAT_0064ef78`. Placing the camera: both first-person modes run the same placement `FUN_0042d980`, which sets the camera to `plane_pos + plane_rot · (DAT_0071c328,32c,330)`, i.e. the plane's `cockpit_camera` marker offset (bound in `FUN_00473480` from the `cockpit_camera` node; default fallback `DAT_0075d1b8/bc/c0` = `(0,0,0)`). Plane-model `cockpit_camera` node translations (decoded from `extracted/C1/... planes/nodes.json`) put the camera on the fuselage centerline a bit above the local origin — default fighter `player_pfighter`: `(0, +0.75, −0.2)` — with +Y up, ±X the wingspan (ailerons at ±63, elevators/tail at −Z ≈ −37), so +Z = nose/forward and the marker is centered, ~0.75 up, marginally aft of the origin. There is **no `nose_camera` node or per-mode offset** — mode 7 reuses the cockpit_camera point. The `cam_anim` ZAN cockpit sequence (`player-gi_1stperson`) carries no FOV (it shows the interior/hides the plane via `cockpit1`/`camera1`), so the base FOV is not authored in `.ani` data.
-  *Fix shape:* **done — decoded facts landed as [`docs/org/cameraViews.md`](org/cameraViews.md) (2026-08-18)**, covering both the per-view FOV model (60° base; mode-6 cockpit = 80°) and the camera-placement fact (cockpit & nose share the `cockpit_camera` marker; no separate nose offset; per-plane authored offsets like `player_pfighter` `(0,0.75,−0.2)`). Remaining fix work is the engine-side amend: change CSVM's single-FOV assumption + the `docs/formats/camparam.md`/`camparam` references to the 60°/80° model. The engine's live FOV read (`GameSession.cs` and the 62° references in `PLAN-overcast-match.md:1463` and `docs/org/tracers.md:258`) should be corrected to 60° base, with the mode-6 80° first-person variant and the per-mode gating as the full model.
+  *Fix shape:* **the decoded facts landed as [`docs/org/cameraViews.md`](org/cameraViews.md) (2026-08-18), and the mode-6/mode-7 first-person half of the model landed in code** (`PLAN-cockpit-view.md` A3): `CameraController.HorizontalToVerticalFovDeg` renders Cockpit at 80° H and Nose at 60° H, both aspect-corrected off the live viewport, deliberately scoped to those two new modes only (Decision 3, "new modes only") and never touching the engine's 62° global. **What remains is the EXTERNAL half.** `GameSession.cs:475`/`:2624` and `Launcher.cs:490` still write the single 62° vertical global to every chase/fixed-numpad/back/pad-look/crash camera. Migrating those three sites to the decoded 60° horizontal base (with the aspect-corrected 46.8° vertical this page already pins) is the remaining work, and it unsettles two judgements made against the current 62°: `PLAN-overcast-match.md:1463`'s overcast sky match and `docs/org/tracers.md:258`'s tracer calibration. Carry that warning into whichever session does the migration — both need re-judging after the base FOV moves, not just re-measuring against the same footage.
   *⚠ Traps:* (i) **The two `CAMERA_STATE`/`CAMERA_FROM_TO` functions (`FUN_00502da0`, `FUN_00503e70`) are animated/in-script FOV changes only (`.ani` H/V_FOV events) — not the base per-view FOV; do not wire the engine's base FOV to them.** (ii) **The 80° is attached to camera mode 6 specifically, not "first person" generally** — mode 7 is also first-person but is 60°, so gating on "is first person" alone would read the mode-7 number wrong. (iii) The `Virtual Cockpit` string is a HUD/perf/zoning label (`FUN_0059c340`), not a view — ruled out. (iv) ~~Which of cockpit vs nose is mode 6 (80°) vs mode 7 (60°) was not pinned~~ — **resolved**: the `FUN_0049fb00` render gate (`cockpit1` drawn only when mode==6) pins mode 6 = Cockpit (80°) and mode 7 = Nose (60°). The remaining subtlety is that **both modes share the same `cockpit_camera` position** (no separate nose offset exists), so "nose" is a render/head-look/FOV variant of the same camera point, not a physically different marker. (v) "62°" invariants elsewhere are the assumption being corrected, not corroboration.
-  *Cross-refs:* `BL-255` (the nose view that exists in the original — the cockpit/nose FOV split this item decodes feeds that entry), `BL-150` (numpad fixed-view FOV calibration is still missing — a documented 60°/80° base + the aspect conversion is the calibration input it needs), `docs/formats/camparam.md` (chase/tuning only; does not cover FOV), `PLAN-overcast-match.md:1463` and `docs/org/tracers.md:258` (the 62° assumption to correct).
+  *Cross-refs:* `BL-255` (the nose view that exists in the original — the cockpit/nose FOV split this item decodes feeds that entry), `BL-150` (numpad fixed-view FOV calibration is still missing — a documented 60°/80° base + the aspect conversion is the calibration input it needs), `docs/formats/camparam.md` (chase/tuning only; does not cover FOV), `PLAN-overcast-match.md:1463` and `docs/org/tracers.md:258` (the 62° assumption to correct), `PLAN-cockpit-view.md` A3 (landed the mode-6/7 half of this model).
+
+- `BL-432` `[Feature]` **The original selects head-look behaviour by key; CSVM infers it from which
+  device moved — a recorded behavioural difference.** `OriginalScreenshots/Keybinds Views 1.png`
+  binds `K` **Access Snap Look Mode** and `J` **Access Smooth Look Mode**, both free in CSVM's
+  flight scheme today. The look-state byte the head-look controller reads (`DAT_0064ef68`,
+  `PLAN-cockpit-view.md`'s decode of `FUN_0042d010`) is a mode selector with three values — `0`
+  snap, `1` free-look, `2` padlock (`BL-399`) — that the original's player flips explicitly with
+  these two keys. `PLAN-cockpit-view.md` C21 instead infers the mode from the input source: the
+  numpad snap cluster snaps, the mouse/right stick pans smoothly, and both are live at once rather
+  than one active mode at a time. That is a genuine behavioural difference, not just an unbound key:
+  the original's player cannot free-look while snap is the active mode (or vice versa), and CSVM's
+  player always can.
+  *Fix shape:* either wire `K`/`J` as an explicit mode toggle gating which input path
+  `HeadLook.Step` honours that frame, or judge the device-inferred behaviour as the better port and
+  record why. Build beside `BL-399` — it is the same byte's third state.
+  *Cross-refs:* `BL-399` (padlock, the byte's third state), `PLAN-cockpit-view.md` C21 (`HeadLook`,
+  `src/Flight/HeadLook.cs`).
+
+- `BL-433` `[Feature]` **Numpad `+`/`−` are unbound; the original uses them for the chase camera's
+  zoom, which CSVM has no equivalent of.** `OriginalScreenshots/Keybinds Views 2.png` labels the
+  pair **External Camera Zoom In/Out** — decoded as keys `0x43`/`0x44` moving a stored zoom value at
+  `2·dt`, clamped `[0, 1]`, smoothed at `1.5`/s (`PLAN-cockpit-view.md`, "What the data actually
+  ships"). `BL-150`'s own item (f) records the same pair, independently measured, as a "camera
+  distance trim" — read together, that trim IS this zoom axis, not a separate control. The
+  head-look controller's own center key (`0x3e`) also zeroes this same zoom value in free-look, so
+  the two features share one piece of state.
+  *Fix shape:* one zoom axis bound to numpad `+`/`−`, driving `CameraController`'s chase distance
+  with the decoded rate/clamp/smoothing; the center key's zero-the-zoom behaviour rides along once
+  `HeadLook`'s center path reaches the chase camera (`BL-435`).
+  *Cross-refs:* `BL-150` item (f) (same control, measured independently), `BL-435` (the center-key
+  zero), `PLAN-cockpit-view.md` (constants, `DAT_0064ef30`/`38`).
+
+- `BL-435` `[Feature]` **The original drives the chase camera through the same head-look controller
+  as the cockpit views; CSVM's chase view has no look-around at all.** `FUN_0042c7f0` (the chase
+  placement dispatcher) calls the identical `FUN_0042d010(0xbfc90fdb, 0)` that
+  `PLAN-cockpit-view.md` C21 already ported as `HeadLook` — same states, same snap table, same
+  2 rad/s pan, same smoothing rates — with its elevation floor at `−π/2` instead of first person's
+  level floor, so the chase
+  camera can look down as well as up. The original's numpad snap cluster (`Kp1`-`Kp9`) plus
+  `F9`-`F12` **External Camera** keys plus `F7` **Access Chase View** (menu label,
+  `OriginalScreenshots/Keybinds Views 2.png`) are this same mechanism, not a separate feature.
+  ⚠ **This is the mechanism behind `BL-150`'s numpad "fixed views."** `BL-150`'s own `CAP-07`
+  measurement found the numpad views compose as a SUM of each held key's 2-D offset from `Kp5`, with
+  a zero resultant giving the default chase pose — exactly this controller's snap-direction
+  composition, applied to the chase camera's `−π/2`-floored instance rather than a table of nine
+  authored poses. `BL-150`'s rebuild should therefore build look-around (this item), not nine
+  hand-placed camera positions.
+  ⚠ **`F7` conflicts with CSVM's own debug binding.** `docs/controls.md` already records `F7` as
+  unassigned in CSVM's flight scheme specifically because `docs/org/cameraViews.md`'s correction
+  identifies "Access Chase View" as the mode-9 FLYBY, not the following chase — a contradiction
+  between the menu label and the decoded behaviour nobody has settled. Resolve which behaviour the
+  `F7`-labelled binding actually maps to before choosing a CSVM key.
+  *Fix shape:* reuse `HeadLook` (`src/Flight/HeadLook.cs`, C21) on the chase camera with
+  `PitchFloor = -π/2` instead of building a second controller; the snap cluster becomes
+  `CameraController`'s numpad table per `BL-150`'s law once that item's rebuild lands.
+  *Cross-refs:* `BL-150` (the fixed-view numpad table this supersedes as a mental model), `BL-433`
+  (the same F9-F12/zoom cluster's `+`/`−` half), `PLAN-cockpit-view.md` (⚠ table row 2, C21
+  `HeadLook`), `docs/org/cameraViews.md` (the F7/flyby correction).
+
+- `BL-436` `[Tuning]` `[Owed-playtest]` **The cockpit view's whole feel is unjudged at the controls
+  — one sitting owes seven separate decisions `PLAN-cockpit-view.md` made without one.** (a)
+  `PlaneBuilder.InteriorScale` (B11) is a declared TUNE, framed static (0.04, "the panel ~0.7 m
+  ahead of the eye") and never flown. (b) Head-look feel (C21): the snap directions, the 2 rad/s
+  free-look pan rate, and the elevation/azimuth smoothing rates (3.0/5.0 per second) are all
+  decoded constants, none flown. (c) The azimuth-sign port decision (C21): the original's two input
+  paths disagree on sign and CSVM picked one convention for both (positive = left) — confirm it
+  reads right rather than backwards. (d) The autohead sub-cap port decision (C22): only the
+  plane-local X/Y velocity drives the lean, the forward (Z) component dropped before scaling, a
+  port choice made without decoded evidence either way. (e) The damaged-over-cockpit engine-sound
+  precedence (D31): when both the damage swap and the cockpit swap are live, damaged wins — an
+  evidence-gapped port decision, no shipped def authors the conflicting case. (f) Wobble in first
+  person against the original: the cockpit camera inherits the plane node's wobble by riding the
+  drawn pose (A2, `docs/org/shakes.md`) — compare amplitude and character in the cockpit at the
+  controls against the original's own cockpit view. (g) The Nose head-look confirm:
+  `PLAN-cockpit-view.md`'s ⚠ table row 2 retired `docs/org/cameraViews.md`'s old "head fixed in
+  Nose" reading in favour of "head-look runs, only autohead is gated" — fly Nose and confirm the
+  free-look is really there, since the retired reading may have been a live impression rather than
+  a misread decompile.
+  *Fix shape:* one cockpit sitting across a couple of airframes covers all seven; each is a
+  judgement call, not a re-decode.
+  *Cross-refs:* `PLAN-cockpit-view.md` (every decision above, by wave: B11, C21, C22, D31), `BL-391`
+  (engine level, kept separate from (f)).
 
 ## HUD & UI
 
@@ -2288,6 +2426,43 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `UI/LoadBoard.cs`, `Launcher.BeginLaunch`/`RunOwedLaunch`, `Utils/StartupProfile.cs`,
   [`docs/org/loading-screen.md`](docs/org/loading-screen.md), `docs/architecture.md`.
 
+- `BL-431` `[Feature]` **The cockpit interior's `gauges` subtree (39 meshes, `cockpit1`) renders as
+  static geometry — the needles never move, and two interior warning lamps ship parked hidden.**
+  `PLAN-cockpit-view.md` (Wave B) built the interior render but deliberately kept `GaugeCluster` as
+  the only DRIVEN instrument set (Decision 1): the in-3D dial faces, bezels and panel are authored
+  geometry with no needle animation wired to them, so a Cockpit-view capture shows the screen-space
+  HUD dials drawn over a static 3D panel holding a fixed pose. Two lamp nodes, `lowalt_on` and
+  `stallwarning_on` (present on all 11 airframes, shipped `active: true`), are parked hidden by
+  `PlaneBuilder.ParkInteriorStates`/`IsInteriorDrivenState` alongside the windshield bullet-hole
+  decals — nothing lights them. Bundled here with a second, related question: whether `GaugeCluster`
+  should reposition per `hud_v2.zrd`'s `POSITION_1ST` layout key when the pilot is in a first-person
+  view — the HUD initializer reads distinct `POSITION_1ST`/`POSITION_3RD` layout keys from the
+  archive and CSVM's `GaugeCluster` consumes neither (`docs/org/cameraViews.md`, "The in-binary
+  strings expose no view-name tokens").
+  *Fix shape:* drive the authored needles and the two lamps off the same telemetry `GaugeCluster`
+  already reads, then decide whether the screen-space cluster retires in first person, moves to the
+  `POSITION_1ST` layout, or keeps doubling up over the 3D panel as it does today.
+  *Residue:* nothing is hidden for this, and nothing needs to be. The instruments were reported
+  flickering, and the mechanism turned out to be the mount scale rather than the missing needle
+  drive: every depth bias `SceneBuilder` emits is a fraction of VIEW DISTANCE, so mounting the
+  interior at `PlaneBuilder.InteriorScale` (0.04) left one authored priority level worth about
+  86 µm of depth at the panel's 0.42 m, below the float noise of a view-space transform computed
+  at a chapter's world coordinates. The bezel rings that ring each instrument (`horizn` at
+  priority 1 over the `dash` panel at 0) swapped winner with the panel from frame to frame. The
+  interior now builds on its own `SceneBuilder` carrying `DepthBiasScale = 1/InteriorScale`, which
+  restores the absolute separation the authoring assumed; the airframe, the world and all four
+  plane-bearing goldens are untouched by it. What remains in a Cockpit capture is texture shimmer
+  on the finest dial markings (the compass drum's ticks, the small dials' graduations) as the
+  panel's projected position wobbles sub-pixel — an aliasing artifact of high-frequency instrument
+  textures, not a draw-order one, and driving the authored needles will not change it either way.
+  *Cross-refs:* `PLAN-cockpit-view.md` B11 (parked the states; also settles that the `gauges` child
+  itself must stay visible — it is not a needle overlay). The windshield bullet-hole decals
+  (`bullet1`-`bullet5`) share the same parked-state mechanism but are driven by the unrelated
+  `cockpit_bulletholes` anim-def family (`docs/plans/PLAN-m3-polish-5.md:453`), not this item.
+  Neither that family nor either other `PLAYER_1ST_PERSON` def (`muzzle_burst`, `player-1`'s
+  `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
+  subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2338,6 +2513,23 @@ usual.
   per-def volume terms feeding `Projectile.cs`'s `def.Volume * 0.2f * MixGain * distanceGain`
   (line ~2238) — not the `1/sqrt(N)` splitscreen term itself, which is confirmed correct.
 
+- `BL-434` `[Research]` **Splitscreen cockpit interior/audio behaviour is unprofiled and unjudged
+  past one pilot.** `PLAN-cockpit-view.md` (Decision 5) built cockpit rendering and the
+  `cockpit_engine_sound` swap verified single-player-only, no further. (a) **Per-viewport interior
+  draw cost is unprofiled**: each pilot's rig now carries its own `cockpit1` subtree and
+  `CockpitVisibility`, so a splitscreen session with 2-4 cockpit-view pilots draws that many
+  interiors simultaneously. (b) **The per-pilot `cockpit_engine_sound` swap against splitscreen's
+  `MixGain` term is unjudged at the controls** — `BL-391`'s "own-ship engine loop too loud" finding
+  predates the cockpit swap and never isolated the `_cp` def specifically. (c) **Today's hiding
+  mechanism is node visibility on a shared plane node, not a per-viewport render flag**:
+  `CockpitVisibility` hides the OWN rig's `healthy` body node, so a pilot sitting in the cockpit
+  hides THAT AIRCRAFT'S body in every pane that can see it, not just their own — a cross-pane effect
+  unjudged at `N > 1`.
+  *Fix shape:* profile per-viewport interior cost at 4 players; a splitscreen listen for the
+  cockpit-swap/`MixGain` interaction; confirm or fix the cross-pane body-hide visually at the
+  controls with 2+ cockpit-view pilots in the same session.
+  *Cross-refs:* `PLAN-cockpit-view.md` B11 ("Splitscreen posture"), `BL-391` (base engine level,
+  the audio half of (b)), `BL-389` (splitscreen weapon mix, same playtest family).
 
 ## Missions, modes & campaign
 
@@ -2371,26 +2563,6 @@ usual.
   *How you'd know it worked:* fail a stunt mission deliberately, confirm the wrap-up claims no best
   and `user://stunt_scores.json` is byte-identical afterwards; then complete one and confirm it
   does record.
-
-- `BL-352` `[Feature]` **Instant Action's Table of Contents: the 19 preset scenarios and their View
-  Story page.** Split out of [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing
-  (2026-08-14) as deliberately out of that plan's scope. The original's Instant Action screen is not
-  primarily a form: down its left side sits `ia_tl_contents`, a 14-row list of 19 named preset
-  scenarios (`langui` ids 3600 to 3618: *Girl Trouble*, *Sour Grapes*, *Black Hats and Hoplites*,
-  *Swan's Gauntlet*, *Manhattan Tea Party*, …). Selecting one fills every dropdown, and *View Story*
-  (`IDS_IA_B_VIEWSTORY`) opens its written setup. `IDS_IA_TABLE_INSTRUCTIONS` says so outright:
-  "Select a mission below and click View Story to see its details on the next page." Most players
-  never touched the dropdowns at all, so this is the mode's real front door.
-  **What it needs.** The preset table is not in any shipped data file; `INSTANTACTION.SCRIPT` reaches
-  it through engine callbacks 2301 (initial index plus mission type), 2302 (index to mission type)
-  and 2353 (push the whole form), so it lives in `crimson.exe`. Decode those four callbacks and the
-  table they read, then render the presets as a first screen ahead of the wizard's step 1. The story
-  prose is a second question: it may be `langui` strings, or it may be `crimson.rof` artwork.
-  ⚠ **Traps.** (a) `ia_tl_contents`'s selection sets the mission type, which then re-enables or hides
-  the whole enemy-wave block (`if (0 == WT)`), so a preset is not just a set of dropdown values; it
-  drives the screen's own state machine. (b) 19 presets against 7 environments means presets are not
-  per-environment; do not assume a mapping. (c) Blocked on nothing, but pointless before
-  `PLAN-instant-action` lands the configurable mission the presets would fill in.
 
 - `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
   (C1/M04 `--generators`, user-reported 2026-08-13).** The spawn position is decoded-correct: the
@@ -2748,11 +2920,10 @@ usual.
   nothing in the extracted data contains that text. It can only be in
   `CrimsonSkiesGame/GOSDATA/ASSETS/BINARIES/langui.dll`, a Win32 resource table no tool of ours
   reads.
-  **Why it is worth its own item.** It unblocks two features, not one. `BL-352`'s entry says the
-  *View Story* prose for the 19 preset scenarios "may be `langui` strings, or it may be
-  `crimson.rof` artwork", and this settles that question in the same pass. The wizard's own decoded
-  facts already cite langui ids (the thirteen militias at 3670, the presets at 3600–3618), so the
-  table is being read second-hand today from decode notes rather than from the file.
+  **Why it is worth its own item.** The wizard's own decoded facts already cite langui ids (the
+  thirteen militias at 3670, the presets at 3600–3618), so the table is being read second-hand today
+  from decode notes rather than from the file. It no longer carries `BL-352` with it: the *View
+  Story* page has no per-preset prose to find, which the decode of that screen settled.
   ⚠ **Traps.** (a) Our Ammo Selection screen ships without description panes, which is a stated
   divergence rather than an oversight; adding them is this item, not a bug fix on that screen. (b) A
   quarter-width four-player pane has no room for a prose block, so the panes are not simply "the

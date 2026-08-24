@@ -10,6 +10,7 @@ friendly-fire rules.
 ## Contents
 
 - [Screen controls](#screen-controls)
+- [Table of Contents presets](#table-of-contents-presets)
 - [Option strings](#option-strings)
 - [Environment mapping](#environment-mapping)
 - [Militias and aircraft](#militias-and-aircraft)
@@ -22,7 +23,8 @@ friendly-fire rules.
 
 `INSTANTACTION.SCRIPT` declares every widget and the engine callback that fills and reads it.
 `LAYOUT.CSV`'s last column on a `D` (dropdown) row is the **visible-row count**, which for these
-short lists equals the item count — except `ia_d_planep`, see the trap below.
+short lists equals the item count. Two rows are windows onto a longer list rather than counts:
+`ia_d_planep` (see the trap below) and `ia_tl_contents`, whose 14 rows show part of a 19-item list.
 
 | Widget | Fill / select callback | Rows | Contents |
 |---|---|---|---|
@@ -35,7 +37,7 @@ short lists equals the item count — except `ia_d_planep`, see the trap below.
 | `ia_d_egroupN` | 2324 | 13 | the militia flying that wave |
 | `ia_d_planeeN` | 2330 / 2331 / 2332 / 2333 | 11 | that militia's aircraft. Each wave has its **own** list id, and selecting a militia resets the wave's plane index to 0 (`ZU[BA]`'s handler sets `AV[BA].QG = 0`), which is the script's own statement that the list depends on the militia |
 | `ia_d_difficultyN` | 2326 | 4 | three skills in a four-row box |
-| `ia_tl_contents` | 2300 / 2302 | 14 visible | the Table of Contents, 19 preset scenarios (`BL-352`, out of scope) |
+| `ia_tl_contents` | 2300 / 2302 | 14 visible | the Table of Contents, 19 preset scenarios (decoded below; the screen itself is `BL-352`) |
 
 Two behaviours matter beyond the option sets, both confirmed directly in the script. Selecting
 mission type 0 (dogfighting an ace) hides every enemy control — `gui_init`'s per-wave loop tests
@@ -49,7 +51,91 @@ and waves 1 to 3 on page 2, keyed off which of the `ia_b_up`/`ia_b_down` buttons
 `callback($$A$$, 1024)` (the player's saved-plane count) `+ 11`, and `gui_continue` re-checks the
 same count each frame to decide whether the default selection is index 0 (no custom planes) or
 index 11 (the first custom plane). 20 is `LAYOUT.CSV`'s visible-row window for that variable-length
-list, not an item count — the only row in this table where the two differ.
+list, not an item count. `ia_tl_contents` is the other row where the two differ, and there the
+longer list is fixed at 19 rather than varying with the player's saved planes.
+
+## Table of Contents presets
+
+The list down the left of the screen offers **19 named preset scenarios**, and selecting one fills
+every other control. No shipped data file carries them: `crimson.exe` holds the table.
+
+**Where.** 19 records of `0x230` (560) bytes at **`0x0061b090`**, running to `0x0061da20`.
+`FUN_004102c0(index)` copies one record over the live setup struct at **`0x0064ab5c`**, which has
+the same layout, then recomputes the derived masks below. The three callbacks resolve inside the
+`uiData` script-callback handler (registered under that name by `FUN_004075d0`, entry `0x004093a0`):
+2300 fills the list, writing the literal count `19` at `0x0040c019` and fetching each row's text as
+langui `3600 + index`; 2301 returns the stored index and mission type; 2302 stores the index, calls
+`FUN_004102c0` and returns the new mission type.
+
+**Record layout.** Every field is an `int32` unless noted, and offsets are from the record's start.
+
+| Offset | Field |
+|---|---|
+| `+0x00` | the preset's own index |
+| `+0x08`, `+0x0c` | the screen's current player / wingman aircraft selection, mirroring `+0x80` and `+0x84` |
+| `+0x10` | 7 bytes, one allowed flag per environment. Derived, stored as zero |
+| `+0x17` | 4 x 11 bytes, one allowed flag per aircraft per wave. Derived, stored as zero |
+| `+0x44` | mission type, in the dropdown order (0 ace, 1 squadron, 2 stunt, 3 zeppelin) |
+| `+0x48` | environment, in the dropdown order |
+| `+0x4c` | wingman count |
+| `+0x50` | 4 dwords, enemies per wave |
+| `+0x60` | 4 dwords, militia per wave |
+| `+0x70` | 4 dwords, skill per wave |
+| `+0x80`, `+0x84` | player and wingman aircraft |
+| `+0x88` | 4 dwords, enemy aircraft per wave |
+| `+0x98`, `+0x164` | player and wingman plane records, 204 bytes each |
+
+**Out-of-range values are sentinels, and applying a preset normalises them.** A militia of 13, a
+skill of 3 and an aircraft of 11 are each one past their dropdown's last row and mean "unset".
+`FUN_004102c0` rewrites an unset wave's militia to 4, its skill to 1 and its aircraft to 5, and the
+mission builder `FUN_004175f0` then skips any wave whose enemy count is 0, so the substituted values
+never reach a mission.
+
+**The two derived masks are what a preset's mission type and militias then permit.**
+`FUN_004103b0` rebuilds the 7-byte environment mask from the mission type, and `FUN_00410420(wave)`
+rebuilds that wave's 11-byte aircraft mask from its militia (see "Militias and aircraft").
+
+**The presets.** Waves read as `count x militia aircraft (skill)`.
+
+| # | Name | Mission | Environment | Player | Wingmen | Waves |
+|---|---|---|---|---|---|---|
+| 0 | Girl Trouble | squadron | Sky Haven | Firebrand | 2 x Peacemaker | 4 x Medusa Kestrel (veteran); 2 x Black Swan Fury (ace) |
+| 1 | Sour Grapes | stunt | Manhattan | Bloodhawk | 0 | 4 x Blake Aviation Bloodhawk (veteran) |
+| 2 | Me and My Big Mouth | ace | the ocean | Autogyro | 0 | none |
+| 3 | The Angry Luau | zeppelin | Hawaii | Fury | 4 x Hellhound | 6 x Fortune Hunter Devastator (ace) |
+| 4 | Hat Trick | squadron | an airfield | Brigand | 0 | 3 x Black Hat Warhawk (veteran) |
+| 5 | Seaside Show-Off | stunt | the ocean | Peacemaker | 2 x Kestrel | 4 x Hughes Aviation Fury (veteran) |
+| 6 | Two to Tango | ace | Sky Haven | Hellhound | 0 | none |
+| 7 | Death of the Gemini | zeppelin | the clouds | Kestrel | 4 x Kestrel | 6 x Hughes Aviation Bloodhawk (ace); 3 x Blake Aviation Peacemaker (veteran) |
+| 8 | Hares and Tortoises | squadron | a movie studio | Bloodhawk | 2 x Bloodhawk | 4 x Studio Security Autogyro (novice); 4 x Black Hat Warhawk (veteran) |
+| 9 | Swan's Gauntlet | stunt | an airfield | Fury | 0 | 4 x Black Swan Fury (ace) |
+| 10 | Aloha, Ace! | ace | Hawaii | Devastator | 0 | none |
+| 11 | Black Hats and Hoplites | zeppelin | Sky Haven | Autogyro | 2 x Autogyro | 6 x Black Hat Brigand (veteran) |
+| 12 | From Russia with Hate | squadron | the clouds | Fury | 2 x Peacemaker | 4 x Russian Devastator (novice); 4 x Russian Devastator (veteran); 2 x Russian Devastator (ace) |
+| 13 | Honor, Hollywood Style | ace | a movie studio | Brigand | 0 | none |
+| 14 | Manhattan Tea Party | zeppelin | Manhattan | Warhawk | 4 x Devastator | 6 x British Peacemaker (veteran); 4 x Sacred Trust Hellhound (ace) |
+| 15 | Let's You, Me, and Him Fight | squadron | the ocean | Hellhound | 3 x Firebrand | 4 x Russian Devastator (veteran); 4 x Fortune Hunter Kestrel (ace) |
+| 16 | The Longest New York Minute | ace | Manhattan | Brigand | 0 | none |
+| 17 | Rocky Mountain Hijinks | stunt | Sky Haven | Peacemaker | 0 | 6 x Sacred Trust Warhawk (veteran) |
+| 18 | The Hollywood Brawl | zeppelin | a movie studio | Devastator | 4 x Kestrel | 6 x Hollywood Knight Firebrand (ace); 4 x Studio Security Autogyro (ace) |
+
+The names are langui 3600 to 3618 in that order. All five ace presets carry no waves, which is the
+same rule the script's `0 == WT` branch enforces on the screen. All four mission types and all seven
+environments appear, and no environment is tied to one mission type, so the presets are not a
+per-environment set.
+
+**Presets fly stock airframes, so nothing here depends on the hangar.** A record's own two plane
+records are not read: `FUN_004102c0` overwrites both from the stock airframe table at `0x00619f58`
+(stride `0xcc`, the same 204 bytes a saved custom plane file carries, see
+[paint.md](paint.md)) indexed by `+0x80` and `+0x84`, then sets each name to langui 134, `"Stock"`.
+
+**⚠ *View Story* opens the wizard page, not a written story.** The path at `0x0040c07d` fetches
+langui `3600 + index` and formats it through langui 1074 `IDS_IA_STORYTITLE`, whose whole text is
+`%1!s!`. The script declares two story widgets and no prose pane: `ia_t_storytitle`, which receives
+that formatted name, and `ia_t_storyinstr`, which is the fixed langui 1063, "Want to create and then
+FLY your own mission? Use the drop-down lists below…". The second page is the configuration screen
+with the preset's name as its heading, so there is no per-preset prose to find in `langui` or in
+`crimson.rof`.
 
 ## Option strings
 
@@ -106,14 +192,24 @@ both run `zeppelin_run`), so the pairing rested on elimination, and the missing 
 the setup screen supplies them, which A3 showed it does for every chapter anyway. Do not
 reintroduce either claim.
 
+**The screen enforces one of these bans itself, without reading `ia.json`.** `FUN_004103b0`
+rebuilds a 7-byte per-environment allow mask whenever the mission type changes: types 0, 1 and 3
+allow all seven rows, and type 2 (stunt flying) clears row 1, the clouds. That is the same
+exclusion C2B's `disallow_missions` carries, arrived at independently, and no stunt preset selects
+row 1.
+
 `num_wingmen` is `3` in all seven chapters that carry it (the eighth, C2B, carries neither
 `player_plane` nor `num_wingmen`); the wingman range is 0 to 5 per `ia_d_nwing`'s row count above.
 
 ## Militias and aircraft
 
-Inverted from [paint.md](paint.md)'s "Patterns are per aircraft" table (measured over the `.BM`
-skins each pattern ships in `crimson.rof`), matched to the militia strings above by their pattern
-name.
+Decoded from `FUN_00410420`, which the setup screen calls once per wave: it switches on that wave's
+militia index and writes an 11-byte allow mask, one flag per aircraft in the langui 3700 order, at
+`0x0064ab73 + wave * 11`. The table below was first inferred by inverting
+[paint.md](paint.md)'s "Patterns are per aircraft" table (measured over the `.BM` skins each pattern
+ships in `crimson.rof`) and matching pattern names to the militia strings above; the binary agrees
+with that inference on all thirteen militias, and every one of the 19 presets picks an enemy
+aircraft inside its own militia's set.
 
 | Militia | Pattern | Aircraft |
 |---|---|---|
@@ -137,10 +233,16 @@ so it is not an Instant Action militia. `BROADWAY` and `ITSTAXI` ship no `paint_
 whatever colours are current, which is the behaviour a Broadway Bomber wave inherits.
 
 **⚠ This reading, not `vehicle.json`'s `paint_pattern` coverage, is the one to build against.**
-Under the def reading the largest militia has three aircraft; under this `.BM` pattern-coverage
-reading Fortune Hunter covers all eleven, which is what `ia_d_planeeN`'s eleven-row dropdown
-requires (`LAYOUT.CSV`, above). The two readings also disagree on Sacred Trust (defs give
-Hellhound alone, coverage gives Warhawk and Hellhound).
+Under the def reading the largest militia has three aircraft and Sacred Trust has Hellhound alone;
+`FUN_00410420` gives Fortune Hunter all eleven and Sacred Trust two, so the def reading is the
+wrong one. Do not restate the older argument for this table, that `ia_d_planeeN`'s eleven rows
+require some militia to reach eleven: that dropdown's 11 is a `LAYOUT.CSV` row window like
+`ia_d_planep`'s 20, and the mask, not the window, is the evidence.
+
+**The mask's bit order is the aircraft dropdown's order**, which is the langui 3700 order
+(Autogyro, Hellhound, Balmoral, Bloodhawk, Brigand, Devastator, Firebrand, Fury, Kestrel,
+Peacemaker, Warhawk) filtered to the allowed flags, not the order the table above happens to list
+them in.
 
 ## Ace
 

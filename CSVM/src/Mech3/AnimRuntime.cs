@@ -227,6 +227,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// runtime built without a viewer seam (a lab, a test) on today's single-camera behaviour.</summary>
     internal Func<IReadOnlyList<Vector3>>? LightViewerPositions;
 
+    /// <summary>Answers the data's <c>PLAYER_1ST_PERSON</c> condition (id 120): whether any human
+    /// pilot is flying one of the two first-person views (Cockpit/Nose). Supplied by the session
+    /// off the rigs' own view mode; null — a lab, a test, a bootstrap before any rig exists —
+    /// reads false, which is what this condition answered before the modes existed.</summary>
+    internal Func<bool>? FirstPersonView;
+
     /// <summary>Whether <see cref="Bootstrap"/> runs the ambient-playback passes (ON_STARTUP defs
     /// and the mission's startanims). True in every game/viewer/flight session. False gives the
     /// animation debugger a quiet stage: base states and mission setup still apply, but nothing
@@ -486,9 +492,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // finishing. The second number is the one that matters — it must be 0.
     private int _waitsInstalled, _waitsAbandoned;
 
-    /// <summary>Answers the data's <c>PLAYER_1ST_PERSON</c> condition. No cockpit view
-    /// exists yet, so false.</summary>
-    private bool FirstPerson;
 
     /// <summary>Key puffer emitters by owning def as well as (name, host) — see
     /// <see cref="EmitterDirector"/>'s keying remark, which carries the measurement behind each
@@ -2452,7 +2455,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // argument (`IF HW_RENDER`) and every compiled instance stores 0, so the
             // condition is the runtime flag itself.
             "HwRender" => true,
-            "PlayerFirstPerson" => FirstPerson,
+            "PlayerFirstPerson" => FirstPersonView?.Invoke() ?? false,
             "PlayerRange" => anchor != null
                              && NearestPlayerDistanceSquared(WorldPos(anchor)) <= num,
             // ANIM_HEALTH gates damage effects: "if this object has been worn down to N".

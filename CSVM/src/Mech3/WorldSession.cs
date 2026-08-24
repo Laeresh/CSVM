@@ -219,6 +219,7 @@ public sealed class WorldSession
             PlayerPosition = o.PlayerPosition,
             PlayerPositions = o.PlayerPositions,
             LightViewerPositions = o.LightViewerPositions,
+            FirstPersonView = o.FirstPersonView,
             // On a single-subtree stage most definitions legitimately resolve nothing, so the bind
             // has to SAY which of "no handler ever fires" and "the node is not here" happened —
             // from outside they are the same still object.
@@ -386,6 +387,10 @@ public sealed class WorldSession
         /// not <see cref="PlayerPositions"/>. Null → the runtime falls back to
         /// <see cref="PlayerPosition"/> alone.</summary>
         public Func<IReadOnlyList<Vector3>>? LightViewerPositions { get; init; }
+
+        /// <summary>Whether any human pilot is in one of the two first-person views, for the
+        /// <c>PLAYER_1ST_PERSON</c> condition. Null → false, the pre-cockpit answer.</summary>
+        public Func<bool>? FirstPersonView { get; init; }
 
         /// <summary>Build world colliders (true in flight; false for a static or lab view).</summary>
         public bool Collision { get; init; }

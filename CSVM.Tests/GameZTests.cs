@@ -18,7 +18,7 @@ public class GameZTests
     {
         // Child references are flat list positions, not the node's own index field.
         var gamez = Load();
-        Assert.Equal(10, gamez.Nodes.Count);
+        Assert.Equal(12, gamez.Nodes.Count);
         var plane = gamez.FindByName("probe_plane")!;
         Assert.Equal(0, plane.Index);
         Assert.Equal(new[] { 1 }, plane.Children);

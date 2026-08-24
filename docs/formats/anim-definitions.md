@@ -367,7 +367,7 @@ so the runtime has a single convention.
 | 473 | `NodeUndercover` | `NODE_NEAR_GROUND [name, d]` | **stubbed false** — needs a ground/occlusion probe. All 473 sit in `ON_CALL` defs the bootstrap never reaches. |
 | 124 | `AnimHealthRange` | — | `min <= health <= max`. Same as `AnimHealth`: false at full health. |
 | 120 | `AnimationLod` | `ANIMATION_LOD [HIGH]` | `ourLod >= n`. **Our setting, not the data's** — see below. |
-| 120 | `PlayerFirstPerson` | `PLAYER_1ST_PERSON` | our camera mode; false until a cockpit view exists. |
+| 120 | `PlayerFirstPerson` | `PLAYER_1ST_PERSON` | our camera mode: true while any human pilot has the Cockpit or Nose view selected, false with no view seam wired (a lab, a test). |
 | 28 | `NodeBelowAlt` | `NODE_BELOW_ALT [name, alt]` | node world Y < alt. |
 | 17 | `HwRender` | `HW_RENDER` | true. |
 

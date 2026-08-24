@@ -42,6 +42,11 @@ public partial class FlightController : Node3D
     /// <summary>The visible aircraft model (a child of this node); hidden while crashed.</summary>
     public Node3D? PlaneModel;
 
+    /// <summary>The per-mode hiding of this pilot's OWN aircraft while a first-person view is on
+    /// the screen (interior in, body out; Nose also drops markers/dontmove). Null on every rig that
+    /// was not built an interior — AI planes and the labs — which then never hides anything.</summary>
+    public CockpitVisibility? Cockpit;
+
     /// <summary>The wobble oscillators and the pivot they roll — the node the assembler hung
     /// <see cref="PlaneModel"/> under. Null when no rig assembly ran (parked lab planes).</summary>
     public PlaneShake? Shake;
@@ -294,6 +299,12 @@ public partial class FlightController : Node3D
     /// wins over this while it is down.</summary>
     public int PinnedView;
 
+    /// <summary>The view mode this pilot starts in (<c>--view=cockpit</c>/<c>=nose</c>); Chase, the
+    /// default, is exactly today's behaviour. The live value is the camera's
+    /// (<see cref="CameraController.ViewMode"/>) once <see cref="Setup"/> has run, because the
+    /// cycle key changes it; this field only seeds it.</summary>
+    public PilotViewMode PinnedViewMode = PilotViewMode.Chase;
+
     /// <summary>Out of lives: this pilot stays crashed for the rest of
     /// the mission — neither R nor <see cref="AutoRespawnAfter"/>'s timer brings it back — while
     /// the session hands its pane to a <see cref="SpectatorCamera"/> and the others fly on. Set by
@@ -332,6 +343,10 @@ public partial class FlightController : Node3D
                                                    // per action
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
 
+    // The head-look recenter key: the original's Kp5 "Look Forward", the middle of the numpad
+    // cluster its eight direction slots surround.
+    private const Key SnapCenterKey = Key.Kp5;
+
     // Everything this pane draws for its pilot. Always present, so no site has to ask whether
     // there is a HUD: an aircraft with no readouts built simply has a module that draws nothing.
     private readonly FlightHud _pilotHud = new();
@@ -347,6 +362,7 @@ public partial class FlightController : Node3D
     private readonly AimCandidateSet _targetScan = new();   // the targeting pass's own scan, rebuilt per frame
     private readonly List<AimCandidate> _targetParts = new(); // this frame's selectable sub-parts
     private readonly bool[] _targetKeyPrev = new bool[5];   // T/Y/U/I/O edge detection
+    private readonly bool[] _viewModeKeyPrev = new bool[4]; // F8/F6 + pad view-selection edges
     private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // D-pad Up tap vs hold
 
     private bool _initialTargetDone;             // --target= has had its one chance
@@ -415,6 +431,7 @@ public partial class FlightController : Node3D
     private bool _heldPinned;                    // the pinned pose below is valid (captured on the first held step)
     private Vector3 _heldPos;                    // the pinned position, re-applied through the model every held step
     private Basis _heldAttitude;                 // the pinned attitude, ditto
+    private Vector2 _mouseLookPrev;              // last frame's screen mouse position (head-look motion)
 
     // The sim advances on the 60 Hz physics tick while rendering runs at the display rate, so
     // drawing the raw sim pose stutters the plane against the smoothly-moving chase camera at
@@ -480,6 +497,15 @@ public partial class FlightController : Node3D
     /// choker's one observable, since nothing else on that path changes (see
     /// <see cref="TryChokeEngine"/>).</summary>
     public float EngineDeadRemainingS => _model.EngineDeadRemainingS;
+
+    /// <summary>The view this pilot has selected, live. Falls back to <see cref="PinnedViewMode"/>
+    /// before <see cref="Setup"/> has built a camera, and reads Chase on an AI rig, which has
+    /// none.</summary>
+    public PilotViewMode ViewMode => _cam?.ViewMode ?? PinnedViewMode;
+
+    /// <summary>Whether this pilot is in one of the two first-person views — the session's feed for
+    /// the anim data's <c>PLAYER_1ST_PERSON</c> condition (id 120).</summary>
+    public bool FirstPersonView => PilotView.IsFirstPerson(ViewMode);
 
     /// <summary>This airframe's stats, the flight model's own copy (jittered for an AI spawn, so it
     /// is the plane's data and not the cached def's). Read for the airframe's DISPLAY NAME
@@ -635,18 +661,28 @@ public partial class FlightController : Node3D
 #pragma warning restore SA1202
 
     /// <summary>Wires the flight model and (for a piloted view) the chase camera, then spawns.
-    /// <paramref name="camera"/> is null on an AI rig: no camera rides the plane and every camera
-    /// write below is skipped — the flight half is identical either way.
-    /// <paramref name="spawnThrottle"/>/<paramref name="spawnSpeed"/> are the mission's own
-    /// PLAYER_INIT values (docs/formats/spawns.md), defaulting to the fallback for callers with no
-    /// mission, and persist for every later respawn on this rig.</summary>
+    /// <paramref name="camera"/> is null on an AI rig: no camera write below runs.
+    /// <paramref name="cockpitCameraOffset"/> is this rig's authored <c>cockpit_camera</c> marker
+    /// (<see cref="Mech3.PlaneBuilder.CockpitCameraOffset"/>), origin for callers with no first
+    /// person view. <paramref name="spawnThrottle"/>/<paramref name="spawnSpeed"/> are the
+    /// mission's PLAYER_INIT values, defaulted for callers with none, and persist across respawns.</summary>
     public void Setup(FlightModel model, Camera3D? camera, CamParams camParams,
         Vector3 spawnPos, Vector3 spawnLookAt,
-        float spawnThrottle = FallbackSpawnThrottle, float spawnSpeed = FallbackSpawnSpeed)
+        float spawnThrottle = FallbackSpawnThrottle, float spawnSpeed = FallbackSpawnSpeed,
+        Vector3 cockpitCameraOffset = default)
     {
         _model = model;
         _viewCamera = camera;
-        _cam = camera != null ? new CameraController(camera, camParams, KeyDown, PinnedView) : null;
+        _cam = camera != null
+            ? new CameraController(camera, camParams, KeyDown, PinnedView, PinnedViewMode, cockpitCameraOffset)
+            : null;
+        // C22: the idle branch of the shared head-look law — set once here, since Head lives for
+        // the controller's whole life and _model (captured by the closure) is reassigned by every
+        // respawn, not replaced.
+        if (_cam != null)
+        {
+            _cam.Head.IdleAim = AutoheadTarget;
+        }
         _spawnPos = spawnPos;
         _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
         _spawnThrottle = spawnThrottle;
@@ -1426,10 +1462,30 @@ public partial class FlightController : Node3D
         }
         else
         {
+            PollViewModeKeys();
+            // Default to the external FOV global; the FirstPerson arm below overrides it, so a
+            // look-behind while SELECTED Cockpit/Nose gets the first-person FOV back on release.
+            _cam.RestoreExternalFov();
+            bool firstPersonPose = false;
             int view = _cam.ActiveView();
             if (view >= 0)
             {
                 _cam.FixedView(view, _renderPose);
+            }
+            else if (_cam.FirstPerson)
+            {
+                // Rigid at cockpit_camera (wobble inherited), the mode's own FOV, aimed by the
+                // head. Look-back stays IN the cockpit — head to dead astern while held, as the
+                // original does — which is why this arm sits above the look-behind branch below.
+                _cam.Head.Step(simDt, _cam.BackActive(PadPressed(JoyButton.RightStick))
+                    ? new HeadLookInput(0f, -1f, 0f, 0f, false)
+                    : HeadLookRead());
+                _cam.FirstPersonView(_renderPose);
+                _cam.ApplyFirstPersonFov();
+                firstPersonPose = true;
+                view = _cam.ViewMode == PilotViewMode.Nose
+                    ? CameraController.NoseViewLog
+                    : CameraController.CockpitViewLog;
             }
             // E42: this player's right-stick click looks back, the pad twin of holding
             // numpad 0 — read here, not in CameraController, same "no pad devices in the camera"
@@ -1456,6 +1512,9 @@ public partial class FlightController : Node3D
                     _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis);
                 }
             }
+            // Keyed to the pose this frame actually took, not to the selection — a look-behind
+            // puts the camera outside the aircraft and must bring its body back while held.
+            Cockpit?.Apply(_cam.ViewMode, firstPersonPose);
             _cam.LogView(view, _model.Position, _model.Attitude);
         }
 
@@ -1494,7 +1553,10 @@ public partial class FlightController : Node3D
             // One drive for both paths: the original runs ONE per-frame routine for the player and
             // every AI vehicle, so the two must never read the airframe differently.
             var engineDrive = EngineAudioCurves.DriveFrom(_model);
-            Audio?.Update(simDt, engineDrive, speedFrac, damageFrac);
+            // Keyed to the SELECTED view (D31), not the per-frame pose the camera actually took —
+            // the original's swap is a camera-mode gate, and a held numpad key or look-behind is a
+            // pose, not a mode change (⚠ table row 2 traces the analogous head-look case).
+            Audio?.Update(simDt, engineDrive, speedFrac, damageFrac, ViewMode == PilotViewMode.Cockpit);
             EngineAudio?.Update(simDt, engineDrive, speedFrac, damageFrac);
             // The throttle-slam gate needs the live value every frame, not just while its plume
             // is active, so it can tell a fresh climb from one already in progress.
@@ -2327,6 +2389,28 @@ public partial class FlightController : Node3D
         Log.Warn("core", $"--target={InitialTarget}: no match — selectable now: {listed}");
     }
 
+    /// <summary>The view-selection inputs, edge-detected: F8 or D-pad Down cycles the first-person
+    /// pair (Cockpit ↔ Nose, entering Cockpit from Chase — the original's "Cycle Cockpit Views",
+    /// which its binding menu also puts on a joystick button), F6 or the pad's Back/Select selects
+    /// the chase view. The original binds a selector per view rather than one three-stop cycle, so
+    /// the way out of first person is its own input; F6 and Back are this port's choices for it.
+    /// The pad half makes the views reachable for a pad-only pilot (P2–P4), who has no keyboard.</summary>
+    private void PollViewModeKeys()
+    {
+        DispatchViewModeKey(0, KeyDown(Key.F8), () => _cam!.CycleCockpitViews());
+        DispatchViewModeKey(1, KeyDown(Key.F6), () => _cam!.SelectChase());
+        DispatchViewModeKey(2, PadPressed(JoyButton.DpadDown), () => _cam!.CycleCockpitViews());
+        DispatchViewModeKey(3, PadPressed(JoyButton.Back), () => _cam!.SelectChase());
+    }
+
+    // Same one-action-per-press rule as DispatchTargetKey, against its own slots.
+    private void DispatchViewModeKey(int slot, bool down, System.Action act)
+    {
+        if (down && !_viewModeKeyPrev[slot])
+            act();
+        _viewModeKeyPrev[slot] = down;
+    }
+
     /// <summary>Edge-detects one targeting key against its own slot and runs its action once per
     /// press. Splitscreen-safe by construction: <see cref="KeyDown"/> is gated on
     /// <see cref="UseKeyboard"/>, so P2–P4 (pad-only) never see these.</summary>
@@ -2803,6 +2887,70 @@ public partial class FlightController : Node3D
     // caller the look-around is inactive.
     private (float X, float Y) PadLookInput() =>
         (StickCurve(PadAxis(JoyAxis.RightX)), StickCurve(PadAxis(JoyAxis.RightY)));
+
+    // One frame of head-look input, in HeadLook's own conventions. Read here for the same reason
+    // the look-around stick is: the camera never learns about pads, mice or key layouts.
+    private HeadLookInput HeadLookRead()
+    {
+        var (snapX, snapY) = SnapLookInput();
+        var (freeRight, freeUp) = FreeLookRead();
+        return new HeadLookInput(snapX, snapY, freeRight, freeUp, KeyDown(SnapCenterKey));
+    }
+
+    // C22's IdleAim delegate: HeadLook.Step calls this only on a frame with no look input at all.
+    // Gated on ViewMode (Cockpit only — the original's option byte AND mode ≠ 7) and the options
+    // toggle here, mirroring the original's engine option byte; the magnitude/negligible-velocity
+    // gate lives in HeadLook.AutoheadTarget itself.
+    private (float Elevation, float Azimuth)? AutoheadTarget()
+    {
+        if (_cam == null || _cam.ViewMode != PilotViewMode.Cockpit
+            || !Config.GetBool("headLook.autohead", false))
+        {
+            return null;
+        }
+        Vector3 localVelocity = _model.Attitude.Inverse() * (_model.VelocityDir * _model.Speed);
+        return HeadLook.AutoheadTarget(localVelocity, _model.Stats.AutoheadTurnTime,
+            _model.Stats.AutoheadTurnMax, _model.Stats.AutoheadTurnMinPitch);
+    }
+
+    // The snap cluster as a composed direction, the original's own numpad bindings: Kp8 Look Up,
+    // Kp4/Kp6 the flanks, Kp2 Look Back, the corners the four diagonals. Only read in a
+    // first-person mode, where the numpad drives no fixed view (PilotView.HoldsFixedViews).
+    private (float X, float Y) SnapLookInput()
+    {
+        float x = (KeyDown(Key.Kp9) || KeyDown(Key.Kp6) || KeyDown(Key.Kp3) ? 1f : 0f)
+                - (KeyDown(Key.Kp7) || KeyDown(Key.Kp4) || KeyDown(Key.Kp1) ? 1f : 0f);
+        float y = (KeyDown(Key.Kp7) || KeyDown(Key.Kp8) || KeyDown(Key.Kp9) ? 1f : 0f)
+                - (KeyDown(Key.Kp1) || KeyDown(Key.Kp2) || KeyDown(Key.Kp3) ? 1f : 0f);
+        return (x, y);
+    }
+
+    // Free-look direction: this player's right stick, or the mouse while its right button is held
+    // (the RMB-to-look posture the freecam already uses). Only the DIRECTION is read, so mouse
+    // pixels and a curved stick axis mix freely and neither needs its own sensitivity.
+    private (float Right, float Up) FreeLookRead()
+    {
+        var mouse = MouseLookDelta();
+        float right = StickCurve(PadAxis(JoyAxis.RightX));
+        float up = -StickCurve(PadAxis(JoyAxis.RightY));   // stick up = look up
+        if (right != 0f || up != 0f)
+        {
+            return (right, up);
+        }
+        return (mouse.X, -mouse.Y);                        // screen Y grows downward
+    }
+
+    // How far the mouse moved since the last read, or zero unless this player's right button is
+    // held. Polled rather than event-driven, like every other control here; the previous position
+    // is refreshed on every call, so an idle mouse reads exactly zero.
+    private Vector2 MouseLookDelta()
+    {
+        var pos = (Vector2)DisplayServer.MouseGetPosition();
+        var delta = pos - _mouseLookPrev;
+        _mouseLookPrev = pos;
+        bool looking = UseKeyboard && Input.IsMouseButtonPressed(MouseButton.Right);
+        return looking && delta.LengthSquared() > 1f ? delta : Vector2.Zero;
+    }
 
     // This plane's half of a contact the resolver is deciding: the engine effects it has to
     // interleave with, plus the struck Node the report deliberately does not carry. One instance

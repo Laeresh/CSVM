@@ -8,10 +8,13 @@ namespace CSVM.Flight;
 /// <summary>
 /// Own-plane sound, all from the player's own game data: the plane's engine loop (per-plane WAV via
 /// vehicle.json 'engine_sound', throttle-driven pitch and volume, swapped for 'damaged_engine_sound'
-/// while the airframe is hurt), the overspeed whine ('prop_sound', which no shipped def names), the
+/// while the airframe is hurt and for 'cockpit_engine_sound' while the pilot's SELECTED view is
+/// Cockpit or Nose — <see cref="EngineAudioCurves.EngineDefFor"/> is the one precedence rule both
+/// swaps share), the overspeed whine ('prop_sound', which no shipped def names), the
 /// airframe rattle (player.json 'rattle' block), plus the prop start/stop one-shots
 /// (snd_propstart/snd_propstop). Non-positional players: these are what the pilot hears, and
-/// <see cref="AiEngineAudio"/> is the positional twin every other aircraft carries.
+/// <see cref="AiEngineAudio"/> is the positional twin every other aircraft carries (own-ship only —
+/// an AI rig has no selected view, so it never reads 'cockpit_engine_sound').
 /// </summary>
 public partial class FlightAudio : Node
 {
@@ -32,12 +35,13 @@ public partial class FlightAudio : Node
     private AudioStreamPlayer? _engine, _whine, _rattle;
     private float _engineVol = 1f, _whineVol = 1f, _rattleVol = 1f; // sounds.json VOLUME base gain
 
-    // The engine slot's two candidate streams, both resolved at Setup so a mid-flight swap is an
+    // The engine slot's three candidate streams, all resolved at Setup so a mid-flight swap is an
     // assignment rather than an archive read: the session's SoundArchive outlives the build, but a
-    // decode at the moment the airframe is hit is a hitch nobody needs.
-    private AudioStreamWav? _engineStream, _damagedStream;
-    private float _damagedVol = 1f;
-    private bool _engineDamaged;              // which of the two the slot currently holds
+    // decode at the moment the airframe is hit or the view changes is a hitch nobody needs.
+    private AudioStreamWav? _engineStream, _damagedStream, _cockpitStream;
+    private float _damagedVol = 1f, _cockpitVol = 1f;
+    private bool _engineDamaged;              // which of the three the slot currently holds
+    private bool _engineCockpitView;
     private float _enginePitchMul = 1f;       // the damaged swap's one-off pitch draw
     private AudioStreamPlayer? _crash;
     private AudioStreamPlayer? _groundExp, _waterExp;
@@ -80,6 +84,9 @@ public partial class FlightAudio : Node
         // second player would be the blend the decode refuted.
         if (stats.DamagedEngineSound is { } damagedName)
             _damagedStream = LoadStream(archive, defs, damagedName, out _damagedVol);
+        // Same non-player pattern: a swap candidate, not a player of its own (D31).
+        if (stats.CockpitEngineSound is { } cockpitName)
+            _cockpitStream = LoadStream(archive, defs, cockpitName, out _cockpitVol);
         if (stats.WhineSound is { } whineName)
             _whine = MakeLoop(archive, defs, whineName, out _whineVol);
         _rattle = MakeLoop(archive, defs, stats.RattleSound, out _rattleVol);
@@ -167,20 +174,24 @@ public partial class FlightAudio : Node
 
     /// <summary>Per-frame drive: <paramref name="speedFrac"/> is speed / fd_speed,
     /// <paramref name="damageFrac"/> is accumulated damage (1 - PlaneDamage.WorstFraction, 0 when
-    /// pristine). Not called while crashed, so the loops stay dead until respawn.</summary>
-    public void Update(float dt, in EngineDrive drive, float speedFrac, float damageFrac)
+    /// pristine), <paramref name="cockpitView"/> is whether the pilot's SELECTED view is the full
+    /// Cockpit — the original swaps only there, not in Nose (confirmed at its controls), and a
+    /// held numpad key or look-behind is a pose, not a selection, so neither retriggers the swap.
+    /// Not called while crashed, so the loops stay dead until respawn.</summary>
+    public void Update(float dt, in EngineDrive drive, float speedFrac, float damageFrac, bool cockpitView = false)
     {
         if (_engineRamp < 1f)
             _engineRamp = Mathf.Min(1f, _engineRamp + dt / EngineStartRamp);
-        SetEngineDamaged(damageFrac > 0f);
+        UpdateEngineSlot(damageFrac > 0f, cockpitView);
         if (_engine != null)
         {
             if (!_engine.Playing)
                 StartEngine(); // respawn after a crash: propstart + fresh volume ramp-in
             var (pitch, volume) = EngineAudioCurves.Engine(_stats, drive, _enginePitchMul);
             _engine.PitchScale = pitch;
+            float baseVol = _engineDamaged ? _damagedVol : _engineCockpitView ? _cockpitVol : _engineVol;
             _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold,
-                volume * (_engineDamaged ? _damagedVol : _engineVol) * _engineRamp * MixGain));
+                volume * baseVol * _engineRamp * MixGain));
         }
         if (_whine != null)
         {
@@ -341,22 +352,25 @@ public partial class FlightAudio : Node
         return archive.Find(def.WavName, def.Looped);
     }
 
-    /// <summary>Points the engine slot at <c>damaged_engine_sound</c> or back at
-    /// <c>engine_sound</c>, drawing the swap's pitch multiplier as it goes. The original gates this
-    /// on a per-vehicle damage bitmask; which damage sets which bit is undecoded, so any damage at
-    /// all swaps here and a full repair swaps back.</summary>
-    private void SetEngineDamaged(bool damaged)
+    /// <summary>Points the engine slot at <c>damaged_engine_sound</c>, <c>cockpit_engine_sound</c>
+    /// or back at <c>engine_sound</c> (<see cref="EngineAudioCurves.EngineDefFor"/> carries the
+    /// precedence), drawing the damaged swap's pitch multiplier as it goes. Damaged gates on ANY
+    /// damage (the bitmask is undecoded, so any damage swaps and a full repair swaps back); either
+    /// input changing re-evaluates the pair.</summary>
+    private void UpdateEngineSlot(bool damaged, bool cockpitView)
     {
         damaged &= _damagedStream != null;
-        if (damaged == _engineDamaged || _engine == null)
+        cockpitView &= _cockpitStream != null;
+        if (_engine == null || (damaged == _engineDamaged && cockpitView == _engineCockpitView))
         {
             return;
         }
         _engineDamaged = damaged;
+        _engineCockpitView = cockpitView;
         var (name, pitchMul) = EngineAudioCurves.EngineDefFor(
-            _stats, damaged, Rng.Stream(Rng.FlightAudio));
+            _stats, damaged, Rng.Stream(Rng.FlightAudio), cockpitView);
         _enginePitchMul = pitchMul;
-        var stream = damaged ? _damagedStream : _engineStream;
+        var stream = damaged ? _damagedStream : cockpitView ? _cockpitStream : _engineStream;
         if (stream == null)
         {
             return;
@@ -367,7 +381,7 @@ public partial class FlightAudio : Node
         if (wasPlaying)
             _engine.Play();
         // The headless observable for a swap nobody can screenshot: which def the slot took and
-        // what the draw gave it.
+        // what the draw gave it. A hard cut, same as the damaged swap — no crossfade is decoded.
         GD.Print($"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
     }
 

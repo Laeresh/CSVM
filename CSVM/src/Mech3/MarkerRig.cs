@@ -39,6 +39,16 @@ public sealed class MarkerRig
         ("player_peacemaker", "Peacemaker"),
     };
 
+    // Alternate-state subtrees that may carry their own same-named reference node distinct from
+    // the plane's one authored marker in the top-level `markers` group — the cockpit interior
+    // models and the wreck. Mirrors PlaneBuilder's own skip list for exactly this reason: without
+    // it, a first-match walk over the whole subtree could resolve to a `cockpit1`/`cockpit2` copy
+    // of `cockpit_camera` instead of the authored one (docs/formats/markers.md).
+    private static readonly HashSet<string> AltStateSubtrees = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "cockpit1", "cockpit2", "destroyed", "player_damage_off",
+    };
+
     private MarkerRig(string planeRoot, List<Marker> markers, List<IReadOnlyList<int>> coLocated)
     {
         PlaneRoot = planeRoot;
@@ -123,6 +133,59 @@ public sealed class MarkerRig
             : a.Ordinal.CompareTo(b.Ordinal));
         var coLocated = GroupCoLocated(markers.ConvertAll(m => m.Local), CoLocateTolerance);
         return new MarkerRig(planeRoot, markers, coLocated);
+    }
+
+    /// <summary>Reads one non-weapon marker node's plane-frame position by name — e.g.
+    /// <c>cockpit_camera</c> — by the same accumulate-from-below-root walk <see cref="Extract"/>
+    /// uses for weapon markers, skipping the alternate-state subtrees above. Returns
+    /// <paramref name="fallback"/> (default the origin) when the plane root or the named node is
+    /// absent — the original's own fallback for a plane with no such node.</summary>
+    public static Vector3 FindNamedMarker(GameZ gamez, string planeRoot, string nodeName, Vector3 fallback = default)
+    {
+        var root = gamez.FindByName(planeRoot);
+        if (root == null)
+        {
+            return fallback;
+        }
+        Vector3? found = null;
+        void Walk(GameZNode node, Transform3D acc)
+        {
+            if (found != null || AltStateSubtrees.Contains(node.Name))
+            {
+                return;
+            }
+            acc *= node.Local ?? Transform3D.Identity;
+            if (node.Name.Equals(nodeName, StringComparison.OrdinalIgnoreCase))
+            {
+                found = acc.Origin;
+                return;
+            }
+            foreach (int c in node.Children)
+            {
+                if (found != null)
+                {
+                    return;
+                }
+                if (c >= 0 && c < gamez.Nodes.Count)
+                {
+                    Walk(gamez.Nodes[c], acc);
+                }
+            }
+        }
+        // Below the root only, same convention as Extract: the root's own transform places the
+        // airframe in a scene, which is not part of the plane frame the offset is quoted in.
+        foreach (int c in root.Children)
+        {
+            if (found != null)
+            {
+                break;
+            }
+            if (c >= 0 && c < gamez.Nodes.Count)
+            {
+                Walk(gamez.Nodes[c], Transform3D.Identity);
+            }
+        }
+        return found ?? fallback;
     }
 
     /// <summary>Groups indices whose positions fall within <paramref name="tolerance"/> of each

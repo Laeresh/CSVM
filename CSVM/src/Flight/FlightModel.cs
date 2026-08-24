@@ -34,8 +34,8 @@ public struct FlightInput
 /// never the bank coupling or the weathervane.
 /// Decode: docs/org/flightModel.md. The two force paths, the plumbing and the standing
 /// decode-vs-footage gaps: this module's entry in docs/architecture.md.
-/// ⚠ Do not retune the constants marked TUNE by feel. The three *Tune rates are pinned to
-/// measured video, the graze trio on Collide is ours, and every other coefficient is the binary's.
+/// ⚠ Do not retune the constants marked TUNE by feel. The graze trio on Collide is ours; the
+/// altitude clamp is footage-derived, and the dive/overshoot caps are numerical backstops.
 /// </summary>
 public sealed class FlightModel
 {
@@ -129,16 +129,6 @@ public sealed class FlightModel
     // Numerical backstop (~140 ft), NOT a modelled spring: it bounds a runaway frame to the measured
     // ballistic overshoot rather than shaping the overshoot.
     private const float AltitudeCapOvershootM = 42.8f;
-    private const float StallNoseRate = 1.0f;     // TUNE: rad/s toward world-down at full stall depth (× stall_mag)
-
-    // Fraction of the nose-chase that survives at 90° bank; the chase weakens with wing verticality,
-    // which is what deepens the knife-edge sag. Kept on a measurement rather than on the decode,
-    // which is silent here. docs/org/flightModel.md, "Bank-independent lift vs the measured
-    // knife-edge sag".
-    // ⚠ Do not retire wingVert by raising this to 1; every knife-edge observable moves the wrong way.
-    // ⚠ Do not lower it either. The excess is in the rotation rate, and 0.10 walks α past liftAOAs[0].
-    private const float KnifeAlignFloor = 0.35f;  // TUNE
-
     // Ground blow's two constants that are NOT in player.json (the three that are live on
     // PlaneStats). Both are decoded, neither is a TUNE: the 0.05 is an immediate in the player
     // branch, and the 2.0 is a global whose only writer is the original's `gbc` debug console
@@ -173,14 +163,14 @@ public sealed class FlightModel
     private const float DragPolarQuad = 0.5f;
 
     // Per-axis control-rate calibration: steady rate = torque · recInertia · Tune / ang_momentum_damp
-    // (× eff on yaw). docs/org/flightModel.md, "The three *Tune rates".
-    // ⚠ Roll's 1.0 is the decode, not an unfitted axis. Restoring a multiplier there needs a
-    // mechanism traced in the binary, never a roll timed off footage — that is what it replaced.
-    // ⚠ Do not move the other two to chase the transient response, a narrowed but open divergence.
-    // They set the STEADY rate, which matches, and a transient chased through them breaks that.
-    private const float PitchTune = 0.89f;        // TUNE: pinned to measured video of the original
-    private const float YawTune = 1.57f;          // TUNE: pinned against the authored yaw curve below
-    private const float RollTune = 1f;            // the binary's own, not a tune
+    // (× eff on yaw). All three are 1: the original has no such factor on any axis.
+    // docs/org/flightModel.md, "The *Tune rates".
+    // ⚠ Kept as named constants, not deleted, so the config keys stay live for an A/B at the
+    // controls. Restoring a value needs a mechanism traced in the binary, never a rate timed off
+    // footage — that is what all three replaced.
+    private const float PitchTune = 1f;
+    private const float YawTune = 1f;
+    private const float RollTune = 1f;
 
     // Bank coupling, the original's coordinated-turn cheat and the only part of its rotation that no
     // airframe authors: banking yaws the nose the way the wings point and pulls it up, with a further
@@ -246,6 +236,14 @@ public sealed class FlightModel
     /// 56.5 mph against its filmed ~76 mph nose-drop. The decode's worked example settles the 1 G
     /// read, and the gap stands recorded in docs/org/flightModel.md, "Stall".</summary>
     public float StallSpeed { get; }
+
+    /// <summary>The original's stall flag, <c>1 − L(9°)/Weight</c>: how far the maximum available
+    /// lift falls short of carrying the aircraft's weight, and the depth the nose-drop torque scales
+    /// with. Positive exactly where the lift cap is under 1, which is the same condition as being
+    /// under <see cref="StallSpeed"/> — that speed is this equation solved for zero.
+    /// ⚠ It is NOT the speed ratio it replaced: this is quadratic in speed, so the drop deepens
+    /// faster as speed bleeds. docs/org/flightModel.md, "Stall".</summary>
+    public float StallFlag => 1f - LiftCapAt(Speed);
 
     /// <summary>Seconds left on the choker's engine-dead timer (<c>TANGLER</c>, the victim's
     /// <c>+0x2e0</c> behind the disabled-systems bit): while it runs the thrust term is zero and
@@ -406,8 +404,6 @@ public sealed class FlightModel
         // Read here as well as at its own site (IsStallWarned, which Step never calls) purely so the
         // key registers on a launch that never flies — --dump-config's template and the orphan check.
         _ = Config.GetFloat("flightModel.stallWarnFrac", StallWarnFrac);
-        float stallNoseRate = Config.GetFloat("flightModel.stallNoseRate", StallNoseRate);
-        float knifeAlignFloor = Config.GetFloat("flightModel.knifeAlignFloor", KnifeAlignFloor);
         float liftGMin = Config.GetFloat("flightModel.liftGMin", LiftGMin);
         float liftGMax = Config.GetFloat("flightModel.liftGMax", LiftGMax);
         float altitudeCapM = Config.GetFloat("flightModel.altitudeCapM", AltitudeCapM);
@@ -448,6 +444,11 @@ public sealed class FlightModel
         // The player branch remains a command bias.
         Vector3 groundBlow = GroundBlowTerm(input, cmd, out float groundBlowSteer);
 
+        // The stall nose-drop, the last block of the original's accumulation and player-only.
+        // docs/org/flightModel.md, "The nose-drop's rate is stall_mag".
+        if (!UsesAiForcePath)
+            cmd = StallNoseTorque(cmd);
+
         // The original's order: accumulate this tick's torque first, then decay the whole result,
         // the fresh torque included. ⚠ Keep the decay EXPONENTIAL. A linear subtraction agrees only
         // to first order and flips BodyRates' sign every tick once dt·damp exceeds 2.
@@ -456,46 +457,10 @@ public sealed class FlightModel
             BodyRates += groundBlow;
         BodyRates *= Mathf.Exp(-dt * s.AngMomentumDamp);
 
-        // Stall: below stall speed the nose is pulled toward WORLD-down on a great-circle rotation,
-        // with no twist about the nose, so it works at any attitude including inverted. The
-        // deep-stall rate exceeds full-elevator authority, which makes the drop decisive.
-        bool stalled = isStalled();
-        float noseYBefore = (-Attitude.Z).Y;  // the nose's world elevation entering this frame
-        if (stalled)
-        {
-            float depth = 1f - Speed / StallSpeed;
-            var noseNow = -Attitude.Z;
-            var axis = noseNow.Cross(Vector3.Down);
-            if (axis.LengthSquared() > 1e-8f)
-            {
-                float angle = Mathf.Min(s.StallMag * stallNoseRate * depth * dt,
-                                        noseNow.AngleTo(Vector3.Down));
-                Attitude = Attitude.Rotated(axis.Normalized(), angle).Orthonormalized();
-            }
-        }
-
         var omegaWorld = Attitude * BodyRates;
         float omega = omegaWorld.Length();
         if (omega > 1e-6f)
             Attitude = Attitude.Rotated(omegaWorld / omega, omega * dt).Orthonormalized();
-
-        // While stalled the nose can NOT be raised over the horizon at any bank angle: cap its world
-        // elevation there, or at where the frame started if the stall caught it nose-high.
-        if (stalled)
-        {
-            var noseAfter = -Attitude.Z;
-            float capY = Mathf.Max(0f, noseYBefore);
-            if (noseAfter.Y > capY + 1e-5f)
-            {
-                var axis = noseAfter.Cross(Vector3.Down);
-                if (axis.LengthSquared() > 1e-8f)
-                {
-                    float angle = Mathf.Asin(Mathf.Clamp(noseAfter.Y, -1f, 1f))
-                                - Mathf.Asin(Mathf.Clamp(capY, -1f, 1f));
-                    Attitude = Attitude.Rotated(axis.Normalized(), angle).Orthonormalized();
-                }
-            }
-        }
 
         // ⚠ Do not add a knife-edge nose-sag term here. The decoded bank→yaw coupling already does
         // that job and gives the original's own shape, and a second term keyed on wing verticality
@@ -539,20 +504,14 @@ public sealed class FlightModel
         float speedFps = Speed * FeetPerMetre;
         float dynPressure = 0.5f * AirDensitySlugPerFt3 * speedFps * speedFps;
         float mach = Speed / (SpeedOfSoundFps * MetresPerFoot);
-        float clMax = Mathf.Max(0f, ClMaxStatic - ClMaxMach * mach);
         // q·RefArea, in weight units (lb/ft² × ft²) — the scale a coefficient converts to a force,
         // and the divisor the delivered C_L (drag, below) comes back out through.
         float qRefArea = dynPressure * s.RefArea;
-        float loadCap = s.VehWeight > 1e-3f ? clMax * qRefArea / s.VehWeight : 0f;
+        float loadCap = LiftCapAt(Speed);
         loadFactor = Mathf.Clamp(loadFactor, -loadCap, loadCap);
         var liftAccel = liftDir.LengthSquared() > 1e-12f
             ? liftDir.Normalized() * (loadFactor * StandardG)
             : Vector3.Zero;
-
-        // How much of the wings' lift points vertically — 1 level or inverted, 0 in knife-edge.
-        // ⚠ Lift itself must not read this; the demand's body X/Y projection is bank-independent by
-        // construction. Its one reader is the nose-chase below (see KnifeAlignFloor).
-        float wingVert = Mathf.Abs(Attitude.Y.Dot(Vector3.Up));
 
         // Thrust pulls along the nose and drag opposes the motion; the along-path shares fall out of
         // the vector sum. ⚠ Gravity acts at full strength in every attitude and carries no
@@ -585,12 +544,10 @@ public sealed class FlightModel
         if (vel.LengthSquared() > 1e-8f)
             VelocityDir = vel.Normalized();
 
-        // The velocity chases the nose at the authored lift_accel_rate, weakened by wing verticality
-        // (see KnifeAlignFloor). Ground blow's second effect rides the same chase unweakened; adding
-        // the two rates is exact, since exp(−a·dt)·exp(−b·dt) = exp(−(a+b)·dt).
-        float align = s.LiftAccelRate
-                      * (knifeAlignFloor + (1f - knifeAlignFloor) * wingVert)
-                      + groundBlowSteer;
+        // ⚠ Nothing may scale this: neither reader of lift_accel_rate carries a bank or verticality
+        // factor (docs/org/flightModel.md, "lift_accel_rate is a lag toward a target velocity").
+        // Ground blow rides the same chase; adding rates is exact under exp.
+        float align = s.LiftAccelRate + groundBlowSteer;
         // ⚠ Keep the near-parallel lerp branch, which is the normal cruise state. Slerp builds its
         // axis from a cross product whose float error swamps a sub-degree angle, and Godot then
         // throws "Argument is not normalized", aborting the physics frame: the plane stops flying.
@@ -626,7 +583,7 @@ public sealed class FlightModel
     /// <summary>Below the airframe's own computed <see cref="StallSpeed"/> — the aerodynamic stall
     /// the flight model flies. NOT the cue the STALL lamp shows: that one lights earlier (a fixed
     /// fraction of fd_speed), see IsStallWarned.</summary>
-    public bool isStalled() => Speed < StallSpeed;
+    public bool isStalled() => StallFlag > 0f;
 
     /// <summary>Below the warning threshold (0.30 fd) — the STALL lamp, which leads the break by a
     /// measured 2.64 sim s / 14.9 mph.</summary>
@@ -714,6 +671,47 @@ public sealed class FlightModel
         }
         return vFps * MetresPerFoot;
     }
+
+    // Maximum available lift as a multiple of weight, clMax(V)·q(V)·RefArea / Weight — the load
+    // factor ceiling, and the quantity ComputeStallSpeed above inverts. Weight is the BARE authored
+    // veh_weight (a load factor of exactly 1), which is what the original compares against.
+    private float LiftCapAt(float speed)
+    {
+        var s = Stats;
+        if (s.VehWeight <= 1e-3f)
+            return 0f;
+        float speedFps = speed * FeetPerMetre;
+        float dynPressure = 0.5f * AirDensitySlugPerFt3 * speedFps * speedFps;
+        float mach = speed / (SpeedOfSoundFps * MetresPerFoot);
+        float clMax = Mathf.Max(0f, ClMaxStatic - ClMaxMach * mach);
+        return clMax * dynPressure * s.RefArea / s.VehWeight;
+    }
+
+    // The stall nose-drop as the original builds it, returning the accumulator with it folded in.
+    // ⚠ The CANCELLATION is what makes the drop decisive, not its magnitude, which would lose a
+    // straight contest with the elevator. Do not add a floor, a minimum rate or an over-the-horizon
+    // cap on top of it. docs/org/flightModel.md, "The nose-drop's rate is stall_mag".
+    private Vector3 StallNoseTorque(Vector3 cmd)
+    {
+        float flag = StallFlag;
+        if (flag <= 0f)
+            return cmd;
+        // Cross order set by THIS engine's rotation convention, not the decode's; the length is the
+        // same either way and is what fades the drop as the nose leaves horizontal. Body frame.
+        var axis = Attitude.Inverse() * Vector3.Up.Cross(-Attitude.Z);
+        float axisSq = axis.LengthSquared();
+        if (axisSq <= 1e-8f)
+            return cmd;
+        // The reciprocal inertia comes out and goes back because the original cancels on the
+        // PRE-inertia accumulator; a projection is rotation-invariant, so no frame change is needed.
+        var pre = cmd / Stats.RecInertia;
+        // Only torque OPPOSING the axis is cancelled — the sign test is the original's own.
+        float along = pre.Dot(axis);
+        if (along < 0f)
+            pre -= axis * (along / axisSq);
+        return (pre + axis * (Stats.StallMag * flag)) * Stats.RecInertia;
+    }
+
 
 
     // Ground blow: the original's bias of control response away from anything large the nose is

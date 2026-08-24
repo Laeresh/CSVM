@@ -71,35 +71,35 @@
     {
       "name": "viewer-bhawk",
       "frame": 30,
-      "hash": "9fda0b12d0c4601c9cf28b91f6ccbf47",
-      "exercises": "one aircraft built and painted: PlaneBuilder, the default Fortune Hunters livery and its decals, the orbit camera's framing, and the launcher-default light (--viewer loads no weather); static by construction, 0 px at 30 vs 360.",
+      "hash": "0f50dc5b19ba2531221ae1cb826ceade",
+      "exercises": "one aircraft built and painted: PlaneBuilder with the cockpit interior subtree the viewer lab builds, the default Fortune Hunters livery and decals, the orbit camera's framing, the launcher-default light; static by construction, 0 px at 30 vs 360.",
       "args": ["--viewer", "--plane=player_bhawk", "--det", "--mute"]
     },
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "3b4fafc18663b12d459b5b1715d432bd",
+      "hash": "79084064877b6a22d800b940299dd98c",
       "exercises": "the synthetic stage with no gamez at all — code-drawn grid, default sky and sun, flight model, HUD; frame-sensitive 12.21 %, and the one shot that still renders with extracted/ absent.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "49aa83ce57fd166a268648f33ffacea7",
+      "hash": "3d0400a81cff78549590b13c93315aea",
       "exercises": "a flying plane in its default livery, the only shaded surface in a flight: chase camera on the sim clock, prop and surface animators, sun bearing, gauges, compass tape, weapon readout, the pipper's range, an exhaust puffer, SpeedCue; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "52b4ab9d53177a757c5e53561129bc5a",
+      "hash": "f43d56e0e4cda225c51242f4d0017353",
       "exercises": "the world-effects runtime rendering a puffer: a kill of the single ap_radiotwr instance calls great_balls_of_fire onto the world-effects stage, plus that rig's SpeedCue; frame-sensitive, and moves off its Rng.Effects seed.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "57e7d89e5bc429993b4ecf162db94afc",
+      "hash": "2de75497fc3a74f5b0bb66bfbb341568",
       "exercises": "player_crash_default on the crash rig (--crash=5's null-material slot-0 arm), the airframe, the moving distance-puffer path, call_crash_trails' ranged launch and tumble, vector-form pieces inheriting no momentum, flydirt's delta, pooled repeat calls.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
@@ -113,14 +113,14 @@
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "9d466dfe5074ac3985bef95c85ff0bfd",
+      "hash": "9f1119142891de5c51579c16e8b7856f",
       "exercises": "the targeting HUD's original-shaped marker: fixed brackets inside the selected gun's reach, the name label below the plane, and --debug-markers' identity/health string; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "d66c0e784de0ae1e94c5e77a472325b4",
+      "hash": "593d5f36d73335038f4417e4634f8eea",
       "exercises": "a shot-down AI aircraft three seconds after the kill, at the downrange its FROZEN commands flew it to: the destroy def's second fireball and trail at the handover where randomdestseq takes the hull over on its inherited world velocity.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     }

@@ -102,6 +102,27 @@ public class MarkerRigTests
         Assert.Null(MarkerRig.Extract(GameZ.Load(TestData.Fixture("gamez-plane")), "player_not_here"));
     }
 
+    [Fact]
+    public void FindNamedMarkerAccumulatesFromBelowTheRootAndSkipsAlternateStateSubtrees()
+    {
+        // "cockpit1" nests its own decoy cockpit_camera (9,9,9) as the FIRST child under
+        // "markers", so a naive first-match walk would find it before the authored one at
+        // markers' +1 y plus cockpit_camera's local +0.5 y.
+        var offset = MarkerRig.FindNamedMarker(
+            GameZ.Load(TestData.Fixture("gamez-plane")), "probe_plane", "cockpit_camera");
+        Assert.Equal(new Vector3(0f, 1.5f, 0f), offset);
+    }
+
+    [Fact]
+    public void FindNamedMarkerFallsBackWhenTheNodeIsAbsent()
+    {
+        var fallback = new Vector3(1f, 2f, 3f);
+        var gamez = GameZ.Load(TestData.Fixture("gamez-plane"));
+        Assert.Equal(fallback, MarkerRig.FindNamedMarker(gamez, "probe_plane", "no_such_node", fallback));
+        Assert.Equal(fallback, MarkerRig.FindNamedMarker(gamez, "player_not_here", "cockpit_camera", fallback));
+        Assert.Equal(Vector3.Zero, MarkerRig.FindNamedMarker(gamez, "player_not_here", "cockpit_camera"));
+    }
+
     private static MarkerRig.Marker Find(MarkerRig rig, string name)
     {
         foreach (var m in rig.Markers)

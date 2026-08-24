@@ -458,7 +458,7 @@ public partial class GameSession : Node3D
         _ambience = new Effects.EffectAmbience();
         _worldEffectsFactory = new WorldEffectsFactory(_spec, _worldRoot,
             () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam ? cam.GlobalPosition : Vector3.Zero,
-            _ambience, PlayerPositionsSnapshot);
+            _ambience, PlayerPositionsSnapshot, AnyPilotFirstPerson);
         // Re-derive every subsystem RNG from the master before anything draws, so this session's
         // content is a function of its master alone rather than of how long the previous one ran.
         // The launcher decides that master: held for a pinned run, stepped per sortie otherwise.
@@ -907,6 +907,10 @@ public partial class GameSession : Node3D
                 // the chase camera trails far enough behind to eat most of a 50 m radius. The same
                 // closure goes to the world-effects runtime, so the two agree on who is nearest.
                 PlayerPositions = PlayerPositionsSnapshot,
+                // PLAYER_1ST_PERSON: any pilot in Cockpit or Nose. There is one world runtime for
+                // every pane, so in splitscreen the condition is "someone is in a cockpit" — the
+                // per-pane reading needs per-pane runtimes and is E41's filed splitscreen item.
+                FirstPersonView = AnyPilotFirstPerson,
                 // The world lights' own nearest-viewer budget — the draw-rule seam A3
                 // promoted, so a light beside player 4's pane stays lit even while player 1 is
                 // far from it. Single player: one entry, same as every other _viewers consumer.
@@ -1393,9 +1397,10 @@ public partial class GameSession : Node3D
         var staticScheme = _liveryResolver.SchemeFor(0, state.ZrdrPath, _liveryResolver.NewPaintRng(), staticPatterns);
         // In --viewer the LIVERY LAB owns the livery and applies it itself, so the
         // model is built bare and there is one write path for paint (its Repaint).
-        // Everywhere else the builder paints at construction as usual.
+        // cockpitInterior rides the same gate as damagePanels: pcdp4/pcdp6 hidden, B12.
         var builder = new PlaneBuilder(state.Gamez, state.Textures, damagePanels: _spec.Viewer,
-            scheme: _spec.Viewer ? null : staticScheme, patterns: _liveryResolver.Patterns);
+            scheme: _spec.Viewer ? null : staticScheme, patterns: _liveryResolver.Patterns,
+            cockpitInterior: _spec.Viewer);
         _plane = builder.Build(_spec.PlaneName);
         StartupProfile.Record("plane", mark);
         state.MeshInstances = builder.MeshInstanceCount;
@@ -1428,7 +1433,7 @@ public partial class GameSession : Node3D
                 pairingDefs.AddRange(Mech3.AnimDefs.LoadFileDefs(state.ZrdrPath, "player_destruct_reset.json"));
                 pairingDefs.AddRange(Mech3.AnimDefs.LoadFileDefs(state.ZrdrPath, "player-1.json"));
                 var visuals = new DamageVisuals(builder.DamagePanels, _plane, stats, smoke, fire, panelTrails,
-                    DamageVisuals.PanelPairingSets(pairingDefs));
+                    DamageVisuals.PanelPairingSets(pairingDefs), cockpitPanels: builder.CockpitDamagePanels);
                 // the HUD gauge cluster as a lab toggle (user request): the damage
                 // dial mirrors the sliders, blinks on decreases like a flight hit
                 var labGauges = GaugeCluster.Build(state.Gamez, _spec.PlaneName, state.Textures, stats.DestroyableParts);
@@ -1713,6 +1718,9 @@ public partial class GameSession : Node3D
             // nearest-human snapshot shared with WorldSession and the world-effects runtime.
             MixGain = mixGain,
             PlayerPositions = PlayerPositionsSnapshot,
+            // muzzle_burst's PLAYER_1ST_PERSON: the same closure the world runtime gets, so the
+            // shot's lights pick the same testfp branch the anim data would.
+            FirstPersonView = AnyPilotFirstPerson,
             BeeperTags = _beeperTags,
             WashSink = _screenFlash != null ? _screenFlash.PlayBlend : null,
             EngineDeadBounds = TanglerChoke.EngineDeadBounds(weaponDefs),
@@ -2573,6 +2581,17 @@ public partial class GameSession : Node3D
                 ? fc.GlobalPosition
                 : _rigs[i].Camera.GlobalPosition;
         return positions;
+    }
+
+    // Whether any human pilot is flying one of the two first-person views — the answer the anim
+    // data's PLAYER_1ST_PERSON condition gets. Read per call, since the cycle key changes it
+    // mid-session; false with no rigs bound (every non-flight mode, and the bootstrap passes).
+    private bool AnyPilotFirstPerson()
+    {
+        for (int i = 0; i < _rigs.Count; i++)
+            if (_rigs[i].Controller is { FirstPersonView: true })
+                return true;
+        return false;
     }
 
     // Creates this session's PlayerRigs, one per rendered view. One player keeps the main-viewport

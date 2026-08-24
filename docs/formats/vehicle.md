@@ -30,7 +30,7 @@ Keys the remake consumes (see `src/Flight/PlaneStats.cs`):
 | `kind_of` | parent def (inheritance chain) |
 | `nodename` | planes.zbd model root node |
 | `engine` | engines.json row id → power factor |
-| `engine_sound` / `cockpit_engine_sound` / `prop_sound` | the three sound-def names (SETS in sounds.json) the engine audio's two slots draw from — see [The engine audio's slots](#the-engine-audios-slots) below. `prop_sound` is authored by no shipped def and `cockpit_engine_sound` is selected by no view CSVM has |
+| `engine_sound` / `cockpit_engine_sound` / `prop_sound` | the three sound-def names (SETS in sounds.json) the engine audio's two slots draw from — see [The engine audio's slots](#the-engine-audios-slots) below. `prop_sound` is authored by no shipped def; `cockpit_engine_sound` is selected while the pilot's SELECTED view is the full Cockpit (`EngineAudioCurves.EngineDefFor`, `FlightAudio.UpdateEngineSlot`) |
 | `damaged_engine_sound` | `[[soundName, pitchLo, pitchHi]]` — an array of candidates that REPLACE the engine slot's definition while the airframe is damaged. One shared `basic_airplane` entry (`snd_damagedengine`, 0.0, 1.0) covers every plane; the two floats are the pitch-multiplier draw range |
 | `dynamics` | nested dict: `pitch_torque`, `roll_torque`, `rudder_torque`, `return_rate`, `ang_momentum_damp`, `rec_moments_inertia` (xyz), `fd_speed` (m/s), `drag_factor`, `veh_weight`, `ref_area`. The parser also accepts `level_off_rate`, which **no shipped def authors** — see below |
 | `spin_props_anim` / `stop_props_anim` | prop-disc anim names (plane_props.json) |
@@ -91,8 +91,8 @@ holds **two** sound handles per vehicle. Both are positional or not by the sound
 | Slot | Definition key | Notes |
 |---|---|---|
 | 0 | `engine_sound` | pitch and volume off the player-global `engine_sound` throttle curves |
-| 0, in the cockpit views | `cockpit_engine_sound` | swapped in while the camera is in either of the original's two cockpit modes, swapped back on leaving them |
-| 0, while damaged | `damaged_engine_sound[]` | a random entry replaces the definition and holds; the entry's pitch range is drawn once and multiplies the throttle pitch curve |
+| 0, in the Cockpit view | `cockpit_engine_sound` | swapped in while the camera is in the full Cockpit mode only — the Nose view keeps the plain def, confirmed at the controls of the original (an earlier "either cockpit mode" reading is retired); CSVM keys this to the pilot's SELECTED view being Cockpit, not the per-frame camera pose, so a held numpad key or look-behind does not retrigger it |
+| 0, while damaged | `damaged_engine_sound[]` | a random entry replaces the definition and holds; the entry's pitch range is drawn once and multiplies the throttle pitch curve; CSVM's port decision is that this wins over the cockpit swap when both apply, since no def authors a damaged cockpit variant and the interaction is not itself decoded |
 | 1 | `prop_sound` | the overspeed whine, off the player-global `prop_sound` speed curves |
 
 An AI vehicle's arm adds exactly two things: the pitch multiplier is forced to 1, and both handles
@@ -100,11 +100,12 @@ stop past **2000 world units** from the player (compared as a squared distance a
 start again on the way back in. Rattle, the collision one-shots and the landing one-shots are not
 part of this routine and are player-gated elsewhere.
 
-⚠ **Two of the four rows are unreachable in the retail install.** No shipped def authors
+⚠ **One of the four rows is unreachable in the retail install.** No shipped def authors
 `prop_sound` and the field has no compiled default, so slot 1 is never assigned and the whine never
-plays for anybody; and CSVM ships no cockpit view, so nothing selects `cockpit_engine_sound` here.
-Every def does author `engine_sound`, and every def inherits `basic_airplane`'s single
-`damaged_engine_sound` entry.
+plays for anybody. Every def does author `engine_sound` AND `cockpit_engine_sound` (`basic_airplane`
+carries both as the fallback every plane either inherits or overrides), and every def inherits
+`basic_airplane`'s single `damaged_engine_sound` entry — `cockpit_engine_sound` is fully reachable
+in the retail data and is now selected by CSVM too, once the pilot has a view to select it with (D31).
 
 ### The engine slot's pitch and gain are not throttle alone
 

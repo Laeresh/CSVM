@@ -75,23 +75,12 @@ hypothesis to check, not a target to build against.
 Most of the items below and a large part of `backlog.md` are blocked on one of these, so filming
 them in a batch unblocks far more than doing them one at a time.
 
-⚠ **Validity gate for every cockpit-gauge clip: auto head turn must be OFF, or the clip is
-unusable.** This already cost two takes. The capture spec and the clip-validity rules were in
-`analysis/video-flight-calibration/FINDINGS.md`, deleted 2026-08-14; recover them with
-`git log -p -- analysis/video-flight-calibration/FINDINGS.md`.
-
-### Flight model — cockpit gauges in frame, head turn off
-
-| ID | Capture | What must be in frame | Unblocks |
-|---|---|---|---|
-| `CAP-20` | Throttle equilibria + a shallow held climb | Two level runs held to equilibrium at **1/4** and **1/2** throttle (the thrust-vs-throttle curve), then a **shallow, steady climb** at fixed throttle — shallow enough that the ADI does **not** saturate, i.e. keep the nose under ~+25°, and hold it 10 s+. `CAP-05`'s 50%-throttle clip failed on exactly this: it was a zoom, the ADI pinned at sky fraction 0.730, and the nose angle became unreadable. ⚠ Still owed after D32, and now the ONLY thing that can settle the climb residual: the 90° climb clip gives a clean speed plateau (163.05 mph at a 56.3° path) but its ADI saturates too, so the nose angle — and with it α, the leading candidate for the model's remaining +25% — is unreadable in every climb capture taken so far | `BL-410` (the sustained-climb residual; `ClimbGravityScale` itself is retired) |
-
-⚠ **Partial STICK deflection cannot be captured: the controls are keyboard, so pitch, roll and
-yaw are 100 % or 0 %.** Any capture asking for "a light, steady pull" or any other intermediate
-*axis* position is unfilmable by construction, not merely unflown — do not file one, ask the binary
-instead. This retired `CAP-32` (2026-08-15). **Throttle is not affected**: it is a stepped setting
-and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 and `CAP-05` flew
-50 %, so `CAP-20`'s 1/4 and 1/2 runs above remain perfectly filmable.
+⚠ **No capture here answers a flight-model question, and none may be filed.** A number off the
+cockpit panel does not settle a flight quantity: footage cannot confirm a decode, it only ranks
+readings, and it will rank a reading nobody has thought of (`docs/verification.md` DET-12, and
+DET-11 on the sim clock that makes every wall-clock rate wrong by 39 %). Flight questions go to
+`crimson.exe` — see `BL-414`. The captures below are **qualitative**: what a thing looks and
+sounds like, watched and frame-sampled, never measured into a constant.
 
 ### HUD — ammo gauge in frame
 
@@ -118,6 +107,7 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
+| `CAP-39` | Cockpit view while firing | In the original, hold the guns for a second or two IN the cockpit view (mode 6), ideally at dusk or against a dark cliff so a light flash reads. A sweep of all 130 existing clips found no cockpit-view firing footage: every gun clip is nose or chase view. *Look for:* how bright and how warm the flash reads inside the canopy, and where it lands — CSVM implements `muzzle_burst`'s authored first-person lights (`testfp`'s `PLAYER_1ST_PERSON` branch: `bigmuzzle_lt` + `muzzle_lt` at the authored offsets, ranges and colour), so the clip CALIBRATES their look rather than settling whether the interior lights at all. Energy is a declared TUNE (the data carries none, so both lights start at the third-person stand-in's 2.5), and the emphasis to match is the canopy struts above the head, which is where the original puts it at the controls; the windshield bullet-hole decals on taking window hits ride the same sortie if one happens | `BL-436` (the muzzle-light energy TUNE), `BL-431` |
 | `CAP-26` | Rocket impacts, one clip per type, **with audio** | Fire each rocket type at open ground and film it close enough to count and orient the rings, with clean audio on the same take: `wep_04` (9M/incendiary), `wep_05` (ARMOR), `wep_06` (BOOM/HE), `wep_08` (SONIC). Two playtests point here: `PT-17` found HE's second ring present but its orientation "kinda random", and `PT-20` judged the sounds "a lot better" but not settleable by ear alone. *Look for:* ring count, ring orientation and how fast the burst reads (`BL-016`'s open "faster than the original" half), plus the launch bark and the per-type impact sound | `BL-016` (open half), `BL-211` |
 | `CAP-27` | Does the original spark on the airframe at all? | Take damage in the original — a light scrape is enough — with the aircraft in frame (external/chase fine), and look for a **spark burst on the airframe itself**, distinct from smoke at the contact point. ⚠ This capture can **delete** a feature rather than tune one: our per-impact spark burst is driven by a 0.99 `injure_anims` entry that exists on **1 of 11** aircraft (the Devastator), plausibly an authoring leftover (was `BL-090` item 2, closed — `git log --grep=BL-090`). If the original never sparks, our implementation goes. If it does, `BL-281`'s ricochet mix can be judged | `BL-281` |
 | `CAP-30` | Firing-wobble amplitude across calibers and airframes | Dead-astern external/chase clips, level flight, guns held 3 s+: **(a)** one plane with two well-separated calibers (30 vs 70), **(b)** one caliber on a light vs a heavy plane, **(c)** — added 2026-08-07 — a **Bloodhawk 40-cal** clip framed and fire-rate-matched to `Gun Wobble and animation.mp4`, giving a *second independent amplitude measurement* of the same case the law was derived from. (c) is what lets this capture serve as `BL-266`(a)'s fallback instrument: (a)/(b) alone ask only whether caliber and plane weight enter the law, and **cannot** settle the uniform ~2–4× shortfall our render shows against the reference clip. ⚠ Dead-astern framing is load-bearing: it makes the on-screen roll angle the world roll angle with no projection model (`analysis/gun-wobble-shake/FINDINGS.md`, capture spec there). Confirms or refutes the pure-caliber magnitude law (7e-5 × caliber, measured on one 40-cal clip) and whether plane model/weight enter; a being-hit clip on the same sortie also pins the impact sources' stand-in quantities | `BL-266` |
