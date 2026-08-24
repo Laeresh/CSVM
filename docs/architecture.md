@@ -37,7 +37,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/PatternLibrary.cs` — decodes the original's `.BM` paint patterns from the extracted ROF archive; `PatternsFor` lists a plane's liveries.
 - `src/Mech3/PlanePainter.cs` — applies a `PaintScheme` to one aircraft: composites skins from the pattern's region masks, swaps decals.
 - `src/Mech3/PropParts.cs` — classifies prop/rotor nodes by name; spin axis + rate from the original anims (props Z, rotor Y).
-- `src/Mech3/ControlSurfaces.cs` — classifies aileron/elevator/rudder mesh nodes and their hinge axes (X ailerons/elevators, Y rudders).
+- `src/Mech3/ControlSurfaces.cs` — classifies left/right aileron, elevator and rudder mesh nodes and their hinge axes (X ailerons/elevators, Y rudders).
 - `src/Mech3/WingLights.cs` — the one source for wingtip nav lights: flare node names, glow texture, warm-amber colour, blink period.
 - `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud deck, camera-anchored skydome, edge extender.
 - `src/Mech3/MapEdgeExtender.cs` — rolling window of repeated border-cell blocks + clutter continuing the world past the map edge, per camera; block depth is per chapter (`DefaultBlockCells`).
@@ -166,10 +166,12 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/ThrottleSlamSmoke.cs` — a large throttle jump streams dark exhaust trail smoke for a few seconds; a single notch or a decrease shows nothing.
 - `src/Flight/SpeedCue.cs` — chapter-authored pale smoke wisps emitted 60 m ahead of each player, density selected by camera altitude.
-- `src/Flight/ControlSurfaceAnimator.cs` — deflects ailerons/elevators/rudders to an absolute pose from slewed stick input; `--fly` only.
+- `src/Flight/ControlSurfaceMix.cs` — the decoded control-surface angle solver: three stick channels into six clamped slots, smoothed at 2/s, with the human-pilot guard. No scene node.
+- `src/Flight/ControlSurfaceAnimator.cs` — poses ailerons/elevators/rudders from those slot angles; `--fly` only.
 - `src/Flight/WingLightBlinker.cs` — blinks the wingtip flares 0.08 s every 1.5 s, reset off on respawn; `--fly` only.
 - `src/Flight/PylonOrdnance.cs` — the rockets under the wings: one FLYOUT-model body per loaded pylon, hidden as its ammo depletes; `--fly` only.
-- `src/Flight/PlaneShake.cs` — the plane-wobble oscillators (gunfire buzz, overspeed rattle, being-hit rocks) summed to visual-only roll on the rig's ShakePivot.
+- `src/Flight/PlaneShake.cs` — the plane-wobble oscillators (gunfire buzz, overspeed rattle, being-hit rocks, the nitro engage) summed to visual-only roll on the rig's ShakePivot.
+- `src/Flight/NitroSystem.cs` — the nitro boost lifecycle: the decoded tank, one-shot engage, cutoff, gates and animation edges, engine-free.
 - `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's triangles, with no per-plane data.
 - `src/Flight/CollisionLayers.cs` — the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.
 - `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` boxes on the aircraft layer; struck shape → part name.
@@ -178,6 +180,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ContactReport.cs` — one detected contact as a value: impact, normal, struck part, collider name, stop fraction, and whether an aeroplane was struck.
 - `src/Flight/ContactOutcome.cs` — what a contact costs the striker: fate, the decoded damage pair, doom, the charged zone, the HUD flash, the push-out, and the struck-aircraft instruction.
 - `src/Flight/AircraftContactResolver.cs` — the decoded contact rules for one aircraft: the damage pair, the fate, and the un-embed loop, with no `Node` in sight.
+- `src/Flight/SweepCadence.cs` — the original's alternate-step collision sweep: which sim steps sweep, and the skipped step's motion carried into the next one.
 - `src/Flight/AircraftLifecycle.cs` — the states one aircraft moves between (in play, crashed, destroyed, inert) with the spawn timers, holding a `SurfaceDefTable` for the crash-def selection; every transition returns what the node must perform.
 - `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part; owns the whole-vehicle kill rule (`IsDestroyed`).
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
@@ -267,6 +270,7 @@ determinism repo-wide — read `docs/verification.md` first.
 instead.
 
 - `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a verdict, shared with the suites.
+- `src/Testing/EnvelopeMargins.cs` — one flight scenario's distance from every term that could bound it, plus which decoded branches it drove; the parity ledger's coverage half.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
@@ -511,6 +515,9 @@ and autogyro.json (agyro_rotors): props spin about local Z, rotors about local Y
 Classifies a plane's control-surface mesh nodes + hinge axes: the deflecting node (l/r_aileronN,
 l/r_elevatorN, l/r_rudderN, the Fury's l/r_rudder_rotate) hangs under a hinge parent group whose
 transform places/orients the hinge line; ailerons/elevators hinge about local X, rudders local Y.
+The name patterns are the original's own six `sprintf` node lists (docs/org/flightModel.md, "The
+original's control-surface animation"), which is why the elevators classify per side: they carry a
+differential roll term, so left and right settle at different angles.
 
 ## src/Mech3/WingLights.cs
 Single source of truth for wingtip nav lights: the flare-node predicate (wing_flare1/2), the glow
@@ -2160,8 +2167,9 @@ in RADIANS as the original stores it), the Cockpit head's `autohead_turn_time`/`
 asymmetry, docs/formats/vehicle/player-globals.md), plus the decoded model's
 lift/AoA/G, turn/yaw-curve, pitch-fade and drag-fade-speed globals — docs/org/flightModel.md; converted
 exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G; the turn/yaw
-curves are live in the model, the G limiters and the pitch fade deliberately not, being authored out
-of reach), the `crash` block's `bounce_factor` (a raw scalar, read one level down inside that block
+curves, the pitch fade, the G limiter and the AOA window are all live in the model, the first two
+neutral on the authored values and the window binding on all of them), the `crash` block's
+`bounce_factor` (a raw scalar, read one level down inside that block
 — the collision restitution's ceiling), the `engine_sound` def name with its
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
 records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per-part
@@ -2595,15 +2603,50 @@ index (its plane gone since the last press) resolves to.
 ## src/Flight/FlightModel.cs
 The decoded, data-driven aircraft plant. Rotation sums stick torque, bank coupling, `return_rate`
 weathervane and ground blow before exponential `ang_momentum_damp` decay; authored speed curves
-scale the stick command only.
-Translation separately composes decoded Mach drag, thrust and lift around the lag vector; the
-original spends that vector directly, leaving three target-velocity calls open (`BL-438`). The
-footage altitude clamp and two numerical caps are ours.
-`UsesAiForcePath` holds near-field differences. The original's >1 km AI speed-hold branch remains
-unported (`BL-425`); player-only guards widen to all humans. `Collide` owns restitution and three
-fitted graze terms; contact lifecycle stays in `AircraftContactResolver`/`FlightController`.
-The choker's extend-only timer zeroes thrust alone. Full decode, standing conflicts and deliberately
-absent terms: [`org/flightModel.md`](org/flightModel.md); measurement rules: `verification.md`.
+scale the stick command only, roll on the base ramp and pitch on that ramp times the authored
+high-speed fade. `OpposingCommandLimitAt` softens the pitch and yaw commands that swing the nose
+further off the flight path, on the decoded G ramp and the decoded AOA window; `AoaLimiterFactor`
+is the window's A/B seam (1, the default, is the decode); the pitch rate it produces is the answer
+and the filmed 33 °/s is discarded beside it.
+Translation composes the original's own chain: the lag vector as a clamped lift demand plus
+decoded Mach drag, thrust and gravity; the velocity direction rotates only through that lift and
+the ground-blow steer (`NoseChaseFactor` 0 pins the retired kinematic chase out, config-selectable
+for A/B). The
+footage altitude clamp, the STALL lamp's fraction and the dive-speed cap are ours, and are the
+whole of what is not decoded in the file; every constant's class is in
+[`org/flightModel.md`](org/flightModel.md)'s inventory, censused by `FlightConstantInventoryTests`.
+`UsesAiForcePath` holds near-field differences, and `FarFieldPlant` is the original's level-of-detail
+branch, re-decided every step: an AI aircraft more than 1 km horizontally from the NEAREST human
+pilot holds `throttle · fd_speed + 5` along its nose at a 1/s lag and skips lift, drag, thrust,
+gravity, the authority curves, the command limiter and the bank coupling, keeping its stick torques
+and the ground blow. The range arrives as `FlightInput.NearestHumanDistSqM`, which is 0 for a plant
+nobody tells; player-only guards widen to all humans. `Collide` is the decoded contact response
+whole: the placement (0.03 m off the surface for a human, the sweep's stop exactly for an AI) and
+the human-only normal impulse on velocity and body rates, with NO tangential, friction or
+vertical-speed term, so a scrape bleeds speed only through repeated impulses; contact lifecycle
+and the remaining invented laws (`C22`) stay in `AircraftContactResolver`/`FlightController`.
+The choker's extend-only timer zeroes thrust alone. There is no engine torque: every write to the
+original's angular accumulator is a product of state-derived vectors and none reads the throttle,
+so the rotational plant is mirror-symmetric and `EngineTorqueAbsenceTests` pins it that way; do not
+re-chase the GDD's one-sided turn assist. `FlightInput.Boost` is the nitro flag: it REPLACES the
+lever with `BoostLever` 1.8 at the thrust read (the throttle and its slew are untouched, so an idle
+boost is a full-throttle boost) and scales the drag coefficient by `BoostDragFactor` 0.8; the
+lifecycle that sets it is `NitroSystem`. Full decode, and every mechanism's class (decoded, named
+product exception, or unsupported): [`org/flightModel.md`](org/flightModel.md), "Parity ledger";
+measurement rules: `verification.md`.
+
+## src/Flight/NitroSystem.cs
+The original's nitro boost lifecycle, engine-free (docs/org/flightModel.md, "Nitro"): a 30-unit
+tank burned at 4/s while boosting and refilled at 1/s always, so a burn nets 3/s and runs 9.5 s
+from full to the 5 % cutoff; the human arm (`HumanCommand`) engages on a held command only from a
+99 % tank and re-asserts the flag until the cutoff, so nothing stops a burn and the refill to
+re-arm takes 28.2 s; the AI arm (`AiSet`) has no engage line and fires once per nitro-flagged
+maneuver. Both refuse an engine-out aircraft and a re-engage while the boost or decay animation
+is alive; the boost animation lives at least 1 s after an engage. `Installed` is the injector
+(the hangar's nitrous engine ids 3-5, or the roster block's `nitro` slot); `EngagedThisTick` and
+`ReleasedThisTick` are the edges `FlightController.AdvanceNitro` turns into the shake kick, the
+`nitro_boost`/`nitro_decay` defs and the `snd_nitro` loop. Every constant is censused by
+`FlightConstantInventoryTests`; `NitroSystemTests` pins the lifecycle and the force couplings.
 
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies
@@ -2637,13 +2680,24 @@ rig's visual layer, so splitscreen panes never see another pilot's private speed
 session `EffectAmbience`, so the authored 500–600 m camera-distance fade and wind apply. `Reset`
 hard-clears all three on crash/respawn so a teleported aircraft cannot bridge its old position.
 
+## src/Flight/ControlSurfaceMix.cs
+The decoded angle solver behind the surfaces, engine-free so the arithmetic is testable without a
+scene: roll drives the two aileron slots at ∓0.5 rad, pitch the two elevator slots at −0.6 rad with
+a ±0.18 rad differential roll term added, yaw both rudder slots at −0.61086524 rad times the
+reverse-authority factor. Aileron and elevator targets are clamped (±0.5, ±0.6); the rudder is not.
+Each slot then decays exponentially toward its target at 2/s, exp(−rate·dt), so the shape holds at
+any frame rate. `Advance`'s `animate` flag is the original's player-only guard: false writes no
+slot at all, which is how an AI aircraft's surfaces stay frozen. Addresses and the list population
+that fixes which node takes which slot: docs/org/flightModel.md, "The original's control-surface
+animation".
+
 ## src/Flight/ControlSurfaceAnimator.cs
-Deflects ailerons/elevators/rudders to an absolute pose: each surface stores its build-time local
-basis and gets Basis = base · Rot(hingeAxis, angle); three channels slew toward the stick at
-SlewPerSec (TUNE), ±20° per kind. --fly only; frozen while paused/crashed, reset on respawn.
-The RUDDER target is additionally scaled by the reverse-authority factor (`FlightModel
-.ReverseAuthorityAt`) — decoded, and this is its ONLY consumer in the original, so the rudder
-barely moves at cruise and swings fully only in the slow-flight window where it has authority.
+The node side of that: collects every classified surface, poses it as an absolute pose (build-time
+local basis, Basis = base · Rot(hingeAxis, slotAngle · scale)) rather than accumulating, and owns
+the two frame flips the original does not need: a mount rotated by yaw π, and a nose-mounted
+canard, which raises the nose the other way. --fly only; frozen while paused/crashed, reset on
+respawn. `FlightController` passes its `IsHumanPiloted` as the guard, which is the plan's Decision
+3: every human pilot animates for splitscreen, AI stays frozen as the original has it.
 
 ## src/Flight/WingLightBlinker.cs
 Flashes the wingtip flares for FlashDuration ~0.033 s (TUNE — matches the original's own footage at
@@ -2688,7 +2742,8 @@ absent sources read as null and `PlaneShake` no-ops them.
 
 ## src/Flight/PlaneShake.cs
 The plane-wobble oscillators: gunfire buzz (`fire_bullet`), overspeed rattle (`high_speed`),
-and being-hit rocks (`bullet_impact`/`missile_impact`/`explosion`), summed each sim tick into
+being-hit rocks (`bullet_impact`/`missile_impact`/`explosion`) and the nitro engage (`nitro`, one
+kick of its absolute authored `magnitude`, human pilots only), summed each sim tick into
 `Roll` — radians the controller writes to `ShakePivot`, the node the assembler hung the plane
 model under. Engine-free on purpose (unit-tested); the pivot write is the controller's one line.
 Amplitude = `magnitude_factor × caliber` in radians of roll, **measured** off original footage
@@ -2791,7 +2846,8 @@ flight model or the mode.
 On a crash it cuts to `CrashView` once,
 writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
 shows no HUD — footage), restoring it on respawn. Every physics query — the PlaneCollider boxes'
-sweep each physics frame plus every ray (ground AGL, the ground-blow probe, the camera's height
+sweep on every other sim step (`SweepCadence`, the original's parity, the skipped step's motion
+carried into the next sweep) plus every ray (ground AGL, the ground-blow probe, the camera's height
 check, both turret/AI lines of sight) — goes through the one `IWorldQuery` bound in `Bind`
 (`GodotWorldQuery`, the sole adapter over `DirectSpaceState`); mask world+aircraft with its own
 `Body` (`AircraftBody`, built in `_Ready` from the same boxes) excluded by RID, so another plane
@@ -2809,7 +2865,7 @@ entry): this node holds one privately, forwards `Crashed`/`Destroyed`/`WreckFall
 onto it, and performs what a transition reports rather than deciding it. `BindCrashRig` takes the
 crash runtime, the def table, the anchor and the two respawn snapshots in one call, so the rig
 cannot be half-bound and only `CrashRuntime`/`CrashAnchor` stay readable as properties. The DEATH family (`CRASH into`, `midair aspect`, every
-`vehicle health exhausted`, `graze`, `ground stop`, `AI ram`, `impact severity`) routes through
+`vehicle health exhausted`, `graze`, `embedded in terrain`, `AI ram`, `impact`) routes through
 `Log.Info("flight", …)`, so a play session's file sink carries how each aircraft died; the
 per-round weapon breadcrumbs around them are a different family and still `GD.Print`.
 The sim half is `SimStep(dt)`, called by
@@ -2820,7 +2876,11 @@ given aircraft is one `IFlightInputSource` (see `src/Flight/IFlightInputSource.c
 in `Bind` and read through `InputSource.Read(dt)` in place of the old per-frame ternary. An AI
 aircraft is this SAME node with `Pilot` (an `AiPilot`) driving that source, `IsHumanPiloted`
 false, `Setup(null)` for the camera (every camera write skipped, `_cam` null) and no HUD canvas
-built — flight, collision, weapons and damage are byte-for-byte the player's path.
+built — flight, collision, weapons and damage are byte-for-byte the player's path. The one thing an
+AI rig is told that a human rig is not is `HumanPositions`, the session's nearest-human snapshot,
+which this node turns into a horizontal squared range every step (the wreck fall included, since the
+original re-tests it whatever is flying the aircraft) and hands the plant as
+`FlightInput.NearestHumanDistSqM` for its far-field branch.
 `TakeProjectileHit` and the contact's ledger spend run the decoded damage flow (PlaneDamage: dead-zone redirect +
 whole-pool overflow, 2026-08-14) — the struck zone is Apply's ANSWER, not the geometric guess,
 and `IsDestroyed` is tested on every hit, zone-less included; the HUD DMG line leads with the
@@ -3082,7 +3142,10 @@ HudMetrics.Scale; Build returns null if a texture is missing; _Process re-anchor
 
 ## src/Flight/GaugeCluster.cs
 The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, plus
-the gun + missile weapon gauges, all geometry extracted from the plane's own gauges subtree
+the gun + missile weapon gauges and the nitro dial (`nitrogauge`, drawn only with the injector
+installed; its two needles chase the decoded targets through `NitroNeedle`'s exponential at 3/s
+and 1.5/s over a 216° sweep, and its screen placement above the GUNS dial is this port's), all
+geometry extracted from the plane's own gauges subtree
 (structure/scales/quirks: docs/formats/hud.md); polys draw by data priority, rest rotations
 ignored; PartFraction binds flight or the lab; dial centres are bottom-anchored (FromBottom) so
 panes keep them on screen. `DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (`BL-085`/`BL-173`) is
@@ -3994,11 +4057,28 @@ The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loa
 `--dump-flight` / `--dump-mips` / `--damage-test` / `--effects-test` inspection reports. Each probe
 does the work once and returns both halves: the report text the flag prints and writes, and a
 structured verdict (counts, per-row booleans, failure strings) a `--run-tests` suite asserts on.
+`FlightEnvelopeAll` is the whole-plant instrument `--dump-flight=all` and the parity ledger share, so
+a dump diffed against an older one and the ledger published from it cannot disagree. A flight row's
+`Target` is always decoded or a named product exception; a footage figure lives in the row's text as
+a discarded annotation and gates nothing. Every scenario also carries `EnvelopeMargins`: its distance
+from each bounding term (the G clamp, the C_L ceiling, the AOA window, the stall flag, the altitude
+band, the dive cap) and which decoded branches it drove.
 `Effects` owns the effects sweep — the puffer half and the template-MESH half (`BL-061`), the
 latter counted only through `MeshCensus` (per-root per-tick PEAK + distance-to-play-point +
 post-stop residual; a final-sample census misses meshes the data turns off inside the window,
 INSTR-11). The `effect-template-mesh` suite counts through `MeshCensus` too, so the sweep's
 verdicts and the suite's assertions cannot drift apart.
+
+## src/Testing/EnvelopeMargins.cs
+The reachability half of the flight-envelope report. `Sample` reads one completed `FlightModel`
+step's public state and keeps, per scenario, the peak load-factor demand against the ±5/9 clamp, the
+peak demand over the aerodynamic C_L ceiling, the deepest opposing-command limit, the closest
+approach to the stall speed, the peak altitude against the 2000 m band boundary, the delivered
+body-up G against the authored `lowGs`/`highGs` starts, and the peak speed against the dive cap;
+`Take` formats that as the row's `margins:` line. Across the whole airframe it also records which of
+`Branches` the scenarios reached. Nothing here feeds a force. ⚠ One instance per airframe and not
+thread-safe: the probe owns it for one report. Which instrument drives each unreached branch is in
+[`org/flightModel.md`](org/flightModel.md), "Parity ledger".
 
 ## src/Testing/TestHarness.cs
 `--run-tests[=filter]`: the suite registry, `TestContext` (assert verbs, resolved data paths, a
@@ -4052,7 +4132,11 @@ exactly the shooter, killer-less and unowned-round deaths score nobody, and the 
 for R),
 the AI actor seam (`ai-actor`: an `AiPilot`-driven plane spawned into an already-stepped sim —
 present, flying its orders, retargetable mid-flight, damageable and killable with the kill
-attributed), the AI gunnery
+attributed),
+the far-field plant's session plumbing (`ai-far-field-plant`: two AI rigs at 100 m and 1200 m from
+a human, so the branch is watched selecting in both directions: the range horizontal, the NEAREST
+of several humans deciding it, an unbound seam staying near-field, and the far rig holding
+throttle × fd_speed + 5 m/s where the near rig on identical orders does not), the AI gunnery
 (`ai-gunnery`: held rigs firing through the real fire-control path — nearest-hostile
 acquisition as mutable state, the quick-draw and ±11° cone gates, dead-eye skill 1 vs 9 hit
 rates on a fixed seed, the kill under the AI's shooter id, and the IsHumanPiloted assist
@@ -4592,7 +4676,7 @@ splitscreen, where one pilot brackets another's build.
 The record of which authored anims are playable effects, and what their defs need staged: the name
 tables every effect producer must stay inside, static and engine-free. Owns `EffectAnimNames`, the
 crash-rig's own name sets (`CrashDefTable`/`AiCrashDefTable`/`TouchdownDefTable`,
-`PlaneDamageEffectAnims`, `PropChoreographyAnims`, and the two damage-stage menus
+`PlaneDamageEffectAnims`, `PropChoreographyAnims`, `NitroAnims`, and the two damage-stage menus
 `PlayerDamageStageAnims`/`AiDamageStageAnims` with their union `DamageStageAnims`), the death
 path's OTHER slot (`AirframeDestroyAnims`/`DestroyAnimFor`, the self-named destroy def, with
 `FliesOwnHull` asking the data which family owns the landing), `ResolvedSurfaceIds`
@@ -4789,20 +4873,32 @@ forgetting one statement rather than four. `AircraftContactResolver` fills it.
 
 ## src/Flight/AircraftContactResolver.cs
 The decoded contact rules for one aircraft, holding an `IWorldQuery` and no `Node`: the damage pair
-both parties spend (`FUN_0048d2c0`), the fate (the doom rule, the no-ledger speed threshold, health
-exhausted, the ground stop, an airframe that cannot un-embed), and the un-embed loop over the
+both parties spend (`FUN_0048d2c0`), the fate (the doom rule, no damage data, health
+exhausted, an airframe that cannot un-embed), and the un-embed loop over the
 seam's `Overlaps`. One call answers one contact with one `ContactOutcome` the caller performs.
 The engine effects it interleaves with, because each one's result is the next rule's premise, go
 through `IContactEffects`: the fly-through offer, the graze reaction, the ledger spend and its
 readouts, and the contact response. `FlightController` implements that as a per-contact
-`ContactEffects`, keeping the struck `Node`, the damage cooldown and the flight model on the node.
-`ContactConditions` is the striker's state per call, `IsHumanPiloted` included.
+`ContactEffects`, keeping the struck `Node`, the sweep cadence and the flight model on the node.
+`ContactConditions` is the striker's state per call, `IsHumanPiloted` included. Every contact the
+resolver is handed spends the pair; the original's every-other-frame cadence is the sweep's
+(`SweepCadence`), never a gate on the spend.
 `AircraftContactResolverTests` pins the rule table off-engine against a synthetic `IWorldQuery` and
 a scriptable `IContactEffects`: the doom rule for an AI ramming a non-aeroplane, the entity cut for
 AI into AI, the player's exemption from both (asserted on the damage magnitude, not just
 `DamageStruckAircraft`, since the entity cut applies only on the non-player branch and only against
-another aeroplane), the ground stop reading `ContactResponse.Speed` alone, and the un-embed loop's
-three-try give-up.
+another aeroplane), a sustained slide exhausting its ledger against a control that spends nothing,
+and the un-embed loop's three-try give-up.
+
+## src/Flight/SweepCadence.cs
+The original's alternate-step collision sweep (`FUN_0048d7f0`'s parity gate and the `obj+0x6B0`
+accumulator, docs/org/flightModel.md "Collision response") as a pure value with no `Node`:
+`Advance` answers whether this sim step sweeps and, after a skipped step, the origin the sweep runs
+from, so the carried motion is swept whole; `Respawn` resets the phase. The parity gates the SWEEP,
+never the spend: a contact the sweep resolves always spends the pair. `SweepCadenceTests` drives it
+with the real resolver and ledger against a kinematic wall, pinning the shallow-then-steeper sequence
+from the controls, a sustained scrape dying in three 50-floor spends, and the spend-gated control
+that locks onto the free steps and never spends.
 
 ## src/Flight/AircraftLifecycle.cs
 The states one aircraft moves between and the rules that move it: in play, crashed, destroyed with

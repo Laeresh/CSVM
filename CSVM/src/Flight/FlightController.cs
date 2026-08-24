@@ -257,6 +257,18 @@ public partial class FlightController : Node3D
     /// path off this same split (<see cref="FlightModel.UsesAiForcePath"/>).</summary>
     public AiPilot? Pilot;
 
+    /// <summary>The nitro boost lifecycle. <see cref="NitroSystem.Installed"/> is the build's
+    /// (the hangar's nitrous engine pick, or the AI spawn's roster flag); the command arm, the
+    /// AI maneuver arm, the tank and the animation edges run from <see cref="SimStep"/>.</summary>
+    public NitroSystem Nitro = new();
+
+    /// <summary>Where the human pilots are, as one snapshot per call — the seam the flight model's
+    /// far-field plant is selected on (<see cref="FlightModel.FarFieldPlant"/>). The session binds
+    /// the same snapshot every other "who is nearest" consumer reads. Null (every rig built without
+    /// a session) leaves the distance at zero, which keeps that rig on near-field aerodynamics.
+    /// ⚠ Set on AI rigs. A human rig's nearest human is itself, so the distance is always 0.</summary>
+    public Func<IReadOnlyList<Vector3>>? HumanPositions;
+
     /// <summary>The world's destructibles, when this session has a world runtime — the aim assist's
     /// third candidate list (an approximation of the original's `targets.zrd`
     /// `MStructList`). Null in every build with no world (the weapon lab, the suites), which costs
@@ -323,15 +335,11 @@ public partial class FlightController : Node3D
     private const float CarrierDropThrottle = 0.1f;
     private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
+    // The nitro_decay def's authored opacity fade (RUN_TIME 1.0), which is how long a re-engage
+    // stays refused for; the runtime has no completion callback to read it off.
+    private const float NitroDecayAnimSeconds = 1f;
     private const float DebugFinishStagger = 1.5f; // s between players' forced finishes (--debug-scoreboard in a race)
 
-    // Collision severity (all TUNE): impact speed along the contact
-    // normal decides between a survivable graze and a crash. A graze damages the
-    // struck part (quadratic in severity), slides the velocity along the surface
-    // with some tangential loss, and kicks the attitude. The thresholds that decide
-    // between the two are AircraftContactResolver's.
-    private const float GrazeMaxDamage = 18f;    // HP at a just-under-crash graze (parts have 20–25)
-    private const float DamageCooldown = 0.3f;   // s between HP subtractions (multi-frame scrapes)
     private const float GrazeReactionInterval = 1.5f; // s between graze reactions — NOT a tuned value:
                                                       // the touchdown defs stop their own puffer at
                                                       // ANIMATION_OFFSET 1.5, so this is one whole authored
@@ -353,6 +361,7 @@ public partial class FlightController : Node3D
     // Which state this aircraft is in and what moves it between them, including the spawn timers.
     // Every transition below reports what it did and this node performs it (Decision 7).
     private readonly AircraftLifecycle _lifecycle = new();
+    private readonly SweepCadence _sweep = new();    // the original's alternate-step sweep and its carried motion
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
     private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
     private readonly List<RocketPylonView> _pylonViews = new();          // the AI rocketeer's pylon walk
@@ -408,7 +417,6 @@ public partial class FlightController : Node3D
     private IWorldQuery? _worldQuery;             // the sweep/ray seam; bound in Bind, lazy for bare test rigs
     private AircraftContactResolver? _contacts;   // the contact rules; lazy, over the same seam
     private IFlightInputSource? _inputSource;     // which stick flies this aircraft; bound in Bind, lazy for bare test rigs
-    private float _damageCooldown;               // s left before the next HP subtraction
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private int _projectileHitsLogged;           // verification breadcrumb: the first few hits log
     private FireControl? _fire;                  // the fire-control state machine; built in _Ready with the loadout
@@ -421,6 +429,8 @@ public partial class FlightController : Node3D
     private bool _gunnerLoggedFire;              // verification breadcrumb: the AI gunner's first open fire
     private bool _rocketeerLoggedFire;           // verification breadcrumb: the AI's first ordnance launch
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
+    private bool _aiNitroArmed;                  // the current AI nitro maneuver already engaged
+    private float _nitroDecayLeftS;              // s the nitro_decay def has left to play
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
     private int? _team;                          // Team's backing field — null until overridden (B7)
@@ -855,7 +865,7 @@ public partial class FlightController : Node3D
                     node.Visible = vis;
                 }
         }
-        _damageCooldown = 0f;
+        _sweep.Reset();
         _grazeReactionCooldown = 0f;
         if (_hudCanvas != null)
             _hudCanvas.Visible = true;  // the crash camera hid it (footage); flying again
@@ -869,6 +879,9 @@ public partial class FlightController : Node3D
         // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → the spawn
         // throttle) must never itself read as a slam.
         ThrottleSmoke?.Reset(_throttle);
+        Nitro.Reset();
+        _aiNitroArmed = false;
+        _nitroDecayLeftS = 0f;
         SpeedCue?.Reset();
         _model.Reset(_spawnPos, _spawnAttitude, _spawnSpeed, _throttle);
         _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
@@ -1247,8 +1260,10 @@ public partial class FlightController : Node3D
         }
         else
         {
-            var prev = _model.Position;          // committed position from last frame
             var input = InputSource.Read(dt);
+            // Read AFTER the input: R respawns inside it, and a sweep from the pose before that
+            // respawn would run the whole way to the spawn point and strike whatever lies between.
+            var entered = _model.Position;       // the position this step enters with
             // The response is absent for 1.5 s, then AI terms run at 15% for 1 s.
             // Keep the probe off too, so the log records response rather than an inert hit.
             bool groundBlowReady = IsHumanPiloted || !_lifecycle.CollisionGraceActive;
@@ -1256,13 +1271,19 @@ public partial class FlightController : Node3D
                 ProbeGroundBlow(ref input);  // reads the pose this step ENTERED with, as the original does
             input.AiGroundBlowScale = !groundBlowReady ? -1f
                 : _lifecycle.PostDropGroundBlowActive ? 0.15f : 1f;
+            input.NearestHumanDistSqM = NearestHumanDistSqM();
+            AdvanceNitro(dt);
+            input.Boost = Nitro.Boosting;
             _lastInput = input;
-            _damageCooldown -= dt;
             _grazeReactionCooldown -= dt;
+            // The original sweeps on every other step and carries the skipped step's motion into
+            // the next sweep, so the sweep from `prev` covers two steps of motion after a skipped
+            // one. Every contact it resolves spends the pair; nothing else gates the spend.
+            bool onSweepStep = _sweep.Advance(entered, out var prev);
             _lifecycle.TickTimers(dt);
             _model.Step(input, dt);
 
-            // The airframe boxes sweep along the frame's motion; the center ray stays as an
+            // The airframe boxes sweep along the carried motion; the center ray stays as an
             // anti-tunnelling backstop. Only the shapeless fallback keeps a nose margin on it.
             var to = _model.Position;
             var step = to - prev;
@@ -1271,7 +1292,7 @@ public partial class FlightController : Node3D
             var probeEnd = len > 1e-4f ? to + step / len * margin : to;
             // ⚠ The grace window suppresses the SWEEP, not just the damage: while it is live this
             // plane has no collision at all (obj+0xAC, docs/org/flightModel.md).
-            bool sweeping = !_lifecycle.CollisionGraceActive;
+            bool sweeping = onSweepStep && !_lifecycle.CollisionGraceActive;
             ContactReport contact = default;
             Node? hitBody = null;
             bool hit = sweeping && SweepAirframe(prev, step, out contact, out hitBody);
@@ -1552,7 +1573,7 @@ public partial class FlightController : Node3D
                 Damage?.SummaryHealthFraction ?? 1f);
             // One drive for both paths: the original runs ONE per-frame routine for the player and
             // every AI vehicle, so the two must never read the airframe differently.
-            var engineDrive = EngineAudioCurves.DriveFrom(_model);
+            var engineDrive = EngineAudioCurves.DriveFrom(_model, _model.Boosting);
             // Keyed to the SELECTED view (D31), not the per-frame pose the camera actually took —
             // the original's swap is a camera-mode gate, and a held numpad key or look-behind is a
             // pose, not a mode change (⚠ table row 2 traces the analogous head-look case).
@@ -1578,7 +1599,8 @@ public partial class FlightController : Node3D
         if (!Crashed && !halted)
         {
             WingLights?.Advance(simDt);
-            Surfaces?.Advance(simDt, _lastInput, _model.ReverseAuthorityAt(_model.Speed));
+            Surfaces?.Advance(simDt, _lastInput, IsHumanPiloted,
+                _model.ReverseAuthorityAt(_model.Speed));
             // damage-stage trails need no per-frame feed: the rig runtime's emitters follow
             // their pdpN/prop1 host nodes themselves
         }
@@ -1633,6 +1655,66 @@ public partial class FlightController : Node3D
             return 0f;
         float t = Mathf.Min(1f, (a - deadzone) / (1f - deadzone));
         return Mathf.Sign(v) * t * t;
+    }
+
+    // N / gamepad X — the nitro command (the original's MSG_CMD_NITROUS "Use Nitro-Booster").
+    // A level read: the command arm engages on pressed-or-held and ignores it otherwise.
+    private bool NitroPressed() => KeyDown(Key.N) || PadPressed(JoyButton.X);
+
+    // The nitro lifecycle for this step, in the original's order: the command arm (human key,
+    // or the AI's nitro-flagged maneuver), then the tank, then the edges the flag produced.
+    // Every human pilot takes the player's arms (shake, loop, animation): plan Decision 3.
+    private void AdvanceNitro(float dt)
+    {
+        bool engineOut = _model.EngineDead;
+        if (IsHumanPiloted)
+            Nitro.HumanCommand(NitroPressed(), engineOut, dt);
+        else if (Pilot?.Machine?.Executor is { Maneuver.Nitro: true })
+        {
+            // One engage per maneuver, the way the maneuver starter fires SetNitro(1) once.
+            if (!_aiNitroArmed)
+                Nitro.AiSet(true, engineOut, dt);
+            _aiNitroArmed = true;
+        }
+        else
+        {
+            _aiNitroArmed = false;
+            Nitro.AiSet(false, engineOut, dt);
+        }
+        Nitro.Advance(dt, engineOut);
+
+        if (Nitro.EngagedThisTick)
+        {
+            if (IsHumanPiloted)
+                Shake?.NitroEngaged();
+            if (PlaneModel != null)
+                CrashRuntime?.PlayWithin(PlaneModel, "nitro_boost", applyReset: false);
+            Log.Debug("flight", $"nitro engaged charge={Nitro.Charge:0.0}");
+        }
+        if (Nitro.ReleasedThisTick && PlaneModel != null && CrashRuntime != null)
+        {
+            CrashRuntime.StopWithin(PlaneModel, "nitro_boost");
+            CrashRuntime.PlayWithin(PlaneModel, "nitro_decay", applyReset: false);
+            _nitroDecayLeftS = NitroDecayAnimSeconds;
+            Log.Debug("flight", $"nitro released charge={Nitro.Charge:0.0}");
+        }
+        // The decay def has no completion callback here; its opacity fade is authored 1.0 s long.
+        if (_nitroDecayLeftS > 0f)
+        {
+            _nitroDecayLeftS -= dt;
+            if (_nitroDecayLeftS <= 0f)
+                Nitro.DecayFinished();
+        }
+        else if (Nitro.DecayAnimPlaying)
+            Nitro.DecayFinished();
+
+        if (IsHumanPiloted && Audio != null)
+        {
+            if (Nitro.BoostAnimAlive)
+                Audio.StartNitroLoop();
+            else
+                Audio.StopNitroLoop();
+        }
     }
 
     // Space / gamepad B — the gun trigger (caller drives the fire-rate clock);
@@ -1691,6 +1773,9 @@ public partial class FlightController : Node3D
             Loadout = Loadout,
             GunSelect = _fire?.GunSel ?? 0,
             PylonSelect = _fire?.SelectedPylon ?? 0,
+            NitroInstalled = Nitro.Installed,
+            NitroBoosting = Nitro.Boosting,
+            NitroChargeFrac = Nitro.ChargeFraction,
             ReticleGun = reticleGun,
             ReticleOrigin = reticleOrigin,
             ReticleNose = reticleNose,
@@ -1969,6 +2054,28 @@ public partial class FlightController : Node3D
         }
     }
 
+    // Squared HORIZONTAL range to the nearest human pilot, the quantity the flight model's
+    // far-field branch is selected on. The original measures Δx² + Δz² against its single player;
+    // this reads every human, which is the flight-parity plan's Decision 3 (docs/plans/PLAN-flight-model-parity.md).
+    // ⚠ No seam bound means no human is known, and 0 keeps the aircraft near-field.
+    private float NearestHumanDistSqM()
+    {
+        if (HumanPositions?.Invoke() is not { Count: > 0 } humans)
+            return 0f;
+        var here = _model.Position;
+        float best = float.MaxValue;
+        for (int i = 0; i < humans.Count; i++)
+        {
+            float dx = humans[i].X - here.X;
+            float dz = humans[i].Z - here.Z;
+            float d = (dx * dx) + (dz * dz);
+            if (d < best)
+                best = d;
+        }
+
+        return best;
+    }
+
     // Vertical clearance over static world collision only. Unlike HitWorld,
     // another aircraft below the camera is not ground for speed_cue's NODE_NEAR_GROUND gate.
     private float HeightAboveWorldGround(Vector3 from)
@@ -2060,6 +2167,7 @@ public partial class FlightController : Node3D
             _gunLoopOn = false;
             Audio?.StopGunLoop();
         }
+        Audio?.StopNitroLoop();
         Audio?.OnCrash();
         // An AI aircraft's loops end here and stay ended: the animation's own authored sound
         // events are what is audible from now on, and no wreck respawns to restart them.
@@ -2094,7 +2202,11 @@ public partial class FlightController : Node3D
         if (!WreckFalling)
             return;
         var prev = _model.Position;
-        _model.Step(_lastInput, dt);
+        // The stick freezes, the range does not: the original re-tests the far-field boundary every
+        // step regardless of what is flying the aircraft, so a wreck drifting past it switches too.
+        var falling = _lastInput;
+        falling.NearestHumanDistSqM = NearestHumanDistSqM();
+        _model.Step(falling, dt);
         if (_model.Position.Y < UnderMapY)
         {
             _lifecycle.StopWreckFall();   // lost under the map; nothing left to strike
@@ -2692,7 +2804,6 @@ public partial class FlightController : Node3D
         Pose = GlobalTransform,
         Stats = Stats,
         Ledger = Damage,
-        DamageCooldownElapsed = _damageCooldown <= 0f,
         Parts = Collider?.Parts,
         ExcludeSelf = Body?.ExcludeSelf,
     };
@@ -2981,7 +3092,6 @@ public partial class FlightController : Node3D
 
         public PlaneDamage.PartState? SpendDamage(string zone, float healthDamage, float armorDamage)
         {
-            _rig._damageCooldown = DamageCooldown;
             var state = _rig.Damage!.Apply(zone, healthDamage, armorDamage);
             string struckPart = state?.Def.Name ?? zone;
             if (state != null)
@@ -2995,14 +3105,13 @@ public partial class FlightController : Node3D
             return state;
         }
 
-        // Slide, restitution and lever-arm kick, on the plant whose fields they write. An airframe
-        // already crashed is off the player path, so its gate rides the restitution's argument.
+        // Placement and the decoded impulse, on the plant whose fields they write. An airframe
+        // already crashed is off the player path, so its gate rides the impulse's argument.
         public ContactResponse ApplyResponse()
         {
             _rig._model.Collide(_from, _motion, _contact.StopFraction, _contact.Impact, _contact.Normal,
-                _rig.IsHumanPiloted && !_rig.Crashed, AircraftContactResolver.CrashSpeed);
-            return new ContactResponse(_rig._model.Speed,
-                new Transform3D(_rig._model.Attitude, _rig._model.Position));
+                _rig.IsHumanPiloted && !_rig.Crashed);
+            return new ContactResponse(new Transform3D(_rig._model.Attitude, _rig._model.Position));
         }
     }
 }

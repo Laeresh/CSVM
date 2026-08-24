@@ -79,7 +79,7 @@ them in a batch unblocks far more than doing them one at a time.
 cockpit panel does not settle a flight quantity: footage cannot confirm a decode, it only ranks
 readings, and it will rank a reading nobody has thought of (`docs/verification.md` DET-12, and
 DET-11 on the sim clock that makes every wall-clock rate wrong by 39 %). Flight questions go to
-`crimson.exe` — see `BL-414`. The captures below are **qualitative**: what a thing looks and
+`crimson.exe` — see [`docs/org/flightModel.md`](docs/org/flightModel.md). The captures below are **qualitative**: what a thing looks and
 sounds like, watched and frame-sampled, never measured into a constant.
 
 ### HUD — ammo gauge in frame
@@ -433,22 +433,6 @@ reasons that have nothing to do with any of these checks.
   instead (`PLAN-overcast-match` `B12`: C1/C2B/C4/C1C = `zone2`), not by a fresh flight.
   *Variations:* one flight each — repeat with `--chapter=C3`, then `--chapter=C2`; (d)'s four
   untouched chapters need only a glance in each.
-
-- `PT-53` `[Own]` **Graze feel now that a graze bounces (`docs/plans/PLAN-ai-flight.md` `C25`, landed
-  2026-08-15, closing `BL-172`).** A survivable scrape now rebounds along the contact normal off the
-  shipped `bounce_factor` 0.6, where before it only slid. Three surfaces, at speed, in C1 or C5:
-  - (a) **a shallow belly skim over flat ground** — the plane should come off the ground and fly on,
-    not skip like a stone or bury itself. This is the case the suite measures at `e = 0.56`;
-  - (b) **an oblique scrape along a building wall or a cliff face** — the rebound there is
-    horizontal, so the altimeter should barely move; what to judge is whether being pushed off the
-    wall reads as a graze rather than as a bounce off a trampoline;
-  - (c) **a building corner** — `CAP-14` shows the original surviving a 144.5 mph graze on a C5
-    skyscraper and dying at 144.2 against another, so survival there is geometry, not speed.
-  ⚠ The three graze constants (`GrazeKick`, `GrazeFriction`, `GrazeStopSpeed`, `BL-271`) were tuned
-  against the OLD no-bounce slide and were not re-tuned when the impulse landed. If a graze feels
-  wrong, they are the first suspects — not `bounce_factor`, which is authored data.
-  *Blocks:* `BL-271`'s re-tune, `BL-381`'s multi-tick scrape (a fail on (b) is evidence for it), and
-  `docs/plans/PLAN-ai-flight.md` F52's player-side graze check (C25) — no separate PT item repeats it.
 
 ### AI flight — external view, own build (F52 AI arm)
 

@@ -111,6 +111,20 @@ public class PlaneShakeTests
     }
 
     [Fact]
+    public void ANitroEngageKicksTheAuthoredAbsoluteMagnitudeOnce()
+    {
+        // fixture nitro.magnitude = 0.05, absolute (no caliber or damage multiplies it), damp 3.
+        var shake = NewShake();
+        shake.NitroEngaged();
+        // One tick in: envelope 0.05·e^(−3/60) on a sawtooth at phase 4/60, |wave| = 0.87.
+        float peak = PeakAfter(shake, seconds: 0.02f);
+        Assert.InRange(peak, 0.05f * 0.6f, 0.05f * 1.001f);
+        // The envelope decays at the authored damp and is gone well before a burn ends.
+        Assert.True(MaxAbsRollOver(shake, seconds: 4f) < 0.05f);
+        Assert.Equal(0f, MaxAbsRollOver(shake, seconds: 4f));
+    }
+
+    [Fact]
     public void AMissingSourceIsANoOpNotACrash()
     {
         var shake = NewShake(); // fixture has no bullet_impact / explosion

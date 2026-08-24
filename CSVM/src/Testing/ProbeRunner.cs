@@ -250,15 +250,18 @@ public sealed class ProbeRunner
         return true;
     }
 
-    /// <summary>--dump-flight[=plane] (docs/cli.md): the <see cref="FlightModel"/> envelope report
-    /// against the video-decoded targets, to stdout and <c>./.scratch/flight_dump.txt</c>. The only
-    /// instrument that shows what a flight-constant change did to the whole envelope.</summary>
+    /// <summary>--dump-flight[=plane|=all] (docs/cli.md): the <see cref="FlightModel"/> envelope
+    /// report against its decoded targets, to stdout and <c>./.scratch/flight_dump.txt</c>. The only
+    /// instrument that shows what a flight-constant change did to the whole envelope, and with
+    /// <c>=all</c> it shows that across all eleven stock airframes in one run.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpFlight(SessionSpec spec)
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
         string plane = spec.DumpFlightPlane.Length > 0 ? spec.DumpFlightPlane : spec.PlaneName;
-        var r = Probes.FlightEnvelope(_zrdrPath, plane);
+        var r = plane.Equals("all", StringComparison.OrdinalIgnoreCase)
+            ? Probes.FlightEnvelopeAll(_zrdrPath)
+            : Probes.FlightEnvelope(_zrdrPath, plane);
         if (r.Error != null)
         {
             GD.PrintErr($"--dump-flight: {r.Error}");

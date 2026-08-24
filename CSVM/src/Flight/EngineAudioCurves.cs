@@ -8,7 +8,7 @@ namespace CSVM.Flight;
 /// <param name="Throttle">The lever, [0..1], which the curves' own control points are in terms of.</param>
 /// <param name="TurnRate">rad/s about everything EXCEPT the nose axis.</param>
 /// <param name="ClimbAttitude">The original's <c>a</c>: negative climbing, positive diving.</param>
-/// <param name="Boosting">⚠ Always false today; CSVM has no nitro system to set it.</param>
+/// <param name="Boosting">The nitro boost flag (<see cref="FlightModel.Boosting"/>).</param>
 public readonly record struct EngineDrive(
     float Throttle, float TurnRate, float ClimbAttitude, bool Boosting = false);
 

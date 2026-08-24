@@ -124,6 +124,12 @@ public static class EffectCatalogue
     // above, FlightController plays these directly (spawn/engine-death), never through a CALL.
     public static readonly string[] PropChoreographyAnims = { "startprops", "stopprops" };
 
+    // The nitro boost's two defs (plane_props.zrd.json): the nitroprop discs cross-fade in over
+    // the spinning props with the exhaust puffers and snd_nitrostart, and the decay reverses it.
+    // FlightController plays them off its NitroSystem's edges, never through a CALL; the
+    // ai_nitro_* wrappers in the same file are retargeting shims the executable never references.
+    public static readonly string[] NitroAnims = { "nitro_boost", "nitro_decay" };
+
     // The authored player damage-stage menu: the per-panel burn, the fuel-vapor leak, and the
     // heavy prop1 trail. DamageVisuals plays these as the vehicle.zrd.json injure_anims thresholds
     // cross — the tier table is authored, nothing here invents one.
@@ -269,6 +275,7 @@ public static class EffectCatalogue
         var names = new List<string>(crashDefs.PlayableDefs);
         names.AddRange(PlaneDamageEffectAnims);
         names.AddRange(PropChoreographyAnims);
+        names.AddRange(NitroAnims);
         names.AddRange(DamageStageAnims);
         if (!string.IsNullOrEmpty(destroyAnim))
             names.Add(destroyAnim);

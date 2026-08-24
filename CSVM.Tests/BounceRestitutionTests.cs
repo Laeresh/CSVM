@@ -89,8 +89,11 @@ public class BounceRestitutionTests
         Assert.True(near < mid && mid < tip,
             $"rebound must grow with arm length near={near:0.000} mid={mid:0.000} tip={tip:0.000}");
 
-        Assert.Equal(12.1f, mid, 1);    // f_lin ≈ 0.672
-        Assert.Equal(16.4f, tip, 1);    // f_lin ≈ 0.911
+        // The angular share is the INERTIA-multiplied vector (the original divides by the authored
+        // reciprocal moments before measuring it), so with roll recI 1.1 these sit slightly above
+        // the recI-multiplied values the earlier reading produced (12.1 / 16.4).
+        Assert.Equal(12.8f, mid, 1);    // f_lin ≈ 0.712
+        Assert.Equal(16.7f, tip, 1);    // f_lin ≈ 0.925
         Assert.True(tip < 0.6f * Sink, "f_lin · bounce_factor stays bounded by the authored 0.6");
     }
 
@@ -161,23 +164,25 @@ public class BounceRestitutionTests
 }
 
 /// <summary>
-/// <see cref="FlightModel.Collide"/>'s graze response past restitution: the slide along the
-/// struck surface (direction and the friction speed loss), the push-out, and the lever-arm
-/// kick's sign. Restitution itself stays <see cref="BounceRestitutionTests"/>'s; this class
-/// covers the parts D7 moved onto <c>Collide</c> alongside it.
-/// The plan text naming this item also names a ground-stop threshold: that constant
-/// (<c>GrazeStopSpeed</c>) is a fate decision outside <c>Collide</c>, so it sits on
+/// <see cref="FlightModel.Collide"/>'s decoded contact response: the placement (0.03 m off the
+/// surface for a human, exactly at the stop for an AI), the absence of any tangential or friction
+/// term, the decoded angular impulse, and the multi-tick scrape that bleeds speed through repeated
+/// normal impulses alone. Restitution's arithmetic stays <see cref="BounceRestitutionTests"/>'s.
+/// Decode: docs/org/flightModel.md, "Collision response" — the original's whole contact path
+/// (sweep, integrator, damage) writes velocity ONLY through the normal impulse, so the filmed
+/// tangential losses are the placement, not a velocity term.
+/// A contact's fate is decided outside <c>Collide</c>; it sits on
 /// <see cref="AircraftContactResolver"/> and is asserted there, not here.
 /// </summary>
 public class CollideResponseTests
 {
     private const float Sink = 30f;
-    private const float CrashSpeed = 25f;   // FlightController's crash-speed divisor
 
-    /// <summary>The push-out is exact arithmetic with no severity scaling: it lands the aircraft
-    /// at <c>prev + step·stopFrac + normal·0.15</c> regardless of speed, angle or pilot.</summary>
+    /// <summary>The human placement is exact arithmetic with no severity scaling: the aircraft
+    /// rests at <c>prev + step·stopFrac + normal·0.03</c>, the decoded literal at
+    /// <c>0x006080c4</c> — not the 0.15 the fitted push-out used.</summary>
     [Fact]
-    public void PositionAfterCollideIsExactlyThePrestepPlusPushOut()
+    public void AHumanContactRestsExactlyPushOutOffTheSweepStop()
     {
         var m = Plant(0.6f);
         m.Reset(Vector3.Zero, Basis.Identity, Sink, 0f);
@@ -186,36 +191,44 @@ public class CollideResponseTests
         var prev = new Vector3(10f, 5f, 0f);
         var step = new Vector3(2f, 0f, -1f);
 
-        m.Collide(prev, step, 0.6f, impact: Vector3.Zero, normal: Vector3.Up,
-            humanPiloted: false, CrashSpeed);
+        m.Collide(prev, step, 0.6f, impact: Vector3.Zero, normal: Vector3.Up, humanPiloted: true);
 
         Assert.Equal(11.2f, m.Position.X, 4);
-        Assert.Equal(5.15f, m.Position.Y, 4);
+        Assert.Equal(5.03f, m.Position.Y, 4);
         Assert.Equal(-0.6f, m.Position.Z, 4);
     }
 
-    /// <summary>A dead-on impact carries no tangential velocity to slide on: the slide is the
-    /// zero vector, so friction has nothing to act on and speed is arrested outright.</summary>
+    /// <summary>An AI contact is the position correction ALONE, resting exactly at the sweep's
+    /// stop: no push-out (the 0.03 rides the player branch only, <c>0x48dfce</c> against
+    /// <c>0x48db30</c>), no velocity change, no kick. The able-to-fail control for the whole
+    /// player gate: any response term leaking onto the AI arm moves one of these.</summary>
     [Fact]
-    public void AHeadOnImpactArrestsAllSpeedWithNoTangentialSlide()
+    public void AnAiContactIsThePositionCorrectionAloneAndTouchesNothingElse()
     {
         var m = Plant(0.6f);
-        m.Reset(Vector3.Zero, Basis.Identity, Sink, 0f);
-        m.VelocityDir = new Vector3(0f, 0f, -1f);
+        m.Reset(Vector3.Zero, Basis.Identity, 0f, 0f);
+        var vel = new Vector3(28f, -6f, 0f);
+        m.VelocityDir = vel.Normalized();
+        m.Speed = vel.Length();
 
-        m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: Vector3.Zero,
-            normal: new Vector3(0f, 0f, 1f), humanPiloted: false, CrashSpeed);
+        var prev = new Vector3(10f, 5f, 0f);
+        var step = new Vector3(2f, 0f, -1f);
+        m.Collide(prev, step, 0.6f, impact: Vector3.Zero, normal: Vector3.Up, humanPiloted: false);
 
-        Assert.Equal(0f, m.Speed, 4);
-        Assert.Equal(0f, m.VelocityDir.X, 4);
-        Assert.Equal(0f, m.VelocityDir.Y, 4);
-        Assert.Equal(-1f, m.VelocityDir.Z, 4);
+        Assert.Equal(11.2f, m.Position.X, 4);
+        Assert.Equal(5f, m.Position.Y, 4);          // exactly the stop: no 0.03, no 0.15
+        Assert.Equal(-0.6f, m.Position.Z, 4);
+        Assert.Equal(vel.Length(), m.Speed, 4);     // velocity untouched entirely
+        Assert.Equal(vel.Normalized().X, m.VelocityDir.X, 4);
+        Assert.Equal(vel.Normalized().Y, m.VelocityDir.Y, 4);
+        Assert.Equal(0f, m.BodyRates.Length(), 4);  // and no kick
     }
 
-    /// <summary>The same head-on impact, human-piloted: with no slide to carry, the outcome is
-    /// restitution alone, and it reproduces the single-axis rebound
+    /// <summary>A head-on human impact has no tangential component to keep, so the outcome is the
+    /// impulse alone, straight back the way it came at <c>bounce_factor · Sink</c> — the
+    /// single-axis rebound
     /// <see cref="BounceRestitutionTests.AnAxialNonRotatingContactReboundsAtExactlyBounceFactor"/>
-    /// already pins — straight back the way it came at <c>bounce_factor · Sink</c>.</summary>
+    /// pins, arriving through <c>Collide</c>.</summary>
     [Fact]
     public void AHeadOnImpactHumanPilotedReboundsStraightBackAtBounceFactor()
     {
@@ -223,8 +236,10 @@ public class CollideResponseTests
         m.Reset(Vector3.Zero, Basis.Identity, Sink, 0f);
         m.VelocityDir = new Vector3(0f, 0f, -1f);
 
-        m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: Vector3.Zero,
-            normal: new Vector3(0f, 0f, 1f), humanPiloted: true, CrashSpeed);
+        // impact 2 m down the normal from the resting pose: the arm is parallel to the normal, so
+        // the angular share vanishes and the rebound is the pure bounce_factor case.
+        m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: new Vector3(0f, 0f, -2f),
+            normal: new Vector3(0f, 0f, 1f), humanPiloted: true);
 
         Assert.Equal(0.6f * Sink, m.Speed, 2);
         Assert.Equal(0f, m.VelocityDir.X, 4);
@@ -232,61 +247,57 @@ public class CollideResponseTests
         Assert.Equal(1f, m.VelocityDir.Z, 4);
     }
 
-    /// <summary>A shallow graze carries most of its speed tangentially: friction kills only the
-    /// fraction the closing speed along the normal earns it, and the surviving direction is
-    /// exactly the tangential component, normalised.</summary>
+    /// <summary>The decoded ABSENCE, able to fail: a shallow human graze keeps its tangential
+    /// speed EXACTLY — the original's contact path carries no friction and no tangential term
+    /// anywhere (the whole path is traced), so the only velocity change is on the normal axis.
+    /// The retired fitted friction (0.35 · vn/25 here ≈ 2.35 m/s of tangential loss) fails this
+    /// by two decimal places.</summary>
     [Fact]
-    public void AShallowGrazeSlidesAlongTheSurfaceLosingOnlyItsNormalShare()
+    public void AShallowHumanGrazeKeepsItsTangentialSpeedExactly()
     {
         var m = Plant(0.6f);
         m.Reset(Vector3.Zero, Basis.Identity, 0f, 0f);
-        // vel = (28, -6, 0): mostly tangential to an Up-normal surface, sinking in at 6 m/s.
         var vel = new Vector3(28f, -6f, 0f);
         m.VelocityDir = vel.Normalized();
         m.Speed = vel.Length();
 
-        m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: Vector3.Zero, normal: Vector3.Up,
-            humanPiloted: false, CrashSpeed);
+        // Arm along the normal so no kick muddies the read; vn = 6 m/s into an Up surface.
+        m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: new Vector3(0f, -2f, 0f),
+            normal: Vector3.Up, humanPiloted: true);
 
-        // slide = (28, 0, 0); friction fraction = GrazeFriction · vn/crashSpeed = 0.35 · 6/25.
-        Assert.Equal(28f * (1f - 0.35f * 6f / 25f), m.Speed, 2);
-        Assert.Equal(1f, m.VelocityDir.X, 4);
-        Assert.Equal(0f, m.VelocityDir.Y, 4);
+        var after = m.VelocityDir * m.Speed;
+        Assert.Equal(28f, after.X, 3);              // tangential untouched: no friction term
+        Assert.Equal(0f, after.Z, 3);
+        Assert.Equal(0.6f * 6f, after.Y, 2);        // and the normal share rebounds at bounce_factor
     }
 
-    /// <summary>The same shallow graze, human-piloted: restitution adds an outward component the
-    /// AI case has none of, so the two headings must diverge on the normal axis alone — the A/B
-    /// this item's evidence rests on.</summary>
+    /// <summary>The decoded angular impulse replaces the fitted kick: magnitude and axis are
+    /// <c>(r × J)/|r|² · (1 + f_ang · bounce_factor) · 0.5</c>, net of the original's accumulator
+    /// round-trip. For a 2 m arm under a 30 m/s vertical slam the hand-computed value is
+    /// 8.26 rad/s of pitch-down about body Z — an inertia moved off the authored reciprocal
+    /// moments fails the partition share.</summary>
     [Fact]
-    public void AShallowGrazeHumanPilotedGainsAnOutwardComponentTheAiCaseHasNone()
+    public void TheAngularImpulseMatchesTheDecodedShape()
     {
-        var vel = new Vector3(28f, -6f, 0f);
+        var m = Plant(0.6f);
+        m.Reset(Vector3.Zero, Basis.Identity, Sink, 0f);
+        m.VelocityDir = Vector3.Down;
 
-        var ai = Plant(0.6f);
-        ai.Reset(Vector3.Zero, Basis.Identity, 0f, 0f);
-        ai.VelocityDir = vel.Normalized();
-        ai.Speed = vel.Length();
+        // Position after placement is (0, 0.03, 0), so impact (2, 0.03, 0) gives arm (2, 0, 0).
+        // J = 30·Up; u = (r×J)/|r|² = (0,0,15); A = 15/recI.z = 13.636; L = 2.25·30 = 67.5;
+        // f_ang = 0.16806; kick_z = 15·(1 + 0.16806·0.6)·0.5 = 8.256.
+        m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: new Vector3(2f, 0.03f, 0f),
+            normal: Vector3.Up, humanPiloted: true);
 
-        var human = Plant(0.6f);
-        human.Reset(Vector3.Zero, Basis.Identity, 0f, 0f);
-        human.VelocityDir = vel.Normalized();
-        human.Speed = vel.Length();
-
-        ai.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: Vector3.Zero, normal: Vector3.Up,
-            humanPiloted: false, CrashSpeed);
-        human.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: Vector3.Zero, normal: Vector3.Up,
-            humanPiloted: true, CrashSpeed);
-
-        Assert.Equal(0f, ai.VelocityDir.Y, 4);
-        Assert.True(human.VelocityDir.Y > 0f,
-            $"the human case must rebound off the surface, VelocityDir.Y={human.VelocityDir.Y:0.000}");
+        Assert.Equal(8.256f, m.BodyRates.Z, 2);
+        Assert.Equal(0f, m.BodyRates.X, 4);
+        Assert.Equal(0f, m.BodyRates.Y, 4);
     }
 
-    /// <summary>The lever-arm kick's sign follows which side of the aircraft the impact landed
-    /// on: a contact ahead of the aircraft and one behind it, everything else identical, must spin
-    /// the body rate in opposite directions.</summary>
+    /// <summary>The kick's sign follows which side of the aircraft was struck: a contact ahead and
+    /// one behind, everything else identical, spin the body rate in opposite directions.</summary>
     [Theory]
-    [InlineData(1f, true)]     // impact ahead of the push-out point
+    [InlineData(1f, true)]     // impact ahead of the resting pose
     [InlineData(-1f, false)]   // impact behind it
     public void TheKickSignFollowsWhichSideOfTheAircraftWasStruck(float impactX, bool expectPositiveZ)
     {
@@ -295,12 +306,76 @@ public class CollideResponseTests
         m.VelocityDir = new Vector3(0f, -1f, 0f);
 
         m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: new Vector3(impactX, 0f, 0f),
-            normal: Vector3.Up, humanPiloted: false, CrashSpeed);
+            normal: Vector3.Up, humanPiloted: true);
 
         if (expectPositiveZ)
             Assert.True(m.BodyRates.Z > 0f, $"BodyRates.Z={m.BodyRates.Z:0.000}");
         else
             Assert.True(m.BodyRates.Z < 0f, $"BodyRates.Z={m.BodyRates.Z:0.000}");
+    }
+
+    /// <summary>The multi-tick scrape, as the decode explains it: an oblique wall scrape bleeds
+    /// speed across ticks purely through REPEATED normal impulses — each tick the plant steers the
+    /// velocity back into the wall, and the next contact spends the re-accumulated closing share.
+    /// With the arm along the normal the per-tick outcome is exact:
+    /// <c>speed' = speed · √(cos²θ + (bounce_factor · sinθ)²)</c>, monotone to a 24 % loss over
+    /// ten ticks at 20° with no friction term anywhere.</summary>
+    [Fact]
+    public void AnObliqueWallScrapeBleedsSpeedAcrossTicksThroughRepeatedImpulsesAlone()
+    {
+        var m = Plant(0.6f);
+        m.Reset(Vector3.Zero, Basis.Identity, 60f, 0f);
+        var wallNormal = Vector3.Right;                 // wall face to the plane's left
+        const float Theta = 20f * Mathf.Pi / 180f;
+
+        float perTick = Mathf.Sqrt(Mathf.Pow(Mathf.Cos(Theta), 2f)
+                                   + Mathf.Pow(0.6f * Mathf.Sin(Theta), 2f));
+        float prevSpeed = m.Speed;
+        for (int tick = 0; tick < 10; tick++)
+        {
+            // The plant's steer between contacts, scripted: the same speed, re-aimed θ into the wall.
+            m.VelocityDir = new Vector3(-Mathf.Sin(Theta), 0f, -Mathf.Cos(Theta));
+            m.BodyRates = Vector3.Zero;
+            m.Collide(m.Position, Vector3.Zero, 0f, impact: m.Position - wallNormal * 2f,
+                normal: wallNormal, humanPiloted: true);
+
+            Assert.True(m.Speed < prevSpeed,
+                $"tick {tick}: speed must bleed every contact, {prevSpeed:0.00} → {m.Speed:0.00} m/s");
+            Assert.Equal(prevSpeed * perTick, m.Speed, 2);
+            prevSpeed = m.Speed;
+        }
+
+        Assert.True(m.Speed < 0.78f * 60f,
+            $"ten scrape ticks must have bled real speed: {m.Speed:0.00} m/s from 60");
+    }
+
+    /// <summary>The scrape control (METHOD-9): a purely tangential drag along the same wall has no
+    /// closing share to spend, so the contact costs nothing at all — the bleed above needs the
+    /// re-closing, so it is the repeated impulse and not a per-contact friction that produced
+    /// it. A friction term of any size fails this exactness.</summary>
+    [Fact]
+    public void AScrapeWithoutReSteerStopsBleedingAfterTheFirstContact()
+    {
+        var m = Plant(0.6f);
+        m.Reset(Vector3.Zero, Basis.Identity, 60f, 0f);
+        var wallNormal = Vector3.Right;
+        const float Theta = 20f * Mathf.Pi / 180f;
+        m.VelocityDir = new Vector3(-Mathf.Sin(Theta), 0f, -Mathf.Cos(Theta));
+
+        m.Collide(m.Position, Vector3.Zero, 0f, impact: m.Position - wallNormal * 2f,
+            normal: wallNormal, humanPiloted: true);
+        float afterFirst = m.Speed;
+
+        // A pure tangential drag along the same wall: no closing component, nothing to spend.
+        var tangential = m.VelocityDir * m.Speed - wallNormal * wallNormal.Dot(m.VelocityDir * m.Speed);
+        m.VelocityDir = tangential.Normalized();
+        m.Speed = tangential.Length();
+        float beforeSlide = m.Speed;
+        m.Collide(m.Position, Vector3.Zero, 0f, impact: m.Position - wallNormal * 2f,
+            normal: wallNormal, humanPiloted: true);
+
+        Assert.True(afterFirst < 60f, "the first, closing contact must have cost speed");
+        Assert.Equal(beforeSlide, m.Speed, 3);
     }
 
     private static FlightModel Plant(float bounceFactor) => new(new PlaneStats

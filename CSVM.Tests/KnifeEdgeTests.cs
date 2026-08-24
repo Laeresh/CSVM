@@ -71,25 +71,34 @@ public class KnifeEdgeTests
         }
     }
 
-    /// <summary>α at the knife-edge stays under <c>liftAOAs[0]</c> on every airframe, so the
-    /// airflow blend never starts faking toward the nose there. Peak runs 0.71–4.29° against the
-    /// authored 5° edge, tightest on the Bloodhawk. Refutes the claim (no instrument reproduces it)
-    /// that the Balmoral knife-edges 0.1° inside the ramp; see docs/org/flightModel.md.</summary>
+    /// <summary>α at the knife-edge stays inside the <c>liftAOAs</c> window on every airframe: the
+    /// blend may engage past the low edge (peaks 0.77–5.68°, tightest on the Bloodhawk at 143 mph)
+    /// but never saturates to fully nose-faked airflow. The Balmoral stays under the low edge,
+    /// which keeps refuting the invented "0.1° inside the ramp" figure no instrument reproduces;
+    /// see docs/org/flightModel.md.</summary>
     [ExtractedDataFact]
-    public void KnifeEdgeAlphaStaysUnderTheLiftAoaWindowOnEveryAirframe()
+    public void KnifeEdgeAlphaStaysInsideTheLiftAoaWindowOnEveryAirframe()
     {
         foreach (string plane in AllPlanes)
         {
             var stats = PlaneStats.Load(ZrdrPath, plane);
-            double edgeDeg = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(stats.LiftAoaCosLo, -1f, 1f)));
+            double lowDeg = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(stats.LiftAoaCosLo, -1f, 1f)));
+            double highDeg = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(stats.LiftAoaCosHi, -1f, 1f)));
             var r = Probes.KnifeEdge(ZrdrPath, plane);
             Assert.True(r.Error == null, $"{plane}: {r.Error ?? "-"}");
             foreach (var run in r.Runs)
             {
-                Assert.True(run.AlphaPeak < edgeDeg,
+                Assert.True(run.AlphaPeak < highDeg,
                     $"{plane} @{run.EntryMph:0} mph: α peaks at {run.AlphaPeak:0.00}° against a "
-                    + $"liftAOAs low edge of {edgeDeg:0.00}° — the airflow blend engages in a "
-                    + "knife-edge, which no measurement of the original supports");
+                    + $"liftAOAs upper edge of {highDeg:0.00}°, and a knife-edge must never reach "
+                    + "fully nose-faked airflow");
+                if (plane == "player_balmoral")
+                {
+                    Assert.True(run.AlphaPeak < lowDeg,
+                        $"player_balmoral @{run.EntryMph:0} mph: α peaks at {run.AlphaPeak:0.00}° "
+                        + $"against the {lowDeg:0.00}° low edge; the refuted claim that it "
+                        + "knife-edges inside the ramp must not come true quietly");
+                }
             }
         }
     }

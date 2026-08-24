@@ -34,7 +34,7 @@ public class ControlAuthorityRampTests
     public void TheRampIsLinearBetweenTheAuthoredKnees(float speedMph, float expected)
     {
         var m = new FlightModel(Authored());
-        Assert.Equal(expected, m.RollPitchAuthorityAt(speedMph * Mph), 4);
+        Assert.Equal(expected, m.RollAuthorityAt(speedMph * Mph), 4);
     }
 
     /// <summary>Read off the SHIPPED data rather than a fixture, which is what says the ramp runs on
@@ -44,8 +44,8 @@ public class ControlAuthorityRampTests
     public void TheKneesComeFromTheAuthoredDataNotTheCompiledFallback()
     {
         var m = new FlightModel(PlaneStats.Load(ZrdrPath, "player_bhawk"));
-        Assert.Equal(0.875f, m.RollPitchAuthorityAt(45f * Mph), 3);
-        Assert.NotEqual(1f, m.RollPitchAuthorityAt(45f * Mph), 3);
+        Assert.Equal(0.875f, m.RollAuthorityAt(45f * Mph), 3);
+        Assert.NotEqual(1f, m.RollAuthorityAt(45f * Mph), 3);
     }
 
     /// <summary>The ramp reaches rotation, on BOTH axes, and in proportion. Two plants fly the same
@@ -109,7 +109,7 @@ public class ControlAuthorityRampTests
         m.Reset(Vector3.Zero, new Basis(Vector3.Forward, Mathf.DegToRad(45f)), 8f * Mph, 0f);
         m.Step(default, Dt);
 
-        Assert.Equal(0f, m.RollPitchAuthorityAt(8f * Mph), 6);
+        Assert.Equal(0f, m.RollAuthorityAt(8f * Mph), 6);
         Assert.True(Mathf.Abs(m.BodyRates.X) > 1e-4f, $"pitch rate {m.BodyRates.X} rad/s");
         Assert.True(Mathf.Abs(m.BodyRates.Y) > 1e-4f, $"yaw rate {m.BodyRates.Y} rad/s");
     }

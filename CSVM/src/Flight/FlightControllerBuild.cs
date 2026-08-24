@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CSVM.Mech3;
 using CSVM.Session;
 using Godot;
@@ -28,6 +29,10 @@ internal sealed class FlightControllerBuild
     public Action<string, Vector3>? GrazeEffectSink;
     public SurfaceDefTable? TouchdownDefs;
     public ProjectilePool? Projectiles;
+
+    /// <summary>The session's "where are the humans" snapshot, which selects the flight model's
+    /// far-field plant. Null on every rig built without a session, leaving it near-field.</summary>
+    public Func<IReadOnlyList<Vector3>>? HumanPositions;
     /// <summary>⚠ Nullable because null and empty are DIFFERENT bindings downstream
     /// (<see cref="FlightController.PadDevices"/>): null reads every connected pad, empty reads
     /// none. The default stays empty so a builder that says nothing arms nothing — an AI rig
@@ -67,6 +72,7 @@ public partial class FlightController
         GrazeEffectSink = build.GrazeEffectSink;
         TouchdownDefs = build.TouchdownDefs;
         Projectiles = build.Projectiles;
+        HumanPositions = build.HumanPositions;
         UseKeyboard = build.UseKeyboard;
         PadDevices = build.PadDevices;
         AllowPause = build.AllowPause;

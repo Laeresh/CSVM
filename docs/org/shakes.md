@@ -37,9 +37,10 @@ differ only in component block (0 vs 4), magnitude law, and cadence:
 The random-walk accumulators are written **onto the camera object**, not the plane —
 `FUN_0048c470` (the per-frame player updater) reads `camera+0xec`/`+0xf0` for `high_speed` when
 its `min_speed` gate trips and calls `FUN_0042c070(4, mag)`; the gun path calls
-`FUN_0042c070(block, mag)` the same way. `FUN_0042c070` kicks `camera`-relative component blocks
-(fire block 0, high_speed block 4, impact block 5). Each block's `[3]/[4]/[5]`
-(roll/pitch/yaw) are the positions; `[6]/[7]/[8]` are velocity.
+`FUN_0042c070(block, mag)` the same way. `FUN_0042c070` kicks `camera`-relative component blocks,
+one per authored source, indexed in the parser's own order (the table in "The seven component
+blocks" below). Each block's `[3]/[4]/[5]` (roll/pitch/yaw) are the **velocities** the kick adds
+to; `[6]/[7]/[8]` are the **positions** that integrate from them and that the consumer sums.
 
 The render consumer is **`FUN_0042c0e0`**: it walks the camera's **seven** component blocks
 (0xb dwords = 0x2c bytes apart), runs the per-block spring-damper `FUN_0042bec0`, **sums all
@@ -52,8 +53,8 @@ interior draw, and hiding scene nodes — **never to scale the wobble**. So **th
 dampening**: cockpit(6)/nose(7) inherit the full undampened wobble 1:1 from the plane node.
 
   *The "dampening" is per-**source**, not per-**view**: `FUN_0042bec0` runs a small damped-spring
-  integrator per block — velocity `[6]/[7]/[8]` integrates from position `[3]/[4]/[5]` at dt=1/150,
-  and position decays through `[1]`=frequency and `[2]`=damping — smoothing each random-walk
+  integrator per block — position `[6]/[7]/[8]` integrates from velocity `[3]/[4]/[5]` at dt=1/150,
+  and velocity decays through `[1]`=frequency and `[2]`=damping — smoothing each random-walk
   source into a bounded wobble. Identical for every camera view.*
 
   *`camera+0x24` is therefore **not** a cockpit dampener — it is block 0's roll accumulator
@@ -66,6 +67,84 @@ Because the first-person placement `FUN_0042d980` (modes 6/7, [`cameraViews.md`]
 the plane's basis directly and adds **no** wobble of its own at attachment, a plane-mounted camera
 inherits the rocked rotation automatically — that is why cockpit/nose read as camera shake and the
 two cockpit views need no separate handling.
+
+## The seven component blocks and every kicker
+
+The camera object `DAT_0064ef78` is an `operator_new(0x158)` allocation constructed by
+`FUN_0042bab0`, and it carries seven identical oscillator blocks starting at `camera+0x18`, each
+eleven dwords (`0x2c` bytes): `[0]` sawtooth, `[1]` frequency, `[2]` damp, `[3]/[4]/[5]` velocity,
+`[6]/[7]/[8]` position, `[9]` and `[10]` the block's one or two magnitude terms. The constructor's
+seven-iteration loop fills every block with the same defaults, frequency `2.0`, damp `4.5`,
+sawtooth 0, zero accumulators and a zero first magnitude term. `FUN_0042bc10` then reads
+`shakes.zrd` and overwrites, per source, only the fields that file authors.
+
+Block index is the parser's own source order, and the magnitude-term offsets pin it: every
+authored magnitude lands at its block's `[9]` (and `[10]` for the two-term sources).
+
+| block | base | source key | magnitude terms | kicked by | when |
+|---|---|---|---|---|---|
+| 0 | `camera+0x18` | `fire_bullet` | `magnitude_factor` `+0x3c` | `FUN_004b6820` at `0x4b6e38` | one gun round fired |
+| 1 | `+0x44` | `bullet_impact` | `magnitude_factor` `+0x68` | `FUN_004b9bc0` at `0x4b9d26`, index 1 | one gun round taken |
+| 2 | `+0x70` | `missile_impact` | `magnitude_factor` `+0x94`, `he_factor` `+0x98` | the same site, index 2 | one rocket taken |
+| 3 | `+0x9c` | `explosion` | `max_magnitude` `+0xc0` | the same site, index 3 | one nearby detonation |
+| 4 | `+0xc8` | `high_speed` | `min_speed` `+0xec`, `magnitude_quotient` `+0xf0` | `FUN_0048c470` at `0x48d1bc` | every frame over the gate |
+| 5 | `+0xf4` | `turbulence` | none parsed; `+0x118` is never written | `FUN_0048d2c0` at `0x48d409` | one collision contact |
+| 6 | `+0x120` | `nitro` | `magnitude` `+0x144` | `FUN_004b2131` at `0x4b21ce` | nitro engaged, player only (`PlaneShake.NitroEngaged`, every human pilot) |
+
+That table is the complete kicker list. `FUN_0042c070` is a one-line forwarder to `FUN_0042be10`,
+`FUN_0042be10` has no other caller, and the five call sites above are every xref to
+`FUN_0042c070`. The only other writer of any block's accumulators is the integrator
+`FUN_0042bec0`, whose sole caller is the render consumer `FUN_0042c0e0`. No function outside the
+shake module stores a float at the block offsets.
+
+⚠ **The `explosion` block's magnitude term never fills.** The parser reads the key
+`max_magnitude` (`0x6215fc`) into `+0xc0`, and `shakes.zrd` authors `magnitude_factor` for that
+source instead, which no reader looks for. The slot therefore keeps the constructor's zero and
+the original's explosion shake has magnitude zero. The three impact sources are `BL-266(b)`'s
+subject and the correction belongs there.
+
+⚠ **`camera+0x1c` holding `2.0` is the constructor default, not the live value.** The parse
+overwrites it with the authored `fire_bullet` frequency, and the same applies to every block the
+data authors. Any gain read off the defaults is a reading of an uninitialised camera;
+`BL-266(a)` owns the gun-buzz law that depends on it.
+
+## Ambient turbulence does not ship
+
+The design intent (a subtle, continuous jostle of the player's plane in steady flight, with zero
+effect on speed, heading or performance) is **not built in the retail game**. It is closed as
+unshipped intent, on two independent negatives.
+
+**The executable parses a `turbulence` source and nothing drives it.** `FUN_0042bc10` looks up the
+key `turbulence` (`0x00621638`, referenced exactly once in the whole binary, from `0x42bd93`) and
+passes block 5 at `camera+0xf4` to the shared law reader `FUN_0042bba0`. That reader takes
+`frequency`, `damp` and `sawtooth` and nothing else, so unlike all six of its neighbours the
+turbulence block has **no magnitude field at all** to parse: there is no key whose value would say
+how hard an ambient jostle rocks the plane, and `camera+0x118`, the slot a magnitude would occupy,
+is written by no instruction in the executable. Block 5's only kicker is the contact path
+`FUN_0048d2c0`, which computes its own per-collision magnitude, so the slot the design named is
+in service as the collision oscillator. There is no per-frame, ungated caller of `FUN_0042c070` on
+any block: of the five call sites, four are per-event (a round fired, damage taken, a contact, a
+nitro engage) and the fifth, `high_speed`, runs per frame but only above its authored `min_speed`
+gate, which is rated max speed. Steady flight kicks nothing.
+
+**The data authors no such source.** `extracted/zrdr/shakes.zrd.json` is the only shake-oscillator
+file in the extracted tree, there is no per-campaign, per-mission or per-airframe override of it,
+and it authors six blocks: `fire_bullet`, `bullet_impact`, `missile_impact`, `explosion`,
+`high_speed` and `nitro`. `turbulence` is not among them, so block 5 also keeps the constructor's
+default law. A census of all 61010 extracted files finds no field or token containing `turbulen`,
+`jostl`, `buffet`, `gust`, `wobble`, `vibrat`, `jitter` or `thermal` anywhere, and no shake source
+with an idle, cruise or always-on activation. The nearest neighbours are all something else:
+`player.zrd.json`'s `rattle` is the speed-keyed volume and pitch envelope for the `snd_planeshake`
+sound and carries no motion; the mission `weather.zrd.json` `WIND` block
+(`STATIC_VELOCITY`, `RANDOM_MAX_SPEED`, `RANDOM_ACCEL`, `RANDOM_ANG_VEL`) is a particle field,
+identical in all 53 mission copies and consumed only by `WIND_FACTOR` on dust, smoke, steam and
+spray emitters, with no plane or player file referencing it; `damage_shakes.zrd`'s `ON_CALL`
+animations are finite three-loop damage reactions; and every `ambient` hit in the tree is lighting.
+
+So magnitude and cadence for an ambient jostle have no authored or executable source, which under
+this project's rules (`docs/verification.md` `SRC-3`, design documents give intent and retail
+evidence decides shipped details) makes any oscillator added here invented content rather than
+parity. `PlaneShake` gains no ambient source.
 
 ## `fire_bullet` — per-shot roll, `magnitude_factor × CALIBER`
 
