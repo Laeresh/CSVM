@@ -431,16 +431,25 @@ to compute the station):
 
 | state | station | leaves when |
 |---|---|---|
-| 0 | trail the selected target, or the leader's position +200 m of altitude when the target is beyond **1800 m** | leader live, within **700 m**, own speed above **20.576 m/s** → 1 |
+| 0 | the target station, or the leader's position +200 m of altitude when there is no target or the LEADER is beyond **1800 m** | leader live, within **700 m**, own speed above **20.576 m/s** → 1 |
 | 1 | the formation offset above | (set from 0, 2 or 4) |
-| 2 | trail the selected target | no target → 1; or `(3 × altitude error)² + range²` above **1200 m** squared for a player leader, **800 m** squared for an AI leader → 1 |
+| 2 | the target station | no target → 1; or `(3 × altitude error)² + horizontal range²` above **1200 m** squared for a player leader, **800 m** squared for an AI leader → 1 |
 | 3 | re-join | within **50 m** of the station → 4; target acquired → 2 |
 | 4 | the formation offset | within **50 m** → 1; target acquired → 2 |
 
-Nothing inside this function enters state 3.
+Both distances in state 2's break-off are measured to the **leader**, not to the target, and the
+range term is the horizontal one alone (`FUN_00538920`, x and z); every other test on this page is
+a 3-D distance (`FUN_00538880`).
 
-**The trail station** behind the selected target (states 0 and 2) ramps with the *target's* speed,
-placed along the target's backward axis:
+Nothing inside this function enters state 3, and **nothing inside it leaves state 1**: the column
+above lists that state's entries, not an exit. A wingman on a player leader therefore joins once
+and holds the formation offset for the rest of the mission, target or no target. The engaging
+state is reachable only through the every-frame forcing an AI leader applies (above), which is why
+a wingman-of-a-wingman is the one that alternates.
+
+**The target station** (states 0 and 2) ramps with the *target's* speed and is placed along the
+NEGATION of the target's backward axis, i.e. that far AHEAD of it along its own facing, a cut-off
+point rather than a trail:
 
 ```
 d = 106.68                                   for v <= 20.576 m/s
@@ -450,13 +459,42 @@ d = 259.08                                   for v >= 102.880005 m/s
 
 Those are imperial figures in metric storage: 350 ft at 46 mph ramping to 850 ft at 230 mph.
 
+⚠ Pursue computes the same ramp from the same immediates and applies it with the OPPOSITE sign
+(`FUN_0041d9f0`: the aim point is the victim's position plus `d ×` its backward axis, so pursue
+stations itself that far BEHIND its victim). The two laws differ in that one sign alone. The aim
+velocity handed to the steering law goes with the station: the target's own on states 0 and 2, the
+LEADER's on states 1 and 4, and zero on the "fly at the leader" arm of state 0.
+
 **Separation.** Inside **80 m** of the leader (6400 m² compared before the square root), the station
 is pushed away from the leader along the leader-to-follower vector scaled by `80 / distance`.
+⚠ The player station is 18.97 m from its leader, so this push ALWAYS fires there: the commanded
+point alternates between the station itself and a point about 99 m out along the current
+leader-to-wingman line, and the hold that results is a weave around the leader rather than a
+parade-tight join.
 
 **Two AI modes short-circuit the law.** Avoid crash (`+0x358 == 3`) steers at the aircraft's own
 position plus **1000 m** of altitude, and stunned (`+0x358 == 4`) returns immediately with no input
 at all. The net follower's avoid-crash case does the same 1000 m climb-out with its own parameter
-block, so **avoid crash is "aim 1000 m above yourself" in both laws**.
+block, so **avoid crash is "aim 1000 m above yourself" in both laws**. The escort law flies its own
+climb-out on `DAT_0061fb28`, the wingman table, where the net follower uses `DAT_0061fb48`.
+
+### What CSVM ports of this (D34)
+
+`src/Flight/AiEscort.cs` is the law: the five-state machine, both station offsets, the ramp, the
+break-off test and the separation push, pure over a leader/target snapshot. `AiPilot.Escort` holds
+it and, when its leader is in play, dispatches to it INSTEAD of pursue, lay off, patrol, evade and
+a running maneuver, keeping only stunned and avoid crash ahead of it, which is the original's own
+fork order. The station is flown through `AiControlLaw` on `AiLawParams.Wingman`.
+
+Not ported: the radio call the join plays (`DAT_0071c3b0`) and the re-acquire sweep state 2 runs
+when its target is lost (`FUN_0041f9c0` again, with its own 3600 m test and second cue,
+`DAT_0071c3b4`); the fire decision the law ends on, which in CSVM is the host's `AiGunner` pass;
+and the null-leader dereference, which CSVM answers by falling back to the pilot's standing orders.
+
+⚠ **A leader flying faster than 250 mph cannot be formated on at all.** The steering law caps an
+AI's desired speed at `AiControlLaw.SpeedCeiling` (111.76 m/s) whatever the airframe can do, so a
+wingman handed a faster leader falls behind for the rest of the mission. That is the original's
+ceiling, not a port artifact, and it is why the in-engine check flies its leader at a cruise lever.
 
 ## Crash avoidance is a STATE, not an altitude rule
 

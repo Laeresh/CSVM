@@ -108,8 +108,9 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/TargetHud.cs` — the per-pane targeting HUD, built in every flight session: the selected-target bracket marker and label, the nearest-AI-hostile fallback, and `--debug-markers`' every-aircraft overlay.
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner: acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
-- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver: mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
+- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver: mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional formation escort, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
 - `src/Flight/AiControlLaw.cs` — the original's own AI steering law (decoded in `docs/org/aiControlLaw.md`): aim point + that point's velocity + one of four decoded parameter tables → stick and throttle lever. Engine-free and pure.
+- `src/Flight/AiEscort.cs` — the formation-escort law a netless `mode wingman` flies (D34, decoded in `docs/org/aiPilot.md`): leader and selected-target snapshots in, one station point and its velocity out, over the engine's own five-state machine. Held by `AiPilot.Escort`, which dispatches to it in place of every other mode but stunned and avoid crash.
 - `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine, the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
 - `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: intercept lead via `AimAssist.TryIntercept`, the quick-draw cone and the engagement window as fire gates, the ±11° traverse clamp with its 10° residual gate, per-shot dead-eye scatter; two mutable target fields (D36, `BL-363`) — aircraft-only `Target`, `AiPilot`'s own pursuit quarry, and non-aircraft `GroundTarget` (a turret or a world/zeppelin structure) so the flight law never chases what it cannot dogfight — plus primary-target name and rating biases (the D12 script seams).
 - `src/Flight/AiRocketeer.cs` — the AI's ordnance employment: the quick-draw cone over the whole pass, then per pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the 200–800 m band and the traverse clamp with its 5° residual gate (tighter than the gun's 10°), then the vehicle-wide lockout stamped ahead of the `quick_draw_chance` roll; the lead is per pylon, a motor round on its `ACCELERATION` ramp in the launcher's frame and a round without one at `VELOCITY` in the world's. Holds no target of its own: the host walks it against `FlightController`'s standing-target lookup (`AiGunner.Target` or `GroundTarget`).
@@ -286,7 +287,7 @@ instead.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
 - `src/Testing/SuiteCatalog.cs` — the ordered registry of the in-engine suites; domain scenario bodies live in `*Suites.cs` modules, while `SuiteConstants` holds their shared golden inputs. Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
-- `src/Testing/*Suites.cs` — thirteen domain scenario modules: puffer, combat, ordnance, Instant Action, AI, targeting, zeppelins, damage, destroy choreography, animation/effects, world/tools, and mid-mission world fidelity.
+- `src/Testing/*Suites.cs` — sixteen domain scenario modules: puffer, combat, ordnance, Instant Action, AI, the campaign, music, targeting, targeting candidates, wingmen, zeppelins, damage, destroy choreography, animation/effects, world/tools, and mid-mission world fidelity.
 - `src/Testing/SuiteConstants.cs` / `BurstTimeline.cs` / `SuiteViewers.cs` / `EffectStageSuiteHelper.cs` — the focused shared inputs, timeline values, pane-camera fixtures, and staged-effect fixture used by more than one suite module.
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
@@ -2063,6 +2064,8 @@ entry course and then walks the throttle toward `sixth_sense_factor` × the purs
 human catches up, evade flies the machine's orders, avoid crash aims 1000 m up on the emergency
 arm, displaced 1000 m right of its own ground track (`ClimbOutBreakM`, invented and measured),
 an evasive maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks),
+and an optional `Escort` (`AiEscort`) which, whenever its leader is in play, takes the dispatch
+away from all of those but stunned and avoid crash, the original's own `mode wingman` fork,
 one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. Pure over
 the model state and its own fields, seeded randomness only, so a fixed-dt run is deterministic
 (`AiPilotTests`). The original's own steering law is `AiControlLaw`; this class is only its driver
@@ -2081,6 +2084,18 @@ point's own speed plus range-weighted lead terms, an intercept solve (`AimAssist
 the direction, bank-to-turn with the elevator joining once the bank command is inside a deadband, a
 wings-level rule, a low-speed unload, and a per-axis scale/limit stage off `PlaneStats`. Engine-free
 and pure over its arguments; pinned against the decode by `AiControlLawTests`.
+
+## src/Flight/AiEscort.cs
+The formation-escort law a netless `mode wingman` aircraft flies, which in the shipped data is the
+campaign's `wingman_N` / `bswingman_N` roster blocks and nothing else (`docs/org/aiPilot.md`, "The
+escort law"). A leader snapshot (position, attitude basis, velocity, whether it is the player) and
+an optional target snapshot in, one station point and that point's velocity out, over the engine's
+own five-state machine: close on the leader, hold the body-frame station, fly a station on the
+target, and the two re-join states nothing in the law enters. Every constant is decoded, the two
+stations included ((6, 0, 18) off the player, (8, −2, −8) off an AI); the 80 m separation push is
+what makes the hold a weave rather than a tight join. Engine-free and deterministic, holding only
+its state and last station; the driver is `AiPilot.Escort`, the table `AiLawParams.Wingman`, and
+the live check is the `wingman-station` suite.
 
 ## src/Flight/AiModeMachine.cs
 The nine-mode AI state machine, owned by `AiPilot.Machine` and stepped from its `Next`:
@@ -4253,7 +4268,7 @@ re-reset the fifth play's rings read INACTIVE at opacity 0, which is the sortie-
 symptom this suite exists to hold shut.
 
 ## src/Testing/*Suites.cs
-Thirteen domain modules hold the in-engine scenario bodies, each named for the whole of what it
+Sixteen domain modules hold the in-engine scenario bodies, each named for the whole of what it
 files: `PufferSuites` (the emitter model's modes, wind, fades and fire column), `CombatSuites`
 (loadouts, live fire, aim assist and the hit chain), `OrdnanceSuites` (a round's flight, guidance
 and ends), `InstantActionSuites` (the mission runtime from spawn to wrap-up), `AiSuites` (how a
@@ -4261,7 +4276,10 @@ computer-controlled combatant behaves: pilots, mounted gunners, combat voice, an
 they wait in), `TargetingSuites` (the `TargetRef` abstraction, candidate pool, sticky selection,
 input decoding and marker HUD), `TargetingCandidateSuites` (D36's widened AI acquisition,
 `BL-363`: the team gate over a registered structure and the win routed to `GroundTarget`, never
-`Target`), `ZeppelinSuites` (motion, fighter launch, multi-zone damage,
+`Target`), `WingmanSuites` (D34's netless `mode wingman` station-keeping, as geometry and flown
+against a scripted leader), `CampaignSuites` (profile persistence, the objectives runtime and the
+mission-end flow), `MusicSuites` (the state-driven score), `ZeppelinSuites` (motion, fighter
+launch, multi-zone damage,
 broadsides), `DamageSuites` (spending armor and health, and the injure staging those ledgers
 fire), `DestroyChoreographySuites` (the choreography a death dispatches: destroy defs, wreck
 flights, crash rigs, callbacks and stops), `AnimationAndEffectsSuites` (anim launches, effect

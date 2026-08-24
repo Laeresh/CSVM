@@ -22,6 +22,7 @@ using static CSVM.Testing.OrdnanceSuites;
 using static CSVM.Testing.PufferSuites;
 using static CSVM.Testing.TargetingCandidateSuites;
 using static CSVM.Testing.TargetingSuites;
+using static CSVM.Testing.WingmanSuites;
 using static CSVM.Testing.WorldAndToolSuites;
 using static CSVM.Testing.WorldFidelitySuites;
 using static CSVM.Testing.ZeppelinSuites;
@@ -131,6 +132,7 @@ public static class SuiteCatalog
         "targeting-candidates",
         "partition-areas",
         "scripted-path",
+        "wingman-station",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -663,6 +665,14 @@ public static class SuiteCatalog
             "it off the strip, and reaching the last waypoint hands it back at the speed it " +
             "reached",
             ScriptedPathTaxi));
+        into.Add(new TestHarness.Suite("wingman-station",
+            "the D34 campaign wingman (BL-362): the decoded netless mode-wingman escort law as " +
+            "geometry (both body-frame stations, the rolled-leader frame, the 106.68/259.08 m " +
+            "target station, the 80 m separation push, the 700 m and 20.576 m/s join gates) and " +
+            "then flown against a scripted leader, a live wingman joining from 1200 m abeam, " +
+            "staying with the leader for the rest of the run, and riding the aft station behind " +
+            "a player leader where it rides the forward one behind an AI leader",
+            WingmanStation));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

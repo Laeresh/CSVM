@@ -624,7 +624,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   net's afterwards (so trap (d) below cannot bite an Instant Action actor, whose block authors all
   nine at ±10000 m), and `min_ai_active_dist` (2000 m, `player.zrd.json`) floors every activation
   volume twice over. **What is left:** a campaign roster spawner reading each block's authored
-  `netids`. Nothing in `src/` reads `aiv` as a spawn roster today, so there is no seam to plumb.
+  `netids`. Nothing in `src/` reads `aiv` as a spawn roster today, so there is no seam to plumb. That spawner's exact
+  contract, including the net-versus-escort fork a block's `mode` and `netids` decide and the volume
+  order around it, is written out in `docs/PLAN-M5-campaign.md`'s D34 section; it is also what
+  `BL-362` now waits on, so one pass closes both.
   ⚠ **The net Instant Action hands out is a campaign MISSION's asset, not a patrol area meant for
   free play** (censused 2026-08-15, at the user's prompting after seeing the shapes at the
   controls). Net names are mission-scoped and the census bears the convention out: 103 of the 222
@@ -2740,7 +2743,10 @@ usual.
   the automatic-screenshot sting, not a zone-cleared cue — formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
-- `BL-362` `[Feature]` **Instant Action wingmen never form up on the player.** *Evidence:* the user at the controls,
+- `BL-362` `[Feature]` `[Blocked: campaign missions]` **Instant Action wingmen never form up on the
+  player. Answered for Instant Action by the anchored net, and the campaign's station-keeping law is
+  LANDED; what is left is the campaign roster spawner that hands a wingman its leader.**
+  *Evidence:* the user at the controls,
   2026-08-15: wingmen fly away instead of staying near the player, with no formation-flying
   behaviour anywhere in the engine and the placeholder law driving them.
   *What we do today:* `GameSession.BuildFlightRigs` places wingman `i` on the decoded spawn fan
@@ -2793,8 +2799,28 @@ usual.
   net is anchored to the
   `player`, so the whole graph is carried around the player and the wingman patrols around them
   without any station-keeping at all. So "wingmen never form up on the player" is answered for
-  Instant Action by the original's own means; what remains here is the CAMPAIGN's netless
-  `mode wingman` station, whose offsets are decoded above and which nothing in `src/` yet flies.
+  Instant Action by the original's own means; what remained here was the CAMPAIGN's netless
+  `mode wingman` station.
+  ✔ **That station-keeping law is now LANDED and only its spawner is missing** (`git log --grep=BL-362`).
+  `src/Flight/AiEscort.cs` is the escort law (`FUN_0041e760`) ported whole: the engine's five-state
+  machine, both body-frame stations, the speed-ramped station on a selected target, the break-off
+  test and the 80 m separation push, pure over a leader/target snapshot. `AiPilot.Escort` holds it
+  and dispatches to it in place of every other mode but stunned and avoid crash, the original's own
+  `mode wingman` fork; the `wingman-station` suite flies it against a scripted leader of each kind.
+  A re-decode for that work corrected three readings in
+  [`docs/org/aiPilot.md`](docs/org/aiPilot.md): the break-off measures to the LEADER on a
+  HORIZONTAL range, state 0's 1800 m test is to the leader rather than to the target, and the
+  106.68–259.08 m station sits AHEAD of the target, not behind it. **What is left is the campaign
+  roster spawner** that gives a `wingman_N` block its leader, which nothing in `src/` does; its
+  exact contract is `docs/PLAN-M5-campaign.md`'s D34 section, and one spawner closes this and
+  `BL-364` together.
+  ⚠ **The decoded hold is a weave, not a parade join.** The 80 m separation push always fires at the
+  18.97 m player station, so the commanded point alternates between the station and a point about
+  99 m out and the wingman orbits its leader (measured in the suite: mean 214 m, worst 471 m behind
+  a cruising leader). Judge it against the original at the controls before calling that a bug.
+  ⚠ A leader flying above 250 mph cannot be formated on at all: the steering law caps an AI's
+  desired speed at `AiControlLaw.SpeedCeiling` whatever the airframe can do. Decoded, not a port
+  artifact.
   ⚠ It is not a formation and should not be judged as one: the wingman walks a figure-eight
   ~1 km across that happens to travel with the player, so it comes close and then swings out again.
   ✔ **The Instant Action side was flown 2026-08-15 and passes** (`PT-50`, now retired): the three
