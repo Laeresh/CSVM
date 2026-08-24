@@ -607,9 +607,11 @@ them change this item's shape. The wallet starts at **$0** with two owned Devast
 first purchase cannot happen before mission 1 pays out. Selling refunds the **full** build cost,
 so there is no depreciation rule to write, and a sell/rebuy loop is free by design. Ammunition
 and rockets cost nothing, so C25 never touches the wallet. Income is a decoded table, not a
-formula: ten mission/objective pairs paying $140,900 in total, plus five named unsellable
-aircraft, each granted once per profile, which B12's progression record must track alongside the
-tree position.
+formula: ten mission/objective pairs paying $140,900 in total, plus named unsellable aircraft,
+each granted once per profile, which B12's progression record must track alongside the tree
+position. <TODO: A5 read five aircraft awards (langui 513-517) where A3 read four non-zero plane
+indices (+0xC values 2, 3, 7, 0); re-read the reward table at 0x0061ae80 and settle the count
+before wiring the awards.>
 
 **Approach.** Read `PLAN-hangar.md` (completed, in `docs/plans/`) and the `HangarFlow.cs`
 architecture entry; add the wallet gate at the existing `Purchase` page seam, parameterized by an
