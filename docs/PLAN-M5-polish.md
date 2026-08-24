@@ -211,8 +211,9 @@ real director against its BUILT world: 9 checks green, and with the marker set r
 `ObjectiveGraph.ObjectiveTargets` alone it fails on the first one (`0 passed, 1 failed`), which is
 the bug it exists to catch. A scripted `--campaign=<profile>:0 --screenshot` run over C3/M01 shows
 the three sites marked in blue over the island with their labels
-(`.scratch/a1-objective-marker.png`). The engine suites and the golden battery are the orchestrator's
-to run after the merge.
+(`.scratch/a1-objective-marker.png`). **Battery on the merged Wave A tree:** build clean, units
+2334/2334, engine suites 112/112 with errors clean, all 16 golden shots hash-identical, so lifting
+`MarkerHud`'s drawing into `MarkerDraw` moved no stunt marker.
 
 ## A2 ☑ A campaign session never spawns its zeppelins or generators (`BL-451`)
 
@@ -249,9 +250,11 @@ constructor runs.
 
 **Model recommendation.** medium. The change is small; the care is all in the regression surface.
 
-**Verified (build and units only; the engine suites and goldens run centrally).**
-`dotnet build CSVM/CSVM.sln`: 0 warnings, 0 errors. `dotnet test CSVM.Tests/CSVM.Tests.csproj`:
-2334 passed, 0 failed, 0 skipped. `.\CheckCommentCaps.ps1 -Summary`: all comment blocks within cap.
+**Verified.** `dotnet build CSVM/CSVM.sln`: 0 warnings, 0 errors.
+`dotnet test CSVM.Tests/CSVM.Tests.csproj`: 2334 passed, 0 failed, 0 skipped.
+`.\CheckCommentCaps.ps1 -Summary`: all comment blocks within cap. **Battery on the merged Wave A
+tree:** build clean, units 2334/2334, engine suites 112/112 with errors clean, all 16 golden shots
+hash-identical, so placing a campaign's zeppelins moved nothing in world build.
 The `campaign-zeppelins` suite (registered last in `SuiteCatalog.cs`, `CSVM.Tests/SuiteCatalogTests.cs`
 updated to 110) and the 16 goldens run as part of the orchestrator's centralized, serialized battery
 rather than here, since parallel `RunTests.ps1` runs across sibling worktrees kill each other's
