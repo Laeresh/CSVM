@@ -1098,7 +1098,8 @@ unregistered-screen case moved to `Ammo`, since `Briefing` now has a page. Audio
 verified from `.scratch/logs/`: with no playback path built (see the contract), there is nothing to
 log yet, and the reveal is asserted directly instead, which is silent but not blind. No screenshot
 was taken: the aid needs the `--menu=` value above and `LaunchMenu.cs` is out of this item's
-boundary. **Verified.** <pending orchestrator run>
+boundary. **Verified.** `RunTests.ps1` on the plan branch with all of Wave C merged: build clean,
+units 2157/2157, engine suites 98/98 with errors clean, all 16 golden shots hash-identical.
 
 **⚠ Traps.** ⚠ Capture-derived timings would be TUNE, but none are used: every duration is an
 authored constant and every cue time is measured off the wav. String fallback holds: without
@@ -1206,7 +1207,8 @@ via `AidProfileStore`, calls `flow.SelectProfile` then `flow.SetMission(0)` then
 `flow.GoTo(CampaignScreen.FlightCheck)`, over a scratch profile directory exactly like the other
 three aids use, so the shot stays machine-independent.
 
-**Verified.** <pending orchestrator run>
+**Verified.** `RunTests.ps1` on the plan branch with all of Wave C merged: build clean, units
+2157/2157, engine suites 98/98 with errors clean, all 16 golden shots hash-identical.
 
 **⚠ Traps.** The silhouette per airframe: reuse the hangar's plane preview path rather than new
 art — done via the same `PX_<n>_BLUEPRINT.TGA` path `HangarAirframePage.BlueprintFor` reads,
@@ -1287,7 +1289,9 @@ hangar-built plane and from a starter's stock fit, a greyed no-gun group's Step 
 ordnance filter honouring the mission-threshold table at ordinal 1 (only AP/HE/None reachable) and
 ordinal 20 (torpedoes reachable), ACCEPT persisting into the store while CANCEL (and a re-entry
 after it) leaves the stored fit untouched, and the wingman slot editing `Profile.Planes[WingmanPlane]`
-rather than the pilot's plane. **Verified.** <pending orchestrator run>
+rather than the pilot's plane. **Verified.** `RunTests.ps1` on the plan branch with all of Wave C
+merged: build clean, units 2157/2157, engine suites 98/98 with errors clean, all 16 golden shots
+hash-identical.
 
 **⚠ Traps.** Which ammo types exist per caliber is data (`WeaponDefs`), not a list to author. A
 rocket dropdown's row is a position in the campaign-progress-filtered table, never an ordnance id
