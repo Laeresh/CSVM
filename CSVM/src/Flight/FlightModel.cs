@@ -46,8 +46,8 @@ public sealed class FlightModel
     public float Speed;                           // m/s along VelocityDir
     public float Throttle;
     // deg: angle(nose, VelocityDir) at frame start, i.e. before this step's forces move
-    // VelocityDir — see Step()'s "α" comment. An emergent LAG from the nose-chase, not a modelled
-    // aerodynamic incidence. Reported for instruments only — no force term reads it.
+    // VelocityDir — see Step()'s "α" comment. An emergent LAG behind the lift demand, not a
+    // modelled aerodynamic incidence. Reported for instruments only — no force term reads it.
     public float Alpha;
     // The demanded load factor in G at this step — the length of the lift demand's body X/Y
     // projection over StandardG — reported BEFORE the ±5/9 clamp and the aerodynamic ceiling below
@@ -133,6 +133,13 @@ public sealed class FlightModel
     // command, so no data key can move it.
     private const float GroundBlowIntoFactor = 0.05f;  // what a command INTO the obstacle is met with
     private const float GroundBlowVelocitySteer = 2f;  // 1/s at contact: velocity steered onto the nose
+
+    // Decoded ABSENT, held at 0: the original never rotates the velocity vector onto the nose
+    // outside the ground-blow steer above. Its lag is spent once, as the clamped lift demand;
+    // a second kinematic chase doubles the swing and hides the clamps. The config key is the
+    // A/B seam (1 restores the pre-decode chase). docs/org/flightModel.md, "lift_accel_rate
+    // is a lag toward a target velocity".
+    private const float NoseChaseFactor = 0f;
 
     // The collision impulse's linear weight (see BounceNormalSpeed): a hardcoded literal with no
     // data origin, so no key in player.json can move it. It sets where the rebound/spin partition
@@ -405,6 +412,7 @@ public sealed class FlightModel
         float liftGMin = Config.GetFloat("flightModel.liftGMin", LiftGMin);
         float liftGMax = Config.GetFloat("flightModel.liftGMax", LiftGMax);
         float altitudeCapM = Config.GetFloat("flightModel.altitudeCapM", AltitudeCapM);
+        float noseChaseFactor = Config.GetFloat("flightModel.noseChaseFactor", NoseChaseFactor);
 
         // --- rotation: torque·recInertia against momentum damping, plus the bank coupling and the
         // weathervane into the same accumulator. Each axis carries its own authored authority curve
@@ -541,10 +549,10 @@ public sealed class FlightModel
         if (vel.LengthSquared() > 1e-8f)
             VelocityDir = vel.Normalized();
 
-        // ⚠ Nothing may scale this: neither reader of lift_accel_rate carries a bank or verticality
-        // factor (docs/org/flightModel.md, "lift_accel_rate is a lag toward a target velocity").
-        // Ground blow rides the same chase; adding rates is exact under exp.
-        float align = s.LiftAccelRate + groundBlowSteer;
+        // ⚠ Do not add lift_accel_rate here: the demand above already spends it, and the original's
+        // only velocity-direction rotation is the ground-blow steer (docs/org/flightModel.md,
+        // "lift_accel_rate is a lag toward a target velocity"). NoseChaseFactor is the A/B seam.
+        float align = s.LiftAccelRate * noseChaseFactor + groundBlowSteer;
         // ⚠ Keep the near-parallel lerp branch, which is the normal cruise state. Slerp builds its
         // axis from a cross product whose float error swamps a sub-degree angle, and Godot then
         // throws "Argument is not normalized", aborting the physics frame: the plane stops flying.

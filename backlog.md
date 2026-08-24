@@ -1004,35 +1004,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (player arm), `BL-330` (the authority ramp this pairs
   with).
 
-- `BL-438` `[Research]` **The original spends its lag vector as the ACCELERATION; we spend it as a
-  lift demand.** `lift_accel_rate` is decoded ([`docs/org/flightModel.md`](docs/org/flightModel.md),
-  "`lift_accel_rate` is a lag toward a target velocity"): `_DAT_0071c448`, fallback 1.2 and this
-  install authoring 0.75, with two readers — `0x48c746` in the force build `FUN_0048c470` and
-  `0x49112a` in `FUN_00490f70` — both computing `lift_accel_rate · (targetVelocity − velocity)`,
-  adding gravity to Y at `0x48c77b`, and rotating the result into body axes. `FUN_0048c470` splits at
-  `0x48c522` on whether the object is the player (`ESI` against `_DAT_0071c298`); the two sides differ
-  only in how `targetVelocity` is built and rejoin at `0x48c70a`, so the lag itself is unconditional.
-  `FlightModel.Step` computes the same shape at its lift step — `(relativeWind − velocity) ·
-  LiftAccelRate` with gravity on Y — but treats it as a DEMAND: it takes a load factor off the
-  vector, clamps it, projects it onto the wing plane, and then sums thrust, drag and gravity
-  separately. The original never forms those separate terms at this site at all.
-  **What is undecoded, and has to be first:** the three virtual-call contributions that build the
-  player's `targetVelocity` (`0x48c6b6`–`0x48c6e7`). Until those are read there is no way to know
-  whether our thrust/drag/lift decomposition is a re-expression of them or an addition to them.
-  ⚠ **Do not start by rewriting `Step`.** A change here moves every airframe and every
-  `flight-envelope` row at once; the product is the decode of those three contributions, and the
-  rebuild is what follows it.
-  ⚠ **This owns the sustained-climb residual.** The full-throttle climb plateaus 25% fast
-  (204.04 mph against the original's 163.05 at a 56.3° path) and does not reproduce the
-  undershoot-and-recover. A lag toward a target velocity settles a climb somewhere a force sum does
-  not, so the residual is most likely this divergence rather than a missing term. The α that was
-  once the leading candidate cannot be read off any capture and no further flight capture will be
-  filmed, so this is the route. ⚠ **Do not reintroduce a pitch-scaled gravity** on the strength of
-  GDD §4.1.1: the shipped gravity block (`0x48ff85`–`0x48ff9d`) reads no attitude at all, and the
-  term that is attitude-scaled runs the other way.
-  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md) (the untune this came out of),
-  `BL-437`, `BL-439`.
-
 - `BL-439` `[Research]` **Decode the thrust-vs-throttle curve, so part-throttle equilibria have a
   target that is not footage.** `Probes.eighth-throttle-speed` now runs with **no** target: its old
   137.9 mph was against a number no clip supports, and the ≈135 that would replace it is another
@@ -1042,8 +1013,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   it — but what it is pinned to is frame-by-frame video, so the suite has made a footage fit
   load-bearing. A decoded curve either confirms it or replaces it; either outcome is worth more than
   the current arrangement, where the assertion is what stops anyone looking.
-  *Cross-refs:* `BL-438` (the force path the curve feeds),
-  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s constant inventory.
+  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md), "`lift_accel_rate` is a lag
+  toward a target velocity" (the decoded force path the curve feeds) and the constant inventory.
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
 

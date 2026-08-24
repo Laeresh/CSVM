@@ -2596,8 +2596,10 @@ index (its plane gone since the last press) resolves to.
 The decoded, data-driven aircraft plant. Rotation sums stick torque, bank coupling, `return_rate`
 weathervane and ground blow before exponential `ang_momentum_damp` decay; authored speed curves
 scale the stick command only.
-Translation separately composes decoded Mach drag, thrust and lift around the lag vector; the
-original spends that vector directly, leaving three target-velocity calls open (`BL-438`). The
+Translation composes the original's own chain: the lag vector as a clamped lift demand plus
+decoded Mach drag, thrust and gravity; the velocity direction rotates only through that lift and
+the ground-blow steer (`NoseChaseFactor` 0 pins the retired kinematic chase out, config-selectable
+for A/B). The
 footage altitude clamp, the STALL lamp's fraction and the dive-speed cap are ours, and are the
 whole of what is not decoded outside `Collide`; every constant's class is in
 [`org/flightModel.md`](org/flightModel.md)'s inventory, censused by `FlightConstantInventoryTests`.

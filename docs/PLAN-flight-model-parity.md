@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Settle the translational plant
 
 1. ☑ A1 Finish the fitted-constant audit (`BL-414`)
-2. ☐ A2 Decode and port the target-velocity acceleration path (`BL-438`)
+2. ☑ A2 Decode and port the target-velocity acceleration path (`BL-438`)
 3. ☐ A3 Settle part-throttle equilibrium (`BL-439`)
 4. ☐ A4 Resolve the live atmosphere band
 
@@ -169,7 +169,7 @@ the instrument sees the clamp. The graze trio stays fitted and is deferred to `C
 **Verified.** Full `RunTests.ps1` battery on the lane tree: build clean, 1998/1998 units,
 93/93 engine suites with engine errors clean, 16/16 goldens hash-identical, exit 0.
 
-## A2 ☐ Decode and port the target-velocity acceleration path (`BL-438`)
+## A2 ☑ Decode and port the target-velocity acceleration path (`BL-438`)
 
 **Goal.** Spend `lift_accel_rate` exactly as the original does and recover its climb shape without tuning.
 
@@ -185,6 +185,34 @@ the trace proves the current composition is not algebraically equivalent. Keep a
 sweep all eleven planes and run the complete suite.
 
 **⚠ Traps.** Do not tune drag, gravity or the lag rate first. Do not restore pitch-scaled gravity.
+
+**Landed.** The `0x48c6b6`–`0x48c6e7` range is decoded: the three virtual calls are one virtual
+velocity getter (vtable slot `+0x4`, a world-velocity float3 pointer, m/s) fetched once per
+component of the `liftAOAs` blend, so the player's `targetVelocity` is exactly the relative wind
+`Step` already builds. The evidence line's core claim is DISPROVEN for the live near-field path:
+`FUN_0048c470` spends the lag as the clamped lift DEMAND through `FUN_0041abd0`/`FUN_0048fc40`
+(thrust, Mach drag, weight, force × 9.82/weight), and `FUN_0048e580` integrates `velocity += a·dt`
+with no kinematic rotation onto the nose; only the far-field branch (crashed, or beyond 1 km,
+`B12`'s plant) spends the raw lag as acceleration. The one real non-equivalence ran the other way:
+`Step`'s extra exponential `VelocityDir` chase at `lift_accel_rate`, which doubles the unclamped
+swing (`ω = rate·α` on both paths) and bypasses the G clamps. It is retired behind the A/B seam
+`NoseChaseFactor` 0 (decoded-absent, config `flightModel.noseChaseFactor`, 1 restores the old
+composition byte-identically). A/B per `METHOD-6`/`METHOD-9`/`METHOD-15`: both dumps from this
+tree, and the seam at 1 reproduces the pre-change dump SHA256-identically while 0 moves 339 of
+891 lines, so the instrument sees the change in both directions. The moved lines are all in
+saturated/transient rows: Bloodhawk `pitch-rate` 35.87 → 32.43 °/s (read 33.00), knife-edge drift
+1.19–1.21 → 0.86–1.08 °/s (filmed 0.69–0.89), `zoom-climb-min-speed` 176.7 → 117.9 mph (read
+127.9), and the `ZzCadenceSweep` roll-off 26.8× → 42.0× against the original's 42×, closing that
+standing 1.57× gap. The climb plateau did NOT move (204.03 mph, α = 0 is a fixed point of both
+compositions), so the climb residual is not owned by this path; `A3`/`A4` own what remains. The
+negative-`C_L` ceiling asymmetry in `FUN_0041abd0` (one-sided `min`, flat −1.8 floor) is recorded
+in the dossier as an open difference. Dossier, inventory (+`NoseChaseFactor` row, config surface
+7 → 8 keys), census and `KnifeEdgeTests`' α-window pin updated; `BL-438` deleted from `backlog.md`.
+
+**Verified.** Full `RunTests.ps1` battery on the lane tree: build clean, 1998/1998 units,
+93/93 engine suites with engine errors clean. Six flight-involved goldens moved as the transient
+predicts and were re-pinned after the user reviewed the old-vs-new montage; a subsequent check
+pass reads 16/16 hash-identical against the new pins, exit 0.
 
 ## A3 ☐ Settle part-throttle equilibrium (`BL-439`)
 

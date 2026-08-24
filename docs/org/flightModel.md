@@ -644,28 +644,85 @@ block:
 
 ```
 a  = lift_accel_rate · (targetVelocity − velocity)     [0x48c70d-0x48c776]
-a.y += gravity                                         [0x48c77b]
+a.y += gravity                                         [0x48c77b, *(obj+0x64)+0xc4]
 a  = a · orientation                                   [into body axes, 0x48c78a…]
 ```
 
 `FUN_0048c470` splits at `0x48c522` on whether the object is the player (`ESI` against
-`_DAT_0071c298`) and the two sides differ only in how they build `targetVelocity` — the player
-accumulating `scalar × direction` through three virtual calls (`0x48c6b6`–`0x48c6e7`), everything
-else taking `−speed × nose` (`0x48c6e9`–`0x48c704`). They rejoin at `0x48c70a`, so the lag itself is
-unconditional.
+`_DAT_0071c298`) and the two sides differ only in how they build `targetVelocity`. They rejoin at
+`0x48c70a`, so the lag itself is unconditional.
+
+**The player's `targetVelocity` is the `liftAOAs` relative wind, nothing more.** The three virtual
+calls at `0x48c6b6` / `0x48c6c8` / `0x48c6db` are ONE virtual getter, vtable slot `+0x4` on the
+aircraft object, returning a pointer to its world-velocity float3 (m/s); the compiler re-fetches it
+once per vector component because the call can clobber the pointer. The block they sit in is the
+blend's middle branch:
+
+- `0x48c528`–`0x48c56d`: `cos α = (velocity · nose) / speed`, from the same getter dotted with
+  `obj+0x198` (`m[2] = −nose`) and negated.
+- `cos α ≥ _DAT_0071c430` (`liftAOAs[0]`): `targetVelocity = velocity` verbatim
+  (`0x48c576`–`0x48c58e`).
+- `cos α ≤ _DAT_0071c434` (`liftAOAs[1]`): `targetVelocity = speed · nose`
+  (`0x48c648`–`0x48c65f`, then the jump at `0x48c670`).
+- between: `t = (liftAOAs[0] − cos α) / (liftAOAs[0] − liftAOAs[1])` (`0x48c676`–`0x48c68f`), and
+  the three calls accumulate `targetVelocity = t · speed · nose + (1 − t) · velocity`
+  componentwise (`0x48c691`–`0x48c6e7`).
+
+Every non-player object takes `−speed × m[2]` = `speed · nose` instead (`0x48c6e9`–`0x48c704`),
+the blend's saturated end. This is exactly `FlightModel.Step`'s `relativeWind`; no thrust, throttle
+or other contribution enters the target.
+
+**What the lag vector then feeds is the demand path the remake already flies, not the
+acceleration.** After the rotation into body axes, `FUN_0048c470` takes the body-X/Y (wing-plane)
+components, forms `n = |(a·m0, a·m1)| / 9.82` and their unit direction, and skips the whole build
+below 2.4384 m/s (8 ft/s, `n = 0`). `FUN_0048fc40` then composes the force: the atmosphere lookup
+(`FUN_0041aca0`/`FUN_0041ac80`) into `q` and Mach; thrust
+`engine_power · RefArea · curve(Mach) · throttle` with the attitude factors `1 + 0.24·m2.y`
+(always) and `1 + 0.13·m2.y` (nose-up only); lift `FUN_0041abd0(Mach, q, n)` delivered along the
+demanded in-plane direction; Mach-polar drag (`FUN_0041ada0`) opposing the velocity; weight
+`(gravity / 9.82) · veh_weight` on world Y. The caller converts the force sum to acceleration by
+`9.82 / veh_weight`, and the integrator `FUN_0048e580` does `velocity += a · dt`, applies the AI's
+4.4704 m/s along-nose floor, and steps position. **No instruction in that chain rotates the
+velocity direction onto the nose.** The plant's only kinematic velocity rotation is the
+ground-blow steer (`FUN_00460700` at `2.0 · S` per second, see "Ground blow" below).
+
+**The "spends the lag as the acceleration" reading is true only of the far-field branch.** The
+first branch of `FUN_0048c470` (crashed player, or beyond 1 km of the player,
+`FUN_00538920 > 1e6` m²) writes `a = throttle · fd_speed · nose − velocity` directly, with no
+`lift_accel_rate`, no gravity and no force build; that is the simplified speed-hold plant `B12`
+ports. The near-field path never does this.
 
 ⚠ **Nothing at either reader touches bank or wing verticality.** The remake's `KnifeAlignFloor`
-weakened this chase by `|bodyUp·up|`; the binary has no such factor, so the constant and its
-`wingVert` input are retired and the chase runs at the authored rate alone. That the knife-edge
-nose–path gap then reads smaller than the footage's is a decode-versus-footage conflict of the same
-class as `yaw-360` and `decel-290-150`, recorded rather than tuned away.
+weakened a chase by `|bodyUp·up|`; the binary has no such factor, so the constant and its
+`wingVert` input are retired. That the knife-edge nose–path gap reads smaller than the footage's is
+a decode-versus-footage conflict of the same class as `yaw-360` and `decel-290-150`, recorded
+rather than tuned away.
 
-⚠ **The remake spends this vector differently, and that is undecoded work, not a landed match.**
-`FlightModel.Step` uses `(relativeWind − velocity) · LiftAccelRate` with gravity on Y as the lift
-DEMAND — deriving a load factor from it, clamping it, projecting it on the wing plane and adding
-thrust, drag and gravity separately — where the original uses the same shape AS the acceleration.
-`BL-438` owns reconciling the two, and the three target-velocity contributions above are the first
-thing it needs.
+⚠ **The remake's second chase is retired: `NoseChaseFactor` is decoded-absent and held at 0.**
+`FlightModel.Step` used to rotate `VelocityDir` exponentially onto the nose at `lift_accel_rate`
+on top of the delivered lift, which applies the same first-order swing twice when unclamped
+(`ω = rate · α` on both paths) and bypasses the ±5/+9 G and ceiling clamps when the demand
+saturates. The config key `flightModel.noseChaseFactor` is the A/B seam: 1 restores the old
+composition (measured byte-identical to the pre-removal eleven-airframe dump), 0 is the decoded
+default. The ground-blow steer keeps its own rotation, which is the original's.
+
+**What the removal moved, and what it did not.** Equilibrium rows are unchanged on all eleven
+(level top speed, terminal dive, altitude cap, eighth-throttle, decel). Saturated and
+transient rows moved: Bloodhawk `pitch-rate` 35.87 → 32.43 °/s against the read 33.00, the
+knife-edge drift 1.19–1.21 → 0.86–1.08 °/s against the filmed 0.69–0.89, `zoom-climb-min-speed`
+176.7 → 117.9 mph against the read 127.9, and the max-pull turn now takes its rate from the
+clamped 9 G lift (`sustained-turn-rate` 34.5 °/s, still a recorded conflict with `CAP-01`).
+The sustained climb did NOT move (204.03 mph plateau): its trajectory holds α = 0, where the
+retired chase was a no-op, so the climb residual against the filmed 163.05 is NOT owned by this
+path; the undecoded thrust-vs-throttle curve (`BL-439`) and the atmosphere band (plan item A4)
+are the owners still standing.
+
+⚠ **One clamp asymmetry remains unported.** `FUN_0041abd0` clamps `C_L` to ±1.8 and then applies
+the compressibility ceiling as a one-sided `min`, so the NEGATIVE ceiling is the flat −1.8 while
+the positive one is `0.75 − 0.15·M` (always below 1.8). `FlightModel.LiftCapAt` caps both signs at
+the positive ceiling, understating negative-G lift at speeds where `1.8 · q·RefArea` exceeds the
+demanded push. Recorded as an open difference; it is outside this section's acceleration-path
+question and no stock-envelope row in the dump reads it.
 
 ## The keyboard stick is an accumulator, not a switch (`FUN_00487460`)
 
@@ -698,26 +755,22 @@ is `2.5 × 0.115` = **0.29** of full travel. The original's fast pitch cadences 
 much smaller stick than its slow ones, which is roll-off produced in the input stage before any
 aerodynamics are involved — see the landing note below.
 
-**Landing note — it closes about a third of the residual roll-off, and a 1.57× gap survives it.**
-Ported as `StickRamp`, applied to the keyboard axes in `FlightController.ReadKeyboard` (the
-gamepad's analogue axes add on top, unramped, matching the joystick path). Driving `ZzCadenceSweep`
-through the ramp moves the 1300 → 570 ms roll-off from **20.5× to 26.8×** against the original's
-**42×**, so the deficit falls from 2.05× to **1.57×**. That remainder is outside the ±20% amplitude
-systematics and the ±12% spread in the clips' mean airspeed, so it is a real difference and not
-measurement slack; the pitch transient nonetheless reads right at the controls, which is why no
-constant is chased for it. Two candidates have never been examined: the `liftAOAs` airflow blend
-under a rapidly reversing demand, and the possibility that the original's 570 ms point
-(a 4.9× drop from 700 ms over a 1.23 frequency ratio) is a resonance rather than a point on a smooth
-roll-off, which no monotone transfer function produces and which the corpus cannot separate from
-noise at 0.63 ± 0.13 ft.
+**Landing note — with the kinematic nose-chase retired, the roll-off gap is closed.** Ported as
+`StickRamp`, applied to the keyboard axes in `FlightController.ReadKeyboard` (the gamepad's
+analogue axes add on top, unramped, matching the joystick path). Driving `ZzCadenceSweep` through
+the ramp on the current plant (`NoseChaseFactor` 0) reads the 1300 → 570 ms roll-off at **42.0×
+against the original's 42×** (unramped 34.4×). The 1.57× deficit this note used to record was
+measured with the retired chase still gluing the flight path to the nose, which suppressed the
+low-cadence ripple; the two speculative candidates it listed (the `liftAOAs` blend under a
+reversing demand, a resonance at 570 ms) are moot with the gap gone.
 ⚠ **Quote the sweep's WALL reading, not its sim reading.** The macro drove the keys in wall
 milliseconds, so the period the game saw is that × 1.390 (`docs/verification.md` DET-11); the sim
 column answers a question nobody flew. It used to be defensible to quote either, because with a
 square wave on both sides the ratio barely moved between them — a rate limit destroys that, since
-2.5/s is an absolute timescale that does not rescale with the cadence. The sim column reads 36.4×
+2.5/s is an absolute timescale that does not rescale with the cadence. The sim column reads 46.2×
 for the same run.
-⚠ **The 23.3× the C23 note above quotes is neither today's baseline nor the right column** — the
-unramped model reads 20.5× on the current build, and ratios are comparable only within one run.
+⚠ **The 23.3× the C23 note above quotes is neither today's baseline nor the right column** — and
+ratios are comparable only within one run.
 
 ## Control authority vs speed
 
@@ -1007,8 +1060,9 @@ attitude** — a weathervane cannot bank an aeroplane.
   the whole of it; the stick ramp is most of the rest.
 - ⚠ **The sweep also refutes a "3.5× steeper than any single first-order lag permits" reading of
   the original's roll-off.** That reasoning assumed the chain is *double integration + one lag*. The
-  remake's is not, and never was: the flight path chases the nose through a **second** first-order
-  lag (`lift_accel_rate`, τ = 1.33 s), so the pre-C23 build already rolled off 19.6× — 1.65× past
+  remake's is not, and never was: the flight path follows the nose through a **second** first-order
+  lag (`lift_accel_rate`, then a kinematic chase, now the demand-side lift, the same `ω = rate · α`
+  when unclamped), so the pre-C23 build already rolled off 19.6× — 1.65× past
   that "ceiling" — with `return_rate` still folded into the damping. The 3.5× figure is therefore
   not a measurement of *our* build's deficit, and the amplitude-for-amplitude comparison above
   replaces it.
@@ -1093,33 +1147,35 @@ row toward the footage (at 0.10: gap 3.5° → 2.1°, drift 0.96 °/s, 874 m) an
 — and it walks the knife-edge α up to 5.36°, past `liftAOAs[0] = 5°`, where the airflow blend
 starts engaging in a knife-edge.
 
-**What the chase now reads at, with the constant gone.** The knife-edge α peak falls rather than
-rises — Bloodhawk 4.28° → 2.59° at the 143 mph entry — so the `liftAOAs[0]` boundary that argued
-against lowering the floor is further away than it ever was, not nearer. Drift holds at 1.19–1.21 °/s
-and the last-third share at 0.20–0.21, so the knife-edge still never settles; `KnifeEdgeTests` pins
-both on all eleven. The nose–path gap does shrink, which is the footage difference this section used
-to weigh, and it is now recorded as a conflict rather than closed.
+**What the knife-edge reads at, with the whole chase retired.** With `NoseChaseFactor` at its
+decoded 0 (see "`lift_accel_rate` is a lag toward a target velocity") the velocity follows the nose
+through the delivered lift alone, so the knife-edge mush is real: α peaks 0.77–5.68° across the
+eleven, and on the tightest airframes at the 143 mph entry (Bloodhawk 5.68°, Peacemaker 5.61°,
+Fury 5.52°) the airflow blend engages past `liftAOAs[0] = 5°`, which is the original's own
+arithmetic at that state and not a defect. The Balmoral peaks 2.28°, so the refuted "0.1° inside
+the ramp" figure stays refuted. Drift reads 0.86–1.08 °/s on the filmed airframe against the
+filmed 0.69–0.89, the closest it has measured, and the last-third share holds at 0.23–0.30, so the
+knife-edge still never settles; `KnifeEdgeTests` pins the drift, the share and the α window on all
+eleven. The nose–path gap remains a recorded conflict.
 
-**The banked rotation runs ≈1.6× the footage rate, and that is a note, not a gap.** Nose drift
-1.09 °/s against a frame-measured 0.69–0.89, heading 1.7 °/s against 0.68–1.13, and
-`sustained-turn-rate` 32.8 against `CAP-01`'s 18.95 — two independent manoeuvres, two different
-body axes, one ratio. Every number on the original's side of that comparison is frame-measured off
-video; the rotation that produces our side is decoded from the force path (the torques, the
-limiters, the bank coupling, the weathervane and the airspeed authority ramp all sit in this
-document). A decode is not corrected by a footage measurement, and a single ratio across two
-manoeuvres and two axes is the signature of a common factor in how the footage was read rather than
-of a force term that would have to reach both. Nothing is tuned to close it.
+**The max-pull turn runs 1.82× the footage rate, and that is a note, not a gap.**
+`sustained-turn-rate` reads 34.5 °/s against `CAP-01`'s 18.95, taken now from the clamped 9 G lift
+rather than from a kinematic chase; the knife-edge drift, which used to share the overshoot,
+reads 0.86–1.08 °/s against the filmed 0.69–0.89 with the chase retired, so the two manoeuvres no
+longer move on one ratio. Every number on the original's side is frame-measured off video; the
+rotation that produces our side is decoded from the force path (the torques, the limiters, the
+bank coupling, the weathervane and the airspeed authority ramp all sit in this document). A decode
+is not corrected by a footage measurement. Nothing is tuned to close it.
 
 ⚠ **Do not reintroduce a nose-sag term to deepen the knife-edge.** The decoded bank→yaw coupling
 already drops the nose there, and the weathervane then pulls it onto the falling path; a second
 nose-down term double-counts what is already present and re-creates the wings-level leak above (the
 retired term rotated the nose down at up to 11.5 °/s in a plain 45° pull).
-⚠ **Do not reintroduce a scale on the nose-chase to close the footage difference either.**
-`KnifeAlignFloor` was exactly that and it is retired: the decode's two `lift_accel_rate` readers
-carry no such factor. What separates the two sides is the ROTATION rate — the ≈1.6× above — and a
-scale on the chase constant would hide a rotation rate inside it. The retired constant also ran into
-a real boundary at 0.10, where the knife-edge α reached 5.36° and crossed
-`liftAOAs[0] = 5°`.
+⚠ **Do not reintroduce a kinematic nose-chase, scaled or not, to close the footage difference.**
+`KnifeAlignFloor` was a scale on such a chase and the chase itself is now retired
+(`NoseChaseFactor` 0, decoded absent): the original rotates the velocity direction only through
+the delivered lift and the ground-blow steer. What separates the two sides is the ROTATION rate,
+the ≈1.6× above, and a chase constant would hide a rotation rate inside it.
 
 ⚠ **CORRECTION (2026-08-09): the authored candidates are exhausted, and this document said
 otherwise for four items running.** C22, C23, D31 and D33 each parked this gap on "the unconsumed
@@ -1257,6 +1313,14 @@ readable ADI would still only give a frame-derived angle, which cannot confirm a
 is answered in the force path above. Do not close the gap
 by moving 0.24/0.13; they are the binary's, and the dive side of the same scale lands
 `terminal-dive` at 356.0 mph against a measured 355.2 ± 6 with nothing fitted.
+
+⚠ **The acceleration-path candidate for this residual is disproven.** The "original spends its lag
+vector as the acceleration" hypothesis is settled in "`lift_accel_rate` is a lag toward a target
+velocity": the near-field composition is the same demand → clamp → force sum this model flies, and
+retiring the remake's extra kinematic chase moved the plateau not at all (204.04 → 204.03), because
+the probe's trajectory holds α = 0, where the chase was a no-op. The residual's remaining owners
+are the α the original's climb path holds (above), the throttle spending of the thrust curve
+(`BL-439` / plan item A3) and the atmosphere band (plan item A4).
 
 ## Thrust available — resolved, `pow` operands recovered
 
@@ -1676,25 +1740,28 @@ clamps — the most generous available reading of "the G this aircraft is pullin
 
 | Airframe | peak demanded G | `highGs[0]` | margin | peak α | `maxAOA` | margin |
 |---|---:|---:|---:|---:|---:|---:|
-| bhawk (Bloodhawk) | **5.01** | 9.0 | 3.99 | **25.6°** | 46.0° | 20.4° |
-| devastator (`pfighter`) | 3.83 | 9.0 | 5.17 | 18.7° | 46.0° | 27.3° |
-| fury | 4.43 | 9.0 | 4.57 | 22.1° | 46.0° | 23.9° |
-| warhawk | 2.56 | 9.0 | 6.44 | 10.6° | 46.0° | 35.4° |
-| autogyro | 3.17 | 9.0 | 5.83 | 12.4° | 46.0° | 33.6° |
-| avenger | 4.07 | 9.0 | 4.93 | 20.3° | 46.0° | 25.7° |
-| balmoral | 2.13 | 9.0 | 6.87 | 8.9° | 46.0° | 37.1° |
-| brigand | 3.45 | 9.0 | 5.55 | 15.6° | 46.0° | 30.4° |
-| firebrand (`fbrand`) | 2.57 | 9.0 | 6.43 | 10.5° | 46.0° | 35.5° |
-| kestrel | 2.91 | 9.0 | 6.09 | 12.4° | 46.0° | 33.6° |
-| peacemaker | 4.73 | 9.0 | 4.27 | 24.1° | 46.0° | 21.9° |
+| bhawk (Bloodhawk) | **6.43** | 9.0 | 2.57 | **40.5°** | 46.0° | 5.5° |
+| devastator (`pfighter`) | 4.88 | 9.0 | 4.12 | 28.1° | 46.0° | 17.9° |
+| fury | 5.73 | 9.0 | 3.27 | 34.2° | 46.0° | 11.8° |
+| warhawk | 3.30 | 9.0 | 5.70 | 14.6° | 46.0° | 31.4° |
+| autogyro | 3.54 | 9.0 | 5.46 | 15.4° | 46.0° | 30.6° |
+| avenger | 5.23 | 9.0 | 3.77 | 31.0° | 46.0° | 15.0° |
+| balmoral | 2.60 | 9.0 | 6.40 | 12.6° | 46.0° | 33.4° |
+| brigand | 4.33 | 9.0 | 4.67 | 23.2° | 46.0° | 22.8° |
+| firebrand (`fbrand`) | 3.32 | 9.0 | 5.68 | 14.4° | 46.0° | 31.6° |
+| kestrel | 3.63 | 9.0 | 5.37 | 17.6° | 46.0° | 28.4° |
+| peacemaker | 6.10 | 9.0 | 2.90 | 37.6° | 46.0° | 8.4° |
 
-The G peak is a full-forward **push** at 1.5 × `fd_speed` on the six fastest airframes and a pull on
-the rest; the α peak is the pull at 1.5 × `fd_speed` on ten of eleven. The suite's own instruments
-agree from the other side: the sustained pitch-rate row reports α = 20.2/20.5/20.6° at
-120/200/280 mph, `zoom-climb` 23.3° at its minimum speed, the sustained turn 23.0°, and D31's
-knife-edge probe peaks at 0.71–4.29°. **The negative side is unreachable twice over:** `lowGs [−6,
-−9]` sits past the −5 G clamp, *and* the demand is the LENGTH of a projected vector, so it is never
-negative in this model at all.
+The G peak is a full-forward **push** at 1.5 × `fd_speed` on the eight fastest airframes and a pull
+on the rest; the α peak is the pull at 1.5 × `fd_speed` on all eleven. The retired kinematic
+nose-chase used to hold every α small, so these margins are much tighter than they once measured
+(the Bloodhawk's α margin is 5.5°), but no manoeuvre crosses either threshold and
+`ControlLimiterTests` still fails if one comes into reach. The suite's own instruments agree from
+the other side: the sustained pitch-rate row reports α = 32.0/32.7/33.1° at 120/200/280 mph,
+`zoom-climb` 38.2° at its minimum speed, the sustained turn 31.8°, and the knife-edge probe peaks
+at 0.77–5.68°. **The negative side is unreachable twice over:** `lowGs [−6, −9]` sits past the
+−5 G clamp, *and* the demand is the LENGTH of a projected vector, so it is never negative in this
+model at all.
 
 ⚠ **The margin against the executable's own fallbacks is one hundredth of a G.** The Bloodhawk's
 5.01 G peak is 0.2 % **past** the compiled fallback `highGs[0] = 5` — under the fallbacks the
@@ -1936,9 +2003,10 @@ purpose: the emitter filter is the probe's `CollisionLayers.World` mask rather t
 (only aircraft bodies carry the Aircraft layer, so terrain, scenery and the zeppelin repel and
 aeroplanes do not, which is the same set the filter above produces for both paths — this engine has
 no scripted-path vehicle carrying the original's vehicle-filter mark, so there is nothing for the
-AI's "unfiltered" sweep to disagree with), and the second effect is folded into the model's existing
-nose-chase as `align + 2·S` (player) or `align + 2·S` un-suppressed (AI) — exact rather than
-approximate, since two exponential steers toward the same target compose. `CSVM.Tests`'
+AI's "unfiltered" sweep to disagree with), and the second effect rides the model's velocity-steer
+seam as an align rate of `2·S` (player, suppressed when commanding into the obstacle) or `2·S`
+un-suppressed (AI); with `NoseChaseFactor` at its decoded 0 the ground-blow steer is the ONLY
+rotation that seam applies, which is the original's own arrangement. `CSVM.Tests`'
 `GroundBlowTests` pins both laws, including the player's `S²` power against the AI's linear `S`, the
 AI's independence from command sign, and the body-frame conversion.
 ⚠ **`ai_groundblow` alone is not the AI factor.** `FlightModel.GroundBlowTerm`'s response is
@@ -2324,6 +2392,7 @@ without a provenance. Five classes are used:
 | `AltitudeCapM` | 2003 | exception | the resting ceiling, measured off `CAP-03` / C1B IA1. It binds, deliberately |
 | `GroundBlowIntoFactor` | 0.05 | decoded | the immediate in the player branch of `FUN_0048c220` |
 | `GroundBlowVelocitySteer` | 2.0 | decoded | a global whose only writer is the `gbc` debug console command |
+| `NoseChaseFactor` | 0 | decoded | decoded-absent: no instruction in `FUN_0048c470`/`FUN_0048fc40`/`FUN_0048e580` rotates the velocity direction onto the nose; see "`lift_accel_rate` is a lag toward a target velocity" |
 | `BounceLeverScale` | 2.25 | contact | the literal at `0x00608108`, no data origin |
 | `GrazeFriction` / `GrazeKick` / `GrazePushOut` | 0.35 / 1.2 / 0.15 | contact | **fitted**, ours rather than the original's, co-tuned as one group with `BounceLeverScale`. `C22` owns them |
 | `DragPolarScale` | 0.73 | decoded | `0x603474`, shared with the thrust curve |
@@ -2337,11 +2406,12 @@ without a provenance. Five classes are used:
 | `PhysicsConstants.MphToMs` | 0.44704 | decoded | the parser's own speed-token scale |
 | `StickRamp.Rate` | 2.5 | decoded | `FUN_00487460`, 0.4 s of held key to full deflection |
 
-The `flightModel.*` config block overrides seven of these: `pitchTune`, `yawTune`, `rollTune`,
-`stallWarnFrac`, `liftGMin`, `liftGMax` and `altitudeCapM`. A key is a development seam for an A/B
-at the controls and says nothing about provenance; the three `*Tune` keys in particular exist so a
-decoded 1 can be compared against a fitted value by hand, and the inventory test pins all three at
-1 so a fit cannot return quietly. `FlightConstantInventoryTests` also asserts the block's key set,
+The `flightModel.*` config block overrides eight of these: `pitchTune`, `yawTune`, `rollTune`,
+`stallWarnFrac`, `liftGMin`, `liftGMax`, `altitudeCapM` and `noseChaseFactor`. A key is a
+development seam for an A/B at the controls and says nothing about provenance; the three `*Tune`
+keys exist so a decoded 1 can be compared against a fitted value by hand, and `noseChaseFactor` so
+the decoded 0 can be compared against the retired kinematic chase (1). The inventory test pins all
+four at their decoded values so a fit cannot return quietly. `FlightConstantInventoryTests` also asserts the block's key set,
 so a key added without an inventory row fails rather than appearing in a `--dump-config` template
 nobody reads.
 
@@ -2382,14 +2452,15 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   0.29 in exactly that attitude, so it rotated the nose down at up to **11.5 °/s** — a nose-down
   bias in every pull at any bank — the "knife-at-zero-bank leak". Also pinned: the
   knife-edge never settles on any of the eleven (a bounded sag puts almost none of its total in the
-  last third of a 36 s hold, a genuine drift about a third), and α stays inside `liftAOAs[0]` on
-  all eleven — peak **0.71–2.59°** against the authored 5°. A fourth assertion, that the nose stays
-  well below the path, is retired with `wingVert`: its bound was a footage anchor written to catch
-  the chase getting faster, which is what the decode requires. That last one **replaced a lost prose
-  figure** ("the Balmoral knife-edges at α = 5.1°, 0.1° inside the ramp") that no instrument could
-  reproduce: the Balmoral peaks at 1.77°, and the tightest airframe is the **Bloodhawk** at 4.29°,
-  ≈0.71° clear. The probe recipe lives in `Probes.KnifeEdge` — it was lost once as prose and is
-  code now precisely so that it cannot be again.
+  last third of a 36 s hold, a genuine drift about a third), and α stays inside the `liftAOAs`
+  WINDOW on all eleven — peak **0.77–5.68°** against the authored 10° upper edge; with the
+  kinematic chase retired the blend may engage past the 5° low edge on the tightest airframes,
+  which is the original's own arithmetic there, but must never saturate. The Balmoral is
+  additionally pinned under the low edge (peak 2.28°), because that pin **replaced a lost prose
+  figure** ("the Balmoral knife-edges at α = 5.1°, 0.1° inside the ramp") no instrument could
+  reproduce. A fourth assertion, that the nose stays well below the path, is retired with
+  `wingVert`: its bound was a footage anchor. The probe recipe lives in `Probes.KnifeEdge` — it was
+  lost once as prose and is code now precisely so that it cannot be again.
 - **`AttitudeThrustTests`** — the 0.24 / 0.13 coefficients, and the SIGN read out of the integrator
   rather than off the formula's argument name: throttle touches only the thrust term, so
   differencing a full-throttle step against a zero-throttle step from an identical state isolates it
