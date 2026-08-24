@@ -395,6 +395,10 @@ Consequences for a reimplementation:
   i.e. where the aircraft stalls. Lift below the ceiling is independent of both.
 - The `±1.8` clamp on `C_L` binds only when `q · RefArea` is small relative to weight, where the
   compressibility ceiling is already lower. In practice `0.75 − 0.15·Mach` is the operative limit.
+- **`n` is a magnitude, so the negative halves of both clamps are dead.** The callers hand this
+  function the length of the demand vector and apply the resulting force along that vector's own
+  normalised direction, so neither `−5` nor `−1.8` can be reached and the one-sided `min` against
+  the compressibility ceiling governs a pushover exactly as it governs a pull.
 - The delivered `C_L` is passed to the drag routine and **never read there** (see Drag). This model
   has no induced drag at all: a pull costs speed only through the lift vector's own tilt.
 
@@ -787,12 +791,18 @@ path. The two owners it named next are settled too: the throttle spending is a p
 multiply that is 1 at the filmed full throttle (see "Part-throttle equilibrium"), and the band is
 the dense one (see Atmosphere). What is left is the α the climb path holds.
 
-⚠ **One clamp asymmetry remains unported.** `FUN_0041abd0` clamps `C_L` to ±1.8 and then applies
-the compressibility ceiling as a one-sided `min`, so the NEGATIVE ceiling is the flat −1.8 while
-the positive one is `0.75 − 0.15·M` (always below 1.8). `FlightModel.LiftCapAt` caps both signs at
-the positive ceiling, understating negative-G lift at speeds where `1.8 · q·RefArea` exceeds the
-demanded push. Recorded as an open difference; it is outside this section's acceleration-path
-question and no stock-envelope row in the dump reads it.
+⚠ **The clamp asymmetry is unreachable, and CSVM already matches.** `FUN_0041abd0` clamps `C_L` to
+±1.8 and then applies the compressibility ceiling as a one-sided `min` with no sign handling
+(`0x41ac5f`–`0x41ac7b`), which reads as a NEGATIVE ceiling of −1.8 against a positive
+`0.75 − 0.15·M`. The negative side never runs: both call sites build the `n` this function receives
+as the length of the demand vector (`0x48c821`–`0x48c852`, `0x49122e`–`0x491236`, a sum of squares
+through the integer sqrt approximation, then `/ 9.82`), so `n ≥ 0` and `C_L ≥ 0` always. The sign of
+the lift lives in the separately normalised direction the force is applied along, not in the
+coefficient, so a pushover arrives as a positive `C_L` and meets the same `0.75 − 0.15·M` ceiling a
+pull does. The −5 G clamp is dead for the same reason: the original limits total demand to 9 G in
+either direction. `FlightModel` reproduces the structure exactly, `LoadFactorDemand` being a
+`liftDir.Length()`, so capping both signs at the positive ceiling is the decode rather than a
+departure from it.
 
 ## The far-field plant
 
@@ -3401,13 +3411,13 @@ which are findings rather than code.
 | engine torque: none exists | decoded | every write to `FUN_0048c470`'s angular accumulator |
 | roll-to-pitch coupling: none exists | decoded | every read of `[obj+0x100]` and `[obj+0x114]` |
 | ambient turbulence: nothing ships | decoded | shake block 5, the five xrefs of `FUN_0042c070` |
+| the one-sided negative `C_L` ceiling is unreachable | decoded | `0x48c821`–`0x48c852` builds `n` as a vector length, so `FUN_0041abd0` is never handed a negative `C_L` |
 | far-field range is measured to the NEAREST human pilot | exception | plan Decision 3; the original presumes one player |
 | control surfaces, shake and nitro edges run for EVERY human pilot | exception | plan Decision 3; the original's guard is the single player |
 | the Fury's rudder animates | exception | CSVM also matches `l_rudder_rotate` and a digitless `l_elevator`, which the `%d` lookups miss |
 | a wreck flies the near-field plant | exception | the crashed-flag far arm at `0x48c4ba` is not ported; its writers are undecoded |
 | the G ramp reads the SAME tick's delivered lift | unsupported | `0x48c883` writes it before `0x48ca1e`; `Step` rotates before it translates, so CSVM is one step late |
 | the thin atmosphere band above 2000 m | unsupported | `FUN_0041aca0`'s second arm; unreachable under the 2003 m cap |
-| the one-sided negative `C_L` ceiling | unsupported | `FUN_0041abd0`'s one-sided `min` and flat −1.8 floor |
 | the `level_off_rate` auto-level torque | unsupported | `0x48cedc` / `0x48cf76`; decoded, and no shipped data authors the rate |
 | the per-contact camera shake | unsupported | `FUN_0048d2c0`'s block-5 kick at `0x48d409` |
 | the AI's `medium_aishake` on a nitro engage | unsupported | `FUN_00473430(1)` |
