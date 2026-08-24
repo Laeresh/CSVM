@@ -1950,6 +1950,54 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-449` `[Bug]` **The campaign screens are the shared list menu, not the original's full-screen
+  boards, and the original's own buttons are not on them.** Seen at the controls: the campaign
+  screens should fill the screen and offer the original's buttons, selectable on a controller.
+  *Evidence:* every campaign page (`CampaignRosterPage`, `CabinPage`, `PreviousMissionsPage`,
+  `BriefingPage`, `FlightCheckPage`, `AmmoPage`) draws through the shared `BoardMenu` idiom: a
+  centred title, a stack of text rows, a small art thumbnail beside them and a keyboard hint line.
+  The original draws each screen as a full-window board with its art edge to edge and its own
+  button plaques along an edge. Compare `.scratch/ours-briefing.png` against
+  `OriginalScreenshots\Campaign Briefing.png`: ours puts a roughly 220 px map thumbnail at the left
+  of a text list, the original fills the window with the map. The chrome is already decoded, not a
+  guess: `docs/formats/briefing.md` reads the dialog's `BACKGROUND` (`POSITION`, `BITMAP`) and its
+  `BUTTONS` section, whose entries share bitmap `brief_button1` with a normal/rollover/activate
+  label set, and `extracted/rimage/brief_button1.png` ships. *Fix shape:* a full-screen board
+  presentation for campaign pages that places elements at their authored pixel positions and draws
+  the authored button art, with focus moving between buttons on the pad. The authored coordinates
+  are a fixed-size dialog, so how that maps onto an arbitrary window is a real decision (integer
+  scale, fit-to-height, or letterboxed authored resolution) and belongs in the item, not in a
+  reviewer's head. *⚠ Traps:* this is Decision 7 of `docs/PLAN-M5-campaign.md` coming back ("new
+  screens follow the existing `src/UI/` board/menu idiom"), which is why the pages look like this;
+  reversing it for the campaign must not drag the Instant Action and hangar boards along, since
+  those are their own fidelity questions. Do not scale a bitmap up past its authored size to fill a
+  4K display without deciding what the original's pixel grid means at that size. *Cross-refs:*
+  `BL-450` is the same screen's missing animation and is the other half of the verdict;
+  `docs/PLAN-M5-campaign.md` C21-C25 built the pages, E42 is the pass that found this.
+
+- `BL-450` `[Bug]` **The briefing does not animate: no flags planted, no photos, no objectives
+  written onto the note.** Seen at the controls: the briefing shows the background image, small,
+  and nothing moves. *Evidence:* `CAP-42` (`OriginalScreenshots\Videos\CAP-42.mkv`, 1920x1080,
+  107 s) shows what the original does, and every beat in it maps to an opcode already decoded in
+  `docs/formats/briefing.md`. At t=46 s: a portrait photo pinned top-left over a paper stack, an
+  `Objectives` parchment lower-left carrying one written line ("1) Find the main treasure site."),
+  three red `?` flags planted on the map with cast shadows, and the three button plaques along the
+  bottom. At t=96 s the same screen carries a DIFFERENT portrait, four written objective lines, a
+  fourth flag, and a zeppelin sprite that arrived for the `Dock with the PANDORA` line. So the
+  photos are a slideshow that changes through the narration, the objective lines are written onto
+  the parchment one at a time, and each flag is planted in step with its line. The opcodes for all
+  of it are censused: `Pict` (id, bitmap, `at [x, y]`), `Fade`, `Spin`, `Move`, `Line`, `On`/`Off`,
+  `Objective` (binds a screen element to an objectives-list entry), `ToBack`, with timing from
+  `PlaySound` + `WaitForMarker` against the narration wav's RIFF cue chunk. Ours plays the
+  narration and uncovers text rows in the list; it draws none of the elements. *Fix shape:* execute
+  the reveal script as authored, placing each `Pict` at its own coordinates. The durations are
+  authored constants in the data and are explicitly not a TUNE gap. *⚠ Traps:* ⚠ a marker number
+  indexes the wav's cue points sorted by SAMPLE OFFSET, never by cue id (13 of the 24 wavs store
+  them out of time order), which the shipped page already gets right; do not regress it while
+  moving the drawing. This item is drawing, not timing. *Cross-refs:* `BL-449` is the same screen's
+  presentation and should land first or together; `docs/formats/briefing.md` carries the opcode
+  table, the marker rule and the per-mission map/flag census.
+
 - `BL-444` `[Feature]` **`HangarArt`'s art seam has no PNG decoder, so PNG-only art draws nothing.**
   *Evidence:* `TgaImage` is the seam's only decoder and covers TGA alone, while
   `extracted/rimage/OL_PLANEDIAGRAMSTOP.PNG` and `OL_PLANEDIAGRAMSFRONT.PNG` (the top and front
