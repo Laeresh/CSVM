@@ -168,14 +168,11 @@ the same discretization to first order in `dt` per step (`exp(−x) = 1 − x + 
 STEADY-STATE fixed points differ by more than that: explicit Euler's fixed point is `cmd/damp`
 exactly, independent of `dt`; the exponential-form fixed point is `cmd·dt·k/(1−k)` with
 `k = exp(−dt·damp)`, which is `cmd/damp · x/(eˣ−1)` for `x = dt·damp` — smaller by `≈ x/2` at
-small `x`. At the remake's own physics tick (`dt = 1/60 s`) and the Bloodhawk's `ang_momentum_damp
-= 5`, `x ≈ 0.083` and the predicted shortfall is `≈4.1 %`, which is what the steady-rate table
-below shows landing at: `roll-360` 1.98 → 2.07 s (+4.5%), `pitch-rate` 33.54 → 32.41 °/s (−3.4%),
-`yaw-360` 28.55 → 29.73 s (+4.1%) — all three inside their asserted tolerance bands, so **no `*Tune`
-was refit**. This is the decoded mechanism's own bias at this `dt`, not a sign the form or the
-ordering is wrong; a build at the original's own internal tick rate (unknown — see the measurement
-harness's 100 Hz, which is not necessarily gameplay's own rate) would show a smaller shortfall
-still, by the same formula. A large-`dt` case (`dt·damp = 5` on a released axis) shows the
+small `x`. At the remake's own physics tick (`dt = 1/60 s`) and the Bloodhawk's
+`ang_momentum_damp = 5`, `x ≈ 0.083` and the stored half-angle rate is `≈4.1 %` below the
+continuous fixed point. The timings formerly quoted here treated that half-angle state as physical
+angular velocity and were invalid; the quaternion exponential below doubles it when attitude is
+built. A large-`dt` case (`dt·damp = 5` on a released axis) shows the
 qualitative point the item is about: the exponential form stays in `(0, 1)`, strictly decaying,
 where the explicit-Euler factor `(1 − dt·damp) = −4` would flip the rate's sign and grow it every
 tick — `CSVM.Tests/AngularDampingTests.cs` pins both the ordering (this tick's own torque is
@@ -1172,6 +1169,14 @@ family (`FUN_00491820`, `FUN_00492040`). The throttle `[obj+0x128]` is read exac
 `FUN_0048c470`, at `0x48c5a0` for the far-field cruise speed, which is a linear target and not a
 torque; the near-field force build reaches the lever only through the thrust curve at `0x48fce7`.
 No engine record, prop direction or handedness constant enters any row of the table.
+
+**The stored vector is a quaternion half-angle rate, not physical angular velocity.** After the
+body/world transforms, `FUN_0048e580` multiplies it by `dt` and passes the vector to
+`FUN_0053fbf0`. That helper returns `(cos |v|, sin |v| · normalize(v))`; `FUN_0053fa40` converts the
+quaternion to a matrix, rotating the attitude by **`2|v|`**. The old remake passed `|v|` directly to
+Godot's axis-angle rotation and therefore turned pitch, yaw and roll at half strength while every
+upstream accumulator value still matched. `FlightAxisReplayTests` independently evaluates all
+three axes and has a half-angle able-to-fail control.
 
 Two consequences follow. Every term above is a product of state-derived vectors, so the whole
 rotational plant is mirror-symmetric under a left/right reflection of the state and the stick: a
@@ -2978,9 +2983,10 @@ collision damage at all; every write to that field found so far stores 0.
 
 ## The `*Tune` rates — none of the three exists in the executable
 
-The remake's per-axis control-rate calibration. Steady rate is
-`torque · rec_moments_inertia · Tune / ang_momentum_damp` (× the yaw authority curve on yaw), and a
-full 360° takes ≈ `1/damp` of spin-up plus `2π/rate`.
+The remake's per-axis control-rate calibration. The steady stored half-angle rate is
+`torque · rec_moments_inertia · Tune / ang_momentum_damp` (× the yaw authority curve on yaw). The
+physical rate is **twice** that value because the attitude is built through the quaternion
+exponential above.
 
 ⚠ **No axis carries a calibration factor.** Read out of the LIVE force function `FUN_0048c470`, the
 three stick torques are built in three guarded blocks and each is exactly four factors, with nothing
@@ -3000,38 +3006,26 @@ only in which authority scalar `FUN_0048bdd0` hands them and in the opposing-com
 which is a constant factor.
 
 So the authored numbers are the whole of it on every axis. The Bloodhawk's `roll_torque 7.5` and
-`rec_moments_inertia.z 1.10` against `ang_momentum_damp 5.0` give **90.7 °/s** and a 360° roll in
-**4.17 s**.
+`rec_moments_inertia.z 1.10` against `ang_momentum_damp 5.0` give **90.7 °/s stored**, **181.4 °/s
+physical**, and a stepped 360° roll in **2.18 s** against the decoded 2.08 s target and the
+original's 2.05 s ADI stopwatch reading.
 
 | Constant | Value | Standing |
 |---|---:|---|
-| `PitchTune` | was **0.89** | fitted to stopwatch timings and cockpit-gauge video, sustained pitch ≈33 °/s. **No counterpart in the binary**, now 1: pitch-rate moves 33.54 → **35.26 °/s** against the original's 33.00, still inside the ±3 band |
-| `YawTune` | was **1.57** | pinned against the authored yaw curve, full-rudder 360° 28.6 s. **No counterpart in the binary**, now 1: yaw-360 moves 28.55 → **49.12 s** against the original's 28.60, and the row is now informational |
+| `PitchTune` | was **0.89** | **No counterpart in the binary**, now 1. With the quaternion correction the sustained physical pitch rate is **24.11 °/s**; faster nose motion opens the AOA window further, so this axis is not a simple 2× output |
+| `YawTune` | was **1.57** | **No counterpart in the binary**, now 1. With the quaternion correction yaw-360 is **30.20 s** against the original's 28.60, rather than the invalid half-angle reading of 49.12 s |
 | `RollTune` | **1.0** | already retired on this evidence; a 2.12 that used to sit here is gone |
 
-The 2.12 existed to reach a **2.05 s** roll timed off footage, which is 2.12× what the executable's
-own arithmetic produces. A decode is not contested with a stopwatch reading, so the multiplier went
-rather than the decode. The pitch and yaw multipliers are the same class of fit against the same
-class of evidence, and the same disposition applies. Restoring any of the three needs a mechanism
-traced in the binary.
-
-⚠ **Pitch survives its own measurement; yaw does not.** Pitch rate is NOT proportional to its
-multiplier, because the weathervane torque enters the same accumulator carrying no `*Tune` and grows
-with the resulting incidence: 0.89 → 1 moves the rate by 5%, not by 12%. At 35.26 °/s the row is
-still green against 33.00 ± 3, and the video it was fitted to reads 37.9 / 33.7 / 30.7 / 36.5 °/s
-binned round a loop, so 0.89 was fitting noise inside its own spread.
-
-Yaw is the row the decode breaks, at 49.12 s against a 28.60 s target. What it moves toward is the
-rudder this page already describes: a ground-handling control held at 10% authority for all of
-normal flight, which a 28.6 s full-rudder 360° never fitted.
+The retired 2.12 `RollTune` almost exactly compensated for the missed quaternion double angle. Its
+agreement with the original was evidence about the decoded integrator, not permission to discard
+the measurement. Pitch and yaw still carry no calibration factor; their remaining behavior comes
+from the same decoded limiter and weathervane terms as before.
 
 ⚠ **`yaw-360` is now INFORMATIONAL, and the 28.6 s was NOT rewritten.** The footage figure stays
-recorded exactly as measured, but it does not gate anything: it disagrees with the decode, and a
+recorded exactly as measured, but it does not gate anything: the remaining 1.60 s disagrees with the decode, and a
 frame-derived duration cannot refute one (`docs/verification.md` DET-12). The row joins
 `accel-150-290` and `decel-290-150` as informational rather than as a target refitted to whatever
-the model now produces. `FlightEnvelopeTests.FlightScenarios` drops 7 → 6 to make the demotion loud,
-which is what that constant is for. The slow rudder was read at the controls and accepted before the
-row moved. Nothing is owed here — do not restore a multiplier to chase the 28.6 s.
+the model now produces. Do not restore a multiplier to chase the residual.
 
 ⚠ **One golden moved with this: `c1-flight`, re-pinned.** It flies `--hold=0.2,0.1,0,1` — held pitch
 and roll, zero rudder — so it moved on the pitch change alone, and the other fifteen shots are
@@ -3593,8 +3587,8 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
   assembly), the linear throttle multiply and its 0.5/s slew, the thrust `pow` operands
   (`MSVCRT!_CIpow`, base `1.33·atm->k`, exponent `1.41·M`), the drag polar's variable being
   **Mach** — the last read off the raw bytes rather than out of a decompiler, which is what
-  corrected it — the conversion-free weight chain ("The force scale — settled"), and the
-  weathervane's axis, its half-angle and
+  corrected it — the conversion-free weight chain ("The force scale — settled"), the attitude
+  quaternion's doubled half-angle, and the weathervane's axis, its half-angle and
   its player-only gate ("Weathervane centring — resolved", which corrects a sign this document
   previously carried).
 - **Read directly from the executable, 2026-08-15:** that the atmosphere call is on the

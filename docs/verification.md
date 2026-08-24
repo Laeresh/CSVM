@@ -42,8 +42,12 @@ derived by setting it equal to the clip's rendered RMS — but a kick of envelop
 renders ~0.28× the law's literal number *by construction* and this was misread as a render-pipeline
 loss. What the engine renders was decodable from the authored constants + oscillator math alone
 (~0.20 px/frame) with no clip; the clip only settles the later fidelity target. A fitted constant
-is only interpretable if it names the quantity it multiplies at the right point in the chain
-(`BL-266(a)`; `analysis/gun-wobble-shake/`).
+  is only interpretable if it names the quantity it multiplies at the right point in the chain
+  (`BL-266(a)`; `analysis/gun-wobble-shake/`).
+- **METHOD-26** — **Carry a decoded representation through its consumer before naming its physical
+  quantity.** `obj+0x16c` looked like angular velocity, but `FUN_0053fbf0` consumes it as a
+  quaternion half-angle: the matrix turns by twice the stored vector. Comparing the accumulator
+  alone left pitch, yaw and roll exactly half-strength while every local value appeared correct.
 
 ## DIAG — chasing a symptom
 

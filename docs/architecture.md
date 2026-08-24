@@ -2611,7 +2611,8 @@ index (its plane gone since the last press) resolves to.
 
 ## src/Flight/FlightModel.cs
 The decoded, data-driven aircraft plant. Rotation sums stick torque, bank coupling, `return_rate`
-weathervane and ground blow before exponential `ang_momentum_damp` decay; authored speed curves
+weathervane and ground blow before exponential `ang_momentum_damp` decay. `BodyRates` stores the
+original's quaternion half-angle rate; `PhysicalBodyRates` and the attitude update double it. Authored speed curves
 scale the stick command only, roll on the base ramp and pitch on that ramp times the authored
 high-speed fade. `OpposingCommandLimitAt` softens the pitch and yaw commands that swing the nose
 further off the flight path, on the decoded G ramp and the decoded AOA window; `AoaLimiterFactor`
@@ -3990,7 +3991,8 @@ structured verdict (counts, per-row booleans, failure strings) a `--run-tests` s
 `FlightEnvelopeAll` is the whole-plant instrument `--dump-flight=all` and the parity ledger share, so
 a dump diffed against an older one and the ledger published from it cannot disagree. A flight row's
 `Target` is always decoded or a named product exception; a footage figure lives in the row's text as
-a discarded annotation and gates nothing. Every scenario also carries `EnvelopeMargins`: its distance
+a discarded annotation and gates nothing. Angular rows read `PhysicalBodyRates`, never the original's
+stored quaternion half-angle state. Every scenario also carries `EnvelopeMargins`: its distance
 from each bounding term (the G clamp, the C_L ceiling, the AOA window, the stall flag, the altitude
 band, the dive cap) and which decoded branches it drove.
 `Effects` owns the effects sweep — the puffer half and the template-MESH half (`BL-061`), the

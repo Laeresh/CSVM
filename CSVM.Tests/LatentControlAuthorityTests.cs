@@ -339,7 +339,7 @@ public class LatentControlAuthorityTests
     {
         var m = new FlightModel(stats);
         m.Reset(Vector3.Zero, Basis.Identity, 300f * Mph, 1f);
-        for (int i = 0; i < 30; i++)
+        for (int i = 0; i < 19; i++)
             m.Step(new FlightInput { Pitch = 1f, Throttle = 1f }, Dt);
         return m;
     }
