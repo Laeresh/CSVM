@@ -896,21 +896,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
   buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
 
-- `BL-393` `[Tuning]` **The control surfaces' deflection angles, mix and slew are decoded and the
-  TUNEs are still in place.** `ControlSurfaceAnimator` deflects ±20° per kind and slews linearly at
-  3 units/s, both chosen by eye. `PLAN-ai-flight` `C24` decoded what the original does while tracing
-  the reverse-authority factor to this same block — six angle slots, six node lists, exponential
-  smoothing at 2/s, rudder −35°, one pair at ±0.5 rad from a single stick channel and one at ±0.6 rad
-  MIXING two channels — and the table is in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "The original's control-surface animation".
-  Only the rudder's reverse-authority scale was ported.
-  ⚠ **The blocker is the mapping, not the numbers.** We classify four surface kinds by node name;
-  the original drives six node lists whose contents are not decoded, and its two mixed slots are not
-  one-axis-per-surface at all. Decode the list population before assigning any angle from that table,
-  or the mix lands on the wrong surfaces.
-  ⚠ The ±20° pair was validated by eye against the original, so this is an A/B against footage, not a
-  correction of something known wrong.
-
 - `BL-425` `[Bug]` **A distant AI aircraft flies a SIMPLIFIED force model in the original, and we
   give every AI the full aerodynamic one.** `FUN_0048c470`, the live force and torque build, opens on
   a test that is not the AI/player split it looks like: **crashed, OR not the player and further than

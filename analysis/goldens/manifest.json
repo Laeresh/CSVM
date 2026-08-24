@@ -85,7 +85,7 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "e5bd163c29e2a24ee3610e7d5fd97fc0",
+      "hash": "2e7c462a9c8b4b1c2c02ce1d5e3a31d5",
       "exercises": "a flying plane in its default livery, the only shaded surface in a flight: chase camera on the sim clock, prop and surface animators, sun bearing, gauges, compass tape, weapon readout, the pipper's range, an exhaust puffer, SpeedCue; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },

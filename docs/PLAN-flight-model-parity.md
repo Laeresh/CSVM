@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ B11 Port the two latent control-authority terms (`BL-437`)
 12. ☐ B12 Port the distant-AI simplified plant (`BL-425`)
-13. ☐ B13 Reproduce control-surface motion (`BL-393`)
+13. ☑ B13 Reproduce control-surface motion (`BL-393`)
 
 ### Wave C — Replace invented collision behavior
 
@@ -361,7 +361,7 @@ architecture updated; `BL-437` deleted from `backlog.md`.
 
 **⚠ Traps.** This did not explain `BL-387`; do not revive that hypothesis.
 
-## B13 ☐ Reproduce control-surface motion (`BL-393`)
+## B13 ☑ Reproduce control-surface motion (`BL-393`)
 
 **Goal.** Match six-list channel mixing, angles, smoothing and the player-only animation guard.
 
@@ -374,6 +374,41 @@ architecture updated; `BL-437` deleted from `backlog.md`.
 **Verify.** Script each axis and mixed pair; prove AI surfaces remain frozen in the original-equivalent mode.
 
 **⚠ Traps.** Do not infer physical surface names from the six slots before decoding population.
+
+**Landed.** The node-list population is decoded, and it settles the mapping the item was blocked
+on: `FUN_004b27e0`, `FUN_004b2a40` and `FUN_004b2ca0` fill the six vectors at `obj+0x9c0` through
+`+0xa10` with two `sprintf` loops each over the six format strings at `0x62aee8`–`0x62af2c`
+(`l_aileron%d`, `r_aileron%d`, `l_elevator%d`, `r_elevator%d`, `l_rudder%d`, `r_rudder%d`), from
+index 1 until a name lookup misses. The string order is the slot order, and nothing else writes
+those vectors. The channels resolve the same way: `obj+0x100`, `+0x108` and `+0x10c` are written
+one-to-one alongside `+0x114` (roll), `+0x11c` (pitch) and `+0x120` (yaw) at
+`0x4922b7`–`0x4922d5` and `0x492b36`–`0x492b7e`, and the joystick read at `0x487559`–`0x487653`
+takes them from axes X, Y and 5. So the mixed pair is the ELEVATORS carrying a differential roll
+term at 36 % of the aileron gain, not an unknown surface: `l_elevator` is
+`clamp(−0.6·pitch − 0.18·roll, ±0.6)` and `r_elevator` the same with the roll term added. The
+smoothing helper `FUN_00460490` is `slot = target + (slot − target)·exp(−rate·dt)` with
+`FUN_00460410` the `exp(−x)` (cubic Taylor below 0.1), so 2/s is an exact 0.5 s time constant, not
+a per-frame fraction. The three appliers at `0x48eca9`–`0x48ecb7` run OUTSIDE the player guard,
+which is how an AI aircraft poses surfaces from slots nothing ever writes. CSVM's ±20° linear
+3 units/s behaviour is replaced: `ControlSurfaceMix` (new, engine-free) holds the five distinct
+slots, the clamps and the exponential, `ControlSurfaceAnimator` keeps only the node side, and
+`ControlSurfaces.Kind` splits the elevator per side because the differential needs it. The guard is
+`FlightController.IsHumanPiloted`, this plan's Decision 3, so AI surfaces freeze and every human
+pilot animates; no config key was invented and no plant constant moved, so the constant inventory
+and its config census are untouched. `ControlSurfaceMixTests` scripts each axis alone, the mixed
+pair on both sides of the clamp, the reverse-authority scaling, the exponential shape against a
+`3·dt` frame rate, and the frozen-AI case with the guard-open run as its `METHOD-9` control.
+`BL-393` deleted from `backlog.md`; the decode with addresses is in
+`docs/org/flightModel.md`, "The original's control-surface animation". One named product
+exception, decided by the user: CSVM's node matching also accepts `l_rudder_rotate` and the
+digitless `l_elevator`, which the original's `%d` lookups miss, so the Fury's rudder animates in
+CSVM where the original flies it frozen; the exception is recorded beside the population decode
+in the dossier.
+
+**Verified.** Full `RunTests.ps1` battery on the merged lane tree: build clean, 2059/2059 units,
+93/93 engine suites with engine errors clean. One golden moved, `c1-flight`, the only shot with a
+held stick input; the pair was reviewed by the user and re-pinned, and a check pass reads 16/16
+hash-identical against the new pin, exit 0.
 
 # Wave C — Replace invented collision behavior
 

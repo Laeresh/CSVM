@@ -37,7 +37,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/PatternLibrary.cs` — decodes the original's `.BM` paint patterns from the extracted ROF archive; `PatternsFor` lists a plane's liveries.
 - `src/Mech3/PlanePainter.cs` — applies a `PaintScheme` to one aircraft: composites skins from the pattern's region masks, swaps decals.
 - `src/Mech3/PropParts.cs` — classifies prop/rotor nodes by name; spin axis + rate from the original anims (props Z, rotor Y).
-- `src/Mech3/ControlSurfaces.cs` — classifies aileron/elevator/rudder mesh nodes and their hinge axes (X ailerons/elevators, Y rudders).
+- `src/Mech3/ControlSurfaces.cs` — classifies left/right aileron, elevator and rudder mesh nodes and their hinge axes (X ailerons/elevators, Y rudders).
 - `src/Mech3/WingLights.cs` — the one source for wingtip nav lights: flare node names, glow texture, warm-amber colour, blink period.
 - `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud deck, camera-anchored skydome, edge extender.
 - `src/Mech3/MapEdgeExtender.cs` — rolling window of repeated border-cell blocks + clutter continuing the world past the map edge, per camera; block depth is per chapter (`DefaultBlockCells`).
@@ -166,7 +166,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/ThrottleSlamSmoke.cs` — a large throttle jump streams dark exhaust trail smoke for a few seconds; a single notch or a decrease shows nothing.
 - `src/Flight/SpeedCue.cs` — chapter-authored pale smoke wisps emitted 60 m ahead of each player, density selected by camera altitude.
-- `src/Flight/ControlSurfaceAnimator.cs` — deflects ailerons/elevators/rudders to an absolute pose from slewed stick input; `--fly` only.
+- `src/Flight/ControlSurfaceMix.cs` — the decoded control-surface angle solver: three stick channels into six clamped slots, smoothed at 2/s, with the human-pilot guard. No scene node.
+- `src/Flight/ControlSurfaceAnimator.cs` — poses ailerons/elevators/rudders from those slot angles; `--fly` only.
 - `src/Flight/WingLightBlinker.cs` — blinks the wingtip flares 0.08 s every 1.5 s, reset off on respawn; `--fly` only.
 - `src/Flight/PylonOrdnance.cs` — the rockets under the wings: one FLYOUT-model body per loaded pylon, hidden as its ammo depletes; `--fly` only.
 - `src/Flight/PlaneShake.cs` — the plane-wobble oscillators (gunfire buzz, overspeed rattle, being-hit rocks) summed to visual-only roll on the rig's ShakePivot.
@@ -511,6 +512,9 @@ and autogyro.json (agyro_rotors): props spin about local Z, rotors about local Y
 Classifies a plane's control-surface mesh nodes + hinge axes: the deflecting node (l/r_aileronN,
 l/r_elevatorN, l/r_rudderN, the Fury's l/r_rudder_rotate) hangs under a hinge parent group whose
 transform places/orients the hinge line; ailerons/elevators hinge about local X, rudders local Y.
+The name patterns are the original's own six `sprintf` node lists (docs/org/flightModel.md, "The
+original's control-surface animation"), which is why the elevators classify per side: they carry a
+differential roll term, so left and right settle at different angles.
 
 ## src/Mech3/WingLights.cs
 Single source of truth for wingtip nav lights: the flare-node predicate (wing_flare1/2), the glow
@@ -2645,13 +2649,24 @@ rig's visual layer, so splitscreen panes never see another pilot's private speed
 session `EffectAmbience`, so the authored 500–600 m camera-distance fade and wind apply. `Reset`
 hard-clears all three on crash/respawn so a teleported aircraft cannot bridge its old position.
 
+## src/Flight/ControlSurfaceMix.cs
+The decoded angle solver behind the surfaces, engine-free so the arithmetic is testable without a
+scene: roll drives the two aileron slots at ∓0.5 rad, pitch the two elevator slots at −0.6 rad with
+a ±0.18 rad differential roll term added, yaw both rudder slots at −0.61086524 rad times the
+reverse-authority factor. Aileron and elevator targets are clamped (±0.5, ±0.6); the rudder is not.
+Each slot then decays exponentially toward its target at 2/s, exp(−rate·dt), so the shape holds at
+any frame rate. `Advance`'s `animate` flag is the original's player-only guard: false writes no
+slot at all, which is how an AI aircraft's surfaces stay frozen. Addresses and the list population
+that fixes which node takes which slot: docs/org/flightModel.md, "The original's control-surface
+animation".
+
 ## src/Flight/ControlSurfaceAnimator.cs
-Deflects ailerons/elevators/rudders to an absolute pose: each surface stores its build-time local
-basis and gets Basis = base · Rot(hingeAxis, angle); three channels slew toward the stick at
-SlewPerSec (TUNE), ±20° per kind. --fly only; frozen while paused/crashed, reset on respawn.
-The RUDDER target is additionally scaled by the reverse-authority factor (`FlightModel
-.ReverseAuthorityAt`) — decoded, and this is its ONLY consumer in the original, so the rudder
-barely moves at cruise and swings fully only in the slow-flight window where it has authority.
+The node side of that: collects every classified surface, poses it as an absolute pose (build-time
+local basis, Basis = base · Rot(hingeAxis, slotAngle · scale)) rather than accumulating, and owns
+the two frame flips the original does not need: a mount rotated by yaw π, and a nose-mounted
+canard, which raises the nose the other way. --fly only; frozen while paused/crashed, reset on
+respawn. `FlightController` passes its `IsHumanPiloted` as the guard, which is the plan's Decision
+3: every human pilot animates for splitscreen, AI stays frozen as the original has it.
 
 ## src/Flight/WingLightBlinker.cs
 Flashes the wingtip flares for FlashDuration ~0.033 s (TUNE — matches the original's own footage at

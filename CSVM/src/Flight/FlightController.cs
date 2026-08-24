@@ -1578,7 +1578,8 @@ public partial class FlightController : Node3D
         if (!Crashed && !halted)
         {
             WingLights?.Advance(simDt);
-            Surfaces?.Advance(simDt, _lastInput, _model.ReverseAuthorityAt(_model.Speed));
+            Surfaces?.Advance(simDt, _lastInput, IsHumanPiloted,
+                _model.ReverseAuthorityAt(_model.Speed));
             // damage-stage trails need no per-frame feed: the rig runtime's emitters follow
             // their pdpN/prop1 host nodes themselves
         }

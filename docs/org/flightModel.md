@@ -830,34 +830,65 @@ the same nine and computes the same curves.) Fallback values shown as authored (
   immediate at `0x608120`), exponentially smoothed toward that target at 2/s by `FUN_00460490` into
   the angle slots `obj+0x634`/`+0x638`, which `FUN_004b2fe0` applies as a node rotation to the two
   rudder node lists at `obj+0xa04`/`+0xa14`. **It scales the VISIBLE rudder deflection, on the
-  player's aircraft only, and touches no torque.** Ported at that site (`ControlSurfaceAnimator`),
-  not in the force path.
+  player's aircraft only, and touches no torque.** Ported at that site (`ControlSurfaceMix`), not
+  in the force path.
 
-### The original's control-surface animation, decoded in passing
+### The original's control-surface animation
 
 The same block in `FUN_0048e580` (`0x48eaf0`–`0x48ec92`, inside a `piVar3 == DAT_0071c298`
-player-only guard) drives **six** angle slots off three stick channels — `obj+0x100` (`a`),
-`obj+0x108` (`b`) and `obj+0x10c` (yaw, the one the reverse-authority factor scales). Each slot is
+player-only guard) drives **six** angle slots off three stick channels: `obj+0x100` roll,
+`obj+0x108` pitch and `obj+0x10c` yaw (the one the reverse-authority factor scales). Each slot is
 smoothed exponentially toward its target at 2/s by `FUN_00460490`, and `FUN_004b2f00` /
 `FUN_004b2f70` / `FUN_004b2fe0` apply the six as node rotations over six node lists:
 
-| Slot | Node list | Target angle | Clamp |
-|---|---|---|---|
-| `+0x63c` / `+0x640` | `+0x9c4` / `+0x9d4` | `−0.5·a` / `+0.5·a` | ±0.5 rad (28.6°) |
-| `+0x62c` / `+0x630` | `+0x9e4` / `+0x9f4` | `−0.6·b − 0.18·a` / `−0.6·b + 0.18·a` | ±0.6 rad (34.4°) |
-| `+0x634` / `+0x638` | `+0xa04` / `+0xa14` | `−0.61086524 · yaw · reverseAuthority` | none (−35° at full) |
+| Slot | Node list | Nodes | Target angle | Clamp |
+|---|---|---|---|---|
+| `+0x63c` / `+0x640` | `+0x9c4` / `+0x9d4` | `l_aileronN` / `r_aileronN` | `−0.5·roll` / `+0.5·roll` | ±0.5 rad (28.6°) |
+| `+0x62c` / `+0x630` | `+0x9e4` / `+0x9f4` | `l_elevatorN` / `r_elevatorN` | `−0.6·pitch − 0.18·roll` / `−0.6·pitch + 0.18·roll` | ±0.6 rad (34.4°) |
+| `+0x634` / `+0x638` | `+0xa04` / `+0xa14` | `l_rudderN` / `r_rudderN` | `−0.61086524 · yaw · reverseAuthority` | none (−35° at full) |
 
-Two things fall out of this that are worth having even though the surfaces themselves are cosmetic.
-The second pair MIXES two channels — a common-mode `b` term with a differential `a` term — so those
-surfaces are not driven by one axis each. And the whole block sits behind the player guard, so **the
-original's AI aircraft fly with frozen control surfaces**; ours deflect on every aircraft, a
-deliberate divergence rather than an unported guard.
-⚠ Which physical surface each node list holds is NOT decoded — only `FUN_004d1a30`'s rotation axis
-per list is visible here, and the `a`/`b` channels were not traced back to the pitch and roll
-inputs. Do not map this table onto aileron/elevator names without reading the list population.
-NOT ported beyond the reverse-authority scale: our `ControlSurfaceAnimator` classifies four surface
-kinds rather than six node lists, and its ±20° angles were validated by eye (`backlog.md`
-`BL-393`).
+**The lists are populated by name, not by geometry.** `FUN_004b27e0` (ailerons), `FUN_004b2a40`
+(elevators) and `FUN_004b2ca0` (rudders) each run two `sprintf` loops over the six format strings
+at `0x62aee8`–`0x62af2c` (`l_aileron%d`, `r_aileron%d`, `l_elevator%d`, `r_elevator%d`,
+`l_rudder%d`, `r_rudder%d`), starting at index 1 and pushing every node `FUN_004d8cf0` finds until
+a lookup misses. The six vectors sit at `obj+0x9c0`, `+0x9d0`, `+0x9e0`, `+0x9f0`, `+0xa00` and
+`+0xa10` in that order, so the string order is the slot order. Nothing else writes them: the
+constructor `FUN_004aff80` zeroes them and the destructor `FUN_004b0aa0` frees them.
+
+**Named product exception: CSVM's name matching is wider than the original's.** The Fury's
+deflecting rudder node is `l_rudder_rotate`, which no `l_rudder%d` lookup finds, so the original
+flies that plane with a frozen rudder; the digitless `l_elevator` shape misses the same way.
+CSVM's `RudderRe`/`ElevatorRe` accept those names and animate the surfaces, kept deliberately as
+an improvement over the shipped behavior (user decision, PLAN-flight-model-parity B13). The
+mixing, angles and smoothing on every matched node remain the decoded values above.
+
+The arithmetic per frame, with addresses:
+
+- **Elevators** (`0x48eaf7`–`0x48eb25`): `roll · 0.18` (`0x6035a4`) is held while `pitch · −0.6`
+  (`0x608124`) is formed; the left slot subtracts the roll term and the right adds it. Both are
+  then clamped to ±0.6 (`0x48eb27`–`0x48eb87`).
+- **Ailerons** (`0x48eb87`–`0x48eba2`): `roll · −0.5` (`0x6034f8`) and `roll · +0.5` (`0x6032e0`),
+  clamped to ±0.5 (`0x48eba5`–`0x48ec05`).
+- **Rudders** (`0x48ec05`–`0x48ec24`): `reverseAuthority · yaw · −0.61086524` (`0x608120`), one
+  value written to both slots, with no clamp.
+- **Smoothing** (`0x48ec27`, `0x48ec3c`, `0x48ec51`, `0x48ec66`, `0x48ec7b`, `0x48ec8d`): six
+  `FUN_00460490(slot, target, 2.0)` calls, the rate the immediate `0x40000000`. That helper is
+  `slot = target + (slot − target)·FUN_00460410(dt·rate)`, and `FUN_00460410` is `exp(−x)` (a cubic
+  Taylor branch below 0.1, `FUN_0053e2e0` otherwise), so the smoothing is exact exponential decay
+  with a 0.5 s time constant and is frame-rate independent.
+
+Two consequences. The elevators MIX two channels, a common-mode pitch term with a differential roll
+term at 36 % of the aileron gain, so they act as small ailerons and the ±0.6 clamp binds whenever
+pitch and roll are commanded together on the same side. And the slot writes sit behind the player
+guard while the three appliers do not (`0x48eca9`–`0x48ecb7`, past the guard's join at `0x48ec9c`),
+so **an AI aircraft poses its surfaces every frame from slots that are never written**, which
+leaves them frozen at neutral.
+
+CSVM reproduces the table in `ControlSurfaceMix`, with `ControlSurfaceAnimator` owning only the
+node side: which slot a node takes, its hinge axis, and the two frame flips a rotated mount and a
+nose-mounted canard need. The guard is `FlightController.IsHumanPiloted` rather than a single
+player pointer, which is this plan's Decision 3: every human pilot animates for splitscreen, AI
+stays frozen as the original has it.
 
 ### The low-speed ramp — implemented 2026-08-15 (closing `BL-330`)
 
