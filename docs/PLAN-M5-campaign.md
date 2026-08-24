@@ -2176,7 +2176,9 @@ line at 45.5 s, `dumdum` stored as the pilot's group-1 ammunition and mounted on
 8 intro callbacks hosted, the primary completed after 3.2 s of flying at 199 m from its reference,
 `music_prebattle_sg` playing `music_prebattle2.wav`, the mission ending Won on mask 0x1, and the
 cabin reading `missionsCompleted=1` with Next Mission on seq 1. `dotnet build CSVM/CSVM.sln` clean
-(0 warnings), `.\CheckCommentCaps.ps1 -Summary` clean.
+(0 warnings), `.\CheckCommentCaps.ps1 -Summary` clean. On the plan branch after the merge, a
+third consecutive run: build clean, units 2334/2334, engine suites 109/109 with errors clean, all
+16 golden shots hash-identical, `campaign-loop` again carrying state in from the run before it.
 
 ## E42 ☐ At-the-controls verdict pass
 

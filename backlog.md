@@ -1461,6 +1461,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
+- `BL-443` `[Feature]` **VO dialogue chains are decoded and prewarmed but nothing plays one.**
+  *Evidence:* `docs/formats/sounds.md` records the chain shape (`[name, [dialogueRoot, [line],
+  [line], …]]`, "a VO chain, NOT a weighted group") and `WorldSounds.Prewarm` decodes a chain's
+  member lines, but `PlayOneShot`/`Spawn` only ever call `SoundGroup.Pick`, which returns null for a
+  chain because it has zero weighted members. So a cue naming a chain resolves, prewarms, and plays
+  silence. C1/M02 carries both shapes in one mission: `OBJECTIVE8`'s `WAKEUP_SOUND_GROUP` and
+  `OBJECTIVE16`'s `COMPLETED_SOUND_GROUP` are weighted and play for real, while `OBJECTIVE1`'s
+  `WAKEUP_SOUND_GROUP snd_NW2Start` and `OBJECTIVE10`'s `COMPLETED_SOUND_GROUP snd_NW2Prim2Suc`
+  are chains and play nothing. *Fix shape:* a chain player: what sequences the lines, what spaces
+  them, whether a chain interrupts or queues behind one already speaking, and what owns it (the
+  sounds page says the chains are kept "so the comms/mission layer can consume them", a consumer
+  that does not exist). *⚠ Traps:* this is not a prewarm gap. `ExtraPrewarmNames` already expands a
+  chain to its members, so the distinction is purely at playback; adding chains to a prewarm list
+  changes nothing. Do not make `SoundGroup.Pick` return a chain member at random either, since a
+  chain is a script, not a draw. *Cross-refs:* `docs/formats/sounds.md`; `docs/PLAN-M5-campaign.md`
+  D33, which found this while proving the objective cues fire and left it deliberately unbuilt.
+
 - `BL-079` `[Feature]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;
   the original's IA traffic is clearly audible in the reference video.
   ⚠ **The "with Doppler" half of that claim is now suspect and must not be built against.** This
@@ -1933,6 +1950,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-444` `[Feature]` **`HangarArt`'s art seam has no PNG decoder, so PNG-only art draws nothing.**
+  *Evidence:* `TgaImage` is the seam's only decoder and covers TGA alone, while
+  `extracted/rimage/OL_PLANEDIAGRAMSTOP.PNG` and `OL_PLANEDIAGRAMSFRONT.PNG` (the top and front
+  plane views `ol_p_planetopicon`/`ol_p_planefrticon` draw, frame = airframe index) ship as PNG.
+  `PngImage` was written for the campaign screens, so a decoder now exists; what is missing is
+  routing the hangar seam's `Art`/`RowArt` through it. Today they return null rather than invent a
+  picture. The same gap hides `PC_P_HANGAR<n>.JPG`, which is JPEG and has no decoder at all.
+  *Fix shape:* route the seam through `PngImage`, then census `rimage/*.PNG` for other art no page
+  draws yet; JPEG is a separate decoder and a separate decision. *⚠ Traps:* returning a placeholder
+  image is worse than returning null, because a wrong picture reads as a fidelity verdict.
+  *Cross-refs:* `docs/PLAN-M5-campaign.md` C24/C25, which named this rather than widening their own
+  file boundary.
+
 - `BL-113` `[Tuning]` `[Owed-playtest]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
 
@@ -2299,6 +2329,43 @@ usual.
   data-orphan SFX named by no `SOUND_GROUPS` entry and no world data; the user confirms it is
   the automatic-screenshot sting, not a zone-cleared cue — formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
+
+- `BL-445` `[Research]` **The original's per-pylon ordnance id vocabulary is not recovered; the
+  hangar stores a CSVM-side stand-in.** *Evidence:* `OwnedPlane.Ordnance` keeps a table index
+  (`1..12` is table index `0..11` plus one), which is a deliberate stand-in chosen so the Ammo
+  Selection screen could ship, not a recovery of what the original writes into a
+  `SavedGames\` plane record's ordnance field. `OwnedPlane.Ammo` is unaffected and keeps its
+  shipped `0..3` plus `4` for no gun. *Fix shape:* decode the field out of a real plane record and
+  map it to weapon defs, which would let a future writer round-trip an original save losslessly.
+  *⚠ Traps:* the user's `CrimsonSkiesGame\SavedGames\` is read-only evidence, never a write target.
+  Nothing depends on this today, so changing the stored vocabulary is a migration of every existing
+  profile, not an edit. *Cross-refs:* `docs/formats/saved-games.md`; `docs/PLAN-M5-campaign.md`
+  C25, and Decision 1, which puts writing the original save format out of scope.
+
+- `BL-446` `[Feature]` **The MPG movie cinemas do not play.** *Evidence:* Decision 2 of
+  `docs/PLAN-M5-campaign.md` put them out of scope for the campaign milestone: plain MPG playback
+  is a codec and container problem orthogonal to the campaign flow, and the loop reaches the cabin
+  and the mission without one. *Fix shape:* decide first whether Godot's own video playback can
+  take the shipped files or whether they need transcoding at extract time; that decision is the
+  deliverable before any code. *Cross-refs:* `docs/PLAN-M5-campaign.md` Decision 2, which filed it.
+
+- `BL-447` `[Feature]` **The cabin ships without Change Memento.** *Evidence:* Decision 3 of
+  `docs/PLAN-M5-campaign.md` deferred it: the function is cosmetic and rests on the undecoded
+  snapshot flow, so the cabin's other rows shipped without it rather than waiting.
+  *Cross-refs:* `BL-256` is the adjacent snapshot work; `docs/PLAN-M5-campaign.md` Decision 3.
+
+- `BL-448` `[Feature]` **An objective gated on `ANIM_STATE <def> EXECUTED` cannot be satisfied, so
+  a mission's authored route to its own ending is unreachable.** *Evidence:* found by the
+  `campaign-loop` suite (`docs/PLAN-M5-campaign.md` E41). C3/M01 ends through its `INSTANTWIN`
+  objective, and the authored path to waking that objective runs through `OBJECTIVE14`'s
+  `ANIM_STATE hooked_to_klondike EXECUTED`, a 15 KB cutscene definition anchored on a `player`
+  node. Nothing plays that definition in a session, so the condition never becomes true and the
+  suite wakes `INSTANTWIN` through the graph directly, exactly as `campaign-mission-end` does.
+  The engine is not wrong here: the missing piece is whatever starts a mid-mission cutscene.
+  *⚠ Traps:* do not satisfy the condition by treating an unplayed definition as executed; that
+  would fire every such objective at mission start. *Cross-refs:* `BL-035` carries the same
+  blocker from the animation side (the `landings.zrd` mid-mission cutscenes and their approach-cone
+  trigger); one trigger unblocks both.
 
 ## Tooling, platform & docs
 
