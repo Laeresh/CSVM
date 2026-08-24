@@ -250,6 +250,131 @@ registers three 0x34-byte texture entries per plane from the +0x5c/+0x60/+0x64 p
 the logo/decal name table at `0x0061da20`. Armour and engine ride the global block, not this
 message.
 
+## The campaign wallet
+
+The player's money is one dword, `0x0064b788`, exposed to the GUI scripts under the name
+`nPlayerCash` by the script-global binder `FUN_00401fc0` (which registers the whole
+`nMission` / `fIAConstruction` / `fMultiPlayerConstruction` / `fAllowAll` / `szSaveGameDir`
+family the same way). **Program-wide it has exactly four writers**, so the ledger below is
+complete, not a sample.
+
+| Site | Effect |
+|---|---|
+| `0x0041146b` (`FUN_004113b0`) | fresh profile: `nPlayerCash = 0` |
+| `0x0041160b` (same function) | `nPlayerCash = 250000`, only when `fAllowAll` is set |
+| `0x00405db9` (`FUN_00405ce0`) | mission wrap-up: `+=` the objective reward below |
+| `0x0040a067` (sell handler) | `+=` the sold plane's full build cost |
+| `0x0040b5f3` (commit 2263) | `-=` the scratch build's total cost |
+
+**Starting funds are $0.** `FUN_004113b0` is the fresh-start initialiser (called from
+`FUN_004112b0` at boot and from the screen-flow dispatcher `FUN_00407670`); it zeroes the
+plane-slot array, resets campaign progress `0x0064b678`, and sets the wallet to zero. The
+`250000` on the next branch is not a campaign figure: `fAllowAll` (`0x00647b5c`) is the flag
+that also switches off every airframe availability threshold in `FUN_00410120` /
+`FUN_004100d0` / `FUN_00410170`, and the same branch fills plane slots 2 to 12 with the eleven
+stock airframe templates. It is the unlock-everything mode, and its budget is the only
+literal money constant in the image.
+
+**The campaign instead starts with two aircraft, not with cash.** The same initialiser copies
+prebuilt records 11 and 12 (204 bytes each) out of the template array at `0x00619f58` into
+plane slots 0 and 1, naming them from `langui` 511 `IDS_PILOTPLANENAME` "Gypsy Magic" and 512
+`IDS_WINGPLANENAME` "The Knave". Both records carry airframe id 5 (Devastator), engine id 1
+(the Lvl-2 tier) and 2 hardpoints per wing. Templates 0 to 10 in that array are the eleven
+stock airframe builds, one per airframe id.
+
+### The sell price is the full build cost
+
+Both the confirmation prompt and the credit compute it the same way, and neither applies a
+depreciation factor: `FUN_00405680(record)` (the same total-cost function the Purchase screen
+displays) is taken through an `FILD` / `ftol` round trip that is arithmetically an identity, a
+compiler artifact of a float-typed cost expression. The prompt is at `0x0040a1e6`, formatting
+`langui` 700 `IDS_PS_QUERYSELL` ("Your %1!s! is worth $%2!d!") with the airframe's short name
+(`langui` 3020 + airframe id) and that figure; the credit is at `0x0040a052`, adding the same
+figure to `nPlayerCash` and clearing the slot's class dword. **So a plane is worth exactly what
+it cost, and rebuilding is free of loss.**
+
+A record whose class dword `+0x00` is `2` is a **special** plane: the sell handler branches at
+`0x0040a1d9` to `langui` 704 `IDS_PS_SPECIALPLANE` ("This %1!s!, %2!s!, cannot be sold")
+instead. `langui` 701 carries the separate floor, "you must keep at least two planes in your
+hangar". The slot array runs 25 records (`0x0064b78c` to `0x0064cb77`), and the free-slot
+finder `FUN_004111f0` refuses a purchase unless at least **six** slots are free or hold special
+planes, so five slots stay reserved for the campaign awards below.
+
+### The mission reward table at `0x0061ae80`
+
+Ten live records of five dwords (stride `0x14`), terminated by a record whose mission id is 0.
+Read by `FUN_00405ce0` (the cash half) and `FUN_00405f00` (the aircraft half).
+
+| Mission | Objective bit | Cash | Awarded airframe |
+|---|---|---|---|
+| 1 | 12 | $900 | none |
+| 2 | 1 | 0 | 2 Balmoral, `langui` 513 "Jumping Jane" |
+| 5 | 1 | $20,000 | none |
+| 6 | 3 | $5,000 | none |
+| 7 | 1 | 0 | 3 Bloodhawk, `langui` 514 "Blue Streak" |
+| 12 | 1 | $10,000 | none |
+| 13 | 0 | 0 | 7 Fury, `langui` 515 "Red Hot Spender" |
+| 17 | 0 | 0 | 0 Hoplite, `langui` 516 "Minx" |
+| 19 | 1 | $5,000 | 10 Warhawk, `langui` 517 "Accipiter Annie" |
+| 24 | 1 | $100,000 | none |
+
+Field `+0x00` is the mission id in the `nMission` numbering, `+0x04` an objective bit index,
+`+0x08` the cash, `+0x0c` an airframe id with **11 meaning no aircraft award**, and `+0x10` a
+pointer into the dword run at `0x00646384` that **no code reads** (one slot per record; left as
+an unread field, not interpreted).
+
+The cash is paid at `0x00405db9` only when the record's mission is the mission just flown, the
+run set that objective bit, and the cumulative per-mission bit mask at `0x0064cbfc + mission*0xa8`
+did **not** already have it: each bonus pays once per profile, replays included. The same sum is
+accumulated into the mission's own stats record, which is what the scoreboard's "Cash Earned"
+(`langui` 1206 / 1211) shows. Bit 0 means "mission completed", with no separate objective gate.
+
+The aircraft half runs in `FUN_00405f00`: on the same gate it copies the matching template out
+of the special-plane array at `0x0061a9b8` (records whose class dword is `2`, stride 204 bytes,
+matched on their airframe id), names it from the string above, and marks a per-airframe
+already-awarded byte at `0x0064cc44 + airframeId` so it is granted once. The five names decode
+their own mapping: the `langui` symbols are `IDS_HW5BALMORALNAME`, `IDS_NW2BLOODHAWKNAME`,
+`IDS_HW3FURYNAME`, `IDS_RM2HOPLITENAME`, `IDS_RM4WARHAWKNAME`.
+
+**Total campaign cash income is $140,900**, from six paying objectives, plus whatever the
+awarded aircraft would fetch if they were sellable, which they are not.
+
+### The purchase gate and what a build costs
+
+Callback 2264 (`0x0040b477`) computes `FUN_00405680` over the scratch record at `0x0064cb78`
+and reports `langui` 1226 "INSUFFICIENT FUNDS" when `nPlayerCash < cost`, alongside 1227
+"OVERWEIGHT" and the missing-engine problem. The commit 2263 subtracts that same total and
+writes the scratch record into a **new** slot, so a build is always paid in full: there is no
+partial-upgrade price, and changing an owned plane means selling it (at full value) and
+building again.
+
+Per-unit constants, all from `FUN_00405680` / `FUN_00405550` and the two purchase-row handlers:
+
+| Item | Cost | Weight |
+|---|---|---|
+| Airframe | stat table `0x00619bb0 +0x00` | `+0x04` |
+| Engine | `FUN_004057c0` over `0x00619d98` plus the tier offsets | same table |
+| Gun | `0x00619e68`, wing or turret column, doubled when twinned | same |
+| Armour | **$4 per unit** | **4 lb per unit** |
+| Hardpoint | **$410 each** | **480 lb each** |
+
+The armour arithmetic in `FUN_00405680` is `(Σ of the four zone dwords) × 20 / 5`, and the zone
+dword is the displayed unit count, so it reduces to $4 per unit. **The per-zone cap is 60
+units**: the dropdown (callback 2246, `0x0040b7bd`) offers 13 rows numbered 0 to 12 and labels
+row `r` as `r × 5` units. A fully armoured airframe is therefore 240 units, $960 and 960 lb,
+which is the figure [`../formats/vehicle.md`](../formats/vehicle.md) reasons about against a
+1900 lb `veh_weight`. Each wing hardpoint group offers 5 rows (0 to 4 hardpoints), matching the
+eight rocket slots the Ammo Selection screen lays out.
+
+### Ammunition and rockets are free
+
+`ORDINANCELAYOUT.SCRIPT` (the Ammo Selection screen) invokes callbacks 2010, 2011, 2014, 2027,
+2028, 2030 to 2037 only: plane icon, plane info line, gun names, the ammo and rocket dropdown
+get/set pairs, their description panels, and accept/cancel. **No cost callback, no funds
+readout and no wallet reference appear anywhere in it**, and no writer of `nPlayerCash` sits on
+that path. Ammunition type and rocket type are a free per-sortie choice in the original; money
+is spent in Plane Construction alone.
+
 ## Open
 
 - The per-hit damage application order across zone/total and armour/structure pools is not

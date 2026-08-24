@@ -63,15 +63,18 @@ missions cannot be individually verified inside one milestone (decision 6).
 
 ## ⚠ Read this before implementing anything
 
-No prior claim about the campaign has been disproven yet; this table starts empty and gets rows as
-disproofs land.
+Disproofs landed so far:
+
+- **A5.** The original charges nothing for ammunition or rockets, sells a plane back at its full
+  build cost with no depreciation, and starts the campaign with **$0** and two aircraft rather than
+  with a purse. The $250,000 in the image is the `fAllowAll` unlock mode's budget.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A4 (landed: `docs/formats/briefing.md`), A7 (landed: `docs/formats/anim-definitions/cutscenes.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field) | Confirm the trace, then implement. |
+| **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A4 (landed: `docs/formats/briefing.md`), A5 (landed: `docs/org/hangar.md` "The campaign wallet", pending only the `CAP-40` on-screen cross-check), A7 (landed: `docs/formats/anim-definitions/cutscenes.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field) | Confirm the trace, then implement. |
 | **Data present and located, vocabulary not yet decoded** | A3, A6 | Decode first; the docs page is the deliverable, the engine item consumes it. |
 | **Direction sound, magnitude or details a judgement call** | B11, B12, C21–C24, D31, D32, D33 | The shape is settled by the original's screens/data; layout metrics, timings and exact behaviours come from captures and decode, not invention. |
-| **Leads only — no mechanism yet** | A5 (prices), D35 partials (BL-037/038 wiring points), D37 (music selection logic) | Budget for investigation; may end in a disproof. |
+| **Leads only — no mechanism yet** | D35 partials (BL-037/038 wiring points), D37 (music selection logic) | Budget for investigation; may end in a disproof. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.
@@ -122,8 +125,11 @@ Everything below was located on disk in this planning session (2026-08-24 survey
 - **Wingman constants** — `BL-362`: decoded body-frame stations (6 m out / 18 m astern of the
   player leader; 8/−2/−8 of an AI leader), 700 m join threshold, speed-ramped trail
   106.68–259.08 m.
-- **Economy** — `docs/formats/vehicle.md`: armor per-unit cost/weight and per-zone caps are
-  executable-resident, undecoded; plane prices are in no reader.
+- **Economy** — decoded out of `crimson.exe` by A5 and written up in `docs/org/hangar.md`, "The
+  economy" and "The campaign wallet": the airframe/engine/gun price tables, armour at $4 and 4 lb
+  per unit with a 60-unit per-zone cap, hardpoints at $410, sell at full build cost, $0 starting
+  funds with two starting Devastators, free ammunition, and the ten-record mission reward table at
+  `0x0061ae80` worth $140,900 plus five named aircraft. No reader ships any of it.
 - **Engine bases to extend** — hangar Build/Buy/Sell flow (`HangarFlow.cs` + pages, `IHangarPage`,
   204-byte import, `user://Planes/`), `LaunchMenu.cs` state machine + board chrome
   (`BoardMenu.cs`), `InstantActionDirector` (the sibling mission director),
@@ -166,7 +172,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ Decode the original save/profile format far enough to answer the structural questions
 3. ☐ Decode the campaign mission tree (order, branching, unlocks)
 4. ☑ Decode the briefing: `Briefing.zrd` dialog layout + the briefing map/flag animation
-5. ☐ Decode the economy constants: plane buy/sell prices, armor cost, starting funds
+5. ☑ Decode the economy constants: plane buy/sell prices, armor cost, starting funds
 6. ☐ Behavioral decode of the campaign GUI scripts (cabin, flight check, ammo, campaign intro)
 7. ☑ Decode the `letterbox` node mechanics and the cutscene `CALLBACK` codes
 8. ☑ Mint and file the owed captures (plane construction screen, previous-missions list, briefing animation, a C1 mission intro, cabin ambience)
@@ -374,15 +380,46 @@ swapped). Do not use that prefix, or its objective count, to pair a mission fold
 limits"). C23 needs an explicit folder-to-state lookup from A3's mission tree, not a formula
 derived from any of these internal names.
 
-## A5 ☐ Decode the economy constants: plane buy/sell prices, armor cost, starting funds
+## A5 ☑ Decode the economy constants: plane buy/sell prices, armor cost, starting funds
 
 **Goal.** The numbers the wallet needs: each airframe's buy and sell price, armor per-unit cost
 and per-zone caps, weapon/ammo prices if the original charges for them, and the campaign's
 starting funds, each with its `crimson.exe` provenance.
 
-**Evidence (confidence: lead-only).** `docs/formats/vehicle.md` flags the armory constants as
-executable-resident and undecoded; prices are in no reader; strings 700–799 are the purchase/sell
-printf templates, which name the slots but not the values.
+**Evidence (confidence: traced to code, pending the on-screen cross-check).** The trace landed.
+Every number below has an address, and the wallet's writer set is closed rather than sampled.
+The write-up is `docs/org/hangar.md`, "The campaign wallet" (the economy tables it extends were
+already there from `PLAN-hangar.md`); `docs/formats/vehicle.md`'s armory paragraph is corrected to
+match. ⚠ **Every recovered price is exe-traced only. The on-screen confirmation is still owed**
+through A8's plane-construction capture (`CAP-40`), which is filed but unfilmed; until it exists,
+no price here has been seen in the original's UI.
+
+What was recovered:
+
+- **Airframe, engine, gun and hardpoint prices** were already decoded (stat table `0x00619bb0`,
+  engine base table `0x00619d98` with its six tier offsets, gun table `0x00619e68`,
+  hardpoints $410 / 480 lb). Confirmed against `FUN_00405680` this pass, not re-derived.
+- **Armour: $4 and 4 lb per unit, per-zone cap 60 units** (13 dropdown rows labelled `r × 5`).
+  This closes `vehicle.md`'s standing "executable-resident, undecoded" note and independently
+  confirms `CAP-19`'s observed 60.
+- **Sell price is the full build cost, no depreciation** (`0x0040a1e6` prompt, `0x0040a052`
+  credit, both `FUN_00405680` through an identity `FILD`/`ftol`). Special planes (class dword 2)
+  cannot be sold; two planes must always remain.
+- **Starting funds are $0.** `FUN_004113b0` zeroes `nPlayerCash` (`0x0064b788`). The campaign
+  starts with two aircraft instead: prebuilt templates 11 and 12, both Devastators, named
+  `langui` 511 "Gypsy Magic" and 512 "The Knave". The $250,000 in the image belongs to the
+  `fAllowAll` unlock mode, not to the campaign.
+- **Ammunition and rockets are free** (disproof). `ORDINANCELAYOUT.SCRIPT` invokes no cost
+  callback and no writer of `nPlayerCash` sits on its path.
+- **Income, which A5 did not ask for and B13 needs**: a ten-record reward table at `0x0061ae80`
+  pays cash and awards five named aircraft on specific mission/objective pairs, once per profile.
+  Total campaign cash income is **$140,900**.
+
+**Named gaps.** (1) The reward table's fifth field, a pointer per record into `0x00646384`, is
+read by no code; left uninterpreted. (2) The airframe blurbs' `ARMOR: Standard (N/T/W)` triples
+still map to nothing, and the decoded flat 60-unit cap rules out the last reading that fit them.
+(3) The reward table's mission ids (1, 2, 5, 6, 7, 12, 13, 17, 19, 24) are in the `nMission`
+numbering, which A3 must reconcile with the chapter folders and the save's `Persist.NNN` ids.
 
 **Approach.** Ghidra trace from the purchase-prompt string references (700–799) back to the
 constants; cross-check any recovered price against the A8 plane-construction capture, which shows
@@ -390,7 +427,8 @@ real prices on screen. Extend `docs/formats/vehicle.md` rather than opening a ne
 
 **Model recommendation.** high — exe tracing; the cross-check against the capture keeps it honest.
 
-**Verify.** Every price shown in the capture matches the decoded constant.
+**Verify.** Every price shown in the capture matches the decoded constant. **Not yet done:
+`CAP-40` is filed but unfilmed.**
 
 **⚠ Traps.** ⚠ Do not tune prices to "feel right" if the trace stalls; a missing constant stays a
 named gap, per the invented-content ground rule.
@@ -542,9 +580,16 @@ the def names.>
 funds and by the campaign availability threshold; selling credits the wallet at the decoded sell
 price; the Instant Action hangar path stays wallet-free.
 
-**Evidence (confidence: traced for the seam, lead-only for the numbers).** `PLAN-hangar.md`
-decision 2 deferred economy to campaign; its decision 9 shipped the 11-airframe
-progress-threshold field unwired. Prices come from A5.
+**Evidence (confidence: traced, seam and numbers both).** `PLAN-hangar.md` decision 2 deferred
+economy to campaign; its decision 9 shipped the 11-airframe progress-threshold field unwired.
+A5 landed the numbers: `docs/org/hangar.md`, "The economy" and "The campaign wallet". Four of
+them change this item's shape. The wallet starts at **$0** with two owned Devastators, so the
+first purchase cannot happen before mission 1 pays out. Selling refunds the **full** build cost,
+so there is no depreciation rule to write, and a sell/rebuy loop is free by design. Ammunition
+and rockets cost nothing, so C25 never touches the wallet. Income is a decoded table, not a
+formula: ten mission/objective pairs paying $140,900 in total, plus five named unsellable
+aircraft, each granted once per profile, which B12's progression record must track alongside the
+tree position.
 
 **Approach.** Read `PLAN-hangar.md` (completed, in `docs/plans/`) and the `HangarFlow.cs`
 architecture entry; add the wallet gate at the existing `Purchase` page seam, parameterized by an

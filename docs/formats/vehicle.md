@@ -307,8 +307,18 @@ ragged for the same reason; and at the armory's observed 4 lbs/unit a **fully** 
 4 × 60 × 4 = **960 lbs** against a `veh_weight` of 1900 — a real trade-off, where the
 blurb-as-cap reading implied 1100 units and 4,400 lbs on a 1900 lb plane. That weight arithmetic was
 already one of the two arguments against blurb-as-cap; the measured 60 replaces it with a figure the
-weight model can carry. The armory's own constants — per-unit cost and weight, per-zone caps — are
-**executable-resident**; `ui_strings.json` ships only the printf templates.
+weight model can carry.
+
+**The armory's own constants are now decoded out of `crimson.exe`**, and they agree with `CAP-19`:
+armour is **$4 and 4 lb per unit**, and the **per-zone cap is 60 units**, uniform across the four
+zones and across all eleven airframes, because the cap is the armour dropdown's own row count
+(13 rows labelled `r × 5` units) and nothing per-airframe gates it. `ui_strings.json` ships only
+the printf templates; the numbers, the airframe/engine/gun/hardpoint price tables, the sell rule
+and the campaign's starting funds live in the executable and are written up in
+[`../org/hangar.md`](../org/hangar.md), "The economy" and "The campaign wallet". Two consequences
+for this page: a fully armoured airframe is 240 units, $960 and 960 lb, and the per-zone triple in
+the airframe blurbs (`ui_strings.json` 40115 and friends) stays **unexplained**, since 60 is a flat
+cap and those triples are both larger and unequal across zones.
 
 ## Definition injury animations
 
