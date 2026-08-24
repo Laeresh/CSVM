@@ -29,9 +29,11 @@ patrol-net follower and the formation escort, behind [ai-rosters.md](ai-rosters.
 [textures.md](../org/textures.md) (the texture header layout and the additive-vs-mix blend rule
 behind [effects.md](effects.md)'s sprites),
 [loading-screen.md](../org/loading-screen.md) (how the mission load screen is named, filled and
-redrawn, behind the `Loading.zrd` dialogs in [zrdr.md](zrdr.md)) and
+redrawn, behind the `Loading.zrd` dialogs in [zrdr.md](zrdr.md)),
 [shakes.md](../org/shakes.md) (how the original consumes the shake laws — the per-shot/per-frame
-magnitudes and the consumer that rocks the plane, behind [shakes.md](shakes.md) here).
+magnitudes and the consumer that rocks the plane, behind [shakes.md](shakes.md) here) and
+[music.md](../org/music.md) (the music channel's routing, variant choice, battle timer and fades,
+behind [sounds.md](sounds.md)'s `MUSIC` groups).
 
 ## Reader map
 

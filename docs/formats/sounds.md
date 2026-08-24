@@ -8,6 +8,7 @@ volume and pitch curves, and the WAV container. The readers are `SoundDefs.cs`, 
 
 - [Sound sets](#sound-sets)
 - [Sound groups](#sound-groups)
+- [The music channel](#the-music-channel)
 - [Player curves](#player-curves)
 - [WAV format](#wav-format)
 ## Sound sets
@@ -61,8 +62,9 @@ Entry shapes (all start with the group name):
   They contribute no weighted member; the parser keeps them as `SoundGroup.Chains` for the
   comms/mission layer, and `WorldSounds.Prewarm` decodes their lines. No chain group mixes chains
   with weighted members, and each holds exactly one chain (2–13 lines). A group with neither
-  members nor chains is not registered. Music `*_sg` groups parse but no `SOUND` event names them
-  (music is triggered elsewhere).
+  members nor chains is not registered. Music `*_sg` groups parse but no `SOUND` event names them:
+  music is cued by name from the missions' `objectives.zrd` and from the menu scripts, not by an
+  animation event (see [The music channel](#the-music-channel)).
 - **Combat-voice variant groups**: 466 entries named `snd_<FAMILY>-A_id<N>_random`
   (`DYNAMIC_WEIGHTS 0.5` over one pilot's `-A/-B/-C` takes of one family), the data's own answer
   to how a take is picked; see [combat-voice.md](combat-voice.md).
@@ -71,6 +73,23 @@ A `SOUND` event's NAME is resolved against `SETS` first, then `SOUND_GROUPS`: `a
 picks one of `snd_exp_hit1/2/3/3a/5`, each of which is an ordinary `SETS` entry
 (`snd_exp_hit1` → `explosion_1.wav`). See [anim-definitions.md](anim-definitions.md) for the
 `SOUND` vs `SOUND_NODE` distinction (only the latter is ambient looping world audio).
+
+## The music channel
+
+`MUSIC` is a routing flag, not a label. A `SETS` definition carrying it, or one whose WAV name
+starts with `mu`, plays on a single streaming channel separate from the pooled positional voices;
+so does a `SOUND_GROUPS` group whose name starts with `mu`. The 33 `music_*.wav` tracks in
+`soundsh`/`soundsl` are reached through seven groups (`music_prebattle_sg`, `music_battle_sg`,
+`music_battlesuccess_sg`, `music_missionsuccess_sg` and the three `*obj_sg` stingers) plus the
+plain definitions `snd_music_splash`, `snd_instantaction` and `snd_spicyairtales`.
+
+The channel holds one track: a new cue hard-cuts the old one, a cue for the track already playing
+is ignored, and nothing crossfades. Which of the six numbered variants plays is the group's own
+weighted-random pick, not a chapter or an act; the two-take stingers alternate instead. Only
+`battle1-6` carry `LOOPED`, and the resolver forces prebattle to loop as well.
+
+The runtime behind all of that, including the battle timer, the fade rates and which tracks ship
+with no trigger at all, is [`org/music.md`](../org/music.md).
 
 ## Player curves
 

@@ -78,6 +78,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/EmptyStage.cs` — the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/SoundArchive.cs` — WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
+- `src/Mech3/MusicPlayer.cs` — the state-driven score: one 2D streaming channel for menu, cabin and mission, with the decoded battle hold.
 - `src/Mech3/SoundDefs.cs` — sounds.json parser: SETS `snd_*` → `SoundDef`; `LoadGroups` → the weighted-random `SOUND_GROUPS` + their dialogue chains.
 - `src/Mech3/CombatVoice.cs` — the combat-voice chain: roster `accentID` → `voice.zrd` pool → pilot VO id → clip defs / the shipped `_random` variant groups; the mission's voice prewarm set.
 - `src/Mech3/Anim/TemplateStage.cs` — the effect-template stage as one module: pool-slot arithmetic, root resolution and retirement.
@@ -1045,6 +1046,14 @@ Godot cannot load the game's WAV format (see `docs/formats/sounds.md`).
 ## src/Mech3/SoundArchive.cs
 WAV lookup over a soundsh/soundsl extraction (zip or dir), decoded through `WavFile` into cached
 `AudioStreamWav`s; `Find(name, looped)` marks the stream as a forward loop when asked.
+
+## src/Mech3/MusicPlayer.cs
+The state-driven score: one non-positional streaming channel beside `WorldSounds`' pooled 3D
+emitters, so the menu, the cabin and the mission director all drive the same track. `Enter(state)`
+cues the sound-group or definition name the original's data names for that state; `Cue(name)` is
+the raw form for a name the data supplies directly. One track at a time, hard cuts, no crossfade;
+`NoteCombat` + `Tick` run the 20-second battle hold and its fade. The selection rules, the fade
+rates and the tracks that ship with no trigger are `docs/org/music.md`.
 
 ## src/Mech3/SoundDefs.cs
 sounds.json SETS parser: `snd_*` name → `SoundDef` (wav name, flags, range, volume); the entry

@@ -17,6 +17,7 @@ using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
 using static CSVM.Testing.InstantActionSuites;
+using static CSVM.Testing.MusicSuites;
 using static CSVM.Testing.OrdnanceSuites;
 using static CSVM.Testing.PufferSuites;
 using static CSVM.Testing.TargetingSuites;
@@ -122,6 +123,7 @@ public static class SuiteCatalog
         "splitscreen-listeners",
         "world-lights-nearest-viewer",
         "campaign-persistence",
+        "music-states",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -612,6 +614,14 @@ public static class SuiteCatalog
             + "intact; the later world is built from the bootstrap, so the log is the only thing "
             + "that could have wrecked them",
             CampaignPersistence));
+        into.Add(new TestHarness.Suite("music-states",
+            "the state-driven score (D37): each game state cues the track family its data names, "
+            + "prebattle and battle loop while the stingers and the success tracks play once, "
+            + "re-entering the playing state never restarts it, the objective stingers alternate "
+            + "their two takes instead of drawing at random, and a combat ping cuts prebattle to "
+            + "battle at silence, ramps it to full in a quarter second, holds it 20 s and fades it "
+            + "out over four",
+            MusicStates));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

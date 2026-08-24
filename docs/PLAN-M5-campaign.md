@@ -74,9 +74,9 @@ missions cannot be individually verified inside one milestone (decision 6).
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A3 (landed: `docs/formats/campaign-sequence.md`), A4 (landed: `docs/formats/briefing.md`), A5 (landed: `docs/org/hangar.md` "The campaign wallet", on-screen cross-check done via `CAP-40`), A6 (landed: `docs/formats/campaign-screens.md`), A7 (landed: `docs/formats/anim-definitions/cutscenes.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field) | Confirm the trace, then implement. |
+| **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A3 (landed: `docs/formats/campaign-sequence.md`), A4 (landed: `docs/formats/briefing.md`), A5 (landed: `docs/org/hangar.md` "The campaign wallet", on-screen cross-check done via `CAP-40`), A6 (landed: `docs/formats/campaign-screens.md`), A7 (landed: `docs/formats/anim-definitions/cutscenes.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field), D37's selection logic (landed: `docs/org/music.md`, with two disproofs) | Confirm the trace, then implement. |
 | **Direction sound, magnitude or details a judgement call** | B11, B12, C21–C24, D31, D32, D33 | The shape is settled by the original's screens/data; layout metrics, timings and exact behaviours come from captures and decode, not invention. |
-| **Leads only — no mechanism yet** | D35 partials (BL-037/038 wiring points), D37 (music selection logic) | Budget for investigation; may end in a disproof. |
+| **Leads only — no mechanism yet** | D35 partials (BL-037/038 wiring points) | Budget for investigation; may end in a disproof. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.
@@ -140,8 +140,10 @@ Everything below was located on disk in this planning session (2026-08-24 survey
 - **Music** — `extracted\soundsh\music_*.wav` (33 tracks, matching low-quality set in `soundsl\`):
   `prebattle1–6`, `battle1–6`, `battlesuccess1–6`, `missionsuccess1–6`, `primaryobj1–2`,
   `secondaryobj1–2`, `tertiaryobj1–2` (objective-completion stingers), `splash`, `instantaction`,
-  `spicyairtales`. The data is fully extracted; the selection/transition logic (which of the six
-  numbered variants when, what triggers prebattle → battle) is undecoded.
+  `spicyairtales`. The data is fully extracted and the selection/transition logic is decoded in
+  D37 ([`docs/org/music.md`](org/music.md)): the numbered variant is the sound group's own weighted
+  random pick, the prebattle → battle transition is a 20-second battle timer pinged by a proximity
+  scan and by player damage, and `instantaction`/`spicyairtales` are cued by nothing at all.
 
 ## Ground rules
 
@@ -200,7 +202,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 34. ☐ Campaign wingmen: named rosters + netless station-keeping (`BL-362`, `BL-364`)
 35. ☐ Mid-mission world fidelity: `WAKE_ANIM` doors (`BL-350`), scripted-path vehicles (`BL-361`), `WorldPartitionSetActive` (`BL-037`), `FogState` (`BL-038`)
 36. ☐ AI targeting candidates beyond aircraft (`BL-363`)
-37. ☐ Music: playback subsystem + the state-driven track selection
+37. ☑ Music: playback subsystem + the state-driven track selection
 
 ### Wave E — end to end and sign-off
 
@@ -1129,7 +1131,7 @@ suites green.
 
 **⚠ Traps.** <TODO: take from BL-363's entry when re-verified.>
 
-## D37 ☐ Music: playback subsystem + the state-driven track selection
+## D37 ☑ Music: playback subsystem + the state-driven track selection
 
 **Goal.** A music player exists (streaming 2D playback, crossfade/stop, `audio.volume` respected)
 and plays the right track for the game state: `splash` on the main menu, the cabin/briefing music,
@@ -1137,29 +1139,128 @@ and plays the right track for the game state: `splash` on the main menu, the cab
 `tertiaryobj` stingers on objective completion, and `battlesuccess`/`missionsuccess` at mission
 end; Instant Action gets `instantaction`.
 
-**Evidence (confidence: traced for the data, lead-only for the logic).** The 33 `music_*` tracks
-are in `extracted\soundsh\` (low-quality twins in `soundsl\`); the state vocabulary is in the
-filenames. Undecoded: which of the six numbered variants plays when (per chapter/act? random?),
-the prebattle → battle trigger, where `spicyairtales` plays (cabin radio is the guess, not a
-fact, and A6 found no script support for it: the out-of-mission screens drive one shared sound
-object playing `music_splash`, per `docs/formats/campaign-screens.md`), and the loop/crossfade
-behaviour. No engine music subsystem exists. The cabin does play background music in the original
-(the at-the-controls answer that closed `CAP-44`); which track is still the trace's to settle.
+**Evidence (confidence: traced to an exact mechanism, with the data that proves it).** The decode
+landed as [`docs/org/music.md`](org/music.md), with a "The music channel" section on
+[`docs/formats/sounds.md`](formats/sounds.md) as its data-side landing. Every selection rule below
+has an address on that page.
 
-**Approach.** Decode the selection logic from `crimson.exe` (the track-name string references are
-the entry point) before wiring states; build the player as a session-level service beside
-`WorldSounds` (2D, not pooled 3D). Subsystem + menu/splash usage can land early; the in-mission
-state hooks ride D31's director events. If the trace stalls, land the player with the decoded
-subset and file the selection gaps as named backlog items rather than inventing a scheme.
+- **The music channel is a routing flag, not a subsystem the data asks for.** `FUN_00593590` sends
+  any `SETS` definition carrying `MUSIC` (or whose WAV name starts `mu`), and any `SOUND_GROUPS`
+  group whose name starts `mu`, to one streaming channel; everything else takes the positional
+  path. That is why no `SOUND` animation event ever names a `music_*_sg` group.
+- **Variant choice is the group's own weighted random with recency, not a chapter, act or
+  sequence.** `FUN_0059a440` draws the member, `FUN_0059ab60` carries the ordinal across and
+  `FUN_005954f0` maps it with `ordinal % 6`. Each family draws independently, so prebattle 3 and
+  battle 6 in one mission is normal and the six tracks are not a matched score set.
+- **The objective stingers are NOT random.** `FUN_005954f0` overrides the group's pick with a
+  per-family counter (`counter & 1`, incremented), so each two-take stinger family alternates
+  strictly from the first cue of a process.
+- **No crossfade, and no restart of the playing track.** `FUN_00595140` returns immediately when the
+  requested WAV is the one already streaming, and otherwise stops the old stream and starts the
+  new one. Track changes are hard cuts.
+- **Loop:** bit 0 of the definition's flag word (the data's `LOOPED`), with `FUN_005954f0` forcing
+  it on for `music_battle_sg` and `music_prebattle_sg`. Only `battle1-6` carry `LOOPED` in the
+  data, so prebattle loops by the override; everything else plays once into silence.
+- **Fades belong to three groups only,** the ones `player.zrd` binds. `FUN_0046cdf0`'s rates are
+  +4.0/s in (0.25 s), −0.25/s out (4 s) and −4.0/s fast out. The shipped `player.zrd` binds only
+  `in_battle_sound = music_battle_sg`; `pre_battle_sound` and `won_battle_sound` hold the
+  placeholder `your_sound_here`. **Battle music is the only track in the game that fades.**
+- **The prebattle → battle trigger is an engine detector, refining A1's note.** The binding is data,
+  the trigger is code: `FUN_0046c870` runs a battle timer off the objectives tick; `FUN_0046c850`
+  refreshes it to **20 s** and never downward; `FUN_0046c700` pings it from a 5-second proximity
+  scan when **more than 2** other vehicles sit within **1000 m** of the player (and only while
+  battle music is silent); `FUN_004b9bc0`'s player branch pings it on damage taken. The timer runs
+  down only while battle music actually plays, then fades out over 4 s into silence, not back to
+  prebattle.
+- **The cabin track is `music_splash.wav`,** which settles `CAP-44`. `GLOBALS.SCRIPT`'s one shared
+  sound object at loop count 5 is the whole out-of-mission score; no screen has a track of its own.
+- **Census.** All 24 campaign missions cue music; none of the 8 Instant Action or 21 multiplayer
+  missions do. `prebattle` 24 missions / 37 cues, `missionsuccess` 22/22, `primaryobj` 20/29,
+  `secondaryobj` 20/24, `battlesuccess` 16/19, `tertiaryobj` 1/2 (`C5/M03`). `music_battle_sg` is
+  cued by no mission at all.
 
-**Model recommendation.** medium for the subsystem; high for the exe trace of the selection logic.
+**Disproofs landed.** `music_instantaction.wav` and `music_spicyairtales.wav` have **no trigger
+anywhere**: neither definition is named by any mission, animation definition or ROF script, and the
+executable references their WAV names only in the resolver and the registration table. Instant
+Action ships silent, and "spicyairtales as the cabin radio" is dead. `music_airtales.wav` (an exe
+branch and handle slot) and `music_loop.wav` (`AUDIO.SCRIPT`'s options-page preview) ship in neither
+sound archive.
 
-**Verify.** Audio asserted from `.scratch/logs/` at `--volume=0` (never `--mute`): the expected
-track name plays on each scripted state transition (menu, mission start, objective complete,
-mission end); an A8-adjacent capture of the original confirms the cabin and briefing tracks.
+**Named gaps.** (1) What stops music on the return to the cabin is not traced; the success tracks
+are one-shots, so the channel falls silent on its own. (2) `FUN_0046c700`'s skip predicate is not
+identified, so "more than 2 vehicles within 1000 m" may be narrower (wrecks or friendlies may be
+excluded). (3) `snd_music`/`snd_music1..3` is a `MUSIC` group over three definitions that do not
+exist and is cued by nothing. (4) `SoundDefs.SoundGroup.Pick` implements the simple recency reading;
+the exe's decay persists and renormalizes to 100 across picks. That is a distribution difference,
+not a wrong-member difference, and changing the shared picker would move every existing
+weighted-sound suite, so it is recorded rather than applied.
 
-**⚠ Traps.** Variant choice (1–6) and crossfade timings are facts to decode or capture, not TUNE
-to invent. `--mute` is load-time blind (nothing counted or logged); use `--volume=0` for tests.
+**Implementation.** `CSVM/src/Mech3/MusicPlayer.cs` (new): a session-level `Node` holding one
+`AudioStreamPlayer` (2D, non-positional), beside `WorldSounds` rather than inside it. Track loading
+goes through the existing `SoundArchive` path via a `Loader` delegate, the same seam
+`WorldSounds.Loader` uses; `audio.volume` needs nothing here, since `Launcher` applies it on the
+master bus and this player is on it. API:
+
+| Member | What it does |
+|---|---|
+| `Enter(MusicState, Random)` | Cues the state's group/definition; returns the WAV now playing, or null when nothing changed |
+| `Cue(name, rng, loops, forceLoop)` | The raw form, for a name the data supplies directly |
+| `Stop()` | Cuts the channel silent |
+| `NoteCombat()` | The combat ping: refresh the battle hold to 20 s, never downward |
+| `ScanPings(nearbyVehicles)` | Static: whether the decoded proximity scan would ping |
+| `Tick(dt, rng)` | Battle hold, fade and the loop restart |
+| `Current` / `State` / `Looping` / `Gain` / `BattleHold` | Read-only state for assertions and the HUD |
+
+`MusicState` is `Silent, Menu, Prebattle, Battle, BattleSuccess, MissionSuccess,
+PrimaryObjective, SecondaryObjective, TertiaryObjective`, each mapping to the one name the
+original's data cues. The decoded constants are public: `BattleHoldSeconds` 20, `BattleScanSeconds`
+5, `BattleScanRadiusM` 1000, `BattleScanMinNearby` 3, `FadeInPerSecond` 4, `FadeOutPerSecond` 0.25,
+`MenuLoopCount` 5.
+
+**Wiring contract (not applied here: C21 owns `LaunchMenu.cs`, D31 owns `GameSession.cs`, and the
+campaign screens are Wave C's).** The orchestrator applies this after C21/D31 land.
+
+1. **Construction, once per process, in `Launcher`** beside the launch-screen build, so one channel
+   outlives every session and a mission launch does not restart the cabin track mid-fade:
+   `_music = new MusicPlayer(soundDefs, soundGroups) { Loader = (def, looped) =>
+   archive.Find(def.WavName, looped, warn: false) };` then `AddChild(_music);`. The defs and groups
+   are `SoundDefs.Load(zrdrPath)` / `LoadGroups(zrdrPath)` over the shared `zrdr` path. The
+   `SoundArchive` must be a process-lifetime one, not the build-scoped `SessionArchives.Sounds`
+   (`SoundsOutliveBuild = false`); open a second `SoundArchive` over `SessionPaths` sounds for this
+   player alone. Call `_music.Tick(delta, _rng)` from `Launcher._Process`.
+2. **Menu and cabin**, in `LaunchMenu.cs` where the board becomes visible, and again in the cabin
+   page's enter: `Music.Enter(MusicState.Menu, rng);`. It is safe to call on every screen entry,
+   because a cue for the playing track is a no-op, which is exactly how the original's
+   `mail(11004)` behaves. `mail(11003)`'s counterpart is `Music.Stop()`, called once where the
+   session leaves the boards for a mission launch.
+3. **Mission start**, in the campaign director's bootstrap after the objectives runtime exists:
+   nothing. Prebattle is cued by the mission's own `WAKEUP_SOUND_GROUP music_prebattle_sg`, so the
+   director's `WAKEUP_SOUND_GROUP` executor routes a name that `MusicPlayer` recognises to
+   `Music.Cue(name, rng)` instead of `WorldSounds.PlayOneShot`. The test is the group name starting
+   with `mu` or the resolved definition carrying `MUSIC`, matching `FUN_00593590`.
+4. **Battle**, in the director's per-frame tick: count other live vehicles within
+   `MusicPlayer.BattleScanRadiusM` of the player at most every `MusicPlayer.BattleScanSeconds`, and
+   only while `Music.State != MusicState.Battle`; call `Music.NoteCombat()` when
+   `MusicPlayer.ScanPings(count)`. Call `Music.NoteCombat()` again from the player-damage path.
+   `MusicPlayer.Tick` does the rest.
+5. **Objective completion and mission end**: rule 3 already covers them, since the stingers and both
+   success families are cued by `WAKEUP_SOUND_GROUP` from the mission data. Nothing hard-codes a
+   state at mission end.
+6. **Instant Action**: nothing. The decode says Instant Action ships silent.
+
+**Verify.** `music-states` (`CSVM/src/Testing/MusicSuites.cs`, registered last in `SuiteCatalog`)
+asserts the track name from `.scratch/logs/` at `--volume=0`: each of the eight states cues its
+family and carries the right loop flag, re-entering the playing state returns null, the primary
+stingers read `2,1,2,1` (alternating, not drawn), and a combat ping cuts prebattle to battle on the
+fade ramp, reaches full gain within a quarter second, holds through the 20 s and fades to silence
+over four. `dotnet build` clean (0 warnings), `dotnet test` 2029/2029, engine suite
+`music-states` PASS with engine errors clean, all 16 golden shots hash-identical.
+**Verified.** \<pending orchestrator run\>
+
+**⚠ Traps.** ⚠ Do not add a crossfade; the original hard-cuts, and the only ramp in the game is
+battle music's. ⚠ Do not give Instant Action or the cabin a track the data does not name: the
+cabin is the splash track, and `instantaction`/`spicyairtales` are cued by nothing. `--mute` is
+load-time blind (nothing counted or logged); use `--volume=0` for tests.
 
 # Wave E — end to end and sign-off
 
