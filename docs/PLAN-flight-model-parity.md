@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ A1 Finish the fitted-constant audit (`BL-414`)
 2. ☑ A2 Decode and port the target-velocity acceleration path (`BL-438`)
 3. ☐ A3 Settle part-throttle equilibrium (`BL-439`)
-4. ☐ A4 Resolve the live atmosphere band
+4. ☑ A4 Resolve the live atmosphere band
 
 ### Wave B — Port known control and AI mechanisms
 
@@ -229,7 +229,7 @@ unresolved while A2's target-velocity contributions are unknown.
 
 **⚠ Traps.** An asserted probe target is not evidence. Do not substitute a new footage estimate.
 
-## A4 ☐ Resolve the live atmosphere band
+## A4 ☑ Resolve the live atmosphere band
 
 **Goal.** Determine which atmosphere band the retail process selects in flight.
 
@@ -244,6 +244,25 @@ at sea level and airborne; document the observation before changing code.
 **Verify.** Repeat live reads at two altitudes, then reproduce the selected band's arithmetic in a test.
 
 **⚠ Traps.** Another static xref sweep cannot settle this. Prove binary and address (`METHOD-6`).
+
+**Landed.** A live retail process holds **6561.6796875** at `0x0071bb3c`, which is 2000 m in
+feet, so the dense band covers the whole envelope below 2000 m and the thin band is that ceiling's
+regime. The slot is a BSS variable, not a shipped `0.0`, and its writer is `FUN_00463640` storing
+through a base register at `0x46368b`, which is why an address xref sweep found nothing. The
+airborne half is observed at the controls: a passive 10 Hz `ReadProcessMemory` sample through
+menu, mission load and flight (3655 vehicle samples, 854 to 6936 ft) reads the threshold constant
+throughout, the dense outputs (`a` 1109.54 ft/s, `rho` 2.2688e-3, `k` 0.98842) on every sample at
+or below the line and the thin outputs (968.02, 1.356e-4, 0.7348) on every sample above it, with
+130 clean transitions as the aircraft crossed the boundary in both directions; the nine
+stragglers sit within 1.3 ft of the threshold, which is the skew between the altitude and
+atmosphere reads. Band selection is `alt <= 2000 m` selects dense, live, both ways. The band
+step function, its 2000 m boundary and the discriminating stall case are asserted in
+`CSVM.Tests/AtmosphereBandTests.cs`. CSVM's dense-band constants match the flyable envelope;
+no code change. The 2003 m `AltitudeCapM` reading of the same ceiling is a recorded lead, not
+acted on here.
+
+**Verified.** Full `RunTests.ps1` battery on the merged lane tree: build clean, 2008/2008 units,
+93/93 engine suites with engine errors clean, 16/16 goldens hash-identical, exit 0.
 
 # Wave B — Port known control and AI mechanisms
 

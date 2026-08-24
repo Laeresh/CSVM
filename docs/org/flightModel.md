@@ -251,15 +251,22 @@ q     = 0.5 · ρ · V_ft/s²          (dynamic pressure, lb/ft²)
 Mach  = V_m/s / (a_ft/s · 0.3048)
 ```
 
-**The dense band is the operative one, for every aircraft, and it rests on the arithmetic rather
-than on the bytes.** The comparison is `alt_ft ≤ threshold → dense` (`0x41aca4`–`0x41acc4`) against
-the threshold at `0x0071bb3c`, whose shipped value is `0.0`, so a literal byte reading hands the
-thin band to anything above sea level. The arithmetic rejects that reading and always has: the
-dense band produces a correct ~76 mph stall from the code's own fallback aircraft where the thin
-band gives a nonsensical 309 mph, and the level-equilibrium solve reproduces nine of eleven
-airframes' authored `fd_speed` under the dense band while the thin band misses by ~4× (see "Drag"
-and the thrust curve's note at `0x71bb3c`). Do not "fix" the band on the strength of the unwritten
-threshold.
+**The dense band is the operative one for the whole flyable envelope, and the live process says so
+directly.** The comparison is `alt_ft ≤ threshold → dense` (`0x41aca4`–`0x41acc4`) against the
+threshold at `0x0071bb3c`, and a running retail process holds **6561.6796875** there, which is
+2000 m converted at 3.28084 ft/m. Every altitude below 2000 m takes the dense band, so the thin
+band is the regime above that ceiling rather than the regime above sea level. The arithmetic
+agrees and always has: the dense band produces a correct ~76 mph stall from the code's own
+fallback aircraft where the thin band gives a nonsensical several-hundred-mph figure, and the
+level-equilibrium solve reproduces nine of eleven airframes' authored `fd_speed` under the dense
+band while the thin band misses by ~4× (see "Drag" and the thrust curve's note at `0x71bb3c`).
+The selection is also observed airborne: a passive 10 Hz sample through menu, mission load and
+flight (3655 vehicle samples, 854–6936 ft) reads the threshold constant throughout, the dense
+outputs on every sample at or below the line, the thin outputs (968.0 ft/s, 1.356e-4, 0.7348) on
+every sample above it, and 130 clean transitions crossing the boundary in both directions; the
+few stragglers sit within 1.3 ft of the threshold, the skew between the altitude and atmosphere
+reads. `CSVM.Tests/AtmosphereBandTests.cs` reproduces the step function, its 2000 m boundary and
+the discriminating stall case.
 
 **A1 (2026-08-15): there is no player-versus-AI density divergence, and the earlier claim that the
 player path pins the dense band was a debug-copy citation.** This paragraph replaces a ⚠ that read
@@ -287,24 +294,27 @@ player path pins the dense band was a debug-copy citation.** This paragraph repl
   higher (`FUN_004969b0`, `0x496b75`), and `FUN_004704b0` pushes the object to terrain + 1 m when it
   is below the terrain.
 
-**The write-xref sweep on the band threshold `DAT_0071bb3c`, stated in full so the search is
-visible.** Cross-references to `0x0071bb3c`: **one**, the read at `0x41aca4` (`FCOMP`). Writes:
-**none, the empty case.** A byte search for the little-endian address `3c bb 71 00` across the
-whole image returns exactly one hit, `0x41aca6`, the displacement inside that same instruction, so
-no pointer table and no parser store can name it, and the search demonstrably
-covers `.data` (the same search for `dynamics` finds the parser token at `0x627f88`). Its
-neighbours are ordinary separate globals reached by absolute address, not a struct some base
-pointer could walk into: `0x71bb40` is written directly at `0x47f3e2`, and `0x71bb44`–`0x71bb60`
-are read by `FUN_0047f1f0` with no writer at all. `0x0071bb3c` is therefore `0.0f` for the whole life of the process, and this question
-cannot be reopened by a further static pass, only by reading the live process.
+**Why an address xref sweep cannot see the threshold's writer.** Cross-references to `0x0071bb3c`
+are **one**, the read at `0x41aca4` (`FCOMP`), and a byte search for the little-endian address
+`3c bb 71 00` across the whole image returns exactly one hit, `0x41aca6`, the displacement inside
+that same instruction. The slot is written through a base register instead: `FUN_00463640` is a
+`__thiscall` reset on the global object at `0x0071bb30` and stores the threshold at `0x46368b` as
+`MOV dword ptr [EDI + 0xc], 0x45cd0d70`, the float bits of 6561.6796875. The same routine resets
+`[obj]`, `[obj+4]`, `[obj+8]` and `[obj+9]`, and the live bytes at `0x71bb30` match that layout.
+The address never appears as an operand, so no sweep keyed on the address can find the store.
 
-⚠ **The literal reading and the arithmetic still disagree, and that conflict is now a
-shared-path question, not an AI one.** Taken at face value the live path gives every airborne
-aircraft the thin band, which no airframe could fly (the authored `ref_area`/`veh_weight` pairs sit
-at ~10 lb/ft² wing loading, tuned for the dense band; under the thin band the aerodynamic ceiling
-`(0.75 − 0.15·M)·q·RefArea` cannot deliver 1 G at any speed those airframes reach). The remake runs
-the dense band for both, which is what the arithmetic supports; what would settle the residue is a
-live read of `0x0071bb3c` and of `[obj+0x208]` in a running process, not another static sweep.
+The slot is also not a shipped initialiser. RVA `0x31bb3c` falls past the raw data of `.data`
+(virtual size `0x4051d4`, raw size `0x02a000`), so it is zero-filled at load and a listing that
+reports `0.0` is reporting the zero fill of a BSS variable. The band question is settled by
+reading the live process, which is what the value above records; a static pass over the image
+cannot settle it in either direction.
+
+### ⚠ The literal reading puts every airborne aircraft on the thin band — RETIRED (2026-08-24)
+
+This read the uninitialised `.data` slot at `0x0071bb3c` as a shipped `0.0` and recorded an open
+conflict between that reading and the stall/equilibrium arithmetic. A live read of the retail
+process disproves the premise: the slot holds 6561.6796875 ft, so the dense band covers everything
+below 2000 m and there is no conflict left to record.
 
 ## Lift — the wings deliver the demanded G
 
@@ -1373,15 +1383,13 @@ atm->a   = (k + 1.0) · 558.0        ; 1109.54 ft/s dense, 968.02 thin
 atm->rho = r · 0.002377             ; 2.2688e-3 dense, 1.35603e-4 thin
 ```
 
-⚠ **This does not reopen the band question.** `0x71bb3c` sits in `.data` with a single read
-reference (the `fcomp` itself) and no writer anywhere in the image — swept exhaustively under A1,
-see the Atmosphere section — so a byte-level reading says "threshold 0, thin band always". The
-**dense band is established by
-arithmetic, not by that flag** (the thin band puts the fallback airframe's stall at 309 mph), and
-it is corroborated here: with the dense band's `k`, the decoded thrust curve and the decoded drag
-polar put the Bloodhawk's full-throttle level equilibrium at **300.5 mph** against its authored
-`fd_speed` of 302.0 and its measured 300.4, with no fitted constant anywhere. The thin band would
-miss by a factor of ~4. Do not "fix" the band on the strength of the unwritten flag.
+The band this resolves to is the dense one everywhere below 2000 m: `0x71bb3c` is a BSS slot whose
+live value is 6561.6796875 ft, written through a base register by the reset routine
+`FUN_00463640`, so a listing that shows `0.0` is showing the zero fill and not a threshold. See
+the Atmosphere section. The arithmetic corroborates it here: with the dense band's `k`, the
+decoded thrust curve and the decoded drag polar put the Bloodhawk's full-throttle level
+equilibrium at **300.5 mph** against its authored `fd_speed` of 302.0 and its measured 300.4, with
+no fitted constant anywhere. The thin band would miss by a factor of ~4.
 
 **This also settles the `fd_speed` caveat below, in `fd_speed`'s favour** for the Bloodhawk: with
 `ThrustFactor = EnginePower` and thrust scaled by `RefArea`, the level equilibrium lands on
@@ -2572,12 +2580,12 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
 - **Read directly from the executable, 2026-08-15:** that the atmosphere call is on the
   shared live path with no player/AI branch and no altitude zeroing, that the altitude-zeroing site
   belongs to the debug copy behind a dialog flag, that the band threshold `0x71bb3c` has one read
-  reference and no writer in the whole image, that the throttle lever and its slew are unbranched,
+  reference and no writer named by address, that the throttle lever and its slew are unbranched,
   and the far-field cruise model behind `fd_speed · throttle`.
-- **Recorded conflict, not an open decode question:** the band threshold reads `0.0`, which would
-  put every airborne aircraft on the thin band, against an authored data set and a stall/equilibrium
-  arithmetic that only work on the dense band. Shared by player and AI; settleable only in a live
-  process.
+- **Read out of a live retail process:** the band threshold at `0x71bb3c` holds 6561.6796875 ft
+  (2000 m), not the `0.0` a listing of the uninitialised slot shows, so the dense band covers
+  every altitude below 2000 m for player and AI alike. The former conflict between the byte
+  reading and the stall/equilibrium arithmetic is closed.
 - **Recorded conflict, not an open decode question:** the absolute force scale below cruise —
   `CAP-05`'s zero-thrust points read the polar ≈2–3.6× too strong (a constant-ΔC_D deficit), the
   weight chain is byte-verified conversion-free, and the footage's own accel row rejects any
