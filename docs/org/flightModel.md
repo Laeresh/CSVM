@@ -1058,6 +1058,52 @@ the token-present branch with no else, unlike `stall_mag`'s. `PlaneStats`' 5.0 a
 are therefore not the executable's defaults for these two, and an airframe that authored neither
 would fly on whatever the record was initialised to; in practice every airframe authors both.
 
+## Engine torque — every write to the angular accumulator, and none is one-sided
+
+GDD §4.1.8 specifies a selective engine torque: nothing in level flight, nothing against the
+torque direction, a faster turn with it. **The shipped executable carries no such term.** The proof
+is the complete list of writes to the angular accumulator, the third argument of `FUN_0048c470`
+(`[EBP+0x10]`, the vector `FUN_0048e580` adds to the persistent rate `obj+0x160`), with the inputs
+of each. A one-sided term needs a sign that does not come from the aircraft's state: a constant
+vector, a constant-signed scalar on a body axis, or a throttle factor. No write has one.
+
+| Address | Term | Inputs | Fixed sign or throttle? |
+|---|---|---|---|
+| `0x48c4a6`–`0x48c4b7` | initialisation | the zero vector at `0x75d1b8` | no (zero) |
+| `0x48c593`–`0x48c603` | far-field arm | writes the LINEAR output `[EBP+0xc]` only; the accumulator is untouched | no |
+| `0x48cae2` | roll stick | `roll_torque [+0x644] · stick [+0x114] · rollAuthority · dt`, along `m[2]` (`+0x198`, −nose) | no (odd in the stick) |
+| `0x48cb98` | pitch stick | `pitch_torque [+0x648] · stick [+0x11c] · pitchAuthority · dt`, along `m[0]` (`+0x180`), times the limiter scalar only when the command's sign bit differs from the closing axis' pitch component (`0x48cb52`) | no (odd in the stick; the limiter keys on state, not on a side) |
+| `0x48cc4e` | yaw stick | `rudder_torque [+0x64c] · stick [+0x120] · yawAuthority · dt`, along `m[1]` (`+0x18c`), same limiter test at `0x48cc08` | no |
+| `0x48ccb3` | bank coupling, yaw axis | `0.205 [0x6289f8] · m[0].y [+0x184] · dt`, along `m[1]` | no (odd in bank: a left bank yaws left, a right bank yaws right) |
+| `0x48cd36` | bank coupling, pitch axis | `(0.165 [0x6289fc] · |m[0].y| − (m[1].y < 0 ? 0.205 · m[1].y : 0)) · dt`, along `m[0]` | no (even in bank: the same nose-up pull either side) |
+| `0x48ce3d` | weathervane (player, not crashed, speed > 0) | `return_rate [+0x654] · dt` times the rotation vector from the nose onto `v̂` (`FUN_0053fd40`/`FUN_0053fca0`) | no (the axis is `nose × v̂`, which mirrors with the state) |
+| `0x48cf76` | `level_off_rate` auto-level (byte `+0x12c` set, roll and pitch sticks both zero) | `level_off_rate [+0x650] · dt` times the rotation vector from `m[1]` onto world up (`0x6379c0`), times the limiter scalar when it opposes the closing axis | no, and the key is never authored, so the term is zero |
+| `FUN_0048c220` at `0x48cf95` (every aircraft but a crashed player) | ground blow | the probe's `A · S` (surface normal × backward axis, `FUN_0048bf60`) scaled by `groundblow_mag` and the command's own projection (player) or by `ai_groundblow · groundblow_mag` (AI), plus the 0.15 factor above `0x71c470` | no (the axis comes from the struck surface) |
+| `0x48d158` | stall nose-drop (player, not crashed, past the stall speed) | `stall_mag [0x71c41c] · stallFlag · dt` times the rotation vector from `m[2]` onto world down, with the projection that removes an opposing accumulated component | no (the axis is `nose × down`) |
+
+The accumulator's downstream is as blind. `FUN_0048e580` adds it to `obj+0x160` (`0x48e6ef`),
+damps the sum exponentially by `ang_momentum_damp` (`FUN_004606d0`), and scales each body
+component by the reciprocal inertia; the only other writers of `obj+0x160` in the program are the
+collision deposit in `FUN_0048d7f0` (`0x48e4d3`–`0x48e4d9`, decoded under "Collision response"),
+the two reset loops `FUN_00491c60` and `FUN_00491d90` that zero it, and the dead debug integrator
+family (`FUN_00491820`, `FUN_00492040`). The throttle `[obj+0x128]` is read exactly once in
+`FUN_0048c470`, at `0x48c5a0` for the far-field cruise speed, which is a linear target and not a
+torque; the near-field force build reaches the lever only through the thrust curve at `0x48fce7`.
+No engine record, prop direction or handedness constant enters any row of the table.
+
+Two consequences follow. Every term above is a product of state-derived vectors, so the whole
+rotational plant is mirror-symmetric under a left/right reflection of the state and the stick: a
+roll or a rudder turn has the same rate in both directions at matched speed, and a centred stick
+in level flight produces no rotation at any throttle. And the far-field plant inherits the same
+property, since it keeps only the stick rows at authority 1 and the ground blow. The remake carries
+the same symmetry and pins it in `CSVM.Tests/EngineTorqueAbsenceTests.cs`: matched full-stick rolls
+and rudder turns in both directions at three throttles, a throttle sweep with a centred stick, and a
+comparison of idle against full throttle with speed and flight path held (thrust otherwise moves
+`v̂`, which the weathervane and the limiter read), with a METHOD-9 control that a 0.28 % one-sided
+assist fails the roll pin. The design document's engine torque is unshipped intent, closed per the
+parity plan's Decision 4, and any directional rate difference read off footage is a frame
+measurement (`docs/verification.md` DET-11, DET-12) against a decoded, symmetric path.
+
 ## Bank coupling — resolved, including the inverted case
 
 `FUN_00490f70` adds two more contributions to the same angular accumulator the stick commands

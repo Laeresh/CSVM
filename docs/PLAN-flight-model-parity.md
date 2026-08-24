@@ -117,7 +117,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Settle designed but unproven features
 
-31. ☐ D31 Settle one-sided engine torque (`BL-309`)
+31. ❌ D31 Settle one-sided engine torque (`BL-309`)
 32. ☐ D32 Settle roll-to-pitch coupling (`BL-310`)
 33. ❌ D33 Settle ambient turbulence (`BL-311`)
 34. ☐ D34 Reproduce nitro boost (`BL-089`)
@@ -590,19 +590,54 @@ separate flight; its breakup-scatter remainder stays in the backlog.
 
 # Wave D — Settle designed but unproven features
 
-## D31 ☐ Settle one-sided engine torque (`BL-309`)
+## D31 ❌ Settle one-sided engine torque (`BL-309`)
 
 **Goal.** Prove whether the shipped game assists turns in one engine-torque direction and port it only if present.
 
 **Evidence (confidence: lead-only).** The GDD specifies assistance; current code has none and existing footage is non-discriminating.
 
-**Approach.** <TODO: re-verify still-open against `git log --grep=BL-309` and code.> Trace `FUN_0048c470` for a throttle/direction term; obtain matched-direction captures only if the trace remains ambiguous.
+**Approach.** Trace `FUN_0048c470` for a throttle/direction term; obtain matched-direction captures only if the trace remains ambiguous.
 
 **Model recommendation.** **max** — absence proof across a decoded accumulator is demanding.
 
 **Verify.** Matched-speed rolls and rudder turns both directions; a port must assist one side and never penalize the other.
 
 **⚠ Traps.** Single-direction video rates may already contain the effect and cannot size it.
+
+**Landed.** DISPROVEN: the shipped executable carries no engine torque, and `BL-309` closes as
+unshipped design intent per Decision 4. The re-verify found the item still open (`git log
+--grep=BL-309` returns only its minting and a renumber). The proof is a complete enumeration of the
+writes to the angular accumulator, the third argument of `FUN_0048c470` (`[EBP+0x10]`, which
+`FUN_0048e580` adds to `obj+0x160` at `0x48e6ef`), now the dossier's "Engine torque" table: the
+zero-vector initialisation (`0x48c4a6`), the three stick torques (`0x48cae2`/`0x48cb98`/`0x48cc4e`,
+each odd in its stick and along a body axis), the two bank-coupling rows (`0x48ccb3` odd in bank on
+the yaw axis, `0x48cd36` even in bank on the pitch axis), the player-only weathervane (`0x48ce3d`,
+axis `nose × v̂`), the never-authored `level_off_rate` arm (`0x48cf76`, axis `m[1] × up`), the
+ground blow (`FUN_0048c220` at `0x48cf95`, axis from the struck surface, on both the player and the
+AI law) and the player-only stall nose-drop (`0x48d158`, axis `nose × down`). Every term is a
+product of state-derived vectors; none carries a constant vector, a constant-signed scalar on a
+body axis, or the throttle. The far-field arm (`0x48c593`–`0x48c603`) writes only the linear
+output, so the AI plant inherits the same set minus what `B12` records it skipping. Downstream is
+as blind: the integrator damps by `ang_momentum_damp` and scales by the reciprocal inertias, and
+the only other writers of `obj+0x160` in the program are the decoded collision deposit
+(`0x48e4d3`), two reset loops (`FUN_00491c60`, `FUN_00491d90`) and the dead debug integrator
+family. The throttle `[obj+0x128]` is read once in `FUN_0048c470`, at `0x48c5a0` for the far-field
+cruise target, which agrees with `A3`'s census from the force side. No engine record, propeller
+direction or handedness constant enters any row, so nothing remains to classify. No code changed;
+the remake's rotational plant already has the decoded symmetry, and
+`CSVM.Tests/EngineTorqueAbsenceTests.cs` pins it so the GDD term is never re-chased: matched
+full-stick rolls and rudder turns in both directions at three throttles on the Bloodhawk's real
+inertias and bank coupling, a centred-stick throttle sweep that stays still, an idle against
+full-throttle comparison with speed and flight path held (the free-path form differs by 2 mrad/s
+in pitch and yaw through the weathervane reading a thrust-moved `v̂`, a translational coupling and
+not a torque), and a `METHOD-9` control showing a 0.28 % one-sided assist
+(a hundredth of the footage pair's disputed 28 %) fails the roll pin. No capture was requested:
+the trace is unambiguous, and per `DET-11`/`DET-12` a directional rate read off footage could
+not outrank it anyway. Dossier and `docs/architecture.md`'s `FlightModel.cs` entry updated;
+`BL-309` deleted from `backlog.md`.
+
+**Verified.** Full `RunTests.ps1` battery on the merged lane tree: build clean, 2093/2093 units,
+94/94 engine suites with engine errors clean, 16/16 goldens hash-identical, exit 0.
 
 ## D32 ☐ Settle roll-to-pitch coupling (`BL-310`)
 

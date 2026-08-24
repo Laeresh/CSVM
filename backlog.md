@@ -923,25 +923,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
 
-- `BL-309` `[Feature]` **Engine torque is a designed, one-sided turn assist — unmodelled.** GDD §4.1.8
-  ("Engine Torque", Motion Model/Flight Dynamics → Simulated Elements; restated, no prose): torque
-  is simulated selectively so the player never fights it — no effect in straight-and-level flight,
-  no effect turning *against* the torque direction, but turning *with* it is **faster**. The
-  behaviour to look for is a directional asymmetry in roll/turn rate that only ever assists.
-  Nothing in `CSVM/src` models it, and no shipped key is known to carry it — the `dynamics` block's
-  `pitch_torque`/`roll_torque`/`rudder_torque` are control torques, not this. ⚠ **Do not go to the
-  footage for it.** `CAP-02 Run 5`'s banked 45° right peaked at 123.8 °/s against left's 96.0, but
-  that pair was flown for heading calibration, the right take decodes badly outside heading, and
-  the sustained rates point the other way — a difference that size is exactly what a frame-derived
-  rate invents (`docs/verification.md` DET-11, DET-12). Settle it in the torque accumulator
-  (`FUN_0048c470`) instead: either a one-sided term is there or the design document's intent never
-  shipped. ⚠ The suite asserts
-  direction-blind rates measured from single-direction captures (yaw 360° to 4%, roll time to 3%) —
-  if the original's assist is real, those measured rates may already *contain* it for whichever
-  direction was flown. Establish the flown directions before touching any constant.
-  *Needs:* an original A/B — a full roll and a full rudder 360° in **both** directions at matched
-  speed (a `CAP` when scheduled).
-
 - `BL-310` `[Feature]` **Pitch-down on aileron roll is designed — unmodelled, and a decode question.**
   GDD §4.1.5: a roll carries a "small but noticeable" nose-over effect. We model
   no roll→pitch coupling. Before inventing a constant, ask the binary: does the live torque path

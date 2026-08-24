@@ -2621,7 +2621,10 @@ whole: the placement (0.03 m off the surface for a human, the sweep's stop exact
 the human-only normal impulse on velocity and body rates, with NO tangential, friction or
 vertical-speed term, so a scrape bleeds speed only through repeated impulses; contact lifecycle
 and the remaining invented laws (`C22`) stay in `AircraftContactResolver`/`FlightController`.
-The choker's extend-only timer zeroes thrust alone. Full decode, standing conflicts and deliberately
+The choker's extend-only timer zeroes thrust alone. There is no engine torque: every write to the
+original's angular accumulator is a product of state-derived vectors and none reads the throttle,
+so the rotational plant is mirror-symmetric and `EngineTorqueAbsenceTests` pins it that way; do not
+re-chase the GDD's one-sided turn assist. Full decode, standing conflicts and deliberately
 absent terms: [`org/flightModel.md`](org/flightModel.md); measurement rules: `verification.md`.
 
 ## src/Flight/PropAnimator.cs
