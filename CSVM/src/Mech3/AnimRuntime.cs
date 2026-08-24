@@ -51,6 +51,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         "StopSequence", "CallAnimation", "StopAnimation", "InvalidateAnimation", "ResetAnimation",
         "PufferState",
         "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild", "Callback",
+        "FogState",
     };
 
     /// <summary>Kinds with a handler that covers only part of what the event does — reported
@@ -168,6 +169,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// to the two vehicle-death seams below and to the census, which is what every runtime with no
     /// host wired reports. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
     public Func<int, string?, bool>? CallbackHost;
+
+    /// <summary>Where a <c>FOG_STATE</c> event's inline fog goes: the session's weather rig, which
+    /// owns the fog globals. Null counts the event. ⚠ Raised under a RESET_STATE as well as in a
+    /// sequence: the original's handler (dispatch slot 28) writes the fog record from either
+    /// walker, and the one shipped use sits in a reset block (docs/formats/anim-definitions.md).</summary>
+    public Action<FogStateChange>? FogStateSink;
 
     /// <summary>The world velocity a <c>Callback 16</c> hands the running instance, which is how a
     /// wreck inherits the aircraft's motion (docs/org/vehicleDamage.md). Supplied by the rig,
@@ -820,8 +827,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary><see cref="Play"/>, scoped to one world subtree: starts only the instances
     /// whose anchor sits at or under <paramref name="scope"/>. C1 carries three
     /// <c>hangerdoors</c> nodes — the zeppelin's and two ground hangars' — so a generator's
-    /// door call must not swing every namesake in the chapter (the F20 case; ground hangar
-    /// doors are mission-animation territory, BL-350).</summary>
+    /// door call must not swing every namesake in the chapter (the F20 case; a ground hangar's
+    /// doors are the mission script's, through <c>WAKE_ANIM</c> and <see cref="Play"/>).</summary>
     public List<(AnimDefinition Def, Node3D? Anchor)> PlayWithin(Node3D scope, string animName,
         bool applyReset = true)
     {
@@ -2204,6 +2211,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     return true;
                 }
 
+            case "FogState":
+                // Not gated on `instant`: the original writes the fog record from a reset walk too.
+                if (FogStateSink != null)
+                {
+                    FogStateSink(FogStateChange.From(ev.Data));
+                    _opsApplied++;
+                }
+                else
+                    Count("FogState(no sink)");
+                return true;
+
             case "Callback":
                 // A callback is a thing that happens, not a pose, so a RESET_STATE raises none.
                 // The two codes acted on are authored in sequences alone, never in a reset block.
@@ -3017,5 +3035,29 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         public bool Equals(Node3D? x, Node3D? y) => (x?.GetInstanceId() ?? 0) == (y?.GetInstanceId() ?? 0);
 
         public int GetHashCode(Node3D obj) => obj.GetInstanceId().GetHashCode();
+    }
+}
+
+public sealed partial class AnimRuntime
+{
+    /// <summary>One <c>FOG_STATE</c> event as authored: an inline fog, not a zone pick. Each field
+    /// is present only when the event carries it, mirroring the compiled flag bits the original's
+    /// handler tests before each write; an absent field leaves that global as it was. The colour
+    /// is in the zone table's own space (sRGB), the ranges in metres.</summary>
+    public readonly record struct FogStateChange(string Name, Color? Color, Vector2? Altitude, Vector2? Range)
+    {
+        /// <summary>Reads the compiled event's payload (<c>name</c>, <c>color</c>, <c>altitude</c>
+        /// min/max, <c>range</c> min/max; <c>type_</c> is the D3D fog mode and ships null).</summary>
+        public static FogStateChange From(AnimData d)
+        {
+            Color? color = d.Obj("color") is { } c
+                ? new Color(c.Num("r") ?? 0f, c.Num("g") ?? 0f, c.Num("b") ?? 0f)
+                : null;
+            return new FogStateChange(d.Str("name") ?? string.Empty, color,
+                MinMax(d.Obj("altitude")), MinMax(d.Obj("range")));
+        }
+
+        private static Vector2? MinMax(AnimData? pair) =>
+            pair is { } p ? new Vector2(p.Num("min") ?? 0f, p.Num("max") ?? 0f) : null;
     }
 }

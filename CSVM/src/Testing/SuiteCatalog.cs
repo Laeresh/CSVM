@@ -138,6 +138,8 @@ public static class SuiteCatalog
         "campaign-objectives-hud",
         "campaign-cutscene",
         "cutscene-letterbox",
+        "hangar-door-wake",
+        "fog-state",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -706,6 +708,21 @@ public static class SuiteCatalog
             + "reveal, and the AT_NODE re-assert copies the cutscene camera's whole frame onto it "
             + "every tick",
             CutsceneLetterbox));
+        into.Add(new TestHarness.Suite("hangar-door-wake",
+            "hangar doors over C1/M04's real world (BL-350): OBJECTIVE1's WAKE_ANIM reaches "
+            + "'hangar3_doors' through the director at its authored 2 s dormancy and its four "
+            + "panels slide their authored 50 m by 12 s; the generator eairg31's own hangar takes "
+            + "the loader's node-name door default (eairg_open31, the close resolving the open), "
+            + "and its door starts opening the decoded 4 s before the spawn, which lands at that "
+            + "hangar",
+            HangarDoorWake));
+        into.Add(new TestHarness.Suite("fog-state",
+            "the FOG_STATE animation event (BL-038) over C1/M04's intro definition: a weather "
+            + "rig writes the zone's fog at build, playing the intro raises its RESET_STATE fog "
+            + "through the runtime's own dispatch, the three fog globals change to the event's "
+            + "authored 'drop_fog' values, an event raised before the rig has built lands after "
+            + "the zone, and a field the event omits is left as the zone wrote it",
+            FogStateEvent));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

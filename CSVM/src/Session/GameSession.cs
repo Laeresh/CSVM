@@ -170,6 +170,9 @@ public partial class GameSession : Node3D
     // session (same lifetime as _worldEffectsFactory); null before the first weathered build and
     // nulled by ReturnToMenu so _Process's null guard covers the frame before the deferred free.
     private WeatherRig? _weatherRig;
+    // A FOG_STATE raised during the world bootstrap, before _weatherRig exists; applied once the
+    // rig has written its zone, which keeps the original's order (the zone first, the event over it).
+    private Mech3.AnimRuntime.FogStateChange? _fogStateBeforeWeather;
     // The world state every puffer in this session reads but none of them owns — the wind and the
     // camera position (see Effects/WorldWind.cs). Constructed here rather than on
     // _weatherRig because the emitter factories need it at StartSession, long before the first
@@ -1026,6 +1029,15 @@ public partial class GameSession : Node3D
                 // its codes the instant startanims starts it, long before a rig exists.
                 CutsceneRoots = _cutscene != null,
                 CallbackHost = _cutscene != null ? _cutscene.Host : null,
+                // The weather rig is built after the world, and the intro's fog fires inside the
+                // bootstrap, so the event is held until the rig has applied its zone.
+                FogStateSink = fog =>
+                {
+                    if (_weatherRig != null)
+                        _weatherRig.ApplyFogState(fog);
+                    else
+                        _fogStateBeforeWeather = fog;
+                },
             },
             state.Gamez, state.Textures, state.Sounds, state.SoundDefs, state.SoundGroups);
         _plane = session.Root;
@@ -1313,6 +1325,11 @@ public partial class GameSession : Node3D
                              + (built.Count > 1 ? "; shown by camera weather state" : ""));
                 }
             });
+            if (_fogStateBeforeWeather is { } heldFog)
+            {
+                _fogStateBeforeWeather = null;
+                _weatherRig.ApplyFogState(heldFog);
+            }
             StartupProfile.Record("weather", weatherMark);
         }
 

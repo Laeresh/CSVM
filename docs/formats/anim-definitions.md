@@ -122,7 +122,7 @@ from below**, and at any normal viewing distance **fog washes them to exactly `F
 the deck hidden and fog off (static `--viewer --chapter=C1`, no `--sky-zone`) the effect is
 obvious — 74,129 px change, the clouds going from hard opaque white to translucent.
 
-### `FogState` — decoded, deliberately not acted on
+### `FogState` — an inline fog written over the zone
 
 The compiled archives carry a `FogState` event kind: mid-mission weather change is a real engine
 capability. **The data uses it exactly once install-wide** —
@@ -141,11 +141,26 @@ weather.json zones (zone1 1000–1750 alt 970–1047, zone2 1000–4000 alt 4000
 ad-hoc third fog state applied to a cutscene camera, **not a zone selector** — it does not answer
 "which zone does a mission fly", which remains engine-side (see
 [weather.md](weather.md#mission-zone-selection)).
-`AnimRuntime` therefore does not implement it: one occurrence, on the one cutscene camera the
-remake does not run, and implementing it would mean a second write path onto the `csky_fog_*`
-globals that `Session.WeatherRig.Build` owns. If the user ever observes fog visibly changing
-*during* a mission somewhere else, that is evidence for the engine-side zone switch and this
-should be revisited.
+**What the handler does** (dispatch slot 28, `FUN_004e8540`): it tests a flag byte at event
+`+0x2c` and, per set bit, calls one of the four fog setters the zone apply itself uses on the same
+fog record: bit 1 the fog type (`FUN_004da800`, `type_`, null in the shipped event), bit 2 the
+colour (`FUN_004da820`), bit 4 the altitude pair (`FUN_004da850`), bit 8 the range pair
+(`FUN_004da870`). Each setter writes its fields and raises a dirty bit on the record; a field the
+event omits is left as the last writer set it. The handler returns 2 (complete) at once and takes no
+`instant` branch, so it fires from a `RESET_STATE` walk exactly as from a sequence, which is the
+only way the shipped use ever fires. The zone apply (`FUN_00472ea0`) writes the same record on a
+camera-state edge, so the two are in last-writer order: the intro's reset writes `drop_fog` over
+the zone at load, and the next camera-state edge writes the zone back. One difference in what is
+written: the zone apply multiplies its range by the detail level's `FOG_SCALE` (1.0 at HIGH);
+the event's range goes in raw. Decode notes: [org/weather.md](../org/weather.md#the-fog_state-animation-event).
+
+CSVM: `AnimRuntime` raises the event through `FogStateSink` (`AnimRuntime.FogStateChange`, one
+nullable field per flag bit) and `Session.WeatherRig.ApplyFogState` writes the carried fields onto
+the `csky_fog_*` globals; an event raised inside the world bootstrap, before the rig exists, is held
+and applied after the zone. The next fog-zone edge re-applies the zone over it. The `fog-state`
+suite pins it on this definition. The `altitude` pair is read as `FogLow`/`FogHigh` in
+`min`/`max` order, the reading mech3ax's field names give; nothing in the shipped use distinguishes
+the two, since both sit far above any C1 flight.
 
 ### `OBJECT_MOTION` is two ops sharing one event
 

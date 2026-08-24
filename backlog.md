@@ -871,19 +871,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Environment & world
 
-- `BL-038` `[Feature]` {CAMPAIGN} **`FogState` is a decoded animation event we do not act on** (found 2026-07-22). Fog **can** be
-  changed mid-mission by animation, but the data uses it exactly once install-wide:
-  `extracted/C1/M04/mis_anim/camera1-mission_intro_animation.json`, `reset_state/events[4]` —
-  `FogState { name: "drop_fog", color 0.69/0.69/0.69, altitude 10000–11000, range 1000–1500 }`.
-  It carries fog parameters **inline** and matches neither C1 zone, so it is an ad-hoc third fog
-  state on the intro cutscene camera, not a zone selector. Relevant because it is the only
-  evidence that weather is scriptable at all; zone *selection* still appears to happen engine-side
-  in the binary (same shape as the `fire2` trigger the user searched the disassembly for).
-  **Documented 2026-07-22** (polish-3 item 2) in `docs/formats/anim-definitions.md` as
-  decoded-but-unacted-on, with the reason: implementing it means a second write path onto the
-  `csky_fog_*` globals `PlaneViewer.SetupWeather` owns, for one cutscene the remake does not run.
-  Revisit if the user ever sees fog visibly change *during* a mission elsewhere.
-
 - `BL-070` `[Bug]` **C5's `poleflare` clutter renders with the wrong billboard axis** (one of two residuals
   from polish-3 item 5, 2026-07-22; the other — the static collider probe's off-by-6/11 — closed
   2026-08-04, `docs/HISTORY.md` "M3 polish-6 C22", with a rewritten probe now committed at
@@ -2249,22 +2236,6 @@ usual.
   *How you'd know it worked:* fail a stunt mission deliberately, confirm the wrap-up claims no best
   and `user://stunt_scores.json` is byte-identical afterwards; then complete one and confirm it
   does record.
-
-- `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
-  (C1/M04 `--generators`, user-reported 2026-08-13).** The spawn position is decoded-correct: the
-  original's launch routine (`FUN_00452450`) teleports the launched vehicle to the same generator
-  node, joined by roster `group` over parked vehicles. What differs is the mission layer: the
-  original plays a hangar-door-open animation (mission scripting/`WAKE_ANIM`, out of M4's scope)
-  before launch, so the geometry the plane flies through is open. Ours never plays it, the door
-  stays closed, and the collision sweep kills the plane on frame one.
-  ⚠ **Traps.** (a) Do NOT "fix" the spawn placement — it matches the decode; the missing piece is
-  the door animation, not the position. (b) Leads preserved from a partial decode: the launch also
-  sets two timers (`+0xac = now + 1.5`, `+0xb4 = now + 2.5`) and an initial velocity with a
-  −22.352 m/s vertical component (the zeppelin drop case). The carrier path now carries both timers:
-  `+0xac` suppresses collision and AI ground blow for 1.5 s, then `+0xb4` limits the ground-blow
-  response to ×0.15 until 2.5 s. (c) The launched-vehicle mechanism itself
-  (parked roster planes, not fresh spawns) is a separate fidelity gap from this bug; B6's fresh-spawn
-  stand-in is documented in its landing commit.
 
 - `BL-314` `[Feature]` `[Blocked: PT-45]` **Race countdown — a rolling start on rails before the run clock
   opens.** The abreast starting grid landed 2026-08-08 (`RaceGrid`), so every pilot in a splitscreen

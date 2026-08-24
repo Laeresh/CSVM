@@ -94,7 +94,7 @@ public sealed partial class AiGeneratorRuntime : Node
                      $"max_active {def.MaxActive}, nets [{string.Join(", ", netNames)}]" +
                      (def.MinAltitude is { } gate ? $", launch gate {gate:0} m" : "") +
                      (def.OpenAnim != null ? $", doors '{def.OpenAnim}'/'{def.CloseAnim}'"
-                         : ", doors unauthored (timing runs log-only)"));
+                         : ", doors unnamed (timing runs log-only)"));
         }
     }
 
@@ -213,7 +213,7 @@ public sealed partial class AiGeneratorRuntime : Node
         // Stop the opposite motion first: a fast cycle can otherwise leave both from-to motions
         // writing. Hooks are scoped to the host's subtree — C1 has three 'hangerdoors' namesakes.
         string? other = opening ? gen.Def.CloseAnim : gen.Def.OpenAnim;
-        if (other != null)
+        if (other != null && other != anim)
         {
             _stopAnim?.Invoke(other, gen.Host);
         }

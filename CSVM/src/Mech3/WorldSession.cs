@@ -234,6 +234,7 @@ public sealed class WorldSession
         };
         s.Runtime = animRuntime;
         animRuntime.CallbackHost = o.CallbackHost;
+        animRuntime.FogStateSink = o.FogStateSink;
         if (o.CutsceneRoots && BootstrapsCutscene(animProgram))
         {
             BuildCutsceneRoots(root, gamez, builder);
@@ -526,6 +527,11 @@ public sealed class WorldSession
         /// starts anything, since an intro definition raises its codes the instant it starts. Null
         /// leaves every code to the runtime's own two seams and its census.</summary>
         public Func<int, string?, bool>? CallbackHost { get; init; }
+
+        /// <summary>Where a <c>FOG_STATE</c> event goes, installed before the bootstrap for the
+        /// same reason as <see cref="CallbackHost"/>: the one shipped use is in an intro
+        /// definition's RESET_STATE, applied while the world is still being built.</summary>
+        public Action<AnimRuntime.FogStateChange>? FogStateSink { get; init; }
 
         /// <summary>Pins the runtime's RNG for a reproducible run (see
         /// <see cref="AnimRuntime.Seed"/>). Null — the default — leaves it unseeded: the game.</summary>

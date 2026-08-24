@@ -659,7 +659,9 @@ entry by design) and the roster `signature_maneuvers` bitmask decode (`Signature
 The mission `egen.zrd.json` reader (docs/formats/mission-entities.md): the enemy generators that
 feed AI aircraft into a live mission, typed as `EnemyGeneratorDef` in the three shipped shapes
 (zeppelin launch 17, plain spawner 5, moving spawner 1); a `[null]` file reads as an empty list.
-Consumed by `Session/AiGeneratorRuntime`; golden counts in `CSVM.Tests/EnemyGeneratorsTests.cs`.
+An unauthored door pair takes the loader's node-name default (`DefaultDoorAnim`, `%.5s_open%.2s`),
+the close being the open name, as the original's loader has it. Consumed by
+`Session/AiGeneratorRuntime`; golden counts in `CSVM.Tests/EnemyGeneratorsTests.cs`.
 
 ## src/Mech3/Zeppelins.cs
 The mission `zeppelins.zrd.json` reader (docs/formats/mission-entities.md): the 58 zeppelin
@@ -4398,7 +4400,8 @@ flights, crash rigs, callbacks and stops), `AnimationAndEffectsSuites` (anim lau
 templates, washes and burst timelines), `WorldAndToolSuites` (the built world's data gates
 and censuses, lighting and viewers, and the lab surfaces), and `WorldFidelitySuites` (the
 mid-mission world behaviours the shipped data drives: the area-selected node toggle over C3's three
-story rectangles, and the scripted-path follower over C1's own takeoff path). They depend on
+story rectangles, the scripted-path follower over C1's own takeoff path, the mission script's and
+the generator's hangar doors over C1/M04, and the `FOG_STATE` event over its intro). They depend on
 `TestHarness` through
 `TestContext`; shared fixtures are separate focused modules, not an all-purpose suite helper.
 
@@ -4811,9 +4814,11 @@ Runs a mission's egen generators (M4 B6 + F20, behind `--generators[=plane]`): o
 `GeneratorCycle` per surviving `EnemyGeneratorDef`, host altitude read live off the resolved host
 node, spawns through `GameSession.SpawnAiAircraft` at the origin node's LIVE position (it rides
 F17's moving zeppelin) in the authored `rotation` drop attitude, each pilot patrolling the cyclic
-net pick through `AiNetFollower` (`SpawnedNet`). Door transitions play the authored
-`open_anim`/`close_anim` through host-scoped hooks (`AnimRuntime.PlayWithin`/`StopWithin`);
-unauthored doors run the timing machine log-only. Every drop/live/door/spawn prints an `egen:`
+net pick through `AiNetFollower` (`SpawnedNet`). Door transitions play the authored or
+node-name-defaulted `open_anim`/`close_anim` (`EnemyGenerators.DefaultDoorAnim`; an unauthored
+close is the open, as in the loader) through host-scoped hooks (`AnimRuntime.PlayWithin`/
+`StopWithin`); a name resolving no def runs the timing machine log-only. A ground hangar's door is
+this cycle's, not the mission script's (`hangar-door-wake` suite). Every drop/live/door/spawn prints an `egen:`
 line, which is the flag's observability. `NotifyHostDied(node)`: the zeppelin death aggregator
 (`ZeppelinRuntime.ZeppelinKilled`, F18) calls it and the matching cycles disable permanently.
 Pinned by the `zeppelin-launch` suite.
@@ -5066,8 +5071,13 @@ return-to-menu — its per-rig nodes hang under `_worldRoot`, so the session's `
 **What the original does per frame is written up in [org/weather.md](org/weather.md)** — including
 the retired `DeckCeilingHeight` fits. The authored side is [formats/weather.md](formats/weather.md)
 and [formats/weather/atmosphere.md](formats/weather/atmosphere.md); the fog-volume whiteout curtain
-is [formats/fogvol.md](formats/fogvol.md). Proven by `CSVM.Tests/FogZoneStateTests.cs`,
-`DeckRegimeTests.cs`, `FlatColorTests.cs`, `FogVolumeWhiteoutTests.cs` and `BandFlickerTests.cs`.
+is [formats/fogvol.md](formats/fogvol.md). `ApplyFogState` is the animation runtime's `FOG_STATE`
+sink (via `GameSession`, which holds an event raised inside the world bootstrap until the rig has
+written its zone): it writes only the fields the event carries onto the same fog globals, and the
+next zone edge writes the zone back over it, the original's last-writer order. `FogGlobals` mirrors
+the last writes, since the renderer refuses to read a global back outside the editor. Proven by
+`CSVM.Tests/FogZoneStateTests.cs`, `DeckRegimeTests.cs`, `FlatColorTests.cs`,
+`FogVolumeWhiteoutTests.cs`, `BandFlickerTests.cs` and the `fog-state` suite.
 
 ## src/Session/LensFlareRig.cs
 The sun's lens flare: four screen-space sprites strung along the sun→screen-centre vector at

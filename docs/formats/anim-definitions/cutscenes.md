@@ -260,7 +260,7 @@ beat that notifies the host".
 M04's intro is spread over three readers, all listed by its `mis_anim.zrd`:
 
 - `intro.zrd` holds `camera1-mission_intro_animation`: the callbacks above, a
-  [`FogState`](../anim-definitions.md#fogstate--decoded-deliberately-not-acted-on) `drop_fog`, the
+  [`FogState`](../anim-definitions.md#fogstate--an-inline-fog-written-over-the-zone) `drop_fog`, the
   pirate zeppelin's start pose, then `start_script`, which calls `scene1`, stops it at 15.9 s, calls
   `scene2`, stops it 12.4 s after that event, and branches on which airframe the player is flying
   (`check_balmoral` → `check_warhawk` → `drop_planes`).

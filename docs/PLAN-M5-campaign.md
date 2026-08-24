@@ -200,7 +200,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 32. ☑ Cutscene player: intro animations, letterbox, camera control, handoff (`BL-134`)
 33. ◐ In-flight objectives display + objective sound cues
 34. ◐ Campaign wingmen: named rosters + netless station-keeping (`BL-362`, `BL-364`)
-35. ◐ Mid-mission world fidelity: `WAKE_ANIM` doors (`BL-350`), scripted-path vehicles (`BL-361`), `WorldPartitionSetActive` (`BL-037`), `FogState` (`BL-038`)
+35. ☑ Mid-mission world fidelity: `WAKE_ANIM` doors (`BL-350`), scripted-path vehicles (`BL-361`), `WorldPartitionSetActive` (`BL-037`), `FogState` (`BL-038`)
 36. ☑ AI targeting candidates beyond aircraft (`BL-363`)
 37. ☑ Music: playback subsystem + the state-driven track selection
 
@@ -1745,7 +1745,7 @@ far AHEAD of it (`quarry.NoseDirection`). One of the two is a sign error in the 
 the other is the escort law's own deliberate mirror. Both decompiles are quoted in
 `docs/org/aiPilot.md`; changing pursuit would move every dogfight and belongs to its own item.
 
-## D35 ☐ Mid-mission world fidelity: `WAKE_ANIM` doors, scripted-path vehicles, partition switching, fog events
+## D35 ☑ Mid-mission world fidelity: `WAKE_ANIM` doors, scripted-path vehicles, partition switching, fog events
 
 **Goal.** Four decoded-but-unbuilt world behaviours land: hangar doors open via `WAKE_ANIM` before
 generator spawns (`BL-350`), scripted-path vehicles follow their authored waypoint paths
@@ -1754,8 +1754,15 @@ events change fog mid-mission (`BL-038`, shipped once, on C1/M04's intro).
 
 **Evidence (confidence: mixed; each BL carries its own decode).** `BL-361` cites the decoded
 waypoint-follower (`docs/org/flightModel.md`); `BL-037` counts all 25 uses in
-`C3/*.gw`; `BL-038` is a decoded anim event. <TODO: re-verify BL-350 and BL-038 against git log +
-code; BL-350's exact `WAKE_ANIM` trigger point needs its entry re-read.> `BL-361` and `BL-037` were
+`C3/*.gw`; `BL-038` is a decoded anim event. `BL-350` and `BL-038` are re-verified open before
+being built: `git log --grep` finds only their filing and this plan's scoping commits; nothing in
+`CSVM/src` reads a `FogState` event (`AnimRuntime.Dispatch` falls to its counted default and
+`docs/formats/anim-definitions.md` says so); the `WAKE_ANIM` `BL-350` names is C1/M04's
+`OBJECTIVE1` (`BEGIN_DORMANT 2.0`, `WAKE_ANIM hangar3_doors`), which D31's director already
+dispatches through `AnimRuntime.Play`, but the hangar it opens is `hangar3`, 2.8 km from the
+generator `eairg31` the crash report came from, so the door that matters to `BL-350` is the
+generator's own, and `AiGeneratorRuntime` ran it log-only because the loader's node-name default
+was documented under the wrong pattern. `BL-361` and `BL-037` were
 re-verified open before they were built: nothing in `CSVM/src` read `taxiPath`, `ppN_aipath` or a
 partition rectangle, `MissionSetup` counted the verb unapplied, and `CampaignDirector.StartTaxi` was
 a named no-op.
@@ -1823,9 +1830,58 @@ once the suite-count test learned the two new suites, engine suites 100/100 with
 (`partition-areas` and `scripted-path` included), all 16 golden shots across the 8 chapters
 hash-identical, so the partition grid and the path follower moved nothing in world build.
 
-**⚠ Traps.** BL-038 fires inside D32's cutscene on C1/M04; land D32 first or verify on a
-non-cutscene fog use if one exists. ⚠ C3/M01 and C3/M04 BOTH switch area 3 off, so the A/B for that
-area is M01 against M02; picking M04 reads as "the verb does nothing".
+**Landed: `BL-350`, the generator's own door.** The mission script's half was already there:
+`OBJECTIVE1`'s `WAKE_ANIM hangar3_doors` reaches `AnimRuntime.Play` through the director and slides
+`hangar3`'s four panels their authored 50 m. The generator's half was not: C1/M04's `eairg31` and
+`eairg32` author no `open_anim`, and the original's loader (`FUN_00452850`) then formats
+`sprintf("%.5s_open%.2s", node, node + len - 2)`, so `eairg31` asks for `eairg_open31`, a C1
+`cam_anim` definition rooted on the host that slides its `ldoor`/`rdoor` 8 m over 4 s, the decoded
+door lead. The close default is formatted into a second buffer and never looked up (the loader
+re-reads the first), so an unauthored close resolves the open definition. `EnemyGenerators` now
+applies both defaults (`DefaultDoorAnim`), `AiGeneratorRuntime` skips its self-stop when the two
+names coincide, and the door cycle that was running log-only drives the real panels. The pattern in
+`docs/formats/mission-entities/enemy-generators.md` was `<node>_open_<nn>`, which matched nothing
+in the install; three unauthored hosts ship the def the real pattern names (C1's two, C2/M01's
+`eshipg31`), and C3/M03's `barracuda` gets nothing. Named gap: a `--campaign=` session still loads
+its generators only with `--generators`, the capacity source for campaign missions being the open
+question that page records.
+
+**Landed: `BL-038`, the inline fog.** The handler is dispatch slot 28 (`FUN_004e8540`): per flag
+bit it calls the four fog setters the zone apply (`FUN_00472ea0`) itself calls on the same fog
+record, raising a dirty bit per field, and it fires from a reset walk exactly as from a sequence,
+which is the only way the shipped `drop_fog` ever fires. `AnimRuntime` raises it through a
+`FogStateSink` (`FogStateChange`, one nullable field per bit), `WorldSession.Options` installs the
+sink before the bootstrap, `GameSession` holds an event raised inside the world build until the
+weather rig has written its zone, and `WeatherRig.ApplyFogState` writes only the carried fields
+onto the `csky_fog_*` globals; the next fog-zone edge writes the zone back, the original's
+last-writer order. `WeatherRig.FogGlobals` mirrors the last writes, since the renderer refuses
+`GlobalShaderParameterGet` outside the editor. Decode: `docs/org/weather.md` "The `FOG_STATE`
+animation event" and `docs/formats/anim-definitions.md`. There is no non-cutscene use in the data
+(one event in 16,114 compiled definitions), so it is verified on the intro definition itself.
+
+**Verified (`BL-350`, `BL-038`).** `dotnet build` clean (0 warnings). Two new suites at the end of
+`SuiteCatalog`, both PASS with zero engine errors: `hangar-door-wake` (C1/M04's built world with the
+director and the mission's two generators attached: `hangar3_doors` wakes at 2.03 s, its panels are
+all 50 m out at 12.00 s; `eairg31`'s door starts moving at 16.03 s and the first spawn comes at
+20.00 s, the decoded 4 s lead, at the generator's own hangar with both panels 8.0 m out) and
+`fog-state` (a real `WeatherRig` over C1/M04 writes zone2's 1000–4000 m / 4000–5000 m at build;
+playing the intro raises one `FogState` through the dispatch and the globals read 1000–1500 m,
+10000–11000 m and 0.69 gray in linear; an event handed to a rig before its build lands after the
+zone; a range-only event leaves the altitude alone). Captures in `.scratch/`:
+`bl350-c1-hangar3-closed.png` versus `bl350-c1-hangar3-open.png` (the script's hangar, its end
+panels slid out) and `bl350-c1-eairg31-closed.png` versus `bl350-c1-eairg31-open.png` (the
+generator's hangar, its door pair slid out, end-on); `bl038-c1-m04-intro-drop-fog.png` (a
+`--fly --mission=M04` session 4 s into its intro cutscene, the log carrying the rig's
+`FOG_STATE 'drop_fog'` line, the zeppelin at 1600 m fogged inside the event's 1000–1500 m range
+where zone2's 1000–4000 m would leave it clear) beside `bl038-c1-m04-zone-fog-before.png` (the
+zone fog from an anim-lab camera at 1500 m over the same mission). ⚠ The animation lab's
+`--play-anim` runs the definition on the lab's own runtime, which has no fog sink, so a lab A/B of
+the intro shows zone fog on both sides; the flown session is where the event lands.
+
+**⚠ Traps.** BL-038 fires inside D32's cutscene on C1/M04, and nowhere else in the data. ⚠ C3/M01
+and C3/M04 BOTH switch area 3 off, so the A/B for that area is M01 against M02; picking M04 reads as
+"the verb does nothing". ⚠ `hangar3` is not a generator's hangar: a door test that watches it and
+the spawn together is watching two unrelated buildings.
 
 ## D36 ☑ AI targeting candidates beyond aircraft (`BL-363`)
 
