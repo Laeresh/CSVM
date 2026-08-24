@@ -57,7 +57,7 @@ magnitudes and the consumer that rocks the plane, behind [shakes.md](shakes.md) 
 
 ### Missions and AI
 
-- [spawns.md](spawns.md), [missions.md](missions.md), [mission-entities.md](mission-entities.md), and [instant-action.md](instant-action.md).
+- [spawns.md](spawns.md), [missions.md](missions.md), [objectives.md](objectives.md), [mission-entities.md](mission-entities.md), and [instant-action.md](instant-action.md).
   - [Enemy generators](mission-entities/enemy-generators.md) — host, launch cycle, and capacity rules.
   - [Instant Action wrap-up](instant-action/wrap-up.md) — scoring and friendly-fire rules.
 - [ai-nets.md](ai-nets.md), [ai-rosters.md](ai-rosters.md), and [combat-voice.md](combat-voice.md).

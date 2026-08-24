@@ -68,8 +68,8 @@ disproofs land.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism, with the data that proves it** | C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field) | Confirm the trace, then implement. |
-| **Data present and located, vocabulary not yet decoded** | A1, A2, A3, A4, A6, A7 | Decode first; the docs page is the deliverable, the engine item consumes it. |
+| **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A4 (landed: `docs/formats/briefing.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field) | Confirm the trace, then implement. |
+| **Data present and located, vocabulary not yet decoded** | A3, A6, A7 | Decode first; the docs page is the deliverable, the engine item consumes it. |
 | **Direction sound, magnitude or details a judgement call** | B11, B12, C21–C24, D31, D32, D33 | The shape is settled by the original's screens/data; layout metrics, timings and exact behaviours come from captures and decode, not invention. |
 | **Leads only — no mechanism yet** | A5 (prices), D35 partials (BL-037/038 wiring points), D37 (music selection logic) | Budget for investigation; may end in a disproof. |
 
@@ -161,7 +161,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — decodes and captures
 
-1. ☐ Decode the `objectives.zrd` choreography vocabulary → `docs/formats/objectives.md`
+1. ☑ Decode the `objectives.zrd` choreography vocabulary → `docs/formats/objectives.md`
 2. ☑ Decode the original save/profile format far enough to answer the structural questions
 3. ☐ Decode the campaign mission tree (order, branching, unlocks)
 4. ☑ Decode the briefing: `Briefing.zrd` dialog layout + the briefing map/flag animation
@@ -217,7 +217,7 @@ strictly last.
 
 # Wave A — decodes and captures
 
-## A1 ☐ Decode the `objectives.zrd` choreography vocabulary → `docs/formats/objectives.md`
+## A1 ☑ Decode the `objectives.zrd` choreography vocabulary → `docs/formats/objectives.md`
 
 **Goal.** A formats page documenting every opcode the campaign missions' `objectives.zrd.json`
 uses (`BEGIN_DORMANT`, `WAKEUP_SOUND_GROUP`, `NAP_OBJECTIVE_WHEN_I_COMPLETE`,
@@ -225,25 +225,32 @@ uses (`BEGIN_DORMANT`, `WAKEUP_SOUND_GROUP`, `NAP_OBJECTIVE_WHEN_I_COMPLETE`,
 `COMPLETED_SOUND_GROUP`, `INACTIVE1`, `RESTORE/EXECUTE/INVALIDATE_ANIMS`, plus everything a full
 census surfaces), with semantics traced against `crimson.exe`, not inferred from names.
 
-**Evidence (confidence: data located, vocabulary undecoded).** Worked example
-`extracted\C2\M01\zrdr\objectives.zrd.json`; the opcode list above was observed across C1/C2
-missions this session. Grep confirms no formats page mentions `WAKEUP_SOUND_GROUP` or
-`NAP_OBJECTIVE`; `docs/formats/missions.md` covers only the stunt/danger-zone sibling surface.
+**Evidence (confidence: exe-traced).** `docs/formats/objectives.md` is landed. All 53
+`objectives.zrd.json` files censused (24 campaign, 8 IA, 21 MP; 1,338 `OBJECTIVEn` blocks);
+every directive traced through `crimson.exe`: parser `FUN_00466b70`, per-frame tick
+`FUN_0046a490`, wake executor `FUN_00469af0`, plus every condition test and completion
+executor, cited on the page per row. The C2/M01 worked example (82 objectives) is walked end
+to end on the page. Named gaps kept as gaps: `PLAYER_INIT`'s non-position fields' consumers,
+the reader of zeppelin byte +0xc (`COMPLETED_ZEPCANNONS`), `WIN_ANIM`/`LOSS_ANIM`'s consumer,
+radio-queue fade internals.
 
-**Approach.** Census every mission's `objectives.zrd.json` for the full opcode inventory and
-argument shapes; then trace the handlers in `crimson.exe` (Ghidra, the same way
-`instant-action.md` was produced). Land as `docs/formats/objectives.md` following `/format-docs`
-conventions. D31 consumes the page.
+**What the traps warned about, resolved.** `INACTIVE1..n` is a gamez node-path inactivity test
+(destroy detection via the node active bit), not a status flag; the `IDENTITY` priority is the
+objectives-display row key, sort key and per-class completion report value, unique per mission,
+and never a weight. Findings D31/D33 must honor: objectives are a four-state machine
+(dormant/awake/napping/retired) with at most ONE completion per tick on a rotating scan;
+`NAP_OBJECTIVE_WHEN_I_COMPLETE` clears the target's completed flag (the repeat mechanism);
+`TICK_DEPENDS_ON_OBJ` gates on the dependency being AWAKE, not complete; the wake executor
+truncates its list at an already-awake target; `WAKEUP_OBJECTIVE_WHEN_I_COMPLETE` (C1B/M03)
+and `SET_AI_` (C5/M04) are dead misspellings the runtime must not fix; danger zones completed
+while an objective sleeps do not count for it; `DEDG` counting force-widens the watched
+group's engagement volumes every tick. For D37: the prebattle-to-battle music transition is
+data-driven through sound groups (`player.zrd` `in_battle_sound` = `music_battle_sg`, latched
+once by `FUN_0046cc70`), not an engine combat detector.
 
-**Model recommendation.** high — exe tracing with judgement about semantics; a wrong reading here
-poisons the whole of Wave D.
-
-**Verify.** The page's opcode table covers 100 % of the opcodes the census finds (state the census
-count on the page); at least the worked-example mission's objective graph is walked end to end on
-paper against the decoded semantics.
-
-**⚠ Traps.** Opcode names look self-explanatory; `INACTIVE1` and the `IDENTITY` priority field are
-not. Do not document a field as understood on the strength of its name.
+**Verify (met).** The page's tables cover 100 % of the census inventory, state the census
+count, and the worked example is walked on paper, surfacing one authoring race (the OBJ29-32
+convoy lines) the page documents rather than smooths over.
 
 ## A2 ☑ Decode the original save/profile format far enough to answer the structural questions
 

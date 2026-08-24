@@ -4,7 +4,9 @@ Part of the [format documentation](README.md). This page describes the objective
 Stunt Flying: `ia.json` supplies the zone set, `targets.json` maps nodes to display-string keys,
 and `messages.json` supplies localized text. `dzones.json` carries per-mission overrides that the
 remake does not read. The current readers are `Messages.cs`, `MissionTargets.cs`, and
-`StuntMission.cs`.
+`StuntMission.cs`. The campaign missions' choreography script, `objectives.zrd`, which consumes
+these danger zones and target-display flags from its own directives, is decoded in
+[objectives.md](objectives.md).
 
 ## Contents
 
