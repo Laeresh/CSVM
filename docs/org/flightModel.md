@@ -3428,6 +3428,7 @@ which are findings rather than code.
 | roll-to-pitch coupling: none exists | decoded | every read of `[obj+0x100]` and `[obj+0x114]` |
 | ambient turbulence: nothing ships | decoded | shake block 5, the five xrefs of `FUN_0042c070` |
 | the one-sided negative `C_L` ceiling is unreachable | decoded | `0x48c821`–`0x48c852` builds `n` as a vector length, so `FUN_0041abd0` is never handed a negative `C_L` |
+| a dead AI's throttle and surfaces freeze at their last commanded values | decoded | `FUN_004b82d0` zeroes neither `+0x124` nor the surface deflections; `StepWreckFall` steps `_lastInput` unchanged |
 | far-field range is measured to the NEAREST human pilot | exception | plan Decision 3; the original presumes one player |
 | control surfaces, shake and nitro edges run for EVERY human pilot | exception | plan Decision 3; the original's guard is the single player |
 | the Fury's rudder animates | exception | CSVM also matches `l_rudder_rotate` and a digitless `l_elevator`, which the `%d` lookups miss |

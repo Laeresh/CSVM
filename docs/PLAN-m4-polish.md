@@ -73,7 +73,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — decode and port
 
 11. ☑ `BL-449` Confirm the one-sided negative `C_L` ceiling, then port or record it
-12. ☐ `BL-451` A dead AI's throttle and surfaces freeze at their last commanded values
+12. ☑ `BL-451` A dead AI's throttle and surfaces freeze at their last commanded values
 13. ☑ `BL-457` Port the per-contact camera shake (block 5)
 14. ☐ `BL-442` Decode what keys the damaged-engine swap and pitch, then port it
 
@@ -315,7 +315,7 @@ signs at the positive ceiling is the decode, not a departure from it. The ledger
 decoded, and the "one clamp asymmetry remains unported" paragraph in `docs/org/flightModel.md` is
 rewritten as settled.
 
-## B12 ☐ `BL-451` A dead AI's throttle and surfaces freeze at their last commanded values
+## B12 ☑ `BL-451` A dead AI's throttle and surfaces freeze at their last commanded values
 
 **Goal.** During the three-second dead-hull flight, CSVM's lever and control surfaces stay where
 the AI last wrote them, as `FUN_004b82d0` leaves them.
@@ -339,6 +339,22 @@ dead hull's motion.
 
 **⚠ Traps.** The `[obj+0x384]` crashed-flag writers are `BL-456`, out of scope; do not fold that
 decode in. A3 edits `AiControlLaw.cs` too, so land A3 first.
+
+**Outcome: a disproof, no production code change.** The freeze falls out of the update order rather
+than from any explicit hold: `FlightController` branches on `Crashed` before it reads `InputSource`
+again, so nothing writes `_lastInput` until `Respawn` clears it, and `StepWreckFall` steps the model
+with a copy of that frozen struct every tick of the fall (refreshing only `NearestHumanDistSqM`,
+since the original re-tests the far-field boundary regardless of who is flying). `EndFlightSystems`
+does not touch it either, and `AircraftLifecycle` needs no lever field because the handover is
+`FlightController`'s alone. Measured on a real Instant Action kill: `throttle=1.000 pitch=0.000
+roll=0.000 yaw=0.000` at the kill and the same at the handover 3.02 s later, the throttle holding at
+exactly 1.000 rather than decaying being what rules out a hidden neutraliser. The `ai-wreck-fall`
+suite now samples the command every frame and asserts bit-identical equality on all four channels,
+against an `internal LastCommand` seam. Out of scope but worth knowing:
+`ControlSurfaceAnimator`'s `animate` guard means an AI's control surfaces are never posed at all,
+alive or dead, so a dead AI's held deflection is not visible.
+
+**Verified.** <pending orchestrator run>
 
 ## B13 ☑ `BL-457` Port the per-contact camera shake (block 5)
 

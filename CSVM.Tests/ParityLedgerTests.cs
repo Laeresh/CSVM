@@ -69,6 +69,8 @@ public class ParityLedgerTests
         ("ambient turbulence: nothing ships", Decoded, "shake block 5, the five xrefs of FUN_0042c070"),
         ("the one-sided negative C_L ceiling is unreachable", Decoded,
             "0x48c821-0x48c852 builds n as a vector length, so FUN_0041abd0 is never handed a negative C_L"),
+        ("a dead AI's throttle and surfaces freeze at their last commanded values", Decoded,
+            "FUN_004b82d0 zeroes neither +0x124 nor the surface deflections; StepWreckFall steps _lastInput unchanged"),
 
         ("far-field range is measured to the NEAREST human pilot", Exception,
             "plan Decision 3; the original presumes one player"),
