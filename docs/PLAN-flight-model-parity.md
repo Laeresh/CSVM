@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ A1 Finish the fitted-constant audit (`BL-414`)
 2. ☑ A2 Decode and port the target-velocity acceleration path (`BL-438`)
-3. ☐ A3 Settle part-throttle equilibrium (`BL-439`)
+3. ☑ A3 Settle part-throttle equilibrium (`BL-439`)
 4. ☑ A4 Resolve the live atmosphere band
 
 ### Wave B — Port known control and AI mechanisms
@@ -214,7 +214,7 @@ in the dossier as an open difference. Dossier, inventory (+`NoseChaseFactor` row
 predicts and were re-pinned after the user reviewed the old-vs-new montage; a subsequent check
 pass reads 16/16 hash-identical against the new pins, exit 0.
 
-## A3 ☐ Settle part-throttle equilibrium (`BL-439`)
+## A3 ☑ Settle part-throttle equilibrium (`BL-439`)
 
 **Goal.** Give each throttle setting a decoded or A2-derived equilibrium target.
 
@@ -228,6 +228,36 @@ unresolved while A2's target-velocity contributions are unknown.
 **Verify.** Sweep throttle 0→1 for all airframes; assert monotonicity and decoded points with a failing perturbation.
 
 **⚠ Traps.** An asserted probe target is not evidence. Do not substitute a new footage estimate.
+
+**Landed.** The lever enters the live force path exactly once, as `avail *= lever` on the thrust
+curve at `0x48fce7`; a census of every read of the current throttle `[obj+0x128]` in the live chain
+returns four other sites and none of them is a force (the far-field cruise target `0x48c5a0`, the
+effect-list delta `0x48e59b`, the fuel burn `0x48e603` and the 0.5/s slew `0x48e63f`–`0x48e6c3`).
+Drag is reached only through the boost flag, which replaces the lever with a flat 1.8 rather than
+scaling it. With one term scaled the level balance solves in closed form:
+`lever(M) = DragFactor · M³ · (0.12 + 0.8M + 0.5M²) · (1.33k)^(1.41M) / (ThrustFactor ·
+(0.84M + 0.112)² · (0.12 − M/60))`, losing one power of `M` below the thrust curve's 0.1 Mach floor
+(which is written into `thrustAvail`'s own argument copy, so drag keeps the true Mach). Reference
+area, air density, the speed of sound and the shared 0.73 all cancel, so the curve is one curve in
+`ThrustFactor / DragFactor`, strictly increasing, and the full-throttle end reproduces the Drag
+section's published `fd_speed` solve. The eleven-airframe table at 1/8, 1/4, 1/2, 3/4 and full is in
+the dossier's new "Part-throttle equilibrium" section. **The decode agrees with the shipped plant,
+so no code changed**: the dump's `level-top-speed` and `eighth-throttle-speed` rows sit within
+0.05 mph of the solve on all eleven except the Balmoral's 1/8, which is the one stock lever whose
+level solution (55.2 mph) falls below the speed at which its wings can still carry `nom_gravity`
+(65.2 mph), where the plant descends instead and no decoded target exists. The climb residual is
+re-attributed rather than closed: the lever is a linear multiply, so at the filmed clip's full
+throttle it is a factor of exactly 1 and no throttle law of any shape can move a full-throttle
+climb. With `A4` settling the band dense, the only owner left is the α the original's climb path
+holds, whose arithmetic (0.550 available against 0.567 needed at a 90° nose and a 56.3° path) the
+climb section already carries. `PartThrottleEquilibriumTests` flies all eleven airframes at eight
+lever positions from above and below against the independently solved curve, and pins monotonicity,
+the ratio-only dependence, the Mach floor's shape and the Balmoral's floor case, with a 5 % lever
+error as the `METHOD-9` control. `BL-439` deleted from `backlog.md`; its `ThrustConst` warning was
+already moot, that constant having gone with the fitted thrust scale.
+
+**Verified.** Full `RunTests.ps1` battery on the lane tree: build clean, 2019/2019 units,
+93/93 engine suites with engine errors clean, 16/16 goldens hash-identical, exit 0.
 
 ## A4 ☑ Resolve the live atmosphere band
 

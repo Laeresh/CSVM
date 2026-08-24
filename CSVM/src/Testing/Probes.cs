@@ -1108,12 +1108,13 @@ public static class Probes
         m = Fresh(stats, Level(), 0.9f * fd, 0.125f);
         Run(m, 0.125f, 300f, pitch: 0f);
         double idlePath = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
-        // ⚠ NO target: every candidate came off video, and the throttle curve that would give a
-        // decoded one is not decoded yet (BL-439). A number here would be a fit, not a check.
+        // ⚠ The Measured column is footage only, and every 1/8-throttle figure ever proposed for it
+        // came off video. The decoded target is asserted in PartThrottleEquilibriumTests instead.
         Row("eighth-throttle-speed", "1/8 throttle held to equilibrium", "mph",
             m.Speed / Mph, null, 0.0,
             $"{m.Speed / fd:0.000} x fd_speed, settled path {idlePath:0.0}°, α {m.Alpha:0.0}° — "
-            + "no decoded target exists; the thrust-vs-throttle curve is undecoded (BL-439)",
+            + "against the decoded level-equilibrium curve, not footage "
+            + "(docs/org/flightModel.md, 'Part-throttle equilibrium')",
             info: true);
 
         // ⚠ ZERO throttle, not 1/8 — the footage cuts 8/8 to 0/8, so this is a pure drag probe.

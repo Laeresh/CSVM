@@ -71,9 +71,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   value TUNE.
 - **The flight constants are coupled and `--run-tests` guards them.** Thrust sets speed, speed
   scales the yaw `eff`, so a change in one moves others; the `flight-envelope` suite asserts six
-  measured scenarios and will fail if a change breaks one. `ThrustConst` is a pinned measurement, not
-  a knob — a fix that needs it to move needs a new measurement first, and chasing a *transient* or a
-  feel report through it is the forbidden move. ⚠ **`PitchTune`/`YawTune`/`RollTune` are no longer
+  measured scenarios and will fail if a change breaks one. There is no thrust scale left to turn:
+  thrust is `EnginePower · ref_area · curve(Mach) · lever`, every number in it is the executable's,
+  and the level-equilibrium curve it produces is asserted per airframe and per lever position
+  ([`docs/org/flightModel.md`](docs/org/flightModel.md), "Part-throttle equilibrium"). Chasing a
+  *transient* or a feel report through the force path is the forbidden move. ⚠ **`PitchTune`/`YawTune`/`RollTune` are no longer
   in that category: all three are 1, because `FUN_0048c470` carries no per-axis factor on any axis
   ([`docs/org/flightModel.md`](docs/org/flightModel.md), "The `*Tune` rates"), and
   `FlightConstantInventoryTests` now pins them there.** Pitch-rate survives the change at
@@ -1003,18 +1005,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the authority ramp itself.
   *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (player arm), `BL-330` (the authority ramp this pairs
   with).
-
-- `BL-439` `[Research]` **Decode the thrust-vs-throttle curve, so part-throttle equilibria have a
-  target that is not footage.** `Probes.eighth-throttle-speed` now runs with **no** target: its old
-  137.9 mph was against a number no clip supports, and the ≈135 that would replace it is another
-  frame measurement. The curve itself is in `crimson.exe` and settles the row outright.
-  ⚠ **`ThrustConst` is the first thing to re-examine, and its protection is backwards.** It is
-  described as a pinned measurement rather than a knob because the `flight-envelope` suite asserts
-  it — but what it is pinned to is frame-by-frame video, so the suite has made a footage fit
-  load-bearing. A decoded curve either confirms it or replaces it; either outcome is worth more than
-  the current arrangement, where the assertion is what stops anyone looking.
-  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md), "`lift_accel_rate` is a lag
-  toward a target velocity" (the decoded force path the curve feeds) and the constant inventory.
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
 

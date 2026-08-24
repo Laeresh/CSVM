@@ -724,8 +724,9 @@ knife-edge drift 1.19–1.21 → 0.86–1.08 °/s against the filmed 0.69–0.89
 clamped 9 G lift (`sustained-turn-rate` 34.5 °/s, still a recorded conflict with `CAP-01`).
 The sustained climb did NOT move (204.03 mph plateau): its trajectory holds α = 0, where the
 retired chase was a no-op, so the climb residual against the filmed 163.05 is NOT owned by this
-path; the undecoded thrust-vs-throttle curve (`BL-439`) and the atmosphere band (plan item A4)
-are the owners still standing.
+path. The two owners it named next are settled too: the throttle spending is a plain linear
+multiply that is 1 at the filmed full throttle (see "Part-throttle equilibrium"), and the band is
+the dense one (see Atmosphere). What is left is the α the climb path holds.
 
 ⚠ **One clamp asymmetry remains unported.** `FUN_0041abd0` clamps `C_L` to ±1.8 and then applies
 the compressibility ceiling as a one-sided `min`, so the NEGATIVE ceiling is the flat −1.8 while
@@ -1324,13 +1325,18 @@ is answered in the force path above. Do not close the gap
 by moving 0.24/0.13; they are the binary's, and the dive side of the same scale lands
 `terminal-dive` at 356.0 mph against a measured 355.2 ± 6 with nothing fitted.
 
+⚠ **The throttle-spending candidate is disproven as well.** The lever is a plain linear multiply on
+available thrust and touches no other term ("Part-throttle equilibrium" below), so at the clip's
+full throttle it is a factor of 1 and no throttle law can move a full-throttle climb at all. With
+the atmosphere band settled dense, the α the climb path holds is the only owner left.
+
 ⚠ **The acceleration-path candidate for this residual is disproven.** The "original spends its lag
 vector as the acceleration" hypothesis is settled in "`lift_accel_rate` is a lag toward a target
 velocity": the near-field composition is the same demand → clamp → force sum this model flies, and
 retiring the remake's extra kinematic chase moved the plateau not at all (204.04 → 204.03), because
-the probe's trajectory holds α = 0, where the chase was a no-op. The residual's remaining owners
-are the α the original's climb path holds (above), the throttle spending of the thrust curve
-(`BL-439` / plan item A3) and the atmosphere band (plan item A4).
+the probe's trajectory holds α = 0, where the chase was a no-op. The residual's one remaining owner
+is the α the original's climb path holds (above); the throttle spending and the atmosphere band
+are both settled and neither carries it.
 
 ## Thrust available — resolved, `pow` operands recovered
 
@@ -1425,8 +1431,9 @@ Thrust = ThrustFactor · RefArea · avail             ; 0x48fde1: fld [obj+0x66c
 ⚠ **Thrust scales with `ref_area`, not with `1/veh_weight`.** That is what makes the thrust/drag
 balance dimensionally consistent — drag is `q · RefArea · DragFactor · C_D`, so `RefArea` cancels
 out of the equilibrium and the top speed depends only on `ThrustFactor / DragFactor` (and weight
-through `C_L`). The remake's `EnginePower × ThrustConst / (VehWeight/1000)` divides by the wrong
-quantity; B13 owns the fix.
+through `C_L`). `FlightModel.ThrustAccelAt` carries the same arrangement:
+`EnginePower · RefArea · curve(Mach) · lever`, converted to an acceleration by the force path's
+own `× 9.82 / VehWeight`.
 
 **2 — the struct slot.** The plane *definition* struct carries the whole `dynamics` block at
 `+0x100 … +0x134`, and the runtime flight object mirrors it at `+0x644 … +0x678`:
@@ -1559,6 +1566,117 @@ toward commanded, snapping exactly onto it when the step crosses). Cutting from 
 2 s of tapering thrust; slamming open takes the same. `FlightController` now applies the live-lever
 slew to AI commands as well as keyboard commands, so a carrier release's 0.1 seed survives the AI's
 first desired-full-throttle update.
+
+## Part-throttle equilibrium, the decoded curve
+
+**The lever enters the live force path exactly once.** Every read of the current throttle
+`[obj+0x128]` inside the live chain (`FUN_0048e580` → `FUN_0048c470` →
+`FUN_0048bdd0` / `FUN_0048fc40` / `FUN_0048c220`, with `FUN_0048d7f0` and `FUN_0048d2c0` on the
+contact side) is one of these five, and only the first is a force:
+
+| Address | Function | What the lever does there |
+|---|---|---|
+| `0x48fcc6` → `0x48fce7` | `FUN_0048fc40` | copied into the local multiplier slot, then `avail *= lever` on the thrust curve |
+| `0x48c5a0` | `FUN_0048c470` | the far-field branch's cruise speed `throttle · fd_speed` |
+| `0x48e59b` | `FUN_0048e580` | `commanded − current`, passed to `FUN_004afbc0` for each entry of the list at `+0x2b0`/`+0x2b4` |
+| `0x48e603` | `FUN_0048e580` | fuel burn, `[obj+0x134] −= dt · throttle · 5`, player-only |
+| `0x48e63f`–`0x48e6c3` | `FUN_0048e580` | the 0.5/s slew of current toward commanded |
+
+Nothing else in the chain reads it. The fuel test at `0x48e5ec` guards more than the burn: a player
+whose `[obj+0x134]` has reached zero jumps past the slew as well (`0x48e5f7` to `0x48e6c9`), so an
+empty tank freezes the lever where it stands rather than closing it. Neither fuel nor that freeze
+is implemented here. The lever reaches drag only through the boost flag
+(`[obj+0x947]`), which does not scale the lever but **replaces** it with a flat 1.8 while setting
+the drag multiplier `[ebp−0xc]` to 0.8 (`0x48fcb6`–`0x48fcbd`, against 1.0 on the normal branch at
+`0x48fccf`). Lift (`FUN_0041abd0`), the weathervane, ground blow and the collision impulse carry no
+throttle input at all. At a fixed lever the plant is therefore the full-throttle plant with exactly
+one term scaled, which is what makes the equilibrium solvable in closed form.
+
+**The level balance.** In steady level flight at zero incidence the wings carry the weight, the
+attitude scale is exactly 1 and thrust opposes drag along the path, so with the thrust curve and
+the Mach polar written out, `RefArea`, `0.73` and the whole `½ρa²` in front of both sides cancel:
+
+```
+lever(M) = DragFactor · M³ · (0.12 + 0.8M + 0.5M²) · (1.33k)^(1.41M)
+           ────────────────────────────────────────────────────────
+                 ThrustFactor · (0.84M + 0.112)² · (0.12 − M/60)
+```
+
+Below the thrust curve's Mach floor the numerator loses one power of `M`, because the curve is then
+evaluated at a fixed `M = 0.1` while drag still reads the true Mach:
+
+```
+lever(M < 0.1) = DragFactor · M² · (0.12 + 0.8M + 0.5M²) · 0.1 · (1.33k)^0.141
+                 ───────────────────────────────────────────────────────────
+                        ThrustFactor · (0.196)² · (0.12 − 0.1/60)
+```
+
+The floor is written back into `thrustAvail`'s own argument slot (`0x41ad02`), a copy of the value
+the caller pushed at `0x48fce1`, and the drag call at `0x48fd76` re-reads the unfloored Mach from
+`0x71c554`. Drag is never floored.
+
+Three properties follow directly. The curve is **strictly increasing in Mach** in both regimes and
+continuous at the join, so it inverts to one equilibrium speed per lever and the lever is a
+monotone speed control. The airframe enters **only through `ThrustFactor / DragFactor`**: two
+airframes sharing that ratio hold the same Mach at the same lever whatever their weight or wing
+area. Air density and the speed of sound cancel out of the balance entirely, so the equilibrium is
+fixed in Mach and only its conversion to a speed reads the atmosphere.
+
+Inverting the curve on the dense band, per airframe, in mph:
+
+| Airframe | 1/8 | 1/4 | 1/2 | 3/4 | full | `fd_speed` | level floor | floor lever |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `pbloodhawk` | 134.5 | 176.1 | 230.4 | 269.3 | 300.5 | 302.0 | 80.9 | 0.033 |
+| `ppeacemaker` | 129.7 | 169.8 | 222.2 | 259.8 | 290.0 | 290.8 | 77.8 | 0.033 |
+| `pfury` | 125.6 | 164.4 | 215.2 | 251.7 | 281.0 | 281.9 | 78.0 | 0.036 |
+| `pavenger` | 116.8 | 152.8 | 200.1 | 234.1 | 261.4 | 264.0 | 81.3 | 0.049 |
+| `pdevastator` | 112.2 | 146.8 | 192.1 | 224.8 | 251.2 | 252.8 | 79.3 | 0.051 |
+| `pbrigand` | 107.2 | 140.2 | 183.5 | 214.8 | 240.0 | 241.6 | 81.6 | 0.061 |
+| `pautogyro` | 96.0 | 125.5 | 164.2 | 192.3 | 214.9 | 228.2 | 26.5 | 0.006 |
+| `pkestrel` | 96.2 | 125.7 | 164.5 | 192.6 | 215.3 | 217.0 | 82.1 | 0.083 |
+| `pfirebrand` | 92.4 | 120.7 | 157.9 | 184.9 | 206.7 | 208.0 | 75.1 | 0.073 |
+| `pwarhawk` | 89.8 | 117.3 | 153.5 | 179.7 | 200.9 | 201.3 | 79.5 | 0.091 |
+| `pbalmoral` | *55.2* | 73.8 | 96.3 | 112.6 | 125.9 | 176.7 | 65.2 | 0.185 |
+
+The full-throttle column is the same solve the Drag section publishes, which is the cross-check
+that this form is that one with a lever added. The remake's plant flies to every cell of the table:
+the eleven-airframe dump's `level-top-speed` and `eighth-throttle-speed` rows agree with it to the
+0.1 mph printed here on all eleven except the Balmoral's 1/8, and `PartThrottleEquilibriumTests` asserts
+the whole eight-lever sweep from both sides at 0.5 %. **No code changed for this item.** The
+remake already spends the lever as a plain multiply on `ThrustAccelAt`, which is what the decode
+says the original does.
+
+⚠ **The curve is a LEVEL-flight solution, and it runs out at the bottom.** Level flight also needs
+the wings to carry `nom_gravity`, so the solution is reachable only above the speed where the
+aerodynamic ceiling delivers `nom_gravity / 9.82` G, which is `√(nom_gravity/9.82) = 1.427` times
+the 1 G stall speed at this install's authored 20 m/s². That is the "level floor" column, and its
+"floor lever" is the smallest lever whose solution clears it. The Balmoral's 1/8 is the only stock
+combination below its own floor (55.2 mph solved against a 65.2 mph floor, italicised above): the
+plant cannot hold it level, and settles instead into a descent that trades height for the missing
+thrust. **A settled descent is not a second equilibrium curve.** Its path angle is not fixed by
+statics, because lift matching `g · cos γ` leaves the along-path balance one equation short; the
+angle the run reaches comes from its own transient, so no number from that state may be quoted as
+a decoded target.
+
+The far-field branch has its own, unrelated throttle equilibrium: `throttle · fd_speed` along the
+nose, plus 5 m/s for anything that is not the player, reached as a rate rather than a force
+(`0x48c593`–`0x48c5ae`). It is a different plant, and `B12` owns porting it.
+
+**This closes the eighth-throttle row's target question.** `Probes.eighth-throttle-speed` reports
+134.52 mph for the Bloodhawk against the 134.5 solved here, and both of the numbers that were
+previously proposed for the row (137.9 mph and a later ≈135) came off video. The row stays
+informational because its "original" column is reserved for footage, and the decoded target is
+asserted in the test suite instead.
+
+⚠ **The sustained-climb residual is NOT owned by throttle spending, and this is a disproof rather
+than a fix.** The lever multiplies available thrust linearly and nothing else, so at the filmed
+clip's full throttle it contributes a factor of exactly 1: **no throttle law of any shape can
+change a full-throttle climb**, because every candidate is 1 at the top of its own range. The
+along-path balance at the footage's own 163.05 mph plateau and 56.3° path needs 0.567 of the
+decoded thrust, and the two decoded terms that can supply it are the attitude scale (0.6612 at its
+floor) and the nose-to-path cosine, whose product at a 90° nose is 0.550. The remaining owner is
+therefore the α the original's climb path holds, exactly as the climb section states, and with
+`A4` settling the band on the dense side, no owner outside that one is left standing.
 
 ## The per-spawn jitter — eleven slots, non-player aircraft only (IMPLEMENTED)
 
@@ -2477,6 +2595,14 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   table above is asserted as a BOUND that separates the four, not one the shipped arrangement merely
   passes, and the probe fails the run outright if the altitude clamp binds (a clamped run measures
   the clamp, not the climb).
+- **`PartThrottleEquilibriumTests`** covers the level-flight curve of "Part-throttle equilibrium", solved
+  from the decoded constants in the test itself and flown on all eleven airframes at eight lever
+  positions from both above and below, so an equilibrium that is right by construction rather than
+  by arithmetic fails. Also pinned: the curve rises with every lever step (a fold would make the
+  lever unusable as a speed control), it depends on nothing but `ThrustFactor / DragFactor`, the
+  Mach floor shapes the lowest levers, and the Balmoral's 1/8 solves below its own level-flight
+  floor. ⚠ Its able-to-fail control is a lever off by 5 %, which must miss the equilibrium at every
+  position (`METHOD-9`); without it the tolerance could admit any curve of roughly this shape.
 - **`ControlLimiterTests`** — the two limiters are decoded, authored out of reach, and deliberately
   NOT implemented; these tests are what keeps that decision honest, because they fail the moment a
   data edit, a per-plane override or a model change brings either threshold into reach. ⚠ The
