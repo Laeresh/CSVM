@@ -1,8 +1,7 @@
 # The hangar — Build Custom Plane (BL-354, absorbing BL-067)
 
-**ACTIVE PLAN** (written 2026-08-21). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**✅ COMPLETE** (written 2026-08-21, completed 2026-08-24). Every item landed; archived in
+`docs/plans/` and indexed in [`plans.md`](plans.md).
 
 The full Build Custom Plane flow: airframe, engine, armour, guns, hardpoints, paint, name, a
 purchase review, persistence, and the built plane flyable from every human plane picker. The
@@ -138,7 +137,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ Custom planes in every human plane picker, with the after-build auto-select
 32. ☑ Building a custom plane into a flying aircraft
-33. ◐ The closing at-the-controls pass, and the BL-354/BL-067 closures (first pass flown, findings below)
+33. ☑ The closing at-the-controls pass, and the BL-354/BL-067 closures (four rounds; every finding landed as Wave E)
 
 ### Wave E — the first pass's findings (2026-08-23, user at the controls)
 
@@ -1075,20 +1074,27 @@ clean (no world-side change expected; a baseline first).
 **⚠ Traps.** No invented armour/engine scalings (Decision 3); if A1 split out, the fields stay
 inert and say so in the UI copy nowhere (silent, not fake).
 
-## D33 ☐ The closing at-the-controls pass, and the BL-354/BL-067 closures
+## D33 ☑ The closing at-the-controls pass, and the BL-354/BL-067 closures
 
-**Goal.** The owed hand-flown verification: build, purchase-gate, save, relaunch, reload, fly,
-import a real original save if one exists; then BL-354 and BL-067 closed per the close ritual
-(entries deleted, evidence in the closing commit).
+**Landed.** Four hand-flown rounds rather than one, each round's findings landed as Wave E
+before the next: round one (the defaults ask, the engine None question, pattern default
+colours, the armour display scale — E41-E44, with the engine-None removal request DISPROVEN
+by the 2218 decode and withdrawn); round two (the ask's overflow, plane deletion, the preview
+composing the wrong artwork, decal icons — E45-E48, E47 turning into the icon-layer decode);
+round three (the pick-by-Enter interaction model and the focus-following totals — E49-E50);
+round four (the unwearable default pattern, fixed inline). Two genuinely hand-built planes
+came out of the passes (`user://Planes/A.json` through the round-one flow, `EDDB.json`
+through the reworked one, exercising the v1-to-v2 migration). The user's sign-off closed the
+pass: "rest looks good". BL-354 and BL-067 deleted from `backlog.md` in the closing commit;
+BL-062's cross-reference updated to point at the landed hangar.
 
-**Evidence (confidence: n/a — this is the verification item).** Decision 8.
+**Verified.** The user at the controls, four rounds, sign-off on the fourth; the closing
+battery's numbers are in the completion commit.
 
-**Approach.** User at the controls with a short script of checks drawn from every C/D item's
-Verify line; findings that are new work get minted as BLs, not fixed inline.
-
-**Model recommendation.** medium — orchestration and record-keeping around a human pass.
-
-**Verify.** This item is the verify. The plan completes only after it.
+**Original approach (kept for reference).** User at the controls with a short script of
+checks drawn from every C/D item's Verify line; findings that are new work get minted as BLs,
+not fixed inline. In practice every finding was small and fidelity-shaped, so each round
+landed as plan items instead, which kept the loop to hours.
 
 # Wave E — the first pass's findings
 

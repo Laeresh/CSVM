@@ -445,30 +445,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   risk:** the pickup entities have not been located, and they may be mission-scripted rather
   than placed in the world data. Locate them before scheduling.
 
-- `BL-067` `[Feature]` **The gun/hardpoint configurator UI** (deferred from M3, decision 9 — M3 flies stock loadouts
-  only, but its loadout model is data-driven so this drops in without rework). The original's
-  screens are `GUNS.SCRIPT` (4 gun slots, `gn_d_gun0..3`, engine callbacks 2249/2250) and
-  `HARDPOINTS.SCRIPT` (2 hardpoint slots, `hp_d_point0..1`, callback 2245), plus
-  `PLANECONSTRUCTION.SCRIPT` / `PURCHASE.SCRIPT`. Both are **pure UI layout** — per-plane slot
-  counts, weapon costs and the economy are all executable-resident, so the *buying* half would
-  have to be invented. The mount names are data (`IDS_AIRFRAMEGUNGROUPNAMES`, ui_strings
-  3060–3079) and the per-plane stock table is authored, so the *placing* half is real.
-  **Decoded:** callbacks 2245/2249/2250 resolve through the widget dispatcher at `0x004093a0` to
-  `0x0040ad0f`/`0x0040bea2`/`0x0040bf72`: the two per-wing hardpoint counts (0-4 each) and an
-  11-row gun model per slot (five gun types, the same five twinned via a family bit adding 5, row
-  10 empty; names are `langui` 3310+type), state living in the scratch custom-plane record
-  ([`docs/formats/paint.md`](docs/formats/paint.md) "Saved custom planes"). The per-plane
-  slot-count premise is DISPROVEN: `GUNS.SCRIPT` builds its four dropdowns in a fixed loop no
-  callback gates, and every airframe carries 4 gun slots and 2 per-wing hardpoint groups; what
-  varies per airframe is the slot titles and the turret bitmask in the airframe stat table at
-  `0x00619bb0` (stride 0x2c: cost, weight, weight capacity, agility, armour rating, availability,
-  turret bits, four slot-title string ids). The buying half is executable-resident as asserted and
-  now read: gun cost/weight table at `0x00619e68` (wing and turret columns, twin doubles both),
-  per-airframe engine bases at `0x00619d98` with fixed per-engine-id offsets, armour at units*4
-  cost and weight, hardpoints $410 / 480 lb each, totals in `FUN_00405680`/`FUN_00405550` with the
-  overweight/no-engine purchase gate in callback 2264 (`0x0040b418`). The full tables, values and
-  callback map are [`docs/org/hangar.md`](docs/org/hangar.md).
-
 - `BL-226` `[Feature]` `[Blocked: cockpit view]` **The incoming-fire cue set's other two halves are blocked on things that do not exist
   yet.** The near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,
   `player.json`'s `bullet_hit_sound`) and `window_hit_sg` (= `snd_windowhit1-3`, non-3D) did not.
@@ -590,8 +566,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the analogous case but was not observed, so do not assume it cycles both ways either.
   (c) Empty-slot skipping is not in question and must survive the change: both directions land on
   an armed slot.
-  *Cross-refs:* `BL-067` (the configurator, where mixed loadouts finally make the direction
-  matter), `BL-296` (ActionMap/rebinding seam), `git log --grep=BL-062` for what settled the
+  *Cross-refs:* the hangar's custom loadouts (`docs/plans/PLAN-hangar.md`, landed) are where
+  mixed fits make the direction matter, so this item's value went up when that shipped;
+  `BL-296` (ActionMap/rebinding seam), `git log --grep=BL-062` for what settled the
   per-hardpoint half.
 
 - `BL-363` `[Bug]` **Only aircraft are AI targeting candidates, so an escort with no enemy planes
@@ -2414,32 +2391,6 @@ usual.
   drives the screen's own state machine. (b) 19 presets against 7 environments means presets are not
   per-environment; do not assume a mapping. (c) Blocked on nothing, but pointless before
   `PLAN-instant-action` lands the configurable mission the presets would fill in.
-
-- `BL-354` `[Feature]` **The hangar: Build Custom Plane.** Split out of
-  [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing (2026-08-14) as a milestone
-  of its own rather than a wave of that plan. `IA_B_BUILD` opens the customisation flow, which
-  `crimson.rof` ships whole: `PLANESELECTION`, `PLANECONSTRUCTION`, `AIRFRAME`, `ARMOR`, `ENGINE`,
-  `GUNS`, `HARDPOINTS`, `PAINT`, `PLANENAME`, `PURCHASE`. Instant Action's pilot-plane dropdown is
-  sized `callback(1024) + 11`, the eleven stock airframes plus however many custom planes the player
-  has saved, and `gui_continue` selects index 11 (the first custom plane) after a build returns.
-  **What already exists here.** The paint half is decoded and implemented: the `.BM` region masks,
-  the three-slot colour formula, the decal set and the per-aircraft pattern lists all live in
-  [`docs/formats/paint.md`](docs/formats/paint.md) and `Mech3/PatternLibrary` + `Mech3/PlanePainter`,
-  and the livery lab already steps them. The armour, engine, guns and hardpoints screens have no
-  decode yet.
-  ⚠ **Traps.** (a) Saved custom planes are 204-byte files in the install's `Planes/` directory and
-  are only **partly** decoded: the name at 0x04 and the three colours at 0x68 as RGBA, with the
-  pattern and decal indices immediately before them unread ([`docs/formats/paint.md`](docs/formats/paint.md),
-  "Saved custom planes"). Importing a player's existing planes needs that finished; creating our own
-  does not, and the two should not be conflated. (b) `PURCHASE` implies an economy, which belongs to
-  the campaign and not to Instant Action.
-  **Decoded:** the 204-byte record is written verbatim by `FUN_0041a7b0` from the record array at
-  `0x0064b78c` (scratch slot 25 at `0x0064cb78`; the commit is case 22 of the screen-flow dispatcher
-  `FUN_00407670`), and `callback(1024)` is that dispatcher's case 0x400, the `Planes\*.*` directory
-  scan with a 24-plane cap. The full field layout, pattern/decal picks included, is in
-  [`docs/formats/paint.md`](docs/formats/paint.md) "Saved custom planes", so the import half is
-  unblocked. The screens' callback map, the airframe stat table and the purchase economy are
-  [`docs/org/hangar.md`](docs/org/hangar.md).
 
 - `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
   (C1/M04 `--generators`, user-reported 2026-08-13).** The spawn position is decoded-correct: the
