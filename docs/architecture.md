@@ -239,6 +239,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/CampaignBriefingPage.cs` — the mission briefing: everything resolved from `CampaignFlow.MissionSeq` alone, through `cm_sequence` to the storage address, `brief_c%d%d` to the dialog state, the state to its map bitmap and narration name, `sounds.zrd`'s `SETS` to the wav file, and the mission's own `objectives.zrd` to the note, so nothing is computed from the story position. REPLAY BRIEFING / RETURN TO CABIN / GO TO FLIGHT CHECK hold rows 0-2 so their indices never move under the cursor while the note fills in below them; the map is the page's `HangarArt` and a note line's flag pin its row art. Labels are `messages.json`'s own `MSG_BTN_*` and an unresolved objective key shows as the raw key, so a missing extraction degrades to the three buttons rather than throwing. It plays nothing: `NarrationWav` and `NarrationStarts` name what a shell must play, and `Advance(seconds)` is the clock a shell drives.
 - `src/UI/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`/`BriefingState`/`BriefingStep`, walking the root list where the 24 states actually live) and `BriefingReveal`, the interpreter that runs a state's 12-opcode beat sheet against a caller-advanced clock, blocking on `Wait`'s authored seconds and `WaitForMarker`'s cue times and keeping each element's opacity, rotation and position as its tweens land. Elements come out in placement order, which is draw order. With no cue points every marker releases at once, so the map finishes under the narration rather than a timing being invented. Decode: `docs/formats/briefing.md`.
 - `src/UI/BriefingObjectives.cs` — the briefing's parchment note from a mission's `objectives.zrd`: every `IDENTITY` carrying a `MSG_BRF_*` key, ordered by priority ascending, which is the list an `Objective id index` opcode indexes 0-based. Takes the reader list rather than a path, so it tests without an extraction; resolves text through `Messages`, leaving the raw key visible when the table cannot.
+- `src/UI/ObjectivesHud.cs` — the in-flight objectives display (D33): reads `CampaignDirector`'s `ObjectiveGraph.Rows` directly (not a re-parse), text through `Messages`, and shows every row rather than gating on the row's own `Awake` flag (an objective authored with no `BEGIN_DORMANT` starts awake without ever running a wake action, so its row's `Awake` flag never turns on even though it is live from the mission's first tick, C1/M02's own primary OBJECTIVE3, and filtering on it would hide exactly the objective a player needs to see first). This also matches the original's own decoded display mechanism (`docs/formats/objectives.md`, `FUN_004acc20`/`FUN_004ad240`): every `IDENTITY` row is built once and shown unconditionally, only the completion mark toggles. Self-mounting like `PerfHud` (its own `CanvasLayer` on `HudLayers.Hud`), so nothing here reaches `GameSession`; mounting it into a real session is a one-line wiring contract `PLAN-M5-campaign.md`'s D33 section names, deferred because `GameSession.cs` was off limits to a concurrent item while this one landed. No reference screenshot covers the original's in-flight layout, so every metric is TUNE; the still-owed capture is named in the plan.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
@@ -779,6 +780,8 @@ at its last position). `HasStream(name)` answers clip availability after the pre
 alone cannot. Who hears these emitters is the pinned per-pane listener model (`UI/SplitScreen`);
 `SetListeners` feeds the `--debug-anim` log alone, whose `dist` column names the NEAREST listener and
 the pane it belongs to, because that is the pane whose volume wins the engine's mix.
+`OneShotsStarted` (D33) counts every one-shot that actually started an `AudioStreamPlayer3D`, so a
+suite can assert a cue fired by counting rather than grepping the `Debug`-gated log line.
 
 ## src/Mech3/WorldLights.cs
 Packs the animated world's `LIGHT_STATE` point lights into the 2×N RGBAF texture the fullbright
@@ -3909,7 +3912,10 @@ no templates does, and `Options.DebugClutterFlag` (`--debug-clutterflag`) hands 
 `WorldBuilder`, then stamps every clutter MultiMesh with a full-strength `SceneBuilder.ClutterColor`
 tint and prints the flagged/clear polygon census. The blue is stamped per instance rather than per
 material because both clutter paths share the placed world's materials — colouring those would
-repaint the ground with them.
+repaint the ground with them. `Options.ExtraPrewarmNames` (D33) prewarms sound-group names the
+`AnimProgram` never sees on its own (`ObjectiveScript.SoundGroupNames()` is the only caller today)
+before the build's sound archive closes; without it a campaign mission's `WAKEUP_SOUND_GROUP`/
+`COMPLETED_SOUND_GROUP` cue decodes to nothing the moment the archive that could decode it is gone.
 
 ## src/Mech3/SessionArchives.cs
 `OpenFor(ArchiveIntent, gamezPath, texturesPath, soundsPath, zrdrPath, mute)` opens the five
@@ -4591,6 +4597,9 @@ without anything special-casing them. The lookup stays at the top level rather t
 nested lists as the original does: no shipped file exercises the recursion, so the answer is the
 same on all 53 files and no data string can false-match a keyword. A `null` block parses to a
 directive-free objective, which starts awake and completes as a no-op.
+`SoundGroupNames()` (D33) collects every sound-group name the script's directives can hand to
+`PlaySoundGroup`, a vocabulary the mission's anim program never sees, so nothing else prewarms it;
+a session hands this to `WorldSession.Options.ExtraPrewarmNames`.
 Format and decode: docs/formats/objectives.md.
 
 ## src/Session/ObjectiveGraph.cs

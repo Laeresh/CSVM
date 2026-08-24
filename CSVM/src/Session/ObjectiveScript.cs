@@ -327,6 +327,37 @@ public sealed class ObjectiveScript
     public ObjectiveDef? ByNumber(int number) =>
         number >= 1 && number <= Objectives.Count ? Objectives[number - 1] : null;
 
+    /// <summary>Every sound-group name a directive can hand to <c>PlaySoundGroup</c>, de-duplicated.
+    /// Never referenced by the anim program, so hand this to
+    /// <see cref="WorldSession.Options.ExtraPrewarmNames"/> or the cue decodes to nothing once the
+    /// build's sound archive closes.</summary>
+    public IReadOnlyList<string> SoundGroupNames()
+    {
+        var names = new List<string>();
+        void Add(string? name)
+        {
+            if (name != null && !names.Contains(name))
+            {
+                names.Add(name);
+            }
+        }
+
+        Add(PrimaryCompleteSound);
+        Add(SecondaryCompleteSound);
+        Add(TertiaryCompleteSound);
+        Add(MissionWonSound);
+        Add(MissionLostSound);
+        Add(ObjectivesWonSound);
+        Add(ObjectivesLostSound);
+        foreach (var def in Objectives)
+        {
+            Add(def.WakeSoundGroup);
+            Add(def.CompletedSoundGroup);
+        }
+
+        return names;
+    }
+
     // The alternating walk, duplicates preserved (ANIM_STATE repeats its ANIM key). A string
     // followed by a list is a key with a value; anything else is a bare flag, which is also what a
     // null body (C2/M01's OBJECTIVE64) parses to.

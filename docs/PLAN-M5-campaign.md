@@ -198,7 +198,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ Campaign mission director: the objectives runtime (from A1) + mission end/return flow
 32. ☐ Cutscene player: intro animations, letterbox, camera control, handoff (`BL-134`)
-33. ☐ In-flight objectives display + objective sound cues
+33. ◐ In-flight objectives display + objective sound cues
 34. ◐ Campaign wingmen: named rosters + netless station-keeping (`BL-362`, `BL-364`)
 35. ◐ Mid-mission world fidelity: `WAKE_ANIM` doors (`BL-350`), scripted-path vehicles (`BL-361`), `WorldPartitionSetActive` (`BL-037`), `FogState` (`BL-038`)
 36. ☑ AI targeting candidates beyond aircraft (`BL-363`)
@@ -1449,25 +1449,108 @@ decision here, not a fact to copy.
 
 ## D33 ☐ In-flight objectives display + objective sound cues
 
-**Goal.** The current objectives are visible in flight (the original's presentation:
-<TODO: capture how the original shows objectives in flight; not covered by the five PNGs>),
-updates fire on wake/complete, and `WAKEUP_SOUND_GROUP`/`COMPLETED_SOUND_GROUP` audio plays.
+**Goal.** The current objectives are visible in flight, one row per unique `IDENTITY` priority,
+text through the messages table with raw-key fallback, updating on the graph's own `Woke`/
+`Completed` events; the original's exact in-flight layout is a capture-owed fidelity question
+(below), not something this item invents. `WAKEUP_SOUND_GROUP`/`COMPLETED_SOUND_GROUP` audio
+plays, verified in engine rather than assumed from D31's routing.
 
-**Evidence (confidence: direction-sound, pending A1 + the TODO capture).** The sound groups are in
-the data; `CombatVoice`/`WorldSounds` are the playback paths; `MissionTargets.cs` exists and must
-be read before scoping.
+**Evidence (confidence: traced for the display; a real gap found and closed for the cues).**
+`docs/formats/objectives.md`'s "IDENTITY and the objectives display" traces the original's own
+mechanism (`FUN_004acc20`/`FUN_004ad240`): every `IDENTITY` is collected into one row per unique
+priority and shown unconditionally, sorted; completion marks the matching row. Nothing in the
+decode gates a row on being "awake": `ObjectiveGraph.Rows`' own `Awake` flag is D31's addition
+for other purposes and is a trap here: an objective authored with no `BEGIN_DORMANT` starts awake
+without ever running a wake action, so its row's `Awake` flag never turns on even though it is
+live from the mission's first tick (C1/M02's own primary, OBJECTIVE3). A readout that hides
+`!Awake` rows would hide exactly the objective a player needs to see first; `ObjectivesHud` shows
+every row instead, matching the traced original.
 
-**Approach.** HUD element following the existing per-mode readout pattern
-(`WeaponReadout`/`MarkerHud` family), fed by D31's objective state; sound via the existing
-sound-group resolution.
+D31's claim that the cues already play does **not** hold as shipped, checked here against a real
+built world rather than the headless `ScriptedWorld` `campaign-objectives` uses. `CampaignDirector.
+World.PlaySoundGroup` does call `WorldSounds.PlayOneShot` correctly, but a campaign mission's
+`WAKEUP_SOUND_GROUP`/`COMPLETED_SOUND_GROUP` names are `objectives.zrd`'s own vocabulary, never
+referenced by the mission's `AnimProgram`, so nothing prewarmed them, and `WorldSounds.Loader`
+closes over the build's `SoundArchive` the moment the `using` scope that build ran in returns
+(`ArchiveIntent.Session`/`Suite` both scope the archive to the build). Any such cue whose name was
+never independently prewarmed by something else therefore decoded to nothing, silently, in a real
+running session exactly as in the suite. Fixed by `ObjectiveScript.SoundGroupNames()` (every
+class/won/lost sound plus every objective's wake/complete group, de-duplicated) handed to a new
+`WorldSession.Options.ExtraPrewarmNames`, prewarmed alongside the anim program's own names before
+the archive closes (the same shape `Options.VoiceClipNames` already established for combat
+voice). `WorldSounds.OneShotsStarted` (new) counts every one-shot that actually started an
+`AudioStreamPlayer3D`, so a suite counts a cue firing rather than grepping a `Debug`-gated log
+line, matching `Anim.SoundChannel.OneShotSoundsPlayed`'s own precedent.
+
+A second, independent gap surfaced and is left as a gap, not built: several of a mission's own
+`WAKEUP_SOUND_GROUP`/`COMPLETED_SOUND_GROUP` names resolve to **VO dialogue chains**
+(`docs/formats/sounds.md`, `[name, [dialogueRoot, [line], [line], …]]`, "a VO chain, NOT a
+weighted group"), and nothing in this engine plays a chain: `WorldSounds.Prewarm` decodes a
+chain's lines but `PlayOneShot`/`Spawn` only ever calls `SoundGroup.Pick`, which returns null for
+a chain (zero weighted members) and plays nothing. `docs/formats/sounds.md` already names this as
+kept "so the comms/mission layer can consume them", a consumer that does not exist. Building a
+chain player is a new capability (sequencing, timing between lines, whatever "the comms/mission
+layer" means operationally), not "verify the existing cues fire," so it stays a named gap for a
+follow-up backlog item rather than something improvised here. C1/M02's own data has both shapes:
+OBJECTIVE8's `WAKEUP_SOUND_GROUP` and OBJECTIVE16's `COMPLETED_SOUND_GROUP` are plain/weighted and
+play for real; OBJECTIVE1's `WAKEUP_SOUND_GROUP snd_NW2Start` and OBJECTIVE10's
+`COMPLETED_SOUND_GROUP snd_NW2Prim2Suc` are chains and play nothing, in the original's own data
+shape, not a CSVM regression.
+
+**Approach.** `src/UI/ObjectivesHud.cs` (new): a self-mounting `Node` in `PerfHud`'s own shape (it
+owns its `CanvasLayer` on `HudLayers.Hud`), built from a `CampaignDirector` and the shared
+`Messages` table, polling for the director's `Graph` in `_Process` (the wiring contract below adds
+it to the tree before `CampaignDirector.Attach` runs) and redrawing on `Woke`/`Completed`.
+`BuildLines()` is exposed separately from drawing so an in-engine suite can assert the readout's
+own content, not just the graph's. Sound: no new routing, D31's `PlaySoundGroup` call is reused
+exactly as landed; this item's only sound-side change is the prewarm fix above, which is a build
+plumbing gap, not a duplicate of the routing.
+
+**⚠ Wiring contract for the orchestrator.** `GameSession.cs` was off limits (D32 was editing it
+concurrently), so the mount is not landed. Two one-line additions, both near where `_campaign` is
+built and attached:
+1. In the `WorldSession.Options` GameSession builds for a campaign session, add
+   `ExtraPrewarmNames = _campaign?.Script.SoundGroupNames()`.
+2. After `_campaign.Attach(...)` (or anywhere the campaign's world root exists), add
+   `_worldRoot!.AddChild(UI.ObjectivesHud.Build(campaign, _messages))` guarded on `_campaign is {
+   } campaign`, the same shape the `TargetingOverlay` `AddChild` beside it already uses.
+Until both land, `ObjectivesHud` is built and proven correct (see Verify) but never mounted in a
+real session, and the prewarm fix only benefits the in-engine suite that sets
+`TestContext.ExtraPrewarmSoundNames` itself.
+
+**⚠ Capture owed.** No reference screenshot covers the original's in-flight objectives
+presentation: all five `Campaign *.png` shots are out-of-mission screens. `ObjectivesHud`'s
+styling (position, font size, checkmark glyph, whether completed rows stay listed or drop) is
+therefore a plain HUD-idiom placeholder, every metric marked TUNE in the source. The capture the
+orchestrator should file: one C1 story mission flown far enough to wake and complete at least one
+objective, showing the original's own in-flight objectives UI (or its absence, the original may
+show nothing in flight and rely on the briefing note alone, which the capture would also settle).
+Names D33 (this section) as the item it unblocks.
 
 **Model recommendation.** medium.
 
-**Verify.** In-engine assertions on cue firing (audio counted in logs at `--volume=0`, never
-`--mute`); screenshot of the HUD element.
+**Verify.** `dotnet build`/`dotnet format` clean (0 warnings), comment caps clean.
+`dotnet test CSVM.Tests/CSVM.Tests.csproj`: 2164/2164 (the pre-existing `SuiteCatalogTests` count/
+last-name assertions updated for the new suite; they were already stale by two suites before this
+item touched them). New suite `campaign-objectives-hud`, registered at the end of
+`SuiteCatalog.Names`: against a BUILT C1/M02 world, `ObjectivesHud.BuildLines()` carries one line
+per `ObjectiveGraph.Rows` row before anything happens; every `WAKEUP_SOUND_GROUP`-authoring
+objective is woken in turn until one starts a real `AudioStreamPlayer3D`
+(`WorldSounds.OneShotsStarted` counted, not logs); every `IDENTITY`+`INACTIVEn` objective is
+driven in turn (resolve, damage/deactivate its nodes, wake, step) until one completes, proving the
+readout (not only the graph) marks the completed row, and separately until one whose
+`COMPLETED_SOUND_GROUP` also starts a real one-shot (the two proofs are not required to land on
+the same objective, since a completing objective's own group can be a VO chain). No `--screenshot`
+was taken; see the wiring contract and capture above. Foreground `RunTests.ps1` on this worktree
+(D33 alone, ahead of the plan branch merge): build clean, units 2164/2164, engine suites 101/101
+with errors clean, all 16 golden shots hash-identical, so the prewarm plumbing and the new suite
+moved nothing in world build. **Verified.** <pending orchestrator run>
 
-**⚠ Traps.** Extend A8 with this capture if the original's in-flight objectives UI is unknown when
-this item starts.
+**⚠ Traps.** Do not filter the readout on `ObjectiveGraph.Rows[i].Awake`; see Evidence. Do not
+add a second `PlaySoundGroup` path for "D33's own" cues; the routing is D31's and stays
+untouched. `ExtraPrewarmNames`/`SoundGroupNames()` prewarm chain members too (`Prewarm` already
+expands a group to its members), so the chain-vs-weighted distinction only matters at *playback*
+(`SoundGroup.Pick`), not at prewarm time.
 
 ## D34 ☐ Campaign wingmen: named rosters + netless station-keeping (`BL-362`, `BL-364`)
 

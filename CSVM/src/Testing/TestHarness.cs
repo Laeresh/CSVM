@@ -463,6 +463,12 @@ public sealed class TestContext
     /// property held first — is never silently reused in its place.</summary>
     public IEmitterFactory? EmitterFactory { get; set; }
 
+    /// <summary>Extra sound-group names to prewarm for the next world this builds, a mission's own
+    /// vocabulary the anim program never sees (<c>ObjectiveScript.SoundGroupNames()</c>). Mutable,
+    /// the same reason <see cref="EmitterFactory"/> is: a suite sets it right before its own
+    /// <see cref="WithWorld(string, bool, Action{TestWorld})"/> call.</summary>
+    public IReadOnlyCollection<string>? ExtraPrewarmSoundNames { get; set; }
+
     /// <summary>Where a suite parents anything that must be in the scene tree — a built plane whose
     /// markers are read by global transform, a chapter world whose death sequences are ticked.</summary>
     public required Node3D Host { get; init; }
@@ -606,6 +612,7 @@ public sealed class TestContext
                 Collision = collision,
                 RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
                 EmitterFactory = EmitterFactory,
+                ExtraPrewarmNames = ExtraPrewarmSoundNames,
                 TexturesOutliveBuild = archives.TexturesOutliveBuild,
                 SoundsOutliveBuild = archives.SoundsOutliveBuild,
             },

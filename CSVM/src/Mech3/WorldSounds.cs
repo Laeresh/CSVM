@@ -59,6 +59,13 @@ public sealed partial class WorldSounds : Node3D
 
     public int Count => _emitters.Count;
 
+    /// <summary>How many one-shots actually started an <see cref="AudioStreamPlayer3D"/> playing,
+    /// the <see cref="Mech3.Anim.SoundChannel.OneShotSoundsPlayed"/> precedent for this class: an
+    /// in-engine suite counts this rather than grepping a Debug-gated log line, and it moves only
+    /// when <see cref="Spawn"/> actually resolved a stream (--mute or an unknown group leaves it
+    /// unchanged, which is why a cue-firing assertion must run at --volume=0, never --mute).</summary>
+    public int OneShotsStarted { get; private set; }
+
     public IEnumerable<string> Names
     {
         get
@@ -382,6 +389,7 @@ public sealed partial class WorldSounds : Node3D
         // Swept when it stops (Tick), no reliance on the Finished signal.
         _oneShots.Add(new OneShot { Player = player, Source = source });
         player.Play();
+        OneShotsStarted++;
         if (Debug)
         {
             GD.Print($"sound one-shot: {name}"

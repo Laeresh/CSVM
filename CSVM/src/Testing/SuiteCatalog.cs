@@ -12,6 +12,7 @@ using Godot;
 
 using static CSVM.Testing.AiSuites;
 using static CSVM.Testing.AnimationAndEffectsSuites;
+using static CSVM.Testing.CampaignHudSuites;
 using static CSVM.Testing.CampaignSuites;
 using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
@@ -133,6 +134,7 @@ public static class SuiteCatalog
         "partition-areas",
         "scripted-path",
         "wingman-station",
+        "campaign-objectives-hud",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -673,6 +675,14 @@ public static class SuiteCatalog
             "staying with the leader for the rest of the run, and riding the aft station behind " +
             "a player leader where it rides the forward one behind an AI leader",
             WingmanStation));
+        into.Add(new TestHarness.Suite("campaign-objectives-hud",
+            "D33's in-flight objectives display and cue firing against a BUILT campaign world: " +
+            "ObjectivesHud carries one line per ObjectiveGraph display row, a scripted " +
+            "IDENTITY objective completing off a real INACTIVEn node marks its own readout line " +
+            "(not only the graph's), and both a WAKEUP_SOUND_GROUP and a COMPLETED_SOUND_GROUP " +
+            "the mission authors start a real AudioStreamPlayer3D through WorldSounds (D31's " +
+            "existing routing, counted rather than duplicated)",
+            CampaignObjectivesHud));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

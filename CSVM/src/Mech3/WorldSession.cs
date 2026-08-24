@@ -312,6 +312,10 @@ public sealed class WorldSession
                 GD.Print($"anim: prewarmed {voiced} combat-voice stream(s) "
                          + $"of {voiceNames.Count} roster clip def(s)");
             }
+            if (o.ExtraPrewarmNames is { Count: > 0 } extraNames)
+            {
+                prewarmed += builtSounds.Prewarm(extraNames);
+            }
             StartupProfile.Record("prewarm", mark);
             if (prewarmed > 0)
             {
@@ -440,6 +444,12 @@ public sealed class WorldSession
         /// lab session hosts no talking pilots. The caller computes the set because which pilots
         /// talk is session policy, not world-build mechanics.</summary>
         public IReadOnlyCollection<string>? VoiceClipNames { get; init; }
+
+        /// <summary>Extra sound-group names to prewarm alongside the anim program's own, for a
+        /// vocabulary <see cref="AnimProgram"/> never sees (the campaign's
+        /// <c>ObjectiveScript.SoundGroupNames()</c> is the only caller today). Null or empty (the
+        /// default) prewarms nothing extra: a non-campaign session has no such names.</summary>
+        public IReadOnlyCollection<string>? ExtraPrewarmNames { get; init; }
 
         /// <summary>The caller's <see cref="SoundArchive"/> outlives this build, so
         /// <c>WorldSounds.Loader</c> stays live for names the prewarm did not reach. Separate from
