@@ -74,7 +74,7 @@ missions cannot be individually verified inside one milestone (decision 6).
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A3 (landed: `docs/formats/campaign-sequence.md`), A4 (landed: `docs/formats/briefing.md`), A5 (landed: `docs/org/hangar.md` "The campaign wallet", pending only the `CAP-40` on-screen cross-check), A6 (landed: `docs/formats/campaign-screens.md`), A7 (landed: `docs/formats/anim-definitions/cutscenes.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field) | Confirm the trace, then implement. |
+| **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A3 (landed: `docs/formats/campaign-sequence.md`), A4 (landed: `docs/formats/briefing.md`), A5 (landed: `docs/org/hangar.md` "The campaign wallet", on-screen cross-check done via `CAP-40`), A6 (landed: `docs/formats/campaign-screens.md`), A7 (landed: `docs/formats/anim-definitions/cutscenes.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field) | Confirm the trace, then implement. |
 | **Direction sound, magnitude or details a judgement call** | B11, B12, C21–C24, D31, D32, D33 | The shape is settled by the original's screens/data; layout metrics, timings and exact behaviours come from captures and decode, not invention. |
 | **Leads only — no mechanism yet** | D35 partials (BL-037/038 wiring points), D37 (music selection logic) | Budget for investigation; may end in a disproof. |
 
@@ -446,8 +446,12 @@ real prices on screen. Extend `docs/formats/vehicle.md` rather than opening a ne
 
 **Model recommendation.** high — exe tracing; the cross-check against the capture keeps it honest.
 
-**Verify.** Every price shown in the capture matches the decoded constant. **Not yet done:
-`CAP-40` is filed but unfilmed.**
+**Verify.** Done via the `CAP-40` screenshots (`OriginalScreenshots\Campaign CAP-40 Plane
+Construction *.png`): the funds note shows $21,840, the exact decoded `Status.dat` value; the
+armor blurb prints $20/5 units and 20 lbs./5 units, the traced $4 and 4 lb per unit; the
+Devastator's engine line (Tornado G450) shows $1,700 / 2,000 lbs / 251 mph, matching airframe 5's
+decoded base row in all three fields; both airframes' weight capacities (10,100 and 4,160 lbs)
+match their stat rows. Every decoded constant visible in the shots agrees.
 
 **⚠ Traps.** ⚠ Do not tune prices to "feel right" if the trace stalls; a missing constant stays a
 named gap, per the invented-content ground rule.
@@ -562,9 +566,11 @@ filing the requests, not the footage.
 
 **Model recommendation.** medium, low effort — mechanical filing.
 
-**Verify.** `playtest.md` lists the five CAPs (`CAP-40` plane construction, `CAP-41` previous
-missions, `CAP-42` briefing animation, `CAP-43` C1 intro cutscene, `CAP-44` cabin ambience), each
-naming its blocked items; the duplicate-ID pre-commit hook passes.
+**Verify.** Three of the five CAPs are delivered and closed: `CAP-40` (plane-construction
+screenshots, consumed by A5's price cross-check), `CAP-41` (previous-missions screenshots, C22's
+layout evidence), `CAP-44` (answered at the controls: the cabin has no idle behaviour, only
+background music over static art). `CAP-42` and `CAP-43` stay owed in `playtest.md`, each naming
+its blocked items; the duplicate-ID pre-commit hook passes.
 
 **⚠ Traps.** ⚠ Footage-derived *measurements* are inadmissible in this repo
 (`docs/verification.md`); the captures are for layout, sequence and on-screen values (prices,
@@ -704,12 +710,19 @@ Plane Construction (into B13's hangar), Return to Main Menu. Change Memento is n
 
 **Evidence (confidence: direction-sound).** Reference PNG; A3 gives Next Mission's source of
 truth; B12 gives the finished-missions list; A6/`PASSENGERCABIN.SCRIPT` gives the original's
-wiring; the A8 cabin capture gives idle/ambience fidelity.
+wiring (`docs/formats/campaign-screens.md`). The ambience question is answered at the controls
+(`CAP-44`, closed): the cabin has NO idle behaviour, only background music over static art, which
+matches A6's flat-art decode; the only ambience work this item owes is whatever music D37 routes
+to the screen. `CAP-41` (screenshots in `OriginalScreenshots\Campaign CAP-41 Previous Mission
+*.png`) gives the Previous Missions layout: a scrapbook-style page titled by the pilot, a
+scrollable list with one row per finished mission (airframe silhouette, mission long name, area
+name, plane-flown name), and VIEW SELECTED / REPLAY MISSION / RETURN TO CABIN buttons; the shots
+show the decoded award names (Minx, Accipiter Annie) and act naming (Rocky Mountains) in use.
 
 **Approach.** Board-idiom page; the four buttons route into existing flows (briefing C23, hangar
-B13, launchscreen). The painted cabin scene: <TODO: locate the cabin background art in
-`extracted\rof`/`rimage` during A6; if it is a rendered 3D set rather than art, decide a static
-fallback.>
+B13, launchscreen). The cabin scene is flat rof art per A6: `PC_BackGround.png` with the
+airframe photograph behind the window hole, the memento frame, and the chapter-count map pins; no
+3D set exists, so no fallback decision is needed.
 
 **Model recommendation.** medium.
 
@@ -959,7 +972,10 @@ end; Instant Action gets `instantaction`.
 are in `extracted\soundsh\` (low-quality twins in `soundsl\`); the state vocabulary is in the
 filenames. Undecoded: which of the six numbered variants plays when (per chapter/act? random?),
 the prebattle → battle trigger, where `spicyairtales` plays (cabin radio is the guess, not a
-fact), and the loop/crossfade behaviour. No engine music subsystem exists.
+fact, and A6 found no script support for it: the out-of-mission screens drive one shared sound
+object playing `music_splash`, per `docs/formats/campaign-screens.md`), and the loop/crossfade
+behaviour. No engine music subsystem exists. The cabin does play background music in the original
+(the at-the-controls answer that closed `CAP-44`); which track is still the trace's to settle.
 
 **Approach.** Decode the selection logic from `crimson.exe` (the track-name string references are
 the entry point) before wiring states; build the player as a session-level service beside
