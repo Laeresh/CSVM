@@ -86,6 +86,7 @@ sounds like, watched and frame-sampled, never measured into a constant.
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
+| `CAP-45` | The in-flight objectives presentation, or its absence | Fly any C1 story mission in the original far enough to wake and complete at least one objective, held long enough to read the screen: whatever the original shows in flight about the current objectives (a list, a one-line message, a chime with nothing on screen, or nothing at all), where it sits, what a completed objective does to it (marked, struck through, dropped), and whether it is always up or appears only on a change. Both states are answers: if the original shows nothing in flight and relies on the briefing alone, film enough of a completion to establish that. | `D33`, whose `ObjectivesHud` styling (position, font size, checkmark glyph, whether completed rows stay listed) is a HUD-idiom placeholder marked TUNE in the source, with no reference shot to check it against: all five `Campaign *.png` shots are out-of-mission screens. |
 
 ### Camera
 

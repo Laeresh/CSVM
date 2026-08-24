@@ -1601,7 +1601,7 @@ therefore a plain HUD-idiom placeholder, every metric marked TUNE in the source.
 orchestrator should file: one C1 story mission flown far enough to wake and complete at least one
 objective, showing the original's own in-flight objectives UI (or its absence, the original may
 show nothing in flight and rely on the briefing note alone, which the capture would also settle).
-Names D33 (this section) as the item it unblocks.
+Filed as `CAP-45` in `playtest.md`, naming D33 as the item it unblocks.
 
 **Model recommendation.** medium.
 
