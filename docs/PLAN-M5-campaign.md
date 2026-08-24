@@ -191,7 +191,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ Player profile screen (create, select, delete, text entry)
 22. ☑ Campaign cabin screen (Next Mission, Previous Missions, Plane Construction, Return to Main Menu)
 23. ☐ Mission briefing screen (map, flags, objectives list, narration; replay / return / flight check)
-24. ☐ Flight check screen (pilot + wingmen planes and loadouts, objectives note, plane change, fly mission)
+24. ☑ Flight check screen (pilot + wingmen planes and loadouts, objectives note, plane change, fly mission)
 25. ☑ Ammo selection screen (per gun caliber group, per hardpoint, descriptions) for self and wingmen
 
 ### Wave D — in-mission campaign machinery
@@ -1017,30 +1017,113 @@ correctly.
 **⚠ Traps.** ⚠ Capture-derived timings are TUNE, never fact (A8 trap). String fallback: without
 `messages.json` extracted the screen must show raw `MSG_*` keys, not crash.
 
-## C24 ☐ Flight check screen
+## C24 ☑ Flight check screen
 
 **Goal.** Per `Campaign Flight Check.png`: mission title, PILOT and WINGMAN rows (plane name,
 silhouette, numbered gun list with ammo types, numbered rocket list), Change Ammo per row (into
 C25), the objectives note, RETURN TO BRIEFING / FLY MISSION; plane change offered when the
 mission allows it.
 
-**Evidence (confidence: direction-sound; loadout base traced).** Reference PNG;
-`Loadout.cs`/`stock_loadouts.json` bind the guns/pylons (traced, landed); wingman rosters come
-from `aiv.zrd` (`docs/formats/ai-rosters.md`). Which missions allow a plane change:
-<TODO: source it in A6/A3; the user states it is mission-dependent, the data home is unknown.>
+**Evidence (confidence: traced).** Reference PNG; `docs/formats/campaign-screens.md`'s "Flight
+check" section (landed by A6) traces every row this item draws: the two slots (`-1` pilot, `-2`
+wingman), the title (`uiData` 2009, langui `3450 + seq`), the plane line (`uiData` 2011), the eight
+gun rows (group `row>>1`, blank when the group has no gun or, on the odd row, is not twinned) and
+eight rocket rows (pylon cell `row`, blank when the cell holds ordnance id 11 or the cell does not
+exist), the wingman half gated by `cm_sequence`'s per-entry wingman flag, and the plane-change gate.
+**The plane-change TODO is resolved:** the two rules are `docs/formats/campaign-screens.md`'s
+"Plane change" paragraph, cross-checked against A3/A5's reward-table reading — barred on ordinals
+13 and 17 (the two story-aircraft grants) and whenever the profile owns fewer than three planes;
+the data home is the same table A5 already decoded (`docs/org/hangar.md`, the mission reward
+table), not a new lookup. Ammunition/ordnance short names are `docs/formats/loadouts.md`'s own
+`selectable.gun_ammo`/`selectable.pylon_ordnance` labels, addressed by the same langui ids
+campaign-screens.md cites (`3360 + ammo`, `3395 + ordnance`); the objectives note follows
+`docs/formats/objectives.md`'s "IDENTITY and the objectives display" rule (one row per unique
+priority, sorted, `MSG_key` resolved through `messages.json`).
 
-**Approach.** Board-idiom page reading the mission's roster + the profile's plane/loadout; FLY
-MISSION launches the campaign session (B11) with the chosen fits carried into `Loadout.Bind` for
-player and wingmen.
+**Approach as built.** One file, `CSVM/src/UI/CampaignFlightCheckPage.cs`, plus the
+`CampaignFlow.Registry` line, per C21's wiring contract. The row list carries only the screen's
+actionable items (PILOT/WINGMAN heading, CHANGE AMMO, CHANGE PLANE, RETURN TO BRIEFING, FLY
+MISSION); each heading row's `Detail` carries its plane's dense eight-row gun/rocket block, and
+every row's `Detail` also carries the objectives note, so it stays visible regardless of focus —
+the same row/Detail split `CampaignRosterPage` uses for its own descriptive text.
+
+A plane's guns and hardpoints resolve with one precedence rule, used for both the gun list and the
+pylon-existence test: a hangar build under `CustomPlaneStore` by the plane's name wins when one
+exists; otherwise the airframe's `stock_loadouts.json` fit stands in. This covers all three cases
+the profile can hold a plane in: a player-built aircraft, one of the two seeded starters (`NewProfile`
+gives them no `CustomPlaneStore` entry), and a granted reward aircraft (copied from the stock
+airframe record per campaign-screens.md's "What 2021 does there"), none of which own a hangar
+build. Hardpoint left/right counts reuse `HangarFlow.StockWingCounts` rather than re-deriving the
+fill-order-to-wing split.
+
+**CHANGE PLANE's own design.** `CampaignScreen` carries no picker-screen slot, and this item's
+boundary does not add one (it cannot edit `CampaignFlow.cs` beyond the Registry line). CHANGE
+PLANE therefore cycles the slot's plane through `Profile.Planes` on the row's stepper (←→),
+writing `SelectedPlane`/`WingmanPlane` and saving immediately through `Flow.Store`. This is a
+judgement call, not a decoded behaviour: the original opens a distinct `PlaneSelection` screen
+(campaign-screens.md's screen-flow table). A future item can promote this to a full picker
+(silhouettes via `PlanePickerRoster`, precedent in C21) without changing this row's contract
+(`Flow.Profile.SelectedPlane`/`WingmanPlane` plus a `Flow.Store.Save`).
+
+**Wiring contract: FLY MISSION's handoff (not applied — the shell/director's job).** FLY MISSION
+calls `Flow.Request(CampaignExit.FlyMission)` and leaves the flow standing, exactly like
+`CampaignExit.OpenHangar`'s existing contract. The shell that reads `Exit == FlyMission` must:
+
+1. Launch a campaign session for `Flow.Profile.Name` and `Flow.MissionSeq`, the two fields
+   `SessionSpec`'s `--campaign=<profile>:<seq>` already parses (B11).
+2. Bind the pilot's loadout through `Loadout.Bind`, sourced from `Flow.Profile.Planes[SelectedPlane]`:
+   its `Airframe` picks the built model (via a `CustomPlaneStore` lookup by name, falling back to
+   the stock `LoadoutDef` exactly as this page's own `ResolveGuns`/`ResolveHardpoints` do), and its
+   `Ammo`/`Ordnance` arrays are the per-slot/per-pylon picks to carry into the bound `GunGroup`/
+   `Hardpoint` records in place of the stock ammo/ordnance defaults.
+3. When the mission's wingman flag is set, bind the wingman's aircraft the same way from
+   `Flow.Profile.Planes[WingmanPlane]`, registered under the `wingman_1` name `saved-games.md` and
+   campaign-screens.md's FLY MISSION paragraph both name.
+4. `CampaignPersistLog.ApplyTo` (B12) runs after the bootstrap and before either bind, per D31's own
+   contract; this item does not touch it.
+
+**Open questions, recorded rather than patched here.** (1) `CampaignProfileDef.NewProfile`
+(B11) seeds `WingmanPlane` at 0, the same index `SelectedPlane` starts at, rather than 1 ("The
+Knave"); a fresh profile's WINGMAN row therefore reads the pilot's own plane until the player
+changes it. (2) `NewProfile`'s `OwnedPlane.Ammo`/`Ordnance` arrays default to C# zero (`slug`,
+`Armor-piercing rockets`) rather than the traced stock fit (`slug`, `wep_06`/High explosive
+everywhere); this page renders whatever the profile stores, so a never-touched starter's rocket
+row currently shows "Armor-piercing" rather than "High explosive" until C25 (or a B11 revisit)
+seeds it correctly. Neither is this item's file to fix (`CampaignProfileStore.cs` is "the store").
 
 **Model recommendation.** medium.
 
-**Verify.** Scripted screenshot; then launch and assert (via the in-engine test harness) that the
-flown loadout matches the screen for player and one wingman.
+**Verify.** `CSVM.Tests/CampaignFlightCheckPageTests.cs`, 16 tests: row composition with and
+without a wingman (`ThePilotRowShowsTheSelectedPlaneAndItsChangeAmmoRow`,
+`WithNoWingmanFlagTheWingmanRowsAreAbsent`, `WithTheWingmanFlagSetTheWingmanBlockAndItsChangeAmmoRowAppear`),
+the eight-row blank-is-data rule (`EightRowGunAndRocketListsBlankRatherThanPad`), a custom build
+overriding the airframe's stock fit (`ACustomBuildsOwnGunsOverrideTheAirframesStockFit`), the
+plane-change gate on ordinals 13/17 and under three planes
+(`ChangePlaneIsBarredOnOrdinals13And17AndUnderThreePlanes`, four cases), the stepper writing and
+saving the pick (`ChangePlaneStepsThroughTheOwnedPlanesAndSaves`), the ammo route
+(`ChangeAmmoSetsTheFlowsSlotAndOpensAmmo`), RETURN TO BRIEFING and FLY MISSION
+(`ReturnToBriefingNavigatesBack`, `FlyMissionRequestsTheExit`), plus two `[ExtractedDataFact]`
+tests against the real install (`TheWingmanFlagAgreesWithCampaignSequenceForARealMission`,
+`TheObjectivesNoteListsNumberedLinesForARealMission`). Foreground `dotnet test
+CSVM.Tests/CSVM.Tests.csproj`: 2069/2069 passed, 0 failed, 0 skipped. `dotnet build`/`dotnet
+format` clean, comment caps clean.
+
+No scripted screenshot was taken: `LaunchMenu.OpenCampaignAid`'s aid list
+(`"campaign"`/`"campaign-empty"`/`"campaign-roster"`/`"campaign-entry"`) is a literal set inside
+`LaunchMenu.cs`, off limits to this item's boundary, and none of the four existing aids reaches
+the flight check screen (they all stop at the roster). **Described for the orchestrator instead:**
+a `"campaign-flightcheck"` aid, added the same way `"campaign-roster"` is, that seeds one profile
+via `AidProfileStore`, calls `flow.SelectProfile` then `flow.SetMission(0)` then
+`flow.GoTo(CampaignScreen.FlightCheck)`, over a scratch profile directory exactly like the other
+three aids use, so the shot stays machine-independent.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** The silhouette per airframe: reuse the hangar's plane preview path rather than new
-art. Ammo lists number to 8 slots with blanks; blanks are data (absent guns), not padding to
-invent.
+art — done via the same `PX_<n>_BLUEPRINT.TGA` path `HangarAirframePage.BlueprintFor` reads,
+loaded independently rather than by importing that page. Ammo lists number to 8 slots with blanks;
+blanks are data (absent guns / a pylon past the hardpoint count / ordnance id 11), never padding to
+invent — the eight-row test above (`EightRowGunAndRocketListsBlankRatherThanPad`) is the proof.
 
 ## C25 ☑ Ammo selection screen
 
