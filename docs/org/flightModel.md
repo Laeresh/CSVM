@@ -224,7 +224,8 @@ is not evidence for neutralising. It is a footage-derived distance, the class of
 has failed here repeatedly and may not contest a decode, and the magnitude under freezing is a
 function of **our** AI's last throttle rather than the original's, so neither number tests the
 mechanism. If the downrange reads wrong at the controls, the open question is what throttle an AI
-carries into its death (`BL-414`), not whether to reinstate a neutraliser the original never had.
+carries into its death, which is a decode of the AI's own throttle command and not whether to
+reinstate a neutraliser the original never had.
 
 ⚠ **Decoded for an AI, assumed for a human.** What `FUN_004897c0` skips on death is the AI think
 (`FUN_0041f810`/`FUN_0041c270`) and the weapon loop, so an AI's commands demonstrably stop being
@@ -1721,9 +1722,10 @@ shape); the hunt is what proved the keys dead.
 ## The resting altitude cap — measured, and traced to ONE mission
 
 The original's flight has a ceiling: the sustained climb above leaves its plateau at ≈6,600 ft
-(`CAP-03`). The remake carries it as a hard clamp at **2003 m**, with a **42.8 m (~140 ft)**
-overshoot backstop above that. Both numbers are **footage measurements** (C1B IA1, Bloodhawk) —
-nothing in `crimson.exe` has been traced to either, so this section is measurement, not decode.
+(`CAP-03`). The remake carries it as a hard clamp at **2003 m**. That number is a **footage
+measurement** (C1B IA1, Bloodhawk); nothing in `crimson.exe` has been traced to it, so this section
+is measurement, not decode. It is the plant's only non-decoded constant that binds in the stock
+envelope, and it is kept as a named product exception rather than as parity behaviour.
 
 **It is a clamp on ALTITUDE, not an energy limit**, and the footage is what says so: the level
 full-throttle equilibrium is flat to ±0.3 mph right up to 15 m under the line, and holding a 22°
@@ -1732,10 +1734,17 @@ bleeds instead. The mechanism therefore deletes the frame's climbing velocity ou
 fading thrust, lift or drag toward the ceiling. Whatever that bleed then runs into — the stall
 thresholds above — is a consequence of the clamp, not a second mechanism built beside it.
 
-The overshoot figure is a backstop only. The footage's zoom entries coast past the resting cap on
-pre-existing momentum before the clamp ever catches them, so it needs only to be at least as
-generous as the measured **6712 ft** apex; it bounds a runaway frame, it does not shape the
-overshoot.
+**There is no separate overshoot constant, because the clamp bounds its own overshoot.** Deleting
+the climbing velocity at the line leaves an aircraft at most one frame of climb above it, and flown
+on all eleven airframes from a 89° entry the greatest height reached above 2003 m is **1.46 m**
+(Brigand), against a one-frame ceiling of 2.30 to 3.94 m. A `42.8 m` (~140 ft) `Position.Y` backstop
+used to sit above the cap, sized to the footage's **6712 ft** zoom apex; that apex is a ballistic
+coast past the ceiling, a shape a velocity deletion cannot produce, so the constant described
+behaviour this model does not have and never engaged. Removing it leaves the eleven-airframe flight
+dump byte-identical, while shrinking it to 0.05 m moves 22 of the dump's lines, which is the control
+that says the instrument can see the clamp at all. `FlightConstantInventoryTests` measures the
+overshoot per airframe, so a mechanism that ever does coast past the line fails rather than passing
+under a constant nobody re-measured.
 
 ⚠ **Traced to ONE mission.** Do not assume the cap is global, per-chapter/zone, or per-aircraft
 until another mission's footage says otherwise.
@@ -1744,6 +1753,11 @@ until another mission's footage says otherwise.
 (1.75 × `fd_speed`) is a numerical backstop against a loop energy pump or a `dt` spike, not a
 terminal speed — a cap that binds replaces a measured terminal with a guess. It does not bind: the
 Bloodhawk's full-throttle 71° dive terminates at **1.11 × `fd_speed`** on the aerodynamics alone.
+Across all eleven airframes, the fastest of a vertical dive, a 70.7° dive and a held loop, each
+entered at `fd_speed` and flown two minutes, peaks between **0.996 and 1.191 × `fd_speed`**, so the
+narrowest margin to the cap is 0.56 `fd_speed` (`FlightConstantInventoryTests`). Entering a dive
+above terminal does not test it either, since the aircraft only decelerates from there
+(`docs/verification.md` METHOD-21).
 It is also the ceiling the `high_speed_pitch_fade` unreachability table below is computed from,
 precisely because it is the most generous "could this airframe ever get there" test available.
 
@@ -2273,6 +2287,68 @@ STEADY rate, which matches; a transient chased through them breaks the thing tha
 The square-wave cadence sweep is the measurement that belongs to that gap — see the stick-ramp
 section's landing note.
 
+## The plant's constant inventory
+
+Every number the live translational and rotational path carries that no data file authors, with the
+class it falls in. `CSVM.Tests/FlightConstantInventoryTests` holds the same table and fails when a
+constant is added, dropped or moved off its recorded value, so a new number cannot arrive here
+without a provenance. Five classes are used:
+
+- **decoded** reads out of `crimson.exe` at the address given, and the sections above carry the
+  mechanism.
+- **authored** mirrors a key in the extracted data.
+- **unit** is a conversion factor or an arithmetic identity, with no behaviour of its own.
+- **exception** is a CSVM invention kept deliberately, with a reason and a reachability
+  measurement.
+- **contact** belongs to the collision response, which `C21`/`C22` own; the graze trio there is the
+  only fitted group left in the file.
+
+| Constant | Value | Class | Evidence |
+|---|---:|---|---|
+| `ThrustMachFloor` | 0.1 | decoded | `0x6034a8`, the Mach floor written back into the argument at `0x41ad02` |
+| `ThrustVRefSlope` | 0.84 | decoded | `0x60349c` |
+| `ThrustVRefMach` | 0.112 | decoded | `0x603498` |
+| `ThrustMachTrim` | 1/60 | decoded | `0x603494` |
+| `ThrustPowMach` | 1.41 | decoded | `0x6034a0`, the `_CIpow` exponent |
+| `ThrustPowBase` | 1.33 × 0.98842078 | decoded | `0x6034a4` times the dense band's `k` |
+| `AttitudeThrustBoth` | 0.24 | decoded | `0x6080dc`, applied at `0x48fd14` |
+| `AttitudeThrustUp` | 0.13 | decoded | `0x6080d8`, the one-sided branch at `0x48fd00` |
+| `LiftGMin` / `LiftGMax` | −5 / 9 | decoded | the lift clamp in `FUN_0041abd0` |
+| `ClMaxStatic` / `ClMaxMach` | 0.75 / 0.15 | decoded | the aerodynamic ceiling in `FUN_0041abd0` |
+| `AirDensitySlugPerFt3` | 2.2688e-3 | decoded | `FUN_0041aca0`, dense band |
+| `SpeedOfSoundFps` | 1109.5 | decoded | `FUN_0041aca0`, dense band |
+| `FeetPerMetre` / `MetresPerFoot` | 3.28084 / 0.3048 | unit | the altitude and Mach conversions the aero path runs in |
+| `StandardG` | 9.82 | decoded | the force-to-acceleration multiply at `0x491290` |
+| `StallWarnFrac` | 0.30 | exception | the STALL lamp's threshold, measured at 0.2989–0.2996 over four clips. A cue, not a force term |
+| `MaxDiveSpeedFrac` | 1.75 | exception | a numerical backstop against a loop energy pump or a `dt` spike, measured non-binding on all eleven (above) |
+| `AltitudeCapM` | 2003 | exception | the resting ceiling, measured off `CAP-03` / C1B IA1. It binds, deliberately |
+| `GroundBlowIntoFactor` | 0.05 | decoded | the immediate in the player branch of `FUN_0048c220` |
+| `GroundBlowVelocitySteer` | 2.0 | decoded | a global whose only writer is the `gbc` debug console command |
+| `BounceLeverScale` | 2.25 | contact | the literal at `0x00608108`, no data origin |
+| `GrazeFriction` / `GrazeKick` / `GrazePushOut` | 0.35 / 1.2 / 0.15 | contact | **fitted**, ours rather than the original's, co-tuned as one group with `BounceLeverScale`. `C22` owns them |
+| `DragPolarScale` | 0.73 | decoded | `0x603474`, shared with the thrust curve |
+| `DragPolarParasite` / `Linear` / `Quad` | 0.12 / 0.8 / 0.5 | decoded | `FUN_0041ada0`, the polar in Mach |
+| `PitchTune` / `YawTune` / `RollTune` | 1 / 1 / 1 | decoded | absent from `FUN_0048c470`'s torque chains; see "The `*Tune` rates" |
+| `BankYawCoupling` / `BankPitchCoupling` | 0.205 / 0.165 | decoded | `0x6289f8` / `0x6289fc` |
+| `WeathervaneHalfAngle` | 0.5 | decoded | the quaternion-log halving at `0x4916fe`–`0x4917f0` |
+| `AiNoseSpeedFloor` | 4.4704 | decoded | `0x608128`, the block at `0x48e95e`–`0x48e998` |
+| `ReverseAuthorityFloor` | 0.2 | decoded | `0x6034fc`, `FUN_0048bdd0`'s fifth output |
+| `PhysicsConstants.NomGravity` | 20 | authored | `player.json`'s `nom_gravity`, mirrored for ballistics |
+| `PhysicsConstants.MphToMs` | 0.44704 | decoded | the parser's own speed-token scale |
+| `StickRamp.Rate` | 2.5 | decoded | `FUN_00487460`, 0.4 s of held key to full deflection |
+
+The `flightModel.*` config block overrides seven of these: `pitchTune`, `yawTune`, `rollTune`,
+`stallWarnFrac`, `liftGMin`, `liftGMax` and `altitudeCapM`. A key is a development seam for an A/B
+at the controls and says nothing about provenance; the three `*Tune` keys in particular exist so a
+decoded 1 can be compared against a fitted value by hand, and the inventory test pins all three at
+1 so a fit cannot return quietly. `FlightConstantInventoryTests` also asserts the block's key set,
+so a key added without an inventory row fails rather than appearing in a `--dump-config` template
+nobody reads.
+
+⚠ **A constant with no evidence column is a fitted constant.** That is what the census test enforces:
+it does not check that a number is right, only that somebody classified it, which is the step that
+was skipped every time a fitted multiplier survived a rewrite here.
+
 ## What the test suite pins, and why each test can fail
 
 Every decoded mechanism above has an able-to-fail assertion behind it, and several of those tests
@@ -2328,6 +2404,14 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   disproof carries its own able-to-fail control (`METHOD-9`): halving both authored thresholds must
   make both checks fail, otherwise the manoeuvres have gone too gentle to trip anything and the
   disproof has stopped measuring a margin.
+- **`FlightConstantInventoryTests`** — the inventory table above, as a census over the plant's own
+  const fields plus the `flightModel.*` config block. It checks provenance, not correctness: a
+  constant added, dropped or moved fails until somebody classifies it, which is the step skipped
+  every time a fitted multiplier survived a rewrite here. Beside the census it measures what the
+  two reachability claims rest on, per airframe: the fastest manoeuvre's peak against
+  `MaxDiveSpeedFrac`, and the height reached above the altitude cap against one frame of climb.
+  ⚠ Its own able-to-fail control is that the fastest manoeuvre still exceeds `fd_speed`; a scenario
+  gone gentle would pass the dive-cap disproof while measuring nothing (`METHOD-9`).
 - **`FlightEnvelopeTests`** — the Bloodhawk's flown envelope against cockpit-gauge video, as golden
   numbers ("150 → 290 mph in 3.76 s" is an invariant of a fixed artifact). The count of asserted
   scenarios is **pinned at 7** so that silently demoting one to informational cannot read as a green

@@ -34,8 +34,8 @@ public struct FlightInput
 /// never the bank coupling or the weathervane.
 /// Decode: docs/org/flightModel.md. The two force paths, the plumbing and the standing
 /// decode-vs-footage gaps: this module's entry in docs/architecture.md.
-/// ⚠ Do not retune the constants marked TUNE by feel. The graze trio on Collide is ours; the
-/// altitude clamp is footage-derived, and the dive/overshoot caps are numerical backstops.
+/// ⚠ Do not retune these constants by feel. Every one is classified in docs/org/flightModel.md's
+/// "The plant's constant inventory" and pinned by CSVM.Tests/FlightConstantInventoryTests.
 /// </summary>
 public sealed class FlightModel
 {
@@ -120,15 +120,13 @@ public sealed class FlightModel
     private const float MaxDiveSpeedFrac = 1.75f;
 
     // The measured resting altitude cap, a clamp on altitude rather than an energy limit: it deletes
-    // climbing velocity outright instead of fading thrust, lift or drag toward it.
+    // climbing velocity outright instead of fading thrust, lift or drag toward it. That deletion is
+    // also what bounds the overshoot above the line, so no second constant carries one.
     // docs/org/flightModel.md, "The resting altitude cap".
     // ⚠ Traced to ONE mission and one airframe. Do not assume it is global, per-chapter/zone or
     // per-aircraft.
     private const float AltitudeCapM = 2003f;
 
-    // Numerical backstop (~140 ft), NOT a modelled spring: it bounds a runaway frame to the measured
-    // ballistic overshoot rather than shaping the overshoot.
-    private const float AltitudeCapOvershootM = 42.8f;
     // Ground blow's two constants that are NOT in player.json (the three that are live on
     // PlaneStats). Both are decoded, neither is a TUNE: the 0.05 is an immediate in the player
     // branch, and the 2.0 is a global whose only writer is the original's `gbc` debug console
@@ -407,7 +405,6 @@ public sealed class FlightModel
         float liftGMin = Config.GetFloat("flightModel.liftGMin", LiftGMin);
         float liftGMax = Config.GetFloat("flightModel.liftGMax", LiftGMax);
         float altitudeCapM = Config.GetFloat("flightModel.altitudeCapM", AltitudeCapM);
-        float altitudeCapOvershootM = Config.GetFloat("flightModel.altitudeCapOvershootM", AltitudeCapOvershootM);
 
         // --- rotation: torque·recInertia against momentum damping, plus the bank coupling and the
         // weathervane into the same accumulator. Each axis carries its own authored authority curve
@@ -575,9 +572,6 @@ public sealed class FlightModel
         }
 
         Position += VelocityDir * Speed * dt;
-        // Backstop, not a modelled spring (same role as MaxDiveSpeedFrac): bounds a runaway frame to
-        // the measured ballistic overshoot rather than ever reproducing its shape.
-        Position.Y = Mathf.Min(Position.Y, altitudeCapM + altitudeCapOvershootM);
     }
 
     /// <summary>Below the airframe's own computed <see cref="StallSpeed"/> — the aerodynamic stall

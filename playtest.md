@@ -79,7 +79,7 @@ them in a batch unblocks far more than doing them one at a time.
 cockpit panel does not settle a flight quantity: footage cannot confirm a decode, it only ranks
 readings, and it will rank a reading nobody has thought of (`docs/verification.md` DET-12, and
 DET-11 on the sim clock that makes every wall-clock rate wrong by 39 %). Flight questions go to
-`crimson.exe` — see `BL-414`. The captures below are **qualitative**: what a thing looks and
+`crimson.exe` — see [`docs/org/flightModel.md`](docs/org/flightModel.md). The captures below are **qualitative**: what a thing looks and
 sounds like, watched and frame-sampled, never measured into a constant.
 
 ### HUD — ammo gauge in frame

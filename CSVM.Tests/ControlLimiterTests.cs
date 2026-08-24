@@ -22,6 +22,11 @@ public class ControlLimiterTests
     // The executable's compiled fallback `highGs` — NOT what this install authors.
     private const float FallbackHighGStart = 5f;
 
+    // The able-to-fail control's α fraction — NOT a measurement, just "a threshold the model can
+    // still cross". Was 0.5, which retiring wingVert put 0.4% out of reach (peak α 22.9° against
+    // 23.0°); pulling harder does not help, since α is a lag bounded by the chase rate.
+    private const float DisproofAoaFraction = 0.45f;
+
     private static readonly string[] AllPlanes =
     {
         "player_bhawk", "player_pfighter", "player_fury", "player_warhawk", "player_autogyro",
@@ -41,11 +46,6 @@ public class ControlLimiterTests
         ("push @ 1.5 fd", 1.5f, new FlightInput { Pitch = -1f, Throttle = 1f }),
         ("rudder @ fd", 1.0f, new FlightInput { Yaw = 1f, Throttle = 1f }),
     };
-
-    // The able-to-fail control's α fraction — NOT a measurement, just "a threshold the model can
-    // still cross". Was 0.5, which retiring wingVert put 0.4% out of reach (peak α 22.9° against
-    // 23.0°); pulling harder does not help, since α is a lag bounded by the chase rate.
-    private const float DisproofAoaFraction = 0.45f;
 
     private static string ZrdrPath =>
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));

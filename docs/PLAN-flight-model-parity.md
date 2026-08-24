@@ -97,7 +97,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Settle the translational plant
 
-1. ☐ A1 Finish the fitted-constant audit (`BL-414`)
+1. ☑ A1 Finish the fitted-constant audit (`BL-414`)
 2. ☐ A2 Decode and port the target-velocity acceleration path (`BL-438`)
 3. ☐ A3 Settle part-throttle equilibrium (`BL-439`)
 4. ☐ A4 Resolve the live atmosphere band
@@ -137,7 +137,7 @@ D34 are independent. E41 follows A2/B11, and E42 follows every other item.
 
 # Wave A — Settle the translational plant
 
-## A1 ☐ Finish the fitted-constant audit (`BL-414`)
+## A1 ☑ Finish the fitted-constant audit (`BL-414`)
 
 **Goal.** Decode, remove or explicitly classify every non-authored plant constant.
 
@@ -152,6 +152,22 @@ and knife-edge floor. The graze trio remains fitted; altitude and speed caps are
 **Verify.** Add an able-to-fail inventory test; baseline the flight dump and run `RunTests.ps1`.
 
 **⚠ Traps.** A config override is not necessarily fitted behavior. Do not count removed history.
+
+**Landed.** Every constant in the plant is classified in `docs/org/flightModel.md`'s "The plant's
+constant inventory", and `CSVM.Tests/FlightConstantInventoryTests` censuses the const fields and the
+`flightModel.*` config block against it, so an unclassified number fails rather than arriving
+quietly. Outside `Collide` the only constants that are not decoded are three named exceptions: the
+2003 m altitude cap (footage, binds deliberately), the STALL lamp's 0.30 fraction (footage, a cue
+that no force term reads) and `MaxDiveSpeedFrac` 1.75 (a numerical backstop, measured non-binding
+with a 0.56 `fd_speed` margin on the tightest of the eleven). The `42.8 m` overshoot backstop is
+removed: the altitude clamp deletes climbing velocity, which bounds overshoot to one frame of climb,
+and the worst of the eleven reaches 1.46 m. Removing it leaves the eleven-airframe flight dump
+byte-identical, while shrinking it to 0.05 m moves 22 lines of that dump, which is the control that
+the instrument sees the clamp. The graze trio stays fitted and is deferred to `C21`/`C22`; the
+`*Tune` trio is decoded-absent, held at 1 and now pinned there by the census.
+
+**Verified.** Full `RunTests.ps1` battery on the lane tree: build clean, 1998/1998 units,
+93/93 engine suites with engine errors clean, 16/16 goldens hash-identical, exit 0.
 
 ## A2 ☐ Decode and port the target-velocity acceleration path (`BL-438`)
 
@@ -284,7 +300,9 @@ Trace the remaining contact path, then route damage through `PlaneDamage` and po
 
 **Evidence (confidence: lead-only).** The backlog records an owed at-controls comparison, not a mechanism.
 
-**Approach.** <TODO: re-verify still-open against `git log --grep=BL-120` and `playtest.md`.> Run matched original/CSVM corner approaches after C21-C22.
+**Approach.** <TODO: re-verify still-open against `git log --grep=BL-120` and `playtest.md`.> Run matched original/CSVM corner approaches after C21-C22. The same sitting covers `BL-121`'s
+owed graze-feel check (kick, friction, stop behavior as settled by C21-C22), so that item needs no
+separate flight; its breakup-scatter remainder stays in the backlog.
 
 **Model recommendation.** **medium** — bounded playtest and evidence recording.
 
