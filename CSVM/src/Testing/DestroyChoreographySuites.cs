@@ -363,24 +363,19 @@ internal static class DestroyChoreographySuites
                 var spec = SessionSpec.Parse(System.Array.Empty<string>());
                 var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
                 var factory = new Session.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
-                var inputs = new HumanFlightAdapter.Inputs
+                var inputs = new AircraftAssemblyResources
                 {
                     PlanesGamez = planesGamez,
                     StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
                     AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-                    RigCount = 0,
                     PaintRng = new RandomNumberGenerator(),
                     ZrdrPath = ctx.ZrdrPath,
                     StockLoadouts = StockLoadouts.Load(),
                     WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
                     Textures = textures,
-                    Projectiles = live,
                     Shakes = ShakeDefs.Load(ctx.ZrdrPath),
-                    Gamez = world.Gamez,
-                    WorldScene = world.Session.Builder.Scene,
-                    CrashProgram = world.Session.Program,
                 };
-                var spawner = new FlightRoster(spec, liveries, factory, ctx.Host, inputs);
+                var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, factory, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = world.Gamez, WorldScene = world.Session.Builder.Scene, CrashProgram = world.Session.Program }, new HumanRosterBindings());
 
                 // A suite that built no colliders would pass the landing arm by never reaching the
                 // ground at all, so the chapter's geometry is found before anything is asked of it.

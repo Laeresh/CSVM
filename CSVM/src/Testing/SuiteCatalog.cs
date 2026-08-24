@@ -59,6 +59,7 @@ public static class SuiteCatalog
         "instant-action-end",
         "instant-action-wrapup",
         "results-board-shell",
+        "flight-roster-transaction",
         "inert-aircraft",
         "world-turrets",
         "carried-turrets",
@@ -348,6 +349,11 @@ public static class SuiteCatalog
             "release to the live flag, the flag clearing retires the board and releases the " +
             "clock — and the wrap-up board's own menu-driven retire, which no flag ever performs",
             ResultsBoardShell));
+        into.Add(new TestHarness.Suite("flight-roster-transaction",
+            "FlightRoster owns human and AI assembly as atomic transactions: a late second-human " +
+            "failure removes external bindings, a retry commits both humans in order with complete " +
+            "bindings, and a late AI failure restores pilot/RNG state and consumes no identity",
+            FlightRosterTransaction));
         into.Add(new TestHarness.Suite("inert-aircraft",
             "the E10 inert state, each claim watched passing on a live aircraft first and on the " +
             "inert one AFTER activation: a plane built inert is not returned by a raycast, is " +

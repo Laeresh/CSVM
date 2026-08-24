@@ -13,32 +13,37 @@ namespace CSVM.Session;
 /// HUD readout/reticle, damage visuals, audio, this player's stunt run, the spawn placement, and
 /// the crash runtime built once the controller is in the tree.
 ///
-/// Constructed once per session with the session-wide flight data (<see cref="Inputs"/>: the
+/// Constructed once per session with the session-wide flight data (the
 /// planes gamez, stats cache, pads, paint rng, spawn list, weapons/loadouts, HUD assets, the
 /// shared projectile pool), then <see cref="Assemble"/>d once per rig, in player order.
 /// ⚠ <b>Player order is load-bearing:</b> the paint rng and the spawn index wrap are shared
 /// streams, so P1..P4 must draw in ascending order or every livery and spawn changes.</summary>
 internal sealed class HumanFlightAdapter
 {
-    private readonly SessionSpec _spec;
+    private readonly FlightRosterPolicy _policy;
     private readonly LiveryResolver _liveries;
     private readonly IFlightStarts _spawns;
     private readonly WorldEffectsFactory _worldEffects;
     private readonly Node3D _worldRoot;
-    private readonly Inputs _in;
+    private readonly AircraftAssemblyResources _aircraft;
+    private readonly FlightWorldBindings _world;
+    private readonly HumanRosterBindings _human;
 
     // Every player's start, resolved in one call (see Assemble).
     private IReadOnlyList<FlightStart>? _starts;
 
-    public HumanFlightAdapter(SessionSpec spec, LiveryResolver liveries, IFlightStarts spawns,
-        WorldEffectsFactory worldEffects, Node3D worldRoot, Inputs inputs)
+    public HumanFlightAdapter(FlightRosterPolicy policy, LiveryResolver liveries, IFlightStarts spawns,
+        WorldEffectsFactory worldEffects, Node3D worldRoot, AircraftAssemblyResources aircraft,
+        FlightWorldBindings world, HumanRosterBindings human)
     {
-        _spec = spec;
+        _policy = policy;
         _liveries = liveries;
         _spawns = spawns;
         _worldEffects = worldEffects;
         _worldRoot = worldRoot;
-        _in = inputs;
+        _aircraft = aircraft;
+        _world = world;
+        _human = human;
     }
 
     /// <summary>Mesh instances the assembled planes added, accumulated across the rigs — the
@@ -73,14 +78,17 @@ internal sealed class HumanFlightAdapter
     /// <summary>Builds player <paramref name="pi"/>'s aircraft into <paramref name="rig"/> and
     /// adds it to the session world. Call once per rig in ascending player order (see the class
     /// note on the shared rng streams).</summary>
-    public void Assemble(int pi, PlayerRig rig)
+    public void Assemble(int pi, PlayerRig rig, Action<FlightController> onCreated)
     {
         bool verbose = pi == 0; // the per-plane detail lines are identical for every player
-        string tag = _in.RigCount > 1 ? $"P{pi + 1} " : "";
+        string tag = _human.RigCount > 1 ? $"P{pi + 1} " : "";
         // Each player flies their own pick; an active Instant Action mission overrides this for
         // every human alike, since the def carries one player_plane, not a per-player list.
-        string planeName = _in.InstantActionPlayerPlaneNode ?? PlaneRoster.PlaneFor(_spec, pi);
-        var stats = _in.StatsFor(planeName);
+        string planeName = _human.InstantActionPlayerPlaneNode
+            ?? (_policy.PlaneNames.Count == 0
+                ? _policy.PlaneName
+                : _policy.PlaneNames[Math.Min(pi, _policy.PlaneNames.Count - 1)]);
+        var stats = _aircraft.StatsFor(planeName);
 
         // The plane this pilot BUILT, when they picked one: its guns, pylons, paint and armour
         // replace the airframe's stock ones below. Null on every stock pick, and empty outside a
@@ -94,7 +102,7 @@ internal sealed class HumanFlightAdapter
         // replaces the airframe's stock EnginePower on a COPY (the stats object is the shared
         // per-airframe cache). Stock pick (id 6) keeps the airframe's own row.
         if (custom != null
-            && Flight.CustomPlaneBuild.EnginePowerFor(_in.ZrdrPath, custom) is { } enginePower)
+            && Flight.CustomPlaneBuild.EnginePowerFor(_aircraft.ZrdrPath, custom) is { } enginePower)
         {
             stats = stats.WithEnginePower(enginePower);
         }
@@ -105,11 +113,11 @@ internal sealed class HumanFlightAdapter
         long mark = StartupProfile.Mark();
         // cockpitInterior: a human rig is the only one whose pilot can look out of a cockpit
         // (PLAN-cockpit-view, B11) — FlightRoster's AI builder deliberately does not ask for one.
-        var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
+        var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
             scheme: custom != null && !_liveries.PaintRequested
                 ? Flight.CustomPlaneBuild.PaintFor(custom, UI.HangarPaintPage.PatternName(custom.PaintPattern))
-                : _liveries.SchemeFor(pi, _in.ZrdrPath, _in.PaintRng,
-                    _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),
+                : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
+                    _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)),
             patterns: _liveries.Patterns, cockpitInterior: true);
         var planeModel = planeBuilder.Build(planeName);
         StartupProfile.Record("plane", mark);
@@ -117,9 +125,9 @@ internal sealed class HumanFlightAdapter
 
         var controller = new FlightController
         {
-            DebugCollision = _in.DebugCollision,
-            PinnedView = _spec.View,
-            PinnedViewMode = _spec.ViewMode,
+            DebugCollision = _world.DebugCollision,
+            PinnedView = _policy.View,
+            PinnedViewMode = _policy.ViewMode,
             HudParent = rig.Viewport,
             // Null when the airframe ships no cockpit1 — the rig then hides nothing, as before B11.
             Cockpit = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior),
@@ -136,11 +144,11 @@ internal sealed class HumanFlightAdapter
             PlayerIndex = pi,
             IsHumanPiloted = true,
             // one scripted sequence per player ('|'-separated); the last covers the rest
-            HoldSegments = _spec.HoldSets == null ? null
-                : _spec.HoldSets[Math.Min(pi, _spec.HoldSets.Length - 1)],
+            HoldSegments = _policy.HoldSets == null ? null
+                : _policy.HoldSets[Math.Min(pi, _policy.HoldSets.Length - 1)],
             PlaneModel = planeModel,
             Props = PropAnimator.Build(planeModel),
-            WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod),
+            WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _policy.AnimLod),
             Surfaces = ControlSurfaceAnimator.Build(planeModel),
             Collider = PlaneCollider.Build(planeModel),
             // A custom plane's four bought zones stand in for the airframe's stock ARMOUR pools,
@@ -149,29 +157,32 @@ internal sealed class HumanFlightAdapter
             Damage = stats.DestroyableParts.Count == 0 ? null
                 : custom != null ? Flight.CustomPlaneBuild.DamageFor(stats, custom)
                 : PlaneDamage.For(stats),
-            CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
-            GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
-            TouchdownDefs = _in.TouchdownDefs,
+            CollideDamageSink = _world.WorldRuntime != null ? _world.WorldRuntime.CollideDamageAt : null,
+            GrazeEffectSink = _world.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
+            TouchdownDefs = _world.TouchdownDefs,
+            Projectiles = _world.Projectiles,
+            HumanPositions = _world.HumanPositions,
             // ⚠ Pass the null through. Null and empty are DIFFERENT bindings to Pads.For: null
             // reads every connected pad (the single-player default, which AssignPads returns for
             // one player), empty reads none. Coalescing here flew a single player pad-dead.
-            PadDevices = _in.PadAssignment?[pi],
+            PadDevices = _human.PadAssignment?[pi],
             UseKeyboard = pi == 0,
             AllowPause = true,
-            Team = _in.InstantActionActive || _in.Coop ? AimAssist.PlayerTeam : null,
-            Shake = new PlaneShake(_in.Shakes),
+            Team = _human.InstantActionActive || _human.Coop ? AimAssist.PlayerTeam : null,
+            Shake = new PlaneShake(_aircraft.Shakes),
         });
+        onCreated(controller);
 
         // Guns/hardpoints: bind this plane's stock loadout (or the --loadout override) to
         // its built model — resolves markers to muzzle nodes + weapons to WeaponDefs.
         // Set before the controller enters the tree (its _Ready builds the fire state).
-        var loadoutDefName = _spec.LoadoutOverride ?? stats.DefName;
-        if (_in.StockLoadouts.For(loadoutDefName) is { } stockDef)
+        var loadoutDefName = _policy.LoadoutOverride ?? stats.DefName;
+        if (_aircraft.StockLoadouts.For(loadoutDefName) is { } stockDef)
         {
             // A custom plane's guns and hardpoints replace the stock ones and the Ammo Selection
             // layer composes over THAT (the built def leaves WeaponId null so a picked ammo still
             // resolves). --loadout= names a def outright, so it takes the whole fit either way.
-            var baseDef = custom != null && _spec.LoadoutOverride == null
+            var baseDef = custom != null && _policy.LoadoutOverride == null
                 ? Flight.CustomPlaneBuild.LoadoutFor(custom, stockDef)
                 : stockDef;
             var ldef = MenuFitFor(pi) is { } choice ? choice.ApplyTo(baseDef) : baseDef;
@@ -180,28 +191,27 @@ internal sealed class HumanFlightAdapter
                 // The weapon lab flies the FULL-RIG loadout instead: every firepoint and
                 // every pylon the airframe carries, seeded from this same stock fit — so the
                 // panel can mount a weapon on a hardpoint the stock file never names.
-                controller.Loadout = _spec.WeaponLab
-                    ? Loadout.ForRig(planeModel, _in.WeaponDefs, ldef)
-                    : Loadout.Bind(ldef, planeModel, _in.WeaponDefs);
-                controller.Projectiles = _in.Projectiles;
+                controller.Loadout = _policy.WeaponLab
+                    ? Loadout.ForRig(planeModel, _aircraft.WeaponDefs, ldef)
+                    : Loadout.Bind(ldef, planeModel, _aircraft.WeaponDefs);
                 // The gun aim assist's structure candidates (B4): the world's
                 // destructibles, when this session built a world at all.
-                controller.Destructibles = _in.WorldRuntime?.Destructibles;
-                controller.InfiniteAmmo = _spec.InfiniteAmmo;
-                controller.AmmoCapOverride = _spec.AmmoCap;
-                controller.AutoFire = _spec.AutoFire;
-                controller.AutoFireRockets = _spec.AutoFireRockets;
-                controller.InitialGunSelect = _spec.GunSelect;
+                controller.Destructibles = _world.WorldRuntime?.Destructibles;
+                controller.InfiniteAmmo = _policy.InfiniteAmmo;
+                controller.AmmoCapOverride = _policy.AmmoCap;
+                controller.AutoFire = _policy.AutoFire;
+                controller.AutoFireRockets = _policy.AutoFireRockets;
+                controller.InitialGunSelect = _policy.GunSelect;
                 // --rocket=<wep_id>: swap every hardpoint's ordnance before the model is mounted.
                 // A testing hook — all 11 stock loadouts carry HE, so this is the only way to
                 // prove the mounted model varies by rocket type.
-                if (_spec.RocketOverride != null)
+                if (_policy.RocketOverride != null)
                 {
-                    Testing.ProbeRunner.ApplyRocketOverride(controller.Loadout, _in.WeaponDefs, _spec.RocketOverride, verbose);
+                    Testing.ProbeRunner.ApplyRocketOverride(controller.Loadout, _aircraft.WeaponDefs, _policy.RocketOverride, verbose);
                 }
                 // Hang the FLYOUT-model ordnance under the pylons — one body per pylon,
                 // hidden as its ammo depletes. Uses the same gamez prototype the round flies.
-                controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _in.Projectiles, controller.InfiniteAmmo);
+                controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _world.Projectiles, controller.InfiniteAmmo);
                 if (verbose)
                 {
                     int groups = 0;
@@ -209,13 +219,13 @@ internal sealed class HumanFlightAdapter
                     GD.Print($"weapons: {groups} gun group(s), {controller.Loadout.Hardpoints.Count} " +
                              $"hardpoint(s), guns=Space/pad-B rockets=F/pad-A, " +
                              $"select guns=G/dpad-L rockets=H/dpad-R" +
-                             (_spec.GunSelect != 0 ? $" [gun-select={_spec.GunSelect}]" : "") +
-                             (_spec.InfiniteAmmo ? " (infinite ammo)" : "") +
-                             (_spec.AmmoCap != null ? $" (--ammo={_spec.AmmoCap})" : ""));
+                             (_policy.GunSelect != 0 ? $" [gun-select={_policy.GunSelect}]" : "") +
+                             (_policy.InfiniteAmmo ? " (infinite ammo)" : "") +
+                             (_policy.AmmoCap != null ? $" (--ammo={_policy.AmmoCap})" : ""));
                     if (controller.Ordnance is { } ord)
                     {
                         GD.Print($"pylon ordnance: {ord.Count} mounted rocket model(s)" +
-                                 (_spec.RocketOverride != null ? $" (--rocket={_spec.RocketOverride})" : ""));
+                                 (_policy.RocketOverride != null ? $" (--rocket={_policy.RocketOverride})" : ""));
                     }
                 }
             }
@@ -232,10 +242,10 @@ internal sealed class HumanFlightAdapter
         // The carried turret gunners: the vehicle def's thirdp turrets block resolved
         // by TITLE against ai.zrd and by node against this built model. Independent of the
         // stock loadout — the gunner's weapon comes from its ai.zrd row, not from a gun slot.
-        if (_in.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
+        if (_aircraft.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
         {
             controller.Turrets = TurretController.BuildCarried(
-                turretDefs, stats, planeModel, _in.WeaponDefs, controller, _in.Projectiles);
+                turretDefs, stats, planeModel, _aircraft.WeaponDefs, controller, _world.Projectiles);
             if (verbose && controller.Turrets.Length > 0)
             {
                 var descs = new List<string>();
@@ -283,14 +293,14 @@ internal sealed class HumanFlightAdapter
 
         // The original's heading tape, rebuilt from the chapter's own HUD
         // textures (compassticks2/compasstxt ship in every chapter's archive).
-        pilotHud.Compass = CompassTape.Build(_in.Textures);
+        pilotHud.Compass = CompassTape.Build(_aircraft.Textures);
         if (verbose && pilotHud.Compass != null)
             GD.Print("compass: heading tape from compassticks2/compasstxt");
 
         // The cockpit dials (altimeter / speedometer / damage display), rebuilt
         // from the plane's own gauges subtree in planes.zbd + the chapter's
         // HUD textures (needle/lowalt/stall/<plane>_damage/hilite/hatchptrn).
-        pilotHud.Gauges = GaugeCluster.Build(_in.PlanesGamez, planeName, _in.Textures,
+        pilotHud.Gauges = GaugeCluster.Build(_aircraft.PlanesGamez, planeName, _aircraft.Textures,
             stats.DestroyableParts);
         if (pilotHud.Gauges is { } gauges)
         {
@@ -305,19 +315,19 @@ internal sealed class HumanFlightAdapter
         // The bitmap-font proof overlay: draw the sample string on this pane so a 1P view
         // and a 4P pane can be compared (--hud-font-test). Set before the controller
         // enters the tree — its _Ready adds this to the HUD canvas.
-        if (_in.HudFont != null && _spec.HudFontTest)
+        if (_aircraft.HudFont != null && _policy.HudFontTest)
         {
-            pilotHud.FontTest = new HudFontTest(_in.HudFont, _spec.HudFontTestText);
+            pilotHud.FontTest = new HudFontTest(_aircraft.HudFont, _policy.HudFontTestText);
             if (verbose)
-                GD.Print($"hud-font-test: '{_spec.HudFontTestText}' via 5pointhud font");
+                GD.Print($"hud-font-test: '{_policy.HudFontTestText}' via 5pointhud font");
         }
 
         // The selected-weapon text readout: the gun group + rocket type and their
         // live ammo, drawn in the game's HUD font from the MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES
         // templates. Built whenever the font loaded and the plane carries a loadout.
-        if (_in.HudFont != null && controller.Loadout != null)
+        if (_aircraft.HudFont != null && controller.Loadout != null)
         {
-            pilotHud.WeaponReadout = WeaponReadout.Build(_in.HudFont, _in.WeaponMessages);
+            pilotHud.WeaponReadout = WeaponReadout.Build(_aircraft.HudFont, _aircraft.WeaponMessages);
             if (verbose)
                 GD.Print("weapon readout: MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES via 5pointhud font");
         }
@@ -325,9 +335,9 @@ internal sealed class HumanFlightAdapter
         // The gun aiming reticle: the ballistic impact point of the selected gun
         // group at the convergence distance, drawn as the game's pipper — visibly
         // trailing the nose in a hard turn, on the rounds in steady flight.
-        if (_in.ReticleTex != null && controller.Loadout != null)
+        if (_aircraft.ReticleTex != null && controller.Loadout != null)
         {
-            pilotHud.Reticle = ImpactReticle.Build(_in.ReticleTex, rig.Camera);
+            pilotHud.Reticle = ImpactReticle.Build(_aircraft.ReticleTex, rig.Camera);
             if (verbose)
                 GD.Print("gun reticle: ballistic impact point via impact_point.png");
         }
@@ -337,7 +347,7 @@ internal sealed class HumanFlightAdapter
         // live rig runtime.
         if (controller.Damage != null)
         {
-            controller.Visuals = BuildDamageVisuals(planeBuilder, planeModel, stats, _in.CrashProgram);
+            controller.Visuals = BuildDamageVisuals(planeBuilder, planeModel, stats, _world.CrashProgram);
             if (verbose)
                 Log.Info("flight",
                     $"damage visuals: {controller.Visuals.PanelCount} panels — authored stage anims via the rig runtime");
@@ -346,10 +356,10 @@ internal sealed class HumanFlightAdapter
         // The data-driven crash rig is built AFTER the controller enters the tree
         // (below), so the crash def's reset states read valid global transforms.
 
-        if (_in.Sounds != null && _in.SoundDefs != null)
+        if (_world.Sounds != null && _world.SoundDefs != null)
         {
-            var audio = new FlightAudio { MixGain = _in.MixGain };
-            audio.Setup(_in.Sounds, _in.SoundDefs, stats, _in.SoundGroups);
+            var audio = new FlightAudio { MixGain = _human.MixGain };
+            audio.Setup(_world.Sounds, _world.SoundDefs, stats, _world.SoundGroups);
             controller.Audio = audio;
             controller.AddChild(audio);
             if (verbose)
@@ -357,21 +367,21 @@ internal sealed class HumanFlightAdapter
                          $"damaged={stats.DamagedEngineSound ?? "none"} " +
                          $"whine={stats.WhineSound ?? "none (no def names prop_sound)"} " +
                          $"rattle={stats.RattleSound}" +
-                         (_in.MixGain < 1f ? $" (per-player mix gain {_in.MixGain:0.00})" : ""));
+                         (_human.MixGain < 1f ? $" (per-player mix gain {_human.MixGain:0.00})" : ""));
         }
         // This player's stunt run: player 1 flies the loaded instance, everyone else an
         // independent copy of the same zones — own progress, own clock.
-        if (_in.StuntZones != null)
+        if (_human.StuntZones != null)
         {
-            controller.Stunt = pi == 0 ? _in.StuntZones : _in.StuntZones.ForAnotherPlayer();
+            controller.Stunt = pi == 0 ? _human.StuntZones : _human.StuntZones.ForAnotherPlayer();
             controller.Stunt.LogTag = tag; // "P2 " in a race — one shared world, four runs
-            controller.DebugCompleteStunt = _spec.DebugScoreboard;
+            controller.DebugCompleteStunt = _policy.DebugScoreboard;
             // The objective marker HUD, one per pane: projects that player's
             // active danger zone through THEIR camera, with the edge arrow + clock
             // bearing + run status.
             var marker = MarkerHud.Build(controller.Stunt, rig.Camera);
             pilotHud.Marker = marker;
-            if (_in.Race is { } race)
+            if (_human.Race is { } race)
             {
                 // Racing: no per-player splits board — the shared ranked board
                 // below covers the whole window when the last pilot is in. The marker
@@ -381,7 +391,7 @@ internal sealed class HumanFlightAdapter
                 marker.Race = race;
                 marker.PlayerIndex = pi;
             }
-            else if (_in.InstantActionActive)
+            else if (_human.InstantActionActive)
             {
                 // Instant Action carries the splits on its own wrap-up board instead, so the two
                 // results boards cannot wake on the same event and stack (BL-358).
@@ -391,12 +401,12 @@ internal sealed class HumanFlightAdapter
                 // Solo: the end-of-run scoreboard — per-zone splits + total +
                 // persisted best time, keyed chapter/mission/plane in
                 // user://stunt_scores.json (race totals are deliberately not recorded).
-                var scoreKey = $"{_spec.Chapter}/{_spec.Mission}/{custom?.Name ?? planeName}";
+                var scoreKey = $"{_policy.Chapter}/{_policy.Mission}/{custom?.Name ?? planeName}";
                 var scoreboard = StuntScoreboard.Build(controller.Stunt,
-                    planeDisplay, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
-                    ScoreStore.Load(), scoreKey, _in.ExitsToMenu, _in.PauseState, _in.MenuInputFor);
+                    planeDisplay, $"{_policy.Chapter}   ·   {PlaneRoster.Humanize(_policy.Scenario)}",
+                    ScoreStore.Load(), scoreKey, _human.ExitsToMenu, _human.PauseState, _human.MenuInputFor);
                 scoreboard.Restart = controller.Rerun;
-                scoreboard.Exit = _in.ExitSession;
+                scoreboard.Exit = _human.ExitSession;
                 controller.Scoreboard = scoreboard;
                 GD.Print($"stunt scoreboard: splits + best time (key '{scoreKey}')");
             }
@@ -409,20 +419,20 @@ internal sealed class HumanFlightAdapter
 
         // Dogfight (--vs): the per-pane match timer/K-D/leader line + kill banner, bound to the
         // match GameSession built before this loop ran; kill facts arrive later via Downed.
-        if (_in.VersusMatch is { } versus)
+        if (_human.VersusMatch is { } versus)
         {
             // Rigs is the SAME list GameSession keeps live for the whole session — every seat
             // already exists (BuildRigs ran before this loop), only .Controller fills in as each
             // player assembles, so by the time this pane draws, every opponent's is populated.
             controller.VersusHud = VersusHud.Build(versus, pi, rig.Camera);
-            controller.VersusHud.Rigs = _in.Rigs;
+            controller.VersusHud.Rigs = _human.Rigs;
             if (verbose)
                 GD.Print("dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
         }
 
         // One per human pane, in EVERY flight session unlike VersusHud: built unconditionally
         // because generators spawn hostiles mid-session, and it draws nothing with an empty pool.
-        var targetHud = TargetHud.Build(pi, rig.Camera, _in.Projectiles);
+        var targetHud = TargetHud.Build(pi, rig.Camera, _world.Projectiles);
         pilotHud.TargetHud = targetHud;
         if (verbose)
             GD.Print("targeting HUD: selected-target marker (brackets + label, edge arrow off screen)");
@@ -431,7 +441,7 @@ internal sealed class HumanFlightAdapter
         // are sorted against THIS plane's pose, so they cannot be shared. GameSession binds
         // TargetSubParts later, once the zeppelins exist.
         controller.Targeting = new TargetSelection();
-        controller.InitialTarget = _spec.TargetSelect;   // --target=, the scripted twin
+        controller.InitialTarget = _policy.TargetSelect;   // --target=, the scripted twin
 
         // ⚠ Bind on EVERY pane, not only under --debug-markers: it is what TargetHud.OwnTeam reads
         // this pane's side off, and the pilot-index derivation it falls back to is the
@@ -440,7 +450,7 @@ internal sealed class HumanFlightAdapter
 
         // --debug-markers: the same HUD marks every live aircraft instead of one hostile. Own also
         // keeps it from marking the aircraft the camera is sitting on.
-        if (_spec.DebugMarkers)
+        if (_policy.DebugMarkers)
         {
             targetHud.MarkAll = true;
             if (verbose)
@@ -451,16 +461,16 @@ internal sealed class HumanFlightAdapter
         // single pilot's answer exists until every slot is known. Resolved lazily on the first
         // rig, so the caller can keep constructing the assembler before the rigs are known.
         var start = (_starts ??= _spawns.ChooseStarts(
-            _in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, _in.RigCount))[pi];
+            _human.SpawnList, _world.MissionZrdrPath, _human.SpawnBase, _human.RigCount))[pi];
         // The plant's force path is chosen once, here, off who is flying — a person, so the
         // player path. FlightModel.UsesAiForcePath carries why this is a construction argument
         // rather than the original's own pointer-compare-against-the-player test.
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
-            rig.Camera, _in.CamParamsFor(planeName), start.Pos, start.LookAt,
+            rig.Camera, _aircraft.CamParamsFor(planeName), start.Pos, start.LookAt,
             start.ThrottleFrac, start.SpeedMps, cockpitCameraOffset: planeBuilder.CockpitCameraOffset);
         // --weapon-lab: a flight session whose aircraft is pinned at the spawn pose. Set after
         // Setup, so the pin, captured at the first held sim step, takes the pose Setup just wrote.
-        if (_spec.WeaponLab)
+        if (_policy.WeaponLab)
         {
             controller.Held = true;
             if (verbose)
@@ -469,22 +479,22 @@ internal sealed class HumanFlightAdapter
         // The throttle-slam exhaust smoke: needs the plane's own exhaust marker
         // nodes plus the live throttle Setup just wrote, so it builds after Setup rather than
         // alongside Props/WingLights above.
-        controller.ThrottleSmoke = ThrottleSlamSmoke.Build(planeModel, _in.ZrdrPath, _in.Textures,
-            controller, controller.Throttle, _in.Ambience);
+        controller.ThrottleSmoke = ThrottleSlamSmoke.Build(planeModel, _aircraft.ZrdrPath, _aircraft.Textures,
+            controller, controller.Throttle, _world.Ambience);
 
         // The ambient speed cue is chapter data, not an aircraft-model effect: one private copy
         // per player so splitscreen panes do not see another pilot's ahead-of-plane wisps.
-        if (!_spec.EmptyStage)
+        if (!_policy.EmptyStage)
         {
-            controller.SpeedCue = SpeedCue.Build(_in.ChapterZrdrPath, _in.Textures, _worldRoot,
-                _in.Ambience,
+            controller.SpeedCue = SpeedCue.Build(_world.ChapterZrdrPath, _aircraft.Textures, _worldRoot,
+                _world.Ambience,
                 rig.VisualLayer == 0 ? null : node => SplitScreen.SetVisualLayer(node, rig.VisualLayer));
         }
 
         // The incoming-fire near-miss cue: this aircraft becomes a target every OTHER
         // pilot's rounds are measured against. After Setup — the target reads the live flight
         // model — and after PlayerIndex, the identity that excludes this pilot's own rounds.
-        controller.AttachWarningShotCue(_in.Projectiles);
+        controller.AttachWarningShotCue(_world.Projectiles);
         controller.Name = $"player{pi + 1}";
         rig.Controller = controller;
         _worldRoot.AddChild(controller);
@@ -492,18 +502,29 @@ internal sealed class HumanFlightAdapter
         // Data-driven crash: a per-player crash AnimRuntime playing the compiled def. Built here,
         // once the controller (and its plane model) are in the tree, so the crash def's reset
         // states resolve valid global transforms.
-        if (_in.CrashProgram != null && _in.WorldScene != null)
+        if (_world.CrashProgram != null && _world.WorldScene != null)
         {
             // WorldSounds goes in on every rig alike; BuildFlightCrashRuntime drops it for a human
             // one, so that asymmetry is stated once, there. The planes gamez goes in on every rig
             // too, or a kill would drop a parachute for one spawner and not the other.
-            _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _in.Gamez,
-                _in.WorldScene, _in.Textures, _in.CrashProgram, verbose,
-                worldSounds: _in.WorldRuntime?.Sounds, planesGamez: _in.PlanesGamez);
+            _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _world.Gamez,
+                _world.WorldScene, _aircraft.Textures, _world.CrashProgram, verbose,
+                worldSounds: _world.WorldRuntime?.Sounds, planesGamez: _aircraft.PlanesGamez);
             // The start choreography for the very first spawn: Respawn() plays this same def on
             // every later respawn, but Setup() above called Respawn() before this runtime existed.
             controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
         }
+    }
+
+    public AssemblyState CaptureState() =>
+        new(MeshInstances, WhatSuffix, _aircraft.PaintRng.State, _starts);
+
+    public void RestoreState(AssemblyState state)
+    {
+        MeshInstances = state.MeshInstances;
+        WhatSuffix = state.WhatSuffix;
+        _aircraft.PaintRng.State = state.PaintRngState;
+        _starts = state.Starts;
     }
 
     /// <summary>Pane <paramref name="pi"/>'s menu-chosen fit, or null to fly the stock one. An
@@ -512,116 +533,21 @@ internal sealed class HumanFlightAdapter
     /// here because it is applied after the bind and wins by arriving later.</summary>
     private LoadoutChoice? MenuFitFor(int pi)
     {
-        if (_spec.LoadoutOverride != null || pi < 0 || pi >= _spec.MenuLoadouts.Count)
+        if (_policy.LoadoutOverride != null || pi < 0 || pi >= _policy.MenuLoadouts.Count)
         {
             return null;
         }
 
-        return _spec.MenuLoadouts[pi];
+        return _policy.MenuLoadouts[pi];
     }
 
     /// <summary>Pane <paramref name="pi"/>'s custom-built plane, or null to fly the stock
     /// airframe. Empty on every launch that did not come off the launchscreen, so the scripted
     /// paths (<c>--plane=</c>, <c>--det</c>) never see one.</summary>
     private Flight.CustomPlaneDef? CustomPlaneFor(int pi) =>
-        pi >= 0 && pi < _spec.MenuCustomPlanes.Count ? _spec.MenuCustomPlanes[pi] : null;
+        pi >= 0 && pi < _policy.MenuCustomPlanes.Count ? _policy.MenuCustomPlanes[pi] : null;
 
-    /// <summary>The session-wide flight data every rig reads — loaded once by
-    /// <c>GameSession.BuildFlightRigs</c> and shared, in contrast to the per-player nodes
-    /// <see cref="Assemble"/> builds. Set once at construction; never mutated per rig.</summary>
-    public sealed class Inputs
-    {
-        /// The aircraft models' gamez (planes.zbd, or the session gamez on the empty stage).
-        public GameZ PlanesGamez = null!;
-        /// This plane's stats, loaded once per distinct aircraft (splitscreen players differ).
-        public Func<string, PlaneStats> StatsFor = null!;
-        /// The same aircraft as the AI flies it, by node name and militia def (null takes the base
-        /// def): the player chain for everything except the damage model and the armament, which
-        /// come from the AI def (PlaneStats.LoadForAi). Cached separately from <see cref="StatsFor"/>
-        /// and keyed by both names, since one airframe's militia variants are different objects.
-        public Func<string, string?, PlaneStats> AiStatsFor = null!;
-        /// This plane's camera tuning, cached the same way and for the same reason.
-        public Func<string, CamParams> CamParamsFor = null!;
-        /// How many rigs this session flies — drives the log tags, the verbose-once lines and the
-        /// single-player-only controller affordances (pause/halt).
-        public int RigCount;
-        /// Splitscreen own-ship mix scale (equal power across the panes).
-        public float MixGain = 1f;
-        /// Per-player pad binding: the join flow's, or the connected roster's.
-        public int[][]? PadAssignment;
-        /// Who is holding the sim clock — the per-pane stunt board raises its own halt reason.
-        public Flight.PauseState PauseState = null!;
-        /// A player's own menu reader, for the board menu that player owns.
-        public Func<int, UI.MenuInput> MenuInputFor = null!;
-        /// Whether the boards' Exit item returns to the launchscreen rather than quitting.
-        public bool ExitsToMenu;
-        /// Leaves the session, routed by the Launcher.
-        public Action ExitSession = null!;
-        /// One livery stream for the session, so P1..P4 draw distinct colours from it.
-        public RandomNumberGenerator PaintRng = null!;
-        /// The session's spawn list and the index P1 takes (each player wraps on from there).
-        public List<SpawnPoint>? SpawnList;
-        public int SpawnBase;
-        /// The weapons catalogue, its message strings and the stock loadouts.
-        public WeaponDefs WeaponDefs = null!;
-        public Messages WeaponMessages = null!;
-        public StockLoadouts StockLoadouts = null!;
-        /// The ai.zrd turret table — null when the archive lacks ai.zrd, which builds
-        /// every plane turretless rather than failing the session.
-        public TurretDefs? TurretDefs;
-        /// The shake-oscillator sources (shakes.json) — one load, one PlaneShake per rig.
-        public ShakeDefs Shakes = null!;
-        /// The one shared projectile/effect pool every player's guns fire into.
-        public ProjectilePool Projectiles = null!;
-        /// Where the human pilots are, the same snapshot every other nearest-human consumer reads.
-        /// An AI rig is given it so its flight model can select the far-field plant.
-        public Func<IReadOnlyList<Vector3>>? HumanPositions;
-        /// The game's HUD bitmap font and the reticle pipper texture — null when absent, which
-        /// simply omits the readout/reticle.
-        public HudFont? HudFont;
-        public Texture2D? ReticleTex;
-        /// The mission's danger zones (--stunt), and the shared race when several pilots fly them.
-        public StuntMission? StuntZones;
-        public StuntRace? Race;
-        /// The dogfight match (--vs), built before this loop runs so every pane's VersusHud binds
-        /// to the same instance GameSession later feeds Downed reports into.
-        public VersusMatch? VersusMatch;
-        /// Every rig in the session (--vs opponent markers) — the same list GameSession
-        /// keeps live for the whole session, not a snapshot; see the Assemble call site.
-        public IReadOnlyList<PlayerRig>? Rigs;
-        /// The active Instant Action mission's player_plane node,
-        /// overriding --plane= for every human alike; null outside one.
-        public string? InstantActionPlayerPlaneNode;
-        /// Whether an Instant Action mission is active — every human takes team 1 (Decision 8)
-        /// regardless of pilot index when this is set.
-        public bool InstantActionActive;
-        /// <c>--coop</c>: every human takes <see cref="AimAssist.PlayerTeam"/>
-        /// in a plain flight session, same as Instant Action. <see cref="SessionSpec.Resolve"/>
-        /// already drops this when <c>--vs</c> is also given, so the two never race here.
-        public bool Coop;
+    public readonly record struct AssemblyState(int MeshInstances, string WhatSuffix,
+        ulong PaintRngState, IReadOnlyList<FlightStart>? Starts);
 
-        /// The session's wind and active camera (see Effects/WorldWind.cs), for the throttle-slam
-        /// exhaust and speed-cue puffers assembled here. Still air unless the session hands its own over.
-        public Effects.EffectAmbience Ambience = Effects.EffectAmbience.Still;
-
-        // The build's archives and world outputs (BuildState's, unchanged).
-        public TextureArchive Textures = null!;
-        public string ZrdrPath = "", ChapterZrdrPath = "", MissionZrdrPath = "";
-        public GameZ Gamez = null!;
-        public SceneBuilder? WorldScene;
-        public AnimRuntime? WorldRuntime;
-        /// The session's one world-effects runtime, so a graze plays its touchdown_* def.
-        /// Null on a world-less build — the scrape then keeps its sound and loses its effect.
-        public AnimRuntime? WorldEffects;
-        /// The level's <c>touchdown_*</c> def vector, built alongside that runtime. Every rig
-        /// indexes the same one, as the original indexes one global.
-        public SurfaceDefTable? TouchdownDefs;
-        public AnimProgram? CrashProgram;
-        public SoundArchive? Sounds;
-        public Dictionary<string, SoundDef>? SoundDefs;
-        /// The SOUND_GROUPS table, for the own-ship cues whose sound is a group name rather than a
-        /// def — the near-miss warning (player.json warning_shot_sound = bullet_warning_sg).
-        public Dictionary<string, SoundGroup>? SoundGroups;
-        public bool DebugCollision;
-    }
 }

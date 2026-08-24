@@ -96,6 +96,15 @@ public sealed class SpeedCue
         _selectionTimer = 0f;
     }
 
+    internal void Dispose()
+    {
+        foreach (var puffer in _puffers)
+        {
+            puffer.GetParent()?.RemoveChild(puffer);
+            puffer.QueueFree();
+        }
+    }
+
     private static Selection Select(float altitude, float agl)
     {
         if (agl < NearGroundMeters)
