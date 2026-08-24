@@ -88,7 +88,7 @@ authored magnitude lands at its block's `[9]` (and `[10]` for the two-term sourc
 | 2 | `+0x70` | `missile_impact` | `magnitude_factor` `+0x94`, `he_factor` `+0x98` | the same site, index 2 | one rocket taken |
 | 3 | `+0x9c` | `explosion` | `max_magnitude` `+0xc0` | the same site, index 3 | one nearby detonation |
 | 4 | `+0xc8` | `high_speed` | `min_speed` `+0xec`, `magnitude_quotient` `+0xf0` | `FUN_0048c470` at `0x48d1bc` | every frame over the gate |
-| 5 | `+0xf4` | `turbulence` | none parsed; `+0x118` is never written | `FUN_0048d2c0` at `0x48d409` | one collision contact |
+| 5 | `+0xf4` | `turbulence` | none parsed; `+0x118` is never written | `FUN_0048d2c0` at `0x48d409` | one collision contact (`PlaneShake.ContactHit`, every human pilot) |
 | 6 | `+0x120` | `nitro` | `magnitude` `+0x144` | `FUN_004b2131` at `0x4b21ce` | nitro engaged, player only (`PlaneShake.NitroEngaged`, every human pilot) |
 
 That table is the complete kicker list. `FUN_0042c070` is a one-line forwarder to `FUN_0042be10`,
@@ -121,9 +121,9 @@ passes block 5 at `camera+0xf4` to the shared law reader `FUN_0042bba0`. That re
 turbulence block has **no magnitude field at all** to parse: there is no key whose value would say
 how hard an ambient jostle rocks the plane, and `camera+0x118`, the slot a magnitude would occupy,
 is written by no instruction in the executable. Block 5's only kicker is the contact path
-`FUN_0048d2c0`, which computes its own per-collision magnitude, so the slot the design named is
-in service as the collision oscillator. There is no per-frame, ungated caller of `FUN_0042c070` on
-any block: of the five call sites, four are per-event (a round fired, damage taken, a contact, a
+`FUN_0048d2c0`, which computes its own per-collision magnitude ("Block 5 — the per-contact kick"
+below), so the slot the design named is in service as the collision oscillator. There is no
+per-frame, ungated caller of `FUN_0042c070` on any block: of the five call sites, four are per-event (a round fired, damage taken, a contact, a
 nitro engage) and the fifth, `high_speed`, runs per frame but only above its authored `min_speed`
 gate, which is rated max speed. Steady flight kicks nothing.
 
@@ -145,6 +145,32 @@ So magnitude and cadence for an ambient jostle have no authored or executable so
 this project's rules (`docs/verification.md` `SRC-3`, design documents give intent and retail
 evidence decides shipped details) makes any oscillator added here invented content rather than
 parity. `PlaneShake` gains no ambient source.
+
+## Block 5 — the per-contact kick, `min(speed × severity × 0.03, 0.15)`
+
+Block 5 is the source the data never authors, so it runs on the constructor's law alone: frequency
+`2.0`, damp `4.5`, sawtooth `0`. Its magnitude is not read from any file. `FUN_0048d2c0`, the
+collision-damage function, computes it per contact at `0x0048d3cc`–`0x0048d409` from the true
+airspeed `obj+0x934`, the severity cosine the sweep returned, the literal `0.03` at `0x006080c4`
+(the same literal the player's contact push-out uses) and a ceiling `0.15` at `0x006036a8`. Two
+guards stand over the kick and nothing else does: the object is the player (`0x0048d3c4`) and its
+crashed flag `obj+0x384` is clear (`0x0048d3aa`).
+
+**Every resolved contact kicks it, a graze included.** The caller gates `FUN_0048d2c0` on a positive
+severity cosine and on nothing else (`0x48ed79` guarding the call at `0x48ed8b`,
+[`flightModel.md`](flightModel.md)), so there is no minimum severity, no closing-speed threshold and
+no cooldown between kicks. The magnitude scales linearly with both terms rather than with the pair's
+cube, and at any flight speed the ceiling is reached by a cosine around `0.05`, so even the
+shallowest contact saturates and the whole run of contacts from a scrape to a nose-in reads as the
+same-sized kick. **Ported** as `CollisionDamage.ContactShake` feeding `PlaneShake.ContactHit`, on
+every human pilot rather than a single player pointer, the same widening the bounce impulse takes.
+
+⚠ **The magnitude is a velocity, not a displacement.** `FUN_0042be10` adds it to the block's
+`[3]/[4]/[5]` accumulators, which the integrator `FUN_0042bec0` turns into the `[6]/[7]/[8]`
+positions the consumer sums, so the original's rendered roll from a saturated kick is a fraction of
+`0.15` rad rather than that angle. `PlaneShake` models each block as an envelope in radians of roll
+directly, which is the same modelling gap the fire source carries (`BL-266(a)`); the kick's
+magnitude is the decode and how it renders is that item's question.
 
 ## `fire_bullet` — per-shot roll, `magnitude_factor × CALIBER`
 

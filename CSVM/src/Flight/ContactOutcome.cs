@@ -44,6 +44,11 @@ public readonly record struct ContactOutcome
     /// attempt left it.</summary>
     public Vector3 PushOut { get; init; }
 
+    /// <summary>The camera kick this contact owes the striker, radians of block-5 roll
+    /// (<see cref="CollisionDamage.ContactShake"/>). Zero on an AI, which the original never
+    /// shakes for, and on a contact that is not closing.</summary>
+    public float ShakeMagnitude { get; init; }
+
     /// <summary>The instruction the caller owes when it is set: hand the struck aeroplane the pair
     /// above, and arm the collision grace window on BOTH parties so neither re-resolves the overlap
     /// they are still in. Only the caller holds the struck rig, so only it can do this.</summary>

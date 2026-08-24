@@ -125,6 +125,40 @@ public class PlaneShakeTests
     }
 
     [Fact]
+    public void AContactKicksBlockFiveAtTheDecodedMagnitude()
+    {
+        // 120 m/s into a 0.6 cosine is far over the ceiling, which is where any contact at flight
+        // speed lands: the decoded law is min(speed x severity x 0.03, 0.15) radians.
+        float magnitude = CollisionDamage.ContactShake(speed: 120f, severity: 0.6f);
+        Assert.Equal(CollisionDamage.ContactShakeCap, magnitude, 5);
+
+        // Block 5 keeps the constructor's law (2 Hz, damp 4.5) because no def authors it, so the
+        // sine peaks a quarter cycle in with the envelope already down to e^(-4.5 x 0.125).
+        var shake = NewShake();
+        shake.ContactHit(magnitude);
+        float peak = MaxAbsRollOver(shake, seconds: 0.5f);
+        Assert.InRange(peak, magnitude * 0.5f, magnitude * 1.001f);
+
+        // It is an impulse, so the authored damp takes it back to rest and leaves it there.
+        Assert.True(MaxAbsRollOver(shake, seconds: 4f) < peak);
+        Assert.Equal(0f, MaxAbsRollOver(shake, seconds: 1f));
+    }
+
+    [Fact]
+    public void AGrazeKicksTooAndScalesWithSpeedAndTheRawCosine()
+    {
+        // The original gates the call on a positive severity cosine and nothing else, so a graze
+        // kicks like any other contact. Under the ceiling the law is linear in both terms.
+        Assert.Equal(0f, CollisionDamage.ContactShake(120f, 0f));
+        Assert.Equal(0.06f, CollisionDamage.ContactShake(20f, 0.1f), 5);
+        Assert.Equal(0.12f, CollisionDamage.ContactShake(40f, 0.1f), 5);
+
+        var shake = NewShake();
+        shake.ContactHit(CollisionDamage.ContactShake(20f, 0.1f));
+        Assert.InRange(MaxAbsRollOver(shake, seconds: 0.5f), 0.06f * 0.5f, 0.06f * 1.001f);
+    }
+
+    [Fact]
     public void AMissingSourceIsANoOpNotACrash()
     {
         var shake = NewShake(); // fixture has no bullet_impact / explosion

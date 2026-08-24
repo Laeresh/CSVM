@@ -1463,9 +1463,12 @@ public static class Probes
                           + $"{"α",7} {"bank",7} {"hdg",8} {"speed",8}");
             foreach (var x in run.Samples)
             {
-                sb.AppendLine($"  {x.T,4:0} {x.NoseDeg,8:0.00} {x.PathDeg,8:0.00} {x.LagDeg,10:0.00} "
-                              + $"{x.SinkFtS,9:0.0} {x.AltM,9:0.0} {x.Alpha,7:0.00} {x.BankDeg,7:0.0} "
-                              + $"{x.HeadingRateDegS,8:0.00} {x.SpeedMph,8:0.0}");
+                // ⚠ Do not restore the finer formats; the two hosts' values differ below them and
+                // the dump would hash differently either side (INSTR-19, which also carries what
+                // the nearest-10-m Δalt costs).
+                sb.AppendLine($"  {x.T,4:0} {x.NoseDeg,8:0.0} {x.PathDeg,8:0.0} {x.LagDeg,10:0.0} "
+                              + $"{x.SinkFtS,9:0} {Math.Round(x.AltM / 10.0) * 10,9:0} {x.Alpha,7:0.0} "
+                              + $"{x.BankDeg,7:0} {x.HeadingRateDegS,8:0.0} {x.SpeedMph,8:0}");
             }
         }
 

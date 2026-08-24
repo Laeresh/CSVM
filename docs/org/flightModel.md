@@ -395,6 +395,10 @@ Consequences for a reimplementation:
   i.e. where the aircraft stalls. Lift below the ceiling is independent of both.
 - The `±1.8` clamp on `C_L` binds only when `q · RefArea` is small relative to weight, where the
   compressibility ceiling is already lower. In practice `0.75 − 0.15·Mach` is the operative limit.
+- **`n` is a magnitude, so the negative halves of both clamps are dead.** The callers hand this
+  function the length of the demand vector and apply the resulting force along that vector's own
+  normalised direction, so neither `−5` nor `−1.8` can be reached and the one-sided `min` against
+  the compressibility ceiling governs a pushover exactly as it governs a pull.
 - The delivered `C_L` is passed to the drag routine and **never read there** (see Drag). This model
   has no induced drag at all: a pull costs speed only through the lift vector's own tilt.
 
@@ -787,12 +791,18 @@ path. The two owners it named next are settled too: the throttle spending is a p
 multiply that is 1 at the filmed full throttle (see "Part-throttle equilibrium"), and the band is
 the dense one (see Atmosphere). What is left is the α the climb path holds.
 
-⚠ **One clamp asymmetry remains unported.** `FUN_0041abd0` clamps `C_L` to ±1.8 and then applies
-the compressibility ceiling as a one-sided `min`, so the NEGATIVE ceiling is the flat −1.8 while
-the positive one is `0.75 − 0.15·M` (always below 1.8). `FlightModel.LiftCapAt` caps both signs at
-the positive ceiling, understating negative-G lift at speeds where `1.8 · q·RefArea` exceeds the
-demanded push. Recorded as an open difference; it is outside this section's acceleration-path
-question and no stock-envelope row in the dump reads it.
+⚠ **The clamp asymmetry is unreachable, and CSVM already matches.** `FUN_0041abd0` clamps `C_L` to
+±1.8 and then applies the compressibility ceiling as a one-sided `min` with no sign handling
+(`0x41ac5f`–`0x41ac7b`), which reads as a NEGATIVE ceiling of −1.8 against a positive
+`0.75 − 0.15·M`. The negative side never runs: both call sites build the `n` this function receives
+as the length of the demand vector (`0x48c821`–`0x48c852`, `0x49122e`–`0x491236`, a sum of squares
+through the integer sqrt approximation, then `/ 9.82`), so `n ≥ 0` and `C_L ≥ 0` always. The sign of
+the lift lives in the separately normalised direction the force is applied along, not in the
+coefficient, so a pushover arrives as a positive `C_L` and meets the same `0.75 − 0.15·M` ceiling a
+pull does. The −5 G clamp is dead for the same reason: the original limits total demand to 9 G in
+either direction. `FlightModel` reproduces the structure exactly, `LoadFactorDemand` being a
+`liftDir.Length()`, so capping both signs at the positive ceiling is the decode rather than a
+departure from it.
 
 ## The far-field plant
 
@@ -2815,7 +2825,20 @@ armorDmg = healthDmg = max(300 · s³, 50)          cube at 0x0048d4c1
 if the striker is not the player and it hit an aeroplane:  both × 0.2
 ```
 
-⚠ **There is no airspeed term anywhere in it.** A 400 mph belly-flop and a 90 mph belly-flop at the
+**The camera kick is the same function's other law, and it is not the pair's.** Before the pair is
+computed, `0x0048d3cc`–`0x0048d409` kicks shake block 5 with
+`min(speed · s · 0.03, 0.15)` radians: the true airspeed at `obj+0x934`, the RAW severity cosine
+rather than its cube, the literal `0.03` at `0x006080c4` and the ceiling `0.15` at `0x006036a8`. Two
+guards stand over it and nothing else does: the object is the player (`0x0048d3c4`) and its crashed
+flag `obj+0x384` is clear (`0x0048d3aa`), so every contact the caller's positive-severity gate lets
+through kicks the camera, a graze included. At any flight speed the ceiling is reached by a cosine
+around 0.05, so the shallowest contacts already saturate. **Ported** as
+`CollisionDamage.ContactShake` feeding `PlaneShake.ContactHit`, widened from the player to every
+human pilot the way the bounce is; the oscillator law block 5 kicks is in
+[`shakes.md`](shakes.md).
+
+⚠ **There is no airspeed term anywhere in the damage pair** (the shake above is the one place in
+this function that reads speed, and it spends no damage). A 400 mph belly-flop and a 90 mph belly-flop at the
 same attitude deal identical damage. The whole law is a function of the angle of incidence, which is
 why a remake that scales collision damage by closing speed cannot be made to match by retuning a
 constant. The floor dominates below `s ≈ 0.550`, so any contact shallower than about 33° off the
@@ -3215,6 +3238,8 @@ without a provenance. Five classes are used:
 | `CollisionDamage.EntityCut` | 0.2 | decoded | `0x48d51a`/`0x48d526`, the non-player-into-aeroplane cut |
 | `CollisionDamage.EntityGrace` | 1.0 | decoded | `0x48d383`/`0x48d395`, written to both parties |
 | `CollisionDamage.SpawnGrace` | 1.5 | decoded | the spawn write of `obj+0xAC` |
+| `CollisionDamage.ContactShakeFactor` | 0.03 | decoded | `0x6080c4`, read at `0x48d3dc`; the contact shake's per-m/s term |
+| `CollisionDamage.ContactShakeCap` | 0.15 | decoded | `0x6036a8`, compared at `0x48d3eb`; the shake's ceiling in radians |
 | `AircraftContactResolver.EmbedPushOut` | 0.3 | exception | m per un-embed attempt; the loop itself has no counterpart, the original's placement cannot leave an airframe overlapping |
 | `AircraftContactResolver.EmbedTries` | 3 | exception | attempts before the airframe is destroyed instead of left inside the world; bound by `AircraftContactResolverTests` |
 
@@ -3396,20 +3421,21 @@ which are findings rather than code.
 | the six-slot control-surface mix and its 2/s exponential | decoded | `FUN_004b27e0` / `FUN_004b2a40` / `FUN_004b2ca0`, smoothing `FUN_00460490` |
 | contact placement, normal impulse and angular deposit | decoded | `FUN_0048d7f0`, `0x48e4bc` |
 | collision damage, armour before health | decoded | `FUN_0048d2c0` |
+| the per-contact camera shake | decoded | `FUN_0048d2c0`'s block-5 kick at `0x48d409`, `min(speed·s·0.03, 0.15)` |
 | the every-other-frame contact sweep | decoded | the parity gate at `0x48ed79` |
 | the nitro tank and its state machine | decoded | `FUN_004aff80`, `FUN_004b2110` |
 | engine torque: none exists | decoded | every write to `FUN_0048c470`'s angular accumulator |
 | roll-to-pitch coupling: none exists | decoded | every read of `[obj+0x100]` and `[obj+0x114]` |
 | ambient turbulence: nothing ships | decoded | shake block 5, the five xrefs of `FUN_0042c070` |
+| the one-sided negative `C_L` ceiling is unreachable | decoded | `0x48c821`–`0x48c852` builds `n` as a vector length, so `FUN_0041abd0` is never handed a negative `C_L` |
+| a dead AI's throttle and surfaces freeze at their last commanded values | decoded | `FUN_004b82d0` zeroes neither `+0x124` nor the surface deflections; `StepWreckFall` steps `_lastInput` unchanged |
 | far-field range is measured to the NEAREST human pilot | exception | plan Decision 3; the original presumes one player |
 | control surfaces, shake and nitro edges run for EVERY human pilot | exception | plan Decision 3; the original's guard is the single player |
 | the Fury's rudder animates | exception | CSVM also matches `l_rudder_rotate` and a digitless `l_elevator`, which the `%d` lookups miss |
 | a wreck flies the near-field plant | exception | the crashed-flag far arm at `0x48c4ba` is not ported; its writers are undecoded |
 | the G ramp reads the SAME tick's delivered lift | unsupported | `0x48c883` writes it before `0x48ca1e`; `Step` rotates before it translates, so CSVM is one step late |
 | the thin atmosphere band above 2000 m | unsupported | `FUN_0041aca0`'s second arm; unreachable under the 2003 m cap |
-| the one-sided negative `C_L` ceiling | unsupported | `FUN_0041abd0`'s one-sided `min` and flat −1.8 floor |
 | the `level_off_rate` auto-level torque | unsupported | `0x48cedc` / `0x48cf76`; decoded, and no shipped data authors the rate |
-| the per-contact camera shake | unsupported | `FUN_0048d2c0`'s block-5 kick at `0x48d409` |
 | the AI's `medium_aishake` on a nitro engage | unsupported | `FUN_00473430(1)` |
 | the AI's positional `snd_nitro` blip | unsupported | the 0.1 s blip plus one second after |
 | a live producer for an AI's nitro injector | unsupported | `AiSpawn.Nitro` reads roster slot 34; the mission spawner does not read roster blocks yet |

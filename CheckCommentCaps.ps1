@@ -34,7 +34,10 @@ $labels = @{
     stmt   = '// above a statement'
 }
 
-$root = git rev-parse --show-toplevel 2>$null
+# $PSScriptRoot names the worktree this file lives in regardless of the caller's cwd; a
+# git-rev-parse-on-cwd root scanned whatever worktree the caller happened to be sitting in.
+$root = $PSScriptRoot
+if (-not $root) { $root = git rev-parse --show-toplevel 2>$null }
 if (-not $root) { $root = (Get-Location).Path }
 
 function Get-Scope {
@@ -96,9 +99,13 @@ $totalBlocks = 0
 $totalExcess = 0
 foreach ($f in $targets) {
     if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { continue }
-    $bad = @(Get-OverCap -File $f)
+    # Resolve-Path (not the raw arg) goes to ReadAllText: it honors PowerShell's $PWD, while
+    # a relative path handed straight to a .NET file API follows the process's own current
+    # directory, which Set-Location does not keep in step with $PWD in a hosted session.
+    $full = (Resolve-Path -LiteralPath $f).Path
+    $bad = @(Get-OverCap -File $full)
     if ($bad.Count -eq 0) { continue }
-    $rel = (Resolve-Path -LiteralPath $f).Path.Replace($root + '\', '')
+    $rel = $full.Replace($root + '\', '')
     $excess = ($bad | ForEach-Object { $_.Length - $caps[$_.Kind] } | Measure-Object -Sum).Sum
     $totalBlocks += $bad.Count
     $totalExcess += $excess

@@ -26,8 +26,11 @@ law — frequency, damping, waveform — and a magnitude term:
 Six sources is the whole file, and there is no per-campaign, per-mission or per-airframe override
 of it anywhere in the extracted tree. The original's parser looks for a **seventh** source,
 `turbulence`, which no shipped data authors and which carries no magnitude key even in the parser;
-its block serves the collision shake instead. See
-[`../org/shakes.md`](../org/shakes.md), "Ambient turbulence does not ship".
+its block serves the collision shake instead, on the constructor's law (frequency 2.0, damp 4.5, no
+sawtooth) and a magnitude the collision function computes rather than reads. A `turbulence` block
+added to this file would therefore retune the collision shake and author no ambient jostle. See
+[`../org/shakes.md`](../org/shakes.md), "Ambient turbulence does not ship" and "Block 5 — the
+per-contact kick".
 
 Readings with confidence: `frequency` in Hz, `damp` a decay rate (the impulse sources die fast),
 `sawtooth` selects the waveform (1 = the buzzy sources: firing, speed rattle, nitro), and

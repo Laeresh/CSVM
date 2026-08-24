@@ -2037,8 +2037,10 @@ that page before changing anything here. An aim point, that point's velocity and
 parameter tables read out of the image in, one `FlightInput` out: a desired speed from the aim
 point's own speed plus range-weighted lead terms, an intercept solve (`AimAssist.TryIntercept`) for
 the direction, bank-to-turn with the elevator joining once the bank command is inside a deadband, a
-wings-level rule, a low-speed unload, and a per-axis scale/limit stage off `PlaneStats`. Engine-free
-and pure over its arguments; pinned against the decode by `AiControlLawTests`.
+wings-level rule, a low-speed unload, and a per-axis scale/limit stage off `PlaneStats`. The
+throttle lever has one path, the walk toward the desired speed; the original's distance-gated
+open-loop branch is not ported (`docs/org/aiControlLaw.md`'s throttle section says why).
+Engine-free and pure over its arguments; pinned against the decode by `AiControlLawTests`.
 
 ## src/Flight/AiModeMachine.cs
 The nine-mode AI state machine, owned by `AiPilot.Machine` and stepped from its `Next`:
@@ -2448,7 +2450,8 @@ CHOSEN `touchdown_*` def, since the sound is authored inside that def). `OnWarni
 `Setup` takes the group table too; rate-limited by `FlightController`'s `WarningShotCue`, same split).
 The engine is ONE voice on one slot; its pitch, gain and definition all come from
 `EngineAudioCurves`, shared with `AiEngineAudio` (see that entry). `UpdateEngineSlot` swaps the
-slot's stream for `damaged_engine_sound` while the airframe is hurt and for `cockpit_engine_sound`
+slot's stream for `damaged_engine_sound` while `EngineAudioCurves.EngineDamaged` holds (worst zone
+below a quarter health, or the engine choked) and for `cockpit_engine_sound`
 while the pilot's SELECTED view (`FlightController.FirstPersonView`, A1's mode-6/7 equivalents) is
 Cockpit or Nose, both resolved at `Setup`; damaged takes precedence when both apply
 (`EngineAudioCurves.EngineDefFor` carries the rule — no def authors a damaged cockpit variant, and
@@ -2458,19 +2461,20 @@ numpad key or look-behind does not retrigger it (D31, closes `BL-161`). `MixGain
 own-ship scale left and stays here — splitscreen, not a fidelity knob.
 
 ## src/Flight/EngineAudioCurves.cs
-The engine-audio slot maths both audio paths read: `EngineDefFor` (which definition the engine slot
-holds and the damaged swap's one-off pitch draw), `Engine` and `Whine` (each slot's pitch and gain
-off the `PlaneStats` curves), `DriveFrom`, and `CullDistanceSq`. It exists because the original runs
-one per-frame routine for the player and every AI vehicle; the decode is in
-[formats/vehicle.md](formats/vehicle.md), "The engine audio's slots".
+The engine-audio slot maths both audio paths read: `EngineDamaged`, `EngineDefFor` and
+`DamagedPitchMul` (whether the airframe counts as damaged, which definition the slot then holds, and
+the swap's one-off pitch draw), `Engine` and `Whine` (each slot's pitch and gain off the
+`PlaneStats` curves), `DriveFrom`, and `CullDistanceSq`. It exists because the original runs one
+per-frame routine for the player and every AI vehicle; the decode is in
+[formats/vehicle.md](formats/vehicle.md), "The engine audio's slots" and "What makes an airframe
+damaged". The damaged swap is a health-fraction gate, not a took-a-hit one.
 The engine slot's parameter is **not the throttle lever alone**: `DriveFrom` reads a turn rate off
 the two body axes perpendicular to the nose and a climb attitude off the orientation, and `Engine`
 adds them to each curve's NORMALISED parameter under a [0, 1.5] clamp before the curve maps it out.
 That ordering is why `SoundCurve` exposes `Frac`/`Remap` separately from `Eval`, and the headroom
-above 1.0 is what lets a hard pull overshoot the curve's own top. Both terms are read from the image
-(same decode section); the turn-rate-into-volume one is inert against the shipped flat volume curve
-and is kept because the data, not the mechanism, is what makes it so. `BL-109`'s `CAP-10`
-measurements of the original are the acceptance test and are pinned by the `engine-note` suite.
+above 1.0 is what lets a hard pull overshoot the curve's own top. The turn-rate-into-volume term is
+inert against the shipped flat volume curve and is kept because the data, not the mechanism, is what
+makes it so. `BL-109`'s `CAP-10` measurements are the acceptance test, pinned by `engine-note`.
 
 ## src/Flight/AiEngineAudio.cs
 The positional twin of `FlightAudio` that an AI-flown aircraft carries instead of it: the same two
@@ -2758,7 +2762,9 @@ Amplitude = `magnitude_factor × caliber` in radians of roll, **measured** off o
 `high_speed`'s input is speed over the plane's `fd_speed`, so the authored `min_speed` 1.0 gate
 means "beyond rated max" — the dive rattle whose magnitude is the EXCESS over the gate,
 `(speedRatio − min_speed)/quotient` (zero at rated max, gentle overspeed ramp); cruise stays
-silent like the footage's idle floor.
+silent like the footage's idle floor. `ContactHit` is block 5, the one oscillator no def authors:
+it runs on the constructor's law (2 Hz, damp 4.5) and takes its magnitude from
+`CollisionDamage.ContactShake`, which every resolved contact spends for a human pilot.
 
 ## src/Flight/FlightControllerBuild.cs
 The internal construction handoff from `FlightRoster` to `FlightController`. It contains one
@@ -3081,8 +3087,10 @@ rule), the whole pair recomputes as parts' fraction × whole maxima after every 
 the unabsorbed leftover re-enters zone-less and drains the whole pair directly. IsDestroyed =
 whole health ≤ 0 (reachable with zones still healthy — the overflow kill). Summary leads with
 the hull pair for the HUD DMG line; SummaryHealthFraction reads the whole pool (DI voice);
-WorstFraction stays the worst PART (FlightAudio's damaged-engine loop; `WorstFraction`'s own doc
-covers the zone-less AI reading). The stock armor/HP doubling and the kill rule are decoded in
+WorstFraction stays the worst PART on the combined pool (the injure_anims scale);
+WorstHealthFraction is the decoded damage-state reading (worst zone on health alone, the hull
+pair where an airframe resolves no zones) and is what the engine-audio swap gates on. The stock
+armor/HP doubling and the kill rule are decoded in
 docs/org/vehicleDamage.md and docs/formats/vehicle.md.
 
 ## src/Flight/DamageVisuals.cs
@@ -4766,7 +4774,8 @@ What one contact costs the striking aircraft, as a value with no `Node` and no p
 it: the fate (`ContactFate.Graze` survivable, `Crash` fatal), the decoded damage pair both parties
 spend, the doom rule's answer, the zone the ledger charged (`Apply`'s answer, not the geometric
 guess), the pilot HUD's flash line, `PushOut` (how far along the normal the caller must move the
-striker to un-embed it, applied on a crash too), and `DamageStruckAircraft`, the instruction a
+striker to un-embed it, applied on a crash too), `ShakeMagnitude` (the block-5 camera kick, zero on
+an AI), and `DamageStruckAircraft`, the instruction a
 caller owes because only it holds the struck rig: hand that aeroplane the pair and arm the
 collision grace on both parties. One value with no optional parts, so forgetting to perform it is
 forgetting one statement rather than four. `AircraftContactResolver` fills it.
@@ -4788,7 +4797,8 @@ a scriptable `IContactEffects`: the doom rule for an AI ramming a non-aeroplane,
 AI into AI, the player's exemption from both (asserted on the damage magnitude, not just
 `DamageStruckAircraft`, since the entity cut applies only on the non-player branch and only against
 another aeroplane), a sustained slide exhausting its ledger against a control that spends nothing,
-and the un-embed loop's three-try give-up.
+the camera kick every human-piloted contact spends and an AI's spends none, and the un-embed loop's
+three-try give-up.
 
 ## src/Flight/SweepCadence.cs
 The original's alternate-step collision sweep (`FUN_0048d7f0`'s parity gate and the `obj+0x6B0`

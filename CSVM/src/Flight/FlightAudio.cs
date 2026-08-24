@@ -196,16 +196,17 @@ public partial class FlightAudio : Node
     public override void _Ready() => StartEngine(); // whine/rattle start on demand
 
     /// <summary>Per-frame drive: <paramref name="speedFrac"/> is speed / fd_speed,
-    /// <paramref name="damageFrac"/> is accumulated damage (1 - PlaneDamage.WorstFraction, 0 when
-    /// pristine), <paramref name="cockpitView"/> is whether the pilot's SELECTED view is the full
-    /// Cockpit — the original swaps only there, not in Nose (confirmed at its controls), and a
-    /// held numpad key or look-behind is a pose, not a selection, so neither retriggers the swap.
+    /// <paramref name="healthFrac"/> and <paramref name="engineDead"/> are the damaged-engine
+    /// inputs <see cref="EngineAudioCurves.EngineDamaged"/> gates on, and
+    /// <paramref name="cockpitView"/> is whether the pilot's SELECTED view is the full Cockpit. A
+    /// held numpad key or look-behind is a pose, not a selection, so neither retriggers that swap.
     /// Not called while crashed, so the loops stay dead until respawn.</summary>
-    public void Update(float dt, in EngineDrive drive, float speedFrac, float damageFrac, bool cockpitView = false)
+    public void Update(float dt, in EngineDrive drive, float speedFrac, float healthFrac,
+        bool engineDead = false, bool cockpitView = false)
     {
         if (_engineRamp < 1f)
             _engineRamp = Mathf.Min(1f, _engineRamp + dt / EngineStartRamp);
-        UpdateEngineSlot(damageFrac > 0f, cockpitView);
+        UpdateEngineSlot(EngineAudioCurves.EngineDamaged(healthFrac, engineDead), cockpitView);
         if (_engine != null)
         {
             if (!_engine.Playing)
@@ -377,8 +378,8 @@ public partial class FlightAudio : Node
 
     /// <summary>Points the engine slot at <c>damaged_engine_sound</c>, <c>cockpit_engine_sound</c>
     /// or back at <c>engine_sound</c> (<see cref="EngineAudioCurves.EngineDefFor"/> carries the
-    /// precedence), drawing the damaged swap's pitch multiplier as it goes. Damaged gates on ANY
-    /// damage (the bitmask is undecoded, so any damage swaps and a full repair swaps back); either
+    /// precedence), drawing the damaged swap's pitch multiplier as it goes. The damaged input is
+    /// the decoded disabled-systems test (<see cref="EngineAudioCurves.EngineDamaged"/>); either
     /// input changing re-evaluates the pair.</summary>
     private void UpdateEngineSlot(bool damaged, bool cockpitView)
     {

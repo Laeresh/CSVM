@@ -458,11 +458,16 @@ is only interpretable if it names the quantity it multiplies at the right point 
   "falling" in one frame and a distance check passes on nothing having flown. Measured on the death
   path, where the same wreck spawned at 1500 m holds its altitude to the metre across all three
   seconds, a dead hull gliding rather than dropping.
-- **INSTR-19** — **A flight-dump hash compares only against one taken on the same host: the Godot
-  runtime and the `dotnet test` host do not agree to the last digit.** The eleven-airframe dump from
-  `--dump-flight=all` and from `ZzBaselineDump` differs on 9 of 1123 lines, each by one unit in the
-  last place of a knife-edge sample, on identical code. Take the before and after of an A/B the same
-  way, or the diff reports the runtimes.
+- **INSTR-19** — **The flight-dump hash agrees across the Godot runtime and the `dotnet test` host,
+  but only because the print is rounded past where they diverge. Prefer a same-host A/B anyway.**
+  The two runtimes' knife-edge values themselves differ by 1e-4 to 3e-2 (float32 accumulation, not
+  the plant), so the agreement is a property of the shipped samples clearing their rounding
+  boundaries, not a guarantee: a new sample, or a plant change that lands a value near a boundary,
+  can put the two hosts back on different hashes. Treat a cross-host mismatch as a rounding
+  boundary to investigate before it is a plant change. **Cost of the rounding: Δalt reads to the
+  nearest 10 m**, so an altitude move smaller than that does not show in the dump at all; every
+  other column lost one digit. The asserted rows are unaffected, since `KnifeEdgeTests` and
+  `ParityLedgerTests` read the probe's values rather than this text.
 
 ## SRC — sources and documents
 

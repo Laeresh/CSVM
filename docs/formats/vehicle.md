@@ -92,13 +92,15 @@ holds **two** sound handles per vehicle. Both are positional or not by the sound
 |---|---|---|
 | 0 | `engine_sound` | pitch and volume off the player-global `engine_sound` throttle curves |
 | 0, in the Cockpit view | `cockpit_engine_sound` | swapped in while the camera is in the full Cockpit mode only — the Nose view keeps the plain def, confirmed at the controls of the original (an earlier "either cockpit mode" reading is retired); CSVM keys this to the pilot's SELECTED view being Cockpit, not the per-frame camera pose, so a held numpad key or look-behind does not retrigger it |
-| 0, while damaged | `damaged_engine_sound[]` | a random entry replaces the definition and holds; the entry's pitch range is drawn once and multiplies the throttle pitch curve; CSVM's port decision is that this wins over the cockpit swap when both apply, since no def authors a damaged cockpit variant and the interaction is not itself decoded |
+| 0, while damaged | `damaged_engine_sound[]` | a random entry replaces the definition and holds while the vehicle's disabled-systems mask is nonzero (below, "What makes an airframe damaged"); the entry's pitch range is drawn once and multiplies the throttle pitch curve; CSVM's port decision is that this wins over the cockpit swap when both apply, since no def authors a damaged cockpit variant and the interaction is not itself decoded |
 | 1 | `prop_sound` | the overspeed whine, off the player-global `prop_sound` speed curves |
 
-An AI vehicle's arm adds exactly two things: the pitch multiplier is forced to 1, and both handles
-stop past **2000 world units** from the player (compared as a squared distance against 4000000) and
-start again on the way back in. Rattle, the collision one-shots and the landing one-shots are not
-part of this routine and are player-gated elsewhere.
+An AI vehicle's arm adds exactly one thing: both handles stop past **2000 world units** from the
+player (compared as a squared distance against 4000000) and start again on the way back in. Rattle,
+the collision one-shots and the landing one-shots are not part of this routine and are player-gated
+elsewhere. ⚠ **The pitch multiplier is not an AI/player fork.** Both arms rejoin at the damage test
+(`0x004b19e2`), so an AI's damaged engine draws the same multiplier a player's does; the literal
+1.0 store at `0x004b1b33` is the HEALTHY case for both, which the decompiler's branch order hides.
 
 ⚠ **One of the four rows is unreachable in the retail install.** No shipped def authors
 `prop_sound` and the field has no compiled default, so slot 1 is never assigned and the whine never
@@ -106,6 +108,60 @@ plays for anybody. Every def does author `engine_sound` AND `cockpit_engine_soun
 carries both as the fallback every plane either inherits or overrides), and every def inherits
 `basic_airplane`'s single `damaged_engine_sound` entry — `cockpit_engine_sound` is fully reachable
 in the retail data and is now selected by CSVM too, once the pilot has a view to select it with (D31).
+
+### What makes an airframe damaged
+
+The swap's condition is not "took a hit". `FUN_004b18a0` reads the vehicle's **disabled-systems
+mask** at `+0x2dc` as a whole dword and takes the damaged arm when it is nonzero
+(`MOV EAX,[ESI+0x2dc]; TEST EAX,EAX; JNZ`, at `0x004b194e` for the player and `0x004b19e2` for an
+AI). Two of the mask's bits reach it in ordinary play: bit `0x2` is engine-out, raised by the
+choker ([org/ordnanceTypes.md](../org/ordnanceTypes.md), "The choker, settled"), and bit `0x1` is
+the damage state, raised by `FUN_004b1790` from the health ledger:
+
+```
+if mode class is 0 or 4 and bit 0x1 is clear:
+    if the vehicle has destroyable parts:
+        worst = min over parts whose flag byte [part+0x21] is set of  part[+0x30] / part[+0x2c]
+    else:
+        worst = vehicle[+0x2d0] / vehicle[+0x2cc]        ; whole-vehicle health current / max
+    if worst < def[+0xbc]:  set bit 0x1
+```
+
+**`def+0xbc` is a quarter, and it is not authored.** No key in `FUN_00479240` writes the field; its
+only writer is the def constructor `FUN_00478a00`, which stores `0.25` (`0x3e800000` at
+`0x00478b44`), and the `kind_of` copy constructor `FUN_00477b70` propagates it down the chain
+unchanged. It is the same shape as `ThrustFactor` and `level_off_rate`: a slot with no parser
+token. Every def in the install therefore uses 0.25, and the test is strictly below it, so a zone
+sitting exactly at a quarter health is still healthy.
+
+⚠ **It is health only, and it is the worst ZONE, not the hull.** The divisor pair is the part's
+health max and current; the armour pool at `+0x24`/`+0x28` is not read here. On an airframe that
+resolves no `destroyable_parts` (every AI-roster chain) the whole-vehicle health fraction stands in
+for it, which is the fallback the function itself has rather than a port's substitution. The
+`critical` flag byte at `[part+0x21]` is what selects a zone into the minimum, and all 88 part
+entries in the shipped `vehicle.zrd` carry it, so in this install the minimum is over every zone.
+
+**The pitch multiplier is a draw, not a derivation.** On the frame the swap is made, the chosen
+entry's flag byte `[entry+0x10]` gates a single
+
+```
+veh[+0x68] = lo + (hi - lo) * rand() / 32767        ; lo = entry[+0x14], hi = entry[+0x18]
+```
+
+which then multiplies the throttle pitch curve's output every frame until the mask clears, at which
+point `0x004b1b33` puts the multiplier back to 1.0. Nothing in the expression reads how hurt the
+airframe is: the shipped entry's 0.0-to-1.0 range means a damaged engine lands anywhere between the
+mixer's frequency floor and normal, and stays there. A cleared flag byte leaves the multiplier at 1
+rather than drawing a zero.
+
+**The mask's edges do the swapping, not a per-frame comparison.** `FUN_004b1690` stops the slot-0
+handle and re-runs the audio routine when the mask goes from zero to nonzero, and on the way back
+restores `engine_sound` (never `cockpit_engine_sound`, which the next frame's healthy arm re-picks)
+before re-running. The damaged arm additionally holds a re-arm timer on the **definition** at
+`def+0x88`: it only starts a damaged loop once that timer passes a threshold redrawn as
+`3.0 + 2·rand()/32767` seconds, so a damaged engine that has been silenced (an AI stopped past the
+cull) waits three to five seconds before it sounds again. A looped `snd_damagedengine` that is
+still playing never reaches the timer.
 
 ### The engine slot's pitch and gain are not throttle alone
 

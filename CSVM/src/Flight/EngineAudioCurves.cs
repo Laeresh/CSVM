@@ -32,6 +32,12 @@ public static class EngineAudioCurves
     /// <summary>The comparison form: the cull test is on squared distance, as the original's is.</summary>
     internal const float CullDistanceSq = CullDistance * CullDistance;
 
+    /// <summary>The health fraction the worst zone must fall BELOW before the airframe counts as
+    /// damaged: the airframe def's field at VDEF+0xbc, whose only writer is the def constructor's
+    /// 0.25 (no reader token reaches it, so every def in the install carries the same number).
+    /// Decode: docs/formats/vehicle.md, "What makes an airframe damaged".</summary>
+    internal const float DamagedEngineHealthFraction = 0.25f;
+
     // The mixer clamps the played frequency rather than letting a multiplier reach zero; Godot has
     // no such floor, and a PitchScale of 0 stalls the stream instead of bottoming out.
     private const float MinPitch = 0.01f;
@@ -53,22 +59,34 @@ public static class EngineAudioCurves
     private const float BoostVolumeParam = 1.17f;
     private const float BoostPitchParam = 1.25f;
 
+    /// <summary>Whether the engine slot takes <c>damaged_engine_sound</c>: the original tests its
+    /// whole disabled-systems mask for nonzero, and the two bits this engine models are the
+    /// health-threshold one and engine-out. <paramref name="worstHealthFraction"/> is
+    /// <see cref="PlaneDamage.WorstHealthFraction"/>, which already picks zones or the hull pair
+    /// the way the original does.</summary>
+    public static bool EngineDamaged(float worstHealthFraction, bool engineDead = false) =>
+        engineDead || worstHealthFraction < DamagedEngineHealthFraction;
+
+    /// <summary>The damaged swap's pitch multiplier, drawn once per swap and then held:
+    /// <paramref name="u"/> is the original's <c>rand() / 32767</c> and the entry's own two floats
+    /// bound it linearly. A CLEAR flag byte leaves the multiplier at 1 rather than drawing, which
+    /// is why the flag is not a range of zero width.</summary>
+    public static float DamagedPitchMul(PlaneStats stats, float u) =>
+        stats.DamagedEnginePitchRandom
+            ? stats.DamagedEnginePitchLo + ((stats.DamagedEnginePitchHi - stats.DamagedEnginePitchLo) * u)
+            : 1f;
+
     /// <summary>The engine slot's definition and its pitch multiplier: damaged swaps onto
-    /// <c>damaged_engine_sound</c> with a drawn multiplier; else <paramref name="cockpitView"/>
-    /// (own-ship only, the full Cockpit view — the original leaves the Nose view on the plain def,
-    /// confirmed at the controls of the original) swaps onto <c>cockpit_engine_sound</c> at
-    /// multiplier 1; else the plain <c>engine_sound</c>. Precedence is a port decision — no def
-    /// authors a damaged cockpit variant, so damage keeps the more important cue.</summary>
+    /// <c>damaged_engine_sound</c> at a drawn multiplier; else <paramref name="cockpitView"/>
+    /// (own-ship only, the full Cockpit view, since the original leaves the Nose view on the plain
+    /// def) swaps onto <c>cockpit_engine_sound</c> at multiplier 1; else the plain
+    /// <c>engine_sound</c>. Damaged wins because no def authors a damaged cockpit variant.</summary>
     public static (string Name, float PitchMul) EngineDefFor(
         PlaneStats stats, bool damaged, RandomNumberGenerator rng, bool cockpitView = false)
     {
         if (damaged && stats.DamagedEngineSound is { } damagedName)
         {
-            float mul = stats.DamagedEnginePitchRandom
-                ? stats.DamagedEnginePitchLo
-                  + ((stats.DamagedEnginePitchHi - stats.DamagedEnginePitchLo) * rng.Randf())
-                : 1f;
-            return (damagedName, mul);
+            return (damagedName, DamagedPitchMul(stats, stats.DamagedEnginePitchRandom ? rng.Randf() : 0f));
         }
         if (cockpitView && stats.CockpitEngineSound is { } cockpitName)
         {

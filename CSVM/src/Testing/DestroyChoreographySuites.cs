@@ -939,6 +939,7 @@ internal static class DestroyChoreographySuites
             // otherwise null the health damage outright (PlaneDamage.Spend).
             float overkill = (damage.WholeHealthMax + damage.WholeArmorMax) * 4f;
             ai.TakeCollisionHit(overkill, overkill, ai.GlobalPosition, 0);
+            var commandAtKill = ai.LastCommand;   // the lever/surface command the AI think left behind
 
             ctx.Check(ai.Destroyed && ai.WreckFalling,
                 $"the kill starts the destroy anim and leaves the hull FLYING destroyed={ai.Destroyed} falling={ai.WreckFalling}");
@@ -959,6 +960,11 @@ internal static class DestroyChoreographySuites
             float handoverAt = -1f;
             var velAtHandover = Vector3.Zero;
             var posAtHandover = posAtKill;
+            // The lever/surface freeze: FUN_004b82d0 zeroes neither on the original, and nothing
+            // here writes _lastInput once Crashed, so the same struct should read back
+            // bit-identical on every one of these frames, not just at the endpoints.
+            bool commandDrifted = false;
+            var commandAtDrift = commandAtKill;
             for (float t = 0f; t < 8f && handoverAt < 0f; t += Dt)
             {
                 ai.SimStep(Dt);
@@ -966,6 +972,14 @@ internal static class DestroyChoreographySuites
                 // and samples the hull the step above has just moved.
                 velAtHandover = ai.WorldVelocity;
                 posAtHandover = ai.WorldPosition;
+                var command = ai.LastCommand;
+                if (!commandDrifted && (command.Pitch != commandAtKill.Pitch
+                    || command.Roll != commandAtKill.Roll || command.Yaw != commandAtKill.Yaw
+                    || command.Throttle != commandAtKill.Throttle))
+                {
+                    commandDrifted = true;
+                    commandAtDrift = command;
+                }
                 rig.Advance(Dt);
                 if (!model.Visible)
                     hullHiddenFrames++;
@@ -974,6 +988,16 @@ internal static class DestroyChoreographySuites
                 if (!ai.WreckFalling)
                     handoverAt = t + Dt;
             }
+
+            var commandAtHandover = ai.LastCommand;
+            ctx.Note($"lever/surface command at kill: throttle={commandAtKill.Throttle:0.000} pitch={commandAtKill.Pitch:0.000} roll={commandAtKill.Roll:0.000} yaw={commandAtKill.Yaw:0.000}; at handover ({handoverAt:0.00} s): throttle={commandAtHandover.Throttle:0.000} pitch={commandAtHandover.Pitch:0.000} roll={commandAtHandover.Roll:0.000} yaw={commandAtHandover.Yaw:0.000}");
+            ctx.Check(!commandDrifted,
+                $"the lever/surface command stayed frozen every frame of the dead-hull flight (else it moved to throttle={commandAtDrift.Throttle:0.000} pitch={commandAtDrift.Pitch:0.000} roll={commandAtDrift.Roll:0.000} yaw={commandAtDrift.Yaw:0.000})");
+            ctx.Check(commandAtHandover.Throttle == commandAtKill.Throttle
+                && commandAtHandover.Pitch == commandAtKill.Pitch
+                && commandAtHandover.Roll == commandAtKill.Roll
+                && commandAtHandover.Yaw == commandAtKill.Yaw,
+                $"…and reads back bit-identical at the handover (BL-451)");
 
             float travelled = posAtHandover.DistanceTo(posAtKill);
             ctx.Note($"the AI Fury's wreck flew {travelled:0} m of its own in {handoverAt:0.00} s, from y={posAtKill.Y:0} to y={posAtHandover.Y:0} m (a glide, not a drop), at {velAtKill.Length():0} → {velAtHandover.Length():0} m/s");
