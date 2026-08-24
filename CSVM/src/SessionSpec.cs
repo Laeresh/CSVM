@@ -1255,6 +1255,13 @@ public sealed record SessionSpec
         return (Flt(s), alloc, frame);
     }
 
+    /// <summary>A copy pointed at the chapter and mission a <c>--campaign=</c> story position
+    /// resolves to. Resolving it needs <c>cm_sequence.zrd</c> off disk, which this type never
+    /// touches, so <see cref="Session.CampaignDirector.ResolveSpec"/> reads the sequence and calls
+    /// this; the rest of the build then sees an ordinary chapter/mission session.</summary>
+    public SessionSpec WithCampaignMission(string chapter, string mission) =>
+        this with { Chapter = chapter, Mission = mission, ChapterGiven = true };
+
     private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 
     // Turns the parsed votes into the one answer each: the mode, its modifiers, the world

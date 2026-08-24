@@ -196,7 +196,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — in-mission campaign machinery
 
-31. ☐ Campaign mission director: the objectives runtime (from A1) + mission end/return flow
+31. ☑ Campaign mission director: the objectives runtime (from A1) + mission end/return flow
 32. ☐ Cutscene player: intro animations, letterbox, camera control, handoff (`BL-134`)
 33. ☐ In-flight objectives display + objective sound cues
 34. ☐ Campaign wingmen: named rosters + netless station-keeping (`BL-362`, `BL-364`)
@@ -866,7 +866,9 @@ plus `--menu=mode` for the new door. **No golden was added or re-pinned:** `anal
 holds world/flight shots only, no menu has ever been pinned there, and a menu shot's hash would
 move on every unrelated label edit. The three campaign aids run over a scratch profile directory
 rather than `user://Profiles`, so the shots are machine-independent and cannot touch a real
-campaign. **Verified.** <pending orchestrator run>
+campaign. **Verified.** `RunTests.ps1` on the plan branch (C21 with the shared flow seam and
+D37): build clean, units 2053/2053, engine suites 95/95 with errors clean, all 16 golden shots
+hash-identical.
 
 **⚠ Traps.** Deletion is destructive: confirm, and honor B11's ownership rule for hangar planes.
 Both hold here, and `DeletingIsConfirmedAndTakesOnlyThatProfile` is the proof, with a sentinel file
@@ -978,7 +980,7 @@ bound weapons via the in-engine harness; CANCEL leaves the stored fit untouched.
 
 # Wave D — in-mission campaign machinery
 
-## D31 ☐ Campaign mission director: the objectives runtime
+## D31 ☑ Campaign mission director: the objectives runtime
 
 **Goal.** A campaign session runs its mission's `objectives.zrd` graph per A1's decoded
 semantics: objectives sleep, wake, chain, edit target lists, fire their sound groups and complete;
@@ -1000,6 +1002,49 @@ the test harness), asserting wake order, chaining, and end state; plus `RunTests
 **⚠ Traps.** Absence of a log line is not evidence a behaviour never ran (file sink and
 `--debug-anim` gating; see memory/verification docs) — assert through the test harness, not log
 greps alone.
+
+**Landed.** Three new files: `src/Session/ObjectiveScript.cs` (the parse), `ObjectiveGraph.cs` (the
+engine-free state machine behind an `IObjectiveWorld` seam) and `CampaignDirector.cs` (the engine
+side). `GameSession` resolves a `--campaign=<profile>:<seq>` launch to its chapter/mission in its
+constructor, builds the director beside `InstantActionDirector`, attaches the graph after the
+emplacement block and steps it from both drive paths. Every decoded quirk is implemented as
+decoded: the four states, one completion per tick from a rotating scan, the wake list's truncation
+at an already-awake target, `NAP` as the only re-run path, the AWAKE gate of
+`TICK_DEPENDS_ON_OBJ`, and the shipped misspellings staying dead by exact-name lookup.
+
+Reaching the engine today: `INACTIVEn` (node visibility), `ANIM_STATE` (a new
+`AnimRuntime.AnimStateOf`), the node form of `TRAVELERS`, `WAKEUP_TURRETS`/`WAKEUP_ZEP_TURRETS`,
+`WAKEUP_GENERATOR`, `WAKE_ANIM`, and both sound groups through `WorldSounds`' existing group
+resolution. Named no-ops, each logged once: everything needing a spawned `aiv` roster (`DEDG`, the
+group form of `TRAVELERS`, `WAKEUP_ENEMIES`, `SET_AI_*`, `WARP_VEHICLE`, `START_TAXI`,
+`COMPLETED_STOPPOINT`), the untraced `COMPLETED_ZEPCANNONS` reader, and `STOP_QUEUED_SOUNDS`. ⚠ An
+unanswerable condition reports FALSE, never true: reading an empty world as "the group is wiped
+out" would win every `DEDG` mission on its first tick. The `aiv` roster spawn is the one thing
+between those no-ops and a mission that plays through, and it is D34's neighbourhood.
+
+D33 consumes `ObjectiveGraph.Rows` (one row per unique `IDENTITY` priority, ascending, with its
+`MSG_` key and awake/completed flags), `ObjectiveTargets`/`OtherTargets`/`HelpLabels`, and the
+`Woke`/`Completed`/`TargetsChanged` events; the wake/complete events carry the sound-group names,
+which is also where D37 sees `music_prebattle_sg` and kin. Mission end raises
+`CampaignDirector.ReturnToCabin` and `MissionEnded` after recording through `CampaignProgression`
+and capturing the persist log; C22 owns the screen it returns to.
+
+**Verified.** \<pending orchestrator run\>. Foreground: `dotnet build` clean (0 warnings,
+StyleCop and comment caps clean), `RunTests.ps1 -SkipGoldens -SkipHitch` PASS — 2047 unit tests
+(18 new in `CSVM.Tests/ObjectiveGraphTests.cs`) and all 96 in-engine suites, engine errors clean.
+Two new suites: `campaign-objectives` drives C1/M02's own 50-objective graph headless to BOTH
+endings it authors (the primary completing off its `INACTIVE` node, its `KILL`/`WAKE`/`NAP` chains,
+the target-list edits, the display rows and mask bit 0; then the 300 s reminder fuse that naps the
+`INSTANTLOSS` objective, losing the mission at 325 s), and `campaign-mission-end` runs the director
+against a BUILT world where 15 real weapon kills through `DamageAt` drive `OBJECTIVE16`'s
+`INACTIVE_COMPLETION_COUNT 10`, then asserts the graph's own end reaches the profile.
+World-build changes: zero.
+
+**Open.** The completed-objective mask's bit-to-objective mapping is not decoded; CSVM defines bit
+n as display row n, which makes bit 0 the lowest priority and therefore the primary objective, the
+one thing `docs/formats/saved-games.md` does state. The order the chaining lists run in
+(wake, kill, nap, sleep) is not pinned by the decode either. Which flag a `MISSION_TIMER` expiry
+sets is untraced; CSVM ends the mission lost.
 
 ## D32 ☐ Cutscene player (`BL-134`)
 
@@ -1255,7 +1300,9 @@ stingers read `2,1,2,1` (alternating, not drawn), and a combat ping cuts prebatt
 fade ramp, reaches full gain within a quarter second, holds through the 20 s and fades to silence
 over four. `dotnet build` clean (0 warnings), `dotnet test` 2029/2029, engine suite
 `music-states` PASS with engine errors clean, all 16 golden shots hash-identical.
-**Verified.** \<pending orchestrator run\>
+**Verified.** `RunTests.ps1` on the plan branch (C21, the shared flow seam and D37 together):
+build clean, units 2053/2053, engine suites 95/95 with errors clean, all 16 golden shots
+hash-identical.
 
 **⚠ Traps.** ⚠ Do not add a crossfade; the original hard-cuts, and the only ramp in the game is
 battle music's. ⚠ Do not give Instant Action or the cabin a track the data does not name: the

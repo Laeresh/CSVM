@@ -124,6 +124,8 @@ public static class SuiteCatalog
         "world-lights-nearest-viewer",
         "campaign-persistence",
         "music-states",
+        "campaign-objectives",
+        "campaign-mission-end",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -622,6 +624,19 @@ public static class SuiteCatalog
             + "battle at silence, ramps it to full in a quarter second, holds it 20 s and fades it "
             + "out over four",
             MusicStates));
+        into.Add(new TestHarness.Suite("campaign-objectives",
+            "the objectives runtime (D31) over a shipped mission's own choreography, headless: the "
+            + "BEGIN_DORMANT wake timings and their sound/turret actions, the primary completing "
+            + "off an INACTIVEn node, its KILL/WAKE/NAP chains and target-list edits, the display "
+            + "rows and the mask's bit 0, plus BOTH endings the script authors — the INSTANTWIN "
+            + "path and the 300 s reminder fuse that naps the INSTANTLOSS objective",
+            CampaignObjectives));
+        into.Add(new TestHarness.Suite("campaign-mission-end",
+            "the campaign mission-end flow against a BUILT world (D31): a scripted kill drives an "
+            + "INACTIVEn condition off real node state, the graph's own end ends the mission, and "
+            + "the result reaches the profile through CampaignProgression with the destruction log "
+            + "captured and the return-to-cabin exit raised",
+            CampaignMissionEnd));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

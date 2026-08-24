@@ -363,6 +363,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // because the event resolves one animation record and never walks the per-node copies.
     private readonly HashSet<AnimDefinition> _invalidated = new();
 
+    // Every definition that has ever been started, so AnimStateOf can tell "has run" from "never
+    // ran". Write-only bookkeeping: nothing in the runtime reads it.
+    private readonly HashSet<AnimDefinition> _everStarted = new();
+
     private readonly Dictionary<string, int> _unhandled = new(StringComparer.Ordinal);
 
     // WAIT_FOR_COMPLETION: callee name -> how many holds it took. NAMES, not just a total: a hold's
@@ -1034,6 +1038,28 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// impact/destruction effects are handed off (doors and other calls fall through).</summary>
     public bool Handles(string animName) => _program.ByAnimName(animName).Count > 0;
 
+    /// <summary>The animation's current runtime state in the mission script's own numbering
+    /// (<c>ANIM_STATE</c>, docs/formats/objectives.md): <c>RUNNING</c> 2 while any definition of
+    /// that name has a live instance, <c>INVALID</c> 4 while one is latched off, <c>EXECUTED</c> 3
+    /// once one has run and finished, and 0 for a name this program never carried.</summary>
+    public int AnimStateOf(string animName)
+    {
+        var defs = _program.ByAnimName(animName);
+        if (defs.Count == 0)
+            return 0;
+        foreach (var inst in _instances)
+            if (defs.Contains(inst.Def))
+                return 2;
+        bool started = false;
+        foreach (var def in defs)
+        {
+            if (_invalidated.Contains(def))
+                return 4;
+            started |= _everStarted.Contains(def);
+        }
+        return started ? 3 : 0;
+    }
+
     /// <summary>The definitions carrying one ANIMATION_NAME — the same lookup
     /// <c>CALL_ANIMATION</c> dispatch uses, exposed so the zeppelin damage runtime can register
     /// a record's destroy anim as a destructible pool (M4 F18).</summary>
@@ -1277,6 +1303,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // idempotently, and tearing down rebuilds every one of them instead. A caller that wants
         // them cleared calls Stop directly.
         RemoveInstances(def.AnimName, anchor, tearDown: false);
+        _everStarted.Add(def);
         var inst = new AnimInstance(def, anchor);
         foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
             inst.AddRunner(seq);

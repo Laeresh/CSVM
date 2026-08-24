@@ -317,6 +317,9 @@ clusters they delegate to.
 - `src/Session/CampaignProfileStore.cs` — JSON persistence for a named campaign profile under `user://Profiles/<name>/profile.json`, following `ScoreStore`/`CustomPlaneStore`'s precedent: funds, owned planes (name-referenced into the global `user://Planes/` store, never a copy of it) with their per-gun ammo and per-pylon ordnance picks, mission results (the original's two halves, latest attempt and best-of merge), the completed-mission count, the granted aircraft awards and the cross-mission destruction log. `SessionSpec.CampaignProfile`/`CampaignMissionSeq` (`--campaign=<profile>:<seq>`) carry the launch-time selection as plain values; building the mission from them is the campaign director's job, not this store's.
 - `src/Session/CampaignProgression.cs` — the rules that write a profile: the best-of merge of one mission attempt (each field's rule is the original's), the monotonic position only a completed primary objective raises, the replay rule Previous Missions flies under, and the five aircraft awards granted once per profile. The cash half of the reward table stays with the hangar economy; this class banks the money an attempt reports.
 - `src/Session/CampaignPersistLog.cs` — the cross-mission state log (`BL-243`): captures what `PERSIST_LOG` defs a mission left destroyed out of `AnimRuntime.Destructibles`, keyed by chapter and by gamez node index, and re-applies it to a later mission of that chapter through `AnimRuntime.DamageAt`, so the death runs the way a weapon kill's did. Persistence is read from the READER def bound to a node, never from the compiled twin, which drops the flag.
+- `src/Session/ObjectiveScript.cs` — one mission's parsed `objectives.zrd`: the file-level keys and the contiguous `OBJECTIVEn` blocks in the typed shape the graph runs, found by exact name so every shipped misspelling lands in no field and stays dead. Decode: `docs/formats/objectives.md`.
+- `src/Session/ObjectiveGraph.cs` — the objectives runtime, engine-free: the four-state machine per objective, the rotating one-completion-per-tick scan, the chaining executor with its already-awake truncation, the nap that clears a completed flag, the condition families' OR, the mission countdown, the win/loss flags and the display rows D33 reads. Reaches the world only through `IObjectiveWorld`.
+- `src/Session/CampaignDirector.cs` — the engine side of a campaign mission and the sibling of `InstantActionDirector`: resolves a `--campaign=<profile>:<seq>` launch to its chapter/mission, arms the graph against the built world's runtimes, and at mission end records the attempt through `CampaignProgression`, folds the destruction log into the profile and raises the return-to-cabin exit.
 
 ### Session root and tests
 
@@ -3895,7 +3898,12 @@ step's hits are in. Nothing tags or seeks yet: the `BEEPER` hit's `TryTag` and t
 `InstantActionDirector.TryCreate` — before any archive, since loading its source is a bare value
 read — and stays null on a load failure or when no mission was given, which is what keeps every
 other mode untouched by its existence. The mission's own state and sequencing are the director's
-(its entry below); what stays here is the call order its phases are pinned to.
+(its entry below); what stays here is the call order its phases are pinned to. The campaign's
+sibling (`CampaignDirector?`) is built beside it and follows the same shape, with one point of its
+own: `CampaignDirector.ResolveSpec` runs in the CONSTRUCTOR, so `_spec.Chapter`/`_spec.Mission`
+already name the story position's world before any path is derived from them. Its `Attach` runs
+after the emplacement block, the last runtime an objective directive can touch, and its `Step` is
+called from both drive paths like the Instant Action sequencer's.
 `SpawnAiAircraft` has a second overload
 (`string, Vector3, Vector3, AiPilot, PaintScheme?, int?, int?, bool inert = false,
 bool shippedSkins = false`) for this; the four-parameter one is the `--ai=` route, for an aircraft
@@ -4469,6 +4477,62 @@ per-wave rosters, then calls `Start()` and activates whatever it returns; the di
 ticks `InstantActionWaves.Step` once per sim step, and its `ActivateWave` resolves the spawn draw
 against every live human's CURRENT position before calling `FlightController.Activate` on each
 member. Format and decode: docs/formats/instant-action.md.
+
+## src/Session/ObjectiveScript.cs
+One mission's `objectives.zrd`, parsed into the typed shape `ObjectiveGraph` runs. `Load` takes a
+mission zrdr scope and yields an empty script for a mission with no file, which is what every
+Instant Action and multiplayer stub amounts to. Two parser rules are the original's and are what
+keep the shipped data honest: blocks are read `OBJECTIVE1`, `OBJECTIVE2`, … and **stop at the first
+missing number**, and every directive is found by EXACT name over the block's flat alternating list,
+so `WAKEUP_OBJECTIVE_WHEN_I_COMPLETE` and the truncated `SET_AI_` land in no field and stay dead
+without anything special-casing them. The lookup stays at the top level rather than recursing into
+nested lists as the original does: no shipped file exercises the recursion, so the answer is the
+same on all 53 files and no data string can false-match a keyword. A `null` block parses to a
+directive-free objective, which starts awake and completes as a no-op.
+Format and decode: docs/formats/objectives.md.
+
+## src/Session/ObjectiveGraph.cs
+The objectives runtime over a parsed script, pure state over `Step` calls in the shape of
+`InstantActionWaves` — no Godot type, no logging, `CSVM.Tests/ObjectiveGraphTests.cs` pins it
+off-engine and `CampaignDirector` owns every log line about it. Implemented as decoded, shipped
+quirks included: the four states (dormant/awake/napping/retired); at most ONE completion per tick
+from a scan index that advances every tick, completion or not; `TICK_DEPENDS_ON_OBJ` gating the
+whole objective on its dependency being AWAKE, not merely alive; the wake executor's early return on
+an already-awake target, which TRUNCATES the rest of the caller's wake list;
+`NAP_OBJECTIVE_WHEN_I_COMPLETE` clearing the target's completed flag as the only re-run path;
+condition families OR-ing together with a conditionless objective completing on its first eligible
+tick; and `DANGER_ZONES_COMPLETED` counting only zones flagged while the objective was awake.
+The world seam is `IObjectiveWorld`: a method returning `null` means "this engine cannot answer",
+which makes the family report FALSE and bumps `UnresolvedConditions` rather than guess — ⚠ reading
+an empty world as "the group is wiped out" would win missions on the first tick.
+The read model D33 consumes is `Rows` (one row per unique `IDENTITY` priority, ascending, the
+priority the row key and the sort key), `ObjectiveTargets`/`OtherTargets`/`HelpLabels`, and the
+`Woke`/`Completed`/`TargetsChanged`/`MissionEnded` events; wake and complete events carry the
+`WAKEUP_SOUND_GROUP` / `COMPLETED_SOUND_GROUP` names, which is also how D37 sees the music groups.
+`CompletedMask` is bit-per-row, so bit 0 is the lowest priority and therefore the primary objective
+the profile's merge gates on (docs/formats/saved-games.md).
+
+## src/Session/CampaignDirector.cs
+The engine side of one campaign mission, behind `GameSession`'s one nullable `_campaign` field and
+the sibling of `InstantActionDirector`: a plain sealed class that builds no node of its own.
+`ResolveSpec` runs in `GameSession`'s CONSTRUCTOR, before any chapter-dependent path is derived: a
+`--campaign=<profile>:<seq>` launch names a story position, so the sequence is read and
+`SessionSpec.WithCampaignMission` points the rest of the build at an ordinary chapter/mission.
+`TryCreate` loads the profile and the script on the same "a failure warns and flies without a
+mission" contract `InstantActionDirector.TryCreate` has. `Attach(WorldInputs)` arms the graph once
+every runtime a directive can touch is up and applies the chapter's persist log; `Step(dt)` is
+called from BOTH of `GameSession`'s drive paths. Mission end records the attempt through
+`CampaignProgression`, merges `CampaignPersistLog.Capture` into the profile, saves it, and raises
+`ReturnToCabin` plus `MissionEnded` for the session layer; the cabin screen itself is C22's.
+Which directives reach the engine today: `INACTIVEn` (node visibility, the decoded active bit),
+`ANIM_STATE` (`AnimRuntime.AnimStateOf`), the node form of `TRAVELERS`, `WAKEUP_TURRETS` /
+`WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
+(`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM`, and both sound-group directives through
+`WorldSounds.PlayOneShot`'s existing group resolution. Everything that needs a spawned `aiv` roster
+(`DEDG`, the group form of `TRAVELERS`, `WAKEUP_ENEMIES`, `SET_AI_*`, `WARP_VEHICLE`, `START_TAXI`,
+`COMPLETED_STOPPOINT`), the untraced `COMPLETED_ZEPCANNONS` reader, and `STOP_QUEUED_SOUNDS` (there
+is no mission radio queue yet) are NAMED no-ops, each logged once per kind. ⚠ Never turn one of
+those into an invented behaviour: the missing consumer is the finding.
 
 ## src/Session/GeneratorCycle.cs
 The decoded egen launch timing law for ONE generator (M4 B6 + F20), pure over `Step` calls (no

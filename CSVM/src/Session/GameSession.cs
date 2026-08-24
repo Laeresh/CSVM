@@ -207,6 +207,10 @@ public partial class GameSession : Node3D
     // StartSession — null outside a mission, which is what keeps every other session mode
     // (free flight, Dogfight) untouched by its existence.
     private InstantActionDirector? _iaDirector;
+    // The active campaign mission's director: the objectives graph, its world seam and the mission
+    // end/return flow (see CampaignDirector). Built at the top of StartSession alongside the
+    // Instant Action one — null outside a --campaign= launch.
+    private CampaignDirector? _campaign;
     // The world AA emplacements: built with the rigs whenever a chapter world and the
     // shared pool exist, stepped in DriveSimSteps after the zeppelins (slung mounts read the
     // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
@@ -270,7 +274,9 @@ public partial class GameSession : Node3D
         // priority first (the Launcher sits one notch behind at -999).
         ProcessPriority = -1000;
         Name = "GameSession";
-        _spec = spec;
+        // ⚠ Resolved here, before any consumer reads Chapter/Mission: a --campaign= launch names a
+        // story position, not a chapter, and every path below is derived from those two fields.
+        _spec = CampaignDirector.ResolveSpec(spec, ctx.ZrdrPath);
         _repoRoot = ctx.RepoRoot;
         _dataRoot = ctx.DataRoot;
         _planesGamezPath = ctx.PlanesGamezPath;
@@ -298,6 +304,11 @@ public partial class GameSession : Node3D
 
     /// <summary>The session's per-player rigs — the Launcher's F11 placement print reads them.</summary>
     internal List<PlayerRig> Rigs => _rigs;
+
+    /// <summary>The campaign mission's director, null outside a <c>--campaign=</c> launch. The
+    /// session layer reads its <see cref="CampaignDirector.ReturnToCabin"/> to know the mission is
+    /// over and the player belongs back in the cabin; C22 builds that screen.</summary>
+    internal CampaignDirector? Campaign => _campaign;
 
     /// <summary>The session's subject plane (null until the build lands one) — the Launcher's
     /// capture tick reads it, because CaptureDirector only shoots once a plane exists.</summary>
@@ -526,6 +537,8 @@ public partial class GameSession : Node3D
         // A fresh director per build, or null: construction (and its one-InstantActionRuntime ⚠)
         // lives on InstantActionDirector.TryCreate.
         _iaDirector = InstantActionDirector.TryCreate(_spec);
+        // The campaign's sibling, on the same "a load failure flies without a mission" contract.
+        _campaign = CampaignDirector.TryCreate(_spec, _zrdrPath, state.MissionZrdrPath);
 
         Stopwatch sw;
         try
@@ -728,6 +741,7 @@ public partial class GameSession : Node3D
         // realtime session never enters DriveSimSteps, so a sequencer stepped only there
         // advances no wave at the controls.
         _iaDirector?.Step(dt);
+        _campaign?.Step(dt);
         // On a realtime clock the walk reads whatever pose each aircraft holds at this node's
         // tick; a step's stale pose is at most one 60 Hz frame of a 600 m cone.
         _smokeScreens?.SimStep(dt);
@@ -2327,6 +2341,22 @@ public partial class GameSession : Node3D
             }
         }
 
+        // The campaign objectives graph (D31): armed once every runtime a directive can touch is
+        // up, which is why it sits after the emplacement block rather than with the other
+        // directors. It builds no node of its own.
+        _campaign?.Attach(new CampaignDirector.WorldInputs
+        {
+            Runtime = state.WorldRuntime,
+            Turrets = _turretEmplacements,
+            Generators = _generators,
+            Sounds = state.WorldRuntime?.Sounds,
+            Projectiles = _projectiles,
+            ListenerPosition = () => _rigs.Count > 0 && _rigs[0].Controller is { } pilot
+                ? pilot.WorldPosition
+                : Vector3.Zero,
+            Rng = Rng.NewSystemRandom(Rng.Ai),
+        });
+
         // F15 / --debug-targets: who is aiming at whom. Reads the live gunners through closures
         // rather than a snapshot — waves activate, AI planes spawn and emplacements die long
         // after this line runs. The roster list is reused, not rebuilt per frame.
@@ -2978,6 +3008,9 @@ public partial class GameSession : Node3D
             // planes above have taken this step's crashes — the alive count
             // InstantActionWaves.Step reads must reflect them. The other drive path steps it too.
             _iaDirector?.Step(dt);
+            // The objectives graph reads the same step's kills and node deactivations, so it ticks
+            // after the AI planes above, exactly where the IA sequencer does.
+            _campaign?.Step(dt);
             // The smoke screens after every aircraft has moved this step: the walk reads the
             // layer's and the victims' poses as they stand now, as the original's does.
             _smokeScreens?.SimStep(dt);

@@ -7,13 +7,21 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>Suites over the campaign's persistence: what a mission leaves destroyed, what survives
-/// the profile file, and what a later mission of the same chapter starts with.</summary>
+/// <summary>Suites over the campaign runtime: what a mission's objectives graph does with the
+/// shipped choreography, what a mission leaves destroyed, what survives the profile file, and what
+/// a later mission of the same chapter starts with.</summary>
 internal static class CampaignSuites
 {
     // How many persisted objects the first mission destroys. Three is enough to prove the log
     // carries a set rather than one lucky node, and cheap enough to leave the world build dominant.
     private const int TargetCount = 3;
+
+    // The decoded worked mission the headless graph suite drives (docs/formats/objectives.md's
+    // vocabulary, walked in full for C2/M01; C1/M02 is the same vocabulary at a size that fits one
+    // suite). Its chapter world is never built here: the graph runs against a scripted world.
+    private const string GraphChapter = "C1";
+
+    private const string GraphMission = "M02";
 
     internal static void CampaignPersistence(TestContext ctx)
     {
@@ -129,6 +137,301 @@ internal static class CampaignSuites
         ctx.Note($"carried {carried.Count} persisted objects across {earlier.MissionFolder} -> {later.MissionFolder}");
     }
 
+    /// <summary>Drives one shipped mission's objectives graph headless against a scripted world:
+    /// the wake timings, the chains, the target-list edits, the display rows, and both endings the
+    /// script authors. No world is built, so this suite costs nothing but the parse.</summary>
+    internal static void CampaignObjectives(TestContext ctx)
+    {
+        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, GraphChapter, GraphMission);
+        ctx.RequireData(zrdr, $"{GraphChapter}/{GraphMission} zrdr");
+        var script = ObjectiveScript.Load(zrdr);
+        var report = new StringBuilder();
+        report.AppendLine($"{GraphChapter}/{GraphMission}: {script.Objectives.Count} objectives");
+        ctx.Same(50, script.Objectives.Count, $"the shipped {GraphChapter}/{GraphMission} objective count");
+
+        var world = new ScriptedWorld();
+        var graph = new ObjectiveGraph(script, world);
+        var woke = new List<int>();
+        var done = new List<int>();
+        graph.Woke += e => woke.Add(e.Number);
+        graph.Completed += e => done.Add(e.Number);
+
+        ctx.Same(5, graph.Rows.Count, $"one display row per unique IDENTITY priority");
+        ctx.Same(1, graph.Rows[0].Priority, $"the lowest priority sorts first, and is the primary");
+        ctx.Same(11, graph.Rows[^1].Priority, $"the secondary's priority is the last row");
+        ctx.Check(graph.StateOf(1) == ObjectiveState.Dormant, $"OBJECTIVE1 begins dormant");
+        ctx.Check(graph.StateOf(2) == ObjectiveState.Awake, $"OBJECTIVE2's null body begins awake");
+
+        Advance(graph, 3f);
+        ctx.Check(done.Contains(2), $"the null block completes as a no-op on its first eligible tick");
+        ctx.Check(woke.Contains(1), $"OBJECTIVE1 wakes at its BEGIN_DORMANT 2 s");
+        ctx.Check(world.SoundGroups.Contains("snd_NW2Start"), $"its WAKEUP_SOUND_GROUP fired");
+        ctx.Check(world.TurretPatterns.Contains("aagun**"), $"its WAKEUP_TURRETS pattern reached the world");
+        Advance(graph, 3f);
+        ctx.Check(woke.IndexOf(48) > woke.IndexOf(1), $"OBJECTIVE1's completion woke OBJECTIVE48 after it");
+        ctx.Check(world.SoundGroups.Contains("music_prebattle_sg"),
+            $"the woken cue's COMPLETED_SOUND_GROUP carries the music group D37 reads");
+
+        // The primary: the pickup going inactive is what completes it, and its completion is where
+        // this mission's chaining, target edits and net reassignments all land.
+        world.Inactive.Add("pickup_objective");
+        Advance(graph, 6f);
+        ctx.Check(done.Contains(3), $"the primary completes when its INACTIVE node loses its active bit");
+        ctx.Same(4, world.AiNets.Count, $"its four SET_AI_NET entries reached the world");
+        ctx.Check(graph.IsOtherTarget("ftank01"), $"ADD_OTHER_TARGET added the fuel tank");
+        ctx.Check(!graph.IsObjectiveTarget("caboose_polys"), $"REMOVE_OBJECTIVE_TARGET dropped the caboose");
+        ctx.Check(graph.Rows[0].Completed, $"the primary's display row is marked");
+        ctx.Same(CampaignProgression.PrimaryObjectiveMask, graph.CompletedMask & 1,
+            $"bit 0 of the recorded mask is that primary");
+        for (int n = 19; n <= 24; n++)
+        {
+            ctx.Check(!graph.AliveOf(n), $"the primary's KILL list retired the reminder loop OBJECTIVE{n}");
+        }
+
+        ctx.Check(done.Contains(4), $"its WAKE list ran OBJECTIVE4, which is conditionless");
+        ctx.Check(graph.StateOf(6) != ObjectiveState.Dormant, $"its NAP list moved OBJECTIVE6 out of dormancy");
+        Advance(graph, 8f);
+        ctx.Check(done.Contains(6), $"the napped objective woke on its own timer and completed");
+        report.AppendLine($"win-path run: {done.Count} completions, {woke.Count} wakes, mask 0x{graph.CompletedMask:x}");
+
+        LossFuse(ctx, script, report);
+        NapClearsCompletion(ctx);
+        ctx.WriteArtifact("test-campaign-objectives.txt", report.ToString());
+        ctx.Note($"drove {GraphChapter}/{GraphMission}'s {script.Objectives.Count}-objective graph to both endings");
+    }
+
+    /// <summary>The mission-end flow against a built world: a scripted kill drives an
+    /// <c>INACTIVEn</c> condition off real node state, the graph's own end is what ends the
+    /// mission, and the result reaches the profile through <see cref="CampaignProgression"/> with
+    /// the destruction log captured and the return-to-cabin exit raised.</summary>
+    internal static void CampaignMissionEnd(TestContext ctx)
+    {
+        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
+        {
+            throw new SuiteSkippedException($"chapter {ctx.Chapter} holds no campaign mission");
+        }
+
+        var script = ObjectiveScript.Load(
+            SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder));
+        if (script.Objectives.Count == 0)
+        {
+            throw new SuiteSkippedException($"{mission.ChapterFolder}/{mission.MissionFolder} authors no objectives");
+        }
+
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        var director = CampaignDirector.Create(script, mission, profile, null);
+        var report = new StringBuilder();
+        report.AppendLine($"{mission.ChapterFolder}/{mission.MissionFolder} seq={mission.Seq}: "
+            + $"{script.Objectives.Count} objectives");
+        ctx.WithWorld(ctx.Chapter, collision: false, mission.MissionFolder, world =>
+        {
+            director.Attach(new CampaignDirector.WorldInputs { Runtime = world.Runtime });
+            var graph = director.Graph!;
+            ctx.Check(graph.Count == script.Objectives.Count, $"every objective is armed");
+            ctx.Check(graph.Rows.Count > 0, $"the mission has a player-visible objectives display");
+
+            int completed = DriveOneInactive(ctx, world, script, graph, report);
+            ctx.Check(completed > 0, $"a scripted kill drove an INACTIVEn condition off real node state");
+
+            int winner = EndObjective(script);
+            ctx.Check(winner > 0, $"the mission authors an INSTANTWIN objective");
+            graph.Wake(winner);
+            Advance(graph, 2f);
+            ctx.Check(director.ReturnToCabin, $"the mission end raised the return-to-cabin exit");
+            var result = director.Result!.Value;
+            ctx.Check(result.Outcome == MissionOutcome.Won, $"the outcome is the graph's own");
+            ctx.Same(graph.CompletedMask, result.Attempt.CompletedMask, $"the recorded mask is the graph's rows");
+            ctx.Check(CampaignProgression.ResultOf(profile, mission.Seq) != null,
+                $"the attempt reached the profile's mission record");
+            bool primary = (result.Attempt.CompletedMask & CampaignProgression.PrimaryObjectiveMask) != 0;
+            ctx.Same(primary ? mission.Seq + 1 : 0, profile.MissionsCompleted,
+                $"the position advances only on a completed primary (primary={primary})");
+            report.AppendLine($"ended {result.Outcome}, mask 0x{result.Attempt.CompletedMask:x}, "
+                + $"{result.Attempt.TimeMs} ms, persist log {profile.PersistLog.Count}");
+        });
+
+        ctx.WriteArtifact($"test-campaign-mission-end-{ctx.Chapter}.txt", report.ToString());
+        ctx.Note($"flew {mission.ChapterFolder}/{mission.MissionFolder} to a graph-derived end");
+    }
+
+    // Runs the loss fuse the mission authors: nothing is satisfied, OBJECTIVE19 wakes at its 300 s
+    // and naps the INSTANTLOSS objective 15 s later, which is what loses the mission.
+    private static void LossFuse(TestContext ctx, ObjectiveScript script, StringBuilder report)
+    {
+        var graph = new ObjectiveGraph(script, new ScriptedWorld());
+        Advance(graph, 305f);
+        ctx.Check(graph.CompletedOf(19), $"the last reminder completes at its BEGIN_DORMANT 300 s");
+        ctx.Check(graph.StateOf(24) == ObjectiveState.Napping, $"its NAP put the INSTANTLOSS objective on a timer");
+        ctx.Check(!graph.Ended, $"the mission has not ended while that nap runs");
+        Advance(graph, 20f);
+        ctx.Check(graph.Outcome == MissionOutcome.Lost, $"the INSTANTLOSS objective ends the mission lost");
+        report.AppendLine($"loss-fuse run: lost at {graph.Elapsed:0.0} s");
+    }
+
+    // NAP_OBJECTIVE_WHEN_I_COMPLETE clearing a completed flag is engine surface no shipped mission
+    // cycles into, so it is driven from a script written in the same vocabulary.
+    private static void NapClearsCompletion(TestContext ctx)
+    {
+        var script = ObjectiveScript.Parse(new List<object?>
+        {
+            new List<object?>
+            {
+                "OBJECTIVE1", new List<object?>
+                {
+                    "BEGIN_DORMANT", new List<object?> { 1.0f },
+                    "NAP_OBJECTIVE_WHEN_I_COMPLETE", new List<object?> { 2.0f, 1.0f },
+                },
+                "OBJECTIVE2", null,
+            },
+        });
+        var graph = new ObjectiveGraph(script, new ScriptedWorld());
+        Advance(graph, 0.5f);
+        ctx.Check(graph.CompletedOf(2), $"the conditionless objective completes first");
+        Advance(graph, 0.7f);
+        ctx.Check(!graph.CompletedOf(2), $"the nap cleared its completed flag");
+        ctx.Check(graph.StateOf(2) == ObjectiveState.Napping, $"and left it napping");
+        Advance(graph, 2f);
+        ctx.Check(graph.CompletedOf(2), $"it ran again, which no plain wake could have done");
+    }
+
+    // Destroys (or deactivates) every node of one objective's INACTIVE paths, then ticks until it
+    // completes. Two passes: an objective whose nodes are all real destructibles first, so the
+    // condition is driven by a WEAPON kill through DamageAt rather than by a bare deactivation.
+    private static int DriveOneInactive(
+        TestContext ctx, TestWorld world, ObjectiveScript script, ObjectiveGraph graph, StringBuilder report)
+    {
+        for (int pass = 0; pass < 2; pass++)
+        {
+            int found = DriveInactivePass(ctx, world, script, graph, report, pass == 0);
+            if (found > 0)
+            {
+                return found;
+            }
+        }
+
+        return 0;
+    }
+
+    private static int DriveInactivePass(
+        TestContext ctx, TestWorld world, ObjectiveScript script, ObjectiveGraph graph,
+        StringBuilder report, bool destructiblesOnly)
+    {
+        foreach (var def in script.Objectives)
+        {
+            if (def.Inactive.Count == 0 || def.InstantLoss)
+            {
+                continue;
+            }
+
+            var nodes = new List<Node3D>();
+            foreach (var path in def.Inactive)
+            {
+                if (Resolve(world, path) is { } node)
+                {
+                    nodes.Add(node);
+                }
+            }
+
+            if (nodes.Count == 0 || nodes.Count < (def.InactiveCount ?? def.Inactive.Count)
+                || (destructiblesOnly && !AllDestructible(world, nodes)))
+            {
+                continue;
+            }
+
+            int killed = 0;
+            foreach (var node in nodes)
+            {
+                if (world.Runtime.Destructibles.Resolve(node) is { MaxHealth: > 0f } live)
+                {
+                    world.Runtime.DamageAt(node, live.MaxHealth);
+                    killed++;
+                }
+                else
+                {
+                    AnimRuntime.SetSubtreeActive(node, false);
+                }
+            }
+
+            graph.Wake(def.Number);
+            Advance(graph, 10f);
+            report.AppendLine($"OBJECTIVE{def.Number}: {nodes.Count} node(s), {killed} by weapon damage, "
+                + $"completed={graph.CompletedOf(def.Number)}");
+            ctx.Check(graph.CompletedOf(def.Number),
+                $"OBJECTIVE{def.Number} completed once its nodes lost their active bit");
+            return nodes.Count;
+        }
+
+        return 0;
+    }
+
+    private static bool AllDestructible(TestWorld world, List<Node3D> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            if (world.Runtime.Destructibles.Resolve(node) is not { MaxHealth: > 0f })
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static Node3D? Resolve(TestWorld world, IReadOnlyList<string> path)
+    {
+        Node3D? node = null;
+        foreach (var name in path)
+        {
+            var found = world.Runtime.FindNodes(name, node);
+            if (found.Count == 0)
+            {
+                return null;
+            }
+
+            node = found[0];
+        }
+
+        return node;
+    }
+
+    private static int EndObjective(ObjectiveScript script)
+    {
+        foreach (var def in script.Objectives)
+        {
+            if (def.InstantWin)
+            {
+                return def.Number;
+            }
+        }
+
+        return 0;
+    }
+
+    private static void Advance(ObjectiveGraph graph, float seconds)
+    {
+        for (float t = 0f; t < seconds; t += 0.1f)
+        {
+            graph.Step(0.1f);
+        }
+    }
+
+    private static CampaignMission? FirstMissionOf(
+        IReadOnlyList<CampaignMission> missions, string chapter)
+    {
+        CampaignMission? found = null;
+        foreach (var m in missions)
+        {
+            if (m.ChapterFolder.Equals(chapter, System.StringComparison.OrdinalIgnoreCase)
+                && (found == null || m.Seq < found.Value.Seq))
+            {
+                found = m;
+            }
+        }
+
+        return found;
+    }
+
     // The last campaign mission stored in a chapter's world folder. The suite needs two missions of
     // one folder, which four of the eight folders have.
     private static CampaignMission? LastMissionOf(
@@ -206,4 +509,82 @@ internal static class CampaignSuites
 
     private static int NodeIndex(Node3D node) =>
         node.HasMeta(AnimRuntime.IndexMeta) ? (int)node.GetMeta(AnimRuntime.IndexMeta) : -1;
+
+    // The graph's world seam with no world behind it: node activity and anim state answer what the
+    // suite sets, and every world-touching action is recorded rather than performed. The two
+    // families a session cannot answer at all report null here, exactly as the live adapter does.
+    private sealed class ScriptedWorld : IObjectiveWorld
+    {
+        public HashSet<string> Inactive { get; } = new(System.StringComparer.OrdinalIgnoreCase);
+
+        public Dictionary<string, int> AnimStates { get; } = new(System.StringComparer.OrdinalIgnoreCase);
+
+        public List<string> SoundGroups { get; } = new();
+
+        public List<string> TurretPatterns { get; } = new();
+
+        public List<string> AiNets { get; } = new();
+
+        public List<string> Generators { get; } = new();
+
+        public bool? NodeInactive(IReadOnlyList<string> path) => Inactive.Contains(path[^1]);
+
+        public int AnimState(string anim) => AnimStates.TryGetValue(anim, out int state) ? state : 0;
+
+        public int? GroupLiveCount(int group, string? generator) => null;
+
+        public bool? TravelersMet(TravelersSpec spec) => null;
+
+        public void WakeupEnemies(IReadOnlyList<string> names)
+        {
+        }
+
+        public void WakeupTurrets(IReadOnlyList<string> patterns) => TurretPatterns.AddRange(patterns);
+
+        public void WakeupZepTurrets(IReadOnlyList<string> nodes) => TurretPatterns.AddRange(nodes);
+
+        public void WakeupGenerator(string name, int count) => Generators.Add(name);
+
+        public void WakeAnim(string anim, string? node)
+        {
+        }
+
+        public void PlaySoundGroup(string group) => SoundGroups.Add(group);
+
+        public void StopQueuedSounds(IReadOnlyList<string> names)
+        {
+        }
+
+        public void WarpVehicle(string vehicle, IReadOnlyList<WarpPoint> points)
+        {
+        }
+
+        public void SetAiTeam(IReadOnlyList<(string Name, int Team)> entries)
+        {
+        }
+
+        public void SetAiNet(IReadOnlyList<(string Name, string Net)> entries)
+        {
+            foreach (var entry in entries)
+            {
+                AiNets.Add(entry.Net);
+            }
+        }
+
+        public void SetAiAttackRadius(IReadOnlyList<(string Name, float Radius)> entries)
+        {
+        }
+
+        public void CompletedZepcannons(IReadOnlyList<(string Zeppelin, int Flag)> entries)
+        {
+        }
+
+        public void CompletedStoppoint(IReadOnlyList<(string Net, int Stop, int Flag)> entries)
+        {
+        }
+
+        public void StartTaxi(IReadOnlyList<string> names)
+        {
+        }
+    }
 }
