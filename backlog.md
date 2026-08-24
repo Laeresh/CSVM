@@ -145,6 +145,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   at 10%, which a graze that leaves the hull healthy never reaches — so this clip showing no
   whole-plane trail is expected, not a puzzle.
 
+- `BL-442` `[Bug]` **The engine sputters at the slightest damage.** Reported at the controls: one
+  shallow graze and the engine note drops to a sputter. `FlightAudio.UpdateEngineSlot` swaps to
+  `snd_damagedengine` on any damage at all (`damageFrac > 0`, any zone below full), and
+  `EngineAudioCurves.EngineDefFor` draws the pitch multiplier uniformly across the authored
+  `[DamagedEnginePitchLo, Hi]` range, so a single graze can land a 0.02 pitch draw. Decode what the
+  original keys the damaged-engine swap on (a health fraction, the engine zone, or a damage stage)
+  and whether the pitch is drawn or derived, then port that. ⚠ Traps: do not add a threshold by
+  feel; the damage-stage decode in `docs/org/vehicleDamage.md` is the place the gate probably
+  lives. Nitro's engine variants (`git log --grep=BL-089`) share this slot, so check both.
+
 - `BL-122` `[Tuning]` `[Owed-playtest]` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: the **debris-arc trajectory** (the executable decode is settled — `translation_range` gives
   `dirY = elevation/90` and horizontal `1 − |elevation|/90`, `initial` the launch speed, `delta` an
@@ -925,17 +935,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   with).
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
-
-- `BL-310` `[Feature]` **Pitch-down on aileron roll is designed — unmodelled, and a decode question.**
-  GDD §4.1.5: a roll carries a "small but noticeable" nose-over effect. We model
-  no roll→pitch coupling. Before inventing a constant, ask the binary: does the live torque path
-  (`FUN_0048c470`, the accumulator the torque decode reads) put a pitch term in on roll input at all? If no
-  such term exists the effect is the design document's intent rather than the shipped behaviour, and
-  this closes as won't-do. ⚠ Do not settle it off the 360° aileron-roll footage — an altitude or ADI
-  dip across a roll cannot separate the coupling from the roll's own geometry, and a frame-derived
-  angle cannot confirm a decode (`docs/verification.md` DET-12).
-  ⚠ This is the cross-axis coupling, not the roll's own spin-up rate, which is
-  decoded (`roll_torque` through the reciprocal inertia, damped exponentially).
 
 ## Environment & world
 

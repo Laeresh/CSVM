@@ -1170,6 +1170,78 @@ linearly at ≈1.08 °/s to −41.8° with no equilibrium (−1993 m), which is 
 produced at all. Recorded for `D31`, not acted on — the drift is ≈1.2–1.6× the frame-measured rate,
 which is a magnitude difference against video where it used to be a missing mechanism.
 
+## Roll to pitch: where the roll command goes, and no pitch write is among its destinations
+
+GDD §4.1.5 gives an aileron roll a "small but noticeable" nose-over. **The shipped executable has
+no such term.** The proof here is the other half of the accumulator argument: rather than reading
+every write and asking what its sign comes from, it starts at the roll command and follows every
+program-wide read of it. The command lives in two slots of the aircraft record, the shaped input
+channel `[obj+0x100]` and the clamped stick `[obj+0x114]`, and the pitch axis is reached by
+neither.
+
+The two command paths write the three sticks strictly axis by axis. Each stick is
+`FUN_00460890(channel, 1.0, 0.5)` of its own channel, and the calls sit in one run: the player's in
+`FUN_00487460` at `0x487dab` (roll from `+0x100`), `0x487dc7` (pitch from `+0x108`) and `0x487de3`
+(yaw from `+0x10c`), the AI's in the identical shape at `0x41c02f`/`0x41c04b`/`0x41c067`
+(`FUN_0041b560`) and `0x420fd8`/`0x420ff4`/`0x421010` (`FUN_004209b0`). The pitch stick `+0x11c`
+therefore takes the pitch channel and nothing else on both paths, which is the first place a
+command-level coupling could have lived and does not.
+
+Every read of the roll command in the program, with what it reaches:
+
+| Address | Function | What it does with the roll command | Axis reached |
+|---|---|---|---|
+| `0x48ca7a`, `0x48ca96` | `FUN_0048c470` | `roll_torque [+0x644] · stick · rollAuthority · dt` along the `m[2]` row of `+0x180` | roll only |
+| `0x48ce53` | `FUN_0048c470` | a compare against `0.0`, gating the `level_off_rate` auto-level with the pitch stick's own zero test | none |
+| `0x48eaf7`, `0x48eb87`, `0x48eb96` | `FUN_0048e580` | the surface targets: `∓0.5 · roll` into the two aileron slots, `∓0.18 · roll` into the two elevator ones | animation only |
+| `0x491445`, `0x491461` | `FUN_00490f70` | the same roll torque in the dead debug integrator, whose only caller is `FUN_00491820` | roll only, unreachable |
+| `0x48f724`–`0x48f79f` | `FUN_0048f720` | integrates the roll command into the turn-rate slot `+0x13c`, clamped by `+0x17c` | see below |
+| `0x490050`, `0x490069`, `0x490091` | `FUN_0048ffe0` | the same integration into `+0x148` | see below |
+| `0x487798`–`0x487e23` | `FUN_00487460` | writes the channel and the stick, then snaps the stick to ±1 past a threshold | input |
+| `0x49225b`–`0x492b54` | `FUN_00492040` | writes the channel and stick pair in the dead debug family | input |
+| `0x4abb13`–`0x4abbaf` | `FUN_004ab550` | poses a node transform, writing only the matrix slots at `[+0xf8]` | none |
+| `0x41bff0`–`0x41c034`, `0x41c1de`–`0x41c23b`, `0x41d89a`–`0x41d8c1`, `0x41e509`–`0x41e58b`, `0x420f91`–`0x420fe3` | AI command builders | square the channel, then write the roll stick from it | input |
+| `0x4b0603`, `0x4b0621` | `FUN_004aff80` | zeroes both slots on construction | none |
+
+⚠ **`[+0x114]` is two different fields in two different structures.** On the plane RECORD the same
+offset is `ang_momentum_damp` (`0x47add3`, and its `5.0` at `0x478bf5`), and `FUN_004d3010` writes
+`+0x110` through `+0x134` as a 4×4 matrix. Neither is the stick, and an offset sweep that does not
+separate them reports coupling that is not there.
+
+`FUN_0048f720` and `FUN_0048ffe0` belong to the other motion models, not to the aeroplane.
+`FUN_00489ea0` switches on `[obj+0x67c]`, a field copied from the vehicle record at `0x475abf`:
+0 and 4 select the flight model `FUN_0048e580`, 1 selects `FUN_0048ffe0`, 2 selects `FUN_0048a880`
+and 3 and 5 select `FUN_0048b480`. In all three of those the roll command becomes a HEADING rate
+(the angle `+0x1fc`, integrated at `0x48b4c6`–`0x48b4cc` and in the same shape in the other two),
+the bank angle `+0x200` is a
+cosmetic function of turn rate and speed, and the pitch angle `+0x1f8` is either never written or,
+in `FUN_0048ffe0`, taken from `atan2` of the velocity components. So even the simplified vehicles
+put the roll command on heading rather than on pitch.
+
+**The elevator mixing is animation, and that is measurable rather than assumed.** The six targets
+`FUN_0048e580` builds at `0x48eaf0`–`0x48ec8b` are smoothed by `FUN_00460490` into `+0x62c`,
+`+0x630`, `+0x634`, `+0x638`, `+0x63c` and `+0x640`. Those six slots are written nowhere else
+except the constructors that zero them (`FUN_004aff80`, `FUN_0047f1f0`, `FUN_0047f740`), and the
+only reads in the whole program are the three appliers `FUN_004b2f00` (`0x4b2f14`, `0x4b2f45`),
+`FUN_004b2f70` (`0x4b2f84`, `0x4b2fb5`) and `FUN_004b2fe0` (`0x4b2ff4`, `0x4b3025`), which pose
+nodes. The force build `FUN_0048fc40` and the torque accumulator `FUN_0048c470` read none of them,
+and the mixing block runs after `FUN_0048c470` has already returned.
+
+The attitude-driven pitch term at `0x48cd36` is a separate mechanism and stays where it is. It
+takes `m[0].y` and `m[1].y`, which are bank and wing-up, so it produces a pitch rate during a roll
+with no reference to the stick at all. That is why altitude or ADI movement across a filmed roll
+cannot settle this question, and why the bank coupling being ported is not evidence that the GDD's
+term shipped.
+
+CSVM carries no roll-to-pitch term and `CSVM.Tests/RollToPitchCouplingTests.cs` pins that it does
+not: a held roll stick at three magnitudes, flown wings-level and on the flight path so the bank
+coupling and the weathervane read one unchanging state, leaves the pitch component of `BodyRates`
+at exactly zero and identical to a centred-stick run, while the roll rate itself is live. The
+`METHOD-9` control injects a nose-over at a fiftieth of `pitch_torque` and reads it back off the
+accumulator, and a fourth test holds the elevator deflection a roll stick produces beside the
+quiet pitch axis in the same state, so the two cannot be confused. The design document's roll-to-
+pitch coupling is unshipped intent, closed per the parity plan's Decision 4.
+
 ## Weathervane centring — resolved, and the summary line above was wrong
 
 `return_rate` is the last contribution `FUN_00490f70` makes to the angular accumulator, at

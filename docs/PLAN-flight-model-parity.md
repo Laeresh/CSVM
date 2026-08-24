@@ -118,7 +118,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — Settle designed but unproven features
 
 31. ❌ D31 Settle one-sided engine torque (`BL-309`)
-32. ☐ D32 Settle roll-to-pitch coupling (`BL-310`)
+32. ❌ D32 Settle roll-to-pitch coupling (`BL-310`)
 33. ❌ D33 Settle ambient turbulence (`BL-311`)
 34. ☑ D34 Reproduce nitro boost (`BL-089`)
 
@@ -639,19 +639,55 @@ not outrank it anyway. Dossier and `docs/architecture.md`'s `FlightModel.cs` ent
 **Verified.** Full `RunTests.ps1` battery on the merged lane tree: build clean, 2093/2093 units,
 94/94 engine suites with engine errors clean, 16/16 goldens hash-identical, exit 0.
 
-## D32 ☐ Settle roll-to-pitch coupling (`BL-310`)
+## D32 ❌ Settle roll-to-pitch coupling (`BL-310`)
 
 **Goal.** Determine whether aileron input adds the GDD's small nose-down term in the retail build.
 
 **Evidence (confidence: lead-only).** Design intent names it; no current mechanism is known.
 
-**Approach.** <TODO: re-verify still-open against `git log --grep=BL-310` and code.> Search the live torque accumulator for pitch written from roll input; close as won't-do if absent.
+**Approach.** Search the live torque accumulator for pitch written from roll input; close as won't-do if absent.
 
 **Model recommendation.** **high** — bounded binary trace with a valid disproof outcome.
 
 **Verify.** If present, a one-step unit isolates cross-axis torque; if absent, document the complete writer search.
 
 **⚠ Traps.** Altitude or ADI movement during a roll cannot separate coupling from geometry.
+
+**Landed.** The re-verify found `BL-310` open, and the complete search DISPROVES the GDD's term.
+The search ran from the command outward rather than from the accumulator inward, which is the
+independent half of `D31`'s writer table: every program-wide read of the roll command, in both of
+its slots (the shaped channel `[obj+0x100]` and the clamped stick `[obj+0x114]`), is enumerated and
+classified, and no read reaches the pitch axis. The live path spends the roll stick exactly twice,
+as the roll torque along the `m[2]` row at `0x48ca7a`–`0x48cae2` and as a compare against `0.0`
+gating the never-authored `level_off_rate` auto-level at `0x48ce53`. **The command builders are
+axis-wise on both paths**, which is the first place a coupling could have lived: each stick is
+`FUN_00460890` of its own channel in one run of three calls, the player's at
+`0x487dab`/`0x487dc7`/`0x487de3` and the AI's in the identical shape at
+`0x41c02f`/`0x41c04b`/`0x41c067` and `0x420fd8`/`0x420ff4`/`0x421010`, so the pitch stick `+0x11c`
+takes the pitch channel `+0x108` alone whoever is flying. **`B13`'s elevator mixing is measured to
+be animation, not assumed to be**: the six targets `FUN_0048e580` builds at `0x48eaf0`–`0x48ec8b`
+land in `+0x62c` through `+0x640`, and the only reads of those six slots in the whole program are
+the three node appliers `FUN_004b2f00`/`FUN_004b2f70`/`FUN_004b2fe0`, with the constructors that
+zero them as the only other writers. The remaining consumers are the other motion models
+(`FUN_00489ea0` switches on `[obj+0x67c]`, copied from the vehicle record at `0x475abf`), and in
+all of them the roll command becomes a heading rate while the pitch angle is either untouched or
+taken from the velocity vector. Two decode hazards are recorded with the finding: `[+0x114]` is
+`ang_momentum_damp` on the plane RECORD and part of a 4×4 matrix in `FUN_004d3010`, so an offset
+sweep that does not separate the structures reports coupling that is not there; and the bank
+coupling's pitch term at `0x48cd36` takes `m[0].y`/`m[1].y`, so it produces pitch during a roll
+with no stick term at all, which is why filmed altitude or ADI movement cannot settle this.
+**No code changed.** `RollToPitchCouplingTests` flies a held roll stick at three magnitudes
+wings-level and on the flight path, so the bank coupling and the weathervane read one unchanging
+state, and pins `BodyRates.X` at exactly zero and identical to a centred-stick run while the roll
+rate stays live; the `METHOD-9` control injects a nose-over at a fiftieth of `pitch_torque` and
+reads it back off the accumulator, and a fourth test holds the roll-driven elevator deflection
+beside the quiet pitch axis so the animation and the plant cannot be confused. The consumer list
+with addresses is in `docs/org/flightModel.md`, "Roll to pitch"; `BL-310` deleted from
+`backlog.md`. Closed per this plan's Decision 4 as unshipped design intent.
+
+**Verified.** Full `RunTests.ps1` battery on the merged lane tree (main merged in the same
+step): build clean, 2132/2132 units, 94/94 engine suites with engine errors clean, 16/16 goldens
+hash-identical, exit 0.
 
 ## D33 ❌ Settle ambient turbulence (`BL-311`)
 
