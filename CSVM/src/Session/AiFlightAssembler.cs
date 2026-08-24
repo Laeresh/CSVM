@@ -102,11 +102,14 @@ internal sealed class AiFlightAssembler
                 GrazeEffectSink = _world.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
                 TouchdownDefs = _world.TouchdownDefs,
                 Projectiles = _world.Projectiles,
+                HumanPositions = _world.HumanPositions,
                 PadDevices = Array.Empty<int>(),
                 Inert = spawn.Inert,
                 Team = spawn.Team,
                 Shake = new PlaneShake(_aircraft.Shakes),
             });
+            // The roster block's nitro slot installs the injector used by an AI's nitro evade.
+            controller.Nitro.Installed = spawn.Nitro;
             onCreated(controller);
 
             // The AI def's own fit when it authors one, the player stock table otherwise. Both

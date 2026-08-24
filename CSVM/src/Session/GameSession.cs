@@ -1704,6 +1704,7 @@ public partial class GameSession : Node3D
         {
             Ambience = _ambience,
             Projectiles = projectiles,
+            HumanPositions = PlayerPositionsSnapshot,
             ChapterZrdrPath = SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter),
             MissionZrdrPath = state.MissionZrdrPath,
             Gamez = state.Gamez,

@@ -23,6 +23,12 @@ law — frequency, damping, waveform — and a magnitude term:
 | `high_speed` | 15.0 | 12.5 | 1 | `magnitude_quotient` 70.0, `min_speed` 1.0 |
 | `nitro` | 4.0 | 3.0 | 1 | `magnitude` 0.05 (absolute) |
 
+Six sources is the whole file, and there is no per-campaign, per-mission or per-airframe override
+of it anywhere in the extracted tree. The original's parser looks for a **seventh** source,
+`turbulence`, which no shipped data authors and which carries no magnitude key even in the parser;
+its block serves the collision shake instead. See
+[`../org/shakes.md`](../org/shakes.md), "Ambient turbulence does not ship".
+
 Readings with confidence: `frequency` in Hz, `damp` a decay rate (the impulse sources die fast),
 `sawtooth` selects the waveform (1 = the buzzy sources: firing, speed rattle, nitro), and
 `high_speed`'s magnitude is its driving quantity divided by `magnitude_quotient` (its input is

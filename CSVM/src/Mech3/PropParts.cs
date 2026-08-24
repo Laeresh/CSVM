@@ -8,7 +8,7 @@ namespace CSVM.Mech3;
 /// local axis and rate: propeller discs turn about local Z, rotors about local Y. See
 /// <c>docs/architecture.md</c> for the node-name scheme and <c>docs/formats/anim-definitions.md</c>
 /// for the <c>XYZ_ROTATION</c> decode these rates come from.
-/// ⚠ <c>nitropropN</c> is classified but never spun; no nitro system yet.
+/// <c>nitropropN</c> is classified and built hidden: the nitro_boost def spins and reveals it.
 /// </summary>
 public static class PropParts
 {
@@ -41,14 +41,14 @@ public static class PropParts
         return Kind.None;
     }
 
-    /// <summary>A blur layer the exterior viewer hides but flight spins (props + rotor);
-    /// nitro stays hidden either way (no nitro system yet). Flight instead hides the inverse:
-    /// the still <c>Static</c> disc and <c>Nitro</c> (see PlaneBuilder.Skip).</summary>
+    /// <summary>A blur layer the exterior viewer hides but flight spins (props + rotor) or
+    /// builds hidden for the nitro_boost def (nitro). Flight instead hides the inverse:
+    /// the still <c>Static</c> disc (see PlaneBuilder.Skip).</summary>
     public static bool IsDynamic(Kind kind) =>
         kind is Kind.PropMain or Kind.PropGhost or Kind.RotorMain or Kind.RotorGhost or Kind.Nitro;
 
     /// <summary>For a spinning kind, its local spin axis and rate (deg/s); false otherwise
-    /// (Nitro included — it is never spun, just hidden).</summary>
+    /// (Nitro included: its spin is the nitro_boost def's own spin_nitrorotorN motion).</summary>
     public static bool Spin(Kind kind, out Vector3 axis, out float degPerSec)
     {
         (axis, degPerSec) = kind switch

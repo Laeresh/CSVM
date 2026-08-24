@@ -16,6 +16,7 @@ Flags are specified in [`cli.md`](cli.md).
 | `F` | A | fire rockets — one per pull |
 | `G` | D-pad ← | select gun group (one at a time) |
 | `H` | D-pad → | select ordnance (steps forward only; the original also steps back, `BL-357`) |
+| `N` | X | nitro boost (the original's "Use Nitro-Booster"): engages only with a nitrous engine fitted and the tank at 99 % or more, then burns the whole tank (9.5 s) with no way to stop it, and re-arms after a 28 s refill. The nitro dial appears above the GUNS dial with the injector fitted (`docs/org/flightModel.md`, "Nitro") |
 | `F5` | | damage lab on the flown plane — `--damage=` |
 | `B` | | weapon lab panel — `--weapon-lab` sessions only; its steppers arm the plane's live loadout and Space/`F` then fire it (`--weapon-lab=` picks the weapon, `--weapon-mount=` the mount, `--weapon-cycle=` steps the list) |
 | click | | weapon lab: park the held plane on the surface under the cursor, at the panel's stand-off, nose on it — `--weapon-click=x,y`, or `--weapon-target=x,y,z` / `--weapon-surface=<registry name>` (any of the fourteen surface ids; `dirt` means id 13, not "untagged") to place without a mouse at all |

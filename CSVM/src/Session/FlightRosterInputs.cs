@@ -93,6 +93,7 @@ internal sealed class AircraftAssemblyResources
 internal sealed class FlightWorldBindings
 {
     public ProjectilePool Projectiles { get; init; } = null!;
+    public Func<IReadOnlyList<Vector3>>? HumanPositions { get; init; }
     public EffectAmbience Ambience { get; init; } = EffectAmbience.Still;
     public GameZ Gamez { get; init; } = null!;
     public SceneBuilder? WorldScene { get; init; }

@@ -66,6 +66,7 @@ public static class SuiteCatalog
         "graze-bounce",
         "ai-spawn-jitter",
         "ai-actor",
+        "ai-far-field-plant",
         "ai-gunnery",
         "ai-modes",
         "voice-runtime",
@@ -399,6 +400,13 @@ public static class SuiteCatalog
             "camera/HUD/devices) spawned into an already-running sim flies its orders, takes a " +
             "mid-flight retarget, and is present, ticking, damageable by the weapon's own values " +
             "and killable with the kill attributed to the shooter through Downed", AiActor));
+        into.Add(new TestHarness.Suite("ai-far-field-plant",
+            "the far-field plant's session plumbing on live rigs: an AI 1200 m from the human " +
+            "flies the decoded speed-hold branch and one at 100 m keeps the aerodynamics, the " +
+            "range is horizontal (3 km of altitude is not distance), the NEAREST of several " +
+            "humans decides it, an unbound seam stays near-field, and the far rig holds " +
+            "throttle x fd_speed + 5 m/s where the near rig on the same orders does not",
+            AiFarFieldPlant));
         into.Add(new TestHarness.Suite("ai-gunnery",
             "the D14 AI gunner + D12 acquisition: acquires through the decoded target ranking " +
             "as mutable state (0.7 player weight, primary_target override, a 'player' assignment " +

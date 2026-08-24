@@ -94,6 +94,19 @@ public class AiSkillsTests
     }
 
     [Fact]
+    public void RosterNitroReadsSlot34AsAFlag()
+    {
+        var fields = new List<object?>();
+        for (int i = 0; i < 34; i++)
+            fields.Add(0f);
+        fields.Add(1f);
+        Assert.True(AiSkills.RosterNitro(fields));
+        fields[34] = -1f;
+        Assert.False(AiSkills.RosterNitro(fields));
+        Assert.False(AiSkills.RosterNitro(new List<object?> { 0f, 0f }));
+    }
+
+    [Fact]
     public void UnsetAndMissingSlotsReadNull()
     {
         // -1 is the authored unset marker; a short block (they ship at 42-81 fields) simply

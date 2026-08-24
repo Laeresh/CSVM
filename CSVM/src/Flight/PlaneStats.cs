@@ -163,11 +163,11 @@ public sealed class PlaneStats
     public float StallMag = 1.25f;
 
     // player.json flight globals, plumbed here instead of hardcoded (docs/org/flightModel.md).
-    // Converted exactly as the original does: speeds × 0.44704, angles cosined where the
-    // original cosines them, raw G otherwise. Fallbacks are the executable's compiled defaults;
-    // this install's authored values differ — see the corrections table there.
-    // ⚠ MaxAoaCos/HighG*/LowG*/HighSpeedPitchFade* are unread on purpose: this install authors
-    // them out of the control limiters' reach. Do not implement any from the field names.
+    // Converted exactly as the original does: speeds × 0.44704, angles cosined where the original
+    // cosines them, raw G otherwise. Fallbacks are the executable's compiled defaults; this
+    // install's authored values differ — see the corrections table there.
+    // ⚠ Every one of these now reaches the plant, so do not read an authored value as proof that a
+    // term is inert; the reachability measurements are in that dossier's limiter sections.
     public float LiftAccelRate = 1.2f;      // lift_accel_rate, 1/s — NOT converted (a rate, not a speed)
     public float LiftAoaCosLo = 0.98f;      // cos(liftAOAs[0]) — liftAOAs is degrees, cosined at load
     public float LiftAoaCosHi = 0.96f;      // cos(liftAOAs[1])

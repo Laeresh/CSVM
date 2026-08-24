@@ -70,15 +70,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   wherever either exists. Where an entry rests on the document alone, it says so and marks the
   value TUNE.
 - **The flight constants are coupled and `--run-tests` guards them.** Thrust sets speed, speed
-  scales the yaw `eff`, so a change in one moves others; the `flight-envelope` suite asserts six
-  measured scenarios and will fail if a change breaks one. `ThrustConst` is a pinned measurement, not
-  a knob — a fix that needs it to move needs a new measurement first, and chasing a *transient* or a
-  feel report through it is the forbidden move. ⚠ **`PitchTune`/`YawTune`/`RollTune` are no longer
-  in that category: all three are 1, because `BL-414` decoded `FUN_0048c470` and found no per-axis
-  factor on any axis.** Pitch-rate survives the change at 35.26 °/s against 33.00 ± 3. **`yaw-360` is
-  now informational**: the model takes 49.12 s against the footage's 28.60 s, the slow rudder was
-  accepted at the controls, and the row is a recorded decode-vs-footage conflict like
-  `accel-150-290` and `decel-290-150`. The 28.60 was not rewritten, and `FlightScenarios` is 6.
+  scales the yaw `eff`, so a change in one moves others; `FlightEnvelopeTests` asserts five
+  decoded scenarios and will fail if a change breaks one. There is no thrust scale left to turn:
+  thrust is `EnginePower · ref_area · curve(Mach) · lever`, every number in it is the executable's,
+  and the level-equilibrium curve it produces is asserted per airframe and per lever position
+  ([`docs/org/flightModel.md`](docs/org/flightModel.md), "Part-throttle equilibrium"). Chasing a
+  *transient* or a feel report through the force path is the forbidden move. ⚠ **`PitchTune`/`YawTune`/`RollTune` are no longer
+  in that category: all three are 1, because `FUN_0048c470` carries no per-axis factor on any axis
+  ([`docs/org/flightModel.md`](docs/org/flightModel.md), "The `*Tune` rates"), and
+  `FlightConstantInventoryTests` now pins them there.** Every asserted target is the decoded
+  plant's own value or a named exception; a footage figure that disagrees (the filmed 33.00 °/s
+  pitch rate, the 28.60 s `yaw-360`, `accel-150-290`, `decel-290-150`) is discarded and kept only
+  as row prose that gates nothing ([`docs/org/flightModel.md`](docs/org/flightModel.md), "Parity
+  ledger"). `FlightScenarios` is 5.
 
 ## Damage & destruction
 
@@ -105,9 +109,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   only the trail shows; and the DISTANCE interval hides behind an inverted flag
   (`has_interval_value` false, key off `interval_type`).
 
-- `BL-121` `[Tuning]` `[Owed-playtest]` **Damage (Run-2 item 10)** — `CrashSpeed` 25, graze friction + attitude kick,
-  `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
-  real flight. Rendering at real spawns is verified (the `TopLevel` anchor fix, `docs/HISTORY.md`
+- `BL-121` `[Tuning]` `[Owed-playtest]` **Damage (Run-2 item 10)** — breakup scatter, and whether
+  the 10c panel-flip and smoke-trail look right in real flight. ⚠ The invented contact constants
+  this item used to name are gone: the crash speed, the stop speed, the graze friction and the
+  fitted kick are retired against the decoded response and the decoded death rule
+  (`git log --grep=BL-271`, `git log --grep=BL-381`), and the graze feel is judged at the controls
+  as matching (`git log --grep=BL-120`), so nothing contact-side remains here. What is this item's
+  own is the breakup-scatter feel judgement.
+  Rendering at real spawns is verified (the `TopLevel` anchor fix, `docs/HISTORY.md`
   2026-08-03, `trail-world-anchor` suite); this item is a magnitude/feel judgement. Tree softness is retired dead code
   (`docs/HISTORY.md` 2026-07-23), not a TUNE — do not re-add it here.
   **`CAP-15` analysed 2026-08-05** (the burn-down half of `CAP-14 Graze and CAP 15 wing to
@@ -134,6 +143,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`FUN_004b3800`, `docs/org/vehicleDamage.md` "Damage staging"): the whole-vehicle health fraction
   at 10%, which a graze that leaves the hull healthy never reaches — so this clip showing no
   whole-plane trail is expected, not a puzzle.
+
+- `BL-442` `[Bug]` **The engine sputters at the slightest damage.** Reported at the controls: one
+  shallow graze and the engine note drops to a sputter. `FlightAudio.UpdateEngineSlot` swaps to
+  `snd_damagedengine` on any damage at all (`damageFrac > 0`, any zone below full), and
+  `EngineAudioCurves.EngineDefFor` draws the pitch multiplier uniformly across the authored
+  `[DamagedEnginePitchLo, Hi]` range, so a single graze can land a 0.02 pitch draw. Decode what the
+  original keys the damaged-engine swap on (a health fraction, the engine zone, or a damage stage)
+  and whether the pitch is drawn or derived, then port that. ⚠ Traps: do not add a threshold by
+  feel; the damage-stage decode in `docs/org/vehicleDamage.md` is the place the gate probably
+  lives. Nitro's engine variants (`git log --grep=BL-089`) share this slot, so check both.
 
 - `BL-122` `[Tuning]` `[Owed-playtest]` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: the **debris-arc trajectory** (the executable decode is settled — `translation_range` gives
@@ -890,295 +909,78 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-414` `[Research]` **Untune the flight model: decode what is currently fitted.** `FlightModel.cs`
-  carries **three fitted graze constants** and **eight `flightModel.*` config overrides**, and
-  [`docs/org/flightModel.md`](docs/org/flightModel.md) already separates what was read out of
-  `crimson.exe` from what was fitted to match the original at the controls. This item is to shrink
-  the second set as far as the binary allows, constant by constant, rather than to re-fit any of
-  them. What is left fitted is the graze trio `GrazeFriction` / `GrazeKick` / `GrazePushOut`
-  (0.35 / 1.2 / 0.15, ours rather than the original's). `PitchTune` and `YawTune` are decoded to 1,
-  and `StallNoseRate` and `KnifeAlignFloor` are gone entirely — the first a no-op multiplier on
-  `stall_mag`, the second a scale on the nose-chase that neither `lift_accel_rate` reader carries.
-  ⚠ **The lift terms are decoded already; this item does not re-open them.** The lift clamp
-  (`LiftGMin` -5 / `LiftGMax` 9) and the aerodynamic ceiling (`ClMaxStatic` 0.75 / `ClMaxMach` 0.15)
-  are both read out of `FUN_0041abd0`; `LiftAccelRate` is the authored `lift_accel_rate` with 1.2 the
-  parser's own fallback (`PlaneStats.cs:171`); and the force/acceleration scale is settled, the whole
-  weight chain conversion-free at `0x47ae2d`, `0x475c6a`, `0x48ff8e`, `0x41ac13` and `0x491290`. What
-  stands open there is the drag polar, which no constant in this model can close. It is a decode of
-  the drag path out of `crimson.exe`, not a re-measurement of footage: a frame-derived polar cannot
-  confirm a decode, only rank readings (`docs/verification.md` DET-12).
-  ⚠ **Traps.** (a) The two-integrator correction on that page is the worked example of how this goes
-  wrong: the provenance table named the wrong integrator for months. Confirm which function you are
-  reading before trusting an offset. (b) A change here moves every aircraft in the game; the goldens
-  and engine suites are the net, and a moved golden hash is a finding to explain, never to re-pin.
-  (c) Do not fold this into a feature item — the product here is the decode and its evidence, and a
-  correct disproof that leaves a constant fitted is a success. (d) The graze trio is not three
-  independent constants: they were tuned together against a slide that carried no restitution, so
-  they and `BounceLeverScale` move as one group or not at all.
-  **Decoded so far:** `FUN_0048c470` builds each axis' stick torque as `torque · stick · authority ·
-  dt` and nothing more (roll `0x48ca8d`-`0x48caa2`, pitch `0x48cb07`-`0x48cb19`, yaw `0x48cbd5`), so
-  `PitchTune` and `YawTune` had no counterpart and are now 1; the stall nose-drop is the authored
-  `stall_mag` (`_DAT_0071c41c`, authored 1.25, dt multiply `0x48d11b`) added as a TORQUE about an
-  unnormalised `nose × worldUp`, which retired `StallNoseRate`; and the nose-chase is
-  `lift_accel_rate` (`_DAT_0071c448`, readers `0x48c746` and `0x49112a`) with no verticality factor
-  at either reader, which retired `KnifeAlignFloor`. Write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md). Still fitted: the graze trio. The same pass
-  found two decoded terms missing from the code entirely, which `BL-437` now owns, and a third
-  divergence in how the lag vector is spent, which `BL-438` owns.
-  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md) (the fitted-vs-decoded split, and
-  its "A destroyed hull flies the same model" section, which hands this item the open question of what
-  throttle an AI carries into its death), `BL-385` (the decoded death path).
-
-- `BL-437` `[Bug]` **Two decoded control-authority terms are not implemented, and both are invisible
-  on the shipped data.** Each is traced in `crimson.exe` and absent from `FlightModel`, and neither
-  changes a number today because the authored values never reach the threshold. That is what makes
-  them worth an item rather than a doc note: the code reads as if the mechanism does not exist, so a
-  later change that makes either reachable produces a divergence nobody will connect to this.
-  - **Pitch has a second authority stage that roll does not.** `FUN_0048bdd0` fades pitch by
-    `high_speed_pitch_fade` on top of the shared base ramp: full authority until `0x0071c400`,
-    falling linearly to zero at `0x0071c404`, fallbacks **500 → 600 mph** (immediates at `0x474179`
-    and `0x474183`; the authored path parses the token at `0x6277f8` from MPH at
-    `0x4741f2`-`0x474231`). Our `RollPitchAuthorityAt` returns one curve for both axes, so the fade
-    is simply missing. It cannot bind on the shipped airframes because 500 mph is above every
-    `fd_speed`, which is also why the video reads pitch rate as flat with speed.
-  - **The opposing-command limiter is absent entirely.** `FUN_0048c470` softens a pitch or yaw
-    command whose sign opposes `unit(nose × v̂)` on the axis being commanded (`0x48ca7a` onward,
-    pitch and yaw only; roll carries no such test), by the smaller of an AOA term
-    `(cos α − maxAOACos) / (1 − maxAOACos)` and a G term ramping to zero between `highGs[0]` and
-    `highGs[1]`. So what it damps is recovery from a departure, not entry into one. Both halves are
-    authored out of reach on all eleven airframes (`ControlLimiterTests`), which is why nothing was
-    ported.
-  ⚠ **Neither is a tuning question and neither should be "fixed" by moving a constant.** The work is
-  to implement the term where the decode puts it, or to record a deliberate divergence with its
-  reason. A fade or a limiter that binds on shipped data would be a decode error, so if implementing
-  one changes any `flight-envelope` row on a stock airframe, the reading is wrong.
-  ⚠ Splitting `RollPitchAuthorityAt` touches every axis' command scaling; its own comment warns that
-  extending a curve to an axis that has its own double-fades it. Split the pitch stage off, do not
-  rebuild the base ramp.
-  *Size:* localized, and the second half may close as a recorded no-change.
-  *How you'd know it worked:* an airframe authored past the fade knee loses pitch authority and keeps
-  roll; a command opposing the flight path at a reachable `highGs` is softened while entry into the
-  same departure is not. Neither is reachable on stock data, so both need a synthetic airframe.
-  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md) ("Control authority vs speed"
-  and "Torques and the limiters"), `BL-414` (the decode pass that surfaced both).
-
-- `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
-  complete and waiting, not as a discovery. Shipped: `MSG_CMD_NITROUS` ("Use Nitro-Booster") is a
-  bindable command and `MSG_HUD_NITRO` ("Nitrous: boost: %1 charge: %2") its two-value readout;
-  `nitrogauge` is in `instruments.zrd.json`'s cockpit layout and all 11 planes carry
-  `nitrogauge` / `nitro_backplate` / `nitro_boost` / `nitro_charge` gauge nodes in planes.zbd;
-  `nitro_boost` / `nitro_decay` are ON_CALL anim defs in `plane_props.zrd.json` (with `ai_nitro_*`
-  wrappers) firing `snd_nitrostart` / `snd_nitrostop` at `nitroprop1` and driving `nitropuff1-4`
-  plus `spin_nitrorotor1-3`; `snd_nitro` is a LOOPED 3D loop (`RANGE [30,400]`). `PropParts`
-  already classifies `nitropropN`, and both `PlaneBuilder` and each plane's own `RESET_STATE` ship
-  it INACTIVE — so the visual half is one `Kind.Nitro` unhide away.
-  ⚠ **The numeric tuning stats did not ship.** No nitro key exists in `vehicle.json` or
-  `player.json` — boost magnitude, charge capacity, burn rate, recharge rate and the speed cap are
-  executable-resident, so this needs a hand-tuned balance pass A/B'd against the original, not a
-  data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
-  buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
-
-- `BL-393` `[Tuning]` **The control surfaces' deflection angles, mix and slew are decoded and the
-  TUNEs are still in place.** `ControlSurfaceAnimator` deflects ±20° per kind and slews linearly at
-  3 units/s, both chosen by eye. `PLAN-ai-flight` `C24` decoded what the original does while tracing
-  the reverse-authority factor to this same block — six angle slots, six node lists, exponential
-  smoothing at 2/s, rudder −35°, one pair at ±0.5 rad from a single stick channel and one at ±0.6 rad
-  MIXING two channels — and the table is in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "The original's control-surface animation".
-  Only the rudder's reverse-authority scale was ported.
-  ⚠ **The blocker is the mapping, not the numbers.** We classify four surface kinds by node name;
-  the original drives six node lists whose contents are not decoded, and its two mixed slots are not
-  one-axis-per-surface at all. Decode the list population before assigning any angle from that table,
-  or the mix lands on the wrong surfaces.
-  ⚠ The ±20° pair was validated by eye against the original, so this is an A/B against footage, not a
-  correction of something known wrong.
-
-- `BL-425` `[Bug]` **A distant AI aircraft flies a SIMPLIFIED force model in the original, and we
-  give every AI the full aerodynamic one.** `FUN_0048c470`, the live force and torque build, opens on
-  a test that is not the AI/player split it looks like: **crashed, OR not the player and further than
-  1000 m from it** (`FUN_00538920` squared separation against `1e6`, the same helper and units as the
-  law's already-decoded 2000 m throttle test). Everything inside 1000 m, AI and player alike, takes
-  the full path. Beyond it the aircraft gets:
-  - **no lift or drag solve at all.** `FUN_0048fc40` is not called; the force is
-    `−(fd_speed · obj+0x4a)` along the nose, a speed-hold pseudo-force, with a further `−5.0` for a
-    non-player aircraft;
-  - **all three authority factors and the reverse-authority factor forced to 1.0**, so `FUN_0048bdd0`
-    never runs and the low-speed ramp never bites;
-  - **no bank coupling.** The `_DAT_006289f8`/`_DAT_006289fc` block sits under the same guard, so a
-    distant aircraft's bank does not turn its nose.
-  `FlightModel` models none of this and cannot: the plant is never told where the player is
-  (`PlayerPosition` reaches `AiControlLaw`'s throttle and nothing else). Every AI in our sim flies the
-  full model at every range.
-  ⚠ **This is not one of the four divergences [`docs/architecture.md`](docs/architecture.md) records**
-  (the `liftAOAs` blend, the weathervane, the nose-speed floor, the ground blow). One address that
-  note cites as evidence for the AI force path, `0x48c520`, sits in this far-field test rather than
-  among the function's three player compares, which are at `0x48cd3e`, `0x48cf7e` and `0x48cf9d`.
-  Confirm which before editing that paragraph; the far-field branch itself is not in doubt.
-  ⚠ Sequencing: the near-field behaviour is what a player ever watches, and it is already right.
-  Porting this changes only aircraft too far away to see, so it is a faithfulness fix rather than a
-  visible one, and it needs the plant to learn a player position it currently has no reason to know.
-  *How you'd know it worked:* a spectated AI beyond 1000 m holds speed along its nose and stops
-  turning with bank; inside 1000 m nothing changes.
-  ⚠ **Implemented experimentally and reverted; it does NOT settle `BL-387`.** The whole arm was built
-  (authority forced to 1, coupling skipped, velocity dragged onto the nose at `fd_speed × lever − 5`)
-  and flown on C1's `M4ReinfAce`: mean bank **66°** against the near-field plant's 64°, peak 90° on
-  both, roll saturated on 50 % of steps against 43 %. Speed drops 111 → 98 m/s and nothing else moves.
-  The reasoning it was built on — no lift means no turn radius means no need to bank — is wrong: the
-  bank is not a RESPONSE to a turn requirement, it is the law's direct output. `roll = -bx` rolls
-  until the target sits in the vertical plane whether or not lift is what turns the aircraft.
-  So this stays a faithfulness item on its own merits, with no bug riding on it, and whoever picks it
-  up should wire the plumbing in the same change rather than leave an unreachable branch.
-  *Cross-refs:* `BL-387`, closed (`git log --grep=BL-387`) — this was found while eliminating plant
-  candidates for it, and measured not to explain it.
-
-- `BL-388` `[Tuning]` `[Owed-playtest]` **The AI autogyro's nose-down at low speed may read softer
-  than the original's — soft, single-session A/B, not a confirmed measurement.** `PT-57`
-  (`docs/plans/PLAN-ai-flight.md` F52 player arm, 2026-08-15): the autogyro's authority-ramp feel
-  otherwise matched the original directly at the controls; the one residual is "the nose pulling
-  down is not as hard as in the original", offered with a "perhaps".
-  *Evidence:* two candidate mechanisms, neither pinned to the report yet. (1) `AiControlLaw`'s
-  low-speed recovery: below `RecoveryNoseY` and `RecoverySpeed` (60 mph) the law firewalls pitch
-  nose-down and the throttle to `SpeedCap`. ⚠ `noseY` is the BACKWARD axis's Y
-  ([`docs/org/aiControlLaw.md`](docs/org/aiControlLaw.md) step 4), so this arms with the nose ~30°
-  **UP** and slow, a stall recovery, not with the nose down. That makes it a weaker candidate for a
-  soft nose-down than it looked, since the reported feel is a dive and this arm does not fire in
-  one; re-read it against that sign before pursuing it. (2) `C24`'s authority ramp
-  (`FlightModel.RollPitchAuthorityAt`) fades pitch alongside roll below `turn_fade_in`/`_out`; the
-  autogyro is the airframe `BL-330` measured losing the MOST authority by its own stall speed
-  (~79%), so a soft nose-down there could also just be the ramp doing its authored job and reading
-  unfamiliar rather than being wrong.
-  ⚠ Do not tune either candidate from this report alone — it is one flight, phrased as uncertain by
-  the reporter, and PT-57 also confirmed the airframe reads correctly everywhere else.
-  *Playtest after fix (or before touching anything):* a second `PT-57` autogyro pass, ideally with
-  the original open side by side, isolating whether the softness is in the recovery arm timing or
-  the authority ramp itself.
-  *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (player arm), `BL-330` (the authority ramp this pairs
-  with).
-
-- `BL-438` `[Research]` **The original spends its lag vector as the ACCELERATION; we spend it as a
-  lift demand.** `lift_accel_rate` is decoded ([`docs/org/flightModel.md`](docs/org/flightModel.md),
-  "`lift_accel_rate` is a lag toward a target velocity"): `_DAT_0071c448`, fallback 1.2 and this
-  install authoring 0.75, with two readers — `0x48c746` in the force build `FUN_0048c470` and
-  `0x49112a` in `FUN_00490f70` — both computing `lift_accel_rate · (targetVelocity − velocity)`,
-  adding gravity to Y at `0x48c77b`, and rotating the result into body axes. `FUN_0048c470` splits at
-  `0x48c522` on whether the object is the player (`ESI` against `_DAT_0071c298`); the two sides differ
-  only in how `targetVelocity` is built and rejoin at `0x48c70a`, so the lag itself is unconditional.
-  `FlightModel.Step` computes the same shape at its lift step — `(relativeWind − velocity) ·
-  LiftAccelRate` with gravity on Y — but treats it as a DEMAND: it takes a load factor off the
-  vector, clamps it, projects it onto the wing plane, and then sums thrust, drag and gravity
-  separately. The original never forms those separate terms at this site at all.
-  **What is undecoded, and has to be first:** the three virtual-call contributions that build the
-  player's `targetVelocity` (`0x48c6b6`–`0x48c6e7`). Until those are read there is no way to know
-  whether our thrust/drag/lift decomposition is a re-expression of them or an addition to them.
-  ⚠ **Do not start by rewriting `Step`.** A change here moves every airframe and every
-  `flight-envelope` row at once; the product is the decode of those three contributions, and the
-  rebuild is what follows it.
-  ⚠ **This owns the sustained-climb residual.** The full-throttle climb plateaus 25% fast
-  (204.04 mph against the original's 163.05 at a 56.3° path) and does not reproduce the
-  undershoot-and-recover. A lag toward a target velocity settles a climb somewhere a force sum does
-  not, so the residual is most likely this divergence rather than a missing term. The α that was
-  once the leading candidate cannot be read off any capture and no further flight capture will be
-  filmed, so this is the route. ⚠ **Do not reintroduce a pitch-scaled gravity** on the strength of
-  GDD §4.1.1: the shipped gravity block (`0x48ff85`–`0x48ff9d`) reads no attitude at all, and the
-  term that is attitude-scaled runs the other way.
-  *Cross-refs:* `BL-414` (the untune this came out of), `BL-437`, `BL-439`.
-
-- `BL-439` `[Research]` **Decode the thrust-vs-throttle curve, so part-throttle equilibria have a
-  target that is not footage.** `Probes.eighth-throttle-speed` now runs with **no** target: its old
-  137.9 mph was against a number no clip supports, and the ≈135 that would replace it is another
-  frame measurement. The curve itself is in `crimson.exe` and settles the row outright.
-  ⚠ **`ThrustConst` is the first thing to re-examine, and its protection is backwards.** It is
-  described as a pinned measurement rather than a knob because the `flight-envelope` suite asserts
-  it — but what it is pinned to is frame-by-frame video, so the suite has made a footage fit
-  load-bearing. A decoded curve either confirms it or replaces it; either outcome is worth more than
-  the current arrangement, where the assertion is what stops anyone looking.
-  *Cross-refs:* `BL-438` (the force path the curve feeds), `BL-414`.
-
-- `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
-
-- `BL-381` `[Feature]` `[Owed-playtest]` **What `BL-172` left behind: the crash block's two damage
-  ranges, and an unexplained vertical-speed kill on contact.** `PLAN-ai-flight` `C25` landed that
-  item's fix shape — the decoded normal-direction restitution off `bounce_factor`, player-only
-  (`git log --grep=BL-172`) — and three things it named are still not built:
-  - **`armor_damage_range [50,300]` / `health_damage_range [50,300]` are still unconsumed.** A
-    collision spends no armour and no health through `PlaneDamage.Apply(part, healthDamage,
-    armorDamage)`; `SurviveHit` deals its own invented `GrazeMaxDamage` quadratic instead, and
-    `Crash` consults the ledger not at all. `PLAN-armour-layer` left the whole `crash` block
-    deliberately unconsumed (its Decision 4) and `BL-172` owned it; nothing owns it now.
-  - **Something removes vertical speed on contact regardless of the surface's orientation, and it is
-    not the restitution.** On BOTH of `CAP-14`'s vertical-face contacts the sink is killed (−45.9 →
-    +8.0 and −21.7 → +1.4 ft/wall-s) even though on a wall the sink is tangential, while flat-ground
-    contacts preserve tangential speed almost perfectly (302 mph belly-flat costs 0.11 mph). The
-    decoded impulse cannot do that: it is normal-only, with no tangential or friction term anywhere
-    in it. ⚠ Those readings are observations off footage and bound nothing — the question is which
-    term in the original's contact path zeroes the sink, and it is answered in `crimson.exe`, not by
-    re-measuring the clip (`docs/verification.md` DET-12).
-  - **An oblique wall scrape is a sustained multi-tick drag, not an impulse.** `CAP-14`'s only
-    multi-frame contact scraped a building at 144.5 mph and lost 40 % over 0.47 s (144.5 → 86.7).
-    This engine resolves one contact per frame with a fixed 0.15 m push-out and a friction-scaled
-    slide, which is a different shape.
-  ⚠ **`GrazeStopSpeed`/`GrazeFriction`/`GrazeKick` were tuned against the old no-bounce slide**
-  (`BL-271` owns them), so they are the first suspects if grazes now feel wrong — the restitution
-  landed on top of them unchanged.
-  ⚠ **Do not chase the flat-ground magnitude with a bigger `bounce_factor`.** The decoded impulse's
-  doubled rotational term is what exceeds 0.6, and it is already implemented; the constant is
-  authored data. See [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Collision response and
-  `bounce_factor`", which also carries the `CAP-14` reading and the correction `C25` made to the
-  lever-arm partition.
-  *How you'd know it worked:* a graze spends real armour before health on the struck zone, and an
-  oblique scrape along a building bleeds speed over several ticks rather than one.
-  *Playtest after fix:* `PT-53`.
-
-- `BL-271` `[Tuning]` `[Owed-playtest]` **The survivable-graze and stop laws are invented physics with player-facing
-  consequences** (`FlightController.cs:271-295,1652-1672`, header "all TUNE"): attitude kick
-  `GrazeKick` 1.2 rad/s, `GrazeFriction` 0.35, quadratic severity damage, "sliding below
-  `GrazeStopSpeed` 12 m/s = destroyed", "3 failed embed push-outs = explode". The original
-  might throw the nose differently or let a plane belly-slide to a stop ("collecting 0-dmg
-  kisses" is the user report that motivated the stop rule). `CAP-14`'s analysed graze already
-  bounds part of this qualitatively — the original's graze cost ~5% speed + sink with wings level,
-  no visible attitude kick at that severity. ⚠ That is an observation, not a target: the footage
-  can say a kick is *absent* at that severity, but no constant here is settled by re-measuring it
-  (`docs/verification.md` DET-12). The kick and the stop rule are judged at the controls against
-  `BL-120`'s corner feel item, and the laws themselves want a decode of the original's contact
-  response.
-
-- `BL-309` `[Feature]` **Engine torque is a designed, one-sided turn assist — unmodelled.** GDD §4.1.8
-  ("Engine Torque", Motion Model/Flight Dynamics → Simulated Elements; restated, no prose): torque
-  is simulated selectively so the player never fights it — no effect in straight-and-level flight,
-  no effect turning *against* the torque direction, but turning *with* it is **faster**. The
-  behaviour to look for is a directional asymmetry in roll/turn rate that only ever assists.
-  Nothing in `CSVM/src` models it, and no shipped key is known to carry it — the `dynamics` block's
-  `pitch_torque`/`roll_torque`/`rudder_torque` are control torques, not this. ⚠ **Do not go to the
-  footage for it.** `CAP-02 Run 5`'s banked 45° right peaked at 123.8 °/s against left's 96.0, but
-  that pair was flown for heading calibration, the right take decodes badly outside heading, and
-  the sustained rates point the other way — a difference that size is exactly what a frame-derived
-  rate invents (`docs/verification.md` DET-11, DET-12). Settle it in the torque accumulator
-  (`FUN_0048c470`) instead: either a one-sided term is there or the design document's intent never
-  shipped. ⚠ The suite asserts
-  direction-blind rates measured from single-direction captures (yaw 360° to 4%, roll time to 3%) —
-  if the original's assist is real, those measured rates may already *contain* it for whichever
-  direction was flown. Establish the flown directions before touching any constant.
-  *Needs:* an original A/B — a full roll and a full rudder 360° in **both** directions at matched
-  speed (a `CAP` when scheduled).
-
-- `BL-310` `[Feature]` **Pitch-down on aileron roll is designed — unmodelled, and a decode question.**
-  GDD §4.1.5: a roll carries a "small but noticeable" nose-over effect. We model
-  no roll→pitch coupling. Before inventing a constant, ask the binary: does the live torque path
-  (`FUN_0048c470`, the accumulator `BL-414` reads) put a pitch term in on roll input at all? If no
-  such term exists the effect is the design document's intent rather than the shipped behaviour, and
-  this closes as won't-do. ⚠ Do not settle it off the 360° aileron-roll footage — an altitude or ADI
-  dip across a roll cannot separate the coupling from the roll's own geometry, and a frame-derived
-  angle cannot confirm a decode (`docs/verification.md` DET-12).
-  ⚠ This is the cross-axis coupling, not the roll's own spin-up rate, which is
-  decoded (`roll_torque` through the reciprocal inertia, damped exponentially).
-
-- `BL-311` `[Feature]` **Ambient turbulence is designed and absent.** GDD §4.1.10: subtle, random jostling
-  of the player's plane to sell moving through air — explicitly zero effect on speed, heading or
-  performance. Visual-only is exactly the contract of the `PlaneShake` oscillators
-  (`src/Flight/PlaneShake.cs`, visual-only roll on `ShakePivot`), so it slots in as one more
-  source. Check `shakes.zrd.json`/`docs/formats/shakes.md` for an ambient source before inventing
-  one; if no data carries it, magnitude and cadence are a TUNE against feel. Low priority; pairs
-  with `BL-266`'s open shake data questions.
+- `BL-443` `[Fidelity]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
+  late.** `FUN_0048fc40` (call `0x48c883`) writes the delivered body-up G and the ramp reads it at
+  `0x48ca1e` in the same tick, before the torques; `FlightModel.Step` rotates before it translates
+  and reads the previous step's. Porting is the force-from-entering-attitude order of `Step`, which
+  moves every envelope row, so it needs its own eleven-airframe `--dump-flight=all` A/B with each
+  moved row attributed. Bounded: the ramp bites near `highGs` (9) and the stock full pull peaks at
+  5.83 G. Ledger row "the G ramp reads the SAME tick's delivered lift" in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md).
+- `BL-444` `[Tooling]` **A flight-dump hash is host-bound.** The Godot run and the `dotnet test`
+  host differ on 9 of 1123 `--dump-flight=all` lines by one unit in the last place (knife-edge
+  samples, runtime float settings, not the plant); `docs/verification.md` `INSTR-19` says compare
+  only against a same-host hash. Round the printed values or pin the float mode so one hash can
+  be quoted across hosts.
+- `BL-445` `[Tooling]` **Dump scenarios for the plant branches the envelope dump never enters.**
+  The dump drives 7 of 16 decoded branches (8 on the autogyro). Reachable but unentered:
+  `pitch-fade`, `g-clamp`, `g-ramp` (a sustained outside push), `dive-cap`, `stall` and the
+  low-speed authority ramp (a slow-flight decay). Each already has a unit instrument; the branch
+  coverage line in the ledger names it. Add scenarios only if whole-envelope coverage is wanted;
+  do not invent a manoeuvre to raise the number.
+- `BL-446` `[Cleanup]` **`ZzBaselineDump` is not throwaway any more.** The `Zz` prefix marks
+  disposable instruments, but the class is the ledger's own dump path (`Probes.FlightEnvelopeAll`).
+  Rename it out of the prefix.
+- `BL-447` `[Fidelity]` **The nine unsupported nitro and shake edges in the parity ledger.**
+  `docs/org/flightModel.md` "Parity ledger", class unsupported, beyond `BL-443`: the thin
+  atmosphere band above 2000 m, the `level_off_rate` auto-level torque, the AI's `medium_aishake`
+  on a nitro engage, the AI's positional `snd_nitro` blip, the nitro decay lockout on a runtime
+  callback, the mouse-flying arm's `is_autogyro` roll/yaw exchange, plus `BL-448`, `BL-450` and
+  `BL-457`. Each is small and independently landable; each names its address in the table.
+- `BL-448` `[Research]` **Is the 2003 m `AltitudeCapM` the dense-band edge?** The measured
+  flight ceiling (an intentional exception) sits 3 m above the decoded atmosphere band boundary
+  (2000 m, `6561.6796875` ft, writer `FUN_00463640`). If the original's ceiling is the thin band's
+  own lift loss rather than a separate cap, the exception becomes a decoded mechanism and the cap
+  constant goes. Lead recorded in the plan's A1 section; `AtmosphereBandTests` has the band.
+- `BL-449` `[Research]` **Confirm the one-sided negative `C_L` ceiling.** `FUN_0041abd0` clamps
+  `C_L` to ±1.8 but the `min` against `0.5·FUN_0041ad80(M)` (`0.75 − 0.15M`) is applied to positive
+  lift only, so inverted or pushed-over flight can reach a larger |C_L| at the same Mach. Confirm
+  the asymmetry is the executable's and not a decompiler artefact, then port or record it (ledger
+  row "the one-sided negative `C_L` ceiling", unsupported).
+- `BL-450` `[Feature]` **Fuel burn and the empty-tank lever freeze.** `FUN_0048e580` burns
+  `[obj+0x134] −= dt · throttle · 5` (player-only, `0x48e603`), and a zero tank jumps past the
+  throttle slew (`0x48e5f7` to `0x48e6c9`), freezing the lever where it stands rather than closing
+  it. No fuel model exists here; the shipped missions never run a tank dry, so this matters only
+  for a long-flight mode. Nitro burns no fuel (`0x48e603` reads the lever, not the boost flag).
+- `BL-451` `[Research]` **A dead AI's throttle.** The death function `FUN_004b82d0` zeroes neither
+  the throttle command nor the control surfaces; they are AI-written state and the AI think is
+  what stops, so they freeze at their last commanded values. CSVM's three-second dead-hull flight
+  should freeze the same way; check what `AircraftLifecycle`'s handover leaves in the lever and
+  whether the recovery arm keeps writing it.
+- `BL-452` `[Docs]` **`BL-266` carries guessed shake constants the decode has since replaced.**
+  The plan's D34 shake pass (`docs/org/shakes.md`, `docs/formats/shakes.md`) traced the block-5 kick
+  and the impact sources; `BL-266`'s (b) and (d) text still quotes the pre-decode readings. Rewrite
+  those sub-items against the decoded numbers rather than leaving both versions live.
+- `BL-453` `[Feature]` **The mission spawner does not read roster blocks.** `AiSpawn.Nitro` reads
+  roster slot 34 (`0x475c9a`, three shipped rosters author it) but the mission spawner never
+  fills it, so an AI nitro injector has no live producer (ledger row, unsupported). Read the roster
+  block at spawn; check which other roster slots the spawner drops on the same path.
+- `BL-454` `[Owed-playtest]` **Nitro dial sweep against the original.** `NitroGaugeNeedleTests`
+  pins the needle law, but nobody has put the moving dial beside a screenshot of the original's.
+  One screenshot of each at full, half and empty tank.
+- `BL-455` `[Cleanup]` **`AiControlLaw.Throttle`'s open-loop far-from-player branch is dead.**
+  The far-field plant (`FlightModel.FarFieldPlant`, beyond 1000 m horizontal) now owns the
+  velocity-match that `farFromPlayer` (`OpenLoopPlayerRange`, `playerPosition`) approximated.
+  Confirm nothing reaches the branch with the plant live and delete it with its parameter.
+- `BL-456` `[Research]` **Trace the writers of the crashed flag `[obj+0x384]`.** Its readers are
+  decoded (`0x48c4ba` selects the far-field arm, `0x48cd4a`, `0x48dfbe` gives a crashed hull
+  severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
+  so the ledger keeps "a wreck flies the near-field plant" as an exception. Decode when and by
+  whom it is set so the wreck can fly the decoded arm.
+- `BL-457` `[Fidelity]` **The per-contact camera shake is not ported.** `FUN_0048d2c0` kicks shake
+  block 5 at `0x48d409` on every resolved contact, grazes included; CSVM resolves the contact
+  without a shake, so scraping a building is silent to the camera. Ledger row, unsupported;
+  `PlaneShake` has the block machinery.
 
 ## Environment & world
 
@@ -2929,6 +2731,11 @@ usual.
   closed as `BL-377`).
 
 ## Tooling, platform & docs
+
+- `BL-458` `[Tooling]` **`CheckCommentCaps.ps1` resolves relative paths against the wrong
+  worktree.** Run from another worktree with a relative path it scans the `flight-parity` (or
+  first) worktree instead of the current directory; absolute paths work. Resolve against
+  `$PWD`, and add a one-line note to the CLAUDE.md hook (7) entry only if the fix needs one.
 
 - `BL-427` `[Feature]` **Extract `langui.dll`'s string table.** Split out while the Ammo Selection
   screen was built (`git log --grep=BL-353`). `extracted/messages.json` carries the weapon **names**

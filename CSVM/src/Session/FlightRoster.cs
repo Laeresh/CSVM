@@ -13,10 +13,11 @@ public readonly record struct FlightRosterBuild(int MeshInstances, string Summar
 /// <summary>One AI aircraft's authored identity and launch facts. <c>AiDef</c> names the militia
 /// variant it flies (<c>bhatwarhawk</c>); null takes the airframe's base def. <c>Fit</c> is a
 /// menu-chosen loadout laid over the stock table's, set only by the wingman spawns: the stock-table
-/// branch below also catches enemies flying player airframes, which must keep their own fit.</summary>
+/// branch below also catches enemies flying player airframes, which must keep their own fit.
+/// <c>Nitro</c> is the roster block's injector flag (<see cref="AiSkills.RosterNitro"/>).</summary>
 public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector3 LookAt, AiPilot Pilot,
     PaintScheme? Scheme = null, int? Team = null, bool Inert = false, bool ShippedSkins = false,
-    string? AiDef = null, LoadoutChoice? Fit = null, int? AttackRating = null);
+    string? AiDef = null, LoadoutChoice? Fit = null, int? AttackRating = null, bool Nitro = false);
 
 /// <summary>The session's aircraft set: builds the human field in deterministic player order and
 /// introduces AI aircraft later for missions, waves, and generators. The roster is the assembly
