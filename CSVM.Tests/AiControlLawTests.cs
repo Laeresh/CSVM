@@ -187,27 +187,6 @@ public class AiControlLawTests
         var emergency = AiControlLaw.Steer(Model(), aim, Vector3.Zero, AiLawParams.AvoidCrash, 0.85f,
             Dt, emergency: true, skillFactor: 0.5f);
         Assert.Equal(-1f, emergency.Roll, 4);
-
-        // Its speed target is a flat 50 mph while the nose is up, which the open-loop lever shows
-        // directly: 22.352 / 30 = 0.745, inside the avoid-crash table's own 0.6..1.3 band.
-        var slow = AiControlLaw.Steer(Model(fdSpeed: 30f), aim, Vector3.Zero, AiLawParams.AvoidCrash,
-            0.85f, Dt, emergency: true, playerPosition: new Vector3(10000f, 400f, 0f));
-        Assert.Equal(22.352 / 30.0, slow.Throttle, 3);
-    }
-
-    [Fact]
-    public void TheDesiredSpeedIsCappedAt250MphNoMatterHowFastTheAirframeIs()
-    {
-        // A Bloodhawk-class fd_speed chasing a 150 m/s target 1 km ahead. The table would allow
-        // fd x 1.1 = 148.5 m/s and the lead terms ask for more still, but the def's own AI speed
-        // clamp is a flat 111.76 m/s (250 mph) with no parser token behind it.
-        var far = new Vector3(10000f, 400f, 0f);
-        var openLoop = AiControlLaw.Steer(Model(fdSpeed: 135f), new Vector3(0f, 400f, -1000f),
-            new Vector3(0f, 0f, -150f), AiLawParams.Cruise, 0.85f, Dt, playerPosition: far);
-
-        // Open loop past 2 km from the player: the lever IS want / fd_speed.
-        Assert.Equal(AiControlLaw.SpeedCeiling / 135.0, openLoop.Throttle, 4);
-        Assert.True(openLoop.Throttle < 148.5 / 135.0, "the airframe cap must not be what bound");
     }
 
     [Fact]
@@ -223,11 +202,20 @@ public class AiControlLawTests
         var down = AiControlLaw.Steer(Model(speed: 110f), aim, Vector3.Zero, AiLawParams.Cruise,
             0.802f, Dt);
         Assert.Equal(0.8, down.Throttle, 5);
+    }
 
-        // Near the player the closed loop runs even at long range: no open-loop jump.
-        var closed = AiControlLaw.Steer(Model(speed: 40f), aim, Vector3.Zero, AiLawParams.Cruise,
-            0.85f, Dt, playerPosition: new Vector3(0f, 400f, -100f));
-        Assert.Equal(0.85 + (0.35 * Dt), closed.Throttle, 5);
+    [Fact]
+    public void TheDesiredSpeedIsCappedAt250MphNoMatterHowFastTheAirframeIs()
+    {
+        // A Bloodhawk-class fd_speed chasing a 150 m/s target 1 km ahead, flying at 120 m/s. The
+        // table would allow fd x 1.1 = 148.5 m/s and the lead terms ask for more still, but the
+        // def's own AI clamp is a flat 111.76 m/s (250 mph) with no parser token behind it.
+        var law = AiControlLaw.Steer(Model(fdSpeed: 135f, speed: 120f), new Vector3(0f, 400f, -1000f),
+            new Vector3(0f, 0f, -150f), AiLawParams.Cruise, 0.85f, Dt);
+
+        // The clamp is observable through the lever's direction alone: only a want UNDER the
+        // current 120 m/s walks the throttle down. The airframe cap's 148.5 would walk it up.
+        Assert.Equal(0.85 - (0.35 * Dt), law.Throttle, 5);
     }
 
     private static FlightModel Model(float fdSpeed = 113f, float rudderTol = 0.2f,

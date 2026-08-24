@@ -64,11 +64,6 @@ public sealed class AiPilot
     /// the one mode that overrides the law's answer (<see cref="FlyLayOff"/>).</summary>
     public float Throttle = 0.85f;
 
-    /// <summary>The player's world position, when the owner knows it, or null. The law's far-field
-    /// throttle branch is keyed on range to the player, so leaving this null keeps the closed-loop
-    /// lever walk, which is the near-player behaviour. Mutable like every other order.</summary>
-    public Vector3? PlayerPosition;
-
     // How far ahead an ordered heading is projected to make the aim point the law wants. A PORT
     // ARTIFACT, not a game value: the original never carries heading/altitude orders, only points
     // (a net node, a target, or its own position plus a climb-out offset), so this distance exists
@@ -315,7 +310,7 @@ public sealed class AiPilot
         in AiLawParams p, bool emergency = false, bool engaged = false, bool gunLead = false)
     {
         var input = AiControlLaw.Steer(model, aimPoint, aimVelocity, p, Throttle, dt,
-            emergency, engaged, gunLead, Machine?.SixthSenseFactor ?? 1f, PlayerPosition);
+            emergency, engaged, gunLead, Machine?.SixthSenseFactor ?? 1f);
         Throttle = input.Throttle;
         return input;
     }

@@ -65,7 +65,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `BL-458` `CheckCommentCaps.ps1` resolves relative paths against the current worktree
 2. ☑ `BL-446` Rename `ZzBaselineDump` out of the throwaway prefix
-3. ☐ `BL-455` Delete `AiControlLaw.Throttle`'s dead far-from-player branch
+3. ☑ `BL-455` Delete `AiControlLaw.Throttle`'s dead far-from-player branch
 4. ☐ `BL-444` A flight-dump hash that is the same on both hosts
 5. ☐ `BL-452` Rewrite `BL-266` (b) and (d) against the decoded shake numbers
 6. ☐ `BL-417` Re-verify the perf flake, and stop one unit flake from skipping the later stages
@@ -150,7 +150,7 @@ instrument), update the env-var name only if it carries the prefix, fix the live
 
 **Verified.** <pending orchestrator run>
 
-## A3 ☐ `BL-455` Delete `AiControlLaw.Throttle`'s dead far-from-player branch
+## A3 ☑ `BL-455` Delete `AiControlLaw.Throttle`'s dead far-from-player branch
 
 **Goal.** `AiControlLaw.Throttle` has one path, the slewed one; `OpenLoopPlayerRange` and the
 `playerPosition` parameter are gone.
@@ -174,6 +174,18 @@ squadron flight shows AI at range holding speed as before.
 **⚠ Traps.** If the branch does fire (an AI far from the player but within the far-field plant's
 1000 m horizontal band by altitude geometry), the item is a disproof and the entry is rewritten, not
 deleted.
+
+`AiPilot.PlayerPosition` (the only seam that could ever set `Steer`'s `playerPosition`) was never
+assigned anywhere outside `AiControlLawTests`' direct calls, so the branch was unreachable through
+any real AI path before this change, not merely shadowed by `FlightModel.FarFieldPlant`. A stderr
+probe at the branch confirmed it: `dotnet test` fired it only from the two unit tests that passed
+`playerPosition` explicitly, and it never fired across the in-engine `--run-tests=Ai` battery
+(16 suites, including `ai-far-field-plant` holding an AI at 1200 m) or a 900-frame Instant Action
+`dogfight_squadron` flight. The probe was removed after confirming the disproof. `dotnet test` on
+the worktree: 2149 passed, 0 failed. The `--run-tests=Ai` suites re-ran clean after the deletion
+(same 16 suites, all PASS).
+
+**Verified.** <pending orchestrator run>
 
 ## A4 ☐ `BL-444` A flight-dump hash that is the same on both hosts
 
