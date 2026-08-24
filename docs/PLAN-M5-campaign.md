@@ -1632,7 +1632,10 @@ worktree's base commit, unrelated to this item's files). A real `--campaign=<pro
 (C1/M02) `--screenshot` flight shows the objectives readout (four rows) drawn over the flight HUD,
 and its log carries `anim: prewarmed 375 sound stream(s) before the archive closed` (263 of them
 the combat-voice roster, the rest the anim program's own sound names plus the objective
-wake/complete groups this item's prewarm fix adds).
+wake/complete groups this item's prewarm fix adds). **Verified.** `RunTests.ps1` on the plan
+branch with the mount, D34's spawner and D35's two sub-changes merged over main's flight-model
+parity: build clean, units 2334/2334, engine suites 108/108 with errors clean, all 16 golden shots
+hash-identical.
 
 **⚠ Traps.** Do not filter the readout on `ObjectiveGraph.Rows[i].Awake`; see Evidence. Do not
 add a second `PlaySoundGroup` path for "D33's own" cues; the routing is D31's and stays
@@ -1739,7 +1742,10 @@ line per spawned block of the seeded profile's mission and the `campaign: roster
 block(s)` summary. `dotnet build` clean (0 warnings), `dotnet test` 2334/2334, `RunTests.ps1` PASS
 with the 106 in-engine suites and all 16 golden shots hash-identical (a campaign roster spawns in a
 campaign session only, so Instant Action and freecam shots do not move), `CheckCommentCaps.ps1`
-clean. `SuiteCatalogTests` took the new count and last name.
+clean. `SuiteCatalogTests` took the new count and last name. **Verified.** `RunTests.ps1` on the
+plan branch with the spawner, D33's mount and D35's two sub-changes merged over main's
+flight-model parity: build clean, units 2334/2334, engine suites 108/108 with errors clean, all 16
+golden shots hash-identical.
 
 **The one `wingman-station` assertion that changed, and why.** Its leashes, its join gates, its
 geometry checks and the A/B between the two stations are untouched and still green (player leader:
@@ -1901,6 +1907,13 @@ where zone2's 1000–4000 m would leave it clear) beside `bl038-c1-m04-zone-fog-
 zone fog from an anim-lab camera at 1500 m over the same mission). ⚠ The animation lab's
 `--play-anim` runs the definition on the lab's own runtime, which has no fog sink, so a lab A/B of
 the intro shows zone fog on both sides; the flown session is where the event lands.
+
+**Verified.** `RunTests.ps1` on the plan branch with these two sub-changes, D33's mount and D34's
+spawner merged over main's flight-model parity: build clean, units 2334/2334, engine suites 108/108
+with errors clean (`hangar-door-wake` and `fog-state` included), all 16 golden shots
+hash-identical. On the merge the two suites' names were missing from `SuiteCatalog.Names` (they
+were registered in the harness alone, so the catalog test failed on collection equality); the list
+carries both.
 
 **⚠ Traps.** BL-038 fires inside D32's cutscene on C1/M04, and nowhere else in the data. ⚠ C3/M01
 and C3/M04 BOTH switch area 3 off, so the A/B for that area is M01 against M02; picking M04 reads as
