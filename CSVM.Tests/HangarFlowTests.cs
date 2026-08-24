@@ -55,6 +55,32 @@ public class HangarFlowTests : IDisposable
         Assert.Equal(HangarExit.None, flow.Exit);
     }
 
+    /// <summary>Picking an airframe whose availability mask excludes the standing pattern snaps
+    /// the paint job to the airframe's first available pattern with that pattern's own defaults:
+    /// a fresh scratch carries pattern 0 (blackhat), which a Fury may not wear, and the paint
+    /// screen must never open on a paint job the plane cannot wear.</summary>
+    [Fact]
+    public void PickingAnAirframeSnapsAnUnwearablePatternToItsFirstAvailable()
+    {
+        var flow = new HangarFlow(_store, UiStrings.Empty);
+        flow.Accept(); // New Plane, on to Airframe
+        flow.PickAirframe(7); // Fury: blackhat's mask excludes it; blckswan (1) is its first
+
+        Assert.Equal(1, flow.Scratch.PaintPattern);
+        Assert.Equal(new[] { 24, 24, 24 }, flow.Scratch.PaintColours);
+    }
+
+    /// <summary>An airframe that may wear the standing pattern keeps it, colours untouched.</summary>
+    [Fact]
+    public void PickingAnAirframeKeepsAWearablePattern()
+    {
+        var flow = new HangarFlow(_store, UiStrings.Empty);
+        flow.Accept();
+        flow.PickAirframe(4); // Brigand: blackhat's mask includes it
+
+        Assert.Equal(0, flow.Scratch.PaintPattern);
+    }
+
     /// <summary>Every screen's heading comes from its own langui id, not a literal.</summary>
     [Fact]
     public void EveryScreenTitlesItselfFromLangui()

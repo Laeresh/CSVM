@@ -437,6 +437,7 @@ public sealed class HangarFlow
         int was = Scratch.Airframe;
         Scratch.Airframe = airframe;
         AirframeChosen = true;
+        NormalisePattern(airframe);
         RaiseDefaultsAsk(airframe, was);
         return true;
     }
@@ -565,6 +566,28 @@ public sealed class HangarFlow
         }
 
         return page;
+    }
+
+    // A pattern the picked airframe may not wear snaps to its first available one, carrying that
+    // pattern's own colour/shade defaults: a fresh scratch holds pattern 0 (blackhat), which most
+    // airframes' availability masks exclude, and the paint screen must never open on a paint job
+    // the plane cannot wear.
+    private void NormalisePattern(int airframe)
+    {
+        var tables = HangarPaintTables.Default;
+        if (tables.Available(Scratch.PaintPattern, airframe))
+        {
+            return;
+        }
+
+        for (int pattern = 0; pattern < HangarPaintTables.PatternCount; pattern++)
+        {
+            if (tables.Available(pattern, airframe))
+            {
+                Scratch.LoadPatternDefaults(pattern);
+                return;
+            }
+        }
     }
 
     // The airframe's stock zone allocations in units (the destroyable_parts armour pools / 5,
