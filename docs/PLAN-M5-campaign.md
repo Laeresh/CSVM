@@ -100,10 +100,14 @@ Everything below was located on disk in this planning session (2026-08-24 survey
 - **Original saves** — `CrimsonSkiesGame\SavedGames\<Profile>\`: `Status.dat` (12,732 B),
   `AutoSave.sav` (11,136 B, embedded absolute path string), `Persist.NNN` (~320–472 B, one per
   mission id, ASCII tag `zSaveHeader`), `Mission.NNN` (24–148 KB), `Snap_*.png` scrapbook shots.
-  Entirely undecoded; custom length-prefixed chunk format, not ZBD/zrdr.
-- **Branching mission tree** — `ZBD\` chapter folders are sparse and branch (`C1` has
-  `M02,M04,M05`; `C2` has `M01–M03,M05`; `C1B`/`C1C`/`C2B` hold one mission each). The graph that
-  orders them is not in any reader found so far; expected in `CAMPAIGN.SCRIPT` or `crimson.exe`.
+  Decoded to the structural depth A2 asked for:
+  [`docs/formats/saved-games.md`](formats/saved-games.md).
+- **Mission order** — `extracted\zrdr\cm_sequence.zrd.json`: 24 flat entries (`seq` 0..23), each
+  naming a `campaign` (a `ZBD` world-folder index), a `mission`, an `area` and a `wingman` flag.
+  There is no branching. The sparse `ZBD` folders (`C1` has `M02,M04,M05`; `C1B` and `C1C` hold one
+  each) are world/terrain splits of a single chapter's five missions, and the 24 briefing wavs
+  `c1-HA-m1` … `c5-MH-m4` follow the sequence exactly. See `saved-games.md`, "Mission ids and the
+  campaign sequence".
 - **UI art** — `extracted\rimage\` (255 PNGs, e.g. `brief_button1.png`) extracted but consumed by
   nothing; `.BM` paint masks and `ui_strings.json` come from `ExtractRof.ps1`.
 - **Strings** — `docs/formats/strings.md`: ids 700–799 purchase/sell prompts, 1200–1299
@@ -158,7 +162,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — decodes and captures
 
 1. ☐ Decode the `objectives.zrd` choreography vocabulary → `docs/formats/objectives.md`
-2. ☐ Decode the original save/profile format far enough to answer the structural questions
+2. ☑ Decode the original save/profile format far enough to answer the structural questions
 3. ☐ Decode the campaign mission tree (order, branching, unlocks)
 4. ☑ Decode the briefing: `Briefing.zrd` dialog layout + the briefing map/flag animation
 5. ☐ Decode the economy constants: plane buy/sell prices, armor cost, starting funds
@@ -241,24 +245,45 @@ paper against the decoded semantics.
 **⚠ Traps.** Opcode names look self-explanatory; `INACTIVE1` and the `IDENTITY` priority field are
 not. Do not document a field as understood on the strength of its name.
 
-## A2 ☐ Decode the original save/profile format far enough to answer the structural questions
+## A2 ☑ Decode the original save/profile format far enough to answer the structural questions
 
 **Goal.** Answers, written into a `docs/formats/` page, to: what a profile stores (wallet, owned
 planes, mission results, current position in the tree), where the player's ammo/loadout selection
 persists, and what `Persist.NNN` carries per mission (the `BL-243` state log). Not a byte-complete
 decode and no writer.
 
-**Evidence (confidence: data located, format undecoded).**
-`CrimsonSkiesGame\SavedGames\Zachary\`: `Status.dat` 12,732 B; `AutoSave.sav` 11,136 B with an
-embedded length-prefixed absolute path; `Persist.NNN` ~320–472 B each with ASCII tag
-`zSaveHeader`; `Mission.NNN` 24–148 KB, ids matching the `Persist` set.
-`docs/formats/loadouts.md` states there is no player loadout anywhere in the ZBD data, so the
-selection must live here.
+**Evidence (confidence: decoded, traced to the save/load callbacks in `crimson.exe`).** The answers
+are in [`docs/formats/saved-games.md`](formats/saved-games.md). Every file in `SavedGames\` is one
+named-section container (payloads, then a 148-byte-per-entry directory, then a count); which
+sections a file holds is decided by a category mask in its 12-byte `zSaveHeader`.
 
-**Approach.** Hexdump-driven structure pass on `Status.dat` and a small `Persist.NNN` first (they
-are small and per-mission diffable: play, change one thing, diff); cross-reference the save/load
-routines in `crimson.exe` where the field meaning is ambiguous. Stop when decision 1's structural
-questions are answered; note explicitly on the page where the decode stops.
+- **The profile is `Status.dat`.** Its `UIData` section (10,820 B) is a verbatim image of the
+  global at `0x0064b340` and holds funds (`+0x448`), the 26-slot 204-byte plane array (`+0x44c`,
+  the same record [`docs/formats/paint.md`](formats/paint.md) already documents), the pilot name,
+  the selected plane, the memento image, and a 24-entry mission-result array (`+0x1868`, 168 B per
+  record, best-of merge on completion: objective mask, time, shots/hits, money, plane flown).
+  Campaign position is `+0x338`, the count of completed missions. Its sibling `PilotStatus`
+  section is 1,448 zero bytes in the only profile available and stays undecoded.
+- **The ammunition and ordnance picks live in the 204-byte plane record**, not in a separate
+  loadout: per-gun ammunition index at `0x98`–`0xa4` (`4` = no gun, correlating perfectly with
+  gun id `5` across all nine planes in the save) and per-pylon ordnance ids at `0xa8`–`0xc4`.
+  B11/C25 persist those two groups; the ordnance id vocabulary is not decoded.
+- **`Persist.NNN` carries no state.** Its only payload is `PlayerVehicle/player` (and
+  `/wingman_1`), four bytes that are the payload's own length, and the load callback is an empty
+  stub. The cross-mission state `BL-243` wants is in `Mission.NNN` (mask `0x20000`: anim
+  activation, running anims, turrets, weapons, world), which the engine reloads from the previous
+  mission **in the same chapter**. B12 should read the page's `Persist.NNN` and `Mission.NNN`
+  sections before choosing its seam.
+- **⚠ The mission tree is not in the save, and it is not a tree.** It is
+  `extracted\zrdr\cm_sequence.zrd.json`: 24 flat entries, `seq` 0..23, each naming a `campaign`
+  (a `ZBD` world-folder index, 1 = `C1`, 2 = `C1B`, 3 = `C1C`, 4 = `C2`, 5 = `C2B`, 6 = `C3`,
+  7 = `C4`, 8 = `C5`), a `mission`, an `area` and a `wingman` flag. `Persist`/`Mission` ids are
+  `%1d%02d` of `campaign`,`mission`. A3's graph section belongs on its own page, not on A2's; A3's
+  Evidence paragraph above is stale where it says no reader holds the graph and where it assumes
+  branching.
+
+**Approach.** Done. The page states where the decode stops (`PilotStatus`, the `Mission.NNN`
+payloads, the settings block, the counter arrays, the ordnance vocabulary) and why.
 
 **Model recommendation.** high — open-ended reverse engineering with a defined stopping rule.
 
@@ -266,7 +291,10 @@ questions are answered; note explicitly on the page where the decode stops.
 page. No claim from file offsets alone.
 
 **⚠ Traps.** ⚠ Do not commit hexdumps containing bulk asset data (repo hard rule). The user's real
-save (`Zachary`) is irreplaceable evidence: read-only, never write into `SavedGames\`.
+save (`Zachary`) is irreplaceable evidence: read-only, never write into `SavedGames\`. The sample
+is a single profile and the original cannot be run here, so "play, change one thing, diff" was
+never available; the page's diffs are across the 20 `Persist` files, the 9 plane records and the 21
+populated mission records instead.
 
 ## A3 ☐ Decode the campaign mission tree (order, branching, unlocks)
 

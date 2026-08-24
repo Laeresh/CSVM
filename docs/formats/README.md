@@ -61,6 +61,8 @@ magnitudes and the consumer that rocks the plane, behind [shakes.md](shakes.md) 
   - [Enemy generators](mission-entities/enemy-generators.md) — host, launch cycle, and capacity rules.
   - [Instant Action wrap-up](instant-action/wrap-up.md) — scoring and friendly-fire rules.
 - [ai-nets.md](ai-nets.md), [ai-rosters.md](ai-rosters.md), and [combat-voice.md](combat-voice.md).
+- [saved-games.md](saved-games.md) — the `SavedGames\` container, the campaign profile, and what
+  `Persist.NNN` and `Mission.NNN` carry.
 
 ### Presentation and UI
 
