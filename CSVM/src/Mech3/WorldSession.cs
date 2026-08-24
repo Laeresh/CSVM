@@ -84,6 +84,9 @@ public sealed class WorldSession
         {
             GD.Print($"effect cycles: {effectCycles.Count} material(s): " + string.Join(", ", effectCycles));
         }
+        // The area-selected toggles are resolved to gamez node indices here, while the gamez is in
+        // hand: Apply runs inside the animation bootstrap, which sees only the built tree.
+        missionSetup?.BindPartitions(gamez);
         mark = StartupProfile.Mark();
         var builder = new WorldBuilder(gamez, textures, collision: o.Collision,
             scrollOverrides: missionSetup?.ScrollByModel(gamez),

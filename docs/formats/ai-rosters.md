@@ -57,7 +57,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 37 | `objectiveTarget` | |
 | 38 | `categoryLabel` | |
 | 39 | `helpLabel` | the objective-kind key — `MSG_OBJ_FOLLOW` / `MSG_OBJ_DESTROY` / `MSG_OBJ_DEFEND` |
-| 40 | `taxiPath` | |
+| 40 | `taxiPath` | the authored waypoint path this vehicle is placed on instead of being flight-simulated, or `0` for none. Ten blocks across three missions carry one, all spelled `ppN`: C1/M04 `blakepeace_2_3`…`_6` (`pp1`…`pp4`), C2/M02 five, C5/M01 one. The waypoints are the chapter gamez's `ppN_aipath` subtree, its `ppN_aipM` children in ordinal order; the vehicle is frozen there until the mission's `START_TAXI` releases it. Law and lifecycle: [`org/flightModel.md`](../org/flightModel.md), "The scripted-path follower" |
 | 41 | `stickiness` | |
 | 42 | `bait` | |
 | 43 | `pilot` | pilot def name (`P_Wingman` and friends; see `pilots.zrd`) |

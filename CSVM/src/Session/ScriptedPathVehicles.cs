@@ -1,0 +1,99 @@
+using System;
+using System.Collections.Generic;
+using CSVM.Flight;
+using CSVM.Mech3;
+using Godot;
+
+namespace CSVM.Session;
+
+/// <summary>
+/// The mission's scripted-path vehicles: the placement, the freeze, the goal-driven release and
+/// the handoff back to the flight model. One registry per campaign mission, owned by
+/// <see cref="CampaignDirector"/>, which releases from <c>START_TAXI</c> and steps it beside the
+/// objectives graph. The law itself is <see cref="PathFollower"/> and the route
+/// <see cref="ScriptedPath"/>; this class only owns the lifecycle and the bodies.
+/// </summary>
+public sealed class ScriptedPathVehicles
+{
+    private readonly Func<string, IReadOnlyList<Node3D>> _findNodes;
+    private readonly Dictionary<string, Entry> _placed = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Binds the registry to the built world's one name resolver, which is what the
+    /// authored path subtrees are found through.</summary>
+    public ScriptedPathVehicles(Func<string, IReadOnlyList<Node3D>> findNodes)
+    {
+        _findNodes = findNodes;
+    }
+
+    /// <summary>Vehicles currently placed on a path, released or not.</summary>
+    public int Count => _placed.Count;
+
+    /// <summary>Places a spawned vehicle on its authored path, frozen at its own pose. False when
+    /// the chapter carries no such path, which leaves the vehicle flight-simulated rather than
+    /// stationary. <paramref name="onComplete"/> is the handoff: it is raised once, with the speed
+    /// the path left the vehicle at, when the last waypoint is reached.</summary>
+    public bool Place(string vehicle, string pathName, Node3D body, Action<float>? onComplete = null)
+    {
+        if (ScriptedPath.Resolve(pathName, _findNodes) is not { } path)
+        {
+            return false;
+        }
+
+        var follower = new PathFollower(path.Waypoints, body.GlobalPosition, body.GlobalRotation.Y);
+        _placed[vehicle] = new Entry(follower, body, onComplete);
+        return true;
+    }
+
+    /// <summary>Releases a placed vehicle, which starts it moving at once. False when nothing of
+    /// that name is placed, which is what the director reports as an unconsumed directive.</summary>
+    public bool Release(string vehicle)
+    {
+        if (!_placed.TryGetValue(vehicle, out var entry))
+        {
+            return false;
+        }
+
+        entry.Follower.Frozen = false;
+        return true;
+    }
+
+    /// <summary>Whether a placed vehicle is still held at its start. Unplaced reads false.</summary>
+    public bool IsFrozen(string vehicle) =>
+        _placed.TryGetValue(vehicle, out var entry) && entry.Follower.Frozen;
+
+    /// <summary>One tick of every placed vehicle. A finished one is dropped from the registry after
+    /// its handoff, so nothing keeps writing a pose over the flight model's.</summary>
+    public void Step(float dt)
+    {
+        List<string>? finished = null;
+        foreach (var (name, entry) in _placed)
+        {
+            if (!GodotObject.IsInstanceValid(entry.Body))
+            {
+                (finished ??= new List<string>()).Add(name);
+                continue;
+            }
+
+            entry.Follower.Step(dt);
+            entry.Body.GlobalPosition = entry.Follower.Position;
+            entry.Body.GlobalRotation = new Vector3(0f, entry.Follower.Heading, 0f);
+            if (!entry.Follower.Following)
+            {
+                entry.OnComplete?.Invoke(entry.Follower.Speed);
+                (finished ??= new List<string>()).Add(name);
+            }
+        }
+
+        if (finished == null)
+        {
+            return;
+        }
+
+        foreach (var name in finished)
+        {
+            _placed.Remove(name);
+        }
+    }
+
+    private readonly record struct Entry(PathFollower Follower, Node3D Body, Action<float>? OnComplete);
+}

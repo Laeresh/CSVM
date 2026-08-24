@@ -28,6 +28,7 @@ public sealed class CampaignDirector
     private readonly CampaignMission _mission;
     private readonly HashSet<string> _gapsLogged = new(StringComparer.Ordinal);
     private World? _world;
+    private ScriptedPathVehicles? _paths;
 
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
@@ -48,6 +49,11 @@ public sealed class CampaignDirector
     /// <summary>The objectives runtime, null until <see cref="Attach"/> has run. D33 reads its
     /// <see cref="ObjectiveGraph.Rows"/> and subscribes to its wake/complete events.</summary>
     public ObjectiveGraph? Graph { get; private set; }
+
+    /// <summary>The mission's scripted-path vehicles, null until <see cref="Attach"/> has run. The
+    /// roster spawner places a vehicle carrying a <c>taxiPath</c> here; <c>START_TAXI</c> releases
+    /// it. Empty while no session spawns the <c>aiv</c> roster.</summary>
+    public ScriptedPathVehicles? Paths => _paths;
 
     /// <summary>The story position being flown.</summary>
     public int Seq => _mission.Seq;
@@ -121,6 +127,9 @@ public sealed class CampaignDirector
     internal void Attach(WorldInputs inputs)
     {
         _world = new World(this, inputs);
+        _paths = inputs.Runtime is { } animRuntime
+            ? new ScriptedPathVehicles(name => animRuntime.FindNodes(name))
+            : null;
         Graph = new ObjectiveGraph(Script, _world);
         Graph.MissionEnded += OnMissionEnded;
         int chapter = _mission.Campaign;
@@ -132,7 +141,11 @@ public sealed class CampaignDirector
     /// <summary>One sim step of the objectives graph. ⚠ Called from BOTH of
     /// <c>GameSession</c>'s drive paths, like the Instant Action sequencer: a realtime session
     /// never enters the stepped path.</summary>
-    internal void Step(float dt) => Graph?.Step(dt);
+    internal void Step(float dt)
+    {
+        Graph?.Step(dt);
+        _paths?.Step(dt);
+    }
 
     /// <summary>A danger zone the player completed, routed into the graph's awake objectives.</summary>
     internal void NotifyDangerZoneCompleted(string zone) => Graph?.NotifyDangerZoneCompleted(zone);
@@ -384,7 +397,20 @@ public sealed class CampaignDirector
 
         public void StartTaxi(IReadOnlyList<string> names)
         {
-            if (names.Count > 0)
+            int released = 0;
+            foreach (var name in names)
+            {
+                if (_owner._paths?.Release(name) == true)
+                {
+                    released++;
+                }
+            }
+
+            if (released > 0)
+            {
+                GD.Print($"campaign: START_TAXI released {released} vehicle(s) onto their paths");
+            }
+            else if (names.Count > 0)
             {
                 _owner.Gap("START_TAXI", $"'{names[0]}' is not a spawned mission vehicle");
             }

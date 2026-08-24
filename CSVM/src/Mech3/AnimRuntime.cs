@@ -1269,6 +1269,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         node.Visible = active;
     }
 
+    // The world node a gamez node index was built into, or null when this build never created it.
+    // The one way to reach a node the caller cannot name, which is what an area-selected toggle
+    // needs: the verb carries a rectangle and no name at all.
+    internal Node3D? FindNodeByIndex(int gamezIndex) => _resolver.ByGamezIndex(gamezIndex);
+
+    // The subtree toggle by gamez node index, which is how the mission script's area verb reaches
+    // its selection: it names no node at all. A node the world build never created is skipped,
+    // exactly as an unresolved name is.
+    internal void SetSubtreeActiveByIndex(int gamezIndex, bool active)
+    {
+        if (FindNodeByIndex(gamezIndex) is { } node)
+        {
+            SetSubtreeActive(node, active);
+        }
+    }
+
     /// <summary>Indexes one pooled copy of a library-root call template: everything
     /// <see cref="IndexStage"/> does, except the resolver's by-index map.
     /// ⚠ Never add a pooled copy to that map. Every copy carries the same compiled node indices, so
@@ -1588,7 +1604,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             (name, scope) => FindAll(name, scope),
             SetSubtreeActive,
             (t, pos) => _opsApplied += Pose.PoseTranslate(t, pos, relative: false),
-            (t, r) => _opsApplied += Pose.PoseRotate(t, r));
+            (t, r) => _opsApplied += Pose.PoseRotate(t, r),
+            SetSubtreeActiveByIndex);
 
         // Pass 1: base states, and the destructible registry. ⚠ Anchored defs only: a def whose
         // NAME matches nothing here must not stomp globally-resolved bare names like 'destroyed'.

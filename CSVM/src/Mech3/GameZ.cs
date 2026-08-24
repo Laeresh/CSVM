@@ -243,6 +243,27 @@ public sealed class GameZ
         return ms.ToArray();
     }
 
+    // The partition grid's geometry, off the FIRST cell's own bounds rather than off Area: column
+    // 0 starts at its low x edge, row 0 at its HIGH z edge, because the second axis is authored
+    // with a negative cell size. Every later cell restates the same size. A legacy extraction
+    // carries no bounds, which leaves the grid unusable and WorldPartitionGrid null.
+    private static void ReadCellBounds(GameZNode node, JsonElement cell)
+    {
+        if (node.PartitionCellX != 0f
+            || !cell.TryGetProperty("min", out var min) || min.ValueKind != JsonValueKind.Object
+            || !cell.TryGetProperty("max", out var max) || max.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        float x0 = min.GetProperty("x").GetSingle(), x1 = max.GetProperty("x").GetSingle();
+        float z0 = min.GetProperty("z").GetSingle(), z1 = max.GetProperty("z").GetSingle();
+        node.PartitionOriginX = x0;
+        node.PartitionOriginZ = z1;
+        node.PartitionCellX = Mathf.Abs(x1 - x0);
+        node.PartitionCellZ = Mathf.Abs(z1 - z0);
+    }
+
     private void EnsureParentMap()
     {
         if (_parent != null)
@@ -333,6 +354,7 @@ public sealed class GameZ
                     // are placed in the world but are NOT in the world's children list. Its
                     // dimensions (rows × cols of one-cell partitions) also give the tile size.
                     node.PartitionNodes = new List<int>();
+                    node.PartitionCellNodes = new List<List<int>>();
                     node.PartitionRows = parts.GetArrayLength();
                     var seen = new HashSet<int>();
                     foreach (var row in parts.EnumerateArray())
@@ -340,6 +362,9 @@ public sealed class GameZ
                         node.PartitionCols = row.GetArrayLength();
                         foreach (var cell in row.EnumerateArray())
                         {
+                            var members = new List<int>();
+                            node.PartitionCellNodes.Add(members);
+                            ReadCellBounds(node, cell);
                             // Legacy: "nodes": [{index, …}]. Unified: "values":
                             // [{node_index, …}] (its sibling "node_indices" is empty in
                             // every chapter, but is read too in case that ever changes).
@@ -348,13 +373,17 @@ public sealed class GameZ
                                 {
                                     if (!nref.TryGetProperty("index", out var iv))
                                         iv = nref.GetProperty("node_index");
+                                    members.Add(iv.GetInt32());
                                     if (seen.Add(iv.GetInt32()))
                                         node.PartitionNodes.Add(iv.GetInt32());
                                 }
                             if (cell.TryGetProperty("node_indices", out var plain) && plain.ValueKind == JsonValueKind.Array)
                                 foreach (var nref in plain.EnumerateArray())
+                                {
+                                    members.Add(nref.GetInt32());
                                     if (seen.Add(nref.GetInt32()))
                                         node.PartitionNodes.Add(nref.GetInt32());
+                                }
                         }
                     }
                 }
@@ -606,6 +635,15 @@ public sealed class GameZNode
     public Transform3D? Local;
     public float LodRangeMin = -1f; // Lod nodes only; 0 = nearest/highest detail
     public List<int>? PartitionNodes; // World nodes only: distinct subtree roots placed via the spatial grid
+    // World nodes only: per-cell membership, row-major over PartitionRows x PartitionCols in the
+    // file's own order, which is the engine's own cell indexing. Kept beside the flat
+    // PartitionNodes because an area query needs the cell a node sits in, which the flat list
+    // discards. See WorldPartitionGrid and docs/formats/interp.md.
+    public List<List<int>>? PartitionCellNodes;
+    // World nodes only: the cell grid's geometry, read off the cells' own bounds rather than
+    // derived from Area — the two axes run opposite ways (docs/formats/world-structure.md).
+    // OriginX is column 0's low x edge; OriginZ is row 0's HIGH z edge.
+    public float PartitionOriginX, PartitionOriginZ, PartitionCellX, PartitionCellZ;
     // World nodes only: the map's ground-plane bounds (area = {left=xMin, right=xMax,
     // top=zMin, bottom=zMax}, Godot world coords) and its partition grid size. WorldBuilder
     // uses these to mirror the outermost border terrain outward past the map edge.

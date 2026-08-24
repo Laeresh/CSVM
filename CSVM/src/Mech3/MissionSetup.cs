@@ -24,7 +24,9 @@ public sealed class MissionSetup
     private readonly Dictionary<string, int> _unapplied = new(StringComparer.Ordinal);
     private readonly List<string> _unresolved = new();
     private readonly List<string> _scrollUnresolved = new();
+    private readonly Dictionary<int, IReadOnlyList<int>> _areaTargets = new();
     private int _activated, _deactivated, _scrollOps, _translated, _rotated;
+    private int _areaOps, _areaOn, _areaOff;
     private bool? _rotateDegrees;
 
     /// <summary>The interp script this was read from, for logging.</summary>
@@ -92,18 +94,44 @@ public sealed class MissionSetup
         return map;
     }
 
+    /// <summary>Resolves the script's <c>WorldPartitionSetActive</c> rectangles against the world's
+    /// partition grid, keeping the gamez node indices each one selects. Called with the gamez in
+    /// hand, because <see cref="Apply"/> runs inside the animation bootstrap, which has none.
+    /// Without it the verb is counted unapplied, exactly as it was before it was consumed.</summary>
+    public void BindPartitions(GameZ gamez)
+    {
+        if (WorldPartitionGrid.Of(gamez.FindByName("world1")) is not { } grid)
+        {
+            return;
+        }
+
+        for (int i = 0; i < _ops.Count; i++)
+        {
+            if (_ops[i].Verb != "WorldPartitionSetActive" || ParseRect(_ops[i].Args) is not { } rect)
+            {
+                continue;
+            }
+
+            _areaTargets[i] = grid.NodesIn(rect.X1, rect.Z1, rect.X2, rect.Z2);
+        }
+    }
+
     /// <summary>Applies the script to a built world. <paramref name="resolve"/> maps a gamez name
     /// (plus an optional <c>FindSubNode</c> scope) to built nodes; <paramref name="setActive"/>,
     /// <paramref name="translate"/> and <paramref name="rotate"/> act on the selection. All four
-    /// come from <see cref="AnimRuntime"/>, reusing its one name resolver.</summary>
+    /// come from <see cref="AnimRuntime"/>, reusing its one name resolver.
+    /// <paramref name="setActiveByIndex"/> switches a gamez node index, which is how the area verb
+    /// reaches its selection; null leaves that verb counted and unapplied.</summary>
     public void Apply(
         Func<string, Node3D?, IReadOnlyList<Node3D>> resolve,
         Action<Node3D, bool> setActive,
         Action<Node3D, Vector3> translate,
-        Action<Node3D, Vector3> rotate)
+        Action<Node3D, Vector3> rotate,
+        Action<int, bool>? setActiveByIndex = null)
     {
-        foreach (var op in _ops)
+        for (int i = 0; i < _ops.Count; i++)
         {
+            var op = _ops[i];
             switch (op.Verb)
             {
                 // The payload: 1,125 of the 1,215 statements across all 53 scripts.
@@ -145,12 +173,35 @@ public sealed class MissionSetup
                 // ScrollByModel.
                 case "Object3DSetScroll":
                     break;
+                // The same toggle NodeSetActive performs, reached by AREA instead of by name, and
+                // ignoring the selection entirely. All 25 uses switch C3's three story areas.
+                case "WorldPartitionSetActive":
+                    SetAreaActive(i, op, setActiveByIndex);
+                    break;
                 default:
                     // Everything else is parsed, counted and reported rather than guessed at —
                     // see the class docs and docs/formats/interp.md for what is left and why.
                     _unapplied[op.Verb] = _unapplied.GetValueOrDefault(op.Verb) + 1;
                     break;
             }
+        }
+
+        void SetAreaActive(int index, Op op, Action<int, bool>? byIndex)
+        {
+            if (byIndex == null || !_areaTargets.TryGetValue(index, out var targets))
+            {
+                _unapplied[op.Verb] = _unapplied.GetValueOrDefault(op.Verb) + 1;
+                return;
+            }
+
+            bool active = op.Args.Length > 0 && op.Args[0] == "on";
+            foreach (int idx in targets)
+                byIndex(idx, active);
+            _areaOps++;
+            if (active)
+                _areaOn += targets.Count;
+            else
+                _areaOff += targets.Count;
         }
 
         void SetActive(Op op, bool active)
@@ -197,6 +248,8 @@ public sealed class MissionSetup
             s += $", {_translated} translated";
         if (_rotated > 0)
             s += $", {_rotated} rotated ({(_rotateDegrees == true ? "deg" : "rad")})";
+        if (_areaOps > 0)
+            s += $", {_areaOps} area toggle(s): {_areaOff} node(s) off, {_areaOn} on";
         if (_scrollOps > 0)
             s += $", {_scrollOps} texture scroll(s) set at build"
                  + (_scrollUnresolved.Count > 0
@@ -218,6 +271,18 @@ public sealed class MissionSetup
     private static bool NameMatches(string nodeName, string scriptName) =>
         nodeName.Equals(scriptName, StringComparison.OrdinalIgnoreCase)
         || Strip(nodeName).Equals(Strip(scriptName), StringComparison.OrdinalIgnoreCase);
+
+    // `on|off <x1> <z1> <x2> <z2>` — the rectangle in world XZ, corners in either order.
+    private static (float X1, float Z1, float X2, float Z2)? ParseRect(string[] args)
+    {
+        if (args.Length < 5
+            || !float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float x1)
+            || !float.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z1)
+            || !float.TryParse(args[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float x2)
+            || !float.TryParse(args[4], NumberStyles.Float, CultureInfo.InvariantCulture, out float z2))
+            return null;
+        return (x1, z1, x2, z2);
+    }
 
     private static Vector3? ParseVector3(string[] args)
     {

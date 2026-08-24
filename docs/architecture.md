@@ -74,6 +74,8 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Anim/NameResolver.cs` — name→node resolution: the index, wildcard matcher, memoized `FindAll`, the three-tier scope chain (`Resolve`/`ResolveScoped` with the `ownRootsOf` hook and the `stagingAdmits` pooled-copy filter), the symbol authority, `Anchors` (narrowing + root lift) and the bind census; generic over the node type, off-engine testable.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock / LOOP / IF-ELSEIF), extracted behind the 3-member `ISequenceHost` seam; headlessly testable.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
+- `src/Mech3/ScriptedPath.cs` — resolves an authored waypoint path (`pp1` → the gamez `pp1_aipath` subtree) into ordered world-space waypoints.
+- `src/Mech3/WorldPartitionGrid.cs` — which gamez nodes a world-space XZ rectangle covers, off the World node's own cell table; the area verb's selector.
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
 - `src/Mech3/SessionArchives.cs` — `OpenFor(ArchiveIntent)` opens the five archives a chapter build needs and the matching `WorldSession.Options` lifetime flags, so `GameSession`, the anim lab and the test harness open the same five without hand-setting the flags.
 - `src/Mech3/EmptyStage.cs` — the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
@@ -167,6 +169,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/SpectatorCamera.cs` — the `--freecam`/`--anim-lab` observation camera: RMB-look + WASD/QE, no roll; `Frame`/`FollowNode` track an object, `F`/pad `X` re-locks onto one.
 - `src/Flight/OrbitLock.cs` — the re-lock rule behind that key: nearest first, then outward, engine-free.
 - `src/Flight/FlightModel.cs` — the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, calibrated control rates.
+- `src/Flight/PathFollower.cs` — the second movement law: a placed vehicle driven along an authored waypoint path instead of through the flight model, handing itself back at the last waypoint.
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/ThrottleSlamSmoke.cs` — a large throttle jump streams dark exhaust trail smoke for a few seconds; a single notch or a decrease shows nothing.
 - `src/Flight/SpeedCue.cs` — chapter-authored pale smoke wisps emitted 60 m ahead of each player, density selected by camera altitude.
@@ -283,7 +286,7 @@ instead.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
 - `src/Testing/SuiteCatalog.cs` — the ordered registry of the in-engine suites; domain scenario bodies live in `*Suites.cs` modules, while `SuiteConstants` holds their shared golden inputs. Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
-- `src/Testing/*Suites.cs` — eleven domain scenario modules: puffer, combat, ordnance, Instant Action, AI, targeting, zeppelins, damage, destroy choreography, animation/effects, and world/tools.
+- `src/Testing/*Suites.cs` — thirteen domain scenario modules: puffer, combat, ordnance, Instant Action, AI, targeting, zeppelins, damage, destroy choreography, animation/effects, world/tools, and mid-mission world fidelity.
 - `src/Testing/SuiteConstants.cs` / `BurstTimeline.cs` / `SuiteViewers.cs` / `EffectStageSuiteHelper.cs` — the focused shared inputs, timeline values, pane-camera fixtures, and staged-effect fixture used by more than one suite module.
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
@@ -314,6 +317,7 @@ clusters they delegate to.
 - `src/Session/InstantActionDirector.cs` — the engine-side sequencing of one Instant Action mission: construction, the actor build phases, the zeppelin switch and wave arm, the sequencer tick and the end-condition/wrap-up wiring, called by `GameSession` at its pinned build and drive points.
 - `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll), and F12's objective-zeppelin selection.
 - `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry, pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
+- `src/Session/ScriptedPathVehicles.cs` — one mission's scripted-path vehicles: placement, the freeze, `START_TAXI`'s release, and the handoff back to the flight model.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in and F12's wave-credit budget that switches it back off.
 - `src/Session/NetTrailerTargets.cs` — resolves a patrol net's trailer name (`player`, a zeppelin, a train) to a live position, so an anchored net rides its target (`BL-377`).
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (`--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft` — or, on an Instant Action zeppelin run (F12), releases an already-built wave member instead.
@@ -366,6 +370,9 @@ honoured by `WorldBuilder.Add`, which skips building an inactive world-build roo
 Carries the node's `zone_id` as `ZoneId` (default −1 when the field is absent, i.e. ungated) — the
 original's per-node visibility zone, honoured per node by `SceneBuilder` and per camera by
 `Mech3/ZoneGate.cs`.
+Carries the World node's partition grid twice: `PartitionNodes` is the flat distinct set every
+placement walk uses, and `PartitionCellNodes` (with the grid origin and cell size read off the first
+cell's own bounds) keeps the per-cell membership an area query needs (see `WorldPartitionGrid`).
 `IsMarkerGizmo(meshIndex)` classifies a mesh as an authoring mark rather than scenery (one flat-
 coloured untextured triangle — see docs/formats/world-structure.md); SceneBuilder draws none.
 Carries each model's `flags.lighting`/`flags.fog` as `GameZMesh.Lighting`/`Fog` (default true) —
@@ -789,8 +796,25 @@ the pure, engine-free overload in `PadsTests.cs`.
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission
-shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`/`Object3DTranslate`/`Object3DRotate`,
-counts + reports every other verb.
+shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`/`Object3DTranslate`/`Object3DRotate`/
+`WorldPartitionSetActive`, counts + reports every other verb. The area verb takes two calls, not one:
+`BindPartitions(gamez)` resolves its rectangles to gamez node indices through `WorldPartitionGrid`
+while the gamez is in hand, and `Apply`'s `setActiveByIndex` delegate switches them in the built
+world. Without the bind the verb is counted unapplied. Decode: docs/formats/interp.md.
+
+## src/Mech3/ScriptedPath.cs
+One authored waypoint path, resolved against the BUILT world through the runtime's own name
+resolver rather than out of the gamez: the roster names `pp1`, the chapter carries the transform-only
+subtree `pp1_aipath`, and its `pp1_aipN` children are the waypoints in ordinal order. Ten vehicles in
+three missions carry one. A missing subtree, or fewer than two waypoints, resolves to null so the
+caller reports it instead of inventing a route. Where the name comes from:
+docs/formats/ai-rosters.md's `taxiPath` slot.
+
+## src/Mech3/WorldPartitionGrid.cs
+The world's spatial cell grid as a query: which gamez nodes does a world-space XZ rectangle cover?
+Built from `GameZNode.PartitionCellNodes` (the per-cell membership `PartitionNodes` flattens away)
+and the cells' own bounds. Its one reader is `MissionSetup`'s area verb. The rectangle is half-open
+in cell space and the two axes run opposite ways; both are in docs/formats/interp.md.
 
 ## src/Mech3/AnimRuntime.cs
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP,
@@ -2631,6 +2655,18 @@ fitted graze terms; contact lifecycle stays in `AircraftContactResolver`/`Flight
 The choker's extend-only timer zeroes thrust alone. Full decode, standing conflicts and deliberately
 absent terms: [`org/flightModel.md`](org/flightModel.md); measurement rules: `verification.md`.
 
+## src/Flight/PathFollower.cs
+The engine's SECOND movement law, and the exclusive alternative to `FlightModel`: the dispatcher
+picks between them before any flight law runs, so nothing here is a steering input. Pure state and
+maths, driven by `Session/ScriptedPathVehicles.cs`. Holds two independent flags, `Following` (the
+path owns this vehicle) and `Frozen` (it is placed and waiting), because folding them together
+cannot express the state most authored path vehicles spend a mission in. Every constant is decoded,
+not tuned. What is NOT pinned by the decode, and is this port's own choice: the altitude between
+waypoints (the follower is taken to the target's height over the horizontal distance still to run),
+and the ride height, which for the aircraft movement classes reads a vehicle-type field this project
+has not identified. Law, constants and both gaps: [`org/flightModel.md`](org/flightModel.md), "The
+scripted-path follower".
+
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies
 (rest pose + rate, radians/second local axes). Advance recomputes each disc's absolute pose from
@@ -4198,7 +4234,7 @@ re-reset the fifth play's rings read INACTIVE at opacity 0, which is the sortie-
 symptom this suite exists to hold shut.
 
 ## src/Testing/*Suites.cs
-Twelve domain modules hold the in-engine scenario bodies, each named for the whole of what it
+Thirteen domain modules hold the in-engine scenario bodies, each named for the whole of what it
 files: `PufferSuites` (the emitter model's modes, wind, fades and fire column), `CombatSuites`
 (loadouts, live fire, aim assist and the hit chain), `OrdnanceSuites` (a round's flight, guidance
 and ends), `InstantActionSuites` (the mission runtime from spawn to wrap-up), `AiSuites` (how a
@@ -4210,8 +4246,11 @@ input decoding and marker HUD), `TargetingCandidateSuites` (D36's widened AI acq
 broadsides), `DamageSuites` (spending armor and health, and the injure staging those ledgers
 fire), `DestroyChoreographySuites` (the choreography a death dispatches: destroy defs, wreck
 flights, crash rigs, callbacks and stops), `AnimationAndEffectsSuites` (anim launches, effect
-templates, washes and burst timelines), and `WorldAndToolSuites` (the built world's data gates
-and censuses, lighting and viewers, and the lab surfaces). They depend on `TestHarness` through
+templates, washes and burst timelines), `WorldAndToolSuites` (the built world's data gates
+and censuses, lighting and viewers, and the lab surfaces), and `WorldFidelitySuites` (the
+mid-mission world behaviours the shipped data drives: the area-selected node toggle over C3's three
+story rectangles, and the scripted-path follower over C1's own takeoff path). They depend on
+`TestHarness` through
 `TestContext`; shared fixtures are separate focused modules, not an all-purpose suite helper.
 
 ## src/Testing/SuiteConstants.cs
@@ -4538,11 +4577,21 @@ Which directives reach the engine today: `INACTIVEn` (node visibility, the decod
 `ANIM_STATE` (`AnimRuntime.AnimStateOf`), the node form of `TRAVELERS`, `WAKEUP_TURRETS` /
 `WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
 (`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM`, and both sound-group directives through
-`WorldSounds.PlayOneShot`'s existing group resolution. Everything that needs a spawned `aiv` roster
-(`DEDG`, the group form of `TRAVELERS`, `WAKEUP_ENEMIES`, `SET_AI_*`, `WARP_VEHICLE`, `START_TAXI`,
-`COMPLETED_STOPPOINT`), the untraced `COMPLETED_ZEPCANNONS` reader, and `STOP_QUEUED_SOUNDS` (there
-is no mission radio queue yet) are NAMED no-ops, each logged once per kind. ⚠ Never turn one of
-those into an invented behaviour: the missing consumer is the finding.
+`WorldSounds.PlayOneShot`'s existing group resolution, and `START_TAXI` through the director's own
+`ScriptedPathVehicles` registry (`Paths`), which it also steps beside the graph. Everything else that
+needs a spawned `aiv` roster (`DEDG`, the group form of `TRAVELERS`, `WAKEUP_ENEMIES`, `SET_AI_*`,
+`WARP_VEHICLE`, `COMPLETED_STOPPOINT`), the untraced `COMPLETED_ZEPCANNONS` reader, and
+`STOP_QUEUED_SOUNDS` (there is no mission radio queue yet) are NAMED no-ops, each logged once per
+kind. ⚠ Never turn one of those into an invented behaviour: the missing consumer is the finding.
+`START_TAXI` is the same shape while nothing places a vehicle: the registry is empty until a roster
+spawner calls `Paths.Place`, and the directive reports itself unconsumed until then.
+
+## src/Session/ScriptedPathVehicles.cs
+One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored
+`ScriptedPath` frozen at its own pose, `Release` is what `START_TAXI` calls, and `Step` drives each
+follower and writes its pose onto the body. A finished vehicle raises its handoff callback with the
+speed the path left it at and leaves the registry, so nothing keeps overwriting the flight model's
+pose. The law is `Flight/PathFollower.cs` and the route `Mech3/ScriptedPath.cs`.
 
 ## src/Session/GeneratorCycle.cs
 The decoded egen launch timing law for ONE generator (M4 B6 + F20), pure over `Step` calls (no

@@ -23,6 +23,7 @@ using static CSVM.Testing.PufferSuites;
 using static CSVM.Testing.TargetingCandidateSuites;
 using static CSVM.Testing.TargetingSuites;
 using static CSVM.Testing.WorldAndToolSuites;
+using static CSVM.Testing.WorldFidelitySuites;
 using static CSVM.Testing.ZeppelinSuites;
 namespace CSVM.Testing;
 
@@ -128,6 +129,8 @@ public static class SuiteCatalog
         "campaign-objectives",
         "campaign-mission-end",
         "targeting-candidates",
+        "partition-areas",
+        "scripted-path",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -646,6 +649,20 @@ public static class SuiteCatalog
             "and the gunner fires real rounds at a zeppelin structure with no aircraft in the scan " +
             "at all",
             TargetingCandidates));
+        into.Add(new TestHarness.Suite("partition-areas",
+            "the area-selected node toggle (BL-037) over C3's own three story rectangles: each " +
+            "resolves through the partition grid to real world content, the half-open cell rule " +
+            "holds (a rectangle inside one cell selects nothing), corner order does not change " +
+            "the selection, and C3/M01's built world really has its third area switched off with " +
+            "the first left standing",
+            PartitionAreas));
+        into.Add(new TestHarness.Suite("scripted-path",
+            "the second movement law (BL-361) over C1's authored pp1 takeoff path: a placed " +
+            "vehicle sits frozen on its first waypoint however long the mission runs, START_TAXI " +
+            "releases it onto a 40 mph taxi, the final leg accelerates past that speed and lifts " +
+            "it off the strip, and reaching the last waypoint hands it back at the speed it " +
+            "reached",
+            ScriptedPathTaxi));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

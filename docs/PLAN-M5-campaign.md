@@ -76,7 +76,7 @@ missions cannot be individually verified inside one milestone (decision 6).
 |---|---|---|
 | **Traced to an exact mechanism, with the data that proves it** | A1 (landed: `docs/formats/objectives.md`), A2 (landed: `docs/formats/saved-games.md`), A3 (landed: `docs/formats/campaign-sequence.md`), A4 (landed: `docs/formats/briefing.md`), A5 (landed: `docs/org/hangar.md` "The campaign wallet", on-screen cross-check done via `CAP-40`), A6 (landed: `docs/formats/campaign-screens.md`), A7 (landed: `docs/formats/anim-definitions/cutscenes.md`), C25 (ammo/loadout base), D34 (station-keeping constants), B13 (threshold field), D37's selection logic (landed: `docs/org/music.md`, with two disproofs) | Confirm the trace, then implement. |
 | **Direction sound, magnitude or details a judgement call** | B11, B12, C21–C24, D31, D32, D33 | The shape is settled by the original's screens/data; layout metrics, timings and exact behaviours come from captures and decode, not invention. |
-| **Leads only — no mechanism yet** | D35 partials (BL-037/038 wiring points) | Budget for investigation; may end in a disproof. |
+| **Leads only — no mechanism yet** | D35's `BL-038` wiring point | Budget for investigation; may end in a disproof. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.
@@ -200,7 +200,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 32. ☐ Cutscene player: intro animations, letterbox, camera control, handoff (`BL-134`)
 33. ☐ In-flight objectives display + objective sound cues
 34. ☐ Campaign wingmen: named rosters + netless station-keeping (`BL-362`, `BL-364`)
-35. ☐ Mid-mission world fidelity: `WAKE_ANIM` doors (`BL-350`), scripted-path vehicles (`BL-361`), `WorldPartitionSetActive` (`BL-037`), `FogState` (`BL-038`)
+35. ◐ Mid-mission world fidelity: `WAKE_ANIM` doors (`BL-350`), scripted-path vehicles (`BL-361`), `WorldPartitionSetActive` (`BL-037`), `FogState` (`BL-038`)
 36. ☑ AI targeting candidates beyond aircraft (`BL-363`)
 37. ☑ Music: playback subsystem + the state-driven track selection
 
@@ -1336,8 +1336,9 @@ Reaching the engine today: `INACTIVEn` (node visibility), `ANIM_STATE` (a new
 `AnimRuntime.AnimStateOf`), the node form of `TRAVELERS`, `WAKEUP_TURRETS`/`WAKEUP_ZEP_TURRETS`,
 `WAKEUP_GENERATOR`, `WAKE_ANIM`, and both sound groups through `WorldSounds`' existing group
 resolution. Named no-ops, each logged once: everything needing a spawned `aiv` roster (`DEDG`, the
-group form of `TRAVELERS`, `WAKEUP_ENEMIES`, `SET_AI_*`, `WARP_VEHICLE`, `START_TAXI`,
-`COMPLETED_STOPPOINT`), the untraced `COMPLETED_ZEPCANNONS` reader, and `STOP_QUEUED_SOUNDS`. ⚠ An
+group form of `TRAVELERS`, `WAKEUP_ENEMIES`, `SET_AI_*`, `WARP_VEHICLE`,
+`COMPLETED_STOPPOINT`), the untraced `COMPLETED_ZEPCANNONS` reader, and `STOP_QUEUED_SOUNDS`.
+(`START_TAXI` has a consumer, D35's `ScriptedPathVehicles`, empty for the same reason.) ⚠ An
 unanswerable condition reports FALSE, never true: reading an empty world as "the group is wiped
 out" would win every `DEDG` mission on its first tick. The `aiv` roster spawn is the one thing
 between those no-ops and a mission that plays through, and it is D34's neighbourhood.
@@ -1464,20 +1465,76 @@ generator spawns (`BL-350`), scripted-path vehicles follow their authored waypoi
 events change fog mid-mission (`BL-038`, shipped once, on C1/M04's intro).
 
 **Evidence (confidence: mixed; each BL carries its own decode).** `BL-361` cites the decoded
-waypoint-follower (`docs/org/flightModel.md`, "Ground blow"); `BL-037` counts all 25 uses in
-`C3/*.gw`; `BL-038` is a decoded anim event. <TODO: re-verify all four against git log + code;
-BL-350's exact `WAKE_ANIM` trigger point needs its entry re-read.>
+waypoint-follower (`docs/org/flightModel.md`); `BL-037` counts all 25 uses in
+`C3/*.gw`; `BL-038` is a decoded anim event. <TODO: re-verify BL-350 and BL-038 against git log +
+code; BL-350's exact `WAKE_ANIM` trigger point needs its entry re-read.> `BL-361` and `BL-037` were
+re-verified open before they were built: nothing in `CSVM/src` read `taxiPath`, `ppN_aipath` or a
+partition rectangle, `MissionSetup` counted the verb unapplied, and `CampaignDirector.StartTaxi` was
+a named no-op.
 
 **Approach.** Four independent sub-changes behind one item; each lands separately with its BL
 closed. Order: BL-350 first (it blocks visible C1 behaviour), then BL-361, BL-037, BL-038.
+
+**Landed: `BL-037`, the area-selected toggle.** `GameZ` keeps the World node's per-cell membership
+(`PartitionCellNodes`) beside the flat `PartitionNodes` the placement walks use, plus the grid origin
+and cell size read off the first cell's own bounds. `WorldPartitionGrid` answers "which nodes does
+this XZ rectangle cover", `MissionSetup.BindPartitions(gamez)` resolves the script's rectangles while
+the gamez is in hand, and `Apply` switches them through one new `AnimRuntime` hook
+(`SetSubtreeActiveByIndex`, over a new `NameResolver.ByGamezIndex`). The verb names no node, so an
+index is the only way to reach its selection. Both decoded traps are honoured and provable: corner
+order is normalised, and the rectangle is half-open in cell space. A third trap was found while
+building it and is now in `docs/formats/interp.md` and `world-structure.md`: **the grid's two axes
+index in opposite directions**, the x origin being the low edge and the z origin the HIGH edge with a
+negative authored cell size, so a grid indexed off `area` alone mirrors the selection onto the wrong
+half of the map. C3's three rectangles resolve to 71, 36 and 131 of the chapter's 439 partition
+roots, and they are terrain and scenery, so a story mission really swaps its map.
+
+**Landed: `BL-361`, the second movement law.** `Flight/PathFollower.cs` is the law with every decoded
+constant (40 mph taxi, the 3/π heading-error normaliser, the final leg's `4.0302024` acceleration,
+the 300 m overshoot and the `83.3` climb gain over 0.4 of 110 mph), holding the path flag and the
+freeze flag separately so "placed and waiting" is expressible. `Mech3/ScriptedPath.cs` is the path
+source, found while building this: the roster's `taxiPath` slot names `ppN` and the chapter gamez
+carries it as the transform-only subtree `ppN_aipath` whose `ppN_aipM` children are the waypoints.
+Ten vehicles carry one, in C1/M04, C2/M02 and C5/M01. `Session/ScriptedPathVehicles.cs` owns the
+lifecycle and `CampaignDirector`'s `START_TAXI` releases it. Write-up:
+`docs/org/flightModel.md`, "The scripted-path follower", and `docs/formats/ai-rosters.md`'s slot 40.
+
+**Named gaps, not guesses.** (1) Nothing spawns the `aiv` roster, so no session places a vehicle on a
+path and the registry is empty at run time; that is D34's neighbourhood and the last piece between
+this law and a visible takeoff. (2) The ride height for movement classes 0 and 4 (the aircraft
+classes, which is every shipped path vehicle) reads a vehicle-type field at `type+0x218` that is not
+identified in `vehicle.json`; the port leaves it at zero rather than reusing the 0.2 m the other
+classes take. (3) `4.0302024` and `83.3` are used exactly as read but remain unidentified as
+authored quantities. (4) The altitude between waypoints and the leg-advance test are this port's own
+readings where the decode is silent; both are stated as such on the docs page.
 
 **Model recommendation.** medium per sub-change; BL-361's second movement law is high.
 
 **Verify.** Per sub-change: the citing mission's scripted capture (`--screenshot`/`--freecam`) at
 the affected site plus the 8-chapter freecam regression with unchanged counts elsewhere.
 
+**Verified (`BL-037`, `BL-361`).** `dotnet build` clean (0 warnings, StyleCop and comment caps).
+Two new suites at the end of `SuiteCatalog`, both PASS with zero engine errors: `partition-areas`
+(C3/M01's built world, the three rectangles' cell spans and node counts, the single-cell rectangle
+selecting nothing, corner order, 126 of 131 area-3 nodes really switched off with 70 of 71 area-1
+nodes left standing) and `scripted-path` (C1/M04's real `pp1`: frozen for 2 s of steps without
+moving, released, rolling at or under the taxi speed, then a final leg peaking at 64.6 m/s and
+climbing 32.6 m before the handoff at 63.96 m/s, which is what `v² = v₀² + 2·4.0302024·464 m` over
+that leg predicts). Captures in `.scratch/`: `bl037-c3-M02-area3.png` versus
+`bl037-c3-M01-area3.png` (the same camera over C3's third area, the landmass, docks and zeppelin
+hangar present in M02 and open sea in M01) and `bl037-c3-M01-area1.png` versus
+`bl037-c3-M02-area1.png` (the opposite transition on the first area, so neither direction is a net
+that could hide the other); `bl361-c1-m04-pp1-strip.png` shows `pp1`'s waypoints run down the middle
+runway of C1/M04's airfield, which corroborates the takeoff-run reading. `dotnet test` in this
+worktree crashes the test host with an `AccessViolationException` at a different, randomly varying
+test each run and zero assertion failures; **the same crash reproduces on this worktree at HEAD with
+none of these changes applied**, and the main checkout passes all 2003. Pre-existing, and not this
+item's. **Verified.** <pending orchestrator run: the 8-chapter freecam regression and the full
+battery>
+
 **⚠ Traps.** BL-038 fires inside D32's cutscene on C1/M04; land D32 first or verify on a
-non-cutscene fog use if one exists.
+non-cutscene fog use if one exists. ⚠ C3/M01 and C3/M04 BOTH switch area 3 off, so the A/B for that
+area is M01 against M02; picking M04 reads as "the verb does nothing".
 
 ## D36 ☑ AI targeting candidates beyond aircraft (`BL-363`)
 

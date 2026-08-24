@@ -1139,28 +1139,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Environment & world
 
-- `BL-037` `[Feature]` {CAMPAIGN} **`WorldPartitionSetActive` is decoded and unimplemented — `NodeSetActive`
-  selected by area.** **Decoded 2026-08-09** from `crimson.exe` in Ghidra and written up in
-  [`docs/formats/interp.md`](docs/formats/interp.md) § "`WorldPartitionSetActive` — `NodeSetActive`,
-  selected by area" (dispatch `FUN_005b80a0`, rectangle walk `FUN_004db790`, shared toggle
-  `FUN_004cca30` = the authored `gwNodeSetActive`). The verb walks the partition grid over its
-  rectangle and calls **the same toggle `NodeSetActive` calls** — bit `0x4` of the node's flag
-  word — so there is no second visibility system to build; the research question is answered and
-  what is left is the decision to implement or drop. ⚠ It is NOT the C5 ground-LOD mechanism —
-  that is the **subface flag** (`analysis/item9-depth-bias/CBLOCK-LOD.md`; the clutter side closed
-  as `BL-250`, `git log --grep=BL-250`) — and not "the runtime system that picks between coarse
-  and fine ground", a claim this entry once made and retracted (⛔ 2026-07-23), and which
-  `docs/HISTORY.md`'s M2 polish-4 entry still restates.
-  *Scope if built:* all 25 uses are `support\c3\*.gw` and resolve to three distinct rectangles;
-  every `off` sits in a story mission, so **IA1 is unaffected in all eight chapters** and no golden
-  can see it. The one real code change is in `GameZ.cs`, which parses the World `partitions` array
-  but dedups it into one flat `PartitionNodes` list, discarding the per-cell membership a rectangle
-  query needs (`MapEdgeExtender` already maps a world position to a cell). ⚠ Two traps recorded in
-  the doc: corner order is normalised by the engine, and the rectangle is **half-open** in cell
-  space — an inclusive test over-selects by one row and one column.
-  *Needs:* a decision. Verifying it means a C3 story-mission A/B against the original, since
-  Instant Action cannot show it.
-
 - `BL-038` `[Feature]` {CAMPAIGN} **`FogState` is a decoded animation event we do not act on** (found 2026-07-22). Fog **can** be
   changed mid-mission by animation, but the data uses it exactly once install-wide:
   `extracted/C1/M04/mis_anim/camera1-mission_intro_animation.json`, `reset_state/events[4]` —
@@ -2761,58 +2739,6 @@ usual.
   data-orphan SFX named by no `SOUND_GROUPS` entry and no world data; the user confirms it is
   the automatic-screenshot sting, not a zone-cleared cue — formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
-
-- `BL-361` `[Feature]` {CAMPAIGN} **Scripted-path vehicles: a second movement law, decoded, with
-  nothing in `CSVM/src` for it.** Surfaced 2026-08-15 by the ground-blow emitter decode (`BL-359`,
-  since closed — `git log --grep=BL-359`), which had to establish what the byte at `+0xcc` means
-  before it could say whether zeppelins repel the player. Write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow".
-  *What it is:* the aircraft update dispatcher `FUN_00489ea0` branches on `obj+0xcc` **before** it
-  reaches any flight law. Non-zero, and the object is driven by the path follower `FUN_0048a110`;
-  zero, and it runs the movement law selected by `obj+0x67C` (`0`/`4` being `FUN_0048e580`, the
-  flight integrator). So a placed vehicle can be a puppet on an authored waypoint list rather than a
-  simulated aeroplane, and it hands itself back to the flight model on reaching the last waypoint.
-  *The lifecycle, decoded:* the spawner `FUN_0047c210` sets `+0xcc = 1` when the spawn record carries
-  a path (`0x0047c568`) together with a freeze flag `+0xd4 = 1` (`0x0047c57e`), so the vehicle sits
-  motionless at its first waypoint until a mission goal releases it (`FUN_0046a2b0`, `0x0046a2c3`,
-  reached from the goal-action runtime `FUN_0046a490`). That same runtime can attach a path at any
-  time with `FUN_004940d0` (`0x0049427c`), which sets `+0xcc = 1` and `+0xd4 = 0` so the vehicle
-  starts moving at once. Only `FUN_0048a110` clears `+0xcc` (`0x0048a863`), and only on the final leg.
-  *The follower's law*, per tick, with `dt` = `DAT_009ad744`:
-
-      target   = next waypoint, y raised by the vehicle type's ride height at type+0x218
-                 (a flat 0.2 m for movement classes other than 0/4)
-      heading += clamp(headingError / 60°, ±1) · dt        radians, so ≥60° of error gives 1 rad/s
-      speed    = 17.8816 m/s, which is exactly 40 mph      held until the final leg
-      forward  = speed · (1 − |clamped heading error|)     it barely advances while turning hard
-      advance the leg when dot(target − pos, legDir) ≤ 5.0
-
-  On the **final** leg the target is replaced by a point **300 m** along the leg direction, its y
-  gains `(speed/110mph − 0.4) · 83.3` once speed passes 0.4 of 110 mph (44 mph), and the speed term
-  becomes `speed += 4.0302024 · dt` instead of the fixed 40 mph. Fixed taxi speed, a ground-height
-  offset from the vehicle type, a final-leg acceleration with a climb-out, and a handoff to the
-  flight model at the end read as **the runway takeoff run**, though `FUN_004940d0` shows a goal can
-  attach a path for any purpose.
-  ⚠ *Traps.* (a) **It is not AI behaviour and not our `AiMode.AvoidCrash`.** The follower replaces the
-  flight model outright; nothing in it is a steering input to `FlightModel.Step`. (b) **The freeze
-  flag `+0xd4` is separate from the path flag `+0xcc`**, and only the follower clears the path flag. A
-  design folding the two into one boolean cannot express "placed and waiting", which is the state
-  most authored vehicles spend most of a mission in. (c) `FUN_004afd00` gates AI radio chatter on
-  `+0xcc` too, so a path-driven vehicle is silent; do not model the movement and leave the voice on.
-  (d) **`4.0302024` and the `83.3` climb gain were read but not identified**, unlike `17.8816` (40 mph
-  exactly), `0.020335784` (1/110 mph) and `0.95492965` (3/π, the 60° heading-error normaliser). Nail
-  those two before shipping a takeoff that looks right at one airframe and wrong at another.
-  *Size:* LARGER. It needs a path source in the mission data, the follower, and a hook in the goal
-  runtime. Campaign-scoped: Instant Action places no vehicle on a path (`ia.zrd.json`'s
-  `dzpath1`–`dzpath5` are danger-zone gates, not vehicle paths), so no golden can see it.
-  *How you'd know it worked:* a mission-opening aircraft sits still on the strip until its goal
-  fires, then rolls at a steady 40 mph, accelerates and climbs out on the last leg, and flies
-  normally from the moment it leaves the path.
-  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow" —
-  ground blow's own emitter test reads this byte, so a spawned vehicle put on a path stops repelling
-  the player the moment it completes the path and drops into the flight model. Ground blow itself
-  shipped without the registry filter (its player probe simply excludes aircraft), so building the
-  follower means revisiting whether a path-driven vehicle needs to become an emitter in this build.
 
 - `BL-362` `[Feature]` **Instant Action wingmen never form up on the player.** *Evidence:* the user at the controls,
   2026-08-15: wingmen fly away instead of staying near the player, with no formation-flying
