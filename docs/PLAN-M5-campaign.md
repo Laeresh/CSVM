@@ -186,7 +186,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — the out-of-mission screens
 
-21. ☐ Player profile screen (create, select, delete, text entry)
+21. ☑ Player profile screen (create, select, delete, text entry)
 22. ☐ Campaign cabin screen (Next Mission, Previous Missions, Plane Construction, Return to Main Menu)
 23. ☐ Mission briefing screen (map, flags, objectives list, narration; replay / return / flight check)
 24. ☐ Flight check screen (pilot + wingmen planes and loadouts, objectives note, plane change, fly mission)
@@ -783,25 +783,92 @@ per-plane "special" flag named in the wiring contract above is B12's to add.
 
 # Wave C — the out-of-mission screens
 
-## C21 ☐ Player profile screen
+## C21 ☑ Player profile screen
 
 **Goal.** The roster screen per `Campaign Player Profile.png`: name text entry, CONTINUE, roster
 list with selection, DELETE PLAYER (confirmed), CANCEL; selecting enters the cabin.
 
-**Evidence (confidence: direction-sound).** Reference PNG reviewed this session; B11 provides the
-store; A6 provides the original's screen wiring. Board/menu idiom per decision 7.
+**Evidence (confidence: direction-sound for the layout, traced for the rules).** The reference PNG
+gives the arrangement: a name box with CONTINUE beside it, the roster list under it, DELETE PLAYER
+and CANCEL along the bottom. A6 (`docs/formats/campaign-screens.md`, "Player profile") gives the
+behaviour, and four of its readings are implemented literally: the roster holds 24 profiles of 32
+characters; the commit path is one and the same from the START button, from Enter in the name box
+and from a double-click on a roster row; DELETE PLAYER raises a confirm before it acts; and the
+edit box's own validation is langui 707 (letters, digits and spaces), 212 (the length limit), 200
+(an empty name) and 202 (a full roster), all four looked up in `extracted\rof\ui_strings.json` this
+pass. The two branches A6 marks unreachable (the load-a-savegame arm, the `crashcheat!` name) are
+not reproduced. B11's `CampaignProfileStore` is the store; decision 7's board idiom is the chrome.
 
-**Approach.** New `src/UI/` page on the board chrome; text entry is the one novel widget (keyboard
-and pad; the launchscreen's `MenuInput` per-player polling is the input seam). Art from
-`extracted\rimage\`/`rof` where identifiable, else the existing board styling; no invented art
-labeled as original.
+**Approach as built.** Two pieces, per the item's two halves.
+
+*The lane.* `CSVM/src/UI/CampaignFlow.cs` mirrors `HangarFlow`'s split (engine-free flow + pages,
+launchscreen as renderer and input source) with one difference: campaign screens are a **stack**,
+not a fixed order, because the cabin opens a briefing which opens a flight check and each returns
+to what opened it. `CampaignPage` carries the defaults, `CampaignPlaceholderPage` covers any screen
+not yet registered, and `CampaignCabinPlaceholderPage` is where a selected profile lands until C22
+replaces it. The launchscreen edit is one door and its plumbing (below).
+
+*The screen.* `CampaignRosterPage` draws the name field, one row per stored profile, then CONTINUE,
+DELETE PLAYER and CANCEL. CONTINUE creates the named profile (`CampaignProfileDef.NewProfile`, the
+traced $0 + two Devastators) or continues the one that exists, and opens the cabin; a roster row
+selects on the first confirm and continues on a second, the launchscreen's own double-enter idiom,
+so no press does two things. DELETE PLAYER is a second stage that opens on the **keep** answer and
+deletes through `CampaignProfileStore.Delete`, which takes the profile's directory alone.
+
+*Text entry* is `CampaignTextEntry`, shared with the later screens. `MenuInput` gained `Typed` and
+`Erase` (letters, digits and space edge-detected per key, upper case under Shift; Backspace) and
+`PadMove`/`PadMoveX`, the pad's own halves of the two cursor axes. While the field is armed the
+shell hands the flow the pad axes instead of the combined ones, because W, A, S and D are letters
+there; the pad then adds a character with up, removes one with down and steps the last one with
+←→, which is `HangarNamePage`'s per-character stepper collapsed onto a single row.
+
+*Art.* `extracted\rimage\` carries no roster-panel art (255 PNGs censused: mission stills, HUD
+fonts, main-menu and splash backdrops, no `cm_*`), so the screen wears the existing board styling.
+Nothing was drawn and labelled as original. The art seam itself is wired: `ICampaignPage.Art` and
+`RowArt` reuse the hangar's own art column through the launchscreen's `PageArt`/`PageRowArt`, so
+C22's cabin art needs no launchscreen edit.
+
+**How a page plugs in (the wiring contract for C22-C25).** Follow this verbatim; none of it touches
+`LaunchMenu.cs`.
+
+1. Add one file, `CSVM/src/UI/Campaign<Screen>Page.cs`, with
+   `public sealed class Campaign<Screen>Page : CampaignPage`. Override `Screen`, `Title`,
+   `RowCount` and `RowText(int)`; override `Detail(int)`, `Footer`, `OpeningRow`, `Step(int,int)`,
+   `Accept(int)`, `Back()`, `Art`, `RowArt(int)` and `TextEntry` as the screen needs them. The
+   constructor takes the flow: `public Campaign<Screen>Page(CampaignFlow flow) : base(flow) { }`.
+2. Add one line to `CampaignFlow.Registry`:
+   `[CampaignScreen.<Screen>] = flow => new Campaign<Screen>Page(flow),`. C22 **replaces** the
+   `[CampaignScreen.Cabin]` line and deletes `CampaignCabinPlaceholderPage.cs`.
+3. Navigate with the flow's API from inside `Accept`: `Flow.GoTo(CampaignScreen.X)` opens a screen
+   (returning to it if it is already open, so RETURN TO CABIN never stacks a second cabin),
+   `Flow.Cancel()` ends the flow for the launchscreen, `Flow.SelectProfile(def)` seats the profile
+   and opens the cabin, `Flow.FocusRow(n)` moves the cursor, `Flow.SetMessage(text)` puts a refusal
+   on the screen's error line. Returning `false` from `Back()` leaves the screen; returning `true`
+   means the page consumed the press (a confirm stage closing, a text field disarming).
+4. Read state through `Flow.Profile` (the selected `CampaignProfileDef`, null only on the roster),
+   `Flow.Store`, `Flow.Roster` and `Flow.Strings` (langui, always with a fallback string).
+5. A screen that types takes a `CampaignTextEntry`, returns it from `TextEntry`, and arms it on the
+   press that enters the field. The flow routes the keyboard and the pad into it; the page never
+   reads input itself.
+6. Screenshot coverage: add a value to `LaunchMenu.OpenCampaignAid`'s list only if the screen needs
+   a scripted state; a page reached by walking the flow needs no new flag at all.
 
 **Model recommendation.** medium.
 
-**Verify.** Scripted `--screenshot` of the screen states (empty roster, filled roster, entry in
-progress) plus a manual pass; `RunTests.ps1` green.
+**Verify.** `dotnet build` clean (0 warnings), `dotnet test` **2053/2053** (24 new units over the
+flow's stack navigation, the roster screen's create/select/refuse/delete rules and the text field's
+alphabet and caps). Scripted screenshots of the three states through the existing `--menu=` +
+`--screenshot=` pattern, run windowed per `docs/verification.md`: `--menu=campaign-empty` (no
+players), `--menu=campaign-roster` (two), `--menu=campaign-entry` (a name mid-entry, caret showing),
+plus `--menu=mode` for the new door. **No golden was added or re-pinned:** `analysis/goldens/`
+holds world/flight shots only, no menu has ever been pinned there, and a menu shot's hash would
+move on every unrelated label edit. The three campaign aids run over a scratch profile directory
+rather than `user://Profiles`, so the shots are machine-independent and cannot touch a real
+campaign. **Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Deletion is destructive: confirm, and honor B11's ownership rule for hangar planes.
+Both hold here, and `DeletingIsConfirmedAndTakesOnlyThatProfile` is the proof, with a sentinel file
+beside the profile store standing in for a hangar plane.
 
 ## C22 ☐ Campaign cabin screen
 

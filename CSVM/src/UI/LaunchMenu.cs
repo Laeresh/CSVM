@@ -24,6 +24,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// text uses (langui 10524).</summary>
     public const string HangarRow = "Build Custom Plane";
 
+    /// <summary>The row that opens the campaign, past the three modes and before the hangar's own
+    /// door. The campaign is not a <see cref="MenuMode"/>: it owns its screens through
+    /// <see cref="CampaignFlow"/> and only launches a mission from inside them.</summary>
+    public const string CampaignRow = "Campaign";
+
     /// <summary>Fired when every joined player has locked a plane: (chapter code, one choice per
     /// player in player order, the picked mode, and — Instant Action only, else null — the
     /// wizard's own built <c>InstantActionDef</c>). The host hides the menu and builds the
@@ -242,6 +247,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // OpenHangar, so cancelling always lands back where the pilot pressed.
     private HangarFlow? _hangar;
     private Screen _hangarReturn = Screen.Mode;
+    // The campaign's out-of-mission flow while it is open. One door (the Mode screen's Campaign
+    // row); its own screens are the flow's pages, so a new one needs no change here.
+    private CampaignFlow? _campaign;
     // The hangar page's art (C22's seam), as the one texture the shell owns: rebuilt only when
     // the page hands over a different decoded image, since Rebuild runs on every keypress.
     private TgaImage? _hangarArtSource;
@@ -265,7 +273,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // instead of _center on the Plane screen once more than one player has joined.
     private Control _paneRoot = null!;
 
-    private enum Screen { Mode, Chapter, Presets, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout, Hangar }
+    private enum Screen { Mode, Chapter, Presets, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout, Hangar, Campaign }
 
     // What a fit row edits. The reset row carries no slot of its own and is the only one Accept
     // does anything on, since every other row is a live stepper.
@@ -301,6 +309,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Wingmen => _wingmenFieldIndex,
         Screen.WingmanLoadout => _wingmanFitRow,
         Screen.Hangar => _hangar?.Row ?? 0,
+        Screen.Campaign => _campaign?.Row ?? 0,
         _ => _slots.Count == 1 && _slots[0].InLoadout ? _slots[0].FitRow : _slots[0].PlaneIndex,
     };
 
@@ -474,8 +483,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// button still held from the transition here (the Esc that left a flight, the Start that
     /// joined a player) does not fire immediately. Joined players survive a return from flight;
     /// their plane locks do not. <paramref name="startScreen"/> opens on a later screen, a
-    /// screenshot aid: docs/cli.md's <c>--menu=</c> list, "hangar"/"defaults"/"paint" being the
-    /// hangar flow's own (<see cref="OpenHangarAid"/>).</summary>
+    /// screenshot aid: docs/cli.md's <c>--menu=</c> list, with the hangar's own values handled by
+    /// <see cref="OpenHangarAid"/> and the campaign's by <see cref="OpenCampaignAid"/>.</summary>
     public void ShowMenu(string startScreen = "")
     {
         _screen = startScreen switch
@@ -522,8 +531,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         // A flow never survives a trip through flight: it holds an unsaved scratch plane, and
         // resuming one after a session would be editing something nobody remembers starting.
         _hangar = null;
+        // Same rule for the campaign: its flow holds a selected profile and a screen stack, and
+        // resuming one after a session would be continuing something nobody remembers starting.
+        _campaign = null;
         RefreshRoster();
         OpenHangarAid(startScreen);
+        OpenCampaignAid(startScreen);
         Visible = true;
         if (_slots.Count == 0)
             _slots.Add(new Slot { Input = { Keyboard = true } });
@@ -851,6 +864,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             if (_screen == Screen.Hangar)
             {
                 return HandleHangarInput(p1) || dirty;
+            }
+
+            if (_screen == Screen.Campaign)
+            {
+                return HandleCampaignInput(p1) || dirty;
             }
 
             if (p1.Move != 0)
@@ -1209,8 +1227,15 @@ public sealed partial class LaunchMenu : CanvasLayer
                 }
                 break;
             case Screen.Mode:
-                // The trailing row is the hangar's top-level door, past the three modes.
-                if (_modeIndex >= Modes.Length)
+                // The two trailing rows are the campaign's and the hangar's top-level doors, past
+                // the three modes.
+                if (_modeIndex == Modes.Length)
+                {
+                    OpenCampaign();
+                    break;
+                }
+
+                if (_modeIndex > Modes.Length)
                 {
                     OpenHangar(Screen.Mode);
                     break;
@@ -1402,6 +1427,125 @@ public sealed partial class LaunchMenu : CanvasLayer
 
             GD.Print($"launchscreen: hangar built \"{name}\", selected in the plane picker");
         }
+    }
+
+    // --- the campaign ---
+
+    // Opens the campaign's out-of-mission flow on its first screen, the profile roster. There is
+    // one door and one exit; every screen inside it is a page of the flow's own.
+    private void OpenCampaign()
+    {
+        _campaign = new CampaignFlow(CampaignProfileStore.UserProfiles(), HangarStrings(), _dataRoot);
+        _screen = Screen.Campaign;
+        _error = "";
+    }
+
+    // The campaign's screens sit behind a flow rather than behind the screen enum, so --menu=
+    // reaches them the way it reaches the hangar's. The three scripted values run over a scratch
+    // profile directory instead of user://Profiles, so the shot is the same on every machine and no
+    // aid can write into a real campaign.
+    private void OpenCampaignAid(string startScreen)
+    {
+        if (startScreen is not ("campaign" or "campaign-empty" or "campaign-roster" or "campaign-entry"))
+        {
+            return;
+        }
+
+        if (startScreen == "campaign")
+        {
+            OpenCampaign();
+            return;
+        }
+
+        _campaign = new CampaignFlow(AidProfileStore(startScreen == "campaign-roster"),
+            HangarStrings(), _dataRoot);
+        _screen = Screen.Campaign;
+        _error = "";
+        if (startScreen == "campaign-entry" && _campaign is { } flow)
+        {
+            flow.Accept();          // arm the name field
+            flow.Type("Zachary");   // a name mid-entry, caret and all
+        }
+    }
+
+    // The scratch store the campaign screenshot aids read: emptied on every open, and seeded with
+    // two profiles for the filled-roster shot.
+    private CampaignProfileStore AidProfileStore(bool seeded)
+    {
+        var dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "CSVM", "menu-aid-profiles");
+        try
+        {
+            if (System.IO.Directory.Exists(dir))
+            {
+                System.IO.Directory.Delete(dir, recursive: true);
+            }
+        }
+        catch (System.IO.IOException)
+        {
+            // A leftover the aid cannot clear is not worth failing a screenshot over.
+        }
+
+        var store = new CampaignProfileStore(dir);
+        if (seeded)
+        {
+            store.Save(CampaignProfileDef.NewProfile("Zachary"));
+            store.Save(CampaignProfileDef.NewProfile("Nathan"));
+        }
+
+        return store;
+    }
+
+    // One frame of player 1's input on a campaign screen. While a page's text field is armed the
+    // keyboard's letters are text, so the cursor axes come from the pad alone.
+    private bool HandleCampaignInput(MenuInput p1)
+    {
+        if (_campaign is not { } flow)
+        {
+            _screen = Screen.Mode;
+            return true;
+        }
+
+        bool typing = flow.CapturesText;
+        int move = typing ? p1.PadMove : p1.Move;
+        int step = typing ? p1.PadMoveX : p1.MoveX;
+        bool dirty = false;
+        if (move != 0)
+        {
+            dirty |= flow.Move(move);
+        }
+
+        if (step != 0)
+        {
+            dirty |= flow.Step(step);
+        }
+
+        if (typing)
+        {
+            dirty |= flow.Type(p1.Typed);
+            dirty |= p1.Erase && flow.Backspace();
+        }
+
+        if (p1.Accept)
+        {
+            dirty |= flow.Accept();
+        }
+        else if (p1.Back)
+        {
+            dirty |= flow.Back();
+        }
+
+        // A refusal (an empty name, a name the original's own rule rejects, a full roster) rides
+        // the screen's error line, the same place the hangar's gate reports.
+        _error = flow.Message;
+        if (flow.Exit != CampaignExit.None)
+        {
+            _screen = Screen.Mode;
+            _campaign = null;
+            _error = "";
+            return true;
+        }
+
+        return dirty;
     }
 
     // Re-reads the saved-plane store into the picker roster and keeps every cursor inside the
@@ -1603,7 +1747,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         float s = LayoutScale();
         // The hangar's art sits in a column of its own to the LEFT of the rows (E47b, the layout
         // the original's paint screen uses), so the body is that much wider when it shows.
-        var hangarArt = _screen == Screen.Hangar ? _hangar?.Page.Art : null;
+        var hangarArt = PageArt();
         _body.CustomMinimumSize = new Vector2((560f + (hangarArt != null ? HangarArtWidth : 0)) * s, 0f);
 
         _body.AddChild(Label("CRIMSON SKIES", (int)(TitleFont * s), TitleColor, HorizontalAlignment.Center));
@@ -1626,6 +1770,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Wingmen => "WINGMEN",
             Screen.WingmanLoadout => $"WINGMEN — AMMO SELECTION  ({Planes[_wingmanPlaneIndex].Name})",
             Screen.Hangar => _hangar?.Page.Title ?? HangarRow,
+            Screen.Campaign => _campaign?.Page.Title ?? CampaignRow,
             _ when _slots.Count == 1 && _slots[0].InLoadout =>
                 $"AMMO SELECTION  ({_roster[_slots[0].PlaneIndex].Name})",
             _ when _slots.Count == 1 && _slots[0].Locked => "AIRCRAFT SELECTED",
@@ -1866,7 +2011,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         int extraChildren = (wingmenLine ? 2 : 0) + (lockedLine ? 2 : 0) + (totalsLine ? 2 : 0);
         // The hangar art column (C22's seam) stands BESIDE the rows since E47b, so it only adds
         // height where it is taller than the rows it sits next to, not on top of them.
-        float artH = _screen == Screen.Hangar && _hangar?.Page.Art != null
+        float artH = PageArt() != null
             ? Mathf.Max(0f, HangarArtHeight + HangarRowArtHeight + 2 * font.GetHeight(FooterFont) +
                 12 - rows * font.GetHeight(RowFont))
             : 0f;
@@ -2011,8 +2156,9 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private int CurrentCount() => _screen switch
     {
-        Screen.Mode => Modes.Length + 1, // + the trailing hangar row
+        Screen.Mode => Modes.Length + 2, // + the trailing campaign and hangar rows
         Screen.Hangar => _hangar?.Page.RowCount ?? 1,
+        Screen.Campaign => _campaign?.Page.RowCount ?? 1,
         Screen.Chapter => CurrentChapters.Length,
         Screen.Presets => InstantActionPresets.All.Count,
         Screen.Environment => Environments.Length,
@@ -2037,8 +2183,10 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         string text = _screen switch
         {
-            Screen.Mode => index < Modes.Length ? Modes[index].Label : HangarRow,
+            Screen.Mode => index < Modes.Length ? Modes[index].Label
+                : index == Modes.Length ? CampaignRow : HangarRow,
             Screen.Hangar => _hangar?.Page.RowText(index) ?? "",
+            Screen.Campaign => _campaign?.Page.RowText(index) ?? "",
             Screen.Chapter => CurrentChapters[index].Name,
             Screen.Presets => InstantActionPresets.All[index].Name,
             Screen.Environment => Environments[index].Name,
@@ -2107,6 +2255,23 @@ public sealed partial class LaunchMenu : CanvasLayer
         return label;
     }
 
+    // The picture the current page asks the shell to draw beside its rows, or null. Hangar and
+    // campaign pages share the one art column, so a page needs no change here to use it.
+    private HangarArt? PageArt() => _screen switch
+    {
+        Screen.Hangar => _hangar?.Page.Art,
+        Screen.Campaign => _campaign?.Page.Art,
+        _ => null,
+    };
+
+    // The focused row's own smaller picture, same seam.
+    private HangarArt? PageRowArt() => _screen switch
+    {
+        Screen.Hangar => _hangar is { } hangar ? hangar.Page.RowArt(hangar.Row) : null,
+        Screen.Campaign => _campaign is { } campaign ? campaign.Page.RowArt(campaign.Row) : null,
+        _ => null,
+    };
+
     // The art column a hangar page may request (C22's seam): the page's picture over the focused
     // row's own, both captioned. Each texture is rebuilt only when the page hands over a different
     // decoded image, since Rebuild runs on every keypress.
@@ -2117,7 +2282,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         box.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
         box.SizeFlagsVertical = Control.SizeFlags.ShrinkBegin;
         AddArt(box, art, HangarArtHeight * s, ref _hangarArtSource, ref _hangarArtTexture, s);
-        if (_hangar?.Page.RowArt(_hangar.Row) is { } rowArt)
+        if (PageRowArt() is { } rowArt)
         {
             box.AddChild(Spacer((int)(6 * s)));
             AddArt(box, rowArt, HangarRowArtHeight * s, ref _hangarRowArtSource,
@@ -2210,6 +2375,13 @@ public sealed partial class LaunchMenu : CanvasLayer
             return "↑↓  Choose mount       ←→  Change       L / Y or Esc / B  Done";
         }
 
+        if (_screen == Screen.Campaign)
+        {
+            // The campaign's pages name their own presses: a screen with an armed text field has a
+            // different control set from the same screen with the cursor on its list.
+            return _campaign?.Page.Footer ?? "Esc / B  Back";
+        }
+
         if (_screen == Screen.Hangar)
         {
             // Name the presses this hangar screen actually has: the two pick screens select on
@@ -2262,6 +2434,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             Screen.Mode => "Mode  ›  Map  ›  Aircraft",
             Screen.Hangar => $"{HangarRow}  ›  {_hangar?.Page.Title}",
+            Screen.Campaign => $"{CampaignRow}  ›  {_campaign?.Page.Title}",
             Screen.Chapter => $"{mode}  ›  Map  ›  Aircraft",
             Screen.Presets => $"{mode}  ›  Table of Contents",
             Screen.Environment => $"{mode}{PresetCrumb()}  ›  Environment  ›  Mission  ›  Aircraft",
@@ -2284,8 +2457,11 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private string Detail(int focus) => _screen switch
     {
-        Screen.Mode => focus < Modes.Length ? Modes[focus].Detail : "Build a plane in the hangar and fly it.",
+        Screen.Mode => focus < Modes.Length ? Modes[focus].Detail
+            : focus == Modes.Length ? "Fly the story: pick a player, then the cabin."
+            : "Build a plane in the hangar and fly it.",
         Screen.Hangar => _hangar?.Page.Detail(focus) ?? "",
+        Screen.Campaign => _campaign?.Page.Detail(focus) ?? "",
         Screen.Presets => PresetDetail(focus),
         Screen.Chapter => $"Region {CurrentChapters[focus].Code}",
         Screen.Environment => $"Region {Environments[focus].Code}",

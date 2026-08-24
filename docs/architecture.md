@@ -205,13 +205,13 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab has a scripted
 `--debug-*` twin so a finding can be reproduced headlessly — see `docs/cli.md`.
 
-- `src/UI/MenuInput.cs` — one player's menu input source: keyboard flag + a `Pads` binding, edge/auto-repeat `Poll(dt)`.
+- `src/UI/MenuInput.cs` — one player's menu input source: keyboard flag + a `Pads` binding, edge/auto-repeat `Poll(dt)`, plus the typed characters and pad-only cursor axes a text field needs.
 - `src/UI/BoardMenu.cs` — a board's cursor and item list, engine-free, so the selection rules test off engine.
 - `src/UI/BoardMenuItem.cs` — the rows a board menu can offer: Resume, Restart, Exit.
 - `src/UI/BoardMenuView.cs` — draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
-- `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session; also the hangar's two doors and its renderer.
+- `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session; also the hangar's two doors, the campaign's one, and the renderer both flows draw through.
 - `src/UI/InstantActionPresets.cs` — the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
 - `src/UI/PlanePickerRoster.cs` — the one roster every human plane picker draws: 11 stock airframes then the store's saved customs, each custom carrying its store name and its airframe's stock node (D32's launch seam); engine-free build/lookup rules.
 - `src/UI/HangarFlow.cs` — the Build Custom Plane flow, engine-free: the original's nine screens over one scratch `CustomPlaneDef`, back/next navigation, the `IHangarPage` mount point C22-C26 fill (rows, detail, stepper, optional page `HangarArt` and a per-row one), the plane-selection screen's two-stage delete (the original's Sell Plane with no economy to sell into), and the gated commit into `CustomPlaneStore`.
@@ -224,6 +224,10 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/Flight/HangarPaintTables.cs` — the paint screen's decoded tables as CSVM data: the swatch table (`data/hangar_swatches.json`, 27 rows of base colour, default variant and shade ramp) and the pattern table plus the 50 decal names (`data/hangar_patterns.json`). `Resolve(colour, shade)` is the original's own resolver; `Available(pattern, airframe)` is the availability mask; `Nearest(rgb)` maps a version-1 store file's free triple onto an authored swatch. Engine-free and pure, so the whole colour model resolves without a session.
 - `src/UI/HangarNamePage.cs` — the PLANENAME screen: one row per character stepped through a filename-safe alphabet plus a length row that adds and removes them, capped at the original's 32-character name, with the detail line assembling the name and marking the focused character.
 - `src/UI/HangarPurchasePage.cs` — the PURCHASE screen: the itemised review, one row per priced thing the scratch plane carries (airframe always, engine when chosen, armed gun slots, armoured zones via 1191-1194, wings with hardpoints via 1176/1177) with its decoded cost and weight, a totals row, and the Purchase Now row that commits, flagged with the problems text (1182 + 1227 / 1171) whenever the verdict is not Ok.
+- `src/UI/CampaignFlow.cs` — the campaign's out-of-mission flow, engine-free: a stack of screens over one selected `CampaignProfileDef`, the `ICampaignPage` mount point the later screens fill (rows, detail, footer, optional `HangarArt`, optional text field), a registry keyed by `CampaignScreen`, and the navigation API (`GoTo`, `Back`, `SelectProfile`, `Cancel`) those pages steer with.
+- `src/UI/CampaignRosterPage.cs` — the player-profile screen: the name field over the roster, CONTINUE creating or continuing a player and opening the cabin, a roster row selecting then continuing, DELETE PLAYER as a confirmed second stage, CANCEL back to the launchscreen, and the original's own name refusals (langui 200/202/212/707).
+- `src/UI/CampaignTextEntry.cs` — a campaign screen's one-line text field: the original's alphanumeric-and-space rule and 32-character cap, typed from the keyboard and stepped from the pad through one alphabet, so the field needs no keyboard and produces nothing the profile store would have to sanitise.
+- `src/UI/CampaignCabinPlaceholderPage.cs` — where a selected profile lands until the cabin screen ships: the cabin's four functions as rows with the profile's wallet and position under them, and a working return to the main menu.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
@@ -3222,6 +3226,19 @@ locked or confirmed and no launch path sees it. Outside `OpenHangarAid`'s script
 values, the hangar is reached only through interactive menu input — no `SessionSpec` field,
 nothing a `--det` run can touch.
 
+The campaign (`CampaignFlow`) has one door, the `Campaign` row between the three modes and the
+hangar's, and `Screen.Campaign` draws through the same centred body: heading, rows, detail and
+footer all read off `_campaign.Page`, and the footer is the page's own, since a screen with an armed
+text field has a different control set from the same screen with the cursor on its list. The art
+column is shared with the hangar through `PageArt`/`PageRowArt`, so a campaign page that hands over
+a picture needs no change here. Input is player 1's alone: `HandleCampaignInput` reads `Move`/
+`MoveX` normally, and while `CampaignFlow.CapturesText` is true it reads `PadMove`/`PadMoveX`
+instead and feeds `Typed`/`Erase` into the field, because W, A, S and D are letters there. The
+flow's `Message` rides the same error line the hangar's gate uses, and any `Exit` returns to the
+Mode screen. `--menu=campaign` opens the real `user://Profiles` roster; `campaign-empty`,
+`campaign-roster` and `campaign-entry` are screenshot aids over a scratch profile directory, so
+those shots are the same on every machine and cannot write into a real campaign.
+
 ## src/UI/PlanePickerRoster.cs
 The picker roster rule behind `LaunchMenu._roster`, engine-free so it tests without a menu
 instance. `Build(stock, customs)` lists the given stock rows first in their given order, then one
@@ -3343,6 +3360,21 @@ id 1 (the stock Lvl-2 tier), and armour from the stock zone allocations (`ZrdrPa
 `CSVM.Tests/HangarPaintPageTests.cs`, `CSVM.Tests/HangarNamePageTests.cs` and
 `CSVM.Tests/HangarPurchasePageTests.cs`.
 
+## src/UI/CampaignFlow.cs
+The campaign's out-of-mission screens as one engine-free flow, the same split `HangarFlow` uses: a
+page owns its rows and its navigation, the launchscreen owns every Godot control. Screens are a
+stack, not a fixed order, because the campaign's navigation is a graph; `GoTo` returns to a screen
+already open instead of stacking a second copy, and backing out of the first one ends the flow with
+`CampaignExit.Cancelled`. `CampaignFlow.Registry` maps a `CampaignScreen` to its page factory and is
+the wave's whole mount point: a new screen is one page file plus one line there, with
+`CampaignPlaceholderPage` covering any screen not yet registered. A page may hand the shell a
+`HangarArt` (the same art column the hangar draws) and a `CampaignTextEntry`; while that field is
+armed, `CapturesText` tells the shell the keyboard is typing, and the flow's own cursor axes edit
+the name instead of the list. Profiles are created, read and deleted only through
+`CampaignProfileStore`, so a deletion takes the profile directory and never `user://Planes/`.
+Off-engine coverage: `CSVM.Tests/CampaignFlowTests.cs`,
+`CSVM.Tests/CampaignRosterPageTests.cs`, `CSVM.Tests/CampaignTextEntryTests.cs`.
+
 ## src/UI/BoardMenu.cs
 A board's cursor and item list, engine-free so the selection rules test off engine the way
 `PauseState` does. Holds no input source: the board polls its menu owner through `MenuInput` and
@@ -3413,6 +3445,11 @@ menu's is. Serves both the launchscreen and the in-flight board menus.
 so an Instant Action wizard screen can carry a vertical list cursor and a horizontal stepper at
 once without either read starving the other: MissionType's lives, WaveEdit's four fields and
 Wingmen's count/aircraft all read it — every other screen ignores it.
+`Typed` (the letters, digits and spaces pressed this frame, upper case under Shift) and `Erase`
+serve a screen with a text field; they are polled and edge-detected per key like everything else
+here, not read off an input event, so text and navigation share one clock. `PadMove`/`PadMoveX` are
+the pad's own halves of the two cursor axes: a screen whose keyboard is typing reads those instead,
+since W, A, S and D are letters there and the combined axes would move the cursor as one types.
 
 ## src/UI/SplitScreen.cs
 The splitscreen rig for 2–4 players (1P never constructs it, keeping that path untouched): black
