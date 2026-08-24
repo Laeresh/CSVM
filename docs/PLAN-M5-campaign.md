@@ -1523,7 +1523,7 @@ included), all 16 golden shots hash-identical.
   it too.** They are parked back at the origin on the handoff so a stale cutscene pose cannot place
   them; what the original does with that node between cutscenes is not decoded.
 
-## D33 ☐ In-flight objectives display + objective sound cues
+## D33 ☑ In-flight objectives display + objective sound cues
 
 **Goal.** The current objectives are visible in flight, one row per unique `IDENTITY` priority,
 text through the messages table with raw-key fallback, updating on the graph's own `Woke`/
@@ -1582,17 +1582,17 @@ own content, not just the graph's. Sound: no new routing, D31's `PlaySoundGroup`
 exactly as landed; this item's only sound-side change is the prewarm fix above, which is a build
 plumbing gap, not a duplicate of the routing.
 
-**⚠ Wiring contract for the orchestrator.** `GameSession.cs` was off limits (D32 was editing it
-concurrently), so the mount is not landed. Two one-line additions, both near where `_campaign` is
-built and attached:
-1. In the `WorldSession.Options` GameSession builds for a campaign session, add
-   `ExtraPrewarmNames = _campaign?.Script.SoundGroupNames()`.
-2. After `_campaign.Attach(...)` (or anywhere the campaign's world root exists), add
-   `_worldRoot!.AddChild(UI.ObjectivesHud.Build(campaign, _messages))` guarded on `_campaign is {
-   } campaign`, the same shape the `TargetingOverlay` `AddChild` beside it already uses.
-Until both land, `ObjectivesHud` is built and proven correct (see Verify) but never mounted in a
-real session, and the prewarm fix only benefits the in-engine suite that sets
-`TestContext.ExtraPrewarmSoundNames` itself.
+**Landed.** `GameSession.BuildWorldStage`'s `WorldSession.Options` carries
+`ExtraPrewarmNames = _campaign?.Script.SoundGroupNames()` beside `VoiceClipNames`; `_campaign` is
+already built earlier in `StartSession`, ahead of the world build, so no reordering was needed.
+`BuildFlightRigs` mounts `UI.ObjectivesHud.Build(campaign, Messages.Load(state.MessagesPath))` on
+`_worldRoot` right after the `TargetingOverlay` `AddChild` beside it, guarded on `_campaign is {
+} campaign`, the same shape that overlay uses; the messages table is reloaded at the call site
+rather than cached on a field, matching how the weapons/stunt-zone loads elsewhere in
+`GameSession` already read `state.MessagesPath`. A real `--campaign=` flight (C1/M02) confirms
+both halves: the readout draws every display row over the flight HUD, and the game log's `anim:
+prewarmed N sound stream(s) before the archive closed` line covers the objective sound groups
+alongside the combat-voice roster.
 
 **⚠ Capture owed.** No reference screenshot covers the original's in-flight objectives
 presentation: all five `Campaign *.png` shots are out-of-mission screens. `ObjectivesHud`'s
@@ -1623,6 +1623,16 @@ with errors clean, all 16 golden shots hash-identical, so the prewarm plumbing a
 moved nothing in world build. **Verified.** `RunTests.ps1` on the plan branch with D32, D33 and
 D34 merged: build clean, units 2164/2164, engine suites 104/104 with errors clean, all 16 golden
 shots hash-identical.
+
+The `GameSession.cs` wiring landed on the `worktree-m5-d33` branch: `dotnet build CSVM/CSVM.sln`
+0 warnings/0 errors; `dotnet test CSVM.Tests/CSVM.Tests.csproj` 2324/2324; `RunTests.ps1
+-SkipGoldens -SkipHitch` on this worktree: build clean, units 2324/2324, engine suites 104/105
+with errors clean and the sole failure `wingman-station` (a pre-existing D34-side failure on this
+worktree's base commit, unrelated to this item's files). A real `--campaign=<profile>:6`
+(C1/M02) `--screenshot` flight shows the objectives readout (four rows) drawn over the flight HUD,
+and its log carries `anim: prewarmed 375 sound stream(s) before the archive closed` (263 of them
+the combat-voice roster, the rest the anim program's own sound names plus the objective
+wake/complete groups this item's prewarm fix adds).
 
 **⚠ Traps.** Do not filter the readout on `ObjectiveGraph.Rows[i].Awake`; see Evidence. Do not
 add a second `PlaySoundGroup` path for "D33's own" cues; the routing is D31's and stays

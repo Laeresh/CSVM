@@ -1009,6 +1009,9 @@ public partial class GameSession : Node3D
                 TexturesOutliveBuild = state.TexturesOutliveBuild,
                 SoundsOutliveBuild = state.SoundsOutliveBuild,
                 VoiceClipNames = voiceClips,
+                // The mission's own WAKEUP_SOUND_GROUP/COMPLETED_SOUND_GROUP names, never
+                // referenced by the anim program, so nothing else would prewarm them (D33).
+                ExtraPrewarmNames = _campaign?.Script.SoundGroupNames(),
                 // The lab's quiet stage: ambient playback deferred to its A toggle, staged templates
                 // relocated onto the call site. Safe this early, since a quiet-stage bootstrap
                 // dispatches only RESET_STATEs and never consults it.
@@ -2441,6 +2444,13 @@ public partial class GameSession : Node3D
         {
             DebugShow = _spec.DebugTargets,
         });
+
+        // The in-flight objectives readout (D33), mounted only for a campaign session; it polls
+        // _campaign.Graph itself once Attach (above) has built it.
+        if (_campaign is { } campaign)
+        {
+            _worldRoot!.AddChild(UI.ObjectivesHud.Build(campaign, Messages.Load(state.MessagesPath)));
+        }
 
         if (_rigs.Count > 1)
         {
