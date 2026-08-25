@@ -148,6 +148,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 80. ☑ A mission cannot re-command its spawned aircraft (`BL-500`)
 81. ☑ A net swap keeps the previous net's engagement gates (`BL-504`)
 82. ☐ A campaign wingman never leaves formation to engage (`BL-505`)
+83. ☐ An AI aircraft's defensive turrets are never built (`BL-506`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -3474,3 +3475,46 @@ wingman's `rating_biases` legitimately exclude targets (CM02's `wingman_4` exclu
 against one it is not told to ignore. ⚠ `BL-504` was a real cause of exactly this symptom for a
 different group of aircraft, so confirm the wingmen's own gates before reading their behaviour as
 this item.
+
+⚠ **Two things from the controls narrow this.** There is no wingman-command binding in this build,
+and `CSVM/project.godot` carries no wingman input action, so an ordered engage cannot be what the
+player is missing; if the original's wingmen only engage when ordered, the absent command IS the
+finding and the work is wiring it. And the authored data argues wingmen engage on their own:
+`wingman_4`'s exclusion list is only meaningful for an aircraft that picks targets, which a wingman
+holding station for the whole mission would never do.
+
+**The behaviour asked for, which is this item's specification.** The wingmen switch to pursue in a
+fight and go back to escorting the player when no enemies are left. The return half is as much a
+part of this as the engage half, and a fix that engages but never re-forms is not done;
+`wingman-station` is the instrument for the re-formed state. Not attacking the Balmorals comes free
+from the bias table and wants no special case.
+
+## G83 ☐ An AI aircraft's defensive turrets are never built (`BL-506`)
+
+**Goal.** A bomber shoots back, from the turrets its own vehicle definition authors.
+
+**Evidence (traced-to-code).** Reported at the controls, that CM02's Balmorals should have turrets
+firing on the Fortune Hunters. The data agrees: `britbalmoral` authors `turrets = [thirdp, [...]]`
+with two mounts, and sixteen vehicle defs across the install author a `thirdp` turret block, the
+five player rigs, their five AI counterparts, the five `r`-prefixed variants and `britbalmoral`. So
+does the code: `TurretController.BuildCarried` has exactly two callers, `HumanFlightAdapter`
+(`:253`) and the `carried-turrets` suite (`AiSuites.cs:414`). `AiFlightAssembler` never calls it.
+The machinery is built and tested, and no AI aircraft is ever given any of it.
+
+**Approach.** Build the host's `thirdp` mounts in the AI assembler the way the human adapter does.
+This is a call and its wiring rather than new turret code, and `carried-turrets` already pins the
+gunner's behaviour.
+
+**Model recommendation.** medium.
+
+**Verify.** A driven leg on CM02's own world with a hostile inside a Balmoral's turret detection
+range: the turret tracks and fires, its hits landing under the host's shooter id.
+
+**⚠ Traps.** ⚠ A turret is a separate gunner from the pilot, so an aircraft whose net gates hold its
+PILOT out of combat can still shoot back, and CM02's bomb-run Balmorals are exactly that case
+(G81). Do not gate the turret on the pilot's attack range. ⚠ Hits must land under the host's shooter
+id and never on the host's own airframe, which the existing suite pins; keep that arm honest for an
+AI host. ⚠ Sixteen defs carry these mounts, so this is not a Balmoral fix and a per-airframe special
+case would be the wrong shape. ⚠ Every AI Kestrel, Avenger, Brigand and Firebrand gains a rear gun
+the player has been flying against without, so this changes the difficulty of missions nobody
+reported a problem with. That is the correct behaviour, but it is worth saying at the controls.

@@ -2217,6 +2217,24 @@ usual.
   *Cross-refs:* `PLAN-M5-polish.md` G77, whose `campaign-bomber-formation` suite is the harness to
   extend.
 
+- `BL-506` `[Bug]` **An AI aircraft's defensive turrets are never built, so a bomber shoots back at
+  nothing.** *Evidence:* reported at the controls, that CM02's Balmorals should have turrets firing
+  on the Fortune Hunters. The data agrees and so does the code. `britbalmoral` authors
+  `turrets = [thirdp, [...]]` with two mounts, and sixteen vehicle defs across the install author a
+  `thirdp` turret block: the five player Kestrel/Avenger/Brigand/Firebrand/Balmoral rigs, their five
+  AI counterparts, the five `r`-prefixed variants and `britbalmoral`. `TurretController.BuildCarried`
+  has exactly two callers, `HumanFlightAdapter` and the `carried-turrets` suite;
+  `AiFlightAssembler` never calls it. So the machinery exists and works, and no AI aircraft is ever
+  given any of it. *Fix shape:* build the host's `thirdp` mounts in the AI assembler the way the
+  human adapter does, which is a call and its wiring rather than new turret code. *⚠ Traps:* hits
+  must land under the HOST's shooter id and never on the host's own airframe, which is what the
+  existing suite pins; keep that arm honest for an AI host. A turret is a separate gunner from the
+  pilot, so an aircraft whose net gates hold its PILOT out of combat can still shoot back, and that
+  is the case CM02's bomb-run Balmorals are (`PLAN-M5-polish.md` G81): do not gate the turret on the
+  pilot's attack range. The turrets go quiet with a crashed host, already covered. Sixteen defs
+  means this is not a Balmoral fix, and a per-airframe special case would be the wrong shape.
+  *Cross-refs:* `PLAN-M5-polish.md` G81 and G83; `BL-505`, reported in the same pass.
+
 - `BL-505` `[Bug]` **A campaign wingman never leaves formation to engage.** *Evidence:* reported at
   the controls under `--debug-markers`, the wingmen never switching to pursue. The same impression
   closed `PLAN-M5-polish.md` F55 and was recorded there as untested rather than dismissed, so this
