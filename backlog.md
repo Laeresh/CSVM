@@ -2330,7 +2330,7 @@ usual.
 
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
   controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.
-  **The mechanism.** `GameSession.StuntSummaryFor` (`GameSession.cs:3083-3094`) calls
+  **The mechanism.** `InstantActionDirector.StuntSummaryFor` (`Session/InstantActionDirector.cs:761-764`) calls
   `store.RecordIfBest(key, run.Elapsed)` behind two guards and no third: the objective is
   `ZonesFlown`, and player 1 has a `Stunt` run at all. Neither asks whether the run was
   **finished**. So every end of an Instant Action stunt mission records a time, a loss included.
@@ -2447,36 +2447,6 @@ usual.
   Spawn spacing here stays this item's call from `PT-43`, and copying the grid over is the wrong
   reflex: four dogfighters 60 m apart on one heading is an instant head-on merge every round.
 
-- `BL-243` `[Feature]` **The original carries destruction across missions in a state log; CSVM has no log, so a
-  warm instant action starts clean where the original does not.** Decoded 2026-08-02 out of
-  `BL-099` — the mechanism, the user's five-step A/B in the original, and the 62-definition
-  `PERSIST_LOG` list are written up in `docs/formats/anim-definitions.md` ("`SAVE_LOG` /
-  `PERSIST_LOG` are the cross-mission state log"); read that before touching this. The rule:
-  **every mission load applies the log, only campaign missions write it, and it commits to the save
-  and survives a process restart.** `SAVE_LOG ON` (568 defs) puts a definition in the log at all;
-  `PERSIST_LOG ON` (62 defs, a strict subset, all fixed world scenery) additionally carries it
-  across mission boundaries.
-  **Scope of the divergence is narrow.** CSVM builds every session from the bootstrap, so we match
-  the original for campaign missions and for a cold instant action; we differ only for an instant
-  action loaded after a campaign mission **in the same process** — the exact case that produced
-  `BL-099`'s burning fuel depot. There is no campaign flow yet, so today this is unobservable in
-  practice.
-  **What implementing it would take:** a chapter-scoped store of `PERSIST_LOG` definition states
-  that outlives `Launcher.ReturnToMenu`'s teardown (which currently QueueFrees the whole session
-  subtree), applied after the `RESET_STATE` bootstrap and before `zepstate`/`startanims`/the `.gw`,
-  written only on a campaign-mission exit. Because `fuelboxconnect*` is a persisted def, the stored
-  state cannot be just a destroyed/healthy flag — a *running* looping animation is part of what the
-  original carries. (The `BL-099` fuel-depot report that produced this item is answered in full in
-  that doc — a cold IA1 renders intact tanks by spec, in the original and in CSVM alike; do not
-  "fix" the depot, and do not re-derive the depot chain analysis it records.)
-  ⚠ **Traps.** (a) **Do not use this to explain away a rendering difference.** It is the reason a
-  screenshot of the original is not evidence about the shipped data, which makes it an equally good
-  way to hand-wave a real bug; anything blamed on the log needs the mission sequence that produced
-  it. (b) Two facts are still untested and would change the design: whether the commit happens at
-  damage time or at mission completion, and a direct A/B separating the two flags (destroy a
-  `PERSIST_LOG` object and a save-only one in one campaign mission, then load an IA — the first
-  should carry, the second should not).
-
 - `BL-256` `[Feature]` **Stunt screenshot feature, triggered off `DzRadius` — much later, by user decision
   (2026-08-04).** `DzRadius` (15 m, user-hand-tuned) is settled
   as the **marker-centre radius**: scoring crosses the authored `dzpathN` gate pair
@@ -2529,25 +2499,6 @@ usual.
   string. Split out while the approach trigger landed (`git log --grep=BL-467`).
 
 ## Tooling, platform & docs
-
-- `BL-427` `[Feature]` **Extract `langui.dll`'s string table.** Split out while the Ammo Selection
-  screen was built (`git log --grep=BL-353`). `extracted/messages.json` carries the weapon **names**
-  (`MSG_WEAP_APIERCING_ROCKET` → "Armor-piercing rocket", the `MSG_WEAP_*` block at ids 12124–12160)
-  but no prose beyond them. The original's Ammo Selection screen also shows a description pane for
-  the highlighted round ("Slugs — These standard lead bullets do damage equally well to both armor
-  and internal components", visible in `OriginalScreenshots/Ammo Selection Gun DropDown.png`), and
-  nothing in the extracted data contains that text. It can only be in
-  `CrimsonSkiesGame/GOSDATA/ASSETS/BINARIES/langui.dll`, a Win32 resource table no tool of ours
-  reads.
-  **Why it is worth its own item.** The wizard's own decoded facts already cite langui ids (the
-  thirteen militias at 3670, the presets at 3600–3618), so the table is being read second-hand today
-  from decode notes rather than from the file. It no longer carries `BL-352` with it: the *View
-  Story* page has no per-preset prose to find, which the decode of that screen settled.
-  ⚠ **Traps.** (a) Our Ammo Selection screen ships without description panes, which is a stated
-  divergence rather than an oversight; adding them is this item, not a bug fix on that screen. (b) A
-  quarter-width four-player pane has no room for a prose block, so the panes are not simply "the
-  screen plus a description" once the strings exist. (c) `langui.dll` is in the game install, which
-  is git-ignored and absent from worktrees — read it by absolute path.
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled

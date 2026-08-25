@@ -11,6 +11,14 @@ headless, but the pass found that a mission cannot in fact be flown to its end a
 Wave A is about play and not about polish; the presentation items the pass also raised sit behind
 it in Wave B.
 
+**Battery on the fully merged tree** (build clean with 0 warnings, run centrally and serialized with
+no sibling worktree building): units **2363 of 2363**, engine suites **118 of 118** with engine errors
+clean, and all **16 golden shots hash-identical**, so a wave that rewrote the campaign screens, moved
+the objectives readout off the flight HUD, retired an overlay into the targeting subsystem and
+changed the anim runtime's instance walk moved no pixel of any flight shot. ⚠ The engine-error screen
+reads a shared log every concurrent Godot writes into, so error counts taken while sibling lanes were
+building are meaningless; this one was taken alone.
+
 **Wave A's purpose is met: the first campaign mission can now be flown to its end at the controls.**
 Wave F is what a complete flown run of it reported next, and it supersedes part of A1: objective
 sites belong in the enemy selection cycle rather than in the standalone overlay A1 built (F53).
@@ -73,7 +81,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ The campaign wingman cannot hold station on a real player (`BL-457`)
 4. ☑ The music channel drowns the briefing (`BL-455`)
 5. ◐ The cutscene letterbox leaks the world at its left and right edges (`BL-452`)
-6. ◐ `DANGER_ZONES_COMPLETED` is never fed in a campaign mission (`BL-458`)
+6. ☑ `DANGER_ZONES_COMPLETED` is never fed in a campaign mission (`BL-458`)
 
 ### Wave B — where things are shown, and where they are heard
 
@@ -98,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 41. ☑ Decode the original's per-pylon ordnance id (`BL-462`)
 42. ☑ Decide how the MPG cinemas would play, before any code (`BL-446`)
-43. ◐ Close what is already done, fix what is merely stale (`BL-243`, `BL-427`, `BL-426`)
+43. ☑ Close what is already done, fix what is merely stale (`BL-243`, `BL-427`, `BL-426`)
 
 ### Wave F — the second at-the-controls pass, once the mission could be finished
 
@@ -292,7 +300,7 @@ never `913`, and a traced run shows `AiParked=false` throughout. ⚠ The parking
 latent for a mission whose intro does raise 913, since `Inert` un-draws an aircraft
 (`FlightController.cs:583`); file that separately if it appears rather than folding it in here.
 
-## A6 ◐ `DANGER_ZONES_COMPLETED` is never fed in a campaign mission (`BL-458`)
+## A6 ☑ `DANGER_ZONES_COMPLETED` is never fed in a campaign mission (`BL-458`)
 
 **Goal.** An objective gated on danger zones can complete.
 
@@ -318,7 +326,12 @@ share their gate math by construction (this module mirrors `TryReadGates`/`GateC
 than importing them) but read different authoring surfaces and belong to different sessions, so a
 shared notify would have been a design choice, not a repair.
 
-**Not landed: the live wiring's last field.** `GameSession.cs`'s own `Attach` call
+**Landed in full.** The orchestrator applied the one missing field at merge, so
+`GameSession`'s `Attach` call now passes `Gamez = state.Gamez` and a real flown campaign session arms
+`CampaignDangerZones`. `campaign-danger-zones` is green in the full battery.
+
+**Was not landed by the item itself, and is recorded because the handoff pattern recurs:**
+`GameSession.cs`'s own `Attach` call
 (`_campaign?.Attach(new CampaignDirector.WorldInputs { … })`, around line 2473) does not set the
 new `Gamez` field — it is out of this item's file ownership (`GameSession.cs` is off-limits here).
 Until that one field is added (`Gamez = state.Gamez,`, alongside the `PlayerAircraft` delegate
@@ -1253,7 +1266,7 @@ a case-sensitive lookup fails on all three; the chapter cinemas come from a `cha
 ⚠ Nobody has judged a transcode at the controls, which is a presentation call rather than a
 technical one.
 
-## E43 ☐ Close what is already done, fix what is merely stale (`BL-243`, `BL-427`, `BL-426`)
+## E43 ☑ Close what is already done, fix what is merely stale (`BL-243`, `BL-427`, `BL-426`)
 
 **Goal.** Three backlog entries stop lying: two are closed because the work landed, one keeps its
 bug and loses its wrong file reference.
@@ -1287,6 +1300,21 @@ commit rather than dropping them: whether the log commits at damage time or at m
 and whether an Instant Action session loaded after a campaign mission in the same process picks the
 log up (`InstantActionDirector` has no apply call). ⚠ `BL-426` is named out of scope by the campaign
 plan's own scope line, so fixing the entry's body is this plan's business and fixing the bug is not.
+
+**Landed.** `BL-243` and `BL-427` are closed and `BL-426` cites a line that exists
+(`Session/InstantActionDirector.cs:761-764`, where the unguarded `RecordIfBest` actually lives, not
+the `GameSession.cs:3083` it named). The one claim the item said to check before closing `BL-427` is
+checked and holds: `extracted/rof/ui_strings.json`'s 3370 block really does carry the ammunition
+description prose the entry's deliverable named, and its four rows read as the slug, dum-dum,
+armour-piercing and explosive descriptions with 3374 as "No Information Available", which is what
+`CampaignAmmoPage.GroupDescription` draws today. `BL-426`'s bug itself is untouched, since the
+campaign plan's scope line puts it out of scope.
+
+⚠ **`BL-243`'s two untested questions are carried here rather than dropped with the entry**, as the
+trap required: whether the persist log commits at damage time or at mission completion, and whether
+an Instant Action session loaded after a campaign mission in the same process picks the log up, since
+`InstantActionDirector` has no apply call. Both are open behaviour questions about a mechanism that
+is otherwise built and covered by `campaign-persistence`.
 
 # Wave F — the second at-the-controls pass, once the mission could be finished
 
