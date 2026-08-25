@@ -77,28 +77,28 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — where things are shown, and where they are heard
 
-11. ☐ The objectives readout belongs on the pause screen (`BL-466`)
-12. ☐ Radio calls play positionally (`BL-465`)
-13. ☐ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
-14. ☐ The briefing reveal, drawn as authored (`BL-464`)
+11. ◐ The objectives readout belongs on the pause screen (`BL-466`)
+12. ◐ Radio calls play positionally (`BL-465`)
+13. ◐ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
+14. ◐ The briefing reveal, drawn as authored (`BL-464`)
 
 ### Wave C — the gaps M5 named
 
 21. ☑ The `landings.zrd` approach trigger, which is the mid-mission cutscene gate (`BL-467`, `BL-035`)
-22. ☐ The VO dialogue chain player (`BL-461`)
-23. ☐ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
+22. ◐ The VO dialogue chain player (`BL-461`)
+23. ◐ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
 
 ### Wave D — the campaign's own rough edges
 
-31. ☐ The load screen's composed artwork (`BL-409`)
-32. ☐ Spawn node names defeat `rating_biases` on the campaign path (`BL-401`)
+31. ◐ The load screen's composed artwork (`BL-409`)
+32. ◐ Spawn node names defeat `rating_biases` on the campaign path (`BL-401`)
 33. ☐ World objects are hostile to everyone (`BL-407`)
 
 ### Wave E — answers and housekeeping
 
-41. ☐ Decode the original's per-pylon ordnance id (`BL-462`)
-42. ☐ Decide how the MPG cinemas would play, before any code (`BL-446`)
-43. ☐ Close what is already done, fix what is merely stale (`BL-243`, `BL-427`, `BL-426`)
+41. ◐ Decode the original's per-pylon ordnance id (`BL-462`)
+42. ◐ Decide how the MPG cinemas would play, before any code (`BL-446`)
+43. ◐ Close what is already done, fix what is merely stale (`BL-243`, `BL-427`, `BL-426`)
 
 ### Wave F — the second at-the-controls pass, once the mission could be finished
 
@@ -106,11 +106,15 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 52. ◐ The cutscene node reparent is unimplemented, so the intro frames nothing (`BL-471`)
 53. ◐ Objective sites belong in the enemy selection cycle, and a moving site's marker must track (`BL-472`)
 54. ◐ A zeppelin's authored team is unread and its wake-up has no seam (`BL-476`)
-55. ☐ The wingman's formation is looser than the original's (`BL-473`)
-56. ☐ `wingman-station` is red under main's flight plant (`BL-474`)
+55. ☐ The wingman's formation is looser than the original's (`BL-473`), blocked on F56
+56. ◐ `wingman-station` is red under main's flight plant (`BL-474`)
 57. ◐ The targeting readout drops the militia name (`BL-475`)
-58. ☐ Alpha-cutout geometry is solid to weapon rays (`BL-477`)
-59. ☐ A net has no stop-point state, so the PANDORA never halts (`BL-478`)
+58. ◐ Alpha-cutout geometry is solid to weapon rays (`BL-477`)
+59. ◐ A net has no stop-point state, so the PANDORA never halts (`BL-478`)
+
+**Everything open is now either in flight or queued behind a stated blocker.** The exceptions are
+D33, which waits on D32 and F54 for the reason F54 gives, B14 and D31, which run behind B13 in one
+lane, C22, which runs behind B12 in one lane, and F55, whose instrument is the suite F56 owns.
 
 ## Dependency and parallelism notes
 
