@@ -35,9 +35,6 @@ public sealed class CampaignAmmoPage : CampaignPage
     // fallback label for when langui text is unavailable.
     private static readonly int[] OrdnanceThreshold = { 1, 1, 2, 8, 7, 12, 7, 7, 17, 17, 20, 1 };
 
-    // The two diagram sheets, decoded once each and framed per airframe below.
-    private static readonly Dictionary<string, TgaImage?> Sheets = new(StringComparer.Ordinal);
-
     private readonly CustomPlaneStore? _planes;
     private StockLoadouts? _stock;
 
@@ -79,8 +76,8 @@ public sealed class CampaignAmmoPage : CampaignPage
         "↑↓  Choose       ←→  Change       Enter / A  Select       Esc / B  Back";
 
     /// <summary>The top view of the aircraft being fitted, the frame this airframe owns in
-    /// <c>OL_PlaneDiagramsTop.png</c> (the multi-frame idiom <c>ol_p_planetopicon</c> draws).</summary>
-    public override HangarArt? Art => Diagram("OL_PLANEDIAGRAMSTOP.PNG");
+    /// the plan-view sheet.</summary>
+    public override HangarArt? Art => Diagram(PlaneDiagrams.Top);
 
     // The stock table: the flow's, else (on-engine only, where res:// resolves) the default file.
     // Off-engine a flow without one reads every plane as fit-less rather than touching Godot.
@@ -166,47 +163,15 @@ public sealed class CampaignAmmoPage : CampaignPage
         return false;
     }
 
-    /// <summary>The front view, the same frame index in <c>OL_PlaneDiagramsFront.png</c>. It is a
-    /// per-plane picture, not a per-row one, so every row shows it.</summary>
-    public override HangarArt? RowArt(int row) => Diagram("OL_PLANEDIAGRAMSFRONT.PNG");
+    /// <summary>The front view, the same frame index in the head-on sheet. It is a per-plane
+    /// picture, not a per-row one, so every row shows it.</summary>
+    public override HangarArt? RowArt(int row) => Diagram(PlaneDiagrams.Front);
 
     /// <inheritdoc/>
     public override bool Back()
     {
         Discard();
         return false;
-    }
-
-    // One sheet, decoded on first sight and kept for the process: the miss is cached too, so an
-    // install without the file probes the disk once rather than every frame.
-    private static TgaImage? Sheet(string root, string file)
-    {
-        string path = Path.Combine(root, "extracted", "rof", "ASSETS", "GRAPHICS", file);
-        if (!Sheets.TryGetValue(path, out var sheet))
-        {
-            sheet = PngImage.TryLoad(path);
-            Sheets[path] = sheet;
-        }
-
-        return sheet;
-    }
-
-    // One airframe's row out of a vertically stacked sheet: eleven equal frames, top to bottom in
-    // airframe-id order. A sheet whose height is not a whole multiple of the airframe count is not
-    // this layout, so it draws nothing rather than a mis-sliced picture.
-    private static TgaImage? FrameOf(TgaImage sheet, int airframe)
-    {
-        int count = HangarEconomy.Airframes.Length;
-        if (count <= 0 || sheet.Height % count != 0)
-        {
-            return null;
-        }
-
-        int height = sheet.Height / count;
-        int stride = sheet.Width * 4;
-        var rgba = new byte[stride * height];
-        Array.Copy(sheet.Rgba, ClampAirframe(airframe) * height * stride, rgba, 0, rgba.Length);
-        return TgaImage.FromRgba(sheet.Width, height, rgba);
     }
 
     private static int ClampAmmo(int ammo) => ammo >= 0 && ammo <= 3 ? ammo : 0;
@@ -307,7 +272,7 @@ public sealed class CampaignAmmoPage : CampaignPage
             return null;
         }
 
-        return Sheet(root, file) is { } sheet && FrameOf(sheet, _plane.Airframe) is { } frame
+        return PlaneDiagrams.Frame(root, file, _plane.Airframe) is { } frame
             ? new HangarArt(frame, _plane.Name)
             : null;
     }

@@ -176,7 +176,7 @@ public sealed class CampaignCabinPage : CampaignPage
         {
             var path = Path.Combine(root, "extracted", "rof", "ASSETS", "GRAPHICS",
                 $"PC_P_HANGAR{plane.Airframe}.JPG");
-            if (TgaImage.TryLoad(path) is { } image)
+            if (ArtImage.TryLoad(path) is { } image)
             {
                 art = new HangarArt(image, plane.Name);
             }

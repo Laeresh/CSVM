@@ -21,6 +21,7 @@ namespace CSVM.UI;
 public sealed class HangarAirframePage : HangarPage
 {
     private readonly Dictionary<int, HangarArt?> _art = new();
+    private readonly Dictionary<int, HangarArt?> _diagrams = new();
 
     /// <summary>Binds the page to its flow.</summary>
     public HangarAirframePage(HangarFlow flow)
@@ -38,8 +39,18 @@ public sealed class HangarAirframePage : HangarPage
     public override int OpeningRow => Flow.AirframeChosen ? Scratch.Airframe : 0;
 
     /// <inheritdoc/>
-    public override HangarArt? Art =>
-        BlueprintFor(Flow.DefaultsAsk ?? Math.Clamp(Flow.Row, 0, HangarEconomy.Airframes.Length - 1));
+    public override HangarArt? Art => BlueprintFor(FocusedAirframe);
+
+    // Which airframe the art follows: the row the cursor is on, or the one the defaults ask is
+    // about, since that ask replaces the list with two buttons and its own row index means nothing.
+    private int FocusedAirframe =>
+        Flow.DefaultsAsk ?? Math.Clamp(Flow.Row, 0, HangarEconomy.Airframes.Length - 1);
+
+    /// <summary>The focused airframe's plan view under its blueprint, the frame it owns in the
+    /// diagram sheet the ammo screen draws from. The blueprint is a schematic in the original's
+    /// grid style and this is the aircraft's actual silhouette, so the pair says both what the
+    /// airframe is called and what it looks like from above before the pick is made.</summary>
+    public override HangarArt? RowArt(int row) => DiagramFor(FocusedAirframe);
 
     /// <inheritdoc/>
     public override string RowText(int row)
@@ -111,13 +122,29 @@ public sealed class HangarAirframePage : HangarPage
         {
             var path = Path.Combine(root, "extracted", "rof", "ASSETS", "GRAPHICS",
                 $"PX_{airframe}_BLUEPRINT.TGA");
-            if (TgaImage.TryLoad(path) is { } image)
+            if (ArtImage.TryLoad(path) is { } image)
             {
                 art = new HangarArt(image, Flow.AirframeName(airframe));
             }
         }
 
         _art[airframe] = art;
+        return art;
+    }
+
+    // The plan-view frame, cached the same way and for the same reason as the blueprint above.
+    private HangarArt? DiagramFor(int airframe)
+    {
+        if (_diagrams.TryGetValue(airframe, out var art))
+        {
+            return art;
+        }
+
+        art = Flow.DataRoot is { } root
+              && PlaneDiagrams.Frame(root, PlaneDiagrams.Top, airframe) is { } frame
+            ? new HangarArt(frame, Flow.AirframeName(airframe))
+            : null;
+        _diagrams[airframe] = art;
         return art;
     }
 }

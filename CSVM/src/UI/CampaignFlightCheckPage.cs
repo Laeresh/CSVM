@@ -72,6 +72,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     private static readonly CampaignProfileDef EmptyProfile = new() { Name = string.Empty };
 
     private readonly Dictionary<int, HangarArt?> _silhouettes = new();
+    private readonly Dictionary<int, HangarArt?> _diagrams = new();
     private readonly bool? _wingmanOverride;
 
     private CustomPlaneStore? _planes;
@@ -108,6 +109,12 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         ? "↑↓  Choose       ←→  Change Plane       Enter / A  Select       Esc / B  Back"
         : "↑↓  Choose       Enter / A  Select       Esc / B  Back";
 
+    /// <summary>The focused pilot's aircraft head-on, its frame of the diagram sheet the ammo
+    /// screen draws from. The shell hangs the row picture off this one, so without it the
+    /// silhouette below never reached the screen at all.</summary>
+    public override HangarArt? Art =>
+        Airframe(Flow.Row) is { } airframe ? DiagramFor(airframe) : null;
+
     private bool HasWingman => _wingmanOverride ?? Mission()?.Wingman ?? false;
 
     // The flow's hangar store, or null off-engine: every plane then reads as its stock fit.
@@ -118,13 +125,8 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     private StockLoadouts? Stock => _stock ??= Flow.Stock;
 
     /// <inheritdoc/>
-    public override HangarArt? RowArt(int row)
-    {
-        var rows = Rows();
-        return row >= 0 && row < rows.Count && rows[row].Silhouette is { } airframe
-            ? SilhouetteFor(airframe)
-            : null;
-    }
+    public override HangarArt? RowArt(int row) =>
+        Airframe(row) is { } airframe ? SilhouetteFor(airframe) : null;
 
     /// <inheritdoc/>
     public override string RowText(int row)
@@ -466,13 +468,60 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         {
             string path = Path.Combine(root, "extracted", "rof", "ASSETS", "GRAPHICS",
                 $"PX_{airframe}_BLUEPRINT.TGA");
-            if (TgaImage.TryLoad(path) is { } image)
+            if (ArtImage.TryLoad(path) is { } image)
             {
                 art = new HangarArt(image, AirframeTitle(airframe));
             }
         }
 
         _silhouettes[airframe] = art;
+        return art;
+    }
+
+    // Which aircraft a row's art shows: its own where the row names a plane (the two pilot lines),
+    // that slot's where the row acts on one (CHANGE AMMO, CHANGE PLANE), and the pilot's for the
+    // two rows that belong to nobody, so the column does not blink out on the way to FLY MISSION.
+    private int? Airframe(int row)
+    {
+        var rows = Rows();
+        if (row < 0 || row >= rows.Count)
+        {
+            return null;
+        }
+
+        if (rows[row].Silhouette is { } own)
+        {
+            return own;
+        }
+
+        var flown = new List<int>();
+        foreach (var candidate in rows)
+        {
+            if (candidate.Silhouette is { } airframe)
+            {
+                flown.Add(airframe);
+            }
+        }
+
+        int slot = rows[row].Kind is FlightRowKind.ChangeAmmo or FlightRowKind.ChangePlane
+            ? rows[row].Slot
+            : 0;
+        return flown.Count == 0 ? null : flown[Math.Min(slot, flown.Count - 1)];
+    }
+
+    // The head-on frame, cached the same way and for the same reason as the silhouette above.
+    private HangarArt? DiagramFor(int airframe)
+    {
+        if (_diagrams.TryGetValue(airframe, out var art))
+        {
+            return art;
+        }
+
+        art = Flow.DataRoot is { } root
+              && PlaneDiagrams.Frame(root, PlaneDiagrams.Front, airframe) is { } frame
+            ? new HangarArt(frame, AirframeTitle(airframe))
+            : null;
+        _diagrams[airframe] = art;
         return art;
     }
 }

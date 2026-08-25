@@ -1422,11 +1422,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // The hangar's screens sit behind a flow rather than behind the screen enum, so --menu= opens
-    // one and walks it: "hangar" the plane list, "defaults" the airframe-defaults ask, "paint" the
-    // preview on a Fury in Fortune Hunters colours. A screenshot/verification aid only.
+    // one and walks it: "hangar" the plane list, "airframe" the airframe list, "defaults" its
+    // defaults ask, "paint" the preview on a Fury in Fortune Hunters colours. An aid only.
     private void OpenHangarAid(string startScreen)
     {
-        if (startScreen is not ("hangar" or "defaults" or "paint" or "name"))
+        if (startScreen is not ("hangar" or "airframe" or "defaults" or "paint" or "name"))
         {
             return;
         }
@@ -1438,6 +1438,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         flow.Accept(); // New Plane, on to the airframe screen
+        if (startScreen == "airframe")
+        {
+            return;
+        }
+
         flow.Accept(); // pick the focused airframe, which is what raises the defaults ask (E49)
         if (startScreen == "defaults")
         {

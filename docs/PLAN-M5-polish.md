@@ -86,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ The `landings.zrd` approach trigger, which is the mid-mission cutscene gate (`BL-467`, `BL-035`)
 22. ◐ The VO dialogue chain player (`BL-461`)
-23. ◐ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
+23. ☑ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
 
 ### Wave D — the campaign's own rough edges
 
@@ -818,7 +818,7 @@ members, so adding chains to a prewarm list changes nothing. ⚠ Do not make `So
 a random chain member; a chain is a script, not a draw, and that change would move every existing
 weighted-sound suite.
 
-## C23 ☐ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
+## C23 ☑ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
 
 **Goal.** The hangar's art seam draws the PNG art that ships, and the JPEG-only art has a recorded
 decision rather than a silent blank.
@@ -841,6 +841,37 @@ diagrams drawn, plus the census result written down.
 
 **⚠ Traps.** ⚠ Returning a placeholder image is worse than returning null: a wrong picture reads as
 a fidelity verdict. Keep the never-invent behaviour for anything still undecodable.
+
+**Landed.** The seam loads by file name rather than by decoder: `Mech3/ArtImage.cs` takes a path and
+picks `PngImage` or `TgaImage` from the extension, so a screen names the file the extraction ships
+and stops caring about its format. `UI/PlaneDiagrams.cs` frames the two sheets for every screen that
+wants them (`OL_PLANEDIAGRAMSTOP.PNG` 204x1870 and `OL_PLANEDIAGRAMSFRONT.PNG` 245x1100, eleven equal
+frames each in airframe-id order); that framing was `CampaignAmmoPage`'s two private helpers, and
+three screens want the same picture now, so it moved out rather than being copied twice. The airframe
+list draws the focused airframe's plan view under its blueprint, and the campaign flight check draws
+the pilot's aircraft head-on over its silhouette. ⚠ **That second screen was drawing no art at all,
+which nobody had reported**: the shell hangs a page's row picture off its main one
+(`LaunchMenu.cs:2168` gates the whole `beside` block on `PageArt()` being non-null) and
+`CampaignFlightCheckPage` overrode `RowArt` without ever overriding `Art`. `--menu=airframe` now
+opens the airframe list without the defaults ask covering it. JPEG is transcoded at extract time
+rather than decoded in `Mech3` (`BL-479`), so a `.JPG` returns null and the screen draws nothing,
+which is the never-invent answer: `ArtImage` has no fallback path and `PlaneDiagrams.Frame` returns
+null rather than slicing a sheet whose height is not a whole multiple of eleven.
+
+**Verified.** `dotnet build` clean with 0 warnings, `dotnet test` 2346 passed (2342 before, plus four
+new `ArtImage` cases, one of which pins that a `.JPG` returns null rather than a stand-in),
+`dotnet format --verify-no-changes` clean, `CheckCommentCaps.ps1 -Summary` clean. `--menu=airframe`
+and `--menu=campaign-flightcheck` both draw two captioned pictures where the flight check drew none,
+and `--menu=campaign-ammo` is pixel-identical before and after the shared-helper move (shots under
+`.scratch/c23/`). The census: of 254 `extracted/rimage` PNGs, 149 reach the briefing page's 24
+mission states, 3 are hard-coded by the HUD font and the impact reticle, 2 are named in `Briefing.zrd`
+chrome that nothing draws, 28 are named only by the escape and Loading dialogs which have no reader,
+and 72 are referenced by nothing, so **105 of 254 reach no page today**, the largest families being
+the 25 `ms_p_*` scrapbook momentos (which Previous Missions would want) and the 9 `mp-*` multiplayer
+event icons. The diagrams themselves were never in `rimage`; they live in
+`extracted/rof/ASSETS/GRAPHICS` with the seam's other art. The JPEG decision rests on every SOF
+marker being read across the 26 files: 24 are baseline `SOF0` but `CR_BACKGROUND` and
+`MP_LOBBY_BACKGROUND` are `SOF2`, so a baseline decoder would leave those two blank.
 
 # Wave D — the campaign's own rough edges
 
