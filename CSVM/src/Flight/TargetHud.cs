@@ -486,9 +486,9 @@ public sealed partial class TargetHud : Control
             var inward = new Vector2(side == 0 ? arm : -arm, 0f);
             var top = new Vector2(x, at.Y - hh);
             var bottom = new Vector2(x, at.Y + hh);
-            DrawLine(top, bottom, color, w);
-            DrawLine(top, top + inward, color, w);
-            DrawLine(bottom, bottom + inward, color, w);
+            DrawLine(top, bottom, color, w, antialiased: true);
+            DrawLine(top, top + inward, color, w, antialiased: true);
+            DrawLine(bottom, bottom + inward, color, w, antialiased: true);
         }
     }
 

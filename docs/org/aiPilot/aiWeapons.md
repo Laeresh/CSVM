@@ -16,8 +16,9 @@ definitions themselves are [`../../formats/weapons.md`](../../formats/weapons.md
 (`FUN_004706f0`). Turrets are their own system (`D:\zipper\Crimson\turret.cpp`, classes `Turret`
 and `TurretRate : TargetRate`) with their own entry into the projectile spawner `FUN_005aef40` and
 their own authored rate model, `WEAPON.FIRE_RATE` redrawn `uniform(min, max)` after every shot
-([`../../formats/turrets.md`](../../formats/turrets.md)). Established from call sites and the class
-layout, not from reading the turret update end to end.
+([`../../formats/turrets.md`](../../formats/turrets.md)). The projectile rate is independent of the
+cannon sound: each shot refreshes one reusable `LOOPED` sound handle for 0.5 seconds, so a carried
+turret's 0.4-second cadence sounds continuous while still emitting one projectile per interval.
 
 ## Contents
 

@@ -113,15 +113,15 @@
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "b82996fdba152ecc32be5fd974c10eb8",
-      "exercises": "Targeting a live AI in flight: its quaternion-driven pose and its crewed rear turret's barrel feed fixed in-range brackets, the label below the plane and --debug-markers identity/health text; frame-sensitive 48.18 %.",
+      "hash": "1542f5665a9e8b740e4972f65bfb73ca",
+      "exercises": "Targeting a live AI in flight: its quaternion-driven pose and its crewed rear turret's barrel feed fixed antialiased in-range brackets, the label below the plane and --debug-markers identity/health text; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "f7cf995fdfbd25cf250d0448c98be1b6",
-      "exercises": "A shot-down AI three seconds after the kill: quaternion flight state under frozen commands, second fireball and trail at the handover where randomdestseq inherits the hull's world velocity.",
+      "hash": "96450fedd0d1fac9e7a1918c4be0af89",
+      "exercises": "A shot-down AI three seconds after the kill: quaternion flight state under frozen commands, the auto-selected target's antialiased brackets, second fireball and trail at the handover where randomdestseq inherits the hull's world velocity.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     }
   ]
