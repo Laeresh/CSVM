@@ -70,7 +70,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Objective targets and help labels are never drawn, so the sites cannot be found (`BL-468`)
 2. ☑ A campaign session never spawns its zeppelins or generators (`BL-451`)
-3. ◐ The campaign wingman cannot hold station on a real player (`BL-457`)
+3. ☑ The campaign wingman cannot hold station on a real player (`BL-457`)
 4. ☑ The music channel drowns the briefing (`BL-455`)
 5. ◐ The cutscene letterbox leaks the world at its left and right edges (`BL-452`)
 6. ◐ `DANGER_ZONES_COMPLETED` is never fed in a campaign mission (`BL-458`)
@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 53. ◐ Objective sites belong in the enemy selection cycle, and a moving site's marker must track (`BL-472`)
 54. ☑ A zeppelin's authored team is unread and its wake-up has no seam (`BL-476`)
 55. ☐ The wingman's formation is looser than the original's (`BL-473`), blocked on F56
-56. ◐ `wingman-station` is red under main's flight plant (`BL-474`)
+56. ☑ `wingman-station` is red under main's flight plant (`BL-474`)
 57. ◐ The targeting readout drops the militia name (`BL-475`)
 58. ◐ Alpha-cutout geometry is solid to weapon rays (`BL-477`)
 59. ◐ A net has no stop-point state, so the PANDORA never halts (`BL-478`)
@@ -342,7 +342,7 @@ build a second, different completion rule for them. ⚠ A `dzpathN` gate pair ca
 apart (a "thin slit" aperture): a probe built to cross one gate can legitimately cross both in the
 same segment, which is completion, not a test bug.
 
-## A3 ◐ The campaign wingman cannot hold station on a real player (`BL-457`)
+## A3 ☑ The campaign wingman cannot hold station on a real player (`BL-457`)
 
 **Goal.** The wingman stays with the player instead of falling behind and climbing away.
 
@@ -1440,8 +1440,14 @@ is "not as close as original". A fidelity gap on a working mechanism, not a repe
 
 **Approach.** Nothing until the gap is measured against something. The decoded station offsets are
 confirmed and the commanded point equals the decoded station to 0.00 m, so the divergence is in how
-closely the escort TRACKS its point, not in where the point is. **Blocked on F56**: the instrument
-that would measure this is `wingman-station`, which is currently red.
+closely the escort TRACKS its point, not in where the point is.
+
+**Unblocked: F56 built the instrument.** `wingman-station`'s flown leg now prints a `settled` figure,
+the last-30 s mean separation on a leader flown like a player: **199 m on `player_pfighter`** and
+413 m on `player_bhawk`. Quote the campaign airframe's 199 m for a campaign statement, since the
+Bloodhawk's 413 m is a stern-chase artefact of a leg where leader and wingman share a top speed at
+full throttle. Because the commanded point is already 0.00 m from the decoded station, any gap the
+user sees IS this number, and the work is to move it toward the original's.
 
 **Model recommendation.** medium.
 
@@ -1451,7 +1457,7 @@ that would measure this is `wingman-station`, which is currently red.
 gap; that trades a confirmed decode for an impression. ⚠ Footage-derived separation distances are
 inadmissible (`docs/verification.md`).
 
-## F56 ☐ `wingman-station` is red under main's flight plant (`BL-474`)
+## F56 ☑ `wingman-station` is red under main's flight plant (`BL-474`)
 
 **Goal.** The suite is green, or its gates are re-justified in writing against the plant that now
 exists.
@@ -1474,6 +1480,45 @@ never reaches.
 **Verify.** The suite green on the merged tree, or the gates changed with the reasoning recorded.
 
 **⚠ Traps.** ⚠ Do not widen the gates until they pass: they encode the decoded 700 m join leash.
+
+**Landed.** ⚠ **Main's flight model did not regress station-keeping. The gates were calibrated
+against a plant that no longer exists, and the largest failing numbers were never separation at
+all.** `7c660df6` re-declared `BodyRates` as quaternion half-angle rad/s and integrated with
+`Rotated(axis, 2f * omega * dt)`, doubling every angular rate; nothing in `AiEscort`, `AiPilot` or
+`AiControlLaw` moved, and `AiControlLaw` is near bang-bang with no rate feedback, so it has no gain
+to be de-tuned. The suite's leader profile was authored in deflection-seconds, so its 1.5 s of 0.6
+roll, written to reach about 47°, now reaches 95°, and the pull behind it digs a descent. The leader
+crosses y = 0 at t = 57.6 s and again at 115.6 s, where `FlightController.UnderMapY` teleports it to
+its 1200 m spawn **setting no crash flag and writing no log line**, so the per-step `Crashed` check
+never fired. Those two jumps are the reported 3797 m worst and most of the 415 m mean, on a leg that
+plateaued at 254 m and never read above 470 m. The profile's holds are now named constants documented
+as ATTITUDES; a floor check fails the leg when an aircraft drops through the backstop; the undecoded
+400 m mean gate is replaced by a settled-window test bounded by the DECODED 700 m leash, which was
+not widened; and the scripted-leg A/B reads the commanded offset rather than the flown one, because
+the two legs enter formation by different routes and their weaves buried the decoded 26 m difference.
+No engine code changed and no goldens are affected.
+
+**Verified.** Run both ways. Reverting the `2f` factor alone makes the UNMODIFIED suite green and
+reproduces this branch's table to the metre (`player_pfighter` 256 m / 590 m, `player_bhawk`
+328 m / 584 m), so the plant change is the whole cause. With the profile flying the attitudes it
+names, `player_pfighter` reads 270 m mean, 199 m settled, 523 m worst and 1075 m lowest altitude
+against 256 m / 590 m before the merge, so station-keeping is unchanged across plants. The instrument
+still bites when it should: with A3's lift removed the campaign airframe fails at 428 m settled
+against a 409 m hold mean and the Bloodhawk outright at 2070 m. `dotnet test` 2342, the full battery
+114 passed 0 failed with errors clean. `docs/verification.md` gains INSTR-22 (the silent under-map
+teleport entering a distance statistic) and INSTR-23 (a deflection-second stick measuring the plant
+rather than the pilot).
+
+**The crux, answered.** The scripted stick was more aggressive than any human's, by a mechanism
+nobody chose: a 95° knife-edge bank held into a pull is not an input a player produces. The gates
+then measured something no flown session reaches, because the leader flew into the ground and the
+world teleported it home. The user's report of a wingman near them throughout is consistent with the
+code rather than in tension with it.
+
+⚠ **One number in A3's Verified prose no longer reproduces and must not be re-quoted:** with the
+re-authored profile the far-field plant is entered on 0 of 7199 steps on BOTH airframes, against
+A3's recorded 54.3 %. The plant is still ruled out at the image, so no conclusion changes, but the
+"far-field 26.8 % to 3.0 %" contrast belongs to the old profile.
 
 ## F57 ☐ The targeting readout drops the militia name (`BL-475`)
 

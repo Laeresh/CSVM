@@ -47,9 +47,34 @@ internal static class WingmanSuites
     // The flown leg's leash IS the join gate, because an escort that has never joined commands a
     // point 200 m above its leader and that is the reported symptom. ⚠ It is not an exit: the
     // formation state is never left once entered, so crossing this line matters at the FIRST join,
-    // not later. The mean allows for the gap the leader opens firewalling from its spawn lever.
+    // not later. It bounds the settled average below as well as the worst separation.
     private const float FlownLeashM = AiEscort.JoinRangeM;
-    private const float FlownMeanHoldM = 400f;
+
+    // The tail of the run the hold is judged as settled over. ⚠ The hold's own mean is not a
+    // property of station-keeping: the leader firewalls off its spawn lever and holds full throttle,
+    // so on one airframe leader and wingman share a top speed and a stern chase never closes, and
+    // what the wingman recovers is only however much corner the leader's turns offer it. The settled
+    // average against the hold's says the wingman is holding rather than leaving, which is the
+    // reported failure, and it does not move with the profile's turn budget.
+    private const float SettledWindowS = 30f;
+
+    // How long the leader's stick is held over to roll into each turn. ⚠ Authored for the BANK it
+    // reaches, about 45°, not for the deflection-seconds: the plant's roll rate is what converts one
+    // into the other, so a change to it moves this number. Held twice this long the leader rolls
+    // past 95°, and the pull that follows digs a knife-edge descent instead of a climbing turn.
+    private const float RollInS = 0.75f;
+
+    // The pull through each turn, and the climb/descent pair between them. Same rule as RollInS:
+    // these are the attitude change the leader is meant to fly, converted to a hold by the plant's
+    // own pitch rate.
+    private const float TurnPullS = 4f;
+    private const float ClimbPullS = 3f;
+
+    // The altitude both aircraft must stay above for the leg to mean anything. ⚠ Below
+    // FlightController's under-map backstop an aircraft is teleported to its spawn with no crash
+    // and no log, and the teleport lands in the separation statistic as a several-kilometre reading
+    // that no aeroplane flew. Fail on the descent instead of averaging the jump.
+    private const float FlownFloorM = 200f;
 
     internal static void WingmanStation(TestContext ctx)
     {
@@ -73,11 +98,11 @@ internal static class WingmanSuites
             var behindPlayer = FlyLeg(ctx, planesGamez, textures, stats, playerLeader: true);
             var withAi = FlyLeg(ctx, planesGamez, textures, stats, playerLeader: false);
 
-            // The A/B the two decoded stations predict: 18 m astern of a player against 8 m ahead
-            // of an AI, so the same wingman rides farther AFT behind a player leader. Both legs
-            // orbit the leader under the separation push, which is common to them and cancels.
+            // The A/B the two decoded stations predict: commanded 18 m astern of a player against
+            // 8 m ahead of an AI. ⚠ Off the COMMANDED point, never the flown one: the two legs
+            // weave around the push by different routes and the residual buries the 26 m.
             ctx.Check(behindPlayer.Z > withAi.Z,
-                $"a player leader's wingman rides aft of an AI leader's, its own decoded station: {behindPlayer.Z:0.0} m against {withAi.Z:0.0} m");
+                $"a player leader's wingman is commanded aft of an AI leader's, its own decoded station: {behindPlayer.Z:0.0} m against {withAi.Z:0.0} m");
         }
         finally
         {
@@ -165,16 +190,16 @@ internal static class WingmanSuites
     private static (FlightInput Input, float Duration)[] FlownLeaderProfile() => new[]
     {
         (new FlightInput { Throttle = 1f }, 20f),
-        (new FlightInput { Throttle = 1f, Roll = 0.6f }, 1.5f),
-        (new FlightInput { Throttle = 1f, Pitch = 0.35f }, 8f),
-        (new FlightInput { Throttle = 1f, Roll = -0.6f }, 1.5f),
+        (new FlightInput { Throttle = 1f, Roll = 0.6f }, RollInS),
+        (new FlightInput { Throttle = 1f, Pitch = 0.35f }, TurnPullS),
+        (new FlightInput { Throttle = 1f, Roll = -0.6f }, RollInS),
         (new FlightInput { Throttle = 1f }, 5f),
-        (new FlightInput { Throttle = 1f, Pitch = 0.15f }, 6f),
-        (new FlightInput { Throttle = 1f, Pitch = -0.15f }, 6f),
+        (new FlightInput { Throttle = 1f, Pitch = 0.15f }, ClimbPullS),
+        (new FlightInput { Throttle = 1f, Pitch = -0.15f }, ClimbPullS),
         (new FlightInput { Throttle = 1f }, 5f),
-        (new FlightInput { Throttle = 1f, Roll = -0.6f }, 1.5f),
-        (new FlightInput { Throttle = 1f, Pitch = 0.35f }, 8f),
-        (new FlightInput { Throttle = 1f, Roll = 0.6f }, 1.5f),
+        (new FlightInput { Throttle = 1f, Roll = -0.6f }, RollInS),
+        (new FlightInput { Throttle = 1f, Pitch = 0.35f }, TurnPullS),
+        (new FlightInput { Throttle = 1f, Roll = 0.6f }, RollInS),
         (new FlightInput { Throttle = 1f }, 0f),
     };
 
@@ -220,9 +245,10 @@ internal static class WingmanSuites
                 planeNode);
 
             float worst = 0f, meanRange = 0f, worstAbove = 0f, worstLeaderSpeed = 0f;
-            float farFastest = 0f, nearFastest = 0f;
+            float farFastest = 0f, nearFastest = 0f, lowest = float.MaxValue;
+            float settledRange = 0f;
             bool leftStation = false, everCrashed = false;
-            int samples = 0, farSteps = 0, allSteps = 0;
+            int samples = 0, settledSamples = 0, farSteps = 0, allSteps = 0;
             for (int i = 0; i < (int)(FlownRunS / StepDt); i++)
             {
                 live.SimStep(StepDt);
@@ -231,6 +257,7 @@ internal static class WingmanSuites
                 float range = wing.WorldPosition.DistanceTo(leader.WorldPosition);
                 worstLeaderSpeed = Mathf.Max(worstLeaderSpeed, leader.WorldVelocity.Length());
                 everCrashed |= wing.Crashed || leader.Crashed;
+                lowest = Mathf.Min(lowest, Mathf.Min(wing.WorldPosition.Y, leader.WorldPosition.Y));
                 allSteps++;
                 float wingSpeed = wing.WorldVelocity.Length();
                 if (wingPlant.FarFieldPlant)
@@ -254,19 +281,27 @@ internal static class WingmanSuites
                 meanRange += range;
                 worstAbove = Mathf.Max(worstAbove, wing.WorldPosition.Y - leader.WorldPosition.Y);
                 leftStation |= escort.State != EscortState.Station;
+                if (i * StepDt >= FlownRunS - SettledWindowS)
+                {
+                    settledSamples++;
+                    settledRange += range;
+                }
             }
 
             meanRange /= Mathf.Max(1, samples);
-            ctx.Note($"[flown {planeNode}] hold: mean {meanRange:0} m, worst {worst:0} m, worst above {worstAbove:0} m, leader peak {worstLeaderSpeed:0} m/s");
+            settledRange /= Mathf.Max(1, settledSamples);
+            ctx.Note($"[flown {planeNode}] hold: mean {meanRange:0} m, settled {settledRange:0} m, worst {worst:0} m, worst above {worstAbove:0} m, leader peak {worstLeaderSpeed:0} m/s, lowest {lowest:0} m");
             ctx.Note($"[flown {planeNode}] plant: far-field {farSteps} of {allSteps} steps ({100f * farSteps / Mathf.Max(1, allSteps):0.0}%), fastest far {farFastest:0.0} m/s, fastest near {nearFastest:0.0} m/s, ceiling {AiControlLaw.SpeedCeiling:0.0}, fd_speed {stats.FdSpeed:0.0}");
             ctx.Check(!everCrashed,
                 $"[flown leader] neither aircraft goes in over the {FlownRunS:0} s the leader is flown");
+            ctx.Check(lowest > FlownFloorM,
+                $"…neither drops through the under-map backstop, whose teleport would be read as separation: lowest {lowest:0} m of {FlownFloorM:0}");
             ctx.Check(!leftStation,
                 $"…the wingman never falls out of the formation state, which commands {AiEscort.LeaderOverflyM:0} m above the leader");
             ctx.Check(worst > 0f && worst < FlownLeashM,
                 $"…and stays with a leader flown on a human stick: worst {worst:0} m of {FlownLeashM:0}");
-            ctx.Check(meanRange < FlownMeanHoldM,
-                $"…averaging inside {FlownMeanHoldM:0} m: {meanRange:0} m");
+            ctx.Check(settledRange < FlownLeashM && settledRange <= meanRange,
+                $"…and settles rather than drifts away: last {SettledWindowS:0} s average {settledRange:0} m against the hold's {meanRange:0} m, both inside {FlownLeashM:0}");
         }
         finally
         {
@@ -276,7 +311,7 @@ internal static class WingmanSuites
         }
     }
 
-    // One leader/wingman pair, flown, reporting the wingman's mean offset in the leader's frame.
+    // One leader/wingman pair, flown, reporting the mean COMMANDED offset in the leader's frame.
     // The leader is scripted: no pilot at all and the stick centred, so it holds a straight course.
     // IsHumanPiloted on it is the one thing that picks which decoded station the wingman flies.
     private static Vector3 FlyLeg(TestContext ctx, GameZ planesGamez, TextureArchive textures,
@@ -396,7 +431,7 @@ internal static class WingmanSuites
             ctx.Check(farSamples > 0 && farStationError < 0.01f,
                 $"…commanding the decoded station whenever outside the 80 m push: {farSamples} samples, worst error {farStationError:0.000} m");
 
-            return mean;
+            return meanCommanded;
         }
         finally
         {

@@ -487,6 +487,23 @@ loss. What the engine renders was decodable from the authored constants + oscill
   whole of `BL-467`; bound, the same episode runs 4.43 s. The suite was also building a world with
   no `camera1` in it at all, so a suite over a subsystem must build the world the way the session
   that runs it does.
+- **INSTR-22** — **An aircraft that sinks below `FlightController`'s under-map backstop is teleported
+  to its spawn with no crash flag and no log line, so any distance a suite is accumulating swallows
+  the jump. Gate a flown leg on an altitude floor.** The backstop fires at y = 0 on a stage that has
+  no ground at all, `Crashed` is never set, and the reset is invisible to a `Crashed` check sampled
+  every step. Measured on `wingman-station`: the scripted leader descended through y = 0 twice in a
+  120 s run and reappeared at its 1200 m spawn, and those two jumps are the whole of a reported
+  3797 m worst separation and most of a 415 m mean, on a leg that plateaued at 254 m and never read
+  above 470 m while both aircraft were flying. INSTR-18 is the same failure at the altitude cap.
+- **INSTR-23** — **A scripted stick authored in deflection-seconds measures the plant, not the pilot:
+  when a plant's rate changes, the same script flies a different aeroplane.** Author such a profile
+  by the attitude each segment is meant to reach and re-derive the hold from the plant's own rate,
+  and say in the constant that this is what it is. Measured on `wingman-station`'s flown leader:
+  after the quaternion half-angle integration doubled every angular rate, its 1.5 s of 0.6 roll
+  reached 95° of bank rather than about 47°, so the 8 s pull that followed dug a knife-edge descent
+  instead of a climbing turn and put the leader into the ground. Nothing in the AI under test had
+  moved. The companion trap is the reverse read: a suite that goes red across a plant change is a
+  claim about the instrument until the instrument has been shown to still fly what it names.
 
 ## SRC — sources and documents
 

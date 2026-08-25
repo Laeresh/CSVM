@@ -2385,24 +2385,8 @@ usual.
   decoded station offsets or the 700 m join gate to close a visual gap; that would trade a confirmed
   decode for an impression. Footage-derived separation distances are inadmissible here
   (`docs/verification.md`), so the reference has to be the decode or the user's eye, not a measurement
-  off the film. *Cross-refs:* `BL-457`, `BL-474`, `BL-469`.
-
-- `BL-474` `[Bug]` **`wingman-station` fails under main's flight plant, and three of its gates are
-  red.** *Evidence:* the suite was authored against this branch's flight model and passes there; after
-  merging main's updated flight model it fails, on the same suite file byte for byte and the same
-  seed. On `player_pfighter` (the campaign's own airframe) this branch's plant reads a 296 m mean
-  separation without the `StationCeiling` lift and 256 m with it, while main's plant reads 1096 m and
-  415 m. The lift therefore does MORE work under main's plant, not less, cutting the escort's time on
-  the far-field plant from 26.8 % of steps to 3.0 %, which settles `BL-457`'s open question toward
-  keeping it. Nitro was ruled out as the cause by a runtime probe: `installed=False` on both rigs. The
-  suite's `worst` column is untrustworthy and should not be quoted (a sampled trace never exceeds
-  470 m); trust the mean. ⚠ Note the contrast this item has to explain: at the controls the wingman is
-  reported near the player throughout (`BL-473`), so either the scripted stick is more aggressive than
-  a human's or the gates measure something the flown case does not reach. *Fix shape:* decide whether
-  this is a regression in main's flight model that its owner should be told about, or a suite whose
-  gates were calibrated against a plant that no longer exists. Do not leave the suite red either way.
-  *⚠ Traps:* do not "fix" it by widening the gates until they pass; the gates encode the 700 m join
-  leash, which is decoded. *Cross-refs:* `BL-457`, `BL-473`.
+  off the film. *Cross-refs:* `BL-469`; `wingman-station`'s `settled` figure is the instrument,
+  199 m on `player_pfighter`, and the number this entry has to move.
 
 - `BL-476` `[Bug]` **A zeppelin carries no identity for its turrets or for a targeting bias.**
   The team and the wake-up seam this entry opened with are built (`ZeppelinRuntime.AuthoredTeam`,
