@@ -271,7 +271,82 @@ public class AiNetFollowerTests
         Assert.Null(AiNets.Resolve(nets, "12"));
     }
 
+    [Fact]
+    public void AnArmedStopPointHoldsTheWalkUntilTheScriptReleasesIt()
+    {
+        // C3/M01's shape: an open path whose middle node is stop point 1, armed in the file, and
+        // whose far end is armed under id 0 so nothing can ever release it.
+        var f = new AiNetFollower(StopPath(), new Random(1), observesStopPoints: true);
+        f.Update(Vector3.Zero);
+        Assert.Equal(0, f.CurrentIndex);
+        Assert.True(f.Update(f.CurrentTarget));
+        Assert.Equal(1, f.CurrentIndex);            // the armed stop point
+
+        Assert.False(f.Update(f.CurrentTarget));    // standing on it does not advance
+        Assert.True(f.Holding);
+        Assert.False(f.Update(f.CurrentTarget));
+        Assert.Equal(1, f.CurrentIndex);
+
+        Assert.Equal(1, f.SetStopPoint(1, false));  // COMPLETED_STOPPOINT [net, 1, 0]
+        Assert.False(f.Holding);
+        Assert.True(f.Update(f.CurrentTarget));
+        Assert.Equal(2, f.CurrentIndex);
+
+        // The far end is a terminal dock: armed, and its id 0 is the one the script side rejects.
+        Assert.False(f.Update(f.CurrentTarget));
+        Assert.True(f.Holding);
+        Assert.Equal(-1, f.SetStopPoint(0, false));
+        Assert.True(f.Update(f.CurrentTarget) == false && f.CurrentIndex == 2);
+    }
+
+    [Fact]
+    public void StopPointsAreReadableButInertOnAFollowerThatDoesNotObserveThem()
+    {
+        // Only the zeppelin follower reads the halt flag (FUN_004bf9d0); the aircraft one does not.
+        var f = new AiNetFollower(StopPath(), new Random(1));
+        Assert.False(f.ObservesStopPoints);
+        Assert.True(f.StopsAt(1));
+        Assert.Equal(1, f.StopPointNode(1));
+        var visited = Walk(f, 2);
+        Assert.Equal(new[] { 0, 1, 2 }, visited);
+        Assert.False(f.Holding);
+    }
+
+    [Fact]
+    public void AStopPointIdResolvesToTheFirstNodeCarryingIt()
+    {
+        // C2B's PirateZep1 puts one id on a run of eight nodes; the engine's scan takes its head.
+        var f = new AiNetFollower(RunPath(), new Random(1), observesStopPoints: true);
+        Assert.Equal(1, f.StopPointNode(5));
+        Assert.Equal(-1, f.StopPointNode(4));
+        Assert.Equal(1, f.SetStopPoint(5, true));
+        Assert.True(f.StopsAt(1));
+        Assert.False(f.StopsAt(2));
+    }
+
+    [Fact]
+    public void ANodeDecodesItsFourOptionalFieldsPositionally()
+    {
+        Assert.Equal(0, Node(0f, 0f).StopPointId);
+        Assert.False(Node(0f, 0f).StopsHere);
+        Assert.Equal(-1, Node(0f, 0f).DangerZonePath);
+
+        var stop = Tagged(3f, 1f);
+        Assert.Equal(3, stop.StopPointId);
+        Assert.True(stop.StopsHere);
+        Assert.False(stop.EntersDangerZone);
+        Assert.Equal(-1, stop.DangerZonePath);
+
+        var dz = Tagged(0f, 0f, 1f, 34f);   // the shipped shape on M4MilesRun
+        Assert.Equal(0, dz.StopPointId);
+        Assert.False(dz.StopsHere);
+        Assert.True(dz.EntersDangerZone);
+        Assert.Equal(34, dz.DangerZonePath);
+    }
+
     private static AiNetNode Node(float x, float z) => new(new Vector3(x, 400f, z), Array.Empty<float>());
+
+    private static AiNetNode Tagged(params float[] tags) => new(new Vector3(0f, 400f, 0f), tags);
 
     // A 4-node square loop, 0-1-2-3-0. Edge (0,3) closes it, so a directed reading
     // would dead-end; the undirected walk is what carries the lap.
@@ -305,6 +380,35 @@ public class AiNetFollowerTests
         },
         Edges = new[] { (0, 1), (1, 2), (2, 3), (0, 3) },
         Trailer = new AiNetTrailer(4, "player"),
+    };
+
+    // An open 3-node path whose middle node is stop point 1 (armed) and whose far end is armed
+    // under the unaddressable id 0 — C3/M01's M1PirateZep in miniature.
+    private static AiNet StopPath() => new()
+    {
+        Id = 11,
+        Name = "TestStops",
+        Nodes = new[]
+        {
+            Node(0f, 0f),
+            new AiNetNode(new Vector3(1000f, 400f, 0f), new[] { 1f, 1f }),
+            new AiNetNode(new Vector3(2000f, 400f, 0f), new[] { 0f, 1f }),
+        },
+        Edges = new[] { (0, 1), (1, 2) },
+    };
+
+    // One stop-point id spread over a RUN of nodes, the C2B PirateZep1 shape.
+    private static AiNet RunPath() => new()
+    {
+        Id = 12,
+        Name = "TestRun",
+        Nodes = new[]
+        {
+            Node(0f, 0f),
+            new AiNetNode(new Vector3(1000f, 400f, 0f), new[] { 5f, 0f }),
+            new AiNetNode(new Vector3(2000f, 400f, 0f), new[] { 5f, 0f }),
+        },
+        Edges = new[] { (0, 1), (1, 2) },
     };
 
     // A hub with three spokes: node 0 connects to 1, 2 and 3 (the branch case).

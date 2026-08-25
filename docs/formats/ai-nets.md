@@ -5,7 +5,8 @@ original's AI flies: waypoint sets with an **explicit edge list**, referenced by
 AI-consuming reader family. Engine reader: `CSVM/src/Mech3/AiNets.cs`; the
 `--debug-ainets` overlay (F13) renders them, and `CSVM/src/Flight/AiNetFollower.cs`
 flies them as a patrol behaviour (`--ai=<plane>:<net>`), traversal along the edge list, an anchored
-trailer ridden (`BL-377`), per-node tags preserved unacted-on.
+trailer ridden (`BL-377`), stop points held and released. `CSVM/src/Session/ZeppelinRuntime.cs`
+is the `COMPLETED_STOPPOINT` consumer; a node's danger-zone fields are preserved unacted-on.
 
 ## Archive locations
 
@@ -115,72 +116,88 @@ there while zeroing every neighbouring field. Whether element 1 is that field or
 simply never deserialised does not change the value in play: **the floor is 10 m on all 222
 shipped nets**, which is what a port needs.
 
-### NODES — `[x, y, z]` (+ optional tags)
+### NODES — `[x, y, z]` (+ four optional fields)
 
 World-space positions in the standard frame (right-handed Y-up, metres —
 [gotchas.md](gotchas.md)). **2,268 nodes** install-wide; 2–44 per net, median 8.
 
-A node list may carry extra numbers past `z`: **81 nodes carry two extra values and 12
-carry four**. These per-node tags are **undecoded**; the design describes stop/valve
-nodes on patrol routes (zeppelins halt at script-armed stop nodes), and these tags are
-the obvious candidate. Read them raw; do not interpret. ⚠ The two widths are **two different
-systems on disjoint sets of nets** — see [below](#the-tags-are-two-systems-not-one).
+A node list may carry up to four more numbers past `z`: **81 nodes carry two and 12 carry four**.
+They are **four independent optional fields**, not two competing tag shapes, and the deserialiser
+reads them positionally behind one element-count test each (`FUN_004304a0`, reached from the net
+table's build through the loader's vtable slot `+0x8`; it widens every node into a 24-byte runtime
+record):
 
-**Stop points are real, and they are scripted.** The binary's mission-script vocabulary
-(`D:\zipper\Crimson\mission.cpp`) includes a **`COMPLETED_STOPPOINT`** condition, in the same
-family as `COMPLETED_ZEPCANNONS` and `COMPLETED_SOUND_GROUP` — so a mission waits on a zeppelin
-reaching its stop point, exactly as the design describes. That raises the confidence that the
-per-node tags above encode stop points, but it does **not** decode them: nothing yet ties a
-specific tag value to the condition. Still a lead, not a finding.
+| Element | Node record | Meaning |
+|---|---|---|
+| 3 | `+0x0c` int, default 0 | **stop-point id**; 0 means "no stop point" |
+| 4 | `+0x10` bool, default false | **halt flag** — a zeppelin arriving here stops |
+| 5 | `+0x11` bool, default false | **danger-zone flag** — reaching here starts a `dzpath` run |
+| 6 | `+0x14` int, default −1 | the `dzpathN` index that run uses |
 
-#### The tags are two systems, not one
+The two widths shipped are therefore fields 3–4 (a zeppelin stop point) and fields 3–6 with 3–4
+zeroed (a danger-zone entry). Nothing ships a node authoring both.
 
-**40 nets of 222 carry tagged nodes**, and cross-referencing them against `neindex` names, the
-`zeppelins.json` `net` field, and each node's degree in the edge list splits them cleanly:
+#### Stop points: `COMPLETED_STOPPOINT` writes the halt flag
 
-| Shape | Nets | Which nets | Value pattern |
-|---|---|---|---|
-| **A — 2 extras** `[a, b]` | 36 | **zeppelin routes, exclusively** | `b ∈ {0,1}`, `a ∈ 0…8` |
-| **B — 4 extras** `[0, 0, 1, N]` | 4 | stunt / cinematic / escort routes | `N ∈ 1…10, 33, 34` |
+`COMPLETED_STOPPOINT` is **not a condition** and a mission never waits on one. It is an action a
+mission runs when an objective **completes**, in the same block as `SET_AI_NET` and
+`COMPLETED_ZEPCANNONS` (`FUN_0046a490`, the objective-completion pass). Its clause is
+`[netName, id, flag]` — the loader stores three words per clause, a `strdup`'d name, an **int** and
+a **bool** (`FUN_00466b70`) — and the handler (`FUN_0046a0d0`) resolves the net by name, requires
+`id > 0`, finds the node by id (`FUN_004319a0`) and writes the flag onto that node's `+0x10`
+(`FUN_004319d0`). So the file's flag is only the net's **initial** state; the script owns it
+afterwards.
 
-⚠ **Do not read the two shapes as one optional-length field.** They occur on disjoint net
-populations and almost certainly belong to different subsystems.
+Only the **zeppelin** follower reads it (`FUN_004bf9d0`), and it reads two nodes at once:
 
-**Shape A is a zeppelin feature.** All 36 are zeppelin routes by name; 31 are directly referenced by
-a `zeppelins.json` `net`, and the remaining five are unreferenced alternates or variants sitting
-beside referenced twins (`M1Cargo` beside `M1CargoAlt`, `SwanZep2` beside `SwanZep1`, plus
-`Gemini1`, `M5Bombrun`, `M4PZRetreat`). Nothing that a fighter flies carries a shape-A tag. That is
-exactly what the stop-point reading predicts, and it is the strongest evidence yet for it.
+- the node it currently sits on halts → hold station: desired pitch 0, heading kept, throttle 0
+  (`FUN_004bf500`);
+- else the node ahead halts → approach it, at full speed until 250 m out and then linearly down to
+  zero, holding position inside 30 m (`FUN_004bf360`);
+- else fly the leg normally.
 
-Structure within shape A:
+The aircraft follower (`FUN_0041d1f0`) never looks at the halt flag. It reads fields 5 and 6
+instead: on arriving at a node whose danger-zone flag is set it starts `dzpath%d` from field 6, or
+the unnumbered run when field 6 is negative.
 
-- **`b` is a flag, and it is not graph topology.** It appears on both degree-1 and degree-2 nodes,
-  so it does not mean "end of the path" — the edge list already says that. It concentrates on a
-  net's **first and/or last** node, with long runs of `b = 0` between.
-- **`a` is a small id allocated sequentially per chapter, across files.** C5's three cargo routes
-  make this plain: `M3Cargo1` uses 1 and 2, `M3Cargo2` uses 3 and 4, `M3Cargo3` uses 5 and 6 — a
-  chapter-wide counter, not a per-net index. `a = 0` recurs on terminal nodes.
+**The lookup takes the FIRST node carrying the id**, which is why a run of nodes may share one:
+`C2B`'s `PirateZep1` puts id 5 on eight consecutive nodes, and `COMPLETED_STOPPOINT
+["PirateZep1", 5, 1]` arms the head of that run.
 
-Worked shape — `C5` `M3Cargo2`, 9 nodes:
+Census against the shipped scripts: **23 `COMPLETED_STOPPOINT` clauses across 11 missions, naming
+14 nets. Every one resolves to a node by id — none is dangling — and 20 of the 23 change the flag
+the file authored**; the three that restate it (`C1B/M03`'s `Vostok1` id 1 and `Klondike1` id 6,
+`C5/M03`'s `M3Cargo3` id 5) all write 0 over a 0. The scripts write `flag = 0` 19 times and
+`flag = 1` 4 times, so releasing a docked airship is the common case and arming a fresh stop
+mid-route is the rare one.
+
+The tagged population, and why it is a zeppelin feature: **40 nets of 222 carry tagged nodes** — 36
+with stop points and 4 with danger-zone entries, on disjoint nets. All 36 are zeppelin routes by
+name; 31 are directly referenced by a `zeppelins.json` `net`, and the remaining five are
+unreferenced alternates beside referenced twins (`M1Cargo` beside `M1CargoAlt`, `SwanZep2` beside
+`SwanZep1`, plus `Gemini1`, `M5Bombrun`, `M4PZRetreat`). Nothing a fighter flies carries one. Of
+the 81 tagged nodes, **27 carry id 0 and 54 a real id; 49 ship armed and 32 clear**.
+
+**Ids are allocated per CHAPTER across files, not per net**, so they collide between nets and are
+meaningful only together with the net name the clause carries. C5's three cargo routes show the
+counter plainly: `M3Cargo1` uses 1 and 2, `M3Cargo2` 3 and 4, `M3Cargo3` 5 and 6.
+
+Worked route — `C3/M01`, the mission this was decoded for. `piratezep` spawns at
+`(-1401, 500, -1413)`, which is `M1PirateZep`'s node 0, and the net is an open 8-node path:
 
 ```
-node 0  [3, 1]      node 1–7  [4, 0]      node 8  [0, 1]
+node 0  (spawn)   node 2  [1, 1]  ← armed, stop point 1   node 7  [0, 1]  ← armed, id 0
 ```
 
-**Two readings survive this evidence and the data cannot choose between them:** `a` is a
-*stop-point id* with `b` marking a halt, or `a` is a *segment id* with `b` marking a segment
-boundary. Both fit every net. Settling it needs the runtime parser.
+It flies out to node 2 and docks there. `OBJECTIVE12` and `OBJECTIVE13` each carry
+`COMPLETED_STOPPOINT [["M1PirateZep", 1, 0]]`, so completing either releases it; it then runs the
+rest of the path and halts for good at node 7, whose id 0 no clause can ever address. `C1/M04` is
+the same shape one step earlier: its `piratezep` spawns ON node 0, which is itself stop point 1 and
+armed, so that PANDORA starts docked and the script launches it.
 
-**Shape B is not a zeppelin thing at all.** It occurs on exactly four nets — `M3StuntCourse` (7
-tagged nodes, distinct `N`), `M1FilmShot` (3), `M1Cabbie` (1), `M4MilesRun` (1) — i.e. the stunt
-course, a camera/cinematic route, and two escort routes. The constant `0, 0, 1` prefix plus a
-varying `N` reads as a reference to some other table by id. Related to the Danger Zone / stunt
-gate system ([missions.md](missions.md)) rather than to `COMPLETED_STOPPOINT`.
-
-⚠ **The runtime parser has not been located.** The only code in `crimson.exe` that names
-`ne%06d.zrd` is the editor's text-file I/O and a debug dump routine, so the string-search route does
-not reach the shipped loader. Until it is found, the above is *structure*, not *meaning*: read the
-tags raw, preserve them, and do not act on either reading.
+⚠ **An armed node with id 0 is a terminal dock.** `id > 0` is the script side's own gate, so a
+zeppelin that reaches one stays there for the rest of the mission. That is what ends an open path,
+which is why the shipped routes do not need to be loops.
 
 Two neighbouring script ops retarget net-followers at runtime — **`SET_AI_NET`** (accepts a vehicle
 *or* a zeppelin) and **`SET_AI_TEAM`** — which is the design's "retreat is expressed as a net

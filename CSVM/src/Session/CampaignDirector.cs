@@ -807,9 +807,20 @@ public sealed class CampaignDirector
 
         public void CompletedStoppoint(IReadOnlyList<(string Net, int Stop, int Flag)> entries)
         {
-            if (entries.Count > 0)
+            if (entries.Count == 0)
             {
-                _owner.Gap("COMPLETED_STOPPOINT", $"net '{entries[0].Net}' has no live stop-point state");
+                return;
+            }
+
+            if (_in.Zeppelins is not { } zeppelins)
+            {
+                _owner.Gap("COMPLETED_STOPPOINT", "no zeppelin runtime in this session");
+                return;
+            }
+
+            foreach (var (net, stop, flag) in entries)
+            {
+                zeppelins.SetStopPoint(net, stop, flag != 0);
             }
         }
 

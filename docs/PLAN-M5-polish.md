@@ -110,7 +110,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 56. ☑ `wingman-station` is red under main's flight plant (`BL-474`)
 57. ☑ The targeting readout drops the militia name (`BL-475`)
 58. ☑ Alpha-cutout geometry is solid to weapon rays (`BL-477`)
-59. ◐ A net has no stop-point state, so the PANDORA never halts (`BL-478`)
+59. ☑ A net has no stop-point state, so the PANDORA never halts (`BL-478`)
 
 **Everything open is now either in flight or queued behind a stated blocker.** The exceptions are
 D33, which waits on D32 and F54 for the reason F54 gives, B14 and D31, which run behind B13 in one
@@ -1666,7 +1666,7 @@ rather than more decode.** The shot may have been beyond 800 m, where the origin
 `f_mid`/`f_lo` whose cards are ±28.3 m of local x against `f_hi`'s ±48.9 m; or the difference is in
 aim assist and target selection rather than in the ray.
 
-## F59 ☐ A net has no stop-point state, so the PANDORA never halts (`BL-478`)
+## F59 ☑ A net has no stop-point state, so the PANDORA never halts (`BL-478`)
 
 **Goal.** An answer: what a net node's shape-A tag means. Then, if it is settled, a zeppelin that
 stops where its mission expects it.
@@ -1693,3 +1693,38 @@ preserved unacted-on (`Flight/AiNetFollower.cs:13`), the condition is parsed and
 not meaning, that two readings both fit every net, and that the runtime parser is not located.
 Implementing "halt at tagged node" today would be inventing content, and it would move where the
 mission's docking happens.
+
+**Landed.** ⚠ **The parser the format page said was missing is located, and the reading is settled at
+the image rather than by the census.** `FUN_004311c0` reaches it through the loader's vtable at
+`0x006046fc` slot `+0x8`: `FUN_004304a0`, the shipped net deserialiser, which had no Ghidra function
+and was created at that address. It widens each node into a 24-byte record and reads four optional
+fields POSITIONALLY, each behind one element-count test: a stop-point id at `+0x0c` (0 = none), a
+halt flag at `+0x10`, a danger-zone flag at `+0x11`, and a `dzpathN` index at `+0x14` (default −1).
+**So "shape A" and "shape B" are the same four fields, not two subsystems.** The rival reading is
+refuted: `COMPLETED_STOPPOINT` resolves the net by name, requires `id > 0`, finds the node BY ID
+(`FUN_004319a0`, first match) and WRITES the flag onto that node's halt byte (`FUN_004319d0`), and a
+boundary flag is not a settable byte addressed by id. Only the zeppelin follower reads it
+(`FUN_004bf9d0`: hold on an armed node, full speed until 250 m along-facing then a linear ramp to
+zero, park inside 30 m); the aircraft follower reads the danger-zone fields instead, which decodes
+shape B as a bonus. `AiNetFollower` carries the live flags, ⚠ gated on an `observesStopPoints` flag
+defaulted OFF because only the zeppelin follower reads them in the original.
+
+⚠ **This item corrects its own Evidence paragraph above.** `COMPLETED_STOPPOINT` is not a condition:
+it runs in the objective COMPLETION pass, where `ObjectiveGraph.RunCompletionActions` already had it
+and where `docs/formats/objectives.md` already said it belongs. `OBJECTIVE12` and `OBJECTIVE13` do
+not complete ON it; they complete by other means and then RELEASE the airship.
+
+**Verified.** Census over all 8 chapters and 53 mission scripts: 23 `COMPLETED_STOPPOINT` clauses in
+11 missions naming 14 nets, all 23 resolving to a node by id with none dangling, and 20 of 23
+flipping the flag the file authored (the 3 that restate it all write 0 over 0). The flag is cleared
+19 times and set 4, so releasing a docked airship is the normal case. 40 of 222 nets carry node
+fields: 36 stop-point nets, all zeppelin routes and none a fighter flies, and 4 danger-zone nets,
+the two sets disjoint; the 11 `dzpathN` indices they name all exist in their chapter's `dzones.zrd`.
+Every zeppelin record checked spawns on its net's node 0, and C1/M04's node 0 IS stop point 1 armed,
+so that PANDORA starts DOCKED and the script launches it. C3/M01's docks at node 2, is released by
+`OBJECTIVE12`/`OBJECTIVE13`, then halts for good at node 7 under id 0, which no clause can address:
+that is how an open path ends, and why our reversal at the degree-1 end was wrong. `zeppelin-motion`
+flies C1/M04's own record through dock, release, traverse and terminal dock, and passes on the merged
+tree with errors clean. Five unit tests pin the field decode, the hold and release, the first-match
+id lookup, the inert aircraft case and the 250 m ramp. The three-part `CampaignDirector` and
+`GameSession` handover was applied at merge, so `COMPLETED_STOPPOINT` stops logging its gap.

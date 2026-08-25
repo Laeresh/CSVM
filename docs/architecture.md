@@ -2096,6 +2096,12 @@ positions in, target node out; its two consumers are `AiPilot.Patrol` (aircraft)
 the leg's horizontal length, floored at 10 m (`docs/org/aiPilot.md`) — so a vehicle that cannot
 turn tightly enough flows past its node instead of orbiting a capture sphere it never enters.
 A zeppelin raises that floor to clear its own turning circle, which is invented and only a floor.
+Also holds a net's live STOP-POINT flags, seeded from the file and rewritten by
+`COMPLETED_STOPPOINT` through `SetStopPoint`: an armed node is never advanced past, and once the
+walk is inside 30 m of it (`StopPointHoldM`, the zeppelin follower's own hold distance, not the
+leg's arrival radius) `Holding` goes true. ⚠ Off by default — `observesStopPoints` is set only by
+`ZeppelinRuntime`, because only the zeppelin follower reads the flag; the aircraft one reads a
+node's danger-zone fields instead (`docs/formats/ai-nets.md`).
 Pinned by `AiNetFollowerTests` + the `ai-net-follow` suite.
 
 ## src/Flight/ZeppelinBroadside.cs
@@ -2123,7 +2129,10 @@ The kinematic zeppelin motion law (M4 F17): flies a `ZeppelinDef` along its net 
 `AiNetFollower`, forward-only along the facing (the design's "require forward motion to turn,
 never bank"), yaw/pitch rate-limited by the record's `max_rate_*` with `accel_*` ramp-in, speed
 by `max_accel` toward `max_speed`, commanded pitch clamped to the record's ±30° band. Pure
-state — no Node, no flight model; `ZeppelinRuntime` writes the pose onto the world node. Pinned
+state — no Node, no flight model; `ZeppelinRuntime` writes the pose onto the world node.
+The stop-point half is the decoded approach: full speed until the along-facing range to an armed
+node falls under 250 m, then linearly down to zero, and once the follower is `Holding` a level
+station-keep (pitch 0, heading kept, speed 0). Pinned
 by `ZeppelinMotionTests` + the `zeppelin-motion` suite.
 
 ## src/Flight/AiPilot.cs
@@ -4751,13 +4760,15 @@ Which directives reach the engine today: `INACTIVEn` (node visibility, the decod
 `ANIM_STATE` (`AnimRuntime.AnimStateOf`), the node form of `TRAVELERS`, `WAKEUP_TURRETS` /
 `WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
 (`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM`, both sound-group directives through
-`MissionRadio`, falling through to `WorldSounds.PlayOneShot` for a cue the radio does not own, and
+`MissionRadio`, falling through to `WorldSounds.PlayOneShot` for a cue the radio does not own,
 `STOP_QUEUED_SOUNDS` through `MissionRadio.Cancel`, `START_TAXI` through the director's own
-`ScriptedPathVehicles` registry (`Paths`), which it also steps beside the graph, and, over the
-spawned roster, `DEDG` (`GroupLiveCount`: not-crashed members of the block group, a parked one
-counting as alive) and `WAKEUP_ENEMIES`, one directive over two deactivated flags: an inert named
-aircraft re-activated at its spawn pose, or a dormant `ZeppelinRuntime` record put into the world.
-The rest (the group form of `TRAVELERS`, `SET_AI_*`, `WARP_VEHICLE`, `COMPLETED_STOPPOINT`), the
+`ScriptedPathVehicles` registry (`Paths`), which it also steps beside the graph,
+`COMPLETED_STOPPOINT` through `ZeppelinRuntime.SetStopPoint` (it arms or releases one stop point of
+a named net, and the airship holds or leaves), and, over the spawned roster, `DEDG`
+(`GroupLiveCount`: not-crashed members of the block group, a parked one counting as alive) and
+`WAKEUP_ENEMIES`, one directive over two deactivated flags: an inert named aircraft re-activated at
+its spawn pose, or a dormant `ZeppelinRuntime` record put into the world.
+The rest (the group form of `TRAVELERS`, `SET_AI_*`, `WARP_VEHICLE`) and the
 untraced `COMPLETED_ZEPCANNONS` reader are NAMED no-ops, each logged once per kind. ⚠ Never turn one of those into an invented
 behaviour: the missing consumer is the finding.
 `BuildRoster(RosterInputs)` is the roster phase, called by `GameSession` right after
@@ -4867,8 +4878,14 @@ hook returning null (the wave has nothing parked left) is accounted exactly like
 Runs a mission's zeppelins (M4 F17 motion + F18 damage + F19 broadside, behind
 `--zeppelins`): each
 `ZeppelinDef` whose world node and net resolve gets a `ZeppelinMotion` on B5's `AiNetFollower`
-(arrival radius widened per record to clear the turning circle), is placed at its authored
-position/yaw/pitch, and the NODE is flown kinematically — no FlightController. `WireDamage`
+(arrival radius widened per record to clear the turning circle, and the only follower that
+observes stop points), is placed at its authored
+position/yaw/pitch, and the NODE is flown kinematically — no FlightController.
+`SetStopPoint(net, id, halts)` is the whole of `COMPLETED_STOPPOINT`: it arms or releases one stop
+point on every follower flying that net, so an airship spawned on an armed node sits docked until
+the objective that owns it completes. ⚠ The original keeps the flag on the shared net record rather
+than per vehicle; no shipped mission puts two zeppelins on one net, so the readings do not
+separate. `WireDamage`
 builds the F18 zones over the world registry: gasbags/`cannon_health` cannons seeded from the
 RECORD where authored (record hp beats a def pool via `Instance.Reseed`; a fresh pool registers
 on the record's destroy-anim def, so zero-HP death plays the authored destruction), engines and

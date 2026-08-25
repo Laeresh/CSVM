@@ -476,17 +476,19 @@ public static class SuiteCatalog
             + "plays the dead pilot's own death cry through the force flag while an unforced "
             + "dispatch on the same dead speaker stays silent", AiVoice));
         into.Add(new TestHarness.Suite("ai-net-follow",
-            "net following (B5): a real chapter net resolves by id and by name, its tags ride " +
-            "along unacted-on, and an AI plane with a net-following pilot captures node after " +
+            "net following (B5): a real chapter net resolves by id and by name, its node fields " +
+            "ride along inert on an AIRCRAFT walk, and an AI plane with a net-following pilot captures node after " +
             "node with every hop an EDGE of the graph, never node order. Then the same net, " +
             "anchored (BL-377), rides its target 6 km east and the plane laps the MOVED ring at " +
             "its authored altitude, never seating on the edgeless anchor node", AiNetFollow));
         into.Add(new TestHarness.Suite("zeppelin-motion",
             "zeppelin motion (F17): C1/M04's piratezep record loads, its world node is placed at " +
-            "the authored pose and flown along PirateZep1 between manual sim steps — every hop an " +
-            "EDGE, displacement never over max_speed·dt, the route's raw shape-A tags acted on by " +
-            "NOTHING (stop nodes undecoded) — total engine loss decelerates it to a stop through " +
-            "the decoded sqrt curve, and a deactivated record is placed but held", ZeppelinMotionSuite));
+            "the authored pose, which is PirateZep1's node 0 and an ARMED stop point, so it sits " +
+            "docked until SetStopPoint releases stop-point id 1 — then flown between manual sim " +
+            "steps (every hop an EDGE, displacement never over max_speed·dt) until the route's " +
+            "far end, armed under the unaddressable id 0, docks it for good; total engine loss " +
+            "decelerates it to a stop through the decoded sqrt curve, and a deactivated record " +
+            "is placed but held", ZeppelinMotionSuite));
         into.Add(new TestHarness.Suite("zeppelin-launch",
             "zeppelin fighter launch (F20): C1/IA1's zeppelin-launch generator authors the " +
             "decoded shape (cargobay origin, −90° drop, mp1 door anims — both shipped as " +

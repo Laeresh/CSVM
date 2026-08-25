@@ -57,7 +57,7 @@ public sealed partial class ZeppelinRuntime : Node
             float turnCircle = def.MaxSpeed / Mathf.Max(Mathf.DegToRad(def.MaxRateYawDeg), 1e-3f);
             float arrival = 1.5f * turnCircle;
             var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai), arrival,
-                trailerTarget?.Invoke(net));
+                trailerTarget?.Invoke(net), observesStopPoints: true);
             var motion = new ZeppelinMotion(def, follower);
             Place(host, motion.Position, motion.YawRad, motion.PitchRad);
             _live.Add(new LiveZeppelin(def, motion, host));
@@ -140,6 +140,35 @@ public sealed partial class ZeppelinRuntime : Node
         SetDormancy(zep, false);
         GD.Print($"zep: '{zep.Def.Node}' woken by the mission script — motion, damage and targeting live");
         return true;
+    }
+
+    /// <summary>What <c>COMPLETED_STOPPOINT</c> does: arms or disarms one stop point of the net
+    /// <paramref name="netName"/> names, for every zeppelin flying it. Returns how many followers
+    /// carried the id. The original writes the flag on the shared net record rather than per
+    /// vehicle, but no shipped mission puts two zeppelins on one net, so the two readings are
+    /// indistinguishable in this install.</summary>
+    public int SetStopPoint(string netName, int stopPointId, bool halts)
+    {
+        int hit = 0;
+        foreach (var zep in _live)
+        {
+            var follower = zep.Motion.Follower;
+            if (!follower.Net.Name.Equals(netName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            int node = follower.SetStopPoint(stopPointId, halts);
+            if (node < 0)
+            {
+                GD.Print($"zep: stop point {stopPointId} of '{netName}' addresses no node — " +
+                         $"'{zep.Def.Node}' unchanged");
+                continue;
+            }
+            hit++;
+            GD.Print($"zep: '{zep.Def.Node}' stop point {stopPointId} of '{netName}' " +
+                     $"{(halts ? "armed" : "released")} at node {node}");
+        }
+        return hit;
     }
 
     /// <summary>Current surviving healthy-entry count, or -1 for an unknown/unwired node.</summary>
@@ -296,7 +325,8 @@ public sealed partial class ZeppelinRuntime : Node
                     var p = zep.Motion.Position;
                     GD.Print($"zep: '{zep.Def.Node}' at ({p.X:0},{p.Y:0},{p.Z:0}) " +
                              $"speed {zep.Motion.Speed:0.#}/{zep.Motion.EffectiveMaxSpeed:0.#} m/s " +
-                             $"toward node {zep.Motion.Follower.CurrentIndex}");
+                             $"toward node {zep.Motion.Follower.CurrentIndex}" +
+                             (zep.Motion.Follower.Holding ? " — holding on its stop point" : ""));
                 }
             }
             PollDamage(zep);

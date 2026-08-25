@@ -161,6 +161,63 @@ public class ZeppelinMotionTests
         }
     }
 
+    [Fact]
+    public void AnArmedStopPointBringsTheZeppelinDownToAHoldOnTheNode()
+    {
+        // A straight 4 km run to an armed stop point: the throttle rides max until 250 m out,
+        // ramps down through it, and the hull parks on the node rather than flowing past it.
+        var def = Def();
+        var net = new AiNet
+        {
+            Id = 1,
+            Name = "TestNet",
+            Nodes = new[]
+            {
+                new AiNetNode(new Vector3(0f, 400f, 0f), Array.Empty<float>()),
+                new AiNetNode(new Vector3(0f, 400f, -4000f), new[] { 1f, 1f }),
+            },
+            Edges = new[] { (0, 1) },
+        };
+        var m = new ZeppelinMotion(def, new AiNetFollower(net, new Random(1), 250f,
+            observesStopPoints: true));
+
+        float atFullSpeed = 0f;
+        for (int i = 0; i < 60 * 900 && !m.Follower.Holding; i++)
+        {
+            m.Step(Dt);
+            float range = (m.Follower.CurrentTarget - m.Position).Length();
+            if (range > 400f)
+            {
+                atFullSpeed = m.Speed;
+            }
+            else if (range is > 60f and < 200f)
+            {
+                Assert.InRange(m.Speed, 0f, m.EffectiveMaxSpeed * 0.85f);
+            }
+        }
+
+        Assert.Equal(15f, atFullSpeed, 1);   // untouched outside the ramp
+        Assert.True(m.Follower.Holding);
+        Assert.InRange((m.Follower.CurrentTarget - m.Position).Length(), 0f,
+            AiNetFollower.StopPointHoldM);
+
+        // Held: the last of the speed bleeds off, then it stays put and levels off, and the
+        // walk never advances.
+        for (int i = 0; i < 60 * 60; i++)
+        {
+            m.Step(Dt);
+        }
+        Assert.Equal(0f, m.Speed);
+        var parked = m.Position;
+        for (int i = 0; i < 60 * 60; i++)
+        {
+            m.Step(Dt);
+        }
+        Assert.InRange(parked.DistanceTo(m.Position), 0f, 0.01f);
+        Assert.Equal(0f, m.PitchRad, 3);
+        Assert.Equal(1, m.Follower.CurrentIndex);
+    }
+
     private static ZeppelinDef Def(float yawDeg = 0f, float pitchDeg = 0f) => new()
     {
         Node = "testzep",

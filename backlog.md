@@ -2311,25 +2311,6 @@ usual.
   through to is `BL-407`'s question. *Cross-refs:* `BL-407` (the structure hostility fall-through,
   still open and still the cause of the reported Kestrel symptom), `docs/org/targeting.md`.
 
-- `BL-478` `[Research]` **`COMPLETED_STOPPOINT` has no net stop-point state, so the PANDORA never
-  halts and shuttles its route forever.** *Evidence:* raised as a question at the controls, whether
-  the airship moves during the last objective. It does, and the data says so three ways: C3/M01's
-  `zeppelins.zrd` gives `piratezep` `net "M1PirateZep"` with `max_speed 20.0`, `C3/zrdr/neindex.zrd`
-  maps that to net id 2, and `ne000002.zrd` is an open 8-node path at y = 500 running about 9 km
-  southwest from the spawn position, which is net node 0. The mission depends on that motion: both
-  `OBJECTIVE12` and `OBJECTIVE13` complete on `COMPLETED_STOPPOINT [["M1PirateZep", 1, 0]]`, and
-  OBJECTIVE13 is the objective that hands the player the dock target. No anim moves it; the motion is
-  the net. Ours flies it (`ZeppelinRuntime.cs:45-63`, `:221-242`) but never halts it: per-node tags are
-  preserved unacted-on (`Flight/AiNetFollower.cs:13`), `COMPLETED_STOPPOINT` is parsed and dispatched
-  (`ObjectiveScript.cs:167`, `ObjectiveGraph.cs:572`) but `CampaignDirector.cs:788-794` logs an
-  explicit `Gap("COMPLETED_STOPPOINT", "net '...' has no live stop-point state")`, and on an open path
-  `AiNetFollower.Update` (`:167-174`) reverses at the degree-1 end. *Fix shape:* a decode, then a
-  stop-point state on `AiNetFollower`. *⚠ Traps:* `docs/formats/ai-nets.md:118-183` is explicit that
-  the shape-A node tags are structure and not meaning, and that two readings (stop-point id plus halt
-  flag, versus segment id plus boundary flag) both fit every net, with the runtime parser not yet
-  located. Implementing "halt at tagged node" today would be inventing content, and it would also
-  change where the mission's docking happens. *Cross-refs:* `BL-472` (the dock marker on this moving
-  airship).
 
 - `BL-469` `[Feature]` **An escort cannot hold station on a leader using nitro, and nothing measures
   the case.** *Evidence:* the two injectors are independent switches, so the asymmetry is reachable

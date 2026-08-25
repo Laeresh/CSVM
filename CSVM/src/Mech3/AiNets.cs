@@ -7,10 +7,33 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>One waypoint of a patrol net: a world position plus the raw per-node tag numbers.
-/// Tags are undecoded — empty on most nodes, 2 or 4 values where present (the candidate
-/// stop/valve markers; see docs/formats/ai-nets.md) — and are exposed verbatim, never
-/// interpreted.</summary>
-public readonly record struct AiNetNode(Vector3 Position, IReadOnlyList<float> Tags);
+/// <see cref="Tags"/> stays verbatim; the four decoded fields below are the deserialiser's own
+/// (<c>FUN_004304a0</c> widens each node into a 24-byte record and fills these in that order,
+/// each behind its own element-count test). Empty on 2,187 of the 2,268 shipped nodes.
+/// Format page: docs/formats/ai-nets.md.</summary>
+public readonly record struct AiNetNode(Vector3 Position, IReadOnlyList<float> Tags)
+{
+    /// <summary>This node's stop-point id, or 0 for "no stop point". A mission script addresses a
+    /// node BY this id (<c>COMPLETED_STOPPOINT</c>, <c>FUN_004319a0</c>) and the lookup takes the
+    /// FIRST node carrying it, so a run of nodes sharing an id resolves to the run's head.
+    /// ⚠ Ids are allocated per CHAPTER across files, not per net, so they collide between nets and
+    /// are only meaningful together with the net.</summary>
+    public int StopPointId => Tags.Count >= 2 ? (int)Tags[0] : 0;
+
+    /// <summary>Whether a zeppelin arriving here halts. The shipped value is the INITIAL state
+    /// only: it is a mutable runtime byte the mission script writes through
+    /// <c>COMPLETED_STOPPOINT</c>, so a net's live halts are the follower's, not this.</summary>
+    public bool StopsHere => Tags.Count >= 2 && Tags[1] != 0f;
+
+    /// <summary>Whether reaching this node hands the flier a danger-zone run. Read only on the
+    /// AIRCRAFT net follower (<c>FUN_0041d1f0</c>, after it advances); the zeppelin follower never
+    /// looks at it.</summary>
+    public bool EntersDangerZone => Tags.Count >= 3 && Tags[2] != 0f;
+
+    /// <summary>The <c>dzpathN</c> guide ribbon <see cref="EntersDangerZone"/> starts, or −1 for
+    /// the unnumbered run the original takes when the field is absent or negative.</summary>
+    public int DangerZonePath => Tags.Count >= 4 ? (int)Tags[3] : -1;
+}
 
 /// <summary>A net's trailer attach/follow target, raw and uninterpreted. The shipped shapes:
 /// <c>[nodeIndex, "name"]</c> (76 nets, e.g. <c>[10, "player"]</c>), <c>[-1, "name"]</c> — a

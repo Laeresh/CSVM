@@ -9,8 +9,9 @@ namespace CSVM.Flight;
 /// current target node out. Aircraft-agnostic on purpose, so <c>ZeppelinMotion</c> (F17) reuses it
 /// unchanged; <see cref="AiPilot.Patrol"/> is the aircraft consumer. Traversal is decoded in this
 /// module's docs/architecture.md entry; the anchored-trailer ride is docs/formats/ai-nets.md.
-/// Arrival is the decoded along-leg test (<see cref="ArrivalRadius"/>). Per-node tags
-/// (<see cref="AiNetNode.Tags"/>) are preserved raw and unacted on (docs/formats/ai-nets.md).
+/// Arrival is the decoded along-leg test (<see cref="ArrivalRadius"/>). A node's stop point
+/// (<see cref="AiNetNode.StopPointId"/>) is live state here, armed and disarmed by
+/// <see cref="SetStopPoint"/>; <see cref="AiNetNode.EntersDangerZone"/> is preserved unacted-on.
 /// </summary>
 public sealed class AiNetFollower
 {
@@ -18,11 +19,18 @@ public sealed class AiNetFollower
     /// (<c>FUN_004303d0</c>) seats 10 and which every shipped net leaves at that default.</summary>
     public const float MinArrivalRadiusM = 10f;
 
+    /// <summary>How near an armed stop point counts as parked on it, metres: the zeppelin
+    /// follower's own hold distance (<c>FUN_004bf360</c>), which is NOT the leg's arrival radius.
+    /// A stop point is a place to sit, so the original drops the abeam capture and holds the
+    /// vehicle on the node itself.</summary>
+    public const float StopPointHoldM = 30f;
+
     // The radius is a tenth of the leg's HORIZONTAL length, floored (FUN_00431a90, which squares
     // it into edge+0x1c at net load). Altitude change along a leg does not widen the capture.
     private const float ArrivalRadiusPerLeg = 0.1f;
 
     private readonly Random _rng;
+    private readonly bool[] _stops;
     private readonly float _minArrivalRadius;
     private readonly int[][] _neighbors;
     private readonly Func<Vector3?>? _trailerTarget;
@@ -30,14 +38,14 @@ public sealed class AiNetFollower
     private int _previousIndex = -1;
     private Vector3? _legOrigin;
 
-    /// <param name="trailerTarget">Where the net's trailer target is right now, or null when it
-    /// cannot be located this frame. Supplied only by a caller that WANTS the net to ride;
-    /// omitted, or paired with a net whose trailer has no anchor node, the authored
-    /// coordinates are flown. Called once per node read, so it must be cheap.</param>
+    /// <param name="trailerTarget">Where the net's trailer target is right now, null when it cannot
+    /// be located; only a caller that WANTS the net to ride passes one. Called per node read.</param>
     /// <param name="minArrivalRadius">The net's own floor on the per-leg radius. Raised only by a
     /// caller whose vehicle cannot turn inside the decoded one; never lowers it.</param>
+    /// <param name="observesStopPoints">⚠ Whether an armed stop point halts this walk. Off unless
+    /// the caller is the ZEPPELIN follower, the only one that reads the flag (architecture.md).</param>
     public AiNetFollower(AiNet net, Random rng, float minArrivalRadius = MinArrivalRadiusM,
-        Func<Vector3?>? trailerTarget = null)
+        Func<Vector3?>? trailerTarget = null, bool observesStopPoints = false)
     {
         if (net.Nodes.Count == 0)
             throw new ArgumentException($"net '{net.Name}#{net.Id}' has no nodes", nameof(net));
@@ -50,6 +58,13 @@ public sealed class AiNetFollower
             _anchorIndex = trailer.NodeIndex;
             _trailerTarget = trailerTarget;
         }
+
+        ObservesStopPoints = observesStopPoints;
+
+        // The file's halt flags are the net's starting state, then the script owns them.
+        _stops = new bool[net.Nodes.Count];
+        for (int i = 0; i < _stops.Length; i++)
+            _stops[i] = net.Nodes[i].StopsHere;
 
         // Undirected adjacency off the explicit edge list, never node order (the graph
         // branches; a list-order walk is the documented wrong reading).
@@ -72,7 +87,8 @@ public sealed class AiNetFollower
         }
     }
 
-    /// <summary>The net being flown: nodes, edges, raw tags and the (unacted-on) trailer.</summary>
+    /// <summary>The net being flown: nodes with their authored fields, edges, and the trailer.
+    /// Node halt flags here are the STARTING state; the live ones are this follower's.</summary>
     public AiNet Net { get; }
 
     /// <summary>The node index currently flown toward; −1 before the first
@@ -81,6 +97,17 @@ public sealed class AiNetFollower
 
     /// <summary>How many node captures have advanced the target so far.</summary>
     public int Advances { get; private set; }
+
+    /// <summary>Whether an armed stop point halts this walk at all (the constructor's
+    /// <c>observesStopPoints</c>). The flags are still readable and writable when it is false.
+    /// </summary>
+    public bool ObservesStopPoints { get; }
+
+    /// <summary>Parked on an armed stop point: <see cref="Update"/> has brought the follower
+    /// within <see cref="StopPointHoldM"/> of <see cref="CurrentIndex"/> and that node's halt flag
+    /// is set, so the walk goes no further until the flag is cleared. The zeppelin law reads this
+    /// to hold station.</summary>
+    public bool Holding { get; private set; }
 
     /// <summary>True when this follower rides its net's trailer target: the net has an
     /// anchor node AND the caller supplied a target. False is the fixed-route case, which is every
@@ -142,6 +169,49 @@ public sealed class AiNetFollower
         CurrentIndex = -1;
         _previousIndex = -1;
         _legOrigin = null;
+        Holding = false;
+    }
+
+    /// <summary>Whether node <paramref name="index"/> currently halts whoever reaches it.</summary>
+    public bool StopsAt(int index) => index >= 0 && index < _stops.Length && _stops[index];
+
+    /// <summary>The node an id addresses: the FIRST node carrying it, the engine's own scan
+    /// (<c>FUN_004319a0</c>). −1 when no node does, and for id 0, which the script side rejects
+    /// before it ever gets here (<c>FUN_0046a0d0</c> tests <c>id &gt; 0</c>) and which 27 shipped
+    /// nodes carry as their "no stop point" value.</summary>
+    public int StopPointNode(int stopPointId)
+    {
+        if (stopPointId <= 0)
+        {
+            return -1;
+        }
+        for (int i = 0; i < Net.Nodes.Count; i++)
+        {
+            if (Net.Nodes[i].StopPointId == stopPointId)
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>Arms or disarms the stop point <paramref name="stopPointId"/> names, the whole of
+    /// what <c>COMPLETED_STOPPOINT</c> does. Returns the node it wrote, or −1 when the net carries
+    /// no such id. Disarming the node being held releases the walk on the next
+    /// <see cref="Update"/>.</summary>
+    public int SetStopPoint(int stopPointId, bool halts)
+    {
+        int node = StopPointNode(stopPointId);
+        if (node < 0)
+        {
+            return -1;
+        }
+        _stops[node] = halts;
+        if (!halts && node == CurrentIndex)
+        {
+            Holding = false;
+        }
+        return node;
     }
 
     /// <summary>Advances the walk from <paramref name="position"/>: the first call targets the
@@ -159,6 +229,12 @@ public sealed class AiNetFollower
             return true;
         }
         var node = CurrentTarget;
+        if (ObservesStopPoints && _stops[CurrentIndex])
+        {
+            // An armed stop point is never advanced past, however far past it the vehicle drifts.
+            Holding = position.DistanceSquaredTo(node) <= StopPointHoldM * StopPointHoldM;
+            return false;
+        }
         var start = LegStart ?? position;
         var leg = node - start;
         if (leg.LengthSquared() > 1e-6f
