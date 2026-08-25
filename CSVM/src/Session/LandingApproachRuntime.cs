@@ -9,12 +9,16 @@ namespace CSVM.Session;
 /// <summary>The mid-mission cutscene trigger: every frame, with nothing already playing and the
 /// player flying, each armed <c>landings.zrd</c> row tests the aircraft against its approach node's
 /// condition volume, attitude cone and speed band, and the first row that passes starts its
-/// animation with <see cref="CutsceneController"/> hosting it. An <c>auto</c> row offers the
-/// auto-land instead of starting anything. Decode:
+/// animation with <see cref="CutsceneController"/> hosting it, once per entry into that volume. An
+/// <c>auto</c> row offers the auto-land instead of starting anything. Decode:
 /// docs/formats/anim-definitions/cutscenes.md.</summary>
 public sealed partial class LandingApproachRuntime : Node
 {
     private readonly List<Bound> _bound = new();
+    // Rows that have fired and whose condition has not stopped passing since. A cutscene ends with
+    // the aircraft parked where the definition left it, which is still inside the volume that
+    // started it, so without this the row re-fires on the frame after the handoff.
+    private readonly HashSet<int> _latched = new();
     private AnimRuntime? _runtime;
     private CutsceneController? _cutscene;
     private Func<FlightController?>? _player;
@@ -53,6 +57,7 @@ public sealed partial class LandingApproachRuntime : Node
         _cutscene = cutscene;
         _player = player;
         _bound.Clear();
+        _latched.Clear();
         foreach (var approach in approaches)
         {
             var found = runtime.FindNodes(approach.Node);
@@ -91,16 +96,23 @@ public sealed partial class LandingApproachRuntime : Node
         }
 
         float speed = plane.WorldVelocity.Length();
-        foreach (var bound in _bound)
+        for (int i = 0; i < _bound.Count; i++)
         {
+            var bound = _bound[i];
             if (!Passes(bound, plane, speed))
             {
+                _latched.Remove(i);
                 continue;
             }
 
             if (bound.Approach.Auto)
             {
                 AutoLandOffered = true;
+                continue;
+            }
+
+            if (!_latched.Add(i))
+            {
                 continue;
             }
 

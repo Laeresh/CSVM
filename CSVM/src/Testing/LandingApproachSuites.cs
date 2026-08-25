@@ -32,6 +32,9 @@ internal static class LandingApproachSuites
     private const float ArmBudgetS = 12f;
     private const float PlayBudgetS = 45f;
 
+    // How long the trigger is ticked after a handoff to catch the row re-firing.
+    private const int RestartFrames = 30;
+
     /// <summary>Drives the campaign's first mission's approach triggers against its BUILT world:
     /// the chapter's rows resolve to real cone/half-cone/sphere volumes, a mission carrying none of
     /// the animations arms none of them, the drop-off rows start disarmed, the mission's own
@@ -54,8 +57,19 @@ internal static class LandingApproachSuites
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
         ctx.ExtraPrewarmSoundNames = script.SoundGroupNames();
-        ctx.WithWorld(chapter, collision: false, folder,
-            world => Drive(ctx, world, director, script, report));
+        // ⚠ The world has to carry the cutscene roots or nothing here sees the defect this suite
+        // exists for: with no `camera1` the drop's own camera events resolve to nothing, the
+        // definition reports zero length and the episode is over the frame it starts.
+        ctx.CutsceneRoots = true;
+        try
+        {
+            ctx.WithWorld(chapter, collision: false, folder,
+                world => Drive(ctx, world, director, script, report));
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+        }
 
         ctx.WriteArtifact($"test-landing-approach-{chapter}.txt", report.ToString());
         ctx.Note($"drove {chapter}/{folder}'s landings.zrd approach triggers against a built world");
@@ -195,6 +209,11 @@ internal static class LandingApproachSuites
         ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, cone, report),
             $"flying '{cone.Node}' once the mission has armed it starts '{trigger.LastStarted}'");
         report.AppendLine($"started '{trigger.LastStarted}', codes [{string.Join(", ", cutscene.Codes)}]");
+        // ⚠ BL-470: an instantly-completing definition satisfies both the EXECUTED and the
+        // objective check below, so those two are blind to a cutscene that is over the frame it
+        // starts. Fly has already ticked the host once, so still Playing here means it outlived it.
+        ctx.Check(cutscene.Playing,
+            $"'{trigger.LastStarted}' still owns the session a frame on, rather than completing instantly");
         foreach (string name in closure)
         {
             report.AppendLine($"  reached '{name}' state {world.Runtime.AnimStateOf(name)}");
@@ -205,13 +224,19 @@ internal static class LandingApproachSuites
         ctx.Check(Raised(cutscene.Codes, 11) && Raised(cutscene.Codes, 2),
             $"the cutscene host took the drop's own callbacks, out-of-flight and presentation");
 
+        float played = 0f;
         for (float t = 0f; t < PlayBudgetS && !graph.CompletedOf(gated.Number); t += StepDt)
         {
             world.Runtime.Advance(StepDt);
             cutscene.Tick();
             graph.Step(StepDt);
+            if (cutscene.Playing)
+            {
+                played += StepDt;
+            }
         }
 
+        report.AppendLine($"episode ran {played:0.##} s past the frame it started on");
         report.AppendLine($"'{gated.AnimStates[0].Name}' state " +
             $"{world.Runtime.AnimStateOf(gated.AnimStates[0].Name)}, " +
             $"OBJECTIVE{gated.Number} completed={graph.CompletedOf(gated.Number)}");
@@ -221,6 +246,34 @@ internal static class LandingApproachSuites
             $"which completes OBJECTIVE{gated.Number}, the primary the drop gates");
         CheckNextPrimary(ctx, world, trigger, cutscene, graph, script, armed,
             ClosureOf(world, armed), rig, report);
+    }
+
+    // ⚠ The handoff hands control back with the aircraft exactly where the cutscene left it, which
+    // is inside the volume that started it, on a row the mission has armed. Without a latch the
+    // trigger re-fires the same row on the next frame, over and over.
+    private static void CheckNoRestart(
+        TestContext ctx, TestWorld world, LandingApproachRuntime trigger,
+        CutsceneController cutscene, ObjectiveGraph graph, FlightController rig,
+        LandingApproach approach, StringBuilder report)
+    {
+        for (int i = 0; i < RestartFrames; i++)
+        {
+            world.Runtime.Advance(StepDt);
+            trigger.Tick();
+            cutscene.Tick();
+            graph.Step(StepDt);
+        }
+
+        var node = world.Runtime.FindNodes(approach.Node)[0];
+        var frame = node.GlobalTransform;
+        var arm = world.Runtime.FindNodes(LandingApproaches.ArmNode, node);
+        report.AppendLine($"{RestartFrames} frames after the handoff: playing={cutscene.Playing} " +
+            $"armed={(arm.Count > 0 ? arm[0].Visible.ToString() : "no land_on")} " +
+            $"band={approach.SpeedInBand(rig.WorldVelocity.Length())} " +
+            $"angle={Mathf.RadToDeg(LandingApproaches.AngleBetween(frame.Basis, rig.Attitude)):0.#} " +
+            $"inside={approach.Contains(frame.AffineInverse() * rig.WorldPosition)}");
+        ctx.Check(!cutscene.Playing,
+            $"and the handoff does not re-fire the row the aircraft is still parked inside");
     }
 
     // The primary after the drop: another objective gated on a landings animation, whose own
@@ -257,6 +310,7 @@ internal static class LandingApproachSuites
             graph.Step(StepDt);
         }
 
+        CheckNoRestart(ctx, world, trigger, cutscene, graph, rig, row, report);
         report.AppendLine($"'{later.AnimStates[0].Name}' state " +
             $"{world.Runtime.AnimStateOf(later.AnimStates[0].Name)}, " +
             $"OBJECTIVE{later.Number} completed={graph.CompletedOf(later.Number)}");

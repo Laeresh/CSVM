@@ -50,17 +50,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         "ObjectMotionSiScript", "Loop", "If", "Elseif", "Else", "Endif", "CallSequence",
         "StopSequence", "CallAnimation", "StopAnimation", "InvalidateAnimation", "ResetAnimation",
         "PufferState",
-        "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild", "Callback",
-        "FogState",
+        "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild", "ObjectDeleteChild",
+        "Callback", "FogState",
     };
 
     /// <summary>Kinds with a handler that covers only part of what the event does — reported
     /// apart from the unhandled ones, since "acted on" and "acted on fully" are different answers.
-    /// <c>ObjectAddChild</c> handles its sound-emitter form and counts the rest as unhandled, and
-    /// <c>Callback</c> acts on the two vehicle-death codes and counts every other one.</summary>
+    /// The two child events take their sound-emitter and node-reparent forms and count the rest as
+    /// unhandled, and <c>Callback</c> acts on the two vehicle-death codes and counts every other
+    /// one.</summary>
     public static readonly IReadOnlyCollection<string> PartialEventKinds = new HashSet<string>(StringComparer.Ordinal)
     {
-        "ObjectAddChild", "Callback",
+        "ObjectAddChild", "ObjectDeleteChild", "Callback",
     };
 
     /// <summary>Refuse the <c>ANIMATION_ROOT_NAME</c> anchor lift, however few matches it finds.
@@ -356,6 +357,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private readonly Dictionary<Node3D, Transform3D> _rest = new(); // authored pose per touched node
 
     private readonly List<AnimInstance> _instances = new();
+
+    // The per-frame snapshot Advance walks. ⚠ An instance's own STOP_ANIMATION removes OTHER
+    // instances mid-walk, so an index into the live list goes out of range; a cutscene definition
+    // that stops the scene it just called is where that happens.
+    private readonly List<AnimInstance> _advancing = new();
 
     // The destructible whose death is directly dispatching right now (a stack, since deaths nest).
     // Lets a death-triggered CALL_ANIMATION landing on the SAME anchor as the dying instance
@@ -1022,20 +1028,29 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         TickDeferredByRange();
         if (DebugMotions)
             LogMotions(dt);
-        // Instances can finish (and CallAnimation can add) during the walk, so iterate a copy.
-        for (int i = _instances.Count - 1; i >= 0; i--)
+        // Instances can finish, stop each other, and be added by CallAnimation during the walk, so
+        // iterate a copy: newest first, one added this frame waits for the next.
+        _advancing.Clear();
+        _advancing.AddRange(_instances);
+        for (int i = _advancing.Count - 1; i >= 0; i--)
         {
-            var inst = _instances[i];
-            inst.Advance(this, dt);
-            if (Retirable(inst))
+            var inst = _advancing[i];
+            if (!_instances.Contains(inst))
             {
-                _instances.RemoveAt(i);
+                continue;
+            }
+
+            inst.Advance(this, dt);
+            if (Retirable(inst) && _instances.Remove(inst))
+            {
                 FinishInputGoverned(inst.Def, inst.Anchor);
                 FinishEffectInstance(inst.Def, inst.Anchor);
                 _templateStage.RetireWhenIdle(inst.Def, inst.Anchor);
                 OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
             }
         }
+
+        _advancing.Clear();
     }
 
     /// <summary>Stops every live instance of an animation name (optionally only on one anchor) and
@@ -1281,6 +1296,19 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     internal static void SetSubtreeActive(Node3D node, bool active)
     {
         node.Visible = active;
+    }
+
+    // Moves a child under a new parent keeping its LOCAL transform, which is what makes the new
+    // parent's frame the one the child's keyframes are read in. `internal` so the cutscene host
+    // undoes a definition's own reparent the same way the runtime made it.
+    // ⚠ Detach and attach rather than Node.Reparent: an intro reparents during the animation
+    // bootstrap, where the world root is not yet in the scene tree and Reparent refuses.
+    internal static void Reparent(Node3D child, Node3D parent)
+    {
+        var local = child.Transform;
+        child.GetParent()?.RemoveChild(child);
+        parent.AddChild(child);
+        child.Transform = local;
     }
 
     // The world node a gamez node index was built into, or null when this build never created it.
@@ -2231,9 +2259,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "ObjectAddChild":
-                // Only the sound-emitter three-quarters of this event is acted on — see
-                // HandleAddChild. Everything else it does still counts as unhandled.
-                if (!HandleAddChild(ev, def, anchor))
+                // ⚠ The sound-emitter form wins; only what it declines is a node reparent.
+                if (!HandleAddChild(ev, def, anchor)
+                    && (instant || !HandleReparent(ev, def, anchor, adopt: true)))
+                    Count(ev.Kind);
+                return true;
+
+            case "ObjectDeleteChild":
+                // ⚠ Sequences only. A RESET_STATE walk runs at the bootstrap, where undoing a
+                // reparent no definition has made yet would move shipped nodes off their parents.
+                if (instant || !HandleReparent(ev, def, anchor, adopt: false))
                     Count(ev.Kind);
                 return true;
 
@@ -2369,9 +2404,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     // The sound-emitter case of OBJECT_ADD_CHILD: attach a declared emitter to the world node that
-    // positions it. Returns false for every other use, which stays counted as unhandled.
-    // Deliberately only the sound subset; most of the event's other uses are cutscene machinery for
-    // cutscenes this project does not have (docs/formats/anim-definitions.md).
+    // positions it. Returns false for every other use, which HandleReparent then takes
+    // (docs/formats/anim-definitions.md).
     private bool HandleAddChild(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
         if (Sounds == null || ev.Data.Str("child") is not { } child)
@@ -2383,6 +2417,35 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (Resolve(parentName, def, anchor) is not { } host)
             return false;
         Sound.Attach(handle, host);
+        return true;
+    }
+
+    // The node-reparent form of OBJECT_ADD_CHILD / OBJECT_DELETE_CHILD: how a cutscene composes
+    // itself. `generic_intro` moves `camera1` into `piratezep` so its authored keyframes read as
+    // offsets inside the airship's frame; a delete detaches the child back to the world root, which
+    // is where the gamez already keeps `camera1` (docs/formats/anim-definitions/cutscenes.md).
+    // ⚠ The LOCAL transform is kept, never the global one: preserving the world pose would leave
+    // every keyframe in world space, which is the whole reason the intro camera flies under the sea.
+    private bool HandleReparent(AnimEvent ev, AnimDefinition def, Node3D? anchor, bool adopt)
+    {
+        if (ev.Data.Str("child") is not { } childName || ev.Data.Str("parent") is not { } parentName)
+            return false;
+        if (Resolve(childName, def, anchor) is not { } child
+            || Resolve(parentName, def, anchor) is not { } named)
+            return false;
+        // A delete names the parent it detaches FROM, so a child hanging somewhere else is a
+        // no-op rather than a move: the intro's own RESET_STATE names a parent it never had.
+        var parent = adopt ? named : _root;
+        if (!adopt && child.GetParent() != named)
+            return true;
+        if (parent == null || parent == child || child.IsAncestorOf(parent))
+            return false;
+        if (child.GetParent() != parent)
+        {
+            Reparent(child, parent);
+            _opsApplied++;
+        }
+
         return true;
     }
 

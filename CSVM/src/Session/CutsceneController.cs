@@ -72,6 +72,8 @@ public sealed partial class CutsceneController : Node
     private IReadOnlyList<PlayerRig> _rigs = Array.Empty<PlayerRig>();
     private Func<IReadOnlyList<FlightController>>? _aiPlanes;
     private Node3D? _cutsceneCamera;
+    // The world root `camera1` belongs under, so Restore can undo a definition's own reparent.
+    private Node3D? _cameraHome;
     private Node3D? _bars;
     private Node3D? _card;
     private Aabb _cardBox;
@@ -112,8 +114,8 @@ public sealed partial class CutsceneController : Node
     /// live applier for this to suppress; the gate is tracked, not acted on.</summary>
     public bool CamParamsFree { get; private set; }
 
-    /// <summary>Every hosted code in the order it was dispatched, which is what a suite asserts the
-    /// shape of the cutscene by.</summary>
+    /// <summary>Every code the current (or last) episode hosted, in the order it was dispatched,
+    /// which is what a suite asserts the shape of the cutscene by.</summary>
     public IReadOnlyList<int> Codes => _codes;
 
     /// <summary>The animation name that raised the first code, and whose end hands off.</summary>
@@ -155,6 +157,9 @@ public sealed partial class CutsceneController : Node
         }
 
         _cutsceneCamera = First(runtime.FindNodes(CameraNode));
+        // ⚠ The runtime's root, not the camera's parent right now: this binds AFTER the bootstrap,
+        // by which time an intro definition has already reparented the camera into what it frames.
+        _cameraHome = runtime.WorldRoot;
         _bars = First(runtime.FindNodes(BarsNode));
         // Measured once, before anything scales it: re-measuring a scaled card would read its own
         // last answer back and oscillate.
@@ -217,6 +222,13 @@ public sealed partial class CutsceneController : Node
                 }
 
                 break;
+        }
+
+        // The record covers ONE episode. Cleared as the next one takes the session rather than at
+        // the handoff, so a caller can still read the shape of the cutscene that just ended.
+        if (!Playing)
+        {
+            _codes.Clear();
         }
 
         _codes.Add(code);
@@ -337,11 +349,16 @@ public sealed partial class CutsceneController : Node
             AnimRuntime.SetSubtreeActive(_bars, false);
         }
 
-        // ⚠ Park the cutscene camera back at the origin. Other definitions pose against `camera1`
-        // too (the bullethole decals), and a node left wherever the last beat put it would place
-        // them there for the rest of the mission.
+        // ⚠ Put the camera back under the world root BEFORE parking it at the origin: a definition
+        // composes itself by reparenting `camera1`, so identity is a pose in the framed node's
+        // frame until that is undone. Other definitions pose against `camera1` too.
         if (_cutsceneCamera != null)
         {
+            if (_cameraHome != null && _cutsceneCamera.GetParent() != _cameraHome)
+            {
+                AnimRuntime.Reparent(_cutsceneCamera, _cameraHome);
+            }
+
             _cutsceneCamera.Transform = Transform3D.Identity;
         }
 

@@ -479,6 +479,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
   9 m from the `shipwreck` the first primary approaches, so the same 6 s flight completed that
   objective and its 2 s + 3 s nap chain armed the trigger mid-leg. The assertion still passed, on
   the aircraft having left the cone by then rather than on the gate being shut.
+- **INSTR-21** — **An animation that completes instantly satisfies every end-state assertion, so a
+  suite that only reads end state is blind to a sequence that never played.** Assert the episode's
+  DURATION as well: that it still owns its host a frame on, or how long it ran. Measured on the
+  `landings-approach-trigger` suite: with `camera1` unbound, C3/M01's drop reported `ANIM_STATE`
+  EXECUTED and completed its gated primary in the frame it started, and the suite was green for the
+  whole of `BL-467`; bound, the same episode runs 4.43 s. The suite was also building a world with
+  no `camera1` in it at all, so a suite over a subsystem must build the world the way the session
+  that runs it does.
 
 ## SRC — sources and documents
 

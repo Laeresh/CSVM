@@ -402,7 +402,17 @@ public sealed class WorldSession
     // (docs/formats/anim-definitions/cutscenes.md).
     private static void BuildCutsceneRoots(Node3D root, GameZ gamez, WorldBuilder builder)
     {
-        root.AddChild(new Node3D { Name = Session.CutsceneController.CameraNode });
+        var camera = new Node3D { Name = Session.CutsceneController.CameraNode };
+        // ⚠ Stamp the gamez index a scene-built node would carry. Every compiled cutscene binds
+        // `camera1` through its symbol table, and a claimed index with no node behind it makes
+        // AnimRuntime.Targets drop the event rather than name-match around it.
+        if (gamez.FindByName(Session.CutsceneController.CameraNode) is { } cameraNode)
+        {
+            camera.SetMeta(AnimRuntime.NameMeta, cameraNode.Name);
+            camera.SetMeta(AnimRuntime.IndexMeta, cameraNode.Index);
+        }
+
+        root.AddChild(camera);
         if (gamez.FindByName(Session.CutsceneController.BarsNode) is not { } bars)
         {
             return;

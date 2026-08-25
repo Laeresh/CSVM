@@ -349,7 +349,7 @@ clusters they delegate to.
 - `src/Session/ObjectiveGraph.cs` — the objectives runtime, engine-free: the four-state machine per objective, the rotating one-completion-per-tick scan, the chaining executor with its already-awake truncation, the nap that clears a completed flag, the condition families' OR, the mission countdown, the win/loss flags and the display rows D33 reads. Reaches the world only through `IObjectiveWorld`.
 - `src/Session/CampaignDirector.cs` — the engine side of a campaign mission and the sibling of `InstantActionDirector`: resolves a `--campaign=<profile>:<seq>` launch to its chapter/mission, arms the graph against the built world's runtimes, and at mission end records the attempt through `CampaignProgression`, folds the destruction log into the profile and raises the return-to-cabin exit the session layer acts on. It also owns the mission's two music duties: routing a `mu*` sound group to the process music channel instead of a positional emitter, and running the decoded proximity scan and player-damage ping that put the score into battle. The wingman's aircraft and fit are resolved here too, from the profile it already has open; nothing spawns that aircraft yet. A cutscene hold (callback 20) stops its whole step.
 - `src/Session/CutsceneController.cs` — the host a cutscene definition raises its `CALLBACK` codes to: the letterbox bars and the cutscene camera the definition itself drives, the world/objectives hold, the player out of flight with the chrome off, the AI parked, then one hard cut back to gameplay on the definition's end or on a skip. It answers for the two story-mission intros always, and for whatever `HostDefinitions` registers (the landings trigger's own rows and their `CALL_ANIMATION` closure). Scoping is by definition name, never by authored code.
-- `src/Session/LandingApproachRuntime.cs` — the mid-mission cutscene trigger: ticks a story mission's resolved `LandingApproaches` against the flown aircraft (arming gate, speed band, attitude cone, condition volume) and starts the row's definition, which is what makes an `ANIM_STATE … EXECUTED` objective satisfiable. An `auto` row offers the auto-land rather than starting anything. Story missions only, for the reason `WorldSession.Options.LandingTriggers` gives.
+- `src/Session/LandingApproachRuntime.cs` — the mid-mission cutscene trigger: ticks a story mission's resolved `LandingApproaches` against the flown aircraft (arming gate, speed band, attitude cone, condition volume) and starts the row's definition, which is what makes an `ANIM_STATE … EXECUTED` objective satisfiable. A row fires once per entry into its volume: the handoff leaves the aircraft where the cutscene parked it, still inside the volume that started it. An `auto` row offers the auto-land rather than starting anything. Story missions only, for the reason `WorldSession.Options.LandingTriggers` gives.
 
 ### Session root and tests
 
@@ -880,7 +880,10 @@ an exemption from this. Scoped to the call's own closure and its slot, never the
 container: another effect live on the same slot number must not be re-posed under its running
 motions. Regression: the `effect-pool-reset` suite. `Play`/`PlayWithin`/`StopWithin` start a def's
 instances by anim name, the latter two scoped to one subtree (a NAME can repeat across a chapter,
-e.g. C1's three `hangerdoors`). Every construction site hands over a sealed `TemplateStage`
+e.g. C1's three `hangerdoors`). `OBJECT_ADD_CHILD`/`OBJECT_DELETE_CHILD` take their node-reparent
+form here (`Reparent`, keeping the LOCAL transform) once the sound-emitter form has declined,
+which is how a cutscene composes its camera inside the node it frames; the decode is
+`docs/formats/anim-definitions/cutscenes.md`. Every construction site hands over a sealed `TemplateStage`
 (`NewTemplateStage`/`ForEffects`/`ForCrashRig`). Sibling modules, each with its own entry: the
 sequence interpreter is `SequenceRunner.cs`, live motions are `Anim/MotionSet.cs`, name resolution
 is `Anim/NameResolver.cs` (this class forwards through `Resolve`/`ResolveScoped`/`Anchors`), puffer
@@ -4074,8 +4077,10 @@ before the build's sound archive closes; without it a campaign mission's `WAKEUP
 `Options.CallbackHost` is installed on the runtime BEFORE the bind, since a bootstrapped intro
 raises its codes the instant it starts, and `Options.CutsceneRoots` builds the two roots the
 `world1` walk never reaches (`camera1`, and the `letterbox` bars, switched off) — only for a
-mission whose start-anims name one of `CutsceneController.IntroAnims`, so every other session's
-node census is exactly what it was.
+mission whose start-anims name one of `CutsceneController.IntroAnims` or that arms an approach
+trigger, so every other session's node census is exactly what it was. The synthetic `camera1`
+carries the gamez name and INDEX metadata a scene-built node would, because every compiled
+cutscene binds it through its symbol table and an unbuilt claim makes the runtime drop the event.
 
 ## src/Mech3/SessionArchives.cs
 `OpenFor(ArchiveIntent, gamezPath, texturesPath, soundsPath, zrdrPath, mute)` opens the five
@@ -4794,7 +4799,8 @@ reveal the AI (only what this controller parked comes back), 666/667 the camera-
 1/10 the handoff and the in-flight systems; 14 and 123 are named gaps with one log line each. The
 handoff raises the gameplay state the definition's own `RESET_STATE` asserts, because a CSVM
 `RESET_STATE` dispatch deliberately raises no callbacks and `RESET_TIME` is undecoded; it also
-retracts the bars and parks `camera1` back at the origin, which other definitions pose against.
+retracts the bars, returns `camera1` to the runtime's world root (a definition composes itself by
+reparenting it) and parks it at the origin, which other definitions pose against.
 Skip is any key (not Escape) or pad button: force-stop the definition, then the same restore, so
 dropping the remaining beats cannot leave the mission held, hidden or unflyable.
 ⚠ `IntroAnims` is the scope, and it is a NAME test: Instant Action's `player_setup` authors the same

@@ -443,14 +443,15 @@ reading skips the whole block and fires nothing. The original's reading is the o
 No `RESET_STATE` in either source contains control flow (verified across the install), so the
 instantaneous base-state pass never has to interpret a branch.
 
-Playback ops seen and deferred: `OBJECT_DELETE_CHILD`,
-`SOUND` (the one-shot form — see below), `OBJECT_CYCLE_TEXTURE`, `CAMERA_STATE`,
-`DETONATE_WEAPON`.
+Playback ops seen and deferred: `SOUND` (the one-shot form — see below),
+`OBJECT_CYCLE_TEXTURE`, `CAMERA_STATE`, `DETONATE_WEAPON`.
 (`FBFX_COLOR_FROM_TO` landed — see [`org/sequences.md`](../org/sequences.md)'s
 "FBFX_COLOR_FROM_TO is a full-screen wash";
 `LIGHT_STATE`/`LIGHT_ANIMATION` landed — see below;
 `SOUND_NODE` + the sound half of `OBJECT_ADD_CHILD` landed — see "SOUND_NODE is a
-three-event triple"; `OBJECT_MOTION`'s rotation half landed and its
+three-event triple" — and the node-reparent half of `OBJECT_ADD_CHILD`/`OBJECT_DELETE_CHILD`
+with it, see [`anim-definitions/cutscenes.md`](anim-definitions/cutscenes.md)'s
+"The reparent is how a cutscene is composed"; `OBJECT_MOTION`'s rotation half landed and its
 ballistic/scale/tumble half — see "OBJECT_MOTION is two ops in one";
 `OBJECT_OPACITY_STATE` landed and `OBJECT_OPACITY_FROM_TO` — see
 "OBJECT_OPACITY_STATE is translucency";

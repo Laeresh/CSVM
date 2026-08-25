@@ -102,8 +102,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave F — the second at-the-controls pass, once the mission could be finished
 
-51. ◐ The cutscene camera has no gamez binding, so a mid-mission cutscene ends in one frame (`BL-470`)
-52. ◐ The cutscene node reparent is unimplemented, so the intro frames nothing (`BL-471`)
+51. ☑ The cutscene camera has no gamez binding, so a mid-mission cutscene ends in one frame (`BL-470`)
+52. ☑ The cutscene node reparent is unimplemented, so the intro frames nothing (`BL-471`)
 53. ◐ Objective sites belong in the enemy selection cycle, and a moving site's marker must track (`BL-472`)
 54. ☑ A zeppelin's authored team is unread and its wake-up has no seam (`BL-476`)
 55. ☐ The wingman's formation is looser than the original's (`BL-473`), blocked on F56
@@ -1191,7 +1191,7 @@ than a frame. F53 supersedes part of A1 and touches the targeting subsystem, whi
 also reach; check for contention. F54, `D32` and `D33` run in the order `D32` then F54 then `D33`,
 for the reason F54 gives. F55 is blocked on F56. F57, F58 and F59 are independent.
 
-## F51 ☐ A mid-mission cutscene ends one frame after it starts (`BL-470`)
+## F51 ☑ A mid-mission cutscene ends one frame after it starts (`BL-470`)
 
 **Goal.** The Jack drop and the PANDORA hookup play as cutscenes instead of completing instantly.
 
@@ -1231,7 +1231,33 @@ plays eight times in a row the moment the episode stops being instant. ⚠ **C21
 blind to this**: its suite asserts `AnimStateOf == 3` and objective completion, which an instantly
 completing definition satisfies. An unchanged suite result is not evidence for this item.
 
-## F52 ☐ The cutscene node reparent is unimplemented, so the intro frames nothing (`BL-471`)
+**Landed.** The synthetic `camera1` carries the gamez node's name and flat-index metadata, so a
+compiled cutscene's symbol table binds it and `AnimRuntime.Targets` stops dropping every event that
+names it. `camera1` is flat-list index 3 in every chapter's `nodes.json`, and both `player-texdrop`
+and `camera1-generic_intro` bind `"ptr": 3`. The guard at `AnimRuntime.cs:2954-2966` is untouched.
+Two hygiene defects landed with it: an approach row fires once per entry into its volume, since the
+handoff leaves the aircraft parked where the cutscene put it, and the host's code record covers one
+episode rather than accumulating. ⚠ **A latent crash had to be fixed to get there**, and it was
+unreachable until a cutscene survived its first frame: `AnimRuntime.Advance` indexed the live
+instance list while an instance's own `STOP_ANIMATION` removes OTHER instances, so
+`hooked_to_klondike` threw `ArgumentOutOfRangeException` on the first real run. The walk now runs
+over a per-frame snapshot; the old `RemoveAt(i)` after a shift could also retire the wrong instance.
+
+**The `player` trap is answered and needs no code.** Fixing `camera1` alone neither plays the camera
+move over an unstaged aircraft nor poses an unrelated node: `player` binds to ptr 8918 and C3's gamez
+has 5408 nodes with none named `player`, so `SymbolClaims` claims the name with a null binding and
+those events drop exactly as before. The camera move plays; what it looks at is not there.
+
+**Verified.** ⚠ The suite was blind for TWO reasons: it built a world with no `camera1` in it at all,
+and it read only end state. It now builds the world the way a story-mission session does and asserts
+the episode's duration. C3/M01's drop runs 4.43 s past the frame it starts on, against 0 s with the
+index stamp removed, while every pre-existing assertion passes either way, which is precisely how
+this shipped green. Thirty frames after the handoff the row is still armed with the aircraft still
+inside it and does not re-fire; with the latch disabled the same check reports it playing again,
+reproducing the flown storm of eight episodes in 0.14 s. Consecutive episodes report 3 then 2 codes
+where the flown log accumulated 4, 11, 17, 23 and on to 59.
+
+## F52 ☑ The cutscene node reparent is unimplemented, so the intro frames nothing (`BL-471`)
 
 **Goal.** The intro cutscene shows the PANDORA and the aircraft it is composed around.
 
@@ -1268,6 +1294,28 @@ freecam regression: `docs/verification.md` DIAG-10 says an 8-chapter sweep is in
 relative to `piratezep`; Restore must put it back under the world root first, which the definition's
 own `reset_state` already asks for. ⚠ `HideUnplacedEntities`/`RestorePlacedEntities` and the `world1`
 walk assume stable parentage.
+
+**Landed.** Both opcodes take their node-reparent form in `Dispatch` once the sound-emitter form has
+declined it, moving the child with its LOCAL transform kept so a definition's authored keyframes are
+read in the frame of the node the shot is about. A delete detaches to the world root, and only when
+the child is actually under the named parent, because the intro's `RESET_STATE` names `piratezep` for
+nodes that were never there. ⚠ The move is a detach and attach rather than `Node.Reparent`, which
+REFUSES when the node is not inside the tree: an intro composes itself during the animation
+bootstrap, before the world root is added to the scene, which is why the first attempt was a silent
+no-op for that reason rather than for a resolution failure. Reparents are dispatched for sequence
+events only, since applying the undo during a bootstrap `RESET_STATE` walk would move shipped nodes
+off a parent nothing has changed. `CutsceneController` takes `_cameraHome` from the runtime's world
+root rather than from the camera's current parent, because `BindWorld` runs after the bootstrap by
+which time the intro has already moved it.
+
+**Verified.** A `--campaign=` screenshot early in C3/M01's `generic_intro` shows the airship
+centre-frame with the camera closing on it, where the same shot before the change is bars plus empty
+sky. A shot after the handoff is ordinary gameplay, chrome back and camera on the aircraft, with no
+stray errors. The runtime's unhandled-event census drops from `ObjectDeleteChild` 8 and
+`ObjectAddChild` 4 to 7 and 3; the one add that applies is `camera1`, and the rest are the
+unresolvable `player` and the `RESET_STATE` walks. ⚠ **The intro is still missing its aircraft**, for
+the reason F51 records: the gamez `player` those definitions animate has no node in C3's gamez at
+all. The camera is now where it belongs, looking at a stage still missing its actors.
 
 ## F53 ☐ Objective sites belong in the enemy selection cycle (`BL-472`)
 

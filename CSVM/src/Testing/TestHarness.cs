@@ -469,6 +469,12 @@ public sealed class TestContext
     /// <see cref="WithWorld(string, bool, Action{TestWorld})"/> call.</summary>
     public IReadOnlyCollection<string>? ExtraPrewarmSoundNames { get; set; }
 
+    /// <summary>Builds the next world the way a STORY mission session does: the cutscene roots
+    /// stand up and the chapter's landings table resolves. Mutable for the reason
+    /// <see cref="EmitterFactory"/> is, and off by default because those roots add nodes a
+    /// per-chapter census counts.</summary>
+    public bool CutsceneRoots { get; set; }
+
     /// <summary>Where a suite parents anything that must be in the scene tree — a built plane whose
     /// markers are read by global transform, a chapter world whose death sequences are ticked.</summary>
     public required Node3D Host { get; init; }
@@ -615,6 +621,8 @@ public sealed class TestContext
                 RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
                 EmitterFactory = EmitterFactory,
                 ExtraPrewarmNames = ExtraPrewarmSoundNames,
+                CutsceneRoots = CutsceneRoots,
+                LandingTriggers = CutsceneRoots,
                 TexturesOutliveBuild = archives.TexturesOutliveBuild,
                 SoundsOutliveBuild = archives.SoundsOutliveBuild,
             },

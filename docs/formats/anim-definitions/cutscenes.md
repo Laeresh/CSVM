@@ -14,6 +14,7 @@ compiled shape are on the [landing page](../anim-definitions.md) and in
 
 - [Conceptual model](#conceptual-model)
 - [The `letterbox` node](#the-letterbox-node)
+- [The reparent is how a cutscene is composed](#the-reparent-is-how-a-cutscene-is-composed)
 - [`CALLBACK`: the dispatch chain](#callback-the-dispatch-chain)
 - [`CALLBACK` code reference](#callback-code-reference)
 - [The intro defs' eight dispatches](#the-intro-defs-eight-dispatches)
@@ -115,6 +116,31 @@ moment of that reset is an open question; see [limits](#evidence-and-limits).
 
 Only one of the 27 is an intro. **Letterbox is the engine's general cutscene idiom**, and the
 mid-mission pickup and hookup sequences are cutscenes by the same construction as the intros.
+
+## The reparent is how a cutscene is composed
+
+A cutscene's camera keyframes are written in the frame of the node the shot is about, and
+`OBJECT_ADD_CHILD` / `OBJECT_DELETE_CHILD` are what put the camera in that frame. Both take a
+`parent` and a `child` name; an add moves the child under the parent and a delete detaches it back
+to the world root, and **neither preserves the child's world pose** — the local transform is the
+whole point.
+
+`camera1-generic_intro`'s `start_script` opens with `OBJECT_DELETE_CHILD [world1, camera1]`,
+the same for `player`, then `OBJECT_ADD_CHILD [piratezep, camera1]` and `[piratezep, player]`;
+its `RESET_STATE` deletes all three of `camera1`, `player` and `piratefighter` from `piratezep`
+and re-adds only `player` to `world1`, which is consistent with a delete meaning "detach", since
+`camera1` and `piratefighter` are parentless roots in the gamez to begin with. C3/M01's
+`player-texdrop` does the same around a per-shot aiming node: it adds `player` under
+`do_direction`, runs an SI script on it, deletes it again, and its third sequence adds `camera1`
+under `do_direction` for the shot and deletes it after.
+
+The offsets only make sense read this way. `gi_cam1`'s first keyframe is
+`(-155.7, -62.0, -768.9)` and `piratezep` sits at `(-1401, 500, -1412)`: a y of −62 is an offset
+inside a node at y = 500, and in world space it is 62 m under the sea.
+
+⚠ The reparent is authored as a live sequence event. A `RESET_STATE` walk carries the undo, and a
+consumer that applies it during a bootstrap pass moves shipped nodes off a parent no definition
+has changed yet.
 
 ## `CALLBACK`: the dispatch chain
 
