@@ -1948,6 +1948,46 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-488` `[Bug]` **The flight check draws a different ammunition than the ammo screen just set, and
+  its gun rows carry more than the original's.** *Evidence:* reported at the controls, with
+  `OriginalScreenshots\Campaign Flight Check.png` as the reference. Three parts, and the third is the
+  one that misleads a player. (a) The original's gun rows read `1) .50-cal. Slug`, caliber then
+  ammunition and nothing else, with an empty slot drawn as its bare number. (b) The original puts the
+  Objectives on a parchment down the RIGHT of the board, italic and numbered, which `BL-449` recorded
+  as a named gap because the page does not load objectives. (c) **The ammunition shown does not match
+  the one just chosen.** Both pages agree on the vocabulary, since `AmmoShortNames`
+  (`CampaignFlightCheckPage.cs:75`) and `AmmoFallback` (`CampaignAmmoPage.cs`) are the same four
+  names in the same order, and every `langui` id involved (3310, 3315, 3350, 3360, 3370 blocks) is
+  blank in `extracted/rof/ui_strings.json`, so both fall back to those arrays. So the divergence is
+  in WHICH value is read, not in how it is named. Two candidates, neither confirmed: the two pages
+  may not resolve the same plane (the ammo page takes `profile.SelectedPlane`/`WingmanPlane` through
+  `EnsureLoaded`, the flight check builds its rows from its own resolution), or the flight check may
+  hold rows built before the ammo screen committed. *Fix shape:* find which of the two it is before
+  changing anything, then make the flight check read what was written. *⚠ Traps:* do not "fix" it by
+  clearing a cache on every frame; `BL-485` shows what an unconsidered repaint policy costs to
+  reason about later. The gun-group index space is slot-based on the stock path
+  (`gun.Slot - 1`) and array-based on the custom-build path, and the two must not be conflated.
+  *Cross-refs:* `BL-449` (the objectives gap it recorded), `PLAN-M5-polish.md` G72.
+
+- `BL-489` `[Feature]` **The screenshot key does nothing in menus, so a menu defect cannot be shown
+  without an external capture.** *Evidence:* asked for at the controls, to make reporting menu
+  defects cheaper. Every menu report in this plan has cost a round trip that a screenshot would have
+  settled. *Fix shape:* the same capture the flight screens use, reachable from the menu screens.
+  *⚠ Traps:* the campaign boards draw through `ComposedBoardView` and the launchscreen draws through
+  its own controls, so a capture that only covers one of those covers half the cases. Write the file
+  where the flight capture writes, so one place collects them. *Cross-refs:* `PLAN-M5-polish.md` G73.
+
+- `BL-490` `[Bug]` **A briefing objective's written line overlaps the one below it.** *Evidence:*
+  reported at the controls on the next mission, so the mission whose lines are longer than C3/M01's.
+  `CampaignBoards.For` places each objective row at `TextSlot(Briefing, i)`, a fixed 30 px step from
+  `335`, so a line that wraps to two rows draws over the next row's slot. The reveal decides WHEN a
+  line appears and the board decides where, and nothing between them measures how tall a line is.
+  *Fix shape:* the parchment's lines have to be laid out by measured height rather than by a fixed
+  step. *⚠ Traps:* the 30 px step and the `(35, 335, 185)` slot are authored geometry, so the fix is
+  a flow rule and not a new set of coordinates. `BL-487` moves these same lines onto `Captions`, so
+  the two want doing together or the layout work is done twice. *Cross-refs:* `BL-487`, `BL-464`,
+  `PLAN-M5-polish.md` G71.
+
 - `BL-487` `[Feature]` **The briefing's objectives are cursor stops, and their text has nowhere else
   to be drawn.** *Evidence:* asked for at the controls, that objectives need not be selectable in the
   briefing. `CampaignBriefingPage.RowCount` returns the three buttons plus one row per revealed

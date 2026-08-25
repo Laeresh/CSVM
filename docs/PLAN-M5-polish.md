@@ -134,7 +134,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 68. ❌ Why the scaffolding read differently at the controls (`BL-477`), disproved: ours reproduces it
 69. ☑ The briefing screen only repaints on a keypress, so its reveal advances invisibly (`BL-485`)
 70. ☑ The profile screen does not open on the profile you last played (`BL-486`)
-71. ☐ The briefing's objectives are cursor stops, and their text has nowhere else to be drawn (`BL-487`)
+71. ☐ The briefing's objectives are cursor stops, their text has nowhere else to be drawn, and long
+    lines overlap each other (`BL-487`, `BL-490`)
+72. ☐ The flight check draws the wrong ammunition, and its rows and objectives are not the original's (`BL-488`)
+73. ☐ The screenshot key does nothing in menus (`BL-489`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -2605,3 +2608,65 @@ cursor walking only the three buttons.
 **⚠ Traps.** ⚠ Do not cut the rows before the text has somewhere else to be drawn; that is this
 item's whole reason to exist. ⚠ `campaign-loop`'s row-count assertion has to move with the content
 rather than be deleted, or the check that the reveal writes anything at all is lost.
+
+**A second report joins this item (`BL-490`), because it is the same layout work.** A briefing
+objective's written line overlaps the one below it, seen on a mission whose lines are longer than
+C3/M01's. `CampaignBoards.For` places each objective row at `TextSlot(Briefing, i)`, a fixed 30 px
+step from 335, so a line that wraps to two rows draws over the next row's slot: the reveal decides
+when a line appears and the board decides where, and nothing between them measures how tall a line
+is. ⚠ The 30 px step and the `(35, 335, 185)` slot are authored geometry, so the fix is a flow rule
+rather than a new set of coordinates. Doing this after the move to `Captions` rather than before is
+what stops the layout being written twice.
+
+## G72 ☐ The flight check draws the wrong ammunition, and its rows are not the original's (`BL-488`)
+
+**Goal.** The flight check reads as the original's does, and the ammunition it shows is the
+ammunition that was just chosen.
+
+**Evidence (confidence: traced for (a) and (b), narrowed to two candidates for (c)).** Reported at
+the controls with `Z:\CSVM\OriginalScreenshots\Campaign Flight Check.png` as the reference. Read that
+picture before starting: it settles the layout question that no decode has.
+(a) The original's gun rows read `1) .50-cal. Slug`, caliber then ammunition and nothing else, and an
+empty slot is drawn as its bare number.
+(b) The Objectives sit on a parchment down the RIGHT of the board, italic and numbered, which B13
+recorded as a named gap because the page does not load objectives.
+(c) **The ammunition shown is not the one chosen**, which is the part that misleads a player. It is
+not a naming problem: `AmmoShortNames` (`CampaignFlightCheckPage.cs:75`) and the ammo page's
+`AmmoFallback` are the same four names in the same order, and every `langui` id in play (the 3310,
+3315, 3350, 3360 and 3370 blocks) is blank in `extracted/rof/ui_strings.json`, so both pages fall
+back to those arrays. The divergence is in which value is read. Two candidates, neither confirmed:
+the pages may not resolve the same plane, or the flight check may hold rows built before the ammo
+screen committed.
+
+**Approach.** Settle (c) first and separately, since it is a defect and the other two are fidelity.
+Establish which of the two candidates it is with a driven check before changing anything.
+
+**Model recommendation.** medium.
+
+**Verify.** A driven check that walks change-ammo, sets a group to a named value, returns, and reads
+the flight check's own row text; plus a shot of the screen against the reference picture.
+
+**⚠ Traps.** ⚠ Do not fix (c) by rebuilding on every frame. G69 shows that a repaint policy needs its
+cost measured and its reason recorded, and this screen is not an animation. ⚠ The gun-group index
+space is slot-based on the stock path (`gun.Slot - 1`) and array-based on the custom-build path;
+conflating them would produce exactly this symptom in a different way. ⚠ The objectives note is
+authored geometry on the board, so place it from the layout rather than by eye against the
+screenshot.
+
+## G73 ☐ The screenshot key does nothing in menus (`BL-489`)
+
+**Goal.** The screenshot key works on the menu screens, so a menu defect can be shown rather than
+described.
+
+**Evidence (confidence: lead-only, asked for at the controls).** Every menu report in this plan has
+cost a round trip that a picture would have settled, which is the whole case for the item.
+
+**Approach.** The capture the flight screens already use, reached from the menu screens.
+
+**Model recommendation.** low.
+
+**Verify.** A key press on a campaign board and on the launchscreen, each producing a file.
+
+**⚠ Traps.** ⚠ The campaign boards draw through `ComposedBoardView` while the launchscreen draws
+through its own controls, so a capture covering only one of those covers half the cases. ⚠ Write the
+file where the flight capture writes it, so one place collects them.
