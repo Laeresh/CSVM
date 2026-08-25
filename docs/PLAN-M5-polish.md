@@ -140,7 +140,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 73. ☑ The screenshot key does nothing in menus (`BL-489`)
 74. ☑ CM02's Balmoral capture reaches none of the three Balmorals, cause found (`BL-492`, `BL-495`)
 75. ☑ CM02's named pilots do not read as named, and their voice lines are unverified (`BL-493`)
-76. ☐ A mission cannot swap the player onto another airframe (`BL-494`), behind G74
+76. ☑ A mission cannot swap the player onto another airframe (`BL-494`, `BL-503`)
 77. ☑ CM02's Balmorals break formation immediately, unattacked (`BL-498`)
 78. ☑ CM02's second Peacemaker squad starts awake and attacks the Pandora (`BL-499`, `BL-500`)
 79. ☑ A roster-spawned aircraft carries none of its gamez node's marker scaffolding (`BL-495`)
@@ -2962,7 +2962,7 @@ forcing the assembler back to the def title fails exactly the two authored-name 
 `c1-targeting-hud` flies `--ai=player_kestrel`, which carries no roster block, and no golden runs a
 campaign. ⚠ Error counts are not evidence in this wave, a sibling lane sharing the log.
 
-## G76 ☐ A mission cannot swap the player onto another airframe (`BL-494`)
+## G76 ☑ A mission cannot swap the player onto another airframe (`BL-494`, `BL-503`)
 
 **Goal.** A mission can put the player in a different aircraft mid-flight, which is what CM02 needs
 after its capture.
@@ -3001,6 +3001,67 @@ Balmoral is a heavy plane and never a `ZeppelinRuntime` object. ⚠ The swap
 happens with a loadout already bound, so a hardpoint table changing under a live rig is the part to
 get right. ⚠ G74 gates this in CM02: with no capture there is no swap to reach, so the two want
 sequencing rather than running together.
+
+**Landed.** A mission can put the player in a different airframe mid-flight, and CM02's capture is
+the one that asks for it: `C3/M05`'s three `britbalmoral_<n>-ww_balmoral<n>` definitions each end
+the wing-walk sequence with `Callback 967`, the last event before the definition finishes.
+[`CSVM/src/Session/AirframeSwap.cs`](../CSVM/src/Session/AirframeSwap.cs) holds the three codes and
+their def/node pairs, which are the pair every other player-airframe path already uses
+(`PlaneStats.DefName` and the picker's planes.zbd node), so the swap needs no table of its own.
+`CutsceneController` hosts them and acts on them (`CutsceneController.cs:256` for the accept,
+`:485` for `Swap`), through a `SwapAirframe` seam `GameSession` fills with
+`FlightRoster.SwapPlayerAirframe` (`GameSession.cs:2907`, `FlightRoster.cs:135`). The swap is the
+roster's third commit path beside `BuildPlayers` and `SpawnAi`: it removes the outgoing aircraft
+and re-runs the human assembler on the named airframe with the pose, heading, throttle and speed
+that aircraft held, through a new `AirframeSwapRequest` argument on
+`HumanFlightAdapter.Assemble` (`HumanFlightAdapter.cs:84`).
+
+**The three answers the item asked for, stated.** *Ammunition* is the new airframe's own and starts
+full: the replacement binds that airframe's stock fit, every pylon at its own capacity, which is
+what the original does when it writes the twelve-slot ammunition table at `DAT_0062ae28` (four gun
+counts then eight hardpoint counts) and re-picks the selected gun and rocket off it. *A weapon in
+flight* is unaffected: rounds live in the session's shared projectile pool keyed by shooter id, and
+the swap leaves the player index alone, so a shot fired a moment earlier still flies and still
+scores to the player. The mounted pylon MODELS go with the old airframe, a mounted round being a
+body on a pylon. *Anything holding a reference to the old rig* goes through
+`FlightController.DetachRosterBindings`, which drops the near-miss registration, the pool's aircraft
+registration, the HUD canvas, the speed cue, the race entry and the four session sinks; that is the
+counterpart of the original walking its global target list and re-pointing every `TargetVehicle`
+that pointed at the player onto the new object. ⚠ It also forces the order: the removal has to
+precede the build, because both aircraft carry the same shooter id.
+
+**The cutscene flags are settled, not guessed.** They are the player vehicle's `+0x91d` and `+0x91e`
+bytes plus `FUN_0042e5a0`, which is exactly the state code 11 and code 2 assert between them: the
+player out of flight, the chrome and view target off. `FUN_0047fd50` clears all three of
+`+0x91d`/`+0x91e`/`+0x91f` while it rebuilds the vehicle, and the case re-asserts two of them
+afterwards, so the order is part of the answer. Nothing in the case ends that state; the definition
+ending does, through the ordinary handoff, which is how the player gets flight back in the new
+airframe. The whole five-step decode is now in
+[`docs/formats/anim-definitions/cutscenes.md`](formats/anim-definitions/cutscenes.md#the-airframe-swap-codes-965-966-and-967).
+
+**Verified.** `dotnet build CSVM/CSVM.sln` clean, 0 warnings; `dotnet test` 2397 passed. The new
+`campaign-airframe-swap` suite drives CM02's own built world: the three decoded codes name the defs
+the shipped stat rows carry, the mission's own compiled program is scanned for a swap callback
+rather than 967 being named by hand, and driving that code through the host takes the player from a
+Bloodhawk (2 gun groups, 3 hardpoints, four 20 hp zones) to a Balmoral (2 gun groups, 8 hardpoints,
+nose 40 / tail 35 / wings 25 and 25) at the same position, heading and speed, with every pylon at
+its own capacity, the outgoing aircraft out of the world, exactly one near-miss registration left in
+the pool, and `OutOfFlight`/`Presenting` landing on the aircraft the swap built. ⚠ Those four armour
+values are the exe's own: `FUN_0047bd90` writes 40, 35, 25, 25 in the 967 case, which is an
+independent confirmation that CSVM's `player_balmoral` stat row is the row the swap is meant to
+produce. `landings-approach-trigger`, `landings-wingwalk-gate`, both `loadout` suites and all 17
+`campaign` suites stay green beside it.
+
+**Two things the original does here that CSVM does not, both per-mission exe behaviour.** After the
+swap, 966 and 967 hand the aircraft the player just left to `wingman_4`: `FUN_004735b0` resolves
+that name to a live vehicle only in `c3`/`m05` and `c4`/`m04`, gives a record of that name the
+player's own aircraft type and livery in those two missions, and the callback places it 100 m off
+the player's nose at 45°, gives it the outgoing airframe's armour and structure sums and reveals it.
+967 also hides the aircraft the capture animation belongs to and scales the new airframe's four
+sections by that aircraft's own damage fractions. The captured Balmoral still flying after the
+player takes it over is a real gap and is filed as `BL-503`; neither behaviour is asked for by
+anything in the data, both being keyed on the chapter and mission strings in the exe, so a search of
+the shipped files for a trigger comes back empty and that emptiness is not evidence.
 
 ## G77 ☑ CM02's Balmorals break formation immediately, unattacked (`BL-498`)
 

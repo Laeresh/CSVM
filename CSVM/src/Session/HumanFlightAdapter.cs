@@ -77,23 +77,29 @@ internal sealed class HumanFlightAdapter
 
     /// <summary>Builds player <paramref name="pi"/>'s aircraft into <paramref name="rig"/> and
     /// adds it to the session world. Call once per rig in ascending player order (see the class
-    /// note on the shared rng streams).</summary>
-    public void Assemble(int pi, PlayerRig rig, Action<FlightController> onCreated)
+    /// note on the shared rng streams). <paramref name="swap"/> is a mid-mission airframe swap
+    /// rather than the initial build: it names the airframe outright and carries the flight state
+    /// of the aircraft being left, and it is the caller's job to have removed that aircraft first.
+    /// </summary>
+    public void Assemble(int pi, PlayerRig rig, Action<FlightController> onCreated,
+        AirframeSwapRequest? swap = null)
     {
         bool verbose = pi == 0; // the per-plane detail lines are identical for every player
         string tag = _human.RigCount > 1 ? $"P{pi + 1} " : "";
         // Each player flies their own pick; an active Instant Action mission overrides this for
-        // every human alike, since the def carries one player_plane, not a per-player list.
-        string planeName = _human.InstantActionPlayerPlaneNode
+        // every human alike, since the def carries one player_plane, not a per-player list. A
+        // mission's own swap outranks both: it names the airframe the script hands the player.
+        string planeName = swap?.PlaneNode
+            ?? _human.InstantActionPlayerPlaneNode
             ?? (_policy.PlaneNames.Count == 0
                 ? _policy.PlaneName
                 : _policy.PlaneNames[Math.Min(pi, _policy.PlaneNames.Count - 1)]);
         var stats = _aircraft.StatsFor(planeName);
 
         // The plane this pilot BUILT, when they picked one: its guns, pylons, paint and armour
-        // replace the airframe's stock ones below. Null on every stock pick, and empty outside a
-        // launchscreen launch, so no scripted path ever sees one.
-        var custom = CustomPlaneFor(pi);
+        // replace the airframe's stock ones below. Null on a stock pick, empty outside a
+        // launchscreen launch, and never on a swap (see AirframeSwapRequest).
+        var custom = swap != null ? null : CustomPlaneFor(pi);
         string planeDisplay = custom?.Name is { Length: > 0 } customName
             ? customName
             : PlaneRoster.PlaneDisplayName(stats);
@@ -370,8 +376,9 @@ internal sealed class HumanFlightAdapter
                          (_human.MixGain < 1f ? $" (per-player mix gain {_human.MixGain:0.00})" : ""));
         }
         // This player's stunt run: player 1 flies the loaded instance, everyone else an
-        // independent copy of the same zones — own progress, own clock.
-        if (_human.StuntZones != null)
+        // independent copy of the same zones — own progress, own clock. Never on a swap, which
+        // would restart the clock and stack a second marker HUD (see AirframeSwapRequest).
+        if (swap == null && _human.StuntZones != null)
         {
             controller.Stunt = pi == 0 ? _human.StuntZones : _human.StuntZones.ForAnotherPlayer();
             controller.Stunt.LogTag = tag; // "P2 " in a race — one shared world, four runs
@@ -458,9 +465,9 @@ internal sealed class HumanFlightAdapter
         }
 
         // Every player's start comes from ONE call: a grid start is not decomposable, since no
-        // single pilot's answer exists until every slot is known. Resolved lazily on the first
-        // rig, so the caller can keep constructing the assembler before the rigs are known.
-        var start = (_starts ??= _spawns.ChooseStarts(
+        // single pilot's answer exists until every slot is known. Resolved lazily on the first rig,
+        // so the caller can construct the assembler first. A swap brings its own instead.
+        var start = swap?.Start ?? (_starts ??= _spawns.ChooseStarts(
             _human.SpawnList, _world.MissionZrdrPath, _human.SpawnBase, _human.RigCount))[pi];
         // The plant's force path is chosen once, here, off who is flying — a person, so the
         // player path. FlightModel.UsesAiForcePath carries why this is a construction argument

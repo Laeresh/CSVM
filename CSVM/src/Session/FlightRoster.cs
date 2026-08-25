@@ -113,10 +113,7 @@ public sealed class FlightRoster
                 _players.Assemble(pi, rigs[pi], attempted.Add);
                 if (rigs[pi].Controller is { } controller)
                 {
-                    controller.SmokeScreens = _human.SmokeScreens;
-                    controller.PauseState = _human.PauseState;
-                    controller.TargetSubParts = _targetSubParts;
-                    controller.TargetObjectives = _targetObjectives;
+                    BindSessionSinks(controller);
                 }
             }
             _humans = new List<PlayerRig>(rigs).AsReadOnly();
@@ -127,6 +124,52 @@ public sealed class FlightRoster
             RollBackPlayers(rigs, attempted, assemblerState);
             throw;
         }
+    }
+
+    /// <summary>Puts one player into a different airframe without ending the mission: the rig's
+    /// aircraft is rebuilt from <paramref name="planeNode"/>'s own record, in the pose, attitude,
+    /// throttle and speed the aircraft being left was flying, carrying the NEW airframe's fit,
+    /// armour and audio and nothing of the outgoing one's. ⚠ Rounds already in the air are not the
+    /// outgoing aircraft's: they ride the shared pool under this pilot's unchanged shooter id.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md, callback codes 965 to 967.</summary>
+    public FlightController SwapPlayerAirframe(PlayerRig rig, string planeNode)
+    {
+        ArgumentNullException.ThrowIfNull(rig);
+        if (_players == null)
+            throw new InvalidOperationException("an airframe swap needs a flight-start policy");
+        if (rig.Controller is not { } outgoing)
+            throw new InvalidOperationException("an airframe swap needs an aircraft to swap out of");
+
+        // The sim pose, not the node's: the node lags it by the render interpolation, and a swap
+        // that read the drawn frame would put the replacement a frame behind where it was flying.
+        var start = new FlightStart(outgoing.WorldPosition,
+            outgoing.WorldPosition + outgoing.NoseDirection, outgoing.Throttle,
+            outgoing.WorldVelocity.Length());
+
+        // The paint stream is shared with every AI spawn still to come, so the replacement's own
+        // livery draw is rolled back afterwards: a mission handing the player an airframe must not
+        // change what the next wave is painted.
+        var assemblerState = _players.CaptureState();
+
+        // ⚠ Order is forced. DetachRosterBindings drops every near-miss registration carrying this
+        // pilot's shooter id and the replacement registers its own under the same id, so the
+        // outgoing aircraft goes first. A build that throws then leaves the rig aircraft-less.
+        RemoveController(outgoing);
+        rig.Controller = null;
+        try
+        {
+            _players.Assemble(rig.Index, rig, _ => { }, new AirframeSwapRequest(planeNode, start));
+        }
+        finally
+        {
+            _players.RestoreState(assemblerState);
+        }
+
+        var controller = rig.Controller
+            ?? throw new InvalidOperationException($"airframe swap to '{planeNode}' built no aircraft");
+        BindSessionSinks(controller);
+        Log.Info("flight", $"airframe swap: P{rig.Index + 1} is now flying '{planeNode}'");
+        return controller;
     }
 
     public void SetTargetSubParts(Action<List<AimCandidate>> source)
@@ -213,6 +256,17 @@ public sealed class FlightRoster
         _targetSubParts = null;
         _targetObjectives = null;
         _spawned = 0;
+    }
+
+    // The session-wide sinks a human controller takes after assembly rather than during it. One
+    // place, because an airframe swap builds a replacement that has to end up bound to exactly what
+    // the initial build bound.
+    private void BindSessionSinks(FlightController controller)
+    {
+        controller.SmokeScreens = _human.SmokeScreens;
+        controller.PauseState = _human.PauseState;
+        controller.TargetSubParts = _targetSubParts;
+        controller.TargetObjectives = _targetObjectives;
     }
 
     private void RollBackPlayers(IReadOnlyList<PlayerRig> rigs,

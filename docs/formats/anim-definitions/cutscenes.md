@@ -405,7 +405,7 @@ install; the compiled archives carry the same events.
 | 913 | 7 | `FUN_0041f250` parks every AI vehicle that is not the player and not itself in a cutscene: sets its hold flag, pushes its next-think time far out, and deactivates its scene node. Plus `FUN_004a95f0` (detaches the wave director's node update), `FUN_004516e0(0)` and `FUN_00453660(0)`. **Clears the world of AI aircraft for the duration of the movie.** |
 | 914 | 8 | the exact inverse (`FUN_0041f2e0`, `FUN_004a9610`, `FUN_004516e0(1)`, `FUN_00453660(1)`), reactivating each AI vehicle with a randomised next-think. Skipped in multiplayer. |
 | 950, 951 | 14 for 951 | 951 teleports the player to the current camera pose and rebuilds its motion state; 950 is a lookup form. |
-| 965, 966, 967 | 1, 1, 3 | swap the player onto a specific airframe (`pbloodhawk`/`player_bhawk`, `pwarhawk`/`player_warhawk`, `pbalmoral`/`player_balmoral`) with its armour and hardpoint table, and set the cutscene flags. The data-side counterpart of the intro defs' `check_balmoral`/`check_warhawk` branches. |
+| 965, 966, 967 | 1, 1, 3 | swap the player onto a specific airframe (`pbloodhawk`/`player_bhawk`, `pwarhawk`/`player_warhawk`, `pbalmoral`/`player_balmoral`) with its armour and hardpoint table, and set the cutscene flags. The data-side counterpart of the intro defs' `check_balmoral`/`check_warhawk` branches. Decoded in full [below](#the-airframe-swap-codes-965-966-and-967). |
 | 968 | 1 | tests `bswingman_1`. |
 
 **The two gaps, named.** Codes **14** (6 occurrences, four of them in the intro defs) and **123**
@@ -413,6 +413,61 @@ install; the compiled archives carry the same events.
 20 below `0x15`, and 4–9 and 14–19 fall through. No other host that can be installed on a cutscene
 animation takes them either, since the only host the cutscene trigger installs is this one. They
 are recorded as gaps, not guessed at: nothing in the exe tells us what 14 or 123 were meant to do.
+
+### The airframe swap codes 965, 966 and 967
+
+The three codes are the only mechanism in the shipped data that changes what the player is flying
+without ending the mission. Their five occurrences are `C1/M02`'s `hangar_3-hangar_drop` (965),
+`C4/M04`'s `player-bm_unhook_player` (966) and the three `britbalmoral_<n>-ww_balmoral<n>` capture
+definitions in `C3/M05` (967), where the code is the last event of the sequence that flies the wing
+walk.
+
+Each case does the same five things, in this order.
+
+1. **Measure the outgoing airframe.** `FUN_0047bcd0(name, &armour, &structure)` reads one hull
+   section's CURRENT pair off the vehicle's section array (at `veh+0x9c`, stride `0x58`, name at
+   `+4`, armour max/current at `+0x24`/`+0x28` and structure max/current at `+0x2c`/`+0x30`),
+   answering −1/−1 for a section the airframe has none of. The four sections are the body, the tail
+   and the two wings, and the two sums are kept for step 5. 965 skips this step.
+2. **Rebuild the vehicle.** `FUN_0047fd50(<def>, <planes.zbd node>)` returns immediately if the
+   player is already in that def. Otherwise it saves the attitude quaternion (`+0x54`), the velocity
+   (`+0x81`) and two further fields, tears the old vehicle body down (`FUN_0047bab0`), builds the
+   new one from the plane record (`FUN_0047c210`), **walks the global target list and re-points
+   every `TargetVehicle` that pointed at the player onto the new object** (both the `+0x948` and the
+   `+0x2fc` slot), re-registers the collision and landing sound handles, restores the saved motion
+   state and re-applies the camera-parameter profile. It clears `+0x91d`/`+0x91e`/`+0x91f` on the
+   way through, which is why step 4 re-asserts them.
+3. **Write the new airframe's tables.** The twelve ints at `DAT_0062ae28` are the player's
+   ammunition table, four gun-group counts then eight hardpoint counts, `−1` for a slot the airframe
+   has none of. The Bloodhawk takes 40/30 and two hardpoints of six, the Warhawk 70/50 and six
+   hardpoints of six, the Balmoral 50/50/30/30 and eight of six; the four bytes at `DAT_0062ae58`
+   ride the four gun slots. `FUN_004b24d0` pushes the table onto the player and `FUN_004b2350`
+   re-picks the selected gun and the selected hardpoint as the first slot in each half with a
+   positive count, so the readouts follow. `FUN_0047bd90(name, armour, −1)` then sets each of the
+   four hull sections to that airframe's own armour, max and current together: 20 across for the
+   Bloodhawk, 30 across for the Warhawk, 40/35/25/25 for the Balmoral, which is the same row CSVM's
+   own stat table carries for `player_balmoral`. Last, `FUN_00449140(<airframe id>)` reads a scalar
+   off the stat row (id 0xb, 0x23, 0x29) into `player+0x66c`.
+4. **Set the cutscene flags.** `player+0x91d = 1` and `player+0x91e = 1`, then `FUN_0042e5a0()`.
+   Those are exactly the state **code 11** and **code 2** assert between them: the player out of
+   flight, and the chrome and view target off. Nothing in the case ends that state; the definition
+   ending does, through the ordinary handoff. 965 additionally sets `player+0x946`, the nitrous
+   injector bit.
+5. **Hand the outgoing airframe to `wingman_4`** (966 and 967 only). `DAT_0071c4f0` is resolved once
+   at mission start by `FUN_004735b0`, which looks `wingman_4` up in the live vehicle list in
+   `c3`/`m05` and `c4`/`m04` and holds 0 everywhere else. The same function gives a record named
+   `wingman_4` **the player's own aircraft type and livery** in those two missions. The case places
+   it 100 m from the player at 45° off the nose, gives it the section sums measured in step 1 and
+   reveals it (`FUN_004b0f40`). 967 also hides the aircraft the capture animation belongs to, and
+   scales the new airframe's four sections by that aircraft's own armour and structure fractions,
+   so the captured plane's damage carries onto the one the player is now flying.
+
+⚠ **CSVM implements steps 2, 3 and 4 and not steps 1 and 5.** The rig is rebuilt through the flight
+roster's own assembler on the named airframe, at the pose, heading, throttle and speed the outgoing
+aircraft held, with that airframe's stock fit at full ammunition and its own armour pools; the
+cutscene flags land on the aircraft the swap built. The `wingman_4` handover and the damage
+carry-over are per-mission exe behaviour keyed on the chapter and mission strings, and nothing in
+the data asks for them.
 
 ### Handoff and skip
 

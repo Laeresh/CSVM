@@ -4917,7 +4917,11 @@ view off the aircraft (`FlightController.CameraOwned`, which also stops the cock
 re-asserted), 11 the player out of flight (`Held` + `Inert` + engine audio paused), 913/914 park and
 reveal the AI (only what this controller parked comes back), 666/667 the camera-parameter gate
 (tracked, not acted on — this engine applies that profile once per rig and never on a view change),
-1/10 the handoff and the in-flight systems; 14 and 123 are named gaps with one log line each. The
+1/10 the handoff and the in-flight systems; 965/966/967 the mid-mission airframe swap, through the
+`SwapAirframe` seam the session fills with `FlightRoster.SwapPlayerAirframe` (the three codes and
+their def/node pairs are `Session/AirframeSwap.cs`); 14 and 123 are named gaps with one log line
+each. A swap sets the cutscene flags 11 and 2 set between them, and clears nothing: the definition
+ending is what gives the player flight back, now in the new airframe. The
 handoff raises the gameplay state the definition's own `RESET_STATE` asserts, because a CSVM
 `RESET_STATE` dispatch deliberately raises no callbacks and `RESET_TIME` is undecoded; it also
 retracts the bars, returns `camera1` to the runtime's world root (a definition composes itself by
@@ -5071,6 +5075,18 @@ unconsumed. The aggregate owns the live
 human/AI membership views, fans target-source updates to present and future members, and drops its
 non-node bindings in `ClearMembership`; the session subtree remains the aircraft node owner.
 `HumanFlightAdapter` and `AiFlightAssembler` are the two private assembly implementations.
+`SwapPlayerAirframe` is the third commit path, a mission putting one player into a different
+airframe mid-flight (callback codes 965 to 967): it removes the outgoing aircraft and re-runs the
+human assembler on the named airframe with the pose, heading, throttle and speed that aircraft
+held. ⚠ The removal has to precede the build, because `DetachRosterBindings` drops every near-miss
+registration carrying that pilot's shooter id and the replacement registers its own under the same
+id. The replacement carries the new airframe's own everything: stats, stock guns and hardpoint
+table at full ammunition, damage zones, camera profile and engine audio. Rounds already in the air
+are unaffected, since they belong to the shared pool under the pilot's unchanged shooter id. The
+livery stream is captured and restored around the build so a swap cannot change what a later AI
+wave is painted, and a swap builds no stunt run, scoreboard or custom-plane fit: the run belongs to
+the pilot, and a bought plane's armour and pylon counts belong to the airframe they were bought
+for.
 
 ## src/Session/FlightRosterInputs.cs
 The grouped construction facts accepted by `FlightRoster`: copied `FlightRosterPolicy`, immutable

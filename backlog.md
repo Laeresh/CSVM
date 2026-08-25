@@ -1948,29 +1948,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-494` `[Feature]` **A mission cannot swap the player onto another airframe, so CM02 cannot be
-  finished after its capture.** *Evidence:* asked at the controls, whether flying the Balmoral to the
-  Pandora is possible yet. It is not, and the gap is narrow rather than deep. The original does this
-  by swapping the PLAYER'S OWN AIRFRAME rather than by handing control of an AI aircraft: callback
-  codes 965, 966 and 967 "swap the player onto a specific airframe (`pbloodhawk`/`player_bhawk`,
-  `pwarhawk`/`player_warhawk`, `pbalmoral`/`player_balmoral`) with its armour and hardpoint table,
-  and set the cutscene flags" (`docs/formats/anim-definitions/cutscenes.md`, the callback table), and
-  they are the data-side counterpart of the intro definitions' own `check_balmoral`/`check_warhawk`
-  branches. `AnimRuntime.HandleCallback` wires two codes and a mission-script host and counts
-  everything else, so 965 to 967 reach nothing. ⚠ **The airframe itself is not the gap:**
-  `player_balmoral` is already a flyable airframe here, with its stat-table row, its Instant Action
-  entry, its `CamParams` third-person override, its eight-rung damage ladder and its effects
-  (`PlanePickerRoster.cs:34`, `InstantAction.cs:62`, `CombatSuites.cs:1052`). Its own animations ship
-  too: `player_balmoral-bal_wing_folddown`/`foldup` and the `bal_hook` extend, retract and startup
-  definitions. *Fix shape:* wire the three swap codes onto the player rig, carrying the airframe's
-  armour and hardpoint table as the decode says, and settle what the cutscene flags do. *⚠ Traps:*
-  this is an airframe swap and not taking over another aircraft, so do not build a way to fly one
-  of the mission's AI Balmorals; the Balmoral the player flies is their own plane record, and the
-  Balmoral is a heavy plane rather than an airship. The swap happens mid
-  mission with a loadout already bound, so the hardpoint table changing under a live rig is the part
-  to get right. This is the last thing standing between the player and finishing CM02, now that the
-  capture itself fires. *Cross-refs:*
-  `BL-471` (the callback decode that filed this), `PLAN-M5-polish.md` G76.
+- `BL-503` `[Feature]` **An airframe swap leaves the captured aircraft flying, and never hands the
+  outgoing one over.** *Evidence:* found by G76, which wired the swap itself and reported this
+  rather than folding it in. The original's 967 case does two more things than the swap. It hides
+  the aircraft the capture animation belongs to and scales the new airframe's four hull sections by
+  that aircraft's own armour and structure fractions, so a Balmoral shot half to pieces is the one
+  the player inherits. And it hands the aircraft the player just left to `wingman_4`: the exe
+  resolves that name only in `c3`/`m05` and `c4`/`m04`, gives a record of that name the player's own
+  aircraft type and livery, places it 100 m off the nose at 45° with the outgoing airframe's armour
+  and structure sums, and reveals it. In CM02 that is the wingman flying off in your old plane while
+  you fly the Balmoral. *Fix shape:* the anim's root vehicle has to be reachable from the callback,
+  which needs the definition's root node name plumbed through `CallbackHost`; it passes only the
+  anim name today, and that is the whole of what blocks the first half. *⚠ Traps:* neither behaviour
+  is asked for by anything in the data. Both are keyed on chapter and mission strings inside the
+  exe, so nothing in the shipped files will tell a reader they should happen, and a search of the
+  data for a trigger will come back empty. Do not read that emptiness as the behaviour not existing.
+  The captured aircraft's damage carries into the player's hull, so wiring the handover without the
+  scaling gives the player a pristine Balmoral and makes the ending easier than the original's.
+  *Cross-refs:* `PLAN-M5-polish.md` G76, which landed the swap; `BL-495`'s marker graft, which is
+  what makes the capture that raises this fire at all.
 
 - `BL-496` `[Feature]` **The aiv `ace` flag reaches the entity and nothing is known about what it
   does there.** *Evidence:* found by G75 while binding the pilot name. Slot 67 `ace` is read by the

@@ -160,6 +160,7 @@ public static class SuiteCatalog
         "campaign-objective-markers",
         "landings-approach-trigger",
         "landings-wingwalk-gate",
+        "campaign-airframe-swap",
         "roster-spawn-names",
         "mission-radio",
         "campaign-zeppelin-wakeup",
@@ -843,6 +844,20 @@ public static class SuiteCatalog
             + "planes' aiv group being down to one, and a driven approach at an armed Balmoral "
             + "starts the capture where the same approach before the gate starts nothing",
             WingWalkCaptureGate));
+
+        // BL-494: callback codes 965 to 967, which put the player in a different airframe mid
+        // mission and reached nothing until the roster grew a swap.
+        into.Add(new TestHarness.Suite("campaign-airframe-swap",
+            "the mission-script host's airframe swap over CM02's BUILT world: the three decoded "
+            + "codes name the defs the shipped stat rows carry, the mission's own capture "
+            + "definition authors the Balmoral one, and driving that code through the host "
+            + "rebuilds the player's rig on the named airframe at the pose, heading and speed it "
+            + "was flying, with that airframe's stock hardpoint table at full ammunition and its "
+            + "own armour pools and damage zones rather than the airframe it replaced, the "
+            + "outgoing aircraft out of the world with no registration of its own left in the "
+            + "projectile pool, and the cutscene flags the code sets landing on the aircraft the "
+            + "swap built",
+            AirframeSwapSuites.AirframeSwap));
 
         // BL-401: the assembler named every spawn ai{n}_{plane}, which no authored pattern can
         // match, so rating_biases was dead on the campaign path.

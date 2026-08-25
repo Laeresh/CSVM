@@ -47,6 +47,12 @@ public sealed partial class CutsceneController : Node
     /// director alongside its own per-step world update (code 20 stops both).</summary>
     public Action<bool>? WorldHeld;
 
+    /// <summary>Puts the player into the named <c>planes.zbd</c> airframe, codes 965 to 967. The
+    /// session fills this in with its roster's own swap; unbound, the three codes are hosted and
+    /// counted rather than reaching an aircraft, which is what a session with no rigs wants.
+    /// Returning false says no aircraft changed.</summary>
+    public Func<string, bool>? SwapAirframe;
+
     // The rest of the mission-script host's codes the intro definitions author. Each is the whole
     // message: the definition it sits in never qualifies it
     // (docs/formats/anim-definitions/cutscenes.md).
@@ -247,6 +253,11 @@ public sealed partial class CutsceneController : Node
             case CodeRestoreSystems:
                 break;
             default:
+                if (AirframeSwapCodes.For(code) != null)
+                {
+                    break;
+                }
+
                 if (Array.IndexOf(NamedGaps, code) < 0)
                 {
                     return false;
@@ -450,6 +461,12 @@ public sealed partial class CutsceneController : Node
 
                 break;
             default:
+                if (AirframeSwapCodes.For(code) is { } airframe)
+                {
+                    Swap(airframe);
+                    break;
+                }
+
                 if (_gapsLogged.Add(code))
                 {
                     GD.Print($"cutscene: callback {code} is a named gap, reaching no case in the " +
@@ -458,6 +475,26 @@ public sealed partial class CutsceneController : Node
 
                 break;
         }
+    }
+
+    // One of codes 965 to 967: the airframe is rebuilt first, then the cutscene flags the code sets
+    // (the ones 11 and 2 set between them) land on the aircraft that now exists. ⚠ Both halves of
+    // that order matter: the original's rebuild CLEARS those flags on the way through, and the
+    // state has to reach the new rig. Nothing here ends the presentation, the definition ending
+    // does, which is how the player gets flight back in the new airframe.
+    private void Swap(AirframeSwapCode airframe)
+    {
+        if (SwapAirframe == null || !SwapAirframe(airframe.PlaneNode))
+        {
+            GD.Print($"cutscene: callback {airframe.Code} names '{airframe.PlaneNode}' " +
+                     "but no aircraft was there to swap");
+            return;
+        }
+
+        OutOfFlight = true;
+        ApplyOutOfFlight(true);
+        Presenting = true;
+        ApplyPresentation(true);
     }
 
     // The chrome and the view target: CameraOwned is what silences the whole per-frame camera arm,

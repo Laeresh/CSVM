@@ -507,6 +507,10 @@ public partial class GameSession : Node3D
                 // AFTER the rigs, for the same reason the spectate override is: a cutscene that
                 // started during the world build has nothing to hide until they exist.
                 _cutscene?.BindRigs(_rigs, () => AiPlanes);
+                if (_cutscene != null)
+                {
+                    _cutscene.SwapAirframe = SwapPlayerAirframe;
+                }
             }
             ApplyDestroyOverride(state);
             ApplyObjectiveOverride(state);
@@ -2894,6 +2898,29 @@ public partial class GameSession : Node3D
             }
         }
         _orbit.Frame(aabb, _spec.CamPos, pivot);
+    }
+
+    // The mission-script host's airframe swap (callback codes 965 to 967). Player 1 alone: the
+    // original has one player vehicle and the codes name it, so a splitscreen pane cannot be given
+    // an answer the data does not carry. A failed swap is reported rather than thrown: the player
+    // keeps the aircraft the exception left them without, and the mission goes on.
+    private bool SwapPlayerAirframe(string planeNode)
+    {
+        if (_flightRoster == null || _rigs.Count == 0 || _rigs[0].Controller == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            _flightRoster.SwapPlayerAirframe(_rigs[0], planeNode);
+            return true;
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"airframe swap to '{planeNode}' failed: {e.Message}");
+            return false;
+        }
     }
 
     // --debug-spectate: build the whole session as it would be flown, then take every human out of
