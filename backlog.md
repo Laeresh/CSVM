@@ -1107,6 +1107,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
+- `BL-484` `[Bug]` **An `AT_NODE` pose run during the animation bootstrap reads and writes global
+  transforms on out-of-tree nodes, so Godot returns identity and the pose lands at the world
+  origin.** *Evidence:* `PoseChannel.PoseAtNode` (`PoseChannel.cs:383,386,391`) takes the host's
+  `GlobalTransform` and assigns the target's `GlobalBasis`/`GlobalPosition`. During the bootstrap the
+  world root is not yet parented, which `AnimRuntime.WorldTransform`'s own comment already records
+  as a known condition and works around for sound positions. The pose path has no such fallback, so
+  Godot's `!is_inside_tree()` guard fires and both reads return `Transform3D()`. Reached through
+  `AnimRuntime.Start` into `SequenceRunner.Advance` into `HandleTranslateState`, and measured at
+  exactly **4 per world built with `CutsceneRoots`**, from `landings-approach-trigger` and
+  `cutscene-letterbox`. ⚠ The harness allowlist previously attributed these lines to a sound bind,
+  which is wrong; the entry and its cap are corrected to name this and to carry the per-world rate.
+  *Fix shape:* give `PoseAtNode` the composition `AnimRuntime.WorldTransform` already implements,
+  and write the target's LOCAL transform when it is out of tree, so a bootstrap pose lands where the
+  same pose lands a frame later. *⚠ Traps:* the letterbox bars and `camera1` are both world roots
+  posed through this path, so a change here moves cutscene framing and must be judged against
+  `cutscene-letterbox` and a `--campaign=` shot rather than against the error count alone. Do not
+  raise the allowlist cap again instead of fixing this: the cap is the rate times the number of
+  suites, so a third such suite is meant to trip it. *Cross-refs:*
+  `CSVM/src/Testing/TestHarness.cs`'s `ErrorAllowlist`; `PLAN-M5-polish.md` A5, whose second world
+  build is what made the count visible.
+
 - `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
   flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
   traced the same day and **fully decoded 2026-08-13**. The decode is

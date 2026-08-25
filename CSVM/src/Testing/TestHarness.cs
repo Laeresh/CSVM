@@ -42,10 +42,13 @@ public static class TestHarness
         // Cap set just above the worst measured chapter (C2 4) so a new source still trips it.
         new ErrorAllowance(@"Condition ""det == 0"" is true\.", 8,
             "pre-existing singular-basis guard in the destructible death path (backlog: det == 0 invert error)"),
-        // A one-shot SOUND event whose anchor is read for its world position during the animation
-        // bootstrap, before the subtree is in the tree. Measured: C3 1, every other chapter 0.
-        new ErrorAllowance(@"Condition ""!is_inside_tree\(\)"" is true", 4,
-            "pre-existing bootstrap sound-position read on an out-of-tree anchor (backlog: C3 sound bind)"),
+        // An AT_NODE pose run during the animation bootstrap, before the world root is parented:
+        // PoseChannel.PoseAtNode reads the host's GlobalTransform and writes the target's, and
+        // Godot's guard returns identity for both (BL-484). Measured at exactly 4 per world built
+        // with CutsceneRoots, and two suites build one, so the cap is that rate times those two
+        // rather than a round number: a third such suite, or a new source, still trips it.
+        new ErrorAllowance(@"Condition ""!is_inside_tree\(\)"" is true", 8,
+            "pre-existing bootstrap AT_NODE pose on an out-of-tree node (backlog: BL-484)"),
     };
 
     // The engine's own error format (print_error): "ERROR: …", "SCRIPT ERROR: …", "USER ERROR: …".
