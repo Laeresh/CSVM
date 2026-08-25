@@ -130,7 +130,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 64. ☐ The 26 `GRAPHICS/*.JPG` draw nothing, so the new boards have holes in them (`BL-479`)
 65. ☐ `campaign-objectives-hud` cannot fire its own check on C3 (`BL-481`)
 66. ☐ Two persist-log behaviour questions, carried out of `BL-243`'s closure
-67. ☐ `BL-181`'s blocker now reads as discharged when it is not
+67. ☑ `BL-181`'s blocker now reads as discharged when it is not
 68. ☐ Why the scaffolding read differently at the controls, blocked on the user's eye (`BL-477`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
@@ -2065,7 +2065,7 @@ assertion for whichever one turns out to be a divergence.
 **⚠ Traps.** ⚠ This is a research item and its deliverable is an answer. Building a commit-timing
 change without settling which timing the original uses would be inventing content.
 
-## G67 ☐ `BL-181`'s blocker now reads as discharged when it is not
+## G67 ☑ `BL-181`'s blocker now reads as discharged when it is not
 
 **Goal.** The blocker names something that can actually arrive.
 
@@ -2084,6 +2084,14 @@ composed boards do not provide one.
 
 **⚠ Traps.** ⚠ Do not discharge it. The playtest verdict it records is contingent and the contingency
 has not been met.
+
+**Landed.** The blocker tag reads `[Blocked: a shared type scale]` rather than naming a milestone, and
+the entry now says what the contingency actually is: the playtest verdict says these read acceptably
+in isolation, and a sign-off needs them read against chrome the original did not paint. The entry
+carries the reason the composed boards do not supply that, which is that they are painted original
+artwork at authored pixels with a per-background ink palette, so they define no type scale, no
+distance units and no shared font choice for an in-flight overlay to match. Done by the orchestrator
+rather than a lane, because `backlog.md` is a single file three lanes would otherwise conflict in.
 
 ## G68 ☐ Why the scaffolding read differently at the controls (`BL-477`)
 

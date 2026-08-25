@@ -2003,14 +2003,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-113` `[Tuning]` `[Owed-playtest]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
 
-- `BL-181` `[Tuning]` `[Blocked: menu hub]` **Marker HUD + scoreboard layout is a provisional pass, not a fidelity sign-off — pending
-  the menu hub.** Playtested 2026-07-30
+- `BL-181` `[Tuning]` `[Blocked: a shared type scale]` **Marker HUD + scoreboard layout is a provisional pass, not a
+  fidelity sign-off.** Playtested 2026-07-30
   (`./RunGame.ps1 --stunt --chapter=C4 --plane=player_fury`): `MarkerHud`/`StuntScoreboard` placement,
-  fonts and distance units "work for now." The verdict is explicitly contingent on the menu hub not
-  existing yet — once it lands, distance units, font choice and scoreboard layout may need to match
-  its chrome rather than today's placeholder styling. Blocked on the menu-hub milestone, not on data.
-  *Fix shape:* re-review `MarkerHud.cs`/`StuntScoreboard.cs` placement once the menu hub UI exists,
-  against the hub's own type scale/units rather than in isolation.
+  fonts and distance units "work for now." The verdict is explicitly contingent: it says these read
+  acceptably in isolation, and a fidelity sign-off needs them read against the chrome the rest of the
+  game's UI uses, which does not exist yet. ⚠ **The composed campaign boards do not discharge this,
+  and should not be read as doing so.** They are painted original artwork positioned at authored
+  pixels with a per-background ink palette (`BoardPalette`), so they carry no type scale, no distance
+  units and no shared font choice for an in-flight overlay to match. What this waits on is a UI
+  surface that defines those three things for chrome the original did not paint, which is what the
+  menu-hub milestone was standing in for. Blocked on that surface, not on data.
+  *Fix shape:* re-review `MarkerHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
+  against it rather than in isolation. *Cross-refs:* `BL-449`, whose landing prompted this wording.
 
 - `BL-296` `[Feature]` **Per-player ActionMap: named actions over the raw key/pad polling, as the
   rebinding seam.** Every control is hard-polled today (`Input.IsKeyPressed`/`IsJoyButtonPressed`
