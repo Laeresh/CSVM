@@ -82,8 +82,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ A campaign session never spawns its zeppelins or generators (`BL-451`)
 3. ☑ The campaign wingman cannot hold station on a real player (`BL-457`)
 4. ☑ The music channel drowns the briefing (`BL-455`)
-5. ◐ The cutscene letterbox leaks the world at its left and right edges (`BL-452`), cause found and
-   fixed, owed one flight of a mission that reparents `camera1` under a moving node (`C2/M05`, CM15)
+5. ☑ The cutscene letterbox leaks the world at its left and right edges (`BL-452`)
 6. ☑ `DANGER_ZONES_COMPLETED` is never fed in a campaign mission (`BL-458`)
 
 ### Wave B — where things are shown, and where they are heard
@@ -512,7 +511,7 @@ options menu itself.
 the original's mix were being matched, and do not fold it into `Gain`, which would move the decoded
 fade assertions.
 
-## A5 ◐ The cutscene letterbox leaks the world at its left and right edges (`BL-452`)
+## A5 ☑ The cutscene letterbox leaks the world at its left and right edges (`BL-452`)
 
 **Goal.** The bars cover what they are meant to cover, at every window aspect, with nothing drawn
 over them.
@@ -708,6 +707,11 @@ identifiable: the companion capture 272 ms later names the "British Balmoral", a
 it by `OBJECT_ADD_CHILD camera1` under the moving `cargozep2`. `generic_intro` drives `camera1` by
 motions instead, and `AnimRuntime.Advance` ticks motions before the instance walk, which is why the
 eleven intro frames shot for the earlier pass came out clean and did not reach this.
+
+**Closed at the controls: the letterbox reads correctly.** The item held open for a confirmation
+flight because the leak had never been reproduced in a render, and that flight has now been made.
+Both halves of the item stand: the bars ride the frame they clad, and the overlays that used to
+draw over them stay down while a cutscene presents.
 
 **Kept.** `cutscene-letterbox` needs a world built with `CutsceneRoots`, the way a story-mission
 session builds one, and carries three checks. The chapter's own card is measured through `BindWorld`
