@@ -793,6 +793,43 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
+- `BL-477` `[Research]` **Alpha-cutout geometry is fully solid to weapon rays, so a target behind a
+  see-through truss can only be hit from the one open aspect.** *Evidence:* reported at the controls
+  on C3/M01's cargo zeppelin, that the slung hydrogen tanks are hittable only from the rear while the
+  original lets shots through the transparent scaffolding around them. The geometry is decisive.
+  `hydrogentank1..4` sit at local z = -70 and -115 (each about ±16) under `cargozep1`; the `front`
+  truss (`f_lo`/`f_mid`/`f_hi`) spans z = -260.0 to -48.2, covering every tank, while the `rear` truss
+  starts at z = +56.8, which is 130 m aft of the rearmost tank. So from behind there is nothing in the
+  way and from every other aspect the `front` truss is. That truss is exactly the "transparent
+  scaffolding": its meshes are large cards with an X-braced truss painted on them (`f_lo` 6 of 10
+  polygons alpha, `f_hi` 39 of 57), textured `cargotex1`/`cgcable1`, both of which
+  `extracted/C3/texture/manifest.json` marks `alpha: "Full"` while the tanks' own `hydrotank1/2/3` are
+  `alpha: "None"`. Ours makes them solid: `SceneBuilder.EmitCollisionFaces` (`:623-650`) emits EVERY
+  polygon with no filter, into a `ConcavePolygonShape3D { BackfaceCollision = true }` (`:820-821`),
+  and transparency is computed on the render path only, from texture pixels (`SceneBuilder.cs:1186-1191`),
+  never reaching `CollidersForMesh`. `Projectile.cs:1116-1150` takes the first `IntersectRay` hit and
+  retires the round, so there is no penetration and no second candidate. **The original's own answer
+  is UNDECODED and the one decoded flag argues the other way**: `docs/formats/gamez.md:38`'s per-node
+  `intersect_surface` is true on `f_lo`, `f_mid`, `f_hi` and both tank meshes across the whole
+  534-node `cargozep1` subtree (only propeller frames and burn effects are false), which read
+  literally says the original polygon-tests the truss too. That establishes only that a false node is
+  skipped, not that a true node's test ignores texture alpha, and whether the original samples alpha
+  at the ray's hit UV is decoded nowhere. `intersect_bbox` and the `node_bbox`/`model_bbox` records
+  are unread by `GameZ.cs` entirely. *Fix shape:* **decode first**, then decide. Find whether
+  `crimson.exe`'s weapon-ray polygon test consults the hit UV's alpha or a bit in the same texture
+  header word `BL-335` already located. The cheap instrument that turns this from inference into
+  measurement: build C3, place `cargozep1` at its authored pose, cast rays at `hydrogentank1`'s centre
+  from 36 azimuths at several elevations and log the first collider's node name; `--collision=show`
+  under `--freecam` draws the same thing. *⚠ Traps:* a blanket "skip every polygon whose texture has
+  alpha" rule is wrong and would read as a new bug, since `cargotex1` is 48.8 % fully opaque and
+  `cgcable1` 15.8 % and those texels are real girders. The blast radius is the whole world, not this
+  zeppelin: the same classification covers every fence, railing and tree card in eight chapters and
+  feeds aircraft terrain collision as well as weapon rays, so a plane could start flying through
+  fences. `hydrotank4` (the tank's own destroyed variant) is itself `alpha: "Full"`, so any rule must
+  be stated in terms that keep a destructible's own hit volume. Do not fix this by shrinking or moving
+  the `front` truss: the geometry is the original's, and the divergence is in the hit test.
+  *Cross-refs:* `BL-335` (the texture header render-flags word), `BL-300` (aircraft collision hulls).
+
 - `BL-443` `[Fidelity]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
   late.** `FUN_0048fc40` (call `0x48c883`) writes the delivered body-up G and the ramp reads it at
   `0x48ca1e` in the same tick, before the torques; `FlightModel.Step` rotates before it translates
@@ -1162,6 +1199,63 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   file's own rule).
 
 ## Effects & animation runtime
+
+- `BL-470` `[Bug]` **A mid-mission cutscene ends one frame after it starts, because `camera1` has no
+  gamez binding.** *Evidence:* found at the controls, and the flown session is on disk
+  (`.scratch/logs/game-20260825-111629.out`): `texdrop` and `hooked_to_klondike` both start off their
+  landing-approach triggers and both log `its definition ended` in the same frame, while
+  `generic_intro` beside them holds 40 s. `ObjectMotionSiScript` reports the motion's length as the
+  event's duration and that is what holds the sequence alive (`AnimRuntime.cs:1949-1953`), but
+  `PoseChannel.HandleMotionSiScript` sets `duration` only inside its per-target loop
+  (`Anim/PoseChannel.cs:317`), so an unresolved target yields zero. `camera1` is stood up as a bare
+  `Node3D` (`WorldSession.cs:405`) while the letterbox six lines later goes through the scene builder
+  and carries a gamez index; every compiled cutscene names `camera1` at index 3, so
+  `NameResolver.SymbolClaims` returns true with a null binding and `AnimRuntime.Targets` refuses to
+  name-match around a claimed-but-unbuilt index (`AnimRuntime.cs:2949-2967`). `generic_intro` survives
+  only because its own anim root IS `camera1`, so the anchor-scoped rescue at `:2962` hits; `texdrop`
+  and `hooked_to_klondike` are anchored on `player` and get nothing. *Fix shape:* bind the synthetic
+  `camera1` to its gamez node index at `WorldSession.cs:405`, the way the letterbox already is.
+  Two hygiene defects found beside it belong in the same change: `Restore` clears `Playing` while the
+  player is still inside the approach volume and the row is still armed, so the hookup re-fired eight
+  times in 0.14 s (invisible only because each episode is one frame), and `CutsceneController._codes`
+  is never cleared in `Restore` (`CutsceneController.cs:325-356`), so `Codes` accumulates across a
+  whole session. *⚠ Traps:* do not relax `AnimRuntime.cs:2954-2966` — the refusal to name-match around
+  a claimed index is what stops C1's `caboose` driving an unrelated `caboose.flt`; fix the binding,
+  not the guard. The same definitions also name `player` (ptr 8918), and `CutsceneController.cs:427`
+  already records that the gamez `player` is not the airframe this engine flies, so fixing `camera1`
+  alone may play the camera move over an unstaged aircraft. The `landings-approach-trigger` suite
+  passed green throughout: it asserts `AnimStateOf == 3` and objective completion, which an instantly
+  completing definition satisfies, so it MUST gain an assertion that the episode outlives one frame.
+  *Cross-refs:* `BL-471` (same subsystem, the other half of the cutscene camera), `BL-467`/`BL-035`
+  (the trigger that starts these, and which is proved working here).
+
+- `BL-471` `[Bug]` **The cutscene node reparent is unimplemented, so the intro camera plays its
+  authored offsets in world space and frames nothing.** *Evidence:* reported at the controls as "no
+  Pandora or planes in sight" in the C3/M01 intro. `camera1-generic_intro.json`'s `start_script`
+  opens with `ObjectDeleteChild world1/camera1`, `ObjectDeleteChild world1/player`,
+  `ObjectAddChild piratezep/camera1`, `ObjectAddChild piratezep/player`, and its `reset_state` undoes
+  exactly that, so the whole intro is composed in the airship's node frame. In CSVM `ObjectAddChild`
+  is handled only in its sound-emitter form (`AnimRuntime.cs:2374-2385`, whose comment calls the
+  reparent uses "cutscene machinery for cutscenes this project does not have"), and
+  `ObjectDeleteChild` is not in `HandledEventKinds` at all (`AnimRuntime.cs:47-55`); C3 ships 9 of
+  them. The scene scripts then write local transforms (`Anim/MotionRuntime.cs:394`), so `gi_cam1`'s
+  first keyframe of `(-155.7, -62.0, -768.9)` lands in world space and the camera flies at y = -62 m,
+  under the sea, about 1.5 km from `piratezep` at `(-1401, 500, -1412)`. A y of -62 is only sensible
+  as an offset inside a node at y = 500. The same gap takes out the aircraft, since `gi_player1` and
+  `gi_pfighter1/2` animate gamez roots the intro also expects parented to the airship. *Fix shape:*
+  implement the node-reparent form of both opcodes in `AnimRuntime.Dispatch`, moving the child
+  WITHOUT preserving its global transform, so the authored keyframes land in the airship's frame with
+  no further change. *⚠ Traps:* the sound-emitter case must still win, so test it first and fall
+  through. A `keepGlobalTransform: true` reparent is exactly wrong and would change nothing visible.
+  `CutsceneController.Restore` parks `camera1` at `Transform3D.Identity` (`:340-346`), which after a
+  reparent is relative to `piratezep`; Restore has to put it back under the world root first, which
+  is what the definition's own `reset_state` already asks for. `HideUnplacedEntities` /
+  `RestorePlacedEntities` and the `world1` walk assume stable parentage. Verification cannot be a
+  freecam sweep: `docs/verification.md` DIAG-10 says an 8-chapter sweep is inert for `generic_intro`.
+  ⚠ **Disproved, do not chase:** the airship not walking its net during the cutscene is authored, not
+  a bug — callback 20 sets `HoldsWorld` and `GameSession.cs:3052` returns before the zeppelin sim
+  step, matching the decode's note that the original's per-frame world update returns immediately
+  while the cutscene slot is set. *Cross-refs:* `BL-470`.
 
 - `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
   flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
@@ -2018,6 +2112,70 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-472` `[Bug]` **Objective sites are drawn as a standalone overlay, all at once; the original
+  files them into the enemy selection cycle, one at a time, and a moving site's marker freezes.**
+  *Evidence:* reported at the controls as "marker should be only one at a time and be targetable like
+  enemies, d-pad up", and separately as "the dock marker should be fixed to the pandora but it isnt
+  updating and staying in the air". The user's report restates the decode rather than a preference:
+  `TargetRef.Classify` (`Flight/TargetRef.cs:183-194`, from `FUN_004b5cd0`) returns `TargetClass.Enemy`
+  for `objectiveTarget: true` above the vehicle restriction, and `SortsFirst` (`:120-121`, from
+  `FUN_004bbd60`'s two `key = -1` overrides) puts an objective at the head of that cycle; the HUD then
+  draws exactly one thing, `TargetHud.Selected => Own?.Targeting?.Current` (`Flight/TargetHud.cs:112`).
+  D-pad up is already `NextEnemy()` (`Flight/FlightController.cs:2469-2477`, tap; hold is
+  `NearestCrosshairs`; keyboard twin `T`). Ours instead draws the whole set
+  (`UI/ObjectiveMarkerHud.cs:289`) from a standalone overlay that touches neither `TargetPool` nor
+  `TargetSelection`. Corroborated by count, not by a single still: all of
+  `OriginalScreenshots\Videos\Complete Mission M02.mkv` sampled at 2 fps gives 255 frames containing
+  marker blue and **every one contains exactly one cluster, zero contain two**, present on the three
+  nav legs and on the return leg and absent through the whole combat leg, which is where an enemy
+  would hold the single selection slot. The frozen dock marker is the same overlay: `pzhookpoint` is a
+  node eleven levels under `piratezep` and `ObjectiveMarkerHud.cs:222` resolves it to a `Vector3`
+  once inside `Rebuild()`, which runs only when the target set changes (`:144-147`, `:200-207`), so
+  ANY moving objective node freezes. Contrast `CampaignDirector.TravelersMet`, which re-resolves
+  `GlobalPosition` every tick (`Session/CampaignDirector.cs:605-634`). *Fix shape:* retire the
+  overlay and register each live site as an `AimCandidate` in the player's `TargetPool` with
+  `objectiveTarget: true`, letting `TargetSelection` and `TargetHud.DrawSelected` do the drawing; a
+  pool candidate is rebuilt from its live source every frame, which fixes the tracking for free.
+  *⚠ Traps:* `TargetPool.Offer` hard-codes `objectiveTarget` absent (`TargetPool.cs:183-189`) behind a
+  comment that is now stale, since `MissionTargets.Objective`/`OtherTarget` exist
+  (`Flight/MissionTargets.cs:18`); the flag must be plumbed, not faked through the `Structure` branch,
+  which forces `otherTarget` and lands the site on the NonAircraft cycle under `U` instead of the
+  Enemy cycle under d-pad up. Selection stickiness is `ReferenceEquals(Source, ...)`
+  (`TargetRef.cs:219`) and `ObjectiveMarkerHud.cs:125` currently uses the node NAME STRING as
+  `Source`, so a fresh string per rebuild would drop the selection every frame; use the resolved
+  `Node3D`. `FlightRoster.SetTargetSubParts` (`Session/FlightRoster.cs:125`) is single-assignment and
+  already taken by the zeppelin runtime (`GameSession.cs:2275`), so compose, do not overwrite.
+  `TargetPool.Rebuild` calls `Clear()` first. Objectives sorting first means they head the cycle
+  during combat too, which matches the decode; do not add a range or FOV gate to hide them. Keep
+  `PointFor`'s precedence for bare-point sites, since C3/M01's village node sits at the world origin
+  7.9 km from the point its own objective tests. Guard with `IsInstanceValid`, because `piratezep` is
+  switched off and moved during world build. The `campaign-objective-markers` suite asserts the
+  current all-at-once set, so an unchanged pass is not evidence here. *Lead-only, not to be changed on
+  this evidence:* the original's off-screen block's third line may be a distance
+  (`Flight/MarkerHud.cs:158`) where `ObjectiveMarkerHud.cs:325` writes `"N o'clock"`; the film's
+  resolution could not settle the glyphs. *Cross-refs:* `BL-468` (the overlay this supersedes).
+
+- `BL-475` `[Fidelity]` **The targeting readout names a campaign AI by airframe alone, dropping the
+  militia name the original shows.** *Evidence:* reported at the controls, that the original's
+  targeting display reads "Medusa Kestrel". The name is authored, not composed:
+  `extracted/zrdr/vehicle.zrd.json` def `medkestrel` carries `title: MSG_VEH_MEDUSA_KESTREL`, and
+  `extracted/messages.json` resolves that id (14012) to "Medusa Kestrel"; the sibling `medbrigand`
+  carries `MSG_VEH_MEDUSA_BRIGAND`, so it is a family. The roster's own slot-20 `title` is the PILOT
+  tier and is a separate thing (`player` gives "Zachary", `wingman_1` "Betty"), and all three
+  `medkestrel_*` blocks author `title: ""`, so the def title is the fallback the readout should reach.
+  Ours calls `PlaneRoster.PlaneDisplayName(stats)` (`Flight/TargetHud.cs:188-189`, again at
+  `TargetPool.cs:143-144`), which reads `stats.DefName`, strips a leading `p` and title-cases it, and
+  whose own doc comment calls itself a placeholder. `DefName` is deliberately the PLAYER def while the
+  militia def sits beside it as `stats.AiDefName` (`PlaneStats.cs:486`), already used for damage and
+  livery (`AiFlightAssembler.cs:123`, `:273`). The lookup idiom exists: `MilitiaPaint.cs:32-34` walks
+  `vehicle.json`, reads each def's `title` and resolves it through `Messages`. *Fix shape:* route
+  `TargetRef.DisplayName` for an aircraft from `stats.AiDefName`'s `vehicle.json` title through
+  `Messages`, falling back to `PlaneDisplayName` where the def carries no title. *⚠ Traps:* do not
+  change `TargetRef.Name` — `TargetRef.cs:66-76` states it is CSVM's identity string for `--target=`
+  and the breadcrumbs, and a golden pinned on "Fury" could not say which Fury it meant. Check the
+  player's own defs before making the title path universal: a bare player def's title is the aircraft
+  alone, which is why `MilitiaPaint.cs:36-37` skips a display name with no space in it.
+
 - `BL-466` `[Bug]` **The objectives readout is on the flight HUD; in the original it is on the
   pause screen.** *Evidence:* the user, from the original: "in the original the in-flight objectives
   are only seen in the pause screen. but the targets are selectable in world." Ours mounts
@@ -2322,6 +2480,78 @@ usual.
 
 ## Missions, modes & campaign
 
+- `BL-473` `[Fidelity]` **The campaign wingman flies a looser formation than the original's.**
+  *Evidence:* judged at the controls on a complete flown C3/M01, after `BL-457`'s ceiling lift landed:
+  the wingman is near the player for the whole flight and never overhead, so the fall-behind-and-climb
+  failure is gone, but the formation is "not as close as original". This is a fidelity gap on a
+  mechanism that now works, not a repeat of `BL-457`. *Fix shape:* nothing until the gap is measured
+  against something. The decoded station offsets are confirmed correct and `PLAN-M5-polish.md` A3
+  proves the commanded point equals the decoded station to 0.00 m, so the divergence is in how closely
+  the escort TRACKS its commanded point, not in where that point is. *⚠ Traps:* do not re-tune the
+  decoded station offsets or the 700 m join gate to close a visual gap; that would trade a confirmed
+  decode for an impression. Footage-derived separation distances are inadmissible here
+  (`docs/verification.md`), so the reference has to be the decode or the user's eye, not a measurement
+  off the film. *Cross-refs:* `BL-457`, `BL-474`, `BL-469`.
+
+- `BL-474` `[Bug]` **`wingman-station` fails under main's flight plant, and three of its gates are
+  red.** *Evidence:* the suite was authored against this branch's flight model and passes there; after
+  merging main's updated flight model it fails, on the same suite file byte for byte and the same
+  seed. On `player_pfighter` (the campaign's own airframe) this branch's plant reads a 296 m mean
+  separation without the `StationCeiling` lift and 256 m with it, while main's plant reads 1096 m and
+  415 m. The lift therefore does MORE work under main's plant, not less, cutting the escort's time on
+  the far-field plant from 26.8 % of steps to 3.0 %, which settles `BL-457`'s open question toward
+  keeping it. Nitro was ruled out as the cause by a runtime probe: `installed=False` on both rigs. The
+  suite's `worst` column is untrustworthy and should not be quoted (a sampled trace never exceeds
+  470 m); trust the mean. ⚠ Note the contrast this item has to explain: at the controls the wingman is
+  reported near the player throughout (`BL-473`), so either the scripted stick is more aggressive than
+  a human's or the gates measure something the flown case does not reach. *Fix shape:* decide whether
+  this is a regression in main's flight model that its owner should be told about, or a suite whose
+  gates were calibrated against a plant that no longer exists. Do not leave the suite red either way.
+  *⚠ Traps:* do not "fix" it by widening the gates until they pass; the gates encode the 700 m join
+  leash, which is decoded. *Cross-refs:* `BL-457`, `BL-473`.
+
+- `BL-476` `[Bug]` **A zeppelin's authored team is decoded and never read, and `WAKEUP_ENEMIES` has
+  no zeppelin seam, so a mission's hidden zeppelin is present and hostile to everyone from t=0.**
+  *Evidence:* found tracing the at-the-controls report that C3/M01's Medusa Kestrels attack
+  `cargozep1`, which is their own side's. `Zeppelins.cs:130-133` decodes an authored team into
+  `ZeppelinDef.Team` (`:313`) and `ZeppelinDef.TeamId` (`:317`), authored on 16 of 58 records
+  install-wide and null on the other 42 including both C3/M01 records, and **nothing anywhere reads
+  either field**. Separately, `CampaignDirector.WakeupEnemies` (`:636-659`) handles only roster
+  aircraft and says so in its own comment at `:639-640`, while C3/M01's `OBJECTIVE39` is
+  `WAKEUP_ENEMIES ["cargozep1"]` plus `WAKE_ANIM fadein_cg1zep` plus `WAKEUP_ZEP_TURRETS
+  ["cargozep1"]`. `cargozep1` ships `deactivated: 1`, and `ZeppelinRuntime.cs:231-237` honours
+  `Deactivated` only by holding its MOTION, so the zeppelin the mission means to reveal partway
+  through is drawn, collidable and registered as a damage pool from mission start. *Fix shape:* read
+  `ZeppelinDef.Team` onto the placed zeppelin and give `WakeupEnemies` a zeppelin seam. *⚠ Traps:* do
+  not set a zeppelin's team to a literal in code — 42 of 58 records author none, and what an
+  unauthored one falls through to is exactly the question `BL-407` owns. *Cross-refs:* `BL-407`
+  (`AimAssist.AddStructures` defaults every structure to `WorldTeam` = 100, which is what actually
+  makes the Kestrels shoot it, and which this entry does NOT duplicate), `BL-401` (C3/M01's Kestrels
+  author `rating_biases [["player", 0.5], ["piratezep", -1.0]]`, the original's own explicit "never
+  target the pirate zeppelin" instruction, dead in our build because spawn node names never match the
+  patterns). Sequence the three as `BL-401` then `BL-476` then `BL-407`, so that when the structure
+  fall-through flips to neutral the authored teams and the authored biases are both live.
+
+- `BL-478` `[Research]` **`COMPLETED_STOPPOINT` has no net stop-point state, so the PANDORA never
+  halts and shuttles its route forever.** *Evidence:* raised as a question at the controls, whether
+  the airship moves during the last objective. It does, and the data says so three ways: C3/M01's
+  `zeppelins.zrd` gives `piratezep` `net "M1PirateZep"` with `max_speed 20.0`, `C3/zrdr/neindex.zrd`
+  maps that to net id 2, and `ne000002.zrd` is an open 8-node path at y = 500 running about 9 km
+  southwest from the spawn position, which is net node 0. The mission depends on that motion: both
+  `OBJECTIVE12` and `OBJECTIVE13` complete on `COMPLETED_STOPPOINT [["M1PirateZep", 1, 0]]`, and
+  OBJECTIVE13 is the objective that hands the player the dock target. No anim moves it; the motion is
+  the net. Ours flies it (`ZeppelinRuntime.cs:45-63`, `:221-242`) but never halts it: per-node tags are
+  preserved unacted-on (`Flight/AiNetFollower.cs:13`), `COMPLETED_STOPPOINT` is parsed and dispatched
+  (`ObjectiveScript.cs:167`, `ObjectiveGraph.cs:572`) but `CampaignDirector.cs:788-794` logs an
+  explicit `Gap("COMPLETED_STOPPOINT", "net '...' has no live stop-point state")`, and on an open path
+  `AiNetFollower.Update` (`:167-174`) reverses at the degree-1 end. *Fix shape:* a decode, then a
+  stop-point state on `AiNetFollower`. *⚠ Traps:* `docs/formats/ai-nets.md:118-183` is explicit that
+  the shape-A node tags are structure and not meaning, and that two readings (stop-point id plus halt
+  flag, versus segment id plus boundary flag) both fit every net, with the runtime parser not yet
+  located. Implementing "halt at tagged node" today would be inventing content, and it would also
+  change where the mission's docking happens. *Cross-refs:* `BL-472` (the dock marker on this moving
+  airship).
+
 - `BL-469` `[Feature]` **An escort cannot hold station on a leader using nitro, and nothing measures
   the case.** *Evidence:* the two injectors are independent switches, so the asymmetry is reachable
   in a real game: a wingman gets one only when its own `aiv` block authors `nitro` slot 34
@@ -2413,11 +2643,40 @@ usual.
   the 700 m join gate, or `SpeedCeiling`. *Cross-refs:* `docs/org/aiPilot.md`,
   `docs/org/aiControlLaw.md`; `docs/PLAN-M5-polish.md` A3.
 
-- `BL-452` `[Bug]` **The cutscene letterbox flickers once mid-cutscene.** Seen at the controls: the
-  bars are correct from the first frame, then "flickers at a point shortly then goes back".
-  *Evidence:* the user's pass. The shipped definition switches the bars on outright and re-asserts
-  the cutscene camera's frame onto them every tick, so a single-frame gap points at one beat that
-  re-runs a base state or re-parents the card.
+- `BL-452` `[Bug]` **The cutscene letterbox leaks the world at its left and right edges.** Seen at the
+  controls first as a flicker ("flickers at a point shortly then goes back"), then reframed by a
+  second pass: "some elements are rendered before the box, on the left side I can see sometimes the
+  environment, probably something to do with the wider display."
+  **Traced, and it is not temporal, which is why the reproduction attempts below found nothing.**
+  Two causes. **(1) The bars' fit solves for equality, so the horizontal margin is exactly zero at
+  16:9 and wider.** The bars are world geometry: one card at `z = -7.5`, `x = ±6.6461835`, `y`
+  half-extent `4.0474105` (`extracted/C3/gamez/models.json` first record; the node's own transform is
+  `"Initial"`). `CutsceneController.FrameBars` (`:486-509`) sets the camera's VERTICAL fov from
+  `Mathf.Min(halfHeight, halfWidth / aspect) / dist`, and those terms cross at
+  `halfWidth / halfHeight = 1.64211`. Below it the height term binds and 4:3 keeps 19 % margin; at or
+  above it the width term binds and the fit is an identity, `tan(fov/2)·dist·aspect = halfWidth`, so
+  the card's outer edge lands on the frame edge with zero margin in exact arithmetic. That covers 16:9
+  (including the project's own 1280x720 default, `project.godot:15-16`), 1920x1080, 21:9 and
+  3440x1440; 16:10 keeps 2.6 %. The card overhangs vertically by 8 % at 16:9, which is why the leak is
+  a left/right artifact only. With 4x MSAA (`project.godot:29`) the boundary column has partial
+  coverage and blends the bar with what is behind it; which side rounds inside depends on the
+  projection that frame, so it comes and goes as the camera moves. ⚠ That last step is lead-only, but
+  it is the only asymmetry available. **(2) Three canvas layers genuinely draw over the bars.** The
+  bars carry no `CanvasLayer` and every `CanvasLayer` draws above all 3D content;
+  `CutsceneController.ApplyPresentation` (`:417-424`) only hides each `FlightController`'s own HUD
+  canvas, so `ObjectivesHud` (`UI/ObjectivesHud.cs:97`), `ObjectiveMarkerHud` (`:249`) and the lens
+  flare / weather overlays stay up through a cutscene. Nothing else in `CSVM/src` consumes
+  `Presenting` outside the suites. *Fix shape:* give the fit a margin instead of solving for equality,
+  and hide those layers while `Presenting`. *⚠ Traps (this cause):* tightening the fov changes every
+  cutscene's framing at every aspect and will move any golden containing one. Do not scale the card
+  node: `PoseChannel.PoseAtNode` re-applies `rest.Basis.Scale` every tick and
+  `CutsceneController.BindWorld` measures `_cardBox` once (`:159-165`) so a scaled card cannot read
+  its own answer back. The wide-aspect fov is already extreme (83° horizontal at 16:9) and the
+  framing fov is recorded as undecoded, so revisit the framing here or not at all. Do not infer the
+  user's display aspect: the project default already breaks, so this needs no wide monitor.
+  *Evidence (the original reading, kept because its disproofs stand):* the shipped definition switches
+  the bars on outright and re-asserts the cutscene camera's frame onto them every tick, so a
+  single-frame gap would have pointed at one beat re-running a base state or re-parenting the card.
   **Ruled out, not reproduced.** The one named candidate, `CutsceneController.Tick` reading a
   one-frame `AnimStateOf` gap between two instances of the intro definition and calling `Restore`
   early, does not fire: two full windowed engine runs under `--det`, each with the controller
