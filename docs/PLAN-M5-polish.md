@@ -147,7 +147,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 79. ☑ A roster-spawned aircraft carries none of its gamez node's marker scaffolding (`BL-495`)
 80. ☑ A mission cannot re-command its spawned aircraft (`BL-500`)
 81. ☑ A net swap keeps the previous net's engagement gates (`BL-504`)
-82. ☐ A campaign wingman never leaves formation to engage (`BL-505`)
+82. ☑ A campaign wingman never leaves formation to engage (`BL-505`), the original does not either
 83. ☐ An AI aircraft's defensive turrets are never built (`BL-506`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
@@ -3438,7 +3438,7 @@ run with the re-baseline switched off: all three read `attack 1 m, return 1 m` a
 3/3. With it, all three read `attack 2000 m, return 1200 m`. `dotnet build` clean, 0 warnings;
 comment caps clean.
 
-## G82 ☐ A campaign wingman never leaves formation to engage (`BL-505`)
+## G82 ☑ A campaign wingman never leaves formation to engage (`BL-505`)
 
 **Goal.** The player's wingmen fight, or the reason the original's do not is established.
 
@@ -3529,6 +3529,13 @@ constraint against trading the decode for an impression. It is the user's call w
 as a deliberate deviation. The clean seam is `AiPilot.Next`'s `Escort is { Leader.InPlay: true }`
 guard plus a re-form condition, and `wingman-station` and `wingman-engage` are both instruments that
 would catch a regression in the held state.
+
+**Closed without that deviation, at the controls.** The recollection of wingmen pursuing was
+withdrawn once the decode came back, so the item closes on its second branch: the reason the
+original's wingmen do not pursue is established, and ours match it, guns from the station included.
+⚠ This is a reading of the image, not a rule: if the original is ever seen pursuing at the controls,
+the finding to re-open is the escort state's exit, since `+0xd8` having no external writer is the
+claim everything else rests on.
 
 ## G83 ☐ An AI aircraft's defensive turrets are never built (`BL-506`)
 
