@@ -371,6 +371,37 @@ internal static class CampaignRosterSuites
         ctx.Note($"{BiasChapter}/{BiasMission}'s authored rating_biases reach their spawns and move the pick");
     }
 
+    /// <summary>The session's own AI spawner with no world effects: <c>CrashProgram</c> and
+    /// <c>WorldScene</c> stay null, so the assembler's crash-runtime block (their only reader) is
+    /// skipped and <c>worldEffects</c> is never dereferenced. Shared with
+    /// <see cref="LandingApproachSuites"/>, which spawns a mission's roster for the scaffolding
+    /// those rigs carry.</summary>
+    internal static FlightRoster Spawner(TestContext ctx, GameZ planesGamez, TextureArchive textures,
+        ProjectilePool live)
+    {
+        var spec = SessionSpec.Parse(Array.Empty<string>());
+        var resources = new AircraftAssemblyResources
+        {
+            PlanesGamez = planesGamez,
+            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            PaintRng = new RandomNumberGenerator(),
+            ZrdrPath = ctx.ZrdrPath,
+            StockLoadouts = StockLoadouts.Load(),
+            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            // The string table the assembler resolves a spawn's authored name through. Without it
+            // every rig falls back to the def-name derivation and the name checks pass vacuously.
+            WeaponMessages = Messages.Load(ctx.MessagesPath),
+            Textures = textures,
+            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+        };
+        return new FlightRoster(FlightRosterPolicy.From(spec),
+            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            null!, ctx.Host, resources,
+            new FlightWorldBindings { Projectiles = live, Gamez = planesGamez },
+            new HumanRosterBindings());
+    }
+
     // The decoded fork per block: wingman_1 escorts the player with no net; a wingman whose
     // primary_target is another block escorts THAT rig; a netted block patrols and never escorts;
     // a deactivated block is inert and out of play.
@@ -581,35 +612,6 @@ internal static class CampaignRosterSuites
             }
         }
         return null;
-    }
-
-    // The session's own AI spawner with no world effects: CrashProgram and WorldScene stay null,
-    // so the assembler's crash-runtime block (their only reader) is skipped and worldEffects is
-    // never dereferenced.
-    private static FlightRoster Spawner(TestContext ctx, GameZ planesGamez, TextureArchive textures,
-        ProjectilePool live)
-    {
-        var spec = SessionSpec.Parse(Array.Empty<string>());
-        var resources = new AircraftAssemblyResources
-        {
-            PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-            PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
-            StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-            // The string table the assembler resolves a spawn's authored name through. Without it
-            // every rig falls back to the def-name derivation and the name checks pass vacuously.
-            WeaponMessages = Messages.Load(ctx.MessagesPath),
-            Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
-        };
-        return new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
-            null!, ctx.Host, resources,
-            new FlightWorldBindings { Projectiles = live, Gamez = planesGamez },
-            new HumanRosterBindings());
     }
 
     // The two candidates' ranks with and without the authored list, computed on the same inputs

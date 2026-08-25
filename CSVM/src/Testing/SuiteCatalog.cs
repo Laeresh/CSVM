@@ -823,15 +823,17 @@ public static class SuiteCatalog
             + "host, runs it to EXECUTED and completes the primary objective gated on it",
             LandingApproachTrigger));
 
-        // BL-492: CM02's wing-walk capture, whose approach rows the mission gates on a land_on
-        // node state switched for all three Balmorals at once.
+        // BL-492/BL-495: CM02's wing-walk capture, whose approach rows the mission gates on a
+        // land_on node state switched for all three Balmorals at once, and whose approach nodes
+        // reach the world only on the rigs the roster spawns.
         into.Add(new TestHarness.Suite("landings-wingwalk-gate",
-            "CM02's Balmoral capture gate over its BUILT world: the mission's three approach rows "
-            + "resolve and differ only by index, each hangs under its own plane's gamez node, one "
-            + "pair of definitions switches all three land_on nodes together, and the objective "
-            + "calling the arming one waits on those planes' aiv group being down to one; it also "
-            + "pins BL-492, that none of those nodes is built because a Balmoral's gamez node is a "
-            + "library root the roster spawns from an airframe record, so all three rows drop at bind",
+            "CM02's Balmoral capture gate over its BUILT world with its own roster spawned: the "
+            + "mission's three approach rows resolve and differ only by index, the world build "
+            + "alone reaches none of them, the roster spawn grafts each onto the rig its block "
+            + "spawned so all five rows bind, one pair of definitions arms and un-arms all three "
+            + "land_on nodes by gamez index, the objective calling the arming one waits on those "
+            + "planes' aiv group being down to one, and a driven approach at an armed Balmoral "
+            + "starts the capture where the same approach before the gate starts nothing",
             WingWalkCaptureGate));
 
         // BL-401: the assembler named every spawn ai{n}_{plane}, which no authored pattern can

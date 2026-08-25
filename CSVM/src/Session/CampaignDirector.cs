@@ -235,6 +235,10 @@ public sealed class CampaignDirector
             }
             _roster[spawn.Name] = rig;
             _rosterPlans[spawn.Name] = spawn;
+            // The chapter's own copy of this vehicle is never placed, so anything it authors past
+            // the shared airframe is grafted onto the rig here, while the rig is the plane the
+            // block named and is already in the tree.
+            inputs.AttachMarkers?.Invoke(spawn.Name, rig);
 
             if (pilot.Machine is { } machine)
             {
@@ -517,6 +521,12 @@ public sealed class CampaignDirector
         public NetTrailerTargets? NetTrailers;
         public Func<string, IReadOnlyList<Node3D>>? FindNodes;
         public SpawnRosterAircraft Spawn = null!;
+
+        /// <summary>Grafts the block's authored marker scaffolding onto the rig it just spawned
+        /// (<c>Mech3/RosterMarkers.cs</c>). Null in a build with no world runtime, which leaves a
+        /// chapter's additions to a vehicle unreachable exactly as they were before.</summary>
+        public Action<string, Node3D>? AttachMarkers;
+
         public Action<FlightController?, int?, int?> RegisterVoice = (_, _, _) => { };
         public Random Rng = new();
     }

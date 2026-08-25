@@ -143,7 +143,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 76. ☐ A mission cannot swap the player onto another airframe (`BL-494`), behind G74
 77. ☐ CM02's Balmorals break formation immediately, unattacked (`BL-498`)
 78. ☑ CM02's second Peacemaker squad starts awake and attacks the Pandora (`BL-499`, `BL-500`)
-79. ☐ A roster-spawned aircraft carries none of its gamez node's marker scaffolding (`BL-495`)
+79. ☑ A roster-spawned aircraft carries none of its gamez node's marker scaffolding (`BL-495`)
 80. ☐ A mission cannot re-command its spawned aircraft (`BL-500`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
@@ -2879,9 +2879,11 @@ green beside it, which is what proves the trigger itself is sound and the reach 
 
 **The fix is a separate item.** Making the capture fire needs a roster-spawned aircraft to carry its
 gamez node's authored scaffolding, parented to the rig and stamped with the gamez index metadata that
-index-addressed definitions look for, the way F51 stamped `camera1`. That reaches `land_on`,
-`bombs_away<n>`, `setb<n>` and `balmoral_healthtest` on the same three planes, so it is wider than
-one landing volume and is filed as `BL-495` with `BL-492` blocked behind it.
+index-addressed definitions look for, the way F51 stamped `camera1`. Filed as `BL-495` and landed by
+G79, which is where the capture starts working. ⚠ This section claimed the same subtree carries
+`bombs_away<n>`, `setb<n>` and `balmoral_healthtest`; G79 established that none of those is a node in
+C3's gamez at all, so the reach gap was the landing volumes and their `land_on` arms and nothing
+wider.
 
 ## G75 ☑ CM02's named pilots do not read as named (`BL-493`)
 
@@ -3110,7 +3112,7 @@ authored list is armed. `dotnet build` clean, `dotnet test` 2394. No production 
 no golden and no sibling suite is at risk. ⚠ Error counts are not evidence in this wave, a sibling
 lane sharing the log.
 
-## G79 ☐ A roster-spawned aircraft carries none of its gamez node's marker scaffolding (`BL-495`)
+## G79 ☑ A roster-spawned aircraft carries none of its gamez node's marker scaffolding (`BL-495`)
 
 **Goal.** CM02's wing-walk capture fires, because the approach volumes it needs are in the world and
 follow the aircraft that own them.
@@ -3140,6 +3142,40 @@ resolved once at spawn drifts away from the aircraft it belongs to. ⚠ Do not p
 itself: it is a prefab, and placing it puts a second Balmoral in the world beside the roster's. ⚠
 This is not Balmoral-specific. Any roster block whose model authors markers is in the same position,
 so a fix keyed to `britbalmoral` would be the wrong shape even if it made CM02 work.
+
+**Landed.** A roster-spawned aircraft carries whatever its own gamez node authors past the shared
+airframe. [`CSVM/src/Mech3/RosterMarkers.cs`](../CSVM/src/Mech3/RosterMarkers.cs) walks the block's
+library-root `markers` subtree against the rig's own marks by their `cs_name`: a mark both sides
+carry is descended into rather than duplicated, and only what the chapter added is built, hung under
+the airframe's mark of the same name, switched to its authored `active` bit and handed to
+`AnimRuntime.IndexStage`. In CM02 that is exactly `bb_approach<n>` under each Balmoral's `pylon8`,
+three subtrees, carrying the chapter gamez indices `activate_wingwalk` and `deactivate_wingwalk`
+write. `CampaignDirector.BuildRoster` calls it per spawn through a new `AttachMarkers` seam
+(`CSVM/src/Session/CampaignDirector.cs:241`), and `GameSession` binds the approach trigger a second
+time after the roster phase, since the first bind runs at world-attach time when no rig exists yet
+(`CSVM/src/Session/GameSession.cs:2188`). Nothing here names a vehicle: the block name is the
+chapter node's name, and the graft is scoped to `markers` for any block whose model authors one.
+
+⚠ **The authored `active` bit had to be applied on the built nodes.** The world walk honours it by
+refusing to build the node at all, which is not open to a node a definition addresses by index. So
+the graft builds the node and switches it off instead, which is what keeps the capture un-armed
+until the gate opens; without it the three rows would read armed from the first frame.
+
+**Verified.** `dotnet build CSVM/CSVM.sln` clean, 0 warnings; `dotnet test` 2394 passed. The
+`landings-wingwalk-gate` suite now spawns CM02's own roster through the session's `FlightRoster` and
+the director's own roster phase, with the graft wired the way `GameSession` wires it, and its arms
+are inverted: all three approach nodes are built where the suite used to require none, each one a
+descendant of the rig its block spawned, all five of the chapter's rows bind where two used to, and
+every `land_on` the gate pair writes (gamez 942, 935, 626) is a built node carrying that index.
+Driven, the capture is un-armed at mission start and a flown approach starts nothing; the pair's own
+`activate_wingwalk` arms all three and the same approach then starts `ww_balmoral1`;
+`deactivate_wingwalk` takes all three back off. `landings-approach-trigger`, the three `roster`
+suites and all 13 `campaign` suites stay green beside it.
+
+**One claim in G74 does not hold.** `bombs_away<n>`, `setb<n>` and `balmoral_healthtest` are not
+nodes in C3's gamez at all, so no reach gap of theirs was closed here and none exists in the shape
+G74 described. The landing volumes and their `land_on` arms are the whole of what that subtree
+carries in this chapter.
 
 ## G80 ☐ A mission cannot re-command its spawned aircraft (`BL-500`)
 

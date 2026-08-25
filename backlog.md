@@ -1968,43 +1968,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   of the mission's AI Balmorals; the Balmoral the player flies is their own plane record, and the
   Balmoral is a heavy plane rather than an airship. The swap happens mid
   mission with a loadout already bound, so the hardpoint table changing under a live rig is the part
-  to get right. `BL-492` gates this in CM02: no capture, no swap to reach. *Cross-refs:* `BL-492`,
+  to get right. This is the last thing standing between the player and finishing CM02, now that the
+  capture itself fires. *Cross-refs:*
   `BL-471` (the callback decode that filed this), `PLAN-M5-polish.md` G76.
-
-- `BL-492` `[Bug]` **CM02's Balmoral capture reaches none of the three Balmorals.**
-  `[Blocked: BL-495]` *Evidence:* reported at the controls, and the cause is measured by the
-  `landings-wingwalk-gate` suite rather than inferred. Nothing is special about the third plane.
-  `LandingApproaches.Resolve` resolves all three rows from `C3/zrdr/landings.zrd`, and
-  `LandingApproachRuntime.Bind` drops all three because the built world carries no `bb_approach<n>`:
-  those nodes hang under `britbalmoral_<n>/markers/pylon8`, and `britbalmoral_<n>` is a gamez library
-  root with no parent that the world build never places, since the campaign roster spawns the plane
-  from the `pbalmoral` airframe record instead. The same reach failure silences the gate,
-  because `activate_wingwalk` and `deactivate_wingwalk` write the three `land_on` nodes by gamez
-  index and those are unbuilt too. The chapter's other two rows, `pz_manual_land` and `pz_auto_land`,
-  hang under the placed `world1` root and do bind, which is the whole of the asymmetry with the
-  Pandora. The gate itself is authored all-three-at-once and waits on one Balmoral being left:
-  `OBJECTIVE20` naps `OBJECTIVE26` awake five seconds after its own `DEDG [5, 1]`, and 5 is the
-  `group` slot the three `britbalmoral_*` aiv blocks share. *Fix shape:* nothing here until `BL-495`
-  gives a roster-spawned vehicle its gamez marker subtree; then re-run the suite and expect the three
-  rows to bind and arm. *⚠ Traps:* do not relax the authored angle or speed gates, which are
-  identical across the three rows and are not what is stopping this. `deactivate_wingwalk` exists, so
-  an arming rule that cannot be un-armed is wrong. *Cross-refs:* `BL-495` (the reach), `BL-467` and
-  `BL-470`, whose approach work this exercises; `PLAN-M5-polish.md` C21, F51, G74.
-
-- `BL-495` `[Bug]` **A roster-spawned vehicle carries none of its gamez node's marker scaffolding.**
-  *Evidence:* found by G74. A campaign roster entry whose model has authored child markers loses them
-  entirely, because the roster spawns a rig from the airframe record while the gamez subtree that
-  carries the markers hangs under a library root the world build never places. In CM02 this is
-  `britbalmoral_<n>/markers/pylon8/bb_approach<n>`, and it takes the wing-walk capture with it. The
-  same subtree carries `land_on`, `bombs_away<n>`, `setb<n>` and `balmoral_healthtest`, so the reach
-  gap is wider than one landing volume. *Fix shape:* parent the gamez node's authored scaffolding to
-  the spawned rig, stamped with the gamez index metadata that lets index-addressed definitions find
-  it, the way `PLAN-M5-polish.md` F51 stamped `camera1`. *⚠ Traps:* the markers must follow the rig,
-  since these planes move under `SET_AI_NET` and a volume resolved once at spawn would drift away
-  from the aircraft it belongs to. Do not place the library root itself; it is a prefab and placing
-  it would put a second Balmoral in the world beside the roster's. *Cross-refs:* `BL-492` (the reported
-  symptom), `PLAN-M5-polish.md` F51 and G74; `CampaignRosterSuites.cs` proves a suite can spawn the
-  roster, so a fix here is verifiable headlessly.
 
 - `BL-496` `[Feature]` **The aiv `ace` flag reaches the entity and nothing is known about what it
   does there.** *Evidence:* found by G75 while binding the pilot name. Slot 67 `ace` is read by the
@@ -2256,10 +2222,11 @@ usual.
   selects before touching any AI mode, since a bomber that neither breaks off nor evades is most
   likely that field rather than a special case in the mode machine. *⚠ Traps:* do not
   give the Balmorals an evasion exemption by name; the flag is authored data and other chapters'
-  bombers will carry it too. `BL-492`'s reach failure means their gamez scaffolding is absent from
-  the built world, so anything read off a spawned Balmoral's node tree is missing pieces and is not
-  evidence about the formation. *Cross-refs:* `BL-499` (the other CM02 report), `BL-492`,
-  `PLAN-M5-polish.md` G77.
+  bombers will carry it too. ⚠ `BL-500` is a live candidate for the whole of this: `SET_AI_NET` is a
+  no-op, so `OBJECTIVE4`'s command onto `M5Bombrun` never lands and the three fly whatever their own
+  roster blocks author. Check what each block authors for itself before reading anything in the AI
+  mode machine as the cause. *Cross-refs:* `BL-500` (the net command that never lands), `BL-499`
+  (the other CM02 report), `PLAN-M5-polish.md` G77.
 
 - `BL-500` `[Bug]` **A mission cannot re-command its spawned aircraft: `SET_AI_NET`, `SET_AI_TEAM`
   and `SET_AI_ATTACK_RADIUS` are named no-ops.** *Evidence:* found by G78 while chasing the ace

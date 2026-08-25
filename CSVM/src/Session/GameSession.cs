@@ -988,6 +988,7 @@ public partial class GameSession : Node3D
         // After the bootstrap: an intro definition has already raised its codes, and this is where
         // the host picks up the two nodes it drives.
         _cutscene?.BindWorld(session.Runtime);
+        state.Landings = session.Landings;
         if (_cutscene != null && _landings != null)
         {
             _cutscene.HostDefinitions(session.LandingCutsceneAnims);
@@ -2156,6 +2157,7 @@ public partial class GameSession : Node3D
         // placed against the built human field, and the leader pass names the player rig.
         if (_campaign is { } campaignRoster)
         {
+            int grafted = 0;
             state.What += campaignRoster.BuildRoster(new CampaignDirector.RosterInputs
             {
                 ChapterZrdrPath = worldBindings.ChapterZrdrPath,
@@ -2169,9 +2171,23 @@ public partial class GameSession : Node3D
                     : null,
                 Spawn = (plan, pos, look, pilot) => flightRoster.SpawnAi(
                     CampaignRosterPlan.SpawnFor(plan, pos, look, pilot)),
+                AttachMarkers = state.WorldRuntime is { } markerWorld
+                    && state.WorldScene is { } markerScene && state.Gamez is { } markerGamez
+                    ? (block, rig) => grafted +=
+                        RosterMarkers.Attach(markerGamez, markerScene, markerWorld, block, rig)
+                    : null,
                 RegisterVoice = RegisterAiVoice,
                 Rng = Rng.NewSystemRandom(Rng.Ai),
             });
+            // ⚠ The first bind ran before any roster rig existed, so a row whose approach node the
+            // graft above has just created was dropped there. Re-bound here, and only when
+            // something was grafted, so a mission that adds nothing keeps one bind and one log line.
+            if (grafted > 0 && _landings != null && _cutscene != null
+                && state.WorldRuntime is { } landingWorld && state.Landings is { } landingRows)
+            {
+                _landings.Bind(landingWorld, landingRows, _cutscene,
+                    () => _rigs.Count > 0 ? _rigs[0].Controller : null);
+            }
         }
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
             && _rigs[0].Controller is { } lead)
@@ -3295,5 +3311,10 @@ public partial class GameSession : Node3D
         public AnimProgram? CrashProgram;
         public SceneBuilder? WorldScene;
         public AnimRuntime? WorldRuntime;
+
+        /// <summary>The chapter's resolved approach rows, kept so the actor build can re-bind the
+        /// trigger once the roster's own approach nodes exist (<see cref="Mech3.RosterMarkers"/>).
+        /// </summary>
+        public IReadOnlyList<LandingApproach>? Landings;
     }
 }

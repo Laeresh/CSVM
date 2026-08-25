@@ -50,12 +50,12 @@ internal static class LandingApproachSuites
     internal static void LandingApproachTrigger(TestContext ctx) =>
         DriveMission(ctx, FirstSeq, "test-landing-approach", Drive);
 
-    /// <summary>Reads CM02's wing-walk capture gate against its BUILT world: three symmetric
-    /// Balmoral rows, each under its own plane's gamez node, one pair of definitions switching
-    /// all three <c>land_on</c> nodes, and an arming objective that waits on those planes' aiv
-    /// group being down to one. It also pins BL-492, that none of those nodes is built, a
-    /// Balmoral's gamez node being a library root the roster spawns from an airframe record
-    /// instead, so all three rows are dropped when the trigger binds.</summary>
+    /// <summary>Drives CM02's wing-walk capture gate against its BUILT world with its own roster
+    /// spawned: three symmetric Balmoral rows, each authored under its plane's gamez node, grafted
+    /// onto the rig the roster spawns so all three bind; one pair of definitions switching all
+    /// three <c>land_on</c> nodes by gamez index, which arms and un-arms the rows it now reaches;
+    /// an arming objective that waits on those planes' aiv group being down to one; and a driven
+    /// approach at an armed Balmoral starting the capture.</summary>
     internal static void WingWalkCaptureGate(TestContext ctx) =>
         DriveMission(ctx, WingWalkSeq, "test-wingwalk-gate", DriveWingWalk);
 
@@ -133,7 +133,8 @@ internal static class LandingApproachSuites
         TestWorld world,
         CampaignDirector director,
         IReadOnlyList<LandingApproach> armed,
-        Action<LandingApproachRuntime, CutsceneController, FlightController, ObjectiveGraph> body)
+        Action<LandingApproachRuntime, CutsceneController, FlightController, ObjectiveGraph> body,
+        Action<ProjectilePool>? beforeBind = null)
     {
         var cutscene = new CutsceneController();
         ctx.Host.AddChild(cutscene);
@@ -151,6 +152,10 @@ internal static class LandingApproachSuites
         {
             rig = BuildRig(ctx, world, pool);
             var craft = rig;
+            // The mission's own actors, before the bind: a row whose approach node arrives with a
+            // roster spawn is only there to bind once that spawn has happened, which is the whole
+            // ordering the session repeats when it re-binds after its roster build.
+            beforeBind?.Invoke(pool);
             trigger.Bind(world.Runtime, armed, cutscene, () => craft);
             director.Attach(new CampaignDirector.WorldInputs
             {
@@ -202,14 +207,21 @@ internal static class LandingApproachSuites
         }
 
         CheckCarriedRows(ctx, world, carried, owners, report);
-        CheckGateReach(ctx, world, script, rows, carried, report);
         CheckGateCondition(ctx, script, blocks, owners, report);
         WithTrigger(ctx, world, director, rows, (trigger, cutscene, rig, graph) =>
-            ctx.Same(rows.Count - carried.Count, trigger.Armed,
-                $"only the rows on static world nodes bind, which is BL-492: a row carried by a roster vehicle has no built approach node"));
+            {
+                CheckGrafted(ctx, world, carried, report);
+                var gate = CheckGateReach(ctx, world, script, rows, carried, report);
+                ctx.Same(rows.Count, trigger.Armed,
+                    $"every resolved row binds, the roster-carried ones included: their approach nodes came with the rigs that own them");
+                RunTheCapture(ctx, world, trigger, cutscene, rig, carried, gate, report);
+            },
+            beforeBind: pool => SpawnRoster(ctx, world, director, missionZrdr, pool, report));
     }
 
-    // The three rows are symmetric and each belongs to a plane the mission's roster spawns.
+    // The three rows are symmetric and each belongs to a plane the mission's roster spawns. Read
+    // BEFORE the roster is spawned, which is where the reach used to end: the approach nodes hang
+    // under a gamez library root the world build never places.
     private static void CheckCarriedRows(
         TestContext ctx, TestWorld world, IReadOnlyList<LandingApproach> carried,
         IReadOnlyList<string> owners, StringBuilder report)
@@ -232,12 +244,38 @@ internal static class LandingApproachSuites
         ctx.Check(symmetric,
             $"and the three differ only by index, so no gate of theirs can admit one and not another");
         ctx.Same(0, built,
-            $"BL-492: none of their approach nodes is built, a Balmoral's gamez node being a library root the roster spawns from an airframe record instead");
+            $"the world build alone reaches none of their approach nodes, a vehicle's gamez node being a library root it never places");
+    }
+
+    // What the graft put in the world: one approach node per carried row, each a descendant of the
+    // rig its own block spawned, so the volume moves with the aircraft rather than standing where
+    // the plane happened to start.
+    private static void CheckGrafted(
+        TestContext ctx, TestWorld world, IReadOnlyList<LandingApproach> carried,
+        StringBuilder report)
+    {
+        int built = 0;
+        int onRig = 0;
+        foreach (var row in carried)
+        {
+            var found = world.Runtime.FindNodes(row.Node);
+            built += found.Count;
+            var owner = found.Count > 0 ? RigAbove(found[0]) : null;
+            onRig += owner != null ? 1 : 0;
+            report.AppendLine($"  '{row.Node}' built={found.Count} " +
+                $"on rig '{owner?.Name.ToString() ?? "-"}' at " +
+                $"{(found.Count > 0 ? found[0].GlobalPosition : Vector3.Zero)}");
+        }
+
+        ctx.Same(carried.Count, built,
+            $"the roster spawn carries each Balmoral's own approach node into the world");
+        ctx.Same(carried.Count, onRig,
+            $"and each one hangs under the rig its block spawned, so it follows the aircraft under SET_AI_NET rather than drifting away from it");
     }
 
     // The mission's own gate pair, found from the compiled definitions rather than named here: the
     // two definitions that write every carried row's land_on node, and what they can reach today.
-    private static void CheckGateReach(
+    private static List<string> CheckGateReach(
         TestContext ctx, TestWorld world, ObjectiveScript script,
         IReadOnlyList<LandingApproach> rows, IReadOnlyList<LandingApproach> carried,
         StringBuilder report)
@@ -265,7 +303,139 @@ internal static class LandingApproachSuites
         ctx.Same(gate.Count, called,
             $"and an objective's WAKE_ANIM calls each of them, so the gate is the mission's own");
         ctx.Check(rows.Count > carried.Count,
-            $"the chapter's static approach rows do build, which is why one on a world node fires and one on an aircraft does not");
+            $"the chapter carries static approach rows beside these, so the two kinds of owner are told apart in one run");
+        int reached = 0;
+        foreach (int index in arms)
+        {
+            reached += index >= 0 && BuiltCount(world, index) == 1 ? 1 : 0;
+        }
+
+        ctx.Same(arms.Count, reached,
+            $"and every land_on the pair writes is a built node carrying that gamez index, which is what makes an index-addressed write land");
+        return gate;
+    }
+
+    // The gate driven on the nodes it now reaches: the pair's own two definitions, told apart by
+    // what they do rather than by name, and the capture flown at an armed Balmoral.
+    private static void RunTheCapture(
+        TestContext ctx, TestWorld world, LandingApproachRuntime trigger, CutsceneController cutscene,
+        FlightController rig, IReadOnlyList<LandingApproach> carried, IReadOnlyList<string> gate,
+        StringBuilder report)
+    {
+        ctx.Same(0, ArmedCount(world, carried),
+            $"the capture starts un-armed: every land_on ships inactive, so it is not offered while more than one Balmoral flies");
+        ctx.Check(!Fly(ctx, world, trigger, cutscene, null, rig, carried[0], report),
+            $"and flying '{carried[0].Node}' before the gate opens starts nothing");
+
+        var arming = GateRun(world, gate, carried, wantArmed: carried.Count, report);
+        if (arming == null)
+        {
+            ctx.Check(false, $"one of the pair arms all {carried.Count} rows");
+            return;
+        }
+
+        ctx.Check(Fly(ctx, world, trigger, cutscene, null, rig, carried[0], report),
+            $"flying '{carried[0].Node}' once the gate has armed it starts '{trigger.LastStarted}'");
+        report.AppendLine($"armed by '{arming}', started '{trigger.LastStarted}'");
+        var clearing = GateRun(world, gate, carried, wantArmed: 0, report, skip: arming);
+        ctx.Check(clearing != null,
+            $"and the pair's other definition takes the same three rows back off, so the capture can go away again");
+    }
+
+    // Plays each gate definition in turn until the carried rows' arm bits reach `wantArmed`,
+    // returning the one that did it. The pair is not named here: which of the two arms is read off
+    // what the run does to the nodes.
+    private static string? GateRun(
+        TestWorld world, IReadOnlyList<string> gate, IReadOnlyList<LandingApproach> carried,
+        int wantArmed, StringBuilder report, string? skip = null)
+    {
+        foreach (string name in gate)
+        {
+            if (string.Equals(name, skip, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            world.Runtime.Play(name);
+            for (float t = 0f; t < ArmBudgetS && ArmedCount(world, carried) != wantArmed; t += StepDt)
+            {
+                world.Runtime.Advance(StepDt);
+            }
+
+            int armed = ArmedCount(world, carried);
+            report.AppendLine($"'{name}' run: {armed} of {carried.Count} land_on armed");
+            if (armed == wantArmed)
+            {
+                return name;
+            }
+        }
+
+        return null;
+    }
+
+    private static int ArmedCount(TestWorld world, IReadOnlyList<LandingApproach> carried)
+    {
+        int armed = 0;
+        foreach (var row in carried)
+        {
+            var found = world.Runtime.FindNodes(row.Node);
+            if (found.Count == 0)
+            {
+                continue;
+            }
+
+            var arm = world.Runtime.FindNodes(LandingApproaches.ArmNode, found[0]);
+            armed += arm.Count > 0 && arm[0].Visible ? 1 : 0;
+        }
+
+        return armed;
+    }
+
+    // The aircraft a grafted node hangs under, or null when it stands in the world on its own.
+    private static FlightController? RigAbove(Node3D node)
+    {
+        for (Node? at = node; at != null; at = at.GetParent())
+        {
+            if (at is FlightController rig)
+            {
+                return rig;
+            }
+        }
+
+        return null;
+    }
+
+    // The mission's roster, spawned through the session's own spawner and the director's own
+    // roster phase, with the marker graft wired exactly as GameSession wires it.
+    private static void SpawnRoster(TestContext ctx, TestWorld world, CampaignDirector director,
+        string missionZrdr, ProjectilePool pool, StringBuilder report)
+    {
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        try
+        {
+            var spawner = CampaignRosterSuites.Spawner(ctx, planesGamez, textures, pool);
+            int grafted = 0;
+            string what = director.BuildRoster(new CampaignDirector.RosterInputs
+            {
+                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter),
+                MissionZrdrPath = missionZrdr,
+                ZrdrPath = ctx.ZrdrPath,
+                FindNodes = name => world.Runtime.FindNodes(name),
+                Spawn = (plan, pos, look, pilot) =>
+                    spawner.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot)),
+                AttachMarkers = (block, node) => grafted += RosterMarkers.Attach(
+                    world.Gamez, world.Session.Builder.Scene, world.Runtime, block, node),
+                Rng = new Random(1),
+            });
+            report.AppendLine($"roster: {director.Roster.Count} rig(s), {grafted} marker graft(s){what}");
+            ctx.Check(grafted > 0,
+                $"the mission's roster spawn grafts the scaffolding its blocks author: {grafted} subtree(s)");
+        }
+        finally
+        {
+            textures.Dispose();
+        }
     }
 
     // What the arming objective waits on: the DEDG the objective ahead of it authors, over the
