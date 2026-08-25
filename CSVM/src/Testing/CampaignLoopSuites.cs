@@ -33,8 +33,8 @@ internal static class CampaignLoopSuites
 
     private const float StepDt = 1f / 60f;
 
-    // How far the briefing's reveal is run, and how many rows it draws before uncovering anything:
-    // the three buttons CampaignBriefingPage holds at the top of its list.
+    // How far the briefing's reveal is run, and the only rows it ever draws: the three buttons.
+    // An uncovered objective is written onto the parchment note, never added to the cursor's list.
     private const float BriefingBudgetS = 180f;
     private const int BriefingButtons = 3;
 
@@ -162,18 +162,21 @@ internal static class CampaignLoopSuites
             // The reveal is the narration's own clock, so the first uncovered line lands wherever
             // this mission's cue points put it rather than at a time this suite could name.
             float uncovered = 0f;
-            for (float t = 0f; t < BriefingBudgetS && briefing.RowCount <= BriefingButtons; t += StepDt)
+            for (float t = 0f; t < BriefingBudgetS && NoteEntries(briefing) == 0; t += StepDt)
             {
                 briefing.Advance(StepDt);
                 uncovered = t;
             }
 
+            int written = NoteEntries(briefing);
             report.AppendLine($"briefing: state={(briefing.State != null ? "loaded" : "none")}, " +
                 $"objectives={briefing.Objectives.Count}, first line at {uncovered:0.0}s, " +
-                $"rows={briefing.RowCount}, narration='{briefing.NarrationWav}'");
+                $"note lines={written}, rows={briefing.RowCount}, narration='{briefing.NarrationWav}'");
             ctx.Check(briefing.State != null, $"the briefing found this mission's own briefing state");
-            ctx.Check(briefing.RowCount > BriefingButtons,
-                $"and its reveal uncovered an objective line by {uncovered:0.0}s, rows={briefing.RowCount}");
+            ctx.Check(written > 0,
+                $"and its reveal wrote an objective onto the parchment note by {uncovered:0.0}s, lines={written}");
+            ctx.Same(BriefingButtons, briefing.RowCount,
+                $"while the screen's rows stayed its three buttons, so a note line is read and not selected");
         }
 
         flow.FocusRow(CampaignBriefingPage.FlightCheckRow);
@@ -644,6 +647,19 @@ internal static class CampaignLoopSuites
             $"NEXT MISSION now opens the briefing on seq {flow.MissionSeq}");
         report.AppendLine($"cabin: missionsCompleted={reread.MissionsCompleted}, next={flow.MissionSeq}, " +
             $"results={reread.MissionResults.Count}");
+    }
+
+    // How many lines the reveal has written onto the parchment, which is what the row count used to
+    // stand in for before an objective stopped being a row.
+    private static int NoteEntries(ICampaignPage page)
+    {
+        int entries = 0;
+        foreach (var note in page.Notes)
+        {
+            entries += note.Entries.Count;
+        }
+
+        return entries;
     }
 
     private static int RowOf(CampaignFlow flow, string text)

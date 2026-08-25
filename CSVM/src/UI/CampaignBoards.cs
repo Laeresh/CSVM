@@ -30,6 +30,10 @@ public static class CampaignBoards
     // so a 14px face is what fits a row without touching the one under it.
     private const float ListFont = 14f;
 
+    // The objectives note's own face. Its entries are written sentences in a 185-wide column, so
+    // they take a smaller face than a listbox row does.
+    private const float NoteFont = 11f;
+
     private static readonly BoardArt PaperButton = Ui("SB_B_PaperButton.png", StripFrames);
     private static readonly BoardArt ReturnToCabinArt = Ui("GN_B_ReturntoCabin.png", StripFrames);
 
@@ -135,7 +139,7 @@ public static class CampaignBoards
 
             var (x, y, width) = TextSlot(page.Screen, listIndex++);
             lines.Add(new BoardLine(
-                page.RowText(row), x, y, width, ListFontOf(page.Screen),
+                page.RowText(row), x, y, width, ListFont,
                 row == focusedRow ? BoardInk.RowFocused : BoardInk.Row, row));
         }
 
@@ -144,8 +148,15 @@ public static class CampaignBoards
             lines.Add(new BoardLine(detail, note.X, note.Y, note.Width, ListFont, BoardInk.Detail));
         }
 
-        return new ComposedBoard(pictures, page.Strokes, lines, plaques);
+        return new ComposedBoard(pictures, page.Strokes, lines, plaques, page.Notes);
     }
+
+    /// <summary>The briefing parchment's objectives list, at the <c>LIST</c> widget's own authored
+    /// geometry: <c>POSITION [35, 335]</c>, <c>WORDWRAP [185, 240]</c>, <c>SPACING [5]</c>. Its
+    /// entries are written sentences in a narrow column, so they take a smaller face than a listbox
+    /// row and a wrapped one pushes the next entry down instead of being given a fixed pitch.</summary>
+    public static BoardNote ObjectivesNote(IReadOnlyList<string> entries) =>
+        new(entries, 35f, 335f, 185f, 240f, 5f, NoteFont, BoardInk.Row);
 
     /// <summary>The authored panel a screen writes the focused row's description into, or null
     /// where the screen has none and the shell's own hint line has to carry it. The ammo screen has
@@ -167,10 +178,6 @@ public static class CampaignBoards
                 ? (243f, 297f, 221f)
                 : (245f, 356f + ((index - 1) * 20f), 305f),
             CampaignScreen.PreviousMissions => (420f, 140f + (index * 24f), 325f),
-            // The objectives note's own list, under its title, inside the parchment. Its entries
-            // are sentences in a 185-wide column, so an entry takes two lines and the pitch is a
-            // pair's worth rather than the listbox row height the other screens use.
-            CampaignScreen.Briefing => (35f, 335f + (index * 30f), 185f),
             // One heading per crew slot, at the PILOT and WINGMAN widgets.
             CampaignScreen.FlightCheck => (138f, index == 0 ? 102f : 320f, 400f),
             // Four gun groups down the ammunition panel, then eight pylons in two columns.
@@ -179,11 +186,6 @@ public static class CampaignBoards
                 : (index < 8 ? 135f : 410f, 320f + ((index - 4) % 4 * 28f), 152f),
             _ => (20f, 20f + (index * 20f), 400f),
         };
-
-    /// <summary>The face a screen's list rows take, in authored pixels. The briefing's note is
-    /// written sentences in a narrow column and takes a smaller one than a listbox row.</summary>
-    public static float ListFontOf(CampaignScreen screen) =>
-        screen == CampaignScreen.Briefing ? 11f : ListFont;
 
     private static BoardArt Ui(string name, int frames = 1) =>
         new(BoardArtLibrary.Ui, name, frames);

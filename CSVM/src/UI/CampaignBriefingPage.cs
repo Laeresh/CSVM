@@ -14,8 +14,8 @@ namespace CSVM.UI;
 /// mission's story position (the map art is reused, and Hawaii's wav numbering is not play order).
 ///
 /// <para>The reveal itself is <see cref="BriefingReveal"/>, run off a clock the shell advances
-/// (<see cref="Advance"/>). The buttons hold rows 0 to 2 so their indices never move under the
-/// cursor while the note fills in below them.</para>
+/// (<see cref="Advance"/>). The screen's only rows are its three buttons: an objective is written
+/// on the parchment through <see cref="Notes"/>, read rather than selected.</para>
 /// </summary>
 public sealed class CampaignBriefingPage : CampaignPage
 {
@@ -71,13 +71,15 @@ public sealed class CampaignBriefingPage : CampaignPage
         }
     }
 
-    /// <summary>The three buttons, then one row per objective the reveal has uncovered.</summary>
+    /// <summary>The three buttons, and nothing else. An uncovered objective is written on the
+    /// parchment through <see cref="Notes"/>, never as a row, so the cursor never stops on the
+    /// mission's own text.</summary>
     public override int RowCount
     {
         get
         {
             Sync();
-            return ButtonRows + (_reveal?.RevealedObjectives.Count ?? 0);
+            return ButtonRows;
         }
     }
 
@@ -194,6 +196,32 @@ public sealed class CampaignBriefingPage : CampaignPage
         }
     }
 
+    /// <summary>The parchment's list: one entry per objective the reveal has uncovered, in the
+    /// order it uncovered them. The reveal decides when a line appears and the widget's own
+    /// wordwrap box decides how far the next one sits below it.</summary>
+    public override IReadOnlyList<BoardNote> Notes
+    {
+        get
+        {
+            Sync();
+            if (_reveal is not { } reveal || reveal.RevealedObjectives.Count == 0)
+            {
+                return Array.Empty<BoardNote>();
+            }
+
+            var entries = new List<string>();
+            foreach (int index in reveal.RevealedObjectives)
+            {
+                if (index >= 0 && index < _objectives.Count)
+                {
+                    entries.Add(_objectives[index].Text);
+                }
+            }
+
+            return new[] { CampaignBoards.ObjectivesNote(entries) };
+        }
+    }
+
     /// <summary>Moves the reveal on by a frame's worth of seconds. The shell calls this while the
     /// briefing is the screen showing; nothing else on the page needs a clock.</summary>
     public void Advance(double seconds)
@@ -202,9 +230,8 @@ public sealed class CampaignBriefingPage : CampaignPage
         _reveal?.Advance(seconds);
     }
 
-    /// <summary>The three plaques the dialog's own <c>BUTTONS</c> section carries, in its order.
-    /// Every later row is an uncovered note line, which the parchment lists rather than draws as a
-    /// control.</summary>
+    /// <summary>The three plaques the dialog's own <c>BUTTONS</c> section carries, in its
+    /// order.</summary>
     public override BoardButtonRef Button(int row) => row switch
     {
         ReplayRow => new BoardButtonRef(BoardButton.ReplayBriefing),
@@ -222,30 +249,8 @@ public sealed class CampaignBriefingPage : CampaignPage
             ReplayRow => Label("MSG_BTN_REPLAY_BRIEFING", "REPLAY BRIEFING"),
             CabinRow => Label("MSG_BTN_RETURN_TO_CABIN", "RETURN TO CABIN"),
             FlightCheckRow => Label("MSG_BTN_GO_TO_FLIGHT_CHECK", "GO TO FLIGHT CHECK"),
-            _ => NoteLine(row)?.Text ?? string.Empty,
+            _ => string.Empty,
         };
-    }
-
-    /// <summary>The flag pin a note line stands for: the <c>OBJPIN&lt;n&gt;</c> picture matching
-    /// its <c>ZEPTEXT&lt;n&gt;</c> text element, where the state ships one.</summary>
-    public override HangarArt? RowArt(int row)
-    {
-        Sync();
-        if (row < ButtonRows || _reveal == null)
-        {
-            return null;
-        }
-
-        int index = _reveal.RevealedObjectives[row - ButtonRows];
-        foreach (var element in _reveal.Elements)
-        {
-            if (element.ObjectiveIndex == index && PinFor(element.Id) is { } pin)
-            {
-                return Picture(pin, string.Empty);
-            }
-        }
-
-        return null;
     }
 
     /// <inheritdoc/>
@@ -257,7 +262,7 @@ public sealed class CampaignBriefingPage : CampaignPage
             ReplayRow => "Plays the briefing again from the start",
             CabinRow => "Back to the cabin",
             FlightCheckRow => "On to the flight check",
-            _ => NoteHeading(),
+            _ => string.Empty,
         };
     }
 
@@ -277,8 +282,7 @@ public sealed class CampaignBriefingPage : CampaignPage
                 Flow.GoTo(CampaignScreen.FlightCheck);
                 return true;
             default:
-                // A note line is the briefing's text, not an action; the press stays on the screen.
-                return true;
+                return false;
         }
     }
 
@@ -296,36 +300,6 @@ public sealed class CampaignBriefingPage : CampaignPage
                     element.At.X, element.At.Y, 0, element.Center, element.Opacity, element.Revs));
             }
         }
-    }
-
-    // The OBJPIN whose trailing number matches a ZEPTEXT's, which is how every state pairs the two
-    // (censused across all 24). A state that ships no matching pin simply has none.
-    private string? PinFor(string textId)
-    {
-        int digits = textId.Length;
-        while (digits > 0 && char.IsDigit(textId[digits - 1]))
-        {
-            digits--;
-        }
-
-        if (digits == textId.Length || _reveal == null)
-        {
-            return null;
-        }
-
-        var pin = _reveal.Element("OBJPIN" + textId[digits..]);
-        return pin is { Bitmap.Length: > 0 } ? pin.Bitmap : null;
-    }
-
-    private BriefingObjective? NoteLine(int row)
-    {
-        if (_reveal == null || row < ButtonRows)
-        {
-            return null;
-        }
-
-        int index = _reveal.RevealedObjectives[row - ButtonRows];
-        return index >= 0 && index < _objectives.Count ? _objectives[index] : null;
     }
 
     private string NoteHeading() => Label("MSG_BRF_DLG_OBJECTIVES", "Objectives");

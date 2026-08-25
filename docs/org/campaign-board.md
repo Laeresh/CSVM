@@ -70,8 +70,13 @@ Three sources, and a reader should know which one is under any given number.
 - **`ASSETS\LAYOUT.CSV`**, for the five script-driven screens. Each widget row carries its art path
   and its X,Y directly, and those are used verbatim.
 - **`Briefing.zrd`'s `BRIEFINGDIALOG`**, for the briefing's parchment (`POSITION [0, 295]`), its
-  title (`[35, 315]`), its list (`[35, 335]`, `WORDWRAP [185, 240]`) and its three plaques
-  (`[197, 560]`, `[397, 560]`, `[597, 560]`).
+  title (`[35, 315]`), its list (`[35, 335]`, `WORDWRAP [185, 240]`, `SPACING [5]`) and its three
+  plaques (`[197, 560]`, `[397, 560]`, `[597, 560]`). ⚠ The list's four numbers are a flow rule and
+  not four slots: an entry wordwraps to 185, the next entry starts `SPACING` below whatever the last
+  one actually drew, and the run stops at 240. Half the campaign's 79 objective lines are taller
+  than one 30 px slot would be, so a fixed pitch draws them over each other (`BL-490`). How tall an
+  entry drew is a font metric, which is why `BoardNote` carries the widget and the renderer
+  measures it.
 - **Measured off the reference screenshots**, for the handful of rows the shipped layout leaves as
   unresolved authoring macros. Each was found by matching the button's own bitmap against the
   screenshot at every offset and taking the best fit; the X the match returned agreed with the

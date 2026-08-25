@@ -134,7 +134,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 68. ❌ Why the scaffolding read differently at the controls (`BL-477`), disproved: ours reproduces it
 69. ☑ The briefing screen only repaints on a keypress, so its reveal advances invisibly (`BL-485`)
 70. ☑ The profile screen does not open on the profile you last played (`BL-486`)
-71. ☐ The briefing's objectives are cursor stops, their text has nowhere else to be drawn, and long
+71. ☑ The briefing's objectives are cursor stops, their text has nowhere else to be drawn, and long
     lines overlap each other (`BL-487`, `BL-490`)
 72. ☑ The flight check draws the wrong ammunition, and its rows and objectives are not the original's (`BL-488`)
 73. ☑ The screenshot key does nothing in menus (`BL-489`)
@@ -2578,7 +2578,7 @@ clean at 0 warnings including StyleCop.
 sees the name field on the first visit and the remembered row from the second, which is the same
 state a new installation is in.
 
-## G71 ☐ The briefing's objectives are cursor stops, and their text has nowhere else to be drawn (`BL-487`)
+## G71 ☑ The briefing's objectives are cursor stops, and their text has nowhere else to be drawn (`BL-487`, `BL-490`)
 
 **Goal.** The briefing's objectives are read and not selected, with every line still written on the
 parchment.
@@ -2617,6 +2617,23 @@ when a line appears and the board decides where, and nothing between them measur
 is. ⚠ The 30 px step and the `(35, 335, 185)` slot are authored geometry, so the fix is a flow rule
 rather than a new set of coordinates. Doing this after the move to `Captions` rather than before is
 what stops the layout being written twice.
+
+**Landed.** The objectives left the row list and became a `BoardNote`, a flowed list widget carrying
+the parchment's own `LIST` geometry (`POSITION [35, 335]`, `WORDWRAP [185, 240]`, `SPACING [5]`).
+`CampaignBriefingPage.RowCount` is its three buttons and nothing else, and `RowArt`, `PinFor` and
+`NoteLine` went with the rows. ⚠ The note is a layer of its own rather than a `Captions` line per
+entry, because a fixed pitch is exactly what (2) is about: `BoardNote.Flow` takes the height
+measurement as an argument and `ComposedBoardView.Measure` supplies it, since how tall a wrapped
+entry drew is a font metric the engine-free half does not hold. `campaign-loop`'s assertion moved
+from `RowCount > BriefingButtons` to the note's own entry count, plus a new check that the row count
+stayed at three.
+
+**Verified.** The new `campaign-briefing-note` suite drives all 24 briefings to a completed reveal
+and measures each composed note with the font the screen writes it in: 79 objective entries, 38 of
+them taller than the retired 30 px pitch, no entry starting above the bottom of the one before it,
+nothing dropped, and every mission's run inside the authored 240 px box (the tallest, `brief_c23`,
+reaches 196). `brief_c31` is the worst case, all four of its entries over the pitch. Even the
+campaign's first mission had two, so the fault was never confined to the long-line missions.
 
 ## G72 ☑ The flight check draws the wrong ammunition, and its rows are not the original's (`BL-488`)
 

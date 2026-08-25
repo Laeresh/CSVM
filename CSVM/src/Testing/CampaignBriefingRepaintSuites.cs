@@ -142,6 +142,17 @@ internal static class CampaignBriefingRepaintSuites
             $"one frame's board stays a small composition, so repainting it every frame is cheap ({primitives} drawn primitives at the reveal's fullest)");
     }
 
-    private static int Counted(ComposedBoard board) =>
-        board.Pictures.Count + board.Strokes.Count + board.Lines.Count + board.Plaques.Count;
+    // A note's entries count as the lines they draw as, so the primitive count still says what one
+    // frame costs now that the objectives are a flowed list rather than one row each.
+    private static int Counted(ComposedBoard board)
+    {
+        int notes = 0;
+        foreach (var note in board.Notes)
+        {
+            notes += note.Entries.Count;
+        }
+
+        return board.Pictures.Count + board.Strokes.Count + board.Lines.Count
+            + board.Plaques.Count + notes;
+    }
 }

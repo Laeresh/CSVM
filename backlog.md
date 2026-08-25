@@ -1965,34 +1965,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   gate means a lost mission writes no world state, so making crashes lose changes what a retry
   starts from. *Cross-refs:* `PLAN-M5-polish.md` A6 and G66.
 
-- `BL-490` `[Bug]` **A briefing objective's written line overlaps the one below it.** *Evidence:*
-  reported at the controls on the next mission, so the mission whose lines are longer than C3/M01's.
-  `CampaignBoards.For` places each objective row at `TextSlot(Briefing, i)`, a fixed 30 px step from
-  `335`, so a line that wraps to two rows draws over the next row's slot. The reveal decides WHEN a
-  line appears and the board decides where, and nothing between them measures how tall a line is.
-  *Fix shape:* the parchment's lines have to be laid out by measured height rather than by a fixed
-  step. *⚠ Traps:* the 30 px step and the `(35, 335, 185)` slot are authored geometry, so the fix is
-  a flow rule and not a new set of coordinates. `BL-487` moves these same lines onto `Captions`, so
-  the two want doing together or the layout work is done twice. *Cross-refs:* `BL-487`, `BL-464`,
-  `PLAN-M5-polish.md` G71.
-
-- `BL-487` `[Feature]` **The briefing's objectives are cursor stops, and their text has nowhere else
-  to be drawn.** *Evidence:* asked for at the controls, that objectives need not be selectable in the
-  briefing. `CampaignBriefingPage.RowCount` returns the three buttons plus one row per revealed
-  objective, so each uncovered objective becomes another cursor stop. Removing them from the count is
-  not separable today: the objective text reaches the screen ONLY through that per-row path, since
-  `CampaignBoards.For` (`:122-140`) walks `page.RowCount` and turns each non-button row into a
-  `BoardLine` at the briefing's authored text slot, and the `Pictures` path cannot carry it because
-  `AddElements` requires `element.Bitmap.Length > 0` while a `ZEPTEXT` objective element carries an
-  empty bitmap by definition. Cutting the rows today deletes the written parchment lines rather than
-  only their cursor stops. *Fix shape:* move the objective lines onto the page's `Captions`, which
-  already places the note heading at the same authored geometry, then drop the rows; `RowArt` becomes
-  unreachable and goes with them. *⚠ Traps:* do not cut the rows before the text has somewhere else
-  to be drawn. `campaign-loop` asserts `briefing.RowCount > BriefingButtons`
-  (`CampaignLoopSuites.cs:175`), and that assertion has to move with the content rather than be
-  deleted, or the check that the reveal writes anything at all is lost. *Cross-refs:* `BL-485`, whose
-  repaint fix does NOT watch `RowCount`, so this is independent rather than blocked; `BL-464`.
-
 
 - `BL-483` `[Bug]` **`campaign-objectives-hud` fails on C4 and C5, on its wake-cue check rather than
   its readout check.** *Evidence:* found while fixing the same suite's completion driver, which now

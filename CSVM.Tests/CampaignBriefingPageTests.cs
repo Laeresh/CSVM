@@ -115,7 +115,8 @@ public class CampaignBriefingPageTests
     }
 
     /// <summary>The reveal runs off the narration's own cue points: nothing until the first
-    /// marker, then the note fills in a line at a time, and REPLAY BRIEFING empties it again.</summary>
+    /// marker, then the note fills in a line at a time, and REPLAY BRIEFING empties it again.
+    /// ⚠ The screen's row count never moves: the note is written, not listed.</summary>
     [ExtractedDataFact]
     public void TheNoteFillsInAsTheNarrationReachesItsMarkersAndReplayEmptiesIt()
     {
@@ -123,29 +124,36 @@ public class CampaignBriefingPageTests
 
         Assert.Equal(0, page.Reveal?.BlockedOnMarker);
         Assert.Equal(3, page.RowCount);
+        Assert.Empty(page.Notes);
 
         Play(page);
         Assert.True(page.Reveal?.Complete);
-        Assert.Equal(7, page.RowCount);
-        Assert.StartsWith("1)", page.RowText(3));
-        Assert.StartsWith("4)", page.RowText(6));
+        Assert.Equal(3, page.RowCount);
+        var entries = Assert.Single(page.Notes).Entries;
+        Assert.Equal(4, entries.Count);
+        Assert.StartsWith("1)", entries[0]);
+        Assert.StartsWith("4)", entries[3]);
 
         page.Accept(CampaignBriefingPage.ReplayRow);
         Assert.Equal(3, page.RowCount);
+        Assert.Empty(page.Notes);
         Assert.Equal(2, page.NarrationStarts);
     }
 
-    /// <summary>The flag pin a note line stands for is the state's own bitmap, which is why the
-    /// last objective's pin differs from the rest.</summary>
+    /// <summary>The note sits in the parchment's own <c>LIST</c> widget, and nothing on the screen
+    /// is a cursor stop but the three buttons.</summary>
     [ExtractedDataFact]
-    public void ANoteLineCarriesItsOwnFlagPin()
+    public void TheNoteIsTheParchmentsOwnListWidgetAndNoneOfItIsSelectable()
     {
         var page = Briefing(NewFlow(TestData.DataRoot, 0));
         Play(page);
 
-        Assert.NotNull(page.RowArt(3));
-        Assert.NotNull(page.RowArt(6));
-        Assert.Null(page.RowArt(CampaignBriefingPage.ReplayRow));
+        var note = Assert.Single(page.Notes);
+        Assert.Equal((35f, 335f, 185f, 240f, 5f), (note.X, note.Y, note.Width, note.Height, note.Spacing));
+        for (int row = 0; row < page.RowCount; row++)
+        {
+            Assert.NotEqual(BoardButton.None, page.Button(row).Button);
+        }
     }
 
     [ExtractedDataFact]

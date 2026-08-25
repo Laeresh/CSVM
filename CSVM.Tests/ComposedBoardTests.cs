@@ -14,6 +14,12 @@ namespace CSVM.Tests;
 /// </summary>
 public class ComposedBoardTests
 {
+    // Ninety characters, which the stand-in measurer below wraps to three lines. The campaign's own
+    // longest objective (MSG_BRF_NWM3_OBJ4) is 98.
+    private const string Long =
+        "4) Cripple the CCCP zeppelin, or set fire to the tanker to prevent them from pursuing it.x";
+
+
     /// <summary>The scaling decision, which every later screen inherits: one uniform scale on both
     /// axes, the board centred, the remainder letterboxed (docs/org/campaign-board.md).</summary>
     [Fact]
@@ -120,6 +126,39 @@ public class ComposedBoardTests
         Assert.Equal((135f, 320f, 152f), CampaignBoards.TextSlot(CampaignScreen.Ammo, 4));
         Assert.Equal((410f, 320f, 152f), CampaignBoards.TextSlot(CampaignScreen.Ammo, 8));
     }
+
+    /// <summary>⚠ The flow rule BL-490 is about: a wrapped entry pushes the next one down by what
+    /// it actually drew, so two long entries cannot land on the same authored slot. The measurer
+    /// stands in for the renderer's font, one line per 30 characters at 13 px a line.</summary>
+    [Fact]
+    public void AWrappedNoteEntryPushesTheOneBelowItDown()
+    {
+        var note = CampaignBoards.ObjectivesNote(new[] { Long, "2) Short.", Long });
+
+        var lines = note.Flow(Measured);
+
+        Assert.Equal(new[] { 335f, 335f + 39f + 5f, 335f + 39f + 5f + 13f + 5f }, lines.Select(l => l.Y));
+        Assert.All(lines, l => Assert.Equal(35f, l.X));
+        Assert.All(lines, l => Assert.Equal(185f, l.Width));
+    }
+
+    /// <summary>The widget's authored 240 px is a box, not a suggestion: an entry that would draw
+    /// past the parchment's bottom is dropped rather than written over the buttons.</summary>
+    [Fact]
+    public void ANoteStopsAtItsAuthoredHeight()
+    {
+        var entries = Enumerable.Repeat(Long, 8).ToArray();
+
+        var lines = CampaignBoards.ObjectivesNote(entries).Flow(Measured);
+
+        Assert.Equal(5, lines.Count);
+        Assert.True(lines[^1].Y + 39f <= 335f + 240f);
+    }
+
+    // Thirty characters is one line, thirteen pixels tall, which is the shape of the real face in
+    // the 185-wide column without needing one.
+    private static float Measured(string text, float width) =>
+        13f * ((text.Length + 29) / 30);
 
     private static CampaignFlow Opened()
     {

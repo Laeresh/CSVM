@@ -13,6 +13,7 @@ using Godot;
 using static CSVM.Testing.AiSuites;
 using static CSVM.Testing.AlphaCutoutRaySuites;
 using static CSVM.Testing.AnimationAndEffectsSuites;
+using static CSVM.Testing.CampaignBriefingNoteSuites;
 using static CSVM.Testing.CampaignBriefingRepaintSuites;
 using static CSVM.Testing.CampaignHudSuites;
 using static CSVM.Testing.CampaignLoopSuites;
@@ -164,6 +165,7 @@ public static class SuiteCatalog
         "zeppelin-identity",
         "campaign-briefing-repaint",
         "menu-screenshot-key",
+        "campaign-briefing-note",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -887,6 +889,14 @@ public static class SuiteCatalog
             + "campaign board, and each press must leave one more file in the folder the flight "
             + "capture writes to",
             MenuScreenshotKey));
+        // BL-490: an objective wrapped to a second line drew over the next one's authored slot,
+        // which only shows on a mission whose sentences are longer than the first's.
+        into.Add(new TestHarness.Suite("campaign-briefing-note",
+            "how the briefing's objectives note flows (BL-490): all 24 missions' reveals driven to "
+            + "their end, each composed note measured with the font the screen writes it in, and "
+            + "no entry allowed to start above the bottom of the one before it or to run past the "
+            + "parchment's authored 240 px box",
+            CampaignBriefingNote));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

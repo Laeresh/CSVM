@@ -88,6 +88,10 @@ public interface ICampaignPage
     /// <summary>Text the screen carries that is not a row: a panel heading, a title widget.</summary>
     IReadOnlyList<BoardLine> Captions { get; }
 
+    /// <summary>List widgets whose entries flow rather than sitting at a fixed pitch: the briefing
+    /// parchment's objectives note, whose lines are read and never selected.</summary>
+    IReadOnlyList<BoardNote> Notes { get; }
+
     /// <summary>Which of the screen's authored buttons row <paramref name="row"/> presses.
     /// <see cref="BoardButton.None"/> means the row is list text, which is the default.</summary>
     BoardButtonRef Button(int row);
@@ -437,6 +441,9 @@ public abstract class CampaignPage : ICampaignPage
 
     /// <inheritdoc/>
     public virtual IReadOnlyList<BoardLine> Captions => Array.Empty<BoardLine>();
+
+    /// <inheritdoc/>
+    public virtual IReadOnlyList<BoardNote> Notes => Array.Empty<BoardNote>();
 
     /// <summary>The flow this page belongs to.</summary>
     protected CampaignFlow Flow { get; }

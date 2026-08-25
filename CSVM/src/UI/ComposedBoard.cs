@@ -135,6 +135,40 @@ public sealed record BoardLine(
     bool Italic = false);
 
 /// <summary>
+/// A list widget's entries and the box they flow inside, in authored pixels: the briefing
+/// parchment's own <c>LIST</c> is <c>POSITION [35, 335]</c>, <c>WORDWRAP [185, 240]</c>,
+/// <c>SPACING [5]</c> (<c>docs/formats/briefing.md</c>). It is a layer of its own rather than one
+/// <see cref="BoardLine"/> per entry because how tall an entry draws is a font metric, which the
+/// engine-free half does not hold, so where the next entry starts cannot be composed here.
+/// </summary>
+public sealed record BoardNote(
+    IReadOnlyList<string> Entries, float X, float Y, float Width, float Height, float Spacing,
+    float Size, BoardInk Ink)
+{
+    /// <summary>The entries as placed lines, stacked from the widget's top-left and stopped at its
+    /// authored height. <paramref name="height"/> measures one entry wrapped to a width, in
+    /// authored pixels; a fixed pitch instead draws a wrapped entry over the one under it.</summary>
+    public IReadOnlyList<BoardLine> Flow(Func<string, float, float> height)
+    {
+        var lines = new List<BoardLine>();
+        float top = Y;
+        foreach (var entry in Entries)
+        {
+            float tall = height(entry, Width);
+            if (top + tall > Y + Height)
+            {
+                break;
+            }
+
+            lines.Add(new BoardLine(entry, X, top, Width, Size, Ink));
+            top += tall + Spacing;
+        }
+
+        return lines;
+    }
+}
+
+/// <summary>
 /// One campaign screen composed in the original's 800x600 dialog space: the pictures under it, the
 /// text on it and the button plaques over it, all at authored pixel positions. Engine-free, so
 /// what a screen is made of tests off engine; <see cref="ComposedBoardView"/> is only its renderer
@@ -147,12 +181,14 @@ public sealed class ComposedBoard
         IReadOnlyList<BoardPicture> pictures,
         IReadOnlyList<BoardStroke> strokes,
         IReadOnlyList<BoardLine> lines,
-        IReadOnlyList<BoardPlaque> plaques)
+        IReadOnlyList<BoardPlaque> plaques,
+        IReadOnlyList<BoardNote>? notes = null)
     {
         Pictures = pictures;
         Strokes = strokes;
         Lines = lines;
         Plaques = plaques;
+        Notes = notes ?? Array.Empty<BoardNote>();
     }
 
     /// <summary>Pictures in draw order, background first.</summary>
@@ -166,6 +202,9 @@ public sealed class ComposedBoard
 
     /// <summary>Button plaques, drawn over everything.</summary>
     public IReadOnlyList<BoardPlaque> Plaques { get; }
+
+    /// <summary>List widgets whose entries flow, drawn with the text.</summary>
+    public IReadOnlyList<BoardNote> Notes { get; }
 
     /// <summary>The strip frame a plaque draws. A four-frame strip inks the state into the art
     /// itself; a one-frame plaque keeps frame 0 and changes its label's font instead, which is

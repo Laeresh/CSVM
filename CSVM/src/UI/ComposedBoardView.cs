@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using Godot;
@@ -54,6 +55,16 @@ public sealed partial class ComposedBoardView : Control
         return view;
     }
 
+    /// <summary>How tall an entry of <paramref name="note"/> draws, in authored pixels, for the
+    /// font and scale a frame is being drawn at. This is the measurement <see cref="BoardNote"/>
+    /// cannot make for itself, and the only reason a flowed list is not composed engine-free.</summary>
+    public static Func<string, float, float> Measure(BoardFit fit, Font font, BoardNote note)
+    {
+        int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(note.Size)));
+        return (text, width) => font.GetMultilineStringSize(
+            text, HorizontalAlignment.Left, fit.Length(width), points).Y / fit.Scale;
+    }
+
     /// <summary>Puts a composed board on screen, with the two lines the shell adds under it.</summary>
     public void Show(ComposedBoard board, BoardPalette palette, string detail, string footer)
     {
@@ -93,6 +104,11 @@ public sealed partial class ComposedBoardView : Control
         foreach (var line in board.Lines)
         {
             DrawText(fit, line.Italic ? Slanted(font) : font, line);
+        }
+
+        foreach (var note in board.Notes)
+        {
+            DrawNote(fit, font, note);
         }
 
         foreach (var plaque in board.Plaques)
@@ -231,6 +247,19 @@ public sealed partial class ComposedBoardView : Control
         // longer than the widget it sits in; a single-line draw would run off the board.
         DrawMultilineString(font, at, line.Text, HorizontalAlignment.Left, fit.Length(line.Width),
             points, -1, InkOf(line.Ink));
+    }
+
+    private void DrawNote(BoardFit fit, Font? font, BoardNote note)
+    {
+        if (font == null)
+        {
+            return;
+        }
+
+        foreach (var line in note.Flow(Measure(fit, font, note)))
+        {
+            DrawText(fit, font, line);
+        }
     }
 
     private void DrawHints(BoardFit fit, Font? font)
