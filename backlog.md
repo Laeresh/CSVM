@@ -1965,22 +1965,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-481` `[Bug]` **`campaign-objectives-hud` fails on `--chapter=C3`, so the suite only proves its
-  point on its default chapter.** *Evidence:* the suite passes on C1 (5 display rows, 4 drawn, two
-  scripted completions each marking their row) and fails on C3 with
-  `!! a scripted completion marks its row in the readout, not only in the graph (OBJECTIVE)`. The
-  objective name in that message is empty, and the artifact shows the driver completing no objective
-  at all on C3/M01, so the check is not catching a display defect: it is reporting that the suite's
-  own completion driver found nothing to complete on that mission's data. **Confirmed pre-existing
-  rather than caused by the pause-screen move**: the identical failure reproduces on commit
-  `4ec47b14`, before Wave F, on a separately built worktree (METHOD-8). *Fix shape:* make the driver
-  find a completable objective on any chapter it is pointed at, or make the suite skip explicitly
-  where a mission carries none, since a check that cannot fire is worse than one that is absent.
-  *⚠ Traps:* do not "fix" it by relaxing the assertion, which is the one proof that the readout marks
-  its own line rather than only the graph. Do not assume C1's shape generalises: C3/M01 builds six
-  display rows to C1/M02's five, and two of C3/M01's are `IDENTITY [SECONDARY, n]` fields with no
-  message key at all. *Cross-refs:* `BL-466`, whose move strengthened this suite and surfaced the
-  failure; `docs/verification.md` DIAG-15 (never silently skip a case) and METHOD-9.
+- `BL-483` `[Bug]` **`campaign-objectives-hud` fails on C4 and C5, on its wake-cue check rather than
+  its readout check.** *Evidence:* found while fixing the same suite's completion driver, which now
+  passes on C1, C2 and C3. What fails on C4 and C5 is `DriveWakeCue`'s assertion that at least one
+  `WAKEUP_SOUND_GROUP` the mission authors started a real one-shot player; the row-marking half of
+  the suite passes on both. **Confirmed pre-existing rather than caused by the driver work**
+  (METHOD-8): `CampaignHudSuites.cs` was reverted to its committed state, rebuilt, and both failures
+  reproduced identically. *Fix shape:* unknown until the wake cue is traced on those two chapters;
+  the question is whether the mission authors a group our wake path never reaches, or whether the
+  one-shot is started somewhere the suite does not look. *⚠ Traps:* do not weaken the wake-cue
+  assertion to make two chapters green, which is the same move `BL-481` forbade for the readout
+  check. C6 and beyond have no extracted data, so a chapter sweep stops at C5. *Cross-refs:*
+  `BL-481`, closed by the work that filed this; `docs/verification.md` METHOD-8 and DIAG-15.
 
 - `BL-113` `[Tuning]` `[Owed-playtest]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).

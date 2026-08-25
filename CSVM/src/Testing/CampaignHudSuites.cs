@@ -12,6 +12,19 @@ namespace CSVM.Testing;
 /// classes, not a scripted stand-in.</summary>
 internal static class CampaignHudSuites
 {
+    // How a display objective can be forced to complete with nobody at the controls. The mission
+    // chooses, not the suite: C1/M02's rows hang off INACTIVEn node lists, C3/M01 authors not one
+    // INACTIVEn in the whole file and completes its secondaries off a danger zone and off an
+    // objective carrying no condition at all. ANIM_STATE, DEDG and TRAVELERS need a flown player
+    // or a running anim program, so they leave no route open here.
+    private enum CompletionRoute
+    {
+        None,
+        Inactive,
+        DangerZones,
+        Unconditional,
+    }
+
     /// <summary>Drives one shipped mission's real director: <see cref="ObjectivesHud"/> tracks the
     /// graph's rows, and a wake/complete sound-group cue starts a real
     /// <see cref="AudioStreamPlayer3D"/> (<see cref="WorldSounds.OneShotsStarted"/>). A group name
@@ -296,9 +309,10 @@ internal static class CampaignHudSuites
         ctx.Check(false, $"at least one WAKEUP_SOUND_GROUP this mission authors started a real one-shot player");
     }
 
-    // Drives every IDENTITY objective with an INACTIVEn condition in turn. Keeps the first that
-    // completes (row-marking proof) and separately the first whose COMPLETED_SOUND_GROUP also
-    // starts a one-shot: a completing objective's group can be a VO dialogue chain
+    // Drives every IDENTITY objective this suite can force to completion with nobody at the
+    // controls, whatever shape the mission authored (see CompletionRoute). Keeps the first that
+    // marks its row (the row-marking proof) and separately the first whose COMPLETED_SOUND_GROUP
+    // also starts a one-shot: a completing objective's group can be a VO dialogue chain
     // (docs/formats/sounds.md), which nothing here plays yet (a named gap, not a suite defect).
     private static void DriveCompletionCue(
         TestContext ctx, TestWorld world, ObjectiveScript script, ObjectiveGraph graph,
@@ -306,40 +320,42 @@ internal static class CampaignHudSuites
     {
         int? rowObjective = null;
         int? soundObjective = null;
+        int driven = 0;
+        var unreachable = new List<string>();
         foreach (var def in script.Objectives)
         {
-            if (def.Identity == null || def.Inactive.Count == 0)
+            if (def.Identity is not { } identity)
             {
                 continue;
             }
 
+            var route = RouteFor(def);
+            if (route == CompletionRoute.None)
+            {
+                unreachable.Add($"OBJECTIVE{def.Number} [{ConditionShape(def)}]");
+                continue;
+            }
+
+            driven++;
             var beforeLines = hud.BuildLines();
             int before = sounds.OneShotsStarted;
-            ProbeRunner.DriveInactive(world.Runtime, def);
-            graph.Wake(def.Number);
+            ForceRoute(world, graph, def, route);
             Advance(graph, 3f);
             hud._Process(0.0);
             if (!graph.CompletedOf(def.Number))
             {
+                report.AppendLine($"OBJECTIVE{def.Number} drove its {route} route " +
+                    $"[{RouteNames(def, route)}] and did not complete");
                 continue;
             }
 
-            var afterLines = hud.BuildLines();
-            bool anyMarked = false;
-            for (int i = 0; i < afterLines.Count; i++)
-            {
-                if (afterLines[i].Completed && (i >= beforeLines.Count || !beforeLines[i].Completed))
-                {
-                    anyMarked = true;
-                }
-            }
-
+            bool marked = RowNewlyMarked(beforeLines, hud.BuildLines(), identity.Priority);
             int after = sounds.OneShotsStarted;
-            report.AppendLine($"OBJECTIVE{def.Number} completed off its INACTIVEn node " +
-                $"[{InactiveNames(def)}], " +
+            report.AppendLine($"OBJECTIVE{def.Number} completed off its {route} route " +
+                $"[{RouteNames(def, route)}], priority={identity.Priority}, " +
                 $"COMPLETED_SOUND_GROUP='{def.CompletedSoundGroup}', one-shots {before} -> {after}, " +
-                $"row marked={anyMarked}");
-            if (rowObjective == null && anyMarked)
+                $"row marked={marked}");
+            if (rowObjective == null && marked)
             {
                 rowObjective = def.Number;
             }
@@ -350,8 +366,7 @@ internal static class CampaignHudSuites
             }
         }
 
-        ctx.Check(rowObjective != null,
-            $"a scripted completion marks its row in the readout, not only in the graph (OBJECTIVE{rowObjective})");
+        CheckRowMarking(ctx, report, rowObjective, driven, unreachable);
         CheckNoBlankRowsDrawn(ctx, hud, report);
         if (soundObjective != null)
         {
@@ -365,6 +380,133 @@ internal static class CampaignHudSuites
                 "(docs/formats/sounds.md)");
         }
     }
+
+    // The one assertion this half exists for. It is only allowed not to run when the mission
+    // authors no display objective this suite can force at all, and DIAG-15 makes that case print
+    // every row it could not reach and the condition family that put it out of range.
+    private static void CheckRowMarking(
+        TestContext ctx, StringBuilder report, int? rowObjective, int driven,
+        IReadOnlyList<string> unreachable)
+    {
+        if (driven > 0)
+        {
+            string drove = $"drove {driven}, marked OBJECTIVE{rowObjective}";
+            ctx.Check(rowObjective != null,
+                $"a scripted completion marks its row in the readout, not only in the graph ({drove})");
+            return;
+        }
+
+        string rows = string.Join("; ", unreachable);
+        string why = $"this mission's {unreachable.Count} display objectives all complete off a "
+            + $"condition no scripted run can force (each needs a flown player or a running anim "
+            + $"program): {rows}";
+        report.AppendLine($"SKIPPED the row-marking check: no forceable display objective ({rows})");
+        const string Gap = "The readout's completion marking is unproven on this chapter, which is "
+            + "a gap in coverage and not a pass";
+        ctx.Note($"SKIPPED the row-marking check, {why}. {Gap}");
+    }
+
+    // Which forcing route this objective's own authored conditions leave open. INACTIVEn is tried
+    // first so a mission that authors both keeps the route it was already proven on.
+    private static CompletionRoute RouteFor(ObjectiveDef def)
+    {
+        if (def.Inactive.Count > 0)
+        {
+            return CompletionRoute.Inactive;
+        }
+
+        if (def.DangerZones.Count > 0)
+        {
+            return CompletionRoute.DangerZones;
+        }
+
+        return def.HasConditions ? CompletionRoute.None : CompletionRoute.Unconditional;
+    }
+
+    // Opens the tick gate, then forces the route. Order is the graph's, not a choice: TICK_DEPENDS_ON_OBJ
+    // holds the completion scan off until its subject is AWAKE, and a wake clears the objective's
+    // own danger-zone tally, so the zones can only be notified after it.
+    private static void ForceRoute(
+        TestWorld world, ObjectiveGraph graph, ObjectiveDef def, CompletionRoute route)
+    {
+        if (def.TickDependsOn > 0)
+        {
+            graph.Wake(def.TickDependsOn);
+        }
+
+        if (route == CompletionRoute.Inactive)
+        {
+            ProbeRunner.DriveInactive(world.Runtime, def);
+        }
+
+        graph.Wake(def.Number);
+        if (route == CompletionRoute.DangerZones)
+        {
+            foreach (var zone in def.DangerZones)
+            {
+                graph.NotifyDangerZoneCompleted(zone);
+            }
+        }
+    }
+
+    // The completed objective's OWN row, found by its identity priority rather than by any row
+    // going green: forcing a route wakes the objective's tick dependency too, and that neighbour
+    // completing would otherwise read as this objective's line being marked.
+    private static bool RowNewlyMarked(
+        IReadOnlyList<ObjectivesHudLine> before, IReadOnlyList<ObjectivesHudLine> after, int priority)
+    {
+        bool marked = false;
+        for (int i = 0; i < after.Count; i++)
+        {
+            if (after[i].Priority == priority && after[i].Completed)
+            {
+                marked |= i >= before.Count || !before[i].Completed;
+            }
+        }
+
+        return marked;
+    }
+
+    // Every condition family the objective authors, for the skip line: this is what says WHY a row
+    // could not be forced rather than leaving the reader to guess.
+    private static string ConditionShape(ObjectiveDef def)
+    {
+        var parts = new List<string>();
+        if (def.Inactive.Count > 0)
+        {
+            parts.Add($"INACTIVEn x{def.Inactive.Count}");
+        }
+
+        if (def.DangerZones.Count > 0)
+        {
+            parts.Add($"DANGER_ZONES x{def.DangerZones.Count}");
+        }
+
+        if (def.AnimStates.Count > 0)
+        {
+            parts.Add($"ANIM_STATE x{def.AnimStates.Count}");
+        }
+
+        if (def.Dedg != null)
+        {
+            parts.Add("DEDG");
+        }
+
+        if (def.Travelers != null)
+        {
+            parts.Add("TRAVELERS");
+        }
+
+        return parts.Count > 0 ? string.Join(" + ", parts) : "no condition";
+    }
+
+    // What the route actually reached for, for the report.
+    private static string RouteNames(ObjectiveDef def, CompletionRoute route) => route switch
+    {
+        CompletionRoute.Inactive => InactiveNames(def),
+        CompletionRoute.DangerZones => string.Join(", ", def.DangerZones),
+        _ => "completes on its first eligible tick",
+    };
 
     // The leaf of each INACTIVE path, for the report: these are the names a scripted run reaches
     // for (--destroy=) when it wants this objective to complete with nobody at the controls.

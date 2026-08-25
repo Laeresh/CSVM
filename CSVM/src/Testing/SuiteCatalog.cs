@@ -715,7 +715,9 @@ public static class SuiteCatalog
         into.Add(new TestHarness.Suite("campaign-objectives-hud",
             "D33's in-flight objectives display and cue firing against a BUILT campaign world: " +
             "ObjectivesHud carries one line per ObjectiveGraph display row, a scripted " +
-            "IDENTITY objective completing off a real INACTIVEn node marks its own readout line " +
+            "IDENTITY objective completing off whichever condition the chapter's own mission " +
+            "authors (an INACTIVEn node list, a danger zone, or no condition at all) marks its " +
+            "own readout line " +
             "(not only the graph's), and both a WAKEUP_SOUND_GROUP and a COMPLETED_SOUND_GROUP " +
             "the mission authors start a real AudioStreamPlayer3D through WorldSounds (D31's " +
             "existing routing, counted rather than duplicated)",

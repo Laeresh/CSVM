@@ -2064,6 +2064,31 @@ rather than only the graph. ⚠ Do not assume C1's shape generalises: C3/M01 bui
 C1/M02's five, and two of C3/M01's are `IDENTITY [SECONDARY, n]` fields with no message key.
 ⚠ `docs/verification.md` DIAG-15 forbids a silent skip.
 
+**Landed.** The driver's filter was the whole of it. `DriveCompletionCue` considered an objective
+only when it authored an `INACTIVEn` node list, and `C3/M01` authors not one `INACTIVEn` in the
+file, so the loop body never ran on that chapter and the assertion reported a null objective
+number. The driver now picks a forcing route per objective from whatever the mission authored
+(`CampaignHudSuites.cs:411` `RouteFor`): an `INACTIVEn` node list, a `DANGER_ZONES_COMPLETED` zone
+list notified through `ObjectiveGraph.NotifyDangerZoneCompleted`, or no condition at all, which
+completes on its first eligible tick. `ForceRoute` (`CampaignHudSuites.cs:429`) opens the
+`TICK_DEPENDS_ON_OBJ` gate before the wake and notifies zones after it, since a wake clears the
+objective's own zone tally. The row check is also stricter rather than relaxed: `RowNewlyMarked`
+(`CampaignHudSuites.cs:455`) requires the row at the completing objective's own identity priority
+to turn over, where the old code accepted any row going green, which a woken tick dependency could
+have supplied. `CheckRowMarking` (`CampaignHudSuites.cs:387`) holds the assertion hard whenever at
+least one display objective is forceable, and only when none is does it print, through both the
+report artifact and `ctx.Note`, how many display rows the mission has and the condition family that
+put each one out of range.
+
+**Verified.** The suite passes on `C1`, `C2` and `C3`; `C3/M01` completes `OBJECTIVE3` off
+`dzpath1` and `OBJECTIVE31` off no condition, each marking its own secondary row. `C4` and `C5`
+still fail, on `DriveWakeCue`'s check that a `WAKEUP_SOUND_GROUP` starts a real one-shot, which is
+a different half of the suite and reproduces identically with this file reverted to its committed
+state, satisfying METHOD-8. Their row-marking half passes. The skip path was exercised by forcing
+`RouteFor` to return `None`, which printed all six of `C3/M01`'s rows with their condition families
+and left the run reporting a note rather than a pass in disguise. `dotnet build` is clean and
+`CSVM.Tests` is 2363 passing.
+
 ## G66 ☐ Two persist-log behaviour questions, carried out of `BL-243`
 
 **Goal.** Two answers, and a test for each if the answer says our behaviour diverges.
