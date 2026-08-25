@@ -257,6 +257,13 @@ wingman ids share one handler apiece, so only the slot differs). Row -1 returns 
 - A rocket row `r` addresses **pylon cell `r`** of the record and is empty when the cell holds 11.
   Cells 0 to 3 are one wing and 4 to 7 the other.
 
+**The calibre name is `IDS_GUNSHORTNAME` (langui `3320 + slot`), not the long name the hangar and
+the ammo screen use.** `Campaign Flight Check.png` settles it: the row reads `1)  .50-cal. Slug`,
+not `1) Barret Arms .50-cal. Slug`, and the 3320 block's strings each lead with a space, which is
+the gap the screenshot draws between the row number and the calibre. Nothing is inserted between a
+row's number and its text on either list, which is why the rocket rows read `1)High explosive`
+tight against their number: `IDS_ROCKETSHORTNAME` carries no leading space of its own.
+
 **The wingman half exists only when the mission has a wingman.** `callback($$A$$, 27)` is
 `FUN_0041aa50`, a byte read out of the loaded campaign sequence at stride 0x34, which is
 `cm_sequence.zrd`'s own per-entry `wingman` flag ([saved-games.md](saved-games.md)). When it is
@@ -480,7 +487,7 @@ corroborate but do not establish them.
 | Player profile | every widget, the roster fill, the validator, all four exits | the roster list's own selection colour (`0xff800000`), the four controls, the pre-filled name | what `uiData` 2106's message says; the unreachable savegame branch |
 | Cabin | the six buttons and their targets, the deactivated SAVE GAME, the plane photo path, the memento source, the pin count, the `idaho` dropdown, the intro trigger | five buttons and no SAVE GAME, the painted cabin, the framed memento, the map | whether anything on the screen animates or loops, and how the pin frames read; both need the cabin capture |
 | Chapter intro | the movie name, the skip gesture, the one-shot guard | not covered by any screenshot | the MPG decode itself, deliberately out of scope |
-| Flight check | both slots, all four lists, the wingman gate, both plane-change rules, the grant table, both exits | the title, plane lines, six of eight gun rows filled and two blank, the objectives note, both buttons | the calibre label's own string source; the `10018`/`10000` state art |
+| Flight check | both slots, all four lists, the wingman gate, both plane-change rules, the grant table, both exits | the title, plane lines, six of eight gun rows filled and two blank, the objectives note, the calibre label's string block, both buttons | the `10018`/`10000` state art |
 | Ammo selection | both callers, the working-copy commit, the greyed empty group, the pylon deactivation, all six string blocks | the greyed fourth group, two of four pylons per wing, both description panes, both plane diagrams | the rocket table's unread second field |
 
 Where this decode stops:

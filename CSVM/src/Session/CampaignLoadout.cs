@@ -12,13 +12,27 @@ namespace CSVM.Session;
 /// </summary>
 public static class CampaignLoadout
 {
+    /// <summary>How many rows the Ammo Selection screen's rocket table has
+    /// (<c>docs/formats/campaign-screens.md</c>), which closes the ordnance vocabulary.</summary>
+    public const int PylonRows = 12;
+
     /// <summary>What <see cref="OwnedPlane.Ammo"/>'s index 0..3 names, in the gun matrix's own
     /// order. Index 4 is the record's no-gun marker, which is not an ammunition at all.</summary>
     public static readonly string[] AmmoNames = { "slug", "dumdum", "ap", "magnesium" };
 
+    // The row an unset pylon stands for: high explosive, the universal stock fit (loadouts.md).
+    private const int StockPylonRow = 1;
+
     // The profile record's "this slot mounts no gun" marker, the fifth value of a four-value
     // ammunition field (docs/formats/campaign-screens.md, "Ammo selection").
     private const int NoGun = 4;
+
+    /// <summary>The rocket-table row (0..11) a stored pylon value names. CSVM's own
+    /// <see cref="OwnedPlane.Ordnance"/> encoding is one-based with 0 meaning "never picked", the
+    /// stand-in the plan's C25 chose over the save format's plain table index; every reader of the
+    /// field goes through here so the two spaces cannot drift apart on one screen.</summary>
+    public static int PylonRow(int stored) =>
+        stored >= 1 && stored <= PylonRows ? stored - 1 : StockPylonRow;
 
     /// <summary>The plane's stored picks as one choice. <paramref name="stock"/> is the table an
     /// ordnance row's <c>wep_*</c> id comes from; without it the pylons keep the base's fit rather

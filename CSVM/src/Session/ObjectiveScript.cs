@@ -322,6 +322,37 @@ public sealed class ObjectiveScript
         return script;
     }
 
+    /// <summary>The player-visible objectives display: one entry per unique <c>IDENTITY</c>
+    /// priority, in ascending priority order (<c>docs/formats/objectives.md</c>, "IDENTITY and the
+    /// objectives display"). An objective authoring no <c>IDENTITY</c> is choreography and never
+    /// appears. This is the whole rule, shared by every screen that writes the list: the flight
+    /// check's parchment before the mission, <see cref="ObjectiveGraph.Rows"/> once it runs.</summary>
+    public IReadOnlyList<ObjectiveIdentity> DisplayIdentities()
+    {
+        var seen = new List<ObjectiveIdentity>();
+        foreach (var def in Objectives)
+        {
+            if (def.Identity is not { } identity)
+            {
+                continue;
+            }
+
+            bool duplicate = false;
+            foreach (var row in seen)
+            {
+                duplicate |= row.Priority == identity.Priority;
+            }
+
+            if (!duplicate)
+            {
+                seen.Add(identity);
+            }
+        }
+
+        seen.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+        return seen;
+    }
+
     /// <summary>The objective with a 1-based number, or null when it is out of range. Every
     /// cross-reference in the file is by this number.</summary>
     public ObjectiveDef? ByNumber(int number) =>

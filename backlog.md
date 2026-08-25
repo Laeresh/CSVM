@@ -1965,27 +1965,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   gate means a lost mission writes no world state, so making crashes lose changes what a retry
   starts from. *Cross-refs:* `PLAN-M5-polish.md` A6 and G66.
 
-- `BL-488` `[Bug]` **The flight check draws a different ammunition than the ammo screen just set, and
-  its gun rows carry more than the original's.** *Evidence:* reported at the controls, with
-  `OriginalScreenshots\Campaign Flight Check.png` as the reference. Three parts, and the third is the
-  one that misleads a player. (a) The original's gun rows read `1) .50-cal. Slug`, caliber then
-  ammunition and nothing else, with an empty slot drawn as its bare number. (b) The original puts the
-  Objectives on a parchment down the RIGHT of the board, italic and numbered, which `BL-449` recorded
-  as a named gap because the page does not load objectives. (c) **The ammunition shown does not match
-  the one just chosen.** Both pages agree on the vocabulary, since `AmmoShortNames`
-  (`CampaignFlightCheckPage.cs:75`) and `AmmoFallback` (`CampaignAmmoPage.cs`) are the same four
-  names in the same order, and every `langui` id involved (3310, 3315, 3350, 3360, 3370 blocks) is
-  blank in `extracted/rof/ui_strings.json`, so both fall back to those arrays. So the divergence is
-  in WHICH value is read, not in how it is named. Two candidates, neither confirmed: the two pages
-  may not resolve the same plane (the ammo page takes `profile.SelectedPlane`/`WingmanPlane` through
-  `EnsureLoaded`, the flight check builds its rows from its own resolution), or the flight check may
-  hold rows built before the ammo screen committed. *Fix shape:* find which of the two it is before
-  changing anything, then make the flight check read what was written. *⚠ Traps:* do not "fix" it by
-  clearing a cache on every frame; `BL-485` shows what an unconsidered repaint policy costs to
-  reason about later. The gun-group index space is slot-based on the stock path
-  (`gun.Slot - 1`) and array-based on the custom-build path, and the two must not be conflated.
-  *Cross-refs:* `BL-449` (the objectives gap it recorded), `PLAN-M5-polish.md` G72.
-
 - `BL-490` `[Bug]` **A briefing objective's written line overlaps the one below it.** *Evidence:*
   reported at the controls on the next mission, so the mission whose lines are longer than C3/M01's.
   `CampaignBoards.For` places each objective row at `TextSlot(Briefing, i)`, a fixed 30 px step from

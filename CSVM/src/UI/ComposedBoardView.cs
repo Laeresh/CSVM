@@ -22,7 +22,14 @@ public sealed partial class ComposedBoardView : Control
     // The band's own height in authored pixels: two lines and a little air.
     private const float HintBand = 32f;
 
+    // How far a synthetic italic leans, as the shear of one em. The extraction ships no italic
+    // face, so a slanted draw of the board's own face is the stand-in for the original's; the
+    // value is chosen to read like the reference screenshot's note, not decoded from anything.
+    private const float Slant = 0.25f;
+
     private readonly Dictionary<string, Texture2D?> _textures = new();
+
+    private FontVariation? _slanted;
 
     private ComposedBoard? _board;
     private string _dataRoot = string.Empty;
@@ -85,7 +92,7 @@ public sealed partial class ComposedBoardView : Control
         var font = GetThemeDefaultFont();
         foreach (var line in board.Lines)
         {
-            DrawText(fit, font, line);
+            DrawText(fit, line.Italic ? Slanted(font) : font, line);
         }
 
         foreach (var plaque in board.Plaques)
@@ -127,6 +134,25 @@ public sealed partial class ComposedBoardView : Control
         BoardInk.LabelActivate => _palette.LabelActivate,
         _ => _palette.Row,
     };
+
+    // The board's own face sheared into an oblique, built once. Godot's variation transform is a
+    // 2x3 matrix over the glyph outline, so the x-shear is the whole of the lean.
+    private FontVariation? Slanted(Font? font)
+    {
+        if (font == null)
+        {
+            return null;
+        }
+
+        if (_slanted == null)
+        {
+            _slanted = new FontVariation { BaseFont = font };
+            _slanted.VariationTransform = new Transform2D(
+                new Vector2(1f, 0f), new Vector2(Slant, 1f), Vector2.Zero);
+        }
+
+        return _slanted;
+    }
 
     private void DrawPicture(BoardFit fit, BoardPicture picture)
     {

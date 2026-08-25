@@ -86,6 +86,53 @@ public class CampaignFlightCheckPageTests
         Assert.Contains(".50-cal", lines[0]);
     }
 
+    // A gun row is the calibre short name and the ammunition, nothing else. The maker's name
+    // (IDS_GUNLONGNAME, langui 3310) belongs to the hangar and the ammo screen; the flight check
+    // reads IDS_GUNSHORTNAME at 3320, whose string owns the leading space the row draws.
+    [Fact]
+    public void AGunRowIsTheCalibreShortNameAndTheAmmunitionAndNothingElse()
+    {
+        var page = NewPage(out _, out _, wingman: false);
+
+        var lines = page.Detail(0).Split('\n');
+        Assert.Equal("1) .50-cal. Slug", lines[0].Split("    ")[0]);
+        Assert.Equal("7)", lines[6].Split("    ")[0]);
+    }
+
+    // The ammo screen and the flight check must read one plane's stored picks the same way. The
+    // stored pylon value is one-based with 0 meaning "never picked" (CampaignLoadout.PylonRow), so
+    // reading it as a plain rocket-table row drew a pylon the player never touched as
+    // armor-piercing and shifted every deliberate pick by one.
+    [Fact]
+    public void TheRowsShowWhatTheAmmoScreenJustCommitted()
+    {
+        string dir = Path.Combine(TestData.TempDir(), "Profiles");
+        var store = new CampaignProfileStore(dir);
+        store.Save(CampaignProfileDef.NewProfile("Zachary"));
+        var flow = new CampaignFlow(store, UiStrings.Empty);
+        flow.SelectProfile(store.Load("Zachary")!);
+        flow.SetMission(0);
+        var planes = new CustomPlaneStore(Path.Combine(TestData.TempDir(), "Planes"));
+        var page = new CampaignFlightCheckPage(flow, planes, Stock, wingman: false);
+        var ammo = new CampaignAmmoPage(flow, planes, Stock);
+        flow.SetAmmoSlot(0);
+
+        // An untouched pylon is the universal high-explosive stock fit on both screens.
+        Assert.Equal("High explosive", ammo.RowText(4));
+        Assert.Contains("1)High explosive", page.Detail(0));
+
+        // Group 0 to armor-piercing, pylon 0 back one row to armor-piercing, then ACCEPT LOADOUT.
+        Assert.True(ammo.Step(0, 2));
+        Assert.True(ammo.Step(4, -1));
+        string pylonPick = ammo.RowText(4);
+        Assert.Equal("Armor-piercing", pylonPick);
+        Assert.True(ammo.Accept(12));
+
+        var lines = page.Detail(0).Split('\n');
+        Assert.Equal("1) .50-cal. Armor-piercing", lines[0].Split("    ")[0]);
+        Assert.Equal("1)" + pylonPick, lines[0].Split("    ")[1]);
+    }
+
     [Theory]
     [InlineData(12, 3, true)]   // ordinal 13
     [InlineData(16, 3, true)]   // ordinal 17
@@ -246,8 +293,10 @@ public class CampaignFlightCheckPageTests
         Assert.False(HasWingmanForReal(withoutWingman));
     }
 
+    // The note is a caption at the authored geometry of fc_t_objtitle and fc_t_objectives, not a
+    // row and not the focused row's description: it is the screen's own parchment down the right.
     [ExtractedDataFact]
-    public void TheObjectivesNoteListsNumberedLinesForARealMission()
+    public void TheObjectivesNoteIsWrittenOnTheParchmentAtItsAuthoredPosition()
     {
         string dir = Path.Combine(TestData.TempDir(), "Profiles");
         var store = new CampaignProfileStore(dir);
@@ -260,8 +309,32 @@ public class CampaignFlightCheckPageTests
         var planes = new CustomPlaneStore(Path.Combine(TestData.TempDir(), "Planes"));
         var page = new CampaignFlightCheckPage(flow, planes, Stock);
 
-        string note = page.Detail(0);
-        Assert.Contains("1)", note);
+        BoardLine? title = null;
+        BoardLine? note = null;
+        foreach (var line in page.Captions)
+        {
+            if (line.X == 558f && line.Y == 80f)
+            {
+                title = line;
+            }
+
+            if (line.X == 554f && line.Y == 120f)
+            {
+                note = line;
+            }
+        }
+
+        Assert.NotNull(title);
+        Assert.True(title!.Italic);
+        Assert.NotNull(note);
+        Assert.True(note!.Italic);
+        Assert.Equal(206f, note.Width);
+        Assert.StartsWith("1) ", note.Text);
+        Assert.Contains("\n2) ", note.Text);
+
+        // The description panel carries the plane's own loadout block and nothing else; the note
+        // has a place of its own now, so it is not appended there.
+        Assert.DoesNotContain(note.Text, page.Detail(0));
     }
 
     // A separate page/flow pair with a real DataRoot, isolated from the no-DataRoot fixtures

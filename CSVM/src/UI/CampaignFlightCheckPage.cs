@@ -46,8 +46,23 @@ internal readonly record struct FlightRow(
 public sealed class CampaignFlightCheckPage : CampaignPage
 {
     // The ordnance table's own "None" row (docs/formats/campaign-screens.md, the Ammo selection
-    // decode): a pylon holding this id carries nothing, whether or not the pylon itself exists.
+    // decode): a pylon resolving to this row carries nothing, whether or not the pylon itself exists.
     private const int NoOrdnance = 11;
+
+    // The objectives note, at the authored positions of fc_t_objtitle and fc_t_objectives. The
+    // title's face is the langui row's own [AB19I] tag: 19 pixels, italic.
+    private const float ObjectivesTitleX = 558f;
+    private const float ObjectivesTitleY = 80f;
+    private const float ObjectivesTitleWidth = 130f;
+    private const float ObjectivesTitleFont = 19f;
+    private const float ObjectivesX = 554f;
+    private const float ObjectivesY = 120f;
+    private const float ObjectivesWidth = 206f;
+
+    // The note's own face. The widget carries a 360000 height, the layout's "grows as it needs to"
+    // sentinel, so it names no line pitch and this is measured off the reference screenshot rather
+    // than decoded.
+    private const float ObjectivesFont = 16f;
 
     // The two weapon tables' headings, at the authored y of fc_t_guntitlep and fc_t_guntitlew, and
     // the drop from a heading to its list, which is that widget pair's own 17 pixels.
@@ -91,8 +106,13 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     private CustomPlaneStore? _planes;
     private StockLoadouts? _stock;
     private Messages? _messages;
-    private bool _missionResolved;
+
+    // The mission and its objectives note, decoded once per mission rather than once per repaint:
+    // both read files, and the flow keeps one page instance across every screen it draws. -2 is
+    // "not yet read for any mission", which no MissionSeq ever is (the cabin's own default is -1).
+    private int _resolvedSeq = -2;
     private CampaignMission? _mission;
+    private string _objectives = string.Empty;
 
     /// <summary>Binds the page to its flow. <paramref name="planes"/>/<paramref name="stock"/> let a
     /// test supply an explicit store and stock-loadout table instead of the Godot-resolved
@@ -144,8 +164,9 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         }
     }
 
-    /// <summary>The title and mission-name widgets, each slot's GUNS and ROCKETS headings, and the
-    /// focused aircraft's weapon block under its own pair, which is what those two tables are.</summary>
+    /// <summary>The title and mission-name widgets, the objectives note down the right of the
+    /// board, each slot's GUNS and ROCKETS headings, and the focused aircraft's weapon block under
+    /// its own pair, which is what those two tables are.</summary>
     public override IReadOnlyList<BoardLine> Captions
     {
         get
@@ -156,6 +177,17 @@ public sealed class CampaignFlightCheckPage : CampaignPage
                 new("FLIGHT CHECK", 138, 36, 190, 20, BoardInk.Heading),
                 new(Title, 136, 70, 400, 15, BoardInk.Detail),
             };
+
+            if (ObjectivesNote() is { Length: > 0 } note)
+            {
+                lines.Add(new BoardLine(
+                    Flow.Strings.Text(1014, "Objectives").Trim(),
+                    ObjectivesTitleX, ObjectivesTitleY, ObjectivesTitleWidth, ObjectivesTitleFont,
+                    BoardInk.Detail, Italic: true));
+                lines.Add(new BoardLine(
+                    note, ObjectivesX, ObjectivesY, ObjectivesWidth, ObjectivesFont,
+                    BoardInk.Detail, Italic: true));
+            }
 
             foreach (var row in rows)
             {
@@ -220,23 +252,13 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         return row >= 0 && row < rows.Count ? rows[row].Text : string.Empty;
     }
 
-    /// <inheritdoc/>
+    /// <summary>The focused row's own description. The objectives note is NOT folded in here: it
+    /// has its own authored widget on the board (see <see cref="Captions"/>), and a screen writes a
+    /// block of text where the layout puts it rather than into the shell's hint band.</summary>
     public override string Detail(int row)
     {
         var rows = Rows();
-        if (row < 0 || row >= rows.Count)
-        {
-            return string.Empty;
-        }
-
-        string own = rows[row].Detail;
-        string objectives = ObjectivesNote();
-        if (objectives.Length == 0)
-        {
-            return own;
-        }
-
-        return own.Length == 0 ? objectives : own + "\n\n" + objectives;
+        return row >= 0 && row < rows.Count ? rows[row].Detail : string.Empty;
     }
 
     /// <inheritdoc/>
@@ -345,10 +367,14 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     private string AirframeTitle(int airframe) => Flow.Strings.Text(3000 + airframe, $"Airframe {airframe}");
 
+    // IDS_GUNSHORTNAME, NOT the 3310 long name: the original's flight-check row reads " .50-cal.",
+    // the maker's name belonging to the hangar and the ammo screen. The string owns its leading
+    // space, which is the gap the reference screenshot draws between "1)" and the calibre, so the
+    // fallback carries it too and no caller inserts one.
     private string CalibreName(int caliber)
     {
         int idx = Math.Clamp((caliber - 30) / 10, 0, 4);
-        return Flow.Strings.Text(3310 + idx, $".{30 + (idx * 10)}-cal.");
+        return Flow.Strings.Text(3320 + idx, $" .{30 + (idx * 10)}-cal.");
     }
 
     private string AmmoName(int index)
@@ -363,39 +389,43 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         return Flow.Strings.Text(3395 + i, OrdnanceShortNames[i]);
     }
 
-    // The same eight rows as two separate columns, which is how the screen's own two list widgets
-    // carry them: one under GUNS, one under ROCKETS, never a single wide block.
-    private (string Guns, string Rockets) WeaponColumns(OwnedPlane plane)
+    // A plane's eight gun rows and eight rocket rows, each drawn as its bare number plus whatever
+    // that slot carries. Nothing is inserted between the two: the calibre string owns its own
+    // leading space and the ordnance short name owns its lack of one, which is what makes the
+    // original read "1)  .50-cal. Slug" beside "1)High explosive". An empty slot is its number.
+    private (List<string> Guns, List<string> Rockets) WeaponRows(OwnedPlane plane)
     {
-        var guns = ResolveGuns(plane);
+        var groups = ResolveGuns(plane);
         var (left, right) = ResolveHardpoints(plane);
         var gunLines = new List<string>(8);
         var rocketLines = new List<string>(8);
         for (int row = 0; row < 8; row++)
         {
-            string gun = GunRowText(guns, plane.Ammo, row);
-            string rocket = RocketRowText(plane.Ordnance, left, right, row);
             int n = row + 1;
-            gunLines.Add($"{n}){(gun.Length > 0 ? " " + gun : string.Empty)}");
-            rocketLines.Add($"{n}){(rocket.Length > 0 ? " " + rocket : string.Empty)}");
+            gunLines.Add($"{n}){GunRowText(groups, plane.Ammo, row)}");
+            rocketLines.Add($"{n}){RocketRowText(plane.Ordnance, left, right, row)}");
         }
 
-        return (string.Join("\n", gunLines), string.Join("\n", rocketLines));
+        return (gunLines, rocketLines);
     }
 
-    // The eight gun rows beside the eight rocket rows, one plane's full loadout block.
+    // The same eight rows as two separate columns, which is how the screen's own two list widgets
+    // carry them: one under GUNS, one under ROCKETS, never a single wide block.
+    private (string Guns, string Rockets) WeaponColumns(OwnedPlane plane)
+    {
+        var (guns, rockets) = WeaponRows(plane);
+        return (string.Join("\n", guns), string.Join("\n", rockets));
+    }
+
+    // The eight gun rows beside the eight rocket rows, one plane's full loadout block: the row's
+    // own Detail text, for a caller with one column to fill rather than the board's two widgets.
     private string LoadoutBlock(OwnedPlane plane)
     {
-        var guns = ResolveGuns(plane);
-        var (left, right) = ResolveHardpoints(plane);
-        var lines = new List<string>(8);
-        for (int row = 0; row < 8; row++)
+        var (guns, rockets) = WeaponRows(plane);
+        var lines = new List<string>(guns.Count);
+        for (int row = 0; row < guns.Count; row++)
         {
-            string gun = GunRowText(guns, plane.Ammo, row);
-            string rocket = RocketRowText(plane.Ordnance, left, right, row);
-            int n = row + 1;
-            lines.Add($"{n}){(gun.Length > 0 ? " " + gun : string.Empty)}" +
-                      $"    {n}){(rocket.Length > 0 ? " " + rocket : string.Empty)}");
+            lines.Add($"{guns[row]}    {rockets[row]}");
         }
 
         return string.Join("\n", lines);
@@ -413,16 +443,20 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         return $"{CalibreName(gun.Caliber)} {AmmoName(ammoIndex)}";
     }
 
+    // ⚠ The stored pylon value is NOT a rocket-table row: CSVM's own encoding is one-based with 0
+    // meaning "never picked" (CampaignLoadout.PylonRow). Reading it as a row drew every untouched
+    // pylon as armor-piercing where the ammo screen and the original both say high explosive, and
+    // shifted every deliberate pick by one.
     private string RocketRowText(IReadOnlyList<int> ordnance, int left, int right, int row)
     {
         bool exists = row < 4 ? row < left : row - 4 < right;
-        if (!exists)
+        if (!exists || row >= ordnance.Count)
         {
             return string.Empty;
         }
 
-        int value = row < ordnance.Count ? ordnance[row] : NoOrdnance;
-        return value == NoOrdnance ? string.Empty : OrdnanceName(value);
+        int table = CampaignLoadout.PylonRow(ordnance[row]);
+        return table == NoOrdnance ? string.Empty : OrdnanceName(table);
     }
 
     // A plane's four gun groups: a hangar build's own picks when one is on file under the plane's
@@ -474,12 +508,18 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     private LoadoutDef? StockFor(int airframe) =>
         Stock?.For(AirframeDefKeys[Math.Clamp(airframe, 0, AirframeDefKeys.Length - 1)]);
 
-    // The mission's objectives note (uiData 2022 / gosCallback 28,
-    // docs/formats/campaign-screens.md): one line per IDENTITY'd objective, sorted and numbered by
-    // its unique priority (docs/formats/objectives.md, "IDENTITY and the objectives display"), text
-    // resolved through messages.json with the raw MSG_ key as its own fallback. Empty (never a
-    // crash) when the data root, the mission or the file is unavailable.
+    // The mission's objectives note (uiData 2022 / gosCallback 28, campaign-screens.md): the
+    // display list's rows concatenated (docs/formats/objectives.md, "IDENTITY and the objectives
+    // display"). ⚠ Do not number the lines here; the number is part of the MSG_ text. Read once
+    // per mission and never once per repaint, since Captions asks for it every time the board is
+    // composed. Empty, never a crash, when the data root, the mission or the file is unavailable.
     private string ObjectivesNote()
+    {
+        Resolve();
+        return _objectives;
+    }
+
+    private string ReadObjectivesNote()
     {
         if (Flow.DataRoot is not { } root || Mission() is not { } mission)
         {
@@ -488,33 +528,13 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
         try
         {
-            string zrdrPath = SessionPaths.MissionZrdr(root, mission.ChapterFolder, mission.MissionFolder);
-            var file = ZrdrDict.FromAlternating(Zrdr.LoadFileOrEmpty(zrdrPath, "objectives.json"));
+            var script = ObjectiveScript.Load(
+                SessionPaths.MissionZrdr(root, mission.ChapterFolder, mission.MissionFolder));
             var messages = MessagesFor(root);
-            var entries = new List<(int Priority, string Text)>();
-            for (int n = 1; file.List($"OBJECTIVE{n}") is { } block; n++)
+            var lines = new List<string>();
+            foreach (var identity in script.DisplayIdentities())
             {
-                var identity = ZrdrDict.FromAlternating(block).List("IDENTITY");
-                if (identity == null || identity.Count < 2 || identity[1] is not float priorityValue)
-                {
-                    continue;
-                }
-
-                int priority = (int)priorityValue;
-                if (entries.Exists(e => e.Priority == priority))
-                {
-                    continue;
-                }
-
-                string? key = identity.Count >= 3 ? identity[2] as string : null;
-                entries.Add((priority, messages.Get(key)));
-            }
-
-            entries.Sort((a, b) => a.Priority.CompareTo(b.Priority));
-            var lines = new List<string>(entries.Count);
-            for (int i = 0; i < entries.Count; i++)
-            {
-                lines.Add($"{i + 1}) {entries[i].Text}");
+                lines.Add(messages.Get(identity.MessageKey));
             }
 
             return string.Join("\n", lines);
@@ -525,14 +545,30 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         }
     }
 
-    private CampaignMission? Mission()
+    // Reads the mission and its objectives note for whichever mission the flow now names, once.
+    // Keyed on the sequence number rather than a bare "done" flag: the flow keeps this page
+    // instance, so the same page draws the second mission after it drew the first.
+    private void Resolve()
     {
-        if (_missionResolved)
+        if (_resolvedSeq == Flow.MissionSeq)
         {
-            return _mission;
+            return;
         }
 
-        _missionResolved = true;
+        _resolvedSeq = Flow.MissionSeq;
+        _mission = null;
+        ReadMission();
+        _objectives = ReadObjectivesNote();
+    }
+
+    private CampaignMission? Mission()
+    {
+        Resolve();
+        return _mission;
+    }
+
+    private void ReadMission()
+    {
         if (Flow.DataRoot is { } root)
         {
             try
@@ -552,8 +588,6 @@ public sealed class CampaignFlightCheckPage : CampaignPage
                 _mission = null;
             }
         }
-
-        return _mission;
     }
 
     private Messages MessagesFor(string root) =>

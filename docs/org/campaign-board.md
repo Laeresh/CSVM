@@ -90,6 +90,22 @@ picture inside it is always the campaign's opening keepsake because choosing one
 The profile screen's title mark (`MM_Logo.png` at `134, 13`) is matched off `Campaign Player
 Profile.png`.
 
+## The flight check's objectives note
+
+The note is authored geometry, and all of it is in `LAYOUT.CSV`: `FC_T_OBJTITLE` at `558, 80` with
+a 130-wide column, `FC_T_OBJECTIVES` at `554, 120` with a 206-wide one, both in the rows' own
+`0xFF2D3843` ink, which is `BoardPalette.Paper`'s `Detail`. The title's face is decoded too, from
+the `[AB19I]` tag `IDS_FC_OBJECTIVES` (langui 1014) leads with: 19 pixels, italic.
+
+**One value is chosen rather than decoded**, and is marked as such in the code: the note body's
+16-pixel face. `FC_T_OBJECTIVES` carries a height of 360000, the layout's "grows as it needs to"
+sentinel, so the row names no line pitch and 16 is measured off `Campaign Flight Check.png`.
+
+What goes on it is the mission's own display list, one line per unique `IDENTITY` priority
+([objectives.md](../formats/objectives.md), "IDENTITY and the objectives display"). ⚠ The line's
+number is part of the `MSG_` text, so nothing in the screen numbers them; an `IDENTITY` with no
+message key is a row with empty text, and draws as a blank line.
+
 ## Button plaques and their four frames
 
 Every screen-specific button ships as one PNG holding **four stacked frames of equal height**, in
@@ -141,5 +157,6 @@ Named so nobody reads their absence as a decode gap.
 - **Per-widget chrome**: dropdown boxes, scrollbars, listbox selection bars, the scrapbook's kill
   markers and stat card. The boards draw their screens' backgrounds, plaques, pictures and text;
   the widgets those text runs sit in are each their own fidelity question.
-- **The flight check's objectives note.** The parchment is drawn from the background art, but the
-  page does not load the mission's objectives, so it is blank.
+- **Italic as a real face.** The extraction ships no italic font, so a langui row asking for one
+  (`[AB19I]`) is drawn as the board's own face sheared 0.25 em. That lean is chosen to read like the
+  reference screenshot, not decoded from anything.

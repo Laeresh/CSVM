@@ -127,9 +127,12 @@ public sealed record BoardPlaque(
     BoardArt Art, float X, float Y, int Row, int Frame, string Label, BoardInk Ink);
 
 /// <summary>One line of board text at an authored position, wrapped to <paramref name="Width"/>
-/// (0 for no wrap). <paramref name="Row"/> is the page row it stands for, or -1 for chrome.</summary>
+/// (0 for no wrap). <paramref name="Row"/> is the page row it stands for, or -1 for chrome.
+/// <paramref name="Italic"/> is the <c>I</c> of a langui row's own <c>[FONTID]</c> tag, which is
+/// how the original names a slanted face; the renderer decides what it draws that with.</summary>
 public sealed record BoardLine(
-    string Text, float X, float Y, float Width, float Size, BoardInk Ink, int Row = -1);
+    string Text, float X, float Y, float Width, float Size, BoardInk Ink, int Row = -1,
+    bool Italic = false);
 
 /// <summary>
 /// One campaign screen composed in the original's 800x600 dialog space: the pictures under it, the

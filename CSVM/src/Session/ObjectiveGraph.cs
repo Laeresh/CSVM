@@ -301,28 +301,7 @@ public sealed class ObjectiveGraph
 
     private void BuildRows()
     {
-        var seen = new List<ObjectiveIdentity>();
-        foreach (var def in _script.Objectives)
-        {
-            if (def.Identity is not { } identity)
-            {
-                continue;
-            }
-
-            bool duplicate = false;
-            foreach (var row in seen)
-            {
-                duplicate |= row.Priority == identity.Priority;
-            }
-
-            if (!duplicate)
-            {
-                seen.Add(identity);
-            }
-        }
-
-        seen.Sort((a, b) => a.Priority.CompareTo(b.Priority));
-        foreach (var identity in seen)
+        foreach (var identity in _script.DisplayIdentities())
         {
             _rows.Add(new ObjectiveRow(identity.Priority, identity.Class, identity.MessageKey, false, false));
         }

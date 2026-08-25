@@ -136,7 +136,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 70. ☑ The profile screen does not open on the profile you last played (`BL-486`)
 71. ☐ The briefing's objectives are cursor stops, their text has nowhere else to be drawn, and long
     lines overlap each other (`BL-487`, `BL-490`)
-72. ☐ The flight check draws the wrong ammunition, and its rows and objectives are not the original's (`BL-488`)
+72. ☑ The flight check draws the wrong ammunition, and its rows and objectives are not the original's (`BL-488`)
 73. ☑ The screenshot key does nothing in menus (`BL-489`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
@@ -2618,7 +2618,7 @@ is. ⚠ The 30 px step and the `(35, 335, 185)` slot are authored geometry, so t
 rather than a new set of coordinates. Doing this after the move to `Captions` rather than before is
 what stops the layout being written twice.
 
-## G72 ☐ The flight check draws the wrong ammunition, and its rows are not the original's (`BL-488`)
+## G72 ☑ The flight check draws the wrong ammunition, and its rows are not the original's (`BL-488`)
 
 **Goal.** The flight check reads as the original's does, and the ammunition it shows is the
 ammunition that was just chosen.
@@ -2652,6 +2652,58 @@ space is slot-based on the stock path (`gun.Slot - 1`) and array-based on the cu
 conflating them would produce exactly this symptom in a different way. ⚠ The objectives note is
 authored geometry on the board, so place it from the layout rather than by eye against the
 screenshot.
+
+**Landed.**
+
+**(c) is NEITHER of the two candidates, and the wrong ammunition is the ROCKETS column.** Both
+screens resolve the same plane and the flight check rebuilds its rows on every access, so nothing is
+stale and the pages never disagree about which aircraft they are showing. `OwnedPlane.Ordnance` is
+one-based with 0 meaning "never picked", the stand-in `PLAN-M5-campaign.md` C25 chose and E41 left in
+place; `CampaignAmmoPage` and `CampaignLoadout` both decode it that way and
+`CampaignFlightCheckPage.RocketRowText` read it as a plain rocket-table row. Every untouched pylon
+therefore drew as armor-piercing where the ammo screen and the original both say high explosive, and
+every deliberate pick drew one row off, so choosing Armor-piercing showed High explosive. The decode
+now lives once, in `CampaignLoadout.PylonRow`, and every reader of the field calls it. The guns' own
+ammunition was measured first and agrees on both screens, which is what narrowed this to the pylons.
+⚠ The two gun-group index spaces are untouched: the stock path stays slot-based (`gun.Slot - 1`) and
+the custom-build path array-based.
+
+**(a) is a wrong string block, not a wrong composer.** `GunRowText` does compose calibre plus
+ammunition and nothing else; `CalibreName` read `IDS_GUNLONGNAME` (langui 3310, "Barret Arms
+.50-cal."). The item's premise that the 3310 block is blank is wrong: it is populated, with the
+makers' long names. The screen reads `IDS_GUNSHORTNAME` (3320) now, whose strings each own a leading
+space, and no caller inserts one, so the guns read `1)  .50-cal. Slug` and the rockets
+`1)High explosive` exactly as the reference picture draws them. The two row composers that had to
+agree about that spacing are now one. `docs/formats/campaign-screens.md` records the reading and its
+"Open" line for the calibre label's string source is struck.
+
+**(b) the note is on the board, and B13's gap had a cause.** The page did load objectives, but its
+private reader applied `ZrdrDict.FromAlternating` to the outer list where `objectives.json` wraps its
+alternating body in one element, so `OBJECTIVE1` was never found and the note was always empty, which
+is why the old test asserting `Detail(0)` contained `"1)"` passed on the loadout block instead. The
+private walk is gone: the page reads `ObjectiveScript.DisplayIdentities`, one place for the
+unique-priority display rule, which `ObjectiveGraph.BuildRows` now calls too. **Decoded:** both
+positions and both widths (`fc_t_objtitle` 558,80,130 and `fc_t_objectives` 554,120,206 from
+`ASSETS/LAYOUT.CSV`), the `0xFF2D3843` ink, and the title's 19-pixel italic face, which is the
+`[AB19I]` tag `IDS_FC_OBJECTIVES` leads with. **Chosen:** the note body's 16-pixel face, because the
+widget's 360000 height is the layout's "grows as it needs to" sentinel and names no pitch, and the
+0.25 em shear that stands in for an italic the extraction does not ship. Both are marked as chosen in
+the code and on `docs/org/campaign-board.md`, whose "flight check's objectives note" absence entry is
+replaced by that section.
+
+⚠ **No repaint policy was introduced.** The screen still draws only when the shell refreshes it. The
+note is read once per mission behind a sequence-number key, since `Captions` asks for it on every
+compose and it reads files.
+
+**Verified.** A driven check in `CampaignFlightCheckPageTests` walks change-ammo on the same flow,
+sets group 0 to Armor-piercing and pylon 0 to Armor-piercing, presses ACCEPT LOADOUT and reads the
+flight check's own rows back: both screens now name the same values, and the untouched pylon reads
+High explosive on both. A second test pins a gun row to `1) .50-cal. Slug` exactly. A
+`--menu=campaign-flightcheck` shot at 1280x720 against `Campaign Flight Check.png`: both weapon
+columns' spacing matches, and the note stands on the parchment, italic, with the numbers the `MSG_`
+text carries. 2385 units green, 120 in-engine suites green with 0 unexpected engine errors, build
+clean with 0 StyleCop warnings. No golden moved and none could: no golden shot is a campaign mission
+or a campaign screen.
 
 ## G73 ☑ The screenshot key does nothing in menus (`BL-489`)
 

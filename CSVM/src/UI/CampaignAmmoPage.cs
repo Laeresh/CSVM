@@ -376,9 +376,10 @@ public sealed class CampaignAmmoPage : CampaignPage
 
         int ordinal = MissionOrdinal();
         int at = OrdnanceTableIndex(cell);
-        for (int tries = 0; tries < 12; tries++)
+        for (int tries = 0; tries < CampaignLoadout.PylonRows; tries++)
         {
-            at = ((at + dir) % 12 + 12) % 12;
+            at = ((at + dir) % CampaignLoadout.PylonRows + CampaignLoadout.PylonRows)
+                % CampaignLoadout.PylonRows;
             if (ordinal >= OrdnanceThreshold[at])
             {
                 _ordnance[cell] = at + 1;
@@ -402,13 +403,10 @@ public sealed class CampaignAmmoPage : CampaignPage
         return body.Length > 0 ? $"{title} - {body}" : title;
     }
 
-    // A cell's ordnance pick as a table index (0..11): the stored value minus one when the working
-    // copy names one explicitly, else the documented universal stock fit (HE, table index 1).
-    private int OrdnanceTableIndex(int cell)
-    {
-        int stored = cell < _ordnance.Length ? _ordnance[cell] : 0;
-        return stored >= 1 && stored <= 12 ? stored - 1 : 1;
-    }
+    // A cell's ordnance pick as a table index (0..11), through the one decoder every reader of the
+    // stored field shares.
+    private int OrdnanceTableIndex(int cell) =>
+        CampaignLoadout.PylonRow(cell < _ordnance.Length ? _ordnance[cell] : 0);
 
     private bool PylonActive(int cell) =>
         cell < 4 ? cell < _build.LeftHardpoints : (cell - 4) < _build.RightHardpoints;
