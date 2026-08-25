@@ -145,9 +145,20 @@ marks another objective completed without running its effects.
 ### Completion actions
 
 Run once, inside the tick that detects completion (`FUN_0046a490`, 0x46a90c onward).
-`COMPLETED_SOUND_GROUP [group]` is queued into the mission radio queue (`FUN_0046cc50`, 1 s
-spacing parameter; a speech group is additionally spaced at least 15 s from the previous
-speech, `FUN_0046caf0`). Then, in order:
+`COMPLETED_SOUND_GROUP [group]` goes to the objective layer's cue dispatcher (`FUN_0046cc50` →
+`FUN_0046caf0`) with a **1 s start delay**, the same delay `WAKEUP_SOUND_GROUP`'s ordinary path
+passes `FUN_00593590`.
+
+⚠ **The dispatcher's 15 s interval is a music guard, not a speech one.** `FUN_0046caf0` gates it on
+`FUN_00480460`, which tests bit 3 of the game's own sound-flag word; the keyword table that builds
+that word (0x628744, consumed at 0x4802e0) is `NOROGUE` 1, `WINGMAN` 2, `VOICE` 4, **`MUSIC` 8**,
+`SFX` 0x10, `OPTIONAL` 0x40. A music cue raised while the previous one's 15 s hold is unexpired is
+**refused** (`return 0`), not delayed, and a music cue is dispatched with a 0 s delay. A voice line
+is subject to no such interval: its only wait rule is its own `QUEUE` tolerance
+([sounds.md](sounds.md)). ⚠ Do not read this interval as spacing between spoken lines; it silences
+short-tolerance chatter that the original plays.
+
+Then, in order:
 
 | Directive | Args | Effect (traced) |
 |---|---|---|

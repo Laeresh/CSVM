@@ -1554,23 +1554,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-465` `[Bug]` **Mission callouts and objective cues play positionally, but they are radio
-  calls and should not be.** Seen at the controls: the lines "are not 3D placed but directly
-  played... if they are 3d i'm gone before they are finished. They are radio calls so no location is
-  needed." *Evidence:* the user's pass, plus the routing: a campaign objective's
-  `WAKEUP_SOUND_GROUP`/`COMPLETED_SOUND_GROUP` goes through `CampaignDirector`'s one sound-group
-  executor to `WorldSounds.PlayOneShot`, which starts an `AudioStreamPlayer3D` (the D33 suite counts
-  exactly that). A positional line attenuates and falls behind as the player flies on, so a callout
-  is half-heard. *Fix shape:* route the radio-call classes to a non-positional channel, beside
-  `MusicPlayer` rather than inside `WorldSounds`, which is the seam the music channel already
-  established. *⚠ Traps:* ⚠ this is a routing question with a decoded answer available, so settle it
-  from the data before moving anything: `docs/formats/sounds.md` records that the original's own
-  channel split sends `MUSIC`-flagged definitions and `mu`-prefixed groups to the streaming channel
-  and **everything else to the positional path**, which as written would put these lines in 3D. If
-  the decode really says positional, the finding is that the original's callouts are positional at a
-  distance that never matters, and the fix is the placement, not the channel. Do not change both.
-  *Cross-refs:* `BL-461` (VO chains), which will inherit whatever channel this settles on;
-  `docs/org/music.md` for the existing two-channel precedent.
+- `BL-480` `[Feature]` **The music channel does not enforce the original's 15 s cue guard.**
+  *Evidence:* found while decoding the mission radio queue. `FUN_0046caf0` gates its 15 s rule on
+  `FUN_00480460`, which reads bit 3 of the game's sound-flag word, and the keyword table at
+  `0x4802e0` (strings at `0x628744`) gives `NOROGUE` 1, `WINGMAN` 2, `VOICE` 4, **`MUSIC` 8**, `SFX`
+  0x10, `OPTIONAL` 0x40. So `FUN_00480460` is an is-music predicate with exactly one call site, and
+  the rule is a **refusal** rather than a delay: `if (this+0x20 != 0 && now < this+0x24) return 0`,
+  so a music cue raised while the previous one's `now + 15.0` hold stands is dropped outright. The
+  remake has no such hold. `MusicPlayer`'s existing rule that re-cueing the playing track never
+  restarts it covers the common case, which is why this is a gap rather than an audible bug today.
+  *Fix shape:* the 15 s refusal hold on `MusicPlayer`, which is where it belongs, since
+  `CampaignDirector.PlaySoundGroup` routes `mu*` cues there before the radio is consulted. *⚠ Traps:*
+  it refuses, it does not queue or delay: a cue inside the hold is lost, not deferred, and
+  implementing it as a delay would change which track plays. Do not put it on `MissionRadio`, which
+  never sees a music cue. *Cross-refs:* `docs/formats/objectives.md`, whose 15 s clause previously
+  read as speech spacing and is corrected; `docs/org/music.md`.
 
 - `BL-455` `[Feature]` **There is no audio options menu, so the music level is a hard-coded
   stand-in.** *Evidence:* at the controls the music drowned the briefing narration, so
@@ -1582,23 +1580,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   to remove rather than adjust it. `MusicPlayer.Gain` deliberately stays the fade's own 0..1 value
   so the decoded ramp assertions still read what the decode describes. *Cross-refs:*
   `docs/org/music.md` for the fade rates the level does not affect.
-
-- `BL-461` `[Feature]` **VO dialogue chains are decoded and prewarmed but nothing plays one.**
-  *Evidence:* `docs/formats/sounds.md` records the chain shape (`[name, [dialogueRoot, [line],
-  [line], …]]`, "a VO chain, NOT a weighted group") and `WorldSounds.Prewarm` decodes a chain's
-  member lines, but `PlayOneShot`/`Spawn` only ever call `SoundGroup.Pick`, which returns null for a
-  chain because it has zero weighted members. So a cue naming a chain resolves, prewarms, and plays
-  silence. C1/M02 carries both shapes in one mission: `OBJECTIVE8`'s `WAKEUP_SOUND_GROUP` and
-  `OBJECTIVE16`'s `COMPLETED_SOUND_GROUP` are weighted and play for real, while `OBJECTIVE1`'s
-  `WAKEUP_SOUND_GROUP snd_NW2Start` and `OBJECTIVE10`'s `COMPLETED_SOUND_GROUP snd_NW2Prim2Suc`
-  are chains and play nothing. *Fix shape:* a chain player: what sequences the lines, what spaces
-  them, whether a chain interrupts or queues behind one already speaking, and what owns it (the
-  sounds page says the chains are kept "so the comms/mission layer can consume them", a consumer
-  that does not exist). *⚠ Traps:* this is not a prewarm gap. `ExtraPrewarmNames` already expands a
-  chain to its members, so the distinction is purely at playback; adding chains to a prewarm list
-  changes nothing. Do not make `SoundGroup.Pick` return a chain member at random either, since a
-  chain is a script, not a draw. *Cross-refs:* `docs/formats/sounds.md`; `docs/PLAN-M5-campaign.md`
-  D33, which found this while proving the objective cues fire and left it deliberately unbuilt.
 
 - `BL-079` `[Feature]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;
   the original's IA traffic is clearly audible in the reference video.

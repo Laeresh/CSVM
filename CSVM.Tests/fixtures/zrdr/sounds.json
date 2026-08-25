@@ -6,7 +6,7 @@
       [
         ["snd_probe_loop", "probe_loop.wav", "LOOPED", "3D", "RANGE", [50, 400], "VOLUME", [0.75]],
         ["snd_probe_oneshot", "probe_one.wav"],
-        ["snd_probe_pitched", "probe_pitch.wav", "FREQUENCY", "SFX", "PURGEABLE"]
+        ["snd_probe_pitched", "probe_pitch.wav", "FREQUENCY", "SFX", "PURGEABLE", "QUEUE", [45]]
       ],
       "probe_set_b",
       [

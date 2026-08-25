@@ -205,6 +205,9 @@ public partial class GameSession : Node3D
     // The E16 voice dispatch (built with the rigs when the world has sounds; its mission clock
     // steps in DriveSimSteps). Null in a soundless/world-less session — chatter simply off.
     private AiVoiceRuntime? _aiVoice;
+    // The mission radio queue the campaign's objective callouts speak on. Built with the rigs when
+    // the world has sounds, stepped beside the director, freed with the world subtree.
+    private MissionRadio? _radio;
     // The egen enemy generators (--generators): loaded with the rigs, stepped in
     // DriveSimSteps before the AI planes it spawns into AiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
@@ -690,6 +693,7 @@ public partial class GameSession : Node3D
         // advances no wave at the controls.
         _iaDirector?.Step(dt);
         _campaign?.Step(dt);
+        _radio?.Tick(dt);
         // On a realtime clock the walk reads whatever pose each aircraft holds at this node's
         // tick; a step's stale pose is at most one 60 Hz frame of a 600 m cone.
         _smokeScreens?.SimStep(dt);
@@ -2100,6 +2104,11 @@ public partial class GameSession : Node3D
             var combatVoice = new CombatVoice(vDefs, vGroups, CombatVoice.LoadAccents(state.ZrdrPath));
             _aiVoice = new AiVoiceRuntime(combatVoice, worldSounds, Rng.NewSystemRandom(Rng.Ai));
             _worldRoot!.AddChild(_aiVoice); // its realtime tick; freed with the world subtree
+            // The radio plays the streams the world's prewarm already decoded, so a callout survives
+            // the sound archive's build scope closing exactly as a one-shot does.
+            _radio = new MissionRadio(vDefs, vGroups, worldSounds.StreamFor);
+            worldSounds.Radio = _radio;
+            _worldRoot!.AddChild(_radio);
             foreach (var rig in _rigs)
             {
                 if (rig.Controller is { } human)
@@ -3075,6 +3084,7 @@ public partial class GameSession : Node3D
             // The objectives graph reads the same step's kills and node deactivations, so it ticks
             // after the AI planes above, exactly where the IA sequencer does.
             _campaign?.Step(dt);
+            _radio?.Tick(dt);
             // The smoke screens after every aircraft has moved this step: the walk reads the
             // layer's and the victims' poses as they stand now, as the original's does.
             _smokeScreens?.SimStep(dt);

@@ -737,17 +737,31 @@ public sealed class CampaignDirector
                 return;
             }
 
-            // The mission radio queue (1 s spacing, 15 s between speech lines) is D33's; this plays
-            // the group straight through the existing resolution, at the listener.
+            // A callout's definition carries QUEUE and never 3D, so it belongs on the radio queue
+            // and not at a point in the world (docs/formats/sounds.md). A cue the radio does not
+            // own returns 0 and falls through to the positional path that does.
+            if (_in.Sounds.Radio is { } radio && radio.Cue(group, _in.Rng) > 0)
+            {
+                return;
+            }
+
             _in.Sounds.PlayOneShot(group, _in.ListenerPosition(), _in.Rng);
         }
 
         public void StopQueuedSounds(IReadOnlyList<string> names)
         {
-            if (names.Count > 0)
+            if (names.Count == 0)
             {
-                _owner.Gap("STOP_QUEUED_SOUNDS", "there is no mission radio queue to cancel from yet");
+                return;
             }
+
+            if (_in.Sounds?.Radio is { } radio)
+            {
+                radio.Cancel(names);
+                return;
+            }
+
+            _owner.Gap("STOP_QUEUED_SOUNDS", "this session built no mission radio queue");
         }
 
         public void WarpVehicle(string vehicle, IReadOnlyList<WarpPoint> points) =>

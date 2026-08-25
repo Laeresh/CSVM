@@ -87,6 +87,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WavCues.cs` — the RIFF `cue ` chunk of a WAV, as times in seconds (zip or dir): the briefing narration's marker points, which is the only clock a reveal script does not carry itself. Times come back ascending because a `WaitForMarker` number indexes them by sample offset and 13 of the 24 briefing wavs store their points out of that order. Kept apart from `SoundArchive`, which decodes to a Godot stream, so a menu page needing only timings stays engine-free. Decode: `docs/formats/briefing.md`.
 - `src/Mech3/SoundArchive.cs` — WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
 - `src/Mech3/MusicPlayer.cs` — the state-driven score: one 2D streaming channel for menu, cabin and mission, with the decoded battle hold.
+- `src/Mech3/MissionRadio.cs` — the mission radio queue: the non-positional voice channel the campaign's objective callouts and VO dialogue chains speak on.
 - `src/Mech3/SoundDefs.cs` — sounds.json parser: SETS `snd_*` → `SoundDef`; `LoadGroups` → the weighted-random `SOUND_GROUPS` + their dialogue chains.
 - `src/Mech3/CombatVoice.cs` — the combat-voice chain: roster `accentID` → `voice.zrd` pool → pilot VO id → clip defs / the shipped `_random` variant groups; the mission's voice prewarm set.
 - `src/Mech3/Anim/TemplateStage.cs` — the effect-template stage as one module: pool-slot arithmetic, root resolution and retirement.
@@ -1140,6 +1141,18 @@ cues the sound-group or definition name the original's data names for that state
 the raw form for a name the data supplies directly. One track at a time, hard cuts, no crossfade;
 `NoteCombat` + `Tick` run the 20-second battle hold and its fade. The selection rules, the fade
 rates and the tracks that ship with no trigger are `docs/org/music.md`.
+
+## src/Mech3/MissionRadio.cs
+The mission radio queue: the third playback channel, beside `MusicPlayer`'s streaming track and
+`WorldSounds`' pooled 3D emitters, and the one a mission's objective callouts speak on. `Cue(name)`
+takes a queued radio definition or a VO dialogue chain and returns how many lines it will speak, 0
+for a name this channel does not own, so the caller can fall through to the channel that does.
+One call speaks at a time: a chain runs its lines back to back as one call, a later cue queues
+behind rather than cutting in, `Cancel` is `STOP_QUEUED_SOUNDS`, and a call waiting past its
+definition's `QUEUE` tolerance is dropped unheard. Streams come from `WorldSounds.StreamFor`, so
+the world's prewarm is what makes a callout survive the sound archive closing. The 1 s cue delay is
+`docs/formats/objectives.md`; the definition classes and the tolerance are
+`docs/formats/sounds.md`.
 
 ## src/Mech3/SoundDefs.cs
 sounds.json SETS parser: `snd_*` name → `SoundDef` (wav name, flags, range, volume); the entry
@@ -4716,14 +4729,14 @@ called from BOTH of `GameSession`'s drive paths. Mission end records the attempt
 Which directives reach the engine today: `INACTIVEn` (node visibility, the decoded active bit),
 `ANIM_STATE` (`AnimRuntime.AnimStateOf`), the node form of `TRAVELERS`, `WAKEUP_TURRETS` /
 `WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
-(`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM`, and both sound-group directives through
-`WorldSounds.PlayOneShot`'s existing group resolution, `START_TAXI` through the director's own
+(`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM`, both sound-group directives through
+`MissionRadio`, falling through to `WorldSounds.PlayOneShot` for a cue the radio does not own, and
+`STOP_QUEUED_SOUNDS` through `MissionRadio.Cancel`, `START_TAXI` through the director's own
 `ScriptedPathVehicles` registry (`Paths`), which it also steps beside the graph, and, over the
 spawned roster, `DEDG` (`GroupLiveCount`: not-crashed members of the block group, a parked one
 counting as alive) and `WAKEUP_ENEMIES` (an inert named aircraft re-activated at its spawn pose).
 The rest (the group form of `TRAVELERS`, `SET_AI_*`, `WARP_VEHICLE`, `COMPLETED_STOPPOINT`), the
-untraced `COMPLETED_ZEPCANNONS` reader, and `STOP_QUEUED_SOUNDS` (there is no mission radio queue
-yet) are NAMED no-ops, each logged once per kind. ⚠ Never turn one of those into an invented
+untraced `COMPLETED_ZEPCANNONS` reader are NAMED no-ops, each logged once per kind. ⚠ Never turn one of those into an invented
 behaviour: the missing consumer is the finding.
 `BuildRoster(RosterInputs)` is the roster phase, called by `GameSession` right after
 `InstantActionDirector.BuildActors` at the point where the human rigs exist: it plans the mission's

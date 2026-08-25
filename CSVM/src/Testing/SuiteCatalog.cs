@@ -153,6 +153,7 @@ public static class SuiteCatalog
         "campaign-objective-markers",
         "landings-approach-trigger",
         "roster-spawn-names",
+        "mission-radio",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -812,6 +813,17 @@ public static class SuiteCatalog
             + "and moves the live pick off it, and bloodhawk_2's always-target on the 'player' "
             + "role takes the human rig over a nearer aircraft",
             RosterSpawnNames));
+
+        // BL-465/BL-461: mission callouts played from a point in the world, and a cue naming a VO
+        // dialogue chain played nothing at all.
+        into.Add(new TestHarness.Suite("mission-radio",
+            "the mission radio queue over the first story mission's own callout vocabulary: every "
+            + "wake/complete cue the mission authors is a queued radio line or a chain of them and "
+            + "none is a positional definition, a chain speaks all of its lines in order, a second "
+            + "cue queues behind the one speaking instead of cutting in, the whole queue drains "
+            + "without starting a positional player, and STOP_QUEUED_SOUNDS drops a call that has "
+            + "not begun",
+            CampaignHudSuites.MissionRadioCallouts));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

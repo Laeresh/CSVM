@@ -78,14 +78,14 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — where things are shown, and where they are heard
 
 11. ◐ The objectives readout belongs on the pause screen (`BL-466`)
-12. ◐ Radio calls play positionally (`BL-465`)
+12. ☑ Radio calls play positionally (`BL-465`)
 13. ◐ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
 14. ◐ The briefing reveal, drawn as authored (`BL-464`)
 
 ### Wave C — the gaps M5 named
 
 21. ☑ The `landings.zrd` approach trigger, which is the mid-mission cutscene gate (`BL-467`, `BL-035`)
-22. ◐ The VO dialogue chain player (`BL-461`)
+22. ☑ The VO dialogue chain player (`BL-461`)
 23. ☑ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
 
 ### Wave D — the campaign's own rough edges
@@ -601,7 +601,7 @@ than only the graph, which is the one proof that this half works; the move must 
 meaningful, not delete it. ⚠ Do not also remove in-world target selection: the same verdict says
 targets are selectable in the world, and that is a different subsystem.
 
-## B12 ☐ Radio calls play positionally (`BL-465`)
+## B12 ☑ Radio calls play positionally (`BL-465`)
 
 **Goal.** A mission callout is heard in full wherever the player flies.
 
@@ -629,6 +629,44 @@ in-engine counter the settled routing makes assertable.
 **⚠ Traps.** ⚠ Do not change both the channel and the placement; one of them is the answer. ⚠ C22
 (the VO chain player) will inherit whatever channel this settles on, so run this first or accept
 that C22 may have to move again.
+
+**Landed.** ⚠ **The contradiction resolved against this repo's own documentation, not against the
+user.** `3D` is the data's positional opt-in rather than its default: of 2766 `SETS` definitions only
+124 carry it, `RANGE` occurs with nothing else, and `QUEUE` and `3D` never co-occur. Across every
+`objectives.zrd` in the install, of 498 distinct callout cue names **not one** names a `3D`
+definition, so a mission callout has no distance model in the data at all and the answer is the
+channel. `Mech3/MissionRadio.cs` is that channel, owned by the mission layer through
+`WorldSounds.Radio`, with `MusicPlayer` as its model and streams from `WorldSounds.StreamFor` so the
+existing prewarm keeps a callout alive after the archive closes. `CampaignDirector.PlaySoundGroup`
+now offers a cue to the radio and falls through to `PlayOneShot` for one it does not own, and
+`STOP_QUEUED_SOUNDS` stops being a named no-op.
+
+⚠ **The 15 s interval is a music-cue guard, not speech spacing, and `docs/formats/objectives.md` is
+corrected.** A first cut gated every call on 15 s, which would have silenced every combat bark, since
+those author `QUEUE 0.5`. `FUN_0046caf0` gates that rule on `FUN_00480460`, which is bit 3 of the
+game's sound-flag word, and the keyword table at `0x4802e0` reads `NOROGUE` 1, `WINGMAN` 2, `VOICE`
+4, `MUSIC` 8, `SFX` 0x10, `OPTIONAL` 0x40. So it is an is-music predicate with one call site, and it
+REFUSES a cue rather than delaying it. The 1 s is a per-cue start delay rather than an inter-call
+gap. Two further decodes came with it and are implemented: the parser adds 0.3 s to an authored
+`QUEUE` value, and a definition with no `QUEUE` key keeps the field's initial 5.0 s. ⚠ The tolerance
+clock runs only while the channel is BUSY, because `QUEUE` is how long a line waits for a channel
+somebody else holds; charging the start delay against a 0.5 s bark would drop it before it spoke.
+
+**Verified.** `mission-radio` over C1/M02 asserts that none of the mission's callout cues names a
+positional definition (15 radio lines, 6 chains, 4 music, 0 positional) and that a whole queue drains
+with `WorldSounds.OneShotsStarted` unmoved at zero. Re-run on the merged tree with the
+`CampaignDirector` handover applied: `1 passed, 0 failed, errors=clean`, 116 suites registered.
+`campaign-objectives-hud`, `voice-runtime`, `ai-voice` and `music-states` all still pass. Heard end
+to end while flying away is the user's half and is not yet done.
+
+⚠ **Named rather than invented, and left for a controls judgement:** `AiVoiceRuntime` plays the
+combat voice `id<N>` clips positionally, and those definitions are `QUEUE 0.5` with no `3D` and no
+`RANGE`, so that placement is the same invention this item removed from the mission callouts.
+Rerouting it would move `voice-runtime` and `ai-voice`. The 15 s music guard itself belongs to
+`MusicPlayer` (`BL-480`), since `mu*` cues are routed there before the radio is consulted.
+`QPRIORITY` writes a 3-bit priority at bits 10 to 12, is read nowhere, and which direction is more
+urgent is undecoded, so nothing acts on it. The wake/complete asymmetry is not implemented rather
+than guessed, because the executor cannot tell the two directives apart.
 
 ## B13 ☐ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
 
@@ -789,7 +827,7 @@ passes over the site, one to arm it and one to fly it. The suite is the flown ev
 clean, all 16 golden shots hash-identical, so widening the cutscene host by definition name reached
 no flight the goldens cover.
 
-## C22 ☐ The VO dialogue chain player (`BL-461`)
+## C22 ☑ The VO dialogue chain player (`BL-461`)
 
 **Goal.** A cue naming a VO dialogue chain plays the chain instead of silence.
 
@@ -817,6 +855,20 @@ counter D33 added for exactly this kind of proof).
 members, so adding chains to a prewarm list changes nothing. ⚠ Do not make `SoundGroup.Pick` return
 a random chain member; a chain is a script, not a draw, and that change would move every existing
 weighted-sound suite.
+
+**Landed.** The consumer `docs/formats/sounds.md` named now exists, and it is B12's channel rather
+than a second mechanism: `MissionRadio.Cue` speaks a `SoundGroup.Chains` script in order as one call,
+a later cue queues behind it instead of cutting in, `Cancel` is `STOP_QUEUED_SOUNDS`, and a call that
+waits past its `QUEUE` tolerance is dropped unheard. `SoundGroup.Pick` is untouched. The owner named
+by the item is the mission layer, through `WorldSounds.Radio`.
+
+**Verified.** `mission-radio` over C1/M02 counts `snd_NW2Start` starting all three of its lines in
+order (`BigJohn_1`, `Tex_2`, `Ilsa_3`) against real prewarmed streams in a built world, with
+`snd_c2-NW-m2_Jack_17` queued behind it speaking fourth rather than cutting in, zero dropped, and
+`Cancel` removing an unstarted call. `WorldSounds.OneShotsStarted` stays at zero throughout, which is
+the proof that nothing on this path became a positional emitter. ⚠ The `Chains[0]` question was
+settled by census rather than by trusting the prose that says the same: of the 222 groups carrying a
+chain, none carries more than one, so the index is total and not a pick.
 
 ## C23 ☑ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
 

@@ -71,6 +71,183 @@ internal static class CampaignHudSuites
         ctx.Note($"drove {mission.ChapterFolder}/{mission.MissionFolder}'s readout and cue path against a built world");
     }
 
+    /// <summary>The mission radio queue over one shipped mission's own callout vocabulary: the
+    /// definition classes the data authors, a VO dialogue chain speaking all its lines in order,
+    /// a plain radio line beside it, and the queue's spacing, wait tolerance and cancellation.
+    /// Built against a real world so the streams are the ones the mission prewarmed.</summary>
+    internal static void MissionRadioCallouts(TestContext ctx)
+    {
+        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
+        {
+            throw new SuiteSkippedException($"chapter {ctx.Chapter} holds no campaign mission");
+        }
+
+        var script = ObjectiveScript.Load(
+            SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder));
+        var defs = SoundDefs.Load(ctx.ZrdrPath);
+        var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var report = new StringBuilder();
+        report.AppendLine($"{mission.ChapterFolder}/{mission.MissionFolder} seq={mission.Seq}");
+        CheckCueClasses(ctx, script, defs, groups, report);
+
+        var cues = script.SoundGroupNames();
+        string? chainCue = FirstCue(cues, groups, defs, chain: true);
+        string? lineCue = FirstCue(cues, groups, defs, chain: false);
+        if (chainCue == null || lineCue == null)
+        {
+            throw new SuiteSkippedException(
+                $"{mission.MissionFolder} authors no chain/line pair to A/B (chain={chainCue} line={lineCue})");
+        }
+
+        ctx.ExtraPrewarmSoundNames = cues;
+        ctx.WithWorld(ctx.Chapter, collision: false, mission.MissionFolder, world =>
+        {
+            var sounds = world.Runtime.Sounds;
+            ctx.Check(sounds != null, $"the mission world built a live WorldSounds channel");
+            if (sounds == null)
+            {
+                return;
+            }
+
+            var radio = new MissionRadio(defs, groups, sounds.StreamFor);
+            ctx.Host.AddChild(radio);
+            DriveRadio(ctx, radio, sounds, chainCue, lineCue, report);
+            radio.QueueFree();
+        });
+
+        ctx.WriteArtifact($"test-mission-radio-{ctx.Chapter}.txt", report.ToString());
+        ctx.Note($"drove {mission.ChapterFolder}/{mission.MissionFolder}'s chain cue '{chainCue}' and line cue '{lineCue}'");
+    }
+
+    // The decode this channel exists for: every callout the mission cues is a queued radio line or
+    // a chain of them, and not one of them is a positional definition.
+    private static void CheckCueClasses(
+        TestContext ctx, ObjectiveScript script, IReadOnlyDictionary<string, SoundDef> defs,
+        IReadOnlyDictionary<string, SoundGroup> groups, StringBuilder report)
+    {
+        int queued = 0, chains = 0, music = 0, positional = 0, unknown = 0;
+        foreach (var cue in script.SoundGroupNames())
+        {
+            if (cue.StartsWith("mu", System.StringComparison.OrdinalIgnoreCase))
+            {
+                music++;
+            }
+            else if (groups.TryGetValue(cue, out var group))
+            {
+                chains += group.Chains.Count > 0 ? 1 : 0;
+                positional += ChainOrGroupIs3D(group, defs) ? 1 : 0;
+            }
+            else if (defs.TryGetValue(cue, out var def))
+            {
+                queued += def.Queued ? 1 : 0;
+                positional += def.Is3D ? 1 : 0;
+            }
+            else
+            {
+                unknown++;
+            }
+        }
+
+        report.AppendLine($"cues: {queued} radio lines, {chains} chains, {music} music, "
+            + $"{positional} positional, {unknown} unknown to sounds.json");
+        ctx.Same(0, positional, $"no callout this mission cues names a positional (3D) definition");
+        ctx.Check(queued + chains > 0, $"the mission cues radio lines and chains ({queued}+{chains})");
+    }
+
+    // Drives the channel: the chain speaks every line in order, a second cue queues behind rather
+    // than cutting in, and a cancelled call never speaks.
+    private static void DriveRadio(
+        TestContext ctx, MissionRadio radio, WorldSounds sounds,
+        string chainCue, string lineCue, StringBuilder report)
+    {
+        int expected = radio.Cue(chainCue, new System.Random(1));
+        ctx.Check(expected > 1, $"the chain cue '{chainCue}' queues its whole script lines={expected}");
+        ctx.Same(0, radio.LinesStarted, $"nothing speaks before the channel is stepped");
+        Pump(radio, MissionRadio.CueDelaySeconds + 0.2f);
+        ctx.Same(1, radio.LinesStarted, $"the chain's first line started on air='{radio.OnAir}'");
+
+        int queuedBefore = sounds.OneShotsStarted;
+        ctx.Same(1, radio.Cue(lineCue, new System.Random(2)),
+            $"a plain radio line '{lineCue}' queues as one line");
+        string? speaking = radio.OnAir;
+        Pump(radio, 0.5f);
+        ctx.Check(speaking != null && radio.OnAir == speaking,
+            $"the second call waits its turn rather than cutting in on '{speaking}'");
+        ctx.Same(1, radio.Pending, $"it is holding in the queue");
+
+        Pump(radio, 240f);
+        ctx.Same(expected + 1, radio.LinesStarted,
+            $"every line of the chain and the line behind it spoke got={radio.LinesStarted}");
+        ctx.Same(0, radio.Dropped, $"nothing waited past its QUEUE tolerance");
+        ctx.Check(radio.OnAir == null, $"the channel falls silent once the queue drains");
+        ctx.Same(queuedBefore, sounds.OneShotsStarted,
+            $"not one callout started a positional player while the radio was speaking");
+
+        radio.Cue(chainCue, new System.Random(3));
+        ctx.Same(1, radio.Cancel(new[] { chainCue }), $"STOP_QUEUED_SOUNDS drops a call that has not started");
+        int spoken = radio.LinesStarted;
+        Pump(radio, 60f);
+        ctx.Same(spoken, radio.LinesStarted, $"the cancelled call never speaks");
+        report.AppendLine($"radio: {radio.LinesStarted} lines started, {radio.Dropped} dropped, "
+            + $"{sounds.OneShotsStarted - queuedBefore} positional one-shots");
+    }
+
+    private static void Pump(MissionRadio radio, float seconds)
+    {
+        for (float t = 0f; t < seconds; t += 0.1f)
+        {
+            radio.Tick(0.1f);
+        }
+    }
+
+    private static bool ChainOrGroupIs3D(
+        SoundGroup group, IReadOnlyDictionary<string, SoundDef> defs)
+    {
+        foreach (var chain in group.Chains)
+        {
+            foreach (var line in chain)
+            {
+                if (defs.TryGetValue(line, out var def) && def.Is3D)
+                {
+                    return true;
+                }
+            }
+        }
+
+        foreach (var (member, _) in group.Members)
+        {
+            if (defs.TryGetValue(member, out var def) && def.Is3D)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // The first cue name of the asked-for shape: a VO dialogue chain, or a bare radio definition.
+    private static string? FirstCue(
+        IReadOnlyList<string> cues, IReadOnlyDictionary<string, SoundGroup> groups,
+        IReadOnlyDictionary<string, SoundDef> defs, bool chain)
+    {
+        foreach (var cue in cues)
+        {
+            if (chain && groups.TryGetValue(cue, out var group) && group.Chains.Count > 0
+                && group.Chains[0].Count > 1)
+            {
+                return cue;
+            }
+
+            if (!chain && !groups.ContainsKey(cue) && defs.TryGetValue(cue, out var def) && def.Queued)
+            {
+                return cue;
+            }
+        }
+
+        return null;
+    }
+
     // Wakes every WAKEUP_SOUND_GROUP-authoring objective in turn until one of them actually starts
     // a real one-shot player, and asserts that at least one did.
     private static void DriveWakeCue(
