@@ -1970,24 +1970,40 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   to get right. `BL-492` gates this in CM02: no capture, no swap to reach. *Cross-refs:* `BL-492`,
   `BL-471` (the callback decode that filed this), `PLAN-M5-polish.md` G76.
 
-- `BL-492` `[Bug]` **CM02's Balmoral capture does not trigger on the last airship.** *Evidence:*
-  reported at the controls, flying the approach at the last Balmoral with nothing happening. The data
-  is complete and symmetric, so this is ours. `C3/zrdr/landings.zrd` carries three rows that differ
-  only by index: `ww_balmoral1`/`bb_approach1`, `ww_balmoral2`/`bb_approach2` and
-  `ww_balmoral3`/`bb_approach3`, each `angle 45` and `speed [50, 320]`. C3's gamez carries all six
-  nodes, one each of `bb_approach1..3` and `britbalmoral_1..3`, so nothing is missing. The three
-  airships fly nets (`OBJECTIVE4` sets `M5Bombrun` on all three) and the mission arms and disarms the
-  wing-walk objectives in threes throughout (`OBJECTIVE35/36/37`, `48/49/50`, `51/52/53`, each a
-  `WAKE_ANIM` of `bombs_away<n>` on `britbalmoral_<n>`). *Fix shape:* find why the third row does not
-  fire when the first two do, before changing anything; the rows being identical in the data is what
-  makes this a defect on our side rather than a fidelity question. Two starting points: `BL-467`'s
-  approach rows start disarmed and are armed by the mission's own objective chain, so the third may
-  never be armed; and `BL-470` gave a row a fire-once-per-entry latch, so a latch keyed wrongly would
-  disarm one row permanently. *⚠ Traps:* do not relax the approach volume's angle or speed gates to
-  make it fire; they are authored and identical across the three. Check whether the volume follows
-  its airship, since these three move under `SET_AI_NET` and a volume that resolved once at spawn
-  would drift. *Cross-refs:* `BL-467` and `BL-470`, whose work this exercises;
-  `PLAN-M5-polish.md` C21, F51, G74.
+- `BL-492` `[Bug]` **CM02's Balmoral capture reaches none of the three airships.**
+  `[Blocked: BL-495]` *Evidence:* reported at the controls, and the cause is measured by the
+  `landings-wingwalk-gate` suite rather than inferred. Nothing is special about the third airship.
+  `LandingApproaches.Resolve` resolves all three rows from `C3/zrdr/landings.zrd`, and
+  `LandingApproachRuntime.Bind` drops all three because the built world carries no `bb_approach<n>`:
+  those nodes hang under `britbalmoral_<n>/markers/pylon8`, and `britbalmoral_<n>` is a gamez library
+  root with no parent that the world build never places, since the campaign roster spawns the airship
+  as an aircraft off the `pbalmoral` airframe instead. The same reach failure silences the gate,
+  because `activate_wingwalk` and `deactivate_wingwalk` write the three `land_on` nodes by gamez
+  index and those are unbuilt too. The chapter's other two rows, `pz_manual_land` and `pz_auto_land`,
+  hang under the placed `world1` root and do bind, which is the whole of the asymmetry with the
+  Pandora. The gate itself is authored all-three-at-once and waits on one airship being left:
+  `OBJECTIVE20` naps `OBJECTIVE26` awake five seconds after its own `DEDG [5, 1]`, and 5 is the
+  `group` slot the three `britbalmoral_*` aiv blocks share. *Fix shape:* nothing here until `BL-495`
+  gives a roster-spawned vehicle its gamez marker subtree; then re-run the suite and expect the three
+  rows to bind and arm. *⚠ Traps:* do not relax the authored angle or speed gates, which are
+  identical across the three rows and are not what is stopping this. `deactivate_wingwalk` exists, so
+  an arming rule that cannot be un-armed is wrong. *Cross-refs:* `BL-495` (the reach), `BL-467` and
+  `BL-470`, whose approach work this exercises; `PLAN-M5-polish.md` C21, F51, G74.
+
+- `BL-495` `[Bug]` **A roster-spawned vehicle carries none of its gamez node's marker scaffolding.**
+  *Evidence:* found by G74. A campaign roster entry whose model has authored child markers loses them
+  entirely, because the roster spawns a rig from the airframe record while the gamez subtree that
+  carries the markers hangs under a library root the world build never places. In CM02 this is
+  `britbalmoral_<n>/markers/pylon8/bb_approach<n>`, and it takes the wing-walk capture with it. The
+  same subtree carries `land_on`, `bombs_away<n>`, `setb<n>` and `balmoral_healthtest`, so the reach
+  gap is wider than one landing volume. *Fix shape:* parent the gamez node's authored scaffolding to
+  the spawned rig, stamped with the gamez index metadata that lets index-addressed definitions find
+  it, the way `PLAN-M5-polish.md` F51 stamped `camera1`. *⚠ Traps:* the markers must follow the rig,
+  since these airships move under `SET_AI_NET` and a volume resolved once at spawn would drift away
+  from the ship it belongs to. Do not place the library root itself; it is a prefab and placing it
+  would put a second airship in the world beside the roster's. *Cross-refs:* `BL-492` (the reported
+  symptom), `PLAN-M5-polish.md` F51 and G74; `CampaignRosterSuites.cs` proves a suite can spawn the
+  roster, so a fix here is verifiable headlessly.
 
 - `BL-493` `[Feature]` **CM02's named pilots do not read as named, and their voice lines are
   unverified.** *Evidence:* remembered at the controls as "a named ace enemy Peacemaker with its own

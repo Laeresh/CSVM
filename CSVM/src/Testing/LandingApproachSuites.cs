@@ -13,9 +13,10 @@ namespace CSVM.Testing;
 /// flown until it starts the drop.</summary>
 internal static class LandingApproachSuites
 {
-    // The story position flown. Every node, animation and objective name below is read out of that
+    // The story positions flown. Every node, animation and objective name below is read out of that
     // mission's own data, so nothing here names a shipped world node by hand.
     private const int FirstSeq = 0;
+    private const int WingWalkSeq = 1;
     private const float StepDt = 1f / 60f;
     private const string PlaneNode = "player_bhawk";
 
@@ -35,16 +36,40 @@ internal static class LandingApproachSuites
     // How long the trigger is ticked after a handoff to catch the row re-firing.
     private const int RestartFrames = 30;
 
+    // What a landings suite does with the built world: the harness owns the build, the suite owns
+    // the drive. The mission's own zrdr path comes with it, for the readers that are not the
+    // objective script.
+    private delegate void MissionDrive(TestContext ctx, TestWorld world, CampaignDirector director,
+        ObjectiveScript script, string missionZrdr, StringBuilder report);
+
     /// <summary>Drives the campaign's first mission's approach triggers against its BUILT world:
     /// the chapter's rows resolve to real cone/half-cone/sphere volumes, a mission carrying none of
     /// the animations arms none of them, the drop-off rows start disarmed, the mission's own
     /// objective chain arms them, and flying one cone starts the drop cutscene, which completes the
     /// primary objective gated on it.</summary>
-    internal static void LandingApproachTrigger(TestContext ctx)
+    internal static void LandingApproachTrigger(TestContext ctx) =>
+        DriveMission(ctx, FirstSeq, "test-landing-approach", Drive);
+
+    /// <summary>Reads CM02's wing-walk capture gate against its BUILT world: three symmetric
+    /// Balmoral rows, each under its own airship's gamez node, one pair of definitions switching
+    /// all three <c>land_on</c> nodes, and an arming objective that waits on the airships' aiv
+    /// group being down to one. It also pins BL-492, that none of those nodes is built, an
+    /// airship's gamez node being a library root the roster spawns as an aircraft, so all three
+    /// rows are dropped when the trigger binds.</summary>
+    internal static void WingWalkCaptureGate(TestContext ctx) =>
+        DriveMission(ctx, WingWalkSeq, "test-wingwalk-gate", DriveWingWalk);
+
+    // The world build every landings suite needs: the story mission at this sequence position, its
+    // objective script, an in-memory campaign profile, and the cutscene roots the definitions pose.
+    private static void DriveMission(
+        TestContext ctx,
+        int seq,
+        string artifactPrefix,
+        MissionDrive drive)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), FirstSeq)
-            ?? throw new SuiteSkippedException($"cm_sequence carries no story position {FirstSeq}");
+        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), seq)
+            ?? throw new SuiteSkippedException($"cm_sequence carries no story position {seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
@@ -53,7 +78,7 @@ internal static class LandingApproachSuites
 
         var script = ObjectiveScript.Load(missionZrdr);
         var report = new StringBuilder();
-        report.AppendLine($"seq {FirstSeq} -> {chapter}/{folder}");
+        report.AppendLine($"seq {seq} -> {chapter}/{folder}");
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
         ctx.ExtraPrewarmSoundNames = script.SoundGroupNames();
@@ -64,19 +89,19 @@ internal static class LandingApproachSuites
         try
         {
             ctx.WithWorld(chapter, collision: false, folder,
-                world => Drive(ctx, world, director, script, report));
+                world => drive(ctx, world, director, script, missionZrdr, report));
         }
         finally
         {
             ctx.CutsceneRoots = false;
         }
 
-        ctx.WriteArtifact($"test-landing-approach-{chapter}.txt", report.ToString());
+        ctx.WriteArtifact($"{artifactPrefix}-{chapter}-{folder}.txt", report.ToString());
         ctx.Note($"drove {chapter}/{folder}'s landings.zrd approach triggers against a built world");
     }
 
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, StringBuilder report)
+        ObjectiveScript script, string missionZrdr, StringBuilder report)
     {
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
         var armed = LandingApproaches.Resolve(
@@ -93,12 +118,27 @@ internal static class LandingApproachSuites
         ctx.Same(0, LandingApproaches.Resolve(chapterZrdr, world.Gamez, _ => false).Count,
             $"and a mission carrying none of them resolves nothing, which keeps Instant Action out");
         CheckShapes(ctx, armed, report);
+        WithTrigger(ctx, world, director, armed, (trigger, cutscene, rig, graph) =>
+        {
+            ctx.Same(armed.Count, trigger.Armed, $"every resolved row binds to a node this world built");
+            RunTheDrop(ctx, world, graph, script, armed, trigger, cutscene, rig, report);
+        });
+    }
 
+    // The session wiring a flown story mission has and the suite harness's world build does not:
+    // the cutscene host over the table's own definition closure, the trigger bound to the resolved
+    // rows, a rig for it to fly, and the campaign director attached to that rig.
+    private static void WithTrigger(
+        TestContext ctx,
+        TestWorld world,
+        CampaignDirector director,
+        IReadOnlyList<LandingApproach> armed,
+        Action<LandingApproachRuntime, CutsceneController, FlightController, ObjectiveGraph> body)
+    {
         var cutscene = new CutsceneController();
         ctx.Host.AddChild(cutscene);
         cutscene.BindWorld(world.Runtime);
         cutscene.HostDefinitions(ClosureOf(world, armed));
-        // What a session wires before the bootstrap; the suite harness's world build does not.
         world.Runtime.CallbackHost = cutscene.Host;
         var trigger = new LandingApproachRuntime();
         ctx.Host.AddChild(trigger);
@@ -112,7 +152,6 @@ internal static class LandingApproachSuites
             rig = BuildRig(ctx, world, pool);
             var craft = rig;
             trigger.Bind(world.Runtime, armed, cutscene, () => craft);
-            ctx.Same(armed.Count, trigger.Armed, $"every resolved row binds to a node this world built");
             director.Attach(new CampaignDirector.WorldInputs
             {
                 Runtime = world.Runtime,
@@ -122,7 +161,7 @@ internal static class LandingApproachSuites
                 Projectiles = pool,
                 Rng = new Random(1),
             });
-            RunTheDrop(ctx, world, director.Graph!, script, armed, trigger, cutscene, rig, report);
+            body(trigger, cutscene, rig, director.Graph!);
         }
         finally
         {
@@ -132,6 +171,129 @@ internal static class LandingApproachSuites
             trigger.Free();
             cutscene.Free();
         }
+    }
+
+    // CM02's capture gate, which is not a per-airship one: the mission arms and disarms its three
+    // Balmoral approaches from one pair of ON_CALL definitions covering all three at once, and the
+    // objective that calls the arming one waits on the airships' own aiv group being down to one.
+    // Each row's approach node is a child of that airship's gamez node, so the volume follows the
+    // airship it belongs to.
+    private static void DriveWingWalk(TestContext ctx, TestWorld world, CampaignDirector director,
+        ObjectiveScript script, string missionZrdr, StringBuilder report)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        var rows = LandingApproaches.Resolve(
+            chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
+        var blocks = AiSkills.LoadRoster(missionZrdr);
+        var carried = new List<LandingApproach>();
+        var owners = new List<string>();
+        foreach (var row in rows)
+        {
+            string owner = TopAncestorOf(world.Gamez, row.Node);
+            report.AppendLine($"row anim='{row.Anim}' node='{row.Node}' {row.Shape} " +
+                $"r={row.Radius:0.0} auto={row.Auto} angle={Mathf.RadToDeg(row.AngleRad):0.#} " +
+                $"speed={row.MinSpeedMps:0.#}..{row.MaxSpeedMps:0.#} m/s " +
+                $"owner='{owner}' built={world.Runtime.FindNodes(row.Node).Count}");
+            if (BlockOf(blocks, owner) != null)
+            {
+                carried.Add(row);
+                owners.Add(owner);
+            }
+        }
+
+        CheckCarriedRows(ctx, world, carried, owners, report);
+        CheckGateReach(ctx, world, script, rows, carried, report);
+        CheckGateCondition(ctx, script, blocks, owners, report);
+        WithTrigger(ctx, world, director, rows, (trigger, cutscene, rig, graph) =>
+            ctx.Same(rows.Count - carried.Count, trigger.Armed,
+                $"only the rows on static world nodes bind, which is BL-492: a row carried by a roster vehicle has no built approach node"));
+    }
+
+    // The three rows are symmetric and each belongs to an airship the mission's roster spawns.
+    private static void CheckCarriedRows(
+        TestContext ctx, TestWorld world, IReadOnlyList<LandingApproach> carried,
+        IReadOnlyList<string> owners, StringBuilder report)
+    {
+        report.AppendLine($"{carried.Count} row(s) carried by a roster vehicle: " +
+            $"{string.Join(", ", owners)}");
+        ctx.Same(3, carried.Count,
+            $"CM02 authors one approach row per Balmoral, each under that airship's own gamez node");
+        bool symmetric = true;
+        int built = 0;
+        foreach (var row in carried)
+        {
+            symmetric &= Mathf.IsEqualApprox(row.AngleRad, carried[0].AngleRad)
+                && Mathf.IsEqualApprox(row.MinSpeedMps, carried[0].MinSpeedMps)
+                && Mathf.IsEqualApprox(row.MaxSpeedMps, carried[0].MaxSpeedMps)
+                && row.Shape == carried[0].Shape;
+            built += world.Runtime.FindNodes(row.Node).Count;
+        }
+
+        ctx.Check(symmetric,
+            $"and the three differ only by index, so no gate of theirs can admit one and not another");
+        ctx.Same(0, built,
+            $"BL-492: none of their approach nodes is built, an airship's gamez node being a library root the roster spawns instead");
+    }
+
+    // The mission's own gate pair, found from the compiled definitions rather than named here: the
+    // two definitions that write every carried row's land_on node, and what they can reach today.
+    private static void CheckGateReach(
+        TestContext ctx, TestWorld world, ObjectiveScript script,
+        IReadOnlyList<LandingApproach> rows, IReadOnlyList<LandingApproach> carried,
+        StringBuilder report)
+    {
+        var arms = new List<int>();
+        foreach (var row in carried)
+        {
+            int index = ArmIndexOf(world.Gamez, row.Node);
+            arms.Add(index);
+            report.AppendLine($"  '{row.Node}' land_on is gamez node {index}, " +
+                $"built={(index >= 0 ? BuiltCount(world, index) : 0)}");
+        }
+
+        var gate = GateDefs(world, arms);
+        report.AppendLine($"gate definitions writing all {arms.Count} land_on node(s): " +
+            $"{string.Join(", ", gate)}");
+        ctx.Same(2, gate.Count,
+            $"the mission carries one pair of definitions that switch all three approaches together");
+        int called = 0;
+        foreach (string name in gate)
+        {
+            called += CallerOf(script, name) != null ? 1 : 0;
+        }
+
+        ctx.Same(gate.Count, called,
+            $"and an objective's WAKE_ANIM calls each of them, so the gate is the mission's own");
+        ctx.Check(rows.Count > carried.Count,
+            $"the chapter's static approach rows do build, which is why one on a world node fires and one on an airship does not");
+    }
+
+    // What the arming objective waits on: the DEDG the objective ahead of it authors, over the
+    // group the airships' own roster blocks are in.
+    private static void CheckGateCondition(
+        TestContext ctx, ObjectiveScript script,
+        IReadOnlyList<(string Name, List<object?> Fields)> blocks, IReadOnlyList<string> owners,
+        StringBuilder report)
+    {
+        int group = -1;
+        bool oneGroup = owners.Count > 0;
+        foreach (string owner in owners)
+        {
+            int mine = BlockOf(blocks, owner) is { } fields ? AiSkills.RosterGroup(fields) : -1;
+            oneGroup &= group < 0 || mine == group;
+            group = mine;
+        }
+
+        report.AppendLine($"the carried rows' airships are aiv group {group}");
+        ctx.Check(oneGroup && group > 0,
+            $"the three Balmorals share one aiv group, which is what a DEDG condition counts");
+        var gate = DedgAhead(script, group);
+        report.AppendLine(gate is { } found
+            ? $"OBJECTIVE{found.Number} waits on DEDG [{found.Dedg!.Value.Group}, " +
+              $"{found.Dedg.Value.Max}] and wakes the objective that calls the arming animation"
+            : "no DEDG objective wakes an objective that calls a gate animation");
+        ctx.Check(gate?.Dedg is { Max: 1 },
+            $"and the capture waits on that group being down to one, so it is not offered while more than one airship flies");
     }
 
     // The shipped volumes, read back off the resolved rows: the six drop cones are cones with a
@@ -412,6 +574,178 @@ internal static class LandingApproachSuites
         {
             textures.Dispose();
         }
+    }
+
+    // The topmost gamez ancestor of a named node: the library root a vehicle instantiates when the
+    // node belongs to one, and the world root's own placed content otherwise.
+    private static string TopAncestorOf(GameZ gamez, string nodeName)
+    {
+        var parents = new int[gamez.Nodes.Count];
+        for (int i = 0; i < parents.Length; i++)
+        {
+            parents[i] = -1;
+        }
+
+        foreach (var node in gamez.Nodes)
+        {
+            foreach (int child in node.Children)
+            {
+                if (child >= 0 && child < parents.Length)
+                {
+                    parents[child] = node.Index;
+                }
+            }
+        }
+
+        if (gamez.FindByName(nodeName) is not { } start)
+        {
+            return string.Empty;
+        }
+
+        var at = start;
+        while (parents[at.Index] >= 0)
+        {
+            at = gamez.Nodes[parents[at.Index]];
+        }
+
+        return at.Name;
+    }
+
+    private static List<object?>? BlockOf(
+        IReadOnlyList<(string Name, List<object?> Fields)> blocks, string name)
+    {
+        foreach (var (block, fields) in blocks)
+        {
+            if (string.Equals(block, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return fields;
+            }
+        }
+
+        return null;
+    }
+
+    // The gamez index of the land_on node under an approach node, or -1 when it carries none.
+    private static int ArmIndexOf(GameZ gamez, string approachNode)
+    {
+        if (gamez.FindByName(approachNode) is not { } approach)
+        {
+            return -1;
+        }
+
+        var stack = new Stack<int>(approach.Children);
+        while (stack.Count > 0)
+        {
+            int index = stack.Pop();
+            if (index < 0 || index >= gamez.Nodes.Count)
+            {
+                continue;
+            }
+
+            var node = gamez.Nodes[index];
+            if (string.Equals(node.Name, LandingApproaches.ArmNode, StringComparison.OrdinalIgnoreCase))
+            {
+                return index;
+            }
+
+            foreach (int child in node.Children)
+            {
+                stack.Push(child);
+            }
+        }
+
+        return -1;
+    }
+
+    private static int BuiltCount(TestWorld world, int gamezIndex)
+    {
+        int built = 0;
+        foreach (var node in world.Runtime.FindNodes(LandingApproaches.ArmNode))
+        {
+            built += node.HasMeta(AnimRuntime.IndexMeta)
+                && (int)node.GetMeta(AnimRuntime.IndexMeta) == gamezIndex ? 1 : 0;
+        }
+
+        return built;
+    }
+
+    // The mission definitions whose symbol table binds every one of these gamez node indices: the
+    // pair that switches a whole set of approach rows in one sequence.
+    private static List<string> GateDefs(TestWorld world, IReadOnlyList<int> indices)
+    {
+        var names = new List<string>();
+        foreach (var def in world.Session.Program.Defs)
+        {
+            if (def.AnimName is not { } name || indices.Count == 0)
+            {
+                continue;
+            }
+
+            bool all = true;
+            foreach (int index in indices)
+            {
+                bool found = false;
+                foreach (int bound in def.NodeRefs.Values)
+                {
+                    found |= bound == index;
+                }
+
+                all &= found;
+            }
+
+            if (all && !Names(names, name))
+            {
+                names.Add(name);
+            }
+        }
+
+        return names;
+    }
+
+    // The DEDG objective over this group that wakes an objective calling an animation: the gate the
+    // capture waits behind.
+    private static ObjectiveDef? DedgAhead(ObjectiveScript script, int group)
+    {
+        foreach (var def in script.Objectives)
+        {
+            if (def.Dedg is not { } dedg || dedg.Group != group)
+            {
+                continue;
+            }
+
+            var woken = new List<int>(def.WakeWhenComplete);
+            if (def.NapWhenComplete is { } nap)
+            {
+                woken.Add(nap.Target);
+            }
+
+            foreach (int number in woken)
+            {
+                foreach (var other in script.Objectives)
+                {
+                    if (other.Number == number && other.WakeAnim != null)
+                    {
+                        return def;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static ObjectiveDef? CallerOf(ObjectiveScript script, string anim)
+    {
+        foreach (var def in script.Objectives)
+        {
+            if (def.WakeAnim is { } wake
+                && string.Equals(wake.Anim, anim, StringComparison.OrdinalIgnoreCase))
+            {
+                return def;
+            }
+        }
+
+        return null;
     }
 
     private static Vector3 Lerp(LandingApproach approach, float fraction) =>

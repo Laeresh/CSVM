@@ -138,7 +138,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
     lines overlap each other (`BL-487`, `BL-490`)
 72. ☑ The flight check draws the wrong ammunition, and its rows and objectives are not the original's (`BL-488`)
 73. ☑ The screenshot key does nothing in menus (`BL-489`)
-74. ☐ CM02's Balmoral capture does not trigger on the last airship (`BL-492`)
+74. ☑ CM02's Balmoral capture reaches none of the three airships, cause found (`BL-492`, `BL-495`)
 75. ☐ CM02's named pilots do not read as named, and their voice lines are unverified (`BL-493`)
 76. ☐ A mission cannot swap the player onto another airframe (`BL-494`), behind G74
 
@@ -2767,7 +2767,7 @@ launcher binding already fired with a menu in the tree under a pushed event, so 
 "nothing happens" could not be reproduced headlessly, and one press at the controls is what would
 confirm it.
 
-## G74 ☐ CM02's Balmoral capture does not trigger on the last airship (`BL-492`)
+## G74 ☑ CM02's Balmoral capture reaches none of the three airships (`BL-492`, `BL-495`)
 
 **Goal.** The wing-walk capture fires at all three Balmorals, or the reason the third differs is
 established.
@@ -2814,6 +2814,43 @@ across the three rows, so a gate that admits the third would admit something wro
 resolved once at spawn would drift away from the ship it belongs to. ⚠ `deactivate_wingwalk` exists, so a capture
 that becomes available and then correctly goes away again is part of the behaviour: do not build an
 arming rule that cannot be un-armed.
+
+**Landed.** No fix, and the item's premise is disproved: nothing is special about the third airship,
+and the capture fires at none of the three. `LandingApproaches` resolves all three rows from the
+chapter table, but `LandingApproachRuntime.Bind` drops all three because the built world carries no
+`bb_approach<n>`. Those nodes hang under `britbalmoral_<n>/markers/pylon8`, and `britbalmoral_<n>` is
+a gamez library root with no parent, which the world build never places: the campaign roster spawns
+the airship as an aircraft off the `pbalmoral` player airframe instead. The same reach failure
+silences the gate itself, since `activate_wingwalk` and `deactivate_wingwalk` write the three
+`land_on` nodes (gamez 942, 935, 626) by index and those are unbuilt too. The chapter's other two
+rows, `pz_manual_land` and `pz_auto_land`, hang under the placed `world1` root and do bind, which is
+the whole of the asymmetry with the Pandora's approach volume. Landed as the
+`landings-wingwalk-gate` suite plus the caveat on `LandingApproachRuntime` in
+[`docs/architecture.md`](architecture.md).
+
+**The gate is authored all-three-at-once and waits on one airship being left.** `OBJECTIVE26`'s
+`WAKE_ANIM activate_wingwalk` sets `land_on` active on all three airships in one sequence and
+`OBJECTIVE56`'s `deactivate_wingwalk` clears the same three; `OBJECTIVE20` naps `OBJECTIVE26` awake
+five seconds after its own `DEDG [5, 1]` completes, and 5 is the `group` slot the three
+`britbalmoral_*` aiv blocks share. So the capture is meant to be offered only once the Balmoral
+group is down to one, which is what the report at the controls described.
+
+**Verified.** `dotnet build CSVM/CSVM.sln` clean, 0 warnings. The new `landings-wingwalk-gate` suite
+drives CM02's built world and reads all of the above off the shipped data rather than naming a node
+by hand: the three rows resolve with identical `HalfCone` shape, 45° cone and 22.4..143.1 m/s band,
+each owned by `britbalmoral_1/2/3`, none of them built; exactly two mission definitions bind all
+three `land_on` indices; the airships are one aiv group; and `OBJECTIVE20`'s `DEDG [5, 1]` is the
+condition ahead of the objective that calls the arming animation. `landings-approach-trigger` stays
+green beside it, which is what proves the trigger itself is sound and the reach is what is missing.
+
+**The fix is a separate item.** Making the capture fire needs a roster-spawned vehicle to carry its
+gamez node's authored scaffolding, parented to the rig and stamped with the gamez index metadata that
+index-addressed definitions look for, the way F51 stamped `camera1`. That reaches `land_on`,
+`bombs_away<n>`, `setb<n>` and `balmoral_healthtest` on the same airships, so it is wider than one
+landing volume and is filed as `BL-495` with `BL-492` blocked behind it.
+⚠ Making the capture fire needs a roster-spawned vehicle to carry its gamez node's authored
+scaffolding, which is a larger change than this item and reaches `bombs_away<n>`, `setb<n>` and
+`balmoral_healthtest` on the same airships.
 
 ## G75 ☐ CM02's named pilots do not read as named (`BL-493`)
 

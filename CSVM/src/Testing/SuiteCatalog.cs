@@ -158,6 +158,7 @@ public static class SuiteCatalog
         "campaign-danger-zones",
         "campaign-objective-markers",
         "landings-approach-trigger",
+        "landings-wingwalk-gate",
         "roster-spawn-names",
         "mission-radio",
         "campaign-zeppelin-wakeup",
@@ -820,6 +821,17 @@ public static class SuiteCatalog
             + "chain arms them, and flying one cone starts the drop cutscene through the cutscene "
             + "host, runs it to EXECUTED and completes the primary objective gated on it",
             LandingApproachTrigger));
+
+        // BL-492: CM02's wing-walk capture, whose approach rows the mission gates on a land_on
+        // node state switched for all three Balmorals at once.
+        into.Add(new TestHarness.Suite("landings-wingwalk-gate",
+            "CM02's Balmoral capture gate over its BUILT world: the mission's three approach rows "
+            + "resolve and differ only by index, each hangs under its own airship's gamez node, one "
+            + "pair of definitions switches all three land_on nodes together, and the objective "
+            + "calling the arming one waits on the airships' aiv group being down to one; it also "
+            + "pins BL-492, that none of those nodes is built because an airship's gamez node is a "
+            + "library root the roster spawns as an aircraft, so all three rows are dropped at bind",
+            WingWalkCaptureGate));
 
         // BL-401: the assembler named every spawn ai{n}_{plane}, which no authored pattern can
         // match, so rating_biases was dead on the campaign path.
