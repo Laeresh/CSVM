@@ -851,7 +851,8 @@ public static class SuiteCatalog
             "the occluders standing between a weapon ray and C3/M01's cargo zeppelin: rays at "
             + "hydrogentank1's mesh centre from 36 azimuths at five elevations, each naming the "
             + "first collider's gamez node, over the mission's own world with the zeppelins placed "
-            + "at their authored pose",
+            + "at their authored pose; then the splash half, a burst on the hull underside plate "
+            + "g482 run through the production cover ray down to each of hydrogentank1..4",
             AlphaCutoutRayCensus));
     }
 

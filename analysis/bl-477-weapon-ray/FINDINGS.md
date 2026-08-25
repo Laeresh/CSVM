@@ -14,6 +14,10 @@ gated only on the per-node `ACTIVE` and `INTERSECT_SURFACE` flags. So the origin
 cargo zeppelin's see-through truss exactly as we do, and `docs/formats/gamez.md`'s literal reading of
 `intersect_surface` is correct.
 
+What killed the tanks in the original was a rocket's splash, not a round through the truss: the
+rocket struck the hull underside above them, and from there the tanks are in the open. Our splash
+occlusion agrees, so nothing about the report is a divergence in either half.
+
 ## What the shipped data shows
 
 1. **The material `flag` bit is the decal-receiving mark, not a transparency mark.** It selects the
@@ -39,6 +43,14 @@ cargo zeppelin's see-through truss exactly as we do, and `docs/formats/gamez.md`
    to ±28.3 m of local x while we stay on `f_hi`'s ±48.9 m. That gap is one of the two open
    candidates for why the tanks read differently at the controls.
 
+5. **Nothing stands between the hull underside and the tank tops.** A ray straight up from each
+   tank's top centre meets `g482`, the belly plate under `underneath` (`cargoskin2`, alpha None),
+   at y = -48.9 to -52.5 in `cargozep1`-local coordinates, against tank tops at y = -61, and
+   meets no polygon in between. The front truss `g469` spans y = -81.0 to -28.3 but its cards
+   stand out to x = +/-48.9 as a lateral screen around the tanks, so no vertical ray over a tank
+   crosses one. That is why a rocket that strikes the belly plate above the tanks has line of
+   sight down to them: it is above the screen, not through a hole in it.
+
 ## The engine half
 
 The `alpha-cutout-ray-census` in-engine suite casts 180 rays at `hydrogentank1`'s mesh centre from
@@ -47,6 +59,17 @@ The `alpha-cutout-ray-census` in-engine suite casts 180 rays at `hydrogentank1`'
 level azimuths, the hull's gasbag panels everything above 30° and the terrain everything below −30°.
 So the reported fore/aft asymmetry is real and its occluders are named; it is simply not a
 divergence from the original.
+
+The same suite's splash half places the burst by measurement rather than assumption: it casts up
+off `hydrogentank1`'s top, strikes `g482` 14.5 m above the tank's centre, and runs
+`ProjectilePool.BlastCoverBetween`, the production cover ray, from that surface down to each of
+`hydrogentank1..4`. All four are clear. Its able-to-fail control, the same ray from 120 m abeam at
+tank height with no struck surface and so no `CoverRayLift`, is stopped by `g469`. Through the
+production gather at the HE rocket's `IMPACT_PROXIMITY` of 15 m, the burst reaches `hydrogentank1`
+(8.5 m to its nearest surface) uncovered, while `g469` and `panelrightb2` are covered by `g482`
+itself, which is the lift working as intended: the plate the round struck shields what is behind it
+and is transparent to its own side. The other three tanks sit 33 to 56 m from that burst and so are
+outside one rocket's radius, which is a radius result and not an occlusion one.
 
 ⚠ The suite hit the instrument trap now recorded as `INSTR-24`: a raycast taken in the same call
 that moved a static body reads the collider at its pre-move pose, and the first run reported 108

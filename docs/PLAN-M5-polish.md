@@ -2237,3 +2237,27 @@ lucky shot through a small gap, so the correct outcome is that most burst points
 cannot supply the burst position; the user's account is admissible as what happened and not as a
 measurement (`docs/verification.md`). ⚠ The 32-target cap on the splash gather is decoded
 (`FUN_004cb420`'s hit buffer) and is not a candidate here, since four tanks cannot overflow it.
+
+**Landed.** ⚠ **The answer is that ours already reproduces the original's shot, and no code follows.**
+The shot was not through a gap in the truss at all: the rocket struck the hull underside above the
+tanks, and the truss is a lateral screen around them rather than a roof over them, so the burst was
+above the screen. The shipped data says the volume between the two is empty. A ray straight up from
+each tank's top centre meets `g482`, the belly plate under `underneath` (`cargoskin2`, alpha None),
+at y = -48.9 to -52.5 in `cargozep1`-local coordinates against tank tops at y = -61, with no polygon
+in between; `g469` spans y = -81.0 to -28.3 but stands out to x = ±48.9, so no vertical ray over a
+tank crosses one. Neither of the two named differences is reached, so `show_backface` and
+`CoverRayLift` are both left alone. What did land is the instrument: `ProjectilePool` exposes its
+own cover predicate and its own gather to a census (`BlastCoverBetween`, `BlastCoverCensus`), so the
+suite tests the shipped rule rather than a copy of it, and `analysis/bl-477-weapon-ray/census.py`
+gains the volume census as its fifth section.
+
+**Verified.** `alpha-cutout-ray-census` gains the splash half and passes. It places the burst by
+measurement rather than assumption, casting up off `hydrogentank1`'s top and striking `g482` 14.5 m
+above the tank's centre, then runs the production cover ray from that surface down to each of
+`hydrogentank1..4`: all four clear. The able-to-fail control, the same ray from 120 m abeam at tank
+height with no struck surface and so no `CoverRayLift`, is stopped by `g469`. Through the production
+gather at the HE rocket's `IMPACT_PROXIMITY` of 15 m, the burst reaches `hydrogentank1` uncovered at
+8.5 m to its nearest surface, while `g469` and `panelrightb2` come back covered by `g482` itself,
+which is the lift doing its job. The other three tanks lie 33 to 56 m from that burst, outside one
+rocket's radius, so a single rocket kills one tank directly and the rest is the chain; that is a
+radius result and not an occlusion one. The ray half is unchanged at 5 of 180.
