@@ -776,7 +776,7 @@ public static class SuiteCatalog
             + "SECONDARY (OBJECTIVE3) and OBJECTIVE11 the way a flown mission would",
             CampaignDangerZoneObjectives));
 
-        // BL-456: the objective-target store had no consumer, so a flown mission never showed the
+        // BL-468: the objective-target store had no consumer, so a flown mission never showed the
         // player where its sites were.
         into.Add(new TestHarness.Suite("campaign-objective-markers",
             "the campaign's objective markers over the first story mission's BUILT world: every "
@@ -785,7 +785,7 @@ public static class SuiteCatalog
             + "and flying one site's own TRAVELERS approach retires that marker alone",
             CampaignObjectiveMarkers));
 
-        // BL-448: nothing read landings.zrd, so no mission could ever play the cutscene an
+        // BL-467: nothing read landings.zrd, so no mission could ever play the cutscene an
         // ANIM_STATE objective waits on.
         into.Add(new TestHarness.Suite("landings-approach-trigger",
             "the mid-mission cutscene trigger over the first story mission's BUILT world: the "

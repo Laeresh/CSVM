@@ -19,7 +19,7 @@ before acting on its title. Every
 other item was re-verified still-open against both the record (`git log --grep`) and the code before
 it was written down, and carries the `file:line` that check produced. Two entries did not survive
 that check and are closed rather than planned (E43). **Out of scope:**
-`BL-447` (Change Memento) rests on `BL-256`, which the user deferred by explicit decision, so it
+`BL-463` (Change Memento) rests on `BL-256`, which the user deferred by explicit decision, so it
 cannot be scheduled without reopening that decision; multiplayer and netcode; the flight model,
 whose own parity plan just closed; anything blocked on a capture that does not exist, including the
 `ObjectivesHud` styling TUNE, which waits on `CAP-45`.
@@ -64,7 +64,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — what stops the campaign being playable
 
-1. ☑ Objective targets and help labels are never drawn, so the sites cannot be found (`BL-456`)
+1. ☑ Objective targets and help labels are never drawn, so the sites cannot be found (`BL-468`)
 2. ☑ A campaign session never spawns its zeppelins or generators (`BL-451`)
 3. ◐ The campaign wingman cannot hold station on a real player (`BL-457`)
 4. ☑ The music channel drowns the briefing (`BL-455`)
@@ -73,15 +73,15 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — where things are shown, and where they are heard
 
-11. ☐ The objectives readout belongs on the pause screen (`BL-454`)
-12. ☐ Radio calls play positionally (`BL-453`)
+11. ☐ The objectives readout belongs on the pause screen (`BL-466`)
+12. ☐ Radio calls play positionally (`BL-465`)
 13. ☐ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
-14. ☐ The briefing reveal, drawn as authored (`BL-450`)
+14. ☐ The briefing reveal, drawn as authored (`BL-464`)
 
 ### Wave C — the gaps M5 named
 
-21. ☑ The `landings.zrd` approach trigger, which is the mid-mission cutscene gate (`BL-448`, `BL-035`)
-22. ☐ The VO dialogue chain player (`BL-443`)
+21. ☑ The `landings.zrd` approach trigger, which is the mid-mission cutscene gate (`BL-467`, `BL-035`)
+22. ☐ The VO dialogue chain player (`BL-461`)
 23. ☐ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
 
 ### Wave D — the campaign's own rough edges
@@ -92,7 +92,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — answers and housekeeping
 
-41. ☐ Decode the original's per-pylon ordnance id (`BL-445`)
+41. ☐ Decode the original's per-pylon ordnance id (`BL-462`)
 42. ☐ Decide how the MPG cinemas would play, before any code (`BL-446`)
 43. ☐ Close what is already done, fix what is merely stale (`BL-243`, `BL-427`, `BL-426`)
 
@@ -125,7 +125,7 @@ keeps the backlog honest while the rest runs.
 
 # Wave A — what stops the campaign being playable
 
-## A1 ☑ Campaign objectives do not register in a flown mission (`BL-456`)
+## A1 ☑ Campaign objectives do not register in a flown mission (`BL-468`)
 
 **Goal.** A campaign mission's objectives complete when the player does what they ask, so the first
 mission can be flown to its end at the controls.
@@ -488,7 +488,7 @@ reveal") and the user's own verdict that the bars are present the instant the lo
 
 # Wave B — where things are shown, and where they are heard
 
-## B11 ☐ The objectives readout belongs on the pause screen (`BL-454`)
+## B11 ☐ The objectives readout belongs on the pause screen (`BL-466`)
 
 **Goal.** The objectives are read on the pause screen, as in the original, and not on the flight
 HUD.
@@ -527,7 +527,7 @@ than only the graph, which is the one proof that this half works; the move must 
 meaningful, not delete it. ⚠ Do not also remove in-world target selection: the same verdict says
 targets are selectable in the world, and that is a different subsystem.
 
-## B12 ☐ Radio calls play positionally (`BL-453`)
+## B12 ☐ Radio calls play positionally (`BL-465`)
 
 **Goal.** A mission callout is heard in full wherever the player flies.
 
@@ -607,7 +607,7 @@ size; a soft upscale of authored art reads as a bug at the controls. ⚠ `BL-181
 entry blocked on "the menu hub", and its blocker is arguably discharged by this work; decide that
 explicitly rather than leaving the tag stale.
 
-## B14 ☐ The briefing reveal, drawn as authored (`BL-450`)
+## B14 ☐ The briefing reveal, drawn as authored (`BL-464`)
 
 **Goal.** The briefing plays the way the original's does: flags planted on the map one at a time,
 the photos changing through the narration, each objective line written onto the parchment as the
@@ -648,7 +648,7 @@ belongs to whoever owns the timing, not to a fudge factor here.
 
 # Wave C — the gaps M5 named
 
-## C21 ☑ The mid-mission cutscene trigger (`BL-448`, `BL-035`)
+## C21 ☑ The mid-mission cutscene trigger (`BL-467`, `BL-035`)
 
 **Goal.** A mission can start a cutscene while it is being flown, which makes an objective gated on
 that definition satisfiable and gives the remaining mission-script callback codes somewhere to land.
@@ -715,7 +715,7 @@ passes over the site, one to arm it and one to fly it. The suite is the flown ev
 clean, all 16 golden shots hash-identical, so widening the cutscene host by definition name reached
 no flight the goldens cover.
 
-## C22 ☐ The VO dialogue chain player (`BL-443`)
+## C22 ☐ The VO dialogue chain player (`BL-461`)
 
 **Goal.** A cue naming a VO dialogue chain plays the chain instead of silence.
 
@@ -838,7 +838,7 @@ buildings" alone.
 
 # Wave E — answers and housekeeping
 
-## E41 ☐ Decode the original's per-pylon ordnance id (`BL-445`)
+## E41 ☐ Decode the original's per-pylon ordnance id (`BL-462`)
 
 **Goal.** An answer: what the original writes into a plane record's ordnance field, and how it maps
 to weapon defs.

@@ -1,4 +1,4 @@
-﻿# Playtest checklist
+# Playtest checklist
 
 Everything that needs a human at the controls (or the original game open for A/B), consolidated.
 **This file holds only what is actionable *today*.** Anything whose test is blocked on an unlanded
@@ -86,7 +86,7 @@ sounds like, watched and frame-sampled, never measured into a constant.
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-45` | The **pause screen's** objectives panel, with an objective already completed | Mostly answered by `Complete Mission M02.mkv` (see `BL-454`), which shows the pause screen's whole composition. One question it does not answer: nothing had completed yet when the screen was opened, so **how a completed objective is marked, and whether it stays listed or drops, is still unknown**. What is owed is one pause screen opened *after* at least one objective has completed, held long enough to read. Nothing else needs filming. | `BL-454`, whose presentation is now settled apart from the completed-row marking. |
+| `CAP-45` | The **pause screen's** objectives panel, with an objective already completed | Mostly answered by `Complete Mission M02.mkv` (see `BL-466`), which shows the pause screen's whole composition. One question it does not answer: nothing had completed yet when the screen was opened, so **how a completed objective is marked, and whether it stays listed or drops, is still unknown**. What is owed is one pause screen opened *after* at least one objective has completed, held long enough to read. Nothing else needs filming. | `BL-466`, whose presentation is now settled apart from the completed-row marking. |
 
 ### Camera
 

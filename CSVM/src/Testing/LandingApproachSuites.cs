@@ -385,7 +385,7 @@ internal static class LandingApproachSuites
     }
 
     // The first objective whose ANIM_STATE condition names an animation only the approach trigger
-    // can play, which is exactly the objective BL-448 found unsatisfiable.
+    // can play, which is exactly the objective BL-467 found unsatisfiable.
     private static ObjectiveDef? GatedObjective(
         ObjectiveScript script, IReadOnlyList<string> closure)
     {

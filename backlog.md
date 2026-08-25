@@ -1462,7 +1462,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-453` `[Bug]` **Mission callouts and objective cues play positionally, but they are radio
+- `BL-465` `[Bug]` **Mission callouts and objective cues play positionally, but they are radio
   calls and should not be.** Seen at the controls: the lines "are not 3D placed but directly
   played... if they are 3d i'm gone before they are finished. They are radio calls so no location is
   needed." *Evidence:* the user's pass, plus the routing: a campaign objective's
@@ -1477,7 +1477,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   and **everything else to the positional path**, which as written would put these lines in 3D. If
   the decode really says positional, the finding is that the original's callouts are positional at a
   distance that never matters, and the fix is the placement, not the channel. Do not change both.
-  *Cross-refs:* `BL-443` (VO chains), which will inherit whatever channel this settles on;
+  *Cross-refs:* `BL-461` (VO chains), which will inherit whatever channel this settles on;
   `docs/org/music.md` for the existing two-channel precedent.
 
 - `BL-455` `[Feature]` **There is no audio options menu, so the music level is a hard-coded
@@ -1491,7 +1491,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   so the decoded ramp assertions still read what the decode describes. *Cross-refs:*
   `docs/org/music.md` for the fade rates the level does not affect.
 
-- `BL-443` `[Feature]` **VO dialogue chains are decoded and prewarmed but nothing plays one.**
+- `BL-461` `[Feature]` **VO dialogue chains are decoded and prewarmed but nothing plays one.**
   *Evidence:* `docs/formats/sounds.md` records the chain shape (`[name, [dialogueRoot, [line],
   [line], …]]`, "a VO chain, NOT a weighted group") and `WorldSounds.Prewarm` decodes a chain's
   member lines, but `PlayOneShot`/`Spawn` only ever call `SoundGroup.Pick`, which returns null for a
@@ -1980,7 +1980,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-454` `[Bug]` **The objectives readout is on the flight HUD; in the original it is on the
+- `BL-466` `[Bug]` **The objectives readout is on the flight HUD; in the original it is on the
   pause screen.** *Evidence:* the user, from the original: "in the original the in-flight objectives
   are only seen in the pause screen. but the targets are selectable in world." Ours mounts
   `ObjectivesHud` on the world root for every campaign session (`GameSession`, D33's mount), so it
@@ -2038,10 +2038,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reversing it for the campaign must not drag the Instant Action and hangar boards along, since
   those are their own fidelity questions. Do not scale a bitmap up past its authored size to fill a
   4K display without deciding what the original's pixel grid means at that size. *Cross-refs:*
-  `BL-450` is the same screen's missing animation and is the other half of the verdict;
+  `BL-464` is the same screen's missing animation and is the other half of the verdict;
   `docs/PLAN-M5-campaign.md` C21-C25 built the pages, E42 is the pass that found this.
 
-- `BL-450` `[Bug]` **The briefing does not animate: no flags planted, no photos, no objectives
+- `BL-464` `[Bug]` **The briefing does not animate: no flags planted, no photos, no objectives
   written onto the note.** Seen at the controls: the briefing shows the background image, small,
   and nothing moves. *Evidence:* `CAP-42` (`OriginalScreenshots\Videos\CAP-42.mkv`, 1920x1080,
   107 s) shows what the original does, and every beat in it maps to an opcode already decoded in
@@ -2525,7 +2525,7 @@ usual.
   the automatic-screenshot sting, not a zone-cleared cue — formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
-- `BL-445` `[Research]` **The original's per-pylon ordnance id vocabulary is not recovered; the
+- `BL-462` `[Research]` **The original's per-pylon ordnance id vocabulary is not recovered; the
   hangar stores a CSVM-side stand-in.** *Evidence:* `OwnedPlane.Ordnance` keeps a table index
   (`1..12` is table index `0..11` plus one), which is a deliberate stand-in chosen so the Ammo
   Selection screen could ship, not a recovery of what the original writes into a
@@ -2544,7 +2544,7 @@ usual.
   take the shipped files or whether they need transcoding at extract time; that decision is the
   deliverable before any code. *Cross-refs:* `docs/PLAN-M5-campaign.md` Decision 2, which filed it.
 
-- `BL-447` `[Feature]` **The cabin ships without Change Memento.** *Evidence:* Decision 3 of
+- `BL-463` `[Feature]` **The cabin ships without Change Memento.** *Evidence:* Decision 3 of
   `docs/PLAN-M5-campaign.md` deferred it: the function is cosmetic and rests on the undecoded
   snapshot flow, so the cabin's other rows shipped without it rather than waiting.
   *Cross-refs:* `BL-256` is the adjacent snapshot work; `docs/PLAN-M5-campaign.md` Decision 3.
@@ -2564,7 +2564,7 @@ usual.
   path has to respect the cutscene guard the same way. ⚠ The prompt's own message ids are `langui`
   ids, which `BL-427` has not extracted, so the text is not in `extracted/messages.json`.
   *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md` "The per-frame test"; `BL-427` for the
-  string. Split out while the approach trigger landed (`git log --grep=BL-448`).
+  string. Split out while the approach trigger landed (`git log --grep=BL-467`).
 
 ## Tooling, platform & docs
 
