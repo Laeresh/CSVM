@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -32,6 +33,23 @@ internal static class CampaignRosterSuites
     private const float LeashM = 600f;
     private const float MeanHoldM = 250f;
     private const float FlownLegLiftM = 800f;
+
+    // BL-401's mission: C1/M02 is where both arms of rating_biases name something a spawn can be.
+    // The player's side (wingman_4 and the devastators) authors an outright exclusion on the enemy
+    // ace BLOCK bloodhawk_2, and bloodhawk_2 itself authors always-target on the player. Neither
+    // pattern can match the assembler's ai{n}_{plane} fallback.
+    private const string BiasChapter = "C1";
+    private const string BiasMission = "M02";
+    private const string ExcludingBlock = "wingman_4";
+    private const string ExcludedBlock = "bloodhawk_2";
+    private const string PlainBlock = "blakepeace_2_1";
+
+    // The two candidate rings, both dead ahead and level, so distance and the authored bias are
+    // the only terms that differ between an arm's two candidates.
+    private const float NearRingM = 400f;
+    private const float MidRingM = 900f;
+    private const float FarRingM = 1500f;
+    private const float ScanRangeM = 3000f;
 
     internal static void CampaignRoster(TestContext ctx)
     {
@@ -137,6 +155,204 @@ internal static class CampaignRosterSuites
 
         ctx.WriteArtifact($"test-campaign-roster-{RosterChapter}-{RosterMission}.txt", report.ToString());
         ctx.Note($"spawned {RosterChapter}/{RosterMission}'s roster from its aiv blocks and flew wingman_1 on the player");
+    }
+
+    /// <summary>BL-401: a campaign spawn wears its roster block's own name, so the patterns
+    /// <c>rating_biases</c> is authored with reach it, and an authored bias then moves the pick.
+    /// Spawns run through the session's own <see cref="FlightRoster"/> and the same
+    /// <see cref="CampaignRosterPlan.SpawnFor"/> record the campaign director builds.</summary>
+    internal static void RosterSpawnNames(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BiasChapter, BiasMission);
+        ctx.RequireData(missionZrdr, $"{BiasChapter}/{BiasMission} zrdr");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BiasChapter);
+        ctx.RequireData(texturesPath, $"{BiasChapter} textures");
+
+        var plan = CampaignRosterPlan.Build(
+            AiSkills.LoadRoster(missionZrdr),
+            VehicleDefs.Load(ctx.ZrdrPath),
+            AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, BiasChapter)),
+            netDraw: _ => 0);
+        var excluding = PlanNamed(plan, ExcludingBlock);
+        var excluded = PlanNamed(plan, ExcludedBlock);
+        var plain = PlanNamed(plan, PlainBlock);
+        if (excluding == null || excluded == null || plain == null)
+        {
+            throw new SuiteSkippedException(
+                $"{BiasChapter}/{BiasMission} does not plan {ExcludingBlock}/{ExcludedBlock}/{PlainBlock}");
+        }
+
+        // The authored term, read before anything is built: the exclusion is written against the
+        // BLOCK name, and it saturates rather than merely penalising.
+        AiRatingBias? exclusion = null;
+        foreach (var b in excluding.Biases)
+        {
+            if (exclusion == null && b.Matches(excluded.Name))
+            {
+                exclusion = b;
+            }
+        }
+        string exclusionBias = Bias(exclusion);
+        ctx.Check(exclusion is { Bias: <= -1f },
+            $"'{ExcludingBlock}' authors a rating_biases exclusion on the block name '{excluded.Name}': bias={exclusionBias}");
+        AiRatingBias? attract = null;
+        foreach (var b in excluded.Biases)
+        {
+            if (attract == null && b.Matches(AiTargetRanking.PlayerRole))
+            {
+                attract = b;
+            }
+        }
+        string attractBias = Bias(attract);
+        ctx.Check(attract is { Bias: >= 1f },
+            $"'{ExcludedBlock}' authors always-target on the '{AiTargetRanking.PlayerRole}' role: bias={attractBias}");
+        if (exclusion == null)
+        {
+            return;
+        }
+
+        var report = new StringBuilder();
+        report.AppendLine($"{BiasChapter}/{BiasMission}: {plan.Spawns.Count} planned block(s)");
+        var textures = new TextureArchive(texturesPath);
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        ProjectilePool? pool = null;
+        FlightRoster? roster = null;
+        FlightController? human = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            roster = Spawner(ctx, planesGamez, textures, live);
+
+            var origin = new Vector3(0f, 500f, 0f);
+            var fwd = Vector3.Forward;
+            FlightController Launch(RosterSpawnPlan block, float ring)
+            {
+                var at = origin + (fwd * ring);
+                return roster!.SpawnAi(CampaignRosterPlan.SpawnFor(block, at, at + fwd,
+                    AiPilot.HoldingCourse(at, at + fwd)));
+            }
+
+            // The shooter authors no name of its own, so the counter fallback is exercised in the
+            // same run: only a caller WITH an authored name takes it.
+            var shooterPilot = AiPilot.HoldingCourse(origin, origin + fwd);
+            var shooter = roster.SpawnAi(new AiSpawn(ctx.PlaneName, origin, origin + fwd,
+                shooterPilot, Scheme: null, Team: AimAssist.PlayerTeam, AttackRating: 5));
+            ctx.Check(shooter.Name == $"ai1_{ctx.PlaneName}",
+                $"a spawn with no authored name keeps the assembler's counter form: {shooter.Name}");
+
+            var aceRig = Launch(excluded, NearRingM);
+            var plainRig = Launch(plain, MidRingM);
+            var wingRig = Launch(excluding, MidRingM);
+            ctx.Check(aceRig.Name == excluded.Name && plainRig.Name == plain.Name
+                      && wingRig.Name == excluding.Name,
+                $"every campaign spawn wears its block's own name: {aceRig.Name}, {plainRig.Name}, {wingRig.Name}");
+            ctx.Check(exclusion.Matches(aceRig.Name),
+                $"the authored pattern '{exclusion.Pattern}' matches the SPAWNED node's name '{aceRig.Name}'");
+            ctx.Check(!exclusion.Matches($"ai2_{excluded.PlaneNode}"),
+                $"…and matches nothing of the old counter shape 'ai2_{excluded.PlaneNode}'");
+
+            // Two of these blocks ship deactivated, and an out-of-play rig never reaches the scan
+            // at all: leaving them inert would let a control pass for the wrong reason. Their
+            // activation is campaign-roster's subject, not this suite's; the geometry is.
+            var stage = new[] { shooter, aceRig, plainRig, wingRig };
+            foreach (var rig in stage)
+            {
+                rig.Held = true;
+                rig.Inert = false;
+            }
+            ctx.Check(Array.TrueForAll(stage, rig => rig.InPlay),
+                $"every rig on the stage is in play before the ranking is measured");
+            if (shooter.Pilot?.Machine is { } machine)
+            {
+                machine.ActivationRange = ScanRangeM;
+            }
+            var gunner = shooter.Pilot?.Gunner;
+            ctx.Check(gunner != null, $"the shooter's spawn armed a gunner");
+            if (gunner == null)
+            {
+                return;
+            }
+
+            void Park()
+            {
+                shooter.PlaceHeld(origin, origin + fwd);
+                aceRig.PlaceHeld(origin + (fwd * NearRingM), origin + (fwd * (NearRingM + 1f)));
+                plainRig.PlaceHeld(origin + (fwd * MidRingM), origin + (fwd * (MidRingM + 1f)));
+                wingRig.PlaceHeld(origin + (fwd * MidRingM), origin + (fwd * (MidRingM + 1f)));
+                if (human != null)
+                {
+                    human.PlaceHeld(origin + (fwd * FarRingM), origin + (fwd * (FarRingM + 1f)));
+                }
+            }
+
+            FlightController? Acquire(IReadOnlyList<AiRatingBias>? biases)
+            {
+                Park();
+                gunner.AutoTarget = true;
+                gunner.RatingBiases = biases;
+                gunner.Target = null;
+                shooter.SimStep(StepDt);
+                live.SimStep(StepDt);
+                return gunner.Target as FlightController;
+            }
+
+            // Arm one, the exclusion. The shooter stands in for wingman_4, so the enemy blocks are
+            // its candidates and its own side is gated out by team.
+            ctx.Check(aceRig.Team != shooter.Team && plainRig.Team != shooter.Team
+                      && wingRig.Team == shooter.Team,
+                $"the authored teams scan the enemy blocks and gate the wingman out: shooter={shooter.Team} ace={aceRig.Team} plain={plainRig.Team} wing={wingRig.Team}");
+            var control = Acquire(null);
+            ctx.Check(ReferenceEquals(control, aceRig),
+                $"with no biases the nearer '{excluded.Name}' at {NearRingM:0} m is the pick: {control?.Name.ToString() ?? "none"}");
+            var biased = Acquire(excluding.Biases);
+            ctx.Check(ReferenceEquals(biased, plainRig),
+                $"the authored exclusion moves the pick to '{plain.Name}' at {MidRingM:0} m: {biased?.Name.ToString() ?? "none"}");
+            ReportRanks(ctx, report, origin, fwd, "exclusion",
+                (aceRig, NearRingM), (plainRig, MidRingM), excluding.Biases);
+
+            // Arm two, the player role. bloodhawk_2's own always-target is authored against
+            // "player", which no human rig is NAMED (HumanFlightAdapter builds player1), so only
+            // the role resolution can carry it. The shooter changes sides to be that ace.
+            var playerStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var humanPos = origin + (fwd * FarRingM);
+            human = Rig(ctx, planesGamez, textures, playerStats, live, ctx.PlaneName, humanPos,
+                humanPos + fwd, human: true, pilot: null, FlightRoster.ShooterIdBase + 50,
+                AimAssist.PlayerTeam);
+            human.Name = "player1";
+            human.Held = true;
+            shooter.Team = aceRig.Team;
+            ctx.Check(human.Name != AiTargetRanking.PlayerRole,
+                $"the human rig is NOT named '{AiTargetRanking.PlayerRole}': {human.Name}");
+            var roleControl = Acquire(null);
+            ctx.Check(ReferenceEquals(roleControl, wingRig),
+                $"with no biases the wingman at {MidRingM:0} m out-ranks the human at {FarRingM:0} m: {roleControl?.Name.ToString() ?? "none"}");
+            var roleBiased = Acquire(excluded.Biases);
+            ctx.Check(ReferenceEquals(roleBiased, human),
+                $"'{excluded.Name}'s authored always-target takes the human instead: {roleBiased?.Name.ToString() ?? "none"}");
+            ReportRanks(ctx, report, origin, fwd, "player role",
+                (wingRig, MidRingM), (human, FarRingM), excluded.Biases);
+        }
+        finally
+        {
+            // Only what this suite put on the host: the host is shared with every other suite in
+            // the run, so sweeping it by type would free a neighbour's rig.
+            human?.Free();
+            var members = new List<FlightController>(roster?.AiAircraft ?? Array.Empty<FlightController>());
+            roster?.ClearMembership();
+            foreach (var rig in members)
+            {
+                rig.Free();
+            }
+            pool?.Free();
+            textures.Dispose();
+        }
+
+        ctx.WriteArtifact($"test-roster-spawn-names-{BiasChapter}-{BiasMission}.txt", report.ToString());
+        ctx.Note($"{BiasChapter}/{BiasMission}'s authored rating_biases reach their spawns and move the pick");
     }
 
     // The decoded fork per block: wingman_1 escorts the player with no net; a wingman whose
@@ -334,5 +550,72 @@ internal static class CampaignRosterSuites
         rig.Name = $"{planeNode}_{shooterId}";
         ctx.Host.AddChild(rig);
         return rig;
+    }
+
+    private static string Bias(AiRatingBias? entry) =>
+        entry?.Bias.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) ?? "-";
+
+    private static RosterSpawnPlan? PlanNamed(CampaignRosterPlan plan, string name)
+    {
+        foreach (var spawn in plan.Spawns)
+        {
+            if (spawn.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return spawn;
+            }
+        }
+        return null;
+    }
+
+    // The session's own AI spawner with no world effects: CrashProgram and WorldScene stay null,
+    // so the assembler's crash-runtime block (their only reader) is skipped and worldEffects is
+    // never dereferenced.
+    private static FlightRoster Spawner(TestContext ctx, GameZ planesGamez, TextureArchive textures,
+        ProjectilePool live)
+    {
+        var spec = SessionSpec.Parse(Array.Empty<string>());
+        var resources = new AircraftAssemblyResources
+        {
+            PlanesGamez = planesGamez,
+            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            PaintRng = new RandomNumberGenerator(),
+            ZrdrPath = ctx.ZrdrPath,
+            StockLoadouts = StockLoadouts.Load(),
+            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            Textures = textures,
+            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+        };
+        return new FlightRoster(FlightRosterPolicy.From(spec),
+            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            null!, ctx.Host, resources,
+            new FlightWorldBindings { Projectiles = live, Gamez = planesGamez },
+            new HumanRosterBindings());
+    }
+
+    // The two candidates' ranks with and without the authored list, computed on the same inputs
+    // the live acquisition builds, so the artifact carries the numbers behind each pick.
+    private static void ReportRanks(TestContext ctx, StringBuilder report, Vector3 origin,
+        Vector3 fwd, string arm, (FlightController Rig, float Ring) a, (FlightController Rig, float Ring) b,
+        IReadOnlyList<AiRatingBias> biases)
+    {
+        report.AppendLine($"-- {arm} --");
+        foreach (var (rig, ring) in new[] { a, b })
+        {
+            string key = rig.IsHumanPiloted ? AiTargetRanking.PlayerRole : rig.Name.ToString();
+            var candidate = new RankedTargetCandidate
+            {
+                Position = origin + (fwd * ring),
+                Forward = fwd,
+                IsPlayer = rig.IsHumanPiloted,
+                ObjectiveBias = 0f,
+            };
+            float plainRank = AiTargetRanking.Score(origin, fwd, ScanRangeM, candidate).Rank;
+            candidate.ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(key, biases);
+            float biasedRank = AiTargetRanking.Score(origin, fwd, ScanRangeM, candidate).Rank;
+            report.AppendLine($"  {rig.Name} as '{key}' at {ring:0} m: rank {plainRank:0.#} -> "
+                              + $"{biasedRank:0.#} (bias term {candidate.ObjectiveBias:0.#})");
+        }
+        ctx.Note($"{arm}: ranks written to the artifact");
     }
 }

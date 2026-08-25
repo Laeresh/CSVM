@@ -152,6 +152,7 @@ public static class SuiteCatalog
         "campaign-danger-zones",
         "campaign-objective-markers",
         "landings-approach-trigger",
+        "roster-spawn-names",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -801,6 +802,16 @@ public static class SuiteCatalog
             + "chain arms them, and flying one cone starts the drop cutscene through the cutscene "
             + "host, runs it to EXECUTED and completes the primary objective gated on it",
             LandingApproachTrigger));
+
+        // BL-401: the assembler named every spawn ai{n}_{plane}, which no authored pattern can
+        // match, so rating_biases was dead on the campaign path.
+        into.Add(new TestHarness.Suite("roster-spawn-names",
+            "BL-401's authored spawn identity over C1/M02's shipped roster: a campaign spawn "
+            + "wears its roster block's own name while a spawn with none keeps the counter form, "
+            + "wingman_4's authored exclusion on the bloodhawk_2 BLOCK matches the spawned node "
+            + "and moves the live pick off it, and bloodhawk_2's always-target on the 'player' "
+            + "role takes the human rig over a nearer aircraft",
+            RosterSpawnNames));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

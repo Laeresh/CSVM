@@ -2813,7 +2813,7 @@ public partial class FlightController : Node3D
                     primary = fc; // a by-NAME assignment names one aircraft: first match is it
                 }
                 else if (fc.IsHumanPiloted
-                    && wanted.Equals("player", StringComparison.OrdinalIgnoreCase))
+                    && wanted.Equals(AiTargetRanking.PlayerRole, StringComparison.OrdinalIgnoreCase))
                 {
                     // "player" is a role, not a name (C22); resolved ONCE per acquisition.
                     float d = ownPos.DistanceSquaredTo(c.Position);
@@ -2840,7 +2840,8 @@ public partial class FlightController : Node3D
                 Position = c.Position,
                 Forward = fc.NoseDirection,
                 IsPlayer = fc.IsHumanPiloted,
-                ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(fc.Name, gunner.RatingBiases),
+                ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(
+                    fc.IsHumanPiloted ? AiTargetRanking.PlayerRole : fc.Name, gunner.RatingBiases),
                 AlliedAttackers = attackers,
             });
             _rankSources.Add(fc);

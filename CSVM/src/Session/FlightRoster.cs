@@ -16,11 +16,15 @@ public readonly record struct FlightRosterBuild(int MeshInstances, string Summar
 /// branch below also catches enemies flying player airframes, which must keep their own fit.
 /// <c>Nitro</c> is the roster block's injector flag (<see cref="AiSkills.RosterNitro"/>).
 /// <c>RosterSkills</c> is a roster block's own nine-slot pilot vector: a set slot outranks the
-/// def's, an unset one falls through to the def and then to <c>AttackRating</c>.</summary>
+/// def's, an unset one falls through to the def and then to <c>AttackRating</c>.
+/// <c>NodeName</c> is the identity the spawned node takes, and a caller that has an authored one
+/// must pass it: <c>primary_target</c> and <c>rating_biases</c> are written against the roster
+/// block's own name, so a spawn left on the fallback <c>ai{n}_{plane}</c> can match neither
+/// (BL-401).</summary>
 public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector3 LookAt, AiPilot Pilot,
     PaintScheme? Scheme = null, int? Team = null, bool Inert = false, bool ShippedSkins = false,
     string? AiDef = null, LoadoutChoice? Fit = null, int? AttackRating = null, bool Nitro = false,
-    AiSkillVector? RosterSkills = null);
+    AiSkillVector? RosterSkills = null, string? NodeName = null);
 
 /// <summary>The session's aircraft set: builds the human field in deterministic player order and
 /// introduces AI aircraft later for missions, waves, and generators. The roster is the assembly

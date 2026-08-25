@@ -91,7 +91,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — the campaign's own rough edges
 
 31. ◐ The load screen's composed artwork (`BL-409`)
-32. ◐ Spawn node names defeat `rating_biases` on the campaign path (`BL-401`)
+32. ☑ Spawn node names defeat `rating_biases` on the campaign path (`BL-401`)
 33. ☐ World objects are hostile to everyone (`BL-407`)
 
 ### Wave E — answers and housekeeping
@@ -896,7 +896,7 @@ description; goldens unchanged.
 **⚠ Traps.** ⚠ Do not take the progress bar on as a bonus: it needs the build decoupled from the
 draw, which is a different item with its own blast radius.
 
-## D32 ☐ Spawn node names defeat `rating_biases` on the campaign path (`BL-401`)
+## D32 ☑ Spawn node names defeat `rating_biases` on the campaign path (`BL-401`)
 
 **Goal.** An AI spawned into a campaign mission matches its roster's `rating_biases` patterns, so
 the authored bias term does something.
@@ -919,6 +919,41 @@ green.
 
 **⚠ Traps.** ⚠ Node names are used for more than bias matching (the wingman binding and the
 `primary_target` resolution read names too); change the name in one place and check every reader.
+
+**Landed.** A campaign spawn's node is named for its roster block. ⚠ The item's own `FlightRoster.cs:152`
+pointer was stale: the name is set at `AiFlightAssembler.cs:158`, while `FlightRoster.cs` carries the
+`AiSpawn` record, which is where the seam had to open. `AiSpawn` gains an optional `NodeName` the
+assembler prefers, with `ai{n}_{plane}` kept as the fallback for the spawners that have no authored
+name (`--ai`, the Instant Action fan, the generators), and `CampaignRosterPlan.SpawnFor` is now the
+one place a planned block becomes a spawn record, so production and the suite construct the same
+thing. A human-piloted candidate answers to the `player` role in `rating_biases` as it already did in
+`primary_target`, which is the other half of the same mismatch. Both were dead on the campaign path;
+both are live. Every reader of the old shape was checked: the roster dictionary and `ResolveLeader`
+key by BLOCK name and never by node name, which is the asymmetry that hid this;
+`CampaignDirector.FindNodes` walks the world index, which a flight rig never enters, so a spawn
+cannot shadow a world node; block names are unique per mission and human rigs are `player1`/`player2`,
+so there is no sibling collision. Two cosmetic consequences are recorded and left alone: a campaign
+spawn's `--debug-markers` tag reads `MEDKESTREL` where it read `AI1`, and `--target=` addresses a
+campaign spawn by its block name while the documented `ai1_player_fury` form still holds elsewhere.
+
+**Verified.** The census: across all 53 shipped `aiv.zrd`, 697 bias entries carry a pattern and 331
+name a roster block in the same mission (157 the `player` block, 174 real AI blocks). Every one was
+dead. The new `roster-spawn-names` suite drives C1/M02's shipped roster through the session's own
+spawner: `wingman_4`'s authored `["bloodhawk_2", -1.0]` matches the spawned node and moves the live
+pick from the candidate at 400 m (rank 1360, now 1e21) to the one at 900 m (rank 1860, unchanged),
+and `bloodhawk_2`'s `["player", 1.0]` takes the human rig at 1500 m (rank 2100 to -97900) over a
+wingman at 900 m. Perturbation each way, run separately: forcing the counter form back fails exactly
+the three name-dependent checks, and forcing the bias name back to `fc.Name` fails exactly the role
+check. ⚠ An early revision passed its biased arms vacuously, because `bloodhawk_2` and `wingman_4`
+ship `deactivated` and never reached the scan; the suite now clears `Inert` and asserts `InPlay`
+before measuring, which is what makes that arm mean anything. `dotnet build` clean, `dotnet test`
+2342, `--run-tests=roster` 3/3, `--run-tests=target` 6/6, `--run-tests=campaign` 10/10.
+
+⚠ **The zeppelin half of the same pattern is still dead and this fix cannot reach it.** C3/M01's
+Kestrels author `[["player", 0.5], ["piratezep", -1.0]]`; the player half is now live, but a
+zeppelin's destructible instances are its ZONES (`gasbag1..6`, `leng11`, `lbroad11`) and
+`TargetPool.NameOf` returns the zone's anchor name, so the pattern needs the zone's owning zeppelin
+identity carried alongside. That is zeppelin-identity work and belongs with F54.
 
 ## D33 ☐ World objects are hostile to everyone (`BL-407`)
 

@@ -2155,15 +2155,8 @@ public partial class GameSession : Node3D
                 FindNodes = worldBindings.WorldRuntime is { } rosterWorld
                     ? name => rosterWorld.FindNodes(name)
                     : null,
-                // The block's own representative rating arms the gunner and machine; its authored
-                // slots then outrank the def's inside the spawner. A campaign enemy keeps its
-                // militia's skins; the player's side takes the default pattern like an IA wingman.
                 Spawn = (plan, pos, look, pilot) => flightRoster.SpawnAi(
-                    new AiSpawn(plan.PlaneNode, pos, look, pilot, Scheme: null, Team: plan.Team,
-                        Inert: plan.Inert, ShippedSkins: plan.Team != AimAssist.PlayerTeam,
-                        AiDef: plan.AiDef, Fit: plan.Fit,
-                        AttackRating: InstantActionRuntime.RepresentativeRating(plan.Skills),
-                        Nitro: plan.Nitro, RosterSkills: plan.Skills)),
+                    CampaignRosterPlan.SpawnFor(plan, pos, look, pilot)),
                 RegisterVoice = RegisterAiVoice,
                 Rng = Rng.NewSystemRandom(Rng.Ai),
             });

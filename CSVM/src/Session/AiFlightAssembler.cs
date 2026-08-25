@@ -155,7 +155,12 @@ internal sealed class AiFlightAssembler
             controller.Setup(new FlightModel(stats, aiForcePath: true), null, new CamParams(),
                 spawn.Position, spawn.LookAt);
             controller.ArmSpawnTimers();
-            controller.Name = $"ai{index + 1}_{spawn.PlaneName}";
+            // The authored identity wins where the caller has one, because the ranking reads this
+            // name against patterns written for it. The counter form is the fallback for the
+            // spawners with no authored name (--ai, the Instant Action fan, the generators).
+            controller.Name = spawn.NodeName is { Length: > 0 } authored
+                ? authored
+                : $"ai{index + 1}_{spawn.PlaneName}";
             _worldRoot.AddChild(controller);
             // The engine loop, positional and culled at 2000 units. Attach no-ops to null when the
             // session found no sound archive; the own-ship FlightAudio is never built for an AI.

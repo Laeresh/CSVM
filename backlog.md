@@ -756,41 +756,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `AiRocketeer` (whose launch direction creates the mismatch), `BL-404` (whether the
   player's rocket gets a direction at all), `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
 
-- `BL-401` `[Bug]` **The node names we spawn do not match the names the rosters author, so
-  `rating_biases` matches nothing.** *Evidence:* `ObjectiveBiasFor(fc.Name, gunner.RatingBiases)`
-  (`FlightController.cs:2427`) matches an authored pattern against the candidate's Godot node name.
-  Those names are ours, not the mission's: `AiAircraftSpawner.cs:140` names an AI plane
-  `ai{n}_{plane}` (`ai1_player_fury`) and `FlightRigAssembler.cs:421` names a human rig
-  `player{n}` (`player1`). The shipped patterns are mission node names — a census of all 53
-  `aiv.zrd.json` (414 blocks, 697 entries) gives `hafury*`, `bswingman_1`, `devastator_1`,
-  `medkestrel_5`, `piratezep`, `fuel_truck*`, `aagun*` and the bare `player`. `AiRatingBias.Matches`
-  treats `*` as the only wildcard, so `player` does not match `player1`, and `hafury*` does not
-  match `ai1_player_fury`. The term is therefore decoded correctly and firing on almost nothing.
-  The `player` case is the sharpest: it is authored 157 times and never negative (40 of them at
-  exactly `1.0`, the always-target saturation), so the pilots most explicitly told to come after
-  the player get no bias at all.
-  *Fix shape:* decide what identity the bias is supposed to match, then make one side produce it.
-  Either resolve the authored pattern to a spawned plane the way `PrimaryTargetName` already does,
-  or carry the roster's own block name onto the spawned `FlightController` beside its Godot name
-  and match on that. Prefer the second: it makes `--target=`, the breadcrumbs and the biases agree
-  on one identity string instead of three.
-  ⚠ *Traps.* (a) **`PrimaryTargetName` already special-cases this and the bias path does not** —
-  `FlightController.cs:2395` matches the name exactly, then `:2399` falls back to
-  `IsHumanPiloted` for `"player"` (`AiGunner.cs:34`). That asymmetry is the bug, so do not "fix"
-  it by copying the human-piloted fallback into `ObjectiveBiasFor`: it would paper over the
-  general naming problem while leaving every non-`player` pattern broken. (b) Renaming the spawned
-  nodes is not the fix. `player` is `EffectCatalogue.CrashAnimRoot` and the crash-scaffold anchor,
-  and the `ai{n}_` prefix is what `TargetHud.HostileTag` reads for the marker tag. (c) The
-  candidate pool now also covers turrets and structures (D36 widened it past aircraft-only), so
-  this naming mismatch is what would still keep `fuel_truck*`/`aagun*` unreachable; fixing names
-  is necessary but was never sufficient on its own. (d) First match
-  wins per block, so a pattern's position matters once names do resolve — do not sort them.
-  *Playtest after fix:* an Instant Action wave whose roster authors `["player", 1.0]`; the pilot
-  carrying it should come for the player over a nearer AI, and the `target rank` breadcrumb should
-  show the `-100000` saturation rather than `0`.
-  *Cross-refs:* [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) (slot 33 and the
-  `bias × −750` decode), `AiTargetRanking.ObjectiveBiasFor`, `AiSkills.RosterRatingBiases`.
-
 ## Flight model & collision physics
 
 - `BL-477` `[Research]` **Alpha-cutout geometry is fully solid to weapon rays, so a target behind a
@@ -2531,11 +2496,16 @@ usual.
   not set a zeppelin's team to a literal in code — 42 of 58 records author none, and what an
   unauthored one falls through to is exactly the question `BL-407` owns. *Cross-refs:* `BL-407`
   (`AimAssist.AddStructures` defaults every structure to `WorldTeam` = 100, which is what actually
-  makes the Kestrels shoot it, and which this entry does NOT duplicate), `BL-401` (C3/M01's Kestrels
-  author `rating_biases [["player", 0.5], ["piratezep", -1.0]]`, the original's own explicit "never
-  target the pirate zeppelin" instruction, dead in our build because spawn node names never match the
-  patterns). Sequence the three as `BL-401` then `BL-476` then `BL-407`, so that when the structure
-  fall-through flips to neutral the authored teams and the authored biases are both live.
+  makes the Kestrels shoot it, and which this entry does NOT duplicate). ⚠ **This entry now also owns
+  the zeppelin half of the authored bias.** C3/M01's Kestrels author `rating_biases [["player", 0.5],
+  ["piratezep", -1.0]]`, the original's own explicit instruction not to target the friendly zeppelin.
+  `BL-401` made the player half live by naming a campaign spawn for its roster block, and its fix
+  cannot reach the zeppelin half: a zeppelin's destructible instances are its ZONES (`gasbag1..6`,
+  `leng11`, `lbroad11`) and `TargetPool.NameOf` (`TargetPool.cs:117`) returns the zone's anchor name,
+  so the pattern needs the zone's owning zeppelin identity carried alongside, which is the same
+  identity this entry has to give the zeppelin for its team. Sequence this entry before `BL-407`, so
+  that when the structure fall-through flips to neutral the authored teams and the authored biases
+  are both live.
 
 - `BL-478` `[Research]` **`COMPLETED_STOPPOINT` has no net stop-point state, so the PANDORA never
   halts and shuttles its route forever.** *Evidence:* raised as a question at the controls, whether

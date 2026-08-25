@@ -82,6 +82,12 @@ public static class AiTargetRanking
     /// <summary>The engine's own out-of-activation score: never picked.</summary>
     public const float NotRanked = 1e21f;
 
+    /// <summary>The name a human-piloted candidate answers to in a roster's <c>primary_target</c>
+    /// and <c>rating_biases</c>. A role, not a node name (C22): the roster's own player block is
+    /// called this and the human rigs are <c>player1</c>/<c>player2</c>, so matching the node name
+    /// alone would leave 157 of the install's 697 authored bias entries dead.</summary>
+    public const string PlayerRole = "player";
+
     /// <summary>cos 60° — the design's 120° front arc, the favourable bearing (the three-way
     /// front/rear/beam split the design describes is collapsed to the readout's binary ± term;
     /// the arc width is the design's, the collapse is an assumption).</summary>
