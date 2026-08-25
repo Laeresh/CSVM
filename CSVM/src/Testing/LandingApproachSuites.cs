@@ -170,6 +170,14 @@ internal static class LandingApproachSuites
         }
         finally
         {
+            // ⚠ The roster spawner parents its rigs to the shared suite host, so this mission's
+            // roster outlives its own suite unless freed here: a later spawn of a block both
+            // missions carry (wingman_4) then collides on the node name and Godot renames it.
+            foreach (var spawned in director.Roster.Values)
+            {
+                spawned.Free();
+            }
+
             rig?.Free();
             pool.Free();
             textures.Dispose();
