@@ -102,13 +102,13 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave F — the second at-the-controls pass, once the mission could be finished
 
-51. ☐ The cutscene camera has no gamez binding, so a mid-mission cutscene ends in one frame (`BL-470`)
-52. ☐ The cutscene node reparent is unimplemented, so the intro frames nothing (`BL-471`)
-53. ☐ Objective sites belong in the enemy selection cycle, and a moving site's marker must track (`BL-472`)
-54. ☐ A zeppelin's authored team is unread and its wake-up has no seam (`BL-476`)
+51. ◐ The cutscene camera has no gamez binding, so a mid-mission cutscene ends in one frame (`BL-470`)
+52. ◐ The cutscene node reparent is unimplemented, so the intro frames nothing (`BL-471`)
+53. ◐ Objective sites belong in the enemy selection cycle, and a moving site's marker must track (`BL-472`)
+54. ◐ A zeppelin's authored team is unread and its wake-up has no seam (`BL-476`)
 55. ☐ The wingman's formation is looser than the original's (`BL-473`)
 56. ☐ `wingman-station` is red under main's flight plant (`BL-474`)
-57. ☐ The targeting readout drops the militia name (`BL-475`)
+57. ◐ The targeting readout drops the militia name (`BL-475`)
 58. ☐ Alpha-cutout geometry is solid to weapon rays (`BL-477`)
 59. ☐ A net has no stop-point state, so the PANDORA never halts (`BL-478`)
 
