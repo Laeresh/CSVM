@@ -162,6 +162,7 @@ public static class SuiteCatalog
         "roster-spawn-names",
         "mission-radio",
         "campaign-zeppelin-wakeup",
+        "campaign-squad-wakeup",
         "alpha-cutout-ray-census",
         "zeppelin-identity",
         "campaign-briefing-repaint",
@@ -864,6 +865,17 @@ public static class SuiteCatalog
             + "uncollidable and out of both target pools while its sibling does not, and "
             + "OBJECTIVE39's own WAKEUP_ENEMIES puts it into the world through the real graph",
             CampaignZeppelinWakeup));
+
+        // BL-499: the aircraft arm of the same directive, which the zeppelin arm above does not
+        // stand in for. CM02's ace squad is the worked case.
+        into.Add(new TestHarness.Suite("campaign-squad-wakeup",
+            "CM02's ace squad over C3/M05's own BUILT world: britpeace_7/8/9 ship deactivated and "
+            + "OBJECTIVE8 names exactly them in WAKEUP_ENEMIES, the three are inert and out of play "
+            + "at mission start while the first Peacemaker squad flies, wiping group 1 completes "
+            + "OBJECTIVE5 and its authored nap puts them into the world 15 s later through the real "
+            + "graph, each woken block walks a patrol net, and britpeace_8's authored always-target "
+            + "on the player role moves its live pick off a nearer candidate onto the human",
+            CampaignSquadWakeSuites.CampaignSquadWakeup));
 
         // BL-477: what stops a shot at the cargo zeppelin's slung tanks was inferred from the
         // geometry; this measures it. The original's own ray test reads no texture at all

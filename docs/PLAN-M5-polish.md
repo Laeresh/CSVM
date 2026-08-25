@@ -142,8 +142,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 75. ☑ CM02's named pilots do not read as named, and their voice lines are unverified (`BL-493`)
 76. ☐ A mission cannot swap the player onto another airframe (`BL-494`), behind G74
 77. ☐ CM02's Balmorals break formation immediately, unattacked (`BL-498`)
-78. ☐ CM02's second Peacemaker squad starts awake and attacks the Pandora (`BL-499`)
+78. ☑ CM02's second Peacemaker squad starts awake and attacks the Pandora (`BL-499`, `BL-500`)
 79. ☐ A roster-spawned aircraft carries none of its gamez node's marker scaffolding (`BL-495`)
+80. ☐ A mission cannot re-command its spawned aircraft (`BL-500`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -3033,7 +3034,7 @@ gamez scaffolding is absent from the built world, so anything read off a spawned
 tree is missing pieces and is not evidence about the formation. ⚠ The three are also the mission's
 capture targets, so do not make them unshootable in the course of making them unflinching.
 
-## G78 ☐ CM02's second Peacemaker squad starts awake and attacks the Pandora (`BL-499`)
+## G78 ☑ CM02's second Peacemaker squad starts awake and attacks the Pandora (`BL-499`, `BL-500`)
 
 **Goal.** The squad carrying the ace appears when the mission wakes it, and comes for the player.
 
@@ -3070,6 +3071,45 @@ hand the squad a hardcoded player target: the bias table expresses this and it a
 `campaign-zeppelin-wakeup` covers `WAKEUP_ENEMIES` for a dormant zeppelin pool; an aircraft roster
 block is a different path and its coverage cannot be assumed from that suite passing.
 
+**Landed.** The first question answers no, and the item's premise does not survive it. `WAKEUP_ENEMIES`
+already reaches an aircraft roster block end to end, so nothing about the squad's dormancy is broken
+and no code was needed for it. `aiv` slot 21 is read into `RosterSpawnPlan.Inert`
+(`CSVM/src/Session/CampaignRoster.cs:195`), carried by `SpawnFor` (`:241`), applied at
+`AiFlightAssembler.Assemble` (`CSVM/src/Session/AiFlightAssembler.cs:115`) through `Bind`
+(`CSVM/src/Flight/FlightControllerBuild.cs:79`), and `CampaignDirector.WakeupEnemies`
+(`CSVM/src/Session/CampaignDirector.cs:637-665`) re-homes each named rig. What landed is the suite
+that says so, `campaign-squad-wakeup`
+(`CSVM/src/Testing/CampaignSquadWakeSuites.cs`), registered at
+`CSVM/src/Testing/SuiteCatalog.cs:165` and `:869`. ⚠ The existing `campaign-roster` suite could not
+have caught a break here: its own spawn callback writes `rig.Inert = plan.Inert` by hand
+(`CSVM/src/Testing/CampaignRosterSuites.cs:130`) instead of building through `FlightRoster.SpawnAi`,
+so it measures the plan and not the assembler. The new suite uses the production spawn and nothing
+else.
+
+⚠ **The second half of the report is real and its cause is a different directive.** `SET_AI_NET` is a
+named no-op (`CSVM/src/Session/CampaignDirector.cs:784-790`), so `OBJECTIVE68`, which the wake chain
+naps awake two seconds later, never moves the three onto `M5Escort`. They keep the net their roster
+blocks author, `M5Bombrun#20`, and fly that route. `SET_AI_TEAM` and `SET_AI_ATTACK_RADIUS` sit in
+the same state on either side of it, and `OBJECTIVE23`'s `M5Postpick` over all six Peacemakers is
+dead for the same reason. That is one item of its own and is not folded in here. The `rating_biases`
+half needs nothing: `britpeace_8`'s authored always-target on the `player` role moves its live pick
+off a nearer candidate onto the human in the driven run. The list's other arm cannot bind in this
+mission for a reason that is not the bias, and `BL-407` already owns it: the pattern reaches a zone
+the hull owns as a 600-unit penalty, but C3/M05's `piratezep` record authors no team, so its damage
+pools take the neutral fall-through and the gunner refuses them as candidates outright.
+
+**Verified.** `--run-tests=campaign-squad-wakeup` PASS over C3/M05's own built world, driving the
+mission's roster through the session's `FlightRoster` and its own objective graph. The authored shape
+is read off the shipped files rather than restated: all three blocks author `deactivated`, all three
+of the first squad do not, `OBJECTIVE8` is dormant and its `WAKEUP_ENEMIES` is exactly the three,
+`OBJECTIVE5` is `DEDG [1, 0]` and naps `OBJECTIVE8` awake at 15 s. Driven, the three are inert and
+out of play at mission start while the first Peacemaker squad flies; crashing group 1 completes
+`OBJECTIVE5` and the squad is in the world 15.03 s later, not before; each woken block walks a patrol
+net; and the pick moves from `devastator_1` at 400 m to the human at 900 m when the block's own
+authored list is armed. `dotnet build` clean, `dotnet test` 2394. No production code is touched, so
+no golden and no sibling suite is at risk. ⚠ Error counts are not evidence in this wave, a sibling
+lane sharing the log.
+
 ## G79 ☐ A roster-spawned aircraft carries none of its gamez node's marker scaffolding (`BL-495`)
 
 **Goal.** CM02's wing-walk capture fires, because the approach volumes it needs are in the world and
@@ -3100,3 +3140,39 @@ resolved once at spawn drifts away from the aircraft it belongs to. ⚠ Do not p
 itself: it is a prefab, and placing it puts a second Balmoral in the world beside the roster's. ⚠
 This is not Balmoral-specific. Any roster block whose model authors markers is in the same position,
 so a fix keyed to `britbalmoral` would be the wrong shape even if it made CM02 work.
+
+## G80 ☐ A mission cannot re-command its spawned aircraft (`BL-500`)
+
+**Goal.** A mission's `SET_AI_NET` moves the named aircraft onto the named net, and the two clauses
+beside it stop declining for a reason that is no longer true.
+
+**Evidence (confidence: traced-to-code).** Found by G78. `SET_AI_NET`, `SET_AI_TEAM` and
+`SET_AI_ATTACK_RADIUS` are all named no-ops in `CampaignDirector`'s objective host
+(`SetAiNet` `:784`, `SetAiTeam` `:776`, `SetAiAttackRadius` `:792`), each declining through `Gap`
+with "is not a spawned mission vehicle". ⚠ **That reason is stale.** The campaign roster spawns
+these aircraft, and `WakeupEnemies` in the same class already reaches a spawned rig by name
+(`:637-665`), so the rigs all three clauses address are present and findable.
+
+**This is most of what CM02 does to its own aircraft.** `OBJECTIVE4` puts the three Balmorals on
+`M5Bombrun` together, `OBJECTIVE68` moves the woken ace squad onto `M5Escort` two seconds after it
+appears, and `OBJECTIVE23` puts all six Peacemakers on `M5Postpick`. None of it happens, so every
+aircraft flies whatever its own roster block authors for the whole mission. That is what the report
+"the ace squad goes for the Pandora" looks like from the cockpit, and it is a live candidate for
+G77's Balmorals leaving formation at mission start.
+
+**Approach.** Command the named rig onto the named net through the existing net follower, reaching
+the rig by name the way `WakeupEnemies` does. Land `SET_AI_TEAM` and `SET_AI_ATTACK_RADIUS` with
+it: they are the same lookup with a different write, and splitting them leaves the same stale reason
+on the other two.
+
+**Model recommendation.** high. It is the mission-script seam every other CM02 item now waits on.
+
+**Verify.** A driven run on CM02's own world: the three Balmorals are on `M5Bombrun` after
+`OBJECTIVE4`, and the ace squad is on `M5Escort` two seconds after it wakes, both read off the live
+followers rather than off the objective having run.
+
+**⚠ Traps.** ⚠ A net swap mid-flight is not a spawn, so the aircraft has to capture the new route
+from where it is rather than restarting at node 0. ⚠ `SET_AI_TEAM` writes into the one shared team
+space, so an id minted here has to be the id the parser mints and not a fresh one. ⚠ Do not answer a
+name matching no live rig by silently doing nothing: a mission naming an aircraft that is not there
+is a real signal and the `Gap` line is how it currently surfaces.

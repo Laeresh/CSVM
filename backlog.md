@@ -2261,6 +2261,28 @@ usual.
   evidence about the formation. *Cross-refs:* `BL-499` (the other CM02 report), `BL-492`,
   `PLAN-M5-polish.md` G77.
 
+- `BL-500` `[Bug]` **A mission cannot re-command its spawned aircraft: `SET_AI_NET`, `SET_AI_TEAM`
+  and `SET_AI_ATTACK_RADIUS` are named no-ops.** *Evidence:* found by G78 while chasing the ace
+  squad's targeting. All three sit in `CampaignDirector`'s objective host as `Gap` calls
+  (`SetAiTeam`, `SetAiNet`, `SetAiAttackRadius`), each declining with "is not a spawned mission
+  vehicle". ⚠ **That reason is stale.** The campaign roster spawns these aircraft and
+  `WakeupEnemies` already re-homes them by name in the same class, so the rigs the three clauses
+  address are present and findable; nothing but the wiring is missing. The consequence in CM02 is
+  the whole mission: `OBJECTIVE4` puts the three Balmorals on `M5Bombrun` together, `OBJECTIVE68`
+  moves the woken ace squad onto `M5Escort` two seconds after it appears, and `OBJECTIVE23` puts all
+  six Peacemakers on `M5Postpick`. None of it happens, so every aircraft flies whatever its own
+  roster block authors for the whole mission, which is what "the ace squad goes for the Pandora"
+  looks like from the cockpit. *Fix shape:* command the named rig onto the named net through the
+  existing net follower, the way `WakeupEnemies` reaches a rig by name. `SET_AI_TEAM` and
+  `SET_AI_ATTACK_RADIUS` are the same lookup with a different write and should land together, since
+  splitting them leaves the same stale reason on the other two. *⚠ Traps:* a net swap mid-flight is
+  not a spawn, so the aircraft has to capture the new route from where it is rather than restarting
+  at node 0. `SET_AI_TEAM` writes into the one shared team space, so an id minted here has to be the
+  same id the parser mints, not a fresh one. Do not answer a name that matches no live rig by
+  silently doing nothing; a mission naming an aircraft that is not there is a real signal.
+  *Cross-refs:* `BL-499` (which found it), `BL-498` (CM02's Balmorals, commanded onto their net by
+  the same clause), `PLAN-M5-polish.md` G80.
+
 - `BL-499` `[Bug]` **CM02's second Peacemaker squad is present from the start and attacks the
   Pandora rather than the player.** *Evidence:* reported at the controls against the original, where
   the squad carrying the ace appears partway through and comes for the player. Both halves are
