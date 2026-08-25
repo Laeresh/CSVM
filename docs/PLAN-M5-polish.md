@@ -82,7 +82,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ A campaign session never spawns its zeppelins or generators (`BL-451`)
 3. ☑ The campaign wingman cannot hold station on a real player (`BL-457`)
 4. ☑ The music channel drowns the briefing (`BL-455`)
-5. ◐ The cutscene letterbox leaks the world at its left and right edges (`BL-452`)
+5. ◐ The cutscene letterbox leaks the world at its left and right edges (`BL-452`), cause found and
+   fixed, owed one flight of a mission that reparents `camera1` under a moving node (`C2/M05`, CM15)
 6. ☑ `DANGER_ZONES_COMPLETED` is never fed in a campaign mission (`BL-458`)
 
 ### Wave B — where things are shown, and where they are heard
@@ -666,13 +667,55 @@ seconds in, which is the same thing the earlier flicker framing was left needing
 cutscenes F51 made playable are the untested case: they run at flight altitude with the sun
 wherever the mission put it, which is where a flare over the bars is most likely to be real.
 
-**Kept.** `cutscene-letterbox` gains two checks and needs a world built with `CutsceneRoots`, the
-way a story-mission session builds one: the chapter's own card is measured through `BindWorld` and
-swept for a positive overhang at 4:3, 16:10, the crossover, 16:9, 21:9 and 3440x1440, and a rig
-carrying a world overlay is driven through the presentation code and the handoff. `CSVM.Tests`'
-`CutsceneLetterboxFitTests` pins the same sweep on the authored extents and carries the able-to-fail
-half: with the overscan taken back out, the same arithmetic reads exactly zero horizontal margin from
-the crossover upwards.
+**⚠ The candidate cause above is disproved, and the fit is not where the leak comes from.**
+`_cardBox.GetCenter()` reads `(0, 0, -7.499995)` on the chapter's own built card, with the card
+node's and the bars node's transforms both identity, so nothing in the geometry is off-centre in X.
+The `letterbox` definition's `AT_NODE` pin carries a zero offset in all eight chapters, so the pin
+adds none either. Both were read before anything was changed.
+
+**Landed: the bars were cladding the previous frame's frame.** The pin is a transform copy, so its
+value depends on WHEN in the frame it is read, and `camera1` is a moving target: a cutscene composes
+itself by reparenting `camera1` under something animated, and `AnimRuntime.Advance` walks its live
+instances newest-first, so the `letterbox` instance (created by the cutscene's own `CALL_ANIMATION`,
+and therefore the newer of the two) re-pins before the definition that composed it gets its turn.
+The rig cameras take `camera1` later still, from `CutsceneController.Tick` at `ProcessPriority`
+1000, after the whole advance. The bars therefore sit one frame behind the eye whenever the camera
+is moving, which is world along the edge the camera is moving away from, constant down every row,
+one side only, and gone again when the camera settles. `CutsceneController.PinBars`
+(`CutsceneController.cs:549-564`, called from `Tick` beside `MirrorCamera`) re-asserts the same pose
+the definition writes, in the same instant the rig cameras get it, keeping the node's authored scale
+(read once in `BindWorld`, since re-reading a posed node would compound). The definition's own pin
+is untouched and the two agree whenever the walk already got the order right. `CardOverscan` stays
+at 0.02: the horizontal margin is not the defect, and widening it would widen an already extreme
+wide-aspect fov the trap list warns about.
+
+**Why it reads as a horizontal leak and never a vertical one.** The card overhangs by 2 % of its
+half-width horizontally and 8 % vertically at 16:9 and wider, so the same frame of lag is absorbed
+on the vertical axis and shows on the horizontal one. That is the surviving role of the fit in this
+symptom: it sets how much mismatch the bars can hide, not the mismatch itself.
+
+**Verified.** The new `cutscene-letterbox` check drives a frame the way the game runs one (advance,
+then move `camera1`, then tick the host) and is able to fail: with `PinBars` ablated it reports the
+bars 0.4472 m and 1.717 deg off the eye. That angle is the reported symptom's own size. At 2558x1408
+the solved fit leaves 25.6 px of card outside each frame edge, so the capture's 17 px of world on
+the left needs the card displaced about 42.6 px, which is 1.66 deg of yaw, against the 1.717 deg the
+ablated check measures for one frame of a camera swinging with what it rides. The mission is
+identifiable: the companion capture 272 ms later names the "British Balmoral", and
+`C2/M05`'s `drop_paratroopers` is one of the 45 mission definitions that raise the letterbox, doing
+it by `OBJECT_ADD_CHILD camera1` under the moving `cargozep2`. `generic_intro` drives `camera1` by
+motions instead, and `AnimRuntime.Advance` ticks motions before the instance walk, which is why the
+eleven intro frames shot for the earlier pass came out clean and did not reach this.
+
+**Kept.** `cutscene-letterbox` needs a world built with `CutsceneRoots`, the way a story-mission
+session builds one, and carries three checks. The chapter's own card is measured through `BindWorld`
+and swept at 4:3, 16:10, the crossover, 16:9, 2558x1408, 21:9 and 3440x1440, each of the card's four
+edges read on its own account against a pane centred on the eye rather than on the card, so a card
+that is off-centre fails on the side it is short of instead of averaging out. A rig carrying a world
+overlay is driven through the presentation code and the handoff. And the frame order is driven the
+way the game runs it, the check that catches the placement half. `CSVM.Tests`'
+`CutsceneLetterboxFitTests` pins the same aspect sweep on the authored extents and carries the fit's
+able-to-fail half: with the overscan taken back out, the same arithmetic reads exactly zero
+horizontal margin from the crossover upwards.
 
 # Wave B — where things are shown, and where they are heard
 

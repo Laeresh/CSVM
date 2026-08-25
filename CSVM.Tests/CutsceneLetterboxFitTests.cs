@@ -17,12 +17,13 @@ public class CutsceneLetterboxFitTests
     private const float HalfHeight = 4.0474105f;
     private const float Dist = 7.5f;
 
-    // Every ratio the project can be flown at, plus the crossover the two terms meet at. 1920x1080
-    // is not listed separately: it IS 16:9 to the last bit, and a theory row that repeats another's
-    // value is skipped outright by xUnit rather than run twice, which silently drops a case.
+    // Every ratio the project can be flown at, the crossover the two terms meet at, and 2558x1408,
+    // the window the reported leak was captured in. 1920x1080 is not listed separately: it IS 16:9
+    // to the last bit, and a theory row that repeats another's value is skipped outright by xUnit
+    // rather than run twice, which silently drops a case.
     public static TheoryData<float> Aspects => new()
     {
-        4f / 3f, 1.6f, 1.64211f, 16f / 9f, 21f / 9f, 3440f / 1440f,
+        4f / 3f, 1.6f, 1.64211f, 16f / 9f, 2558f / 1408f, 21f / 9f, 3440f / 1440f,
     };
 
     [Theory]

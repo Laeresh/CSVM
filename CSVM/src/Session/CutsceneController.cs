@@ -91,6 +91,10 @@ public sealed partial class CutsceneController : Node
     private Node3D? _bars;
     private Node3D? _card;
     private Aabb _cardBox;
+    // The bars node's authored scale, read alongside the card measurement and for the same reason:
+    // PinBars re-asserts a pose every tick, and reading the scale back off a posed node would let
+    // it compound.
+    private Vector3 _barsScale = Vector3.One;
 
     // BL-452 watchdog state (WatchBars): the bars' visibility as of the last tick, and how many
     // times it has flipped in the current episode.
@@ -201,6 +205,7 @@ public sealed partial class CutsceneController : Node
         // Measured once, before anything scales it: re-measuring a scaled card would read its own
         // last answer back and oscillate.
         _card = _bars != null && _bars.GetChildCount() > 0 ? _bars.GetChild(0) as Node3D : null;
+        _barsScale = _bars?.Basis.Scale ?? Vector3.One;
         if (_card != null && CardBounds(_card) is { } box)
         {
             _cardBox = box;
@@ -301,6 +306,7 @@ public sealed partial class CutsceneController : Node
         }
 
         MirrorCamera();
+        PinBars();
         FrameBars();
         WatchBars();
         if (_runtime != null && Anim != null && _runtime.AnimStateOf(Anim) != AnimRunning)
@@ -575,6 +581,22 @@ public sealed partial class CutsceneController : Node
         {
             rig.Camera.GlobalTransform = pose;
         }
+    }
+
+    // BL-452: the bars take camera1's pose HERE, in the same instant MirrorCamera hands that pose
+    // to the rig cameras, because the letterbox definition's own LOOP pin lands at an arbitrary
+    // point in the runtime's instance walk and can be a frame behind the eye it clads
+    // (docs/formats/anim-definitions/cutscenes.md, "What the def does"). ⚠ Keep the node's rest
+    // scale, the way PoseChannel does: the card must not be resized (see BindWorld).
+    private void PinBars()
+    {
+        if (_bars == null || _cutsceneCamera == null || !_bars.Visible)
+        {
+            return;
+        }
+
+        var pose = _cutsceneCamera.GlobalTransform.Orthonormalized();
+        _bars.GlobalTransform = new Transform3D(pose.Basis.Scaled(_barsScale), pose.Origin);
     }
 
     // The bars are a fixed card 7.5 m in front of the eye, so what they cover is a question of

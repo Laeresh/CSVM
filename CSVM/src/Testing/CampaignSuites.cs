@@ -47,9 +47,10 @@ internal static class CampaignSuites
     private static readonly int[] RestoreCodes = { 1, 10, 914, 667 };
 
     // The pane ratios the letterbox fit is swept over: 4:3, 16:10, the 1.64211 crossover the two
-    // fit terms meet at, 16:9 (the project's own default), 21:9 and 3440x1440.
+    // fit terms meet at, 16:9 (the project's own default 1280x720), 2558x1408 (the window the
+    // reported BL-452 leak was captured in), 21:9 and 3440x1440.
     private static readonly float[] LetterboxAspects =
-        { 4f / 3f, 1.6f, 1.64211f, 16f / 9f, 21f / 9f, 3440f / 1440f };
+        { 4f / 3f, 1.6f, 1.64211f, 16f / 9f, 2558f / 1408f, 21f / 9f, 3440f / 1440f };
 
     internal static void CampaignPersistence(TestContext ctx)
     {
@@ -490,9 +491,63 @@ internal static class CampaignSuites
 
         });
 
+        LetterboxBarsRideTheFrameTheyClad(ctx);
         LetterboxCoversThePane(ctx);
         PresentingLowersTheWorldOverlays(ctx);
         ctx.Note($"the {ctx.Chapter} letterbox card tracks the cutscene camera by transform copy");
+    }
+
+    // BL-452's placement half. The definition's LOOP pin is asserted somewhere inside the runtime's
+    // instance walk, which runs newest-first, so a definition that poses camera1 by a sequence
+    // event moves the eye AFTER the letterbox instance has already pinned the bars to where it was.
+    // The rig cameras take camera1's final pose, so the bars end up cladding last frame's frame and
+    // the world shows along the trailing edge. Driven the way the frame really runs: advance, then
+    // move camera1, then tick the host.
+    private static void LetterboxBarsRideTheFrameTheyClad(TestContext ctx)
+    {
+        var host = new CutsceneController();
+        var stage = new Node3D { Name = "LetterboxOrderStage" };
+        var camera = new Node3D { Name = CutsceneController.CameraNode };
+        var bars = new Node3D { Name = CutsceneController.BarsNode };
+        stage.AddChild(camera);
+        stage.AddChild(bars);
+        var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+        ctx.Host.AddChild(host);
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            ctx.WithWorld(ctx.Chapter, collision: false, world =>
+            {
+                runtime.Bind(stage, world.Session.Program.Subset(CutsceneController.BarsNode));
+                host.BindWorld(runtime);
+                host.HostDefinitions(new[] { CutsceneController.BarsNode });
+                var start = new Transform3D(
+                    Basis.FromEuler(new Vector3(0.05f, 0.4f, 0f)), new Vector3(60f, 300f, -120f));
+                camera.GlobalTransform = start;
+                runtime.Play(CutsceneController.BarsNode);
+                host.Host(CutsceneController.CodeHoldsWorld, CutsceneController.BarsNode);
+
+                // A frame's worth of a cutscene camera swinging with the aircraft it rides: the
+                // pin has already run for this frame, and only now does the eye move.
+                runtime.Advance(1f / 60f);
+                var moved = new Transform3D(
+                    Basis.FromEuler(new Vector3(0.05f, 0.4f + 0.03f, 0f)), new Vector3(60.4f, 300f, -120.2f));
+                camera.GlobalTransform = moved;
+                host.Tick();
+
+                ctx.Check(bars.GlobalPosition.IsEqualApprox(moved.Origin),
+                    $"the bars take the eye's position at the instant the frame is taken, off by {bars.GlobalPosition.DistanceTo(moved.Origin):0.####} m");
+                ctx.Check(bars.GlobalBasis.Z.IsEqualApprox(moved.Basis.Z),
+                    $"and its facing, which keeps the card square to the frame, off by {Mathf.RadToDeg(bars.GlobalBasis.Z.AngleTo(moved.Basis.Z)):0.###} deg");
+            });
+        }
+        finally
+        {
+            runtime.Free();
+            stage.Free();
+            host.Free();
+        }
     }
 
     // BL-452's first cause, over the chapter's OWN card rather than a written-down extent: the fit
@@ -522,11 +577,19 @@ internal static class CampaignSuites
                     continue;
                 }
 
+                // Each edge on its own account, in card units, so a card whose AABB centre is off
+                // the node origin fails on the side it is short of instead of averaging out: the
+                // reported leak was 17 px on one edge and none on the other.
                 float seenHalfHeight = Mathf.Tan(Mathf.DegToRad(fov) * 0.5f) * Mathf.Abs(card.GetCenter().Z);
-                float horizontal = 1f - (seenHalfHeight * aspect / (card.Size.X * 0.5f));
-                float vertical = 1f - (seenHalfHeight / (card.Size.Y * 0.5f));
-                ctx.Check(horizontal > 0f && vertical > 0f,
-                    $"at {aspect:0.###} the card overhangs the pane (h {horizontal:0.###}, v {vertical:0.###})");
+                float seenHalfWidth = seenHalfHeight * aspect;
+                // The pane is centred on the bars root's origin, which is where camera1 puts the
+                // eye; the card is wherever its own extent says, which need not be centred there.
+                float left = -seenHalfWidth - card.Position.X;
+                float right = card.End.X - seenHalfWidth;
+                float below = -seenHalfHeight - card.Position.Y;
+                float above = card.End.Y - seenHalfHeight;
+                ctx.Check(left > 0f && right > 0f && below > 0f && above > 0f,
+                    $"at {aspect:0.###} the card overhangs the pane on every edge (l {left:0.####}, r {right:0.####}, b {below:0.####}, a {above:0.####})");
             }
         }
         finally

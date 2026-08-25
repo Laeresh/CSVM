@@ -96,6 +96,22 @@ offset. **The node is never reparented** (no `OBJECT_ADD_CHILD` anywhere targets
 stay a parentless root that tracks the camera by transform copy, and the quads' authored `z = −7.5`
 puts them 7.5 m in front of the eye, well inside `camera1`'s `clip_near` of 1.0.
 
+⚠ **"Every tick" is not a moment, and in CSVM the moment is what matters.** The pin copies a
+transform, so its value depends on where in the frame it is read, and the node it reads is a moving
+target: a cutscene composes itself by reparenting `camera1` under something animated (the section
+below), so `camera1`'s global transform changes whenever that parent does. `AnimRuntime.Advance`
+walks its live instances newest-first, and the `letterbox` instance is created by the cutscene's own
+`CALL_ANIMATION`, so it is the newer of the two and re-pins before the definition that composed it
+gets its turn. The rig cameras take `camera1`'s pose later still, from
+`CutsceneController.Tick` at `ProcessPriority` 1000, after the whole advance. Left at that, the bars
+clad the previous frame's frame while the eye is already in this one, and the world shows along
+whichever edge the camera is moving away from for as long as it keeps moving. The horizontal margin
+is the smallest one (`CardOverscan`, 2 % of the card's half-width at 16:9 and wider, against an 8 %
+vertical overhang), so this reads as a left or right leak and never a top or bottom one. The host
+therefore re-asserts the pin itself, in the same instant it hands the pose to the rig cameras
+(`CutsceneController.PinBars`); the definition's own pin is unchanged and the two agree whenever the
+walk already got the order right.
+
 The def is `ON_CALL` and every call site gives it the local name `local_letterbox`. Nothing in the
 install ever stops it: a scan of every `STOP_ANIMATION`, `INVALIDATE_ANIMATION` and
 `RESET_ANIMATION` in every reader finds **zero** that names `letterbox` or `local_letterbox`. The
