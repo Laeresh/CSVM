@@ -2221,27 +2221,20 @@ usual.
   *Cross-refs:* `PLAN-M5-polish.md` G77, whose `campaign-bomber-formation` suite is the harness to
   extend.
 
-- `BL-500` `[Bug]` **A mission cannot re-command its spawned aircraft: `SET_AI_NET`, `SET_AI_TEAM`
-  and `SET_AI_ATTACK_RADIUS` are named no-ops.** *Evidence:* found by G78 while chasing the ace
-  squad's targeting. All three sit in `CampaignDirector`'s objective host as `Gap` calls
-  (`SetAiTeam`, `SetAiNet`, `SetAiAttackRadius`), each declining with "is not a spawned mission
-  vehicle". ⚠ **That reason is stale.** The campaign roster spawns these aircraft and
-  `WakeupEnemies` already re-homes them by name in the same class, so the rigs the three clauses
-  address are present and findable; nothing but the wiring is missing. The consequence in CM02 is
-  the whole mission: `OBJECTIVE4` puts the three Balmorals on `M5Bombrun` together, `OBJECTIVE68`
-  moves the woken ace squad onto `M5Escort` two seconds after it appears, and `OBJECTIVE23` puts all
-  six Peacemakers on `M5Postpick`. None of it happens, so every aircraft flies whatever its own
-  roster block authors for the whole mission, which is what "the ace squad goes for the Pandora"
-  looks like from the cockpit. *Fix shape:* command the named rig onto the named net through the
-  existing net follower, the way `WakeupEnemies` reaches a rig by name. `SET_AI_TEAM` and
-  `SET_AI_ATTACK_RADIUS` are the same lookup with a different write and should land together, since
-  splitting them leaves the same stale reason on the other two. *⚠ Traps:* a net swap mid-flight is
-  not a spawn, so the aircraft has to capture the new route from where it is rather than restarting
-  at node 0. `SET_AI_TEAM` writes into the one shared team space, so an id minted here has to be the
-  same id the parser mints, not a fresh one. Do not answer a name that matches no live rig by
-  silently doing nothing; a mission naming an aircraft that is not there is a real signal.
-  *Cross-refs:* `BL-499` (which found it), `BL-498` (CM02's Balmorals, commanded onto their net by
-  the same clause), `PLAN-M5-polish.md` G80.
+- `BL-502` `[Feature]` **`SET_AI_NET` and `SET_AI_TEAM` reach no zeppelin.** *Evidence:* found by
+  G80, which wired both clauses for roster-spawned aircraft and could not carry the same lookup to
+  airships. Six clauses across four missions name one: `blackswanzep` (C1C/M01), `blackhatzep`
+  (C4/M05), `piratezep` (C5/M04) and `cargozep2`/`cargozep3` (C2/M05 and C4/M05). None is in CM02,
+  so no mission the player is currently trying to finish depends on this. `ZeppelinMotion` holds its
+  net follower and `LiveZeppelin.Team` read-only, so this is a change to `ZeppelinRuntime` rather
+  than to the director's lookup. Those names surface through the `Gap` line today, so a mission
+  hitting this says so. *Fix shape:* give `ZeppelinRuntime` the same two writes the aircraft arm
+  got, re-seating the follower from the airship's current position rather than restarting its route.
+  *⚠ Traps:* a zeppelin is not a vehicle in the original and does not run the nose-aligned edge pick
+  (`PLAN-M5-polish.md` G77), so a re-seat here keeps the nearest-node rule and must not inherit the
+  aircraft path's heading argument. The record's own team fans across the whole airship including
+  its guns, so a script-side team write has to fan the same way or half the hull keeps the old side.
+  *Cross-refs:* `PLAN-M5-polish.md` G80, which landed the aircraft arm.
 
 - `BL-499` `[Bug]` **CM02's second Peacemaker squad is present from the start and attacks the
   Pandora rather than the player.** *Evidence:* reported at the controls against the original, where

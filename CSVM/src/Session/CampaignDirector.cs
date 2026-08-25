@@ -38,6 +38,14 @@ public sealed class CampaignDirector
     private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
     private World? _world;
     private ScriptedPathVehicles? _paths;
+
+    // What the three SET_AI_* directives need after the roster phase has run: the chapter's nets
+    // by name, the trailer resolver a re-commanded net needs to ride its target, and the floor
+    // every activation radius takes. Kept because a mission re-commands its aircraft long after
+    // BuildRoster's inputs have gone out of scope.
+    private IReadOnlyList<AiNet> _chapterNets = Array.Empty<AiNet>();
+    private NetTrailerTargets? _netTrailers;
+    private float _minAiActiveDist = 2000f;
     private CampaignDangerZones? _dangerZones;
     private bool _cutsceneHold;
 
@@ -191,6 +199,10 @@ public sealed class CampaignDirector
             GD.PushWarning($"campaign: cannot read the roster ({e.Message}): no roster spawned");
             return "";
         }
+
+        _chapterNets = nets;
+        _netTrailers = inputs.NetTrailers;
+        _minAiActiveDist = inputs.MinAiActiveDist;
 
         var plan = CampaignRosterPlan.Build(blocks, defs, nets, WingmanNode, WingmanFit,
             netDraw: count => inputs.Rng.Next(count));
@@ -503,6 +515,13 @@ public sealed class CampaignDirector
         }
     }
 
+    // The rig a mission clause's vehicle name addresses, or null when no roster block of that name
+    // was spawned. The three SET_AI_* directives are one lookup with three different writes, so
+    // they share this; a miss is reported by the caller rather than swallowed, because a mission
+    // naming an aircraft that is not there is a real signal.
+    private FlightController? Commanded(string name) =>
+        _roster.TryGetValue(name, out var rig) ? rig : null;
+
     /// <summary>What <see cref="BuildRoster"/> reads from the session's build: the data paths,
     /// the first human, the net trailer resolver, the world's node lookup, and the two delegates
     /// <c>GameSession</c> keeps private behaviour behind (the spawner and the voice
@@ -783,28 +802,91 @@ public sealed class CampaignDirector
         public void WarpVehicle(string vehicle, IReadOnlyList<WarpPoint> points) =>
             _owner.Gap("WARP_VEHICLE", $"'{vehicle}' is not a spawned mission vehicle");
 
+        /// <summary>The vehicle arm of <c>SET_AI_TEAM</c> (<c>FUN_00469e20</c>): the script's raw
+        /// integer becomes the vehicle's team id with no conversion, in the one space the roster
+        /// block's own <c>team</c> slot writes, and the setter drops the current target with it
+        /// (docs/org/targeting.md).</summary>
         public void SetAiTeam(IReadOnlyList<(string Name, int Team)> entries)
         {
-            if (entries.Count > 0)
+            int set = 0;
+            var unmatched = new List<string>();
+            foreach (var (name, team) in entries)
             {
-                _owner.Gap("SET_AI_TEAM", $"'{entries[0].Name}' is not a spawned mission vehicle");
+                if (_owner.Commanded(name) is not { } rig)
+                {
+                    unmatched.Add(name);
+                    continue;
+                }
+
+                rig.Team = team;
+                if (rig.Pilot?.Gunner is { } gunner)
+                {
+                    gunner.Target = null;
+                    gunner.GroundTarget = null;
+                }
+                set++;
             }
+            Report("SET_AI_TEAM", set, entries.Count, unmatched);
         }
 
+        /// <summary>Moves each named aircraft onto the named patrol net, the vehicle arm of
+        /// <c>SET_AI_NET</c> (<c>FUN_00475f30</c> into <c>FUN_00475fc0</c>, docs/org/aiPilot.md
+        /// "Net assignment"). A chapter that carries no net of that name leaves the aircraft on
+        /// its current route, which is the engine's own no-match branch.</summary>
         public void SetAiNet(IReadOnlyList<(string Name, string Net)> entries)
         {
-            if (entries.Count > 0)
+            int moved = 0;
+            var unmatched = new List<string>();
+            foreach (var (name, netName) in entries)
             {
-                _owner.Gap("SET_AI_NET", $"'{entries[0].Name}' is not a spawned mission vehicle");
+                if (_owner.Commanded(name) is not { } rig || rig.Pilot is not { } pilot)
+                {
+                    unmatched.Add(name);
+                    continue;
+                }
+
+                if (AiNets.ByName(_owner._chapterNets, netName) is not { } net)
+                {
+                    GD.Print($"campaign: SET_AI_NET '{netName}' is not a net this chapter carries: " +
+                             $"'{name}' keeps the route it is on");
+                    continue;
+                }
+
+                // A net outranks wingman mode, so the escort buffer goes with the assignment.
+                pilot.Escort = null;
+                // A fresh walk seats itself at the node nearest wherever the aeroplane IS, which is
+                // what makes a mid-flight swap capture the new route instead of restarting it.
+                pilot.Patrol = new AiNetFollower(net, Utils.Rng.NewSystemRandom(Utils.Rng.Ai),
+                    trailerTarget: _owner._netTrailers?.For(net));
+                // The net's own volumes overwrite the vehicle's where it authors them. Only the
+                // spawn runs the roster block's copy afterwards, so here the net wins outright.
+                CampaignRosterPlan.ApplyVolumes(pilot.Machine, net.Volumes, _owner._minAiActiveDist);
+                moved++;
+                GD.Print($"campaign: SET_AI_NET '{name}' onto '{net.Name}#{net.Id}'");
             }
+            Report("SET_AI_NET", moved, entries.Count, unmatched);
         }
 
+        /// <summary>Writes each named aircraft's attack volume radius (<c>FUN_00469f70</c>, vehicle
+        /// <c>+0x328</c>). The altitude band the same write carries has no consumer here, the same
+        /// place <see cref="CampaignRosterPlan.ApplyVolumes"/> leaves it. No shipped mission
+        /// authors this directive, so only a modified script reaches it.</summary>
         public void SetAiAttackRadius(IReadOnlyList<(string Name, float Radius)> entries)
         {
-            if (entries.Count > 0)
+            int set = 0;
+            var unmatched = new List<string>();
+            foreach (var (name, radius) in entries)
             {
-                _owner.Gap("SET_AI_ATTACK_RADIUS", $"'{entries[0].Name}' is not a spawned mission vehicle");
+                if (_owner.Commanded(name) is not { } rig || rig.Pilot?.Machine is not { } machine)
+                {
+                    unmatched.Add(name);
+                    continue;
+                }
+
+                machine.AttackRange = radius;
+                set++;
             }
+            Report("SET_AI_ATTACK_RADIUS", set, entries.Count, unmatched);
         }
 
         public void CompletedZepcannons(IReadOnlyList<(string Zeppelin, int Flag)> entries)
@@ -852,6 +934,23 @@ public sealed class CampaignDirector
             else if (names.Count > 0)
             {
                 _owner.Gap("START_TAXI", $"'{names[0]}' is not a spawned mission vehicle");
+            }
+        }
+
+        // The shared tail of the three SET_AI_* directives: one line for what landed, one Gap for
+        // what did not. ⚠ SET_AI_NET and SET_AI_TEAM also take a ZEPPELIN name (six clauses over
+        // four missions), an arm with no seam here, so an unmatched name is always reported.
+        private void Report(string directive, int applied, int total, List<string> unmatched)
+        {
+            if (applied > 0)
+            {
+                GD.Print($"campaign: {directive} applied to {applied} of {total} named vehicle(s)");
+            }
+
+            if (unmatched.Count > 0)
+            {
+                _owner.Gap(directive, $"'{unmatched[0]}' and {unmatched.Count - 1} more name no " +
+                                      "spawned roster aircraft (a zeppelin is one such name)");
             }
         }
 

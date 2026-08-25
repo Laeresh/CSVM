@@ -144,7 +144,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 77. ☑ CM02's Balmorals break formation immediately, unattacked (`BL-498`)
 78. ☑ CM02's second Peacemaker squad starts awake and attacks the Pandora (`BL-499`, `BL-500`)
 79. ☑ A roster-spawned aircraft carries none of its gamez node's marker scaffolding (`BL-495`)
-80. ☐ A mission cannot re-command its spawned aircraft (`BL-500`)
+80. ☑ A mission cannot re-command its spawned aircraft (`BL-500`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -3216,7 +3216,7 @@ nodes in C3's gamez at all, so no reach gap of theirs was closed here and none e
 G74 described. The landing volumes and their `land_on` arms are the whole of what that subtree
 carries in this chapter.
 
-## G80 ☐ A mission cannot re-command its spawned aircraft (`BL-500`)
+## G80 ☑ A mission cannot re-command its spawned aircraft (`BL-500`)
 
 **Goal.** A mission's `SET_AI_NET` moves the named aircraft onto the named net, and the two clauses
 beside it stop declining for a reason that is no longer true.
@@ -3251,3 +3251,49 @@ from where it is rather than restarting at node 0. ⚠ `SET_AI_TEAM` writes into
 space, so an id minted here has to be the id the parser mints and not a fresh one. ⚠ Do not answer a
 name matching no live rig by silently doing nothing: a mission naming an aircraft that is not there
 is a real signal and the `Gap` line is how it currently surfaces.
+
+**Landed.** All three clauses reach the aircraft the campaign roster spawned. `CampaignDirector`
+keeps the chapter's nets, the trailer resolver and `min_ai_active_dist` past the roster phase
+(`CSVM/src/Session/CampaignDirector.cs:41-48`, written at `:203-205`), and one private lookup
+answers all three verbs (`:522`), the way `WakeupEnemies` reaches a rig by name. `SetAiNet`
+(`:836`) hands the rig's pilot a fresh `AiNetFollower` on the named net, clears the escort buffer
+because a net outranks wingman mode, and applies the net's own volumes through
+`CampaignRosterPlan.ApplyVolumes`; the fresh follower's own seat scan is what captures the route
+from where the aeroplane is. `SetAiTeam` (`:809`) writes the script's raw integer onto
+`FlightController.Team`, the same space the roster block's `team` slot writes, and drops the
+gunner's current target with it. `SetAiAttackRadius` (`:874`) writes `AiModeMachine.AttackRange`.
+A name matching no spawned block is collected and reported through `Gap` rather than dropped
+(`:943`).
+
+⚠ **A net swap is not a spawn, so the net's volumes are not outranked.** The roster block's own
+copy runs only at the spawn (`FUN_0047c210`), so on a script-side assignment the net's nine values
+win outright where it authors them. `M5Bombrun` authors an attack radius of 1, and the three
+Balmorals take it when the bomb run starts.
+
+**The zeppelin arm of both verbs is not reached.** `SET_AI_NET` and `SET_AI_TEAM` each accept a
+zeppelin name; six clauses across four missions use one (`blackswanzep`, `blackhatzep`,
+`piratezep`, `cargozep2/3`), none of them in CM02. `ZeppelinMotion` holds its follower and its
+team read-only, so that arm is a change to `ZeppelinRuntime` rather than to this lookup. Those
+names now surface through the `Gap` line instead of being silently dropped. Filed as `BL-502`.
+
+**Verified.** `--run-tests=campaign-set-ai-net` PASS, a new suite
+(`CSVM/src/Testing/CampaignSetAiSuites.cs`, registered at `CSVM/src/Testing/SuiteCatalog.cs:166`
+and `:885`) driving C3/M05's own roster through the session's `FlightRoster` and its own objective
+graph. The authored shape is read off the shipped file: `OBJECTIVE4` names exactly the three
+Balmorals for `M5Bombrun`, `OBJECTIVE68` exactly the ace squad for `M5Escort`, `OBJECTIVE23` all
+six Peacemakers, and every Balmoral block authors one net of its own that is `M5Bombers`, not the
+bomb run. Driven, the three fly `M5Bombers` until `OBJECTIVE4` completes and then all three fly
+`M5Bombrun#20`, read off the live followers; each seats at the node nearest its own position, and
+the one parked down the route beforehand seats at node 12 rather than restarting at 0. The net's
+authored attack radius reaches the aeroplane while the activation radius keeps its
+`min_ai_active_dist` floor. The ace squad reaches `M5Escort` through the mission's own wake chain,
+`OBJECTIVE5` to `OBJECTIVE8` to `OBJECTIVE68`, and not through a directly woken objective. The two
+verbs no shipped mission authors are driven through one objective appended to this mission's own
+parsed script: `SET_AI_TEAM` moves the lead Balmoral off its authored team 2 onto 1 and clears its
+target, `SET_AI_ATTACK_RADIUS` writes 1234 m, and a name that is there for neither does not cost
+the clause its other entries. `campaign-squad-wakeup`'s standing note about `SET_AI_NET` being a
+no-op is now an assertion that all three are on `M5Escort`
+(`CSVM/src/Testing/CampaignSquadWakeSuites.cs:292`). All 14 `campaign` suites, `ai-net-follow`,
+`landings-approach-trigger` and `landings-wingwalk-gate` pass beside it. `dotnet build` clean, 0
+warnings; `dotnet test` 2394 passed. ⚠ Error counts are not evidence in this wave, a sibling lane
+sharing the log.

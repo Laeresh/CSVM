@@ -289,7 +289,7 @@ internal static class CampaignSquadWakeSuites
                 ? 1 : 0;
         }
         ctx.Same(3, netted, $"each of the woken three walks a patrol net after the wake");
-        ctx.Note($"{onEscort} of 3 on '{EscortNet}': SET_AI_NET is a named no-op in this session, so the squad keeps the net its roster block authored and flies that route instead");
+        ctx.Same(3, onEscort, $"…and OBJECTIVE68's SET_AI_NET has moved all three onto '{EscortNet}'");
     }
 
     // The second half of the report: the woken squad's live pick. Its own always-target on the

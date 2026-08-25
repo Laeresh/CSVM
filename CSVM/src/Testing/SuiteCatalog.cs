@@ -164,6 +164,7 @@ public static class SuiteCatalog
         "mission-radio",
         "campaign-zeppelin-wakeup",
         "campaign-squad-wakeup",
+        "campaign-set-ai-net",
         "alpha-cutout-ray-census",
         "zeppelin-identity",
         "campaign-briefing-repaint",
@@ -885,6 +886,18 @@ public static class SuiteCatalog
             + "graph, each woken block walks a patrol net, and britpeace_8's authored always-target "
             + "on the player role moves its live pick off a nearer candidate onto the human",
             CampaignSquadWakeSuites.CampaignSquadWakeup));
+
+        // BL-500: the three SET_AI_* directives were named no-ops, so most of what CM02 does to
+        // its own aircraft never happened and every one of them flew its roster block all mission.
+        into.Add(new TestHarness.Suite("campaign-set-ai-net",
+            "a mission re-commanding the aircraft it spawned, over C3/M05's own BUILT world: the "
+            + "three Balmorals fly the M5Bombers their own blocks author until OBJECTIVE4 puts all "
+            + "three on M5Bombrun, each capturing the route at the node nearest where it is rather "
+            + "than restarting it, the net's own volumes reaching the aeroplane; the ace squad is "
+            + "on M5Escort after the mission's own wake chain naps OBJECTIVE68 awake; and an "
+            + "appended objective drives SET_AI_TEAM and SET_AI_ATTACK_RADIUS, which no shipped "
+            + "mission authors, including a name that is there for neither",
+            CampaignSetAiSuites.CampaignSetAiNet));
 
         // BL-477: what stops a shot at the cargo zeppelin's slung tanks was inferred from the
         // geometry; this measures it. The original's own ray test reads no texture at all
