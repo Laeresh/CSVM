@@ -55,7 +55,7 @@ public sealed class FlightModel
 {
     public Vector3 Position;
     public Basis Attitude = Basis.Identity;       // body→world; nose −Z, up +Y (Godot frame)
-    public Vector3 BodyRates;                     // rad/s: x pitch(+up), y yaw(+left), z roll(+left)
+    public Vector3 BodyRates;                     // quaternion half-angle rad/s: x pitch, y yaw, z roll
     public Vector3 VelocityDir = Vector3.Forward;
     public float Speed;                           // m/s along VelocityDir
     public float Throttle;
@@ -268,6 +268,10 @@ public sealed class FlightModel
     }
 
     public PlaneStats Stats { get; }
+
+    /// <summary>The body rates as physical angular velocity: <see cref="BodyRates"/> carries the
+    /// original's quaternion half-angle, so an instrument reading rad/s wants twice it.</summary>
+    public Vector3 PhysicalBodyRates => BodyRates * 2f;
 
     /// <summary>Whether this plant flows the original's AI force path rather than its player one,
     /// chosen once at construction from <c>IsHumanPiloted</c> because the original's own selection
@@ -635,7 +639,7 @@ public sealed class FlightModel
         var omegaWorld = Attitude * BodyRates;
         float omega = omegaWorld.Length();
         if (omega > 1e-6f)
-            Attitude = Attitude.Rotated(omegaWorld / omega, omega * dt).Orthonormalized();
+            Attitude = Attitude.Rotated(omegaWorld / omega, 2f * omega * dt).Orthonormalized();
 
         // ⚠ Do not add a knife-edge nose-sag term here. The decoded bank→yaw coupling already does
         // that job and gives the original's own shape, and a second term keyed on wing verticality

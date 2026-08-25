@@ -10,7 +10,7 @@ namespace CSVM.Tests;
 /// without launching the engine. Same report <c>--dump-flight=all</c> prints, so a hash taken
 /// either way is the same hash. Writes to <c>CSVM_DUMP_OUT</c> (default: the temp folder's
 /// <c>flight-dump.txt</c>) and asserts nothing about the numbers: the diff is the instrument.</summary>
-public class ZzBaselineDump
+public class FlightEnvelopeDump
 {
     private static string ZrdrPath =>
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));

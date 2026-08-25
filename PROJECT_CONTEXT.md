@@ -105,7 +105,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `RunProbe.ps1` — **every ad-hoc scripted Godot launch goes through this** (`--screenshot=`, `--dump-*`, one-off `--run-tests=`): hidden desktop + streams redirected to files, so nothing flashes on screen or prints over the calling terminal. Never invoke the Godot exe directly for a probe. Details: `docs/tooling.md`.
 - `HiddenDesktop.ps1` — dot-sourced by `RunTests.ps1`: runs every launch on a separate Windows desktop so no test window ever appears on screen. Details: `docs/tooling.md`.
 - `CleanScratch.ps1` — sweeps `.scratch/` artifacts **and finished `.claude/worktrees/` agent worktrees** (`-?` lists its switches). Spares backups and dirty worktrees; leaves branches alone by default.
-- `CheckCommentCaps.ps1` — the comment-length caps above, over `CSVM/src` and `CSVM.Tests`. Bare for the file:line list, `-Summary` for one line per file worst-first, or with paths for just those files. A pre-commit hook runs it; run it yourself while editing.
+- `CheckCommentCaps.ps1` — the comment-length caps above, over `CSVM/src` and `CSVM.Tests`. Bare for the file:line list, `-Summary` for one line per file worst-first, or with paths for just those files. Scans the worktree the script file itself lives in, not the caller's working directory, so it is correct from any worktree regardless of where it is invoked. A pre-commit hook runs it; run it yourself while editing.
 - `New-ItemId.ps1` — mints the next `BL-`/`CAP-`/`PT-` item ID (`-Kind BL`, optional `-Count n` to reserve a block). The counter sits in `.git/item-id-counters.json` — shared by all worktrees, incremented under an exclusive lock — so concurrent sessions can't mint the same number. **Never assign an item ID any other way, and run it for EVERY id rather than once per session** — deriving the next id by adding 1 (or reusing one it handed you earlier) leaves the counter behind the file, so the invented number is handed out again on the next call. Use `-Count n` when you need several at once. A pre-commit hook fails the commit if `backlog.md`/`playtest.md` define an ID twice.
 - `tools/` — downloaded binaries (git-ignored): pinned mech3ax v0.6.1, the mech3ax fork, the Godot 4.7 .NET editor.
 - `analysis/` — **committed** read-only analysis scripts + their `FINDINGS.md`, one dir per question. For instruments whose result `docs/` cites, because `.scratch/` is swept. No game data in them, ever.
@@ -141,7 +141,7 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 - `src/UI/` (16) — launchscreen, splitscreen rig, and the inspection labs (each with a scripted `--debug-*` twin).
 - `src/Utils/` (6) — session-wide services: clock, log, seed, shader time, config, startup profile. Determinism lives here.
 - `src/Testing/` (6) — the in-engine assertion harness behind `--run-tests` and the `--dump-*` probes.
-- `src/Session/` (9) — `Launcher.cs` (Main.tscn root: bootstrap, launchscreen, persistent camera/lighting) and `GameSession.cs` (the per-launch session node it instantiates), plus livery/spawn/plane-roster resolution, the per-player flight-rig assembler, the AI aircraft spawner, the effect/crash stage factory, and the weather rig.
+- `src/Session/` (11) — `Launcher.cs` (Main.tscn root: bootstrap, launchscreen, persistent camera/lighting) and `GameSession.cs` (the per-launch session node it instantiates), plus livery/spawn/plane-roster resolution, the roster aggregate with grouped inputs and its two internal assemblers, the effect/crash stage factory, and the weather rig.
 - `src/` root (3) — `SessionSpec.cs`, `SessionPaths.cs`, `Pads.cs`.
 - `CSVM.Tests/` — the xUnit project: engine-free reader units. Anything reaching `GD.*` or a live `Node` belongs in `src/Testing/` instead.
 
@@ -217,8 +217,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1 through 4 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, Instant Action, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI: aircraft that patrol, engage, evade and die, turrets, zeppelins, and pilot voice. All four Instant Action mission types (ace, squadron, stunt flying, zeppelin run) are playable and scored, solo or in splitscreen, over the seven shipped environments.
 
-**Active plan:** none; the last completed is [`docs/plans/PLAN-flight-model-parity.md`](docs/plans/PLAN-flight-model-parity.md).
-Next: pick the next plan from `backlog.md` (`BL-442` engine sputter, `BL-121`). The cockpit sitting `BL-436` is the freshest owed playtest.
+**Active plan:** none; the last completed is [`docs/plans/PLAN-m4-polish.md`](docs/plans/PLAN-m4-polish.md).
+Next: pick the next plan from `backlog.md` (`BL-121`, `BL-447`). `PT-84` and the `BL-120`/`PT-53` corner graze are the freshest owed playtests.
 
 Verify any change with **`.\RunTests.ps1`** (build → units →in-engine suites → golden hashes → one exit code); read[`docs/verification.md`](docs/verification.md) first.
 

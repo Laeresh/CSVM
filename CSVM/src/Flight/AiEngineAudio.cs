@@ -77,10 +77,11 @@ public sealed partial class AiEngineAudio : Node3D
     /// <summary>Per-frame drive, same arguments as <see cref="FlightAudio.Update"/> and called from
     /// the same place, so both paths run off the sim clock. Beyond the cull both slots stop; back
     /// inside, they start again.</summary>
-    public void Update(float dt, in EngineDrive drive, float speedFrac, float damageFrac)
+    public void Update(float dt, in EngineDrive drive, float speedFrac, float healthFrac,
+        bool engineDead = false)
     {
         _ = dt;
-        SetEngineDamaged(damageFrac > 0f);
+        SetEngineDamaged(EngineAudioCurves.EngineDamaged(healthFrac, engineDead));
         float distSq = NearestListenerDistanceSq();
         bool culled = distSq > EngineAudioCurves.CullDistanceSq;
         if (culled != _culled)
@@ -177,8 +178,8 @@ public sealed partial class AiEngineAudio : Node3D
     }
 
     // The engine slot's damage swap, decided by the same helper the own-ship path uses so the two
-    // cannot drift; see FlightAudio.UpdateEngineSlot for why any damage at all trips it. An AI rig
-    // has no selected view, so it never passes firstPerson and never reads cockpit_engine_sound.
+    // cannot drift. An AI rig has no selected view, so it never passes firstPerson and never reads
+    // cockpit_engine_sound.
     private void SetEngineDamaged(bool damaged)
     {
         damaged &= _damagedStream != null;

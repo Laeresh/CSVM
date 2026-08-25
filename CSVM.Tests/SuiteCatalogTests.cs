@@ -11,7 +11,7 @@ public sealed class SuiteCatalogTests
     {
         string[] names = TestHarness.All.Select(suite => suite.Name).ToArray();
 
-        Assert.Equal(113, names.Length);
+        Assert.Equal(114, names.Length);
         Assert.Equal(SuiteCatalog.Names, names);
         Assert.Equal("emitter-lifetime", names[0]);
         Assert.Equal("landings-approach-trigger", names[^1]);

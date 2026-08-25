@@ -70,6 +70,7 @@ public static class SuiteCatalog
         "instant-action-end",
         "instant-action-wrapup",
         "results-board-shell",
+        "flight-roster-transaction",
         "inert-aircraft",
         "world-turrets",
         "carried-turrets",
@@ -378,6 +379,11 @@ public static class SuiteCatalog
             "release to the live flag, the flag clearing retires the board and releases the " +
             "clock — and the wrap-up board's own menu-driven retire, which no flag ever performs",
             ResultsBoardShell));
+        into.Add(new TestHarness.Suite("flight-roster-transaction",
+            "FlightRoster owns human and AI assembly as atomic transactions: a late second-human " +
+            "failure removes external bindings, a retry commits both humans in order with complete " +
+            "bindings, and a late AI failure restores pilot/RNG state and consumes no identity",
+            FlightRosterTransaction));
         into.Add(new TestHarness.Suite("inert-aircraft",
             "the E10 inert state, each claim watched passing on a live aircraft first and on the " +
             "inert one AFTER activation: a plane built inert is not returned by a raycast, is " +
@@ -572,7 +578,7 @@ public static class SuiteCatalog
         into.Add(new TestHarness.Suite("ai-crash-defs",
             "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default, and the def switches off both the airframe's healthy subtree and the crash root's wreck — while a human rig off the same factory keeps player_crash_* (G21)", AiCrashDefs));
         into.Add(new TestHarness.Suite("ai-wreck-fall",
-            "a killed AI aircraft's whole fall: the kill starts its self-named destroy def and no ai_crash_* def, the airframe is drawn on every frame of the fall, the hull travels under the flight model until Callback 15 releases it at the authored 3.0 s, Callback 16 hands the anim the velocity it reached THERE, and a wreck that meets the ground first plays its surface-indexed crash def and is hidden only then (D21)", AiWreckFall));
+            "a killed AI aircraft's whole fall: the kill starts its self-named destroy def and no ai_crash_* def, the airframe is drawn on every frame of the fall, the hull travels under the flight model until Callback 15 releases it at the authored 3.0 s, Callback 16 hands the anim the velocity it reached THERE, a wreck that meets the ground first plays its surface-indexed crash def and is hidden only then (D21), and the lever/surface command last written by the AI think reads back bit-identical every frame of the fall (BL-451)", AiWreckFall));
         into.Add(new TestHarness.Suite("player-destroy-choreography",
             "a shot-down player plays player-player whole: the two authored arms are chosen by the def's own IF NODE_ACTIVE 1 (its node one is `player_autogyro`, so only the autogyro stops its rotor), the cockpit eject stages and shows its cpilot, all four wreck pieces appear and fly their own OBJECT_MOTION, and the camera-only Callback 3 stays counted rather than invented (D25)", PlayerDestroyChoreography));
         into.Add(new TestHarness.Suite("hostile-marker-hud",

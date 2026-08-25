@@ -992,14 +992,14 @@ public static class Probes
             m.Step(new FlightInput { Pitch = 1f, Throttle = 1f }, EnvDt);
             // The footage's rate is binned round a whole loop, so the first 360° of nose rotation
             // is the comparable figure, not the level-entry transient or the 2 s settled value.
-            noseSwept += Mathf.RadToDeg(m.BodyRates.X) * EnvDt;
+            noseSwept += Mathf.RadToDeg(m.PhysicalBodyRates.X) * EnvDt;
             if (loopTime == 0f && noseSwept >= 360f)
                 loopTime = i * EnvDt;
             float cosA = Mathf.Cos(Mathf.DegToRad(m.Alpha));
             float window = m.OpposingCommandLimitAt(m.Speed, cosA, 0f, 1f);
             float pathRate = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(prevDir.Dot(m.VelocityDir), -1f, 1f))) / EnvDt;
             prevDir = m.VelocityDir;
-            float noseRate = Mathf.RadToDeg(m.BodyRates.X);
+            float noseRate = Mathf.RadToDeg(m.PhysicalBodyRates.X);
             float liftG = Mathf.Min(Mathf.Clamp(m.LoadFactorDemand, -5f, 9f), m.LiftCapAt(m.Speed));
             float vane = Mathf.RadToDeg(m.WeathervaneTorque().X * stats.RecInertia.X);
             peakNose = Mathf.Max(peakNose, noseRate);
@@ -1010,7 +1010,7 @@ public static class Probes
                           + $"{pathRate,8:0.00} {vane,9:0.00}");
         }
 
-        sb.AppendLine($"peak nose rate {peakNose:0.00} °/s, final {Mathf.RadToDeg(m.BodyRates.X):0.00} °/s "
+        sb.AppendLine($"peak nose rate {peakNose:0.00} °/s, final {Mathf.RadToDeg(m.PhysicalBodyRates.X):0.00} °/s "
                       + $"at α {m.Alpha:0.0}°; peak body-up G {peakG:0.00} against highGs[0] "
                       + $"{stats.HighGStart:0.#}; nose swept {noseSwept:0} ° in {seconds:0.0} s"
                       + (loopTime > 0f
@@ -1066,7 +1066,7 @@ public static class Probes
             float nose = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp((-m.Attitude.Z).Y, -1f, 1f)));
             sb.AppendLine($"{i * EnvDt,6:0.000} {m.Speed / Mph,8:0.0} {nose,7:0.0} {flag,7:0.000} "
                           + $"{m.PitchAuthorityAt(m.Speed),6:0.000} {window,7:0.000} "
-                          + $"{drop,9:0.00} {vane,9:0.00} {Mathf.RadToDeg(m.BodyRates.X),9:0.00} "
+                          + $"{drop,9:0.00} {vane,9:0.00} {Mathf.RadToDeg(m.PhysicalBodyRates.X),9:0.00} "
                           + $"{(armed ? "yes" : "no"),4} {steer.Pitch,9:0.00}");
         }
 
@@ -1185,14 +1185,14 @@ public static class Probes
             + "decoded thrust/drag/gravity balance at this path; the filmed 355.2 is discarded");
 
         // --- roll. Accumulated body roll rate: no other axis is commanded. The target is the
-        // DECODE's own — roll_torque · recInertia.z / ang_momentum_damp, 90.6 °/s steady plus the
-        // spin-up — not the 2.05 s a stopwatch and the video's ADI bank centroid read off footage.
+        // DECODE's own — quaternion angle doubles the stored half-angle rate to 181.3 °/s steady.
+        // Its 2.08 s target includes spin-up; the original's ADI stopwatch read 2.05 s.
         m = Fresh(stats, Level(), fd, 1f);
         double tRoll = RunUntil(m, 1f, 30f, RollAccum(m), roll: 1f, watch: watch);
-        Row("roll-360", "full aileron from level cruise, 360°", "s", tRoll, 4.15, 0.25,
+        Row("roll-360", "full aileron from level cruise, 360°", "s", tRoll, 2.08, 0.25,
             $"α {m.Alpha:0.0}° at finish — target is the decoded steady rate "
-            + "roll_torque · recInertia.z / ang_momentum_damp with its own spin-up, not the 2.05 s "
-            + "a stopwatch read off the ADI");
+            + "2 * roll_torque · recInertia.z / ang_momentum_damp with its own spin-up; a stopwatch "
+            + "read 2.05 s off the original's ADI");
 
         // --- pitch at three speeds. The AOA window and the lag rate are both the binary's, so the
         // rate they produce is the answer and the loop-binned 33.00 is discarded. ⚠ Do NOT close
@@ -1203,7 +1203,7 @@ public static class Probes
         {
             m = Fresh(stats, Level(), mph * Mph, 1f);
             Run(m, 1f, 2f, pitch: 1f, watch: watch);
-            pitchRates.Add(Mathf.RadToDeg(m.BodyRates.X));
+            pitchRates.Add(Mathf.RadToDeg(m.PhysicalBodyRates.X));
             pitchAlphas.Add(m.Alpha);
         }
         Row("pitch-rate", "sustained full-elevator body pitch rate", "°/s",
@@ -1463,9 +1463,12 @@ public static class Probes
                           + $"{"α",7} {"bank",7} {"hdg",8} {"speed",8}");
             foreach (var x in run.Samples)
             {
-                sb.AppendLine($"  {x.T,4:0} {x.NoseDeg,8:0.00} {x.PathDeg,8:0.00} {x.LagDeg,10:0.00} "
-                              + $"{x.SinkFtS,9:0.0} {x.AltM,9:0.0} {x.Alpha,7:0.00} {x.BankDeg,7:0.0} "
-                              + $"{x.HeadingRateDegS,8:0.00} {x.SpeedMph,8:0.0}");
+                // ⚠ Do not restore the finer formats; the two hosts' values differ below them and
+                // the dump would hash differently either side (INSTR-19, which also carries what
+                // the nearest-10-m Δalt costs).
+                sb.AppendLine($"  {x.T,4:0} {x.NoseDeg,8:0.0} {x.PathDeg,8:0.0} {x.LagDeg,10:0.0} "
+                              + $"{x.SinkFtS,9:0} {Math.Round(x.AltM / 10.0) * 10,9:0} {x.Alpha,7:0.0} "
+                              + $"{x.BankDeg,7:0} {x.HeadingRateDegS,8:0.0} {x.SpeedMph,8:0}");
             }
         }
 
@@ -2036,13 +2039,13 @@ public static class Probes
     private static Func<bool> RollAccum(FlightModel m)
     {
         double turned = 0;
-        return () => (turned += Math.Abs(m.BodyRates.Z) * EnvDt) >= Math.Tau;
+        return () => (turned += Math.Abs(m.PhysicalBodyRates.Z) * EnvDt) >= Math.Tau;
     }
 
     private static Func<bool> YawAccum(FlightModel m)
     {
         double turned = 0;
-        return () => (turned += Math.Abs(m.BodyRates.Y) * EnvDt) >= Math.Tau;
+        return () => (turned += Math.Abs(m.PhysicalBodyRates.Y) * EnvDt) >= Math.Tau;
     }
 
     // ---- shared formatting -------------------------------------------------------------------

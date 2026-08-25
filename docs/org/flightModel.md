@@ -168,14 +168,11 @@ the same discretization to first order in `dt` per step (`exp(−x) = 1 − x + 
 STEADY-STATE fixed points differ by more than that: explicit Euler's fixed point is `cmd/damp`
 exactly, independent of `dt`; the exponential-form fixed point is `cmd·dt·k/(1−k)` with
 `k = exp(−dt·damp)`, which is `cmd/damp · x/(eˣ−1)` for `x = dt·damp` — smaller by `≈ x/2` at
-small `x`. At the remake's own physics tick (`dt = 1/60 s`) and the Bloodhawk's `ang_momentum_damp
-= 5`, `x ≈ 0.083` and the predicted shortfall is `≈4.1 %`, which is what the steady-rate table
-below shows landing at: `roll-360` 1.98 → 2.07 s (+4.5%), `pitch-rate` 33.54 → 32.41 °/s (−3.4%),
-`yaw-360` 28.55 → 29.73 s (+4.1%) — all three inside their asserted tolerance bands, so **no `*Tune`
-was refit**. This is the decoded mechanism's own bias at this `dt`, not a sign the form or the
-ordering is wrong; a build at the original's own internal tick rate (unknown — see the measurement
-harness's 100 Hz, which is not necessarily gameplay's own rate) would show a smaller shortfall
-still, by the same formula. A large-`dt` case (`dt·damp = 5` on a released axis) shows the
+small `x`. At the remake's own physics tick (`dt = 1/60 s`) and the Bloodhawk's
+`ang_momentum_damp = 5`, `x ≈ 0.083` and the stored half-angle rate is `≈4.1 %` below the
+continuous fixed point. The timings formerly quoted here treated that half-angle state as physical
+angular velocity and were invalid; the quaternion exponential below doubles it when attitude is
+built. A large-`dt` case (`dt·damp = 5` on a released axis) shows the
 qualitative point the item is about: the exponential form stays in `(0, 1)`, strictly decaying,
 where the explicit-Euler factor `(1 − dt·damp) = −4` would flip the rate's sign and grow it every
 tick — `CSVM.Tests/AngularDampingTests.cs` pins both the ordering (this tick's own torque is
@@ -395,6 +392,10 @@ Consequences for a reimplementation:
   i.e. where the aircraft stalls. Lift below the ceiling is independent of both.
 - The `±1.8` clamp on `C_L` binds only when `q · RefArea` is small relative to weight, where the
   compressibility ceiling is already lower. In practice `0.75 − 0.15·Mach` is the operative limit.
+- **`n` is a magnitude, so the negative halves of both clamps are dead.** The callers hand this
+  function the length of the demand vector and apply the resulting force along that vector's own
+  normalised direction, so neither `−5` nor `−1.8` can be reached and the one-sided `min` against
+  the compressibility ceiling governs a pushover exactly as it governs a pull.
 - The delivered `C_L` is passed to the drag routine and **never read there** (see Drag). This model
   has no induced drag at all: a pull costs speed only through the lift vector's own tilt.
 
@@ -787,12 +788,18 @@ path. The two owners it named next are settled too: the throttle spending is a p
 multiply that is 1 at the filmed full throttle (see "Part-throttle equilibrium"), and the band is
 the dense one (see Atmosphere). What is left is the α the climb path holds.
 
-⚠ **One clamp asymmetry remains unported.** `FUN_0041abd0` clamps `C_L` to ±1.8 and then applies
-the compressibility ceiling as a one-sided `min`, so the NEGATIVE ceiling is the flat −1.8 while
-the positive one is `0.75 − 0.15·M` (always below 1.8). `FlightModel.LiftCapAt` caps both signs at
-the positive ceiling, understating negative-G lift at speeds where `1.8 · q·RefArea` exceeds the
-demanded push. Recorded as an open difference; it is outside this section's acceleration-path
-question and no stock-envelope row in the dump reads it.
+⚠ **The clamp asymmetry is unreachable, and CSVM already matches.** `FUN_0041abd0` clamps `C_L` to
+±1.8 and then applies the compressibility ceiling as a one-sided `min` with no sign handling
+(`0x41ac5f`–`0x41ac7b`), which reads as a NEGATIVE ceiling of −1.8 against a positive
+`0.75 − 0.15·M`. The negative side never runs: both call sites build the `n` this function receives
+as the length of the demand vector (`0x48c821`–`0x48c852`, `0x49122e`–`0x491236`, a sum of squares
+through the integer sqrt approximation, then `/ 9.82`), so `n ≥ 0` and `C_L ≥ 0` always. The sign of
+the lift lives in the separately normalised direction the force is applied along, not in the
+coefficient, so a pushover arrives as a positive `C_L` and meets the same `0.75 − 0.15·M` ceiling a
+pull does. The −5 G clamp is dead for the same reason: the original limits total demand to 9 G in
+either direction. `FlightModel` reproduces the structure exactly, `LoadFactorDemand` being a
+`liftDir.Length()`, so capping both signs at the positive ceiling is the decode rather than a
+departure from it.
 
 ## The far-field plant
 
@@ -1162,6 +1169,14 @@ family (`FUN_00491820`, `FUN_00492040`). The throttle `[obj+0x128]` is read exac
 `FUN_0048c470`, at `0x48c5a0` for the far-field cruise speed, which is a linear target and not a
 torque; the near-field force build reaches the lever only through the thrust curve at `0x48fce7`.
 No engine record, prop direction or handedness constant enters any row of the table.
+
+**The stored vector is a quaternion half-angle rate, not physical angular velocity.** After the
+body/world transforms, `FUN_0048e580` multiplies it by `dt` and passes the vector to
+`FUN_0053fbf0`. That helper returns `(cos |v|, sin |v| · normalize(v))`; `FUN_0053fa40` converts the
+quaternion to a matrix, rotating the attitude by **`2|v|`**. The old remake passed `|v|` directly to
+Godot's axis-angle rotation and therefore turned pitch, yaw and roll at half strength while every
+upstream accumulator value still matched. `FlightAxisReplayTests` independently evaluates all
+three axes and has a half-angle able-to-fail control.
 
 Two consequences follow. Every term above is a product of state-derived vectors, so the whole
 rotational plant is mirror-symmetric under a left/right reflection of the state and the stick: a
@@ -2884,7 +2899,20 @@ armorDmg = healthDmg = max(300 · s³, 50)          cube at 0x0048d4c1
 if the striker is not the player and it hit an aeroplane:  both × 0.2
 ```
 
-⚠ **There is no airspeed term anywhere in it.** A 400 mph belly-flop and a 90 mph belly-flop at the
+**The camera kick is the same function's other law, and it is not the pair's.** Before the pair is
+computed, `0x0048d3cc`–`0x0048d409` kicks shake block 5 with
+`min(speed · s · 0.03, 0.15)` radians: the true airspeed at `obj+0x934`, the RAW severity cosine
+rather than its cube, the literal `0.03` at `0x006080c4` and the ceiling `0.15` at `0x006036a8`. Two
+guards stand over it and nothing else does: the object is the player (`0x0048d3c4`) and its crashed
+flag `obj+0x384` is clear (`0x0048d3aa`), so every contact the caller's positive-severity gate lets
+through kicks the camera, a graze included. At any flight speed the ceiling is reached by a cosine
+around 0.05, so the shallowest contacts already saturate. **Ported** as
+`CollisionDamage.ContactShake` feeding `PlaneShake.ContactHit`, widened from the player to every
+human pilot the way the bounce is; the oscillator law block 5 kicks is in
+[`shakes.md`](shakes.md).
+
+⚠ **There is no airspeed term anywhere in the damage pair** (the shake above is the one place in
+this function that reads speed, and it spends no damage). A 400 mph belly-flop and a 90 mph belly-flop at the
 same attitude deal identical damage. The whole law is a function of the angle of incidence, which is
 why a remake that scales collision damage by closing speed cannot be made to match by retuning a
 constant. The floor dominates below `s ≈ 0.550`, so any contact shallower than about 33° off the
@@ -3024,9 +3052,10 @@ collision damage at all; every write to that field found so far stores 0.
 
 ## The `*Tune` rates — none of the three exists in the executable
 
-The remake's per-axis control-rate calibration. Steady rate is
-`torque · rec_moments_inertia · Tune / ang_momentum_damp` (× the yaw authority curve on yaw), and a
-full 360° takes ≈ `1/damp` of spin-up plus `2π/rate`.
+The remake's per-axis control-rate calibration. The steady stored half-angle rate is
+`torque · rec_moments_inertia · Tune / ang_momentum_damp` (× the yaw authority curve on yaw). The
+physical rate is **twice** that value because the attitude is built through the quaternion
+exponential above.
 
 ⚠ **No axis carries a calibration factor.** Read out of the LIVE force function `FUN_0048c470`, the
 three stick torques are built in three guarded blocks and each is exactly four factors, with nothing
@@ -3046,38 +3075,26 @@ only in which authority scalar `FUN_0048bdd0` hands them and in the opposing-com
 which is a constant factor.
 
 So the authored numbers are the whole of it on every axis. The Bloodhawk's `roll_torque 7.5` and
-`rec_moments_inertia.z 1.10` against `ang_momentum_damp 5.0` give **90.7 °/s** and a 360° roll in
-**4.17 s**.
+`rec_moments_inertia.z 1.10` against `ang_momentum_damp 5.0` give **90.7 °/s stored**, **181.4 °/s
+physical**, and a stepped 360° roll in **2.18 s** against the decoded 2.08 s target and the
+original's 2.05 s ADI stopwatch reading.
 
 | Constant | Value | Standing |
 |---|---:|---|
-| `PitchTune` | was **0.89** | fitted to stopwatch timings and cockpit-gauge video, sustained pitch ≈33 °/s. **No counterpart in the binary**, now 1: pitch-rate moves 33.54 → **35.26 °/s** against the original's 33.00, still inside the ±3 band |
-| `YawTune` | was **1.57** | pinned against the authored yaw curve, full-rudder 360° 28.6 s. **No counterpart in the binary**, now 1: yaw-360 moves 28.55 → **49.12 s** against the original's 28.60, and the row is now informational |
+| `PitchTune` | was **0.89** | **No counterpart in the binary**, now 1. With the quaternion correction the sustained physical pitch rate is **24.11 °/s**; faster nose motion opens the AOA window further, so this axis is not a simple 2× output |
+| `YawTune` | was **1.57** | **No counterpart in the binary**, now 1. With the quaternion correction yaw-360 is **30.20 s** against the original's 28.60, rather than the invalid half-angle reading of 49.12 s |
 | `RollTune` | **1.0** | already retired on this evidence; a 2.12 that used to sit here is gone |
 
-The 2.12 existed to reach a **2.05 s** roll timed off footage, which is 2.12× what the executable's
-own arithmetic produces. A decode is not contested with a stopwatch reading, so the multiplier went
-rather than the decode. The pitch and yaw multipliers are the same class of fit against the same
-class of evidence, and the same disposition applies. Restoring any of the three needs a mechanism
-traced in the binary.
-
-⚠ **Pitch survives its own measurement; yaw does not.** Pitch rate is NOT proportional to its
-multiplier, because the weathervane torque enters the same accumulator carrying no `*Tune` and grows
-with the resulting incidence: 0.89 → 1 moves the rate by 5%, not by 12%. At 35.26 °/s the row is
-still green against 33.00 ± 3, and the video it was fitted to reads 37.9 / 33.7 / 30.7 / 36.5 °/s
-binned round a loop, so 0.89 was fitting noise inside its own spread.
-
-Yaw is the row the decode breaks, at 49.12 s against a 28.60 s target. What it moves toward is the
-rudder this page already describes: a ground-handling control held at 10% authority for all of
-normal flight, which a 28.6 s full-rudder 360° never fitted.
+The retired 2.12 `RollTune` almost exactly compensated for the missed quaternion double angle. Its
+agreement with the original was evidence about the decoded integrator, not permission to discard
+the measurement. Pitch and yaw still carry no calibration factor; their remaining behavior comes
+from the same decoded limiter and weathervane terms as before.
 
 ⚠ **`yaw-360` is now INFORMATIONAL, and the 28.6 s was NOT rewritten.** The footage figure stays
-recorded exactly as measured, but it does not gate anything: it disagrees with the decode, and a
+recorded exactly as measured, but it does not gate anything: the remaining 1.60 s disagrees with the decode, and a
 frame-derived duration cannot refute one (`docs/verification.md` DET-12). The row joins
 `accel-150-290` and `decel-290-150` as informational rather than as a target refitted to whatever
-the model now produces. `FlightEnvelopeTests.FlightScenarios` drops 7 → 6 to make the demotion loud,
-which is what that constant is for. The slow rudder was read at the controls and accepted before the
-row moved. Nothing is owed here — do not restore a multiplier to chase the 28.6 s.
+the model now produces. Do not restore a multiplier to chase the residual.
 
 ⚠ **One golden moved with this: `c1-flight`, re-pinned.** It flies `--hold=0.2,0.1,0,1` — held pitch
 and roll, zero rudder — so it moved on the pitch change alone, and the other fifteen shots are
@@ -3284,6 +3301,8 @@ without a provenance. Five classes are used:
 | `CollisionDamage.EntityCut` | 0.2 | decoded | `0x48d51a`/`0x48d526`, the non-player-into-aeroplane cut |
 | `CollisionDamage.EntityGrace` | 1.0 | decoded | `0x48d383`/`0x48d395`, written to both parties |
 | `CollisionDamage.SpawnGrace` | 1.5 | decoded | the spawn write of `obj+0xAC` |
+| `CollisionDamage.ContactShakeFactor` | 0.03 | decoded | `0x6080c4`, read at `0x48d3dc`; the contact shake's per-m/s term |
+| `CollisionDamage.ContactShakeCap` | 0.15 | decoded | `0x6036a8`, compared at `0x48d3eb`; the shake's ceiling in radians |
 | `AircraftContactResolver.EmbedPushOut` | 0.3 | exception | m per un-embed attempt; the loop itself has no counterpart, the original's placement cannot leave an airframe overlapping |
 | `AircraftContactResolver.EmbedTries` | 3 | exception | attempts before the airframe is destroyed instead of left inside the world; bound by `AircraftContactResolverTests` |
 
@@ -3465,20 +3484,21 @@ which are findings rather than code.
 | the six-slot control-surface mix and its 2/s exponential | decoded | `FUN_004b27e0` / `FUN_004b2a40` / `FUN_004b2ca0`, smoothing `FUN_00460490` |
 | contact placement, normal impulse and angular deposit | decoded | `FUN_0048d7f0`, `0x48e4bc` |
 | collision damage, armour before health | decoded | `FUN_0048d2c0` |
+| the per-contact camera shake | decoded | `FUN_0048d2c0`'s block-5 kick at `0x48d409`, `min(speed·s·0.03, 0.15)` |
 | the every-other-frame contact sweep | decoded | the parity gate at `0x48ed79` |
 | the nitro tank and its state machine | decoded | `FUN_004aff80`, `FUN_004b2110` |
 | engine torque: none exists | decoded | every write to `FUN_0048c470`'s angular accumulator |
 | roll-to-pitch coupling: none exists | decoded | every read of `[obj+0x100]` and `[obj+0x114]` |
 | ambient turbulence: nothing ships | decoded | shake block 5, the five xrefs of `FUN_0042c070` |
+| the one-sided negative `C_L` ceiling is unreachable | decoded | `0x48c821`–`0x48c852` builds `n` as a vector length, so `FUN_0041abd0` is never handed a negative `C_L` |
+| a dead AI's throttle and surfaces freeze at their last commanded values | decoded | `FUN_004b82d0` zeroes neither `+0x124` nor the surface deflections; `StepWreckFall` steps `_lastInput` unchanged |
 | far-field range is measured to the NEAREST human pilot | exception | plan Decision 3; the original presumes one player |
 | control surfaces, shake and nitro edges run for EVERY human pilot | exception | plan Decision 3; the original's guard is the single player |
 | the Fury's rudder animates | exception | CSVM also matches `l_rudder_rotate` and a digitless `l_elevator`, which the `%d` lookups miss |
 | a wreck flies the near-field plant | exception | the crashed-flag far arm at `0x48c4ba` is not ported; its writers are undecoded |
 | the G ramp reads the SAME tick's delivered lift | unsupported | `0x48c883` writes it before `0x48ca1e`; `Step` rotates before it translates, so CSVM is one step late |
 | the thin atmosphere band above 2000 m | unsupported | `FUN_0041aca0`'s second arm; unreachable under the 2003 m cap |
-| the one-sided negative `C_L` ceiling | unsupported | `FUN_0041abd0`'s one-sided `min` and flat −1.8 floor |
 | the `level_off_rate` auto-level torque | unsupported | `0x48cedc` / `0x48cf76`; decoded, and no shipped data authors the rate |
-| the per-contact camera shake | unsupported | `FUN_0048d2c0`'s block-5 kick at `0x48d409` |
 | the AI's `medium_aishake` on a nitro engage | unsupported | `FUN_00473430(1)` |
 | the AI's positional `snd_nitro` blip | unsupported | the 0.1 s blip plus one second after |
 | a live producer for an AI's nitro injector | unsupported | `AiSpawn.Nitro` reads roster slot 34; the mission spawner does not read roster blocks yet |
@@ -3636,8 +3656,8 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
   assembly), the linear throttle multiply and its 0.5/s slew, the thrust `pow` operands
   (`MSVCRT!_CIpow`, base `1.33·atm->k`, exponent `1.41·M`), the drag polar's variable being
   **Mach** — the last read off the raw bytes rather than out of a decompiler, which is what
-  corrected it — the conversion-free weight chain ("The force scale — settled"), and the
-  weathervane's axis, its half-angle and
+  corrected it — the conversion-free weight chain ("The force scale — settled"), the attitude
+  quaternion's doubled half-angle, and the weathervane's axis, its half-angle and
   its player-only gate ("Weathervane centring — resolved", which corrects a sign this document
   previously carried).
 - **Read directly from the executable, 2026-08-15:** that the atmosphere call is on the

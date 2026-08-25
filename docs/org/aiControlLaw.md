@@ -179,6 +179,15 @@ else:
 throttle = clamp(throttle, params[0], params[1])
 ```
 
+⚠ **CSVM does not port the distance half of that open-loop branch.** `FlightModel.FarFieldPlant`
+already takes an AI's whole plant, throttle included, off the near-field aerodynamics once the
+nearest human is beyond the 1000 m horizontal `FarFieldRangeM`, so this branch's own 2000 m gate
+never has anything left to add at the range it would fire. Nothing on the AI path carries a live
+player position for the condition to read either, so it cannot become true at all: the
+`ai-far-field-plant` engine suite (an AI held at 1200 m, past the plant's own threshold) and an
+instrumented Instant Action squadron flight both confirm it never fires. The crashed half is
+the wreck-fall arm, covered in `flightModel.md`'s crashed-flag row.
+
 **6. Stick.** With `h` the horizontal magnitude of `(bx, by)`, renormalised to 1.0 when the target
 is **behind** (`bz > 0`), pitch and yaw start at zero and:
 

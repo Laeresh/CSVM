@@ -166,7 +166,7 @@ public class ControlLimiterTests
     }
 
     /// <summary>The per-airframe table behind the two disproofs, written to whatever file
-    /// CSVM_LIMITER_OUT names (the same pattern ZzBaselineDump uses). Asserts nothing on its
+    /// CSVM_LIMITER_OUT names (the same pattern FlightEnvelopeDump uses). Asserts nothing on its
     /// own.</summary>
     [ExtractedDataFact]
     public void DumpTheLimiterMargins()

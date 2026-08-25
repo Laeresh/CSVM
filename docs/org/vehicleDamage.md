@@ -46,6 +46,9 @@ consumed (`init_health`, the four zone pairs, `armor`).
 | `FUN_004b3800` | The def-level `injure_anims` driver, keyed on the **whole-vehicle** health fraction |
 | `FUN_004b3d70` | The per-part `injure_anims` driver, keyed on **that part's** fraction |
 | `FUN_004b1790` | The low-health test that arms the damage-state call (`FUN_004b1690`) |
+| `FUN_004b1690` | The disabled-systems setter at `+0x2dc`: sets or clears one bit, and re-points the engine slot on the mask's edges |
+| `FUN_00478a00` | The vehicle-def constructor, which is where every def field with no parser token gets its value |
+| `FUN_00477b70` | The `kind_of` copy constructor: a child def starts as a field-by-field copy of its parent |
 | `FUN_004b82d0` | Death: plays the def's destroy anim, and everything that follows from being dead |
 | `FUN_0048b920` | Ground impact: picks a crash anim from the per-material table and registers the same callback |
 | `LAB_00480710` | The native completion callback a dying vehicle registers on its destroy/crash anim |
@@ -89,6 +92,46 @@ A part record (`0x58` bytes, `FUN_00476250` fills it, `FUN_0041c470` prints it):
 | `+0x3c` / `+0x40` | the part's own `injure_anims` list, `0x1c` per entry |
 | `+0x4c` | one handle per entry of that list |
 
+## The damaged state
+
+A vehicle carries a **disabled-systems mask** at `+0x2dc`, a dword of independent bits, and a timer
+beside it at `+0x2e0`. `FUN_004b1690` is its only setter: it ORs a bit in, ANDs it out, or (for the
+value 4) writes the mask outright, and it is the mask's *edges* that do work. On bit `0x2` it runs
+the engine stop `FUN_004b15c0` or the restart `FUN_004b1630`; on the whole mask leaving zero it
+stops the engine sound handle and re-runs the audio routine, and on the mask returning to zero it
+puts `engine_sound` back on the slot and re-runs it. Twelve instructions in the image reference
+`+0x2dc`, all in the flight-model and damage ranges.
+
+| Bit | Meaning | Raised by |
+|---|---|---|
+| `0x1` | the airframe is damaged | `FUN_004b1790`, below |
+| `0x2` | engine out | the choker ([ordnanceTypes.md](ordnanceTypes.md), "The choker, settled"), with the `+0x2e0` timer |
+| `0x4` | written as the whole mask, clearing the others with it | `FUN_004b1690`'s own value-4 arm |
+
+**Bit `0x1` is a health-fraction test, and the fraction is a quarter.** `FUN_004b1790` runs on an
+aircraft (mode class 0 or 4) whose bit is still clear, walks the per-part array, and takes the
+**lowest health-only fraction** `part[+0x30] / part[+0x2c]` across the parts whose flag byte
+`[part+0x21]` is set; on a vehicle with no parts it takes the whole-vehicle pair
+`[+0x2d0] / [+0x2cc]` instead. If that fraction is strictly below the airframe def's `+0xbc` the bit
+goes up. The two callers are the collision function `FUN_0048d2c0` and the take-hit routine
+`FUN_004b9bc0`, so the test is re-run after every damage event and never on a timer.
+
+⚠ **Armour is not in this fraction.** The pair divided is health max and health current; the part's
+armour pool at `+0x24`/`+0x28` is untouched here. A reading that uses the combined pool trips the
+state earlier than the original does on any zone that carries armour.
+
+⚠ **What CLEARS bit `0x1` is undecoded.** `FUN_004b1790` only ever sets it, and guards on the bit
+being clear already, so within that function the state is one-way. `FUN_004b1690` can clear any
+bit, but no caller has been traced clearing this one. CSVM recomputes the test every frame instead
+of latching, so a repair that lifts the worst zone back over a quarter returns the healthy engine
+note immediately; whether the original does the same is the part to decode before relying on it.
+
+⚠ **`def+0xbc` has no authored key.** `FUN_00479240` never writes it. The value comes from the def
+constructor `FUN_00478a00`, which stores `0.25` at `0x00478b44`, and `FUN_00477b70` copies it down
+each `kind_of` chain. Do not look for a `vehicle.zrd` key to tune: every def in the install carries
+a quarter, and the test is strictly below it. What the bit then drives is the engine-audio swap
+([formats/vehicle.md](../formats/vehicle.md), "What makes an airframe damaged").
+
 ## Where the numbers come from at spawn
 
 Four things can write the pools, in this order.
@@ -97,8 +140,9 @@ Four things can write the pools, in this order.
 max, unconditionally, and copies the whole `destroyable_parts` array across. `FUN_00476250` then
 fills each part's max and current from the def's own record, so a fresh vehicle starts at full on
 both ledgers. Because `FUN_00479240` only writes def`+0xb4` when the def actually spells `health`,
-a def chain that never spells it leaves whatever the def struct was initialised with (see "Open
-threads").
+a def chain that never spells it keeps the def constructor's value: `FUN_00478a00` stores **100.0**
+into both `+0xb4` (health max) and `+0xb8` (armour max), and `FUN_00477b70` copies them down each
+`kind_of` chain. That is why `FUN_004b3bf0`'s recompute never sees a zero max on a player plane.
 
 **2. The roster block.** `FUN_0047c210` is the spawn used for an `aiv` entry. It applies
 `init_health` (block`+0x28`) **only if greater than zero**, and `armor` (block`+0x2c`) if greater
@@ -796,10 +840,6 @@ airframes and a real spawn.
 
 ## Open threads
 
-- **Where a player plane's health max comes from.** No player def resolves a whole-vehicle pair, and
-  `FUN_00479240` leaves the field alone when the key is absent, so the value is whatever the def
-  struct is initialised with. `FUN_004b3bf0`'s recompute multiplies by that max, so it cannot be
-  zero in practice. The initialiser was not located.
 - **The `critical` flag** on a `destroyable_parts` entry is documented as "the plane is destroyed
   when this part reaches 0 HP", from the flag's name. No code on the death path reads a part flag:
   `FUN_004b82d0` has four callers and none of them is a per-part check, and `FUN_004b3bf0` only

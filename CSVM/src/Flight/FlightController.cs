@@ -661,6 +661,12 @@ public partial class FlightController : Node3D
 #pragma warning disable SA1202 // kept beside World, its seam counterpart, ahead of the public method below
     private IFlightInputSource InputSource => _inputSource ??= ResolveInputSource();
 
+    /// <summary>The raw lever/surface command last written into <see cref="_lastInput"/>, the value
+    /// <see cref="StepWreckFall"/> replays unchanged for a dead hull: internal so a suite can
+    /// assert it is bit-identical across the death handover rather than inferring the freeze from
+    /// the wreck's retained speed alone.</summary>
+    internal FlightInput LastCommand => _lastInput;
+
     private IFlightInputSource ResolveInputSource() =>
         _holdSegments != null ? new ScriptedInputSource(_holdSegments)
         : Pilot != null ? new PilotInputSource(this)
@@ -1419,7 +1425,7 @@ public partial class FlightController : Node3D
             // path = climb/dive angle of the flight path; nose = the attitude's pitch;
             // wv = wing verticality |up·Y| (1 level/inverted, 0 knife-edge) — the nose-chase factor
             GD.Print($"flight: pos=({p.X:0},{p.Y:0},{p.Z:0}) spd={_model.Speed:0.0} m/s " +
-                     $"thr={_model.Throttle:0.00} rates=({_model.BodyRates.X:0.00},{_model.BodyRates.Y:0.00},{_model.BodyRates.Z:0.00}) " +
+                     $"thr={_model.Throttle:0.00} rates=({_model.PhysicalBodyRates.X:0.00},{_model.PhysicalBodyRates.Y:0.00},{_model.PhysicalBodyRates.Z:0.00}) " +
                      $"path={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(_model.VelocityDir.Y, -1f, 1f))):0}° " +
                      $"nose={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(-_model.Attitude.Z.Y, -1f, 1f))):0}° " +
                      $"wv={Mathf.Abs(_model.Attitude.Y.Dot(Vector3.Up)):0.00}" +
@@ -1573,19 +1579,18 @@ public partial class FlightController : Node3D
         if (!halted && !Crashed)
         {
             float speedFrac = _model.Speed / _model.Stats.FdSpeed;
-            // Zones OR the hull pair, whichever is worse: an AI airframe resolves no zones, so
-            // WorstFraction alone reads 1 however hurt it is and its engine would never take the
-            // damaged swap. A player's two track each other, so this cannot move its own timing.
-            float damageFrac = 1f - Mathf.Min(Damage?.WorstFraction ?? 1f,
-                Damage?.SummaryHealthFraction ?? 1f);
+            // Zones where the airframe resolves them, the hull pair where it does not: the two
+            // arms the decoded damage-state test itself has, so nothing here picks between them.
+            float healthFrac = Damage?.WorstHealthFraction ?? 1f;
             // One drive for both paths: the original runs ONE per-frame routine for the player and
             // every AI vehicle, so the two must never read the airframe differently.
             var engineDrive = EngineAudioCurves.DriveFrom(_model, _model.Boosting);
             // Keyed to the SELECTED view (D31), not the per-frame pose the camera actually took —
             // the original's swap is a camera-mode gate, and a held numpad key or look-behind is a
             // pose, not a mode change (⚠ table row 2 traces the analogous head-look case).
-            Audio?.Update(simDt, engineDrive, speedFrac, damageFrac, ViewMode == PilotViewMode.Cockpit);
-            EngineAudio?.Update(simDt, engineDrive, speedFrac, damageFrac);
+            Audio?.Update(simDt, engineDrive, speedFrac, healthFrac, _model.EngineDead,
+                ViewMode == PilotViewMode.Cockpit);
+            EngineAudio?.Update(simDt, engineDrive, speedFrac, healthFrac, _model.EngineDead);
             // The throttle-slam gate needs the live value every frame, not just while its plume
             // is active, so it can tell a fresh climb from one already in progress.
             ThrottleSmoke?.Update(simDt, _model.Throttle);
@@ -1611,6 +1616,26 @@ public partial class FlightController : Node3D
             // damage-stage trails need no per-frame feed: the rig runtime's emitters follow
             // their pdpN/prop1 host nodes themselves
         }
+    }
+
+    internal void DetachRosterBindings(ProjectilePool pool)
+    {
+        pool.NearMissTargets.RemoveAll(target => target.ShooterId == PlayerIndex);
+        if (Body != null)
+            pool.UnregisterAircraft(Body);
+        if (_hudCanvas != null && GodotObject.IsInstanceValid(_hudCanvas))
+        {
+            _hudCanvas.GetParent()?.RemoveChild(_hudCanvas);
+            _hudCanvas.QueueFree();
+            _hudCanvas = null;
+        }
+        SpeedCue?.Dispose();
+        SpeedCue = null;
+        Race?.Remove(PlayerIndex);
+        Race = null;
+        SmokeScreens = null;
+        PauseState = null;
+        TargetSubParts = null;
     }
 
     /// <summary>Whether static world geometry blocks the segment — the turret gunners' cached
@@ -2944,6 +2969,10 @@ public partial class FlightController : Node3D
             struckRig.ArmCollisionGrace();
         }
 
+        // The block-5 kick. Crashed rides the same gate as the impulse: 0x48d3aa jumps the whole
+        // shake-and-decal branch when the player's crashed flag (obj+0x384) is set.
+        if (outcome.ShakeMagnitude > 0f && !Crashed)
+            Shake?.ContactHit(outcome.ShakeMagnitude);
         if (outcome.DamageFlashText is { } flash)
             _pilotHud.Flash(flash);
         _model.Position += outcome.PushOut;

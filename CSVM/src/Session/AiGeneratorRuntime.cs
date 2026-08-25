@@ -9,7 +9,7 @@ namespace CSVM.Session;
 
 /// <summary>Runs a mission's enemy generators (M4 B6 + F20): each loaded
 /// <see cref="EnemyGeneratorDef"/> gets a <see cref="GeneratorCycle"/> and spawns AI aircraft
-/// through <c>GameSession.SpawnAiAircraft</c> as its waves come due, dropping at the origin
+/// through the handed roster callback as its waves come due, dropping at the origin
 /// node's live position in the authored drop attitude and patrolling the cyclic net pick through
 /// <see cref="AiNetFollower"/>. A generator whose host or whole nets list fails to resolve is
 /// dropped at load, never loaded inert (docs/formats/mission-entities.md). Every load drop, door

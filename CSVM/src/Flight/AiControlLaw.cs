@@ -93,10 +93,6 @@ public static class AiControlLaw
     /// <summary>How fast the commanded throttle walks toward the desired speed, per second.</summary>
     public const float ThrottleRatePerS = 0.35f;
 
-    /// <summary>Past this range from the player the throttle is set open loop from the desired
-    /// speed instead of walked toward it.</summary>
-    public const float OpenLoopPlayerRange = 2000f;
-
     /// <summary>The projectile speed the head-on firing solution is solved at, a hard immediate in
     /// the original rather than a real round's speed.</summary>
     public const float GunSolutionSpeed = 860f;
@@ -148,14 +144,12 @@ public static class AiControlLaw
 
     /// <summary>One step's stick and throttle for an aim point. <paramref name="emergency"/> is the
     /// crash-recovery arm; <paramref name="engaged"/> is the combat driver's authority bonus;
-    /// <paramref name="gunLead"/> swaps the fly-to solve for a firing solution. <paramref
-    /// name="playerPosition"/>, when known, arms the far-field open-loop throttle.
+    /// <paramref name="gunLead"/> swaps the fly-to solve for a firing solution.
     /// <paramref name="stationKeeping"/> swaps the desired-speed ceiling for
     /// <see cref="StationCeiling"/>, and is the escort's alone.</summary>
     public static FlightInput Steer(FlightModel model, Vector3 aimPoint, Vector3 aimVelocity,
         in AiLawParams p, float throttle, float dt, bool emergency = false, bool engaged = false,
-        bool gunLead = false, float skillFactor = 1f, Vector3? playerPosition = null,
-        bool stationKeeping = false)
+        bool gunLead = false, float skillFactor = 1f, bool stationKeeping = false)
     {
         var stats = model.Stats;
         var att = model.Attitude;
@@ -207,7 +201,7 @@ public static class AiControlLaw
             h = 1f;
         }
 
-        float lever = Throttle(model, stats, want, throttle, dt, p, pos, playerPosition);
+        float lever = Throttle(model, want, throttle, dt, p);
 
         // ⚠ CLEARING rudder_tol picks the BANK branch, so a higher rudder_tol means MORE rudder.
         // Astern h is pinned to 1 and always banks; ahead it is the true error. aiControlLaw.md
@@ -320,16 +314,10 @@ public static class AiControlLaw
             : delta.Normalized();
     }
 
-    private static float Throttle(FlightModel model, PlaneStats stats, float want, float throttle,
-        float dt, in AiLawParams p, Vector3 pos, Vector3? playerPosition)
+    private static float Throttle(FlightModel model, float want, float throttle, float dt,
+        in AiLawParams p)
     {
-        float lever;
-        bool farFromPlayer = playerPosition is { } pp
-            && pos.DistanceSquaredTo(pp) > OpenLoopPlayerRange * OpenLoopPlayerRange;
-        if (farFromPlayer && stats.FdSpeed > 1e-3f)
-            lever = want / stats.FdSpeed;
-        else
-            lever = throttle + (want <= model.Speed ? -ThrottleRatePerS * dt : ThrottleRatePerS * dt);
+        float lever = throttle + (want <= model.Speed ? -ThrottleRatePerS * dt : ThrottleRatePerS * dt);
         return lever > p.SpeedCap ? p.SpeedCap : Mathf.Max(lever, p.ThrottleMin);
     }
 

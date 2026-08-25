@@ -70,19 +70,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   wherever either exists. Where an entry rests on the document alone, it says so and marks the
   value TUNE.
 - **The flight constants are coupled and `--run-tests` guards them.** Thrust sets speed, speed
-  scales the yaw `eff`, so a change in one moves others; the `flight-envelope` suite asserts six
-  measured scenarios and will fail if a change breaks one. There is no thrust scale left to turn:
+  scales the yaw `eff`, so a change in one moves others; `FlightEnvelopeTests` asserts five
+  decoded scenarios and will fail if a change breaks one. There is no thrust scale left to turn:
   thrust is `EnginePower · ref_area · curve(Mach) · lever`, every number in it is the executable's,
   and the level-equilibrium curve it produces is asserted per airframe and per lever position
   ([`docs/org/flightModel.md`](docs/org/flightModel.md), "Part-throttle equilibrium"). Chasing a
   *transient* or a feel report through the force path is the forbidden move. ⚠ **`PitchTune`/`YawTune`/`RollTune` are no longer
   in that category: all three are 1, because `FUN_0048c470` carries no per-axis factor on any axis
   ([`docs/org/flightModel.md`](docs/org/flightModel.md), "The `*Tune` rates"), and
-  `FlightConstantInventoryTests` now pins them there.** Pitch-rate survives the change at
-  35.26 °/s against 33.00 ± 3. **`yaw-360` is
-  now informational**: the model takes 49.12 s against the footage's 28.60 s, the slow rudder was
-  accepted at the controls, and the row is a recorded decode-vs-footage conflict like
-  `accel-150-290` and `decel-290-150`. The 28.60 was not rewritten, and `FlightScenarios` is 6.
+  `FlightConstantInventoryTests` now pins them there.** Every asserted target is the decoded
+  plant's own value or a named exception; a footage figure that disagrees (the filmed 33.00 °/s
+  pitch rate, the 28.60 s `yaw-360`, `accel-150-290`, `decel-290-150`) is discarded and kept only
+  as row prose that gates nothing ([`docs/org/flightModel.md`](docs/org/flightModel.md), "Parity
+  ledger"). `FlightScenarios` is 5.
 
 ## Damage & destruction
 
@@ -143,16 +143,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`FUN_004b3800`, `docs/org/vehicleDamage.md` "Damage staging"): the whole-vehicle health fraction
   at 10%, which a graze that leaves the hull healthy never reaches — so this clip showing no
   whole-plane trail is expected, not a puzzle.
-
-- `BL-442` `[Bug]` **The engine sputters at the slightest damage.** Reported at the controls: one
-  shallow graze and the engine note drops to a sputter. `FlightAudio.UpdateEngineSlot` swaps to
-  `snd_damagedengine` on any damage at all (`damageFrac > 0`, any zone below full), and
-  `EngineAudioCurves.EngineDefFor` draws the pitch multiplier uniformly across the authored
-  `[DamagedEnginePitchLo, Hi]` range, so a single graze can land a 0.02 pitch draw. Decode what the
-  original keys the damaged-engine swap on (a health fraction, the engine zone, or a damage stage)
-  and whether the pitch is drawn or derived, then port that. ⚠ Traps: do not add a threshold by
-  feel; the damage-stage decode in `docs/org/vehicleDamage.md` is the place the gate probably
-  lives. Nitro's engine variants (`git log --grep=BL-089`) share this slot, so check both.
 
 - `BL-122` `[Tuning]` `[Owed-playtest]` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: the **debris-arc trajectory** (the executable decode is settled — `translation_range` gives
@@ -802,6 +792,49 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `bias × −750` decode), `AiTargetRanking.ObjectiveBiasFor`, `AiSkills.RosterRatingBiases`.
 
 ## Flight model & collision physics
+
+- `BL-443` `[Fidelity]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
+  late.** `FUN_0048fc40` (call `0x48c883`) writes the delivered body-up G and the ramp reads it at
+  `0x48ca1e` in the same tick, before the torques; `FlightModel.Step` rotates before it translates
+  and reads the previous step's. Porting is the force-from-entering-attitude order of `Step`, which
+  moves every envelope row, so it needs its own eleven-airframe `--dump-flight=all` A/B with each
+  moved row attributed. Bounded: the ramp bites near `highGs` (9) and the stock full pull peaks at
+  5.83 G. Ledger row "the G ramp reads the SAME tick's delivered lift" in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md).
+- `BL-445` `[Tooling]` **Dump scenarios for the plant branches the envelope dump never enters.**
+  The dump drives 7 of 16 decoded branches (8 on the autogyro). Reachable but unentered:
+  `pitch-fade`, `g-clamp`, `g-ramp` (a sustained outside push), `dive-cap`, `stall` and the
+  low-speed authority ramp (a slow-flight decay). Each already has a unit instrument; the branch
+  coverage line in the ledger names it. Add scenarios only if whole-envelope coverage is wanted;
+  do not invent a manoeuvre to raise the number.
+- `BL-447` `[Fidelity]` **The eight unsupported nitro and shake edges in the parity ledger.**
+  `docs/org/flightModel.md` "Parity ledger", class unsupported, beyond `BL-443`: the thin
+  atmosphere band above 2000 m, the `level_off_rate` auto-level torque, the AI's `medium_aishake`
+  on a nitro engage, the AI's positional `snd_nitro` blip, the nitro decay lockout on a runtime
+  callback, the mouse-flying arm's `is_autogyro` roll/yaw exchange, plus `BL-448` and `BL-450`.
+  Each is small and independently landable; each names its address in the table.
+- `BL-448` `[Research]` **Is the 2003 m `AltitudeCapM` the dense-band edge?** The measured
+  flight ceiling (an intentional exception) sits 3 m above the decoded atmosphere band boundary
+  (2000 m, `6561.6796875` ft, writer `FUN_00463640`). If the original's ceiling is the thin band's
+  own lift loss rather than a separate cap, the exception becomes a decoded mechanism and the cap
+  constant goes. Lead recorded in the plan's A1 section; `AtmosphereBandTests` has the band.
+- `BL-450` `[Feature]` **Fuel burn and the empty-tank lever freeze.** `FUN_0048e580` burns
+  `[obj+0x134] −= dt · throttle · 5` (player-only, `0x48e603`), and a zero tank jumps past the
+  throttle slew (`0x48e5f7` to `0x48e6c9`), freezing the lever where it stands rather than closing
+  it. No fuel model exists here; the shipped missions never run a tank dry, so this matters only
+  for a long-flight mode. Nitro burns no fuel (`0x48e603` reads the lever, not the boost flag).
+- `BL-453` `[Feature]` **The mission spawner does not read roster blocks.** `AiSpawn.Nitro` reads
+  roster slot 34 (`0x475c9a`, three shipped rosters author it) but the mission spawner never
+  fills it, so an AI nitro injector has no live producer (ledger row, unsupported). Read the roster
+  block at spawn; check which other roster slots the spawner drops on the same path.
+- `BL-454` `[Owed-playtest]` **Nitro dial sweep against the original.** `NitroGaugeNeedleTests`
+  pins the needle law, but nobody has put the moving dial beside a screenshot of the original's.
+  One screenshot of each at full, half and empty tank.
+- `BL-456` `[Research]` **Trace the writers of the crashed flag `[obj+0x384]`.** Its readers are
+  decoded (`0x48c4ba` selects the far-field arm, `0x48cd4a`, `0x48dfbe` gives a crashed hull
+  severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
+  so the ledger keeps "a wreck flies the near-field plant" as an exception. Decode when and by
+  whom it is set so the wreck can fly the decoded arm.
 
 ## Environment & world
 
@@ -1521,27 +1554,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   passing plane. Treat Doppler on IA traffic as **unverified**, and measure it (same method: track a
   tonal component against the source WAV) before implementing it.
 
-- `BL-223` `[Bug]` `[Owed-playtest]` **Damaged-engine loop gates on the wrong thing: any part's worst fraction, not the
-  engine part's health pool (B5, 2026-08-01; regated per playtest 2026-08-06, PT-26).** Today
-  `PlaneStats`/`FlightAudio` blend `snd_damagedengine` from `1 - PlaneDamage.WorstFraction` across
-  ALL parts — first scratch anywhere brings the loop in. Two fixes, both data-supported:
-  1. **Gate by zone:** blend from the **engine-marked destroyable part(s)** only — the
-     `destroyable_parts` `engine` flag marks the part the engines physically live in (tail on the
-     Bloodhawk, wings on the Balmoral; `docs/formats/vehicle.md`), matching the user's read of the
-     original. Damage elsewhere leaves the engine sounding healthy.
-  2. **Gate by pool:** the loop responds to that part's **hit-point pool**, not its armor —
-     armor-only damage stays silent. Implementable now: the two-pool
-     `PlaneDamage.Apply(part, healthDamage, armorDamage)` landed 2026-08-04 (`PLAN-armour-layer`).
-  The `damaged_engine_sound` `f0/f1` fade window (`["snd_damagedengine", 0.0, 1.0]`, shared via
-  `basic_airplane`) then reads over the engine part's health fraction. A pleasant consequence:
-  with armor spent first, the loop naturally starts only once real airframe damage exists — which
-  answers the old "should it ramp rather than snap on first scratch" question by construction.
-  No capture owed: the `engine` data flag plus the user's recollection carry the zone rule, and
-  filming the original to prove armor hits don't trigger it would be trying to hear a negative.
-  The gain TUNE survives as this entry's tail: `FlightAudio.DamagedEngineMixGain` (default 1.0,
-  the def's own sounds.json volume, unattenuated) has no reference recording of its own — judge it
-  against the healthy engine at the controls after the regating. Config keys:
-  `flightAudio.damagedEngineMixGain`.
+- `BL-459` `[Feature]` **The damaged engine's re-arm delay is not ported.** When the engine slot's
+  handle is not playing and the airframe is damaged, `FUN_004b18a0` does not restart the damaged
+  loop at once: it accumulates the frame time into the airframe DEFINITION's field at `def+0x88`
+  and only starts a loop once that total passes a threshold redrawn each frame as
+  `3.0 + 2·rand()/32767` seconds, resetting the field to zero as it does
+  (`docs/formats/vehicle.md`, "What makes an airframe damaged"). CSVM restarts the loop the frame
+  the swap is decided, so a damaged aircraft coming back inside `AiEngineAudio`'s 2000 m cull is
+  audible three to five seconds earlier than the original's would be.
+  *How you would know:* an AI plane damaged below a quarter health, flown out past 2000 m and back,
+  logs its `slot 0 -> snd_damagedengine` line three to five seconds after the `audible` line rather
+  than beside it.
+  ⚠ Traps: the timer sits on the **definition**, not the instance, so every aircraft sharing an
+  airframe def shares one counter and one draw. Port that sharing or record why not, but do not
+  quietly give each aircraft its own. A looped `snd_damagedengine` that is still playing never
+  reaches the timer, so this is only reachable through the cull (or a stream that ends), which is
+  also why it is small. Rejected: treating the delay as a crossfade; the transition is a hard cut.
 
 - `BL-252` `[Tuning]` `[Owed-playtest]` **Overspeed-whine volume** (`prop_sound`). `CAP-10` plus a
   live cross-check incidentally confirmed the **gating** of the original's dive/overspeed sound and
@@ -1583,8 +1611,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-281` `[Tuning]` `[Blocked: CAP-27]` **The ricochet sounds are audible but very faint.** `PT-25` (c), 2026-08-05:
   `snd_ricochet1–4` play under the per-impact spark burst but sit too low to read. A mix-gain
-  question with no reference recording behind it — same shape as `BL-223`'s damaged-engine gain,
-  and to be judged at the controls rather than derived. ⚠ Judge only after `CAP-27` decides
+  question with no reference recording behind it, to be judged at the controls rather than derived. ⚠ Judge only after `CAP-27` decides
   whether the original has this effect at all: `BL-090` already calls the 0.99 `injure_anims`
   entry that drives it "plausibly an authoring leftover", present on 1 of 11 aircraft, so the
   capture may delete the feature rather than tune it.
@@ -1611,21 +1638,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `FlightAudio.MixGain` is `1` in 1P (no attenuation applies), so this is the vehicle.json
   `engine_sound` mix level (or the detuned dual-voice stack's combined gain, `EngineDetuneRatio`)
   read too loud on its own terms. *Fix shape:* a level match by ear against the reference video,
-  same method `BL-223` and `BL-269` already used for this signal chain.
+  the same method `BL-269` already used for this signal chain.
 
-- `BL-424` `[Feature]` **A choked engine still sounds like a running one.** `PT-69` (d): the choker
-  (`wep_12`, `TANGLER`) cuts thrust for 5–13 s and nothing in the audio chain reacts, so a choked
-  aircraft, your own included, keeps its full engine loop. `FlightAudio` drives the loop from
-  throttle and damage (`damaged_engine_sound`), never from `FlightController`'s engine-dead timer.
-  ⚠ What the original plays over the cut is **undecoded**: the `PT-69` row asserted an engine-loop
-  swap, but no `docs/org` page records one, so decode the original's behaviour (silence, a stop/start
-  pair, or a second loop) before building. Scope is every loop a session renders: the own-ship one,
-  and the AI planes' positional loops (`PLAN-ai-damage-and-engine-audio`), which read the same
-  engine model and would otherwise keep running through a choke too.
-  *Fix shape:* gate `FlightAudio`'s loop on the engine-dead timer the same way the thrust cut reads
-  it, with whatever the decode says the original plays over the gap.
-  *Cross-refs:* `BL-421` (closed; it confirmed the engine-audio model at the controls), `BL-223`/`BL-285`
-  (the loop's damage and start/stop inputs), `BL-406` (closed; the choke itself landed there).
+- `BL-424` `[Research]` **What else a choked engine does besides swap its loop.** The swap itself is
+  decoded and ported: the choker raises bit `0x2` of the disabled-systems mask, the engine-audio
+  routine tests the whole mask for nonzero, so a choked aircraft plays `snd_damagedengine` at a
+  drawn pitch exactly as a badly hurt one does (`docs/formats/vehicle.md`, "What makes an airframe
+  damaged"). Both the own-ship and the AI arm read the same gate. What is left is the pair of
+  functions the mask's bit-`0x2` edges call, `FUN_004b15c0` and `FUN_004b1630`, which
+  `docs/org/ordnanceTypes.md` names the engine stop and restart without either having been opened:
+  if they also cut a prop loop or fire a one-shot, a choke sounds like more than a definition swap.
+  *Fix shape:* open both functions, then port whatever they do beyond the swap.
+  ⚠ Traps: do not re-decode the swap, and do not read "engine stop" as an audio call on the
+  strength of its name, since it sits on the thrust path's flag and may touch no sound at all.
+  Rejected: gating the loop on `FlightController`'s engine-dead timer as a bespoke rule; the timer
+  reaches the audio through the decoded mask test and needs no second path.
+  *Cross-refs:* `BL-421` (closed; it confirmed the engine-audio model at the controls), `BL-285`
+  (the loop's start/stop inputs), `BL-406` (closed; the choke itself landed there).
 
 ## Cameras & views
 
@@ -1859,24 +1888,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     `FIRE_RATE` (8.0 for wep_40) — the "12–13/s" was a redraw-window artifact — and 60 fps
     pose-interpolated render loss tested NEGATIVE.)
   **Still open, all data/fidelity questions:**
-  - (b) the impact sources' per-event quantities are stand-ins declared TUNE (gun hits reuse
-    caliber, rockets use armor damage) — a being-hit capture pins them.
+  - (b) the impact sources' `magnitude_factor` constants are decoded (`bullet_impact` 5e-4,
+    `missile_impact` 1e-3 plus `he_factor` 2.0 on HE rounds, both read at `FUN_004b9bc0`'s block
+    1/2 kicks), but what each multiplies is not: the per-event drive quantity `FUN_004b9bc0` passes
+    alongside `magnitude_factor` is undecoded, so CSVM's stand-ins (an incoming gun round reusing
+    the caliber law, a rocket's armor damage doubled by `he_factor`) stay TUNE. A being-hit capture
+    pins them; a further decode of `FUN_004b9bc0`'s own multiplicand would settle it without one.
+    The `explosion` source's magnitude term is decoded as never filling in the original: the parser
+    reads the key `max_magnitude` into block 3's slot while `shakes.zrd` authors `magnitude_factor`
+    instead, so the retail explosion shake is zero regardless of blast damage
+    ([`docs/org/shakes.md`](docs/org/shakes.md)). `PlaneShake.ExplosionAt` still kicks the authored
+    `magnitude_factor` against a damage stand-in, so the port and the decode now disagree here;
+    matching the original means zeroing that kick, not tuning it.
   - (c) the `ON_CALL` `small/medium/large` `damage_shakes` defs stay unwired — unknown caller,
     likely script/set-piece.
-  - **(d) high_speed shares the gun's random-walk accumulator — decoded, engine port now owed.**
-    The 2026-08-18 excess-over-gate correction (`(speedRatio − gate)/quotient`, `554edcee`) returned
-    the dive rattle to ~zero at rated max, but the ported gun buzz (~7× louder) exposes it as ~6× muted
-    vs the original's dive. **2026-08-19 the binary settled the open hypothesis: the original drives
-    `high_speed` through the SAME random-walk accumulator as the gun** — `FUN_0048c470` (per-frame
-    player updater) reads `camera+0xec/0xf0` (`min_speed`/`magnitude_quotient`) and calls
-    `FUN_0042c070(4, mag)` = the identical `FUN_0042be10` accumulator the `fire_bullet` path uses
-    (component index 4 vs 0, kicking 3-axis accumulators `camera+0xd4/+0xd8/+0xdc` per frame). So the
-    original is NOT the remake's damped sawtooth — it is a second random-walk accumulator fed by the
-    existing excess-over-gate `SetSpeedRatio` law. That mechanism mismatch (sawtooth vs random-walk) is
-    the root cause of the ~6× muted dive. Trace: `analysis/gun-wobble-shake/FINDINGS.md` (high_speed
-    section) and `docs/formats/shakes.md`. **Open/fidelity action:** port `PlaneShake`'s `_speed` path
-    to a `_fire`-style random-walk accumulator (tune `GunBuzzKickScale`-equivalent knob), then playtest
-    the dive against the original clip.
+  - **(d) `high_speed` drives the same random-walk accumulator as the gun, decoded; the engine
+    port is owed.** The per-frame player updater `FUN_0048c470` reads block 4's `min_speed`/
+    `magnitude_quotient` fields and calls the identical `FUN_0042c070`/`FUN_0042be10` dispatcher the
+    `fire_bullet` path uses, just on component index 4 (`camera+0xd4/+0xd8/+0xdc`) instead of 0,
+    every frame the excess-over-gate law (`(speedRatio − min_speed)/magnitude_quotient`,
+    `PlaneShake.SetSpeedRatio`) is positive. CSVM's `_speed` oscillator is a deterministic damped
+    sawtooth, a different mechanism from the original's random walk, and next to the gun buzz now
+    ported to its own random-walk step, the sawtooth dive rattle reads muted. **Open/fidelity
+    action:** give `_speed` a random-walk accumulator on the pattern of `_fire` (a
+    `GunBuzzKickScale`-equivalent tune knob), fed by the existing `SetSpeedRatio` law, then playtest
+    the dive against the original clip to judge the ported magnitude. Trace:
+    `analysis/gun-wobble-shake/FINDINGS.md` (high_speed section) and
+    [`docs/org/shakes.md`](docs/org/shakes.md).
   - **(fidelity) judge the port, then dial.** Playtest owed: fly the merged build and judge
     `GunBuzzKickScale` (1.0 default = faithful step) against the original clip before touching it.
     Two honest caveats: the random-walk **decay model (τ≈80 ms) is an engineering guess, not a
@@ -2284,6 +2322,21 @@ usual.
 
 ## Missions, modes & campaign
 
+- `BL-469` `[Feature]` **An escort cannot hold station on a leader using nitro, and nothing measures
+  the case.** *Evidence:* the two injectors are independent switches, so the asymmetry is reachable
+  in a real game: a wingman gets one only when its own `aiv` block authors `nitro` slot 34
+  (`AiFlightAssembler.cs:112` through `AiSkills.RosterNitro`, and only three shipped blocks author
+  1), while the player's comes from their own customised aircraft
+  (`HumanFlightAdapter.cs:138`, `CustomPlaneBuild.HasNitrous`). A player who has bought an injector,
+  escorted by a wingman whose block authors none, gives the leader a thrust term the escort cannot
+  command at any lever, so no desired-speed ceiling can keep it in place. `wingman-station` measures
+  the symmetric no-nitro case on both sides, which is the right default and the one the reported
+  symptom came from, but its comment does not say so. *Fix shape:* a second `[flown]` leg with the
+  leader's `Nitro.Installed` true and the wingman's false, and then a decision about what the escort
+  should do when it cannot match its leader at all. *⚠ Traps:* do not fold this into `BL-457`: that
+  item's numbers are the symmetric case and are sound; this is a different pairing. Do not "fix" it
+  by installing nitro on every wingman, which would contradict the roster data.
+
 - `BL-458` `[Bug]` **`DANGER_ZONES_COMPLETED` can never be satisfied in a flown campaign mission.**
   *Evidence:* a campaign mission's danger zones are the same `dzpathN` gate geometry `--stunt`
   reads, authored from a different surface: no `ia.json` `dzones` list, but the mission's own
@@ -2302,7 +2355,27 @@ usual.
 
 - `BL-457` `[Bug]` **The campaign wingman ends up high and far behind, so it reads as having spawned
   in the wrong place.** Seen at the controls: "in the original the wingman spawns beside me. here he
-  spawns above the island flying towards me." *Evidence:* **the spawn is correct and this is not a
+  spawns above the island flying towards me."
+  ⚠ **Merging main's flight model made this materially WORSE, and `wingman-station` is red on the
+  merged tree.** Same suite file, byte-identical, same seed, `player_pfighter`, leader on a plain
+  full-throttle human stick: our own plant read mean 296 m / worst 702 m without the ceiling lift
+  and 256 m / 590 m with it; main's plant reads **mean 1096 m without the lift and 415 m with it**.
+  The `player_bhawk` arm moves the same way (1023 m to 267 m). Three of the suite's gates now fail.
+  Two conclusions. The `StationCeiling` lift is doing MORE work under main's plant, not less: it cuts
+  the mean by roughly two thirds and collapses the escort's time on the far-field plant from 26.8 %
+  of steps to 3.0 %, so the open question of whether to keep it resolves toward keeping it. And the
+  remaining defect now has a second, larger contributor in `FlightModel` itself.
+  *⚠ Traps:* ⚠ **Nitro is ruled out and must not be re-chased.** A runtime probe on both rigs reads
+  `leader installed=False everBoosted=False, wingman installed=False`, and the suite file is
+  unchanged across the merge, so the harness is not the variable. ⚠ The `1.50` lever in the trace is
+  the WINGMAN's, capped by `AiLawParams.Wingman`'s own `SpeedCap`, not the leader's; the leader peaks
+  at lever 1.00 and its 127 m/s against `fd_speed` 113.0 is an ordinary shallow dive, not a boost.
+  ⚠ Main's deletion of `AiControlLaw`'s far-field branch is not the cause either: that branch keyed
+  off `AiPilot.PlayerPosition`, which this suite never assigned, so it was already dead here.
+  ⚠ **Trust the `mean` column, not `worst`.** The sampled trace never exceeds 470 m over a 120 s run
+  while `worst` reads 3797 m, so that excursion is a between-samples transient and possibly a
+  position discontinuity (`INSTR-18`'s altitude-cap teleport is a candidate); it needs a finer trace
+  before anyone tunes against it. *Evidence:* **the spawn is correct and this is not a
   placement bug.** `C3/M01`'s `aiv.zrd` authors `player` at `[-1426, 150, -1813]` yaw 40 and
   `wingman_1` at `[-1378, 150, -1706]` yaw 40, 117 m apart at the same altitude and heading, and the
   spawner puts it exactly there (`CampaignRoster.cs:191-192`, confirmed in a live run). Traced from
@@ -2586,24 +2659,6 @@ usual.
   quarter-width four-player pane has no room for a prose block, so the panes are not simply "the
   screen plus a description" once the strings exist. (c) `langui.dll` is in the game install, which
   is git-ignored and absent from worktrees — read it by absolute path.
-
-- `BL-417` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` flakes and aborts the whole battery.**
-  It asserts a `PerfSample.Scope` allocates zero bytes and intermittently reports **3984**, the same
-  value every time. Seen twice in one session on an unchanged binary, and it passes on an immediate
-  re-run both alone and in the full unit suite, so it is timing, not a real allocation regression.
-  The cost is out of proportion to the defect: `RunTests.ps1` stops at the units stage, so a flake
-  here means the engine suites, the goldens and the hitch check never run at all, and an unattended
-  run reports a red battery for a reason unrelated to whatever it was testing.
-  ⚠ **Traps.** (a) Do not "fix" it by loosening the assertion to a byte budget: zero-allocation is
-  the property the test exists to hold, and a threshold would hide the regression it guards. The
-  fault is in what makes the measurement noisy (GC timing or JIT on first entry), not in the bound.
-  (b) 3984 being byte-identical across occurrences is a lead worth following, not a coincidence to
-  average away. (c) Whatever the fix, the battery should not lose four stages to one unit flake;
-  that ordering question is worth answering separately.
-  *Status:* `BL-379` reported the same flake (at 4872 rather than 3984) and was closed by a warm-up
-  loop that excludes runtime JIT/OSR noise from the measured window. That fix plausibly covers this
-  too, so the first step is to re-verify rather than to re-diagnose; what stays open regardless is
-  (c), the battery losing four stages to one unit flake.
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled

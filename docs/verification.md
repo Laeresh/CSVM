@@ -42,8 +42,12 @@ derived by setting it equal to the clip's rendered RMS — but a kick of envelop
 renders ~0.28× the law's literal number *by construction* and this was misread as a render-pipeline
 loss. What the engine renders was decodable from the authored constants + oscillator math alone
 (~0.20 px/frame) with no clip; the clip only settles the later fidelity target. A fitted constant
-is only interpretable if it names the quantity it multiplies at the right point in the chain
-(`BL-266(a)`; `analysis/gun-wobble-shake/`).
+  is only interpretable if it names the quantity it multiplies at the right point in the chain
+  (`BL-266(a)`; `analysis/gun-wobble-shake/`).
+- **METHOD-26** — **Carry a decoded representation through its consumer before naming its physical
+  quantity.** `obj+0x16c` looked like angular velocity, but `FUN_0053fbf0` consumes it as a
+  quaternion half-angle: the matrix turns by twice the stored vector. Comparing the accumulator
+  alone left pitch, yaw and roll exactly half-strength while every local value appeared correct.
 
 ## DIAG — chasing a symptom
 
@@ -458,11 +462,16 @@ is only interpretable if it names the quantity it multiplies at the right point 
   "falling" in one frame and a distance check passes on nothing having flown. Measured on the death
   path, where the same wreck spawned at 1500 m holds its altitude to the metre across all three
   seconds, a dead hull gliding rather than dropping.
-- **INSTR-19** — **A flight-dump hash compares only against one taken on the same host: the Godot
-  runtime and the `dotnet test` host do not agree to the last digit.** The eleven-airframe dump from
-  `--dump-flight=all` and from `ZzBaselineDump` differs on 9 of 1123 lines, each by one unit in the
-  last place of a knife-edge sample, on identical code. Take the before and after of an A/B the same
-  way, or the diff reports the runtimes.
+- **INSTR-19** — **The flight-dump hash agrees across the Godot runtime and the `dotnet test` host,
+  but only because the print is rounded past where they diverge. Prefer a same-host A/B anyway.**
+  The two runtimes' knife-edge values themselves differ by 1e-4 to 3e-2 (float32 accumulation, not
+  the plant), so the agreement is a property of the shipped samples clearing their rounding
+  boundaries, not a guarantee: a new sample, or a plant change that lands a value near a boundary,
+  can put the two hosts back on different hashes. Treat a cross-host mismatch as a rounding
+  boundary to investigate before it is a plant change. **Cost of the rounding: Δalt reads to the
+  nearest 10 m**, so an altitude move smaller than that does not show in the dump at all; every
+  other column lost one digit. The asserted rows are unaffected, since `KnifeEdgeTests` and
+  `ParityLedgerTests` read the probe's values rather than this text.
 - **INSTR-20** — **A negative test that also steps the mission script can arm the very gate it is
   asserting stays shut.** Drive only the subsystem under test through the control leg. Measured on
   the `landings-approach-trigger` suite: "flying the drop approach before the mission arms it starts
