@@ -1970,6 +1970,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-486` `[Feature]` **The profile screen opens on the name field, so returning to a campaign means
+  walking the cursor down to your own profile every time.** *Evidence:* reported at the controls,
+  wanting the last profile already selected so that confirming is one press.
+  `ICampaignPage.OpeningRow` is the seam and it exists (`CampaignFlow.cs:69`, defaulted to 0 at
+  `:416`, consumed at `:302` and `:322`), but `CampaignRosterPage` does not override it, so the
+  cursor opens on row 0, the name field, above `Flow.Roster`'s rows. Nothing records which profile
+  was last used: `CampaignProfileStore.List` (`:312-328`) walks the profile directories and sorts
+  the names alphabetically, and `CampaignProfileDef` carries no last-played stamp. *Fix shape:*
+  decide where "last used" is recorded BEFORE writing the override, and check what the original
+  records rather than inventing a sidecar, since it must remember the current player somewhere to
+  reopen a campaign at all. Only then override `OpeningRow` to that profile's row. *⚠ Traps:* a
+  directory timestamp is not a last-played record, since any write to a profile touches it and a
+  restore or a copy rewrites all of them at once. The roster is alphabetical, so a row index is not
+  stable across creating or deleting a profile and the stored value has to be the NAME.
+  `CampaignFlow.ClampedRow` runs right after `OpeningRow`, so an override naming a profile that has
+  since been deleted must land somewhere sensible rather than out of range. *Cross-refs:*
+  `PLAN-M5-polish.md` G70; `BL-449` (the composed board these screens draw through).
+
 - `BL-483` `[Bug]` **`campaign-objectives-hud` fails on C4 and C5, on its wake-cue check rather than
   its readout check.** *Evidence:* found while fixing the same suite's completion driver, which now
   passes on C1, C2 and C3. What fails on C4 and C5 is `DriveWakeCue`'s assertion that at least one

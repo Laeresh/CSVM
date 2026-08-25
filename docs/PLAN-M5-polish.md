@@ -133,6 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 67. ☑ `BL-181`'s blocker now reads as discharged when it is not
 68. ❌ Why the scaffolding read differently at the controls (`BL-477`), disproved: ours reproduces it
 69. ☐ The briefing screen only repaints on a keypress, so its reveal advances invisibly (`BL-485`)
+70. ☐ The profile screen does not open on the profile you last played (`BL-486`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -2470,3 +2471,32 @@ frame rate is not obviously free. ⚠ **The instrument that missed this must cha
 `--menu=campaign-briefing:<s>` advances the reveal and then draws once, which is exactly why B14's
 timed shots at 6, 12, 24, 40 and 70 s all read correctly while the live screen does not. A check for
 this has to drive frames.
+
+## G70 ☐ The profile screen does not open on the profile you last played (`BL-486`)
+
+**Goal.** Returning to a campaign is one press: the profile screen opens with the last played profile
+already under the cursor.
+
+**Evidence (confidence: traced-to-code for the gap, undecoded for where the answer is stored).**
+Reported at the controls. The seam exists and is simply not overridden: `ICampaignPage.OpeningRow`
+(`CampaignFlow.cs:69`) defaults to 0 (`:416`) and the flow reads it on every arrival (`:302`,
+`:322`), and `CampaignRosterPage` takes the default, so the cursor opens on the name field above the
+roster's own rows. What is missing underneath is the record: `CampaignProfileStore.List`
+(`:312-328`) walks the profile directories and sorts alphabetically, and `CampaignProfileDef` carries
+no last-played stamp, so there is nothing to point the cursor at yet.
+
+**Approach.** Settle where "last played" is recorded before writing the override. The original has to
+remember the current player to reopen a campaign at all, so read what it records and where, and only
+invent a store if the decode shows none.
+
+**Model recommendation.** medium. The override itself is small; the storage decision is the item.
+
+**Verify.** A driven-cursor check over a roster of several profiles: the screen opens on the one last
+played, and still opens somewhere sensible when that profile has since been deleted.
+
+**⚠ Traps.** ⚠ A directory timestamp is not a last-played record. Any write to a profile touches it,
+and a restore or a copy rewrites all of them at once. ⚠ The roster is alphabetical, so a row index is
+not stable across creating or deleting a profile: the stored value has to be the name. ⚠
+`CampaignFlow.ClampedRow` runs immediately after `OpeningRow`, so an override naming a profile that
+no longer exists must land somewhere sensible rather than out of range. ⚠ The user's own profile
+`Gab` is read-only evidence and is never a write target in a test.
