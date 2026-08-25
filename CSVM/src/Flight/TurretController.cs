@@ -53,11 +53,11 @@ public sealed class TurretController
     private readonly AimCandidateSet _scan = new(); // reused per tick, aircraft list only
     private readonly Transform3D _yawRest;
     private readonly Transform3D _pitchRest;
-    private readonly int _team;            // team id: the authored TEAM, or the host's
     private readonly Node3D? _healthyNode; // emplacement kill switch; null on a carried turret
     private readonly Node3D? _site;        // emplacement placement node; null on a carried turret
     private readonly Node3D? _platform;    // the hull section the emplacement is mounted on
 
+    private int _team;           // team id: the authored TEAM or the host's, until a record fans one
     private float _windowLeft;   // s left in the current attack/bored window
     private float _fireIn;       // s until the next shot is allowed
     private int _fpNext;         // round-robin firepoint cursor
@@ -143,7 +143,8 @@ public sealed class TurretController
 
     /// <summary>The team the acquisition gate and the aim-assist candidate list run on: the
     /// authored <see cref="TurretDef.TeamId"/> for an emplacement, the host's team for a
-    /// carried turret.</summary>
+    /// carried turret, and a mission record's own value once something fans one on
+    /// (<see cref="SetTeam"/>).</summary>
     public int Team => _team;
 
     /// <summary>The platform's velocity: the host's for a carried turret, the differenced own
@@ -410,6 +411,24 @@ public sealed class TurretController
     /// <see cref="IWorldQuery"/> with no live node in the process.</summary>
     public static bool WorldBlocksLine(IWorldQuery world, Vector3 from, Vector3 to) =>
         world.Ray(from, to, CollisionLayers.World, null, out _);
+
+    /// <summary>Writes the team the acquisition gate runs on, for the fan a zeppelin record's team
+    /// performs across its airship, guns included. Returns whether the value moved.
+    /// ⚠ The original also clears the gunner's target POINTER here (<c>FUN_004acb70</c>, the write
+    /// at <c>0x004acb90</c>), so a now-friendly lock is not kept. This gunner holds no pointer and
+    /// re-acquires every tick; the cached sight line is what does carry over, so it goes.</summary>
+    public bool SetTeam(int team)
+    {
+        if (_team == team)
+        {
+            return false;
+        }
+        _team = team;
+        _losNext = 0.0;              // the cached verdict was taken against the old team's target
+        TargetPosition = default;
+        Gate = TurretGate.NoTarget;
+        return true;
+    }
 
     /// <summary>The activation stand-in's hook (and, later, the real <c>WAKEUP_TURRETS</c>'):
     /// wakes a dormant emplacement. Logged by the caller, never silent.</summary>

@@ -33,6 +33,7 @@ using static CSVM.Testing.TargetingSuites;
 using static CSVM.Testing.WingmanSuites;
 using static CSVM.Testing.WorldAndToolSuites;
 using static CSVM.Testing.WorldFidelitySuites;
+using static CSVM.Testing.ZeppelinIdentitySuites;
 using static CSVM.Testing.ZeppelinSuites;
 namespace CSVM.Testing;
 
@@ -158,6 +159,7 @@ public static class SuiteCatalog
         "mission-radio",
         "campaign-zeppelin-wakeup",
         "alpha-cutout-ray-census",
+        "zeppelin-identity",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -684,7 +686,8 @@ public static class SuiteCatalog
             + "captured and the return-to-cabin exit raised",
             CampaignMissionEnd));
         into.Add(new TestHarness.Suite("targeting-candidates",
-            "the D36 widened AI acquisition (BL-363): a same-team registered structure is refused, " +
+            "the D36 widened AI acquisition (BL-363): a registered structure whose pool authors no " +
+            "team is nobody's target and a same-team one is refused, while " +
             "a real team's AI routes a winning structure candidate into AiGunner.GroundTarget " +
             "rather than the aircraft-only Target field (so AiPilot's flight law sees nothing new), " +
             "and the gunner fires real rounds at a zeppelin structure with no aircraft in the scan " +
@@ -854,6 +857,13 @@ public static class SuiteCatalog
             + "at their authored pose; then the splash half, a burst on the hull underside plate "
             + "g482 run through the production cover ray down to each of hydrogentank1..4",
             AlphaCutoutRayCensus));
+        into.Add(new TestHarness.Suite("zeppelin-identity",
+            "the owning-zeppelin identity a zone and a gun carry (BL-476): C5/M03's authored "
+            + "cargozep* exclusion reaches a gasbag only through its hull's name and not through "
+            + "the zone's own, and over C1/MP3's built world the record team fans onto every "
+            + "emplacement standing on the ally hull while the unauthored sibling's guns keep "
+            + "their TURRET default",
+            ZeppelinIdentity));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

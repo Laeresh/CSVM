@@ -564,7 +564,7 @@ element draws the triangle, and how it is rotated, is unresolved.
 | Team space | one space for everything: `0` neutral, `1` ally, enemy index `N` = `N + 2`, stored at `+0x8` on every combat object | the same space; an authored id is the runtime id |
 | Hostility test | one predicate over raw ids: differ, and neither is `0` | `AimAssist.Hostile`, asked by both the gun assist and the turret gunner rather than restated at each gate |
 | Splitscreen pilots | no per-pilot ladder exists | a remake-only rule: pilot 0 is the player's side, further pilots land in `AimAssist.VersusTeamBand` so a `--vs` player cannot inherit the id the no-`TEAM` emplacements default to |
-| World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | `AimAssist.WorldTeam` (100), hostile to every pilot; the port is `BL-407` |
+| World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | the same: `AimCandidateSet.AddStructures` falls a pool with no authored team through to `AimAssist.NeutralTeam`. Only a zeppelin record authors one, and the two-bit ownership field has no authored writer at all (both `crimson.exe` writers are runtime `OR`s at `0x0048490c` and `0x004807ef`) |
 | Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | not selectable |
 | Cycle order | objectives first, then ahead / behind / left / right, nearest inside each sector | not applicable |
 | "Nearest" | head of that order, not a global nearest | not applicable |

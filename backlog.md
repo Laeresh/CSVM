@@ -447,28 +447,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Weapons & combat
 
-- `BL-407` `[Bug]` **World objects are hostile to everyone; the original leaves an unauthored one
-  neutral.** *Evidence:* the team-space decode ([`docs/org/targeting.md`](docs/org/targeting.md)
-  "The team space"), taken while unifying the emplacement and aircraft team spaces
-  (`git log --grep=BL-403`). CSVM stamps every destructible with
-  `AimAssist.WorldTeam` (100) through `AddStructures`'s default, which `FlightController.cs:1873`
-  takes on every frame of every session, so a crate is hostile to every pilot alike. The original
-  builds a world object through the same constructor as an aircraft (`FUN_004a3360` →
-  `FUN_004a2570`) and takes its team from a **two-bit ownership field** on the scene node, walking
-  the node then its ancestors (`FUN_004a32f0`, called at `0x004a3493`); when no ancestor carries
-  one it falls through to **neutral**, and the hostility predicate's neutral clause is what makes
-  it untargetable.
-  ⚠ **Do not just change the constant to 0.** CSVM reads no ownership field, so every world object
-  would go neutral at once and the gun assist would fall silent over every ground target and every
-  zeppelin gasbag. The work is to find whether any CSVM world node carries authored ownership
-  first, and only then to decide whether hostile-to-all stays as a remake-only rule.
-  *How you'd know it worked:* ground targets and gasbags still take assisted fire, and whatever the
-  ownership field turns out to select still does.
-  *Cross-refs:* `BL-400` (the other half: structures on the Non-Aircraft SELECTION cycle need a
-  curated `targets.zrd`-equivalent list — this item is the gun assist's team, they fail in
-  different subsystems), `AimAssist.WorldTeam`, [`docs/org/targeting.md`](docs/org/targeting.md)
-  ("The team space", where the decode this splits off from is written up).
-
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
   (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research
   risk:** the pickup entities have not been located, and they may be mission-scripted rather
@@ -2145,29 +2123,6 @@ usual.
   (`docs/verification.md`), so the reference has to be the decode or the user's eye, not a measurement
   off the film. *Cross-refs:* `BL-469`; `wingman-station`'s `settled` figure is the instrument,
   199 m on `player_pfighter`, and the number this entry has to move.
-
-- `BL-476` `[Bug]` **A zeppelin carries no identity for its turrets or for a targeting bias.**
-  The team and the wake-up seam this entry opened with are built (`ZeppelinRuntime.AuthoredTeam`,
-  `WireZones`, `DestructibleRegistry.Instance.Team`, `ZeppelinRuntime.Wake` through
-  `CampaignDirector.WakeupEnemies`); **two identity remainders keep it open.**
-  (a) *The team is not fanned onto the zeppelin's turrets*, although the decode says it should be:
-  `FUN_004bee80` writes `+0x8` on every child, turrets included. `TurretController.Team` is
-  read-only, and `docs/org/targeting.md:230` records that the original drops a now-friendly lock when
-  a team changes (`0x004acb90`), so a setter needs that too. It bites only an `ally` zeppelin's own
-  guns (C1/C1B/C1C/C2/C2B/C3/C4/C5 MP3, C4/M05, C5/M02, C5/M04).
-  (b) *A `rating_biases` pattern naming a zeppelin still matches nothing.* C3/M01's Kestrels author
-  `[["player", 0.5], ["piratezep", -1.0]]`, the original's own instruction not to target the friendly
-  airship. `BL-401` made the player half live, and its fix cannot reach this one: a zeppelin's
-  destructible instances are its ZONES (`gasbag1..6`, `leng11`, `lbroad11`) and `TargetPool.NameOf`
-  (`TargetPool.cs:117`) returns the zone's anchor name, so the ranking needs the zone's owning
-  zeppelin identity carried alongside, which is the same identity (a) needs.
-  *Fix shape:* one owning-zeppelin identity on a zone pool, read by the turret team fan and by
-  `ObjectiveBiasFor`. *⚠ Traps:* the read-only `TurretController.Team` is read-only for a reason;
-  changing a team mid-mission has to drop an existing lock or an AI keeps shooting a friend. Do not
-  set a zeppelin's team to a literal: 42 of 58 records author none, and what an unauthored one falls
-  through to is `BL-407`'s question. *Cross-refs:* `BL-407` (the structure hostility fall-through,
-  still open and still the cause of the reported Kestrel symptom), `docs/org/targeting.md`.
-
 
 - `BL-469` `[Feature]` **An escort cannot hold station on a leader using nitro, and nothing measures
   the case.** *Evidence:* the two injectors are independent switches, so the asymmetry is reachable

@@ -2370,6 +2370,8 @@ public partial class GameSession : Node3D
             // ⚠ Into the tree AFTER the zeppelin runtime: the physics tick follows tree order, so
             // this is what lets a slung mount read its ride's moved pose on a realtime clock.
             _worldRoot!.AddChild(_turretEmplacements);
+            // The rest of the zeppelin record's team fan: its guns, which do not exist until here.
+            _zeppelins?.FanTeamsOntoTurrets(_turretEmplacements);
             int awakeByData = _turretEmplacements.AwakeCount;
             // The zeppelin turret arm recorded above. ⚠ Run it BEFORE --wake-turrets, which stands
             // in for a mission script and therefore wins, the same order the original has.

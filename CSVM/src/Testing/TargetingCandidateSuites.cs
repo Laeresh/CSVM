@@ -51,8 +51,8 @@ internal static class TargetingCandidateSuites
             ctx.Host.AddChild(live);
 
             // The registered structure: a zeppelin gasbag's own shape (docs/formats/destructibles.md),
-            // parked so the gunner's intercept sees a static target, on WorldTeam — hostile to every
-            // real team (AimAssist.WorldTeam), exactly the aim assist's own structure candidates.
+            // parked so the gunner's intercept sees a static target. Its team is left unauthored
+            // here and authored below, which is the whole of the fall-through arm.
             var structurePos = new Vector3(0f, 500f, 0f);
             gasbagNode = new Node3D { Name = "gasbag1", Position = structurePos };
             ctx.Host.AddChild(gasbagNode);
@@ -100,20 +100,43 @@ internal static class TargetingCandidateSuites
                 }
             }
 
-            // --- same-team structure: refused outright (the decoded team gate, unchanged by D36).
-            ai.Team = AimAssist.WorldTeam;
+            // --- unauthored structure: refused by every team, because the fall-through is neutral
+            // and neutral is symmetric and total (docs/org/targeting.md "The hostility predicate").
+            // This is the arm that would pass on a hostile fall-through, so it is what BL-407 moved.
+            int hostileTeam = AimAssist.PlayerTeam + 1; // any real team, distinct from the player's
+            ai.Team = hostileTeam;
             gunner.AutoTarget = true;
             Step(1);
             ctx.Check(gunner.GroundTarget == null && gunner.Target == null,
-                $"a same-team structure is never a candidate (WorldTeam vs WorldTeam)");
+                $"a structure whose pool authors no team is nobody's target (the neutral fall-through)");
+
+            // --- same-team structure: refused outright (the decoded team gate, unchanged by D36).
+            gasbagInst.Team = hostileTeam;
+            ai.Team = hostileTeam;
+            gunner.AutoTarget = true;
+            Step(1);
+            ctx.Check(gunner.GroundTarget == null && gunner.Target == null,
+                $"a structure on the shooter's own authored team is never a candidate");
+
+            // --- the owning-zeppelin identity (BL-476): a zone answers to its anchor name AND to
+            // the hull that owns it, so an authored -1.0 on the HULL excludes the gasbag. Both arms
+            // run from an idle gunner, because a standing pick is sticky and would answer for it.
+            gasbagInst.Team = hostileTeam + 1; // an authored team the shooter is hostile to
+            gasbagInst.Owner = "piratezep";
+            gunner.RatingBiases = new[] { new AiRatingBias("piratezep", -1f, null) };
+            gunner.AutoTarget = true;
+            Step(1);
+            ctx.Check(gunner.GroundTarget == null,
+                $"an authored -1.0 naming the OWNING zeppelin excludes its zone, which the zone's own name 'gasbag1' could never match");
 
             // --- widened acquisition: a real team now sees the structure with no aircraft in the
-            // scan at all — BL-363's TargetStruct pool, previously unreachable.
-            ai.Team = AimAssist.PlayerTeam + 1; // any real team distinct from WorldTeam/Neutral
+            // scan at all — BL-363's TargetStruct pool, previously unreachable. Doubling as the
+            // exclusion's control: the same -1.0 naming a hull this zone does not belong to.
+            gunner.RatingBiases = new[] { new AiRatingBias("beowulfzep", -1f, null) };
             gunner.AutoTarget = true;
             Step(1);
             ctx.Check(ReferenceEquals(gunner.GroundTarget, gasbagInst),
-                $"the widened acquisition (D36, BL-363) routes a zeppelin structure into GroundTarget");
+                $"the widened acquisition (D36, BL-363) routes a zeppelin structure into GroundTarget, and an exclusion naming a different hull does not block it");
             ctx.Check(gunner.Target == null,
                 $"a non-aircraft winner never touches AiGunner.Target — AiPilot's flight law sees nothing new");
 

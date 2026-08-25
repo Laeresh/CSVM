@@ -1127,10 +1127,12 @@ bootstrap, read by `ANIM_HEALTH` eval, escalated by `ApplyDamageStages`, damaged
 `Resolve(struck)` maps a raycast-hit node back to its instance. Schema: docs/formats/destructibles.md.
 `Instance.Reseed(max)` re-seeds a pool from a mission record — the F18 zeppelin zones, where
 `zeppelins.json` hp beats the def's own `HEALTH` — and refuses once damaged, so a late wire-up
-cannot heal a fight in progress. `Instance.Team` and `Instance.Dormant` are the two flags a mission
+cannot heal a fight in progress. `Instance.Team`, `Instance.Owner` and `Instance.Dormant` are what a mission
 record can put on a pool: an owning side where the data names one (`ZeppelinRuntime` is the only
-writer today), and "registered but not in the world yet", which `AimCandidateSet.AddStructures`
-refuses outright.
+writer of either today, and a pool with no team is neutral, so nobody's target), the name of the
+entity the pool is a PART of (a zeppelin's zones carry their hull's name, which is the only thing a
+`rating_biases` pattern naming the airship can match), and "registered but not in the world yet",
+which `AimCandidateSet.AddStructures` refuses outright.
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM→PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies —
@@ -1340,7 +1342,8 @@ comes in with the candidate and puts a site on the Enemy cycle, `otherTarget` is
 what the candidate is and puts a sub-part on the Non-Aircraft one. An `Ordnance` entry is admitted only when its source is a
 `ProjectilePool.Flyout` with the `TARGETABLE` admission byte set and still live, so a round wrapped
 only because it is fused stays unselectable. `Describe` is the only place in the targeting path that reads
-a concrete source type. `TargetSelection` owns the instance; `HumanFlightAdapter` wires one per human
+a concrete source type, beside `NameOf`/`OwnerOf`, the identity pair the AI ranker's
+`rating_biases` match reuses so it grows no second switch of its own. `TargetSelection` owns the instance; `HumanFlightAdapter` wires one per human
 pane and `FlightController.StepTargeting` feeds it every frame. Decode:
 [org/targeting.md](org/targeting.md) "The candidate list". Pinned by the `target-pool` suite, with
 the carried-gunner exclusion on `turret-gunner`.
@@ -1382,7 +1385,8 @@ pattern node via `AnimRuntime.FindNodes` with multi-segment paths scoped to the 
 ticked by `Session/TurretEmplacementRuntime`). Per tick: nearest hostile aircraft inside
 `DETECTION_RANGE` (team gate through `AimAssist.Hostile`; carried = host's
 `FlightController.Team`, emplacement = the authored/default `TurretDef.TeamId` with no conversion,
-since one integer space covers aircraft and emplacements alike),
+since one integer space covers aircraft and emplacements alike, until `SetTeam` fans a zeppelin
+record's own team over the guns standing on that hull),
 `AimAssist.TryIntercept` lead (no solution ⇒ track, hold fire),
 wrap-aware directed yaw clamp + pitch clamp, bounded slew (3.0/s), pose written onto the PARTS
 nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution cone, cached
@@ -4975,6 +4979,10 @@ too (`BL-377`, via `NetTrailerTargets`); `formats/ai-nets.md` has the two-of-222
 `CollectTargetParts(List<AimCandidate>)` offers those same F18 zones — gasbags, engines, cannons —
 to the player's `TargetPool`, one candidate per part, each carrying the hull's own velocity so the
 bracket gate has something to lead. It is the only channel by which a structure becomes selectable.
+`AuthoredTeam` reads a record's team and `WireZones` fans it, plus the hull's own name as each
+pool's `Owner`, onto every zone; `FanTeamsOntoTurrets` finishes that fan on the guns standing on the
+hull, which do not exist until `GameSession` has built the emplacements. An unauthored record fans
+neither, and its parts are then neutral.
 `Hold(node)` (F12) is the runtime counterpart of that flag for a zeppelin Instant Action's own
 builder switched off: placed, but no longer stepped, so it neither flies its net nor fires an
 invisible broadside. It stands in for `FUN_0045a390`'s `FUN_0045a2a0`, which deletes the vehicle/AI
@@ -5000,7 +5008,8 @@ unconditionally with a chapter flight — the original's world placement pass is
 Observability: the `turrets: N world emplacement(s) placed…` census line plus per-turret
 `woken`/`engaging` breadcrumbs. Pinned by the `world-turrets` suite (C1 census 74, C4 census 92).
 `SetActivatedUnder` is the Instant Action builder's own subtree write (the objective hull's 14
-rings come up armed, a switched-off hull's go quiet); `WakeAll` is the `--wake-turrets` stand-in.
+rings come up armed, a switched-off hull's go quiet); `SetTeamUnder` is the same walk for the team
+a zeppelin record fans across its whole airship; `WakeAll` is the `--wake-turrets` stand-in.
 Format and decode, including the wake ordering and the awake-by-data census:
 docs/formats/turrets.md "Waking a whole subtree".
 

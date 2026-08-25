@@ -381,6 +381,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
   `no_focus` in project.godot; setting `WindowSetFlag` at runtime after the fact does not hand
   focus back, so an interactive session must request focus explicitly instead
   (`Launcher._Ready`).
+- **SHELL-15** — **A BOM a PowerShell write left on a source file comes BACK the next time the
+  Edit tool touches that file, so strip it as the LAST step and confirm with `git diff`, not with
+  `ReadAllBytes`.** Edit rewrites from its own cached read of the file, which still carries the
+  byte-order mark, so a strip followed by any edit silently restores it. Measured while flipping one
+  constant back for a perturbation run: `Set-Content -Encoding utf8` added the mark, a
+  `[IO.File]::WriteAllText` with `UTF8Encoding($false)` removed it, and the next `Edit` call put it
+  back, with `ReadAllBytes` reporting the file clean in between. The visible symptom is a diff whose
+  first line is the file's unchanged `using`, which reads as a line-ending problem and is not one.
 - **SHELL-14** — **Test window-focus handling by alt-tabbing, not minimising.** Minimising a
   Godot window delivers only the mouse enter/exit pair, never a focus notification; on Windows
   11 / Godot 4.7 a real focus change delivers `APPLICATION_FOCUS_OUT`/`_IN`, not the

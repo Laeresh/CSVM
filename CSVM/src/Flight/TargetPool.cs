@@ -127,6 +127,15 @@ public sealed class TargetPool
         _ => "",
     };
 
+    /// <summary>The name of the entity a candidate is a PART of, or null where it is a whole thing
+    /// in its own right. Only a zeppelin zone has one today. Kept beside <see cref="NameOf"/> so the
+    /// ranker's <c>rating_biases</c> match has one source-type switch, not two.</summary>
+    internal static string? OwnerOf(object? source) => source switch
+    {
+        DestructibleRegistry.Instance inst => inst.Owner,
+        _ => null,
+    };
+
     /// <summary>Whether a turret candidate stands in the world rather than being carried by an
     /// aircraft. Only emplacements are selectable: a carried gunner's host is already a target in
     /// its own right, and offering both would put two entries on one silhouette. An emplacement is

@@ -88,8 +88,8 @@ public sealed partial class ZeppelinRuntime : Node
     /// authoring none. The parser's three names mint ids in the one shared team space —
     /// <c>ally</c> 1, <c>neutral</c> 0, <c>enemy</c> the first enemy index, 2 — and a bare integer
     /// is the runtime id verbatim (docs/org/targeting.md "Zeppelins carry a record override").
-    /// ⚠ Never substitute a value for an unauthored record: what those fall through to is
-    /// <c>BL-407</c>'s question, not this seam's.</summary>
+    /// ⚠ Never substitute a value for an unauthored record: its parts fall through to
+    /// <see cref="AimAssist.NeutralTeam"/>, the original's own rule.</summary>
     public static int? AuthoredTeam(ZeppelinDef def) =>
         def.TeamId ?? (def.Team?.ToLowerInvariant() switch
         {
@@ -98,6 +98,26 @@ public sealed partial class ZeppelinRuntime : Node
             "neutral" => AimAssist.NeutralTeam,
             _ => (int?)null,
         });
+
+    /// <summary>Completes the record-team fan onto the guns standing on each airship, which is the
+    /// rest of what <c>FUN_004bee80</c> writes. Call once the emplacements exist; a record authoring
+    /// no team leaves its guns on their own <c>TURRET</c> default, since substituting one there is
+    /// the same invention <see cref="AuthoredTeam"/> refuses. Returns how many gunners moved.</summary>
+    public int FanTeamsOntoTurrets(TurretEmplacementRuntime turrets)
+    {
+        int moved = 0;
+        foreach (var zep in _live)
+        {
+            if (zep.Team is not { } team)
+            {
+                continue;
+            }
+            int changed = turrets.SetTeamUnder(zep.Host, team);
+            moved += changed;
+            GD.Print($"zep: '{zep.Def.Node}' team {team} onto {changed} turret(s)");
+        }
+        return moved;
+    }
 
     /// <summary>The live motions by node name, the F18 seam's lookup (damage writes
     /// <see cref="ZeppelinMotion.AliveEngines"/>).</summary>
@@ -543,11 +563,14 @@ public sealed partial class ZeppelinRuntime : Node
         }
 
         // The record's team, fanned onto every part the way the original fans one value across the
-        // whole airship. A record authoring none leaves the pools' own null in place.
+        // whole airship; a record authoring none leaves the pools' own null in place.
         int fanned = 0;
-        if (zep.Team is { } authored)
+        foreach (var inst in ZonePools(zep))
         {
-            foreach (var inst in ZonePools(zep))
+            // Unconditional: a zone is named for itself, so the airship's own name is all a
+            // rating_biases pattern naming the airship can match.
+            inst.Owner = def.Node;
+            if (zep.Team is { } authored)
             {
                 inst.Team = authored;
                 fanned++;

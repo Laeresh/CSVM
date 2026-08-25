@@ -2862,7 +2862,8 @@ public partial class FlightController : Node3D
         }
 
         // Turrets and structures: BL-363's other two pools, neither with a primary_target/facing
-        // term (docs/org/aiPilot.md); a structure's WorldTeam admits it through the same gate.
+        // term (docs/org/aiPilot.md). A structure reaches the gate on its pool's authored team, so
+        // an unauthored one is neutral and never ranked at all.
         AddRankedNonAircraft(_gunnerScan.Turrets, isTurret: true, ownTeam, gunner);
         AddRankedNonAircraft(_gunnerScan.Structures, isTurret: false, ownTeam, gunner);
 
@@ -2910,7 +2911,8 @@ public partial class FlightController : Node3D
                 Forward = Vector3.Zero,
                 IsPlayer = false,
                 ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(
-                    TargetPool.NameOf(c.Source), gunner.RatingBiases, isTurret),
+                    TargetPool.NameOf(c.Source), TargetPool.OwnerOf(c.Source),
+                    gunner.RatingBiases, isTurret),
                 AlliedAttackers = attackers,
             });
             _rankSources.Add(c.Source);

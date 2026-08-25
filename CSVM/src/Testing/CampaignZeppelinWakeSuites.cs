@@ -103,20 +103,20 @@ internal static class CampaignZeppelinWakeSuites
 
             var set = new AimCandidateSet();
             set.AddStructures(registry);
-            int worldTeam = 0, playerTeam = 0;
+            int neutral = 0, playerTeam = 0;
             foreach (var candidate in set.Structures)
             {
-                worldTeam += candidate.Team == AimAssist.WorldTeam ? 1 : 0;
+                neutral += candidate.Team == AimAssist.NeutralTeam ? 1 : 0;
                 playerTeam += candidate.Team == AimAssist.PlayerTeam ? 1 : 0;
             }
 
             report.AppendLine($"candidate gates: {set.Structures.Count} of 3 pools admitted, " +
-                $"{worldTeam} on the fall-through, {playerTeam} on the authored side");
+                $"{neutral} on the fall-through, {playerTeam} on the authored side");
             ctx.Same(2, set.Structures.Count,
                 $"the dormant pool is refused and the other two are admitted");
             ctx.Same(1, playerTeam, $"the pool carrying an authored team keeps it");
-            ctx.Same(1, worldTeam,
-                $"and the pool carrying none still falls through to {AimAssist.WorldTeam} — BL-407's question, untouched here");
+            ctx.Same(1, neutral,
+                $"and the pool carrying none falls through to {AimAssist.NeutralTeam}, so it is nobody's target");
             _ = plain;
         }
         finally

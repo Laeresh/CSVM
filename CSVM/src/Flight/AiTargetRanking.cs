@@ -173,14 +173,22 @@ public static class AiTargetRanking
     /// <see cref="TurretBiasFlat"/> on top of every arm above, including the no-match case — the
     /// decoded flat term a turret candidate always carries.</summary>
     public static float ObjectiveBiasFor(string name, IReadOnlyList<AiRatingBias>? biases,
-        bool isTurret = false)
+        bool isTurret = false) => ObjectiveBiasFor(name, null, biases, isTurret);
+
+    /// <summary>The same term for a candidate that is PART of a larger named entity: a zeppelin
+    /// zone answers to its own anchor name and to <paramref name="owner"/>, the airship's node name,
+    /// so C3/M01's authored <c>["piratezep", -1.0]</c> reaches every gasbag of that hull. The
+    /// first-matching-entry rule is the list's, not the name's: entries are still walked in authored
+    /// order and the first one either name matches wins.</summary>
+    public static float ObjectiveBiasFor(string name, string? owner,
+        IReadOnlyList<AiRatingBias>? biases, bool isTurret = false)
     {
         float flat = isTurret ? TurretBiasFlat : 0f;
         if (biases == null)
             return flat;
         foreach (var b in biases)
         {
-            if (!b.Matches(name))
+            if (!b.Matches(name) && !(owner != null && b.Matches(owner)))
                 continue;
             if (b.Bias >= 1f)
                 return AlwaysTarget + flat;

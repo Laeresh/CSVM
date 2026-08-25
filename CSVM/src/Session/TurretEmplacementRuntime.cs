@@ -108,6 +108,32 @@ public sealed partial class TurretEmplacementRuntime : Node
         return changed;
     }
 
+    /// <summary>Writes <paramref name="team"/> on every emplacement standing on
+    /// <paramref name="root"/> or anywhere under it, and reports how many changed. The subtree walk
+    /// is <see cref="SetActivatedUnder"/>'s, because it is the same primitive: the original fans a
+    /// zeppelin record's team across the whole airship, its guns included
+    /// (<c>FUN_004bee80</c>, docs/org/targeting.md).</summary>
+    public int SetTeamUnder(Node3D root, int team)
+    {
+        int changed = 0;
+        foreach (var t in _turrets)
+        {
+            if (t.Site is not { } site || !GodotObject.IsInstanceValid(site))
+            {
+                continue;
+            }
+            if (site != root && !root.IsAncestorOf(site))
+            {
+                continue;
+            }
+            if (t.SetTeam(team))
+            {
+                changed++;
+            }
+        }
+        return changed;
+    }
+
     public void SimStep(float dt)
     {
         foreach (var t in _turrets)

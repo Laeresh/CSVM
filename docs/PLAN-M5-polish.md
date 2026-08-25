@@ -102,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ The load screen's composed artwork (`BL-409`)
 32. ☑ Spawn node names defeat `rating_biases` on the campaign path (`BL-401`)
-33. ☐ World objects are hostile to everyone (`BL-407`)
+33. ☑ World objects are hostile to everyone (`BL-407`)
 
 ### Wave E — answers and housekeeping
 
@@ -125,7 +125,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave G — what the first six waves left open
 
 61. ☐ The intro cutscene stages no aircraft, because the node its definitions animate does not exist (`BL-482`)
-62. ☐ A zeppelin's turrets and its damage zones carry no owning identity (`BL-476`), behind D33
+62. ☑ A zeppelin's turrets and its damage zones carry no owning identity (`BL-476`), behind D33
 63. ❌ The music channel has no 15 s refusal hold (`BL-480`), disproved: the rule is real and unreachable
 64. ❌ The 26 `GRAPHICS/*.JPG` draw nothing (`BL-479`), disproved: they already draw as board pictures
 65. ☑ `campaign-objectives-hud` cannot fire its own check on C3 (`BL-481`)
@@ -1161,7 +1161,7 @@ zeppelin's destructible instances are its ZONES (`gasbag1..6`, `leng11`, `lbroad
 `TargetPool.NameOf` returns the zone's anchor name, so the pattern needs the zone's owning zeppelin
 identity carried alongside. That is zeppelin-identity work and belongs with F54.
 
-## D33 ☐ World objects are hostile to everyone (`BL-407`)
+## D33 ☑ World objects are hostile to everyone (`BL-407`)
 
 **Goal.** World scenery is neutral unless the data says otherwise, as the original has it.
 
@@ -1191,6 +1191,40 @@ neutral structure are both refused where the data says they should be.
 **⚠ Traps.** ⚠ D36's landed rule stands: a large nearby structure can outrank a distant fighter
 because the ranking is minimised, so a change here must not be judged by "the AI stopped shooting
 buildings" alone.
+
+**Landed.** `AimCandidateSet.AddStructures` falls a pool with no authored team through to
+`AimAssist.NeutralTeam` instead of `WorldTeam`, and its `team` parameter is gone, since every caller
+took the default and a second fall-through would only hide the first. Neutral is symmetric and total
+in `AimAssist.Hostile`, so an unauthored structure is now neither a target nor a shooter for anyone:
+the gun assist's structure list and `FlightController.SelectRankedTarget`'s structure pool are the
+only two readers, and both ask that one predicate. The `WorldTeam` constant stays at 100 with one
+reader left, `ZeppelinRuntime.CollectTargetParts`, where it is the player SELECTION cycle's own
+fall-through and keeps an unauthored zeppelin's parts on the Enemy cycle rather than moving them to
+the Ally one. That divergence is deliberate and is recorded on the constant: the selection of
+zeppelin sub-parts is a remake addition with no counterpart in the decode, while hostility is a port.
+The precondition `BL-407` set was checked rather than assumed: the ownership field the original reads
+(`FUN_004a32f0`, the two-bit slot in node `+0x28`) has no authored writer anywhere, both writers in
+`crimson.exe` being runtime `OR` instructions at `0x0048490c` and `0x004807ef`, so every shipped
+destructible resolves neutral in the original too and there is no data to read first.
+`docs/org/targeting.md`'s "What this means for CSVM" row is rewritten to say so.
+
+**Verified.** The `targeting-candidates` suite gains the arm the change is about, that a structure
+whose pool authors no team is refused by a real-team AI, and keeps the same-team and hostile arms
+either side of it, now on authored ids rather than on the fall-through. Perturbation, run
+separately: restoring the hostile fall-through in `AddStructures` alone fails that new arm, so it can
+fail and it measures this change. ⚠ Read the perturbation run honestly: the same-team arm failed
+alongside it, but as a knock-on, the gunner having latched the structure in the arm before it rather
+than as an independent control. `campaign-zeppelin-wakeup`'s gate census, which `F54` deliberately
+pinned to the old fall-through, now asserts the neutral one; `F54`'s authored-team half is untouched
+and still passes. D36's ranking trap is respected: nothing here is judged by an AI ceasing to shoot
+buildings, and the gate is asserted directly on the candidate's team instead. `dotnet build` clean,
+`dotnet test` 2363, `--run-tests=target` 6/6, `--run-tests=campaign` 11/11.
+
+**⚠ Consequence to judge at the controls, not disproved here.** The gun aim assist is now silent
+over every unauthored world object, including C3/M01's two zeppelins and Instant Action's, because
+the original is silent there too. Damage is unaffected, since a round's damage path never asks about
+teams (`docs/verification.md` SRC-6), and the player can still SELECT a zeppelin sub-part. Whether
+the missing assist reads as a loss at the controls is a fidelity question only the user can settle.
 
 # Wave E — answers and housekeeping
 
@@ -1944,7 +1978,7 @@ wrong. ⚠ Do not relax `AnimRuntime.cs:2954-2966` to make the name resolve; F51
 stands unchanged. ⚠ An intro composes itself during the animation bootstrap, before the world root is
 in the scene, which is the condition that made F52's first attempt a silent no-op.
 
-## G62 ☐ A zeppelin's turrets and its zones carry no owning identity (`BL-476`)
+## G62 ☑ A zeppelin's turrets and its zones carry no owning identity (`BL-476`)
 
 **Goal.** One owning-zeppelin identity on a zone pool, read by the turret team fan and by the
 targeting bias, so an airship's guns and an authored `rating_biases` pattern both find it.
@@ -1973,6 +2007,54 @@ that the original drops a now-friendly lock when a team changes (`0x004acb90`), 
 too or an AI keeps shooting a friend. ⚠ Do not set a zeppelin's team to a literal; 42 of 58 records
 author none and what an unauthored one falls through to is D33's question. ⚠ D33 alone already fixes
 the reported Kestrel symptom, so this item must not be judged by that symptom disappearing.
+
+**Landed.** The identity is one nullable string, `DestructibleRegistry.Instance.Owner`, written by
+`ZeppelinRuntime.WireZones` beside the team it already fanned, on every zone pool and unconditionally
+(a record authoring no team still owns its zones). `TargetPool.OwnerOf` reads it back beside
+`NameOf`, so the targeting path keeps one source-type switch rather than growing a second, and
+`AiTargetRanking.ObjectiveBiasFor` gains an owner overload where a bias entry matches on either
+name. The authored order still decides which entry wins, so the decoded first-match rule is intact.
+For the guns, `TurretController.SetTeam` makes the team writable, `TurretEmplacementRuntime` gains
+`SetTeamUnder`, the same subtree walk as its `SetActivatedUnder`, and
+`ZeppelinRuntime.FanTeamsOntoTurrets` runs it per authored record from `GameSession`, after the
+emplacements are built because they do not exist before then. No literal is invented anywhere: a
+record with no team fans nothing and its guns keep their authored `TURRET` default.
+
+**The read-only trap is discharged rather than worked around.** `docs/org/targeting.md:230` records
+that `FUN_004acb70` clears the turret's target pointer `+0x210` on a team change so a now-friendly
+lock is not kept. CSVM's gunner holds no such pointer: `TurretController.AcquireTarget` rescans the
+aircraft list every tick and returns a position, so there is no lock to drop. What does survive a
+tick is the cached line-of-sight verdict, taken against the old team's target and valid for another
+1 to 2 s, so `SetTeam` expires that and clears the standing aim. The prohibition on the member now
+says which half applies here and why.
+
+**Verified.** The new `zeppelin-identity` suite drives both halves off shipped records. The bias
+half reads C5/M03's own roster and asserts that its authored `["cargozep*", -1.0]` reaches a pool
+named `gasbag1` only through the owner `cargozep2`, returns 0 through the zone's own name, and
+returns 0 for a pool owned by `beowulfzep`, which that mission does not name. The gun half builds
+C1/MP3's world, wires the real `ZeppelinRuntime` and `TurretEmplacementRuntime`, and measures the
+fan: 14 emplacements under the `ally` hull `multiplayer2zep` move to team 1, the 14 under the
+unauthored `multiplayer1zep` stay on the `TURRET` default 2, and a second fan moves 0, which is
+`SetTeam`'s own did-it-change report. `targeting-candidates` carries the end-to-end arm: a real AI
+gunner with an authored `-1.0` naming the owning hull acquires nothing, while the same `-1.0` naming
+a different hull leaves it holding the zone. Perturbations, one variable at a time and run
+separately: ignoring the owner in `ObjectiveBiasFor` fails the exclusion arm in both suites, and
+making `SetTeam` refuse every write fails the fan arms with `moved=0` against an expected 14.
+⚠ Both bias arms are written from an IDLE gunner, because a standing ground target is sticky: the
+first revision asserted the exclusion by dropping a pick already made, and it failed on the
+stickiness rather than on the bias.
+
+The census that says how much was dead: across the shipped install, 34 `rating_biases` entries in
+20 missions name a zeppelin node of their own mission, and every one matched nothing. Ten of them
+(C2/M05's two, C4/M05's four, C5/M02's one and C5/M03's three) sit on a record that authors a team,
+so they are ranking terms again. The other 24, C3/M01's `["piratezep", -1.0]` among them, name a
+record authoring no team, so D33 keeps those zones neutral and out of the rank pool entirely and the
+term still cannot fire there. That is the original's own arrangement rather than a gap: neutral is
+total, so the authored exclusion is redundant beside it. ⚠ This is also why the item is not judged
+by the Kestrel symptom, exactly as its traps say.
+
+`dotnet build` clean, `dotnet test` 2363, `--run-tests=target` 6/6, `--run-tests=zeppelin` 8/8,
+`--run-tests=campaign` 11/11, `--run-tests=turret` 2/2.
 
 ## G63 ❌ The music channel has no 15 s refusal hold (`BL-480`)
 
