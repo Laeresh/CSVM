@@ -63,6 +63,7 @@ public sealed partial class CutsceneController : Node
     private static readonly int[] RestoreCodes =
         { CodeHandoff, CodeRestoreSystems, CodeRevealAi, CodeCamParamsRestore };
 
+    private readonly HashSet<string> _hosted = new(StringComparer.Ordinal);
     private readonly List<int> _codes = new();
     private readonly List<FlightController> _parked = new();
     private readonly HashSet<int> _gapsLogged = new();
@@ -118,10 +119,28 @@ public sealed partial class CutsceneController : Node
     /// <summary>The animation name that raised the first code, and whose end hands off.</summary>
     public string? Anim { get; private set; }
 
-    /// <summary>Is this one of the definitions this host answers for? Only a story mission's intro
-    /// plays as a cutscene here; every other definition's codes keep the answer they had.</summary>
+    /// <summary>Is this one of the two story-mission intro definitions?</summary>
     public static bool IsIntro(string? animName) =>
         animName != null && Array.IndexOf(IntroAnims, animName) >= 0;
+
+    /// <summary>Registers definitions this host answers for beyond the intros: what the landings
+    /// trigger can start, plus what those definitions reach by <c>CALL_ANIMATION</c>. This is the
+    /// original's per-instance host registration, resolved from the authored data instead.
+    /// ⚠ Pass definition names, never callback codes; Instant Action's <c>player_setup</c> raises
+    /// the same nine an intro does.</summary>
+    public void HostDefinitions(IEnumerable<string> animNames)
+    {
+        foreach (string name in animNames)
+        {
+            _hosted.Add(name);
+        }
+    }
+
+    /// <summary>Does this host answer for <paramref name="animName"/>? An intro always, and a
+    /// definition registered through <see cref="HostDefinitions"/>; every other definition's codes
+    /// keep the answer they had.</summary>
+    public bool Hosts(string? animName) =>
+        animName != null && (IsIntro(animName) || _hosted.Contains(animName));
 
     /// <summary>The world's animation runtime and the two nodes a cutscene definition drives. Run
     /// once the world is built, before any rig exists: the intro definitions start during the
@@ -174,7 +193,7 @@ public sealed partial class CutsceneController : Node
     /// two vehicle-death codes and every unknown one keep the answer they had.</summary>
     public bool Host(int code, string? animName)
     {
-        if (!IsIntro(animName) && !(Playing && animName == Anim))
+        if (!Hosts(animName) && !(Playing && animName == Anim))
         {
             return false;
         }

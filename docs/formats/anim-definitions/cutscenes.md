@@ -148,6 +148,101 @@ registration is why a mid-mission cutscene's `CALLBACK`s are live. 32 distinct a
 appear across the eight files, all of them approach cones, hookups and landings; **no intro
 definition is named in any `landings.zrd`**.
 
+#### The condition object is an authored triangle
+
+The loader `FUN_0045d8f0` reads the file and hands each record to the parser `FUN_0045da80`, which
+resolves the row into a nine-field record and drops the row outright when a field fails to resolve.
+The keys it reads are exactly `node`, `anim`, `angle`, `speed` and `auto`.
+
+| record field | source | meaning |
+|---|---|---|
+| `[0]` | `node [name]` | the approach node, whose world pose the attitude test measures against |
+| `[1]` | its `land_on` descendant | the arming gate: the row is dead while that node's active bit (bit 2 of `+0x24`, `gwNodeSetActive`) is clear |
+| `[2]` | its `cone`, `half_cone` or `sphere` descendant | the shape node, whose world pose the volume is expressed in |
+| `[3]` | built from `[2]`'s model | the condition object, one of three classes with a `Contains` virtual at vtable slot 0 |
+| `[4]` | `angle [deg]` | `(deg · π/180 ÷ 2)²`; `FLT_MAX` when unauthored, which skips the attitude test |
+| `[5]`, `[6]` | `speed [min, max]` | mph × `0.44704`, so metres per second; `∓FLT_MAX` when unauthored |
+| `[7]` | `auto` | the auto-land flag |
+| `[8]` | `anim [name]` | the animation definition, resolved by `FUN_00523820` |
+
+The shape node is **deactivated at parse time** (`FUN_004cca30(node, 0)`), so the marker never
+renders in a mission; CSVM never builds it either, because a lone untextured triangle is what
+`GameZ.IsMarkerGizmo` culls.
+
+**The volume is that node's single authored triangle.** The parser requires the shape node's model
+to carry exactly one polygon of exactly three vertices and reads the three as:
+
+- **`cone`** (`PTR_FUN_00607b18`, 0x2c bytes): apex `v0`, base centre `v1`, axis `normalize(v1 − v0)`,
+  base radius `|v2 − v1|`. `FUN_0045d5b0` tests a point `p` by `t = dot(axis, p − v1) / dot(axis, v0 − v1)`,
+  requiring `0 ≤ t ≤ 1` and `|(p − v1) − (v0 − v1)·t| ≤ (1 − t)·R`. `t` runs 0 at the base disc to 1 at
+  the apex, so the radius closes to nothing exactly at the target.
+- **`half_cone`** (`PTR_FUN_00607b24`, 0x38 bytes): the same cone plus the half-space
+  `dot(p − v1, normalize(perp)) ≥ 0`, where `perp` is the triangle's own component perpendicular to
+  the axis. `FUN_0045d730` applies the half-space first.
+- **`sphere`** (`PTR_FUN_00607b0c`, 0x14 bytes): centre `v0`, radius `|v1 − v0|`. `FUN_0045cf60`
+  tests `|p − centre| < r` with the centre put through the shape node's world transform.
+
+All 34 shipped rows across the eight chapters resolve: one node match each, one shape child each,
+one `land_on` each. Six of C3's are `cone` (the `do_approachN` drop ring, 250.79 m deep and 271.76 m
+at the base, a 47.3° half-angle, all six sharing model 490 at one point with 60° of yaw between
+them), the two `hooked_to_klondike` rows are a 96 × 32 m `half_cone` and a 500 m `sphere`, and every
+other chapter's rows are `half_cone` except its own auto row.
+
+#### The per-frame test
+
+`FUN_0045df60` runs one record and gates in this order:
+
+1. the player's `+0x91d` cutscene flag is clear, and the landings slot `DAT_0071b1dc` is empty;
+2. the record's `land_on` node is absent or active;
+3. `[5] ≤ player+0x934 ≤ [6]`, the speed band, inclusive;
+4. the attitude: `FUN_0053f610` turns the approach node's Euler rotation into a quaternion,
+   `FUN_0053f9b0` multiplies it against the player's own at `player+0x150`, and `FUN_0053fca0` takes
+   that relative quaternion's log map, whose magnitude is exactly half the rotation angle. Comparing
+   its square against `[4]` is therefore the exact test **"the player's whole orientation is within
+   `angle` degrees of the approach node's"**, roll included, not just heading;
+5. the condition object's `Contains`, with the player's position in the shape node's live world
+   frame.
+
+A row that passes and carries `auto` sets `DAT_00719109` instead of starting anything; the next
+frame `FUN_0045e120` turns that into the on-screen auto-land prompt (message `0xb5`, or `0xb6` when
+the binding is a pad button, over key binding `0x6a`). Every other row starts its animation with
+`FUN_004edda0` and registers the mission-script host on it with `FUN_004ee160`.
+
+#### Arming is the mission script's job
+
+The gate node is what a mission opens and closes. C3/M01 lists `disable_dropoff` in
+`NEW_GAME_START`, which sets all six `do_approachN/land_on` `INACTIVE`, so the drop ring is dead
+from mission load. `OBJECTIVE21`'s `WAKE_ANIM [enable_dropoff]` sets them `ACTIVE`, and
+`OBJECTIVE22`'s `WAKE_ANIM [disable_dropoff]` closes them again once the drop has played. The
+klondike hookup is armed the same way, by `OBJECTIVE14`'s `WAKE_ANIM [pzhomebase]`. **The approach
+table is the mechanism; the objective script decides when each row is live.**
+
+#### Limits and readings
+
+- **Undecoded: whether the host reaches a called definition.** `FUN_004ee160` writes the host on the
+  animation instance the trigger starts, and it is the only writer install-wide. The `do_approachN`
+  definitions author no `CALLBACK` at all: they set `ObjectRotateState do_direction` and then
+  `CallAnimation texdrop`, and it is `player-texdrop` that raises 11, 951, 2 and 1 plus the
+  `letterbox` call. No propagation of `anim+0x74` from a caller to a callee was found. CSVM takes
+  the **reading** that the host answers for a started row's definition *and* its `CALL_ANIMATION`
+  closure, because the drop is a letterboxed movie that has to hide the chrome and take the player
+  out of flight, and no other mechanism does that.
+- **Undecoded: when the landings slot clears.** `DAT_0071b1dc` holds the running instance and is
+  cleared only by `SceneAnimCallback_0045e0f0` seeing callback **0**, which nothing authors. Read
+  literally, one landings cutscene per mission load would lock out the rest, which C3/M01 (drop,
+  then hookup) contradicts. CSVM instead re-arms as soon as the started definition ends, which is
+  what the mission needs.
+- **A reading: the volume's frame is static.** The original re-reads the shape node's world pose
+  every frame. Nothing in the install animates a `cone`/`half_cone`/`sphere` marker or its approach
+  node, so CSVM folds the shape's local chain into the approach node once at load and follows one
+  node.
+- **A divergence: CSVM arms the table only in a story mission.** The original's mission load
+  (`FUN_00464680`) arms it for every mission type, and the anim-not-found rejection is what keeps
+  most Instant Action missions out. It does not keep all of them out: C3/IA1 carries
+  `hooked_to_klondike` and C3 ships `pz_manual_land/land_on` active, so an Instant Action sortie
+  there would take a docking cutscene. Whether the original means that is undecoded, so CSVM scopes
+  by session (`WorldSession.Options.LandingTriggers`).
+
 ### The intro defs run without a host
 
 Intro definitions are bootstrapped from `StartAnims.zrd`, whose two sections are `NEW_GAME_START`

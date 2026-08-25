@@ -463,6 +463,13 @@ is only interpretable if it names the quantity it multiplies at the right point 
   `--dump-flight=all` and from `ZzBaselineDump` differs on 9 of 1123 lines, each by one unit in the
   last place of a knife-edge sample, on identical code. Take the before and after of an A/B the same
   way, or the diff reports the runtimes.
+- **INSTR-20** — **A negative test that also steps the mission script can arm the very gate it is
+  asserting stays shut.** Drive only the subsystem under test through the control leg. Measured on
+  the `landings-approach-trigger` suite: "flying the drop approach before the mission arms it starts
+  nothing" was written as a flight that stepped the objective graph too, and C3/M01's drop cones sit
+  9 m from the `shipwreck` the first primary approaches, so the same 6 s flight completed that
+  objective and its 2 s + 3 s nap chain armed the trigger mid-leg. The assertion still passed, on
+  the aircraft having left the cone by then rather than on the gate being shut.
 
 ## SRC — sources and documents
 

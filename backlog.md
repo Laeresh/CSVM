@@ -1245,12 +1245,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
   | Kind | Count | Why it cannot do anything |
   |---|---|---|
-  | `Callback` | ×8 every chapter | **Answered.** The values 1/2/10/11/14/20/913/914 are the cutscene vocabulary, decoded in `docs/formats/anim-definitions/cutscenes.md`, and `CutsceneController` is the host a story mission's intro raises them to. What is left here is every OTHER code the mission-script host reads (the `landings.zrd` cutscenes' 3/12/13/86/701/702/800–803/950/951/965–968), which needs the approach-cone trigger that starts a mid-mission cutscene at all. |
+  | `Callback` | ×8 every chapter | **Answered.** The values 1/2/10/11/14/20/913/914 are the cutscene vocabulary, decoded in `docs/formats/anim-definitions/cutscenes.md`, and `CutsceneController` is the host that raises them, for a story mission's intro and for the `landings.zrd` approach triggers `LandingApproachRuntime` starts. What is left here is only the OTHER codes the mission-script host reads: **3, 12, 13, 86, 701, 702, 800–803, 950, 951, 965–968**. Those reach the host today and are declined, so they are now testable rather than unreachable. C3/M01's own drop raises `951` (teleport the player to the camera pose) and it is the first one worth doing. |
   | `ObjectCycleTexture` | ×1–2 per chapter | Every dispatch is `node=taildamage` with **`targets=0`** — the node never resolves, so there is nothing to cycle. The one real use of this mechanism (the cockpit damage-indicator hilite) is already a build-time material swap in `GaugeCluster.cs`. |
 
-  **Pick these up when the thing they depend on exists** — the mid-mission cutscene trigger for the
-  rest of `Callback` — not before. `ObjectCycleTexture` needs neither; it needs a mission that
-  actually builds a `taildamage` node, which none of the ones this project defaults to do.
+  **The blocker on the `Callback` half is gone**: the approach trigger exists, so the remaining
+  codes now arrive at a live host and each can be implemented and tested against C3/M01's own drop
+  and hookup. `ObjectCycleTexture` still needs a mission that actually builds a `taildamage` node,
+  which none of the ones this project defaults to do.
 
 - `BL-218` `[Tuning]` `[Owed-playtest]` **Puffer `NUMBER` default (2026-08-01)** — `NUMBER` is absent from 680 of C1's 721
   `PufferState` events, including `large_30sec_fire`'s `fire_n_smoke`, and `PufferState.FromAnimEvent`
@@ -2548,38 +2549,22 @@ usual.
   snapshot flow, so the cabin's other rows shipped without it rather than waiting.
   *Cross-refs:* `BL-256` is the adjacent snapshot work; `docs/PLAN-M5-campaign.md` Decision 3.
 
-- `BL-448` `[Feature]` **An objective gated on `ANIM_STATE <def> EXECUTED` cannot be satisfied, so
-  a mission's authored route to its own ending is unreachable.** *Evidence:* found by the
-  `campaign-loop` suite (`docs/PLAN-M5-campaign.md` E41). C3/M01 ends through its `INSTANTWIN`
-  objective, and the authored path to waking that objective runs through `OBJECTIVE14`'s
-  `ANIM_STATE hooked_to_klondike EXECUTED`, a 15 KB cutscene definition anchored on a `player`
-  node. Nothing plays that definition in a session, so the condition never becomes true and the
-  suite wakes `INSTANTWIN` through the graph directly, exactly as `campaign-mission-end` does.
-  The engine is not wrong here: the missing piece is whatever starts a mid-mission cutscene.
-  **The missing mechanism is now identified exactly, and it is narrower than "play mid-mission
-  cutscenes".** `C3/zrdr/landings.zrd.json` is a table of approach triggers:
-  `anim[do_approach1] node[do_approach1] angle[45] speed[50, 320]` six times over, plus
-  `anim[hooked_to_klondike] node[pz_manual_land] angle[35] speed[50, 220]` and
-  `anim[hooked_to_klondike] node[pz_auto_land] auto`. **Nothing in `CSVM/src` reads
-  `landings.zrd`.** The decode is already written up in
-  `docs/formats/anim-definitions/cutscenes.md` (`FUN_0045df60`): every frame, with no cutscene
-  running and the player controllable, the engine tests the player against the named approach node's
-  condition object and speed band, starts the named animation, and registers the mission-script host
-  on it. The six `do_approachN` defs each set `ObjectRotateState do_direction` and then
-  `CallAnimation texdrop`, which is why the film's Jack drop is staged off the approach direction;
-  `player-texdrop.json` is `ON_CALL`, `has_callbacks`, and opens with `Callback 11` plus
-  `CallObjectConnector letterbox`, so it is a letterboxed cutscene built exactly like the intro.
-  The `auto` row is the film's auto-land button. **Consequence:** on C3/M01 this one gap blocks
-  `PRIMARY 2` (Drop off Jack, via `OBJECTIVE21`'s `ANIM_STATE texdrop EXECUTED`), `PRIMARY 4` (Dock
-  with the PANDORA) and, transitively, `PRIMARY 3`, which is woken only through `PRIMARY 2`. *Fix
-  shape:* read `landings.zrd`, tick the cone/angle/speed test, `CALL_ANIMATION` the named def, and
-  route its callbacks through the existing `CutsceneController.Host`.
-  *⚠ Traps:* ⚠ do not satisfy the condition by treating an unplayed definition as executed; that
-  would fire every such objective at mission start. ⚠ Not every `ANIM_STATE` objective is blocked:
-  C3/M01's `OBJECTIVE26`/`OBJECTIVE30` name `volcano1`, which is `ON_STARTUP` and does reach
-  EXECUTED, so they are fine. Check the named def's trigger kind before filing one under this.
-  *Cross-refs:* `BL-035` carries the same blocker from the animation side; one trigger unblocks
-  both. Three of C3/M01's six display rows are blocked on this.
+- `BL-460` `[Feature]` **The auto-land the approach table offers has no button.** *Evidence:* every
+  chapter's `landings.zrd` carries one `auto` row, a 500 m sphere around `pz_auto_land` with no
+  attitude cone and no speed band. The original does not start the animation on it: `FUN_0045df60`
+  raises `DAT_00719109`, and `FUN_0045e120` turns that into an on-screen prompt (message `0xb5`, or
+  `0xb6` when the binding is a pad button, over key binding `0x6a`) that the player then presses to
+  start the same hookup the manual row starts. CSVM decodes and ticks the row
+  (`LandingApproachRuntime.AutoLandOffered` goes true exactly when the original lights the prompt),
+  but nothing draws the prompt or reads a key off it, so the row is observable and inert.
+  *Fix shape:* a HUD line off `AutoLandOffered` plus a binding that calls `Play` on the row's
+  animation, which is the same call the manual row already makes.
+  *⚠ Traps:* ⚠ The manual and auto rows name the SAME animation, so a session that starts it from
+  both would double-fire; the trigger already returns after the first row that passes, and a button
+  path has to respect the cutscene guard the same way. ⚠ The prompt's own message ids are `langui`
+  ids, which `BL-427` has not extracted, so the text is not in `extracted/messages.json`.
+  *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md` "The per-frame test"; `BL-427` for the
+  string. Split out while the approach trigger landed (`git log --grep=BL-448`).
 
 ## Tooling, platform & docs
 

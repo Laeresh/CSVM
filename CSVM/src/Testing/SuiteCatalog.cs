@@ -22,6 +22,7 @@ using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
 using static CSVM.Testing.InstantActionSuites;
+using static CSVM.Testing.LandingApproachSuites;
 using static CSVM.Testing.MusicSuites;
 using static CSVM.Testing.OrdnanceSuites;
 using static CSVM.Testing.PufferSuites;
@@ -149,6 +150,7 @@ public static class SuiteCatalog
         "campaign-zeppelins",
         "campaign-danger-zones",
         "campaign-objective-markers",
+        "landings-approach-trigger",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -782,6 +784,17 @@ public static class SuiteCatalog
             + "the site name, in the decoded blue, sitting on the world node the mission named, "
             + "and flying one site's own TRAVELERS approach retires that marker alone",
             CampaignObjectiveMarkers));
+
+        // BL-448: nothing read landings.zrd, so no mission could ever play the cutscene an
+        // ANIM_STATE objective waits on.
+        into.Add(new TestHarness.Suite("landings-approach-trigger",
+            "the mid-mission cutscene trigger over the first story mission's BUILT world: the "
+            + "chapter's landings.zrd rows resolve to the cone, half-cone and sphere volumes their "
+            + "approach nodes author, a mission carrying none of the animations resolves none of "
+            + "them, the drop-off rows start disarmed and fire nothing, the mission's own objective "
+            + "chain arms them, and flying one cone starts the drop cutscene through the cutscene "
+            + "host, runs it to EXECUTED and completes the primary objective gated on it",
+            LandingApproachTrigger));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

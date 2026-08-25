@@ -619,6 +619,11 @@ public partial class FlightController : Node3D
     /// frame) — what the AI gunner's quick-draw cones project fore and aft from.</summary>
     public Vector3 NoseDirection => -_model.Attitude.Z;
 
+    /// <summary>The whole SIM attitude, body→world, nose −Z and up +Y. Roll is part of the answer:
+    /// the landings trigger measures the aircraft against an approach node's own orientation, and
+    /// a rolled aircraft is off that approach by the roll as much as by the heading.</summary>
+    public Basis Attitude => _model.Attitude;
+
     /// <summary>The weapon lab's free camera: while set, this controller writes NOTHING to the
     /// camera — no chase, no fixed view, no orbit, and <see cref="SnapCamera"/> is a no-op — because
     /// the lab has handed the same <see cref="Camera3D"/> to a <see cref="SpectatorCamera"/> so the

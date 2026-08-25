@@ -65,11 +65,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — what stops the campaign being playable
 
 1. ☑ Objective targets and help labels are never drawn, so the sites cannot be found (`BL-456`)
-2. ☐ A campaign session never spawns its zeppelins or generators (`BL-451`)
-3. ☐ The campaign wingman cannot hold station on a real player (`BL-457`)
+2. ☑ A campaign session never spawns its zeppelins or generators (`BL-451`)
+3. ◐ The campaign wingman cannot hold station on a real player (`BL-457`)
 4. ☑ The music channel drowns the briefing (`BL-455`)
-5. ☐ The cutscene letterbox flickers once (`BL-452`)
-6. ☐ `DANGER_ZONES_COMPLETED` is never fed in a campaign mission (`BL-458`)
+5. ◐ The cutscene letterbox flickers once (`BL-452`)
+6. ◐ `DANGER_ZONES_COMPLETED` is never fed in a campaign mission (`BL-458`)
 
 ### Wave B — where things are shown, and where they are heard
 
@@ -80,7 +80,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — the gaps M5 named
 
-21. ☐ The `landings.zrd` approach trigger, which is the mid-mission cutscene gate (`BL-448`, `BL-035`)
+21. ☑ The `landings.zrd` approach trigger, which is the mid-mission cutscene gate (`BL-448`, `BL-035`)
 22. ☐ The VO dialogue chain player (`BL-443`)
 23. ☐ PNG on the hangar art seam, and what to do about JPEG (`BL-444`)
 
@@ -322,7 +322,7 @@ build a second, different completion rule for them. ⚠ A `dzpathN` gate pair ca
 apart (a "thin slit" aperture): a probe built to cross one gate can legitimately cross both in the
 same segment, which is completion, not a test bug.
 
-## A3 ☐ The campaign wingman cannot hold station on a real player (`BL-457`)
+## A3 ◐ The campaign wingman cannot hold station on a real player (`BL-457`)
 
 **Goal.** The wingman stays with the player instead of falling behind and climbing away.
 
@@ -648,7 +648,7 @@ belongs to whoever owns the timing, not to a fudge factor here.
 
 # Wave C — the gaps M5 named
 
-## C21 ☐ The mid-mission cutscene trigger (`BL-448`, `BL-035`)
+## C21 ☑ The mid-mission cutscene trigger (`BL-448`, `BL-035`)
 
 **Goal.** A mission can start a cutscene while it is being flown, which makes an objective gated on
 that definition satisfiable and gives the remaining mission-script callback codes somewhere to land.
@@ -679,6 +679,38 @@ suite then updated to take that route and still green twice.
 definition as executed: every such objective would fire at mission start. ⚠ D32's finding stands,
 that authored callback codes do not identify a cutscene (Instant Action's `player_setup` raises the
 same nine), so scope by definition, never by code.
+
+**Landed.** `LandingApproaches` (`src/Mech3/LandingApproaches.cs`) reads a chapter's `landings.zrd`
+and resolves each row against the gamez: the approach node, its arming `land_on` child, and the
+condition volume, which is the single authored triangle on the node's `cone`, `half_cone` or
+`sphere` child expressed in the approach node's own frame. `LandingApproachRuntime`
+(`src/Session/LandingApproachRuntime.cs`) ticks that table against the flown aircraft in the
+original's own order (arming gate, speed band, attitude, volume) and starts the row's definition;
+an `auto` row raises `AutoLandOffered` rather than starting anything, which is the auto-land prompt.
+The condition object was decoded rather than guessed: the three shape classes, their vtables and
+their containment tests are written up on
+[`docs/formats/anim-definitions/cutscenes.md`](formats/anim-definitions/cutscenes.md), and the
+`angle` test is exact rather than approximate, a geodesic quaternion angle over the player's whole
+orientation, roll included. Hosting widened by definition, never by code:
+`CutsceneController.HostDefinitions` takes the names `WorldSession` computes from the resolved rows
+plus their `CALL_ANIMATION` closure, and `Hosts` replaces the `IsIntro` gate on the dispatch.
+Instant Action stays out two ways: a row whose animation the mission does not carry is dropped at
+load (the original's own rejection), and the table is resolved only for a story mission, because
+C3/IA1 does carry `hooked_to_klondike` with its approach shipped armed.
+
+**Verified.** `dotnet build CSVM/CSVM.sln` clean, 0 warnings; `dotnet test` 2334 passed, 0 failed;
+`.\CheckCommentCaps.ps1 -Summary` clean. The new `landings-approach-trigger` suite drives C3/M01's
+built world: 8 of the chapter's 11 rows resolve, all 8 bind, a mission carrying none of the
+animations resolves none, the six drop cones read back at a 47.3° half-angle over 250.8 m, the drop
+ring starts disarmed and flying it fires nothing, the mission's own chain arms it by flying the
+site, flying `do_approach1` then starts the drop, the host takes its callbacks 11 and 2, `texdrop`
+reaches EXECUTED and `OBJECTIVE21` (PRIMARY 2) completes; flying `pz_manual_land` afterwards starts
+`hooked_to_klondike` and completes `OBJECTIVE14` (PRIMARY 4), the condition `PLAN-M5-campaign` E41
+could only satisfy by waking `INSTANTWIN` directly. 17 assertions, green on two consecutive runs.
+A `--campaign=` launch arms the same 8 rows and free flight over the same chapter arms none, which
+is the session wiring. ⚠ The drop itself is not reachable from a single scripted `--campaign=` run:
+the mission's intro definition still holds the world at 40 s of sim time, and the trigger wants two
+passes over the site, one to arm it and one to fly it. The suite is the flown evidence.
 
 ## C22 ☐ The VO dialogue chain player (`BL-443`)
 

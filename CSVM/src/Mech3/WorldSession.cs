@@ -46,6 +46,18 @@ public sealed class WorldSession
     /// teardown) so a rebuild drops the previous world's lights.</summary>
     public WorldLights Lights { get; private set; } = null!;
 
+    /// <summary>The chapter's <c>landings.zrd</c> approach triggers this mission can run, resolved
+    /// against the built gamez. Empty unless <see cref="Options.CutsceneRoots"/> asked for them,
+    /// and empty in any mission carrying none of the chapter's approach animations.</summary>
+    public IReadOnlyList<LandingApproach> Landings { get; private set; } =
+        Array.Empty<LandingApproach>();
+
+    /// <summary>Every definition those triggers can reach, their own plus the
+    /// <c>CALL_ANIMATION</c> closure: what a cutscene host has to answer for, asked by definition
+    /// rather than by callback code.</summary>
+    public IReadOnlyList<string> LandingCutsceneAnims { get; private set; } =
+        Array.Empty<string>();
+
     /// <summary>Build the world named <c>world1</c> and bind its animation program. The archives
     /// are the caller's <c>using</c> locals — see the disposal-lifetime contract on the class.
     /// ⚠ Keep each phase's <see cref="StartupProfile.Record"/> call next to its step; moving one
@@ -190,6 +202,12 @@ public sealed class WorldSession
             chapterAnimPath, missionAnimPath);
         StartupProfile.Record("anim", mark);
         s.Program = animProgram;
+        if (o.LandingTriggers)
+        {
+            s.Landings = LandingApproaches.Resolve(
+                chapterZrdrPath, gamez, name => animProgram.ByAnimName(name).Count > 0);
+            s.LandingCutsceneAnims = CutsceneAnimsOf(animProgram, s.Landings);
+        }
         // Puffer factory retirement: see Options.TexturesOutliveBuild.
         var lights = new WorldLights();
         s.Lights = lights;
@@ -235,7 +253,7 @@ public sealed class WorldSession
         s.Runtime = animRuntime;
         animRuntime.CallbackHost = o.CallbackHost;
         animRuntime.FogStateSink = o.FogStateSink;
-        if (o.CutsceneRoots && BootstrapsCutscene(animProgram))
+        if (o.CutsceneRoots && (BootstrapsCutscene(animProgram) || s.Landings.Count > 0))
         {
             BuildCutsceneRoots(root, gamez, builder);
         }
@@ -351,6 +369,30 @@ public sealed class WorldSession
         }
 
         return false;
+    }
+
+    // Every definition the chapter's approach triggers can raise a callback from: the row's own
+    // animation plus what it reaches by CALL_ANIMATION, which is where the drop and hookup movies
+    // actually live (the row's definition only aims the drop and calls one).
+    private static List<string> CutsceneAnimsOf(
+        AnimProgram program, IReadOnlyList<LandingApproach> landings)
+    {
+        var roots = new List<string>(landings.Count);
+        foreach (var approach in landings)
+        {
+            roots.Add(approach.Anim);
+        }
+
+        var names = new List<string>();
+        foreach (var def in program.Subset(roots).Defs)
+        {
+            if (def.AnimName is { } name && !names.Contains(name))
+            {
+                names.Add(name);
+            }
+        }
+
+        return names;
     }
 
     // The two roots a cutscene definition drives, neither of which the world1 walk reaches: the
@@ -522,6 +564,14 @@ public sealed class WorldSession
         /// leaves every session's node census exactly as it was; a flown chapter session sets it,
         /// because that is where an intro definition can play.</summary>
         public bool CutsceneRoots { get; init; }
+
+        /// <summary>Resolve the chapter's <c>landings.zrd</c> approach triggers. Set by a STORY
+        /// mission only. ⚠ Not by an Instant Action one, although the original's shared mission
+        /// load arms the table there too: C3/IA1 carries <c>hooked_to_klondike</c> and ships its
+        /// <c>pz_manual_land/land_on</c> active, so arming it would give an Instant Action sortie a
+        /// docking cutscene. Whether the original means to is undecoded
+        /// (docs/formats/anim-definitions/cutscenes.md).</summary>
+        public bool LandingTriggers { get; init; }
 
         /// <summary>The <c>CALLBACK</c> host installed on the world runtime before the bootstrap
         /// starts anything, since an intro definition raises its codes the instant it starts. Null

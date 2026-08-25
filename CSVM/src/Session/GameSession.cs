@@ -225,6 +225,8 @@ public partial class GameSession : Node3D
     // definition starts itself out of startanims and needs its CALLBACK codes hosted from the
     // bootstrap on. Null everywhere else, which leaves the world build's node census untouched.
     private CutsceneController? _cutscene;
+    // The landings.zrd approach trigger, built and bound alongside the cutscene host it feeds.
+    private LandingApproachRuntime? _landings;
     // The world AA emplacements: built with the rigs whenever a chapter world and the
     // shared pool exist, stepped in DriveSimSteps after the zeppelins (slung mounts read the
     // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
@@ -580,6 +582,14 @@ public partial class GameSession : Node3D
         {
             _cutscene.WorldHeld = held => _campaign?.HoldForCutscene(held);
             AddChild(_cutscene);
+            // The mid-mission cutscene trigger, hosted by the same controller. ⚠ Story missions
+            // only: C3/IA1 carries hooked_to_klondike with its approach armed, so an Instant
+            // Action sortie would take a docking cutscene (WorldSession.Options.LandingTriggers).
+            if (_campaign != null)
+            {
+                _landings = new LandingApproachRuntime();
+                AddChild(_landings);
+            }
         }
 
         Stopwatch sw;
@@ -1068,6 +1078,7 @@ public partial class GameSession : Node3D
                 // The cutscene seam, wired before the bootstrap because an intro definition raises
                 // its codes the instant startanims starts it, long before a rig exists.
                 CutsceneRoots = _cutscene != null,
+                LandingTriggers = _landings != null,
                 CallbackHost = _cutscene != null ? _cutscene.Host : null,
                 // The weather rig is built after the world, and the intro's fog fires inside the
                 // bootstrap, so the event is held until the rig has applied its zone.
@@ -1094,6 +1105,12 @@ public partial class GameSession : Node3D
         // After the bootstrap: an intro definition has already raised its codes, and this is where
         // the host picks up the two nodes it drives.
         _cutscene?.BindWorld(session.Runtime);
+        if (_cutscene != null && _landings != null)
+        {
+            _cutscene.HostDefinitions(session.LandingCutsceneAnims);
+            _landings.Bind(session.Runtime, session.Landings, _cutscene,
+                () => _rigs.Count > 0 ? _rigs[0].Controller : null);
+        }
         // The screen wash. Set here rather than inside WorldSession for the same reason the
         // contact mask below is: the overlay is a session-owned surface and WorldSession builds
         // runtimes for the test harness too, where there is no session to own one.
