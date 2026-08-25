@@ -1986,14 +1986,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`gun.Slot - 1`) and array-based on the custom-build path, and the two must not be conflated.
   *Cross-refs:* `BL-449` (the objectives gap it recorded), `PLAN-M5-polish.md` G72.
 
-- `BL-489` `[Feature]` **The screenshot key does nothing in menus, so a menu defect cannot be shown
-  without an external capture.** *Evidence:* asked for at the controls, to make reporting menu
-  defects cheaper. Every menu report in this plan has cost a round trip that a screenshot would have
-  settled. *Fix shape:* the same capture the flight screens use, reachable from the menu screens.
-  *⚠ Traps:* the campaign boards draw through `ComposedBoardView` and the launchscreen draws through
-  its own controls, so a capture that only covers one of those covers half the cases. Write the file
-  where the flight capture writes, so one place collects them. *Cross-refs:* `PLAN-M5-polish.md` G73.
-
 - `BL-490` `[Bug]` **A briefing objective's written line overlaps the one below it.** *Evidence:*
   reported at the controls on the next mission, so the mission whose lines are longer than C3/M01's.
   `CampaignBoards.For` places each objective row at `TextSlot(Briefing, i)`, a fixed 30 px step from

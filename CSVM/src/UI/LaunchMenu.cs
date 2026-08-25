@@ -770,13 +770,27 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
     }
 
-    /// <summary>Typed characters for the PLANENAME screen, the one place the launchscreen takes
-    /// text. An event rather than the raw polling everything else here uses, because only the event
-    /// carries the character the pilot's own keyboard layout produced; held keys arrive as echoes,
-    /// which is where typing gets its auto-repeat.</summary>
+    /// <summary>The screenshot key, and typed characters for the PLANENAME screen. Typing is taken
+    /// as an event rather than by the raw polling everything else here uses, because only the event
+    /// carries the character the pilot's own keyboard layout produced, and held keys arrive as
+    /// echoes, which is where typing gets its auto-repeat.
+    /// <para>⚠ The screenshot key is handled here rather than left to the launcher, so the menu
+    /// screens own their binding (BL-489); marking it handled keeps one press to one file.</para></summary>
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (!Visible || NamePage() is not { } page || @event is not InputEventKey { Pressed: true } key)
+        if (!Visible)
+        {
+            return;
+        }
+
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F12 })
+        {
+            Testing.CaptureDirector.SaveScreenshot(GetViewport());
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (NamePage() is not { } page || @event is not InputEventKey { Pressed: true } key)
         {
             return;
         }

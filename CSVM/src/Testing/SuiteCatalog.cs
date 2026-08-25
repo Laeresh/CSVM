@@ -26,6 +26,7 @@ using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
 using static CSVM.Testing.InstantActionSuites;
 using static CSVM.Testing.LandingApproachSuites;
+using static CSVM.Testing.MenuCaptureSuites;
 using static CSVM.Testing.MusicSuites;
 using static CSVM.Testing.OrdnanceSuites;
 using static CSVM.Testing.PufferSuites;
@@ -162,6 +163,7 @@ public static class SuiteCatalog
         "alpha-cutout-ray-census",
         "zeppelin-identity",
         "campaign-briefing-repaint",
+        "menu-screenshot-key",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -876,6 +878,15 @@ public static class SuiteCatalog
             + "screen afresh on far more than the handful of frames an objective count moves on, "
             + "and one frame's board is counted so the cost of repainting it is on the record",
             CampaignBriefingRepaint));
+
+        // BL-489: the screenshot key reached the launcher only when no menu was up, so a menu
+        // defect could be described but not shown.
+        into.Add(new TestHarness.Suite("menu-screenshot-key",
+            "the screenshot key on the menu screens: a real key event is pushed through the real "
+            + "viewport with a LaunchMenu standing, once on the launchscreen and once on a "
+            + "campaign board, and each press must leave one more file in the folder the flight "
+            + "capture writes to",
+            MenuScreenshotKey));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

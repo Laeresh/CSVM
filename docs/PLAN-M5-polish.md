@@ -137,7 +137,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 71. ☐ The briefing's objectives are cursor stops, their text has nowhere else to be drawn, and long
     lines overlap each other (`BL-487`, `BL-490`)
 72. ☐ The flight check draws the wrong ammunition, and its rows and objectives are not the original's (`BL-488`)
-73. ☐ The screenshot key does nothing in menus (`BL-489`)
+73. ☑ The screenshot key does nothing in menus (`BL-489`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -2653,7 +2653,7 @@ conflating them would produce exactly this symptom in a different way. ⚠ The o
 authored geometry on the board, so place it from the layout rather than by eye against the
 screenshot.
 
-## G73 ☐ The screenshot key does nothing in menus (`BL-489`)
+## G73 ☑ The screenshot key does nothing in menus (`BL-489`)
 
 **Goal.** The screenshot key works on the menu screens, so a menu defect can be shown rather than
 described.
@@ -2670,3 +2670,27 @@ cost a round trip that a picture would have settled, which is the whole case for
 **⚠ Traps.** ⚠ The campaign boards draw through `ComposedBoardView` while the launchscreen draws
 through its own controls, so a capture covering only one of those covers half the cases. ⚠ Write the
 file where the flight capture writes it, so one place collects them.
+
+**Landed.** `LaunchMenu._UnhandledInput` (`CSVM/src/UI/LaunchMenu.cs:777`) now takes `F12` on every
+menu screen and marks it handled, calling the flight screens' own
+`CaptureDirector.SaveScreenshot` (`CSVM/src/Testing/CaptureDirector.cs:52`). Both menu layouts are
+covered by one binding, because the launchscreen's control layout and the campaign boards'
+`ComposedBoardView` are drawn by the same node. The capture is unchanged in what it writes: the
+folder is now named once by `CaptureDirector.ShotDir()`, the repo's git-ignored `Screenshots/`, and
+`SaveScreenshot` returns the file it wrote so a caller can say where a shot landed.
+No dependency on a session, on `--det` or on a harness: the key is read from the ordinary input path
+a player's press arrives on.
+
+**Verified.** New suite `menu-screenshot-key` (suite 121, `CSVM/src/Testing/MenuCaptureSuites.cs`)
+pushes a real `InputEventKey` through the real viewport with a real `LaunchMenu` standing, once on
+the launchscreen and once on a campaign briefing board, and asserts one new file per press, in
+`CaptureDirector.ShotDir()`, with content, and that the menu is what took the key. PASS, 0 engine
+errors. It fails on the ownership check with the new branch disabled, so it can fail. All 12
+`campaign` suites PASS, 0 engine errors. `SuiteCatalogTests` PASS at 121 names. Build clean at 0
+warnings including StyleCop, all comment blocks within cap. ⚠ What the menu capture contains was
+checked separately, through scripted `--menu --screenshot=` and `--menu=campaign-briefing:0
+--screenshot=` runs: 52 KB and 584 KB PNGs showing the launchscreen and the briefing board, so menu
+pixels do reach a viewport grab. ⚠ Not verified: a human press on a live window. The pre-fix
+launcher binding already fired with a menu in the tree under a pushed event, so the reported
+"nothing happens" could not be reproduced headlessly, and one press at the controls is what would
+confirm it.

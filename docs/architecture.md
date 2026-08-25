@@ -3417,6 +3417,12 @@ The campaign's screens are the third layout, drawn through `ComposedBoardView` r
 as controls, and the shell owns the two things a page cannot: the briefing's narration player and
 its reveal clock (`TickCampaignAudio`). A running reveal repaints the board every frame, because a
 reveal is an animation and no property watch describes one; `campaign-briefing-repaint` measures it.
+`_UnhandledInput` also takes the screenshot key (`F12`) for both layouts and marks it handled, so a
+press on any menu screen writes one file through `CaptureDirector.SaveScreenshot`, into the same
+`Screenshots/` folder a flight shot lands in. The menu owns that binding rather than borrowing the
+launcher's, because a board is what a menu defect has to be reported from (`BL-489`);
+`menu-screenshot-key` pushes a real key event through the real viewport on both layouts and fails if
+the menu leaves the key to whatever is above it.
 
 ## src/UI/InstantActionPresets.cs
 The original's Table of Contents: the 19 preset scenarios decoded from 19 `0x230`-byte records at
@@ -4509,6 +4515,9 @@ save, constructed once in `Launcher._Ready` from the launch spec
 , which is what keeps `--menu --screenshot` capturing the launchscreen with no session node
 alive. No back-reference to the host node — `Tick`/`PrintPlacement` take the
 camera/orbit/rigs/clock/plane/menu-visible they need as parameters.
+`SaveScreenshot` is the ad-hoc save every screen shares, and `ShotDir()` is the single folder they
+all write into (`Screenshots/` at the repo root, git-ignored). It returns the file it wrote, which is
+how a caller or a suite says where a shot landed rather than re-deriving the path.
 
 ## src/Testing/GltfExporter.cs
 Exports the viewer plane's `Node3D` subtree to a glTF file — mesh + the currently painted livery

@@ -46,13 +46,18 @@ public sealed class CaptureDirector
         string.Format(System.Globalization.CultureInfo.InvariantCulture,
             "{0:0.#####},{1:0.#####},{2:0.#####}", v.X, v.Y, v.Z);
 
-    /// <summary>Save the current frame to a timestamped PNG under the repo's Screenshots/
-    /// folder (git-ignored — rendered frames are game-derived). Bound to F12 in both the
-    /// orbit viewer and free flight; the full viewport is captured, HUD overlay included.</summary>
-    public static void SaveScreenshot(Viewport viewport)
+    /// <summary>The one folder every ad-hoc capture lands in, whichever screen took it: the repo's
+    /// git-ignored Screenshots/ (rendered frames are game-derived). Menu shots go here too, so a
+    /// pilot has one place to look and one place to attach a picture to a report from.</summary>
+    public static string ShotDir() =>
+        Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "..", "Screenshots"));
+
+    /// <summary>Save the current frame to a timestamped PNG under <see cref="ShotDir"/>. Bound to
+    /// F12 in the orbit viewer, in free flight and on the menu screens; the full viewport is
+    /// captured, HUD or board included. Returns the file written, null if the save failed.</summary>
+    public static string? SaveScreenshot(Viewport viewport)
     {
-        var projectDir = ProjectSettings.GlobalizePath("res://");
-        var dir = Path.GetFullPath(Path.Combine(projectDir, "..", "Screenshots"));
+        var dir = ShotDir();
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, $"crimsonskies_{System.DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.png");
         var img = viewport.GetTexture().GetImage();
@@ -60,11 +65,11 @@ public sealed class CaptureDirector
         if (err == Error.Ok)
         {
             GD.Print($"screenshot saved: {path}");
+            return path;
         }
-        else
-        {
-            GD.PrintErr($"screenshot failed ({err}): {path}");
-        }
+
+        GD.PrintErr($"screenshot failed ({err}): {path}");
+        return null;
     }
 
     /// <summary>The capture block at the tail of `_Process`. Nothing built yet: only shoot once a
