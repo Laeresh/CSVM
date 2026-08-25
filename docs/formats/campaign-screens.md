@@ -363,6 +363,10 @@ multiplayer paths are the likely users.
 The second dword of each record (4, 4, 2, 2, 2, 2, 2, 4, 4, 1, 0, 0 in row order) is read by
 nothing this decode found; it has no cross-reference in the executable.
 
+**The table index is what a plane record stores**, and
+[saved-games.md](saved-games.md#where-the-ammunition-and-ordnance-picks-live) carries the mapping
+from it to the `wep_*` the pylon actually fires.
+
 **The description strings.** Both description panes are two langui strings, a title and a body,
 concatenated with a separator. All four blocks are contiguous and in list order:
 

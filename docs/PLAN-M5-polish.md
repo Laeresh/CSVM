@@ -96,8 +96,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — answers and housekeeping
 
-41. ◐ Decode the original's per-pylon ordnance id (`BL-462`)
-42. ◐ Decide how the MPG cinemas would play, before any code (`BL-446`)
+41. ☑ Decode the original's per-pylon ordnance id (`BL-462`)
+42. ☑ Decide how the MPG cinemas would play, before any code (`BL-446`)
 43. ◐ Close what is already done, fix what is merely stale (`BL-243`, `BL-427`, `BL-426`)
 
 ### Wave F — the second at-the-controls pass, once the mission could be finished
@@ -922,7 +922,7 @@ buildings" alone.
 
 # Wave E — answers and housekeeping
 
-## E41 ☐ Decode the original's per-pylon ordnance id (`BL-462`)
+## E41 ☑ Decode the original's per-pylon ordnance id (`BL-462`)
 
 **Goal.** An answer: what the original writes into a plane record's ordnance field, and how it maps
 to weapon defs.
@@ -946,7 +946,37 @@ from cited.
 target. ⚠ Decision 1 of the campaign plan puts writing the original save format out of scope, so
 this item stops at the answer.
 
-## E42 ☐ Decide how the MPG cinemas would play, before any code (`BL-446`)
+**Landed.** The per-pylon ordnance id is the Ammo Selection screen's twelve-row rocket table index,
+mapped to a weapon by `FUN_004440f0`: ids 0 to 4 give `wep_05` to `wep_09`, then 5 to `wep_15`, 6 to
+`wep_13`, 7 to `wep_12`, 8 to `wep_10`, 9 to `wep_11`, 10 to `wep_14`, and 11 or anything else leaves
+the pylon empty, which closes the vocabulary at twelve values. Ids 0 to 4 run in step with their
+weapon numbers and the rest do not, so the mapping is read off the switch rather than derived from an
+offset. `FUN_00443d70` settles the neighbouring groups at the same time, upgrading what was a
+cross-record observation: gun-slot ids 0 to 4 are 30, 40, 50, 60 and 70 calibre, the ammunition index
+is added, and a slot resolves to `wep_{caliber + ammo}`. The item stops at the answer as its scope
+line required; `CampaignProfileStore` and `CampaignLoadout` are untouched, and CSVM's one-based
+`PylonOrdnance` index is recorded as a deliberate stand-in, since reconciling the two vocabularies
+would migrate every existing profile.
+
+**Verified.** Two independent readers of the field agree, which is what makes this a decode rather
+than a plausible reading: `FUN_00443de0`, the mission-start applier, walks the eight cells from
+record `+0xa8`, passes each through `FUN_004440f0`, formats the result `wep_%02d` and looks it up by
+exact name in the ZWEP catalog (`FUN_004bad90` into `FUN_005abfd0`), while the Ammo Selection
+callback for `uiData` 2031 at `0x00409aec` reads the same cell and adds `0xd43`, the
+`IDS_ROCKETSHORTNAME` base. Read against a real record (`Zachary\Status.dat`, `UIData` at `0x5b4`,
+plane array at `+0x44c`): the shipped profile uses 1, 2, 5, 10 and 11, with 11 on exactly the cells
+past each wing's hardpoint count at `+0x34`/`+0x38` and never inside it, and the eight-pylon planes
+carrying no 11 at all. The torpedo respects the table's own availability gate, offered from mission
+20 on a profile with 20 missions completed. Two planes carry genuinely mixed pylon loads, which
+`docs/formats/loadouts.md` previously had only from the design document. The mapping, the record it
+was read from and the values the shipped profile uses are on
+`docs/formats/saved-games.md`, and the "ordnance id vocabulary" line is struck from that page's own
+"Evidence and limits". ⚠ One asymmetry is traced but NOT confirmed in play and is recorded as such:
+the wingman's pylons go through `FUN_00444300`, which formats `wep_%2d` rather than `%02d`, so ids 0
+to 4 render with a leading space against an exact-match catalog lookup and would find nothing. The
+original cannot be run here to see it.
+
+## E42 ☑ Decide how the MPG cinemas would play, before any code (`BL-446`)
 
 **Goal.** A recorded decision: whether Godot's own video playback can take the shipped files, or
 whether they need transcoding at extract time.
@@ -965,6 +995,31 @@ accept, and write the decision down. No player code until the decision exists.
 
 **⚠ Traps.** ⚠ Do not start with a transcode pipeline; if the engine plays the files as they ship,
 the pipeline is the expensive wrong answer.
+
+**Landed.** ⚠ **The trap did not fire: the engine will not take the files as they ship, so a
+conversion step is required after all.** The decision is to transcode at extract time to `.ogv` and
+play through a stock `VideoStreamPlayer`, because that uses a decoder the engine maintains, the
+playback surface is identical either way, and the source is 320x240 and already lossy. The
+alternative is recorded beside it because the choice is reversible: a C# `VideoStreamPlayback`
+subclass decoding MPEG-1 at runtime needs no engine build and no GDExtension, and it wins if keeping
+a third-party media binary out of the extraction step matters more than owning a decoder. No player
+code and no pipeline were written. `BL-446` stays open as the feature it is, carrying the decision.
+
+**Verified.** The ten shipped files are uniformly MPEG-1 system streams (pack marker `0010`, never
+MPEG-2's `01`), MPEG-1 video 320x240 square-pixel at 856 to 1500 kbps with no sequence extension
+anywhere, and MPEG-1 audio layer II at 44.1 kHz. ⚠ Two break the otherwise uniform profile and a
+reader must not assume one: `msopen1.mpg` is 29.97 fps at 1500 kbps, and `crimflag.mpg` is mono. No
+`ffprobe` or `mediainfo` exists in this environment, so the pack, sequence and audio frame headers
+were parsed directly. Godot 4.7 compiles in exactly one video decoder: `VideoStreamTheora` is the
+only `VideoStream` subclass in the editor binary, `VideoStream.xml` says the file should be Ogg
+Theora with the `.ogv` extension, and the single `.mpg` string in the binary is the Android
+exporter's already-compressed extension list. The facts, the decision and its limits are on
+`docs/formats/cinemas.md`. Three findings for whoever builds the player: `fmv.zrd`'s `PLAYAVI`
+actions name `MSopen1.mpg`, `zipper.mpg` and `Chap0.mpg` in a case the on-disk names do not have, so
+a case-sensitive lookup fails on all three; the chapter cinemas come from a `char[9]` array at
+`0x0061e68c` naming `chap1.mpg` through `chap6.mpg`, and `chap6.mpg` has no file in the install.
+⚠ Nobody has judged a transcode at the controls, which is a presentation call rather than a
+technical one.
 
 ## E43 ☐ Close what is already done, fix what is merely stale (`BL-243`, `BL-427`, `BL-426`)
 

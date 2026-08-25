@@ -164,29 +164,79 @@ against the most recent mission attempt.
 ### Where the ammunition and ordnance picks live
 
 `docs/formats/loadouts.md` states there is no player loadout anywhere in the ZBD data. It is in the
-204-byte plane record, in two field groups that [paint.md](paint.md) describes only in terms of the
+204-byte plane record, in the field groups that [paint.md](paint.md) describes only in terms of the
 values the hangar's own commit writes:
 
 | Offset | Field |
 |---|---|
-| `0x88`, `0x8c`, `0x90`, `0x94` | four gun-slot ids, `5` = no gun |
+| `0x34`, `0x38` | hardpoints on the left and the right wing, which bound the pylon cells |
+| `0x88`, `0x8c`, `0x90`, `0x94` | four **gun-slot ids**, `0` to `4` selecting 30, 40, 50, 60 and 70 calibre, `5` = no gun |
 | `0x98`, `0x9c`, `0xa0`, `0xa4` | **per-gun ammunition index**, `4` = no gun |
 | `0xa8` .. `0xc4` | **per-pylon ordnance id**, eight cells, four per wing |
 
-The ammunition claim rests on a cross-record observation over the nine planes in the sample
-profile, not on offsets. `ammo[i] == 4` holds in exactly the slots where `gun[i] == 5`, in all
-nine records with no exception, so the group is per-gun-slot and `4` is its no-gun marker. The
-remaining values are `0`, `1`, `2` and `3`, which is exactly the ammunition index range
-[loadouts.md](loadouts.md) decodes for the `wep_{caliber+k}` matrix (`slug` 0, `dumdum` 1, `ap` 2,
-`magnesium` 3), and they vary per plane and per slot within one plane. The hangar's commit writes
-`0` or `4` here, which is the same field seen before the campaign's Ammo Selection screen has
-touched it.
+`FUN_00443de0` is the mission-start applier and reads all three groups off the profile's plane
+record (or off a scratch record on the Instant Action path). It resolves each gun through
+`FUN_00443d70`, which takes the gun-slot id and the ammunition index and returns the weapon
+number: ids `0` to `4` give 30, 40, 50, 60 and 70, and the ammunition index is added to that, so a
+gun slot resolves to `wep_{caliber + ammo}`, the rule [loadouts.md](loadouts.md) states for stock
+guns. An ammunition index of `4`, or a gun id the switch does not name, returns -1 and the slot
+carries no weapon. That confirms from the executable what a cross-record observation over the nine
+planes in the sample profile also shows, that `ammo[i] == 4` holds in exactly the slots where
+`gun[i] == 5`; the remaining ammunition values are `0` to `3` (`slug`, `dumdum`, `ap`,
+`magnesium`). The hangar's commit writes `0` or `4` here, which is the same field seen before the
+campaign's Ammo Selection screen has touched it.
 
-The pylon cells vary the same way: values `1`, `2`, `5`, `10` and `11` appear across the nine
-records, with `11` on every cell past a wing's hardpoint count. The hangar commit writes `1` or
-`11`, so the other values are the campaign's per-pylon ordnance choice. **The id-to-ordnance
-mapping is not decoded**, so a CSVM implementation must resolve these against
-[loadouts.md](loadouts.md)'s hardpoint stock ids rather than assume the numbering matches.
+**The per-pylon ordnance id is the rocket table's index**, the twelve-row table
+[campaign-screens.md](campaign-screens.md) decodes for the Ammo Selection screen, and not the
+dropdown row that screen displays. Two independent paths in the executable read the field as that
+index. `FUN_00443de0` walks the eight cells from `+0xa8` and passes each through `FUN_004440f0`, a
+switch whose result is formatted `wep_%02d` and looked up by name in the ZWEP catalog
+(`FUN_004bad90` into `FUN_005abfd0`, an exact name match). The Ammo Selection callback for
+`uiData` 2031 at `0x00409aec` reads `+0xa8 + 4 * cell` off the same record and adds `0xd43`, which
+is 3395, the `IDS_ROCKETSHORTNAME` base, so the stored value indexes the string block directly.
+
+| Id | Ordnance | Weapon | In the sample profile |
+|---|---|---|---|
+| 0 | Armor-piercing rockets | `wep_05` | not used |
+| 1 | High-explosive rockets | `wep_06` | Jumping Jane on all eight pylons, Gypsy Magic and Mk III on one each |
+| 2 | Flak rockets | `wep_07` | eight of the nine planes |
+| 3 | Sonic rockets | `wep_08` | not used |
+| 4 | Flash rockets | `wep_09` | not used |
+| 5 | Rear flash rockets | `wep_15` | Red Hot Spender, on its second left pylon |
+| 6 | Smoke screen | `wep_13` | not used |
+| 7 | Choker rockets | `wep_12` | not used |
+| 8 | Beeper rockets | `wep_10` | not used |
+| 9 | Seeker rockets | `wep_11` | not used |
+| 10 | Aerial torpedoes | `wep_14` | Accipiter Annie, on its two outer pylons per wing |
+| 11 | None | none | every cell past a wing's hardpoint count |
+
+Ids `0` to `4` run in step with `wep_05` to `wep_09`, and the rest do not, so the mapping has to be
+read off `FUN_004440f0` rather than derived from an offset. `FUN_004440f0` names ids `0` to `10`
+and returns -1 for everything else, so `11` and any out-of-range value leave the pylon empty; the
+vocabulary is closed at those twelve values.
+
+Cells `0` to `3` are the left wing and `4` to `7` the right, each half bounded by the hardpoint
+count at `+0x34` and `+0x38`. In all nine planes of the sample profile, `11` sits on exactly the
+cells past that count and never inside it, and the eight-pylon planes (Jumping Jane, Accipiter
+Annie) carry no `11` at all. The hangar's commit writes `1` or `11`, so any other value is the
+campaign's own per-pylon pick. Red Hot Spender carries Flak on one pylon and a rear flash rocket on
+another, and Accipiter Annie carries Flak inboard and torpedoes outboard, which is a mixed load
+observed in shipped data rather than inferred from the design
+([loadouts.md](loadouts.md), "Schema limit"). The torpedo also respects the table's availability
+gate: it is offered from mission 20, and this profile has 20 missions completed.
+
+**CSVM stores a different vocabulary in the same-named field.** `CampaignProfileStore`'s
+`Ordnance[8]` holds a one-based index into `stock_loadouts.json`'s `PylonOrdnance` option list,
+with `0` meaning unset, which `CampaignLoadout.For` reads as `Ordnance[cell] - 1`. That is a
+CSVM-side stand-in, not this decode. Reconciling the two would migrate every existing CSVM
+profile, so the two numbering schemes are deliberately separate and neither is derived from the
+other.
+
+One asymmetry in `FUN_00443de0` is traced but not confirmed in play: the pilot's pylon results are
+stored for the `wep_%02d` path, while the wingman's go to `FUN_00444300`, which formats
+`wep_%2d`. Ids `0` to `4` resolve to weapon numbers 5 to 9, which that format renders with a
+leading space, and the catalog lookup is an exact name match, so those five ordnance types would
+find nothing on the wingman's pylons. The original cannot be run here to see what that looks like.
 
 ### The mission-result array
 
@@ -332,7 +382,8 @@ Where the decode stops:
 - **`UIData`'s settings block** (`+0x110` .. `+0x310`). Only the resolution pair and the renderer
   name buffers are identified.
 - **The two twelve-byte counter arrays** in a mission-result record.
-- **The ordnance id vocabulary** for the per-pylon cells, and the payout table's values.
+- **The payout table's values.** The ordnance id vocabulary for the per-pylon cells is decoded
+  above; the second dword of each rocket table record still has no reader.
 - **`UIData +0x00` and `+0x08`.** Located and typed, not interpreted. `+0x340` is the wingman's
   selected-plane index: the flight check resets its wingman slot from it the way the pilot slot
   reads `+0x33c` ([campaign-screens.md](campaign-screens.md)).

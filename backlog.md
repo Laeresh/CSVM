@@ -2857,24 +2857,23 @@ usual.
   the automatic-screenshot sting, not a zone-cleared cue — formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
-- `BL-462` `[Research]` **The original's per-pylon ordnance id vocabulary is not recovered; the
-  hangar stores a CSVM-side stand-in.** *Evidence:* `OwnedPlane.Ordnance` keeps a table index
-  (`1..12` is table index `0..11` plus one), which is a deliberate stand-in chosen so the Ammo
-  Selection screen could ship, not a recovery of what the original writes into a
-  `SavedGames\` plane record's ordnance field. `OwnedPlane.Ammo` is unaffected and keeps its
-  shipped `0..3` plus `4` for no gun. *Fix shape:* decode the field out of a real plane record and
-  map it to weapon defs, which would let a future writer round-trip an original save losslessly.
-  *⚠ Traps:* the user's `CrimsonSkiesGame\SavedGames\` is read-only evidence, never a write target.
-  Nothing depends on this today, so changing the stored vocabulary is a migration of every existing
-  profile, not an edit. *Cross-refs:* `docs/formats/saved-games.md`; `docs/PLAN-M5-campaign.md`
-  C25, and Decision 1, which puts writing the original save format out of scope.
-
 - `BL-446` `[Feature]` **The MPG movie cinemas do not play.** *Evidence:* Decision 2 of
   `docs/PLAN-M5-campaign.md` put them out of scope for the campaign milestone: plain MPG playback
   is a codec and container problem orthogonal to the campaign flow, and the loop reaches the cabin
-  and the mission without one. *Fix shape:* decide first whether Godot's own video playback can
-  take the shipped files or whether they need transcoding at extract time; that decision is the
-  deliverable before any code. *Cross-refs:* `docs/PLAN-M5-campaign.md` Decision 2, which filed it.
+  and the mission without one. **The decision this entry was waiting on is made and recorded in
+  [`docs/formats/cinemas.md`](docs/formats/cinemas.md); what remains is the work itself.** The ten
+  shipped files are MPEG-1 system streams, MPEG-1 video 320x240 at 856 to 1500 kbps with MPEG-1
+  audio layer II at 44.1 kHz, and Godot 4.7 compiles in exactly one video decoder, Ogg Theora, so
+  they cannot play as they ship. The decision is to transcode at extract time to `.ogv` and play
+  through a stock `VideoStreamPlayer`, with a C# `VideoStreamPlayback` subclass recorded as the
+  reversible alternative. *Fix shape:* the transcode step in the extraction pipeline and the player.
+  *⚠ Traps:* two files break the otherwise uniform profile and a reader must not assume one
+  (`msopen1.mpg` is 29.97 fps at 1500 kbps, `crimflag.mpg` is mono). `fmv.zrd`'s `PLAYAVI` actions
+  name `MSopen1.mpg`, `zipper.mpg` and `Chap0.mpg` in a case the on-disk names do not have, so a
+  case-sensitive lookup fails on all three. The chapter array at `0x0061e68c` names `chap1.mpg`
+  through `chap6.mpg` and `chap6.mpg` has no file in the install. Nobody has judged a transcode at
+  the controls, which is a presentation call and not a technical one.
+  *Cross-refs:* `docs/PLAN-M5-campaign.md` Decision 2, which filed it; `docs/formats/cinemas.md`.
 
 - `BL-463` `[Feature]` **The cabin ships without Change Memento.** *Evidence:* Decision 3 of
   `docs/PLAN-M5-campaign.md` deferred it: the function is cosmetic and rests on the undecoded
