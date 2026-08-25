@@ -19,8 +19,8 @@ public sealed class CampaignRosterPage : CampaignPage
     // removes a profile names the profile it removes.
     private bool _confirming;
 
-    // The roster row the player picked, "" for none. A pick fills the name field, so the field is
-    // what every action below actually reads.
+    // The roster row the player picked this visit, "" for none. While it is empty the screen
+    // stands on the store's remembered player instead, which is what <see cref="Selected"/> is.
     private string _selected = string.Empty;
 
     /// <summary>Binds the page to its flow.</summary>
@@ -59,9 +59,41 @@ public sealed class CampaignRosterPage : CampaignPage
         }
     }
 
+    /// <summary>The cursor opens on the remembered player's own row, so returning to a campaign is
+    /// one press. Row 0, the name field, when nothing is remembered or its profile is gone.</summary>
+    public override int OpeningRow => _confirming ? 1 : RosterRow(Selected);
+
     private int ContinueRow => Flow.Roster.Count + 1;
 
     private int DeleteRow => Flow.Roster.Count + 2;
+
+    // The profile the screen stands on: the pilot's own pick, or the store's remembered player
+    // until they make one. Re-derived rather than latched, because the roster is read after the
+    // page is built and a profile can be created or deleted under it.
+    private string Selected
+    {
+        get
+        {
+            if (_selected.Length > 0)
+            {
+                return _selected;
+            }
+
+            string last = Flow.Store.LastPlayed;
+            return RosterRow(last) > 0 ? last : string.Empty;
+        }
+    }
+
+    // What the screen's three actions act on: the typed name, or the profile it stands on while
+    // the field is untouched. Picking a row fills the field, so the two agree after the first pick.
+    private string NameInPlay
+    {
+        get
+        {
+            string typed = _entry.Text.Trim();
+            return typed.Length > 0 ? typed : Selected;
+        }
+    }
 
     /// <inheritdoc/>
     public override string RowText(int row)
@@ -73,13 +105,14 @@ public sealed class CampaignRosterPage : CampaignPage
 
         if (row == 0)
         {
-            return "Name:  " + (_entry.Display.Length > 0 ? _entry.Display : "(none)");
+            string shown = _entry.Display.Length > 0 ? _entry.Display : Selected;
+            return "Name:  " + (shown.Length > 0 ? shown : "(none)");
         }
 
         if (row <= Flow.Roster.Count)
         {
             string name = Flow.Roster[row - 1];
-            return name == _selected ? "✓ " + name : name;
+            return name == Selected ? "✓ " + name : name;
         }
 
         return row == ContinueRow ? "CONTINUE" : row == DeleteRow ? "DELETE PLAYER" : "CANCEL";
@@ -125,7 +158,7 @@ public sealed class CampaignRosterPage : CampaignPage
 
         if (row <= Flow.Roster.Count)
         {
-            return Flow.Roster[row - 1] == _selected
+            return Flow.Roster[row - 1] == Selected
                 ? "Enter / A again to fly this player's campaign"
                 : "Enter / A selects this player";
         }
@@ -157,8 +190,9 @@ public sealed class CampaignRosterPage : CampaignPage
         if (row <= Flow.Roster.Count)
         {
             string name = Flow.Roster[row - 1];
-            if (name == _selected)
+            if (name == Selected)
             {
+                _entry.Set(name);
                 return Continue();
             }
 
@@ -200,11 +234,31 @@ public sealed class CampaignRosterPage : CampaignPage
         return false;
     }
 
+    // Which row a profile name sits on, or 0 (the name field) for a name the roster does not
+    // carry. 0 is also where a remembered profile that has since been deleted lands.
+    private int RosterRow(string name)
+    {
+        if (name.Length == 0)
+        {
+            return 0;
+        }
+
+        for (int i = 0; i < Flow.Roster.Count; i++)
+        {
+            if (Flow.Roster[i] == name)
+            {
+                return i + 1;
+            }
+        }
+
+        return 0;
+    }
+
     // The screen's one commit path: validate the name in the original's own words, create the
     // profile when it is new, and open the cabin on it.
     private bool Continue()
     {
-        string name = _entry.Text.Trim();
+        string name = NameInPlay;
         if (name.Length == 0)
         {
             Flow.SetMessage(Flow.Strings.Text(200, "You must enter a player name."));
@@ -261,13 +315,16 @@ public sealed class CampaignRosterPage : CampaignPage
     // that follows a mistaken DELETE PLAYER must not be the one that destroys a campaign.
     private bool BeginDelete()
     {
-        string name = _entry.Text.Trim();
+        string name = NameInPlay;
         if (name.Length == 0 || Flow.Store.Load(name) == null)
         {
             Flow.SetMessage($"There is no player named \"{name}\".");
             return true;
         }
 
+        // The confirm names the profile it is about, and it reads the field, so a delete aimed at
+        // the remembered player has to put that name there first.
+        _entry.Set(name);
         _confirming = true;
         Flow.FocusRow(1);
         return true;

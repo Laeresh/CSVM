@@ -3413,6 +3413,10 @@ onto 19 items, `_presetTop` follows the cursor through `ScrollPresetsToCursor`, 
 that slice while `Row` keeps taking the absolute index. `DebugPreset(N)` (--debug-preset=) applies
 one and opens on step 1, the aid for what units cannot see: a wrong aircraft or militia looks
 entirely plausible on screen.
+The campaign's screens are the third layout, drawn through `ComposedBoardView` rather than rebuilt
+as controls, and the shell owns the two things a page cannot: the briefing's narration player and
+its reveal clock (`TickCampaignAudio`). A running reveal repaints the board every frame, because a
+reveal is an animation and no property watch describes one; `campaign-briefing-repaint` measures it.
 
 ## src/UI/InstantActionPresets.cs
 The original's Table of Contents: the 19 preset scenarios decoded from 19 `0x230`-byte records at
@@ -3632,7 +3636,10 @@ the wave's whole mount point: a new screen is one page file plus one line there,
 `HangarArt` (the same art column the hangar draws) and a `CampaignTextEntry`; while that field is
 armed, `CapturesText` tells the shell the keyboard is typing, and the flow's own cursor axes edit
 the name instead of the list. Profiles are created, read and deleted only through
-`CampaignProfileStore`, so a deletion takes the profile directory and never `user://Planes/`.
+`CampaignProfileStore`, so a deletion takes the profile directory and never `user://Planes/`. That
+store also remembers which profile was last seated, by name; `ICampaignPage.OpeningRow` is where a
+screen says which row the cursor arrives on, and the roster page answers with that profile's row
+(`docs/org/campaign-board.md`, "Which player the profile screen opens on").
 ⚠ A campaign page draws as a composed board, not as the shared `BoardMenu` idiom: it contributes its
 `Pictures`, `Strokes` and `Captions` and names which of the screen's authored buttons each row
 presses through `Button`, and `CampaignBoards` supplies the geometry. The `HangarArt` a page still

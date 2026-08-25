@@ -1107,28 +1107,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
-- `BL-485` `[Bug]` **The briefing screen only repaints on a keypress, so its reveal advances
-  invisibly and the picture changes only when the selection does.** *Evidence:* reported at the
-  controls. `LaunchMenu.Rebuild` runs on input, and the one per-frame path that can mark the board
-  dirty is `TickCampaignAudio` (`LaunchMenu.cs:1883-1908`), whose change test predates the reveal
-  being drawn: it compares `page.RowCount` and `page.Art` and returns false otherwise. Both are now
-  the wrong things to watch. `BL-464` made the briefing draw its flags, photographs, flourishes and
-  route line through `Pictures`/`Strokes` off `BriefingReveal.Elements`
-  (`CampaignBriefingPage.cs:143-183`), each element carrying its own `Visible`, `Opacity` and
-  rotation, and `BL-479`'s closure left campaign pages' `Art` doing nothing. So every element that
-  appears between two parchment lines appears with no repaint behind it, and a fade changes opacity
-  every frame with nothing watching. *Fix shape:* the briefing is a two-minute animation, so a
-  discrete did-it-change test is the wrong shape; while the reveal is running the board wants
-  repainting on its own clock. *⚠ Traps:* `Rebuild` replaces the controls it draws, so repainting at
-  frame rate is not obviously free and needs measuring before it is adopted, and the flicker note at
-  `LaunchMenu.cs:780` exists because a rebuild inside an input handler already bit once. Do not fix
-  it by watching more page properties one at a time: opacity alone changes continuously, so any
-  property list is a list of the cases someone remembered. *⚠ Instrument gap:* `--menu=campaign-briefing:<s>`
-  advances the reveal and then draws ONCE, which is why `BL-464`'s timed shots at 6, 12, 24, 40 and
-  70 s all read correctly while the live screen does not. A check for this has to drive frames, not
-  a time argument. *Cross-refs:* `BL-464` (the reveal drawing this outgrew), `BL-449` (the composed
-  board surface), `PLAN-M5-polish.md` B14.
-
 - `BL-484` `[Bug]` **An `AT_NODE` pose run during the animation bootstrap reads and writes global
   transforms on out-of-tree nodes, so Godot returns identity and the pose lands at the world
   origin.** *Evidence:* `PoseChannel.PoseAtNode` (`PoseChannel.cs:383,386,391`) takes the host's
@@ -1970,23 +1948,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-486` `[Feature]` **The profile screen opens on the name field, so returning to a campaign means
-  walking the cursor down to your own profile every time.** *Evidence:* reported at the controls,
-  wanting the last profile already selected so that confirming is one press.
-  `ICampaignPage.OpeningRow` is the seam and it exists (`CampaignFlow.cs:69`, defaulted to 0 at
-  `:416`, consumed at `:302` and `:322`), but `CampaignRosterPage` does not override it, so the
-  cursor opens on row 0, the name field, above `Flow.Roster`'s rows. Nothing records which profile
-  was last used: `CampaignProfileStore.List` (`:312-328`) walks the profile directories and sorts
-  the names alphabetically, and `CampaignProfileDef` carries no last-played stamp. *Fix shape:*
-  decide where "last used" is recorded BEFORE writing the override, and check what the original
-  records rather than inventing a sidecar, since it must remember the current player somewhere to
-  reopen a campaign at all. Only then override `OpeningRow` to that profile's row. *⚠ Traps:* a
-  directory timestamp is not a last-played record, since any write to a profile touches it and a
-  restore or a copy rewrites all of them at once. The roster is alphabetical, so a row index is not
-  stable across creating or deleting a profile and the stored value has to be the NAME.
-  `CampaignFlow.ClampedRow` runs right after `OpeningRow`, so an override naming a profile that has
-  since been deleted must land somewhere sensible rather than out of range. *Cross-refs:*
-  `PLAN-M5-polish.md` G70; `BL-449` (the composed board these screens draw through).
+- `BL-487` `[Feature]` **The briefing's objectives are cursor stops, and their text has nowhere else
+  to be drawn.** *Evidence:* asked for at the controls, that objectives need not be selectable in the
+  briefing. `CampaignBriefingPage.RowCount` returns the three buttons plus one row per revealed
+  objective, so each uncovered objective becomes another cursor stop. Removing them from the count is
+  not separable today: the objective text reaches the screen ONLY through that per-row path, since
+  `CampaignBoards.For` (`:122-140`) walks `page.RowCount` and turns each non-button row into a
+  `BoardLine` at the briefing's authored text slot, and the `Pictures` path cannot carry it because
+  `AddElements` requires `element.Bitmap.Length > 0` while a `ZEPTEXT` objective element carries an
+  empty bitmap by definition. Cutting the rows today deletes the written parchment lines rather than
+  only their cursor stops. *Fix shape:* move the objective lines onto the page's `Captions`, which
+  already places the note heading at the same authored geometry, then drop the rows; `RowArt` becomes
+  unreachable and goes with them. *⚠ Traps:* do not cut the rows before the text has somewhere else
+  to be drawn. `campaign-loop` asserts `briefing.RowCount > BriefingButtons`
+  (`CampaignLoopSuites.cs:175`), and that assertion has to move with the content rather than be
+  deleted, or the check that the reveal writes anything at all is lost. *Cross-refs:* `BL-485`, whose
+  repaint fix does NOT watch `RowCount`, so this is independent rather than blocked; `BL-464`.
+
 
 - `BL-483` `[Bug]` **`campaign-objectives-hud` fails on C4 and C5, on its wake-cue check rather than
   its readout check.** *Evidence:* found while fixing the same suite's completion driver, which now

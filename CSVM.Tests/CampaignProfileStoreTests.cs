@@ -215,4 +215,43 @@ public class CampaignProfileStoreTests
         Assert.Null(store.Load(name));
         Assert.True(Directory.Exists(Path.Combine(dir, "Zachary")));
     }
+
+    /// <summary>The last-played record is a name beside the profile directories, so it survives a
+    /// second store instance, an empty name clears it, and an unreadable file reads as none rather
+    /// than throwing. It is never a row: <see cref="CampaignProfileStore.List"/> sorts.</summary>
+    [Fact]
+    public void LastPlayed_RoundTripsClearsAndToleratesRubbish()
+    {
+        var dir = TestData.TempDir();
+        var store = new CampaignProfileStore(dir);
+        Assert.Equal(string.Empty, store.LastPlayed);
+
+        store.RecordLastPlayed("Nathan");
+        Assert.Equal("Nathan", new CampaignProfileStore(dir).LastPlayed);
+        Assert.Empty(store.List()); // the record is not a profile
+
+        store.RecordLastPlayed(string.Empty);
+        Assert.Equal(string.Empty, new CampaignProfileStore(dir).LastPlayed);
+
+        File.WriteAllText(Path.Combine(dir, "last-played.json"), "not json at all");
+        Assert.Equal(string.Empty, new CampaignProfileStore(dir).LastPlayed);
+    }
+
+    /// <summary>Deleting the recorded profile forgets it, so nothing points at a name the store no
+    /// longer carries; deleting a different one leaves the record standing.</summary>
+    [Fact]
+    public void Delete_ClearsTheRecordOnlyForTheProfileItRemoves()
+    {
+        var dir = TestData.TempDir();
+        var store = new CampaignProfileStore(dir);
+        store.Save(CampaignProfileDef.NewProfile("Nathan"));
+        store.Save(CampaignProfileDef.NewProfile("Zachary"));
+        store.RecordLastPlayed("Nathan");
+
+        store.Delete("Zachary");
+        Assert.Equal("Nathan", store.LastPlayed);
+
+        store.Delete("Nathan");
+        Assert.Equal(string.Empty, store.LastPlayed);
+    }
 }

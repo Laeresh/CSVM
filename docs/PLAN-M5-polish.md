@@ -132,8 +132,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 66. ☑ Two persist-log behaviour questions, carried out of `BL-243`'s closure
 67. ☑ `BL-181`'s blocker now reads as discharged when it is not
 68. ❌ Why the scaffolding read differently at the controls (`BL-477`), disproved: ours reproduces it
-69. ☐ The briefing screen only repaints on a keypress, so its reveal advances invisibly (`BL-485`)
-70. ☐ The profile screen does not open on the profile you last played (`BL-486`)
+69. ☑ The briefing screen only repaints on a keypress, so its reveal advances invisibly (`BL-485`)
+70. ☑ The profile screen does not open on the profile you last played (`BL-486`)
+71. ☐ The briefing's objectives are cursor stops, and their text has nowhere else to be drawn (`BL-487`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -2439,7 +2440,7 @@ which is the lift doing its job. The other three tanks lie 33 to 56 m from that 
 rocket's radius, so a single rocket kills one tank directly and the rest is the chain; that is a
 radius result and not an occlusion one. The ray half is unchanged at 5 of 180.
 
-## G69 ☐ The briefing screen only repaints on a keypress (`BL-485`)
+## G69 ☑ The briefing screen only repaints on a keypress (`BL-485`)
 
 **Goal.** The briefing's reveal is seen as it happens, rather than only when a keypress happens to
 repaint the board.
@@ -2472,7 +2473,42 @@ frame rate is not obviously free. ⚠ **The instrument that missed this must cha
 timed shots at 6, 12, 24, 40 and 70 s all read correctly while the live screen does not. A check for
 this has to drive frames.
 
-## G70 ☐ The profile screen does not open on the profile you last played (`BL-486`)
+**Landed.** `TickCampaignAudio` (`LaunchMenu.cs:1899-1915`) no longer asks whether a property moved.
+While the page's reveal is not `Complete` the board repaints on the frame clock, plus one trailing
+frame so the frame that lands the last tween is drawn; `_briefingRows`/`_briefingArt` are gone and
+`_briefingRunning` replaces them. The trap is recorded on that member rather than here. A second
+defect on the way: `RebuildBoard` never recorded `_stripText`, so `_Process`'s own join-strip
+comparison never settled on a campaign screen and whether the briefing repainted depended on
+leftover text from the last centred screen. It is recorded there now (`LaunchMenu.cs:2270-2273`),
+which is what makes the repaint policy the only thing driving a board's redraw.
+
+**The cost, measured before adopting it.** The board path of `Rebuild` replaces no controls: it
+composes a `ComposedBoard` and hands it to `ComposedBoardView.Show`, which sets four fields and
+queues a redraw. Over 5400 driven frames of a real menu that composition costs **0.004 ms per
+frame**, and the board at its last state is **13 drawn primitives** (pictures, strokes, text lines
+and the three plaques), all from cached textures. Both numbers are asserted by the new
+suite rather than left in a commit message. Nothing flickers, because `Show` replaces the whole
+composition in one call and the surface draws it in one `_Draw`.
+
+**The new check: `campaign-briefing-repaint`** (suite 120, `CampaignBriefingRepaintSuites.cs`). It
+drives frames rather than taking a time argument: it builds a real `LaunchMenu`, walks it to the
+briefing, turns Godot's own processing off and calls `_Process` 5400 times at a fixed 1/60 s. Each
+frame it compares the composition the board surface is holding against one composed from the page
+at that moment, so a shell that advances the reveal without repainting is caught on the frame it
+happens. **Before the fix: 5193 of 5400 frames stale and two distinct compositions over a whole
+reveal. After: 0 stale, 690 distinct.** It also catches the frozen case, since a board that never
+repaints is stale on every frame after the first. `ICampaignPage`'s per-row objective path is
+untouched, so `RowCount` still moves and `campaign-loop` still reads it.
+
+**Verified.** `campaign-briefing-repaint` PASS with 0 engine errors, and all 12 `campaign` suites
+PASS with 0 engine errors. 2378 units. Build clean at 0 warnings including StyleCop. Live A/B at
+the pixel level, 45 consecutive rendered frames per point: pre-fix, 1 distinct image at both t=5 s
+and t=12 s; post-fix, 26 and 19. At 24, 40 and 70 s the reveal is holding on a narration marker with
+no tween running, so one distinct image there is correct rather than a miss. ⚠ The marker timing was
+not touched: `BriefingReveal` and `WavCues` are unchanged, and the reveal still completes inside the
+same window it did before.
+
+## G70 ☑ The profile screen does not open on the profile you last played (`BL-486`)
 
 **Goal.** Returning to a campaign is one press: the profile screen opens with the last played profile
 already under the cursor.
@@ -2500,3 +2536,72 @@ not stable across creating or deleting a profile: the stored value has to be the
 `CampaignFlow.ClampedRow` runs immediately after `OpeningRow`, so an override naming a profile that
 no longer exists must land somewhere sensible rather than out of range. ⚠ The user's own profile
 `Gab` is read-only evidence and is never a write target in a test.
+
+**The storage question, answered from the binary before any code.** The original remembers the
+current player **by name, in the registry, outside every save file**:
+`HKEY_CURRENT_USER\SOFTWARE\Microsoft\Microsoft Games\Crimson Skies\1.0`, value `UIPlayerName`,
+REG_SZ. `FUN_00404960`'s UI-string-save message (`0x85d`, index 0) writes `UIData +0x314` there
+through `FUN_00407440`, and `FUN_004113b0` reads it back through `FUN_004073d0` when `+0x314` is
+empty, with langui string 500 only as the never-played fallback. The same key carries the
+multiplayer callsign, game name, team name and connection settings. So the extraction carries
+nothing, because the record was never in `SavedGames\` at all; the decode is now on
+`docs/formats/saved-games.md` under "Which player is current, across runs", and it corrects that
+page's `+0x314` row, which said langui 500 was the source rather than the fallback.
+
+**Landed.** A store of our own with the original's semantics, and the registry key deliberately not
+written: it is the retail game's live state, and a remake that edits it changes what the original
+does on the same machine. `CampaignProfileStore.LastPlayed` / `RecordLastPlayed` hold the profile
+**name** in `user://Profiles/last-played.json`, beside the profile directories rather than inside
+one, since it is a statement about the store. `CampaignFlow.SelectProfile` records it, which is the
+one place a profile is seated. `CampaignProfileStore.Delete` clears it when it removes that profile.
+`CampaignRosterPage.OpeningRow` resolves the recorded name against `Flow.Roster` and returns that
+row, and the page's new `Selected` re-derives the standing profile every time rather than latching
+it, because the roster is read after the page is built. The screen also ticks that profile and its
+name field carries it, so the confirm on the opening row flies the campaign: one press, which is
+what was asked for. `CampaignFlow`'s constructor now seats `Page.OpeningRow` as well, since the
+opening screen was the one screen that never consulted the seam.
+
+**Verified.** A driven-cursor check in `CSVM.Tests/CampaignRosterPageTests.cs`, every step a call a
+pad press makes, over a roster of three where the remembered profile is neither first nor last: the
+reopened flow lands on row 2, draws the tick and the name, and one `Accept` reaches the cabin on
+that profile. It fails on the opening row without the override. Both trap cases are their own tests:
+a profile whose directory was removed behind the store's back opens on the name field with the
+cursor in range, and deleting the remembered profile through the screen clears the record. Two store
+units cover the record itself, including an unreadable file reading as none and a delete clearing
+only its own name. 2383 units, all 12 `campaign` engine suites PASS with 0 engine errors, build
+clean at 0 warnings including StyleCop.
+
+⚠ **Not reached.** Nothing migrates an existing installation: a player whose profiles predate this
+sees the name field on the first visit and the remembered row from the second, which is the same
+state a new installation is in.
+
+## G71 ☐ The briefing's objectives are cursor stops, and their text has nowhere else to be drawn (`BL-487`)
+
+**Goal.** The briefing's objectives are read and not selected, with every line still written on the
+parchment.
+
+**Evidence (confidence: traced-to-code, and it corrects the orchestrator's own premise).** The user's
+instruction is that objectives need not be selectable, and the obvious change is to stop counting
+them in `CampaignBriefingPage.RowCount`. That cannot be done on its own today, because the objective
+text reaches the screen ONLY through the per-row path: `CampaignBoards.For` (`:122-140`) walks
+`page.RowCount` and turns each non-button row into a `BoardLine` at the briefing's authored text slot.
+The `Pictures` path cannot carry it, since `AddElements` requires `element.Bitmap.Length > 0` and a
+`ZEPTEXT` objective element carries an empty bitmap by definition. So cutting the rows today deletes
+the written parchment lines rather than only their cursor stops. `campaign-loop` also asserts
+`briefing.RowCount > BriefingButtons` (`CampaignLoopSuites.cs:175`).
+
+⚠ **The dependency the orchestrator claimed does not exist.** G69's repaint no longer watches
+`RowCount` at all, so this is independent work rather than something G69 blocks.
+
+**Approach.** Move the objective lines onto the page's `Captions`, which already places the note
+heading at the same authored geometry, then drop the rows. `RowArt` becomes unreachable when they go,
+so it goes with them rather than staying as a member that looks live.
+
+**Model recommendation.** low.
+
+**Verify.** The parchment's written lines unchanged in a driven-frames shot before and after, and the
+cursor walking only the three buttons.
+
+**⚠ Traps.** ⚠ Do not cut the rows before the text has somewhere else to be drawn; that is this
+item's whole reason to exist. ⚠ `campaign-loop`'s row-count assertion has to move with the content
+rather than be deleted, or the check that the reveal writes anything at all is lost.

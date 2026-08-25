@@ -18,6 +18,7 @@ renderer). The decodes the coordinates come from are
 - [Decision: uniform fit, letterboxed, nearest](#decision-uniform-fit-letterboxed-nearest)
 - [Where each coordinate comes from](#where-each-coordinate-comes-from)
 - [Button plaques and their four frames](#button-plaques-and-their-four-frames)
+- [Which player the profile screen opens on](#which-player-the-profile-screen-opens-on)
 - [What is not reproduced](#what-is-not-reproduced)
 
 ## The authored space
@@ -105,6 +106,26 @@ triad is for.
 On a pad, focus is the rollover frame and a held confirm is the depressed one. That is the whole of
 what changed about focus: the cursor was a highlighted text row and is now a plaque in the state
 the original's own art already carried.
+
+## Which player the profile screen opens on
+
+The screen opens with the cursor on the profile last played, already ticked, so continuing a
+campaign is one press. The record is the profile **name**, held in `user://Profiles/last-played.json`
+beside the profile directories, written when a profile is seated and cleared when it is deleted.
+
+The name, and a store of our own, are both what the decode says. The original keeps the current
+player as a name too, in `HKEY_CURRENT_USER\SOFTWARE\Microsoft\Microsoft Games\Crimson Skies\1.0`
+under `UIPlayerName`, read back into `UIData +0x314` at startup
+([saved-games.md](../formats/saved-games.md), "Which player is current, across runs"). Nothing in
+the save container carries it, so there is no file to read and the semantics are all the decode
+supplies. Writing that registry key itself is rejected: it is the retail game's own live state, and
+a remake that edits it changes what the original game does on the same machine.
+
+⚠ **A row index and a directory timestamp are both wrong and neither is used.** The roster sorts
+alphabetically, so a stored row moves whenever a profile is created or deleted; and every save
+touches a profile's directory, while a restore or a copy rewrites all of them at once. A recorded
+name is resolved against the roster on each visit, and one the roster no longer carries opens the
+cursor on the name field instead.
 
 ## What is not reproduced
 

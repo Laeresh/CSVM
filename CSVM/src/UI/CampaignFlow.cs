@@ -159,6 +159,10 @@ public sealed class CampaignFlow
         Planes = planes;
         Stock = stock;
         Roster = store.List();
+        // The opening screen gets its own page's opening row too, not just the screens arrived at
+        // later, or the roster would be the one screen that ignores the seam.
+        Row = Page.OpeningRow;
+        ClampedRow();
     }
 
     /// <summary>The stock-loadout table (<c>stock_loadouts.json</c>) the flight check and ammo
@@ -353,6 +357,7 @@ public sealed class CampaignFlow
     public void SelectProfile(CampaignProfileDef profile)
     {
         Profile = profile;
+        Store.RecordLastPlayed(profile.Name);
         GoTo(CampaignScreen.Cabin);
     }
 

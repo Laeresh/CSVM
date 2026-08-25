@@ -30,6 +30,10 @@ public sealed partial class ComposedBoardView : Control
     private string _footer = string.Empty;
     private BoardPalette _palette = BoardPalette.Paper;
 
+    /// <summary>The board last handed to <see cref="Show"/>, which is what the surface is
+    /// drawing.</summary>
+    public ComposedBoard? Board => _board;
+
     /// <summary>Builds the view over the extraction root its art loads from.</summary>
     public static ComposedBoardView Build(string dataRoot)
     {

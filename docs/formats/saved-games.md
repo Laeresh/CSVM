@@ -18,6 +18,7 @@ the decode stops and why.
 - [Save categories](#save-categories)
 - [`Status.dat`: the profile](#statusdat-the-profile)
   - [The `UIData` block](#the-uidata-block)
+  - [Which player is current, across runs](#which-player-is-current-across-runs)
   - [Funds and the plane list](#funds-and-the-plane-list)
   - [Where the ammunition and ordnance picks live](#where-the-ammunition-and-ordnance-picks-live)
   - [The mission-result array](#the-mission-result-array)
@@ -143,7 +144,7 @@ places `UIData` at `0x5b4`.
 | `+0x08` | a screen/state id | compared against 6 in `FUN_00416ad0` |
 | `+0x0c` | the profile directory as an absolute path, NUL-padded | zeroed for a new profile; `FUN_0046b1e0` returns it and every save path is `sprintf("%s\\...")` on it |
 | `+0x110` .. `+0x310` | video and detail settings, including the renderer name buffers and a `640`,`480` resolution pair at `+0x15c` | the two device-name strings are the shipped renderer names |
-| `+0x314` | pilot name, 32 bytes | `FUN_004113b0` fills it from langui string 500 for a new profile |
+| `+0x314` | pilot name, 32 bytes | `FUN_004113b0` fills it from the registry, falling back to langui string 500; see "Which player is current" below |
 | `+0x338` | missions completed, which is also the sequence index of the next mission | raised to the current mission index only inside the primary-objective-complete branch of `FUN_00405ce0`; zeroed for a new profile |
 | `+0x33c` | selected plane, an index into the plane array | `FUN_00405ce0` reads the flown plane's name and airframe from this slot |
 | `+0x344` | the current memento image file name | `FUN_004113b0` seeds it with `MS_P_InitialPinup1.jpg` |
@@ -154,6 +155,20 @@ places `UIData` at `0x5b4`.
 
 The pilot-name buffer is not cleared before a shorter name is written into it: the sample profile
 reads `Zachary\0achary\0`, the tail of a longer previous name. A reader must stop at the first NUL.
+
+### Which player is current, across runs
+
+**The current player is remembered in the registry, by name, outside every save file.** The key is
+`HKEY_CURRENT_USER\SOFTWARE\Microsoft\Microsoft Games\Crimson Skies\1.0` and the value is
+`UIPlayerName`, a REG_SZ. `FUN_00404960`'s UI-string-save message (`0x85d`, index 0) writes
+`+0x314` there through the generic string writer `FUN_00407440`, and `FUN_004113b0` reads it back
+through `FUN_004073d0` when `+0x314` is empty, using langui string 500 only as the fallback for a
+machine that has never played. The same key and the same two helpers carry the multiplayer
+callsign, game name, team name and connection settings (`UICallsign`, `UIGameName`, `UITeamName`,
+`UIMPVoice`, `UIMPAutoRefresh`, `UIIPAddress`, `UIPhn`, `UIConType`).
+
+So the record is a **name**, it lives outside `SavedGames\`, and nothing in the container format
+carries it. A directory timestamp is not the mechanism and never was.
 
 ### Funds and the plane list
 

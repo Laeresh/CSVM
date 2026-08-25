@@ -184,6 +184,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
   of the same frame. Same camera, same flags, 600× the signal: what fails a golden is the size of
   the subject in frame, and a burning wreck is a different subject from the plane that was flying.
 
+- **SHOT-32** — **A shot of an animated screen proves the frame it drew, never that the screen
+  keeps drawing; check an animation by driving frames.** `--menu=campaign-briefing:<s>` advances
+  the reveal itself and then renders, so it draws a correct picture out of a shell that had
+  repainted nothing since the last keypress: the timed shots at 6, 12, 24, 40 and 70 s all read
+  correctly while the live screen was frozen (BL-485). Driving 5400 frames of the real menu and
+  comparing the surface's board against one composed from the page found 5193 stale frames and
+  two distinct compositions over a whole reveal.
+
 ## GOLD — golden images
 
 - **GOLD-1** — **Update moved hashes with the visual change, and explain each moved shot in the

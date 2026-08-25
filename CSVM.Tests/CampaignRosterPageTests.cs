@@ -203,6 +203,71 @@ public class CampaignRosterPageTests
         Assert.Equal(CampaignExit.Cancelled, flow.Exit);
     }
 
+    /// <summary>Returning to a campaign is one press: the screen opens on the profile last played,
+    /// already ticked, and the confirm on that row flies it. Driven through the cursor the way a
+    /// pad drives it, over a roster of three where the remembered one is neither first nor last.</summary>
+    [Fact]
+    public void TheScreenOpensOnTheProfileLastPlayedAndOnePressContinuesIt()
+    {
+        var first = Seeded(out string dir, "Amelia", "Nathan", "Zachary");
+        first.FocusRow(2); // the Nathan row
+        first.Accept();    // select
+        first.Accept();    // continue, which is what records him
+        Assert.Equal("Nathan", first.Profile?.Name);
+
+        var reopened = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty);
+
+        Assert.Equal(2, reopened.Row);
+        Assert.Equal("✓ Nathan", reopened.Page.RowText(2));
+        Assert.Equal("Name:  Nathan", reopened.Page.RowText(0));
+        reopened.Accept();
+        Assert.Equal(CampaignScreen.Cabin, reopened.Screen);
+        Assert.Equal("Nathan", reopened.Profile?.Name);
+    }
+
+    /// <summary>A remembered name is resolved against the roster, never trusted: the roster is
+    /// alphabetical, so a row index would have moved anyway, and the profile may be gone.</summary>
+    [Fact]
+    public void AProfileDeletedSinceItWasPlayedOpensOnTheNameFieldInstead()
+    {
+        var first = Seeded(out string dir, "Amelia", "Nathan", "Zachary");
+        first.FocusRow(2);
+        first.Accept();
+        first.Accept();
+
+        Directory.Delete(Path.Combine(dir, "Nathan"), recursive: true);
+        var reopened = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty);
+
+        Assert.Equal(0, reopened.Row);
+        Assert.Equal("Name:  (none)", reopened.Page.RowText(0));
+        Assert.Equal(new[] { "Amelia", "Zachary" }, reopened.Roster);
+        reopened.Accept(); // arms the field rather than flying a profile that is not there
+        Assert.True(reopened.CapturesText);
+        Assert.Equal(CampaignScreen.Roster, reopened.Screen);
+    }
+
+    /// <summary>Deleting the remembered profile through the screen clears the record too, so the
+    /// next visit opens on the field rather than on a name nothing answers to.</summary>
+    [Fact]
+    public void DeletingTheRememberedProfileForgetsIt()
+    {
+        var first = Seeded(out string dir, "Nathan", "Zachary");
+        first.FocusRow(1);
+        first.Accept();
+        first.Accept();
+        Assert.Equal("Nathan", new CampaignProfileStore(dir).LastPlayed);
+
+        var reopened = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty);
+        reopened.FocusRow(reopened.Roster.Count + 2); // DELETE PLAYER
+        reopened.Accept();
+        Assert.Equal("Delete Nathan", reopened.Page.RowText(0));
+        reopened.FocusRow(0);
+        reopened.Accept();
+
+        Assert.Equal(string.Empty, new CampaignProfileStore(dir).LastPlayed);
+        Assert.Equal(0, new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty).Row);
+    }
+
     private static CampaignFlow NewFlow(out string dir)
     {
         dir = Path.Combine(TestData.TempDir(), "Profiles");

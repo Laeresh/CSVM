@@ -280,10 +280,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // the briefing stops being the screen showing (the plan's C23 wiring contract).
     private AudioStreamPlayer _narration = null!;
     private int _narrationStarts;
-    // What the briefing screen last drew, so a reveal that uncovered a line (or changed its map)
-    // redraws and a reveal still waiting on a marker does not rebuild the board every frame.
-    private int _briefingRows = -1;
-    private HangarArt? _briefingArt;
+    // Whether the briefing's reveal was running on the previous frame, which is what buys the one
+    // repaint after it finishes: the frame that lands the last tween is the frame that stops
+    // being a running reveal.
+    private bool _briefingRunning;
     // The campaign's out-of-mission flow while it is open. One door (the Mode screen's Campaign
     // row); its own screens are the flow's pages, so a new one needs no change here.
     private CampaignFlow? _campaign;
@@ -330,6 +330,15 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <see cref="CloseHangar"/> reads it back out of the refreshed roster to auto-select the
     /// just-built plane (the original's index-11 contract, by name).</summary>
     public string LastBuiltPlane { get; private set; } = "";
+
+    /// <summary>The campaign flow while one is open, or null. Read-only: the flow's own screens
+    /// are driven through it, not around it.</summary>
+    public CampaignFlow? Campaign => _campaign;
+
+    /// <summary>The composed board currently on screen, or null when no campaign screen is up.
+    /// This is what the pilot is looking at, so a check that the screen keeps up with a running
+    /// briefing reveal compares it against a board freshly composed from the page.</summary>
+    public ComposedBoard? ShownBoard => _boardRoot?.Board;
 
     // The chapter roster the picked mode offers — the Chapter screen and everything
     // downstream (breadcrumb, launch) index into this, never the full list. Free Flight/Dogfight
@@ -1895,16 +1904,13 @@ public sealed partial class LaunchMenu : CanvasLayer
             PlayNarration(page.NarrationWav);
         }
 
-        int rows = page.RowCount;
-        var art = page.Art;
-        if (rows == _briefingRows && ReferenceEquals(art, _briefingArt))
-        {
-            return false;
-        }
-
-        _briefingRows = rows;
-        _briefingArt = art;
-        return true;
+        // ⚠ Do not turn this back into a did-it-change test over page properties. A reveal fades,
+        // spins and moves its elements continuously, so such a list is only the cases someone
+        // remembered; while it runs, the board repaints on the frame clock instead.
+        bool running = page.Reveal is { Complete: false };
+        bool repaint = running || _briefingRunning;
+        _briefingRunning = running;
+        return repaint;
     }
 
     // Starts (or restarts) the narration. A missing stream is silence, not a refusal: the wav is
@@ -1927,8 +1933,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private void StopNarration()
     {
         _narrationStarts = 0;
-        _briefingRows = -1;
-        _briefingArt = null;
+        _briefingRunning = false;
         if (_narration is { Playing: true })
         {
             _narration.Stop();
@@ -2262,6 +2267,10 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
+        // A board draws no join strip, so the strip text is recorded here rather than left at
+        // whatever the last centred screen wrote. Otherwise _Process's own strip comparison never
+        // settles on a campaign screen, and a board repaints for a reason that is not its own.
+        _stripText = JoinStripText();
         var page = flow.Page;
         int row = flow.Row;
         string detail = _error.Length > 0 ? _error : page.Detail(row);

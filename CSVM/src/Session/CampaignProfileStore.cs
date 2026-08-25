@@ -131,6 +131,11 @@ public sealed class CampaignProfileStore
 
     private const string FileName = "profile.json";
 
+    // The player last seated, kept beside the profile directories rather than inside one, because
+    // it is a statement about the store and not about any profile. The original keeps the same
+    // thing outside its saves; the decode is in docs/formats/saved-games.md.
+    private const string LastPlayedFile = "last-played.json";
+
     private static readonly JsonWriterOptions WriterOptions = new() { Indented = true };
 
     private readonly string _dir;
@@ -145,6 +150,42 @@ public sealed class CampaignProfileStore
         }
 
         _dir = directory;
+    }
+
+    /// <summary>The name of the profile last seated, or "" when the store has never recorded one.
+    /// The name, never a row or a timestamp: the roster is alphabetical and every profile file is
+    /// touched by a save. A recorded name whose profile has since been deleted still reads back,
+    /// so a caller resolves it against the roster rather than trusting it.</summary>
+    public string LastPlayed
+    {
+        get
+        {
+            try
+            {
+                var path = Path.Combine(_dir, LastPlayedFile);
+                if (!File.Exists(path))
+                {
+                    return string.Empty;
+                }
+
+                using var doc = JsonDocument.Parse(File.ReadAllText(path));
+                return doc.RootElement.ValueKind == JsonValueKind.Object
+                    ? ReadString(doc.RootElement, "name")
+                    : string.Empty;
+            }
+            catch (JsonException)
+            {
+                return string.Empty;
+            }
+            catch (IOException)
+            {
+                return string.Empty;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return string.Empty;
+            }
+        }
     }
 
     /// <summary>The production store, <c>user://Profiles/</c> resolved to its OS path.</summary>
@@ -306,6 +347,40 @@ public sealed class CampaignProfileStore
         }
     }
 
+    /// <summary>Records which profile is now seated, the store's answer to "who was playing".
+    /// An empty name clears the record. A write that fails is dropped: a convenience about where
+    /// the cursor opens must not be able to refuse a campaign.</summary>
+    public void RecordLastPlayed(string name)
+    {
+        try
+        {
+            Directory.CreateDirectory(_dir);
+            var path = Path.Combine(_dir, LastPlayedFile);
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                File.Delete(path);
+                return;
+            }
+
+            using var stream = new MemoryStream();
+            using (var w = new Utf8JsonWriter(stream, WriterOptions))
+            {
+                w.WriteStartObject();
+                w.WriteNumber("version", Version);
+                w.WriteString("name", name);
+                w.WriteEndObject();
+            }
+
+            File.WriteAllText(path, Encoding.UTF8.GetString(stream.ToArray()), new UTF8Encoding(false));
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
     /// <summary>Every stored profile's name, sorted. A missing directory is an empty list (a first
     /// run has created nothing); a profile subdirectory with no readable <c>profile.json</c> is
     /// skipped, never a crash.</summary>
@@ -377,6 +452,11 @@ public sealed class CampaignProfileStore
             }
 
             Directory.Delete(dir, recursive: true);
+            if (string.Equals(LastPlayed, name, StringComparison.OrdinalIgnoreCase))
+            {
+                RecordLastPlayed(string.Empty);
+            }
+
             return true;
         }
         catch (IOException)

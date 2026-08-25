@@ -13,6 +13,7 @@ using Godot;
 using static CSVM.Testing.AiSuites;
 using static CSVM.Testing.AlphaCutoutRaySuites;
 using static CSVM.Testing.AnimationAndEffectsSuites;
+using static CSVM.Testing.CampaignBriefingRepaintSuites;
 using static CSVM.Testing.CampaignHudSuites;
 using static CSVM.Testing.CampaignLoopSuites;
 using static CSVM.Testing.CampaignMarkerSuites;
@@ -160,6 +161,7 @@ public static class SuiteCatalog
         "campaign-zeppelin-wakeup",
         "alpha-cutout-ray-census",
         "zeppelin-identity",
+        "campaign-briefing-repaint",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -864,6 +866,16 @@ public static class SuiteCatalog
             + "emplacement standing on the ally hull while the unauthored sibling's guns keep "
             + "their TURRET default",
             ZeppelinIdentity));
+
+        // BL-485: the shell advanced the reveal every frame and repainted the board only when a
+        // discrete property moved, which a shot taken at a named second cannot see.
+        into.Add(new TestHarness.Suite("campaign-briefing-repaint",
+            "the briefing reveal reaching the screen, driven frame by frame through a real "
+            + "LaunchMenu: the composed board the surface holds is compared against a board "
+            + "composed from the page on each of 5400 driven frames, the reveal must compose the "
+            + "screen afresh on far more than the handful of frames an objective count moves on, "
+            + "and one frame's board is counted so the cost of repainting it is on the record",
+            CampaignBriefingRepaint));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------
