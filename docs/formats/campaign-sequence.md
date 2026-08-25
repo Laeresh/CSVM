@@ -129,6 +129,23 @@ the folder-to-state binding [briefing.md](briefing.md) left open: **`brief_c<cam
 formatted from the two `cm_sequence` fields**, with no reference to `seq`, the act, or the
 narration filename.
 
+## Naming a mission in a report
+
+**`CM01` to `CM24`, the campaign ordinal, one-based.** `CM01` is the first mission flown and `CM24`
+the last. Use it in reports, backlog entries, commit messages and at the controls; give the storage
+address alongside it the first time a piece of work names a mission, as `CM01 (C3/M01)`, so the
+files it points at are one lookup away.
+
+Three collisions this avoids, which is why the prefix is `CM` and not something shorter. A bare
+`M02` is the mission folder inside an act, and those folders are not in play order, so `M02` and the
+second mission of the campaign are different missions. `C3` is a world folder, not an act. And a
+bare number in prose reads as whichever numbering the reader has in mind.
+
+⚠ **`CM` is one-based and `seq` is zero-based, so `CM02` is `seq` 1.** They differ by one everywhere
+they meet: the profile's stored position, `--campaign=<profile>:<seq>`, and the table above are all
+`seq`. Convert once, at the edge that reads a human's number, and never carry both conventions in
+the same function.
+
 ## Progression: what advances Next Mission
 
 The profile stores one number: how many missions have been completed. It is the `seq` of the next
