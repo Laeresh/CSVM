@@ -1948,6 +1948,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-491` `[Bug]` `[Deferred: useful while debugging]` **Crashing the player's aircraft does not end
+  a campaign mission.** *Evidence:* reported at the controls. A campaign mission ends through
+  `ObjectiveGraph.End`, and the three endings it has are the authored end, an `INSTANTLOSS`
+  objective, and the countdown expiring (`ObjectiveGraph.cs:354`); none of them is the player dying,
+  and nothing in `CampaignDirector` watches the player's own crash state. `GameSession` subscribes to
+  the graph's `MissionEnded` alone. ⚠ **Deferred by the player's own decision, not blocked**: flying
+  on after a crash is convenient while the campaign is still being built, so the current behaviour
+  stays for now. Re-open it when the campaign is being judged as a game rather than debugged. ⚠ That
+  reason decays, so read it as a decision with a date in `git log --grep=BL-491` rather than as a
+  rule. *Fix shape:* whatever ends the mission on a player death has to name which of the original's
+  endings it is, since the graph's own three are all authored and a fourth is not yet decoded.
+  *⚠ Traps:* `FlightController.UnderMapY` teleports an aircraft that goes below the map WITHOUT
+  setting a crash flag and without logging (`docs/verification.md` INSTR-22 records what that cost
+  once), so "the player crashed" is not a state that can be read casually. `BL-486`'s persist-log
+  gate means a lost mission writes no world state, so making crashes lose changes what a retry
+  starts from. *Cross-refs:* `PLAN-M5-polish.md` A6 and G66.
+
 - `BL-488` `[Bug]` **The flight check draws a different ammunition than the ammo screen just set, and
   its gun rows carry more than the original's.** *Evidence:* reported at the controls, with
   `OriginalScreenshots\Campaign Flight Check.png` as the reference. Three parts, and the third is the
