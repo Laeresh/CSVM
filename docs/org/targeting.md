@@ -508,7 +508,36 @@ The four red-listed category ids are `0x1f42`, `0x1f46`, `0x1f49` and `0x1f8d`, 
 | Category only | `"[%s] -"` | `0x006253c0` |
 | Neither | blank | `DAT_006f1ee8` |
 
-**Line 2** is the entity's own name string at `+0x14`/`+0x18`.
+**Line 2** is the entity's own name string at `+0x14`/`+0x18`, and its source is settled: the
+**roster block's own `title`** (`aiv.zrd` slot 20, the `MSG_*_NAME` pilot key). The block reader
+`FUN_00437620` `_strdup`s element 20 into the block struct's `+0xc` (from `src+0xac`, the reader's
+`list + 0xc + 8k`), and the spawn path `FUN_0047c210` reads it at `0x0047c9a2`, resolves it through
+`FUN_0059cd20` (key to message id, stored at entity `+0x20`) and `FUN_0059ce40` (id to text), then
+assigns the text into the `std::string` at entity `+0x10` at `0x0047c9c8`. A key the string table
+does not know is copied verbatim instead (`0x0047ca98`–`0x0047cafd`).
+
+⚠ **A block that authors an empty `title` gets no name line at all** — the branch at `0x0047c9a7`
+leaves the string empty. That is 239 of the install's 414 roster blocks, so most enemies in the
+original show a box and no name.
+
+**Three authors write that string, and the vehicle definition is none of them.**
+
+- **The campaign roster**, as above: `aiv` slot 20 through the block struct's `+0xc`.
+- **Instant Action**, in `FUN_0045a390`, which builds the same block struct three times and writes
+  `+0xc` in each: the player's flight from five hardcoded string ids (`0x32c9`, `0x32cb`, `0x32cc`,
+  `0x32cd`, `0x32e4`) at `0x0045a7ae`, the ace from `ia.zrd`'s `ace_name` at `0x0045ab0a`, and each
+  enemy group from its own `enemy_name` at `0x0045ae73`. `ia.zrd`'s parser resolves both keys at
+  parse time (`0x0045946b`, `0x00458e36`), so they arrive as display text. This is why an Instant
+  Action Kestrel carries a name line while an unnamed campaign block does not.
+- **A template-less generator spawn**, in `FUN_00451bf0`, which assigns entity `+0x10` directly from
+  the `egen.zrd` record's `vehicle`/`title` value at `0x004520ee`. That path takes the value RAW,
+  with no string-table lookup, so whatever the file authors is displayed literally. The two are
+  complementary: an `egen` record that resolved a roster block runs the roster path above instead.
+
+⚠ **The `vehicle.zrd` def's own `title` (`MSG_VEH_*`) is read by none of them.** `FUN_00479240`,
+the vehicle-definition parser, stores it at that definition's `+0xc` (`0x004792ca`–`0x00479305`),
+a different object. ⚠ "No fourth author exists" is NOT established: the sweep covered the entity
+constructor's site and all five of its callers, not the whole image.
 
 **Line 3** is the `%d o'clock` bearing. `FUN_0049d940` computes the hour and formats
 `MSG_N_OCLOCK` (`extracted/messages.json` id 132, `"%1!d! o'clock"`) into a 256-byte buffer, and
@@ -572,6 +601,7 @@ element draws the triangle, and how it is rotated, is unresolved.
 | Marker box | fixed 20 × 16 px with 4 px arms, gated on the selected gun's `RANGE` through a lead solve | no box; a text tag only |
 | Label | three lines, 15 px pitch, below the box (above near the bottom edge), centred | one line **above** the projected point (`RefOnScreenLift`) |
 | Label content | `<name> [<category>] -` / proper name / `%d o'clock` | `HostileTag` cuts the node name at the first `_` to get `AI1` |
+| Name line's source | the roster block's `title` alone; an unnamed block shows no name | a campaign spawn takes the block's `title` (`AiSpawn.PilotName`), and where it has none the remake keeps an airframe title the original does not print there |
 | Colour | red hostile, green friendly, blue non-destructive objective | HUD red for hostiles, HUD blue for own team under `--debug-markers` |
 | Off screen | edge position plus the same three lines, clamped with a 3 px margin | edge arrow plus a one-line tag (`DrawOpponent`) |
 
@@ -589,9 +619,13 @@ element is the right port and is a deliberate divergence, not a fidelity loss.
   `FUN_00469e20` both zero a plane's `+0x948`; neither was traced to the player's respawn path.
 - The edge arrow sprite: which element draws it and how it is oriented.
 - Whether `FUN_004bc1e0` de-duplicates the attacker queue.
-- The exact `aiv.zrd` key names behind entity `+0x14` (name), `+0x28` (label), `+0x3c` (category),
-  `+0x4c` and `+0x4d`. The offsets and their effects are traced; the key binding is inference from
-  the `aiv.zrd` format comment at `0x00622508`.
+- The `aiv.zrd` key names behind entity `+0x28` (label), `+0x3c` (category), `+0x4c` and `+0x4d`.
+  The name at `+0x14` is settled (above, slot 20 `title`), and the other two are read from the same
+  block struct: `+0x28` from block `+0x114` (block element 38, `0x0047d53f`) and `+0x3c` from block
+  `+0x118` (element 39, `0x0047d69e`). ⚠ Their SCHEMA names are still inference: the exe's format
+  comment at `0x00622508` names three fewer fields between `primary_target` and `title` than
+  `FUN_00437620` consumes, so aligning the comment's tail on `title = 20` (which would make 38
+  `categoryLabel` and 39 `helpLabel`) is a `+3` shift that has not been proved.
 - The text elements' font metrics. The ~3 px of leading between a line's anchor and its ink is
   measured on two shots, not decoded.
 - Whether the box's absolute pixel constants interact with the resolution-doubling branch in

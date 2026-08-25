@@ -2005,22 +2005,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   symptom), `PLAN-M5-polish.md` F51 and G74; `CampaignRosterSuites.cs` proves a suite can spawn the
   roster, so a fix here is verifiable headlessly.
 
-- `BL-493` `[Feature]` **CM02's named pilots do not read as named, and their voice lines are
-  unverified.** *Evidence:* remembered at the controls as "a named ace enemy Peacemaker with its own
-  voice lines", and the data supports it. `C3/M05/zrdr/aiv.zrd` carries six name keys
-  (`MSG_SIRWINTHROP_NAME`, `MSG_BUCK_NAME`, `MSG_TEX_NAME`, `MSG_BJOHN_NAME`, `MSG_BETTY_NAME`,
-  `MSG_JACK_NAME`) in the aiv blocks' own pilot-name field, and the mission's Peacemakers are
-  `britpeace_2/3/7/8/9`. `britpeace_7` is the one other blocks single out, appearing in their
-  `rating_biases` at `-1.0` beside the truck patterns. *Fix shape:* three questions in order, and the
-  first two may close it with no code. Does a named block's spawn carry that name to the targeting
-  readout, which `BL-475` built for the militia case? Does `AiVoiceRuntime` have the pilot's lines
-  bound? And only then, is `britpeace_7` the block carrying `MSG_SIRWINTHROP_NAME`, which needs the
-  block-to-spawn binding rather than the adjacency of the two strings in one file. *⚠ Traps:* the
-  aiv record is positional, so a name read by counting fields is a guess unless the field's offset is
-  established; `BL-475`'s work is the precedent for doing that properly. Do not assume `britpeace_7`
-  is the ace because it is the most mentioned: a `-1.0` bias naming it means other pilots are told
-  NOT to shoot it, which is an argument for it being friendly to them rather than for it being an
-  ace. *Cross-refs:* `BL-475` (the targeting readout's name), `BL-401` (authored spawn identity),
+- `BL-496` `[Feature]` **The aiv `ace` flag reaches the entity and nothing is known about what it
+  does there.** *Evidence:* found by G75 while binding the pilot name. Slot 67 `ace` is read by the
+  block reader into `CCEVeh+0xa4` and carried by the spawn path into entity `+0x988`. That field has
+  four touches program-wide: the constructor default, that write, a read at `0x0047cde2` sitting
+  immediately ahead of the skill block, and a read in a runtime function that was not chased. So the
+  flag gates something in skill interpolation, and 26 blocks across the campaign carry it. CSVM
+  parses the slot and uses it for nothing. *Fix shape:* decode the `0x0047cde2` branch and the
+  runtime read before changing any rating, since what an ace gets is the question and "it is flagged"
+  is only the input. *⚠ Traps:* the flag is narrower than a complete skill vector (26 blocks against
+  29), so the two are not interchangeable and neither is a proxy for the other. Do not give aces a
+  blanket rating bonus on the strength of the flag alone; the branch may scale an interpolation
+  rather than add to it. *Cross-refs:* `BL-497` (the other rating that does not reach the runtime),
+  `PLAN-M5-polish.md` G75.
+
+- `BL-497` `[Bug]` **A campaign spawn's talker and constitution ratings never reach
+  `AiVoiceRuntime`.** *Evidence:* found by G75. `CampaignDirector` passes null where the ratings
+  would go, so every campaign pilot is equally talkative regardless of what its block authors: an ace
+  rated 9 on `talker` says no more than a mook rated 1. The ratings are parsed and carried as far as
+  the plan. *Fix shape:* thread the spawn's ratings through to the voice runtime the way the roster
+  now threads the pilot name. *⚠ Traps:* `docs/formats/combat-voice.md` carried a stale note claiming
+  this already worked, corrected by G75, so check the doc's current claim rather than an older
+  reading. A pilot whose accent resolves to a VO id with no WAVs stays silent whatever its `talker`
+  rating is, so a fix here will not be visible on those eight named aces. *Cross-refs:* `BL-496`,
   `PLAN-M5-polish.md` G75.
 
 - `BL-491` `[Bug]` `[Deferred: useful while debugging]` **Crashing the player's aircraft does not end

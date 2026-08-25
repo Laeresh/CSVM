@@ -255,6 +255,22 @@ internal static class CampaignRosterSuites
             ctx.Check(!exclusion.Matches($"ai2_{excluded.PlaneNode}"),
                 $"…and matches nothing of the old counter shape 'ai2_{excluded.PlaneNode}'");
 
+            // BL-493: the block's own pilot name (aiv slot 20) is what the original's readout
+            // prints, and it outranks the airframe title. The plain block authors none, so the two
+            // sources are told apart in one run rather than agreeing by accident.
+            var strings = Messages.Load(ctx.MessagesPath);
+            string aceName = PlaneRoster.PlaneDisplayName(aceRig.Stats!);
+            string plainName = PlaneRoster.PlaneDisplayName(plainRig.Stats!);
+            string wingName = PlaneRoster.PlaneDisplayName(wingRig.Stats!);
+            ctx.Check(excluded.Title != null && aceName == strings.Get(excluded.Title),
+                $"the ace block's authored '{excluded.Title}' is the name its marker prints: '{aceName}'");
+            ctx.Check(excluding.Title != null && wingName == strings.Get(excluding.Title),
+                $"…and so is the named wingman's '{excluding.Title}': '{wingName}'");
+            ctx.Check(plain.Title == null && plainName != aceName && plainName != wingName,
+                $"a block with no authored name keeps the airframe title instead: '{plainName}'");
+            report.AppendLine($"marker names: {excluded.Name}='{aceName}' " +
+                $"{excluding.Name}='{wingName}' {plain.Name}='{plainName}'");
+
             // Two of these blocks ship deactivated, and an out-of-play rig never reaches the scan
             // at all: leaving them inert would let a control pass for the wrong reason. Their
             // activation is campaign-roster's subject, not this suite's; the geometry is.
@@ -583,6 +599,9 @@ internal static class CampaignRosterSuites
             ZrdrPath = ctx.ZrdrPath,
             StockLoadouts = StockLoadouts.Load(),
             WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            // The string table the assembler resolves a spawn's authored name through. Without it
+            // every rig falls back to the def-name derivation and the name checks pass vacuously.
+            WeaponMessages = Messages.Load(ctx.MessagesPath),
             Textures = textures,
             Shakes = ShakeDefs.Load(ctx.ZrdrPath),
         };

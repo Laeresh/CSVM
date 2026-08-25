@@ -241,7 +241,8 @@ public sealed class CampaignRosterPlan
             Inert: plan.Inert, ShippedSkins: plan.Team != AimAssist.PlayerTeam,
             AiDef: plan.AiDef, Fit: plan.Fit,
             AttackRating: InstantActionRuntime.RepresentativeRating(plan.Skills),
-            Nitro: plan.Nitro, RosterSkills: plan.Skills, NodeName: plan.Name);
+            Nitro: plan.Nitro, RosterSkills: plan.Skills, NodeName: plan.Name,
+            PilotName: plan.Title);
 
     /// <summary>The formation leader a plan's <see cref="RosterSpawnPlan.LeaderName"/> names,
     /// out of the spawned rigs: the literal <c>player</c> is the first human, anything else a

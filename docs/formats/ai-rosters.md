@@ -45,7 +45,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 6 | `primary_target` | an assigned target node name. 6 distinct: `""` (346), `player` (27), `devastator_1/2/3`, `piratezep`. The engine's own debug readout prints it as "Primary target: %s". ⚠ **Its meaning depends on `mode`:** on a `jet` it is a targeting assignment, but on a netless `wingman` it is the **formation leader**, and the escort law flies a fixed offset from it ([`org/aiPilot.md`](../org/aiPilot.md)). Corrects the "not a formation leader" reading, which was right about `jet`s and wrong about wingmen |
 | 7 | `init_health` | starting health override; `0.0` = use the airframe default. Real values do occur (e.g. `216.0`) |
 | 8–19 | the activation/attack/return volumes | 12 slots for the 9 named `{active,attack,return}_{rad,u,l}` — see [below](#the-three-unnamed-slots). `rad` is a radius, `u`/`l` an upper/lower altitude band |
-| 20 | `title` | `MSG_*_NAME` display key, resolving in `messages.json` ([missions.md](missions.md)) |
+| 20 | `title` | `MSG_*_NAME` display key, resolving in `messages.json` ([missions.md](missions.md)). **This is the targeting readout's name line**, and its only source: the spawn path resolves it into the AI entity's own name string, while the `vehicle.zrd` def's `title` goes to a different object the readout never reads ([`org/targeting.md`](../org/targeting.md#the-hud-the-label)). 175 of the 414 blocks author one; the other 239 show a marker with no name at all |
 | 21 | `deactivated` | |
 | 22–30 | **the skill vector** | `dare_devil natural_touch sixth_sense dead_eye quick_draw steady_hand stun_recovery talker constitution` — see [below](#the-skill-vector) |
 | 31 | `pref_engage_alt` | **preferred engagement altitude in metres**, not a radius; `-1.0` on 384, else 350 / 1100 / 1500 / 1550 / 1600. Spelled `preferred_engagement_altitude` in `vehicle.json`, which is also the fallback when this slot is `-1.0` (`basic_airplane` authors 300.0). ⚠ **It is a maneuver-selection weight, not an altitude order:** its one reader (`FUN_004201a0`, `0x004204da`) adds 1.0 to a candidate evasive maneuver's weight when the aircraft is on the wrong side of it. Nothing steers toward it ([`org/aiPilot.md`](../org/aiPilot.md)) |
@@ -66,7 +66,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 57–64 | `anose hnose atail htail aleft hleft aright hright` | **per-zone armour + health**, in `(armor, health)` pairs over the four damage zones nose / tail / left / right — the same zone set and the same armour-first two-pool model as the player's `destroyable_parts` ([vehicle.md](vehicle.md#armor-and-hit-points)) |
 | 65 | `accentID` | **the voice id** → row in `voice.zrd` → `soundsh/VO_id<N>_*` clips |
 | 66 | `armor` | |
-| 67 | `ace` | |
+| 67 | `ace` | `1` on **26 blocks** across the 53 rosters and `0` on the other 388. Every one of the 26 also authors a `MSG_*_NAME` in slot 20 and a complete skill vector, and each is the block the mission's own script singles out. **It is read**: the block reader stores it at the block struct's `+0xa4` (`0x00437ea0`) and the spawn path copies it to the AI entity's `+0x988` (`0x0047ca42`–`0x0047ca4b`), where one read at `0x0047cde2` sits immediately before the skill block and gates skill interpolation. The Instant Action spawner sets the same field. ⚠ **What the gate does to a rating is not decoded**, nor is the second read at `0x004ba23a`. Narrower than the skill vector, see [below](#the-skill-vector) |
 | 68–71 | `pattern decal1 decal2 decal3` | livery ([paint.md](paint.md)) |
 | 72–80 | `r1 g1 b1 r2 g2 b2 r3 g3 b3` | livery colours ([paint.md](paint.md)) |
 
@@ -169,8 +169,13 @@ Slots 22–30 are nine consecutive integers valued `-1` (unset) or **1–9**, in
 | 29 | `talker` |
 | 30 | `constitution` |
 
-They are populated as a complete nine-value vector on exactly **29 blocks** — precisely the named
-aces. `<Cx>/IA1/zrdr/ia.zrd`'s `ace_stats` key independently fixes the count at nine
+They are populated as a complete nine-value vector on exactly **29 blocks**. ⚠ **That is three more
+than the roster's own `ace` flag (slot 67), and the flag is the one to read.** The three blocks with
+a full vector and no flag are flavour pilots rather than aces: C2/M02's `secfury_5` and `secfury_6`
+(`MSG_STUNT_PLANE_NAME`) and C5/M01's `autogyro_1` (`MSG_CABBIE_NAME`), all three on team 0. Every
+flagged block also carries the vector, so the flag narrows the set and never widens it, and every
+one of the 26 authors a `MSG_*_NAME` in slot 20 that resolves in the string table.
+`<Cx>/IA1/zrdr/ia.zrd`'s `ace_stats` key independently fixes the count at nine
 (`[9,9,9,9,9,9,9,9,9]`, in all 8 chapters), confirming 9 is the ceiling.
 
 Three shipped cases corroborate the ordering, each landing on a different slot:
@@ -188,6 +193,32 @@ order** — the chapter directories are not story order.
 
 ⚠ **Three of the design's twelve pilot stats are not in this vector**: preferred engagement altitude
 is slot 31, signature maneuvers is slot 32, and there is no signature-*approach* field at all.
+
+### What binds a block to the ace role
+
+Three authored things agree on which block is a mission's ace, and none of them is the file's own
+string adjacency. CM02 (`C3/M05`, "The Great British Bomber Heist") is the worked case, whose ace is
+`britpeace_7`, Sir Charles Emmett Winthrop:
+
+- **The flag.** Slot 67 is `1` on `britpeace_7` and on no other block in the mission. The five other
+  British Peacemakers author no slot-20 title either, so the roster distinguishes exactly one of the
+  six. The engine carries the flag through to the AI entity and reads it on the skill path
+  ([above](#field-table)); what it does there is undecoded, so treat the flag as identity here.
+- **The cohort and the mission script.** `britpeace_7` is the sole member of `group` 4, and the
+  mission's SECONDARY objective is a `DEDG` over group 4 whose completion plays the ace's death
+  chatter (`snd_HA5AceDead`). `group` is the join key ([above](#group-is-a-cohort-id-not-a-formation)),
+  so this is a real binding between the block and the script's idea of "the ace is down".
+- **The dialogue.** The objective that wakes the block also cues `snd_HA5Wave2`, a three-line chain
+  in which the ace speaks twice with the player's reply between. Mission dialogue is a different
+  system from the combat chatter slot 65 selects, and it is the one that carries an ace's bespoke
+  lines: his two takes ship as audio, while his accent resolves to a pilot id with none
+  ([combat-voice.md](combat-voice.md)).
+
+⚠ **Do not read the ace out of `rating_biases` instead.** Five blocks in CM02 name `britpeace_7` at
+`-1.0`, which looks like a signal until the teams are checked: all five are the player's own flight
+(team 1) and the ace is team 2. A `-1.0` is a hard never-target ([above](#field-table)), so the
+mission is reserving the kill for the player, not marking a friend. The flag answers the question
+the bias only appears to.
 
 ### AI skill parameters
 

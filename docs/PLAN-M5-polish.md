@@ -139,7 +139,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 72. ☑ The flight check draws the wrong ammunition, and its rows and objectives are not the original's (`BL-488`)
 73. ☑ The screenshot key does nothing in menus (`BL-489`)
 74. ☑ CM02's Balmoral capture reaches none of the three airships, cause found (`BL-492`, `BL-495`)
-75. ☐ CM02's named pilots do not read as named, and their voice lines are unverified (`BL-493`)
+75. ☑ CM02's named pilots do not read as named, and their voice lines are unverified (`BL-493`)
 76. ☐ A mission cannot swap the player onto another airframe (`BL-494`), behind G74
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
@@ -2852,7 +2852,7 @@ landing volume and is filed as `BL-495` with `BL-492` blocked behind it.
 scaffolding, which is a larger change than this item and reaches `bombs_away<n>`, `setb<n>` and
 `balmoral_healthtest` on the same airships.
 
-## G75 ☐ CM02's named pilots do not read as named (`BL-493`)
+## G75 ☑ CM02's named pilots do not read as named (`BL-493`)
 
 **Goal.** Answers first: whether a named pilot's name reaches the targeting readout, and whether
 their voice lines are bound. Then code only if an answer says something is missing.
@@ -2879,6 +2879,55 @@ field's offset is established; F57's work is the precedent for doing that proper
 to shoot it, which argues for it being friendly to them rather than for it being an ace. ⚠ The user's
 report is a memory of the original, so treat it as a lead to verify against the data rather than as a
 specification.
+
+**Landed.** The premise holds and the third question answers first. CM02's ace is `britpeace_7`,
+Sir Charles Emmett Winthrop, bound by three authored things and by none of them the file's string
+adjacency: `aiv` slot 67 `ace` is `1` on that block alone; it carries the mission's only complete
+nine-value skill vector; and it is the sole member of cohort 4, which the mission's SECONDARY
+objective destroys, playing `snd_HA5AceDead`. The `-1.0` reading is answered rather than avoided:
+the five blocks naming `britpeace_7` at `-1.0` are the player's OWN flight on team 1 against an
+ace on team 2, so the exclusion reserves the kill for the player. Question 2 is a two-part answer.
+His bespoke lines exist and are mission dialogue, not combat chatter: `snd_HA5Wave2` chains
+`Winthrop_13` → `Zachary_14` → `Winthrop_145`, both his takes ship as audio, the objective that
+wakes him cues the chain, and CSVM already plays and prewarms it. His COMBAT voice is bound and
+silent: slot 65 gives accent 19, the accent table sends that to pilot VO id 15, and id 15 ships 25
+clip definitions with no WAV behind any of them. Question 1 was the one that landed code. The
+original takes the readout's name line from `aiv` slot 20 alone, traced through the block reader
+(`FUN_00437620`, element 20 to the block struct's `+0xc`) and the spawn path (`FUN_0047c210`,
+`0x0047c9a2`–`0x0047c9c8`); CSVM parsed slot 20 into the plan and dropped it at `SpawnFor`, so all
+six of CM02's Peacemakers read "British Peacemaker". `AiSpawn` gains `PilotName`, `SpawnFor` carries
+it, and `AiFlightAssembler` prefers it over the airframe title.
+
+⚠ **This corrects F57's premise and the correction is deliberately partial.** The vehicle
+definition's own `title` is read by none of the three authors of that string (the roster, `ia.zrd`'s
+`enemy_name`/`ace_name`, and a template-less `egen` spawn's raw value), so the original never prints
+"Medusa Kestrel" on the readout and a block with no authored name shows no name at all, which is 239
+of the install's 414 blocks. Removing the airframe fallback is not done here: it would blank the
+readout for most enemies and is a decision of its own, so the fallback stays and is recorded as a
+remake divergence in `docs/org/targeting.md`. Two findings are left for their own items rather than
+folded in. Slot 67 `ace` IS read, into entity `+0x988`, where one read gates skill interpolation
+(`0x0047cde2`); what it does to a rating is undecoded (`BL-496`). And a campaign spawn's talker and
+constitution ratings still do not reach `AiVoiceRuntime` (`CampaignDirector` passes null), so an ace
+rated 9 on `talker` is no chattier than a mook rated 1 (`BL-497`).
+
+**Verified.** Seven unit cases pin the answers against the shipped install: the `ace` flag is `1` on
+26 blocks and is narrower than the 29 complete skill vectors (the three extras being two stunt planes
+and a cabbie); every flagged ace authors a `MSG_*_NAME` that resolves; CM02 has exactly one flagged
+block and it resolves to "Sir Charles Emmett Winthrop" while the other five Peacemakers author no
+name; cohort 4 is that block alone and the objective that destroys it is the SECONDARY one playing
+`snd_HA5AceDead`; the dialogue chain is the three named lines, both Winthrop takes have WAVs, and the
+cue reaches `SoundGroupNames()` so the session prewarms it; accent 19 resolves to VO id 15 whose every
+clip definition has no WAV; and the planned block's title now survives into `AiSpawn.PilotName` while
+an unnamed block's stays null. The driven check is in `roster-spawn-names`, which spawns C1/M02's
+blocks through the real `FlightRoster.SpawnAi`: the marker reads `bloodhawk_2`='Northwest Ace',
+`wingman_4`='Ilsa' and `blakepeace_2_1`='Blake Aviation Peacemaker', three names from two sources in
+one run. ⚠ That suite's harness authored no string table before this, so its name arms would have
+passed vacuously; it now loads `Messages` the way production does. Perturbation, run separately:
+forcing the assembler back to the def title fails exactly the two authored-name arms ('Bloodhawk',
+'Devastator') and leaves the airframe-fallback arm passing. `dotnet build` clean, `dotnet test` 2394,
+`--run-tests=roster` 3/3, `--run-tests=target` 6/6, comment caps clean. No golden is touched:
+`c1-targeting-hud` flies `--ai=player_kestrel`, which carries no roster block, and no golden runs a
+campaign. ⚠ Error counts are not evidence in this wave, a sibling lane sharing the log.
 
 ## G76 ☐ A mission cannot swap the player onto another airframe (`BL-494`)
 

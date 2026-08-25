@@ -20,11 +20,12 @@ public readonly record struct FlightRosterBuild(int MeshInstances, string Summar
 /// <c>NodeName</c> is the identity the spawned node takes, and a caller that has an authored one
 /// must pass it: <c>primary_target</c> and <c>rating_biases</c> are written against the roster
 /// block's own name, so a spawn left on the fallback <c>ai{n}_{plane}</c> can match neither
-/// (BL-401).</summary>
+/// (BL-401).
+/// <c>PilotName</c> is the block's slot-20 key, the readout's name (docs/org/targeting.md).</summary>
 public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector3 LookAt, AiPilot Pilot,
     PaintScheme? Scheme = null, int? Team = null, bool Inert = false, bool ShippedSkins = false,
     string? AiDef = null, LoadoutChoice? Fit = null, int? AttackRating = null, bool Nitro = false,
-    AiSkillVector? RosterSkills = null, string? NodeName = null);
+    AiSkillVector? RosterSkills = null, string? NodeName = null, string? PilotName = null);
 
 /// <summary>The session's aircraft set: builds the human field in deterministic player order and
 /// introduces AI aircraft later for missions, waves, and generators. The roster is the assembly
