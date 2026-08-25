@@ -2146,6 +2146,25 @@ usual.
 
 ## Missions, modes & campaign
 
+- `BL-482` `[Bug]` **The intro cutscene stages no aircraft, because the node its definitions animate
+  does not exist in the gamez.** *Evidence:* `BL-471`'s reparent work put the camera in the airship's
+  node frame, and a `--campaign=` shot early in C3/M01's `generic_intro` now shows the PANDORA
+  centre-frame, which answers half of the report that neither the airship nor any plane was in sight.
+  The other half stands and is traced. `camera1-generic_intro.json` names `player` at ptr 8918, C3's
+  gamez carries 5408 nodes and none is named `player`, so `SymbolClaims` claims the name with a null
+  binding and every event posing it drops. `CutsceneController.cs:427` already records that the gamez
+  `player` is not the airframe this engine flies. The camera move plays over a stage with no actors,
+  and the shipped data does not say what the actors are. *Fix shape:* decode first. The original
+  resolves ptr 8918 to something at runtime, so locate the site that puts a node under that name into
+  the node table and read what mesh it carries; only then decide whether the flown airframe is the
+  right stand-in or whether the intro composes a separate template. An answer that leaves the intro as
+  it is closes this. *⚠ Traps:* do not bind `player` to the flown `FlightController` because the name
+  matches, which is the inference `CutsceneController`'s note exists to prevent. Do not relax
+  `AnimRuntime.cs:2954-2966` to make the name resolve; refusing to name-match around a claimed index
+  is what stops C1's `caboose` driving an unrelated `caboose.flt`. An intro composes itself during the
+  animation bootstrap, before the world root is in the scene. *Cross-refs:* `BL-470` and `BL-471`, both
+  closed by the work that filed this; `PLAN-M5-polish.md` G61.
+
 - `BL-473` `[Fidelity]` **The campaign wingman flies a looser formation than the original's.**
   *Evidence:* judged at the controls on a complete flown C3/M01, after `BL-457`'s ceiling lift landed:
   the wingman is near the player for the whole flight and never overhead, so the fall-behind-and-climb

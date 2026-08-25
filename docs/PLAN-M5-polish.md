@@ -22,6 +22,8 @@ building are meaningless; this one was taken alone.
 **Wave A's purpose is met: the first campaign mission can now be flown to its end at the controls.**
 Wave F is what a complete flown run of it reported next, and it supersedes part of A1: objective
 sites belong in the enemy selection cycle rather than in the standalone overlay A1 built (F53).
+Wave G is different in kind from both: nothing in it was reported at the controls, and every item was
+found by an item that landed, so each one names the item that filed it.
 
 ⚠ **Wave A's items were found by a human at the controls and then traced, and three of them are not
 what the symptom said.** The objectives register correctly and the player simply cannot find the
@@ -120,9 +122,23 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 58. ☑ Alpha-cutout geometry is solid to weapon rays (`BL-477`)
 59. ☑ A net has no stop-point state, so the PANDORA never halts (`BL-478`)
 
-**Everything open is now either in flight or queued behind a stated blocker.** The exceptions are
-D33, which waits on D32 and F54 for the reason F54 gives, B14 and D31, which run behind B13 in one
-lane, C22, which runs behind B12 in one lane, and F55, whose instrument is the suite F56 owns.
+### Wave G — what the first six waves left open
+
+61. ☐ The intro cutscene stages no aircraft, because the node its definitions animate does not exist (`BL-482`)
+62. ☐ A zeppelin's turrets and its damage zones carry no owning identity (`BL-476`), behind D33
+63. ☐ The music channel has no 15 s refusal hold (`BL-480`)
+64. ☐ The 26 `GRAPHICS/*.JPG` draw nothing, so the new boards have holes in them (`BL-479`)
+65. ☐ `campaign-objectives-hud` cannot fire its own check on C3 (`BL-481`)
+66. ☐ Two persist-log behaviour questions, carried out of `BL-243`'s closure
+67. ☐ `BL-181`'s blocker now reads as discharged when it is not
+68. ☐ Why the scaffolding read differently at the controls, blocked on the user's eye (`BL-477`)
+
+**Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
+items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
+two causes and not yet built; D33, which waited on D32 and F54 and is now unblocked; and F55, which
+has its instrument and needs the user's verdict against it. Inside Wave G, G62 runs behind D33 for
+the reason F54 gives, G68 and F55 are the two items no amount of work here can close, and the rest
+are independent of each other.
 
 ## Dependency and parallelism notes
 
@@ -148,6 +164,15 @@ may also touch for the board presentation, so sequence D31 after B13 or agree a 
 E41 and E42 are research items whose deliverable is an answer, and E43 is housekeeping; all three
 can run at any point. E43 is the cheapest thing in the plan and closing two stale entries early
 keeps the backlog honest while the rest runs.
+
+**Wave G's shape is different from the others.** Its items were not reported at the controls; every
+one of them was found by the work that closed something else, so each names the item that filed it.
+D33 and G62 are one ordering and touch the same targeting files, so run D33 first and G62 behind it,
+never as parallel worktrees. G64 changes the extraction pipeline and bumps `VERSION.json`, so it
+cannot share a tree with anything that reads `extracted/`. G61 reaches the anim runtime and the
+cutscene host, which A5 also touches, so sequence those two rather than running them together. G63,
+G65, G66 and G67 are independent of everything, and G66 is a research item whose deliverable is an
+answer. G68 and F55 cannot be scheduled at all until the user answers them.
 
 ---
 
@@ -1870,3 +1895,218 @@ flies C1/M04's own record through dock, release, traverse and terminal dock, and
 tree with errors clean. Five unit tests pin the field decode, the hold and release, the first-match
 id lookup, the inert aircraft case and the 250 m ramp. The three-part `CampaignDirector` and
 `GameSession` handover was applied at merge, so `COMPLETED_STOPPOINT` stops logging its gap.
+
+# Wave G — what the first six waves left open
+
+Waves A through F closed on the two at-the-controls passes. This wave closes on the work itself:
+every item here was found by an item that landed, and each one names the item that filed it. That
+changes how they should be read. There is no symptom to trace back, so the Evidence paragraphs are
+already traced, and the risk is the opposite of Wave A's: an item here can be built exactly as
+written and still be the wrong thing to spend a wave on, because nobody has reported missing it.
+G64 is the exception and should be judged first, since the boards Wave B built are what the user
+sees on the way into every mission and fifteen of their backgrounds are currently blank.
+
+**Three items carry over rather than being restated here.** A5 is traced to two causes and not
+built. D33 is unblocked now that D32 and F54 have landed, and it is the fix for the Kestrels
+attacking their own zeppelin. F55 has its instrument and needs the user's verdict against it.
+
+## G61 ☐ The intro cutscene stages no aircraft (`BL-482`)
+
+**Goal.** An answer first: what the original's `player` node is and where it comes from. Then, if the
+answer supports it, an intro composed around the aircraft its definitions animate.
+
+**Evidence (confidence: traced-to-code for the absence, lead-only for anything beyond it).** F52 put
+the camera where it belongs and the airship is centre-frame, which is half of the user's "no Pandora
+or planes in sight". The other half stands. `camera1-generic_intro.json` names `player` at ptr 8918,
+C3's gamez carries 5408 nodes and none of them is named `player`, so `SymbolClaims` claims the name
+with a null binding and every event that poses it drops (F51). `CutsceneController.cs:427` already
+records that the gamez `player` is not the airframe this engine flies. So the camera move plays over
+a stage with no actors on it, and the shipped data does not say what the actors are.
+
+**Approach.** Decode before building. The question is narrow: the original resolves ptr 8918 to
+something at runtime, so find the creation site that puts a node under that name into the node table,
+and read what mesh it carries. Only then decide whether our flown airframe is the right stand-in or
+whether the intro composes a separate template. ⚠ If the decode does not settle it, the item closes
+as an answer with the intro left as it is, which is a success by this plan's ground rules.
+
+**Model recommendation.** high. It starts undecoded and the wrong reading stages a wrong aircraft in
+every chapter's intro.
+
+**Verify.** The reading stated with the evidence that chose it. If code follows, a `--campaign=`
+screenshot early in C3/M01's `generic_intro` showing the aircraft where the definition poses them,
+against the same shot before the change.
+
+**⚠ Traps.** ⚠ Do not bind `player` to the flown `FlightController` because the name matches: the
+`CutsceneController` note above exists precisely because that inference was already made once and was
+wrong. ⚠ Do not relax `AnimRuntime.cs:2954-2966` to make the name resolve; F51's trap on that guard
+stands unchanged. ⚠ An intro composes itself during the animation bootstrap, before the world root is
+in the scene, which is the condition that made F52's first attempt a silent no-op.
+
+## G62 ☐ A zeppelin's turrets and its zones carry no owning identity (`BL-476`)
+
+**Goal.** One owning-zeppelin identity on a zone pool, read by the turret team fan and by the
+targeting bias, so an airship's guns and an authored `rating_biases` pattern both find it.
+
+**Evidence (confidence: traced).** F54 built the authored team and the wake-up seam and left two
+remainders, both the same missing identity. The team is not fanned onto the zeppelin's turrets
+although `FUN_004bee80` writes `+0x8` on every child, turrets included, and `TurretController.Team`
+is read-only. A `rating_biases` pattern naming a zeppelin still matches nothing, because a zeppelin's
+destructible instances are its zones (`gasbag1..6`, `leng11`, `lbroad11`) and `TargetPool.NameOf`
+(`TargetPool.cs:117`) returns the zone's anchor name, so C3/M01's Kestrels authoring
+`[["piratezep", -1.0]]` get no match. D32 made the `player` half of that same pattern live and its fix
+cannot reach this one.
+
+**Approach.** Carry the owning zeppelin's identity alongside the zone in the pool, then read it in
+both places. Run it behind D33, so the hostility fall-through is already neutral and the bias change
+is judged on its own.
+
+**Model recommendation.** medium.
+
+**Verify.** The `target-pool` and `targeting-candidates` suites, plus a check that an `ally`
+zeppelin's turrets carry their airship's team and that a `-1.0` bias on a zeppelin name reaches its
+zones.
+
+**⚠ Traps.** ⚠ `TurretController.Team` is read-only for a reason: `docs/org/targeting.md:230` records
+that the original drops a now-friendly lock when a team changes (`0x004acb90`), so a setter needs that
+too or an AI keeps shooting a friend. ⚠ Do not set a zeppelin's team to a literal; 42 of 58 records
+author none and what an unauthored one falls through to is D33's question. ⚠ D33 alone already fixes
+the reported Kestrel symptom, so this item must not be judged by that symptom disappearing.
+
+## G63 ☐ The music channel has no 15 s refusal hold (`BL-480`)
+
+**Goal.** A music cue raised inside the previous cue's 15 s hold is dropped, as the original drops it.
+
+**Evidence (confidence: traced-to-code, decoded at the image).** Found while B12 decoded the mission
+radio queue. `FUN_0046caf0` gates the rule on `FUN_00480460`, an is-music predicate with exactly one
+call site reading bit 3 of the sound-flag word, and the keyword table at `0x4802e0` gives `MUSIC` 8.
+The rule is `if (this+0x20 != 0 && now < this+0x24) return 0`, a refusal rather than a delay.
+`MusicPlayer`'s existing rule that re-cueing the playing track never restarts it covers the common
+case, which is why this is a gap rather than an audible bug today.
+
+**Approach.** The hold on `MusicPlayer`, which is where `CampaignDirector.PlaySoundGroup` routes `mu*`
+cues before the radio is consulted.
+
+**Model recommendation.** low.
+
+**Verify.** A unit test that a second cue inside the hold is lost and a third after it plays.
+
+**⚠ Traps.** ⚠ It refuses, it does not defer: implementing it as a delay changes which track plays.
+⚠ Do not put it on `MissionRadio`, which never sees a music cue.
+
+## G64 ☐ The 26 `GRAPHICS/*.JPG` draw nothing (`BL-479`)
+
+**Goal.** The cabin's plane photographs and the fifteen menu backgrounds draw.
+
+**Evidence (confidence: traced).** C23 gave the art seam a decoder chosen by file name, so a `.PNG` or
+`.TGA` draws and a `.JPG` returns null, which is the never-invent answer rather than a hole in the
+seam. The decision recorded on `ArtImage`'s own type doc is to transcode at extract time rather than
+write a decoder in `Mech3`, on four facts: the scope is 26 files; two of them (`CR_BACKGROUND` and
+`MP_LOBBY_BACKGROUND`) are progressive `SOF2`, so a hand-written baseline decoder several times
+`PngImage`'s size would still leave those two blank; `ExtractRof.ps1` already writes additive PNG
+sidecars beside the 184 custom `.BM` textures; and the host decodes all 26 including the progressive
+pair, verified in memory without writing to `extracted/`. B13 landed the composed boards on top of
+this gap, so it is now visible on the way into every mission.
+
+**Approach.** The additive `.JPG` to `.PNG` sidecar pass in `ExtractRof.ps1`, keeping the original.
+`ArtImage` needs no new branch afterwards.
+
+**Model recommendation.** low, but it touches the extraction pipeline, which raises the care rather
+than the reasoning.
+
+**Verify.** A re-extraction, then a shot of the cabin and of a menu background that was blank.
+
+**⚠ Traps.** ⚠ This needs a re-extraction and bumps the `VERSION.json` stamp, which is why it was kept
+out of the seam work; it cannot share a worktree with anything reading `extracted/`. ⚠ Do not return
+a placeholder for an undecodable image: a wrong picture reads as a fidelity verdict.
+
+## G65 ☐ `campaign-objectives-hud` cannot fire its own check on C3 (`BL-481`)
+
+**Goal.** The suite proves its point on any chapter it is pointed at, or says explicitly why it
+cannot.
+
+**Evidence (confidence: traced, and confirmed pre-existing).** The suite passes on C1 and fails on C3
+with an empty objective name, and the artifact shows its driver completing no objective at all on
+C3/M01, so it is not catching a display defect: it is reporting that its own completion driver found
+nothing to complete. The identical failure reproduces on `4ec47b14`, before Wave F, on a separately
+built worktree, which satisfies METHOD-8. B11's move strengthened the suite and surfaced it.
+
+**Approach.** Make the driver find a completable objective on whatever chapter it is given, or skip
+explicitly where a mission carries none.
+
+**Model recommendation.** medium.
+
+**Verify.** The suite green on C1 and on C3, with the skip path, if one is taken, printing what it
+skipped and why.
+
+**⚠ Traps.** ⚠ Do not relax the assertion, which is the one proof that the readout marks its own line
+rather than only the graph. ⚠ Do not assume C1's shape generalises: C3/M01 builds six display rows to
+C1/M02's five, and two of C3/M01's are `IDENTITY [SECONDARY, n]` fields with no message key.
+⚠ `docs/verification.md` DIAG-15 forbids a silent skip.
+
+## G66 ☐ Two persist-log behaviour questions, carried out of `BL-243`
+
+**Goal.** Two answers, and a test for each if the answer says our behaviour diverges.
+
+**Evidence (confidence: lead-only, and deliberately so).** E43 closed `BL-243` because the
+cross-mission persist log is built and covered by `campaign-persistence`, and carried its two untested
+questions here rather than dropping them with the entry. Whether the log commits at damage time or at
+mission completion is unmeasured. Whether an Instant Action session loaded after a campaign mission in
+the same process picks the log up is unmeasured, and `InstantActionDirector` has no apply call, which
+is a reason to think it does not.
+
+**Approach.** Answer the second question from our own code first, since it is a one-file read, then
+decide whether the first is worth a decode or whether the shipped behaviour is defensible either way.
+
+**Model recommendation.** medium.
+
+**Verify.** Each answer stated with the evidence that chose it, plus a `campaign-persistence`
+assertion for whichever one turns out to be a divergence.
+
+**⚠ Traps.** ⚠ This is a research item and its deliverable is an answer. Building a commit-timing
+change without settling which timing the original uses would be inventing content.
+
+## G67 ☐ `BL-181`'s blocker now reads as discharged when it is not
+
+**Goal.** The blocker names something that can actually arrive.
+
+**Evidence (confidence: traced).** B13 raised it on landing. `BL-181` blocks the marker HUD and
+scoreboard layout sign-off on a menu hub with its own type scale to review them against. The campaign
+boards have landed, so someone will read "the boards are in" as discharging it, but those boards are
+painted original artwork with a per-background palette and no shared type scale, so they supply
+nothing to review against.
+
+**Approach.** Rewrite the blocker to name the type scale it actually waits on, and say why the
+composed boards do not provide one.
+
+**Model recommendation.** low.
+
+**Verify.** The entry read back by someone who has not seen this plan.
+
+**⚠ Traps.** ⚠ Do not discharge it. The playtest verdict it records is contingent and the contingency
+has not been met.
+
+## G68 ☐ Why the scaffolding read differently at the controls (`BL-477`)
+
+**Goal.** An answer to the user's report that a shot passes through the transparent scaffolding in the
+original, given that the decode says our behaviour matches.
+
+**Evidence (confidence: the disproof is decoded; the remaining candidates are lead-only).** F58
+settled the mechanism against the report. The original's weapon-ray polygon test reads no texture data
+at any point, and the census names the occluders: 5 of 180 rays reach `hydrogentank1`, the front truss
+`g469` takes 26 of the 36 level azimuths. Texture alpha, a `BL-335` header bit, `intersect_bbox`, LOD
+mis-selection at gun range, backface and the projectile's `0x40000` mask are each ruled out with
+evidence. Two candidates remain: the shot may have been beyond 800 m, where the original narrows to
+`f_mid`/`f_lo` whose cards are ±28.3 m of local x against `f_hi`'s ±48.9 m, or the difference is in
+aim assist and target selection rather than in the ray.
+
+**Approach.** Nothing until the user answers. The two candidates are distinguished by one fact the
+user has and the repo does not: roughly how far out the shot was taken.
+
+**Model recommendation.** medium, and only once it is unblocked.
+
+**Verify.** The user's eye, since the reference is theirs.
+
+**⚠ Traps.** ⚠ Do not reopen the ray rule. `SceneBuilder.EmitCollisionFaces` now carries the
+prohibition against writing an alpha rule, and F58's traps on why a blanket rule is wrong stand.
+⚠ Footage-derived distances are inadmissible (`docs/verification.md`), so the range cannot be
+recovered from the clips.
