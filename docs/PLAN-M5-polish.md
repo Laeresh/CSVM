@@ -1995,7 +1995,7 @@ cues before the radio is consulted.
 **⚠ Traps.** ⚠ It refuses, it does not defer: implementing it as a delay changes which track plays.
 ⚠ Do not put it on `MissionRadio`, which never sees a music cue.
 
-## G64 ☐ The 26 `GRAPHICS/*.JPG` draw nothing (`BL-479`)
+## G64 ☑ The 26 `GRAPHICS/*.JPG` draw nothing (`BL-479`)
 
 **Goal.** The cabin's plane photographs and the fifteen menu backgrounds draw.
 
@@ -2020,6 +2020,25 @@ than the reasoning.
 **⚠ Traps.** ⚠ This needs a re-extraction and bumps the `VERSION.json` stamp, which is why it was kept
 out of the seam work; it cannot share a worktree with anything reading `extracted/`. ⚠ Do not return
 a placeholder for an undecodable image: a wrong picture reads as a fidelity verdict.
+
+**Landed.** No transcode, because the premise is false: the JPEG pictures already draw. Every JPEG a
+screen names is a **board** picture, and `ComposedBoardView.Load` reads it through Godot's own
+loader (`UI/ComposedBoardView.cs:252`), which the four recorded facts never weighed. The three edits
+are the prose that said otherwise. `Mech3/ArtImage.cs:20` now carries the prohibition on its
+`TryLoad`, `docs/architecture.md`'s `ArtImage` entry carries the measurement, and
+`UI/CampaignCabinPage.cs` loses `PlanePhoto`, a `PC_P_HANGAR<n>.JPG` load through `ArtImage` that
+could only ever return null and whose result the campaign shell never draws (`Rebuild` returns at
+`LaunchMenu.cs:2130` for every campaign screen, so `Art` reaches nothing but the briefing's
+change-detection). `Art` is the cabin scene alone and `Pictures` is unchanged.
+
+**Verified.** `--menu=campaign-cabin` draws `PC_P_HANGAR5.JPG` in the window: the shot's photograph
+block matches that file's own pixels at a mean absolute channel difference of 1.74/255, against 8.9
+to 16.7 for the other ten photographs, so the picture is identified rather than assumed.
+`--menu=campaign-flightcheck` draws `FC_BACKGROUND.JPG`. Godot's loader decodes all 26 files,
+`CR_BACKGROUND` and `MP_LOBBY_BACKGROUND` included, pixel-identical to a GDI+ reference decode over
+a 7,500-point grid, so the progressive pair is not a gap either. The cabin shot's raw-pixel hash is
+unchanged across the edit (`29b9f2aa63d634f9b756880d9c5bf291`), which is the point: deleting a load
+that returned null moves nothing. `dotnet build` clean with 0 warnings, `dotnet test` 2363 passed.
 
 ## G65 ☐ `campaign-objectives-hud` cannot fire its own check on C3 (`BL-481`)
 

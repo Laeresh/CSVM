@@ -16,7 +16,10 @@ namespace CSVM.Mech3;
 public static class ArtImage
 {
     /// <summary>Reads and decodes one art file, or null when it is absent, unreadable, or in a
-    /// format no decoder here covers.</summary>
+    /// format no decoder here covers.
+    /// ⚠ Do not add a JPEG decoder or an extract-time PNG sidecar for the 26 JPEG pictures: the
+    /// shell's own loader reads all of them, so a screen that wants one names it as a board
+    /// picture instead (docs/architecture.md, this file's entry).</summary>
     public static TgaImage? TryLoad(string path) =>
         Path.GetExtension(path).ToLowerInvariant() switch
         {

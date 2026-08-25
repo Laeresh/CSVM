@@ -41,10 +41,6 @@ public sealed class CampaignCabinPage : CampaignPage
         "Return to Main Menu",
     };
 
-    // Cached per airframe, so a photo miss (see PlanePhoto below) is probed once, not once per
-    // frame, mirroring HangarAirframePage.BlueprintFor.
-    private readonly Dictionary<int, HangarArt?> _photoArt = new();
-
     // The cabin scene, decoded on first sight and kept: one 800x600 PNG per session, and a miss
     // must not re-probe the disk every frame.
     private HangarArt? _scene;
@@ -66,16 +62,15 @@ public sealed class CampaignCabinPage : CampaignPage
     public override int RowCount => Rows.Length;
 
     /// <inheritdoc/>
-    /// <remarks>The cabin scene, <c>PC_BackGround.png</c>. The pilot's own aircraft behind the
-    /// window hole (<c>PC_P_HANGAR&lt;airframe&gt;.JPG</c>) is preferred where it decodes, but it
-    /// ships as JPG and no engine-free JPG decoder exists, so the photograph stays a named gap the
-    /// plan's C22 section records rather than papering over. The background itself is PNG and
-    /// draws through <see cref="PngImage"/>.</remarks>
-    public override HangarArt? Art => PlanePhoto() ?? CabinScene();
+    /// <remarks>The cabin scene, <c>PC_BackGround.png</c>, through <see cref="PngImage"/>. The
+    /// pilot's own aircraft is not read here: the campaign screens render as composed boards, so
+    /// <see cref="Pictures"/> is what draws the photograph and this stays the one flat picture the
+    /// page can hand a caller that wants pixels.</remarks>
+    public override HangarArt? Art => CabinScene();
 
     /// <summary>The scene as the original layers it: the pilot's own aircraft first, then the
     /// painted cabin over it, whose colour-keyed hole is where the window is. The photograph ships
-    /// as JPG, which only the shell's decoder reads, so the board names it and never loads it.</summary>
+    /// as JPG, which the shell's own loader reads.</summary>
     public override IReadOnlyList<BoardPicture> Pictures
     {
         get
@@ -102,8 +97,9 @@ public sealed class CampaignCabinPage : CampaignPage
 
     /// <summary>The map's pin count: one per story chapter reached, the story chapter of the
     /// campaign's current position (<c>gosCallback</c> 7 with -2, docs/formats/campaign-screens.md,
-    /// "The cabin"). A pure, tested stand-in for the pixel composition <see cref="Art"/> cannot yet
-    /// draw: <c>PC_mappins.png</c> hits the same JPG/PNG gap as the plane photo below.</summary>
+    /// "The cabin"). The count is engine-free and tested; drawing the pins needs their authored
+    /// positions on the map, which nothing decodes yet. <c>PC_mappins.png</c> itself is an ordinary
+    /// 50x100 RGBA sheet the art seam reads.</summary>
     public static int MapPinCount(CampaignProfileDef profile) =>
         (CampaignProgression.NextMissionSeq(profile) / 5) + 1;
 
@@ -214,33 +210,4 @@ public sealed class CampaignCabinPage : CampaignPage
         return $"PC_P_HANGAR{profile.Planes[index].Airframe}.JPG";
     }
 
-    private HangarArt? PlanePhoto()
-    {
-        var profile = Flow.Profile;
-        if (profile == null || profile.Planes.Count == 0)
-        {
-            return null;
-        }
-
-        int index = Math.Clamp(profile.SelectedPlane, 0, profile.Planes.Count - 1);
-        var plane = profile.Planes[index];
-        if (_photoArt.TryGetValue(plane.Airframe, out var cached))
-        {
-            return cached;
-        }
-
-        HangarArt? art = null;
-        if (Flow.DataRoot is { } root)
-        {
-            var path = Path.Combine(root, "extracted", "rof", "ASSETS", "GRAPHICS",
-                $"PC_P_HANGAR{plane.Airframe}.JPG");
-            if (ArtImage.TryLoad(path) is { } image)
-            {
-                art = new HangarArt(image, plane.Name);
-            }
-        }
-
-        _photoArt[plane.Airframe] = art;
-        return art;
-    }
 }

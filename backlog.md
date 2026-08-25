@@ -1982,24 +1982,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   message key at all. *Cross-refs:* `BL-466`, whose move strengthened this suite and surfaced the
   failure; `docs/verification.md` DIAG-15 (never silently skip a case) and METHOD-9.
 
-- `BL-479` `[Feature]` **The 26 `GRAPHICS/*.JPG` have no PNG sidecar, so the cabin's plane photo and
-  fifteen menu backgrounds draw nothing.** *Evidence:* the art seam now loads by file name
-  (`Mech3/ArtImage.cs`), so a `.PNG` or `.TGA` draws and a `.JPG` returns null, which is the
-  never-invent answer rather than a gap in the seam. The decision recorded on `ArtImage`'s own type
-  doc is to transcode at extract time rather than write a decoder in `Mech3`, on four facts: the
-  scope is 26 files (eleven `PC_P_HANGAR<n>.JPG` cabin photos at 720x334 and fifteen 800x600 menu
-  backgrounds, 107 across all of `extracted/rof`); **two of the 26 are progressive**, since every SOF
-  marker was read and while 24 are baseline `SOF0`, `CR_BACKGROUND` and `MP_LOBBY_BACKGROUND` are
-  `SOF2`, so a hand-written baseline decoder several times `PngImage`'s size would still leave those
-  two blank; `ExtractRof.ps1` already writes additive PNG sidecars beside the 184 custom `.BM`
-  textures, so this is that same move rather than a new mechanism; and its host decodes all 26,
-  including the progressive pair, which was verified in memory without writing to `extracted/`.
-  *Fix shape:* the `.JPG` to `.PNG` sidecar pass in `ExtractRof.ps1`, additive, keeping the original.
-  Once transcoded `ArtImage` needs no new branch. *⚠ Traps:* this touches the extraction pipeline, so
-  it needs a re-extraction and bumps the `VERSION.json` stamp, which is why it is not part of the
-  seam work. Do not return a placeholder for an undecodable image: a wrong picture reads as a
-  fidelity verdict. *Cross-refs:* `BL-444`, closed by the seam work that filed this.
-
 - `BL-113` `[Tuning]` `[Owed-playtest]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
 
