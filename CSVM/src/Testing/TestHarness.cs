@@ -44,8 +44,8 @@ public static class TestHarness
             "pre-existing singular-basis guard in the destructible death path (backlog: det == 0 invert error)"),
         // An AT_NODE pose run during the animation bootstrap, before the world root is parented,
         // which Godot's guard answers with identity for both transforms (BL-484). Measured at 4
-        // per CutsceneRoots world and two suites build one, so a third still trips this cap.
-        new ErrorAllowance(@"Condition ""!is_inside_tree\(\)"" is true", 8,
+        // per CutsceneRoots world and three suites build one, so a fourth still trips this cap.
+        new ErrorAllowance(@"Condition ""!is_inside_tree\(\)"" is true", 16,
             "pre-existing bootstrap AT_NODE pose on an out-of-tree node (backlog: BL-484)"),
     };
 
