@@ -1107,6 +1107,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
+- `BL-485` `[Bug]` **The briefing screen only repaints on a keypress, so its reveal advances
+  invisibly and the picture changes only when the selection does.** *Evidence:* reported at the
+  controls. `LaunchMenu.Rebuild` runs on input, and the one per-frame path that can mark the board
+  dirty is `TickCampaignAudio` (`LaunchMenu.cs:1883-1908`), whose change test predates the reveal
+  being drawn: it compares `page.RowCount` and `page.Art` and returns false otherwise. Both are now
+  the wrong things to watch. `BL-464` made the briefing draw its flags, photographs, flourishes and
+  route line through `Pictures`/`Strokes` off `BriefingReveal.Elements`
+  (`CampaignBriefingPage.cs:143-183`), each element carrying its own `Visible`, `Opacity` and
+  rotation, and `BL-479`'s closure left campaign pages' `Art` doing nothing. So every element that
+  appears between two parchment lines appears with no repaint behind it, and a fade changes opacity
+  every frame with nothing watching. *Fix shape:* the briefing is a two-minute animation, so a
+  discrete did-it-change test is the wrong shape; while the reveal is running the board wants
+  repainting on its own clock. *⚠ Traps:* `Rebuild` replaces the controls it draws, so repainting at
+  frame rate is not obviously free and needs measuring before it is adopted, and the flicker note at
+  `LaunchMenu.cs:780` exists because a rebuild inside an input handler already bit once. Do not fix
+  it by watching more page properties one at a time: opacity alone changes continuously, so any
+  property list is a list of the cases someone remembered. *⚠ Instrument gap:* `--menu=campaign-briefing:<s>`
+  advances the reveal and then draws ONCE, which is why `BL-464`'s timed shots at 6, 12, 24, 40 and
+  70 s all read correctly while the live screen does not. A check for this has to drive frames, not
+  a time argument. *Cross-refs:* `BL-464` (the reveal drawing this outgrew), `BL-449` (the composed
+  board surface), `PLAN-M5-polish.md` B14.
+
 - `BL-484` `[Bug]` **An `AT_NODE` pose run during the animation bootstrap reads and writes global
   transforms on out-of-tree nodes, so Godot returns identity and the pose lands at the world
   origin.** *Evidence:* `PoseChannel.PoseAtNode` (`PoseChannel.cs:383,386,391`) takes the host's

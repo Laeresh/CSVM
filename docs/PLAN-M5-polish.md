@@ -132,6 +132,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 66. ☑ Two persist-log behaviour questions, carried out of `BL-243`'s closure
 67. ☑ `BL-181`'s blocker now reads as discharged when it is not
 68. ❌ Why the scaffolding read differently at the controls (`BL-477`), disproved: ours reproduces it
+69. ☐ The briefing screen only repaints on a keypress, so its reveal advances invisibly (`BL-485`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -2436,3 +2437,36 @@ gather at the HE rocket's `IMPACT_PROXIMITY` of 15 m, the burst reaches `hydroge
 which is the lift doing its job. The other three tanks lie 33 to 56 m from that burst, outside one
 rocket's radius, so a single rocket kills one tank directly and the rest is the chain; that is a
 radius result and not an occlusion one. The ray half is unchanged at 5 of 180.
+
+## G69 ☐ The briefing screen only repaints on a keypress (`BL-485`)
+
+**Goal.** The briefing's reveal is seen as it happens, rather than only when a keypress happens to
+repaint the board.
+
+**Evidence (confidence: traced-to-code).** Reported at the controls: the screen "only renders a new
+image when I change the selection". `LaunchMenu.Rebuild` runs on input, and the one per-frame path
+that can mark the board dirty is `TickCampaignAudio` (`LaunchMenu.cs:1883-1908`), whose change test
+predates the reveal being drawn at all. It compares `page.RowCount` and `page.Art` and returns false
+otherwise. Both are now the wrong things to watch: B14 made the briefing draw its flags,
+photographs, flourishes and route line through `Pictures`/`Strokes` off `BriefingReveal.Elements`
+(`CampaignBriefingPage.cs:143-183`), each element carrying its own `Visible`, `Opacity` and rotation,
+and G64's closure left a campaign page's `Art` doing nothing. So an element that arrives between two
+parchment lines arrives with no repaint behind it, and a fade changes opacity every frame with
+nothing watching.
+
+**Approach.** The briefing is a two-minute animation, so a discrete did-it-change test is the wrong
+shape for it. While the reveal is running the board wants repainting on its own clock. Measure the
+cost of that before adopting it, since `Rebuild` replaces the controls it draws.
+
+**Model recommendation.** medium.
+
+**Verify.** A driven-frames check rather than a time argument, for the reason under Traps, plus the
+screen watched through a reveal at the controls.
+
+**⚠ Traps.** ⚠ Do not fix it by watching more page properties one at a time: opacity alone changes
+continuously, so any property list is a list of the cases someone remembered. ⚠ `Rebuild` inside an
+input handler already bit once, which is what the note at `LaunchMenu.cs:780` records; repainting at
+frame rate is not obviously free. ⚠ **The instrument that missed this must change too.**
+`--menu=campaign-briefing:<s>` advances the reveal and then draws once, which is exactly why B14's
+timed shots at 6, 12, 24, 40 and 70 s all read correctly while the live screen does not. A check for
+this has to drive frames.
