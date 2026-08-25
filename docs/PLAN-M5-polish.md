@@ -143,6 +143,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 76. ☐ A mission cannot swap the player onto another airframe (`BL-494`), behind G74
 77. ☐ CM02's Balmorals break formation immediately, unattacked (`BL-498`)
 78. ☐ CM02's second Peacemaker squad starts awake and attacks the Pandora (`BL-499`)
+79. ☐ A roster-spawned aircraft carries none of its gamez node's marker scaffolding (`BL-495`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -3068,3 +3069,34 @@ this mission (`OBJECTIVE20`, `55`, `63`), which is what makes the two easy to co
 hand the squad a hardcoded player target: the bias table expresses this and it already ships. ⚠
 `campaign-zeppelin-wakeup` covers `WAKEUP_ENEMIES` for a dormant zeppelin pool; an aircraft roster
 block is a different path and its coverage cannot be assumed from that suite passing.
+
+## G79 ☐ A roster-spawned aircraft carries none of its gamez node's marker scaffolding (`BL-495`)
+
+**Goal.** CM02's wing-walk capture fires, because the approach volumes it needs are in the world and
+follow the aircraft that own them.
+
+**Evidence (confidence: measured).** G74 measured it and the `landings-wingwalk-gate` suite pins it.
+A campaign roster entry whose model has authored child markers loses them entirely: the roster
+spawns a rig from the airframe record, while the gamez subtree carrying the markers hangs under a
+library root the world build never places. In CM02 that subtree is
+`britbalmoral_<n>/markers/pylon8/bb_approach<n>`, and it takes the capture with it. The same subtree
+carries `land_on`, `bombs_away<n>`, `setb<n>` and `balmoral_healthtest`, so the reach gap is wider
+than one landing volume and the mission's bombing run probably sits behind it too.
+
+**Approach.** Parent the gamez node's authored scaffolding to the spawned rig, stamped with the
+gamez index metadata that index-addressed definitions look for, the way F51 stamped `camera1`. The
+`land_on` writes go by gamez index (942, 935, 626 in CM02), so the stamp is what makes the gate
+reachable and not only the volume.
+
+**Model recommendation.** high. It reaches the roster spawn path, the world build and the node
+index space at once, and everything else in CM02 is queued behind it.
+
+**Verify.** `landings-wingwalk-gate` flipping: the three rows bind rather than dropping, the gate
+pair's writes land on built nodes, and a driven approach at an armed Balmoral starts the capture.
+The suite already asserts the failing state, so its arms are the ones to invert.
+
+**⚠ Traps.** ⚠ The markers must follow the rig. These planes move under `SET_AI_NET`, and a volume
+resolved once at spawn drifts away from the aircraft it belongs to. ⚠ Do not place the library root
+itself: it is a prefab, and placing it puts a second Balmoral in the world beside the roster's. ⚠
+This is not Balmoral-specific. Any roster block whose model authors markers is in the same position,
+so a fix keyed to `britbalmoral` would be the wrong shape even if it made CM02 work.
