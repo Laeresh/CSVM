@@ -858,6 +858,15 @@ public sealed class CampaignDirector
                 // what makes a mid-flight swap capture the new route instead of restarting it.
                 pilot.Patrol = new AiNetFollower(net, Utils.Rng.NewSystemRandom(Utils.Rng.Ai),
                     trailerTarget: _owner._netTrailers?.For(net));
+                // ⚠ Re-baseline on the vehicle's own ranges FIRST: ApplyVolumes skips a radius the
+                // net authors as zero, so a second net authoring none leaves the previous one's
+                // gates standing and an escort off a bomb-run net never leaves patrol (BL-504).
+                if (pilot.Machine is { } gates && rig.Stats is { } defs)
+                {
+                    gates.AttackRange = defs.AiAttackRange;
+                    gates.ReturnRange = defs.AiReturnRange;
+                }
+
                 // The net's own volumes overwrite the vehicle's where it authors them. Only the
                 // spawn runs the roster block's copy afterwards, so here the net wins outright.
                 CampaignRosterPlan.ApplyVolumes(pilot.Machine, net.Volumes, _owner._minAiActiveDist);

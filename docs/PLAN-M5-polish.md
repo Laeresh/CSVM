@@ -146,6 +146,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 78. ☑ CM02's second Peacemaker squad starts awake and attacks the Pandora (`BL-499`, `BL-500`)
 79. ☑ A roster-spawned aircraft carries none of its gamez node's marker scaffolding (`BL-495`)
 80. ☑ A mission cannot re-command its spawned aircraft (`BL-500`)
+81. ☑ A net swap keeps the previous net's engagement gates (`BL-504`)
+82. ☐ A campaign wingman never leaves formation to engage (`BL-505`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -3401,3 +3403,74 @@ no-op is now an assertion that all three are on `M5Escort`
 `landings-approach-trigger` and `landings-wingwalk-gate` pass beside it. `dotnet build` clean, 0
 warnings; `dotnet test` 2394 passed. ⚠ Error counts are not evidence in this wave, a sibling lane
 sharing the log.
+
+## G81 ☑ A net swap keeps the previous net's engagement gates (`BL-504`)
+
+**Goal.** An aircraft moved onto a second net flies that net's engagement gates, not the ones it
+arrived with.
+
+**Evidence (measured).** Reported at the controls under `--debug-markers`: CM02's second Peacemaker
+squad, the one carrying the ace, stays in patrol and never turns on the player. The squad authors
+`netids` 20, `M5Bombrun`, whose attack and return radii are both `1.0`, which is how a bomb-run net
+keeps the aircraft on it out of combat. `OBJECTIVE68` then moves the squad onto `M5Escort`, which
+authors neither radius. `CampaignRosterPlan.ApplyVolumes` skips a radius a net authors as zero,
+because zero means "this net says nothing" rather than "a zero-metre volume", so overlaying the
+second net left the first one's 1 m standing for the rest of the mission. The squad's mode machine
+promotes out of patrol on `Mathf.Min(ActivationRange, AttackRange)`, so at 1 m nothing ever
+promotes. ⚠ **The 1 m gate is correct where it is authored**, confirmed at the controls: the
+Balmorals holding fire is the bomb-run net doing its job, and only the squad that LEAVES that net
+is wrong.
+
+⚠ **This was introduced by G80.** Before it, `SET_AI_NET` did nothing at all and the squad kept its
+spawn net's gates, so the defect arrived with the verb that made the clause work.
+
+**Landed.** `CampaignDirector.SetAiNet` re-baselines the pilot's attack and return ranges on the
+vehicle's own `AiAttackRange`/`AiReturnRange` before overlaying the new net's volumes, so a net
+authoring nothing hands the aircraft its stat-table gates rather than its predecessor's. The first
+Peacemaker squad was never affected: it spawns on `M5Escort`, which authors neither radius, so it
+kept the vehicle's 2000 m throughout, and that asymmetry is why one squad engaged and the other did
+not.
+
+**Verified.** A new arm in `campaign-set-ai-net` reads each woken squad member's live gates after
+the mission's own wake chain and requires them to equal that aircraft's own def values. Ablation,
+run with the re-baseline switched off: all three read `attack 1 m, return 1 m` and the arm fails
+3/3. With it, all three read `attack 2000 m, return 1200 m`. `dotnet build` clean, 0 warnings;
+comment caps clean.
+
+## G82 ☐ A campaign wingman never leaves formation to engage (`BL-505`)
+
+**Goal.** The player's wingmen fight, or the reason the original's do not is established.
+
+**Evidence (confidence: reported at the controls, and the decode currently AGREES with the defect).**
+Reported under `--debug-markers`: the wingmen never switch to pursue. The same impression closed F55
+and was recorded there as untested rather than dismissed, so this is its confirmation.
+
+⚠ **The decode as written says the original behaves the same way, which is what makes this an
+investigation rather than a fix.** `AiPilot.Next` short-circuits the whole dispatch on
+`Escort is { Leader.InPlay: true }`, and `docs/org/aiPilot.md`'s escort law records that nothing
+inside `FUN_0041e760` leaves state 1, so "a wingman on a player leader joins once and holds the
+formation offset for the rest of the mission, target or no target", the engaging state being
+reachable only through the every-frame forcing an AI leader applies. Our behaviour is a faithful
+port of that reading.
+
+**Approach.** Establish what clears or overrides wingman mode from OUTSIDE that function, since the
+report says the original's wingmen engage and the law alone cannot produce it. Named candidates, to
+be confirmed or killed rather than assumed: the player's own wingman orders, which the original
+exposes as commands; an objective clause that clears `primary_target`; and the vehicle's mode being
+set to something other than 4 by the target-selection path. ⚠ Settle first whether the wingman's
+GUNS fire while it holds station, because "does not switch to pursue" and "does not shoot at all"
+are different reports and only the second is certainly a defect.
+
+**Model recommendation.** high. It is an exe decode against a behaviour the current decode
+contradicts.
+
+**Verify.** A driven campaign leg with a hostile inside the wingman's own gates: what the original
+does, established from the image, and ours matching it.
+
+**⚠ Traps.** ⚠ Do not simply drop the escort short-circuit so the mode machine runs. That trades a
+documented decode for an impression and would also break the station keeping F55 closed on. ⚠ The
+wingman's `rating_biases` legitimately exclude targets (CM02's `wingman_4` excludes the Balmorals,
+`britpeace_7` and the trucks), so a wingman ignoring a particular aircraft can be correct; test
+against one it is not told to ignore. ⚠ `BL-504` was a real cause of exactly this symptom for a
+different group of aircraft, so confirm the wingmen's own gates before reading their behaviour as
+this item.

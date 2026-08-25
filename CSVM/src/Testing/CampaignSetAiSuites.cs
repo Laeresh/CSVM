@@ -327,6 +327,23 @@ internal static class CampaignSetAiSuites
             report.AppendLine($"net: {name} flies '{patrol?.Net.Name ?? "-"}' after the wake chain");
         }
         ctx.Same(3, onEscort, $"the woken ace squad is on '{EscortNet}', read off its live followers");
+
+        // BL-504: the squad spawns on the bomb-run net, whose 1 m attack radius keeps a bomber out
+        // of combat, then moves to a net authoring none. A swap that overlays without
+        // re-baselining leaves that 1 m standing and the squad never leaves patrol.
+        int engageable = 0;
+        foreach (var name in Squad)
+        {
+            var gates = rigs.TryGetValue(name, out var rig) ? rig.Pilot?.Machine : null;
+            var defs = rigs.TryGetValue(name, out var owner) ? owner.Stats : null;
+            engageable += gates != null && defs != null
+                && Mathf.IsEqualApprox(gates.AttackRange, defs.AiAttackRange) ? 1 : 0;
+            report.AppendLine($"gates: {name} attack {gates?.AttackRange ?? -1f:0.##} m, " +
+                $"return {gates?.ReturnRange ?? -1f:0.##} m");
+        }
+
+        ctx.Same(3, engageable,
+            $"…and each is back on its own vehicle's attack range, so it can leave patrol at all");
     }
 
     // The two verbs no shipped mission authors, driven through the appended objective. The clause

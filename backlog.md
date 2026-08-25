@@ -2217,6 +2217,29 @@ usual.
   *Cross-refs:* `PLAN-M5-polish.md` G77, whose `campaign-bomber-formation` suite is the harness to
   extend.
 
+- `BL-505` `[Bug]` **A campaign wingman never leaves formation to engage.** *Evidence:* reported at
+  the controls under `--debug-markers`, the wingmen never switching to pursue. The same impression
+  closed `PLAN-M5-polish.md` F55 and was recorded there as untested rather than dismissed, so this
+  is its confirmation. ⚠ **The decode as written agrees with the defect, which is what makes this an
+  investigation and not a fix.** `AiPilot.Next` short-circuits the whole dispatch while the escort
+  has a live leader, and `docs/org/aiPilot.md`'s escort law records that nothing inside
+  `FUN_0041e760` leaves state 1, so a wingman on a player leader joins once and holds the formation
+  offset for the rest of the mission, target or no target; the engaging state is reachable only
+  through the every-frame forcing an AI leader applies. Ours is a faithful port of that reading.
+  *Fix shape:* establish what clears or overrides wingman mode from OUTSIDE that function, since the
+  report says the original's wingmen engage and the law alone cannot produce it. Candidates to
+  confirm or kill rather than assume: the player's own wingman orders, an objective clause clearing
+  `primary_target`, and the vehicle's mode being set to something other than 4 by the
+  target-selection path. Settle first whether the wingman's GUNS fire while it holds station, since
+  "does not switch to pursue" and "does not shoot at all" are different reports and only the second
+  is certainly a defect. *⚠ Traps:* do not simply drop the escort short-circuit so the mode machine
+  runs; that trades a documented decode for an impression and breaks the station keeping F55 closed
+  on. A wingman's `rating_biases` legitimately exclude targets (CM02's `wingman_4` excludes the
+  Balmorals, `britpeace_7` and the trucks), so a wingman ignoring one particular aircraft can be
+  correct. `PLAN-M5-polish.md` G81 was a real cause of this symptom for a different group, so
+  confirm the wingmen's own gates before reading their behaviour as this item. *Cross-refs:*
+  `PLAN-M5-polish.md` F55, G81, G82.
+
 - `BL-502` `[Feature]` **`SET_AI_NET` and `SET_AI_TEAM` reach no zeppelin.** *Evidence:* found by
   G80, which wired both clauses for roster-spawned aircraft and could not carry the same lookup to
   airships. Six clauses across four missions name one: `blackswanzep` (C1C/M01), `blackhatzep`
