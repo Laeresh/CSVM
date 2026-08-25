@@ -51,11 +51,11 @@ internal static class LandingApproachSuites
         DriveMission(ctx, FirstSeq, "test-landing-approach", Drive);
 
     /// <summary>Reads CM02's wing-walk capture gate against its BUILT world: three symmetric
-    /// Balmoral rows, each under its own airship's gamez node, one pair of definitions switching
-    /// all three <c>land_on</c> nodes, and an arming objective that waits on the airships' aiv
-    /// group being down to one. It also pins BL-492, that none of those nodes is built, an
-    /// airship's gamez node being a library root the roster spawns as an aircraft, so all three
-    /// rows are dropped when the trigger binds.</summary>
+    /// Balmoral rows, each under its own plane's gamez node, one pair of definitions switching
+    /// all three <c>land_on</c> nodes, and an arming objective that waits on those planes' aiv
+    /// group being down to one. It also pins BL-492, that none of those nodes is built, a
+    /// Balmoral's gamez node being a library root the roster spawns from an airframe record
+    /// instead, so all three rows are dropped when the trigger binds.</summary>
     internal static void WingWalkCaptureGate(TestContext ctx) =>
         DriveMission(ctx, WingWalkSeq, "test-wingwalk-gate", DriveWingWalk);
 
@@ -173,11 +173,11 @@ internal static class LandingApproachSuites
         }
     }
 
-    // CM02's capture gate, which is not a per-airship one: the mission arms and disarms its three
+    // CM02's capture gate, which is not a per-aircraft one: the mission arms and disarms its three
     // Balmoral approaches from one pair of ON_CALL definitions covering all three at once, and the
-    // objective that calls the arming one waits on the airships' own aiv group being down to one.
-    // Each row's approach node is a child of that airship's gamez node, so the volume follows the
-    // airship it belongs to.
+    // objective that calls the arming one waits on those planes' own aiv group being down to one.
+    // Each row's approach node is a child of that plane's gamez node, so the volume follows the
+    // aircraft it belongs to.
     private static void DriveWingWalk(TestContext ctx, TestWorld world, CampaignDirector director,
         ObjectiveScript script, string missionZrdr, StringBuilder report)
     {
@@ -209,7 +209,7 @@ internal static class LandingApproachSuites
                 $"only the rows on static world nodes bind, which is BL-492: a row carried by a roster vehicle has no built approach node"));
     }
 
-    // The three rows are symmetric and each belongs to an airship the mission's roster spawns.
+    // The three rows are symmetric and each belongs to a plane the mission's roster spawns.
     private static void CheckCarriedRows(
         TestContext ctx, TestWorld world, IReadOnlyList<LandingApproach> carried,
         IReadOnlyList<string> owners, StringBuilder report)
@@ -217,7 +217,7 @@ internal static class LandingApproachSuites
         report.AppendLine($"{carried.Count} row(s) carried by a roster vehicle: " +
             $"{string.Join(", ", owners)}");
         ctx.Same(3, carried.Count,
-            $"CM02 authors one approach row per Balmoral, each under that airship's own gamez node");
+            $"CM02 authors one approach row per Balmoral, each under that plane's own gamez node");
         bool symmetric = true;
         int built = 0;
         foreach (var row in carried)
@@ -232,7 +232,7 @@ internal static class LandingApproachSuites
         ctx.Check(symmetric,
             $"and the three differ only by index, so no gate of theirs can admit one and not another");
         ctx.Same(0, built,
-            $"BL-492: none of their approach nodes is built, an airship's gamez node being a library root the roster spawns instead");
+            $"BL-492: none of their approach nodes is built, a Balmoral's gamez node being a library root the roster spawns from an airframe record instead");
     }
 
     // The mission's own gate pair, found from the compiled definitions rather than named here: the
@@ -265,11 +265,11 @@ internal static class LandingApproachSuites
         ctx.Same(gate.Count, called,
             $"and an objective's WAKE_ANIM calls each of them, so the gate is the mission's own");
         ctx.Check(rows.Count > carried.Count,
-            $"the chapter's static approach rows do build, which is why one on a world node fires and one on an airship does not");
+            $"the chapter's static approach rows do build, which is why one on a world node fires and one on an aircraft does not");
     }
 
     // What the arming objective waits on: the DEDG the objective ahead of it authors, over the
-    // group the airships' own roster blocks are in.
+    // group the three planes' own roster blocks are in.
     private static void CheckGateCondition(
         TestContext ctx, ObjectiveScript script,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks, IReadOnlyList<string> owners,
@@ -284,7 +284,7 @@ internal static class LandingApproachSuites
             group = mine;
         }
 
-        report.AppendLine($"the carried rows' airships are aiv group {group}");
+        report.AppendLine($"the carried rows' planes are aiv group {group}");
         ctx.Check(oneGroup && group > 0,
             $"the three Balmorals share one aiv group, which is what a DEDG condition counts");
         var gate = DedgAhead(script, group);
@@ -293,7 +293,7 @@ internal static class LandingApproachSuites
               $"{found.Dedg.Value.Max}] and wakes the objective that calls the arming animation"
             : "no DEDG objective wakes an objective that calls a gate animation");
         ctx.Check(gate?.Dedg is { Max: 1 },
-            $"and the capture waits on that group being down to one, so it is not offered while more than one airship flies");
+            $"and the capture waits on that group being down to one, so it is not offered while more than one Balmoral flies");
     }
 
     // The shipped volumes, read back off the resolved rows: the six drop cones are cones with a

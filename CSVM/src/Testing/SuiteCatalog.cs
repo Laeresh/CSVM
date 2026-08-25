@@ -826,11 +826,11 @@ public static class SuiteCatalog
         // node state switched for all three Balmorals at once.
         into.Add(new TestHarness.Suite("landings-wingwalk-gate",
             "CM02's Balmoral capture gate over its BUILT world: the mission's three approach rows "
-            + "resolve and differ only by index, each hangs under its own airship's gamez node, one "
+            + "resolve and differ only by index, each hangs under its own plane's gamez node, one "
             + "pair of definitions switches all three land_on nodes together, and the objective "
-            + "calling the arming one waits on the airships' aiv group being down to one; it also "
-            + "pins BL-492, that none of those nodes is built because an airship's gamez node is a "
-            + "library root the roster spawns as an aircraft, so all three rows are dropped at bind",
+            + "calling the arming one waits on those planes' aiv group being down to one; it also "
+            + "pins BL-492, that none of those nodes is built because a Balmoral's gamez node is a "
+            + "library root the roster spawns from an airframe record, so all three rows drop at bind",
             WingWalkCaptureGate));
 
         // BL-401: the assembler named every spawn ai{n}_{plane}, which no authored pattern can

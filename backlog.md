@@ -1951,7 +1951,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-494` `[Feature]` **A mission cannot swap the player onto another airframe, so CM02 cannot be
   finished after its capture.** *Evidence:* asked at the controls, whether flying the Balmoral to the
   Pandora is possible yet. It is not, and the gap is narrow rather than deep. The original does this
-  by swapping the PLAYER'S OWN AIRFRAME rather than by handing control of an AI airship: callback
+  by swapping the PLAYER'S OWN AIRFRAME rather than by handing control of an AI aircraft: callback
   codes 965, 966 and 967 "swap the player onto a specific airframe (`pbloodhawk`/`player_bhawk`,
   `pwarhawk`/`player_warhawk`, `pbalmoral`/`player_balmoral`) with its armour and hardpoint table,
   and set the cutscene flags" (`docs/formats/anim-definitions/cutscenes.md`, the callback table), and
@@ -1964,24 +1964,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   too: `player_balmoral-bal_wing_folddown`/`foldup` and the `bal_hook` extend, retract and startup
   definitions. *Fix shape:* wire the three swap codes onto the player rig, carrying the airframe's
   armour and hardpoint table as the decode says, and settle what the cutscene flags do. *⚠ Traps:*
-  this is an airframe swap and not vehicle possession, so do not build a way to fly a
-  `ZeppelinRuntime` airship; the Balmoral the player flies is a plane record. The swap happens mid
+  this is an airframe swap and not taking over another aircraft, so do not build a way to fly one
+  of the mission's AI Balmorals; the Balmoral the player flies is their own plane record, and the
+  Balmoral is a heavy plane rather than an airship. The swap happens mid
   mission with a loadout already bound, so the hardpoint table changing under a live rig is the part
   to get right. `BL-492` gates this in CM02: no capture, no swap to reach. *Cross-refs:* `BL-492`,
   `BL-471` (the callback decode that filed this), `PLAN-M5-polish.md` G76.
 
-- `BL-492` `[Bug]` **CM02's Balmoral capture reaches none of the three airships.**
+- `BL-492` `[Bug]` **CM02's Balmoral capture reaches none of the three Balmorals.**
   `[Blocked: BL-495]` *Evidence:* reported at the controls, and the cause is measured by the
-  `landings-wingwalk-gate` suite rather than inferred. Nothing is special about the third airship.
+  `landings-wingwalk-gate` suite rather than inferred. Nothing is special about the third plane.
   `LandingApproaches.Resolve` resolves all three rows from `C3/zrdr/landings.zrd`, and
   `LandingApproachRuntime.Bind` drops all three because the built world carries no `bb_approach<n>`:
   those nodes hang under `britbalmoral_<n>/markers/pylon8`, and `britbalmoral_<n>` is a gamez library
-  root with no parent that the world build never places, since the campaign roster spawns the airship
-  as an aircraft off the `pbalmoral` airframe instead. The same reach failure silences the gate,
+  root with no parent that the world build never places, since the campaign roster spawns the plane
+  from the `pbalmoral` airframe record instead. The same reach failure silences the gate,
   because `activate_wingwalk` and `deactivate_wingwalk` write the three `land_on` nodes by gamez
   index and those are unbuilt too. The chapter's other two rows, `pz_manual_land` and `pz_auto_land`,
   hang under the placed `world1` root and do bind, which is the whole of the asymmetry with the
-  Pandora. The gate itself is authored all-three-at-once and waits on one airship being left:
+  Pandora. The gate itself is authored all-three-at-once and waits on one Balmoral being left:
   `OBJECTIVE20` naps `OBJECTIVE26` awake five seconds after its own `DEDG [5, 1]`, and 5 is the
   `group` slot the three `britbalmoral_*` aiv blocks share. *Fix shape:* nothing here until `BL-495`
   gives a roster-spawned vehicle its gamez marker subtree; then re-run the suite and expect the three
@@ -1999,9 +2000,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   gap is wider than one landing volume. *Fix shape:* parent the gamez node's authored scaffolding to
   the spawned rig, stamped with the gamez index metadata that lets index-addressed definitions find
   it, the way `PLAN-M5-polish.md` F51 stamped `camera1`. *⚠ Traps:* the markers must follow the rig,
-  since these airships move under `SET_AI_NET` and a volume resolved once at spawn would drift away
-  from the ship it belongs to. Do not place the library root itself; it is a prefab and placing it
-  would put a second airship in the world beside the roster's. *Cross-refs:* `BL-492` (the reported
+  since these planes move under `SET_AI_NET` and a volume resolved once at spawn would drift away
+  from the aircraft it belongs to. Do not place the library root itself; it is a prefab and placing
+  it would put a second Balmoral in the world beside the roster's. *Cross-refs:* `BL-492` (the reported
   symptom), `PLAN-M5-polish.md` F51 and G74; `CampaignRosterSuites.cs` proves a suite can spawn the
   roster, so a fix here is verifiable headlessly.
 
@@ -2242,15 +2243,18 @@ usual.
   `docs/formats/anim-definitions/cutscenes.md` ("`player`, and the two pointer spaces a definition
   addresses"), which carries the decode; `BL-470` and `BL-471`, closed by the work that filed this.
 
-- `BL-498` `[Fidelity]` **CM02's Balmorals do not hold formation, and break it when attacked.**
-  *Evidence:* reported at the controls against the original, where the three airships fly in
-  formation and stay in it under fire. The data separates them from every fighter in the mission:
-  all three carry `group` 5, empty `rating_biases`, and behaviour slot 32 = `2` where the mission's
+- `BL-498` `[Bug]` **CM02's Balmorals break formation immediately, unattacked.**
+  *Evidence:* reported at the controls against the original, where the three heavy planes fly in
+  formation and stay in it under fire. ⚠ **In ours they break it right at mission start, with nobody
+  shooting at them**, so this is not an evasion-response question and a fix aimed at damage
+  reactions would miss it. The data separates them from every fighter in the mission: all three
+  carry `group` 5, empty `rating_biases`, and behaviour slot 32 = `2` where the mission's
   Peacemakers carry `16` and the player's flight `0`. `OBJECTIVE4` puts all three on the `M5Bombrun`
   net together, so the formation is authored as three aircraft on one net rather than as an escort
-  station. *Fix shape:* establish what slot 32 selects before touching any AI mode, since a bomber
-  that never breaks off is most likely that field rather than a special case in the mode machine.
-  Then find which of our transitions takes them off the net when they are shot at. *⚠ Traps:* do not
+  station. *Fix shape:* start from the unattacked case, since three aircraft commanded onto one net
+  should already fly it together and something is taking them off it at t=0. Establish what slot 32
+  selects before touching any AI mode, since a bomber that neither breaks off nor evades is most
+  likely that field rather than a special case in the mode machine. *⚠ Traps:* do not
   give the Balmorals an evasion exemption by name; the flag is authored data and other chapters'
   bombers will carry it too. `BL-492`'s reach failure means their gamez scaffolding is absent from
   the built world, so anything read off a spawned Balmoral's node tree is missing pieces and is not
