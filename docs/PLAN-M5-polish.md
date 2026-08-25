@@ -131,7 +131,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 65. ☑ `campaign-objectives-hud` cannot fire its own check on C3 (`BL-481`)
 66. ☑ Two persist-log behaviour questions, carried out of `BL-243`'s closure
 67. ☑ `BL-181`'s blocker now reads as discharged when it is not
-68. ◐ Why the scaffolding read differently at the controls, now a splash-occlusion question (`BL-477`)
+68. ❌ Why the scaffolding read differently at the controls (`BL-477`), disproved: ours reproduces it
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -2183,7 +2183,7 @@ artwork at authored pixels with a per-background ink palette, so they define no 
 distance units and no shared font choice for an in-flight overlay to match. Done by the orchestrator
 rather than a lane, because `backlog.md` is a single file three lanes would otherwise conflict in.
 
-## G68 ◐ Why the scaffolding read differently at the controls (`BL-477`)
+## G68 ❌ Why the scaffolding read differently at the controls (`BL-477`)
 
 **Goal.** An answer to the user's report that a shot passes through the transparent scaffolding in the
 original, given that the decode says our behaviour matches.
