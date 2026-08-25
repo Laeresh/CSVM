@@ -138,6 +138,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
     lines overlap each other (`BL-487`, `BL-490`)
 72. ☑ The flight check draws the wrong ammunition, and its rows and objectives are not the original's (`BL-488`)
 73. ☑ The screenshot key does nothing in menus (`BL-489`)
+74. ☐ CM02's Balmoral capture does not trigger on the last airship (`BL-492`)
+75. ☐ CM02's named pilots do not read as named, and their voice lines are unverified (`BL-493`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -2763,3 +2765,61 @@ pixels do reach a viewport grab. ⚠ Not verified: a human press on a live windo
 launcher binding already fired with a menu in the tree under a pushed event, so the reported
 "nothing happens" could not be reproduced headlessly, and one press at the controls is what would
 confirm it.
+
+## G74 ☐ CM02's Balmoral capture does not trigger on the last airship (`BL-492`)
+
+**Goal.** The wing-walk capture fires at all three Balmorals, or the reason the third differs is
+established.
+
+**Evidence (confidence: traced for the data, unmeasured for the cause).** Reported at the controls,
+flying the approach at the last Balmoral with nothing happening. ⚠ **The data is complete and
+symmetric, which is what makes this ours rather than a fidelity question.** `C3/zrdr/landings.zrd`
+carries three rows differing only by index: `ww_balmoral1`/`bb_approach1`,
+`ww_balmoral2`/`bb_approach2`, `ww_balmoral3`/`bb_approach3`, each `angle 45`, `speed [50, 320]`.
+C3's gamez carries all six nodes, one each of `bb_approach1..3` and `britbalmoral_1..3`. The mission
+arms and disarms the wing-walk objectives in threes throughout (`OBJECTIVE35/36/37`, `48/49/50`,
+`51/52/53`), and `OBJECTIVE4` puts all three airships on the `M5Bombrun` net.
+
+**Approach.** Establish why the third does not fire when the first two do, before changing anything.
+Two starting points, both from work this plan already landed: C21's approach rows start disarmed and
+are armed by the mission's own objective chain, so the third may never be armed; and F51 gave a row a
+fire-once-per-entry latch, so a latch keyed wrongly would disarm one row for good.
+
+**Model recommendation.** medium.
+
+**Verify.** A driven approach at each of the three in turn, all three firing, on the mission's own
+built world.
+
+**⚠ Traps.** ⚠ Do not relax the angle or speed gates to make it fire: they are authored and identical
+across the three rows, so a gate that admits the third would admit something wrong at the other two.
+⚠ Check whether the volume follows its airship. These three move under `SET_AI_NET`, and a volume
+resolved once at spawn would drift away from the ship it belongs to. ⚠ The first two firing is a
+report rather than a measurement; confirm it rather than assuming the fault is unique to the third.
+
+## G75 ☐ CM02's named pilots do not read as named (`BL-493`)
+
+**Goal.** Answers first: whether a named pilot's name reaches the targeting readout, and whether
+their voice lines are bound. Then code only if an answer says something is missing.
+
+**Evidence (confidence: traced for the data, lead-only for the report).** Remembered at the controls
+as a named ace enemy Peacemaker with its own voice lines, and the data supports the premise.
+`C3/M05/zrdr/aiv.zrd` carries six name keys in the blocks' own pilot-name field
+(`MSG_SIRWINTHROP_NAME`, `MSG_BUCK_NAME`, `MSG_TEX_NAME`, `MSG_BJOHN_NAME`, `MSG_BETTY_NAME`,
+`MSG_JACK_NAME`), and the mission's Peacemakers are `britpeace_2/3/7/8/9`. `britpeace_7` is the one
+other blocks single out, at `-1.0` in their `rating_biases` beside the truck patterns.
+
+**Approach.** Three questions in order, and the first two may close the item with no code. Does a
+named block's spawn carry that name to the targeting readout, which F57 built for the militia case?
+Does `AiVoiceRuntime` have that pilot's lines bound? Only then, which block is the ace.
+
+**Model recommendation.** medium.
+
+**Verify.** Each answer stated with the evidence that chose it, and a driven check for whichever one
+turns out to be missing.
+
+**⚠ Traps.** ⚠ The aiv record is positional, so a name read by counting fields is a guess until the
+field's offset is established; F57's work is the precedent for doing that properly. ⚠ Do not assume
+`britpeace_7` is the ace because it is mentioned most. A `-1.0` bias naming it tells other pilots NOT
+to shoot it, which argues for it being friendly to them rather than for it being an ace. ⚠ The user's
+report is a memory of the original, so treat it as a lead to verify against the data rather than as a
+specification.

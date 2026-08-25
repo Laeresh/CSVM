@@ -1948,6 +1948,43 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-492` `[Bug]` **CM02's Balmoral capture does not trigger on the last airship.** *Evidence:*
+  reported at the controls, flying the approach at the last Balmoral with nothing happening. The data
+  is complete and symmetric, so this is ours. `C3/zrdr/landings.zrd` carries three rows that differ
+  only by index: `ww_balmoral1`/`bb_approach1`, `ww_balmoral2`/`bb_approach2` and
+  `ww_balmoral3`/`bb_approach3`, each `angle 45` and `speed [50, 320]`. C3's gamez carries all six
+  nodes, one each of `bb_approach1..3` and `britbalmoral_1..3`, so nothing is missing. The three
+  airships fly nets (`OBJECTIVE4` sets `M5Bombrun` on all three) and the mission arms and disarms the
+  wing-walk objectives in threes throughout (`OBJECTIVE35/36/37`, `48/49/50`, `51/52/53`, each a
+  `WAKE_ANIM` of `bombs_away<n>` on `britbalmoral_<n>`). *Fix shape:* find why the third row does not
+  fire when the first two do, before changing anything; the rows being identical in the data is what
+  makes this a defect on our side rather than a fidelity question. Two starting points: `BL-467`'s
+  approach rows start disarmed and are armed by the mission's own objective chain, so the third may
+  never be armed; and `BL-470` gave a row a fire-once-per-entry latch, so a latch keyed wrongly would
+  disarm one row permanently. *⚠ Traps:* do not relax the approach volume's angle or speed gates to
+  make it fire; they are authored and identical across the three. Check whether the volume follows
+  its airship, since these three move under `SET_AI_NET` and a volume that resolved once at spawn
+  would drift. *Cross-refs:* `BL-467` and `BL-470`, whose work this exercises;
+  `PLAN-M5-polish.md` C21, F51, G74.
+
+- `BL-493` `[Feature]` **CM02's named pilots do not read as named, and their voice lines are
+  unverified.** *Evidence:* remembered at the controls as "a named ace enemy Peacemaker with its own
+  voice lines", and the data supports it. `C3/M05/zrdr/aiv.zrd` carries six name keys
+  (`MSG_SIRWINTHROP_NAME`, `MSG_BUCK_NAME`, `MSG_TEX_NAME`, `MSG_BJOHN_NAME`, `MSG_BETTY_NAME`,
+  `MSG_JACK_NAME`) in the aiv blocks' own pilot-name field, and the mission's Peacemakers are
+  `britpeace_2/3/7/8/9`. `britpeace_7` is the one other blocks single out, appearing in their
+  `rating_biases` at `-1.0` beside the truck patterns. *Fix shape:* three questions in order, and the
+  first two may close it with no code. Does a named block's spawn carry that name to the targeting
+  readout, which `BL-475` built for the militia case? Does `AiVoiceRuntime` have the pilot's lines
+  bound? And only then, is `britpeace_7` the block carrying `MSG_SIRWINTHROP_NAME`, which needs the
+  block-to-spawn binding rather than the adjacency of the two strings in one file. *⚠ Traps:* the
+  aiv record is positional, so a name read by counting fields is a guess unless the field's offset is
+  established; `BL-475`'s work is the precedent for doing that properly. Do not assume `britpeace_7`
+  is the ace because it is the most mentioned: a `-1.0` bias naming it means other pilots are told
+  NOT to shoot it, which is an argument for it being friendly to them rather than for it being an
+  ace. *Cross-refs:* `BL-475` (the targeting readout's name), `BL-401` (authored spawn identity),
+  `PLAN-M5-polish.md` G75.
+
 - `BL-491` `[Bug]` `[Deferred: useful while debugging]` **Crashing the player's aircraft does not end
   a campaign mission.** *Evidence:* reported at the controls. A campaign mission ends through
   `ObjectiveGraph.End`, and the three endings it has are the authored end, an `INSTANTLOSS`
