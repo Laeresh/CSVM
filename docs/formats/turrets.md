@@ -101,7 +101,7 @@ times are seconds; distances metres.
 | `ATTACK_INTERVAL` | 42 | scalar or `[min,max]` — how long a firing spell lasts |
 | `BORED_INTERVAL` | 42 | scalar or `[min,max]` — how long the pause between spells lasts |
 | `PITCH` | 37 (+1 stray) | `[min,max]` elevation arc — see the mis-nesting note below |
-| `SOUNDS` | 37 | sub-block: `ON`, `START`, `STOP`, `CANNON` |
+| `SOUNDS` | 37 | sub-block: `ON`, `START`, `STOP`, `CANNON`; the cannon sound has a refreshed 0.5 s playback lease |
 | `YAW` | 36 | `[min,max]` traverse arc |
 | `NODES` | 26 | standalone placement patterns |
 | `TEAM` | 20 | always `1` = **ally** where present; absent = **enemy** (see "Teams" below) |
@@ -144,7 +144,10 @@ sequence's healthy→destroyed swap deactivates the `HEALTHY_NODE` (default `hea
 gunner goes permanently quiet. Treat the `ai.zrd` value as editor-era authoring, not a pool.
 
 The `SOUNDS` sub-block likewise ships only `CANNON` (37 entries, always `snd_chaingun`); `ON`,
-`START` and `STOP` parse and are never used.
+`START` and `STOP` parse and are never used. `snd_chaingun` is a `LOOPED` sound definition. A
+turret does not play it as an isolated clip: the firing path owns one reusable sound handle and
+refreshes its expiry to 0.5 seconds after every shot. The sound manager releases that handle only
+after the lease expires.
 
 ⚠ **`PITCH` is authored at top level on 37 entries, not the raw count of 38**: the train turret
 (`MSG_TUR_TRAIN`) nests its one `PITCH [20,80]` **inside its `WEAPON` block**, where the turret
@@ -307,6 +310,15 @@ Two conditions gate the shot:
 authored, would add a duty cycle on top: a charge that drains while firing and recharges at the
 same rate while not, forcing a `FIRE_LIMITS[1]`-second cooldown when exhausted.
 
+**Projectile cadence and cannon audio have separate lifetimes.** Each elapsed `FIRE_RATE`
+interval emits exactly one projectile; the referenced ballistics record's own `FIRE_RATE` does
+not govern a turret. That same shot refreshes the turret's reusable `SOUNDS.CANNON` handle for
+0.5 seconds. Because the carried Firebrand row has a 0.4-second interval, its next projectile
+arrives before that lease expires and `snd_chaingun` remains a continuous machine-gun loop through
+the firing spell. Once firing stops, the loop ends within 0.5 seconds. A playback implementation
+that restarts `chaingun.wav` as a non-looped one-shot at each projectile preserves the ballistic
+rate but turns the audible firing spell into isolated shots.
+
 **`INACCURACY` perturbs the shot, not the barrel.** The scatter cone is applied to the fire
 direction *after* the aim solution and after the model nodes have been written, so the turret is
 seen to aim true and the rounds spread. It is a half-angle in degrees, 2.5–15.0 across the 42.
@@ -360,4 +372,12 @@ persists across save/restore.
 
 ## Evidence & limits
 
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
+The turret entry loader is `FUN_004a9df0`; it reads `FIRE_RATE` into the turret timer range and
+allocates one cannon-sound slot per turret. `FUN_004aabb0` is the complete update: after its aim,
+duty-cycle and fire gates, it calls the projectile spawner `FUN_005aef40` exactly once and redraws
+the next-shot timestamp from the turret range. The same branch passes `SOUNDS.CANNON` and a literal
+0.5-second lease to `FUN_0045e470`. That helper reuses the slot's existing sound handle and moves
+its expiry to sound-clock-now + 0.5; `FUN_0045e360` stops and clears the handle only after the
+sound clock passes that expiry. These executable paths settle the projectile/audio distinction;
+the `snd_chaingun` `LOOPED` flag and the Firebrand's 0.4-second scalar come from the shipped reader
+data.
