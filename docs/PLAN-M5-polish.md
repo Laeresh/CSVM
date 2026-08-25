@@ -104,11 +104,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 51. ☑ The cutscene camera has no gamez binding, so a mid-mission cutscene ends in one frame (`BL-470`)
 52. ☑ The cutscene node reparent is unimplemented, so the intro frames nothing (`BL-471`)
-53. ◐ Objective sites belong in the enemy selection cycle, and a moving site's marker must track (`BL-472`)
+53. ☑ Objective sites belong in the enemy selection cycle, and a moving site's marker must track (`BL-472`)
 54. ☑ A zeppelin's authored team is unread and its wake-up has no seam (`BL-476`)
 55. ☐ The wingman's formation is looser than the original's (`BL-473`), blocked on F56
 56. ☑ `wingman-station` is red under main's flight plant (`BL-474`)
-57. ◐ The targeting readout drops the militia name (`BL-475`)
+57. ☑ The targeting readout drops the militia name (`BL-475`)
 58. ☑ Alpha-cutout geometry is solid to weapon rays (`BL-477`)
 59. ◐ A net has no stop-point state, so the PANDORA never halts (`BL-478`)
 
@@ -1317,7 +1317,7 @@ unresolvable `player` and the `RESET_STATE` walks. ⚠ **The intro is still miss
 the reason F51 records: the gamez `player` those definitions animate has no node in C3's gamez at
 all. The camera is now where it belongs, looking at a stage still missing its actors.
 
-## F53 ☐ Objective sites belong in the enemy selection cycle (`BL-472`)
+## F53 ☑ Objective sites belong in the enemy selection cycle (`BL-472`)
 
 **Goal.** One objective marker at a time, selected with d-pad up the way an enemy is, and a marker
 on a moving node that tracks it.
@@ -1357,6 +1357,35 @@ combat too, which matches the decode; do not add a range or FOV gate. ⚠ Keep `
 for bare-point sites: C3/M01's village node sits at the world origin, 7.9 km from the point its own
 objective tests. ⚠ Lead-only and not to be changed on this evidence: the original's off-screen block
 may end in a distance where ours writes `"N o'clock"`.
+
+**Landed.** Each live site is offered to the player's `TargetPool` as an `AimCandidate` carrying the
+mission's own `objectiveTarget` flag, so `TargetRef.Classify` files it on the Enemy cycle,
+`SortsFirst` puts it at the head, d-pad up steps between the sites, and `TargetHud` draws the ONE
+selection with the original's category line over the site's name. A1's overlay is retired, 333 lines
+deleted, and its two decodes are kept in the new `Session/ObjectiveSites.cs`: the starting-`objective`
+flag set, since C3/M01 only ever REMOVES its sites, and the bare-`TRAVELERS`-point precedence.
+`MarkerDraw` and `EdgeMarker` are untouched and still shared with the stunt marker. **The frozen dock
+marker falls out of the same change**: every candidate is rebuilt from its live source each frame, and
+`Collect` returns the SAME `ObjectiveSite` instance per node for as long as the mission flags it,
+which is what `ReferenceEquals(Source, ...)` stickiness needs. The old overlay used the node NAME
+STRING as its source, so a fresh string per rebuild would have dropped the selection every frame.
+Two seams stayed separate deliberately: the objective feed is its own roster channel, leaving
+`SetTargetSubParts`'s single assignment to the zeppelin runtime, and `TargetPool.Offer` plumbs the
+objective flag rather than standing it in through `otherTarget`.
+
+**Verified.** The rewritten `campaign-objective-markers` drives C3/M01 against its built world
+through a real `TargetSelection`: three sites on the Enemy cycle, the selected one carrying
+`objective=True class=Enemy` in marker blue, next-enemy stepping `t_chamber` to `grasshut2`, the
+bare-point site marked at its point rather than at its node 7.9 km away, a site tracked through a
+scripted 600 m node move, and flying an approach retiring that site and leaving the rest. 11 checks,
+and it fails on the right check under each of THREE deliberate perturbations: position frozen at
+first resolve, a fresh site instance per rebuild, and the objective flag faked through `otherTarget`.
+A live `--campaign` run logs `campaign: 3 objective site(s) on the player's target cycle` and
+`target pool: enemy=3 ally=1 nonAircraft=103 class=Enemy acquired=t_chamber` and draws exactly one
+blue marker; the same run on the `otherTarget` build logged `enemy=0 nonAircraft=106`, three sites
+moving cycle for cycle. ⚠ Not verified: d-pad cycling at the controls, since the lane had no pad,
+and the dock marker riding the moving PANDORA in a live session, since `pzhookpoint` is only ADDed
+after the wreck objective, so the mechanism is pinned headlessly by the moving-node check instead.
 
 ## F54 ☑ A zeppelin's authored team is unread and its wake-up has no seam (`BL-476`)
 
@@ -1520,7 +1549,7 @@ re-authored profile the far-field plant is entered on 0 of 7199 steps on BOTH ai
 A3's recorded 54.3 %. The plant is still ruled out at the image, so no conclusion changes, but the
 "far-field 26.8 % to 3.0 %" contrast belongs to the old profile.
 
-## F57 ☐ The targeting readout drops the militia name (`BL-475`)
+## F57 ☑ The targeting readout drops the militia name (`BL-475`)
 
 **Goal.** A campaign AI reads as "Medusa Kestrel", the name the original shows.
 
@@ -1545,6 +1574,24 @@ title through `Messages`, falling back to `PlaneDisplayName` where the def carri
 string for `--target=` and the breadcrumbs, and a golden pinned on "Fury" could not say which Fury it
 meant. ⚠ Check the player's own defs before making the title path universal; a bare player def's
 title is the aircraft alone, which is why `MilitiaPaint.cs:36-37` skips a name with no space in it.
+
+**Landed.** The readout prints the name the def authors, so a militia AI reads "Medusa Kestrel".
+`PlaneStats.LoadForAi` reads the AI chain's own `title` key (inherited from the airframe where a def
+carries none), `AiFlightAssembler` resolves it through the session's string table, which is the one
+place the loaded def and the string table meet, and `PlaneRoster.PlaneDisplayName` prefers that
+authored name over its `p`-strip derivation, so both readers pick it up with no change of their own.
+`TargetRef.Name` is untouched, so `--target=` and the breadcrumbs still match `ai1_player_kestrel`.
+A player load carries no AI chain and so no title, which leaves a `--vs` opponent's marker as it was.
+
+**Verified.** Four new unit cases pin the decode against the shipped install: `medkestrel` authors
+`MSG_VEH_MEDUSA_KESTREL` resolving to "Medusa Kestrel", `pkestrel` and `kestrel` both carry
+`MSG_VEH_KESTREL` so the player path is unchanged, and 51 of 75 defs carry a title while the `w*`
+wingman and `r*` remote families carry none and inherit. A scripted `--ai=player_kestrel:def=medkestrel`
+run labels the marker "Medusa Kestrel" where the unfixed build labels it "Kestrel", 287 pixels apart
+and all of them in the label. The `c1-targeting-hud` golden reproduces its committed hash digit for
+digit, because that shot flies the plain `kestrel` def whose title is the same word the old
+derivation produced, and `manifest.json` is unmodified. ⚠ Not settled: whether the original prints a
+militia name for a WINGMAN def, since those author no title at all and ours inherits the airframe's.
 
 ## F58 ☑ Alpha-cutout geometry is solid to weapon rays (`BL-477`)
 

@@ -117,6 +117,16 @@ public sealed class PlaneStats
     /// player defs alone, so swapping it would leave every AI plane unarmed.</summary>
     public string? AiDefName;
 
+    /// <summary>The AI def's <c>title</c> message KEY ("MSG_VEH_MEDUSA_KESTREL"), nearest in the AI
+    /// chain, null on a player load. Resolve it through the string table for the name the targeting
+    /// readout prints; unresolved it is a key, not a name.</summary>
+    public string? AiTitleKey;
+
+    /// <summary>That title resolved ("Medusa Kestrel"), or null where nobody has resolved it — a
+    /// suite rig with no string table, or a player load. <c>PlaneRoster.PlaneDisplayName</c> prefers
+    /// it over the def-name derivation, which is how a marker reads the militia's name.</summary>
+    public string? AiTitle;
+
     // dynamics block
     public float PitchTorque = 2.4f;
     public float RollTorque = 6f;
@@ -564,6 +574,16 @@ public sealed class PlaneStats
                 Constitution = Skill("constitution"),
             };
             stats.AiAccentId = Skill("accentID");
+            // The name the targeting readout prints: a militia def authors its own
+            // ("MSG_VEH_MEDUSA_KESTREL"), and one that does not inherits the airframe's.
+            foreach (var d in aiChain)
+            {
+                if (d.Str("title") is { } title)
+                {
+                    stats.AiTitleKey = title;
+                    break;
+                }
+            }
         }
 
         // weapons: the AI chain's own armament, 5-tuples in list order. Guarded on aiChain rather

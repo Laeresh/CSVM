@@ -14,12 +14,17 @@ public static class PlaneRoster
     public static string PlaneFor(SessionSpec spec, int index) =>
         spec.PlaneNames.Count == 0 ? spec.PlaneName : spec.PlaneNames[Math.Min(index, spec.PlaneNames.Count - 1)];
 
-    /// <summary>A readable plane name for the stunt scoreboard from the vehicle.json def
-    /// name — the player defs are "p&lt;name&gt;" (pbloodhawk, ppeacemaker, pfury, …), so strip the
-    /// leading p and title-case → "Bloodhawk". Falls back to the node name. (Placeholder until the
-    /// launchscreen gets a proper data-driven roster of display names.)</summary>
+    /// <summary>A readable plane name: the def's own authored <c>title</c> where it has been
+    /// resolved ("Medusa Kestrel"), else derived from the vehicle.json def name — the player defs
+    /// are "p&lt;name&gt;" (pbloodhawk, ppeacemaker, pfury, …), so strip the leading p and
+    /// title-case → "Bloodhawk". Falls back to the node name.</summary>
     public static string PlaneDisplayName(PlaneStats stats)
     {
+        if (stats.AiTitle is { Length: > 0 } title)
+        {
+            return title;
+        }
+
         var d = stats.DefName;
         string name = d.Length > 1 && (d[0] == 'p' || d[0] == 'P') ? d[1..]
             : d.Length > 0 ? d

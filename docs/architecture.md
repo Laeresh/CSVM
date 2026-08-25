@@ -150,7 +150,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WeaponReadout.cs` — the selected-weapon text readout: gun group + rocket type and live ammo, in the game's own HUD font.
 - `src/Flight/ImpactReticle.cs` — the gun aiming pipper: 0.5 s of the selected group's flight along the nose (the original's own rule), projected each frame.
 - `src/Flight/EdgeMarker.cs` — the off-screen edge marker's placement rules, engine-free: on-screen test, behind-mirror, edge clamp (`Resolve`) and the clock-hour bearing (`ClockHour`); MarkerHud, VersusHud and TargetHud all place through it.
-- `src/Flight/MarkerDraw.cs` — the world marker's drawing primitives, engine-side but camera-free: reticle, edge arrow, centred text block and its clamped variant, plus the marker blue and the drop shadow. `EdgeMarker` places a marker; this draws it, so `MarkerHud` and the campaign's `ObjectiveMarkerHud` share one look.
+- `src/Flight/MarkerDraw.cs` — the world marker's drawing primitives, engine-side but camera-free: reticle, edge arrow, centred text block and its clamped variant, plus the marker blue and the drop shadow. `EdgeMarker` places a marker; this draws it.
 - `src/Flight/MarkerHud.cs` — the stunt objective marker HUD: reticle, screen-edge arrow + o'clock bearing, run status, banners; one per player.
 - `src/Flight/StuntScoreboard.cs` — end-of-run results overlay: a Godot-UI panel of per-zone splits, total, and the persisted best time.
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
@@ -250,7 +250,6 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`/`BriefingState`/`BriefingStep`, walking the root list where the 24 states actually live) and `BriefingReveal`, the interpreter that runs a state's 12-opcode beat sheet against a caller-advanced clock, blocking on `Wait`'s authored seconds and `WaitForMarker`'s cue times and keeping each element's opacity, rotation and position as its tweens land. Elements come out in placement order, which is draw order. With no cue points every marker releases at once, so the map finishes under the narration rather than a timing being invented. Decode: `docs/formats/briefing.md`.
 - `src/UI/BriefingObjectives.cs` — the briefing's parchment note from a mission's `objectives.zrd`: every `IDENTITY` carrying a `MSG_BRF_*` key, ordered by priority ascending, which is the list an `Objective id index` opcode indexes 0-based. Takes the reader list rather than a path, so it tests without an extraction; resolves text through `Messages`, leaving the raw key visible when the table cannot.
 - `src/UI/ObjectivesHud.cs` — the in-flight objectives display (D33): reads `CampaignDirector`'s `ObjectiveGraph.Rows` directly (not a re-parse), text through `Messages`, and shows every row rather than gating on the row's own `Awake` flag (an objective authored with no `BEGIN_DORMANT` starts awake without ever running a wake action, so its row's `Awake` flag never turns on even though it is live from the mission's first tick, C1/M02's own primary OBJECTIVE3, and filtering on it would hide exactly the objective a player needs to see first). This also matches the original's own decoded display mechanism (`docs/formats/objectives.md`, `FUN_004acc20`/`FUN_004ad240`): every `IDENTITY` row is built once and shown unconditionally, only the completion mark toggles. Self-mounting like `PerfHud` (its own `CanvasLayer` on `HudLayers.Hud`), so nothing here reaches `GameSession`; mounting it into a real session is a one-line wiring contract `PLAN-M5-campaign.md`'s D33 section names, deferred because `GameSession.cs` was off limits to a concurrent item while this one landed. No reference screenshot covers the original's in-flight layout, so every metric is TUNE; the still-owed capture is named in the plan.
-- `src/UI/ObjectiveMarkerHud.cs` — the flown campaign mission's objective-site markers, the only thing that tells the player where to go: the marker set is `targets.zrd`'s own `objective` entries edited by `objectives.zrd`'s `ADD_`/`REMOVE_OBJECTIVE_TARGET`, the label and colour are `TargetRef`'s decoded ones, the placement is `EdgeMarker`'s and the drawing is `MarkerDraw`'s. A site the mission names by a bare `TRAVELERS` point is marked at that point, not at the world node of the same name. Self-mounting like `ObjectivesHud`.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
@@ -347,6 +346,7 @@ clusters they delegate to.
 - `src/Session/CampaignLoadout.cs` — the bridge between a profile's stored picks and a flying aircraft's fit: one `OwnedPlane`'s ammunition indices and ordnance table indices as the `LoadoutChoice` a launch hands the session, which `Loadout.Bind` then lays over the aircraft's base fit. Engine-free, and both encodings are the campaign screens' own rather than the original's per-pylon ordnance id, which is a rocket table index decoded in `docs/formats/saved-games.md` and deliberately not adopted here, so an unset pylon is left to the base rather than written back.
 - `src/Session/ObjectiveScript.cs` — one mission's parsed `objectives.zrd`: the file-level keys and the contiguous `OBJECTIVEn` blocks in the typed shape the graph runs, found by exact name so every shipped misspelling lands in no field and stays dead. Decode: `docs/formats/objectives.md`.
 - `src/Session/ObjectiveGraph.cs` — the objectives runtime, engine-free: the four-state machine per objective, the rotating one-completion-per-tick scan, the chaining executor with its already-awake truncation, the nap that clears a completed flag, the condition families' OR, the mission countdown, the win/loss flags and the display rows D33 reads. Reaches the world only through `IObjectiveWorld`.
+- `src/Session/ObjectiveSites.cs` — the flown campaign mission's objective sites as targeting candidates, which is what tells the player where to go: the set is `targets.zrd`'s own `objective` entries edited by `objectives.zrd`'s `ADD_`/`REMOVE_OBJECTIVE_TARGET`, offered to each player's `TargetPool` with the mission's objective flag so they head the Enemy cycle and the ordinary selection draws one at a time. Rebuilt from its live source every frame, so a site under a moving node moves with it. A site the mission names by a bare `TRAVELERS` point sits at that point, not at the world node of the same name.
 - `src/Session/CampaignDirector.cs` — the engine side of a campaign mission and the sibling of `InstantActionDirector`: resolves a `--campaign=<profile>:<seq>` launch to its chapter/mission, arms the graph against the built world's runtimes, and at mission end records the attempt through `CampaignProgression`, folds the destruction log into the profile and raises the return-to-cabin exit the session layer acts on. It also owns the mission's two music duties: routing a `mu*` sound group to the process music channel instead of a positional emitter, and running the decoded proximity scan and player-damage ping that put the score into battle. The wingman's aircraft and fit are resolved here too, from the profile it already has open; nothing spawns that aircraft yet. A cutscene hold (callback 20) stops its whole step.
 - `src/Session/CutsceneController.cs` — the host a cutscene definition raises its `CALLBACK` codes to: the letterbox bars and the cutscene camera the definition itself drives, the world/objectives hold, the player out of flight with the chrome off, the AI parked, then one hard cut back to gameplay on the definition's end or on a skip. It answers for the two story-mission intros always, and for whatever `HostDefinitions` registers (the landings trigger's own rows and their `CALL_ANIMATION` closure). Scoping is by definition name, never by authored code.
 - `src/Session/LandingApproachRuntime.cs` — the mid-mission cutscene trigger: ticks a story mission's resolved `LandingApproaches` against the flown aircraft (arming gate, speed band, attitude cone, condition volume) and starts the row's definition, which is what makes an `ANIM_STATE … EXECUTED` objective satisfiable. A row fires once per entry into its volume: the handoff leaves the aircraft where the cutscene parked it, still inside the volume that started it. An `auto` row offers the auto-land rather than starting anything. Story missions only, for the reason `WorldSession.Options.LandingTriggers` gives.
@@ -1334,7 +1334,10 @@ reachable through `Of(TargetClass)`), rebuilt from scratch on every `Rebuild` ca
 original's own contract and why a runtime spawn appears and a death disappears with no extra
 plumbing. It walks three of the aim assist's four lists (`Vehicles`, `Turrets`, `Ordnance`);
 selectable structures arrive through `Rebuild`'s separate `subParts` argument, filled only by
-`ZeppelinRuntime.CollectTargetParts`. An `Ordnance` entry is admitted only when its source is a
+`ZeppelinRuntime.CollectTargetParts`, and the campaign's objective sites through its `objectives`
+argument, filled by `ObjectiveSites.Collect`. The two mission flags stay separate: `objectiveTarget`
+comes in with the candidate and puts a site on the Enemy cycle, `otherTarget` is stood in for by
+what the candidate is and puts a sub-part on the Non-Aircraft one. An `Ordnance` entry is admitted only when its source is a
 `ProjectilePool.Flyout` with the `TARGETABLE` admission byte set and still live, so a round wrapped
 only because it is fused stays unselectable. `Describe` is the only place in the targeting path that reads
 a concrete source type. `TargetSelection` owns the instance; `HumanFlightAdapter` wires one per human
@@ -2314,6 +2317,9 @@ Two flavours of one airframe: `Load` resolves everything down the player chain, 
   def on both flavours on purpose (`AiDefName`'s own doc); `damaged_engine_sound` and
   `cockpit_engine_sound` both parse fully — `EngineAudioCurves.EngineDefFor` is what selects
   between them and the plain `engine_sound` (see `src/Flight/EngineAudioCurves.cs` below).
+  `LoadForAi` also reads the AI chain's `title` message key into `AiTitleKey`, the authored name a
+  militia def carries ("MSG_VEH_MEDUSA_KESTREL") and a plain def inherits from its airframe;
+  `AiFlightAssembler` resolves it into `AiTitle` for the targeting readout.
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a
@@ -2389,17 +2395,6 @@ The stunt objective marker HUD: a viewport-filling `Control` drawing the on-scre
 block, the off-screen edge arrow (`EdgeMarker.Resolve` + clock-hour bearing), run status and banners
 (`CompleteBanner` branches solo vs race); one per player, sized via `HudMetrics.Scale(this)`.
 
-## src/UI/ObjectiveMarkerHud.cs
-The flown campaign mission's objective-site markers. The set is `targets.zrd`'s own `objective`
-entries minus those a completed objective's `REMOVE_OBJECTIVE_TARGET` names, plus whatever
-`ADD_OBJECTIVE_TARGET` has added: `ObjectiveGraph.ObjectiveTargets` alone starts empty and a
-mission that only ever REMOVES its sites would draw nothing. Label and colour come from
-`TargetRef`'s decoded format strings and `TargetHud.MarkerColor` (category line over the site name,
-blue unless the category is destructive), placement from `EdgeMarker`, drawing from `MarkerDraw`.
-`PointFor` prefers the bare `TRAVELERS` point of the objective that edits a target over the world
-node of the same name, because C3/M01's village node stands at the world origin. Self-mounting the
-way `ObjectivesHud` is, so `GameSession` only adds it. Pinned by `campaign-objective-markers`.
-
 ## src/Flight/StuntScoreboard.cs
 End-of-run results overlay: plain Godot UI (dimming backdrop → CenterContainer →
 PanelContainer → VBox + 3-column split grid) filled from `StuntMission.InCompletionOrder()`;
@@ -2467,7 +2462,8 @@ The shape's provenance is decoded in [`org/targeting.md`](org/targeting.md).
 
 ## src/Flight/TargetHud.cs
 The per-pane targeting HUD, built on EVERY human pane in every flight session (`--vs` panes get one
-alongside `VersusHud`): the pilot's own selected target from `TargetSelection`, a nearest-AI-hostile
+alongside `VersusHud`): the pilot's own selected target from `TargetSelection` (a campaign
+mission's objective sites included, since they ride that same selection), a nearest-AI-hostile
 fallback where no selection exists, and `--debug-markers`' every-live-aircraft overlay. Draws the
 original's bracket box, label block and off-screen edge arrow + clock bearing, and owns the colour
 table (`MarkerColor`), the label layout (`LabelLines`), the selected gun's reach gate (`GunReaches`,
@@ -4573,7 +4569,9 @@ this class) is `BL-301`'s call.
 
 ## src/Session/PlaneRoster.cs
 Static, spec-free lookups over a `SessionSpec`'s plane roster: `PlaneFor(spec, index)`,
-`PlaneDisplayName(stats)`, `Humanize(s)`.
+`PlaneDisplayName(stats)`, `Humanize(s)`. A plane's display name is the def's AUTHORED `title`
+(`PlaneStats.AiTitle`, "Medusa Kestrel") where something has resolved it through the string table,
+and the def-name derivation ("Bloodhawk") otherwise, which is what a player load and a bare rig get.
 No session state — every call takes the `SessionSpec` explicitly rather than caching one, since
 these are pure over their arguments.
 
@@ -4702,6 +4700,19 @@ directive-free objective, which starts awake and completes as a no-op.
 `PlaySoundGroup`, a vocabulary the mission's anim program never sees, so nothing else prewarms it;
 a session hands this to `WorldSession.Options.ExtraPrewarmNames`.
 Format and decode: docs/formats/objectives.md.
+
+## src/Session/ObjectiveSites.cs
+The flown campaign mission's objective sites, offered to each player's `TargetPool` as
+objective-flagged candidates: the original carries an objective as a companion flag on the Enemy
+cycle, so one site is drawn at a time and d-pad up steps between them. The set is `targets.zrd`'s
+own `objective` entries minus those a completed objective's `REMOVE_OBJECTIVE_TARGET` names, plus
+whatever `ADD_OBJECTIVE_TARGET` has added: `ObjectiveGraph.ObjectiveTargets` alone starts empty and
+a mission that only ever REMOVES its sites would offer nothing. One `ObjectiveSite` instance lives
+as long as the mission flags it, since the selection is held by source identity; its position and
+labels are re-read every frame, which is what tracks a site under a moving node. `PointFor` prefers
+the bare `TRAVELERS` point of the objective that edits a target over the world node of the same
+name, because C3/M01's village node stands at the world origin. `GameSession` binds it through
+`FlightRoster.SetTargetObjectives`. Pinned by `campaign-objective-markers`.
 
 ## src/Session/ObjectiveGraph.cs
 The objectives runtime over a parsed script, pure state over `Step` calls in the shape of
@@ -4951,7 +4962,9 @@ required dependencies explicit at the production seam.
 ## src/Session/AiFlightAssembler.cs
 The roster's private AI assembly path. It prepares authored/fallback pilot skills and maneuvers,
 builds the model, controller, livery, loadout/ordnance, damage visuals and optional crash runtime,
-then places the finished node. The assembler owns the one AI skills cache; `FlightRoster` lends
+then places the finished node. It also resolves the def's authored `title` into
+`PlaneStats.AiTitle` (the militia name the targeting readout prints), because this is where the
+loaded def and the session's string table meet. The assembler owns the one AI skills cache; `FlightRoster` lends
 that already-loaded table to the session's voice adapter without reopening the archive.
 
 ## src/Session/HumanFlightAdapter.cs

@@ -67,6 +67,13 @@ internal sealed class AiFlightAssembler
         PreparePilot(spawn, baseStats);
         var stats = baseStats.WithAiSpawnJitter(
             Rng.NewSystemRandom(Rng.Spawn, index, 0));
+        // The name the targeting readout prints, resolved here because this is where the string
+        // table and the loaded def meet; a rig with no table keeps the def-name derivation.
+        if (stats.AiTitleKey is { } titleKey && _aircraft.WeaponMessages is { } messages)
+        {
+            string title = messages.Get(titleKey);
+            stats.AiTitle = title.StartsWith("MSG_", StringComparison.Ordinal) ? null : title;
+        }
         if (spawn.Pilot.Machine is { } machine)
         {
             machine.AttackRange = stats.AiAttackRange;

@@ -44,6 +44,7 @@ public sealed class FlightRoster
     private readonly Dictionary<FlightController, AiSubscriptions> _aiSubscriptions = new();
     private IReadOnlyList<PlayerRig> _humans = Array.Empty<PlayerRig>();
     private Action<List<AimCandidate>>? _targetSubParts;
+    private Action<List<AimCandidate>>? _targetObjectives;
     private int _spawned;
 
     internal FlightRoster(FlightRosterPolicy policy, LiveryResolver liveries,
@@ -114,6 +115,7 @@ public sealed class FlightRoster
                     controller.SmokeScreens = _human.SmokeScreens;
                     controller.PauseState = _human.PauseState;
                     controller.TargetSubParts = _targetSubParts;
+                    controller.TargetObjectives = _targetObjectives;
                 }
             }
             _humans = new List<PlayerRig>(rigs).AsReadOnly();
@@ -132,6 +134,18 @@ public sealed class FlightRoster
         foreach (var rig in _humans)
             if (rig.Controller is { } controller)
                 controller.TargetSubParts = source;
+    }
+
+    /// <summary>Binds the campaign mission's objective-site feed. Its own channel rather than a
+    /// second assignment to <see cref="SetTargetSubParts"/>, which the zeppelin runtime already
+    /// holds; the two feeds carry different mission flags and ride different cycles. Human panes
+    /// only: an AI rig does no targeting of its own.</summary>
+    public void SetTargetObjectives(Action<List<AimCandidate>> source)
+    {
+        _targetObjectives = source;
+        foreach (var rig in _humans)
+            if (rig.Controller is { } controller)
+                controller.TargetObjectives = source;
     }
 
     /// <summary>Introduces one fully configured AI aircraft into the running session.</summary>
@@ -196,6 +210,7 @@ public sealed class FlightRoster
         _ai.Clear();
         _aiSubscriptions.Clear();
         _targetSubParts = null;
+        _targetObjectives = null;
         _spawned = 0;
     }
 

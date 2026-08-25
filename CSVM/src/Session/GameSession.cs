@@ -2423,16 +2423,21 @@ public partial class GameSession : Node3D
             DebugShow = _spec.DebugTargets,
         });
 
-        // The in-flight objectives readout (D33) and the objective-site markers, mounted only for a
-        // campaign session; both poll _campaign.Graph themselves once Attach (above) has built it.
-        // The markers are what tells the player where the mission's sites are.
+        // The in-flight objectives readout and the objective-site feed, both mounted only for a
+        // campaign session and both polling _campaign.Graph themselves once Attach (above) has
+        // built it. The sites go onto the player's target cycle, which is what marks them.
         if (_campaign is { } campaign)
         {
             var objectiveMessages = Messages.Load(state.MessagesPath);
             _worldRoot!.AddChild(UI.ObjectivesHud.Build(campaign, objectiveMessages));
-            _worldRoot!.AddChild(UI.ObjectiveMarkerHud.Build(campaign, objectiveMessages,
-                MissionTargets.Load(state.MissionZrdrPath), state.WorldRuntime,
-                () => _rigs.Count > 0 ? _rigs[0].Controller : null));
+            var sites = new ObjectiveSites(campaign, objectiveMessages,
+                MissionTargets.Load(state.MissionZrdrPath), state.WorldRuntime);
+            flightRoster.SetTargetObjectives(into => sites.Collect(into));
+            // Verification breadcrumb: how many sites the mission starts with. A zero here and a
+            // populated objectives readout means the target table, not the graph, is the problem.
+            var offered = new List<AimCandidate>();
+            sites.Collect(offered);
+            GD.Print($"campaign: {offered.Count} objective site(s) on the player's target cycle");
         }
 
         if (_rigs.Count > 1)

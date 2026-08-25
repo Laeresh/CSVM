@@ -4,23 +4,27 @@ using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
-using CSVM.UI;
 using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The suite over the campaign's objective markers: the store that says where the mission
-/// wants the player to go, and the HUD read model that finally consumes it.</summary>
+/// <summary>The suite over the campaign's objective sites: the store that says where the mission
+/// wants the player to go, and the target cycle that finally consumes it. The sites go through the
+/// ordinary selection, so what is asserted is a pool, a cycle and a sticky selection.</summary>
 internal static class CampaignMarkerSuites
 {
     // The story position flown. Chapter, mission folder and every node name below come out of
     // cm_sequence and that mission's own data, so nothing here names a shipped world node.
     private const int FirstSeq = 0;
 
+    // How far a site's world node is moved to prove the candidate follows it.
+    private static readonly Vector3 Shove = new(600f, 0f, -400f);
+
     /// <summary>Drives the campaign's first mission against its BUILT world: the objective sites
-    /// its <c>targets.zrd</c> flags each carry a marker with the original's two label lines and its
-    /// decoded colour, the marker sits on the world node it names, and flying the site's own
-    /// <c>TRAVELERS</c> approach retires that marker and leaves the rest standing.</summary>
+    /// its <c>targets.zrd</c> flags reach the player's Enemy cycle carrying the mission's objective
+    /// flag, exactly one is selected at a time, a site under a node that moves is marked where it
+    /// now is, and flying a site's own <c>TRAVELERS</c> approach retires it and leaves the
+    /// rest.</summary>
     internal static void CampaignObjectiveMarkers(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -48,7 +52,7 @@ internal static class CampaignMarkerSuites
             Drive(ctx, world, director, script, targets, messages, report));
 
         ctx.WriteArtifact($"test-campaign-objective-markers-{chapter}.txt", report.ToString());
-        ctx.Note($"drove {chapter}/{folder}'s objective markers against a built world");
+        ctx.Note($"drove {chapter}/{folder}'s objective sites through the target cycle");
     }
 
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
@@ -65,113 +69,167 @@ internal static class CampaignMarkerSuites
             Rng = new Random(1),
         });
         var graph = director.Graph!;
-        var hud = ObjectiveMarkerHud.Build(director, messages, targets, world.Runtime, () => null);
-        ctx.Host.AddChild(hud);
-
-        // The HUD polls for the graph in _Process rather than at construction (a session adds it
-        // before Attach runs), so drive one frame before reading it, as a real session would.
-        hud._Process(0.0);
-        foreach (var marker in hud.Markers)
+        var sites = new ObjectiveSites(director, messages, targets, world.Runtime);
+        var pilot = new Pilot(sites);
+        pilot.Fly(listener[0]);
+        foreach (var target in pilot.Selection.Pool.Enemy)
         {
-            report.AppendLine($"marker '{marker.Node}': \"{marker.CategoryLine}\" / " +
-                $"\"{marker.Name}\" at {marker.Position} colour {marker.Color}");
+            report.AppendLine($"enemy cycle: '{target.Name}' objective={target.Objective} " +
+                $"\"{target.CategoryLine}\" / \"{target.DisplayName}\" at {target.Position}");
         }
 
-        ctx.Check(hud.Markers.Count > 0,
-            $"the mission's objective sites carry a marker before anything has completed");
-        CheckOneMarker(ctx, world, hud, report);
-        CheckPointSite(ctx, world, script, hud, report);
-        RetireOneSite(ctx, script, graph, hud, listener, report);
-        hud.QueueFree();
+        ctx.Check(ObjectiveCount(pilot.Selection.Pool.Enemy) > 0,
+            $"the mission's objective sites reach the pilot's Enemy cycle");
+        ctx.Check(NamesOf(pilot.Selection.Pool.NonAircraft, script, graph, targets) == 0,
+            $"and none of them landed on the Non-Aircraft cycle instead");
+        CheckSelection(ctx, pilot, report);
+        CheckCycle(ctx, pilot, report);
+        CheckPointSite(ctx, world, script, pilot, report);
+        CheckMovingSite(ctx, world, script, pilot, report);
+        RetireOneSite(ctx, script, graph, pilot, listener, report);
     }
 
-    // The label and colour of the first marker that resolved: the original's category line over the
-    // site's own name, in the blue a non-destructive objective earns.
-    private static void CheckOneMarker(
-        TestContext ctx, TestWorld world, ObjectiveMarkerHud hud, StringBuilder report)
+    // The one selected site: the head of the cycle, drawn with the original's category line over
+    // the site's own name, in the blue a non-destructive objective earns.
+    private static void CheckSelection(TestContext ctx, Pilot pilot, StringBuilder report)
     {
-        if (hud.Markers.Count == 0)
+        if (pilot.Selection.Current is not { } current)
         {
+            ctx.Check(false, $"the pilot has a selected target with objective sites in the pool");
             return;
         }
 
-        var marker = hud.Markers[0];
-        ctx.Check(marker.Name.Length > 0 && !marker.Name.StartsWith("MSG_", StringComparison.Ordinal),
-            $"'{marker.Node}' carries a resolved name line, not a raw message key ('{marker.Name}')");
-        ctx.Check(marker.CategoryLine.EndsWith("-", StringComparison.Ordinal),
-            $"and the original's category line above it ('{marker.CategoryLine}')");
-        ctx.Check(marker.Color == MarkerDraw.HudBlue,
-            $"drawn in the marker blue the original uses for a non-destructive objective");
-        var found = world.Runtime.FindNodes(marker.Node, null);
-        ctx.Check(found.Count > 0 && found[0].GlobalPosition.IsEqualApprox(marker.Position),
-            $"and it sits on the world node the mission named, not on a guessed point");
-        report.AppendLine($"checked '{marker.Node}' at {marker.Position}");
+        report.AppendLine($"selected '{current.Name}': objective={current.Objective} " +
+            $"class={current.Class} colour {TargetHud.MarkerColor(current, AimAssist.PlayerTeam)}");
+        ctx.Check(current.Objective && current.Class == TargetClass.Enemy,
+            $"an objective site is what the auto-acquire selects ('{current.Name}')");
+        ctx.Check(pilot.Selection.Ordered.Count > 0 && pilot.Selection.Ordered[0].Objective,
+            $"and it sorts ahead of every sector, so it heads the cycle");
+        ctx.Check(current.DisplayName.Length > 0
+            && !current.DisplayName.StartsWith("MSG_", StringComparison.Ordinal),
+            $"the marker's name line is resolved, not a raw message key ('{current.DisplayName}')");
+        ctx.Check(current.CategoryLine.EndsWith("-", StringComparison.Ordinal),
+            $"with the original's category line above it ('{current.CategoryLine}')");
+        ctx.Check(TargetHud.MarkerColor(current, AimAssist.PlayerTeam) == MarkerDraw.HudBlue,
+            $"in the marker blue the original uses for a non-destructive objective");
     }
 
-    // A site the mission names by a bare TRAVELERS point: the marker belongs on that point, not on
-    // the world node of the same name, which this mission parks at the origin.
-    private static void CheckPointSite(TestContext ctx, TestWorld world, ObjectiveScript script,
-        ObjectiveMarkerHud hud, StringBuilder report)
+    // One at a time, stepped like an enemy: d-pad up's NextEnemy moves the selection to another
+    // site, and an untouched rebuild keeps the one it landed on.
+    private static void CheckCycle(TestContext ctx, Pilot pilot, StringBuilder report)
     {
-        foreach (var marker in hud.Markers)
+        if (pilot.Selection.Current is not { } first || ObjectiveCount(pilot.Selection.Ordered) < 2)
         {
-            if (ObjectiveMarkerHud.PointFor(script, marker.Node) is not { } point)
+            report.AppendLine("fewer than two objective sites are selectable, so no step to check");
+            return;
+        }
+
+        pilot.Selection.NextEnemy();
+        pilot.Fly(pilot.Position);
+        var stepped = pilot.Selection.Current;
+        report.AppendLine($"next enemy: '{first.Name}' -> '{stepped?.Name ?? "-"}'");
+        ctx.Check(stepped is { Objective: true } && !stepped.Value.IsSameTarget(first),
+            $"stepping the enemy cycle moves to another objective site");
+        pilot.Fly(pilot.Position);
+        ctx.Check(stepped is { } held && pilot.Selection.Current is { } after
+            && after.IsSameTarget(held),
+            $"and a rebuild holds it, so the selection survives a frame");
+    }
+
+    // A site the mission names by a bare TRAVELERS point: it belongs on that point, not on the
+    // world node of the same name, which this mission parks at the origin.
+    private static void CheckPointSite(TestContext ctx, TestWorld world, ObjectiveScript script,
+        Pilot pilot, StringBuilder report)
+    {
+        foreach (var target in pilot.Selection.Pool.Enemy)
+        {
+            if (!target.Objective || ObjectiveSites.PointFor(script, target.Name) is not { } point)
             {
                 continue;
             }
 
-            var found = world.Runtime.FindNodes(marker.Node, null);
-            report.AppendLine($"'{marker.Node}' point {point} vs node " +
+            var found = world.Runtime.FindNodes(target.Name, null);
+            report.AppendLine($"'{target.Name}' point {point} vs node " +
                 $"{(found.Count > 0 ? found[0].GlobalPosition.ToString() : "unresolved")}");
-            ctx.Check(marker.Position.IsEqualApprox(point),
-                $"'{marker.Node}' is marked at the point its objective tests, not at its node");
+            ctx.Check(target.Position.IsEqualApprox(point),
+                $"'{target.Name}' sits at the point its objective tests, not at its node");
             ctx.Check(found.Count == 0 || !found[0].GlobalPosition.IsEqualApprox(point),
                 $"and that point is somewhere the node itself is not, so the choice matters");
             return;
         }
 
-        report.AppendLine("no drawn marker is named by a bare TRAVELERS point");
+        report.AppendLine("no offered site is named by a bare TRAVELERS point");
     }
 
-    // Flies the site's own TRAVELERS approach by putting the listener on it: the objective
-    // completes, its REMOVE_OBJECTIVE_TARGET fires, and that marker alone leaves the HUD.
-    private static void RetireOneSite(TestContext ctx, ObjectiveScript script, ObjectiveGraph graph,
-        ObjectiveMarkerHud hud, Vector3[] listener, StringBuilder report)
+    // The frozen-marker check: a site standing on a world node is rebuilt from that node every
+    // frame, so moving the node (or its parent) moves the candidate with it.
+    private static void CheckMovingSite(TestContext ctx, TestWorld world, ObjectiveScript script,
+        Pilot pilot, StringBuilder report)
     {
-        if (Approachable(script, hud) is not { } site)
+        if (NodeSite(world, script, pilot) is not { } pick)
         {
-            report.AppendLine("no marker this mission draws is retired by a TRAVELERS approach");
+            report.AppendLine("no offered site stands on a resolvable world node");
             return;
         }
 
-        int before = hud.Markers.Count;
+        var (target, mover) = pick;
+        var before = target.Position;
+        var origin = mover.GlobalPosition;
+        mover.GlobalPosition = origin + Shove;
+        pilot.Fly(pilot.Position);
+        var moved = Find(pilot.Selection.Pool.Enemy, target.Name);
+        // Restore and rebuild together: a pool left holding the shoved position is a world state
+        // every later check would read, and the mission's own approach tests would miss by 720 m.
+        mover.GlobalPosition = origin;
+        pilot.Fly(pilot.Position);
+        report.AppendLine($"moved '{mover.Name}' by {Shove}: '{target.Name}' {before} -> " +
+            $"{(moved is { } m ? m.Position.ToString() : "gone")}");
+        ctx.Check(moved is { } after && after.Position.IsEqualApprox(before + Shove),
+            $"'{target.Name}' tracks the node it stands on when that node moves");
+        ctx.Check(moved is { } still && still.Source is ObjectiveSite,
+            $"and it is still the same site object, so a selection on it would hold");
+    }
+
+    // Flies the site's own TRAVELERS approach by putting the listener on it: the objective
+    // completes, its REMOVE_OBJECTIVE_TARGET fires, and that site alone leaves the cycle.
+    private static void RetireOneSite(TestContext ctx, ObjectiveScript script, ObjectiveGraph graph,
+        Pilot pilot, Vector3[] listener, StringBuilder report)
+    {
+        if (Approachable(script, pilot) is not { } site)
+        {
+            report.AppendLine("no site this mission offers is retired by a TRAVELERS approach");
+            return;
+        }
+
+        int before = ObjectiveCount(pilot.Selection.Pool.Enemy);
         listener[0] = site.Position;
         for (float t = 0f; t < 6f; t += 0.1f)
         {
             graph.Step(0.1f);
         }
 
-        hud._Process(0.0);
-        report.AppendLine($"flew the approach to '{site.Node}': {before} markers -> {hud.Markers.Count}");
-        ctx.Check(!Drawn(hud, site.Node),
-            $"flying '{site.Node}'s approach retires its marker");
-        ctx.Check(hud.Markers.Count < before,
-            $"and leaves the mission's remaining sites marked ({hud.Markers.Count} still drawn)");
+        pilot.Fly(pilot.Position);
+        int after = ObjectiveCount(pilot.Selection.Pool.Enemy);
+        report.AppendLine($"flew the approach to '{site.Name}': {before} sites -> {after}");
+        ctx.Check(Find(pilot.Selection.Pool.Enemy, site.Name) == null,
+            $"flying '{site.Name}'s approach retires its marker");
+        ctx.Check(after > 0 && after < before,
+            $"and leaves the mission's remaining sites offered ({after} still selectable)");
     }
 
-    // The first drawn marker whose site an awake objective both approaches (TRAVELERS on that node)
+    // The first offered site whose approach an awake objective both flies (TRAVELERS on that node)
     // and removes when it completes, which is the mission's own "you have been here" pair.
-    private static ObjectiveMarker? Approachable(ObjectiveScript script, ObjectiveMarkerHud hud)
+    private static TargetRef? Approachable(ObjectiveScript script, Pilot pilot)
     {
-        foreach (var marker in hud.Markers)
+        foreach (var target in pilot.Selection.Pool.Enemy)
         {
             foreach (var def in script.Objectives)
             {
-                if (def.Travelers is { } spec
-                    && string.Equals(spec.WhereNode, marker.Node, StringComparison.OrdinalIgnoreCase)
-                    && Names(def.RemoveObjectiveTarget, marker.Node))
+                if (target.Objective && def.Travelers is { } spec
+                    && string.Equals(spec.WhereNode, target.Name, StringComparison.OrdinalIgnoreCase)
+                    && Names(def.RemoveObjectiveTarget, target.Name))
                 {
-                    return marker;
+                    return target;
                 }
             }
         }
@@ -179,17 +237,75 @@ internal static class CampaignMarkerSuites
         return null;
     }
 
-    private static bool Drawn(ObjectiveMarkerHud hud, string node)
+    // The first offered site that stands on a world node rather than a bare point, with the node
+    // to move: its PARENT where that parent is itself parented, which is the under-a-moving-hull
+    // case, and the site's own node where the parent is the chapter world's own root.
+    private static (TargetRef Target, Node3D Mover)? NodeSite(TestWorld world,
+        ObjectiveScript script, Pilot pilot)
     {
-        foreach (var marker in hud.Markers)
+        foreach (var target in pilot.Selection.Pool.Enemy)
         {
-            if (string.Equals(marker.Node, node, StringComparison.OrdinalIgnoreCase))
+            if (!target.Objective || ObjectiveSites.PointFor(script, target.Name) != null)
             {
-                return true;
+                continue;
+            }
+
+            var found = world.Runtime.FindNodes(target.Name, null);
+            if (found.Count == 0 || !found[0].IsInsideTree())
+            {
+                continue;
+            }
+
+            var parent = found[0].GetParent() as Node3D;
+            return (target, parent?.GetParent() is Node3D ? parent : found[0]);
+        }
+
+        return null;
+    }
+
+    private static TargetRef? Find(IReadOnlyList<TargetRef> cycle, string name)
+    {
+        foreach (var target in cycle)
+        {
+            if (string.Equals(target.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return target;
             }
         }
 
-        return false;
+        return null;
+    }
+
+    private static int ObjectiveCount(IReadOnlyList<TargetRef> cycle)
+    {
+        int found = 0;
+        foreach (var target in cycle)
+        {
+            if (target.Objective)
+            {
+                found++;
+            }
+        }
+
+        return found;
+    }
+
+    // How many of the mission's live site names ended up on a cycle they do not belong to.
+    private static int NamesOf(IReadOnlyList<TargetRef> cycle, ObjectiveScript script,
+        ObjectiveGraph graph, MissionTargets targets)
+    {
+        var live = new List<string>();
+        ObjectiveSites.CollectTargets(script, graph, targets, live);
+        int found = 0;
+        foreach (var target in cycle)
+        {
+            if (Names(live, target.Name))
+            {
+                found++;
+            }
+        }
+
+        return found;
     }
 
     private static bool Names(IReadOnlyList<string> names, string node)
@@ -230,5 +346,29 @@ internal static class CampaignMarkerSuites
         }
 
         return null;
+    }
+
+    // A pilot's targeting frame with no aircraft: the same pool feed and the same per-frame
+    // rebuild FlightController.StepTargeting runs, driven a frame at a time by the suite.
+    private sealed class Pilot
+    {
+        private readonly ObjectiveSites _sites;
+        private readonly List<AimCandidate> _offered = new();
+        private readonly AimCandidateSet _scan = new();
+
+        internal Pilot(ObjectiveSites sites) => _sites = sites;
+
+        internal TargetSelection Selection { get; } = new();
+
+        internal Vector3 Position { get; private set; }
+
+        internal void Fly(Vector3 position)
+        {
+            Position = position;
+            _offered.Clear();
+            _sites.Collect(_offered);
+            Selection.Rebuild(_scan, null, AimAssist.PlayerTeam, null, position, Basis.Identity,
+                _offered);
+        }
     }
 }

@@ -231,6 +231,13 @@ public partial class FlightController : Node3D
     /// same sink shape <see cref="CollideDamageSink"/> already uses.</summary>
     public System.Action<List<AimCandidate>>? TargetSubParts;
 
+    /// <summary>Appends the campaign mission's live objective sites to the targeting pool each
+    /// frame (<c>ObjectiveSites.Collect</c>, bound by <c>GameSession</c>). Null outside a campaign
+    /// session. A channel of its own rather than <see cref="TargetSubParts"/>: a site carries the
+    /// mission's <c>objectiveTarget</c> flag and rides the Enemy cycle, while a sub-part carries
+    /// <c>otherTarget</c> and rides the Non-Aircraft one.</summary>
+    public System.Action<List<AimCandidate>>? TargetObjectives;
+
     /// <summary><c>--target=</c>'s spec, or null for an unscripted session. Applied ONCE, on
     /// the first frame <see cref="Targeting"/>'s pool has anything in it, and never consulted again —
     /// it sets the initial selection, it does not hold it, so an interactive session started with the
@@ -372,6 +379,7 @@ public partial class FlightController : Node3D
     private readonly RandomNumberGenerator _aimRng = Rng.Stream(Rng.Weapons); // the assist's 1° launch scatter
     private readonly AimCandidateSet _targetScan = new();   // the targeting pass's own scan, rebuilt per frame
     private readonly List<AimCandidate> _targetParts = new(); // this frame's selectable sub-parts
+    private readonly List<AimCandidate> _targetSites = new(); // this frame's objective sites
     private readonly bool[] _targetKeyPrev = new bool[5];   // T/Y/U/I/O edge detection
     private readonly bool[] _viewModeKeyPrev = new bool[4]; // F8/F6 + pad view-selection edges
     private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // D-pad Up tap vs hold
@@ -1636,6 +1644,7 @@ public partial class FlightController : Node3D
         SmokeScreens = null;
         PauseState = null;
         TargetSubParts = null;
+        TargetObjectives = null;
     }
 
     /// <summary>Whether static world geometry blocks the segment — the turret gunners' cached
@@ -2432,11 +2441,16 @@ public partial class FlightController : Node3D
             Projectiles.CollectFusedOrdnance(_targetScan);
             _targetParts.Clear();
             TargetSubParts?.Invoke(_targetParts);
+            // The mission's objective sites, rebuilt from their live sources every frame, so a
+            // site under a moving node is marked where it now is rather than where it was.
+            _targetSites.Clear();
+            TargetObjectives?.Invoke(_targetSites);
         }
         // The team is read off the FIELD. Deriving it from PlayerIndex is right for P1 by
         // coincidence and wrong for every other pane the moment a mission sets teams — the
         // wingman-in-the-marker bug (see TargetHud.OwnTeam).
-        sel.Rebuild(_targetScan, _targetParts, Team, this, _model.Position, _model.Attitude);
+        sel.Rebuild(_targetScan, _targetParts, Team, this, _model.Position, _model.Attitude,
+            _targetSites);
 
         // The death prune (FUN_004a64e0). There is no session-wide Downed broadcast outside --vs,
         // so this pane prunes its own queue: a shot-down attacker must not be offered again.
