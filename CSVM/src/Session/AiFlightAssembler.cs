@@ -151,6 +151,19 @@ internal sealed class AiFlightAssembler
                 Log.Warn("weapons", $"ai: loadout bind failed for '{stats.DefName}' — this plane flies unarmed error={e.Message}");
             }
 
+            // The carried turret gunners, built as the player's are and independent of the loadout
+            // above. A gunner is a separate crewman reading none of the pilot's engagement gates,
+            // so a block whose net holds its pilot out of combat still shoots back.
+            if (_aircraft.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
+            {
+                controller.Turrets = TurretController.BuildCarried(
+                    turretDefs, stats, planeModel, _aircraft.WeaponDefs, controller, _world.Projectiles);
+                if (controller.Turrets.Length > 0)
+                {
+                    Log.Info("weapons", $"ai: '{stats.DefName}' carries {controller.Turrets.Length} turret gunner(s) under shooter id {controller.PlayerIndex}");
+                }
+            }
+
             // Visible damage, phase 1: the same object the player rig gets, built from this
             // airframe's own injure_anims. Phase 2 (the sink and the stops) is wired by
             // BuildFlightCrashRuntime below, once the runtime it plays into exists.

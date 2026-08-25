@@ -148,7 +148,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 80. ☑ A mission cannot re-command its spawned aircraft (`BL-500`)
 81. ☑ A net swap keeps the previous net's engagement gates (`BL-504`)
 82. ☑ A campaign wingman never leaves formation to engage (`BL-505`), the original does not either
-83. ☐ An AI aircraft's defensive turrets are never built (`BL-506`)
+83. ☑ An AI aircraft's defensive turrets are never built (`BL-506`, `BL-507`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -3537,7 +3537,7 @@ original's wingmen do not pursue is established, and ours match it, guns from th
 the finding to re-open is the escort state's exit, since `+0xd8` having no external writer is the
 claim everything else rests on.
 
-## G83 ☐ An AI aircraft's defensive turrets are never built (`BL-506`)
+## G83 ☑ An AI aircraft's defensive turrets are never built (`BL-506`, `BL-507`)
 
 **Goal.** A bomber shoots back, from the turrets its own vehicle definition authors.
 
@@ -3566,3 +3566,48 @@ AI host. ⚠ Sixteen defs carry these mounts, so this is not a Balmoral fix and 
 case would be the wrong shape. ⚠ Every AI Kestrel, Avenger, Brigand and Firebrand gains a rear gun
 the player has been flying against without, so this changes the difficulty of missions nobody
 reported a problem with. That is the correct behaviour, but it is worth saying at the controls.
+
+**Landed.** Two writes, both of them general rather than per-airframe. `AiFlightAssembler.Assemble`
+now builds the host's `thirdp` mounts through the same `TurretController.BuildCarried` the human
+adapter calls, placed beside the loadout bind and independent of it, so any of the sixteen defs that
+authors mounts flies them. And `PlaneStats.LoadCore` reads the `turrets` block off the AI chain on
+an AI load, where it already reads the damage model, rather than off the player chain: the block is
+authored twice over and the two are different guns, the AI Balmoral's rear mount detecting at 900 m
+with a 10 s attack window where the player rig's `MSG_TUR_PREAR_G3` reaches 350 m with 4 s. Wiring
+the assembler alone would have crewed every AI bomber with the player's shorter-sighted pair.
+
+⚠ **This makes the game harder, everywhere AI flies one of these airframes.** Every AI Kestrel,
+Avenger, Brigand, Firebrand and Balmoral now carries the rear gun its data has always authored, at
+the AI entry's own 900 m detection rather than the player rig's 350 m, and the gunner fires whatever
+the pilot's net gates say. Missions nobody reported a problem with get harder, and the change is not
+scoped to CM02.
+
+**Verified.** A new arm in `campaign-set-ai-net`, on C3/M05's own built world through the mission's
+own graph. The Balmoral the swap arm parks on `M5Bombrun` carries both mounts, the rear one resolves
+as `MSG_TUR_REAR_G3` and takes its host's team, and over four seconds it slews onto a Fortune Hunter
+174 m behind and below (dot 1.000), fires ten rounds through the 15° gate, takes 20 off that
+aeroplane's ledger and is recorded in its attacker queue, which is the shooter id resolving back to
+the host. Its own airframe stays pristine, the pilot's attack gate reads 1 m throughout, and a
+forced crash stops the gun. Ablation, with the assembler call switched off: the same aeroplane
+carries zero mounts and the arm fails 2/2. Ablation of the chain read alone: two mounts build but
+the rear one is the player's `MSG_TUR_PREAR_G3` and the arm fails. `ai-plane-defs` gains an arm
+requiring an AI load to name its own entries; `carried-turrets`, `world-turrets`, `campaign-roster`,
+`wingman-engage`, `ai-gunnery`, `campaign-airframe-swap`, `campaign-squad-wakeup`,
+`targeting-candidates` and `zeppelin-identity` stay green. `dotnet build` clean, 0 warnings, 2399
+unit tests pass, comment caps clean.
+
+⚠ **One golden moves.** `c1-targeting-hud` re-pins to `b82996fdba152ecc32be5fd974c10eb8`: the AI
+Kestrel it targets now has a crewed rear turret, which poses at its arc centre instead of the
+model's rest pose. The difference is a single pixel on that aeroplane's silhouette at 305 m, and
+that pixel is the change working. `c1-ai-wreck` is unmoved, its AI being a turretless Fury.
+
+⚠ **A separate defect this makes more visible, not folded in.** `FlightController`'s AI acquisition
+files carried turrets into its ranked target pool (`AddRankedNonAircraft` over `_gunnerScan.Turrets`)
+with no discriminator on `TurretController.Site`, so an enemy aircraft's gunner is offered as a
+target in its own right, a second entry on one silhouette. The player's own target pool already
+guards this, which is what `carried-turrets` pins. The defect predates this item, since the player's
+mounts were always in that pool, but every AI aircraft carrying mounts now multiplies it. Filed as
+`BL-507`.
+
+⚠ **Owed at the controls.** Nothing here was flown by a person, so whether the new rear guns read
+right in the cockpit, and whether the difficulty they add is the original's, is unjudged.

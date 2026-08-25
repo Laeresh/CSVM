@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -38,6 +39,10 @@ internal static class CampaignSetAiSuites
     private const string StartNet = "M5Bombers";
 
     private const string EscortNet = "M5Escort";
+
+    /// <summary>The rearward of the two <c>thirdp</c> mounts <c>britbalmoral</c> authors: YAW
+    /// [120,250] and PITCH [-45,0], the belly arc a bomber defends itself with.</summary>
+    private const string RearTurretTitle = "MSG_TUR_REAR_G3";
     private const string PostpickNet = "M5Postpick";
 
     // The synthetic clause's writes: a team the Balmoral's own block does not author (it ships 2)
@@ -193,6 +198,7 @@ internal static class CampaignSetAiSuites
             }
 
             BombRun(ctx, director, graph, rigs, nets, skills, report);
+            TurretDefence(ctx, live, rigs, human, report);
             EscortSwap(ctx, director, graph, rigs, report);
             Synthetic(ctx, director, graph, rigs, synthetic, report);
         }
@@ -285,6 +291,125 @@ internal static class CampaignSetAiSuites
                 $"…and the activation radius keeps its min_ai_active_dist floor: {machine.ActivationRange:0} m");
         }
     }
+
+    // BL-506: the turret gunners a Balmoral carries, driven on the bomb-run net the mission has
+    // just put it on. A gunner is a separate crewman from the pilot, so the 1 m attack radius that
+    // net authors, correct where it is and checked above, may not silence it. The subject is the
+    // Balmoral the swap arm parked, and the addressee is the player, the aeroplane the report is
+    // about; the rest of the Fortune Hunters go neutral so the nearest-hostile pick is decided.
+    private static void TurretDefence(TestContext ctx, ProjectilePool live,
+        IReadOnlyDictionary<string, FlightController> rigs, FlightController player,
+        StringBuilder report)
+    {
+        if (!rigs.TryGetValue(Balmorals[2], out var bomber))
+        {
+            return;
+        }
+
+        ctx.Same(2, bomber.Turrets.Length,
+            $"{Balmorals[2]} carries the two thirdp mounts its own def authors");
+        TurretController? rear = null;
+        foreach (var t in bomber.Turrets)
+        {
+            if (RearTurretTitle.Equals(t.Def.Title, StringComparison.Ordinal))
+            {
+                rear = t;
+            }
+        }
+        if (rear == null)
+        {
+            ctx.Check(false, $"the rear mount '{RearTurretTitle}' resolved against the built model");
+            return;
+        }
+        ctx.Check(rear.Team == bomber.Team && bomber.Team != AimAssist.PlayerTeam,
+            $"the gunner takes its host's team ({rear.Team}), which is not the player's");
+
+        // ⚠ The BOMBER moves and the target does not: a round is resolved by a ray against the
+        // physics space, which no frame steps between the placement and the burst, so every
+        // aircraft body is still filed where it was inserted and only the shooter may move.
+        var mark = player.WorldPosition;
+        // Re-pinned where it already is, which moves nothing but takes the spawn speed off the
+        // model: a rig nobody steps still REPORTS that velocity, and the gunner would lead a
+        // motion the aeroplane is not making and put the whole burst past it.
+        player.PlaceHeld(mark, mark + player.NoseDirection);
+        var seat = mark + new Vector3(0f, 105f, -150f);
+        bomber.Held = true;
+        bomber.PlaceHeld(seat, seat + Vector3.Forward);
+        player.Targeting ??= new TargetSelection();
+        // The rest of the Fortune Hunters sit within the 900 m this mount detects at, and the
+        // picker takes the nearest hostile: park them neutral so the burst has one addressee, and
+        // hand their teams back before the escort arm reads them.
+        var muted = new List<FlightController>();
+        foreach (var other in rigs.Values)
+        {
+            if (other.Team == AimAssist.PlayerTeam)
+            {
+                muted.Add(other);
+                other.Team = AimAssist.NeutralTeam;
+            }
+        }
+        // INACCURACY 7.5 deg scatters the burst; the aim-assist suite covers the cone, and a
+        // pair 183 m apart is inside it either way.
+        rear.Def.InaccuracyDeg = 0f;
+
+        float gate = bomber.Pilot?.Machine?.AttackRange ?? -1f;
+        float before = Combined(player);
+        int shotsBefore = rear.ShotsFired;
+        for (int i = 0; i < 240; i++)
+        {
+            bomber.SimStep(StepDt);
+            live.SimStep(StepDt);
+        }
+
+        var toTarget = (player.WorldPosition - rear.WorldPosition).Normalized();
+        float dot = rear.BarrelWorldDir.Dot(toTarget);
+        report.AppendLine($"turret: {Balmorals[2]} pilot attack gate {gate:0.##} m, rear mount "
+            + $"'{rear.Def.Title}' dot {dot:0.000} shots {rear.ShotsFired} gate {rear.Gate}");
+        report.AppendLine($"turret: target hp {before:0.##} -> {Combined(player):0.##}, "
+            + $"attackers {player.Targeting.Attackers.Count}");
+
+        ctx.Check(gate >= 0f && gate < 2f,
+            $"the pilot is still gated out of combat by the bomb-run net: attack {gate:0.##} m");
+        ctx.Check(dot > TurretController.FireGateCos,
+            $"…and the gunner slewed onto the target anyway: dot {dot:0.000}");
+        ctx.Check(rear.ShotsFired > shotsBefore,
+            $"the gunner fires through the 15° gate: {rear.ShotsFired - shotsBefore} round(s)");
+        ctx.Check(Combined(player) < before,
+            $"its rounds strike the target: {before - Combined(player):0.##} off the ledger");
+        ctx.Check(Pristine(bomber),
+            $"…and none of them on the host's own airframe, which the rear arc points across");
+        bool credited = false;
+        foreach (var a in player.Targeting.Attackers)
+        {
+            credited |= ReferenceEquals(a, bomber);
+        }
+        ctx.Check(credited,
+            $"the hits resolve under the host's shooter id {bomber.PlayerIndex}, not an unowned round");
+
+        // A downed host's gunners go quiet: the same rule the player's carried mounts follow.
+        int atCrash = rear.ShotsFired;
+        bomber.DebugForceCrash();
+        for (int i = 0; i < 120; i++)
+        {
+            bomber.SimStep(StepDt);
+            live.SimStep(StepDt);
+        }
+        ctx.Check(!rear.Alive && rear.ShotsFired == atCrash,
+            $"a crashed host's gunner stops firing: {rear.ShotsFired} round(s)");
+
+        bomber.Held = false;
+        foreach (var other in muted)
+        {
+            other.Team = AimAssist.PlayerTeam;
+        }
+    }
+
+    private static float Combined(FlightController rig) =>
+        rig.Damage is { } d ? d.Parts.Values.Sum(p => p.Hp + p.Armor) : 0f;
+
+    private static bool Pristine(FlightController rig) =>
+        rig.Damage is not { } d
+        || d.Parts.Values.All(p => p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor);
 
     // OBJECTIVE68's clause, driven through the mission's own wake chain: group 1 goes down,
     // OBJECTIVE5's nap wakes OBJECTIVE8, and that naps OBJECTIVE68 awake two seconds later.
@@ -556,6 +681,7 @@ internal static class CampaignSetAiSuites
             WeaponMessages = Messages.Load(ctx.MessagesPath),
             Textures = textures,
             Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            TurretDefs = TurretDefs.Load(ctx.ZrdrPath),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
             new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),

@@ -627,9 +627,10 @@ public sealed class PlaneStats
             break;
         }
 
-        // turrets: nearest def in the chain that has the block. Keyed by viewpoint
-        // (firstp/thirdp), each entry an alternating [title, [MSG_TUR_*], node, [turretNode]].
-        foreach (var d in chain)
+        // turrets: nearest def in the chain that has the block (docs/formats/vehicle.md), the AI
+        // chain on an AI load as the damage model is. The pair is authored twice over and the two
+        // are different guns: the AI Balmoral's rear mount sees 900 m where the player rig's sees 350.
+        foreach (var d in damageChain)
         {
             if (d.Dict("turrets") is not { } turrets)
                 continue;

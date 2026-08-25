@@ -917,9 +917,13 @@ public static class SuiteCatalog
             + "three Balmorals fly the M5Bombers their own blocks author until OBJECTIVE4 puts all "
             + "three on M5Bombrun, each capturing the route at the node nearest where it is rather "
             + "than restarting it, the net's own volumes reaching the aeroplane; the ace squad is "
-            + "on M5Escort after the mission's own wake chain naps OBJECTIVE68 awake; and an "
+            + "on M5Escort after the mission's own wake chain naps OBJECTIVE68 awake; an "
             + "appended objective drives SET_AI_TEAM and SET_AI_ATTACK_RADIUS, which no shipped "
-            + "mission authors, including a name that is there for neither",
+            + "mission authors, including a name that is there for neither; and a bomber on that "
+            + "1 m attack radius still carries the two turret gunners britbalmoral authors, "
+            + "tracking and hitting a Fortune Hunter under its own shooter id while its pilot "
+            + "stays out of combat, taking nothing on its own airframe and going quiet when it is "
+            + "downed",
             CampaignSetAiSuites.CampaignSetAiNet));
 
         // BL-477: what stops a shot at the cargo zeppelin's slung tanks was inferred from the
