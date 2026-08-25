@@ -1223,8 +1223,11 @@ buildings, and the gate is asserted directly on the candidate's team instead. `d
 **⚠ Consequence to judge at the controls, not disproved here.** The gun aim assist is now silent
 over every unauthored world object, including C3/M01's two zeppelins and Instant Action's, because
 the original is silent there too. Damage is unaffected, since a round's damage path never asks about
-teams (`docs/verification.md` SRC-6), and the player can still SELECT a zeppelin sub-part. Whether
-the missing assist reads as a loss at the controls is a fidelity question only the user can settle.
+teams (`docs/verification.md` SRC-6), and the player can still SELECT a zeppelin sub-part.
+
+**Settled by the user, and the item closes with it.** The assist's silence over buildings and
+gasbags reads as acceptable at the controls, on the grounds that the assist there was our invention
+rather than the original's behaviour. So neutral stands and no compensating rule is wanted.
 
 # Wave E — answers and housekeeping
 
