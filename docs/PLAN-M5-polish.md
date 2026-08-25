@@ -2780,10 +2780,27 @@ C3's gamez carries all six nodes, one each of `bb_approach1..3` and `britbalmora
 arms and disarms the wing-walk objectives in threes throughout (`OBJECTIVE35/36/37`, `48/49/50`,
 `51/52/53`), and `OBJECTIVE4` puts all three airships on the `M5Bombrun` net.
 
-**Approach.** Establish why the third does not fire when the first two do, before changing anything.
-Two starting points, both from work this plan already landed: C21's approach rows start disarmed and
-are armed by the mission's own objective chain, so the third may never be armed; and F51 gave a row a
-fire-once-per-entry latch, so a latch keyed wrongly would disarm one row for good.
+⚠ **Corrected by the user: it is not the third airship, and the capture is not meant to be available
+until one Balmoral is left.** So the shape is not one row of three failing, it is an arming gate that
+never fires, and the symmetry above is the reason to expect all three to behave alike.
+
+**The gate is a node state switched by an animation, not an objective flag.**
+`C3/M05/zrdr/wingwalk.zrd` defines two `ON_CALL` animations on `britbalmoral_1`: `activate_wingwalk`
+sets the `land_on` sub-node `ACTIVE` on all three airships in one sequence, and
+`deactivate_wingwalk` sets the same three back to `INACTIVE`. `OBJECTIVE26` is dormant with
+`WAKE_ANIM ["activate_wingwalk"]` and `OBJECTIVE56` is its mirror. So the capture is all-three-at-once
+and is gated on a sub-node's active state.
+
+**Approach.** Three things in order. What wakes `OBJECTIVE26`, and whether we evaluate that
+condition; the `DEDG` clauses are the candidates for "one Balmoral is left" (`OBJECTIVE5` `[1, 0]`,
+`OBJECTIVE12` `[1, 1]`, `OBJECTIVE22` `[5, 0]`, `OBJECTIVE55` and `OBJECTIVE63` both `[5, 1]`), and
+what the two arguments mean has to be established before any of them is read as a count. Whether
+`activate_wingwalk` runs when woken, given its sequence writes `OBJECT_ACTIVE_STATE` on a sub-node
+rather than on the airship root. And whether our approach trigger consults that state at all.
+
+⚠ **A model difference is the likely finding.** C21 built approach rows that the objective chain
+arms, where the original gates them on node state. If that is what this is, it is not a bug in one
+row and it decides the shape of the fix.
 
 **Model recommendation.** medium.
 
@@ -2793,8 +2810,9 @@ built world.
 **⚠ Traps.** ⚠ Do not relax the angle or speed gates to make it fire: they are authored and identical
 across the three rows, so a gate that admits the third would admit something wrong at the other two.
 ⚠ Check whether the volume follows its airship. These three move under `SET_AI_NET`, and a volume
-resolved once at spawn would drift away from the ship it belongs to. ⚠ The first two firing is a
-report rather than a measurement; confirm it rather than assuming the fault is unique to the third.
+resolved once at spawn would drift away from the ship it belongs to. ⚠ `deactivate_wingwalk` exists, so a capture
+that becomes available and then correctly goes away again is part of the behaviour: do not build an
+arming rule that cannot be un-armed.
 
 ## G75 ☐ CM02's named pilots do not read as named (`BL-493`)
 
