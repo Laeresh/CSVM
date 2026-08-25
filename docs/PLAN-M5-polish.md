@@ -131,14 +131,15 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 65. ☐ `campaign-objectives-hud` cannot fire its own check on C3 (`BL-481`)
 66. ☐ Two persist-log behaviour questions, carried out of `BL-243`'s closure
 67. ☑ `BL-181`'s blocker now reads as discharged when it is not
-68. ☐ Why the scaffolding read differently at the controls, blocked on the user's eye (`BL-477`)
+68. ◐ Why the scaffolding read differently at the controls, now a splash-occlusion question (`BL-477`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
 two causes and not yet built; D33, which waited on D32 and F54 and is now unblocked; and F55, which
 has its instrument and needs the user's verdict against it. Inside Wave G, G62 runs behind D33 for
-the reason F54 gives, G68 and F55 are the two items no amount of work here can close, and the rest
-are independent of each other.
+the reason F54 gives, F55 is the one item no amount of work here can close, and the rest are
+independent of each other. G68 was blocked on the user and is not any more: their account of the
+original run makes it a splash-occlusion measurement with an instrument that already exists.
 
 ## Dependency and parallelism notes
 
@@ -172,7 +173,8 @@ never as parallel worktrees. G64 changes the extraction pipeline and bumps `VERS
 cannot share a tree with anything that reads `extracted/`. G61 reaches the anim runtime and the
 cutscene host, which A5 also touches, so sequence those two rather than running them together. G63,
 G65, G66 and G67 are independent of everything, and G66 is a research item whose deliverable is an
-answer. G68 and F55 cannot be scheduled at all until the user answers them.
+answer. G68 reaches `Projectile` and the census stage in `alpha-cutout-ray-census`, which nothing
+else in this wave touches. F55 cannot be scheduled at all until the user answers it.
 
 ---
 
@@ -2093,7 +2095,7 @@ artwork at authored pixels with a per-background ink palette, so they define no 
 distance units and no shared font choice for an in-flight overlay to match. Done by the orchestrator
 rather than a lane, because `backlog.md` is a single file three lanes would otherwise conflict in.
 
-## G68 ☐ Why the scaffolding read differently at the controls (`BL-477`)
+## G68 ◐ Why the scaffolding read differently at the controls (`BL-477`)
 
 **Goal.** An answer to the user's report that a shot passes through the transparent scaffolding in the
 original, given that the decode says our behaviour matches.
@@ -2107,14 +2109,43 @@ evidence. Two candidates remain: the shot may have been beyond 800 m, where the 
 `f_mid`/`f_lo` whose cards are ±28.3 m of local x against `f_hi`'s ±48.9 m, or the difference is in
 aim assist and target selection rather than in the ray.
 
-**Approach.** Nothing until the user answers. The two candidates are distinguished by one fact the
-user has and the repo does not: roughly how far out the shot was taken.
+⚠ **Unblocked, and neither candidate was it. The weapon was a rocket and what reached the tanks was
+its blast.** The user's own account of the original run, given after F58 landed: the rocket was fired
+above the scaffold through a small gap, detonated there, and the splash killed the tanks, which they
+describe as a lucky shot. So no projectile passed through the truss in the original either, and the
+original report's "shoot through the transparent scaffolding" was the blast reaching past it rather
+than the round doing so. F58's disproof stands untouched and is now the whole answer for the ray.
 
-**Model recommendation.** medium, and only once it is unblocked.
+**The question this becomes is about splash occlusion, not about the ray.** Ours already occludes:
+`Projectile.BlastCovered` casts from the burst to each candidate's centre with the candidate excluded
+and treats anything it meets as cover, which is the original's `FUN_004cb420` under `FUN_005aca30`'s
+occlusion flag, and world geometry is cover while aircraft are not (C11). The truss is world geometry
+and F58 established it is solid to a ray, so a burst on the wrong side of it is correctly blocked. The
+open question is narrow: does a burst in the gap the user found have a clear ray to the tanks in ours,
+the way it did in theirs?
 
-**Verify.** The user's eye, since the reference is theirs.
+**Approach.** Reproduce the shot's geometry rather than the shot. `alpha-cutout-ray-census` already
+places `cargozep1` at its authored pose in a built C3/M01, so extend that stage: sample burst points
+in the volume above the front truss, run the real `BlastCovered` test against each of
+`hydrogentank1..4`, and report which burst points reach them. If some do, ours reproduces the original
+and the item closes as an answer. If none do, the difference is in one of two named places and both
+are already known: our colliders are two-sided (`BackfaceCollision = true`) where the original honours
+`show_backface`, which 33 of `g469`'s 39 cards set, so a card the original's ray passes through from
+behind is cover in ours; and `CoverRayLift` has no counterpart established for a burst with no struck
+surface.
 
-**⚠ Traps.** ⚠ Do not reopen the ray rule. `SceneBuilder.EmitCollisionFaces` now carries the
-prohibition against writing an alpha rule, and F58's traps on why a blanket rule is wrong stand.
-⚠ Footage-derived distances are inadmissible (`docs/verification.md`), so the range cannot be
-recovered from the clips.
+**Model recommendation.** medium. The instrument exists and the decode is settled, so this is a
+measurement and a narrow comparison rather than a new decode.
+
+**Verify.** The burst-point census, stated as a fraction reaching the tanks, and if code follows, the
+same census before and after. ⚠ `alpha-cutout-ray-census` exists because of INSTR-24: a raycast in the
+same call that moved a static body reads the collider at its pre-move pose. Any new stage that places
+the airship inherits that trap.
+
+**⚠ Traps.** ⚠ Do not reopen the ray rule. `SceneBuilder.EmitCollisionFaces` carries the prohibition
+against writing an alpha rule, and F58's traps on why a blanket rule is wrong stand. ⚠ Do not widen
+the blast radius or drop the occlusion test to make a lucky shot reproducible: the user calls it a
+lucky shot through a small gap, so the correct outcome is that most burst points fail. ⚠ Footage
+cannot supply the burst position; the user's account is admissible as what happened and not as a
+measurement (`docs/verification.md`). ⚠ The 32-target cap on the splash gather is decoded
+(`FUN_004cb420`'s hit buffer) and is not a candidate here, since four tanks cannot overflow it.
