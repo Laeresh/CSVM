@@ -32,6 +32,14 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     /// <inheritdoc/>
     public override int RowCount => Seqs().Count + 3;
 
+    /// <summary>The album page's own two text widgets: whose scrapbook it is, then the heading over
+    /// the mission list.</summary>
+    public override IReadOnlyList<BoardLine> Captions => new[]
+    {
+        new BoardLine(Flow.Profile?.Name ?? string.Empty, 425, 64, 300, 18, BoardInk.Heading),
+        new BoardLine("PREVIOUS MISSIONS", 425, 114, 300, 16, BoardInk.Heading),
+    };
+
     /// <inheritdoc/>
     public override string RowText(int row)
     {
@@ -47,6 +55,19 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
             0 => "VIEW SELECTED",
             1 => "REPLAY MISSION",
             _ => "RETURN TO CABIN",
+        };
+    }
+
+    /// <inheritdoc/>
+    public override BoardButtonRef Button(int row)
+    {
+        int offset = row - Seqs().Count;
+        return offset switch
+        {
+            0 => new BoardButtonRef(BoardButton.ViewMission),
+            1 => new BoardButtonRef(BoardButton.ReplayMission),
+            2 => new BoardButtonRef(BoardButton.ReturnToCabin),
+            _ => BoardButtonRef.None,
         };
     }
 

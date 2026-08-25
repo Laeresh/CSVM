@@ -49,6 +49,9 @@ public enum BriefingOp
 /// arguments carry it. The dialog is the original's 800x600 screen.</summary>
 public readonly record struct BriefingPoint(float X, float Y);
 
+/// <summary>A connector line's authored colour, the script's own 0-255 RGB triple.</summary>
+public readonly record struct BriefingColor(byte R, byte G, byte B);
+
 /// <summary>
 /// One opcode with its arguments. The fields are shared across opcodes the way the data shares
 /// them: <see cref="From"/>/<see cref="To"/> are a fade's start and end and a spin's start and
@@ -69,6 +72,13 @@ public sealed record BriefingStep
 
     /// <summary>Where a <see cref="BriefingOp.Pict"/> places its element.</summary>
     public BriefingPoint At { get; init; }
+
+    /// <summary>Whether <see cref="At"/> is the picture's middle rather than its top left, which
+    /// is the script's own <c>center</c> flag and how most flags and photographs are placed.</summary>
+    public bool Center { get; init; }
+
+    /// <summary>A <see cref="BriefingOp.Line"/>'s authored colour.</summary>
+    public BriefingColor Color { get; init; }
 
     /// <summary>A tween's starting value.</summary>
     public float From { get; init; }
@@ -227,6 +237,7 @@ public sealed class BriefingDialog
                 Id = id,
                 Bitmap = d.Str("bitmap") ?? string.Empty,
                 At = new BriefingPoint(d.Float("at"), d.Float("at", 0f, 1)),
+                Center = string.Equals(d.Str("center"), "true", StringComparison.OrdinalIgnoreCase),
             },
             BriefingOp.Fade => new BriefingStep
             {
@@ -251,7 +262,14 @@ public sealed class BriefingDialog
                 Path = Points(d.List("path")),
                 Duration = d.Float("duration"),
             },
-            BriefingOp.Line => new BriefingStep { Op = op, Id = id, Path = Points(d.List("points")) },
+            BriefingOp.Line => new BriefingStep
+            {
+                Op = op,
+                Id = id,
+                Path = Points(d.List("points")),
+                Color = new BriefingColor(
+                    (byte)d.Float("color"), (byte)d.Float("color", 0f, 1), (byte)d.Float("color", 0f, 2)),
+            },
             BriefingOp.Objective => new BriefingStep { Op = op, Id = id, Index = (int)d.Float("index") },
             _ => new BriefingStep { Op = op, Id = id },
         };
@@ -292,6 +310,15 @@ public sealed class BriefingElement
 
     /// <summary>Where it sits now, after any move.</summary>
     public BriefingPoint At { get; internal set; }
+
+    /// <summary>Whether <see cref="At"/> is its middle rather than its top left.</summary>
+    public bool Center { get; internal set; }
+
+    /// <summary>A connector line's two endpoints, empty for a picture.</summary>
+    public IReadOnlyList<BriefingPoint> Points { get; internal set; } = Array.Empty<BriefingPoint>();
+
+    /// <summary>A connector line's colour.</summary>
+    public BriefingColor Color { get; internal set; }
 
     /// <summary>Whether an <see cref="BriefingOp.On"/> has shown it and no
     /// <see cref="BriefingOp.Off"/> has taken it away.</summary>
@@ -490,9 +517,12 @@ public sealed class BriefingReveal
                 var placed = Ensure(step.Id);
                 placed.Bitmap = step.Bitmap;
                 placed.At = step.At;
+                placed.Center = step.Center;
                 break;
             case BriefingOp.Line:
                 var line = Ensure(step.Id);
+                line.Points = step.Path;
+                line.Color = step.Color;
                 if (step.Path.Count > 0)
                 {
                     line.At = step.Path[0];

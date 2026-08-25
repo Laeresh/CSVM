@@ -73,6 +73,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // Its column's 720p width, to the left of the rows (E47b), and the focused row's own smaller
     // picture under it (E48's 66x66 decal tile).
     private const int HangarArtWidth = 220;
+
+    // How long a pressed plaque holds its depressed frame. Short enough not to lag a press, long
+    // enough to be seen at any frame rate the boards run at.
+    private const int PressFrames = 6;
     private const int HangarRowArtHeight = 66;
     // Splitscreen plane select (several players): the bottom strip that keeps the breadcrumb +
     // join hint out of the panes, as a fraction of viewport height, and the pane's inner padding.
@@ -309,6 +313,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     // instead of _center on the Plane screen once more than one player has joined.
     private Control _paneRoot = null!;
 
+    // The campaign's composed-board surface, drawn instead of _center on every campaign screen.
+    private ComposedBoardView _boardRoot = null!;
+
+    // Frames left to draw the pressed plaque depressed. The original's own button art carries that
+    // frame, and a confirm that changes nothing on screen reads as a dead button on a pad.
+    private int _pressFrames;
+
     private enum Screen { Mode, Chapter, Presets, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout, Hangar, Campaign }
 
     // What a fit row edits. The reset row carries no slot of its own and is the only one Accept
@@ -403,6 +414,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         menu._paneRoot = new Control { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         menu._paneRoot.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         root.AddChild(menu._paneRoot);
+
+        // The campaign's screens are composed boards rather than row lists, so they draw through
+        // their own full-window surface; exactly one of the three layouts is ever visible.
+        menu._boardRoot = ComposedBoardView.Build(dataRoot);
+        menu._boardRoot.Visible = false;
+        root.AddChild(menu._boardRoot);
 
         return menu;
     }
@@ -727,6 +744,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         // After the input, so a press that opened or left the briefing is already reflected: the
         // reveal is a clock the page cannot own, and the narration is a node the page cannot hold.
         dirty |= TickCampaignAudio(delta);
+        if (_pressFrames > 0)
+        {
+            _pressFrames--;
+            dirty = true;
+        }
+
         dirty |= _typed;
         _typed = false;
 
@@ -1610,14 +1633,21 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        float seconds = 0f;
+        float argument = 0f;
         if (colon >= 0)
         {
             float.TryParse(startScreen[(colon + 1)..], System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out seconds);
+                System.Globalization.CultureInfo.InvariantCulture, out argument);
         }
 
-        WalkCampaignAid(flow, value, seconds);
+        WalkCampaignAid(flow, value, argument);
+
+        // On every screen but the briefing the argument is a cursor step count instead, so a shot
+        // can show focus on a plaque other than the opening one. Each step is one pad press.
+        for (int i = 0; value != "campaign-briefing" && i < (int)argument; i++)
+        {
+            flow.Move(1);
+        }
     }
 
     // Walks the first stored profile to its next mission's flight check and presses FLY MISSION,
@@ -1768,7 +1798,9 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         if (p1.Accept)
         {
-            dirty |= flow.Accept();
+            _pressFrames = PressFrames;
+            dirty = true;
+            flow.Accept();
         }
         else if (p1.Back)
         {
@@ -2081,12 +2113,23 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private void Rebuild()
     {
+        // A campaign screen is a composed board at authored pixel positions, not a row list, so it
+        // takes the whole window and neither of the other two layouts draws behind it.
+        bool board = _screen == Screen.Campaign && _campaign != null;
+
         // Several players choosing aircraft get a real split screen — one panel each, laid out by
         // SplitScreen.PaneRect, so you pick in the pane you will then fly in. Everything else (and
         // every single-player screen) keeps the centred layout untouched.
-        bool split = _screen == Screen.Plane && _slots.Count > 1;
-        _center.Visible = !split;
+        bool split = !board && _screen == Screen.Plane && _slots.Count > 1;
+        _center.Visible = !split && !board;
         _paneRoot.Visible = split;
+        _boardRoot.Visible = board;
+        if (board)
+        {
+            RebuildBoard();
+            return;
+        }
+
         if (split)
         {
             // The hangar DOOR exists only in the lone-pilot layout, so a pilot joining while
@@ -2208,6 +2251,28 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         _body.AddChild(Spacer((int)(16 * s)));
         _body.AddChild(Label(Footer(), (int)(FooterFont * s), FooterColor, HorizontalAlignment.Center));
+    }
+
+    // One campaign screen as its composed board. The error line rides the detail slot, which is
+    // where a refusal has to appear on a screen with no error row of its own.
+    private void RebuildBoard()
+    {
+        if (_campaign is not { } flow)
+        {
+            return;
+        }
+
+        var page = flow.Page;
+        int row = flow.Row;
+        string detail = _error.Length > 0 ? _error : page.Detail(row);
+        // A block of text is the screen's own to place; the one-line hint band takes only what a
+        // screen has nowhere else to put, which is every short description and every refusal.
+        bool banded = CampaignBoards.DetailSlot(page.Screen) == null && !detail.Contains('\n');
+        _boardRoot.Show(
+            CampaignBoards.For(page, row, _pressFrames > 0, detail),
+            BoardPalette.For(page.Screen),
+            banded ? detail : string.Empty,
+            page.Footer);
     }
 
     // The splitscreen aircraft select: one panel per player in that player's pane of the

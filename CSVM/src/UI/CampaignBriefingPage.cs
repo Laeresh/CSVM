@@ -30,6 +30,13 @@ public sealed class CampaignBriefingPage : CampaignPage
 
     private const int ButtonRows = 3;
 
+    // The objectives note's own authored placement, the dialog's OBJECTIVESLIST BACKGROUND
+    // (docs/formats/briefing.md). It draws under every reveal element, which is where ToBack, the
+    // one opcode ever aimed at it, leaves it.
+    private const int ParchmentY = 295;
+
+    private static readonly BoardArt Parchment = new(BoardArtLibrary.Rimage, "parchment");
+
     private readonly Dictionary<string, HangarArt?> _art = new(StringComparer.OrdinalIgnoreCase);
 
     // The MissionSeq everything below describes. -2 is "nothing loaded yet", distinct from the
@@ -129,6 +136,64 @@ public sealed class CampaignBriefingPage : CampaignPage
         }
     }
 
+    /// <summary>The mission's map, the objectives parchment over it, then every element the reveal
+    /// has placed: the photographs, the flag pins, the flourishes. Each carries the script's own
+    /// position, opacity and rotation, so what is drawn is the authored composition and when it
+    /// arrives stays <see cref="BriefingReveal"/>'s business.</summary>
+    public override IReadOnlyList<BoardPicture> Pictures
+    {
+        get
+        {
+            Sync();
+            var pictures = new List<BoardPicture>();
+            if (_state is { Background.Length: > 0 } state)
+            {
+                pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, state.Background), 0, 0));
+            }
+
+            pictures.Add(new BoardPicture(Parchment, 0, ParchmentY));
+            if (_reveal is { } reveal)
+            {
+                AddElements(pictures, reveal, back: true);
+                AddElements(pictures, reveal, back: false);
+            }
+
+            return pictures;
+        }
+    }
+
+    /// <summary>The route line a state may draw between two of its pins, at most one per mission.</summary>
+    public override IReadOnlyList<BoardStroke> Strokes
+    {
+        get
+        {
+            Sync();
+            var strokes = new List<BoardStroke>();
+            foreach (var element in _reveal?.Elements ?? Array.Empty<BriefingElement>())
+            {
+                if (element.Visible && element.Opacity > 0f && element.Points.Count >= 2)
+                {
+                    strokes.Add(new BoardStroke(
+                        element.Points[0].X, element.Points[0].Y,
+                        element.Points[1].X, element.Points[1].Y,
+                        element.Color.R, element.Color.G, element.Color.B, element.Opacity));
+                }
+            }
+
+            return strokes;
+        }
+    }
+
+    /// <summary>The parchment's own title widget, at the dialog's authored position.</summary>
+    public override IReadOnlyList<BoardLine> Captions
+    {
+        get
+        {
+            Sync();
+            return new[] { new BoardLine(NoteHeading(), 35, 315, 185, 17, BoardInk.Heading) };
+        }
+    }
+
     /// <summary>Moves the reveal on by a frame's worth of seconds. The shell calls this while the
     /// briefing is the screen showing; nothing else on the page needs a clock.</summary>
     public void Advance(double seconds)
@@ -136,6 +201,17 @@ public sealed class CampaignBriefingPage : CampaignPage
         Sync();
         _reveal?.Advance(seconds);
     }
+
+    /// <summary>The three plaques the dialog's own <c>BUTTONS</c> section carries, in its order.
+    /// Every later row is an uncovered note line, which the parchment lists rather than draws as a
+    /// control.</summary>
+    public override BoardButtonRef Button(int row) => row switch
+    {
+        ReplayRow => new BoardButtonRef(BoardButton.ReplayBriefing),
+        CabinRow => new BoardButtonRef(BoardButton.ReturnToCabin),
+        FlightCheckRow => new BoardButtonRef(BoardButton.GoToFlightCheck),
+        _ => BoardButtonRef.None,
+    };
 
     /// <inheritdoc/>
     public override string RowText(int row)
@@ -203,6 +279,22 @@ public sealed class CampaignBriefingPage : CampaignPage
             default:
                 // A note line is the briefing's text, not an action; the press stays on the screen.
                 return true;
+        }
+    }
+
+    // One pass of the reveal's elements: the ToBack ones first, then the rest, both in the order
+    // the script placed them, which is the order they stack in.
+    private static void AddElements(List<BoardPicture> into, BriefingReveal reveal, bool back)
+    {
+        foreach (var element in reveal.Elements)
+        {
+            if (element.Back == back && element.Visible && element.Opacity > 0f
+                && element.Bitmap.Length > 0)
+            {
+                into.Add(new BoardPicture(
+                    new BoardArt(BoardArtLibrary.Rimage, element.Bitmap),
+                    element.At.X, element.At.Y, 0, element.Center, element.Opacity, element.Revs));
+            }
         }
     }
 

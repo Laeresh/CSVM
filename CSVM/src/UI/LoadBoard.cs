@@ -1,37 +1,42 @@
+using System.Collections.Generic;
 using Godot;
 
 namespace CSVM.UI;
 
 /// <summary>
-/// The load screen drawn over the whole window while a session builds — the same board style as
-/// the pause and results boards, with no menu on it. A build is one synchronous block that stalls
-/// the frame loop for a second or two, so nothing can be drawn DURING it; the Launcher shows this,
-/// lets one frame render, and builds on the next tick.
-/// ⚠ Deliberately has no progress: the build reports its phases only after the fact
-/// (<c>StartupProfile</c>), so a bar here would be a fiction. The original's own load screen,
-/// its lamp bar included, is artwork in <c>extracted/rimage/</c> and is not matched yet; see
-/// the backlog.
+/// The load screen drawn over the whole window while a session builds: the original's own composed
+/// artwork (<c>docs/org/loading-screen.md</c>) through the campaign boards' authored-pixel surface.
+/// A build is one synchronous block that stalls the frame loop for a second or two, so nothing can
+/// be drawn DURING it; the Launcher shows this, lets one frame render, and builds on the next tick.
+/// ⚠ Deliberately has no progress fill and no turning propeller: both need the build decoupled
+/// from the draw, which is a different item, so the bar draws its unlit strip and the propeller one
+/// still frame. Nothing here reports a fraction the build has not measured.
 /// </summary>
 public sealed partial class LoadBoard : Control
 {
-    // Base metrics at 720p (scaled by window height), mirroring PauseBoard so the load screen
-    // reads as the same family of screen. All TUNE.
-    private const int TitleFont = 30;
-    private const int SubjectFont = 18;
+    // Where the two lines sit on each screen's own writing surface: the campaign sheet's white
+    // paper, the blackboard's ruled right half. Not decoded; the decode carries no text position.
+    private const float CampaignTextX = 60f;
+    private const float BoardTextX = 360f;
 
-    private static readonly Color TitleColor = new(0.93f, 0.96f, 1f);
-    private static readonly Color SubjectColor = new(0.66f, 0.74f, 0.88f);
+    private static readonly BoardArt Sheet = new(BoardArtLibrary.Rimage, "loadframe");
+    private static readonly BoardArt Blackboard = new(BoardArtLibrary.Rimage, "loadframempt2");
 
-    private string _subject = "";
+    private ComposedBoard _board = Empty();
+    private BoardPalette _palette = BoardPalette.Paper;
+    private string _dataRoot = string.Empty;
 
-    /// <summary>Builds the board naming what is being loaded (a chapter and mode line, or empty
-    /// for no second line). Opaque rather than translucent: the outgoing session is still in the
-    /// tree for this one frame, and a half-seen dead world is worse than a plain screen.</summary>
-    public static LoadBoard Build(string subject)
+    /// <summary>Builds the board for one launch. <paramref name="campaign"/> picks the paper sheet
+    /// over the blackboard, the split the original makes; free flight and dogfight are ours rather
+    /// than the original's and take the non-campaign screen. <paramref name="subject"/> names what
+    /// is loading, or is empty for no second line.</summary>
+    public static LoadBoard Build(string dataRoot, bool campaign, string subject)
     {
         var board = new LoadBoard
         {
-            _subject = subject,
+            _dataRoot = dataRoot,
+            _board = campaign ? CampaignSheet(subject) : Blackboards(subject),
+            _palette = campaign ? BoardPalette.Paper : BoardPalette.Chalk,
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
         };
@@ -39,56 +44,72 @@ public sealed partial class LoadBoard : Control
         return board;
     }
 
-    /// <summary>Populates on entry rather than in <see cref="Build"/>: the text is sized off the
-    /// viewport, which a node outside the tree cannot read.</summary>
+    /// <summary>Populates on entry rather than in <see cref="Build"/>: the view sizes itself off
+    /// the viewport, which a node outside the tree cannot read.</summary>
     public override void _Ready()
     {
-        var backdrop = new ColorRect
-        {
-            Color = new Color(0.03f, 0.04f, 0.07f),
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        backdrop.SetAnchorsPreset(LayoutPreset.FullRect);
-        AddChild(backdrop);
-
-        var center = new CenterContainer { MouseFilter = MouseFilterEnum.Ignore };
-        center.SetAnchorsPreset(LayoutPreset.FullRect);
-        AddChild(center);
-
-        // Sized off the window height alone, the whole-window rule every shared board follows.
-        float height = GetViewportRect().Size.Y;
-        float s = Mathf.Max(0.5f, height > 0f ? height / 720f : 1f);
-        var body = new VBoxContainer();
-        body.AddThemeConstantOverride("separation", Mathf.RoundToInt(7f * s));
-        center.AddChild(body);
-
-        body.AddChild(Centered(Label("LOADING", (int)(TitleFont * s), TitleColor)));
-        if (_subject.Length > 0)
-        {
-            body.AddChild(Centered(Label(_subject, (int)(SubjectFont * s), SubjectColor)));
-        }
+        var view = ComposedBoardView.Build(_dataRoot);
+        AddChild(view);
+        view.Show(_board, _palette, string.Empty, string.Empty);
     }
 
+    /// <inheritdoc/>
     public override void _Process(double delta)
     {
-        // Track the window (resizable) so the backdrop always covers it — PauseBoard's same rule.
+        // Track the window (resizable) so the artwork always covers it, the whole-window rule every
+        // shared board follows.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
     }
 
-    private static Label Label(string text, int fontSize, Color color)
+    // The campaign screen: a chart sheet in its frame, with the unlit bar under it at the position
+    // the repaint measures its fill from. No pictures, which is what the campaign dialogs carry.
+    private static ComposedBoard CampaignSheet(string subject) =>
+        new(
+            new[]
+            {
+                new BoardPicture(Sheet, 0, 0, 0, false, 1f, 0f, BoardFit.AuthoredWidth, BoardFit.AuthoredHeight),
+                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "prog_blkload"), 90, 548),
+            },
+            System.Array.Empty<BoardStroke>(),
+            Lines(CampaignTextX, subject, 460f),
+            System.Array.Empty<BoardPlaque>());
+
+    // The Instant Action screen: the blackboard, its three authored photographs each centred on
+    // its own coordinate, the unlit lamp bar and one still propeller frame beside it.
+    private static ComposedBoard Blackboards(string subject) =>
+        new(
+            new[]
+            {
+                new BoardPicture(Blackboard, 0, 0),
+                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "MP-shotdown"), 197, 157, 0, true),
+                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "MP-crash"), 197, 307, 0, true),
+                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "mp-dangerzone2"), 197, 457, 0, true),
+                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "prp0"), 506, 549),
+                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "prog_blk"), 564, 546),
+            },
+            System.Array.Empty<BoardStroke>(),
+            Lines(BoardTextX, subject, 380f),
+            System.Array.Empty<BoardPlaque>());
+
+    private static IReadOnlyList<BoardLine> Lines(float x, string subject, float width)
     {
-        var l = new Label { Text = text };
-        l.AddThemeFontSizeOverride("font_size", fontSize);
-        l.AddThemeColorOverride("font_color", color);
-        return l;
+        var lines = new List<BoardLine>(2)
+        {
+            new("LOADING", x, 60f, width, 26f, BoardInk.Heading),
+        };
+        if (subject.Length > 0)
+        {
+            lines.Add(new BoardLine(subject, x, 100f, width, 15f, BoardInk.Row));
+        }
+
+        return lines;
     }
 
-    private static CenterContainer Centered(Control c)
-    {
-        var cc = new CenterContainer { MouseFilter = MouseFilterEnum.Ignore };
-        cc.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        cc.AddChild(c);
-        return cc;
-    }
+    private static ComposedBoard Empty() =>
+        new(
+            System.Array.Empty<BoardPicture>(),
+            System.Array.Empty<BoardStroke>(),
+            System.Array.Empty<BoardLine>(),
+            System.Array.Empty<BoardPlaque>());
 }

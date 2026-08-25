@@ -29,7 +29,8 @@ internal readonly record struct FlightCheckGun(int Caliber, bool Twin);
 /// <see cref="FlightRowKind.ChangePlane"/> row acts on, and the airframe an info row's silhouette
 /// (<see cref="ICampaignPage.RowArt"/>) is drawn from, if any.</summary>
 internal readonly record struct FlightRow(
-    string Text, string Detail, FlightRowKind Kind, int Slot = 0, int? Silhouette = null);
+    string Text, string Detail, FlightRowKind Kind, int Slot = 0, int? Silhouette = null,
+    string Guns = "", string Rockets = "");
 
 /// <summary>
 /// The flight check screen (<c>Campaign Flight Check.png</c>, <c>FLIGHTCHECK.SCRIPT</c>,
@@ -47,6 +48,19 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     // The ordnance table's own "None" row (docs/formats/campaign-screens.md, the Ammo selection
     // decode): a pylon holding this id carries nothing, whether or not the pylon itself exists.
     private const int NoOrdnance = 11;
+
+    // The two weapon tables' headings, at the authored y of fc_t_guntitlep and fc_t_guntitlew, and
+    // the drop from a heading to its list, which is that widget pair's own 17 pixels.
+    private const int PilotTableY = 167;
+    private const int WingmanTableY = 382;
+    private const int TableGap = 17;
+
+    // The weapon lists' face. The columns are 150 authored pixels wide and the ammunition names
+    // carry their maker, so a row only fits at ten.
+    private const float TableFont = 10f;
+
+    // The plane-icon sheet stacks one silhouette per airframe, in the airframe id's own order.
+    private const int SilhouetteFrames = 12;
 
     // Airframe id 0-10 to stock_loadouts.json's def key, the same row order
     // PlanePickerRoster.AirframeNodes and loadouts.md's stock table both use.
@@ -72,7 +86,6 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     private static readonly CampaignProfileDef EmptyProfile = new() { Name = string.Empty };
 
     private readonly Dictionary<int, HangarArt?> _silhouettes = new();
-    private readonly Dictionary<int, HangarArt?> _diagrams = new();
     private readonly bool? _wingmanOverride;
 
     private CustomPlaneStore? _planes;
@@ -109,11 +122,58 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         ? "↑↓  Choose       ←→  Change Plane       Enter / A  Select       Esc / B  Back"
         : "↑↓  Choose       Enter / A  Select       Esc / B  Back";
 
-    /// <summary>The focused pilot's aircraft head-on, its frame of the diagram sheet the ammo
-    /// screen draws from. The shell hangs the row picture off this one, so without it the
-    /// silhouette below never reached the screen at all.</summary>
-    public override HangarArt? Art =>
-        Airframe(Flow.Row) is { } airframe ? DiagramFor(airframe) : null;
+    /// <summary>Each crew slot's aircraft silhouette, the airframe's own frame of the icon sheet,
+    /// at the authored positions of <c>fc_p_pilotplane</c> and <c>fc_p_wingplane</c>.</summary>
+    public override IReadOnlyList<BoardPicture> Pictures
+    {
+        get
+        {
+            var pictures = new List<BoardPicture>(2);
+            var rows = Rows();
+            foreach (var row in rows)
+            {
+                if (row.Silhouette is { } airframe)
+                {
+                    pictures.Add(new BoardPicture(
+                        new BoardArt(BoardArtLibrary.Ui, "FC_PlaneIcons.Png", SilhouetteFrames),
+                        144, row.Slot == 0 ? 190 : 408, airframe));
+                }
+            }
+
+            return pictures;
+        }
+    }
+
+    /// <summary>The title and mission-name widgets, each slot's GUNS and ROCKETS headings, and the
+    /// focused aircraft's weapon block under its own pair, which is what those two tables are.</summary>
+    public override IReadOnlyList<BoardLine> Captions
+    {
+        get
+        {
+            var rows = Rows();
+            var lines = new List<BoardLine>
+            {
+                new("FLIGHT CHECK", 138, 36, 190, 20, BoardInk.Heading),
+                new(Title, 136, 70, 400, 15, BoardInk.Detail),
+            };
+
+            foreach (var row in rows)
+            {
+                if (row.Kind != FlightRowKind.Info)
+                {
+                    continue;
+                }
+
+                float y = row.Slot == 0 ? PilotTableY : WingmanTableY;
+                lines.Add(new BoardLine("GUNS", 240, y, 150, 12, BoardInk.Heading));
+                lines.Add(new BoardLine("ROCKETS", 394, y, 150, 12, BoardInk.Heading));
+                lines.Add(new BoardLine(row.Guns, 240, y + TableGap, 150, TableFont, BoardInk.Row));
+                lines.Add(new BoardLine(row.Rockets, 394, y + TableGap, 150, TableFont, BoardInk.Row));
+            }
+
+            return lines;
+        }
+    }
 
     private bool HasWingman => _wingmanOverride ?? Mission()?.Wingman ?? false;
 
@@ -125,8 +185,33 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     private StockLoadouts? Stock => _stock ??= Flow.Stock;
 
     /// <inheritdoc/>
-    public override HangarArt? RowArt(int row) =>
-        Airframe(row) is { } airframe ? SilhouetteFor(airframe) : null;
+    public override BoardButtonRef Button(int row)
+    {
+        var rows = Rows();
+        if (row < 0 || row >= rows.Count)
+        {
+            return BoardButtonRef.None;
+        }
+
+        var found = rows[row];
+        return found.Kind switch
+        {
+            FlightRowKind.ChangeAmmo => new BoardButtonRef(BoardButton.ChangeAmmo, found.Slot),
+            FlightRowKind.ChangePlane => new BoardButtonRef(BoardButton.ChangePlane, found.Slot),
+            FlightRowKind.ReturnToBriefing => new BoardButtonRef(BoardButton.ReturnToBriefing),
+            FlightRowKind.FlyMission => new BoardButtonRef(BoardButton.FlyMission),
+            _ => BoardButtonRef.None,
+        };
+    }
+
+    /// <inheritdoc/>
+    public override HangarArt? RowArt(int row)
+    {
+        var rows = Rows();
+        return row >= 0 && row < rows.Count && rows[row].Silhouette is { } airframe
+            ? SilhouetteFor(airframe)
+            : null;
+    }
 
     /// <inheritdoc/>
     public override string RowText(int row)
@@ -234,13 +319,14 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     {
         if (planeIndex < 0 || planeIndex >= profile.Planes.Count)
         {
-            rows.Add(new FlightRow($"{heading}   (no plane)", string.Empty, FlightRowKind.Info));
+            rows.Add(new FlightRow($"{heading}   (no plane)", string.Empty, FlightRowKind.Info, slot));
             return;
         }
 
         var plane = profile.Planes[planeIndex];
+        var (guns, rockets) = WeaponColumns(plane);
         rows.Add(new FlightRow($"{heading}   {plane.Name}   {AirframeTitle(plane.Airframe)}",
-            LoadoutBlock(plane), FlightRowKind.Info, Silhouette: plane.Airframe));
+            LoadoutBlock(plane), FlightRowKind.Info, slot, plane.Airframe, guns, rockets));
         rows.Add(new FlightRow("CHANGE AMMO", string.Empty, FlightRowKind.ChangeAmmo, slot));
         if (ChangePlaneAllowed(profile))
         {
@@ -275,6 +361,26 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     {
         int i = Math.Clamp(index, 0, OrdnanceShortNames.Length - 1);
         return Flow.Strings.Text(3395 + i, OrdnanceShortNames[i]);
+    }
+
+    // The same eight rows as two separate columns, which is how the screen's own two list widgets
+    // carry them: one under GUNS, one under ROCKETS, never a single wide block.
+    private (string Guns, string Rockets) WeaponColumns(OwnedPlane plane)
+    {
+        var guns = ResolveGuns(plane);
+        var (left, right) = ResolveHardpoints(plane);
+        var gunLines = new List<string>(8);
+        var rocketLines = new List<string>(8);
+        for (int row = 0; row < 8; row++)
+        {
+            string gun = GunRowText(guns, plane.Ammo, row);
+            string rocket = RocketRowText(plane.Ordnance, left, right, row);
+            int n = row + 1;
+            gunLines.Add($"{n}){(gun.Length > 0 ? " " + gun : string.Empty)}");
+            rocketLines.Add($"{n}){(rocket.Length > 0 ? " " + rocket : string.Empty)}");
+        }
+
+        return (string.Join("\n", gunLines), string.Join("\n", rocketLines));
     }
 
     // The eight gun rows beside the eight rocket rows, one plane's full loadout block.
@@ -468,60 +574,13 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         {
             string path = Path.Combine(root, "extracted", "rof", "ASSETS", "GRAPHICS",
                 $"PX_{airframe}_BLUEPRINT.TGA");
-            if (ArtImage.TryLoad(path) is { } image)
+            if (TgaImage.TryLoad(path) is { } image)
             {
                 art = new HangarArt(image, AirframeTitle(airframe));
             }
         }
 
         _silhouettes[airframe] = art;
-        return art;
-    }
-
-    // Which aircraft a row's art shows: its own where the row names a plane (the two pilot lines),
-    // that slot's where the row acts on one (CHANGE AMMO, CHANGE PLANE), and the pilot's for the
-    // two rows that belong to nobody, so the column does not blink out on the way to FLY MISSION.
-    private int? Airframe(int row)
-    {
-        var rows = Rows();
-        if (row < 0 || row >= rows.Count)
-        {
-            return null;
-        }
-
-        if (rows[row].Silhouette is { } own)
-        {
-            return own;
-        }
-
-        var flown = new List<int>();
-        foreach (var candidate in rows)
-        {
-            if (candidate.Silhouette is { } airframe)
-            {
-                flown.Add(airframe);
-            }
-        }
-
-        int slot = rows[row].Kind is FlightRowKind.ChangeAmmo or FlightRowKind.ChangePlane
-            ? rows[row].Slot
-            : 0;
-        return flown.Count == 0 ? null : flown[Math.Min(slot, flown.Count - 1)];
-    }
-
-    // The head-on frame, cached the same way and for the same reason as the silhouette above.
-    private HangarArt? DiagramFor(int airframe)
-    {
-        if (_diagrams.TryGetValue(airframe, out var art))
-        {
-            return art;
-        }
-
-        art = Flow.DataRoot is { } root
-              && PlaneDiagrams.Frame(root, PlaneDiagrams.Front, airframe) is { } frame
-            ? new HangarArt(frame, AirframeTitle(airframe))
-            : null;
-        _diagrams[airframe] = art;
         return art;
     }
 }

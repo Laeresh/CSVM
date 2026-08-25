@@ -24,6 +24,13 @@ public sealed class CampaignCabinPage : CampaignPage
     // original's own gate) is a boolean with no accompanying message string.
     private const string FinishedReason = "Every mission in the campaign has been completed.";
 
+    // The memento's window inside PC_Mementopicframe, measured as the block each hangar
+    // photograph keys out for it. The frame's own border covers the edges either way.
+    private const int MementoX = 179;
+    private const int MementoY = 330;
+    private const int MementoWidth = 73;
+    private const int MementoHeight = 84;
+
     // The four buttons, in the original's own order (docs/formats/campaign-screens.md, "The
     // cabin"). SAVE GAME is deactivated there and never drawn here.
     private static readonly string[] Rows =
@@ -66,12 +73,49 @@ public sealed class CampaignCabinPage : CampaignPage
     /// draws through <see cref="PngImage"/>.</remarks>
     public override HangarArt? Art => PlanePhoto() ?? CabinScene();
 
+    /// <summary>The scene as the original layers it: the pilot's own aircraft first, then the
+    /// painted cabin over it, whose colour-keyed hole is where the window is. The photograph ships
+    /// as JPG, which only the shell's decoder reads, so the board names it and never loads it.</summary>
+    public override IReadOnlyList<BoardPicture> Pictures
+    {
+        get
+        {
+            var pictures = new List<BoardPicture>(2);
+            if (PlaneArtName() is { } photo)
+            {
+                pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, photo), 46, 69));
+            }
+
+            // The memento, over the hangar photograph's own keyed-out block for it and under the
+            // painting. Picking one is not shipped, so it is always the campaign's opening keepsake.
+            pictures.Add(new BoardPicture(
+                new BoardArt(BoardArtLibrary.Rimage, "ms_p_initialpinup1"),
+                MementoX, MementoY, 0, false, 1f, 0f, MementoWidth, MementoHeight));
+            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, "PC_BackGround.png"), 0, 0));
+
+            // The frame is painted over the painting rather than seen through its hole, which is
+            // the one element the layout puts above the background.
+            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, "PC_Mementopicframe.png"), 169, 317));
+            return pictures;
+        }
+    }
+
     /// <summary>The map's pin count: one per story chapter reached, the story chapter of the
     /// campaign's current position (<c>gosCallback</c> 7 with -2, docs/formats/campaign-screens.md,
     /// "The cabin"). A pure, tested stand-in for the pixel composition <see cref="Art"/> cannot yet
     /// draw: <c>PC_mappins.png</c> hits the same JPG/PNG gap as the plane photo below.</summary>
     public static int MapPinCount(CampaignProfileDef profile) =>
         (CampaignProgression.NextMissionSeq(profile) / 5) + 1;
+
+    /// <inheritdoc/>
+    public override BoardButtonRef Button(int row) => row switch
+    {
+        0 => new BoardButtonRef(BoardButton.NextMission),
+        1 => new BoardButtonRef(BoardButton.PreviousMissions),
+        PlaneConstructionRow => new BoardButtonRef(BoardButton.PlaneConstruction),
+        3 => new BoardButtonRef(BoardButton.ReturnToMainMenu),
+        _ => BoardButtonRef.None,
+    };
 
     /// <inheritdoc/>
     public override string RowText(int row) => Rows[row];
@@ -154,6 +198,20 @@ public sealed class CampaignCabinPage : CampaignPage
         }
 
         return _scene;
+    }
+
+    // The hangar photograph's own filename for the profile's selected aircraft, or null where the
+    // profile owns nothing to photograph.
+    private string? PlaneArtName()
+    {
+        var profile = Flow.Profile;
+        if (profile == null || profile.Planes.Count == 0)
+        {
+            return null;
+        }
+
+        int index = Math.Clamp(profile.SelectedPlane, 0, profile.Planes.Count - 1);
+        return $"PC_P_HANGAR{profile.Planes[index].Airframe}.JPG";
     }
 
     private HangarArt? PlanePhoto()

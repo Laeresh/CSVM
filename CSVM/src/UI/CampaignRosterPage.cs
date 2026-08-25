@@ -85,6 +85,28 @@ public sealed class CampaignRosterPage : CampaignPage
         return row == ContinueRow ? "CONTINUE" : row == DeleteRow ? "DELETE PLAYER" : "CANCEL";
     }
 
+    /// <summary>The three plaques the panel carries. The delete confirm replaces the whole screen
+    /// with its two answers, so it draws no button at all and the answers stay list rows.</summary>
+    public override BoardButtonRef Button(int row)
+    {
+        if (_confirming)
+        {
+            return BoardButtonRef.None;
+        }
+
+        if (row == ContinueRow)
+        {
+            return new BoardButtonRef(BoardButton.Continue);
+        }
+
+        if (row == DeleteRow)
+        {
+            return new BoardButtonRef(BoardButton.DeletePlayer);
+        }
+
+        return row == DeleteRow + 1 ? new BoardButtonRef(BoardButton.CancelProfile) : BoardButtonRef.None;
+    }
+
     /// <inheritdoc/>
     public override string Detail(int row)
     {

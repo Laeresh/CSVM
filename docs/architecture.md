@@ -3629,9 +3629,60 @@ the wave's whole mount point: a new screen is one page file plus one line there,
 armed, `CapturesText` tells the shell the keyboard is typing, and the flow's own cursor axes edit
 the name instead of the list. Profiles are created, read and deleted only through
 `CampaignProfileStore`, so a deletion takes the profile directory and never `user://Planes/`.
+⚠ A campaign page draws as a composed board, not as the shared `BoardMenu` idiom: it contributes its
+`Pictures`, `Strokes` and `Captions` and names which of the screen's authored buttons each row
+presses through `Button`, and `CampaignBoards` supplies the geometry. The `HangarArt` a page still
+hands over is the hangar's own art column and is unused on the campaign path.
 Off-engine coverage: `CSVM.Tests/CampaignFlowTests.cs`,
 `CSVM.Tests/CampaignRosterPageTests.cs`, `CSVM.Tests/CampaignTextEntryTests.cs`,
 `CSVM.Tests/CampaignCabinPageTests.cs`, `CSVM.Tests/CampaignPreviousMissionsPageTests.cs`.
+
+## src/UI/BoardFit.cs
+How the original's fixed 800x600 campaign dialog space lands on an arbitrary window: one uniform
+scale on both axes, the board centred, the remainder letterboxed. A `record struct` with `X`, `Y`
+and `Length`, so every element goes through the same mapping and only the scale changes. ⚠ The two
+rejected alternatives (an integer scale, a fit-to-height bleed) and why the art must be sampled
+nearest rather than smoothly are in `docs/org/campaign-board.md`; that decision is inherited by
+every campaign screen, so changing it here changes all six. A viewport with no area falls back to
+1:1 rather than a scale nothing can draw at. Off-engine coverage:
+`CSVM.Tests/ComposedBoardTests.cs`.
+
+## src/UI/ComposedBoard.cs
+What a composed campaign screen is made of, engine-free: pictures at authored pixel positions,
+connector strokes, text lines, and button plaques, each in draw order. Carries the two state rules
+as statics — `PlaqueFrame` picks a four-frame strip's disabled/normal/rollover/depressed frame,
+`PlaqueInk` picks a one-frame plaque's label face, which is the whole of the briefing's
+`BtnLabelNormal`/`Rollover`/`Activate` triad. `BoardArt` names a bitmap and how many stacked frames
+it holds; the renderer, not the model, resolves it to a file, which is what keeps the JPG the screen
+backgrounds ship as out of the engine-free half.
+
+## src/UI/CampaignBoards.cs
+The authored geometry of all six campaign screens plus the composer that turns a page and a cursor
+into a `ComposedBoard`. Every coordinate is the original's own: `ASSETS\LAYOUT.CSV` for the five
+script-driven screens, `Briefing.zrd`'s own chrome for the briefing, and, for the rows the shipped
+layout leaves as unresolved authoring macros, a measurement off the reference screenshots recorded
+in `docs/org/campaign-board.md`. A page names one of these buttons per row through
+`ICampaignPage.Button`; every other row lists down that screen's own text widgets via `TextSlot`.
+⚠ `Labelled` on a slot, not the frame count, decides whether a plaque's words are drawn over it: the
+generic paper buttons are four-frame strips that still carry an `IDS_*` label. Off-engine coverage:
+`CSVM.Tests/ComposedBoardTests.cs`.
+
+## src/UI/ComposedBoardView.cs
+The Godot half of the campaign boards: draws one `ComposedBoard` over the whole window through
+`BoardFit`, with `TextureFilter` pinned to Nearest so the authored pixel grid stays hard. Owns the
+texture cache and the only art resolution there is — `extracted/rimage/<name>.png` for mission art,
+`extracted/rof/ASSETS/GRAPHICS/<name>` for screen chrome — loading through `Image.LoadFromFile`,
+which reads the JPG backgrounds no engine-free decoder here covers. A miss is cached, so an absent
+extraction is probed once per name and the screen degrades rather than throwing. Carries the one
+piece of chrome that is not the original's: a two-line hint band across the top of the board with
+the focused row's description and the controls line, because the original said both with a mouse
+pointer and a pad has none.
+
+## src/UI/BoardPalette.cs
+The ink a campaign board writes in, one palette per background family, because the screens are
+painted art and the grey the flight check's forms use is invisible on the cabin's dark hangar. The
+flight check and ammo values are their layout rows' own ARGB fields; the rest are chosen to read on
+their background, and `docs/org/campaign-board.md` says which is which.
 
 ## src/UI/BoardMenu.cs
 A board's cursor and item list, engine-free so the selection rules test off engine the way
@@ -3647,17 +3698,22 @@ beats back in the same frame, the row having already been chosen. A results boar
 answers no back key and advertises none. Off-engine coverage: `CSVM.Tests/BoardMenuTests.cs`.
 
 ## src/UI/LoadBoard.cs
-The load screen drawn over the whole window while a session builds, in the same board style as the
-pause and results boards but carrying no menu. Opaque rather than translucent: the outgoing session
-is still in the tree for the one frame it is up, and a half-seen dead world is worse than a plain
-screen. Populated in `_Ready` rather than `Build`, since the text is sized off the viewport and a
-node outside the tree has none to read. Its subject line names the chapter and the flight the way a
-player picked it — `Launcher.LaunchSubject` takes an Instant Action mission's name from
+The load screen drawn over the whole window while a session builds: the original's own composed
+artwork (`docs/org/loading-screen.md`) through `ComposedBoardView`, so it inherits the campaign
+boards' authored-pixel surface and `BoardFit`'s scaling rule. Two compositions, the split the
+original makes: a campaign launch gets the chart sheet (`loadframe`, the unlit scale at `90,548`),
+everything else the blackboard (`loadframempt2`, its three authored photographs each centred on its
+own coordinate, the unlit lamp strip and one still propeller frame). Free flight and dogfight are
+ours rather than the original's and take the non-campaign screen. Populated in `_Ready` rather than
+`Build`, since the view sizes itself off the viewport and a node outside the tree has none to read.
+Its subject line names the chapter and the flight the way a player picked it —
+`Launcher.LaunchSubject` takes an Instant Action mission's name from
 `InstantAction.MissionTypeLabel` ("Attacking a Zeppelin"), never `SessionSpec.ModeName`, which is
-the log file's internal tag ("fly", "stunt") and not a player's word. ⚠ No progress bar, ever, while the build stays one
-synchronous block — `StartupProfile` reports its phases only after the fact, so a bar would be a
-fiction. The original's own load screen, its six-lamp progress bar included, is artwork in
-`extracted/rimage/` and is not matched yet (`BL-409`). The Launcher owns the show/free pair; see its
+the log file's internal tag ("fly", "stunt") and not a player's word. ⚠ The bar draws its UNLIT
+strip and the propeller one still frame, and neither ever moves: a fill and an animation both need
+the build decoupled from the draw, and while the build stays one synchronous block `StartupProfile`
+reports its phases only after the fact, so a moving bar would be a fiction. ⚠ The two text lines are
+placed by us; the decode carries no text coordinates. The Launcher owns the show/free pair; see its
 entry for the deferred-build handshake.
 
 ## src/UI/BoardMenuItem.cs

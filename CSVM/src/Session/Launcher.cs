@@ -732,10 +732,18 @@ public partial class Launcher : Node3D
         // score stops. What plays next is the mission's own business: a campaign mission cues
         // prebattle from its objectives graph, and Instant Action ships silent (docs/org/music.md).
         _music?.Stop();
-        _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.HudLayers.Board };
-        _loadLayer.AddChild(UI.LoadBoard.Build($"{_spec.Chapter}   ·   {LaunchSubject()}"));
-        AddChild(_loadLayer);
+        ShowLoadScreen(_spec.CampaignProfile != null);
         _launchFramesWaited = 0;
+    }
+
+    // The load screen over the whole window, on the board layer. Campaign launches take the
+    // original's chart sheet and everything else its blackboard (docs/org/loading-screen.md).
+    private void ShowLoadScreen(bool campaign)
+    {
+        _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.HudLayers.Board };
+        _loadLayer.AddChild(UI.LoadBoard.Build(
+            _dataRoot, campaign, $"{_spec.Chapter}   ·   {LaunchSubject()}"));
+        AddChild(_loadLayer);
     }
 
     // What the load screen calls this flight: an Instant Action mission by the wizard's own name
@@ -851,6 +859,13 @@ public partial class Launcher : Node3D
             AddChild(_menu);
         }
         _menu.ShowMenu(_spec.MenuStartScreen);
+        // The load screen is up for two frames during a build and torn down before anything
+        // renders, so a shot of it needs a door of its own that leaves it standing.
+        if (_spec.MenuStartScreen is "loadboard" or "loadboard-campaign")
+        {
+            ShowLoadScreen(_spec.MenuStartScreen == "loadboard-campaign");
+        }
+
         // Safe on every entry: a cue for the track already playing is a no-op, which is exactly
         // what the original's own mail(11004) does (docs/org/music.md).
         _music?.Enter(MusicState.Menu, _musicRng);

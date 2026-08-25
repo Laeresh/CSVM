@@ -77,6 +77,21 @@ public interface ICampaignPage
     /// <summary>The field this page types into, or null when it has none.</summary>
     CampaignTextEntry? TextEntry { get; }
 
+    /// <summary>The pictures this page's own data decides, under the screen's fixed chrome and in
+    /// draw order: the screen background where the page picks it, the photograph behind the cabin
+    /// window, the briefing's flags. Positions are authored 800x600 pixels.</summary>
+    IReadOnlyList<BoardPicture> Pictures { get; }
+
+    /// <summary>The connector lines this page's data draws over its pictures.</summary>
+    IReadOnlyList<BoardStroke> Strokes { get; }
+
+    /// <summary>Text the screen carries that is not a row: a panel heading, a title widget.</summary>
+    IReadOnlyList<BoardLine> Captions { get; }
+
+    /// <summary>Which of the screen's authored buttons row <paramref name="row"/> presses.
+    /// <see cref="BoardButton.None"/> means the row is list text, which is the default.</summary>
+    BoardButtonRef Button(int row);
+
     /// <summary>A second, smaller picture for the focused row, or null for none.</summary>
     HangarArt? RowArt(int row);
 
@@ -409,8 +424,20 @@ public abstract class CampaignPage : ICampaignPage
     /// <inheritdoc/>
     public virtual CampaignTextEntry? TextEntry => null;
 
+    /// <inheritdoc/>
+    public virtual IReadOnlyList<BoardPicture> Pictures => Array.Empty<BoardPicture>();
+
+    /// <inheritdoc/>
+    public virtual IReadOnlyList<BoardStroke> Strokes => Array.Empty<BoardStroke>();
+
+    /// <inheritdoc/>
+    public virtual IReadOnlyList<BoardLine> Captions => Array.Empty<BoardLine>();
+
     /// <summary>The flow this page belongs to.</summary>
     protected CampaignFlow Flow { get; }
+
+    /// <inheritdoc/>
+    public virtual BoardButtonRef Button(int row) => BoardButtonRef.None;
 
     /// <inheritdoc/>
     public virtual HangarArt? RowArt(int row) => null;

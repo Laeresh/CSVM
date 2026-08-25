@@ -27,6 +27,9 @@ public sealed class CampaignAmmoPage : CampaignPage
     private const int AcceptRow = GroupRows + PylonRows;
     private const int CancelRow = AcceptRow + 1;
 
+    // Both diagram sheets stack one frame per airframe, in the airframe id's own order.
+    private const int DiagramFrames = 11;
+
     // IDS_AMMOSHORTNAME (3360+) fallback text, index 4 the no-gun marker's own row.
     private static readonly string[] AmmoFallback = { "Slug", "Dum-dum", "Armor-piercing", "Explosive", "None" };
 
@@ -79,9 +82,46 @@ public sealed class CampaignAmmoPage : CampaignPage
     /// the plan-view sheet.</summary>
     public override HangarArt? Art => Diagram(PlaneDiagrams.Top);
 
+    /// <summary>The two aircraft diagrams, each the airframe's own frame of its sheet, at the
+    /// authored positions of <c>ol_p_planetopicon</c> and <c>ol_p_planefrticon</c>.</summary>
+    public override IReadOnlyList<BoardPicture> Pictures
+    {
+        get
+        {
+            EnsureLoaded();
+            if (_plane is not { } plane)
+            {
+                return Array.Empty<BoardPicture>();
+            }
+
+            int frame = ClampAirframe(plane.Airframe);
+            return new[]
+            {
+                new BoardPicture(new BoardArt(BoardArtLibrary.Ui, "OL_PlaneDiagramsTop.png", DiagramFrames), 305, 96, frame),
+                new BoardPicture(new BoardArt(BoardArtLibrary.Ui, "OL_PlaneDiagramsFront.png", DiagramFrames), 225, 437, frame),
+            };
+        }
+    }
+
+    /// <summary>The screen's own title and the two panel headings, at their authored positions.</summary>
+    public override IReadOnlyList<BoardLine> Captions => new[]
+    {
+        new BoardLine("AMMO SELECTION", 138, 36, 190, 20, BoardInk.Heading),
+        new BoardLine("AMMUNITION", 138, 76, 200, 15, BoardInk.Heading),
+        new BoardLine("ROCKETS", 138, 291, 200, 15, BoardInk.Heading),
+    };
+
     // The stock table: the flow's, else (on-engine only, where res:// resolves) the default file.
     // Off-engine a flow without one reads every plane as fit-less rather than touching Godot.
     private StockLoadouts? Stock => _stock ??= Flow.Stock;
+
+    /// <inheritdoc/>
+    public override BoardButtonRef Button(int row) => row switch
+    {
+        AcceptRow => new BoardButtonRef(BoardButton.AcceptLoadout),
+        CancelRow => new BoardButtonRef(BoardButton.CancelLoadout),
+        _ => BoardButtonRef.None,
+    };
 
     /// <inheritdoc/>
     public override string RowText(int row)

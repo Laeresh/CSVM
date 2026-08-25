@@ -79,8 +79,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ The objectives readout belongs on the pause screen (`BL-466`)
 12. ☑ Radio calls play positionally (`BL-465`)
-13. ◐ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
-14. ◐ The briefing reveal, drawn as authored (`BL-464`)
+13. ☑ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
+14. ☑ The briefing reveal, drawn as authored (`BL-464`)
 
 ### Wave C — the gaps M5 named
 
@@ -90,7 +90,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — the campaign's own rough edges
 
-31. ◐ The load screen's composed artwork (`BL-409`)
+31. ☑ The load screen's composed artwork (`BL-409`)
 32. ☑ Spawn node names defeat `rating_biases` on the campaign path (`BL-401`)
 33. ☐ World objects are hostile to everyone (`BL-407`)
 
@@ -696,7 +696,7 @@ Rerouting it would move `voice-runtime` and `ai-voice`. The 15 s music guard its
 urgent is undecoded, so nothing acts on it. The wake/complete asymmetry is not implemented rather
 than guessed, because the executor cannot tell the two directives apart.
 
-## B13 ☐ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
+## B13 ☑ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
 
 **Goal.** Each campaign screen fills the window as one composed board, with its art at the size the
 original draws it and the original's own button plaques along the bottom, and the pad moves focus
@@ -747,7 +747,56 @@ size; a soft upscale of authored art reads as a bug at the controls. ⚠ `BL-181
 entry blocked on "the menu hub", and its blocker is arguably discharged by this work; decide that
 explicitly rather than leaving the tag stale.
 
-## B14 ☐ The briefing reveal, drawn as authored (`BL-464`)
+**Landed.** Every campaign screen draws as one composed board at the original's own authored pixel
+positions: its painted background, its own button plaques, and its text in the widgets the layout
+names. Five new modules carry it (`BoardFit` the mapping, `ComposedBoard` the engine-free model,
+`CampaignBoards` the six screens' geometry, `ComposedBoardView` the renderer, `BoardPalette` the
+per-background ink), and `ICampaignPage` gained `Pictures`, `Strokes`, `Captions` and `Button(row)`.
+**The geometry is decoded, not guessed**: `extracted/rof/ASSETS/LAYOUT.CSV`, 56 KB and sectioned per
+screen, carries every widget's art path and X,Y for the five script-driven screens, and every screen
+button turns out to be a four-frame vertical strip ordered disabled / normal / rollover / depressed,
+matching that file's own `ColorDisabled,ColorActive,ColorRollover,ColorDepressed` columns. Focus is
+the rollover frame and a confirm the depressed one, both frames the original's art already carried.
+Four rows ship with unresolved authoring macros; they were resolved by template-matching each
+button's own bitmap against the reference screenshot, and what licenses reading the Y off that match
+is that the X it returned equalled the layout row's own X in every case.
+
+**The scaling decision, in writing, on `docs/org/campaign-board.md`:** one uniform scale
+`min(w/800, h/600)`, board centred, remainder letterboxed, every bitmap sampled nearest-neighbour.
+Both alternatives are rejected there with reasons. An integer scale floors to 1 at both 720p and
+1080p, leaving an 800x600 island in a 1080p window. A fit-to-height bleed has nothing to bleed, since
+the plaques anchor to the authored bottom edge and the backgrounds are exactly 800x600.
+Nearest-neighbour answers the soft-upscale trap: a fractional scale duplicates rows unevenly, so it
+reads chunky rather than blurred, and text is drawn as a real face at `scale * authoredSize` rather
+than as scaled glyphs. Two positions are chosen rather than decoded and marked as such in code and
+docs: the cabin's memento window and the profile screen's logo. A standing gap closed on the way, the
+cabin's photograph, which the renderer draws because `Image.LoadFromFile` takes the shipped JPG.
+
+**Verified.** A scripted shot of each of the six screens at 1280x720 read against its
+`OriginalScreenshots\Campaign *.png` reference: backgrounds, plaque positions and plaque art match. A
+four-step focus pass over the cabin shows the rollover frame following the cursor through NEXT
+MISSION, PREVIOUS MISSIONS, PLANE CONSTRUCTION and RETURN TO MAIN MENU, each step being
+`CampaignFlow.Move(1)`, the exact call a pad press makes; `--menu=campaign-cabin:2` was added because
+`--det` disables pads, and the press frame is covered by a unit test. Build clean with 0 warnings
+including StyleCop, and 2363 units on the fully merged tree.
+
+⚠ **`BL-181` is NOT discharged and stays blocked, decided explicitly as the trap required.** Its
+blocker is a menu hub with its own type scale to review `MarkerHud` and `StuntScoreboard` against;
+these boards are painted original artwork with a per-background palette and no shared type scale, so
+they supply nothing to review against. Its blocker wording should be made concrete, because someone
+will now read "the campaign boards landed" as discharging it.
+
+**Not reached, and named on `docs/org/campaign-board.md` so their absence does not read as a decode
+gap:** the profile screen's `CrimFlag.MPG` movie, whose shipped still is a placeholder; the cabin's
+map pins, where `LAYOUT.CSV` puts them at z 0 BEHIND a z 4 background, a contradiction left
+unresolved with `MapPinCount` kept as the tested stand-in; per-widget chrome; and the flight check's
+objectives note, blank because the page does not load objectives. ⚠ A rename came with it:
+`CampaignBoard` became `ComposedBoard` and `CampaignBoardView` became `ComposedBoardView`, so D31
+could reuse the surface, since the load screen is not a campaign screen. C23's own `Art` override on
+the flight check page is superseded here, because the composed board draws that silhouette directly
+rather than through the shell's row-art hook.
+
+## B14 ☑ The briefing reveal, drawn as authored (`BL-464`)
 
 **Goal.** The briefing plays the way the original's does: flags planted on the map one at a time,
 the photos changing through the narration, each objective line written onto the parchment as the
@@ -785,6 +834,22 @@ id** (13 of the 24 wavs store them out of time order, and reading the id as the 
 briefing backwards). The shipped page gets this right; do not regress it while moving the drawing.
 ⚠ This item is drawing, not timing: if a beat lands at the wrong moment, that is a marker bug and
 belongs to whoever owns the timing, not to a fudge factor here.
+
+**Landed.** `BriefingReveal` already modelled every element and nothing was drawing them. The reader
+was missing two fields the drawing needs and now parses them: a step's `center` flag, which most
+flags and photos use, and a `Line`'s colour and points. The page emits the map, the parchment at its
+authored `[0, 295]`, then every visible element at its own position, opacity and rotation, `ToBack`
+ones first, and the route line as a stroke. ⚠ The timing is untouched: the marker-sorted-by-sample-
+offset rule lives in `BriefingReveal` and `WavCues` and was not gone near, and no fudge factor was
+added anywhere, since every duration is the authored constant the reveal already ran.
+
+**Verified.** A timed sequence from one scripted run at 6, 12, 24, 40 and 70 seconds reads as
+`CAP-42`'s own progression does: at 6 s the sub flourish alone with no flags and an empty parchment;
+at 24 s two numbered flags with cast shadows, the escort planes, the zeppelin photograph pinned
+top-left over the paper stack, and two written objective lines; complete by 70 s. The flag count and
+the parchment's line count grow together. ⚠ One mission only: the briefing aid always takes its
+seeded profile's `NextMissionSeq`, and naming a seq would have meant a second CLI shape in a shared
+parse path, so C1/M01's four-flag reveal is unshot.
 
 # Wave C — the gaps M5 named
 
@@ -955,7 +1020,7 @@ marker being read across the 26 files: 24 are baseline `SOF0` but `CR_BACKGROUND
 
 # Wave D — the campaign's own rough edges
 
-## D31 ☐ The load screen's composed artwork (`BL-409`)
+## D31 ☑ The load screen's composed artwork (`BL-409`)
 
 **Goal.** The load screen draws the original's composed artwork instead of a plain panel.
 
@@ -975,6 +1040,27 @@ description; goldens unchanged.
 
 **⚠ Traps.** ⚠ Do not take the progress bar on as a bonus: it needs the build decoupled from the
 draw, which is a different item with its own blast radius.
+
+**Landed.** The load screen draws the original's composed artwork through B13's surface, inheriting
+the same authored-pixel scaling rule. Two compositions, the split the original makes: a campaign
+launch gets `loadframe` with the unlit scale at `90,548`, and everything else gets `loadframempt2`
+with its three authored photographs each centred on `197,157` / `197,307` / `197,457`, the unlit lamp
+strip at `564,546` and one still propeller frame at `506,549`. Free flight and dogfight are ours
+rather than the original's and take the non-campaign screen, which is stated in the code and the docs.
+⚠ **The progress bar is explicitly not taken on**: the unlit strips are drawn and never filled and the
+propeller draws one frame and never steps. Both need the build decoupled from the draw, since
+`BeginLaunch` shows the board, lets one frame render, then builds synchronously, so nothing can be
+redrawn during the build at all; and separately the extraction ships only the six range endpoints of
+the propeller cycle, so the authored 6 fps animation could not be reproduced even with a clock. Text
+placement is ours rather than decoded, since the decode carries no text coordinates, and that is
+marked in both code and docs.
+
+**Verified.** A scripted shot of each family against the decode's own description, through a
+`--menu=loadboard` / `--menu=loadboard-campaign` door added because the real screen is up for two
+frames during a build and torn down before anything renders, so it cannot otherwise be photographed.
+⚠ The subject line in those shots reads "C1 · Free Flight" because the aid is not a real launch. Not
+reached: the campaign sheet's parchment objectives list, which the decode names without giving a
+position, and for which there are no objectives to list at that point anyway.
 
 ## D32 ☑ Spawn node names defeat `rating_biases` on the campaign path (`BL-401`)
 
