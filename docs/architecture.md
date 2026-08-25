@@ -300,7 +300,7 @@ instead.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
 - `src/Testing/SuiteCatalog.cs` — the ordered registry of the in-engine suites; domain scenario bodies live in `*Suites.cs` modules, while `SuiteConstants` holds their shared golden inputs. Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
-- `src/Testing/*Suites.cs` — sixteen domain scenario modules: puffer, combat, ordnance, Instant Action, AI, the campaign, music, targeting, targeting candidates, wingmen, zeppelins, damage, destroy choreography, animation/effects, world/tools, and mid-mission world fidelity.
+- `src/Testing/*Suites.cs` — the domain scenario modules: puffer, combat, ordnance, Instant Action, AI, the campaign, music, targeting, targeting candidates, wingmen, zeppelins, damage, destroy choreography, animation/effects, world/tools, mid-mission world fidelity, and the weapon-ray occluder census.
 - `src/Testing/SuiteConstants.cs` / `BurstTimeline.cs` / `SuiteViewers.cs` / `EffectStageSuiteHelper.cs` — the focused shared inputs, timeline values, pane-camera fixtures, and staged-effect fixture used by more than one suite module.
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
@@ -4391,7 +4391,9 @@ templates, washes and burst timelines), `WorldAndToolSuites` (the built world's 
 and censuses, lighting and viewers, and the lab surfaces), and `WorldFidelitySuites` (the
 mid-mission world behaviours the shipped data drives: the area-selected node toggle over C3's three
 story rectangles, the scripted-path follower over C1's own takeoff path, the mission script's and
-the generator's hangar doors over C1/M04, and the `FOG_STATE` event over its intro). They depend on
+the generator's hangar doors over C1/M04, and the `FOG_STATE` event over its intro), plus
+`AlphaCutoutRaySuites` (the BL-477 census: what actually stops a weapon ray short of C3/M01's cargo
+zeppelin's slung tanks, as first-collider node names over a sphere of aspects). They depend on
 `TestHarness` through
 `TestContext`; shared fixtures are separate focused modules, not an all-purpose suite helper.
 

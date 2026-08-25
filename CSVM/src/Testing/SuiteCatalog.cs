@@ -11,6 +11,7 @@ using CSVM.Utils;
 using Godot;
 
 using static CSVM.Testing.AiSuites;
+using static CSVM.Testing.AlphaCutoutRaySuites;
 using static CSVM.Testing.AnimationAndEffectsSuites;
 using static CSVM.Testing.CampaignHudSuites;
 using static CSVM.Testing.CampaignLoopSuites;
@@ -156,6 +157,7 @@ public static class SuiteCatalog
         "roster-spawn-names",
         "mission-radio",
         "campaign-zeppelin-wakeup",
+        "alpha-cutout-ray-census",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -837,6 +839,16 @@ public static class SuiteCatalog
             + "uncollidable and out of both target pools while its sibling does not, and "
             + "OBJECTIVE39's own WAKEUP_ENEMIES puts it into the world through the real graph",
             CampaignZeppelinWakeup));
+
+        // BL-477: what stops a shot at the cargo zeppelin's slung tanks was inferred from the
+        // geometry; this measures it. The original's own ray test reads no texture at all
+        // (docs/org/weaponRay.md), so this is a census of OUR occluders, not a fidelity gate.
+        into.Add(new TestHarness.Suite("alpha-cutout-ray-census",
+            "the occluders standing between a weapon ray and C3/M01's cargo zeppelin: rays at "
+            + "hydrogentank1's mesh centre from 36 azimuths at five elevations, each naming the "
+            + "first collider's gamez node, over the mission's own world with the zeppelins placed "
+            + "at their authored pose",
+            AlphaCutoutRayCensus));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

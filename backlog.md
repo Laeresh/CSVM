@@ -758,42 +758,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-477` `[Research]` **Alpha-cutout geometry is fully solid to weapon rays, so a target behind a
-  see-through truss can only be hit from the one open aspect.** *Evidence:* reported at the controls
-  on C3/M01's cargo zeppelin, that the slung hydrogen tanks are hittable only from the rear while the
-  original lets shots through the transparent scaffolding around them. The geometry is decisive.
-  `hydrogentank1..4` sit at local z = -70 and -115 (each about ±16) under `cargozep1`; the `front`
-  truss (`f_lo`/`f_mid`/`f_hi`) spans z = -260.0 to -48.2, covering every tank, while the `rear` truss
-  starts at z = +56.8, which is 130 m aft of the rearmost tank. So from behind there is nothing in the
-  way and from every other aspect the `front` truss is. That truss is exactly the "transparent
-  scaffolding": its meshes are large cards with an X-braced truss painted on them (`f_lo` 6 of 10
-  polygons alpha, `f_hi` 39 of 57), textured `cargotex1`/`cgcable1`, both of which
-  `extracted/C3/texture/manifest.json` marks `alpha: "Full"` while the tanks' own `hydrotank1/2/3` are
-  `alpha: "None"`. Ours makes them solid: `SceneBuilder.EmitCollisionFaces` (`:623-650`) emits EVERY
-  polygon with no filter, into a `ConcavePolygonShape3D { BackfaceCollision = true }` (`:820-821`),
-  and transparency is computed on the render path only, from texture pixels (`SceneBuilder.cs:1186-1191`),
-  never reaching `CollidersForMesh`. `Projectile.cs:1116-1150` takes the first `IntersectRay` hit and
-  retires the round, so there is no penetration and no second candidate. **The original's own answer
-  is UNDECODED and the one decoded flag argues the other way**: `docs/formats/gamez.md:38`'s per-node
-  `intersect_surface` is true on `f_lo`, `f_mid`, `f_hi` and both tank meshes across the whole
-  534-node `cargozep1` subtree (only propeller frames and burn effects are false), which read
-  literally says the original polygon-tests the truss too. That establishes only that a false node is
-  skipped, not that a true node's test ignores texture alpha, and whether the original samples alpha
-  at the ray's hit UV is decoded nowhere. `intersect_bbox` and the `node_bbox`/`model_bbox` records
-  are unread by `GameZ.cs` entirely. *Fix shape:* **decode first**, then decide. Find whether
-  `crimson.exe`'s weapon-ray polygon test consults the hit UV's alpha or a bit in the same texture
-  header word `BL-335` already located. The cheap instrument that turns this from inference into
-  measurement: build C3, place `cargozep1` at its authored pose, cast rays at `hydrogentank1`'s centre
-  from 36 azimuths at several elevations and log the first collider's node name; `--collision=show`
-  under `--freecam` draws the same thing. *⚠ Traps:* a blanket "skip every polygon whose texture has
-  alpha" rule is wrong and would read as a new bug, since `cargotex1` is 48.8 % fully opaque and
-  `cgcable1` 15.8 % and those texels are real girders. The blast radius is the whole world, not this
-  zeppelin: the same classification covers every fence, railing and tree card in eight chapters and
-  feeds aircraft terrain collision as well as weapon rays, so a plane could start flying through
-  fences. `hydrotank4` (the tank's own destroyed variant) is itself `alpha: "Full"`, so any rule must
-  be stated in terms that keep a destructible's own hit volume. Do not fix this by shrinking or moving
-  the `front` truss: the geometry is the original's, and the divergence is in the hit test.
-  *Cross-refs:* `BL-335` (the texture header render-flags word), `BL-300` (aircraft collision hulls).
 
 - `BL-443` `[Fidelity]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
   late.** `FUN_0048fc40` (call `0x48c883`) writes the delivered body-up G and the ramp reads it at

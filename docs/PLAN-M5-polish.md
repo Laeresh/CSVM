@@ -109,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 55. ☐ The wingman's formation is looser than the original's (`BL-473`), blocked on F56
 56. ☑ `wingman-station` is red under main's flight plant (`BL-474`)
 57. ◐ The targeting readout drops the militia name (`BL-475`)
-58. ◐ Alpha-cutout geometry is solid to weapon rays (`BL-477`)
+58. ☑ Alpha-cutout geometry is solid to weapon rays (`BL-477`)
 59. ◐ A net has no stop-point state, so the PANDORA never halts (`BL-478`)
 
 **Everything open is now either in flight or queued behind a stated blocker.** The exceptions are
@@ -1546,7 +1546,7 @@ string for `--target=` and the breadcrumbs, and a golden pinned on "Fury" could 
 meant. ⚠ Check the player's own defs before making the title path universal; a bare player def's
 title is the aircraft alone, which is why `MilitiaPaint.cs:36-37` skips a name with no space in it.
 
-## F58 ☐ Alpha-cutout geometry is solid to weapon rays (`BL-477`)
+## F58 ☑ Alpha-cutout geometry is solid to weapon rays (`BL-477`)
 
 **Goal.** An answer first: whether the original's weapon-ray test consults texture alpha. Then, if it
 does, a rule that lets shots through a see-through truss without letting them through its girders.
@@ -1584,6 +1584,40 @@ the whole world and includes aircraft terrain collision, so a plane could start 
 fences. ⚠ `hydrotank4`, the tank's own destroyed variant, is itself `alpha: "Full"`; the rule must be
 stated so a destructible keeps its own hit volume. ⚠ Do not shrink or move the truss: the geometry is
 the original's and the divergence is in the hit test.
+
+**Landed.** ⚠ **The answer is "neither", and no collision rule follows.** `crimson.exe`'s weapon-ray
+polygon test reads no texture data at any point: `FUN_0055c9c0` walks a model's whole polygon array
+unfiltered and picks between two geometry-only testers on a MATERIAL bit, and the UV-computing one
+(`FUN_0055db90`) returns a hit UNCONDITIONALLY, storing the UV only so `FUN_00558f80` can stamp a
+bullet hole into the texture. The one place the whole path touches texture space is to write, after
+the hit is decided. That selector bit is mech3ax's `MaterialFlags::UNKNOWN`, the `flag` field in
+`materials.json`, set on 21 of C3's 483 materials and every one an aircraft or cockpit skin, so on a
+zeppelin no hit UV is computed at all. `intersect_surface` is resolved in the flag's favour rather
+than dodged: `FUN_004c9a00` gates on `ACTIVE` and `INTERSECT_SURFACE` and nothing else, with the bit
+numbers pinned by the GameGen keyword path, so the original polygon-tests the truss.
+`SceneBuilder.EmitCollisionFaces` now carries the prohibition against writing a rule.
+Three further decodes came with it: `INTERSECT_BBOX` REPLACES the polygon test rather than
+pre-filtering it (correcting `gamez.md`), a LOD node is descended into for exactly one child chosen
+by `ACTIVE`, and the sole pass-through rule is `FUN_005ad330`'s water rescan, keyed on the soil id
+and never on alpha.
+
+**Verified.** `alpha-cutout-ray-census` places `cargozep1` at its authored pose in a built C3/M01 and
+casts 180 rays at `hydrogentank1`'s mesh centre from 36 azimuths at five elevations: 5 of 180 reach
+the tank, the front truss `g469` takes 26 of the 36 level azimuths, the hull's gasbag panels
+everything above 30° and the terrain everything below −30°. So the reported asymmetry is real and its
+occluders are named, and it is not a divergence. Ruled out with evidence: texture alpha, a `BL-335`
+header bit, `intersect_bbox` (zero of the 534 nodes carry it), LOD mis-selection at gun range
+(`f_hi`'s band is [0, 800) and our rule picks exactly it), backface (the original does honour
+`show_backface` where our colliders are two-sided, but 33 of `g469`'s 39 cards set it), and the
+projectile's `0x40000` mask (no shipped node carries bit 18). `docs/org/weaponRay.md` carries the
+decode, `analysis/bl-477-weapon-ray/` the censuses and their `FINDINGS.md`, and `docs/verification.md`
+gains INSTR-24, the trap that bit the first census: a raycast in the same call that moved a static
+body reads the collider at its pre-move pose, reporting 108 clean misses through 140 live bodies.
+
+**Two candidates remain for why it read differently at the controls, and both need the user's eye
+rather than more decode.** The shot may have been beyond 800 m, where the original narrows to
+`f_mid`/`f_lo` whose cards are ±28.3 m of local x against `f_hi`'s ±48.9 m; or the difference is in
+aim assist and target selection rather than in the ray.
 
 ## F59 ☐ A net has no stop-point state, so the PANDORA never halts (`BL-478`)
 

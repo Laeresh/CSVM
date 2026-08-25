@@ -504,6 +504,13 @@ loss. What the engine renders was decodable from the authored constants + oscill
   instead of a climbing turn and put the leader into the ground. Nothing in the AI under test had
   moved. The companion trap is the reverse read: a suite that goes red across a plant change is a
   claim about the instrument until the instrument has been shown to still fly what it names.
+- **INSTR-24** — **A raycast taken in the same call that moved a static body reads the collider at
+  its OLD pose, and reports empty space as "nothing there".** A `StaticBody3D`'s transform reaches
+  the physics server on the next frame, which never arrives inside a suite; call
+  `ForceUpdateTransform()` over the moved subtree first. Measured on `alpha-cutout-ray-census`:
+  placing C3/M01's `cargozep1` at its authored pose and immediately casting 180 rays at
+  `hydrogentank1` returned 108 clean misses through 140 live collider bodies, which reads exactly
+  like an airship with no collision at all.
 
 ## SRC — sources and documents
 
