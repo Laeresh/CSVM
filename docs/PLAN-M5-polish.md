@@ -105,7 +105,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 51. ◐ The cutscene camera has no gamez binding, so a mid-mission cutscene ends in one frame (`BL-470`)
 52. ◐ The cutscene node reparent is unimplemented, so the intro frames nothing (`BL-471`)
 53. ◐ Objective sites belong in the enemy selection cycle, and a moving site's marker must track (`BL-472`)
-54. ◐ A zeppelin's authored team is unread and its wake-up has no seam (`BL-476`)
+54. ☑ A zeppelin's authored team is unread and its wake-up has no seam (`BL-476`)
 55. ☐ The wingman's formation is looser than the original's (`BL-473`), blocked on F56
 56. ◐ `wingman-station` is red under main's flight plant (`BL-474`)
 57. ◐ The targeting readout drops the militia name (`BL-475`)
@@ -1310,7 +1310,7 @@ for bare-point sites: C3/M01's village node sits at the world origin, 7.9 km fro
 objective tests. ⚠ Lead-only and not to be changed on this evidence: the original's off-screen block
 may end in a distance where ours writes `"N o'clock"`.
 
-## F54 ☐ A zeppelin's authored team is unread and its wake-up has no seam (`BL-476`)
+## F54 ☑ A zeppelin's authored team is unread and its wake-up has no seam (`BL-476`)
 
 **Goal.** A mission's hidden zeppelin stays hidden until the script reveals it, and a zeppelin that
 authors a team carries it.
@@ -1342,6 +1342,45 @@ what an unauthored one falls through to is `D33`'s question, not this one's. ⚠
 and should be cross-referenced rather than absorbed: C3/M01's Kestrels author `rating_biases
 [["player", 0.5], ["piratezep", -1.0]]`, which is the original's own explicit instruction not to
 target the friendly zeppelin, and it is dead in our build because spawn node names never match.
+
+**Landed.** `ZeppelinRuntime.AuthoredTeam` reads a record's team into the one shared team space
+(`neutral` 0, `ally` 1, `enemy` 2, a bare integer verbatim) and returns null for a record authoring
+none, so no literal is invented; `WireZones` fans that one value onto every zone pool the way
+`FUN_004bee80` fans it across the airship, and `DestructibleRegistry.Instance.Team` carries it to
+`AimAssist.AddStructures`, which prefers it over the world fall-through. ⚠ That fall-through is
+deliberately still `WorldTeam`, since it is `D33`'s question, and the new suite asserts an unauthored
+pool still falls through to 100. A `deactivated` record now starts DORMANT rather than merely
+motionless, and `CampaignDirector.WakeupEnemies` tries the roster and then the zeppelin, so
+`WAKEUP_ENEMIES` is one directive over both deactivated flags. The dormant pose is opacity 0 rather
+than `Visible = false` for two measured reasons: `RestorePlacedEntities` would undo a visibility
+write a second later (the baseline run logs the poll restoring both airships), while opacity is a
+shader parameter that poll knows nothing about, so A2's placement is not fought and `WorldBuilder`
+needed no change; and the mission's own reveal IS an opacity fade, `cargozep1-fadein_cg1zep.json`
+being a single `ObjectOpacityFromTo` from 0.0 to 1.0 over 6 s, so alpha 0 is the fade's own start
+point rather than a guess, and `PoseChannel`'s existing rule drops the colliders with it.
+
+**Verified.** `campaign-zeppelin-wakeup` over C3's built world reads the three parser names off
+shipped records (C1/MP3 `ally` to 1, C5/M03 three `enemy` to 2, C3/M01 both unauthored), confirms an
+authored pool team beats the fall-through while an unauthored one keeps 100, confirms a dormant pool
+is refused outright, then drives the real `ObjectiveGraph.Wake(39)` through the real
+`CampaignDirector`: target parts 18 to 37, structure candidates 230 to 249, hull collidable 0.07 s
+into the 6 s reveal. A real C3/M01 run logs `team unauthored — deactivated, out of the world until
+woken` and `anim: fade dropped colliders under 'cargozep1'` while the unplaced-entity poll restores
+the node without revealing it; a real C5/M03 run logs `team 2 on 19 pool(s)` per authored record and
+`no authored team` for `beowulfzep`. `dotnet test` 2342 in the lane and 2347 on the merged tree, all
+8 chapters `--freecam` error-free, and all 16 golden hashes re-run by hand and unchanged. ⚠ Could not
+be verified visually: an A/B screenshot at `cargozep1` was inconclusive, since at 500 m the fog wall
+hides it in both builds and closer poses land inside the intro's letterbox, so the collider-drop log
+line and the suite's collider walk are the evidence instead.
+
+**Two remainders, carried on `BL-476` rather than dropped.** The team is NOT fanned onto the
+zeppelin's turrets although the decode says it should be (`FUN_004bee80` writes `+0x8` on every
+child): `TurretController.Team` is read-only and `docs/org/targeting.md` records that the original
+drops a now-friendly lock when the team changes, so a setter needs that too, and it bites only an
+`ally` zeppelin's own guns. And the `["piratezep", -1.0]` half of the authored bias is still dead
+after `D32`, because a zeppelin's destructible instances are its ZONES and `TargetPool.NameOf`
+returns the zone's anchor name, so the ranking needs the zone's owning zeppelin identity, which is
+the same identity this item gives the zeppelin for its team.
 
 ## F55 ☐ The wingman's formation is looser than the original's (`BL-473`)
 

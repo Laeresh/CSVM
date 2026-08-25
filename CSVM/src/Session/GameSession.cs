@@ -2399,6 +2399,7 @@ public partial class GameSession : Node3D
             Runtime = state.WorldRuntime,
             Turrets = _turretEmplacements,
             Generators = _generators,
+            Zeppelins = _zeppelins,
             // A6/BL-458: the campaign's danger-zone gates are chapter-world geometry, so the
             // tracker needs the built gamez to resolve its dzpathN subtrees.
             Gamez = state.Gamez,

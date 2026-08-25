@@ -304,7 +304,7 @@ public sealed partial class ZeppelinRuntime
             }
             if (Find(name) is { Dead: false } other)
             {
-                var vel = other.Def.Deactivated
+                var vel = other.Dormant
                     ? Vector3.Zero
                     : other.Motion.Forward * other.Motion.Speed;
                 return (other.Host.GlobalPosition, vel, name, other);

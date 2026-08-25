@@ -1425,8 +1425,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // Thin forwards into the pose family, kept here because their callers name this runtime:
     // MotionRuntime.Create reads the landing-resume mark as `rt.ConsumeLandingResume`, the
-    // `ground-contact` suite arms it through `runtime.MarkLandingResume`, and OpacityFade
-    // writes through `rt.SetSubtreeOpacity`. The state and the bodies live in PoseChannel.
+    // `ground-contact` suite arms it through `runtime.MarkLandingResume`, and OpacityFade and the
+    // zeppelin dormancy pose write through `rt.SetSubtreeOpacity`. The state and the bodies live
+    // in PoseChannel.
     internal bool ConsumeLandingResume(Node3D target) => Pose.ConsumeLandingResume(target);
 
     internal void MarkLandingResume(Node3D target) => Pose.MarkLandingResume(target);

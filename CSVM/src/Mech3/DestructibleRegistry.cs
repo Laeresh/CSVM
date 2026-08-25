@@ -144,6 +144,17 @@ public sealed class DestructibleRegistry
         public float Health { get; set; }
         public State Status { get; set; } = State.Healthy;
 
+        /// <summary>The owning side, where the mission data names one, or null where nothing does.
+        /// Only a zeppelin record authors one today (docs/org/targeting.md "The team space"), and
+        /// the candidate builder falls a null through to its own default.
+        /// ⚠ Never write a literal here for an unauthored object; that fall-through is BL-407.</summary>
+        public int? Team { get; set; }
+
+        /// <summary>Out of play: the pool exists, but its object is not in the world yet — a
+        /// mission's <c>deactivated</c> zeppelin before its script wakes it. Refused as a target
+        /// while set. ⚠ Not a death state: <see cref="Status"/> stays healthy and the HP stands.</summary>
+        public bool Dormant { get; set; }
+
         /// <summary>How many of the DAMAGE_SEQUENCE's descending health thresholds this instance
         /// has fallen past — the deepest progressive-damage stage it has escalated to. Only ever
         /// increases (damage escalates, never heals), so a stage effect fires exactly once; a

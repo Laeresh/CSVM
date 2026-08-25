@@ -63,8 +63,9 @@ public sealed partial class ZeppelinRuntime : Node
             _live.Add(new LiveZeppelin(def, motion, host));
             GD.Print($"zep: '{def.Node}' placed at ({def.Position.X:0},{def.Position.Y:0}," +
                      $"{def.Position.Z:0}) on net '{net.Name}' ({net.Nodes.Count} nodes), " +
-                     $"max_speed {def.MaxSpeed:0.#} m/s, engines {motion.TotalEngines}" +
-                     (def.Deactivated ? " — deactivated, holding" : ""));
+                     $"max_speed {def.MaxSpeed:0.#} m/s, engines {motion.TotalEngines}, " +
+                     $"team {AuthoredTeam(def)?.ToString() ?? "unauthored"}" +
+                     (def.Deactivated ? " — deactivated, out of the world until woken" : ""));
         }
     }
 
@@ -79,9 +80,24 @@ public sealed partial class ZeppelinRuntime : Node
     /// unobservable in this install (all 58 records author 12 or 14).</summary>
     public event Action<string>? ZeppelinEnginesDisabled;
 
-    /// <summary>Zeppelins placed on a resolved net (a held <c>deactivated</c> one counts — it
-    /// is placed and would fly when a script layer wakes it).</summary>
+    /// <summary>Zeppelins placed on a resolved net (a dormant <c>deactivated</c> one counts — it
+    /// is placed and flies once a script layer wakes it).</summary>
     public int LiveCount => _live.Count;
+
+    /// <summary>The record's authored team as an engine team id, or null on the 42 of 58 records
+    /// authoring none. The parser's three names mint ids in the one shared team space —
+    /// <c>ally</c> 1, <c>neutral</c> 0, <c>enemy</c> the first enemy index, 2 — and a bare integer
+    /// is the runtime id verbatim (docs/org/targeting.md "Zeppelins carry a record override").
+    /// ⚠ Never substitute a value for an unauthored record: what those fall through to is
+    /// <c>BL-407</c>'s question, not this seam's.</summary>
+    public static int? AuthoredTeam(ZeppelinDef def) =>
+        def.TeamId ?? (def.Team?.ToLowerInvariant() switch
+        {
+            "enemy" => TurretDef.DefaultTeamId,
+            "ally" => AimAssist.PlayerTeam,
+            "neutral" => AimAssist.NeutralTeam,
+            _ => (int?)null,
+        });
 
     /// <summary>The live motions by node name, the F18 seam's lookup (damage writes
     /// <see cref="ZeppelinMotion.AliveEngines"/>).</summary>
@@ -105,6 +121,27 @@ public sealed partial class ZeppelinRuntime : Node
         return true;
     }
 
+    /// <summary>Whether this zeppelin is still out of the world on its record's own
+    /// <c>deactivated</c> (false for an unknown node).</summary>
+    public bool IsDormant(string node) => Find(node)?.Dormant ?? false;
+
+    /// <summary>`WAKEUP_ENEMIES` on a zeppelin: the mission script puts a <c>deactivated</c> record
+    /// into play — its motion runs, its parts become targets and damageable, and the hull comes
+    /// back to full opacity, which is where a mission's own reveal animation then fades it in from.
+    /// Returns whether the name is a dormant zeppelin of this mission; already-woken and unknown
+    /// names both answer false, so the caller can report an unconsumed directive.</summary>
+    public bool Wake(string node)
+    {
+        if (Find(node) is not { Dormant: true } zep)
+        {
+            return false;
+        }
+        zep.Dormant = false;
+        SetDormancy(zep, false);
+        GD.Print($"zep: '{zep.Def.Node}' woken by the mission script — motion, damage and targeting live");
+        return true;
+    }
+
     /// <summary>Current surviving healthy-entry count, or -1 for an unknown/unwired node.</summary>
     public int SurvivorsOf(string node) =>
         Find(node) is { Damage: { } damage } zep ? damage.Survivors(zep.ZoneAlive) : -1;
@@ -119,20 +156,25 @@ public sealed partial class ZeppelinRuntime : Node
     {
         foreach (var zep in _live)
         {
+            if (zep.Dormant)
+            {
+                continue;   // not in the world yet; its script wake-up is what puts it there
+            }
             var vel = zep.Motion.Forward * zep.Motion.Speed;
+            int zepTeam = zep.Team ?? team;
             foreach (var inst in zep.GasbagZones.Values)
             {
-                AddPart(into, inst, team, vel);
+                AddPart(into, inst, zepTeam, vel);
             }
 
             foreach (var inst in zep.EngineZones.Values)
             {
-                AddPart(into, inst, team, vel);
+                AddPart(into, inst, zepTeam, vel);
             }
 
             foreach (var cannon in zep.CannonZones)
             {
-                AddPart(into, cannon.Instance, team, vel);
+                AddPart(into, cannon.Instance, zepTeam, vel);
             }
         }
     }
@@ -151,6 +193,10 @@ public sealed partial class ZeppelinRuntime : Node
         foreach (var zep in _live)
         {
             WireZones(zep, runtime);
+            if (zep.Dormant)
+            {
+                SetDormancy(zep, true);
+            }
         }
     }
 
@@ -228,11 +274,11 @@ public sealed partial class ZeppelinRuntime : Node
         }
         foreach (var zep in _live)
         {
-            if (zep.Def.Deactivated || zep.Held)
+            if (zep.Dormant || zep.Held)
             {
-                // Placed, holding: either for a mission-script wake-up (the record's own
-                // `deactivated`, out of M4 scope) or because Instant Action's builder switched
-                // this zeppelin off (F12, see Hold).
+                // Placed, not stepped: either waiting on the mission script's WAKEUP_ENEMIES (the
+                // record's own `deactivated`, see Wake) or switched off by Instant Action's own
+                // builder (F12, see Hold).
                 continue;
             }
             if (!zep.Dead)
@@ -360,6 +406,31 @@ public sealed partial class ZeppelinRuntime : Node
     private static bool ZoneIsAlive(DestructibleRegistry.Instance? inst) =>
         inst == null || inst.Status != DestructibleRegistry.State.Destroyed;
 
+    // Every wired zone pool of one zeppelin, in no particular order.
+    private static IEnumerable<DestructibleRegistry.Instance> ZonePools(LiveZeppelin zep)
+    {
+        foreach (var inst in zep.GasbagZones.Values)
+        {
+            if (inst != null)
+            {
+                yield return inst;
+            }
+        }
+
+        foreach (var inst in zep.EngineZones.Values)
+        {
+            if (inst != null)
+            {
+                yield return inst;
+            }
+        }
+
+        foreach (var cannon in zep.CannonZones)
+        {
+            yield return cannon.Instance;
+        }
+    }
+
     private LiveZeppelin? Find(string node)
     {
         foreach (var zep in _live)
@@ -441,10 +512,37 @@ public sealed partial class ZeppelinRuntime : Node
             }
         }
 
+        // The record's team, fanned onto every part the way the original fans one value across the
+        // whole airship. A record authoring none leaves the pools' own null in place.
+        int fanned = 0;
+        if (zep.Team is { } authored)
+        {
+            foreach (var inst in ZonePools(zep))
+            {
+                inst.Team = authored;
+                fanned++;
+            }
+        }
+
         GD.Print($"zep: '{def.Node}' damage wired — {zep.GasbagInstances.Count}/" +
                  $"{zep.GasbagZones.Count} gasbag zones pooled, {pooled}/{def.Engines.Count} " +
                  $"engines, {zep.CannonZones.Count}/{def.CannonHealth.Count} cannons, " +
-                 $"kill at survivors < {def.NumHealthyRequired} of {def.Healthy.Count}");
+                 $"kill at survivors < {def.NumHealthyRequired} of {def.Healthy.Count}" +
+                 (zep.Team is { } team ? $", team {team} on {fanned} pool(s)" : ", no authored team"));
+    }
+
+    // Out of the world, or back in it. The hull is posed at the fade alpha an
+    // OBJECT_OPACITY_FROM_TO reveal starts from rather than switched off, because the same rule
+    // that drops a faded subtree's colliders then applies, and because a mission's own reveal
+    // animates that very parameter — writing Visible instead would leave the fade running on a
+    // node the unplaced-entity poll can switch back on underneath it.
+    private void SetDormancy(LiveZeppelin zep, bool dormant)
+    {
+        foreach (var inst in ZonePools(zep))
+        {
+            inst.Dormant = dormant;
+        }
+        _runtime?.SetSubtreeOpacity(zep.Host, dormant ? 0f : 1f);
     }
 
     private void PollDamage(LiveZeppelin zep)
@@ -552,9 +650,18 @@ public sealed partial class ZeppelinRuntime : Node
             Host = host;
             ZoneAlive = node => ZoneIsAlive(
                 GasbagZones.TryGetValue(node, out var inst) ? inst : null);
+            Dormant = def.Deactivated;
+            Team = AuthoredTeam(def);
         }
 
         public ZeppelinDef Def { get; }
+
+        /// <summary>The record's own <c>deactivated</c>, until a script wakes it: out of the world
+        /// altogether rather than merely stopped, which is what <see cref="Held"/> is.</summary>
+        public bool Dormant { get; set; }
+
+        /// <summary>The record's authored team, or null on a record authoring none.</summary>
+        public int? Team { get; }
 
         public ZeppelinMotion Motion { get; }
 

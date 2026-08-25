@@ -18,6 +18,7 @@ using static CSVM.Testing.CampaignMarkerSuites;
 using static CSVM.Testing.CampaignRosterSuites;
 using static CSVM.Testing.CampaignSuites;
 using static CSVM.Testing.CampaignZeppelinSuites;
+using static CSVM.Testing.CampaignZeppelinWakeSuites;
 using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
@@ -154,6 +155,7 @@ public static class SuiteCatalog
         "landings-approach-trigger",
         "roster-spawn-names",
         "mission-radio",
+        "campaign-zeppelin-wakeup",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -824,6 +826,17 @@ public static class SuiteCatalog
             + "without starting a positional player, and STOP_QUEUED_SOUNDS drops a call that has "
             + "not begun",
             CampaignHudSuites.MissionRadioCallouts));
+
+        // BL-476: a zeppelin's authored team reached nothing and its `deactivated` flag held only
+        // the motion, so the airship a mission reveals partway through was in play from t=0.
+        into.Add(new TestHarness.Suite("campaign-zeppelin-wakeup",
+            "the hidden zeppelin and the authored team over the first story mission's BUILT world: "
+            + "the three parser team names resolve to the ids the one shared team space mints, an "
+            + "authored pool team beats the world fall-through while an unauthored one keeps it, a "
+            + "dormant pool is no candidate at all, C3/M01's deactivated cargozep1 starts "
+            + "uncollidable and out of both target pools while its sibling does not, and "
+            + "OBJECTIVE39's own WAKEUP_ENEMIES puts it into the world through the real graph",
+            CampaignZeppelinWakeup));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

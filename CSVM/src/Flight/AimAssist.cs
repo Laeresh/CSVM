@@ -488,19 +488,20 @@ public sealed class AimCandidateSet
         Ordnance.Add(Make(position, velocity, team, live: true, source, coneOverride));
 
     /// <summary>Every registered destructible that is not already destroyed, as structure
-    /// candidates. <paramref name="team"/> defaults to <see cref="AimAssist.WorldTeam"/> — the
-    /// world's shootables are nobody's own, so they are hostile to every pilot; CSVM has no team
-    /// data to read this from. An anchor outside the tree is skipped rather than read (its global
-    /// transform is meaningless until it is in one).</summary>
+    /// candidates. A pool carrying <see cref="DestructibleRegistry.Instance.Team"/> uses it;
+    /// <paramref name="team"/> is the fall-through for the rest, hostile to every pilot, which is a
+    /// remake-only rule (<c>BL-407</c>) and not the original's neutral. Skipped: an anchor outside
+    /// the tree (its global transform is meaningless until it is in one) and a dormant pool, whose
+    /// object is not in the world yet.</summary>
     public void AddStructures(DestructibleRegistry registry, int team = AimAssist.WorldTeam)
     {
         foreach (var inst in registry.All)
         {
-            if (!inst.Anchor.IsInsideTree())
+            if (inst.Dormant || !inst.Anchor.IsInsideTree())
             {
                 continue;
             }
-            AddStructure(inst.Anchor.GlobalPosition, team,
+            AddStructure(inst.Anchor.GlobalPosition, inst.Team ?? team,
                 inst.Status != DestructibleRegistry.State.Destroyed, inst);
         }
     }

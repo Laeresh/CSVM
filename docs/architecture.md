@@ -1124,7 +1124,10 @@ bootstrap, read by `ANIM_HEALTH` eval, escalated by `ApplyDamageStages`, damaged
 `Resolve(struck)` maps a raycast-hit node back to its instance. Schema: docs/formats/destructibles.md.
 `Instance.Reseed(max)` re-seeds a pool from a mission record — the F18 zeppelin zones, where
 `zeppelins.json` hp beats the def's own `HEALTH` — and refuses once damaged, so a late wire-up
-cannot heal a fight in progress.
+cannot heal a fight in progress. `Instance.Team` and `Instance.Dormant` are the two flags a mission
+record can put on a pool: an owning side where the data names one (`ZeppelinRuntime` is the only
+writer today), and "registered but not in the world yet", which `AimCandidateSet.AddStructures`
+refuses outright.
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM→PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies —
@@ -4734,7 +4737,8 @@ Which directives reach the engine today: `INACTIVEn` (node visibility, the decod
 `STOP_QUEUED_SOUNDS` through `MissionRadio.Cancel`, `START_TAXI` through the director's own
 `ScriptedPathVehicles` registry (`Paths`), which it also steps beside the graph, and, over the
 spawned roster, `DEDG` (`GroupLiveCount`: not-crashed members of the block group, a parked one
-counting as alive) and `WAKEUP_ENEMIES` (an inert named aircraft re-activated at its spawn pose).
+counting as alive) and `WAKEUP_ENEMIES`, one directive over two deactivated flags: an inert named
+aircraft re-activated at its spawn pose, or a dormant `ZeppelinRuntime` record put into the world.
 The rest (the group form of `TRAVELERS`, `SET_AI_*`, `WARP_VEHICLE`, `COMPLETED_STOPPOINT`), the
 untraced `COMPLETED_ZEPCANNONS` reader are NAMED no-ops, each logged once per kind. ⚠ Never turn one of those into an invented
 behaviour: the missing consumer is the finding.
@@ -4877,8 +4881,14 @@ builder switched off: placed, but no longer stepped, so it neither flies its net
 invisible broadside. It stands in for `FUN_0045a390`'s `FUN_0045a2a0`, which deletes the vehicle/AI
 objects under the deactivated node — CSVM has no such object graph to delete. Switching the world
 NODE off is the CALLER's act (`GameSession`, the decoded `gwNodeSetActive`), because the builder's
-three `*_zeppelin` names need not be zeppelin records at all. Format and decode: `formats/ai-nets.md`,
-`formats/mission-entities.md`.
+three `*_zeppelin` names need not be zeppelin records at all. `Wake(node)` is the other flag's
+counterpart: a record authoring `deactivated` starts DORMANT, posed at fade alpha 0 so its colliders
+drop with it and out of both candidate channels, until a mission's `WAKEUP_ENEMIES` puts it in the
+world and the objective's own reveal animation fades it up. `AuthoredTeam(def)` reads the record's
+own side into the one shared team space and `WireDamage` fans it onto every zone pool, the way the
+original fans one value across the whole airship; a record authoring none leaves the pool's null in
+place. Format and decode: `formats/ai-nets.md`, `formats/mission-entities.md`,
+`org/targeting.md`.
 
 ## src/Session/TurretEmplacementRuntime.cs
 The world AA emplacements: `TurretController.BuildEmplacements` resolved against the

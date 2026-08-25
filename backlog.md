@@ -2461,32 +2461,27 @@ usual.
   *⚠ Traps:* do not "fix" it by widening the gates until they pass; the gates encode the 700 m join
   leash, which is decoded. *Cross-refs:* `BL-457`, `BL-473`.
 
-- `BL-476` `[Bug]` **A zeppelin's authored team is decoded and never read, and `WAKEUP_ENEMIES` has
-  no zeppelin seam, so a mission's hidden zeppelin is present and hostile to everyone from t=0.**
-  *Evidence:* found tracing the at-the-controls report that C3/M01's Medusa Kestrels attack
-  `cargozep1`, which is their own side's. `Zeppelins.cs:130-133` decodes an authored team into
-  `ZeppelinDef.Team` (`:313`) and `ZeppelinDef.TeamId` (`:317`), authored on 16 of 58 records
-  install-wide and null on the other 42 including both C3/M01 records, and **nothing anywhere reads
-  either field**. Separately, `CampaignDirector.WakeupEnemies` (`:636-659`) handles only roster
-  aircraft and says so in its own comment at `:639-640`, while C3/M01's `OBJECTIVE39` is
-  `WAKEUP_ENEMIES ["cargozep1"]` plus `WAKE_ANIM fadein_cg1zep` plus `WAKEUP_ZEP_TURRETS
-  ["cargozep1"]`. `cargozep1` ships `deactivated: 1`, and `ZeppelinRuntime.cs:231-237` honours
-  `Deactivated` only by holding its MOTION, so the zeppelin the mission means to reveal partway
-  through is drawn, collidable and registered as a damage pool from mission start. *Fix shape:* read
-  `ZeppelinDef.Team` onto the placed zeppelin and give `WakeupEnemies` a zeppelin seam. *⚠ Traps:* do
-  not set a zeppelin's team to a literal in code — 42 of 58 records author none, and what an
-  unauthored one falls through to is exactly the question `BL-407` owns. *Cross-refs:* `BL-407`
-  (`AimAssist.AddStructures` defaults every structure to `WorldTeam` = 100, which is what actually
-  makes the Kestrels shoot it, and which this entry does NOT duplicate). ⚠ **This entry now also owns
-  the zeppelin half of the authored bias.** C3/M01's Kestrels author `rating_biases [["player", 0.5],
-  ["piratezep", -1.0]]`, the original's own explicit instruction not to target the friendly zeppelin.
-  `BL-401` made the player half live by naming a campaign spawn for its roster block, and its fix
-  cannot reach the zeppelin half: a zeppelin's destructible instances are its ZONES (`gasbag1..6`,
-  `leng11`, `lbroad11`) and `TargetPool.NameOf` (`TargetPool.cs:117`) returns the zone's anchor name,
-  so the pattern needs the zone's owning zeppelin identity carried alongside, which is the same
-  identity this entry has to give the zeppelin for its team. Sequence this entry before `BL-407`, so
-  that when the structure fall-through flips to neutral the authored teams and the authored biases
-  are both live.
+- `BL-476` `[Bug]` **A zeppelin carries no identity for its turrets or for a targeting bias.**
+  The team and the wake-up seam this entry opened with are built (`ZeppelinRuntime.AuthoredTeam`,
+  `WireZones`, `DestructibleRegistry.Instance.Team`, `ZeppelinRuntime.Wake` through
+  `CampaignDirector.WakeupEnemies`); **two identity remainders keep it open.**
+  (a) *The team is not fanned onto the zeppelin's turrets*, although the decode says it should be:
+  `FUN_004bee80` writes `+0x8` on every child, turrets included. `TurretController.Team` is
+  read-only, and `docs/org/targeting.md:230` records that the original drops a now-friendly lock when
+  a team changes (`0x004acb90`), so a setter needs that too. It bites only an `ally` zeppelin's own
+  guns (C1/C1B/C1C/C2/C2B/C3/C4/C5 MP3, C4/M05, C5/M02, C5/M04).
+  (b) *A `rating_biases` pattern naming a zeppelin still matches nothing.* C3/M01's Kestrels author
+  `[["player", 0.5], ["piratezep", -1.0]]`, the original's own instruction not to target the friendly
+  airship. `BL-401` made the player half live, and its fix cannot reach this one: a zeppelin's
+  destructible instances are its ZONES (`gasbag1..6`, `leng11`, `lbroad11`) and `TargetPool.NameOf`
+  (`TargetPool.cs:117`) returns the zone's anchor name, so the ranking needs the zone's owning
+  zeppelin identity carried alongside, which is the same identity (a) needs.
+  *Fix shape:* one owning-zeppelin identity on a zone pool, read by the turret team fan and by
+  `ObjectiveBiasFor`. *⚠ Traps:* the read-only `TurretController.Team` is read-only for a reason;
+  changing a team mid-mission has to drop an existing lock or an AI keeps shooting a friend. Do not
+  set a zeppelin's team to a literal: 42 of 58 records author none, and what an unauthored one falls
+  through to is `BL-407`'s question. *Cross-refs:* `BL-407` (the structure hostility fall-through,
+  still open and still the cause of the reported Kestrel symptom), `docs/org/targeting.md`.
 
 - `BL-478` `[Research]` **`COMPLETED_STOPPOINT` has no net stop-point state, so the PANDORA never
   halts and shuttles its route forever.** *Evidence:* raised as a question at the controls, whether

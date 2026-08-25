@@ -529,6 +529,7 @@ public sealed class CampaignDirector
         public AnimRuntime? Runtime;
         public TurretEmplacementRuntime? Turrets;
         public AiGeneratorRuntime? Generators;
+        public ZeppelinRuntime? Zeppelins;
         public WorldSounds? Sounds;
         public ProjectilePool? Projectiles;
         public Func<Vector3>? ListenerPosition;
@@ -635,26 +636,31 @@ public sealed class CampaignDirector
 
         public void WakeupEnemies(IReadOnlyList<string> names)
         {
-            // The partner of the roster's deactivated flag: a named inert aircraft is put back in
-            // play at its own spawn pose (docs/formats/objectives.md). A zeppelin by that name has
-            // no seam here yet.
-            int woken = 0;
+            // The partner of BOTH deactivated flags (docs/formats/objectives.md): the roster's,
+            // which puts an inert aircraft back in play at its spawn pose, and a zeppelin record's,
+            // which puts a hidden airship into the world. A name is one or the other, never both.
+            int aircraft = 0, zeppelins = 0;
             foreach (var name in names)
             {
                 if (_owner._roster.TryGetValue(name, out var rig) && _owner._rosterPlans.TryGetValue(name, out var plan)
                     && rig.Inert)
                 {
                     rig.Activate(plan.Position, plan.Position + plan.Forward);
-                    woken++;
+                    aircraft++;
+                }
+                else if (_in.Zeppelins?.Wake(name) == true)
+                {
+                    zeppelins++;
                 }
             }
-            if (woken > 0)
+            if (aircraft + zeppelins > 0)
             {
-                GD.Print($"campaign: WAKEUP_ENEMIES activated {woken} of {names.Count} named aircraft");
+                GD.Print($"campaign: WAKEUP_ENEMIES activated {aircraft} of {names.Count} named " +
+                         $"aircraft and woke {zeppelins} zeppelin(s)");
             }
             else if (names.Count > 0)
             {
-                _owner.Gap("WAKEUP_ENEMIES", $"'{names[0]}' and {names.Count - 1} more name no deactivated roster aircraft");
+                _owner.Gap("WAKEUP_ENEMIES", $"'{names[0]}' and {names.Count - 1} more name no deactivated roster aircraft or zeppelin");
             }
         }
 
