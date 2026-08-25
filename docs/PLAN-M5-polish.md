@@ -116,7 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 52. ☑ The cutscene node reparent is unimplemented, so the intro frames nothing (`BL-471`)
 53. ☑ Objective sites belong in the enemy selection cycle, and a moving site's marker must track (`BL-472`)
 54. ☑ A zeppelin's authored team is unread and its wake-up has no seam (`BL-476`)
-55. ☐ The wingman's formation is looser than the original's (`BL-473`), blocked on F56
+55. ☑ The wingman's formation is looser than the original's (`BL-473`)
 56. ☑ `wingman-station` is red under main's flight plant (`BL-474`)
 57. ☑ The targeting readout drops the militia name (`BL-475`)
 58. ☑ Alpha-cutout geometry is solid to weapon rays (`BL-477`)
@@ -141,6 +141,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 74. ☑ CM02's Balmoral capture reaches none of the three airships, cause found (`BL-492`, `BL-495`)
 75. ☑ CM02's named pilots do not read as named, and their voice lines are unverified (`BL-493`)
 76. ☐ A mission cannot swap the player onto another airframe (`BL-494`), behind G74
+77. ☐ CM02's Balmorals do not hold formation, and break it when attacked (`BL-498`)
+78. ☐ CM02's second Peacemaker squad starts awake and attacks the Pandora (`BL-499`)
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -529,6 +531,24 @@ that boundary column has partial coverage and blends the bar with what is behind
 rounds inside depends on the projection at that frame, so it comes and goes as the camera moves.
 ⚠ This last step is lead-only, but it is the only asymmetry available: nothing in the card geometry,
 the pin or the formula is left/right asymmetric.
+
+⚠ **A capture at the controls settles the side and kills the MSAA lead.**
+`Screenshots/crimsonskies_2026-08-25_20-48-39-216.png`, window 2558x1408 (aspect 1.8168, above the
+1.64211 crossover, so the width term binds as (1) describes). Measured per row over the whole image:
+both bars begin at `x = 17` and end at `x = 2557`, the frame's last column, on every row of both
+bars. So the leak is **17 px on the left and nothing on the right**, constant, with the player's own
+wing visible in the strip. A partial-coverage rounding artifact is at most a pixel and would swap
+sides as the camera moves; 17 px on one side every row is a placement fact, and the plan's
+"which side rounds inside depends on the projection" lead is disproved by this measurement.
+
+⚠ **The candidate cause is that the fit reads the card's size and drops its centre.**
+`FramingFovDeg` (`:141-153`) takes `cardBox.GetCenter().Z` for the distance but sizes the fit from
+`cardBox.Size` alone, so nothing in the fit or the pin consults the card's centre in X. A card whose
+own AABB centre is off its node origin therefore sits off-centre in the frame while the fov is
+solved for its half-width, which is exactly a one-sided gap. `CardOverscan` already exists and
+should have left a margin on BOTH sides; the card being flush against the right edge says the
+offset is the larger of the two. Read `_cardBox.GetCenter().X` before changing anything, since if
+that is zero the cause is elsewhere and the offset has to be found in the camera or the pin.
 
 **(2) Three canvas layers genuinely draw over the bars.** The bars carry no `CanvasLayer` at all, and
 every `CanvasLayer` draws above all 3D content. During a campaign cutscene `ObjectivesHud`
@@ -1717,7 +1737,7 @@ after `D32`, because a zeppelin's destructible instances are its ZONES and `Targ
 returns the zone's anchor name, so the ranking needs the zone's owning zeppelin identity, which is
 the same identity this item gives the zeppelin for its team.
 
-## F55 ☐ The wingman's formation is looser than the original's (`BL-473`)
+## F55 ☑ The wingman's formation is looser than the original's (`BL-473`)
 
 **Goal.** The wingman flies the original's formation distance.
 
@@ -1743,6 +1763,13 @@ user sees IS this number, and the work is to move it toward the original's.
 **⚠ Traps.** ⚠ Do not re-tune the decoded station offsets or the 700 m join gate to close a visual
 gap; that trades a confirmed decode for an impression. ⚠ Footage-derived separation distances are
 inadmissible (`docs/verification.md`).
+
+**Closed on the user's eye, which is the verification this item asked for.** The formation reads
+right at the controls against the 199 m the instrument measures, so no tuning is warranted and the
+item closes with no code. ⚠ A separate impression came with the closure and is NOT settled here: the
+wingman may not engage the player's enemies. That is target selection rather than station keeping,
+it is untested on both sides, and it belongs to whatever item is opened if the impression holds; it
+is recorded so the closure of this item is not read as covering it.
 
 ## F56 ☑ `wingman-station` is red under main's flight plant (`BL-474`)
 
@@ -2762,10 +2789,11 @@ errors. It fails on the ownership check with the new branch disabled, so it can 
 warnings including StyleCop, all comment blocks within cap. ⚠ What the menu capture contains was
 checked separately, through scripted `--menu --screenshot=` and `--menu=campaign-briefing:0
 --screenshot=` runs: 52 KB and 584 KB PNGs showing the launchscreen and the briefing board, so menu
-pixels do reach a viewport grab. ⚠ Not verified: a human press on a live window. The pre-fix
-launcher binding already fired with a menu in the tree under a pushed event, so the reported
-"nothing happens" could not be reproduced headlessly, and one press at the controls is what would
-confirm it.
+pixels do reach a viewport grab.
+
+**Confirmed at the controls.** A human press on a live menu screen writes the file:
+`Screenshots/crimsonskies_2026-08-25_18-22-11-942.png`. The one case the suite could not cover is
+now covered by the capture, and the item is closed.
 
 ## G74 ☑ CM02's Balmoral capture reaches none of the three airships (`BL-492`, `BL-495`)
 
@@ -2967,3 +2995,67 @@ that airframe's armour and hardpoints rather than the previous one's.
 happens with a loadout already bound, so a hardpoint table changing under a live rig is the part to
 get right. ⚠ G74 gates this in CM02: with no capture there is no swap to reach, so the two want
 sequencing rather than running together.
+
+## G77 ☐ CM02's Balmorals do not hold formation, and break it when attacked (`BL-498`)
+
+**Goal.** The three airships fly the formation the mission authors and stay in it under fire.
+
+**Evidence (confidence: reported at the controls, traced for the data).** Reported against the
+original, where the Balmorals fly in formation and do not break it when attacked. The data separates
+them from every fighter in the mission: all three carry `group` 5, empty `rating_biases`, and
+behaviour slot 32 = `2`, where the mission's Peacemakers carry `16` and the player's flight `0`.
+`OBJECTIVE4` puts all three on the `M5Bombrun` net together, so the formation is authored as three
+aircraft sharing one net rather than as an escort station on a leader.
+
+**Approach.** Establish what slot 32 selects before touching any AI mode. A bomber that never breaks
+off is most likely that field rather than a special case in the mode machine, and the field is
+shipped data that other chapters' bombers will carry too. Then find which of our own transitions
+takes them off the net when they are shot at; `ai-modes` already prints the transition list.
+
+**Model recommendation.** medium.
+
+**Verify.** A driven run on CM02's own world: the three fly the net together, and firing on one does
+not move it off the net or change its separation from the other two.
+
+**⚠ Traps.** ⚠ Do not give the Balmorals an evasion exemption by name. The flag is authored and a
+name check would not carry to any other mission's bombers. ⚠ `BL-492`'s reach failure means their
+gamez scaffolding is absent from the built world, so anything read off a spawned Balmoral's node
+tree is missing pieces and is not evidence about the formation. ⚠ The three are also the mission's
+capture targets, so do not make them unshootable in the course of making them unflinching.
+
+## G78 ☐ CM02's second Peacemaker squad starts awake and attacks the Pandora (`BL-499`)
+
+**Goal.** The squad carrying the ace appears when the mission wakes it, and comes for the player.
+
+**Evidence (confidence: reported at the controls, decoded for both halves).** Both halves of the
+report are authored. `OBJECTIVE8` is dormant and carries
+`WAKEUP_ENEMIES [britpeace_7, britpeace_8, britpeace_9]`, so the squad is asleep at mission start;
+completing it also wakes `OBJECTIVE9` (the `snd_HA5Wave2` Winthrop chain that G75 decoded),
+`OBJECTIVE10` (the SECONDARY that kills the ace) and `OBJECTIVE68`
+(`SET_AI_NET M5Escort` on the same three, two seconds later). Targeting is authored as well:
+`britpeace_8` and `britpeace_9` carry `rating_biases [piratezep, -0.8] [player, 1.0]`, and
+`britpeace_7` carries `[player, 1.0]` alone. So the squad is told to prefer the player and to
+deprioritise the pirate zeppelin, which is the reported behaviour exactly.
+
+**The gate is the first Peacemaker squad, not the Balmorals.** `OBJECTIVE5` carries `DEDG [1, 0]`,
+and group 1 is `britpeace_1/2/3`; on completion it naps `OBJECTIVE8` awake after 15 s.
+
+**Approach.** Two questions in order. Whether `WAKEUP_ENEMIES` reaches an aircraft roster block at
+all, since a squad that is present from the start has had its dormancy dropped rather than its
+targeting broken, and the targeting question may not survive the answer. Then whether the biases
+reach the pick for a woken spawn, which `roster-spawn-names` proves they do for a spawn that was
+there from the start.
+
+**Model recommendation.** medium.
+
+**Verify.** A driven run on CM02's own world: the three are absent from the world until the first
+Peacemaker squad is destroyed, appear 15 s after it, and their live pick is the player rather than
+the pirate zeppelin.
+
+**⚠ Traps.** ⚠ The recollection at the controls is "after 2 Balmoral kills" and the authored gate is
+the first Peacemaker squad being wiped out. Both can be true of one playthrough, so treat the
+recollection as the lead and the `DEDG` as the specification. Group 5 down to one IS a real gate in
+this mission (`OBJECTIVE20`, `55`, `63`), which is what makes the two easy to conflate. ⚠ Do not
+hand the squad a hardcoded player target: the bias table expresses this and it already ships. ⚠
+`campaign-zeppelin-wakeup` covers `WAKEUP_ENEMIES` for a dormant zeppelin pool; an aircraft roster
+block is a different path and its coverage cannot be assumed from that suite passing.

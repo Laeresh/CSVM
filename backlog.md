@@ -2242,19 +2242,41 @@ usual.
   `docs/formats/anim-definitions/cutscenes.md` ("`player`, and the two pointer spaces a definition
   addresses"), which carries the decode; `BL-470` and `BL-471`, closed by the work that filed this.
 
-- `BL-473` `[Fidelity]` **The campaign wingman flies a looser formation than the original's.**
-  *Evidence:* judged at the controls on a complete flown C3/M01, after `BL-457`'s ceiling lift landed:
-  the wingman is near the player for the whole flight and never overhead, so the fall-behind-and-climb
-  failure is gone, but the formation is "not as close as original". This is a fidelity gap on a
-  mechanism that now works, not a repeat of `BL-457`. *Fix shape:* nothing until the gap is measured
-  against something. The decoded station offsets are confirmed correct and `PLAN-M5-polish.md` A3
-  proves the commanded point equals the decoded station to 0.00 m, so the divergence is in how closely
-  the escort TRACKS its commanded point, not in where that point is. *⚠ Traps:* do not re-tune the
-  decoded station offsets or the 700 m join gate to close a visual gap; that would trade a confirmed
-  decode for an impression. Footage-derived separation distances are inadmissible here
-  (`docs/verification.md`), so the reference has to be the decode or the user's eye, not a measurement
-  off the film. *Cross-refs:* `BL-469`; `wingman-station`'s `settled` figure is the instrument,
-  199 m on `player_pfighter`, and the number this entry has to move.
+- `BL-498` `[Fidelity]` **CM02's Balmorals do not hold formation, and break it when attacked.**
+  *Evidence:* reported at the controls against the original, where the three airships fly in
+  formation and stay in it under fire. The data separates them from every fighter in the mission:
+  all three carry `group` 5, empty `rating_biases`, and behaviour slot 32 = `2` where the mission's
+  Peacemakers carry `16` and the player's flight `0`. `OBJECTIVE4` puts all three on the `M5Bombrun`
+  net together, so the formation is authored as three aircraft on one net rather than as an escort
+  station. *Fix shape:* establish what slot 32 selects before touching any AI mode, since a bomber
+  that never breaks off is most likely that field rather than a special case in the mode machine.
+  Then find which of our transitions takes them off the net when they are shot at. *⚠ Traps:* do not
+  give the Balmorals an evasion exemption by name; the flag is authored data and other chapters'
+  bombers will carry it too. `BL-492`'s reach failure means their gamez scaffolding is absent from
+  the built world, so anything read off a spawned Balmoral's node tree is missing pieces and is not
+  evidence about the formation. *Cross-refs:* `BL-499` (the other CM02 report), `BL-492`,
+  `PLAN-M5-polish.md` G77.
+
+- `BL-499` `[Bug]` **CM02's second Peacemaker squad is present from the start and attacks the
+  Pandora rather than the player.** *Evidence:* reported at the controls against the original, where
+  the squad carrying the ace appears partway through and comes for the player. Both halves are
+  authored. `OBJECTIVE8` is dormant and carries `WAKEUP_ENEMIES [britpeace_7, britpeace_8,
+  britpeace_9]`, so the squad is asleep at mission start; completing it also wakes `OBJECTIVE9` (the
+  `snd_HA5Wave2` Winthrop chain), `OBJECTIVE10` (the SECONDARY that kills the ace) and `OBJECTIVE68`
+  (`SET_AI_NET M5Escort` on the same three, two seconds later). The gate is `OBJECTIVE5`'s
+  `DEDG [1, 0]`, and group 1 is `britpeace_1/2/3`, the FIRST Peacemaker squad; on completion it naps
+  `OBJECTIVE8` awake after 15 s. Targeting is authored too: `britpeace_8` and `britpeace_9` carry
+  `rating_biases [piratezep, -0.8] [player, 1.0]`, and `britpeace_7` carries `[player, 1.0]` alone.
+  *Fix shape:* two questions in order. Whether `WAKEUP_ENEMIES` reaches an aircraft roster block at
+  all, since a squad that spawns at mission start has had its dormancy dropped rather than its
+  targeting broken. Then whether those biases reach the pick for a woken spawn, which
+  `roster-spawn-names` proves they do for a spawn present from the start. *⚠ Traps:* ⚠ the user's
+  recollection is "after 2 Balmoral kills" and the authored gate is the first Peacemaker squad being
+  wiped out; both may be true of one playthrough, so treat the recollection as the lead and the
+  `DEDG` as the specification. Group 5 down to one IS a real gate in this mission (`OBJECTIVE20`,
+  `55`, `63`), which is what makes the two easy to conflate. Do not hand the squad a hardcoded player
+  target: the bias table is what expresses this and it already ships. *Cross-refs:* `BL-493`'s ace
+  decode, `BL-498`, `PLAN-M5-polish.md` G78.
 
 - `BL-469` `[Feature]` **An escort cannot hold station on a leader using nitro, and nothing measures
   the case.** *Evidence:* the two injectors are independent switches, so the asymmetry is reachable
