@@ -2091,24 +2091,35 @@ usual.
 
 ## Missions, modes & campaign
 
-- `BL-482` `[Bug]` **The intro cutscene stages no aircraft, because the node its definitions animate
-  does not exist in the gamez.** *Evidence:* `BL-471`'s reparent work put the camera in the airship's
-  node frame, and a `--campaign=` shot early in C3/M01's `generic_intro` now shows the PANDORA
-  centre-frame, which answers half of the report that neither the airship nor any plane was in sight.
-  The other half stands and is traced. `camera1-generic_intro.json` names `player` at ptr 8918, C3's
-  gamez carries 5408 nodes and none is named `player`, so `SymbolClaims` claims the name with a null
-  binding and every event posing it drops. `CutsceneController.cs:427` already records that the gamez
-  `player` is not the airframe this engine flies. The camera move plays over a stage with no actors,
-  and the shipped data does not say what the actors are. *Fix shape:* decode first. The original
-  resolves ptr 8918 to something at runtime, so locate the site that puts a node under that name into
-  the node table and read what mesh it carries; only then decide whether the flown airframe is the
-  right stand-in or whether the intro composes a separate template. An answer that leaves the intro as
-  it is closes this. *⚠ Traps:* do not bind `player` to the flown `FlightController` because the name
-  matches, which is the inference `CutsceneController`'s note exists to prevent. Do not relax
-  `AnimRuntime.cs:2954-2966` to make the name resolve; refusing to name-match around a claimed index
-  is what stops C1's `caboose` driving an unrelated `caboose.flt`. An intro composes itself during the
-  animation bootstrap, before the world root is in the scene. *Cross-refs:* `BL-470` and `BL-471`, both
-  closed by the work that filed this; `PLAN-M5-polish.md` G61.
+- `BL-482` `[Feature]` **The intro cutscene stages no aircraft: the two it animates live in the
+  aircraft archive, which the world build never puts in the animation node table.** ⚠ **Decoded, so
+  this is scoped work and no longer an open question.** *Evidence:* a definition's symbol table
+  addresses two node tables. A chapter node's `ptr` is its position in that chapter's `nodes.json`; a
+  node from the shared aircraft archive is its position in `planes/nodes.json` plus a base, and that
+  base is the chapter's own node count rounded up to the next multiple of 2500 (holds for all eight
+  chapters: C2/C2B 5000, C1/C1B/C1C/C3 7500, C4 10000, C5 12500, and for all nine cross-archive
+  pointers in C3's intro). So `camera1-generic_intro.json`'s ptr 8918 is aircraft-archive node 1418,
+  named `player`, a parentless `Object3d` whose one child `player_pfighter` the airframe name table at
+  `0x00620cc0` identifies as the Devastator's player-model node. **`player` is the flown aircraft**,
+  established by decode rather than by the name: `FUN_004d0280(7, "player")` resolves it by string
+  comparison over node table 7, `FUN_0042e5e0` switches it off around a render pass, and mission setup
+  passes the same literal with the player's loadout record (`FUN_004136e0` into `FUN_00414f40`). The
+  node ships wrapping a Devastator because that is what sat in the slot when the archive was built,
+  not because the intro is about one. *Fix shape:* the intro stages two aircraft, `piratefighter`
+  (activated, `wing_lights_blink` and `spinprops`, reparented under `piratezep`, flown by
+  `gi_pfighter1`/`gi_pfighter2`) and `player` (activated with `healthy` on and `cockpit1` off, flown
+  by `gi_player1`, launched by `gi_playerdrop`/`gi_player2` with `snd_droplaunch`). Building it needs
+  aircraft-archive subtrees in the animation runtime's node table at the bootstrap, before the world
+  root is in the scene; needs the flown `FlightController`'s model posed by the runtime while it is
+  `Held`/`Inert`, which is the state callback 11 puts it in; and needs a second Devastator staged as an
+  AI-less prop. *⚠ Traps:* that reaches the world build, the flight roster and the anim runtime at
+  once, and a wrong reading of which airframe fills the slot puts a wrong aircraft in every chapter's
+  intro. Do not relax `AnimRuntime.cs:2954-2966`: `player` drops because the node is missing, not
+  because the guard refuses to name-match, and relaxing it would bind `player` to any unrelated node
+  sharing the name. Two limits are stated rather than closed: `FUN_0041a320`'s use of the pair was not
+  read, and no exe site computing the 2500 rounding was traced. *Cross-refs:*
+  `docs/formats/anim-definitions/cutscenes.md` ("`player`, and the two pointer spaces a definition
+  addresses"), which carries the decode; `BL-470` and `BL-471`, closed by the work that filed this.
 
 - `BL-473` `[Fidelity]` **The campaign wingman flies a looser formation than the original's.**
   *Evidence:* judged at the controls on a complete flown C3/M01, after `BL-457`'s ceiling lift landed:

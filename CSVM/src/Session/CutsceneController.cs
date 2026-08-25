@@ -29,6 +29,14 @@ public sealed partial class CutsceneController : Node
     /// world.</summary>
     public const int CodeHoldsWorld = 20;
 
+    /// <summary>How far the card is made to overhang the pane it covers. The unmargined fit is an
+    /// equality wherever the width term binds (every ratio at or above 1.64211, the 1280x720
+    /// default included), so the card's outer edge lands on the frame edge and the world shows
+    /// through the boundary column under MSAA and projection rounding. TUNE: the original's own
+    /// framing fov is undecoded, so this is a margin clear of that boundary, not a decoded
+    /// figure (BL-452).</summary>
+    public const float CardOverscan = 0.02f;
+
     /// <summary>The bespoke C1/M04 intro, and the one the other twelve story missions share. ⚠ The
     /// authored codes do NOT identify a cutscene on their own: Instant Action's own
     /// <c>player_setup</c> raises the same nine, and what the original does with them there is
@@ -120,6 +128,29 @@ public sealed partial class CutsceneController : Node
 
     /// <summary>The animation name that raised the first code, and whose end hands off.</summary>
     public string? Anim { get; private set; }
+
+    /// <summary>The letterbox card's extent as <see cref="BindWorld"/> measured it, in the bars
+    /// root's own frame. Read-only, and measured once: see the note in <c>BindWorld</c>.</summary>
+    public Aabb CardBox => _cardBox;
+
+    /// <summary>The vertical field of view, in degrees, at which the letterbox card of extent
+    /// <paramref name="cardBox"/> covers a pane of ratio <paramref name="aspect"/>, or null when
+    /// the card has no usable extent. Public because the fit is the whole of BL-452's first cause
+    /// and is asserted directly; <see cref="CardOverscan"/> is what keeps it off the equality.
+    /// </summary>
+    public static float? FramingFovDeg(Aabb cardBox, float aspect)
+    {
+        float dist = Mathf.Abs(cardBox.GetCenter().Z);
+        float halfHeight = cardBox.Size.Y * 0.5f;
+        float halfWidth = cardBox.Size.X * 0.5f;
+        if (dist <= 0f || halfHeight <= 0f || halfWidth <= 0f || aspect <= 0f)
+        {
+            return null;
+        }
+
+        float half = Mathf.Min(halfHeight, halfWidth / aspect) / (1f + CardOverscan);
+        return Mathf.RadToDeg(2f * Mathf.Atan(half / dist));
+    }
 
     /// <summary>Is this one of the two story-mission intro definitions?</summary>
     public static bool IsIntro(string? animName) =>
@@ -431,6 +462,8 @@ public sealed partial class CutsceneController : Node
 
     // The chrome and the view target: CameraOwned is what silences the whole per-frame camera arm,
     // which is also what stops the cockpit rules being re-asserted over the cutscene every frame.
+    // The rig's world overlays go down with the chrome: a CanvasLayer ignores depth, so the flare
+    // and the whiteout would paint over a card the world puts in front of them (BL-452).
     private void ApplyPresentation(bool on)
     {
         foreach (var pilot in Pilots())
@@ -438,11 +471,22 @@ public sealed partial class CutsceneController : Node
             pilot.CameraOwned = on;
             pilot.SetPilotHudVisible(!on);
         }
+
+        foreach (var rig in _rigs)
+        {
+            foreach (var overlay in rig.WorldOverlays)
+            {
+                overlay.Visible = !on;
+            }
+        }
     }
 
     // Out of flight: the airframe holds its pose, takes no input and is neither drawn nor hittable,
-    // and its sound handles go with it. The original's node deactivation names its own `player`
-    // node, which is not the airframe this engine builds for the pilot.
+    // and its sound handles go with it. This IS the original's OBJECT_ACTIVE_STATE [player, false]:
+    // its `player` node is the flown aircraft, resolved by name at runtime and carrying whichever
+    // airframe the pilot bought (docs/formats/anim-definitions/cutscenes.md). What CSVM has no node
+    // for is the POSE half, so an intro's own aircraft motion drops instead of playing and the
+    // airframe stays undrawn for the whole cutscene (BL-482).
     private void ApplyOutOfFlight(bool on)
     {
         foreach (var pilot in Pilots())
@@ -498,19 +542,12 @@ public sealed partial class CutsceneController : Node
 
     // The bars are a fixed card 7.5 m in front of the eye, so what they cover is a question of
     // frame shape: the card IS the frame, which is the only reading under which the geometry is a
-    // letterbox at all. Each camera takes the widest field of view the card still covers: its
-    // authored height on a 4:3 pane, its width on anything wider than the 5:3 it was cut for.
+    // letterbox at all. Each camera takes the widest field of view the card still covers, less the
+    // overscan below: its authored height on a 4:3 pane, its width on anything wider than the 5:3
+    // it was cut for.
     private void FrameBars()
     {
         if (_card == null || _rigs.Count == 0)
-        {
-            return;
-        }
-
-        float dist = Mathf.Abs(_cardBox.GetCenter().Z);
-        float halfHeight = _cardBox.Size.Y * 0.5f;
-        float halfWidth = _cardBox.Size.X * 0.5f;
-        if (dist <= 0f || halfHeight <= 0f || halfWidth <= 0f)
         {
             return;
         }
@@ -519,9 +556,13 @@ public sealed partial class CutsceneController : Node
         {
             var size = rig.Camera.GetViewport().GetVisibleRect().Size;
             float aspect = size.Y > 0f ? size.X / size.Y : 1f;
+            if (FramingFovDeg(_cardBox, aspect) is not { } fov)
+            {
+                continue;
+            }
+
             _fov.TryAdd(rig.Camera, rig.Camera.Fov);
-            rig.Camera.Fov = Mathf.RadToDeg(
-                2f * Mathf.Atan(Mathf.Min(halfHeight, halfWidth / aspect) / dist));
+            rig.Camera.Fov = fov;
         }
     }
 

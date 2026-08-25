@@ -46,6 +46,11 @@ internal static class CampaignSuites
 
     private static readonly int[] RestoreCodes = { 1, 10, 914, 667 };
 
+    // The pane ratios the letterbox fit is swept over: 4:3, 16:10, the 1.64211 crossover the two
+    // fit terms meet at, 16:9 (the project's own default), 21:9 and 3440x1440.
+    private static readonly float[] LetterboxAspects =
+        { 4f / 3f, 1.6f, 1.64211f, 16f / 9f, 21f / 9f, 3440f / 1440f };
+
     internal static void CampaignPersistence(TestContext ctx)
     {
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
@@ -482,9 +487,83 @@ internal static class CampaignSuites
                 runtime.Free();
                 stage.Free();
             }
+
         });
 
+        LetterboxCoversThePane(ctx);
+        PresentingLowersTheWorldOverlays(ctx);
         ctx.Note($"the {ctx.Chapter} letterbox card tracks the cutscene camera by transform copy");
+    }
+
+    // BL-452's first cause, over the chapter's OWN card rather than a written-down extent: the fit
+    // used to solve for equality, so the card's edge landed on the frame edge at 16:9 and wider.
+    // ⚠ The cutscene roots are an option, so this needs a world built the way a story mission's is.
+    private static void LetterboxCoversThePane(TestContext ctx)
+    {
+        var host = new CutsceneController();
+        ctx.Host.AddChild(host);
+        ctx.CutsceneRoots = true;
+        try
+        {
+            Aabb card = default;
+            ctx.WithWorld(IntroChapter, collision: false, IntroMission,
+                world =>
+                {
+                    host.BindWorld(world.Runtime);
+                    card = host.CardBox;
+                });
+            ctx.Check(card.Size.X > 0f && card.Size.Y > 0f && card.GetCenter().Z < 0f,
+                $"the built {CutsceneController.BarsNode} carries a measurable card ({card.Size})");
+            foreach (float aspect in LetterboxAspects)
+            {
+                if (CutsceneController.FramingFovDeg(card, aspect) is not { } fov)
+                {
+                    ctx.Check(false, $"no fit at aspect {aspect:0.###}");
+                    continue;
+                }
+
+                float seenHalfHeight = Mathf.Tan(Mathf.DegToRad(fov) * 0.5f) * Mathf.Abs(card.GetCenter().Z);
+                float horizontal = 1f - (seenHalfHeight * aspect / (card.Size.X * 0.5f));
+                float vertical = 1f - (seenHalfHeight / (card.Size.Y * 0.5f));
+                ctx.Check(horizontal > 0f && vertical > 0f,
+                    $"at {aspect:0.###} the card overhangs the pane (h {horizontal:0.###}, v {vertical:0.###})");
+            }
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+            host.Free();
+        }
+    }
+
+    // BL-452's second cause: a CanvasLayer draws over all 3D content, so the rig's own world
+    // overlays paint the sun and the cloud over the card unless the presentation code lowers them.
+    private static void PresentingLowersTheWorldOverlays(TestContext ctx)
+    {
+        var host = new CutsceneController();
+        ctx.Host.AddChild(host);
+        var camera = new Camera3D();
+        var overlay = new CanvasLayer();
+        ctx.Host.AddChild(camera);
+        ctx.Host.AddChild(overlay);
+        try
+        {
+            var rig = new Flight.PlayerRig { Camera = camera, HudParent = ctx.Host };
+            rig.WorldOverlays.Add(overlay);
+            host.BindRigs(new[] { rig }, () => System.Array.Empty<Flight.FlightController>());
+            ctx.Check(overlay.Visible, $"a rig's world overlays are up while nothing presents");
+            host.Host(2, CutsceneController.IntroAnims[1]);
+            ctx.Check(host.Presenting && !overlay.Visible,
+                $"the presentation code lowers them, so nothing draws over the bars");
+            host.Host(1, CutsceneController.IntroAnims[1]);
+            ctx.Check(!host.Presenting && overlay.Visible, $"and the handoff puts them back");
+        }
+        finally
+        {
+            overlay.Free();
+            camera.Free();
+            host.Free();
+        }
     }
 
     // The objectives half of callback 20: a held director advances no dormancy timer, which is what

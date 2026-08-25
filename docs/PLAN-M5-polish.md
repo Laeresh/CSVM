@@ -124,7 +124,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave G — what the first six waves left open
 
-61. ☐ The intro cutscene stages no aircraft, because the node its definitions animate does not exist (`BL-482`)
+61. ☑ The intro cutscene stages no aircraft (`BL-482`), answered: `player` is decoded, staging is scoped
 62. ☑ A zeppelin's turrets and its damage zones carry no owning identity (`BL-476`), behind D33
 63. ❌ The music channel has no 15 s refusal hold (`BL-480`), disproved: the rule is real and unreachable
 64. ❌ The 26 `GRAPHICS/*.JPG` draw nothing (`BL-479`), disproved: they already draw as board pictures
@@ -599,6 +599,49 @@ it, since its current coverage demonstrably misses it.
 
 **⚠ Traps.** ⚠ Do not fix a flicker by tweening the bars in: that contradicts both the decode ("no
 reveal") and the user's own verdict that the bars are present the instant the load ends.
+
+**Landed, as a hardening of both traced causes.** The fit no longer solves for equality: the chosen
+half-extent is divided by `1 + CutsceneController.CardOverscan`, so the card overhangs the pane on
+its binding axis at every ratio instead of meeting the frame edge exactly. The formula moved out of
+`FrameBars` into the public static `CutsceneController.FramingFovDeg(Aabb, float)` so it can be
+asserted directly against the chapter's own measured card. The card node is untouched, per the
+trap. Direction of the change: overscan makes the fov NARROWER, from 52.82° to 52.34° vertical at
+16:9, so the wide-aspect framing becomes slightly less extreme rather than more; the plan's trap
+paragraph has that backwards. The visible cost is that the slot between the bars grows by ten rows
+at 1280x720, 477 to 487. For the second cause, a rig's screen-space world overlays are collected in
+`PlayerRig.WorldOverlays` (the lens flare's sprite and wash canvases, the cloud whiteout) and
+`ApplyPresentation` lowers them with the chrome, since a `CanvasLayer` ignores depth and would paint
+the sun and the cloud over a card the world puts 7.5 m in front of them.
+
+**⚠ The list of canvases in cause (2) above is stale and only one third of it survives.** `B11` moved
+`ObjectivesHud` onto the pause screen alone, so its layer is built `Visible = false` and shown only
+while `PauseState.Paused` (`UI/ObjectivesHud.cs:113-116`); it draws nothing during a flown cutscene.
+`ObjectiveMarkerHud` no longer exists at all, retired into the targeting subsystem by Wave F. The
+`LensFlareRig` and `WeatherRig` overlays are the whole of the remaining defect, and a C3/M01 campaign
+session does build both (`lens flare [C3]: 1 rig(s), slots lflare1..4`, cloud band 10000-11000 m).
+
+**Verified, and ⚠ neither cause reproduces the reported symptom.** Both changes are correct as code
+and neither is demonstrated as the user's leak. Eleven `--campaign=` frames were shot across both
+intro paths and both causes, and every one of them has a fully opaque letterbox with no world pixel
+anywhere inside either bar: C3/M01's `generic_intro` at five poses and C1/M04's
+`mission_intro_animation` at three, at 1280x720 and again at 2560x1080 (aspect 2.370, far past the
+1.64211 crossover), with the overscan ablated to zero on one build and the overlay hide ablated out
+on another. So the zero-margin fit is real arithmetic that this engine's rasteriser resolves in the
+card's favour at every pose reachable from a worktree, and the flare and the whiteout never land on
+screen during either intro: C3's sun sits at yaw 135 / pitch -25 behind the intro camera, and the
+camera never climbs to the 10 km cloud band. **A5 should not be closed on this evidence.** What is
+still owed is a capture at the controls naming the mission, the window size and roughly how many
+seconds in, which is the same thing the earlier flicker framing was left needing. The mid-mission
+cutscenes F51 made playable are the untested case: they run at flight altitude with the sun
+wherever the mission put it, which is where a flare over the bars is most likely to be real.
+
+**Kept.** `cutscene-letterbox` gains two checks and needs a world built with `CutsceneRoots`, the
+way a story-mission session builds one: the chapter's own card is measured through `BindWorld` and
+swept for a positive overhang at 4:3, 16:10, the crossover, 16:9, 21:9 and 3440x1440, and a rig
+carrying a world overlay is driven through the presentation code and the handoff. `CSVM.Tests`'
+`CutsceneLetterboxFitTests` pins the same sweep on the authored extents and carries the able-to-fail
+half: with the overscan taken back out, the same arithmetic reads exactly zero horizontal margin from
+the crossover upwards.
 
 # Wave B — where things are shown, and where they are heard
 
@@ -1949,7 +1992,7 @@ sees on the way into every mission and fifteen of their backgrounds are currentl
 built. D33 is unblocked now that D32 and F54 have landed, and it is the fix for the Kestrels
 attacking their own zeppelin. F55 has its instrument and needs the user's verdict against it.
 
-## G61 ☐ The intro cutscene stages no aircraft (`BL-482`)
+## G61 ☑ The intro cutscene stages no aircraft (`BL-482`)
 
 **Goal.** An answer first: what the original's `player` node is and where it comes from. Then, if the
 answer supports it, an intro composed around the aircraft its definitions animate.
@@ -1980,6 +2023,53 @@ against the same shot before the change.
 wrong. ⚠ Do not relax `AnimRuntime.cs:2954-2966` to make the name resolve; F51's trap on that guard
 stands unchanged. ⚠ An intro composes itself during the animation bootstrap, before the world root is
 in the scene, which is the condition that made F52's first attempt a silent no-op.
+
+**Answered, and no staging code follows.** The decode settled it, so by this item's own ground rule
+it closes as an answer with the intro left as it is. The answer is in
+`docs/formats/anim-definitions/cutscenes.md` under "`player`, and the two pointer spaces a
+definition addresses"; only the stale comment at `CutsceneController.ApplyOutOfFlight` changed in
+code.
+
+**What ptr 8918 resolves to.** A definition's symbol table addresses two node tables, not one. A
+chapter node's `ptr` is its position in that chapter's `nodes.json`; a node from the shared aircraft
+archive is its position in `planes/nodes.json` plus a base, and that base is the chapter's own node
+count rounded up to the next multiple of 2500. The rule holds for all eight chapters (C2/C2B 5000,
+C1/C1B/C1C/C3 7500, C4 10000, C5 12500) and, within C3, for all nine cross-archive pointers the
+intro's symbol tables carry. So 8918 is aircraft-archive node 1418, which is named `player`: a
+parentless `Object3d` whose single child is `player_pfighter`. The airframe name table at
+`0x00620cc0` in `crimson.exe` gives seven names per airframe, and `player_pfighter` is the
+Devastator's player-model node.
+
+**`player` is the flown aircraft, and the plan's trap needs restating.** The trap was right that a
+name match proves nothing, and the decode rather than the name is what settles it: `FUN_004d0280(7,
+"player")` resolves the name by string comparison over node table 7, `FUN_0042e5e0` uses that to
+switch the node off around a render pass, and mission setup passes the same literal with the
+player's own loadout record (`FUN_004136e0` ends with `FUN_00414f40("player", <record>)`). The
+intro's own use agrees from three more directions: `OBJECT_ACTIVE_STATE [player, false]` sits beside
+callback 11 and `[player, true]` beside callbacks 1 and 10, `start_script` moves it out of `world1`
+and the undo puts it back there, and codes 965/966/967 swap the player onto a named airframe. The
+node ships wrapping a Devastator because that is what sat in the slot when the archive was built,
+not because the intro is about a Devastator; C1/M04's `check_balmoral` / `check_warhawk` branches
+are the same fact from the data side. ⚠ `CutsceneController.cs`'s note was therefore half wrong and
+is corrected: `player` is not a chapter-gamez node, which is true and is why it never resolves, but
+it IS the airframe the pilot flies, and callback 11's out-of-flight state is CSVM's equivalent of
+the very event that note was written about.
+
+**What the intro would stage, and why it is not built here.** Two aircraft, both from the aircraft
+archive: `piratefighter` (activated, `wing_lights_blink` and `spinprops` called on it, reparented
+under `piratezep`, flown by `gi_pfighter1`/`gi_pfighter2`) and `player` (activated with `healthy` on
+and `cockpit1` off, flown by `gi_player1`, then launched by `gi_playerdrop`/`gi_player2` with
+`snd_droplaunch`). Building that needs the world build to put aircraft-archive subtrees into the
+animation runtime's node table at the bootstrap, before the world root is in the scene; needs the
+flown `FlightController`'s model posed by the runtime while it is `Held`/`Inert`, which is the exact
+state callback 11 puts it in; and needs a second Devastator staged as an AI-less prop. That reaches
+the world build, the flight roster and the anim runtime at once, and a wrong reading of which
+airframe goes in the slot puts a wrong aircraft in every chapter's intro, which is the risk the item
+was rated `high` for. It is now a decoded, scoped piece of work rather than an open question.
+
+**⚠ Not disproved, and left alone.** `AnimRuntime.cs:2954-2966` is untouched; the reason `player`
+drops is a missing node, not a guard that refuses to name-match. Nothing here argues for relaxing
+it, and relaxing it would make `player` bind to whatever unrelated node shared the name.
 
 ## G62 ☑ A zeppelin's turrets and its zones carry no owning identity (`BL-476`)
 

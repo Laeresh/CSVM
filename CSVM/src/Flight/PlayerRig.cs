@@ -67,6 +67,14 @@ public sealed class PlayerRig
     /// <summary>This player's full-pane cloud-band whiteout overlay, faded by camera altitude.</summary>
     public ColorRect? Whiteout;
 
+    /// <summary>This rig's screen-space layers that depict the WORLD rather than the chrome: the
+    /// lens flare's sprites and wash, and the cloud whiteout. A <c>CanvasLayer</c> draws over all
+    /// 3D content whatever its depth, so these would otherwise paint the sun and the cloud over a
+    /// cutscene's letterbox card, which sits 7.5 m in front of the eye and occludes both in world
+    /// terms. <c>Session.CutsceneController</c> lowers them while a definition presents (BL-452);
+    /// nothing else touches them, so an ordinary flight is unchanged.</summary>
+    public List<CanvasLayer> WorldOverlays = new();
+
     /// <summary>This player's own camera weather state (1/2/3 — <c>WeatherState.CameraWeatherState</c>),
     /// published once per frame by
     /// <c>Session.WeatherRig.Tick</c>. Per rig, not per session — a splitscreen pane's camera can

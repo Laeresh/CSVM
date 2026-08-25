@@ -15,6 +15,7 @@ compiled shape are on the [landing page](../anim-definitions.md) and in
 - [Conceptual model](#conceptual-model)
 - [The `letterbox` node](#the-letterbox-node)
 - [The reparent is how a cutscene is composed](#the-reparent-is-how-a-cutscene-is-composed)
+- [`player`, and the two pointer spaces a definition addresses](#player-and-the-two-pointer-spaces-a-definition-addresses)
 - [`CALLBACK`: the dispatch chain](#callback-the-dispatch-chain)
 - [`CALLBACK` code reference](#callback-code-reference)
 - [The intro defs' eight dispatches](#the-intro-defs-eight-dispatches)
@@ -141,6 +142,95 @@ inside a node at y = 500, and in world space it is 62 m under the sea.
 ⚠ The reparent is authored as a live sequence event. A `RESET_STATE` walk carries the undo, and a
 consumer that applies it during a bootstrap pass moves shipped nodes off a parent no definition
 has changed yet.
+
+## `player`, and the two pointer spaces a definition addresses
+
+### A cross-archive `ptr` is the aircraft archive's index plus a per-chapter base
+
+A compiled definition's symbol table gives every name a `ptr`, and those pointers do not all index
+the same table. A chapter node's `ptr` is its position in that chapter's own `nodes.json`:
+`world1` 0, `camera1` 3, `letterbox` 6, and C3's `piratezep` 1020. A node from the shared aircraft
+archive (`planes/nodes.json`, 3317 nodes) is its position there plus a base, and the base is that
+chapter's own node count rounded up to the next multiple of 2500:
+
+| chapter | `nodes.json` | base | `player` | `piratefighter` |
+|---|---|---|---|---|
+| C1 | 7064 | 7500 | 8918 | 9824 |
+| C1B | 5603 | 7500 | 8918 | 9824 |
+| C1C | 5644 | 7500 | 8918 | 9824 |
+| C2 | 4956 | 5000 | 6418 | 7324 |
+| C2B | 4901 | 5000 | 6418 | 7324 |
+| C3 | 5408 | 7500 | 8918 | 9824 |
+| C4 | 8289 | 10000 | 11418 | 12324 |
+| C5 | 11438 | 12500 | 13918 | 14824 |
+
+Eight chapters, one rule, no exceptions. Within C3 the same base resolves nine cross-archive names:
+
+| name in `camera1-generic_intro` and its called defs | `ptr` | `planes/nodes.json` |
+|---|---|---|
+| `cockpit1` | 7549 | 49 |
+| `player_balmoral` | 7525 | 25 |
+| `healthy` | 7649 | 149 |
+| `shadow` | 7701 | 201 |
+| `destroyed` | 7702 | 202 |
+| `player_warhawk` | 8135 | 635 |
+| `player` | 8918 | 1418 |
+| `piratefighter` | 9824 | 2324 |
+| `staticprop1` | 9963 | 2463 |
+
+The base always clears the chapter's own table, so the two spaces cannot overlap. Reading a
+cross-archive `ptr` against the chapter's table is what makes `player` look like a name with no
+node behind it, and it is why the same name carries a different number in every chapter while the
+aircraft archive it points into is one shared file.
+
+### `player` is the player's own aircraft
+
+`player` (aircraft-archive node 1418) is a parentless `Object3d` whose single child is
+`player_pfighter`. The airframe name table at `0x00620cc0` in `crimson.exe` carries seven name
+pointers per airframe (display name, player-model node, `p<name>`, `r<name>`, `w<name>`, remote
+node, def name), and `player_pfighter` is the **Devastator's** player-model node: that row reads
+`Devastator`, `player_pfighter`, `pdevastator`, `rdevastator`, `wingman`, `piratefighter`,
+`devastator`, the only row whose fifth and sixth fields break the `w<name>` / `<name>` pattern.
+Every other airframe's player model is a parentless root of its own (`player_bhawk`,
+`player_fury`); `player_pfighter` is the one that ships inside a wrapper.
+
+The name is what resolves, not the pointer. `FUN_004d0280(7, "player")` walks node table 7
+comparing strings, and `FUN_0042e5e0` calls it to switch the node off around a render pass and
+back on after. The mission setup path builds the player's own vehicle record and passes that same
+literal with it: `FUN_004136e0` ends with `FUN_00414f40("player", <record>)`, once per arm of a
+two-way choice over the loadout, and that function packs the record and calls
+`FUN_0041a320(<record>, "player")`.
+
+The intro's own use of the name agrees from three further directions. `callback_sequence` opens
+with `OBJECT_ACTIVE_STATE [player, false]` beside code 11, which is what takes the player out of
+flight, and `RESET_STATE` closes with `[player, true]` beside codes 1 and 10, the handoff and the
+systems restore. `start_script` moves `player` out of `world1` and under `piratezep`, and the undo
+puts it back under `world1`, which is where the flown aircraft lives. And codes 965, 966 and 967
+swap the player onto a named airframe, which only means anything if the node they swap is the
+player's.
+
+⚠ So the shipped `player` node wraps a Devastator because that is what sat in the slot when the
+aircraft archive was built, not because the intro is about a Devastator. What airframe the intro
+actually shows is the one the player flies, which is also why C1/M04's intro branches on
+`check_balmoral` / `check_warhawk`.
+
+### What a `generic_intro` stages
+
+Two aircraft, both from the aircraft archive rather than the chapter's gamez.
+
+- **`piratefighter`.** `gi_pfighter1` activates it, sets `healthy` on and `destroyed` / `shadow` /
+  `staticprop1` off, calls `wing_lights_blink` and `spinprops` on it, adds it under `piratezep`,
+  and runs its own SI script. `gi_pfighter2` repeats that for the later shot.
+- **`player`.** `gi_1stperson` activates it, sets `healthy` on and `cockpit1` off, and runs
+  `gi_player1`; `gi_playerdrop` runs `gi_player2` over the launch, with `snd_droplaunch` and a
+  `wing_lights_blink` addressed to `player_pfighter` **by name**, the one place the authored data
+  reaches past the slot to the Devastator's model directly.
+
+⚠ CSVM stages neither. The world build puts no aircraft-archive node into the animation runtime's
+node table, so both names claim a symbol with a null binding and every event that poses them drops
+(`BL-482`). The camera move plays over an empty stage; what CSVM does instead of
+`OBJECT_ACTIVE_STATE [player, false]` is callback 11's own out-of-flight state, which holds the
+flown airframe undrawn for the whole cutscene rather than posing it.
 
 ## `CALLBACK`: the dispatch chain
 
@@ -448,6 +538,17 @@ beat deactivating it; the smooth phase between them is
   overhangs it horizontally. `camera1`'s own gamez `Camera` record carries `fov_h_base` /
   `fov_v_base` of 0 (runtime-filled), and the `CAMERA_STATE` events in the intro readers set only
   `NEAR_CLIP` and `LOD_MULTIPLIER`, so the number itself is not in the data.
+- The `player` reading above rests on the aircraft archive's own `nodes.json` (the base rule holds
+  for all eight chapters, and within C3 for all nine cross-archive pointers the intro's symbol
+  tables carry), on the airframe name table at `0x00620cc0`, and on three exe sites: `FUN_004d0280`
+  (name lookup over node table 7), `FUN_0042e5e0` (its caller, hiding the node for a render pass)
+  and `FUN_004136e0` (mission setup, passing the literal with the loadout record). **What
+  `FUN_0041a320` does with the pair was not read**, so "the record is created under that name" is
+  the shape of the call, not a traced construction.
+- **Undecoded: what computes the base.** The rounding rule is read off the eight chapters' own
+  numbers; no exe site that computes it was traced, and no chapter's node count lands exactly on a
+  multiple of 2500, so whether the rounding is strict or inclusive is undetermined. Resolve these
+  names by name rather than by arithmetic on the pointer.
 - **Undecoded: what `camera1-player_setup` is for.** It carries the whole cutscene vocabulary and
   every Instant Action mission starts it; nothing establishes what the original shows while it runs.
 - **Undecoded: how the original draws a parentless active root.** `gwNodeSetActive`

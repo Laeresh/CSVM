@@ -656,6 +656,7 @@ public sealed class WeatherRig
                 rig.Whiteout.SetAnchorsPreset(Control.LayoutPreset.FullRect);
                 canvas.AddChild(rig.Whiteout);
                 rig.HudParent.AddChild(canvas);
+                rig.WorldOverlays.Add(canvas);
             }
         }
 
