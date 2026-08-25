@@ -711,6 +711,9 @@ A `--campaign=` launch arms the same 8 rows and free flight over the same chapte
 is the session wiring. ⚠ The drop itself is not reachable from a single scripted `--campaign=` run:
 the mission's intro definition still holds the world at 40 s of sim time, and the trigger wants two
 passes over the site, one to arm it and one to fly it. The suite is the flown evidence.
+**Battery on the merged tree:** build clean, units 2334/2334, engine suites 113/113 with errors
+clean, all 16 golden shots hash-identical, so widening the cutscene host by definition name reached
+no flight the goldens cover.
 
 ## C22 ☐ The VO dialogue chain player (`BL-443`)
 
