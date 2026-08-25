@@ -344,6 +344,62 @@ public class AiNetFollowerTests
         Assert.Equal(34, dz.DangerZonePath);
     }
 
+    /// <summary>The seat with a heading (<c>FUN_00475fc0</c>): the nearest node becomes the node
+    /// flown FROM and the target is the far end of the edge best lined up with the nose, so the
+    /// first leg is an authored one rather than a run at the node.</summary>
+    [Fact]
+    public void AHeadingSeatsOnTheNearestNodeAndFliesTheBestAlignedEdge()
+    {
+        // Nearest to (100, 100) is node 0; from there the +X nose picks edge 0→1 over 0→3.
+        var f = new AiNetFollower(Loop(), new Random(1));
+        Assert.True(f.Update(new Vector3(100f, 400f, 100f), Vector3.Right));
+        Assert.Equal(0, f.LegStartIndex);
+        Assert.Equal(1, f.CurrentIndex);
+
+        // The same seat with the nose turned the other way takes the other edge.
+        var g = new AiNetFollower(Loop(), new Random(1));
+        Assert.True(g.Update(new Vector3(100f, 400f, 100f), Vector3.Back));
+        Assert.Equal(0, g.LegStartIndex);
+        Assert.Equal(3, g.CurrentIndex);
+    }
+
+    /// <summary>Why <c>BL-498</c> broke CM02's bomber formation: aircraft seated on one node with
+    /// one heading must all leave it the same way. The seeded draw split them at the first node,
+    /// with nobody attacking, and the decoded pick is deterministic.</summary>
+    [Fact]
+    public void VehiclesSeatedOnOneNodeWithOneHeadingAllLeaveItTheSameWay()
+    {
+        var starts = new[]
+        {
+            new Vector3(60f, 400f, 40f), new Vector3(10f, 400f, -60f), new Vector3(-40f, 400f, -10f),
+        };
+        var picked = new List<int>();
+        for (int i = 0; i < starts.Length; i++)
+        {
+            // A different seed each, which is what the roster hands each spawned aircraft.
+            var f = new AiNetFollower(Star(), new Random(i + 1));
+            f.Update(starts[i], Vector3.Right);
+            picked.Add(f.CurrentIndex);
+        }
+        Assert.Equal(new[] { 1, 1, 1 }, picked);
+    }
+
+    /// <summary>The walk step (<c>FUN_0041d8f0</c>) runs the same pick with the edge just flown
+    /// excluded, so a branch is resolved by the nose and never by the seed.</summary>
+    [Fact]
+    public void TheOnwardStepPicksByTheNoseAndSkipsTheEdgeJustFlown()
+    {
+        // Seated at node 1 (the +X end of one spoke), nose back toward the hub.
+        var f = new AiNetFollower(Star(), new Random(1));
+        f.Update(new Vector3(900f, 400f, 0f), Vector3.Left);
+        Assert.Equal(1, f.LegStartIndex);
+        Assert.Equal(0, f.CurrentIndex);
+
+        // At the hub, still heading −X: node 3 is straight ahead, node 1 is the edge just flown.
+        Assert.True(f.Update(f.CurrentTarget, Vector3.Left));
+        Assert.Equal(3, f.CurrentIndex);
+    }
+
     private static AiNetNode Node(float x, float z) => new(new Vector3(x, 400f, z), Array.Empty<float>());
 
     private static AiNetNode Tagged(params float[] tags) => new(new Vector3(0f, 400f, 0f), tags);

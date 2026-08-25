@@ -29,6 +29,9 @@ public sealed class AiNetFollower
     // it into edge+0x1c at net load). Altitude change along a leg does not widen the capture.
     private const float ArrivalRadiusPerLeg = 0.1f;
 
+    // Below this a heading is no facing at all, and the seeded draw stands in for it.
+    private const float HeadingEpsilon = 1e-6f;
+
     private readonly Random _rng;
     private readonly bool[] _stops;
     private readonly float _minArrivalRadius;
@@ -95,6 +98,10 @@ public sealed class AiNetFollower
     /// <see cref="Update"/> picks the nearest node.</summary>
     public int CurrentIndex { get; private set; } = -1;
 
+    /// <summary>The node the current leg starts at, −1 while the walk is flying at its own seat
+    /// node. This is the engine's <c>obj+0x2e8</c>, the node a vehicle is flying FROM.</summary>
+    public int LegStartIndex => _previousIndex;
+
     /// <summary>How many node captures have advanced the target so far.</summary>
     public int Advances { get; private set; }
 
@@ -119,9 +126,8 @@ public sealed class AiNetFollower
     public Vector3 CurrentTarget => NodePosition(CurrentIndex);
 
     /// <summary>Where the leg being flown STARTS, trailer offset included: the node just left, or
-    /// on the first leg the point the walk was seated from. The original always has one
-    /// (`obj+0x2e8` is seated at spawn and it aims at the far end of that edge); our first leg
-    /// targets the nearest node instead of leaving it, so it starts where the vehicle was.
+    /// the seat node when <see cref="Update"/> was given a heading. A caller with no heading is
+    /// seated on the nearest node itself, and its first leg starts where the vehicle was.
     /// Null only before the first <see cref="Update"/>. <see cref="AiPilot.PatrolAim"/> and the
     /// arrival test are the consumers.</summary>
     public Vector3? LegStart =>
@@ -214,18 +220,30 @@ public sealed class AiNetFollower
         return node;
     }
 
-    /// <summary>Advances the walk from <paramref name="position"/>: the first call targets the
-    /// nearest node (the design's "fly first to the nearest node"); afterwards, drawing abeam the
-    /// node steps to a connected neighbour. Returns true when the target changed.</summary>
+    /// <summary>Advances the walk from <paramref name="position"/>: the first call seats on the
+    /// nearest node and targets the far end of an edge, and drawing abeam that node steps on.
+    /// Returns true when the target changed.</summary>
+    /// <param name="heading">The vehicle's nose, which picks the edge. <see cref="Vector3.Zero"/>
+    /// for a caller with none: it seats on the nearest node as a target and draws instead.</param>
     // ⚠ The test is ALONG the leg, not a distance to the node (FUN_0041d1f0, after the law call):
     // it fires however far off to the side the vehicle is, so one that cannot turn tightly enough
     // flows past its node instead of orbiting it forever.
-    public bool Update(Vector3 position)
+    public bool Update(Vector3 position, Vector3 heading = default)
     {
         if (CurrentIndex < 0)
         {
-            CurrentIndex = NearestNode(position);
-            _legOrigin = position - LiveOffset();
+            int seat = NearestNode(position);
+            if (heading.LengthSquared() > HeadingEpsilon && _neighbors[seat].Length > 0)
+            {
+                _previousIndex = seat;
+                _legOrigin = null;
+                CurrentIndex = PickOnward(seat, exclude: -1, heading);
+            }
+            else
+            {
+                CurrentIndex = seat;
+                _legOrigin = position - LiveOffset();
+            }
             return true;
         }
         var node = CurrentTarget;
@@ -240,10 +258,9 @@ public sealed class AiNetFollower
         if (leg.LengthSquared() > 1e-6f
             && (position - node).Dot(leg.Normalized()) <= -ArrivalRadius(start, node, _minArrivalRadius))
             return false;
-        var candidates = _neighbors[CurrentIndex];
-        if (candidates.Length == 0)
+        if (_neighbors[CurrentIndex].Length == 0)
             return false; // an isolated node is held, not escaped by inventing an edge
-        int next = candidates.Length == 1 ? candidates[0] : PickOnward(candidates);
+        int next = PickOnward(CurrentIndex, _previousIndex, heading);
         _previousIndex = CurrentIndex;
         _legOrigin = null;
         CurrentIndex = next;
@@ -251,22 +268,55 @@ public sealed class AiNetFollower
         return true;
     }
 
-    // A seeded draw over the onward neighbours, excluding the node just left when anything
-    // else is available (a path net still turns back at its dead ends).
-    private int PickOnward(int[] candidates)
+    // The onward neighbour of `from`, excluding `exclude` (the node just left, −1 at the seat)
+    // when anything else is available; a path net still turns back at its dead ends.
+    // ⚠ With a heading this is the engine's own rule and must stay deterministic: the edge whose
+    // leg direction best lines up with the vehicle's nose (FUN_00431e40, called from the net
+    // assignment and from the walk step). Vehicles seated on one node with one heading must all
+    // leave it the same way, which is what keeps a group flying one net in formation.
+    private int PickOnward(int from, int exclude, Vector3 heading)
     {
+        var candidates = _neighbors[from];
+        if (candidates.Length == 1)
+            return candidates[0];
         int onward = 0;
         foreach (int c in candidates)
         {
-            if (c != _previousIndex)
+            if (c != exclude)
                 onward++;
         }
         if (onward == 0)
-            return candidates[_rng.Next(candidates.Length)];
+        {
+            exclude = -1;
+            onward = candidates.Length;
+        }
+        if (heading.LengthSquared() > HeadingEpsilon)
+        {
+            var nose = heading.Normalized();
+            var origin = Net.Nodes[from].Position;
+            int best = -1;
+            float bestDot = float.NegativeInfinity;
+            foreach (int c in candidates)
+            {
+                if (c == exclude)
+                    continue;
+                var leg = Net.Nodes[c].Position - origin;
+                if (leg.LengthSquared() < 1e-6f)
+                    continue;
+                float aligned = leg.Normalized().Dot(nose);
+                if (aligned > bestDot)
+                {
+                    bestDot = aligned;
+                    best = c;
+                }
+            }
+            if (best >= 0)
+                return best;
+        }
         int pick = _rng.Next(onward);
         foreach (int c in candidates)
         {
-            if (c == _previousIndex)
+            if (c == exclude)
                 continue;
             if (pick-- == 0)
                 return c;

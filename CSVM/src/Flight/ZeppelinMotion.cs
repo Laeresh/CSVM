@@ -107,6 +107,8 @@ public sealed class ZeppelinMotion
         {
             return;
         }
+        // No heading: the nose-aligned edge pick is the aeroplane AI's rule (FUN_00431e40), and a
+        // zeppelin is not a vehicle in the original at all. It keeps the nearest-node seat.
         Follower.Update(Position);
         var to = Follower.CurrentTarget - Position;
 

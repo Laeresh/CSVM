@@ -2093,8 +2093,13 @@ split `WeaponCursor` uses. One pass accrues 1.0, saturating at max, draining at 
 cue re-triggers no faster than the interval.
 
 ## src/Flight/AiNetFollower.cs
-Walks an `AiNet` patrol graph as a waypoint stream: first the nearest node, then
-edge-list neighbours, no immediate backtrack, branches drawn from its own seeded `Random` (per
+Walks an `AiNet` patrol graph as a waypoint stream. Given the vehicle's nose it is the decoded
+walk (`FUN_00431e40`, `docs/org/aiPilot.md`): seat on the nearest node and fly the far end of the
+edge whose leg best lines up with that nose, then the same pick at every arrival with the edge just
+flown excluded. Nothing draws, so vehicles seated on one node facing one way leave it together,
+which is what makes a group sharing one net fly in formation (`BL-498`). A caller with no nose
+(`ZeppelinMotion`, and a zeppelin is not a vehicle in the original) keeps the older nearest-node
+seat with branches drawn from its own seeded `Random` (per
 plane off the `Rng.Ai` stream at spawn, never Godot's global rng). Aircraft-agnostic on purpose:
 positions in, target node out; its two consumers are `AiPilot.Patrol` (aircraft) and
 `ZeppelinMotion` (F17's kinematic node follow). Arrival is the decoded ALONG-LEG test — a tenth of

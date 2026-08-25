@@ -422,16 +422,16 @@ public sealed class AiPilot
 
     // Patrol: the node is a point with no velocity, which is the shape the law wants, but it is
     // NOT the aim point — PatrolAim displaces it off the aeroplane's own cross-track error, and
-    // flying at the node itself is what BL-387 was. Until the walk has advanced once there is no
-    // leg to be off, so the node is flown directly. Without a net the standing heading/altitude
-    // orders are projected into a point. All of it on the cruise table, the original's patrol arm.
+    // flying at the node itself is what BL-387 was. The nose seats the walk on a real edge from
+    // the first step, so there is a leg to be off straight away. Without a net the standing
+    // heading/altitude orders are projected into a point. All of it on the original's cruise table.
     private FlightInput FlyPatrol(FlightModel model, float dt)
     {
         if (Patrol is not { } patrol)
             return Fly(model, dt, OrderAim(model), Vector3.Zero, AiLawParams.Cruise);
 
         SteeringPatrol = true;
-        patrol.Update(model.Position);
+        patrol.Update(model.Position, -model.Attitude.Z);
         var node = patrol.CurrentTarget;
         var toNode = node - model.Position;
         if (new Vector2(toNode.X, toNode.Z).LengthSquared() > 1f)

@@ -44,12 +44,29 @@ internal static class CampaignRosterSuites
     private const string ExcludedBlock = "bloodhawk_2";
     private const string PlainBlock = "blakepeace_2_1";
 
+    // CM02: three britbalmoral blocks sharing net 19, group 5, no rating_biases, spawned about
+    // 110 m apart. The formation is authored as three aircraft on one net, not as a station.
+    private const string BomberChapter = "C3";
+    private const string BomberMission = "M05";
+    private const int BomberNetId = 19;
+    private const float BomberRunS = 60f;
+    private const float BomberFireAtS = 20f;
+
+    // How far apart the three may ever get. Their spawn spread is about 145 m, and a run that
+    // splits at a node passes this inside seconds.
+    private const float BomberSpreadCeilingM = 600f;
+
     // The two candidate rings, both dead ahead and level, so distance and the authored bias are
     // the only terms that differ between an arm's two candidates.
     private const float NearRingM = 400f;
     private const float MidRingM = 900f;
     private const float FarRingM = 1500f;
     private const float ScanRangeM = 3000f;
+
+    private static readonly string[] BomberBlocks =
+    {
+        "britbalmoral_1", "britbalmoral_2", "britbalmoral_3",
+    };
 
     internal static void CampaignRoster(TestContext ctx)
     {
@@ -402,6 +419,106 @@ internal static class CampaignRosterSuites
             new HumanRosterBindings());
     }
 
+    /// <summary>CM02's three bombers hold the formation their shared net flies. They are spawned
+    /// from that mission's own roster into its own world, flown with nobody engaging them, then one
+    /// is hit hard enough that its steady-hand test is certain to fail. What is under test is that
+    /// the three leave their seat node the same way and stay on one node together, which the seeded
+    /// branch draw did not do (<c>BL-498</c>).</summary>
+    internal static void BomberFormation(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BomberChapter, BomberMission);
+        ctx.RequireData(missionZrdr, $"{BomberChapter}/{BomberMission} zrdr");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BomberChapter);
+        ctx.RequireData(texturesPath, $"{BomberChapter} textures");
+
+        CampaignMission? found = null;
+        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        {
+            if (m.ChapterFolder.Equals(BomberChapter, StringComparison.OrdinalIgnoreCase)
+                && m.MissionFolder.Equals(BomberMission, StringComparison.OrdinalIgnoreCase))
+            {
+                found = m;
+            }
+        }
+        if (found is not { } mission)
+        {
+            throw new SuiteSkippedException($"{BomberChapter}/{BomberMission} is not in cm_sequence");
+        }
+
+        var blocks = AiSkills.LoadRoster(missionZrdr);
+        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var script = ObjectiveScript.Load(missionZrdr);
+        var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
+        var report = new StringBuilder();
+        report.AppendLine($"{BomberChapter}/{BomberMission} seq={mission.Seq}: {blocks.Count} roster block(s)");
+
+        ctx.WithWorld(BomberChapter, collision: false, BomberMission, world =>
+        {
+            var textures = new TextureArchive(texturesPath);
+            var rigs = new List<FlightController>();
+            ProjectilePool? pool = null;
+            FlightRoster? spawner = null;
+            FlightController? player = null;
+            try
+            {
+                var live = new ProjectilePool(textures, null, null);
+                pool = live;
+                ctx.Host.AddChild(live);
+                spawner = Spawner(ctx, planesGamez, textures, live);
+
+                var playerPose = PlayerPose(blocks);
+                var playerStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+                player = Rig(ctx, planesGamez, textures, playerStats, live, ctx.PlaneName,
+                    playerPose.Position, playerPose.Position + playerPose.Forward, human: true,
+                    pilot: null, FlightRoster.ShooterIdBase, AimAssist.PlayerTeam);
+
+                var human = player;
+                director.BuildRoster(new CampaignDirector.RosterInputs
+                {
+                    ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, BomberChapter),
+                    MissionZrdrPath = missionZrdr,
+                    ZrdrPath = ctx.ZrdrPath,
+                    MinAiActiveDist = skills.MinAiActiveDist,
+                    Player = () => human,
+                    NetTrailers = new NetTrailerTargets(
+                        () => human.WorldPosition,
+                        name => world.Runtime.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null),
+                    FindNodes = name => world.Runtime.FindNodes(name),
+                    // The session's own assembler, so the machine, the skills and the inert flag
+                    // are the ones a played mission gets rather than the plan read back by hand.
+                    Spawn = (plan, pos, look, pilot) =>
+                    {
+                        var rig = spawner!.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot));
+                        rigs.Add(rig);
+                        return rig;
+                    },
+                    Rng = new System.Random(1),
+                });
+
+                FlyBombers(ctx, director.Roster, rigs, live, report);
+            }
+            finally
+            {
+                player?.Free();
+                var members = new List<FlightController>(
+                    spawner?.AiAircraft ?? Array.Empty<FlightController>());
+                spawner?.ClearMembership();
+                foreach (var rig in members)
+                {
+                    rig.Free();
+                }
+                pool?.Free();
+                textures.Dispose();
+            }
+        });
+
+        ctx.WriteArtifact($"test-bomber-formation-{BomberChapter}-{BomberMission}.txt", report.ToString());
+        ctx.Note($"flew {BomberChapter}/{BomberMission}'s three netted bombers, unattacked and then fired on");
+    }
+
     // The decoded fork per block: wingman_1 escorts the player with no net; a wingman whose
     // primary_target is another block escorts THAT rig; a netted block patrols and never escorts;
     // a deactivated block is inert and out of play.
@@ -533,6 +650,111 @@ internal static class CampaignRosterSuites
             $"wingman_1 stays with the player: worst {worstLate:0} m of {LeashM:0} over the last minute");
         ctx.Check(meanRange < MeanHoldM,
             $"…averaging inside {MeanHoldM:0} m of the player: {meanRange:0} m");
+    }
+
+    // The flown half: the three bombers over a minute of their shared net, with one hit part way.
+    private static void FlyBombers(TestContext ctx, IReadOnlyDictionary<string, FlightController> roster,
+        List<FlightController> rigs, ProjectilePool live, StringBuilder report)
+    {
+        var bombers = new List<FlightController>();
+        foreach (string name in BomberBlocks)
+        {
+            if (roster.TryGetValue(name, out var rig))
+            {
+                bombers.Add(rig);
+            }
+        }
+        ctx.Same(BomberBlocks.Length, bombers.Count, $"the three britbalmoral blocks all have a rig");
+        if (bombers.Count != BomberBlocks.Length)
+        {
+            return;
+        }
+        foreach (var rig in bombers)
+        {
+            ctx.Check(rig.Pilot?.Patrol is { Net.Id: BomberNetId },
+                $"{rig.Name} carries its authored net {BomberNetId}: {rig.Pilot?.Patrol?.Net.Id}");
+        }
+
+        float spawnSpread = Spread(bombers);
+        report.AppendLine($"spawn spread {spawnSpread:0} m");
+        // Each aircraft's own walk, appended when it steps. They are a hundred metres apart, so
+        // they draw abeam a node frames apart; what must match is the route, not the frame.
+        var routes = new List<List<int>> { new(), new(), new() };
+        bool split = false, drifted = false, wasHit = false;
+        float worstSpread = 0f;
+        int fireFrame = (int)(BomberFireAtS / StepDt);
+        for (int i = 0; i < (int)(BomberRunS / StepDt); i++)
+        {
+            live.SimStep(StepDt);
+            foreach (var rig in rigs)
+            {
+                if (rig.InPlay)
+                {
+                    rig.SimStep(StepDt);
+                }
+            }
+            if (i == fireFrame && bombers[1].Pilot?.Machine is { } hit)
+            {
+                // A certain steady-hand failure, which is the worst the roll can do: the reaction
+                // runs rather than being rolled away, and the aircraft must still hold its net.
+                hit.SteadyHandChance = 1f;
+                hit.NotifyDamage(20f, Vector3.Right);
+                wasHit = hit.Mode != AiMode.Patrol;
+                report.AppendLine($"t={i * StepDt:0}s hit {bombers[1].Name}: mode={AiModeMachine.NameOf(hit.Mode)}");
+            }
+            int node = bombers[0].Pilot!.Patrol!.CurrentIndex;
+            for (int b = 0; b < bombers.Count; b++)
+            {
+                var walk = bombers[b].Pilot!.Patrol!;
+                var route = routes[b];
+                if (route.Count == 0 || route[route.Count - 1] != walk.CurrentIndex)
+                {
+                    route.Add(walk.CurrentIndex);
+                }
+                // A lag of more than one node is a divergence rather than a straggler.
+                split |= Math.Abs(walk.Advances - bombers[0].Pilot!.Patrol!.Advances) > 1;
+            }
+            float spread = Spread(bombers);
+            worstSpread = Mathf.Max(worstSpread, spread);
+            drifted |= spread > BomberSpreadCeilingM;
+            if (i % 600 == 0)
+            {
+                string modes = $"{AiModeMachine.NameOf(bombers[0].Pilot!.Machine!.Mode)}/"
+                    + $"{AiModeMachine.NameOf(bombers[1].Pilot!.Machine!.Mode)}/"
+                    + $"{AiModeMachine.NameOf(bombers[2].Pilot!.Machine!.Mode)}";
+                ctx.Note($"t={i * StepDt:0}s node={node} spread={spread:0} m modes={modes}");
+            }
+        }
+
+        float finalSpread = Spread(bombers);
+        for (int b = 0; b < routes.Count; b++)
+        {
+            report.AppendLine($"{bombers[b].Name} route: {string.Join(" ", routes[b])}");
+        }
+        report.AppendLine($"worst spread {worstSpread:0} m, final {finalSpread:0} m, split={split}");
+        string route0 = string.Join(" ", routes[0]);
+        ctx.Check(string.Join(" ", routes[1]) == route0 && string.Join(" ", routes[2]) == route0,
+            $"all three walk the same nodes of their net: {route0}");
+        ctx.Check(!split, $"…never more than one node apart over the whole {BomberRunS:0} s");
+        ctx.Check(wasHit, $"the hit did run a reaction, so the held formation is not an unfired test");
+        ctx.Check(!drifted,
+            $"…and never spread past {BomberSpreadCeilingM:0} m of each other: worst {worstSpread:0} m");
+        ctx.Check(finalSpread < BomberSpreadCeilingM,
+            $"the one that was fired on is back with the other two: {finalSpread:0} m");
+    }
+
+    // The widest gap between any two of the group, metres.
+    private static float Spread(List<FlightController> group)
+    {
+        float worst = 0f;
+        for (int i = 0; i < group.Count; i++)
+        {
+            for (int j = i + 1; j < group.Count; j++)
+            {
+                worst = Mathf.Max(worst, group[i].WorldPosition.DistanceTo(group[j].WorldPosition));
+            }
+        }
+        return worst;
     }
 
     private static (Vector3 Position, Vector3 Forward) PlayerPose(

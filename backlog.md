@@ -2209,24 +2209,17 @@ usual.
   `docs/formats/anim-definitions/cutscenes.md` ("`player`, and the two pointer spaces a definition
   addresses"), which carries the decode; `BL-470` and `BL-471`, closed by the work that filed this.
 
-- `BL-498` `[Bug]` **CM02's Balmorals break formation immediately, unattacked.**
-  *Evidence:* reported at the controls against the original, where the three heavy planes fly in
-  formation and stay in it under fire. ⚠ **In ours they break it right at mission start, with nobody
-  shooting at them**, so this is not an evasion-response question and a fix aimed at damage
-  reactions would miss it. The data separates them from every fighter in the mission: all three
-  carry `group` 5, empty `rating_biases`, and behaviour slot 32 = `2` where the mission's
-  Peacemakers carry `16` and the player's flight `0`. `OBJECTIVE4` puts all three on the `M5Bombrun`
-  net together, so the formation is authored as three aircraft on one net rather than as an escort
-  station. *Fix shape:* start from the unattacked case, since three aircraft commanded onto one net
-  should already fly it together and something is taking them off it at t=0. Establish what slot 32
-  selects before touching any AI mode, since a bomber that neither breaks off nor evades is most
-  likely that field rather than a special case in the mode machine. *⚠ Traps:* do not
-  give the Balmorals an evasion exemption by name; the flag is authored data and other chapters'
-  bombers will carry it too. ⚠ `BL-500` is a live candidate for the whole of this: `SET_AI_NET` is a
-  no-op, so `OBJECTIVE4`'s command onto `M5Bombrun` never lands and the three fly whatever their own
-  roster blocks author. Check what each block authors for itself before reading anything in the AI
-  mode machine as the cause. *Cross-refs:* `BL-500` (the net command that never lands), `BL-499`
-  (the other CM02 report), `PLAN-M5-polish.md` G77.
+- `BL-501` `[Feature]` **Nothing exercises avoid-crash probing between aircraft flying one net in
+  formation.** *Evidence:* flagged by G77, which fixed the branch draw that split CM02's three
+  bombers and then measured them holding 82 m to 219 m apart on one route. That suite builds its
+  world with collision off, so the probing three aircraft at roughly a hundred metres would do to
+  each other is never run, and that spacing is exactly the geometry that can arm it. *Fix shape:*
+  drive the same formation in a collision world and see whether avoid-crash promotes, and if it
+  does, whether it takes an aircraft off its route. *⚠ Traps:* do not widen the formation to quiet
+  a probe. The separation is what the net and the cross-track carry produce from authored data, and
+  a formation that holds only because its members are far apart is not the one the original flies.
+  *Cross-refs:* `PLAN-M5-polish.md` G77, whose `campaign-bomber-formation` suite is the harness to
+  extend.
 
 - `BL-500` `[Bug]` **A mission cannot re-command its spawned aircraft: `SET_AI_NET`, `SET_AI_TEAM`
   and `SET_AI_ATTACK_RADIUS` are named no-ops.** *Evidence:* found by G78 while chasing the ace

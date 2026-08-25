@@ -153,6 +153,7 @@ public static class SuiteCatalog
         "hangar-door-wake",
         "fog-state",
         "campaign-roster",
+        "campaign-bomber-formation",
         "campaign-loop",
         "campaign-zeppelins",
         "campaign-danger-zones",
@@ -771,6 +772,12 @@ public static class SuiteCatalog
             + "floor, and over a two-minute flown run wingman_1 holds the scripted player inside "
             + "the wingman-station leash",
             CampaignRoster));
+        into.Add(new TestHarness.Suite("campaign-bomber-formation",
+            "CM02's three netted bombers (BL-498) spawned from C3/M05's own aiv roster into its "
+            + "built world: all three carry net 19, they leave their shared seat node the same way "
+            + "and fly one node of it together for a minute with nobody engaging them, and a "
+            + "certain steady-hand failure on one leaves it on that node and back with the other two",
+            BomberFormation));
 
         // ⚠ Keep after every other content suite: it leaves its own profile file behind for the
         // next process to read. campaign-zeppelins below touches none of that state.

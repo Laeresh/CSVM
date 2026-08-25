@@ -379,7 +379,7 @@ Net assignment is `FUN_00475fc0`. On `netids == -1` it returns immediately, leav
 untouched. On a valid net it:
 
 - sets the current node `+0x2e8` to the nearest node to the spawn position (`FUN_00431900`) and the
-  current edge `+0x2ec` (`FUN_00431e40`);
+  current edge `+0x2ec` (`FUN_00431e40`, below);
 - sets the task `+0x2f0` to **2 when the net record's `+0x10` field is non-zero, else 0**;
 - **overwrites the vehicle's three volumes from the net's own**, where the net authors a non-zero:
   activation from net `+0x24`² / `+0x28` / `+0x2c` into `+0x318` / `+0x31c` / `+0x320`, attack from
@@ -406,6 +406,36 @@ with `+0x67c = 0` on every path, including the failure path where the net id did
 
 So `mode wingman` is not "this aircraft escorts". It is **"this aircraft escorts when it has no
 net"**, and the net wins whenever one is authored.
+
+## Which edge a vehicle leaves a node on: the nose, never a draw
+
+`FUN_00431e40(net, nodeIndex, excludeEdgeIndex, direction)` picks the edge, and it has exactly two
+callers: the net assignment `FUN_00475fc0` at seat, with no edge excluded, and the walk step
+`FUN_0041d8f0` after an arrival, excluding the edge just flown. Both pass the same direction, the
+vehicle's `+0x198`–`+0x1a0` basis row with each float's sign bit flipped, which is its backward axis
+negated and so its **nose**.
+
+The pick walks the node's own edge list, skips the excluded edge, resolves each edge's far end,
+normalises `farEnd − node` through `FUN_00422690`, dots it with the direction and keeps the maximum,
+seeded at `−FLT_MAX` so the first of equal maxima wins. A node with no edges returns −1.
+
+Three things follow. **The walk is deterministic**: nothing draws, so two vehicles seated on one node
+facing one way leave it on one edge, which is how the campaign's grouped aircraft fly a shared net in
+formation. **The seat is the node, not a destination**: `+0x2e8` holds the node the vehicle is flying
+FROM and the aim point is the far end of that edge, so a vehicle offset to the side of the leg keeps
+that offset through the cross-track carry below rather than converging on a node. And the direction
+is the nose rather than the velocity, so a slipping or rolled aeroplane picks the same edge as a
+coordinated one.
+
+⚠ One arm ahead of all of that is unread: when net `+0x10` is non-zero the function instead returns
+the first non-negative entry of the node's `+0x20` array. That is the same field the net assignment
+tests to seat task 2 rather than 0, so it belongs with the undecoded danger-zone path tags
+([`../formats/ai-nets.md`](../formats/ai-nets.md)) and no shipped net this reaches has been read.
+
+CSVM ports the pick as `AiNetFollower.PickOnward`, taking the nose through `AiNetFollower.Update`;
+`AiPilot.FlyPatrol` passes `−model.Attitude.Z`. A caller with no facing keeps the older
+nearest-node seat and a seeded draw, which is `ZeppelinMotion` alone, because a zeppelin is not a
+vehicle in this engine at all and does not reach `FUN_00431e40`.
 
 ## The escort law, `FUN_0041e760`
 
@@ -865,7 +895,8 @@ is where to start.
 | `FUN_004314e0` | builds one `CCENet` from its record: nodes, edges, volumes, and the trailer's name→object resolve |
 | `FUN_00431a90` | per edge at net load: the delta, its 3-D length, and the arrival radius squared into `edge+0x1c` |
 | `FUN_004303d0` | the `CCENet` constructor, whose `+0x28` default is the 10 m arrival-radius floor |
-| `FUN_0041d8f0` | steps the walk to the next edge once the arrival test fires |
+| `FUN_0041d8f0` | steps the walk to the next edge once the arrival test fires, excluding the edge just flown |
+| `FUN_00431e40` | which edge leaves a node: the one whose leg best lines up with the vehicle's nose |
 | `FUN_00432010` | node position with the trailer offset applied: the "this net rides that object" rule |
 | `FUN_00432140` | node position by index, the wrapper every consumer calls |
 | `FUN_00431900` | nearest node to a point, skipping edgeless nodes |

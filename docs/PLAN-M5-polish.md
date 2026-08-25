@@ -141,7 +141,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 74. ☑ CM02's Balmoral capture reaches none of the three Balmorals, cause found (`BL-492`, `BL-495`)
 75. ☑ CM02's named pilots do not read as named, and their voice lines are unverified (`BL-493`)
 76. ☐ A mission cannot swap the player onto another airframe (`BL-494`), behind G74
-77. ☐ CM02's Balmorals break formation immediately, unattacked (`BL-498`)
+77. ☑ CM02's Balmorals break formation immediately, unattacked (`BL-498`)
 78. ☑ CM02's second Peacemaker squad starts awake and attacks the Pandora (`BL-499`, `BL-500`)
 79. ☑ A roster-spawned aircraft carries none of its gamez node's marker scaffolding (`BL-495`)
 80. ☐ A mission cannot re-command its spawned aircraft (`BL-500`)
@@ -3002,7 +3002,7 @@ happens with a loadout already bound, so a hardpoint table changing under a live
 get right. ⚠ G74 gates this in CM02: with no capture there is no swap to reach, so the two want
 sequencing rather than running together.
 
-## G77 ☐ CM02's Balmorals break formation immediately, unattacked (`BL-498`)
+## G77 ☑ CM02's Balmorals break formation immediately, unattacked (`BL-498`)
 
 **Goal.** The three planes fly the formation the mission authors and stay in it under fire.
 
@@ -3035,6 +3035,45 @@ name check would not carry to any other mission's bombers. ⚠ `BL-492`'s reach 
 gamez scaffolding is absent from the built world, so anything read off a spawned Balmoral's node
 tree is missing pieces and is not evidence about the formation. ⚠ The three are also the mission's
 capture targets, so do not make them unshootable in the course of making them unflinching.
+
+**Landed.** The cause was the follower's branch pick, not the mode machine and not slot 32. All
+three blocks author `netids` 19, `M5Bombers`, a ten-node cycle whose nearest node to every one of
+their spawns is node 2, so the three were commanded onto one net and one seat node. `AiNetFollower`
+then drew its onward node from its own seeded `Random`, and with no previous node at the seat both
+neighbours were candidates, so the three drew independently and split around the ring within two
+seconds of the first node capture. `FUN_00431e40`, decoded here, is the engine's own pick and it
+draws nothing: it takes the edge whose leg direction best lines up with the vehicle's nose, called
+from the net assignment `FUN_00475fc0` with no exclusion and from the walk step `FUN_0041d8f0` with
+the edge just flown excluded. It also seats the vehicle ON the nearest node rather than sending it
+to it, which is what lets each aircraft keep its own offset through the cross-track carry.
+`AiNetFollower.PickOnward` is that rule and `AiNetFollower.Update` takes the nose,
+`AiPilot.FlyPatrol` passing `−model.Attitude.Z`; a caller with no nose (`ZeppelinMotion`, and a
+zeppelin is not a vehicle in this engine) keeps the nearest-node seat and the draw. Nothing is keyed
+to a Balmoral, an airframe or a mission. The decode is in `docs/org/aiPilot.md`.
+
+Slot 32 is disproved as a lead: it is `signature_maneuvers`, already decoded in
+`docs/formats/ai-rosters.md`, and the Balmorals' `2` is bit 1, `rudder_turn`. It weights the
+evasive-maneuver library draw and selects no AI mode. What does keep them out of combat is their
+net's own attack and return volumes, 1 m each, which the spawner already applies: `Patrol` never
+promotes to `Pursue` because nothing is ever inside a metre.
+
+`BL-500`'s `SET_AI_NET` no-op is not this item's cause. `OBJECTIVE4` is `BEGIN_DORMANT` and moves
+the three onto `M5Bombrun` later in the mission; at mission start they are on the net their own
+blocks author, and the break was measured on that net.
+
+**Verified.** `campaign-bomber-formation` drives C3/M05's own roster into its own built world
+through `FlightRoster.SpawnAi`, so the machine and skills are the assembler's. Over sixty seconds
+with nothing engaging them the three walk the identical node route `3 4 5 6 7 8 9`, never more than
+one node apart, and their widest separation runs 82 m to 219 m against a 112 m spawn spread. One is
+then hit with its steady-hand chance forced to a certain failure: it runs a real evasive maneuver,
+stays on the route and is back inside the band. Without the fix the same suite fails on all four
+arms, the routes diverging at the seat node and the spread reaching 2072 m. `dotnet build` clean,
+`dotnet test` 2397 passed, and `ai-net-follow`, `ai-modes`, `campaign-roster`, `campaign-zeppelins`,
+`wingman-station`, `landings-wingwalk-gate` and `instant-action` all pass.
+
+⚠ **One case is not exercised.** That world is built with collision off, so the avoid-crash probing
+three aircraft a hundred metres apart would do to each other never runs, and that spacing is the
+geometry that can arm it. Filed as `BL-501` rather than left implicit.
 
 ## G78 ☑ CM02's second Peacemaker squad starts awake and attacks the Pandora (`BL-499`, `BL-500`)
 

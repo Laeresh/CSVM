@@ -130,7 +130,9 @@ public class AiPilotTests
         pilot.Patrol = new AiNetFollower(net, new System.Random(1));
         pilot.Next(model, Dt);
         Assert.True(pilot.SteeringPatrol);
-        Assert.Equal(0, pilot.Patrol.CurrentIndex);   // the node the leash would point at
+        // Seated on node 0, the nearest, and flying its one edge: the leash points at the far end.
+        Assert.Equal(0, pilot.Patrol.LegStartIndex);
+        Assert.Equal(1, pilot.Patrol.CurrentIndex);
 
         // Steering something else clears it on the very next step, even though the follower
         // still holds its node, which is the case a leash must draw dimmed rather than bright.
