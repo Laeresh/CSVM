@@ -474,7 +474,7 @@ public sealed class CampaignDirector
             0,
             plane?.Airframe ?? 0,
             plane?.Name ?? string.Empty);
-        if (_world?.Runtime is { } runtime)
+        if (_world?.Runtime is { } runtime && CampaignPersistLog.CommitsOn(outcome))
         {
             _profile.PersistLog.Merge(_mission.Campaign, CampaignPersistLog.Capture(runtime));
         }

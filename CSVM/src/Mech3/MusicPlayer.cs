@@ -136,7 +136,10 @@ public sealed partial class MusicPlayer : Node
 
     /// <summary>Plays a cue named the way the original's data names it: a <c>SOUND_GROUPS</c> group
     /// (<c>music_*_sg</c>) or a plain <c>SETS</c> definition. Returns the WAV now playing, or null
-    /// when the name is unknown, its stream is missing, or that track is already playing.</summary>
+    /// when the name is unknown, its stream is missing, or that track is already playing.
+    /// ⚠ Do not add the original's 15 s music refusal here. It guards the objectives runtime's
+    /// tracked-cue list, which no mission cue reaches, while every mission cue reaches this method
+    /// (docs/org/music.md).</summary>
     public string? Cue(string name, Random rng, int loops = 1, bool forceLoop = false)
     {
         if (ResolveDef(name, rng) is not { } def)

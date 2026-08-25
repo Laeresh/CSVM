@@ -30,7 +30,7 @@ numbered variants plays, and how the score starts, loops and stops.
 | `FUN_00594e80` | Music-subsystem init: zeroes the counters, computes the base-name sums |
 | `FUN_0046cc70` | The objectives runtime's sound-group wake: the three `player.zrd`-bound groups' stateful treatment |
 | `FUN_0046cd00` | The latched battle-music start |
-| `FUN_0046caf0` | Creates a tracked fade record for a cue |
+| `FUN_0046caf0` | Creates a tracked fade record for a cue, and holds the music refusal below |
 | `FUN_0046cdf0` | Per-tick fade service: the three ramp rates and the record sweep |
 | `FUN_0046c930` | Applies a fade record's gain, and stops the sound when a fade-out reaches zero |
 | `FUN_0046c870` | The battle timer: start, count down, fade out |
@@ -124,6 +124,37 @@ and `won_battle_sound` both hold the placeholder literal `your_sound_here`, whic
 nothing. **Battle music is the only track in the game that fades.** Everything else starts and stops
 at full gain.
 
+### The 15 s music refusal, and why nothing hears it
+
+`FUN_0046caf0` carries a rule that reads like a music-channel hold and is not one. When
+`FUN_00480460` says the cue is music, which is bit 3 of the sound-flag word and the value 8 the
+keyword table at `0x4802e0` gives `MUSIC`, the function returns 0 without creating a record if a
+tracked music record is still held (`+0x20`) and the clock `DAT_0071c470` has not reached its
+deadline (`+0x24`). Accepting a music cue flips the previously held record to the 4 s fade-out,
+stores the new record in `+0x20`, and sets the deadline to the clock plus the constant at
+`0x00603560`, which is 15.0. It refuses rather than defers, so a cue inside the window is lost and
+not delayed. The object holding both fields is the single tracked-cue list at `0x0071b438`.
+
+Three facts together make the rule unreachable in the shipped game.
+
+- **Only a tracked cue can reach it.** `FUN_0046cc70` sends every woken group that is not one of the
+  three `player.zrd`-bound sounds straight to `FUN_00593590`. The census below finds 133 music cues
+  across the six mission families in the 53 shipped `objectives.zrd` files, and every one of them
+  takes that direct path.
+- **Only one of the three is bound.** `pre_battle_sound` and `won_battle_sound` hold
+  `your_sound_here`, so `music_battle_sg` on `in_battle_sound` is the only music that can arrive.
+- **`music_battle_sg` cannot arrive inside the window.** No mission cues it. The battle timer starts
+  it through `FUN_0046cd00`, which latches one handle at a time, and the timer counts down only
+  while the music is heard, so battle music sounds for at least its 20 s hold plus a 4 s fade-out
+  before the channel is free again. `FUN_0046cdf0` clears `+0x20` when it sweeps a record whose
+  sound has stopped, so by the time a restart is possible the deadline has passed and the guard is
+  off in any case.
+
+⚠ **Do not put this hold on the music channel.** `MusicPlayer.Cue` is where every `mu*` group lands
+in this project, including the 133 the original routes past `FUN_0046caf0` entirely. A hold there
+would drop objective stingers the original plays, such as the second of a mission's two
+`music_primaryobj_sg` takes when its objectives complete within a quarter of a minute of each other.
+
 ## The prebattle-to-battle transition
 
 The binding is data (`in_battle_sound`), but the trigger is code. `FUN_0046c870`, ticked from the
@@ -172,6 +203,10 @@ its own.
 
 ## Named gaps and disproofs
 
+- **The 15 s music refusal is not a music-channel rule.** It guards the objectives runtime's
+  tracked-cue list, no mission cue reaches that list, and the only music that does cannot arrive
+  inside the window. [The subsection above](#the-15-s-music-refusal-and-why-nothing-hears-it) has
+  the three facts and the prohibition that follows from them.
 - ⚠ **`music_instantaction.wav` has no trigger.** Its definition `snd_instantaction` is named by no
   mission, no animation definition and no ROF script, and the executable references the WAV name
   only in the resolver and the registration table. Instant Action ships silent.

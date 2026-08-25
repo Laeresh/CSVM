@@ -103,6 +103,11 @@ internal static class CampaignSuites
 
             ctx.Check(saveOnly < 0 || !capturedNodes.Contains(saveOnly),
                 $"a destructible with no PERSIST_LOG def stays out of the log node={saveOnly}");
+            // The director commits a capture only on a won mission, which is when the original
+            // writes its world-state carrier; the merge below stands in for that commit.
+            ctx.Check(CampaignPersistLog.CommitsOn(MissionOutcome.Won)
+                && !CampaignPersistLog.CommitsOn(MissionOutcome.Lost),
+                $"only a won mission commits its capture to the log");
             profile.PersistLog.Merge(chapter, captured);
             store.Save(profile);
         });

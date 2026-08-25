@@ -78,6 +78,12 @@ public sealed class CampaignPersistLog
         return states;
     }
 
+    /// <summary>Whether a mission that ended this way commits its capture to the log. The original
+    /// writes the world-state carrier once, in the mission-end pass, and only for a won mission
+    /// (docs/formats/saved-games.md). ⚠ Never commit a loss: <see cref="Merge"/> only ever
+    /// escalates damage, so a failed attempt's wreckage could not be taken back on the retry.</summary>
+    public static bool CommitsOn(MissionOutcome outcome) => outcome == MissionOutcome.Won;
+
     /// <summary>Every state held for one chapter, in insertion order of its nodes.</summary>
     public IReadOnlyList<PersistedObject> For(int chapter)
     {

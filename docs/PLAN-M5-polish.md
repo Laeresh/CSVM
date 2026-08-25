@@ -126,10 +126,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 61. ☐ The intro cutscene stages no aircraft, because the node its definitions animate does not exist (`BL-482`)
 62. ☐ A zeppelin's turrets and its damage zones carry no owning identity (`BL-476`), behind D33
-63. ☐ The music channel has no 15 s refusal hold (`BL-480`)
-64. ☐ The 26 `GRAPHICS/*.JPG` draw nothing, so the new boards have holes in them (`BL-479`)
-65. ☐ `campaign-objectives-hud` cannot fire its own check on C3 (`BL-481`)
-66. ☐ Two persist-log behaviour questions, carried out of `BL-243`'s closure
+63. ❌ The music channel has no 15 s refusal hold (`BL-480`), disproved: the rule is real and unreachable
+64. ❌ The 26 `GRAPHICS/*.JPG` draw nothing (`BL-479`), disproved: they already draw as board pictures
+65. ☑ `campaign-objectives-hud` cannot fire its own check on C3 (`BL-481`)
+66. ☑ Two persist-log behaviour questions, carried out of `BL-243`'s closure
 67. ☑ `BL-181`'s blocker now reads as discharged when it is not
 68. ◐ Why the scaffolding read differently at the controls, now a splash-occlusion question (`BL-477`)
 
@@ -1974,7 +1974,7 @@ too or an AI keeps shooting a friend. ⚠ Do not set a zeppelin's team to a lite
 author none and what an unauthored one falls through to is D33's question. ⚠ D33 alone already fixes
 the reported Kestrel symptom, so this item must not be judged by that symptom disappearing.
 
-## G63 ☐ The music channel has no 15 s refusal hold (`BL-480`)
+## G63 ❌ The music channel has no 15 s refusal hold (`BL-480`)
 
 **Goal.** A music cue raised inside the previous cue's 15 s hold is dropped, as the original drops it.
 
@@ -1995,7 +1995,32 @@ cues before the radio is consulted.
 **⚠ Traps.** ⚠ It refuses, it does not defer: implementing it as a delay changes which track plays.
 ⚠ Do not put it on `MissionRadio`, which never sees a music cue.
 
-## G64 ☑ The 26 `GRAPHICS/*.JPG` draw nothing (`BL-479`)
+**Landed as a disproof, and the approach above is the thing disproved.** The rule is at the image
+exactly as the evidence states, confirmed instruction by instruction: `FUN_00480460` is the is-music
+predicate, the refusal is `+0x20 != 0 && DAT_0071c470 < +0x24` returning 0 with no record made, and
+an accepted cue sets `+0x24` to the clock plus the constant at `0x00603560`, which reads 15.0. What
+the evidence did not carry is where the rule sits. `FUN_0046caf0` is the objectives runtime's
+tracked-cue creator, and `FUN_0046cc70` sends every woken group that is not one of the three
+`player.zrd`-bound sounds straight to `FUN_00593590`, so none of the 133 mission music cues in the
+53 shipped `objectives.zrd` files can reach the hold. Of the three bound sounds only
+`in_battle_sound` is real, holding `music_battle_sg`, which no mission cues and which the battle
+timer sounds for at least its 20 s hold plus a 4 s fade before the channel frees; `FUN_0046cdf0`
+clears `+0x20` when it sweeps a stopped record, so the deadline has passed before a restart is
+possible. The hold therefore changes nothing that is heard.
+
+Putting it on `MusicPlayer` would have been a regression rather than a fidelity gain, because that
+is where all 133 of those cues land in this project, and a hold there would drop objective stingers
+the original plays. So no behaviour changed. `docs/org/music.md` gains the decode, the three facts
+that make it unreachable, and the prohibition, and `MusicPlayer.Cue` carries the prohibition on the
+member itself so the next reader of the same evidence does not re-file it.
+
+**Verified.** `dotnet build` clean and 2364 unit tests pass, which is the whole check a
+documentation change and a comment need. The census behind the 133 figure was re-run over the 53
+`objectives.zrd` files in `extracted/` and reproduces the table in `docs/org/music.md` exactly, and
+`music_battle_sg` appears in none of them. `player.zrd`'s two placeholder bindings were read back
+from `extracted/zrdr/player.zrd.json`.
+
+## G64 ❌ The 26 `GRAPHICS/*.JPG` draw nothing (`BL-479`)
 
 **Goal.** The cabin's plane photographs and the fifteen menu backgrounds draw.
 
@@ -2040,7 +2065,7 @@ a 7,500-point grid, so the progressive pair is not a gap either. The cabin shot'
 unchanged across the edit (`29b9f2aa63d634f9b756880d9c5bf291`), which is the point: deleting a load
 that returned null moves nothing. `dotnet build` clean with 0 warnings, `dotnet test` 2363 passed.
 
-## G65 ☐ `campaign-objectives-hud` cannot fire its own check on C3 (`BL-481`)
+## G65 ☑ `campaign-objectives-hud` cannot fire its own check on C3 (`BL-481`)
 
 **Goal.** The suite proves its point on any chapter it is pointed at, or says explicitly why it
 cannot.
@@ -2089,7 +2114,7 @@ state, satisfying METHOD-8. Their row-marking half passes. The skip path was exe
 and left the run reporting a note rather than a pass in disguise. `dotnet build` is clean and
 `CSVM.Tests` is 2363 passing.
 
-## G66 ☐ Two persist-log behaviour questions, carried out of `BL-243`
+## G66 ☑ Two persist-log behaviour questions, carried out of `BL-243`
 
 **Goal.** Two answers, and a test for each if the answer says our behaviour diverges.
 
@@ -2110,6 +2135,25 @@ assertion for whichever one turns out to be a divergence.
 
 **⚠ Traps.** ⚠ This is a research item and its deliverable is an answer. Building a commit-timing
 change without settling which timing the original uses would be inventing content.
+
+**Landed.** Both questions are answered, and the first turned up a divergence beside the timing it
+asked about. The original writes its world-state carrier once, in the mission-end pass
+(`FUN_004174a0` into `FUN_0046b450` into `FUN_0046b490`), the same pass that writes `Status.dat`,
+so the commit is at mission completion and never at damage time, which is what `OnMissionEnded`
+already did. That pass is also gated on the campaign object existing (`DAT_0071bb7c`) and on its win
+flag (`+0xc58`, read through `FUN_00463be0`, the flag the debrief `FUN_004194e0` and the cinema pick
+`FUN_0046ba10` both branch on), so a lost or abandoned attempt writes nothing and a retry starts from
+the state the last won mission left. We merged on every outcome. The rule is now
+`CampaignPersistLog.CommitsOn`, which `CampaignDirector.OnMissionEnded` consults. Instant Action does
+not pick the log up and should not: the original's load walks backwards from the campaign object's
+`cm_sequence` index, and `cm_sequence.zrd` holds exactly the 24 campaign missions, so no Instant
+Action mission has an index to walk back from. `docs/formats/saved-games.md` carries both gates, the
+walk's key, and the one edge left open, which is whether a stale index can survive into a later
+non-campaign launch in the same process.
+
+**Verified.** `dotnet build` clean, 2364 unit tests pass including the three new `CommitsOn`
+assertions, and `campaign-persistence` passes on C1 carrying three persisted objects from `m04` to
+`m05`. The suite now also asserts the won-only rule at the point it stands in for the commit.
 
 ## G67 ☑ `BL-181`'s blocker now reads as discharged when it is not
 

@@ -42,6 +42,16 @@ public class CampaignPersistLogTests
         Assert.True(Assert.Single(log.For(1)).Destroyed);
     }
 
+    /// <summary>Only a won mission writes the original's world-state carrier, so a lost or
+    /// abandoned attempt leaves the chapter as the last won mission left it.</summary>
+    [Fact]
+    public void OnlyAWonMissionCommitsItsCapture()
+    {
+        Assert.True(CampaignPersistLog.CommitsOn(MissionOutcome.Won));
+        Assert.False(CampaignPersistLog.CommitsOn(MissionOutcome.Lost));
+        Assert.False(CampaignPersistLog.CommitsOn(MissionOutcome.None));
+    }
+
     [Fact]
     public void ResetReplacesTheWholeLog()
     {

@@ -103,6 +103,19 @@ in the same pass, guarded by a chapter in 1..9 and a mission in 1..10, from
 `FUN_0046b450`). The profile directory is baked in as an absolute path (see
 [the `UIData` block](#the-uidata-block)).
 
+Two further gates sit in front of that pass, and both matter to what carries across missions:
+
+- **A campaign object must exist.** `FUN_0046b450` tests the global campaign pointer `DAT_0071bb7c`
+  before writing anything. Nothing outside a campaign has a mission id to write under.
+- **The mission must have been won.** The same function then reads the campaign object's win flag
+  (`+0xc58`, through `FUN_00463be0`) and skips the pass when it is clear. That flag is the one the
+  debrief `FUN_004194e0` branches on to set the mission-result record's completion bit, and the one
+  `FUN_0046ba10` picks the success cinema with; the debrief's failure branch offers to skip the
+  mission after repeated attempts and sets the flag when the offer is taken.
+
+So a lost or abandoned attempt writes no world state. The chapter's world stays as the last **won**
+mission left it, and a retry starts from that state rather than from the failed attempt's wreckage.
+
 ## `Status.dat`: the profile
 
 Three sections, in this order:
@@ -302,6 +315,18 @@ bytes, `AnimActivation` sections are 88, 328, 568, 628 or 700 bytes depending on
 
 **The per-section payloads are not decoded.** Only the container, the section names and the
 per-owner section lengths are established here.
+
+**The backwards walk is keyed on the campaign sequence, so Instant Action never picks a
+`Mission.NNN` up.** `FUN_0046b7e0` starts from the campaign object's current `cm_sequence` index
+(`+0xc18`) and steps backwards through the mission list `FUN_0046bf40` built from `cm_sequence.zrd`,
+returning the first earlier entry whose `campaign` field matches. `cm_sequence.zrd` holds exactly 24
+entries, the 24 campaign missions, so an Instant Action or multiplayer mission has no index to walk
+back from and `FUN_00463e80` loads nothing. ⚠ `+0xc18` is set to -1 only when the mission list is
+read and is set again only by the campaign launch path `FUN_0046c140`; the other paths that set the
+current chapter and mission (`FUN_00417090`, `FUN_004174d0`, `FUN_0041a880`, `FUN_00427b9d`,
+`FUN_00496c60`) leave it alone. Whether a stale index can therefore survive into a later
+non-campaign launch in the same process is not settled statically, and would be a defect of the
+original rather than behaviour to reproduce.
 
 ## `AutoSave.sav`
 

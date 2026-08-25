@@ -1461,22 +1461,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-480` `[Feature]` **The music channel does not enforce the original's 15 s cue guard.**
-  *Evidence:* found while decoding the mission radio queue. `FUN_0046caf0` gates its 15 s rule on
-  `FUN_00480460`, which reads bit 3 of the game's sound-flag word, and the keyword table at
-  `0x4802e0` (strings at `0x628744`) gives `NOROGUE` 1, `WINGMAN` 2, `VOICE` 4, **`MUSIC` 8**, `SFX`
-  0x10, `OPTIONAL` 0x40. So `FUN_00480460` is an is-music predicate with exactly one call site, and
-  the rule is a **refusal** rather than a delay: `if (this+0x20 != 0 && now < this+0x24) return 0`,
-  so a music cue raised while the previous one's `now + 15.0` hold stands is dropped outright. The
-  remake has no such hold. `MusicPlayer`'s existing rule that re-cueing the playing track never
-  restarts it covers the common case, which is why this is a gap rather than an audible bug today.
-  *Fix shape:* the 15 s refusal hold on `MusicPlayer`, which is where it belongs, since
-  `CampaignDirector.PlaySoundGroup` routes `mu*` cues there before the radio is consulted. *⚠ Traps:*
-  it refuses, it does not queue or delay: a cue inside the hold is lost, not deferred, and
-  implementing it as a delay would change which track plays. Do not put it on `MissionRadio`, which
-  never sees a music cue. *Cross-refs:* `docs/formats/objectives.md`, whose 15 s clause previously
-  read as speech spacing and is corrected; `docs/org/music.md`.
-
 - `BL-455` `[Feature]` **There is no audio options menu, so the music level is a hard-coded
   stand-in.** *Evidence:* at the controls the music drowned the briefing narration, so
   `MusicPlayer.ChannelLevel` now mixes the channel at 0.2 of the master bus. That constant is a
