@@ -1965,42 +1965,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-
-- `BL-466` `[Bug]` **The objectives readout is on the flight HUD; in the original it is on the
-  pause screen.** *Evidence:* the user, from the original: "in the original the in-flight objectives
-  are only seen in the pause screen. but the targets are selectable in world." Ours mounts
-  `ObjectivesHud` on the world root for every campaign session (`GameSession`, D33's mount), so it
-  is up the whole flight. A second symptom from the same pass: when an objective completed, the tick
-  was not on its line, so the player could not tell which one had completed. *Fix shape:* move the
-  readout to the pause screen and take it off the HUD; keep the graph binding and the completion
-  marking, which are D33's and are not in question, and fix the mark's alignment while moving it.
-  **The presentation is referenced**, from `OriginalScreenshots\Videos\Complete Mission M02.mkv` at
-  t=12 s (frame kept at `playtest\M02-complete-run\pause-screen-objectives.png`): the pause screen
-  is the mission map filling the left two thirds with its `?` flags planted (one labelled `4`, the
-  PANDORA dock), an `Objectives` parchment top-right carrying the numbered lines, a photo
-  bottom-right, a compass rose and copyright line bottom-left, and four plaque buttons in two rows
-  centre-bottom, `Resume`/`Restart` over `Preferences`/`Quit`. The same film at t=5 s shows the
-  flight HUD carrying gauges alone (rockets, altimeter, artificial horizon, guns, airspeed, a
-  compass tape) with no objectives anywhere, which is the footage confirmation that the readout does
-  not belong there.
-  **Why the tick was not on the line, traced.** Two independent causes. (1) C3/M01 builds **six**
-  display rows, not the four the pause screen lists: `OBJECTIVE3` authors `IDENTITY [SECONDARY, 11]`
-  and `OBJECTIVE31` authors `IDENTITY [SECONDARY, 12]`, two fields with **no message key**, so
-  `ObjectivesHud.cs:65` asks `Messages.Get(null)`, gets `""` (`Messages.cs:88`), and a completed
-  secondary renders as a bare tick with no text (`ObjectivesHud.cs:117`). (2) The readout is placed
-  at `(24, 64) * windowH/1080` (`ObjectivesHud.cs:123`), which on a 1280x720 window puts the first
-  line at y=43, overlapping the flight HUD's own `SPD / ALT / THR` strip.
-  *⚠ Traps:* ⚠ a two-field `IDENTITY` is the data's own shape, not a parse bug, so decide what an
-  unkeyed row should show rather than treating the empty string as a defect. ⚠ nothing had completed
-  when that pause screen was opened, so how a completed line is
-  marked, and whether it stays listed, is still unknown and is what `CAP-45` still owes; do not
-  invent a checkmark idiom from the placeholder. ⚠ the completed-row marking is the half that has an
-  in-engine proof
-  (`campaign-objectives-hud` asserts the readout marks its own completed line, not just the graph),
-  so the move must keep that suite meaningful rather than deleting it. ⚠ Do not also remove
-  in-world target selection: the same verdict says targets ARE selectable in the world, and that is
-  a different subsystem. *Cross-refs:* `CAP-45`, re-pointed at the pause screen's presentation,
-  which has no reference shot.
+- `BL-481` `[Bug]` **`campaign-objectives-hud` fails on `--chapter=C3`, so the suite only proves its
+  point on its default chapter.** *Evidence:* the suite passes on C1 (5 display rows, 4 drawn, two
+  scripted completions each marking their row) and fails on C3 with
+  `!! a scripted completion marks its row in the readout, not only in the graph (OBJECTIVE)`. The
+  objective name in that message is empty, and the artifact shows the driver completing no objective
+  at all on C3/M01, so the check is not catching a display defect: it is reporting that the suite's
+  own completion driver found nothing to complete on that mission's data. **Confirmed pre-existing
+  rather than caused by the pause-screen move**: the identical failure reproduces on commit
+  `4ec47b14`, before Wave F, on a separately built worktree (METHOD-8). *Fix shape:* make the driver
+  find a completable objective on any chapter it is pointed at, or make the suite skip explicitly
+  where a mission carries none, since a check that cannot fire is worse than one that is absent.
+  *⚠ Traps:* do not "fix" it by relaxing the assertion, which is the one proof that the readout marks
+  its own line rather than only the graph. Do not assume C1's shape generalises: C3/M01 builds six
+  display rows to C1/M02's five, and two of C3/M01's are `IDENTITY [SECONDARY, n]` fields with no
+  message key at all. *Cross-refs:* `BL-466`, whose move strengthened this suite and surfaced the
+  failure; `docs/verification.md` DIAG-15 (never silently skip a case) and METHOD-9.
 
 - `BL-449` `[Bug]` **The campaign screens are the shared list menu, not the original's full-screen
   boards, and the original's own buttons are not on them.** Seen at the controls: the campaign

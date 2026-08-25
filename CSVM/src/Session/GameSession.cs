@@ -145,6 +145,8 @@ public partial class GameSession : Node3D
     private bool _crashFired;
     // --debug-scoreboard --vs: fires once, on the first sim step — see DriveSimSteps.
     private bool _versusDebugKillFired;
+    // --debug-pause[=frame]: fires once, the frame the sim clock first reaches it.
+    private bool _debugPauseFired;
     // --debug-wash=N: how many of its two scripted washes have fired — see DriveSimSteps.
     private int _debugWashesFired;
     private SpectatorCamera? _spectator;
@@ -507,6 +509,7 @@ public partial class GameSession : Node3D
                 _cutscene?.BindRigs(_rigs, () => AiPlanes);
             }
             ApplyDestroyOverride(state);
+            ApplyObjectiveOverride(state);
             LogBuildSummary(state, sw);
         }
         catch (Exception e)
@@ -2423,13 +2426,13 @@ public partial class GameSession : Node3D
             DebugShow = _spec.DebugTargets,
         });
 
-        // The in-flight objectives readout and the objective-site feed, both mounted only for a
+        // The pause-screen objectives readout and the objective-site feed, both mounted only for a
         // campaign session and both polling _campaign.Graph themselves once Attach (above) has
         // built it. The sites go onto the player's target cycle, which is what marks them.
         if (_campaign is { } campaign)
         {
             var objectiveMessages = Messages.Load(state.MessagesPath);
-            _worldRoot!.AddChild(UI.ObjectivesHud.Build(campaign, objectiveMessages));
+            _worldRoot!.AddChild(UI.ObjectivesHud.Build(campaign, objectiveMessages, _pauseState!));
             var sites = new ObjectiveSites(campaign, objectiveMessages,
                 MissionTargets.Load(state.MissionZrdrPath), state.WorldRuntime);
             flightRoster.SetTargetObjectives(into => sites.Collect(into));
@@ -2451,6 +2454,21 @@ public partial class GameSession : Node3D
         {
             state.What += $" + '{iaPlayerNode ?? _spec.PlaneName}' flying";
         }
+    }
+
+    // --debug-objective=N: the scripted twin of flying whatever completes campaign objective N, so
+    // a --screenshot can show a marked objectives line with nobody at the controls. Runs at build,
+    // before the graph's first step, which is what lets that step complete it off its own
+    // conditions rather than a mark being faked into the display.
+    private void ApplyObjectiveOverride(BuildState state)
+    {
+        if (_spec.DebugObjective is not int number || _campaign is not { } campaign)
+        {
+            return;
+        }
+
+        bool armed = Testing.ProbeRunner.ForceObjective(state.WorldRuntime, campaign, number);
+        state.What += armed ? $" + forced OBJECTIVE{number}" : $" + OBJECTIVE{number} (not armed here)";
     }
 
     // --destroy=<name>: kill a named destructible at session build so a --screenshot captures its
@@ -3039,6 +3057,13 @@ public partial class GameSession : Node3D
                 rig.Controller?.DebugForceCrash();
             foreach (var plane in AiPlanes)
                 plane.DebugForceCrash();
+        }
+        // --debug-pause[=frame]: the scripted Start press, so a --screenshot catches the pause
+        // screen. Player 0 owns it, as a solo press would. Same single-fire shape as --crash above.
+        if (_spec.DebugPauseFrame is int pauseFrame && !_debugPauseFired && clock.Frame >= pauseFrame)
+        {
+            _debugPauseFired = true;
+            _pauseState?.TryToggle(0);
         }
         // --debug-scoreboard --vs: one scripted, ATTRIBUTED kill on the first sim step, through the
         // same Downed path a real kill takes, so a screenshot has a real K/D and kill banner

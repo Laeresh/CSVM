@@ -61,6 +61,10 @@ public sealed record SessionSpec
     // the default `--frames=` screenshot lands mid-break-up rather than pre-impact.
     private const int DefaultCrashFrame = 5;
 
+    // The sim frame a bare `--debug-pause` (no `=frame`) opens the board at: one step, so the
+    // scripted pause is as early as a shot of the board alone can want it.
+    private const int DefaultDebugPauseFrame = 1;
+
     // The frame a bare `--hitch-inject=` (no `@frame`) fires at, in FrameCount's own space.
     // The wall-time margin this gives on the dev box is measured in docs/cli.md.
     private const int DefaultHitchInjectFrame = 300;
@@ -524,6 +528,20 @@ public sealed record SessionSpec
 
     public bool DebugScoreboard { get; private set; }
 
+    /// <summary><c>--debug-pause[=frame]</c>: open the pause board at that sim frame, the scripted
+    /// twin of the Start press, so a <c>--screenshot</c> captures the pause screen with nobody at
+    /// the controls. A frame late enough for the mission to have run is the point: the objectives
+    /// readout is drawn there, and it can only show a completion the sim has actually reached.
+    /// Null when the flag was absent.</summary>
+    public int? DebugPauseFrame { get; private set; }
+
+    /// <summary><c>--debug-objective=N</c>: wake campaign objective N on the first sim step, the
+    /// scripted twin of whatever the mission normally wakes it with. A dormant objective cannot
+    /// complete, so this is what lets a headless run reach a completion (pair it with
+    /// <c>--destroy=</c> on the nodes its INACTIVEn conditions name). Null when the flag was
+    /// absent.</summary>
+    public int? DebugObjective { get; private set; }
+
     /// <summary><c>--debug-wash=N</c>: address two scripted blend washes to viewer N (1-based)
     /// through <c>ScreenFlash.PlayBlend</c>, a red one on the first sim step and a white one two
     /// seconds later, so the victim-routed channel and its blending can be seen at the controls
@@ -765,6 +783,9 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--paint-seed=")) { s.PaintSeed = ulong.Parse(arg["--paint-seed=".Length..]); s.PaintSeedExplicit = true; }
             else if (arg.StartsWith("--rof=")) { s.Rof = arg["--rof=".Length..]; }
             else if (arg == "--debug-scoreboard") { s.DebugScoreboard = true; }
+            else if (arg == "--debug-pause") { s.DebugPauseFrame = DefaultDebugPauseFrame; }
+            else if (arg.StartsWith("--debug-pause=")) { s.DebugPauseFrame = int.Parse(arg["--debug-pause=".Length..]); }
+            else if (arg.StartsWith("--debug-objective=")) { s.DebugObjective = int.Parse(arg["--debug-objective=".Length..]); }
             else if (arg.StartsWith("--debug-wash=")) { s.DebugWash = int.Parse(arg["--debug-wash=".Length..]); }
             else if (arg == "--debug-markers") { s.DebugMarkers = true; }
             else if (arg == "--debug-spectate") { s.DebugSpectate = true; }

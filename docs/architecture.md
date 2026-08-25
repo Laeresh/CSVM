@@ -249,7 +249,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/CampaignBriefingPage.cs` — the mission briefing: everything resolved from `CampaignFlow.MissionSeq` alone, through `cm_sequence` to the storage address, `brief_c%d%d` to the dialog state, the state to its map bitmap and narration name, `sounds.zrd`'s `SETS` to the wav file, and the mission's own `objectives.zrd` to the note, so nothing is computed from the story position. REPLAY BRIEFING / RETURN TO CABIN / GO TO FLIGHT CHECK hold rows 0-2 so their indices never move under the cursor while the note fills in below them; the map is the page's `HangarArt` and a note line's flag pin its row art. Labels are `messages.json`'s own `MSG_BTN_*` and an unresolved objective key shows as the raw key, so a missing extraction degrades to the three buttons rather than throwing. It plays nothing: `NarrationWav` and `NarrationStarts` name what a shell must play, and `Advance(seconds)` is the clock a shell drives.
 - `src/UI/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`/`BriefingState`/`BriefingStep`, walking the root list where the 24 states actually live) and `BriefingReveal`, the interpreter that runs a state's 12-opcode beat sheet against a caller-advanced clock, blocking on `Wait`'s authored seconds and `WaitForMarker`'s cue times and keeping each element's opacity, rotation and position as its tweens land. Elements come out in placement order, which is draw order. With no cue points every marker releases at once, so the map finishes under the narration rather than a timing being invented. Decode: `docs/formats/briefing.md`.
 - `src/UI/BriefingObjectives.cs` — the briefing's parchment note from a mission's `objectives.zrd`: every `IDENTITY` carrying a `MSG_BRF_*` key, ordered by priority ascending, which is the list an `Objective id index` opcode indexes 0-based. Takes the reader list rather than a path, so it tests without an extraction; resolves text through `Messages`, leaving the raw key visible when the table cannot.
-- `src/UI/ObjectivesHud.cs` — the in-flight objectives display (D33): reads `CampaignDirector`'s `ObjectiveGraph.Rows` directly (not a re-parse), text through `Messages`, and shows every row rather than gating on the row's own `Awake` flag (an objective authored with no `BEGIN_DORMANT` starts awake without ever running a wake action, so its row's `Awake` flag never turns on even though it is live from the mission's first tick, C1/M02's own primary OBJECTIVE3, and filtering on it would hide exactly the objective a player needs to see first). This also matches the original's own decoded display mechanism (`docs/formats/objectives.md`, `FUN_004acc20`/`FUN_004ad240`): every `IDENTITY` row is built once and shown unconditionally, only the completion mark toggles. Self-mounting like `PerfHud` (its own `CanvasLayer` on `HudLayers.Hud`), so nothing here reaches `GameSession`; mounting it into a real session is a one-line wiring contract `PLAN-M5-campaign.md`'s D33 section names, deferred because `GameSession.cs` was off limits to a concurrent item while this one landed. No reference screenshot covers the original's in-flight layout, so every metric is TUNE; the still-owed capture is named in the plan.
+- `src/UI/ObjectivesHud.cs` — the campaign mission's objectives readout, drawn on the **pause screen** and nowhere else (`BL-466`): the original keeps its objectives on the pause screen's parchment and leaves the flight HUD to the gauges, so the whole layer is hidden until `PauseState.Paused`. Reads `CampaignDirector`'s `ObjectiveGraph.Rows` directly (not a re-parse), text through `Messages`, and shows every row rather than gating on the row's own `Awake` flag (an objective authored with no `BEGIN_DORMANT` starts awake without ever running a wake action, so its row's `Awake` flag never turns on even though it is live from the mission's first tick, C1/M02's own primary OBJECTIVE3, and filtering on it would hide exactly the objective a player needs to see first). This also matches the original's own decoded display mechanism (`docs/formats/objectives.md`, `FUN_004acc20`/`FUN_004ad240`): every `IDENTITY` row is built once and shown unconditionally, only the completion mark toggles. A row the mission gives **no message key** resolves to no text and is dropped from the drawing (`DrawnLines`), since drawn it would be a mark against blank space, and `BuildLines` still carries one line per graph row so a suite counts against the graph. The mark takes a column of its own, so a completed line's text starts where every other line's does. Self-mounting like `PerfHud` (its own `CanvasLayer`, on `HudLayers.Board` with the pause board and after it in tree order), so `GameSession` only hands it the shared `PauseState` and adds it. The reference frame (`Complete Mission M02.mkv` at t=12 s) fixes the top-right corner and nothing else, so the glyphs and metrics are TUNE.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
@@ -2345,7 +2345,7 @@ missing file yields an empty set. `ByNode` exposes the whole table for a consume
 starting flags rather than one node's keys. Schema: docs/formats/missions.md.
 
 ## src/Flight/MarkerDraw.cs
-The world marker's drawing primitives, shared by `MarkerHud` and `UI/ObjectiveMarkerHud`: the
+The world marker's drawing primitives, shared by `MarkerHud` and `TargetHud`: the
 shadowed reticle, the edge arrow with its tail stroke, and the centred text block (`Lines`) with
 the pane-clamped variant (`LinesClamped`) an off-screen marker needs. Owns the marker blue and
 the drop shadow; colour and scaled sizes stay with the caller, since each HUD scales through its
@@ -2530,7 +2530,9 @@ and Exit decide the whole session. Exit's label follows how the session was laun
 each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run.
 `Populate()` runs only on a fresh pause (mirrors `VersusBoard`'s snapshot discipline); `Visible`
 tracks `PauseState.Paused` on every `Changed` event, and `_Process` polls the host only to move
-the cursor.
+the cursor. A campaign session's objectives readout (`UI/ObjectivesHud`) rides the same pause on a
+layer of its own rather than inside this board, since it belongs to the flown mission and this
+board is shared by every mode.
 
 ## src/Flight/IaWrapupBoard.cs
 Instant Action's wrap-up board — `VersusBoard`'s WHOLE-window
@@ -4427,6 +4429,11 @@ constructed once in `Launcher._Ready` after the base paths settle — the Launch
 the `--dump-*`/`--run-tests` early quits itself and hands the runner to each session node.
 Each method reads a `SessionSpec` passed **per call**, not stored — a menu launch can replace the
 caller's spec between calls, so a cached one would silently answer with a stale launch's flags.
+`TriggerDestroy` (`--destroy=`) and `ForceObjective` (`--debug-objective=`) are the two scripted
+world forces that live here rather than in a session: `ForceObjective` wakes one campaign objective
+and drives the nodes its `INACTIVEn` conditions name inactive, so the graph completes it off its
+own conditions on the next step instead of a mark being faked into the display. The objectives
+suite drives its completions through the same `DriveInactive`.
 
 ## src/Testing/CaptureDirector.cs
 The `--screenshot=`/`--shots=`/`--frames=` state machine plus F11/F12's placement print and ad-hoc

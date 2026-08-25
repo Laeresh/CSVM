@@ -77,7 +77,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — where things are shown, and where they are heard
 
-11. ◐ The objectives readout belongs on the pause screen (`BL-466`)
+11. ☑ The objectives readout belongs on the pause screen (`BL-466`)
 12. ☑ Radio calls play positionally (`BL-465`)
 13. ◐ Full-screen campaign boards with the original's buttons, worked on a pad (`BL-449`)
 14. ◐ The briefing reveal, drawn as authored (`BL-464`)
@@ -562,7 +562,7 @@ reveal") and the user's own verdict that the bars are present the instant the lo
 
 # Wave B — where things are shown, and where they are heard
 
-## B11 ☐ The objectives readout belongs on the pause screen (`BL-466`)
+## B11 ☑ The objectives readout belongs on the pause screen (`BL-466`)
 
 **Goal.** The objectives are read on the pause screen, as in the original, and not on the flight
 HUD.
@@ -600,6 +600,34 @@ line, and a flight capture showing nothing on the HUD.
 than only the graph, which is the one proof that this half works; the move must keep that suite
 meaningful, not delete it. ⚠ Do not also remove in-world target selection: the same verdict says
 targets are selectable in the world, and that is a different subsystem.
+
+**Landed.** The readout's layer sits with the pause board on `HudLayers.Board`, added after it so
+tree order puts it above that board's backdrop, and is visible only while `PauseState.Paused`. The
+flight HUD carries gauges alone, which is what the reference frame shows. Both traced causes of "the
+tick was not on its line" are fixed: a row the mission gives no message key is dropped from the
+DRAWING rather than shown as a mark against blank space (`BuildLines` still returns one line per
+graph row, so the suite counts against the graph, and C1/M02 draws 4 of 5 while C3/M01 draws 4 of 6,
+matching the original's four-line parchment), and the readout is drawn in the reference frame's
+top-right corner with the tick in a column of its own, so a completed line's text starts where every
+other line's does. The graph binding, the polling and the completion marking are untouched. Two
+scripted-capture doors came with it, because a headless run could reach neither the pause screen nor
+a completion: `--debug-pause[=frame]` and `--debug-objective=N`, the latter waking one objective and
+driving the nodes its `INACTIVEn` conditions name inactive so the completion comes off the graph's
+own conditions rather than being faked into the display. ⚠ `--destroy=` alone cannot do this: the
+`INACTIVE` leaves are not destructible def names and a dormant objective cannot complete at all.
+
+**Verified.** A paused C1/M02 capture shows the Objectives panel top-right with four lines and the
+tick on the second one's own line; the same mission in flight shows the gauges alone with nothing of
+the objectives on screen. The suite is kept and strengthened rather than deleted, which the trap
+required: it now runs with a paused `PauseState` so the drawing path is exercised, and adds a check
+that no drawn line is a mark against blank text, before and after the completion drive. On the merged
+tree `campaign-objectives-hud` passes with errors clean and units are 2356.
+
+⚠ **The suite fails on `--chapter=C3`, and that is pre-existing rather than caused by this move.**
+The identical failure reproduces on commit `4ec47b14` from a separately built worktree (METHOD-8), so
+`BL-481` carries it: the driver completes no objective at all on C3/M01, which makes the check report
+a vacuum rather than a display defect. The panel's glyphs, colours, type sizes and margins are TUNE:
+the reference frame fixes the corner and the four-line content, not our metrics.
 
 ## B12 ☑ Radio calls play positionally (`BL-465`)
 

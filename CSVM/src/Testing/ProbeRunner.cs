@@ -154,6 +154,75 @@ public sealed class ProbeRunner
         return killed;
     }
 
+    /// <summary>Wakes campaign objective <paramref name="number"/> and drives every node its
+    /// <c>INACTIVEn</c> conditions name inactive, the scripted twin of flying whatever completes
+    /// it: the graph then completes it off its own conditions on the next step, rather than a
+    /// mark being faked into the display. Drives <c>--debug-objective=</c> and the objectives
+    /// suite alike. Returns whether the mission arms an objective of that number.</summary>
+    public static bool ForceObjective(Mech3.AnimRuntime? runtime, Session.CampaignDirector director, int number)
+    {
+        if (runtime == null || director.Graph is not { } graph)
+        {
+            return false;
+        }
+
+        foreach (var def in director.Script.Objectives)
+        {
+            if (def.Number != number)
+            {
+                continue;
+            }
+
+            DriveInactive(runtime, def);
+            graph.Wake(number);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Destroys (or, where nothing is destructible, deactivates) every node one
+    /// objective's <c>INACTIVE</c> paths name, the same resolve-then-kill shape
+    /// <c>CampaignMissionEnd</c>'s driver uses.</summary>
+    public static void DriveInactive(Mech3.AnimRuntime runtime, Session.ObjectiveDef def)
+    {
+        foreach (var path in def.Inactive)
+        {
+            if (ResolvePath(runtime, path) is not { } node)
+            {
+                continue;
+            }
+
+            if (runtime.Destructibles.Resolve(node) is { MaxHealth: > 0f } live)
+            {
+                runtime.DamageAt(node, live.MaxHealth);
+            }
+            else
+            {
+                Mech3.AnimRuntime.SetSubtreeActive(node, false);
+            }
+        }
+    }
+
+    /// <summary>Walks a node path name by name, each step searched under the node the last one
+    /// resolved to; null when any step finds nothing.</summary>
+    public static Node3D? ResolvePath(Mech3.AnimRuntime runtime, IReadOnlyList<string> path)
+    {
+        Node3D? node = null;
+        foreach (var name in path)
+        {
+            var found = runtime.FindNodes(name, node);
+            if (found.Count == 0)
+            {
+                return null;
+            }
+
+            node = found[0];
+        }
+
+        return node;
+    }
+
     /// <summary>--dump-markers[=plane] (docs/cli.md): the airframe marker-rig report — stdout and
     /// <c>./.scratch/markers_dump.txt</c> — that <c>docs/formats/markers.md</c> regenerates from.
     /// See <see cref="Mech3.MarkerRig"/>.</summary>

@@ -48,7 +48,11 @@ internal static class CampaignHudSuites
                 Rng = new System.Random(1),
             });
             var graph = director.Graph!;
-            var hud = ObjectivesHud.Build(director, messages);
+            // Paused from the start: the readout is a pause-screen element (B11), so its drawing
+            // path only runs while the board is up, and this suite wants that path exercised.
+            var pause = new CSVM.Flight.PauseState();
+            pause.TryToggle(0);
+            var hud = ObjectivesHud.Build(director, messages, pause);
             ctx.Host.AddChild(hud);
 
             // ObjectivesHud polls for the graph in _Process rather than at construction (the
@@ -57,6 +61,7 @@ internal static class CampaignHudSuites
             hud._Process(0.0);
             ctx.Same(graph.Rows.Count, hud.BuildLines().Count,
                 $"the readout carries one line per display row before anything happens");
+            CheckNoBlankRowsDrawn(ctx, hud, report);
 
             if (sounds != null)
             {
@@ -248,6 +253,23 @@ internal static class CampaignHudSuites
         return null;
     }
 
+    // A row the mission gives no message key resolves to no text, and drawn anyway it is a bare
+    // mark against blank space, which is what stopped a player reading WHICH objective had
+    // completed (B11). The readout drops those rows, so nothing it draws is ever blank.
+    private static void CheckNoBlankRowsDrawn(TestContext ctx, ObjectivesHud hud, StringBuilder report)
+    {
+        var drawn = hud.DrawnLines();
+        bool blank = false;
+        foreach (var line in drawn)
+        {
+            blank |= string.IsNullOrWhiteSpace(line.Text);
+        }
+
+        report.AppendLine($"{hud.BuildLines().Count} display rows, {drawn.Count} of them drawn");
+        ctx.Check(!blank, $"no drawn objectives line is a mark against blank text");
+        ctx.Check(drawn.Count > 0, $"the readout draws at least one keyed objectives line");
+    }
+
     // Wakes every WAKEUP_SOUND_GROUP-authoring objective in turn until one of them actually starts
     // a real one-shot player, and asserts that at least one did.
     private static void DriveWakeCue(
@@ -293,7 +315,7 @@ internal static class CampaignHudSuites
 
             var beforeLines = hud.BuildLines();
             int before = sounds.OneShotsStarted;
-            DriveInactive(world, def);
+            ProbeRunner.DriveInactive(world.Runtime, def);
             graph.Wake(def.Number);
             Advance(graph, 3f);
             hud._Process(0.0);
@@ -313,7 +335,8 @@ internal static class CampaignHudSuites
             }
 
             int after = sounds.OneShotsStarted;
-            report.AppendLine($"OBJECTIVE{def.Number} completed off its INACTIVEn node, " +
+            report.AppendLine($"OBJECTIVE{def.Number} completed off its INACTIVEn node " +
+                $"[{InactiveNames(def)}], " +
                 $"COMPLETED_SOUND_GROUP='{def.CompletedSoundGroup}', one-shots {before} -> {after}, " +
                 $"row marked={anyMarked}");
             if (rowObjective == null && anyMarked)
@@ -329,6 +352,7 @@ internal static class CampaignHudSuites
 
         ctx.Check(rowObjective != null,
             $"a scripted completion marks its row in the readout, not only in the graph (OBJECTIVE{rowObjective})");
+        CheckNoBlankRowsDrawn(ctx, hud, report);
         if (soundObjective != null)
         {
             ctx.Check(true, $"a COMPLETED_SOUND_GROUP cue started a real one-shot player (OBJECTIVE{soundObjective})");
@@ -342,44 +366,19 @@ internal static class CampaignHudSuites
         }
     }
 
-    // Destroys (or deactivates) every node one objective's INACTIVE paths name, the same
-    // resolve-then-kill shape CampaignMissionEnd's own driver uses.
-    private static void DriveInactive(TestWorld world, ObjectiveDef def)
+    // The leaf of each INACTIVE path, for the report: these are the names a scripted run reaches
+    // for (--destroy=) when it wants this objective to complete with nobody at the controls.
+    private static string InactiveNames(ObjectiveDef def)
     {
+        var names = new List<string>();
         foreach (var path in def.Inactive)
         {
-            if (Resolve(world, path) is not { } node)
-            {
-                continue;
-            }
-
-            if (world.Runtime.Destructibles.Resolve(node) is { MaxHealth: > 0f } live)
-            {
-                world.Runtime.DamageAt(node, live.MaxHealth);
-            }
-            else
-            {
-                AnimRuntime.SetSubtreeActive(node, false);
-            }
-        }
-    }
-
-    private static Node3D? Resolve(TestWorld world, IReadOnlyList<string> path)
-    {
-        Node3D? node = null;
-        foreach (var name in path)
-        {
-            var found = world.Runtime.FindNodes(name, node);
-            if (found.Count == 0)
-            {
-                return null;
-            }
-
-            node = found[0];
+            names.Add(path.Count > 0 ? path[path.Count - 1] : "?");
         }
 
-        return node;
+        return string.Join(", ", names);
     }
+
 
     private static void Advance(ObjectiveGraph graph, float seconds)
     {
