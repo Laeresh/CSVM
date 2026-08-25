@@ -1948,6 +1948,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-494` `[Feature]` **A mission cannot swap the player onto another airframe, so CM02 cannot be
+  finished after its capture.** *Evidence:* asked at the controls, whether flying the Balmoral to the
+  Pandora is possible yet. It is not, and the gap is narrow rather than deep. The original does this
+  by swapping the PLAYER'S OWN AIRFRAME rather than by handing control of an AI airship: callback
+  codes 965, 966 and 967 "swap the player onto a specific airframe (`pbloodhawk`/`player_bhawk`,
+  `pwarhawk`/`player_warhawk`, `pbalmoral`/`player_balmoral`) with its armour and hardpoint table,
+  and set the cutscene flags" (`docs/formats/anim-definitions/cutscenes.md`, the callback table), and
+  they are the data-side counterpart of the intro definitions' own `check_balmoral`/`check_warhawk`
+  branches. `AnimRuntime.HandleCallback` wires two codes and a mission-script host and counts
+  everything else, so 965 to 967 reach nothing. ⚠ **The airframe itself is not the gap:**
+  `player_balmoral` is already a flyable airframe here, with its stat-table row, its Instant Action
+  entry, its `CamParams` third-person override, its eight-rung damage ladder and its effects
+  (`PlanePickerRoster.cs:34`, `InstantAction.cs:62`, `CombatSuites.cs:1052`). Its own animations ship
+  too: `player_balmoral-bal_wing_folddown`/`foldup` and the `bal_hook` extend, retract and startup
+  definitions. *Fix shape:* wire the three swap codes onto the player rig, carrying the airframe's
+  armour and hardpoint table as the decode says, and settle what the cutscene flags do. *⚠ Traps:*
+  this is an airframe swap and not vehicle possession, so do not build a way to fly a
+  `ZeppelinRuntime` airship; the Balmoral the player flies is a plane record. The swap happens mid
+  mission with a loadout already bound, so the hardpoint table changing under a live rig is the part
+  to get right. `BL-492` gates this in CM02: no capture, no swap to reach. *Cross-refs:* `BL-492`,
+  `BL-471` (the callback decode that filed this), `PLAN-M5-polish.md` G76.
+
 - `BL-492` `[Bug]` **CM02's Balmoral capture does not trigger on the last airship.** *Evidence:*
   reported at the controls, flying the approach at the last Balmoral with nothing happening. The data
   is complete and symmetric, so this is ours. `C3/zrdr/landings.zrd` carries three rows that differ

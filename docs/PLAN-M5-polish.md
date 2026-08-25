@@ -140,6 +140,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 73. ☑ The screenshot key does nothing in menus (`BL-489`)
 74. ☐ CM02's Balmoral capture does not trigger on the last airship (`BL-492`)
 75. ☐ CM02's named pilots do not read as named, and their voice lines are unverified (`BL-493`)
+76. ☐ A mission cannot swap the player onto another airframe (`BL-494`), behind G74
 
 **Everything open is either in flight, queued behind a stated blocker, or waiting on the user.** Three
 items carry over from the earlier waves rather than being restated in Wave G: A5, which is traced to
@@ -2841,3 +2842,42 @@ field's offset is established; F57's work is the precedent for doing that proper
 to shoot it, which argues for it being friendly to them rather than for it being an ace. ⚠ The user's
 report is a memory of the original, so treat it as a lead to verify against the data rather than as a
 specification.
+
+## G76 ☐ A mission cannot swap the player onto another airframe (`BL-494`)
+
+**Goal.** A mission can put the player in a different aircraft mid-flight, which is what CM02 needs
+after its capture.
+
+**Evidence (confidence: traced-to-code for the gap, decoded for the mechanism).** Asked at the
+controls: after capturing the Balmoral, the player should fly it to the Pandora. That is not possible
+today, and the gap is narrower than the question suggests.
+
+⚠ **The original swaps the player's own airframe rather than handing over an AI airship.** Callback
+codes 965, 966 and 967 swap the player onto `pbloodhawk`/`player_bhawk`,
+`pwarhawk`/`player_warhawk` and `pbalmoral`/`player_balmoral` with that airframe's armour and
+hardpoint table, and set the cutscene flags
+(`docs/formats/anim-definitions/cutscenes.md`'s callback table, from F52's decode). They are the
+data-side counterpart of the intro definitions' `check_balmoral`/`check_warhawk` branches.
+`AnimRuntime.HandleCallback` (`:2289-2324`) wires two codes and a mission-script host and counts
+every other code, so those three reach nothing.
+
+⚠ **The airframe is not the gap.** `player_balmoral` is already flyable here: its stat-table row
+(`PlanePickerRoster.cs:34`), its Instant Action entry (`InstantAction.cs:62`), its `CamParams`
+third-person override, its eight-rung damage ladder (`CombatSuites.cs:1052`) and its effects
+(`EffectCatalogue.cs:176`). Its own animations ship too, `bal_wing_folddown`/`foldup` and the
+`bal_hook` extend, retract and startup definitions.
+
+**Approach.** Wire the three swap codes onto the player rig, carrying the airframe's armour and
+hardpoint table as the decode says, and settle what the cutscene flags do.
+
+**Model recommendation.** high. It reaches the player rig, the loadout binding and the anim runtime
+at once, mid mission, with a live aircraft already bound.
+
+**Verify.** A driven swap on the mission's own world, the player ending in the named airframe with
+that airframe's armour and hardpoints rather than the previous one's.
+
+**⚠ Traps.** ⚠ This is an airframe swap, not vehicle possession: do not build a way to fly a
+`ZeppelinRuntime` airship, because the Balmoral the player flies is a plane record. ⚠ The swap
+happens with a loadout already bound, so a hardpoint table changing under a live rig is the part to
+get right. ⚠ G74 gates this in CM02: with no capture there is no swap to reach, so the two want
+sequencing rather than running together.
