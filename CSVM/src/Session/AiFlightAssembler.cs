@@ -67,6 +67,14 @@ internal sealed class AiFlightAssembler
         PreparePilot(spawn, baseStats);
         var stats = baseStats.WithAiSpawnJitter(
             Rng.NewSystemRandom(Rng.Spawn, index, 0));
+        // The name the targeting readout prints, resolved here because this is where the string
+        // table and the loaded def meet; a rig with no table keeps the def-name derivation.
+        // ⚠ The block's own pilot name outranks the airframe title: docs/org/targeting.md.
+        if ((spawn.PilotName ?? stats.AiTitleKey) is { } titleKey && _aircraft.WeaponMessages is { } messages)
+        {
+            string title = messages.Get(titleKey);
+            stats.AiTitle = title.StartsWith("MSG_", StringComparison.Ordinal) ? null : title;
+        }
         if (spawn.Pilot.Machine is { } machine)
         {
             machine.AttackRange = stats.AiAttackRange;
@@ -143,6 +151,19 @@ internal sealed class AiFlightAssembler
                 Log.Warn("weapons", $"ai: loadout bind failed for '{stats.DefName}' — this plane flies unarmed error={e.Message}");
             }
 
+            // The carried turret gunners, built as the player's are and independent of the loadout
+            // above. A gunner is a separate crewman reading none of the pilot's engagement gates,
+            // so a block whose net holds its pilot out of combat still shoots back.
+            if (_aircraft.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
+            {
+                controller.Turrets = TurretController.BuildCarried(
+                    turretDefs, stats, planeModel, _aircraft.WeaponDefs, controller, _world.Projectiles);
+                if (controller.Turrets.Length > 0)
+                {
+                    Log.Info("weapons", $"ai: '{stats.DefName}' carries {controller.Turrets.Length} turret gunner(s) under shooter id {controller.PlayerIndex}");
+                }
+            }
+
             // Visible damage, phase 1: the same object the player rig gets, built from this
             // airframe's own injure_anims. Phase 2 (the sink and the stops) is wired by
             // BuildFlightCrashRuntime below, once the runtime it plays into exists.
@@ -155,7 +176,12 @@ internal sealed class AiFlightAssembler
             controller.Setup(new FlightModel(stats, aiForcePath: true), null, new CamParams(),
                 spawn.Position, spawn.LookAt);
             controller.ArmSpawnTimers();
-            controller.Name = $"ai{index + 1}_{spawn.PlaneName}";
+            // The authored identity wins where the caller has one, because the ranking reads this
+            // name against patterns written for it. The counter form is the fallback for the
+            // spawners with no authored name (--ai, the Instant Action fan, the generators).
+            controller.Name = spawn.NodeName is { Length: > 0 } authored
+                ? authored
+                : $"ai{index + 1}_{spawn.PlaneName}";
             _worldRoot.AddChild(controller);
             // The engine loop, positional and culled at 2000 units. Attach no-ops to null when the
             // session found no sound archive; the own-ship FlightAudio is never built for an AI.
@@ -189,9 +215,13 @@ internal sealed class AiFlightAssembler
     {
         var pilot = spawn.Pilot;
         var defSkills = defStats.AiPilotSkills;
-        int SkillFor(int? authored, int fallback) =>
-            _policy.AiAttackSkillExplicit || spawn.AttackRating != null
-                ? fallback : authored ?? fallback;
+        var roster = spawn.RosterSkills ?? default;
+        // The precedence the original's roster has: a block's own slot first, then the def's, then
+        // the flat rating. --ai-attack= pins every slot (docs/formats/ai-rosters.md).
+        int SkillFor(int? authored, int fallback, int? rosterSlot = null) =>
+            rosterSlot ?? (_policy.AiAttackSkillExplicit
+                    || (spawn.AttackRating != null && spawn.RosterSkills == null)
+                ? fallback : authored ?? fallback);
 
         if ((spawn.AttackRating ?? _policy.AiAttackSkill) is { } skill && pilot.Gunner == null)
         {
@@ -203,20 +233,20 @@ internal sealed class AiFlightAssembler
                 pilot.Gunner = new AiGunner(rng)
                 {
                     DeadEyeAngleDeg = _aiSkills.DeadEyeAngleDeg(
-                        SkillFor(defSkills.DeadEye, skill)),
+                        SkillFor(defSkills.DeadEye, skill, roster.DeadEye)),
                     QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(
-                        SkillFor(defSkills.QuickDraw, skill)),
+                        SkillFor(defSkills.QuickDraw, skill, roster.QuickDraw)),
                 };
                 var ordRng = new RandomNumberGenerator
                 { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
-                int quickDraw = SkillFor(defSkills.QuickDraw, skill);
+                int quickDraw = SkillFor(defSkills.QuickDraw, skill, roster.QuickDraw);
                 pilot.Rocketeer = new AiRocketeer(ordRng.Randf)
                 {
                     QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(quickDraw),
                     QuickDrawChance = _aiSkills.QuickDrawChance(quickDraw),
                 };
                 GD.Print("ai: gunner armed at dead-eye " +
-                    $"{SkillFor(defSkills.DeadEye, skill)} / quick-draw {quickDraw} " +
+                    $"{SkillFor(defSkills.DeadEye, skill, roster.DeadEye)} / quick-draw {quickDraw} " +
                     $"(dead-eye {pilot.Gunner.DeadEyeAngleDeg:0.00}°, " +
                     $"quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°, " +
                     $"ordnance roll {pilot.Rocketeer.QuickDrawChance:0.00} per " +
@@ -235,17 +265,17 @@ internal sealed class AiFlightAssembler
             _aiSkills ??= AiSkills.Load(_aircraft.ZrdrPath);
             _maneuvers ??= Maneuvers.Load(_aircraft.ZrdrPath);
             int rating = spawn.AttackRating ?? _policy.AiAttackSkill ?? 5;
-            int sixthSense = SkillFor(defSkills.SixthSense, rating);
+            int sixthSense = SkillFor(defSkills.SixthSense, rating, roster.SixthSense);
             pilot.Machine = new AiModeMachine(Rng.NewSystemRandom(Rng.Ai))
             {
                 ActivationRange = _aiSkills.MinAiActiveDist,
                 SteadyHandChance = _aiSkills.At("steady_hand_chance",
-                    SkillFor(defSkills.SteadyHand, rating)),
+                    SkillFor(defSkills.SteadyHand, rating, roster.SteadyHand)),
                 SixthSenseChance = _aiSkills.At("sixth_sense_chance", sixthSense),
                 SixthSenseFactor = _aiSkills.At("sixth_sense_factor", sixthSense),
                 StunRecoveryIntervalS = _aiSkills.At("stun_recovery_interval",
-                    SkillFor(defSkills.StunRecovery, rating)),
-                NaturalTouch = SkillFor(defSkills.NaturalTouch, rating),
+                    SkillFor(defSkills.StunRecovery, rating, roster.StunRecovery)),
+                NaturalTouch = SkillFor(defSkills.NaturalTouch, rating, roster.NaturalTouch),
                 Library = _maneuvers,
                 AssistEnabled = !_policy.NoAssist,
             };

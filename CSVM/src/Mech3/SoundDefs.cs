@@ -14,6 +14,14 @@ public static class SoundDefs
     /// <summary>Loads all SETS entries from sounds.json in a zrdr extraction (zip or dir).</summary>
     public static Dictionary<string, SoundDef> Load(string zrdrPath)
     {
+        static float? Num(object? v) => v switch
+        {
+            float f => f,
+            double d => (float)d,
+            int i => i,
+            _ => null,
+        };
+
         var defs = new Dictionary<string, SoundDef>(StringComparer.OrdinalIgnoreCase);
         var root = Zrdr.LoadFile(zrdrPath, "sounds.json")[0] as List<object?>
             ?? throw new InvalidOperationException("sounds.json: unexpected root shape");
@@ -37,6 +45,9 @@ public static class SoundDefs
                         List<object?>? Val() => j + 1 < entry.Count ? entry[j + 1] as List<object?> : null;
                         switch (flag)
                         {
+                            case "QUEUE" when Val() is { Count: >= 1 } q && Num(q[0]) is { } secs:
+                                def.QueueSeconds = secs;
+                                break;
                             case "LOOPED": def.Looped = true; break;
                             case "3D": def.Is3D = true; break;
                             case "FREQUENCY": def.Frequency = true; break;
@@ -135,7 +146,11 @@ public static class SoundDefs
     }
 }
 
-/// <summary>One sound definition from sounds.json (name → WAV + playback flags).</summary>
+/// <summary>One sound definition from sounds.json (name → WAV + playback flags). The data sorts
+/// every definition into one playback class and the flags are the sorter: <c>3D</c> (always with
+/// <c>RANGE</c>) is the positional opt-in, <c>QUEUE</c> marks a queued radio line, <c>MUSIC</c>
+/// the streaming channel, and a definition carrying none of them is cockpit or UI audio. See
+/// docs/formats/sounds.md.</summary>
 public sealed class SoundDef
 {
     public string Name = "";
@@ -145,6 +160,15 @@ public sealed class SoundDef
     public bool Frequency;       // FREQUENCY flag: the engine pitch-shifts this sound
     public float RangeMin = 130f, RangeMax = 1020f; // RANGE [full-volume dist, audible dist], m
     public float Volume = 1f;    // VOLUME base gain
+
+    /// <summary>QUEUE's value: how long this line may wait in the mission radio queue before it is
+    /// dropped as stale, in seconds. Null when the definition is not a queued line. No definition
+    /// in the shipped data carries both this and <see cref="Is3D"/>.</summary>
+    public float? QueueSeconds;
+
+    /// <summary>Whether this definition is a radio line: it plays on the non-positional mission
+    /// radio queue rather than from a point in the world.</summary>
+    public bool Queued => QueueSeconds != null;
 }
 
 /// <summary>

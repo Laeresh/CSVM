@@ -14,10 +14,18 @@ public readonly record struct FlightRosterBuild(int MeshInstances, string Summar
 /// variant it flies (<c>bhatwarhawk</c>); null takes the airframe's base def. <c>Fit</c> is a
 /// menu-chosen loadout laid over the stock table's, set only by the wingman spawns: the stock-table
 /// branch below also catches enemies flying player airframes, which must keep their own fit.
-/// <c>Nitro</c> is the roster block's injector flag (<see cref="AiSkills.RosterNitro"/>).</summary>
+/// <c>Nitro</c> is the roster block's injector flag (<see cref="AiSkills.RosterNitro"/>).
+/// <c>RosterSkills</c> is a roster block's own nine-slot pilot vector: a set slot outranks the
+/// def's, an unset one falls through to the def and then to <c>AttackRating</c>.
+/// <c>NodeName</c> is the identity the spawned node takes, and a caller that has an authored one
+/// must pass it: <c>primary_target</c> and <c>rating_biases</c> are written against the roster
+/// block's own name, so a spawn left on the fallback <c>ai{n}_{plane}</c> can match neither
+/// (BL-401).
+/// <c>PilotName</c> is the block's slot-20 key, the readout's name (docs/org/targeting.md).</summary>
 public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector3 LookAt, AiPilot Pilot,
     PaintScheme? Scheme = null, int? Team = null, bool Inert = false, bool ShippedSkins = false,
-    string? AiDef = null, LoadoutChoice? Fit = null, int? AttackRating = null, bool Nitro = false);
+    string? AiDef = null, LoadoutChoice? Fit = null, int? AttackRating = null, bool Nitro = false,
+    AiSkillVector? RosterSkills = null, string? NodeName = null, string? PilotName = null);
 
 /// <summary>The session's aircraft set: builds the human field in deterministic player order and
 /// introduces AI aircraft later for missions, waves, and generators. The roster is the assembly
@@ -37,6 +45,7 @@ public sealed class FlightRoster
     private readonly Dictionary<FlightController, AiSubscriptions> _aiSubscriptions = new();
     private IReadOnlyList<PlayerRig> _humans = Array.Empty<PlayerRig>();
     private Action<List<AimCandidate>>? _targetSubParts;
+    private Action<List<AimCandidate>>? _targetObjectives;
     private int _spawned;
 
     internal FlightRoster(FlightRosterPolicy policy, LiveryResolver liveries,
@@ -104,9 +113,7 @@ public sealed class FlightRoster
                 _players.Assemble(pi, rigs[pi], attempted.Add);
                 if (rigs[pi].Controller is { } controller)
                 {
-                    controller.SmokeScreens = _human.SmokeScreens;
-                    controller.PauseState = _human.PauseState;
-                    controller.TargetSubParts = _targetSubParts;
+                    BindSessionSinks(controller);
                 }
             }
             _humans = new List<PlayerRig>(rigs).AsReadOnly();
@@ -119,12 +126,70 @@ public sealed class FlightRoster
         }
     }
 
+    /// <summary>Puts one player into a different airframe without ending the mission: the rig's
+    /// aircraft is rebuilt from <paramref name="planeNode"/>'s own record, in the pose, attitude,
+    /// throttle and speed the aircraft being left was flying, carrying the NEW airframe's fit,
+    /// armour and audio and nothing of the outgoing one's. ⚠ Rounds already in the air are not the
+    /// outgoing aircraft's: they ride the shared pool under this pilot's unchanged shooter id.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md, callback codes 965 to 967.</summary>
+    public FlightController SwapPlayerAirframe(PlayerRig rig, string planeNode)
+    {
+        ArgumentNullException.ThrowIfNull(rig);
+        if (_players == null)
+            throw new InvalidOperationException("an airframe swap needs a flight-start policy");
+        if (rig.Controller is not { } outgoing)
+            throw new InvalidOperationException("an airframe swap needs an aircraft to swap out of");
+
+        // The sim pose, not the node's: the node lags it by the render interpolation, and a swap
+        // that read the drawn frame would put the replacement a frame behind where it was flying.
+        var start = new FlightStart(outgoing.WorldPosition,
+            outgoing.WorldPosition + outgoing.NoseDirection, outgoing.Throttle,
+            outgoing.WorldVelocity.Length());
+
+        // The paint stream is shared with every AI spawn still to come, so the replacement's own
+        // livery draw is rolled back afterwards: a mission handing the player an airframe must not
+        // change what the next wave is painted.
+        var assemblerState = _players.CaptureState();
+
+        // ⚠ Order is forced. DetachRosterBindings drops every near-miss registration carrying this
+        // pilot's shooter id and the replacement registers its own under the same id, so the
+        // outgoing aircraft goes first. A build that throws then leaves the rig aircraft-less.
+        RemoveController(outgoing);
+        rig.Controller = null;
+        try
+        {
+            _players.Assemble(rig.Index, rig, _ => { }, new AirframeSwapRequest(planeNode, start));
+        }
+        finally
+        {
+            _players.RestoreState(assemblerState);
+        }
+
+        var controller = rig.Controller
+            ?? throw new InvalidOperationException($"airframe swap to '{planeNode}' built no aircraft");
+        BindSessionSinks(controller);
+        Log.Info("flight", $"airframe swap: P{rig.Index + 1} is now flying '{planeNode}'");
+        return controller;
+    }
+
     public void SetTargetSubParts(Action<List<AimCandidate>> source)
     {
         _targetSubParts = source;
         foreach (var rig in _humans)
             if (rig.Controller is { } controller)
                 controller.TargetSubParts = source;
+    }
+
+    /// <summary>Binds the campaign mission's objective-site feed. Its own channel rather than a
+    /// second assignment to <see cref="SetTargetSubParts"/>, which the zeppelin runtime already
+    /// holds; the two feeds carry different mission flags and ride different cycles. Human panes
+    /// only: an AI rig does no targeting of its own.</summary>
+    public void SetTargetObjectives(Action<List<AimCandidate>> source)
+    {
+        _targetObjectives = source;
+        foreach (var rig in _humans)
+            if (rig.Controller is { } controller)
+                controller.TargetObjectives = source;
     }
 
     /// <summary>Introduces one fully configured AI aircraft into the running session.</summary>
@@ -189,7 +254,19 @@ public sealed class FlightRoster
         _ai.Clear();
         _aiSubscriptions.Clear();
         _targetSubParts = null;
+        _targetObjectives = null;
         _spawned = 0;
+    }
+
+    // The session-wide sinks a human controller takes after assembly rather than during it. One
+    // place, because an airframe swap builds a replacement that has to end up bound to exactly what
+    // the initial build bound.
+    private void BindSessionSinks(FlightController controller)
+    {
+        controller.SmokeScreens = _human.SmokeScreens;
+        controller.PauseState = _human.PauseState;
+        controller.TargetSubParts = _targetSubParts;
+        controller.TargetObjectives = _targetObjectives;
     }
 
     private void RollBackPlayers(IReadOnlyList<PlayerRig> rigs,

@@ -26,16 +26,18 @@ public sealed partial class MarkerHud : Control
     private const int RefStatusFont = 19;    // the run-status line
     private const int RefBannerFont = 26;    // intro / all-complete banners
     private const float RefStatusY = 100f;   // run-status baseline y, just under the compass tape
-    private const float RefArrowLen = 20f;   // arrowhead length
-    private const float RefArrowHalf = 9f;   // arrowhead half-width
-    private const float RefTextGap = 10f;    // gap from the projected point / arrow to the text
-    private const float RefReticleR = 9f;    // on-screen target reticle radius
     private const float IntroDuration = 5f;  // s the run-start line shows (fades the last second)
     private const float FlashDuration = 1.6f;// s a zone-cleared flash shows
 
-    private static readonly Color HudBlue = new(0.55f, 0.78f, 1f);
+    // The reticle, arrow and text-block geometry are MarkerDraw's, shared with the campaign's
+    // objective marker so both draw the one look.
+    private const float RefArrowLen = MarkerDraw.RefArrowLen;
+    private const float RefArrowHalf = MarkerDraw.RefArrowHalf;
+    private const float RefTextGap = MarkerDraw.RefTextGap;
+    private const float RefReticleR = MarkerDraw.RefReticleR;
+
+    private static readonly Color HudBlue = MarkerDraw.HudBlue;
     private static readonly Color HudGreen = new(0.60f, 1f, 0.70f); // completion feedback
-    private static readonly Color Shadow = new(0f, 0f, 0f, 0.75f);
 
     private StuntMission _mission = null!;
     private Camera3D _camera = null!;
@@ -186,54 +188,16 @@ public sealed partial class MarkerHud : Control
         return lines.ToArray();
     }
 
-    private void DrawArrow(Vector2 tip, Vector2 dir, float len, float half, float s)
-    {
-        var perp = new Vector2(-dir.Y, dir.X);
-        var b1 = tip - dir * len + perp * half;
-        var b2 = tip - dir * len - perp * half;
-        var off = new Vector2(1.5f, 1.5f) * s;
-        DrawColoredPolygon(new[] { tip + off, b1 + off, b2 + off }, Shadow);
-        DrawColoredPolygon(new[] { tip, b1, b2 }, HudBlue);
-        DrawLine(tip - dir * len, tip - dir * (len + 8f * s), HudBlue, 2f * s);
-    }
+    private void DrawArrow(Vector2 tip, Vector2 dir, float len, float half, float s) =>
+        MarkerDraw.Arrow(this, tip, dir, len, half, s, HudBlue);
 
-    private void DrawReticle(Vector2 p, float r)
-    {
-        DrawArc(p, r + 1f, 0f, Mathf.Tau, 20, Shadow, 2.5f);
-        DrawArc(p, r, 0f, Mathf.Tau, 20, HudBlue, 1.5f);
-    }
+    private void DrawReticle(Vector2 p, float r) => MarkerDraw.Reticle(this, p, r, HudBlue);
 
-    // Draws centred lines (each horizontally centred at `anchor`.X),
-    // with a 1 px drop shadow. Vertically the block is centred on `anchor`.Y
-    // unless `topAnchored`, in which case anchor.Y is its top.
     private void DrawLines(Font font, Vector2 anchor, string[] lines, int fontSize, Color color,
-        bool topAnchored = false)
-    {
-        float lineH = font.GetHeight(fontSize);
-        float ascent = font.GetAscent(fontSize);
-        float y = topAnchored ? anchor.Y + ascent : anchor.Y - lines.Length * lineH / 2f + ascent;
-        foreach (var line in lines)
-        {
-            float w = font.GetStringSize(line, HorizontalAlignment.Left, -1f, fontSize).X;
-            var p = new Vector2(anchor.X - w / 2f, y);
-            DrawString(font, p + Vector2.One, line, HorizontalAlignment.Left, -1f, fontSize, Shadow);
-            DrawString(font, p, line, HorizontalAlignment.Left, -1f, fontSize, color);
-            y += lineH;
-        }
-    }
+        bool topAnchored = false) =>
+        MarkerDraw.Lines(this, font, anchor, lines, fontSize, color, topAnchored);
 
-    // Like DrawLines (vertically centred) but keeps the whole block within
-    // the screen margins — the off-screen edge marker never spills off a corner.
-    private void DrawLinesClamped(Font font, Vector2 center, string[] lines, int fontSize, Color color)
-    {
-        float lineH = font.GetHeight(fontSize);
-        float totalH = lines.Length * lineH;
-        float maxW = 0f;
-        foreach (var line in lines)
-            maxW = Mathf.Max(maxW, font.GetStringSize(line, HorizontalAlignment.Left, -1f, fontSize).X);
-        float m = EdgeMarker.RefEdgeMargin * HudMetrics.Scale(this);
-        center.X = Mathf.Clamp(center.X, m + maxW / 2f, Size.X - m - maxW / 2f);
-        center.Y = Mathf.Clamp(center.Y, m + totalH / 2f, Size.Y - m - totalH / 2f);
-        DrawLines(font, center, lines, fontSize, color);
-    }
+    private void DrawLinesClamped(Font font, Vector2 center, string[] lines, int fontSize, Color color) =>
+        MarkerDraw.LinesClamped(this, font, center, lines, fontSize, color, Size,
+            EdgeMarker.RefEdgeMargin * HudMetrics.Scale(this));
 }

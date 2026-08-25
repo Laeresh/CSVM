@@ -45,15 +45,22 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ClutterTemplates.cs` — the `templates.zrd` reader: each clutter decoration model's authored substitution table, scale range and fade distances, plus the five keys no chapter authors.
 - `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
-- `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer included.
+- `src/Mech3/LandingApproaches.cs` — a chapter's `landings.zrd` approach table resolved against the gamez: each row's condition volume (the `cone`/`half_cone`/`sphere` child's single authored triangle, expressed in the approach node's own frame), its attitude cone and its speed band, plus the geodesic attitude test. Engine-free geometry; `LandingApproachRuntime` flies a player against it. Decode: `docs/formats/anim-definitions/cutscenes.md`.
+- `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer and the net's own three volumes included.
+- `src/Mech3/AiVolumes.cs` — `AiVolume`/`AiVolumeSet`: the activation/attack/return volumes as a roster block (slots 8–19) and a net record (elements 2–10) author them, with the engine's non-zero overlay.
+- `src/Mech3/RosterMarkers.cs` — grafts a roster block's authored marker scaffolding onto the rig its spawn built: the chapter's own copy of a vehicle is a library root the world never places, so whatever that copy adds under `markers` past the shared airframe's is built there, hung under the airframe's mark of the same name, switched to its authored `active` bit and indexed on the world runtime, which is what gives an index-addressed definition a node to write and a condition volume that moves with its aircraft.
+- `src/Mech3/VehicleDefs.cs` — the `vehicle.json` def index a roster spawn resolves a block against: the def behind a block name, its `mode` through `kind_of`, and the player airframe node its model is built from.
 - `src/Mech3/Maneuvers.cs` — the shared maneuver library (`zrdr/maneuvers.zrd`): 17 timed attitude-step programs with `natural_touch` difficulty gates, the eligibility cull, and the `signature_maneuvers` bitmask decode.
+- `src/Mech3/CampaignSequence.cs` — the shared `cm_sequence.zrd` reader: the campaign's 24 flat mission entries, each one's storage address (world folder, mission folder, `Persist.NNN`/`Mission.NNN` save id) and the backwards walk to the previous mission of the same world folder that cross-mission persistence is scoped by. Decode: `docs/formats/campaign-sequence.md`.
 - `src/Mech3/EnemyGenerators.cs` — the mission `egen.zrd.json` reader: the 23 enemy generators in their three shapes (zeppelin launch / plain / moving spawner), `[null]` files as empty.
 - `src/Mech3/Zeppelins.cs` — the mission `zeppelins.zrd.json` reader: the 58 zeppelin instances (motion limits, net, gasbags/healthy/engines, cannons), all values in authored units.
 - `src/Mech3/InstantAction.cs` — `InstantActionDef` + the `ia.zrd.json`/`--ia=` readers: mission type, wingmen, four waves, ace, with every optional key resolved to the original's own built-in default.
-- `src/Mech3/AiSkills.cs` — the `ai_skill_parameters` endpoint pairs from player.json (1–9 ratings, linear between the decoded endpoints) + the roster accessors: the skill vector (slots 22–30 by stat name), `primary_target` (slot 6) and `rating_biases` (slot 33, `AiRatingBias` wildcards).
+- `src/Mech3/AiSkills.cs` — the `ai_skill_parameters` endpoint pairs from player.json (1–9 ratings, linear between the decoded endpoints) + the roster accessors: the skill vector (slots 22–30 by stat name), `primary_target` (slot 6), `rating_biases` (slot 33, `AiRatingBias` wildcards) and the spawn-facing slots (`netids`, pose, team, group, title, `deactivated`, `pref_engage_alt`, the signature mask, `taxiPath`, the accent).
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
 - `src/Mech3/UiStrings.cs` — the original's UI string table (`extracted/rof/ui_strings.json`) by id: langui rows only (ids repeat across the file's two tables), `FormatMessage` placeholders (`%1!d!`) converted to composite format, leading `[FONTID]` tags stripped.
-- `src/Mech3/TgaImage.cs` — the engine-free TGA decoder behind the hangar's art (`extracted/rof/ASSETS/GRAPHICS`): types 2 and 10 (RLE) truecolour at 24/32 bits, both row orders, to top-down RGBA8; anything else, or a malformed/absent file, is null.
+- `src/Mech3/TgaImage.cs` — the engine-free TGA decoder behind the hangar's art (`extracted/rof/ASSETS/GRAPHICS`): types 2 and 10 (RLE) truecolour at 24/32 bits, both row orders, to top-down RGBA8; anything else, or a malformed/absent file, is null. `FromRgba` wraps an already-decoded buffer as one of these, which is how `PngImage` reaches the same art path.
+- `src/Mech3/PngImage.cs` — the engine-free PNG decoder behind the menus' `rimage` art (the campaign briefing's maps and flag pins), returning a `TgaImage` so both decoders feed one seam: 8-bit non-interlaced truecolour with (colour type 6) and without (type 2) alpha, which is all 254 files that extraction ships, all five row filters; a palette, a 16-bit channel, an Adam7 file or a malformed/absent one is null rather than a throw.
+- `src/Mech3/ArtImage.cs` — the one door menu art is loaded through: a path in, a decoded `TgaImage` or null out, decoder picked from the extension (`.PNG` → `PngImage`, `.TGA` → `TgaImage`). A screen names the file the extraction ships and stops caring what format it is, which is what let the hangar's art seam stay TGA-only while the PNG art beside it went undrawn. **JPEG has no decoder and needs none.** `extracted/rof/ASSETS/GRAPHICS` holds 26 `.JPG` (11 `PC_P_HANGAR<n>`, 15 menu backgrounds, 14 of those 800x600 and `MP_ERRORMESSAGEBACKGROUND` 380x206), 24 of them baseline (SOF0) and two progressive (SOF2, `CR_BACKGROUND` and `MP_LOBBY_BACKGROUND`), so a hand-written baseline decoder several times the size of `PngImage` would leave two files blank. It is not needed and neither is an extract-time PNG sidecar: every JPEG picture a screen names is a **board** picture, and `ComposedBoardView.Load` reads it through Godot's own loader, both progressive files included, pixel-identical to a reference decode. A `.JPG` handed to this door still returns null, which is the correct answer: a stand-in picture on a fidelity screen reads as a verdict about the original.
 - `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
 - `src/Mech3/CompiledAnim.cs` — reader for the compiled `cam_anim`/`mis_anim` archives: anim defs, sequences/events, lazy SI-script pool.
 - `src/Mech3/AnimDefs.cs` — the zrdr front-end: ANIMATION_DEFINITIONS reader files, normalized into one `AnimDefinition` model.
@@ -72,11 +79,16 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Anim/NameResolver.cs` — name→node resolution: the index, wildcard matcher, memoized `FindAll`, the three-tier scope chain (`Resolve`/`ResolveScoped` with the `ownRootsOf` hook and the `stagingAdmits` pooled-copy filter), the symbol authority, `Anchors` (narrowing + root lift) and the bind census; generic over the node type, off-engine testable.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock / LOOP / IF-ELSEIF), extracted behind the 3-member `ISequenceHost` seam; headlessly testable.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
+- `src/Mech3/ScriptedPath.cs` — resolves an authored waypoint path (`pp1` → the gamez `pp1_aipath` subtree) into ordered world-space waypoints.
+- `src/Mech3/WorldPartitionGrid.cs` — which gamez nodes a world-space XZ rectangle covers, off the World node's own cell table; the area verb's selector.
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
 - `src/Mech3/SessionArchives.cs` — `OpenFor(ArchiveIntent)` opens the five archives a chapter build needs and the matching `WorldSession.Options` lifetime flags, so `GameSession`, the anim lab and the test harness open the same five without hand-setting the flags.
 - `src/Mech3/EmptyStage.cs` — the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
+- `src/Mech3/WavCues.cs` — the RIFF `cue ` chunk of a WAV, as times in seconds (zip or dir): the briefing narration's marker points, which is the only clock a reveal script does not carry itself. Times come back ascending because a `WaitForMarker` number indexes them by sample offset and 13 of the 24 briefing wavs store their points out of that order. Kept apart from `SoundArchive`, which decodes to a Godot stream, so a menu page needing only timings stays engine-free. Decode: `docs/formats/briefing.md`.
 - `src/Mech3/SoundArchive.cs` — WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
+- `src/Mech3/MusicPlayer.cs` — the state-driven score: one 2D streaming channel for menu, cabin and mission, with the decoded battle hold.
+- `src/Mech3/MissionRadio.cs` — the mission radio queue: the non-positional voice channel the campaign's objective callouts and VO dialogue chains speak on.
 - `src/Mech3/SoundDefs.cs` — sounds.json parser: SETS `snd_*` → `SoundDef`; `LoadGroups` → the weighted-random `SOUND_GROUPS` + their dialogue chains.
 - `src/Mech3/CombatVoice.cs` — the combat-voice chain: roster `accentID` → `voice.zrd` pool → pilot VO id → clip defs / the shipped `_random` variant groups; the mission's voice prewarm set.
 - `src/Mech3/Anim/TemplateStage.cs` — the effect-template stage as one module: pool-slot arithmetic, root resolution and retirement.
@@ -102,13 +114,14 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/TargetHud.cs` — the per-pane targeting HUD, built in every flight session: the selected-target bracket marker and label, the nearest-AI-hostile fallback, and `--debug-markers`' every-aircraft overlay.
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner: acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
-- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver: mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
+- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver: mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional formation escort, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
 - `src/Flight/AiControlLaw.cs` — the original's own AI steering law (decoded in `docs/org/aiControlLaw.md`): aim point + that point's velocity + one of four decoded parameter tables → stick and throttle lever. Engine-free and pure.
+- `src/Flight/AiEscort.cs` — the formation-escort law a netless `mode wingman` flies (D34, decoded in `docs/org/aiPilot.md`): leader and selected-target snapshots in, one station point and its velocity out, over the engine's own five-state machine. Held by `AiPilot.Escort`, which dispatches to it in place of every other mode but stunned and avoid crash.
 - `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine, the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
-- `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: intercept lead via `AimAssist.TryIntercept`, the quick-draw cone and the engagement window as fire gates, the ±11° traverse clamp with its 10° residual gate, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
-- `src/Flight/AiRocketeer.cs` — the AI's ordnance employment: the quick-draw cone over the whole pass, then per pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the 200–800 m band and the traverse clamp with its 5° residual gate (tighter than the gun's 10°), then the vehicle-wide lockout stamped ahead of the `quick_draw_chance` roll; the lead is per pylon, a motor round on its `ACCELERATION` ramp in the launcher's frame and a round without one at `VELOCITY` in the world's. Holds no target of its own: the host walks it against `AiGunner.Target`.
+- `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: intercept lead via `AimAssist.TryIntercept`, the quick-draw cone and the engagement window as fire gates, the ±11° traverse clamp with its 10° residual gate, per-shot dead-eye scatter; two mutable target fields (D36, `BL-363`) — aircraft-only `Target`, `AiPilot`'s own pursuit quarry, and non-aircraft `GroundTarget` (a turret or a world/zeppelin structure) so the flight law never chases what it cannot dogfight — plus primary-target name and rating biases (the D12 script seams).
+- `src/Flight/AiRocketeer.cs` — the AI's ordnance employment: the quick-draw cone over the whole pass, then per pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the 200–800 m band and the traverse clamp with its 5° residual gate (tighter than the gun's 10°), then the vehicle-wide lockout stamped ahead of the `quick_draw_chance` roll; the lead is per pylon, a motor round on its `ACCELERATION` ramp in the launcher's frame and a round without one at `VELOCITY` in the world's. Holds no target of its own: the host walks it against `FlightController`'s standing-target lookup (`AiGunner.Target` or `GroundTarget`).
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch, engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
-- `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula: rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching and the allied-attacker deconfliction pick.
+- `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula: rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching (a turret's flat `+37.5` handicap included, D36) and the allied-attacker deconfliction pick.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints: nearest node first, then edge-list neighbours, seeded branch draws, and an anchored net offset onto its live trailer target (`BL-377`); aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
 - `src/Flight/ZeppelinBroadside.cs` — the pure broadside law (M4 F19): the decoded 90° side arc (dot > 0.707 on the moving hull's lateral axis), the per-cannon stowed→deploy→ready→fire machine with its own re-fire timer, the ballistic lead solve (skip on no solution) and the seeded gasbag pick.
 - `src/Flight/ZeppelinDamage.cs` — the pure zeppelin kill arithmetic (M4 F18): the decoded survivor threshold over the `healthy` list, the engine recount, the DAMAGES_ZEPPELIN gasbag gate, the record-stage crossing helper.
@@ -131,13 +144,14 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WarningShotCue.cs` — the shipped near-miss accumulator (player.json `warning_shot_*`) + swept-segment/point distance; engine-free so it unit-tests.
 - `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig — a phantom shooter on each player's six, so the cue is reachable deterministically without an AI gunner.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
-- `src/Flight/MissionTargets.cs` — mission `targets.json` loader: world-node name → objective display keys, resolved through `Messages`.
+- `src/Flight/MissionTargets.cs` — mission `targets.json` loader: world-node name → objective display keys and the `objective`/`other_target` marker flags a mission starts with, resolved through `Messages`.
 - `src/Flight/StuntMission.cs` — Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
 - `src/Flight/HudMetrics.cs` — the one rule for HUD sizing: window height / 1440, damped by `sqrt(paneH/windowH)` for splitscreen.
 - `src/Flight/HudFont.cs` — the game's own 5px HUD bitmap font, auto-segmented from `rimage/5pointhud*.png`; `--hud-font-test` proves it.
 - `src/Flight/WeaponReadout.cs` — the selected-weapon text readout: gun group + rocket type and live ammo, in the game's own HUD font.
 - `src/Flight/ImpactReticle.cs` — the gun aiming pipper: 0.5 s of the selected group's flight along the nose (the original's own rule), projected each frame.
 - `src/Flight/EdgeMarker.cs` — the off-screen edge marker's placement rules, engine-free: on-screen test, behind-mirror, edge clamp (`Resolve`) and the clock-hour bearing (`ClockHour`); MarkerHud, VersusHud and TargetHud all place through it.
+- `src/Flight/MarkerDraw.cs` — the world marker's drawing primitives, engine-side but camera-free: reticle, edge arrow, centred text block and its clamped variant, plus the marker blue and the drop shadow. `EdgeMarker` places a marker; this draws it.
 - `src/Flight/MarkerHud.cs` — the stunt objective marker HUD: reticle, screen-edge arrow + o'clock bearing, run status, banners; one per player.
 - `src/Flight/StuntScoreboard.cs` — end-of-run results overlay: a Godot-UI panel of per-zone splits, total, and the persisted best time.
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
@@ -163,6 +177,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/SpectatorCamera.cs` — the `--freecam`/`--anim-lab` observation camera: RMB-look + WASD/QE, no roll; `Frame`/`FollowNode` track an object, `F`/pad `X` re-locks onto one.
 - `src/Flight/OrbitLock.cs` — the re-lock rule behind that key: nearest first, then outward, engine-free.
 - `src/Flight/FlightModel.cs` — the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, calibrated control rates.
+- `src/Flight/PathFollower.cs` — the second movement law: a placed vehicle driven along an authored waypoint path instead of through the flight model, handing itself back at the last waypoint.
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/ThrottleSlamSmoke.cs` — a large throttle jump streams dark exhaust trail smoke for a few seconds; a single notch or a decrease shows nothing.
 - `src/Flight/SpeedCue.cs` — chapter-authored pale smoke wisps emitted 60 m ahead of each player, density selected by camera altitude.
@@ -207,17 +222,18 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab has a scripted
 `--debug-*` twin so a finding can be reproduced headlessly — see `docs/cli.md`.
 
-- `src/UI/MenuInput.cs` — one player's menu input source: keyboard flag + a `Pads` binding, edge/auto-repeat `Poll(dt)`.
+- `src/UI/MenuInput.cs` — one player's menu input source: keyboard flag + a `Pads` binding, edge/auto-repeat `Poll(dt)`, plus the typed characters and pad-only cursor axes a text field needs.
 - `src/UI/BoardMenu.cs` — a board's cursor and item list, engine-free, so the selection rules test off engine.
 - `src/UI/BoardMenuItem.cs` — the rows a board menu can offer: Resume, Restart, Exit.
 - `src/UI/BoardMenuView.cs` — draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
-- `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session; also the hangar's two doors and its renderer.
+- `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session; also the hangar's two doors, the campaign's one, and the renderer both flows draw through.
 - `src/UI/InstantActionPresets.cs` — the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
 - `src/UI/PlanePickerRoster.cs` — the one roster every human plane picker draws: 11 stock airframes then the store's saved customs, each custom carrying its store name and its airframe's stock node (D32's launch seam); engine-free build/lookup rules.
+- `src/UI/PlaneDiagrams.cs` — the two plane-diagram sheets the original draws beside a fitted aircraft, framed per airframe: `OL_PLANEDIAGRAMSTOP.PNG` (204x1870) and `OL_PLANEDIAGRAMSFRONT.PNG` (245x1100), each eleven equal frames stacked top to bottom in airframe-id order. Shared by ammo selection, the campaign's flight check and the hangar's airframe list; the decode is cached for the process, misses included, and a sheet whose height is not a whole multiple of the airframe count draws nothing rather than a mis-sliced picture.
 - `src/UI/HangarFlow.cs` — the Build Custom Plane flow, engine-free: the original's nine screens over one scratch `CustomPlaneDef`, back/next navigation, the `IHangarPage` mount point C22-C26 fill (rows, detail, stepper, optional page `HangarArt` and a per-row one), the plane-selection screen's two-stage delete (the original's Sell Plane with no economy to sell into), and the gated commit into `CustomPlaneStore`.
-- `src/UI/HangarAirframePage.cs` — the AIRFRAME screen: all 11 airframes as rows, focus previewing one and confirm picking it (raising the string-206 defaults ask as an inline two-row confirm), the stat table's figures and the economy's star ratings per row, the focused airframe's blueprint TGA as page art; nothing is ticked until a pick is made and the ←→ stepper is inert.
+- `src/UI/HangarAirframePage.cs` — the AIRFRAME screen: all 11 airframes as rows, focus previewing one and confirm picking it (raising the string-206 defaults ask as an inline two-row confirm), the stat table's figures and the economy's star ratings per row, the focused airframe's blueprint TGA as page art with its `PlaneDiagrams` plan view under it as row art; nothing is ticked until a pick is made and the ←→ stepper is inert.
 - `src/UI/HangarEnginePage.cs` — the ENGINE screen: the airframe's six engines (langui 3100+af*6+id) plus the None row (1165, the decoded dropdown's own last row; 1171 stays the purchase wording), the pick ticked and opened on, confirm writing the scratch engine and the stepper inert, each row's decoded cost and weight via `HangarEconomy.EngineLine`.
 - `src/UI/HangarArmourPage.cs` — the ARMOR screen: the four zones through their own langui formats (1191-1194) on the record's own units x5 display scale (0 to 60 in fives, the original's 13-row dropdown), the detail naming the pick as that dropdown does (1165 "None" on zero, else 1170 of units x5) beside the x4 priced cost and weight.
 - `src/UI/HangarGunsPage.cs` — the GUNS screen: always four slots titled from the stat table's slot-title strings, each stepping the original's 11-entry dropdown (five calibres single, five twinned via format 506, No Gun 3315), the detail pricing the slot's wing or turret column (doubled for twin) with the calibre's magazine rounds.
@@ -226,6 +242,15 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/Flight/HangarPaintTables.cs` — the paint screen's decoded tables as CSVM data: the swatch table (`data/hangar_swatches.json`, 27 rows of base colour, default variant and shade ramp) and the pattern table plus the 50 decal names (`data/hangar_patterns.json`). `Resolve(colour, shade)` is the original's own resolver; `Available(pattern, airframe)` is the availability mask; `Nearest(rgb)` maps a version-1 store file's free triple onto an authored swatch. Engine-free and pure, so the whole colour model resolves without a session.
 - `src/UI/HangarNamePage.cs` — the PLANENAME screen: one row per character stepped through a filename-safe alphabet plus a length row that adds and removes them, capped at the original's 32-character name, with the detail line assembling the name and marking the focused character.
 - `src/UI/HangarPurchasePage.cs` — the PURCHASE screen: the itemised review, one row per priced thing the scratch plane carries (airframe always, engine when chosen, armed gun slots, armoured zones via 1191-1194, wings with hardpoints via 1176/1177) with its decoded cost and weight, a totals row, and the Purchase Now row that commits, flagged with the problems text (1182 + 1227 / 1171) whenever the verdict is not Ok.
+- `src/UI/CampaignFlow.cs` — the campaign's out-of-mission flow, engine-free: a stack of screens over one selected `CampaignProfileDef`, the `ICampaignPage` mount point the later screens fill (rows, detail, footer, optional `HangarArt`, optional text field), a registry keyed by `CampaignScreen`, and the navigation API (`GoTo`, `Back`, `SelectProfile`, `Cancel`) those pages steer with.
+- `src/UI/CampaignRosterPage.cs` — the player-profile screen: the name field over the roster, CONTINUE creating or continuing a player and opening the cabin, a roster row selecting then continuing, DELETE PLAYER as a confirmed second stage, CANCEL back to the launchscreen, and the original's own name refusals (langui 200/202/212/707).
+- `src/UI/CampaignTextEntry.cs` — a campaign screen's one-line text field: the original's alphanumeric-and-space rule and 32-character cap, typed from the keyboard and stepped from the pad through one alphabet, so the field needs no keyboard and produces nothing the profile store would have to sanitise.
+- `src/UI/CampaignCabinPage.cs` — the cabin hub: NEXT MISSION (opens the briefing for the profile's next mission, or refuses in the campaign's own words once all 24 are complete), PREVIOUS MISSIONS, PLANE CONSTRUCTION (a `CampaignExit.OpenHangar` request the shell fulfils), and RETURN TO MAIN MENU; `Pictures` layers the pilot's own aircraft photo (`PC_P_HANGAR<airframe>.JPG`) under the painted cabin, whose colour-keyed hole is the window, and the board draws it; `Art` is the flat cabin scene alone, for a caller that wants pixels. `MapPinCount` is a pure, tested stand-in for pins nothing places yet.
+- `src/UI/CampaignPreviousMissionsPage.cs` — the scrapbook's finished-missions list, one row per completed mission in `seq` order (long name, area, plane flown from the best-of record) plus VIEW SELECTED (a no-op; the detail line already says everything it would), REPLAY MISSION (`SetMission` + `GoTo(Briefing)`, no advance) and RETURN TO CABIN.
+- `src/UI/CampaignBriefingPage.cs` — the mission briefing: everything resolved from `CampaignFlow.MissionSeq` alone, through `cm_sequence` to the storage address, `brief_c%d%d` to the dialog state, the state to its map bitmap and narration name, `sounds.zrd`'s `SETS` to the wav file, and the mission's own `objectives.zrd` to the note, so nothing is computed from the story position. REPLAY BRIEFING / RETURN TO CABIN / GO TO FLIGHT CHECK are the screen's only rows: an uncovered objective is written on the parchment through `Notes`, the `BoardNote` carrying the dialog's own `LIST` widget, so the mission's text is read and never a cursor stop (`BL-487`). The map is the page's `HangarArt`. Labels are `messages.json`'s own `MSG_BTN_*` and an unresolved objective key shows as the raw key, so a missing extraction degrades to the three buttons rather than throwing. It plays nothing: `NarrationWav` and `NarrationStarts` name what a shell must play, and `Advance(seconds)` is the clock a shell drives.
+- `src/UI/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`/`BriefingState`/`BriefingStep`, walking the root list where the 24 states actually live) and `BriefingReveal`, the interpreter that runs a state's 12-opcode beat sheet against a caller-advanced clock, blocking on `Wait`'s authored seconds and `WaitForMarker`'s cue times and keeping each element's opacity, rotation and position as its tweens land. Elements come out in placement order, which is draw order. With no cue points every marker releases at once, so the map finishes under the narration rather than a timing being invented. Decode: `docs/formats/briefing.md`.
+- `src/UI/BriefingObjectives.cs` — the briefing's parchment note from a mission's `objectives.zrd`: every `IDENTITY` carrying a `MSG_BRF_*` key, ordered by priority ascending, which is the list an `Objective id index` opcode indexes 0-based. Takes the reader list rather than a path, so it tests without an extraction; resolves text through `Messages`, leaving the raw key visible when the table cannot.
+- `src/UI/ObjectivesHud.cs` — the campaign mission's objectives readout, drawn on the **pause screen** and nowhere else (`BL-466`): the original keeps its objectives on the pause screen's parchment and leaves the flight HUD to the gauges, so the whole layer is hidden until `PauseState.Paused`. Reads `CampaignDirector`'s `ObjectiveGraph.Rows` directly (not a re-parse), text through `Messages`, and shows every row rather than gating on the row's own `Awake` flag (an objective authored with no `BEGIN_DORMANT` starts awake without ever running a wake action, so its row's `Awake` flag never turns on even though it is live from the mission's first tick, C1/M02's own primary OBJECTIVE3, and filtering on it would hide exactly the objective a player needs to see first). This also matches the original's own decoded display mechanism (`docs/formats/objectives.md`, `FUN_004acc20`/`FUN_004ad240`): every `IDENTITY` row is built once and shown unconditionally, only the completion mark toggles. A row the mission gives **no message key** resolves to no text and is dropped from the drawing (`DrawnLines`), since drawn it would be a mark against blank space, and `BuildLines` still carries one line per graph row so a suite counts against the graph. The mark takes a column of its own, so a completed line's text starts where every other line's does. Self-mounting like `PerfHud` (its own `CanvasLayer`, on `HudLayers.Board` with the pause board and after it in tree order), so `GameSession` only hands it the shared `PauseState` and adds it. The reference frame (`Complete Mission M02.mkv` at t=12 s) fixes the top-right corner and nothing else, so the glyphs and metrics are TUNE.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
@@ -275,7 +300,7 @@ instead.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
 - `src/Testing/SuiteCatalog.cs` — the ordered registry of the in-engine suites; domain scenario bodies live in `*Suites.cs` modules, while `SuiteConstants` holds their shared golden inputs. Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
-- `src/Testing/*Suites.cs` — eleven domain scenario modules: puffer, combat, ordnance, Instant Action, AI, targeting, zeppelins, damage, destroy choreography, animation/effects, and world/tools.
+- `src/Testing/*Suites.cs` — the domain scenario modules: puffer, combat, ordnance, Instant Action, AI, the campaign, music, targeting, targeting candidates, wingmen, zeppelins, damage, destroy choreography, animation/effects, world/tools, mid-mission world fidelity, and the weapon-ray occluder census.
 - `src/Testing/SuiteConstants.cs` / `BurstTimeline.cs` / `SuiteViewers.cs` / `EffectStageSuiteHelper.cs` — the focused shared inputs, timeline values, pane-camera fixtures, and staged-effect fixture used by more than one suite module.
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
@@ -308,12 +333,24 @@ clusters they delegate to.
 - `src/Session/InstantActionDirector.cs` — the engine-side sequencing of one Instant Action mission: construction, the actor build phases, the zeppelin switch and wave arm, the sequencer tick and the end-condition/wrap-up wiring, called by `GameSession` at its pinned build and drive points.
 - `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll), and F12's objective-zeppelin selection.
 - `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry, pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
+- `src/Session/ScriptedPathVehicles.cs` — one mission's scripted-path vehicles: placement, the freeze, `START_TAXI`'s release, and the handoff back to the flight model.
+- `src/Session/CampaignRoster.cs` — the engine-free plan of a campaign mission's `aiv` roster: each block resolved to an airframe, its authored net or the decoded netless-wingman escort (never both), the merged volumes and the leader lookup; `CampaignDirector.BuildRoster` places it.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in and F12's wave-credit budget that switches it back off.
 - `src/Session/NetTrailerTargets.cs` — resolves a patrol net's trailer name (`player`, a zeppelin, a train) to a live position, so an anchored net rides its target (`BL-377`).
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (`--generators`): load-time drop rules, per-cycle stepping, spawns through the handed roster callback — or, on an Instant Action zeppelin run (F12), releases an already-built wave member instead.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
 - `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17+F18+F19, `--zeppelins`): places each record's world node at its authored pose, flies it along its net through `ZeppelinMotion`, owns the multi-zone damage (per-part registry pools, the survivor-count kill, the authored hull death) and fires the broadside (`ZeppelinRuntime.Cannons.cs`: real unowned `wep_28` rounds through `ZeppelinBroadside`).
 - `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements: the standalone `ai.zrd` family placed at its `NODES` patterns against the built chapter world, shipped `ACTIVATED` honoured, `SetActivatedUnder` the Instant Action builder's subtree activation (what arms the objective zeppelin's rings), `--wake-turrets` the `WAKEUP_TURRETS` stand-in.
+- `src/Session/CampaignProfileStore.cs` — JSON persistence for a named campaign profile under `user://Profiles/<name>/profile.json`, following `ScoreStore`/`CustomPlaneStore`'s precedent: funds, owned planes (name-referenced into the global `user://Planes/` store, never a copy of it) with their per-gun ammo and per-pylon ordnance picks, mission results (the original's two halves, latest attempt and best-of merge), the completed-mission count, the granted aircraft awards and the cross-mission destruction log. `SessionSpec.CampaignProfile`/`CampaignMissionSeq` (`--campaign=<profile>:<seq>`) carry the launch-time selection as plain values; building the mission from them is the campaign director's job, not this store's.
+- `src/Session/CampaignProgression.cs` — the rules that write a profile: the best-of merge of one mission attempt (each field's rule is the original's), the monotonic position only a completed primary objective raises, the replay rule Previous Missions flies under, and the five aircraft awards granted once per profile. The cash half of the reward table stays with the hangar economy; this class banks the money an attempt reports.
+- `src/Session/CampaignPersistLog.cs` — the cross-mission state log (`BL-243`): captures what `PERSIST_LOG` defs a mission left destroyed out of `AnimRuntime.Destructibles`, keyed by chapter and by gamez node index, and re-applies it to a later mission of that chapter through `AnimRuntime.DamageAt`, so the death runs the way a weapon kill's did. Persistence is read from the READER def bound to a node, never from the compiled twin, which drops the flag.
+- `src/Session/CampaignLoadout.cs` — the bridge between a profile's stored picks and a flying aircraft's fit: one `OwnedPlane`'s ammunition indices and ordnance table indices as the `LoadoutChoice` a launch hands the session, which `Loadout.Bind` then lays over the aircraft's base fit. Engine-free, and both encodings are the campaign screens' own rather than the original's per-pylon ordnance id, which is a rocket table index decoded in `docs/formats/saved-games.md` and deliberately not adopted here, so an unset pylon is left to the base rather than written back. ⚠ `PylonRow` is the one decoder of the stored one-based ordnance value, and every screen that reads the field calls it rather than subtracting one itself; a second reading of the field puts a different rocket on the flight check than the ammo screen just committed.
+- `src/Session/ObjectiveScript.cs` — one mission's parsed `objectives.zrd`: the file-level keys and the contiguous `OBJECTIVEn` blocks in the typed shape the graph runs, found by exact name so every shipped misspelling lands in no field and stays dead. Decode: `docs/formats/objectives.md`.
+- `src/Session/ObjectiveGraph.cs` — the objectives runtime, engine-free: the four-state machine per objective, the rotating one-completion-per-tick scan, the chaining executor with its already-awake truncation, the nap that clears a completed flag, the condition families' OR, the mission countdown, the win/loss flags and the display rows D33 reads. Reaches the world only through `IObjectiveWorld`.
+- `src/Session/ObjectiveSites.cs` — the flown campaign mission's objective sites as targeting candidates, which is what tells the player where to go: the set is `targets.zrd`'s own `objective` entries edited by `objectives.zrd`'s `ADD_`/`REMOVE_OBJECTIVE_TARGET`, offered to each player's `TargetPool` with the mission's objective flag so they head the Enemy cycle and the ordinary selection draws one at a time. Rebuilt from its live source every frame, so a site under a moving node moves with it. A site the mission names by a bare `TRAVELERS` point sits at that point, not at the world node of the same name.
+- `src/Session/CampaignDirector.cs` — the engine side of a campaign mission and the sibling of `InstantActionDirector`: resolves a `--campaign=<profile>:<seq>` launch to its chapter/mission, arms the graph against the built world's runtimes, and at mission end records the attempt through `CampaignProgression`, folds the destruction log into the profile and raises the return-to-cabin exit the session layer acts on. It also owns the mission's two music duties: routing a `mu*` sound group to the process music channel instead of a positional emitter, and running the decoded proximity scan and player-damage ping that put the score into battle. The wingman's aircraft and fit are resolved here too, from the profile it already has open; nothing spawns that aircraft yet. A cutscene hold (callback 20) stops its whole step.
+- `src/Session/CutsceneController.cs` — the host a cutscene definition raises its `CALLBACK` codes to: the letterbox bars and the cutscene camera the definition itself drives, the world/objectives hold, the player out of flight with the chrome off, the AI parked, then one hard cut back to gameplay on the definition's end or on a skip. It answers for the two story-mission intros always, and for whatever `HostDefinitions` registers (the landings trigger's own rows and their `CALL_ANIMATION` closure). Scoping is by definition name, never by authored code.
+- `src/Session/LandingApproachRuntime.cs` — the mid-mission cutscene trigger: ticks a story mission's resolved `LandingApproaches` against the flown aircraft (arming gate, speed band, attitude cone, condition volume) and starts the row's definition, which is what makes an `ANIM_STATE … EXECUTED` objective satisfiable. A row fires once per entry into its volume: the handoff leaves the aircraft where the cutscene parked it, still inside the volume that started it. An `auto` row offers the auto-land rather than starting anything. Story missions only, for the reason `WorldSession.Options.LandingTriggers` gives. ⚠ A row whose approach node sits under a gamez library root reaches the world only on the rig the mission's roster spawns (`Mech3/RosterMarkers.cs`), so the trigger is bound a second time after the roster build; without that second bind those rows are dropped by the first one, which runs at world-attach time. CM02's three Balmoral rows are the case: they hang under `britbalmoral_<n>/markers/pylon8` and `landings-wingwalk-gate` drives them.
 
 ### Session root and tests
 
@@ -354,6 +391,9 @@ honoured by `WorldBuilder.Add`, which skips building an inactive world-build roo
 Carries the node's `zone_id` as `ZoneId` (default −1 when the field is absent, i.e. ungated) — the
 original's per-node visibility zone, honoured per node by `SceneBuilder` and per camera by
 `Mech3/ZoneGate.cs`.
+Carries the World node's partition grid twice: `PartitionNodes` is the flat distinct set every
+placement walk uses, and `PartitionCellNodes` (with the grid origin and cell size read off the first
+cell's own bounds) keeps the per-cell membership an area query needs (see `WorldPartitionGrid`).
 `IsMarkerGizmo(meshIndex)` classifies a mesh as an authoring mark rather than scenery (one flat-
 coloured untextured triangle — see docs/formats/world-structure.md); SceneBuilder draws none.
 Carries each model's `flags.lighting`/`flags.fog` as `GameZMesh.Lighting`/`Fog` (default true) —
@@ -614,7 +654,8 @@ Ids 0–5 are compiled into `crimson.exe`; ids 6–13 are the `LoadSoils`-loaded
 ## src/Mech3/AiNets.cs
 The chapter patrol-net reader (`docs/formats/ai-nets.md`): every `ne0NNNNN.zrd.json` in a chapter
 zrdr scope joined with its `neindex.zrd.json` name — nodes, the explicit edge list, raw per-node
-tags, and the trailer attach target. Plus the lookups both ways the data references nets:
+tags, the trailer attach target, and the net's own three volumes (`Volumes`, record elements 2–10
+as an `AiVolumeSet`). Plus the lookups both ways the data references nets:
 `ById` (aiv field 0), `ByName` (egen/zeppelins/objectives, case-insensitive), `Resolve` (either
 spelling), and `ChapterFirst` (the net an Instant Action actor is given). Consumers:
 `UI/AiNetsOverlay.cs` and `Flight/AiNetFollower.cs`. Golden counts asserted in
@@ -632,7 +673,9 @@ entry by design) and the roster `signature_maneuvers` bitmask decode (`Signature
 The mission `egen.zrd.json` reader (docs/formats/mission-entities.md): the enemy generators that
 feed AI aircraft into a live mission, typed as `EnemyGeneratorDef` in the three shipped shapes
 (zeppelin launch 17, plain spawner 5, moving spawner 1); a `[null]` file reads as an empty list.
-Consumed by `Session/AiGeneratorRuntime`; golden counts in `CSVM.Tests/EnemyGeneratorsTests.cs`.
+An unauthored door pair takes the loader's node-name default (`DefaultDoorAnim`, `%.5s_open%.2s`),
+the close being the open name, as the original's loader has it. Consumed by
+`Session/AiGeneratorRuntime`; golden counts in `CSVM.Tests/EnemyGeneratorsTests.cs`.
 
 ## src/Mech3/Zeppelins.cs
 The mission `zeppelins.zrd.json` reader (docs/formats/mission-entities.md): the 58 zeppelin
@@ -684,9 +727,28 @@ The AI pilot-skill constants (docs/formats/ai-rosters.md): player.json's
 (`At`, plus named helpers for D14's two angles), the roster accessors
 (`RosterSkills`: aiv slots 22–30 by stat name, `-1`/omitted = null; `RosterPrimaryTarget`:
 slot 6; `RosterRatingBiases`: slot 33 as `AiRatingBias` — wildcard `Matches`, shipped pairs,
-a third element accepted and preserved raw, never acted on) and the thin per-mission
-roster loader (`LoadRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
-slot 6/33 census goldens in `AiTargetRankingTests`.
+a third element accepted and preserved raw, never acted on; the spawn-facing `Roster*` readers for
+slots 0–4, 20, 21, 31, 32, 40 and 65, every one defensive over a short block) and the thin
+per-mission roster loader (`LoadRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
+slot 6/33 census goldens in `AiTargetRankingTests`; the spawn slots in `CampaignRosterPlanTests`.
+
+## src/Mech3/AiVolumes.cs
+`AiVolume` (radius, upper, lower) and `AiVolumeSet` (activation, attack, return): the one shape
+both authors of an AI's range volumes are read into, a roster block's twelve slots 8–19
+(`FromRosterSlots`, three named per volume plus a flag no block authors) and a net record's nine
+floats at elements 2–10 (`FromNetRecord`). `Overlaid` is the engine's per-field non-zero test, so
+`net.Overlaid(block)` is the decoded order (docs/org/aiPilot.md "Net assignment"); the
+`min_ai_active_dist` floor is `Session/CampaignRoster.cs`'s `ApplyVolumes`. The altitude bands are
+read and carried but have no consumer: `Flight/AiModeMachine.cs` gates on radii alone.
+
+## src/Mech3/VehicleDefs.cs
+The `vehicle.json` def table as an index, next to `Flight/PlaneStats.cs`'s full read of one def:
+`DefForBlock` strips a block name's trailing `_N` ordinals until a def matches, `ModeOf` walks
+`kind_of` to the nearest authored `mode` (`jet` at the root, the engine's zero default),
+`AirframeFor` finds the player airframe node an AI def's model is built from (the `p`-prefixed twin
+of the nearest ancestor, else of the chain's `nodename`), `BaseDefForPlayerNode` is its inverse and
+`DerivesFrom` is the variant test `PlaneStats.LoadForAi` enforces. Pure over the parsed root
+(`FromRoot`), pinned in `CampaignRosterPlanTests`.
 
 ## src/Mech3/FogVolumes.cs
 The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of
@@ -761,6 +823,8 @@ at its last position). `HasStream(name)` answers clip availability after the pre
 alone cannot. Who hears these emitters is the pinned per-pane listener model (`UI/SplitScreen`);
 `SetListeners` feeds the `--debug-anim` log alone, whose `dist` column names the NEAREST listener and
 the pane it belongs to, because that is the pane whose volume wins the engine's mix.
+`OneShotsStarted` (D33) counts every one-shot that actually started an `AudioStreamPlayer3D`, so a
+suite can assert a cue fired by counting rather than grepping the `Debug`-gated log line.
 
 ## src/Mech3/WorldLights.cs
 Packs the animated world's `LIGHT_STATE` point lights into the 2×N RGBAF texture the fullbright
@@ -780,8 +844,25 @@ the pure, engine-free overload in `PadsTests.cs`.
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission
-shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`/`Object3DTranslate`/`Object3DRotate`,
-counts + reports every other verb.
+shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`/`Object3DTranslate`/`Object3DRotate`/
+`WorldPartitionSetActive`, counts + reports every other verb. The area verb takes two calls, not one:
+`BindPartitions(gamez)` resolves its rectangles to gamez node indices through `WorldPartitionGrid`
+while the gamez is in hand, and `Apply`'s `setActiveByIndex` delegate switches them in the built
+world. Without the bind the verb is counted unapplied. Decode: docs/formats/interp.md.
+
+## src/Mech3/ScriptedPath.cs
+One authored waypoint path, resolved against the BUILT world through the runtime's own name
+resolver rather than out of the gamez: the roster names `pp1`, the chapter carries the transform-only
+subtree `pp1_aipath`, and its `pp1_aipN` children are the waypoints in ordinal order. Ten vehicles in
+three missions carry one. A missing subtree, or fewer than two waypoints, resolves to null so the
+caller reports it instead of inventing a route. Where the name comes from:
+docs/formats/ai-rosters.md's `taxiPath` slot.
+
+## src/Mech3/WorldPartitionGrid.cs
+The world's spatial cell grid as a query: which gamez nodes does a world-space XZ rectangle cover?
+Built from `GameZNode.PartitionCellNodes` (the per-cell membership `PartitionNodes` flattens away)
+and the cells' own bounds. Its one reader is `MissionSetup`'s area verb. The rectangle is half-open
+in cell space and the two axes run opposite ways; both are in docs/formats/interp.md.
 
 ## src/Mech3/AnimRuntime.cs
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP,
@@ -800,7 +881,10 @@ an exemption from this. Scoped to the call's own closure and its slot, never the
 container: another effect live on the same slot number must not be re-posed under its running
 motions. Regression: the `effect-pool-reset` suite. `Play`/`PlayWithin`/`StopWithin` start a def's
 instances by anim name, the latter two scoped to one subtree (a NAME can repeat across a chapter,
-e.g. C1's three `hangerdoors`). Every construction site hands over a sealed `TemplateStage`
+e.g. C1's three `hangerdoors`). `OBJECT_ADD_CHILD`/`OBJECT_DELETE_CHILD` take their node-reparent
+form here (`Reparent`, keeping the LOCAL transform) once the sound-emitter form has declined,
+which is how a cutscene composes its camera inside the node it frames; the decode is
+`docs/formats/anim-definitions/cutscenes.md`. Every construction site hands over a sealed `TemplateStage`
 (`NewTemplateStage`/`ForEffects`/`ForCrashRig`). Sibling modules, each with its own entry: the
 sequence interpreter is `SequenceRunner.cs`, live motions are `Anim/MotionSet.cs`, name resolution
 is `Anim/NameResolver.cs` (this class forwards through `Resolve`/`ResolveScoped`/`Anchors`), puffer
@@ -816,8 +900,11 @@ here for the same reason, and `Light` reads both live. The nine `OBJECT_*` pose/
 delegate to `Pose` the same way, each adding the handler's returned op count to the census counter;
 the `_rest` pose table stays here, since the death flow (`RestoreRestPoses`/`ApplyDeathSwap`) reads
 it too, and both the family and the motion value types reach it only through `RestOf`.
-`CALLBACK` raises the two vehicle-death codes through caller-supplied seams (`WreckVelocity`,
-`StopDamageStages`) and counts every other code; decode in `docs/org/vehicleDamage.md`.
+`CALLBACK` offers each code to `CallbackHost` first (the mission-script host, given the raising
+definition's animation name — `Session/CutsceneController.cs`), then raises the two vehicle-death
+codes through caller-supplied seams (`WreckVelocity`, `StopDamageStages`) and counts every other
+one; decodes in `docs/org/vehicleDamage.md` and
+`docs/formats/anim-definitions/cutscenes.md`.
 `FBFX_COLOR_FROM_TO`/`LIGHT_ANIMATION` report their `run_time` as the
 event's duration, spacing a chain instead of firing it in one instant; decode in
 `docs/formats/anim-definitions.md`.
@@ -932,6 +1019,10 @@ on `AnimRuntime`, read by the death flow; `AnimRuntime` keeps thin internal forw
 `ConsumeLandingResume`/`MarkLandingResume`/`SetSubtreeOpacity`, whose callers (`MotionRuntime`,
 the `ground-contact` suite, `OpacityFade`) name the runtime. No teardown reach-in exists: none of
 this family's state is per-instance the way emitters, lights and sounds are.
+The `AT_NODE` form of the translate and rotate poses (`PoseAtNode`) takes another node's world
+frame with `state` as an offset inside it, rather than an absolute pose; the host is resolved by
+name over the whole index because it is a root of its own, not something the event's anchor
+contains. Spellings and census: docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/Anim/NameResolver.cs
 Name→node resolution as one public module, generic over the node type (`NameResolver<TNode>`): the
@@ -1037,7 +1128,12 @@ bootstrap, read by `ANIM_HEALTH` eval, escalated by `ApplyDamageStages`, damaged
 `Resolve(struck)` maps a raycast-hit node back to its instance. Schema: docs/formats/destructibles.md.
 `Instance.Reseed(max)` re-seeds a pool from a mission record — the F18 zeppelin zones, where
 `zeppelins.json` hp beats the def's own `HEALTH` — and refuses once damaged, so a late wire-up
-cannot heal a fight in progress.
+cannot heal a fight in progress. `Instance.Team`, `Instance.Owner` and `Instance.Dormant` are what a mission
+record can put on a pool: an owning side where the data names one (`ZeppelinRuntime` is the only
+writer of either today, and a pool with no team is neutral, so nobody's target), the name of the
+entity the pool is a PART of (a zeppelin's zones carry their hull's name, which is the only thing a
+`rating_biases` pattern naming the airship can match), and "registered but not in the world yet",
+which `AimCandidateSet.AddStructures` refuses outright.
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM→PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies —
@@ -1046,6 +1142,26 @@ Godot cannot load the game's WAV format (see `docs/formats/sounds.md`).
 ## src/Mech3/SoundArchive.cs
 WAV lookup over a soundsh/soundsl extraction (zip or dir), decoded through `WavFile` into cached
 `AudioStreamWav`s; `Find(name, looped)` marks the stream as a forward loop when asked.
+
+## src/Mech3/MusicPlayer.cs
+The state-driven score: one non-positional streaming channel beside `WorldSounds`' pooled 3D
+emitters, so the menu, the cabin and the mission director all drive the same track. `Enter(state)`
+cues the sound-group or definition name the original's data names for that state; `Cue(name)` is
+the raw form for a name the data supplies directly. One track at a time, hard cuts, no crossfade;
+`NoteCombat` + `Tick` run the 20-second battle hold and its fade. The selection rules, the fade
+rates and the tracks that ship with no trigger are `docs/org/music.md`.
+
+## src/Mech3/MissionRadio.cs
+The mission radio queue: the third playback channel, beside `MusicPlayer`'s streaming track and
+`WorldSounds`' pooled 3D emitters, and the one a mission's objective callouts speak on. `Cue(name)`
+takes a queued radio definition or a VO dialogue chain and returns how many lines it will speak, 0
+for a name this channel does not own, so the caller can fall through to the channel that does.
+One call speaks at a time: a chain runs its lines back to back as one call, a later cue queues
+behind rather than cutting in, `Cancel` is `STOP_QUEUED_SOUNDS`, and a call waiting past its
+definition's `QUEUE` tolerance is dropped unheard. Streams come from `WorldSounds.StreamFor`, so
+the world's prewarm is what makes a callout survive the sound archive closing. The 1 s cue delay is
+`docs/formats/objectives.md`; the definition classes and the tolerance are
+`docs/formats/sounds.md`.
 
 ## src/Mech3/SoundDefs.cs
 sounds.json SETS parser: `snd_*` name → `SoundDef` (wav name, flags, range, volume); the entry
@@ -1221,10 +1337,14 @@ reachable through `Of(TargetClass)`), rebuilt from scratch on every `Rebuild` ca
 original's own contract and why a runtime spawn appears and a death disappears with no extra
 plumbing. It walks three of the aim assist's four lists (`Vehicles`, `Turrets`, `Ordnance`);
 selectable structures arrive through `Rebuild`'s separate `subParts` argument, filled only by
-`ZeppelinRuntime.CollectTargetParts`. An `Ordnance` entry is admitted only when its source is a
+`ZeppelinRuntime.CollectTargetParts`, and the campaign's objective sites through its `objectives`
+argument, filled by `ObjectiveSites.Collect`. The two mission flags stay separate: `objectiveTarget`
+comes in with the candidate and puts a site on the Enemy cycle, `otherTarget` is stood in for by
+what the candidate is and puts a sub-part on the Non-Aircraft one. An `Ordnance` entry is admitted only when its source is a
 `ProjectilePool.Flyout` with the `TARGETABLE` admission byte set and still live, so a round wrapped
 only because it is fused stays unselectable. `Describe` is the only place in the targeting path that reads
-a concrete source type. `TargetSelection` owns the instance; `HumanFlightAdapter` wires one per human
+a concrete source type, beside `NameOf`/`OwnerOf`, the identity pair the AI ranker's
+`rating_biases` match reuses so it grows no second switch of its own. `TargetSelection` owns the instance; `HumanFlightAdapter` wires one per human
 pane and `FlightController.StepTargeting` feeds it every frame. Decode:
 [org/targeting.md](org/targeting.md) "The candidate list". Pinned by the `target-pool` suite, with
 the carried-gunner exclusion on `turret-gunner`.
@@ -1266,7 +1386,8 @@ pattern node via `AnimRuntime.FindNodes` with multi-segment paths scoped to the 
 ticked by `Session/TurretEmplacementRuntime`). Per tick: nearest hostile aircraft inside
 `DETECTION_RANGE` (team gate through `AimAssist.Hostile`; carried = host's
 `FlightController.Team`, emplacement = the authored/default `TurretDef.TeamId` with no conversion,
-since one integer space covers aircraft and emplacements alike),
+since one integer space covers aircraft and emplacements alike, until `SetTeam` fans a zeppelin
+record's own team over the guns standing on that hull),
 `AimAssist.TryIntercept` lead (no solution ⇒ track, hold fire),
 wrap-aware directed yaw clamp + pitch clamp, bounded slew (3.0/s), pose written onto the PARTS
 nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution cone, cached
@@ -1972,14 +2093,25 @@ split `WeaponCursor` uses. One pass accrues 1.0, saturating at max, draining at 
 cue re-triggers no faster than the interval.
 
 ## src/Flight/AiNetFollower.cs
-Walks an `AiNet` patrol graph as a waypoint stream: first the nearest node, then
-edge-list neighbours, no immediate backtrack, branches drawn from its own seeded `Random` (per
+Walks an `AiNet` patrol graph as a waypoint stream. Given the vehicle's nose it is the decoded
+walk (`FUN_00431e40`, `docs/org/aiPilot.md`): seat on the nearest node and fly the far end of the
+edge whose leg best lines up with that nose, then the same pick at every arrival with the edge just
+flown excluded. Nothing draws, so vehicles seated on one node facing one way leave it together,
+which is what makes a group sharing one net fly in formation (`BL-498`). A caller with no nose
+(`ZeppelinMotion`, and a zeppelin is not a vehicle in the original) keeps the older nearest-node
+seat with branches drawn from its own seeded `Random` (per
 plane off the `Rng.Ai` stream at spawn, never Godot's global rng). Aircraft-agnostic on purpose:
 positions in, target node out; its two consumers are `AiPilot.Patrol` (aircraft) and
 `ZeppelinMotion` (F17's kinematic node follow). Arrival is the decoded ALONG-LEG test — a tenth of
 the leg's horizontal length, floored at 10 m (`docs/org/aiPilot.md`) — so a vehicle that cannot
 turn tightly enough flows past its node instead of orbiting a capture sphere it never enters.
 A zeppelin raises that floor to clear its own turning circle, which is invented and only a floor.
+Also holds a net's live STOP-POINT flags, seeded from the file and rewritten by
+`COMPLETED_STOPPOINT` through `SetStopPoint`: an armed node is never advanced past, and once the
+walk is inside 30 m of it (`StopPointHoldM`, the zeppelin follower's own hold distance, not the
+leg's arrival radius) `Holding` goes true. ⚠ Off by default — `observesStopPoints` is set only by
+`ZeppelinRuntime`, because only the zeppelin follower reads the flag; the aircraft one reads a
+node's danger-zone fields instead (`docs/formats/ai-nets.md`).
 Pinned by `AiNetFollowerTests` + the `ai-net-follow` suite.
 
 ## src/Flight/ZeppelinBroadside.cs
@@ -2007,7 +2139,10 @@ The kinematic zeppelin motion law (M4 F17): flies a `ZeppelinDef` along its net 
 `AiNetFollower`, forward-only along the facing (the design's "require forward motion to turn,
 never bank"), yaw/pitch rate-limited by the record's `max_rate_*` with `accel_*` ramp-in, speed
 by `max_accel` toward `max_speed`, commanded pitch clamped to the record's ±30° band. Pure
-state — no Node, no flight model; `ZeppelinRuntime` writes the pose onto the world node. Pinned
+state — no Node, no flight model; `ZeppelinRuntime` writes the pose onto the world node.
+The stop-point half is the decoded approach: full speed until the along-facing range to an armed
+node falls under 250 m, then linearly down to zero, and once the follower is `Holding` a level
+station-keep (pitch 0, heading kept, speed 0). Pinned
 by `ZeppelinMotionTests` + the `zeppelin-motion` suite.
 
 ## src/Flight/AiPilot.cs
@@ -2021,6 +2156,8 @@ entry course and then walks the throttle toward `sixth_sense_factor` × the purs
 human catches up, evade flies the machine's orders, avoid crash aims 1000 m up on the emergency
 arm, displaced 1000 m right of its own ground track (`ClimbOutBreakM`, invented and measured),
 an evasive maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks),
+and an optional `Escort` (`AiEscort`) which, whenever its leader is in play, takes the dispatch
+away from all of those but stunned and avoid crash, the original's own `mode wingman` fork,
 one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. Pure over
 the model state and its own fields, seeded randomness only, so a fixed-dt run is deterministic
 (`AiPilotTests`). The original's own steering law is `AiControlLaw`; this class is only its driver
@@ -2041,6 +2178,18 @@ wings-level rule, a low-speed unload, and a per-axis scale/limit stage off `Plan
 throttle lever has one path, the walk toward the desired speed; the original's distance-gated
 open-loop branch is not ported (`docs/org/aiControlLaw.md`'s throttle section says why).
 Engine-free and pure over its arguments; pinned against the decode by `AiControlLawTests`.
+
+## src/Flight/AiEscort.cs
+The formation-escort law a netless `mode wingman` aircraft flies, which in the shipped data is the
+campaign's `wingman_N` / `bswingman_N` roster blocks and nothing else (`docs/org/aiPilot.md`, "The
+escort law"). A leader snapshot (position, attitude basis, velocity, whether it is the player) and
+an optional target snapshot in, one station point and that point's velocity out, over the engine's
+own five-state machine: close on the leader, hold the body-frame station, fly a station on the
+target, and the two re-join states nothing in the law enters. Every constant is decoded, the two
+stations included ((6, 0, 18) off the player, (8, −2, −8) off an AI); the 80 m separation push is
+what makes the hold a weave rather than a tight join. Engine-free and deterministic, holding only
+its state and last station; the driver is `AiPilot.Escort`, the table `AiLawParams.Wingman`, and
+the live check is the `wingman-station` suite.
 
 ## src/Flight/AiModeMachine.cs
 The nine-mode AI state machine, owned by `AiPilot.Machine` and stepped from its `Next`:
@@ -2187,6 +2336,9 @@ Two flavours of one airframe: `Load` resolves everything down the player chain, 
   def on both flavours on purpose (`AiDefName`'s own doc); `damaged_engine_sound` and
   `cockpit_engine_sound` both parse fully — `EngineAudioCurves.EngineDefFor` is what selects
   between them and the plain `engine_sound` (see `src/Flight/EngineAudioCurves.cs` below).
+  `LoadForAi` also reads the AI chain's `title` message key into `AiTitleKey`, the authored name a
+  militia def carries ("MSG_VEH_MEDUSA_KESTREL") and a plain def inherits from its airframe;
+  `AiFlightAssembler` resolves it into `AiTitle` for the targeting readout.
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a
@@ -2197,8 +2349,17 @@ only IA1 folders have one, the original picks one at random per launch) and `Loa
 
 ## src/Flight/MissionTargets.cs
 Loads a mission's targets.json: world-node NAME → objective display keys
-(`description`/`category_label`/`help_label`), resolved through `Messages`. Generic across
-mission types; a missing file yields an empty set. Schema: docs/formats/missions.md.
+(`description`/`category_label`/`help_label`), resolved through `Messages`, plus the valueless
+`objective`/`other_target` marker flags a mission starts with. Generic across mission types; a
+missing file yields an empty set. `ByNode` exposes the whole table for a consumer that needs the
+starting flags rather than one node's keys. Schema: docs/formats/missions.md.
+
+## src/Flight/MarkerDraw.cs
+The world marker's drawing primitives, shared by `MarkerHud` and `TargetHud`: the
+shadowed reticle, the edge arrow with its tail stroke, and the centred text block (`Lines`) with
+the pane-clamped variant (`LinesClamped`) an off-screen marker needs. Owns the marker blue and
+the drop shadow; colour and scaled sizes stay with the caller, since each HUD scales through its
+own `HudMetrics.Scale`. Where a marker GOES is `EdgeMarker`'s; this is only what it looks like.
 
 ## src/Flight/StuntMission.cs
 Stunt Flying state: `Load` builds the ordered zone list from ia.json `dzones` (HUD positions via
@@ -2320,7 +2481,8 @@ The shape's provenance is decoded in [`org/targeting.md`](org/targeting.md).
 
 ## src/Flight/TargetHud.cs
 The per-pane targeting HUD, built on EVERY human pane in every flight session (`--vs` panes get one
-alongside `VersusHud`): the pilot's own selected target from `TargetSelection`, a nearest-AI-hostile
+alongside `VersusHud`): the pilot's own selected target from `TargetSelection` (a campaign
+mission's objective sites included, since they ride that same selection), a nearest-AI-hostile
 fallback where no selection exists, and `--debug-markers`' every-live-aircraft overlay. Draws the
 original's bracket box, label block and off-screen edge arrow + clock bearing, and owns the colour
 table (`MarkerColor`), the label layout (`LabelLines`), the selected gun's reach gate (`GunReaches`,
@@ -2378,7 +2540,9 @@ and Exit decide the whole session. Exit's label follows how the session was laun
 each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run.
 `Populate()` runs only on a fresh pause (mirrors `VersusBoard`'s snapshot discipline); `Visible`
 tracks `PauseState.Paused` on every `Changed` event, and `_Process` polls the host only to move
-the cursor.
+the cursor. A campaign session's objectives readout (`UI/ObjectivesHud`) rides the same pause on a
+layer of its own rather than inside this board, since it belongs to the flown mission and this
+board is shared by every mode.
 
 ## src/Flight/IaWrapupBoard.cs
 Instant Action's wrap-up board — `VersusBoard`'s WHOLE-window
@@ -2658,6 +2822,18 @@ is alive; the boost animation lives at least 1 s after an engage. `Installed` is
 `nitro_boost`/`nitro_decay` defs and the `snd_nitro` loop. Every constant is censused by
 `FlightConstantInventoryTests`; `NitroSystemTests` pins the lifecycle and the force couplings.
 
+## src/Flight/PathFollower.cs
+The engine's SECOND movement law, and the exclusive alternative to `FlightModel`: the dispatcher
+picks between them before any flight law runs, so nothing here is a steering input. Pure state and
+maths, driven by `Session/ScriptedPathVehicles.cs`. Holds two independent flags, `Following` (the
+path owns this vehicle) and `Frozen` (it is placed and waiting), because folding them together
+cannot express the state most authored path vehicles spend a mission in. Every constant is decoded,
+not tuned. What is NOT pinned by the decode, and is this port's own choice: the altitude between
+waypoints (the follower is taken to the target's height over the horizontal distance still to run),
+and the ride height, which for the aircraft movement classes reads a vehicle-type field this project
+has not identified. Law, constants and both gaps: [`org/flightModel.md`](org/flightModel.md), "The
+scripted-path follower".
+
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies
 (rest pose + rate, radians/second local axes). Advance recomputes each disc's absolute pose from
@@ -2811,8 +2987,9 @@ per-frame cost on aircraft that draw nothing, AI rigs above all.
 `Attach(canvas, versusHud, scoreboard)` builds the text block and parents every readout in the
 shipped draw order; `VersusHud` and `StuntScoreboard` are still the flight node's, and are threaded
 through because their z-order slots sit INSIDE this order rather than after it. `SetVisible` is
-photo mode's hide-everything (`BL-429`, forwarded from `FlightController.SetPilotHudVisible` because
-`GameSession` drives it per rig); `SetInstrumentsVisible` is the narrower one `--debug-spectate`
+the hide-everything a cutscene's chrome-off and photo mode both take (`BL-429`, forwarded from
+`FlightController.SetPilotHudVisible` because `GameSession` drives it per rig; the compass tape goes
+with the rest); `SetInstrumentsVisible` is the narrower one `--debug-spectate`
 wants, which keeps the marker HUD deliberately. `StepAgl` is the altimeter's LOW ALT feed, one ray
 per physics frame through the same `IWorldQuery` seam every other aircraft query uses, and
 `AglMeters` reads it back for the flight telemetry line. `Flash` raises the impact line and `Reset`
@@ -2960,11 +3137,12 @@ share for a splash hit, 1 for a direct round). The weapon/graze kill test is
 old any-critical-part kill; the `critical` flag stays parsed, nothing consults it). An AI
 pilot's trigger and lead are its `AiPilot.Gunner`: `SimStep` drives the gunner before
 the fire step (`DriveAiGunner` — standing target kept while live, else re-acquired through
-`SelectRankedTarget`, D12's decoded ranking over the pool roster with the same team gate:
-primary_target outranks — by NAME the first match, by the `player` token the human NEAREST this
-attacker so a wave spreads over the panes instead of converging on P1 (BL-367) — ranking otherwise,
-activation-cutoff candidates never picked, first
-acquisition logged with its rank inputs; with a
+`SelectRankedTarget`, D12/D36's decoded ranking over aircraft, turrets and structures (`BL-363`)
+with the same team gate: primary_target outranks — by NAME the first match, by the `player` token
+the human NEAREST this attacker so a wave spreads over the panes instead of converging on P1
+(BL-367), both aircraft-only — ranking otherwise, activation-cutoff candidates never picked, a
+non-aircraft winner routed to `AiGunner.GroundTarget` rather than `Target` so `AiPilot` never sees
+it, first acquisition logged with its rank inputs; with a
 mode machine a standing target is kept in every mode but only pursue/lay off solve and shoot),
 the fire inputs read `WantsFire` instead of the raw controls, and `AssistedGunDirection`'s
 non-human arm fires the gunner's per-shot dead-eye scatter — an AI plane NEVER ticks or reads
@@ -3241,6 +3419,16 @@ onto 19 items, `_presetTop` follows the cursor through `ScrollPresetsToCursor`, 
 that slice while `Row` keeps taking the absolute index. `DebugPreset(N)` (--debug-preset=) applies
 one and opens on step 1, the aid for what units cannot see: a wrong aircraft or militia looks
 entirely plausible on screen.
+The campaign's screens are the third layout, drawn through `ComposedBoardView` rather than rebuilt
+as controls, and the shell owns the two things a page cannot: the briefing's narration player and
+its reveal clock (`TickCampaignAudio`). A running reveal repaints the board every frame, because a
+reveal is an animation and no property watch describes one; `campaign-briefing-repaint` measures it.
+`_UnhandledInput` also takes the screenshot key (`F12`) for both layouts and marks it handled, so a
+press on any menu screen writes one file through `CaptureDirector.SaveScreenshot`, into the same
+`Screenshots/` folder a flight shot lands in. The menu owns that binding rather than borrowing the
+launcher's, because a board is what a menu defect has to be reported from (`BL-489`);
+`menu-screenshot-key` pushes a real key event through the real viewport on both layouts and fails if
+the menu leaves the key to whatever is above it.
 
 ## src/UI/InstantActionPresets.cs
 The original's Table of Contents: the 19 preset scenarios decoded from 19 `0x230`-byte records at
@@ -3275,7 +3463,7 @@ stretching the centred body past its edges. Every hangar screen also carries the
 (`HangarFlow.TotalsLine`, PLAN-hangar Decision 10), error-coloured via `TotalsOverweight` and
 counted by `LayoutScale` the same way. A page needs no change here, art included. The hangar's
 screens sit behind a flow rather than behind the screen enum, so `--menu=` reaches them through
-`OpenHangarAid`: `hangar` the plane list, `defaults` the airframe-defaults ask, `paint` the
+`OpenHangarAid`: `hangar` the plane list, `airframe` the airframe list, `defaults` its ask, `paint` the
 preview on a Fury in Fortune Hunters colours with a nose decal chosen. A screenshot aid only.
 Every human plane picker (the lone-pilot centred Plane screen and every splitscreen pane) draws
 one roster, `_roster`: the eleven stock airframes then the store's saved customs
@@ -3296,6 +3484,37 @@ roster anywhere a plane is actually read. The row is a door, not an aircraft, so
 locked or confirmed and no launch path sees it. Outside `OpenHangarAid`'s scripted-screenshot
 values, the hangar is reached only through interactive menu input — no `SessionSpec` field,
 nothing a `--det` run can touch.
+
+The campaign (`CampaignFlow`) has one door, the `Campaign` row between the three modes and the
+hangar's, and `Screen.Campaign` draws through the same centred body: heading, rows, detail and
+footer all read off `_campaign.Page`, and the footer is the page's own, since a screen with an armed
+text field has a different control set from the same screen with the cursor on its list. The art
+column is shared with the hangar through `PageArt`/`PageRowArt`, so a campaign page that hands over
+a picture needs no change here. Input is player 1's alone: `HandleCampaignInput` reads `Move`/
+`MoveX` normally, and while `CampaignFlow.CapturesText` is true it reads `PadMove`/`PadMoveX`
+instead and feeds `Typed`/`Erase` into the field, because W, A, S and D are letters there. The
+flow's `Message` rides the same error line the hangar's gate uses. `--menu=campaign` opens the real
+`user://Profiles` roster; every other `campaign-*` value is a screenshot aid over a scratch profile
+directory, so those shots are the same on every machine and cannot write into a real campaign. The
+one exception is `campaign-fly`, which launches a mission and therefore has to use the real store,
+because the session's own director reads that one.
+
+The flow's three exits are the shell's three jobs. `Cancelled` returns to the Mode screen.
+`OpenHangar` opens `HangarFlow` over a `HangarCampaignContext` on the flow's own profile and leaves
+the campaign flow standing; `CloseHangar` calls `Resume` on it, built or cancelled alike, so a
+purchase or a sale shows on the cabin the moment the hangar closes. `FlyMission` saves the profile,
+stops the score and hands the host a `CampaignLaunch`: the profile, the story position, and the
+pilot's aircraft as its stock node, its hangar build where it has one, and the fit
+`CampaignLoadout` derives from the profile's picks. The wingman is deliberately not in it, since
+`CampaignDirector` resolves that binding from the same profile it opens anyway.
+
+Two things the campaign pages cannot own live here, because a page holds no Godot node and has no
+frame to advance on: the briefing's reveal clock (`page.Advance(delta)` once per frame while the
+briefing is the screen showing) and its narration, an `AudioStreamPlayer` of this board's own on
+the Master bus, restarted whenever the page's `NarrationStarts` moves and stopped the moment the
+briefing stops showing. The board redraws on a reveal only when it uncovered a row or changed its
+map, so a reveal waiting on a marker costs one comparison a frame. The score is the host's, entered
+on every menu and cabin entry and stopped where a launch leaves the boards.
 
 ## src/UI/PlanePickerRoster.cs
 The picker roster rule behind `LaunchMenu._roster`, engine-free so it tests without a menu
@@ -3418,6 +3637,84 @@ id 1 (the stock Lvl-2 tier), and armour from the stock zone allocations (`ZrdrPa
 `CSVM.Tests/HangarPaintPageTests.cs`, `CSVM.Tests/HangarNamePageTests.cs` and
 `CSVM.Tests/HangarPurchasePageTests.cs`.
 
+## src/UI/CampaignFlow.cs
+The campaign's out-of-mission screens as one engine-free flow, the same split `HangarFlow` uses: a
+page owns its rows and its navigation, the launchscreen owns every Godot control. Screens are a
+stack, not a fixed order, because the campaign's navigation is a graph; `GoTo` returns to a screen
+already open instead of stacking a second copy, and backing out of the first one ends the flow with
+`CampaignExit.Cancelled`. `CampaignFlow.Registry` maps a `CampaignScreen` to its page factory and is
+the wave's whole mount point: a new screen is one page file plus one line there, with
+`CampaignPlaceholderPage` covering any screen not yet registered. A page may hand the shell a
+`HangarArt` (the same art column the hangar draws) and a `CampaignTextEntry`; while that field is
+armed, `CapturesText` tells the shell the keyboard is typing, and the flow's own cursor axes edit
+the name instead of the list. Profiles are created, read and deleted only through
+`CampaignProfileStore`, so a deletion takes the profile directory and never `user://Planes/`. That
+store also remembers which profile was last seated, by name; `ICampaignPage.OpeningRow` is where a
+screen says which row the cursor arrives on, and the roster page answers with that profile's row
+(`docs/org/campaign-board.md`, "Which player the profile screen opens on").
+⚠ A campaign page draws as a composed board, not as the shared `BoardMenu` idiom: it contributes its
+`Pictures`, `Strokes` and `Captions` and names which of the screen's authored buttons each row
+presses through `Button`, and `CampaignBoards` supplies the geometry. The `HangarArt` a page still
+hands over is the hangar's own art column and is unused on the campaign path.
+Off-engine coverage: `CSVM.Tests/CampaignFlowTests.cs`,
+`CSVM.Tests/CampaignRosterPageTests.cs`, `CSVM.Tests/CampaignTextEntryTests.cs`,
+`CSVM.Tests/CampaignCabinPageTests.cs`, `CSVM.Tests/CampaignPreviousMissionsPageTests.cs`.
+
+## src/UI/BoardFit.cs
+How the original's fixed 800x600 campaign dialog space lands on an arbitrary window: one uniform
+scale on both axes, the board centred, the remainder letterboxed. A `record struct` with `X`, `Y`
+and `Length`, so every element goes through the same mapping and only the scale changes. ⚠ The two
+rejected alternatives (an integer scale, a fit-to-height bleed) and why the art must be sampled
+nearest rather than smoothly are in `docs/org/campaign-board.md`; that decision is inherited by
+every campaign screen, so changing it here changes all six. A viewport with no area falls back to
+1:1 rather than a scale nothing can draw at. Off-engine coverage:
+`CSVM.Tests/ComposedBoardTests.cs`.
+
+## src/UI/ComposedBoard.cs
+What a composed campaign screen is made of, engine-free: pictures at authored pixel positions,
+connector strokes, text lines, button plaques, and flowed list widgets, each in draw order.
+`BoardNote` is the last of those: a widget's entries plus its authored wrap box and spacing, which
+`Flow(height)` turns into placed lines. It takes the measurement as an argument because how tall a
+wrapped entry drew is a font metric the engine-free half does not hold, and it is a layer of its own
+rather than one `BoardLine` per entry for exactly that reason (`BL-490`). Carries the two state rules
+as statics — `PlaqueFrame` picks a four-frame strip's disabled/normal/rollover/depressed frame,
+`PlaqueInk` picks a one-frame plaque's label face, which is the whole of the briefing's
+`BtnLabelNormal`/`Rollover`/`Activate` triad. `BoardArt` names a bitmap and how many stacked frames
+it holds; the renderer, not the model, resolves it to a file, which is what keeps the JPG the screen
+backgrounds ship as out of the engine-free half.
+
+## src/UI/CampaignBoards.cs
+The authored geometry of all six campaign screens plus the composer that turns a page and a cursor
+into a `ComposedBoard`. Every coordinate is the original's own: `ASSETS\LAYOUT.CSV` for the five
+script-driven screens, `Briefing.zrd`'s own chrome for the briefing, and, for the rows the shipped
+layout leaves as unresolved authoring macros, a measurement off the reference screenshots recorded
+in `docs/org/campaign-board.md`. A page names one of these buttons per row through
+`ICampaignPage.Button`; every other row lists down that screen's own text widgets via `TextSlot`.
+`ObjectivesNote` is the one widget that is not a slot list: the briefing parchment's `LIST` flows its
+entries, so it carries a wrap box and a spacing instead of a pitch and the renderer measures it.
+⚠ `Labelled` on a slot, not the frame count, decides whether a plaque's words are drawn over it: the
+generic paper buttons are four-frame strips that still carry an `IDS_*` label. Off-engine coverage:
+`CSVM.Tests/ComposedBoardTests.cs`.
+
+## src/UI/ComposedBoardView.cs
+The Godot half of the campaign boards: draws one `ComposedBoard` over the whole window through
+`BoardFit`, with `TextureFilter` pinned to Nearest so the authored pixel grid stays hard. Owns the
+texture cache and the only art resolution there is — `extracted/rimage/<name>.png` for mission art,
+`extracted/rof/ASSETS/GRAPHICS/<name>` for screen chrome — loading through `Image.LoadFromFile`,
+which reads the JPG backgrounds no engine-free decoder here covers. A miss is cached, so an absent
+extraction is probed once per name and the screen degrades rather than throwing. Supplies the font
+metric a `BoardNote` cannot take for itself (`Measure`), which is the only reason a flowed list is
+not composed engine-free. Carries the one
+piece of chrome that is not the original's: a two-line hint band across the top of the board with
+the focused row's description and the controls line, because the original said both with a mouse
+pointer and a pad has none.
+
+## src/UI/BoardPalette.cs
+The ink a campaign board writes in, one palette per background family, because the screens are
+painted art and the grey the flight check's forms use is invisible on the cabin's dark hangar. The
+flight check and ammo values are their layout rows' own ARGB fields; the rest are chosen to read on
+their background, and `docs/org/campaign-board.md` says which is which.
+
 ## src/UI/BoardMenu.cs
 A board's cursor and item list, engine-free so the selection rules test off engine the way
 `PauseState` does. Holds no input source: the board polls its menu owner through `MenuInput` and
@@ -3432,17 +3729,22 @@ beats back in the same frame, the row having already been chosen. A results boar
 answers no back key and advertises none. Off-engine coverage: `CSVM.Tests/BoardMenuTests.cs`.
 
 ## src/UI/LoadBoard.cs
-The load screen drawn over the whole window while a session builds, in the same board style as the
-pause and results boards but carrying no menu. Opaque rather than translucent: the outgoing session
-is still in the tree for the one frame it is up, and a half-seen dead world is worse than a plain
-screen. Populated in `_Ready` rather than `Build`, since the text is sized off the viewport and a
-node outside the tree has none to read. Its subject line names the chapter and the flight the way a
-player picked it — `Launcher.LaunchSubject` takes an Instant Action mission's name from
+The load screen drawn over the whole window while a session builds: the original's own composed
+artwork (`docs/org/loading-screen.md`) through `ComposedBoardView`, so it inherits the campaign
+boards' authored-pixel surface and `BoardFit`'s scaling rule. Two compositions, the split the
+original makes: a campaign launch gets the chart sheet (`loadframe`, the unlit scale at `90,548`),
+everything else the blackboard (`loadframempt2`, its three authored photographs each centred on its
+own coordinate, the unlit lamp strip and one still propeller frame). Free flight and dogfight are
+ours rather than the original's and take the non-campaign screen. Populated in `_Ready` rather than
+`Build`, since the view sizes itself off the viewport and a node outside the tree has none to read.
+Its subject line names the chapter and the flight the way a player picked it —
+`Launcher.LaunchSubject` takes an Instant Action mission's name from
 `InstantAction.MissionTypeLabel` ("Attacking a Zeppelin"), never `SessionSpec.ModeName`, which is
-the log file's internal tag ("fly", "stunt") and not a player's word. ⚠ No progress bar, ever, while the build stays one
-synchronous block — `StartupProfile` reports its phases only after the fact, so a bar would be a
-fiction. The original's own load screen, its six-lamp progress bar included, is artwork in
-`extracted/rimage/` and is not matched yet (`BL-409`). The Launcher owns the show/free pair; see its
+the log file's internal tag ("fly", "stunt") and not a player's word. ⚠ The bar draws its UNLIT
+strip and the propeller one still frame, and neither ever moves: a fill and an animation both need
+the build decoupled from the draw, and while the build stays one synchronous block `StartupProfile`
+reports its phases only after the fact, so a moving bar would be a fiction. ⚠ The two text lines are
+placed by us; the decode carries no text coordinates. The Launcher owns the show/free pair; see its
 entry for the deferred-build handshake.
 
 ## src/UI/BoardMenuItem.cs
@@ -3488,6 +3790,11 @@ menu's is. Serves both the launchscreen and the in-flight board menus.
 so an Instant Action wizard screen can carry a vertical list cursor and a horizontal stepper at
 once without either read starving the other: MissionType's lives, WaveEdit's four fields and
 Wingmen's count/aircraft all read it — every other screen ignores it.
+`Typed` (the letters, digits and spaces pressed this frame, upper case under Shift) and `Erase`
+serve a screen with a text field; they are polled and edge-detected per key like everything else
+here, not read off an input event, so text and navigation share one clock. `PadMove`/`PadMoveX` are
+the pad's own halves of the two cursor axes: a screen whose keyboard is typing reads those instead,
+since W, A, S and D are letters there and the combined axes would move the cursor as one types.
 
 ## src/UI/SplitScreen.cs
 The splitscreen rig for 2–4 players (1P never constructs it, keeping that path untouched): black
@@ -3719,7 +4026,7 @@ than under it (the anim lab's `--plane=` prop), each also capping its own ancest
 
 ## src/UI/TargetingOverlay.cs
 The targeting overlay (F15, `--debug-targets`): a per-frame line from every turret gunner
-(`TurretController.TargetPosition`) and AI gunner (`AiGunner.Target`) to its acquired target,
+(`TurretController.TargetPosition`) and AI gunner (`AiGunner.Target`/`GroundTarget`, D36) to its acquired target,
 coloured by the gate holding the trigger (`TurretController.Gate`), with that gate named per shooter
 in the HUD. Depth test off, since the line into a hull is the one worth seeing. In splitscreen the
 world-space lines draw in every pane on their own (default render layer, in every camera's
@@ -3857,7 +4164,17 @@ no templates does, and `Options.DebugClutterFlag` (`--debug-clutterflag`) hands 
 `WorldBuilder`, then stamps every clutter MultiMesh with a full-strength `SceneBuilder.ClutterColor`
 tint and prints the flagged/clear polygon census. The blue is stamped per instance rather than per
 material because both clutter paths share the placed world's materials — colouring those would
-repaint the ground with them.
+repaint the ground with them. `Options.ExtraPrewarmNames` (D33) prewarms sound-group names the
+`AnimProgram` never sees on its own (`ObjectiveScript.SoundGroupNames()` is the only caller today)
+before the build's sound archive closes; without it a campaign mission's `WAKEUP_SOUND_GROUP`/
+`COMPLETED_SOUND_GROUP` cue decodes to nothing the moment the archive that could decode it is gone.
+`Options.CallbackHost` is installed on the runtime BEFORE the bind, since a bootstrapped intro
+raises its codes the instant it starts, and `Options.CutsceneRoots` builds the two roots the
+`world1` walk never reaches (`camera1`, and the `letterbox` bars, switched off) — only for a
+mission whose start-anims name one of `CutsceneController.IntroAnims` or that arms an approach
+trigger, so every other session's node census is exactly what it was. The synthetic `camera1`
+carries the gamez name and INDEX metadata a scene-built node would, because every compiled
+cutscene binds it through its symbol table and an unbuilt claim makes the runtime drop the event.
 
 ## src/Mech3/SessionArchives.cs
 `OpenFor(ArchiveIntent, gamezPath, texturesPath, soundsPath, zrdrPath, mute)` opens the five
@@ -3885,6 +4202,7 @@ initial humans and later command-line/mission/wave/generator AI enter through th
 `AllAircraft` combines the ordered rig controllers with the roster's AI view for simulation-facing
 consumers. Exit frees the session subtree atomically, asks the roster to release non-node membership,
 and disposes only the non-node resources this orchestrator owns.
+
 ## src/Utils/GameClock.cs
 The session's simulation clock: `BeginFrame(wallDelta)` (first thing in `GameSession._Process`)
 sets `Steps` + `Dt`; consumers read `FrameDt`, or loop `Steps` times on `Dt`. Modes: Realtime,
@@ -4148,18 +4466,29 @@ re-reset the fifth play's rings read INACTIVE at opacity 0, which is the sortie-
 symptom this suite exists to hold shut.
 
 ## src/Testing/*Suites.cs
-Eleven domain modules hold the in-engine scenario bodies, each named for the whole of what it
+Sixteen domain modules hold the in-engine scenario bodies, each named for the whole of what it
 files: `PufferSuites` (the emitter model's modes, wind, fades and fire column), `CombatSuites`
 (loadouts, live fire, aim assist and the hit chain), `OrdnanceSuites` (a round's flight, guidance
 and ends), `InstantActionSuites` (the mission runtime from spawn to wrap-up), `AiSuites` (how a
 computer-controlled combatant behaves: pilots, mounted gunners, combat voice, and the inert state
 they wait in), `TargetingSuites` (the `TargetRef` abstraction, candidate pool, sticky selection,
-input decoding and marker HUD), `ZeppelinSuites` (motion, fighter launch, multi-zone damage,
+input decoding and marker HUD), `TargetingCandidateSuites` (D36's widened AI acquisition,
+`BL-363`: the team gate over a registered structure and the win routed to `GroundTarget`, never
+`Target`), `WingmanSuites` (D34's netless `mode wingman` station-keeping, as geometry and flown
+against a scripted leader), `CampaignSuites` (profile persistence, the objectives runtime and the
+mission-end flow), `MusicSuites` (the state-driven score), `ZeppelinSuites` (motion, fighter
+launch, multi-zone damage,
 broadsides), `DamageSuites` (spending armor and health, and the injure staging those ledgers
 fire), `DestroyChoreographySuites` (the choreography a death dispatches: destroy defs, wreck
 flights, crash rigs, callbacks and stops), `AnimationAndEffectsSuites` (anim launches, effect
-templates, washes and burst timelines), and `WorldAndToolSuites` (the built world's data gates
-and censuses, lighting and viewers, and the lab surfaces). They depend on `TestHarness` through
+templates, washes and burst timelines), `WorldAndToolSuites` (the built world's data gates
+and censuses, lighting and viewers, and the lab surfaces), and `WorldFidelitySuites` (the
+mid-mission world behaviours the shipped data drives: the area-selected node toggle over C3's three
+story rectangles, the scripted-path follower over C1's own takeoff path, the mission script's and
+the generator's hangar doors over C1/M04, and the `FOG_STATE` event over its intro), plus
+`AlphaCutoutRaySuites` (the BL-477 census: what actually stops a weapon ray short of C3/M01's cargo
+zeppelin's slung tanks, as first-collider node names over a sphere of aspects). They depend on
+`TestHarness` through
 `TestContext`; shared fixtures are separate focused modules, not an all-purpose suite helper.
 
 ## src/Testing/SuiteConstants.cs
@@ -4187,6 +4516,11 @@ constructed once in `Launcher._Ready` after the base paths settle — the Launch
 the `--dump-*`/`--run-tests` early quits itself and hands the runner to each session node.
 Each method reads a `SessionSpec` passed **per call**, not stored — a menu launch can replace the
 caller's spec between calls, so a cached one would silently answer with a stale launch's flags.
+`TriggerDestroy` (`--destroy=`) and `ForceObjective` (`--debug-objective=`) are the two scripted
+world forces that live here rather than in a session: `ForceObjective` wakes one campaign objective
+and drives the nodes its `INACTIVEn` conditions name inactive, so the graph completes it off its
+own conditions on the next step instead of a mark being faked into the display. The objectives
+suite drives its completions through the same `DriveInactive`.
 
 ## src/Testing/CaptureDirector.cs
 The `--screenshot=`/`--shots=`/`--frames=` state machine plus F11/F12's placement print and ad-hoc
@@ -4195,6 +4529,9 @@ save, constructed once in `Launcher._Ready` from the launch spec
 , which is what keeps `--menu --screenshot` capturing the launchscreen with no session node
 alive. No back-reference to the host node — `Tick`/`PrintPlacement` take the
 camera/orbit/rigs/clock/plane/menu-visible they need as parameters.
+`SaveScreenshot` is the ad-hoc save every screen shares, and `ShotDir()` is the single folder they
+all write into (`Screenshots/` at the repo root, git-ignored). It returns the file it wrote, which is
+how a caller or a suite says where a shot landed rather than re-deriving the path.
 
 ## src/Testing/GltfExporter.cs
 Exports the viewer plane's `Node3D` subtree to a glTF file — mesh + the currently painted livery
@@ -4229,6 +4566,22 @@ item, handed down through `LauncherContext`: back to the launchscreen when the p
 into it, out of the game otherwise. The routing Esc used to do — Esc now opens the pause board
 instead, so leaving a flight is reachable from a pad, and this one rule lives here rather than
 being restated per board.
+`StartCampaignFromMenu` is the cabin's own launch, deriving its spec via
+`SessionSpec.FromCampaign(_cli, ...)` from the profile and story position the campaign flow
+settled. It names no chapter and no mission: `CampaignDirector.ResolveSpec` reads those out of
+`cm_sequence` in the session's constructor, so one place resolves a story position whether it came
+from a cabin or a `--campaign=` command line. Its return leg is `ReturnToCabin`, handed down
+through `LauncherContext` and non-null only in a menu-driven process: a campaign mission's end
+queues the profile name, and the next `_Process` frees the session and reopens the launchscreen on
+that profile's cabin. Queued rather than acted on directly, because the mission ends inside the
+session's own physics step, which is no place to free it.
+The music channel is built here too, once per process and after every early-quit probe, over a
+`SoundArchive` of its own rather than the build-scoped `SessionArchives.Sounds`: one channel has to
+outlive a mission launch, or the cabin track would restart every time the player left a board. It
+is entered on every launchscreen show, stopped in `BeginLaunch` (the one place a session leaves the
+boards), and ticked on wall time from `_Process` so a paused or stepped session cannot stall a fade
+halfway. An install with no readable sound archive or sound definitions leaves it null, which is
+silence rather than a refusal to launch.
 `RestartSession` is its sibling for the boards' Restart on an Instant Action mission: `QueueFree`
 this session, step the sortie seed exactly as flying again from the menu does (so an unpinned
 restart draws a new mission and a pinned one repeats), and build a fresh session from the same
@@ -4322,7 +4675,9 @@ this class) is `BL-301`'s call.
 
 ## src/Session/PlaneRoster.cs
 Static, spec-free lookups over a `SessionSpec`'s plane roster: `PlaneFor(spec, index)`,
-`PlaneDisplayName(stats)`, `Humanize(s)`.
+`PlaneDisplayName(stats)`, `Humanize(s)`. A plane's display name is the def's AUTHORED `title`
+(`PlaneStats.AiTitle`, "Medusa Kestrel") where something has resolved it through the string table,
+and the def-name derivation ("Bloodhawk") otherwise, which is what a player load and a bare rig get.
 No session state — every call takes the `SessionSpec` explicitly rather than caching one, since
 these are pure over their arguments.
 
@@ -4436,6 +4791,147 @@ ticks `InstantActionWaves.Step` once per sim step, and its `ActivateWave` resolv
 against every live human's CURRENT position before calling `FlightController.Activate` on each
 member. Format and decode: docs/formats/instant-action.md.
 
+## src/Session/ObjectiveScript.cs
+One mission's `objectives.zrd`, parsed into the typed shape `ObjectiveGraph` runs. `Load` takes a
+mission zrdr scope and yields an empty script for a mission with no file, which is what every
+Instant Action and multiplayer stub amounts to. Two parser rules are the original's and are what
+keep the shipped data honest: blocks are read `OBJECTIVE1`, `OBJECTIVE2`, … and **stop at the first
+missing number**, and every directive is found by EXACT name over the block's flat alternating list,
+so `WAKEUP_OBJECTIVE_WHEN_I_COMPLETE` and the truncated `SET_AI_` land in no field and stay dead
+without anything special-casing them. The lookup stays at the top level rather than recursing into
+nested lists as the original does: no shipped file exercises the recursion, so the answer is the
+same on all 53 files and no data string can false-match a keyword. A `null` block parses to a
+directive-free objective, which starts awake and completes as a no-op.
+`SoundGroupNames()` (D33) collects every sound-group name the script's directives can hand to
+`PlaySoundGroup`, a vocabulary the mission's anim program never sees, so nothing else prewarms it;
+a session hands this to `WorldSession.Options.ExtraPrewarmNames`.
+Format and decode: docs/formats/objectives.md.
+
+## src/Session/ObjectiveSites.cs
+The flown campaign mission's objective sites, offered to each player's `TargetPool` as
+objective-flagged candidates: the original carries an objective as a companion flag on the Enemy
+cycle, so one site is drawn at a time and d-pad up steps between them. The set is `targets.zrd`'s
+own `objective` entries minus those a completed objective's `REMOVE_OBJECTIVE_TARGET` names, plus
+whatever `ADD_OBJECTIVE_TARGET` has added: `ObjectiveGraph.ObjectiveTargets` alone starts empty and
+a mission that only ever REMOVES its sites would offer nothing. One `ObjectiveSite` instance lives
+as long as the mission flags it, since the selection is held by source identity; its position and
+labels are re-read every frame, which is what tracks a site under a moving node. `PointFor` prefers
+the bare `TRAVELERS` point of the objective that edits a target over the world node of the same
+name, because C3/M01's village node stands at the world origin. `GameSession` binds it through
+`FlightRoster.SetTargetObjectives`. Pinned by `campaign-objective-markers`.
+
+## src/Session/ObjectiveGraph.cs
+The objectives runtime over a parsed script, pure state over `Step` calls in the shape of
+`InstantActionWaves` — no Godot type, no logging, `CSVM.Tests/ObjectiveGraphTests.cs` pins it
+off-engine and `CampaignDirector` owns every log line about it. Implemented as decoded, shipped
+quirks included: the four states (dormant/awake/napping/retired); at most ONE completion per tick
+from a scan index that advances every tick, completion or not; `TICK_DEPENDS_ON_OBJ` gating the
+whole objective on its dependency being AWAKE, not merely alive; the wake executor's early return on
+an already-awake target, which TRUNCATES the rest of the caller's wake list;
+`NAP_OBJECTIVE_WHEN_I_COMPLETE` clearing the target's completed flag as the only re-run path;
+condition families OR-ing together with a conditionless objective completing on its first eligible
+tick; and `DANGER_ZONES_COMPLETED` counting only zones flagged while the objective was awake.
+The world seam is `IObjectiveWorld`: a method returning `null` means "this engine cannot answer",
+which makes the family report FALSE and bumps `UnresolvedConditions` rather than guess — ⚠ reading
+an empty world as "the group is wiped out" would win missions on the first tick.
+The read model D33 consumes is `Rows` (one row per unique `IDENTITY` priority, ascending, the
+priority the row key and the sort key), `ObjectiveTargets`/`OtherTargets`/`HelpLabels`, and the
+`Woke`/`Completed`/`TargetsChanged`/`MissionEnded` events; wake and complete events carry the
+`WAKEUP_SOUND_GROUP` / `COMPLETED_SOUND_GROUP` names, which is also how D37 sees the music groups.
+`CompletedMask` is bit-per-row, so bit 0 is the lowest priority and therefore the primary objective
+the profile's merge gates on (docs/formats/saved-games.md).
+
+## src/Session/CampaignDirector.cs
+The engine side of one campaign mission, behind `GameSession`'s one nullable `_campaign` field and
+the sibling of `InstantActionDirector`: a plain sealed class that builds no node of its own.
+`ResolveSpec` runs in `GameSession`'s CONSTRUCTOR, before any chapter-dependent path is derived: a
+`--campaign=<profile>:<seq>` launch names a story position, so the sequence is read and
+`SessionSpec.WithCampaignMission` points the rest of the build at an ordinary chapter/mission.
+`TryCreate` loads the profile and the script on the same "a failure warns and flies without a
+mission" contract `InstantActionDirector.TryCreate` has. `Attach(WorldInputs)` arms the graph once
+every runtime a directive can touch is up and applies the chapter's persist log; `Step(dt)` is
+called from BOTH of `GameSession`'s drive paths. Mission end records the attempt through
+`CampaignProgression`, merges `CampaignPersistLog.Capture` into the profile, saves it, and raises
+`ReturnToCabin` plus `MissionEnded` for the session layer; the cabin screen itself is C22's.
+Which directives reach the engine today: `INACTIVEn` (node visibility, the decoded active bit),
+`ANIM_STATE` (`AnimRuntime.AnimStateOf`), the node form of `TRAVELERS`, `WAKEUP_TURRETS` /
+`WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
+(`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM`, both sound-group directives through
+`MissionRadio`, falling through to `WorldSounds.PlayOneShot` for a cue the radio does not own,
+`STOP_QUEUED_SOUNDS` through `MissionRadio.Cancel`, `START_TAXI` through the director's own
+`ScriptedPathVehicles` registry (`Paths`), which it also steps beside the graph,
+`COMPLETED_STOPPOINT` through `ZeppelinRuntime.SetStopPoint` (it arms or releases one stop point of
+a named net, and the airship holds or leaves), and, over the spawned roster, `DEDG`
+(`GroupLiveCount`: not-crashed members of the block group, a parked one counting as alive) and
+`WAKEUP_ENEMIES`, one directive over two deactivated flags: an inert named aircraft re-activated at
+its spawn pose, or a dormant `ZeppelinRuntime` record put into the world.
+The rest (the group form of `TRAVELERS`, `SET_AI_*`, `WARP_VEHICLE`) and the
+untraced `COMPLETED_ZEPCANNONS` reader are NAMED no-ops, each logged once per kind. ⚠ Never turn one of those into an invented
+behaviour: the missing consumer is the finding.
+`BuildRoster(RosterInputs)` is the roster phase, called by `GameSession` right after
+`InstantActionDirector.BuildActors` at the point where the human rigs exist: it plans the mission's
+`aiv` blocks through `Session/CampaignRoster.cs`, spawns each through the handed delegate (an
+authored `netids` becomes `AiPilot.Patrol` on the chapter's net with its trailer; a netless
+`mode wingman` block gets `AiPilot.Escort` in a SECOND pass once every rig exists, its
+`primary_target` resolving to the player rig or a block by name; never both), applies the merged
+volumes and the `min_ai_active_dist` floor, the signature maneuvers, the rating biases and the
+accent, builds a `deactivated` block inert, places a `taxiPath` block held on its path
+(`PlaceOnPath`: re-pinned through `FlightController.PlaceHeld` each tick, `Activate`d at the
+handoff speed), and logs one `campaign: roster '<name>'` line per block. A block whose
+`primary_target` is not spawned holds its course; a leader that dies later is `AiPilot`'s own
+fallback. `Roster` is the spawned map by block name; the player's block is skipped, a surface
+vehicle (`mode ship`) has no airframe and is reported, not spawned.
+`HoldForCutscene(bool)` is callback 20's objectives half: a held director advances no dormancy
+timer or reminder fuse while a cutscene owns the session (`Session/CutsceneController.cs`).
+
+## src/Session/CampaignRoster.cs
+The engine-free half of the campaign roster spawner: `CampaignRosterPlan.Build` turns
+`AiSkills.LoadRoster`'s blocks into one `RosterSpawnPlan` each, using `Mech3/VehicleDefs.cs` for
+the def behind the block name, its `mode` and its player airframe, and the chapter's `AiNet`s for
+the authored `netids` (a multi-entry list takes the handed `rand() % count` draw). The decoded fork
+is here and nowhere else: `Escorts` is `mode wingman` AND no authored net, `Net` is any authored
+net that the chapter carries, and a plan never has both (docs/org/aiPilot.md "A net demotes a
+wingman"). `Volumes` is the net's set overlaid by the block's own; `ApplyVolumes` writes the radii
+onto an `AiModeMachine` and floors activation at `min_ai_active_dist`. The profile's wingman
+airframe replaces the block's own for the named block (`wingman_1`), taking the `w<plane>` def for
+its stats; a def that is no `kind_of` variant of its airframe flies the plain base def, with the
+block's own def still deciding the mode. `ResolveLeader` is the second-pass lookup (`player` = the
+first human). Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`; the placement half is the
+`campaign-roster` suite.
+
+## src/Session/ScriptedPathVehicles.cs
+One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored
+`ScriptedPath` frozen at its own pose, `Release` is what `START_TAXI` calls, and `Step` drives each
+follower and writes its pose onto the body, or hands it to the caller's `setPose` for a body whose
+pose a simulation of its own owns (a held `FlightController`). A finished vehicle raises its handoff
+callback with the speed the path left it at and leaves the registry, so nothing keeps overwriting
+the flight model's pose. The law is `Flight/PathFollower.cs` and the route `Mech3/ScriptedPath.cs`.
+
+## src/Session/CutsceneController.cs
+The host a story mission's intro definition raises its `CALLBACK` codes to, and the session state
+those codes describe. A `Node` only so it can tick LAST in the frame (`ProcessPriority` 1000): the
+rig cameras take the pose that frame's animation advance put `camera1` in, so the bars, posed inside
+that advance, never sit against a camera one frame behind them. Hosted: 20 world+objectives hold
+(`GameSession`'s drive paths and `CampaignDirector.HoldForCutscene` read it), 2 chrome off and the
+view off the aircraft (`FlightController.CameraOwned`, which also stops the cockpit rules being
+re-asserted), 11 the player out of flight (`Held` + `Inert` + engine audio paused), 913/914 park and
+reveal the AI (only what this controller parked comes back), 666/667 the camera-parameter gate
+(tracked, not acted on — this engine applies that profile once per rig and never on a view change),
+1/10 the handoff and the in-flight systems; 965/966/967 the mid-mission airframe swap, through the
+`SwapAirframe` seam the session fills with `FlightRoster.SwapPlayerAirframe` (the three codes and
+their def/node pairs are `Session/AirframeSwap.cs`); 14 and 123 are named gaps with one log line
+each. A swap sets the cutscene flags 11 and 2 set between them, and clears nothing: the definition
+ending is what gives the player flight back, now in the new airframe. The
+handoff raises the gameplay state the definition's own `RESET_STATE` asserts, because a CSVM
+`RESET_STATE` dispatch deliberately raises no callbacks and `RESET_TIME` is undecoded; it also
+retracts the bars, returns `camera1` to the runtime's world root (a definition composes itself by
+reparenting it) and parks it at the origin, which other definitions pose against.
+Skip is any key (not Escape) or pad button: force-stop the definition, then the same restore, so
+dropping the remaining beats cannot leave the mission held, hidden or unflyable.
+⚠ `IntroAnims` is the scope, and it is a NAME test: Instant Action's `player_setup` authors the same
+nine codes, so a code test would give every mission a letterbox and a suspended world. Decode:
+`docs/formats/anim-definitions/cutscenes.md`.
+
 ## src/Session/GeneratorCycle.cs
 The decoded egen launch timing law for ONE generator (M4 B6 + F20), pure over `Step` calls (no
 clock, no randomness, no nodes), so `CSVM.Tests/GeneratorCycleTests.cs` pins it off-engine. The
@@ -4464,9 +4960,11 @@ Runs a mission's egen generators (M4 B6 + F20, behind `--generators[=plane]`): o
 `GeneratorCycle` per surviving `EnemyGeneratorDef`, host altitude read live off the resolved host
 node, spawns through the handed roster callback at the origin node's LIVE position (it rides
 F17's moving zeppelin) in the authored `rotation` drop attitude, each pilot patrolling the cyclic
-net pick through `AiNetFollower` (`SpawnedNet`). Door transitions play the authored
-`open_anim`/`close_anim` through host-scoped hooks (`AnimRuntime.PlayWithin`/`StopWithin`);
-unauthored doors run the timing machine log-only. Every drop/live/door/spawn prints an `egen:`
+net pick through `AiNetFollower` (`SpawnedNet`). Door transitions play the authored or
+node-name-defaulted `open_anim`/`close_anim` (`EnemyGenerators.DefaultDoorAnim`; an unauthored
+close is the open, as in the loader) through host-scoped hooks (`AnimRuntime.PlayWithin`/
+`StopWithin`); a name resolving no def runs the timing machine log-only. A ground hangar's door is
+this cycle's, not the mission script's (`hangar-door-wake` suite). Every drop/live/door/spawn prints an `egen:`
 line, which is the flag's observability. `NotifyHostDied(node)`: the zeppelin death aggregator
 (`ZeppelinRuntime.ZeppelinKilled`, F18) calls it and the matching cycles disable permanently.
 Pinned by the `zeppelin-launch` suite.
@@ -4481,8 +4979,14 @@ hook returning null (the wave has nothing parked left) is accounted exactly like
 Runs a mission's zeppelins (M4 F17 motion + F18 damage + F19 broadside, behind
 `--zeppelins`): each
 `ZeppelinDef` whose world node and net resolve gets a `ZeppelinMotion` on B5's `AiNetFollower`
-(arrival radius widened per record to clear the turning circle), is placed at its authored
-position/yaw/pitch, and the NODE is flown kinematically — no FlightController. `WireDamage`
+(arrival radius widened per record to clear the turning circle, and the only follower that
+observes stop points), is placed at its authored
+position/yaw/pitch, and the NODE is flown kinematically — no FlightController.
+`SetStopPoint(net, id, halts)` is the whole of `COMPLETED_STOPPOINT`: it arms or releases one stop
+point on every follower flying that net, so an airship spawned on an armed node sits docked until
+the objective that owns it completes. ⚠ The original keeps the flag on the shared net record rather
+than per vehicle; no shipped mission puts two zeppelins on one net, so the readings do not
+separate. `WireDamage`
 builds the F18 zones over the world registry: gasbags/`cannon_health` cannons seeded from the
 RECORD where authored (record hp beats a def pool via `Instance.Reseed`; a fresh pool registers
 on the record's destroy-anim def, so zero-HP death plays the authored destruction), engines and
@@ -4509,13 +5013,23 @@ too (`BL-377`, via `NetTrailerTargets`); `formats/ai-nets.md` has the two-of-222
 `CollectTargetParts(List<AimCandidate>)` offers those same F18 zones — gasbags, engines, cannons —
 to the player's `TargetPool`, one candidate per part, each carrying the hull's own velocity so the
 bracket gate has something to lead. It is the only channel by which a structure becomes selectable.
+`AuthoredTeam` reads a record's team and `WireZones` fans it, plus the hull's own name as each
+pool's `Owner`, onto every zone; `FanTeamsOntoTurrets` finishes that fan on the guns standing on the
+hull, which do not exist until `GameSession` has built the emplacements. An unauthored record fans
+neither, and its parts are then neutral.
 `Hold(node)` (F12) is the runtime counterpart of that flag for a zeppelin Instant Action's own
 builder switched off: placed, but no longer stepped, so it neither flies its net nor fires an
 invisible broadside. It stands in for `FUN_0045a390`'s `FUN_0045a2a0`, which deletes the vehicle/AI
 objects under the deactivated node — CSVM has no such object graph to delete. Switching the world
 NODE off is the CALLER's act (`GameSession`, the decoded `gwNodeSetActive`), because the builder's
-three `*_zeppelin` names need not be zeppelin records at all. Format and decode: `formats/ai-nets.md`,
-`formats/mission-entities.md`.
+three `*_zeppelin` names need not be zeppelin records at all. `Wake(node)` is the other flag's
+counterpart: a record authoring `deactivated` starts DORMANT, posed at fade alpha 0 so its colliders
+drop with it and out of both candidate channels, until a mission's `WAKEUP_ENEMIES` puts it in the
+world and the objective's own reveal animation fades it up. `AuthoredTeam(def)` reads the record's
+own side into the one shared team space and `WireDamage` fans it onto every zone pool, the way the
+original fans one value across the whole airship; a record authoring none leaves the pool's null in
+place. Format and decode: `formats/ai-nets.md`, `formats/mission-entities.md`,
+`org/targeting.md`.
 
 ## src/Session/TurretEmplacementRuntime.cs
 The world AA emplacements: `TurretController.BuildEmplacements` resolved against the
@@ -4528,7 +5042,8 @@ unconditionally with a chapter flight — the original's world placement pass is
 Observability: the `turrets: N world emplacement(s) placed…` census line plus per-turret
 `woken`/`engaging` breadcrumbs. Pinned by the `world-turrets` suite (C1 census 74, C4 census 92).
 `SetActivatedUnder` is the Instant Action builder's own subtree write (the objective hull's 14
-rings come up armed, a switched-off hull's go quiet); `WakeAll` is the `--wake-turrets` stand-in.
+rings come up armed, a switched-off hull's go quiet); `SetTeamUnder` is the same walk for the team
+a zeppelin record fans across its whole airship; `WakeAll` is the `--wake-turrets` stand-in.
 Format and decode, including the wake ordering and the awake-by-data census:
 docs/formats/turrets.md "Waking a whole subtree".
 
@@ -4560,6 +5075,18 @@ unconsumed. The aggregate owns the live
 human/AI membership views, fans target-source updates to present and future members, and drops its
 non-node bindings in `ClearMembership`; the session subtree remains the aircraft node owner.
 `HumanFlightAdapter` and `AiFlightAssembler` are the two private assembly implementations.
+`SwapPlayerAirframe` is the third commit path, a mission putting one player into a different
+airframe mid-flight (callback codes 965 to 967): it removes the outgoing aircraft and re-runs the
+human assembler on the named airframe with the pose, heading, throttle and speed that aircraft
+held. ⚠ The removal has to precede the build, because `DetachRosterBindings` drops every near-miss
+registration carrying that pilot's shooter id and the replacement registers its own under the same
+id. The replacement carries the new airframe's own everything: stats, stock guns and hardpoint
+table at full ammunition, damage zones, camera profile and engine audio. Rounds already in the air
+are unaffected, since they belong to the shared pool under the pilot's unchanged shooter id. The
+livery stream is captured and restored around the build so a swap cannot change what a later AI
+wave is painted, and a swap builds no stunt run, scoreboard or custom-plane fit: the run belongs to
+the pilot, and a bought plane's armour and pylon counts belong to the airframe they were bought
+for.
 
 ## src/Session/FlightRosterInputs.cs
 The grouped construction facts accepted by `FlightRoster`: copied `FlightRosterPolicy`, immutable
@@ -4570,7 +5097,9 @@ required dependencies explicit at the production seam.
 ## src/Session/AiFlightAssembler.cs
 The roster's private AI assembly path. It prepares authored/fallback pilot skills and maneuvers,
 builds the model, controller, livery, loadout/ordnance, damage visuals and optional crash runtime,
-then places the finished node. The assembler owns the one AI skills cache; `FlightRoster` lends
+then places the finished node. It also resolves the def's authored `title` into
+`PlaneStats.AiTitle` (the militia name the targeting readout prints), because this is where the
+loaded def and the session's string table meet. The assembler owns the one AI skills cache; `FlightRoster` lends
 that already-loaded table to the session's voice adapter without reopening the archive.
 
 ## src/Session/HumanFlightAdapter.cs
@@ -4697,8 +5226,13 @@ return-to-menu — its per-rig nodes hang under `_worldRoot`, so the session's `
 **What the original does per frame is written up in [org/weather.md](org/weather.md)** — including
 the retired `DeckCeilingHeight` fits. The authored side is [formats/weather.md](formats/weather.md)
 and [formats/weather/atmosphere.md](formats/weather/atmosphere.md); the fog-volume whiteout curtain
-is [formats/fogvol.md](formats/fogvol.md). Proven by `CSVM.Tests/FogZoneStateTests.cs`,
-`DeckRegimeTests.cs`, `FlatColorTests.cs`, `FogVolumeWhiteoutTests.cs` and `BandFlickerTests.cs`.
+is [formats/fogvol.md](formats/fogvol.md). `ApplyFogState` is the animation runtime's `FOG_STATE`
+sink (via `GameSession`, which holds an event raised inside the world bootstrap until the rig has
+written its zone): it writes only the fields the event carries onto the same fog globals, and the
+next zone edge writes the zone back over it, the original's last-writer order. `FogGlobals` mirrors
+the last writes, since the renderer refuses to read a global back outside the editor. Proven by
+`CSVM.Tests/FogZoneStateTests.cs`, `DeckRegimeTests.cs`, `FlatColorTests.cs`,
+`FogVolumeWhiteoutTests.cs`, `BandFlickerTests.cs` and the `fog-state` suite.
 
 ## src/Session/LensFlareRig.cs
 The sun's lens flare: four screen-space sprites strung along the sun→screen-centre vector at

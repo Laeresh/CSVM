@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using CSVM.Testing;
 using Xunit;
 
@@ -11,10 +11,10 @@ public sealed class SuiteCatalogTests
     {
         string[] names = TestHarness.All.Select(suite => suite.Name).ToArray();
 
-        Assert.Equal(95, names.Length);
+        Assert.Equal(128, names.Length);
         Assert.Equal(SuiteCatalog.Names, names);
         Assert.Equal("emitter-lifetime", names[0]);
-        Assert.Equal("world-lights-nearest-viewer", names[^1]);
+        Assert.Equal("campaign-briefing-note", names[^1]);
         Assert.Equal(names.Length, names.Distinct().Count());
     }
 }

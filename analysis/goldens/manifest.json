@@ -113,8 +113,8 @@
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "d3baf0a921a22d8aae985a35ca104eaf",
-      "exercises": "Targeting a live AI in flight: its quaternion-driven pose feeds fixed antialiased in-range brackets, the label below the plane and --debug-markers identity/health text; frame-sensitive 48.18 %.",
+      "hash": "1542f5665a9e8b740e4972f65bfb73ca",
+      "exercises": "Targeting a live AI in flight: its quaternion-driven pose and its crewed rear turret's barrel feed fixed antialiased in-range brackets, the label below the plane and --debug-markers identity/health text; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {

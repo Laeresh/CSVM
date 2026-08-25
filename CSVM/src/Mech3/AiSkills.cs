@@ -110,6 +110,22 @@ public sealed class AiSkills
     // Roster slot 34: nitro, the nitrous injector flag the spawner copies onto the vehicle.
     private const int NitroSlot = 34;
 
+    // The spawn-facing slots a campaign roster block is placed from (docs/formats/ai-rosters.md
+    // "Field table"): the net id list, the spawn pose, the side, the cohort, the display key,
+    // the deactivated flag, the engagement-altitude weight, the signature mask, the taxi path
+    // and the voice id.
+    private const int NetIdsSlot = 0;
+    private const int PositionSlot = 1;
+    private const int YawSlot = 2;
+    private const int TeamSlot = 3;
+    private const int GroupSlot = 4;
+    private const int TitleSlot = 20;
+    private const int DeactivatedSlot = 21;
+    private const int PrefEngageAltSlot = 31;
+    private const int SignatureSlot = 32;
+    private const int TaxiPathSlot = 40;
+    private const int AccentSlot = 65;
+
     private readonly Dictionary<string, (float At1, float At9)> _params =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -191,6 +207,80 @@ public sealed class AiSkills
     public static bool RosterNitro(IReadOnlyList<object?> fields) =>
         fields.Count > NitroSlot && fields[NitroSlot] is float f && f >= 1f;
 
+    /// <summary>Reads a roster block's <c>netids</c> (slot 0) as the list the exe's comment
+    /// names: a scalar reads as one entry, a list as its numeric entries, and <c>-1</c>, an
+    /// empty list, a short block or a non-numeric slot read as no net. ⚠ An empty result selects
+    /// the escort behaviour on a <c>mode wingman</c> def, not "no orders" (docs/org/aiPilot.md).</summary>
+    public static List<int> RosterNetIds(IReadOnlyList<object?> fields)
+    {
+        var ids = new List<int>();
+        if (fields.Count <= NetIdsSlot)
+            return ids;
+        switch (fields[NetIdsSlot])
+        {
+            case float single when single >= 0f:
+                ids.Add((int)single);
+                break;
+            case List<object?> list:
+                foreach (var entry in list)
+                {
+                    if (entry is float id && id >= 0f)
+                        ids.Add((int)id);
+                }
+                break;
+            default:
+                break;
+        }
+        return ids;
+    }
+
+    /// <summary>Reads a roster block's spawn position (slot 1, the one list-typed slot) and yaw
+    /// (slot 2, degrees, the mission-data heading convention). Null when the position is not an
+    /// x y z list; a missing yaw reads 0.</summary>
+    public static (Godot.Vector3 Position, float YawDeg)? RosterSpawnPose(IReadOnlyList<object?> fields)
+    {
+        if (fields.Count <= PositionSlot || fields[PositionSlot] is not List<object?> { Count: >= 3 } p
+            || p[0] is not float x || p[1] is not float y || p[2] is not float z)
+            return null;
+        float yaw = fields.Count > YawSlot && fields[YawSlot] is float f ? f : 0f;
+        return (new Godot.Vector3(x, y, z), yaw);
+    }
+
+    /// <summary>Reads a roster block's <c>team</c> (slot 3), or null when unset.</summary>
+    public static int? RosterTeam(IReadOnlyList<object?> fields) => IntSlot(fields, TeamSlot);
+
+    /// <summary>Reads a roster block's <c>group</c> (slot 4), the mission-logic cohort id, 0
+    /// when unset (the at-mission-start population).</summary>
+    public static int RosterGroup(IReadOnlyList<object?> fields) => IntSlot(fields, GroupSlot) ?? 0;
+
+    /// <summary>Reads a roster block's <c>title</c> (slot 20), the <c>MSG_*_NAME</c> display key,
+    /// or null when empty or unset.</summary>
+    public static string? RosterTitle(IReadOnlyList<object?> fields) => StrSlot(fields, TitleSlot);
+
+    /// <summary>Reads a roster block's <c>deactivated</c> flag (slot 21): true when authored 1,
+    /// the block waiting for a <c>WAKEUP_ENEMIES</c> or a generator launch.</summary>
+    public static bool RosterDeactivated(IReadOnlyList<object?> fields) =>
+        fields.Count > DeactivatedSlot && fields[DeactivatedSlot] is float f && f >= 1f;
+
+    /// <summary>Reads a roster block's <c>pref_engage_alt</c> (slot 31), metres, or null on the
+    /// <c>-1.0</c> that defers to the def's <c>preferred_engagement_altitude</c>. ⚠ A maneuver
+    /// selection weight, not an altitude order (docs/formats/ai-rosters.md).</summary>
+    public static float? RosterPrefEngageAlt(IReadOnlyList<object?> fields) =>
+        fields.Count > PrefEngageAltSlot && fields[PrefEngageAltSlot] is float f && f >= 0f ? f : null;
+
+    /// <summary>Reads a roster block's <c>signature_maneuvers</c> bitmask (slot 32), 0 = none.
+    /// <see cref="Maneuvers.SignatureNames"/> turns it into names.</summary>
+    public static long RosterSignatureMask(IReadOnlyList<object?> fields) =>
+        fields.Count > SignatureSlot && fields[SignatureSlot] is float f && f > 0f ? (long)f : 0L;
+
+    /// <summary>Reads a roster block's <c>taxiPath</c> (slot 40): the authored <c>ppN</c> path
+    /// name, or null on the <c>0</c> that means none (docs/formats/ai-rosters.md).</summary>
+    public static string? RosterTaxiPath(IReadOnlyList<object?> fields) => StrSlot(fields, TaxiPathSlot);
+
+    /// <summary>Reads a roster block's <c>accentID</c> (slot 65), the voice id, or null on
+    /// <c>-1</c> or a short block.</summary>
+    public static int? RosterAccentId(IReadOnlyList<object?> fields) => IntSlot(fields, AccentSlot);
+
     /// <summary>Reads a roster block's <c>rating_biases</c> (slot 33): the authored
     /// [pattern, bias, ?] entries in order, or an empty list when the slot is null, omitted or
     /// malformed. The third element is undecoded and kept raw on each entry.</summary>
@@ -249,5 +339,11 @@ public sealed class AiSkills
     /// <summary>The per-launch ordnance dice, 0–1 (0.05 at 1 → 0.44 at 9). Despite the shared
     /// name this is not a gun term: it gates nothing but an ordnance launch.</summary>
     public float QuickDrawChance(float rating) => At("quick_draw_chance", rating);
+
+    private static int? IntSlot(IReadOnlyList<object?> fields, int slot) =>
+        fields.Count > slot && fields[slot] is float f && f >= 0f ? (int)f : null;
+
+    private static string? StrSlot(IReadOnlyList<object?> fields, int slot) =>
+        fields.Count > slot && fields[slot] is string { Length: > 0 } s ? s : null;
 }
 

@@ -8,6 +8,7 @@ volume and pitch curves, and the WAV container. The readers are `SoundDefs.cs`, 
 
 - [Sound sets](#sound-sets)
 - [Sound groups](#sound-groups)
+- [The music channel](#the-music-channel)
 - [Player curves](#player-curves)
 - [WAV format](#wav-format)
 ## Sound sets
@@ -21,7 +22,34 @@ volume and pitch curves, and the WAV container. The readers are `SoundDefs.cs`, 
 - **Bare flags:** `LOOPED` (plays as a forward loop), `3D` (positional), `FREQUENCY`
   (the engine may pitch-shift this sound), `SFX`, `PURGEABLE`, `OPTIONAL`.
 - **Valued keys:** `RANGE [fullVolumeDist, audibleDist]` (meters), `VOLUME [gain]`,
-  `QUEUE [...]`.
+  `QUEUE [waitSeconds]`, `QPRIORITY [n]`.
+
+### Which channel a definition plays on
+
+⚠ **`3D` is the positional opt-in, not the default.** Only 124 of the 2,766 shipped definitions
+carry it, every one of them also carries `RANGE`, and no definition carries `RANGE` without it. A
+definition with neither is not a positional sound with default distances; it has no distance model
+at all. The flags sort the whole library into four channels, and the classes do not overlap:
+
+| Class | Marker | Count | Where it plays |
+|---|---|---|---|
+| Positional | `3D` (+ `RANGE`, `SFX`) | 124 | a point in the world, `WorldSounds` |
+| Radio line | `QUEUE [seconds]` | 2,538 | the mission radio queue, no position |
+| Music | `MUSIC`, or a `mu`-prefixed WAV or group | 33 | the streaming channel |
+| Cockpit and UI | none of the above | 71 | flat: briefings, `*_cp` engine loops, menu clicks |
+
+⚠ **`QUEUE` and `3D` never co-occur**, over all 2,766 definitions. Every mission-VO and
+combat-voice definition is a radio line, so a callout is heard the same wherever the player is;
+placing one in the world is an invention the data does not support. `QUEUE`'s value is how long
+the line may wait for a channel someone else holds before it is dropped as stale: 0.5 s for the
+combat barks in `COMMON` and the `id<N>` sets (say it now or not at all), 45 s for a mission's own
+VO, 85 s for C5/M04's. The parser (`FUN_00592c90`) reads the key into the definition's wait field
+and then **adds 0.3 s**; a definition with no `QUEUE` key keeps that field's initial **5.0 s**.
+`QPRIORITY` writes a 3-bit priority (bits 10–12) over the file header's `DEFAULT_QUEUE_PRIORITY 3`,
+on three definitions in `c3m05` and nowhere else; ⚠ which direction is more urgent is undecoded, so
+nothing reads it. ⚠ The tolerance is a wait rule, not a deadline on the cue's own 1 s start delay:
+charging the delay against it drops every 0.5 s bark before it can speak. The cue delay and the
+`STOP_QUEUED_SOUNDS` cancellation are [objectives.md](objectives.md).
 
 Beside the effect/UI sets (`COMMON`, the per-mission `c<x>m<nn>` sets, the `brief_*` and `DIALOG`
 sets), 35 sets named `id<N>` carry the combat-voice clips: `snd_id<N>_<TYPE>` →
@@ -58,11 +86,13 @@ Entry shapes (all start with the group name):
   recency decay; their `snd_nothing` at 0.7 is a 70% chance of silence.
 - **VO dialogue chains** (`snd_assignments`, `snd_HI1*`; 222 groups) nest a list where a weighted
   member's name would be: `[firstLine, [line], [line], …]`, an ordered sequence of snd names.
-  They contribute no weighted member; the parser keeps them as `SoundGroup.Chains` for the
-  comms/mission layer, and `WorldSounds.Prewarm` decodes their lines. No chain group mixes chains
-  with weighted members, and each holds exactly one chain (2–13 lines). A group with neither
-  members nor chains is not registered. Music `*_sg` groups parse but no `SOUND` event names them
-  (music is triggered elsewhere).
+  They contribute no weighted member; the parser keeps them as `SoundGroup.Chains`, `MissionRadio`
+  speaks them in order as one radio call, and `WorldSounds.Prewarm` decodes their lines. No chain
+  group mixes chains with weighted members, and each holds exactly one chain (2–13 lines). Every
+  line of every chain an objective cues is a `QUEUE` definition; not one is `3D`. A group with neither
+  members nor chains is not registered. Music `*_sg` groups parse but no `SOUND` event names them:
+  music is cued by name from the missions' `objectives.zrd` and from the menu scripts, not by an
+  animation event (see [The music channel](#the-music-channel)).
 - **Combat-voice variant groups**: 466 entries named `snd_<FAMILY>-A_id<N>_random`
   (`DYNAMIC_WEIGHTS 0.5` over one pilot's `-A/-B/-C` takes of one family), the data's own answer
   to how a take is picked; see [combat-voice.md](combat-voice.md).
@@ -71,6 +101,25 @@ A `SOUND` event's NAME is resolved against `SETS` first, then `SOUND_GROUPS`: `a
 picks one of `snd_exp_hit1/2/3/3a/5`, each of which is an ordinary `SETS` entry
 (`snd_exp_hit1` → `explosion_1.wav`). See [anim-definitions.md](anim-definitions.md) for the
 `SOUND` vs `SOUND_NODE` distinction (only the latter is ambient looping world audio).
+
+## The music channel
+
+`MUSIC` is a routing flag, not a label. A `SETS` definition carrying it, or one whose WAV name
+starts with `mu`, plays on a single streaming channel; so does a `SOUND_GROUPS` group whose name
+starts with `mu`. ⚠ It selects the streaming channel and nothing else: what a definition without
+it plays on is decided by `3D` and `QUEUE`, not by the absence of `MUSIC`
+([which channel a definition plays on](#which-channel-a-definition-plays-on)). The 33 `music_*.wav` tracks in
+`soundsh`/`soundsl` are reached through seven groups (`music_prebattle_sg`, `music_battle_sg`,
+`music_battlesuccess_sg`, `music_missionsuccess_sg` and the three `*obj_sg` stingers) plus the
+plain definitions `snd_music_splash`, `snd_instantaction` and `snd_spicyairtales`.
+
+The channel holds one track: a new cue hard-cuts the old one, a cue for the track already playing
+is ignored, and nothing crossfades. Which of the six numbered variants plays is the group's own
+weighted-random pick, not a chapter or an act; the two-take stingers alternate instead. Only
+`battle1-6` carry `LOOPED`, and the resolver forces prebattle to loop as well.
+
+The runtime behind all of that, including the battle timer, the fade rates and which tracks ship
+with no trigger at all, is [`org/music.md`](../org/music.md).
 
 ## Player curves
 

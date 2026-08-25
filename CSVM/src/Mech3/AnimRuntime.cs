@@ -50,16 +50,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         "ObjectMotionSiScript", "Loop", "If", "Elseif", "Else", "Endif", "CallSequence",
         "StopSequence", "CallAnimation", "StopAnimation", "InvalidateAnimation", "ResetAnimation",
         "PufferState",
-        "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild", "Callback",
+        "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild", "ObjectDeleteChild",
+        "Callback", "FogState",
     };
 
     /// <summary>Kinds with a handler that covers only part of what the event does — reported
     /// apart from the unhandled ones, since "acted on" and "acted on fully" are different answers.
-    /// <c>ObjectAddChild</c> handles its sound-emitter form and counts the rest as unhandled, and
-    /// <c>Callback</c> acts on the two vehicle-death codes and counts every other one.</summary>
+    /// The two child events take their sound-emitter and node-reparent forms and count the rest as
+    /// unhandled, and <c>Callback</c> acts on the two vehicle-death codes and counts every other
+    /// one.</summary>
     public static readonly IReadOnlyCollection<string> PartialEventKinds = new HashSet<string>(StringComparer.Ordinal)
     {
-        "ObjectAddChild", "Callback",
+        "ObjectAddChild", "ObjectDeleteChild", "Callback",
     };
 
     /// <summary>Refuse the <c>ANIMATION_ROOT_NAME</c> anchor lift, however few matches it finds.
@@ -161,6 +163,19 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// session-scoped, and this runtime is instanced per effect pool and per player crash rig.
     /// Which panes the wash reaches is the sink's decision, not this runtime's.</summary>
     public Action<Color, Color, float, Vector3, float>? ScreenFlash;
+
+    /// <summary>The mission-script host a <c>CALLBACK</c> code is offered to first, with the
+    /// raising definition's animation name: the cutscene vocabulary (presentation, world hold, AI
+    /// park, handoff) belongs to the session, not to this runtime. Returning false leaves the code
+    /// to the two vehicle-death seams below and to the census, which is what every runtime with no
+    /// host wired reports. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public Func<int, string?, bool>? CallbackHost;
+
+    /// <summary>Where a <c>FOG_STATE</c> event's inline fog goes: the session's weather rig, which
+    /// owns the fog globals. Null counts the event. ⚠ Raised under a RESET_STATE as well as in a
+    /// sequence: the original's handler (dispatch slot 28) writes the fog record from either
+    /// walker, and the one shipped use sits in a reset block (docs/formats/anim-definitions.md).</summary>
+    public Action<FogStateChange>? FogStateSink;
 
     /// <summary>The world velocity a <c>Callback 16</c> hands the running instance, which is how a
     /// wreck inherits the aircraft's motion (docs/org/vehicleDamage.md). Supplied by the rig,
@@ -343,6 +358,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly List<AnimInstance> _instances = new();
 
+    // The per-frame snapshot Advance walks. ⚠ An instance's own STOP_ANIMATION removes OTHER
+    // instances mid-walk, so an index into the live list goes out of range; a cutscene definition
+    // that stops the scene it just called is where that happens.
+    private readonly List<AnimInstance> _advancing = new();
+
     // The destructible whose death is directly dispatching right now (a stack, since deaths nest).
     // Lets a death-triggered CALL_ANIMATION landing on the SAME anchor as the dying instance
     // register on its LocalCallTargets, so a reset can Stop and restore it too. Without that, a
@@ -362,6 +382,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // works that way (docs/formats/anim-definitions.md). Keyed by DEFINITION, not (def, anchor),
     // because the event resolves one animation record and never walks the per-node copies.
     private readonly HashSet<AnimDefinition> _invalidated = new();
+
+    // Every definition that has ever been started, so AnimStateOf can tell "has run" from "never
+    // ran". Write-only bookkeeping: nothing in the runtime reads it.
+    private readonly HashSet<AnimDefinition> _everStarted = new();
 
     private readonly Dictionary<string, int> _unhandled = new(StringComparer.Ordinal);
 
@@ -809,8 +833,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary><see cref="Play"/>, scoped to one world subtree: starts only the instances
     /// whose anchor sits at or under <paramref name="scope"/>. C1 carries three
     /// <c>hangerdoors</c> nodes — the zeppelin's and two ground hangars' — so a generator's
-    /// door call must not swing every namesake in the chapter (the F20 case; ground hangar
-    /// doors are mission-animation territory, BL-350).</summary>
+    /// door call must not swing every namesake in the chapter (the F20 case; a ground hangar's
+    /// doors are the mission script's, through <c>WAKE_ANIM</c> and <see cref="Play"/>).</summary>
     public List<(AnimDefinition Def, Node3D? Anchor)> PlayWithin(Node3D scope, string animName,
         bool applyReset = true)
     {
@@ -1004,20 +1028,29 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         TickDeferredByRange();
         if (DebugMotions)
             LogMotions(dt);
-        // Instances can finish (and CallAnimation can add) during the walk, so iterate a copy.
-        for (int i = _instances.Count - 1; i >= 0; i--)
+        // Instances can finish, stop each other, and be added by CallAnimation during the walk, so
+        // iterate a copy: newest first, one added this frame waits for the next.
+        _advancing.Clear();
+        _advancing.AddRange(_instances);
+        for (int i = _advancing.Count - 1; i >= 0; i--)
         {
-            var inst = _instances[i];
-            inst.Advance(this, dt);
-            if (Retirable(inst))
+            var inst = _advancing[i];
+            if (!_instances.Contains(inst))
             {
-                _instances.RemoveAt(i);
+                continue;
+            }
+
+            inst.Advance(this, dt);
+            if (Retirable(inst) && _instances.Remove(inst))
+            {
                 FinishInputGoverned(inst.Def, inst.Anchor);
                 FinishEffectInstance(inst.Def, inst.Anchor);
                 _templateStage.RetireWhenIdle(inst.Def, inst.Anchor);
                 OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
             }
         }
+
+        _advancing.Clear();
     }
 
     /// <summary>Stops every live instance of an animation name (optionally only on one anchor) and
@@ -1033,6 +1066,28 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// world runtime tests this before routing a death's CALL_ANIMATION here, so only the curated
     /// impact/destruction effects are handed off (doors and other calls fall through).</summary>
     public bool Handles(string animName) => _program.ByAnimName(animName).Count > 0;
+
+    /// <summary>The animation's current runtime state in the mission script's own numbering
+    /// (<c>ANIM_STATE</c>, docs/formats/objectives.md): <c>RUNNING</c> 2 while any definition of
+    /// that name has a live instance, <c>INVALID</c> 4 while one is latched off, <c>EXECUTED</c> 3
+    /// once one has run and finished, and 0 for a name this program never carried.</summary>
+    public int AnimStateOf(string animName)
+    {
+        var defs = _program.ByAnimName(animName);
+        if (defs.Count == 0)
+            return 0;
+        foreach (var inst in _instances)
+            if (defs.Contains(inst.Def))
+                return 2;
+        bool started = false;
+        foreach (var def in defs)
+        {
+            if (_invalidated.Contains(def))
+                return 4;
+            started |= _everStarted.Contains(def);
+        }
+        return started ? 3 : 0;
+    }
 
     /// <summary>The definitions carrying one ANIMATION_NAME — the same lookup
     /// <c>CALL_ANIMATION</c> dispatch uses, exposed so the zeppelin damage runtime can register
@@ -1243,6 +1298,35 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         node.Visible = active;
     }
 
+    // Moves a child under a new parent keeping its LOCAL transform, which is what makes the new
+    // parent's frame the one the child's keyframes are read in. `internal` so the cutscene host
+    // undoes a definition's own reparent the same way the runtime made it.
+    // ⚠ Detach and attach rather than Node.Reparent: an intro reparents during the animation
+    // bootstrap, where the world root is not yet in the scene tree and Reparent refuses.
+    internal static void Reparent(Node3D child, Node3D parent)
+    {
+        var local = child.Transform;
+        child.GetParent()?.RemoveChild(child);
+        parent.AddChild(child);
+        child.Transform = local;
+    }
+
+    // The world node a gamez node index was built into, or null when this build never created it.
+    // The one way to reach a node the caller cannot name, which is what an area-selected toggle
+    // needs: the verb carries a rectangle and no name at all.
+    internal Node3D? FindNodeByIndex(int gamezIndex) => _resolver.ByGamezIndex(gamezIndex);
+
+    // The subtree toggle by gamez node index, which is how the mission script's area verb reaches
+    // its selection: it names no node at all. A node the world build never created is skipped,
+    // exactly as an unresolved name is.
+    internal void SetSubtreeActiveByIndex(int gamezIndex, bool active)
+    {
+        if (FindNodeByIndex(gamezIndex) is { } node)
+        {
+            SetSubtreeActive(node, active);
+        }
+    }
+
     /// <summary>Indexes one pooled copy of a library-root call template: everything
     /// <see cref="IndexStage"/> does, except the resolver's by-index map.
     /// ⚠ Never add a pooled copy to that map. Every copy carries the same compiled node indices, so
@@ -1277,6 +1361,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // idempotently, and tearing down rebuilds every one of them instead. A caller that wants
         // them cleared calls Stop directly.
         RemoveInstances(def.AnimName, anchor, tearDown: false);
+        _everStarted.Add(def);
         var inst = new AnimInstance(def, anchor);
         foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
             inst.AddRunner(seq);
@@ -1368,8 +1453,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // Thin forwards into the pose family, kept here because their callers name this runtime:
     // MotionRuntime.Create reads the landing-resume mark as `rt.ConsumeLandingResume`, the
-    // `ground-contact` suite arms it through `runtime.MarkLandingResume`, and OpacityFade
-    // writes through `rt.SetSubtreeOpacity`. The state and the bodies live in PoseChannel.
+    // `ground-contact` suite arms it through `runtime.MarkLandingResume`, and OpacityFade and the
+    // zeppelin dormancy pose write through `rt.SetSubtreeOpacity`. The state and the bodies live
+    // in PoseChannel.
     internal bool ConsumeLandingResume(Node3D target) => Pose.ConsumeLandingResume(target);
 
     internal void MarkLandingResume(Node3D target) => Pose.MarkLandingResume(target);
@@ -1561,7 +1647,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             (name, scope) => FindAll(name, scope),
             SetSubtreeActive,
             (t, pos) => _opsApplied += Pose.PoseTranslate(t, pos, relative: false),
-            (t, r) => _opsApplied += Pose.PoseRotate(t, r));
+            (t, r) => _opsApplied += Pose.PoseRotate(t, r),
+            SetSubtreeActiveByIndex);
 
         // Pass 1: base states, and the destructible registry. ⚠ Anchored defs only: a def whose
         // NAME matches nothing here must not stomp globally-resolved bare names like 'destroyed'.
@@ -2153,17 +2240,35 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     return true;
                 }
 
+            case "FogState":
+                // Not gated on `instant`: the original writes the fog record from a reset walk too.
+                if (FogStateSink != null)
+                {
+                    FogStateSink(FogStateChange.From(ev.Data));
+                    _opsApplied++;
+                }
+                else
+                    Count("FogState(no sink)");
+                return true;
+
             case "Callback":
                 // A callback is a thing that happens, not a pose, so a RESET_STATE raises none.
                 // The two codes acted on are authored in sequences alone, never in a reset block.
                 if (!instant)
-                    HandleCallback(ev);
+                    HandleCallback(ev, def);
                 return true;
 
             case "ObjectAddChild":
-                // Only the sound-emitter three-quarters of this event is acted on — see
-                // HandleAddChild. Everything else it does still counts as unhandled.
-                if (!HandleAddChild(ev, def, anchor))
+                // ⚠ The sound-emitter form wins; only what it declines is a node reparent.
+                if (!HandleAddChild(ev, def, anchor)
+                    && (instant || !HandleReparent(ev, def, anchor, adopt: true)))
+                    Count(ev.Kind);
+                return true;
+
+            case "ObjectDeleteChild":
+                // ⚠ Sequences only. A RESET_STATE walk runs at the bootstrap, where undoing a
+                // reparent no definition has made yet would move shipped nodes off their parents.
+                if (instant || !HandleReparent(ev, def, anchor, adopt: false))
                     Count(ev.Kind);
                 return true;
 
@@ -2181,9 +2286,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // test can stand in for reading the value.
     // ⚠ An unrecognised code is counted under its own key and nothing else. Codes outside the two
     // below belong to the original's mission-script handler, and guessing at one invents behaviour.
-    private void HandleCallback(AnimEvent ev)
+    private void HandleCallback(AnimEvent ev, AnimDefinition def)
     {
         int code = (int)(ev.Data.Num("value") ?? -1f);
+        // The mission-script host first: its vocabulary is the session's, and it declines every
+        // code it does not own, so the two seams below keep the codes they always had.
+        if (CallbackHost != null && CallbackHost(code, def.AnimName))
+        {
+            _opsApplied++;
+            return;
+        }
+
         switch (code)
         {
             case CallbackWreckVelocity when WreckVelocity != null:
@@ -2291,9 +2404,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     // The sound-emitter case of OBJECT_ADD_CHILD: attach a declared emitter to the world node that
-    // positions it. Returns false for every other use, which stays counted as unhandled.
-    // Deliberately only the sound subset; most of the event's other uses are cutscene machinery for
-    // cutscenes this project does not have (docs/formats/anim-definitions.md).
+    // positions it. Returns false for every other use, which HandleReparent then takes
+    // (docs/formats/anim-definitions.md).
     private bool HandleAddChild(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
         if (Sounds == null || ev.Data.Str("child") is not { } child)
@@ -2305,6 +2417,35 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (Resolve(parentName, def, anchor) is not { } host)
             return false;
         Sound.Attach(handle, host);
+        return true;
+    }
+
+    // The node-reparent form of OBJECT_ADD_CHILD / OBJECT_DELETE_CHILD: how a cutscene composes
+    // itself. `generic_intro` moves `camera1` into `piratezep` so its authored keyframes read as
+    // offsets inside the airship's frame; a delete detaches the child back to the world root, which
+    // is where the gamez already keeps `camera1` (docs/formats/anim-definitions/cutscenes.md).
+    // ⚠ The LOCAL transform is kept, never the global one: preserving the world pose would leave
+    // every keyframe in world space, which is the whole reason the intro camera flies under the sea.
+    private bool HandleReparent(AnimEvent ev, AnimDefinition def, Node3D? anchor, bool adopt)
+    {
+        if (ev.Data.Str("child") is not { } childName || ev.Data.Str("parent") is not { } parentName)
+            return false;
+        if (Resolve(childName, def, anchor) is not { } child
+            || Resolve(parentName, def, anchor) is not { } named)
+            return false;
+        // A delete names the parent it detaches FROM, so a child hanging somewhere else is a
+        // no-op rather than a move: the intro's own RESET_STATE names a parent it never had.
+        var parent = adopt ? named : _root;
+        if (!adopt && child.GetParent() != named)
+            return true;
+        if (parent == null || parent == child || child.IsAncestorOf(parent))
+            return false;
+        if (child.GetParent() != parent)
+        {
+            Reparent(child, parent);
+            _opsApplied++;
+        }
+
         return true;
     }
 
@@ -2958,5 +3099,29 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         public bool Equals(Node3D? x, Node3D? y) => (x?.GetInstanceId() ?? 0) == (y?.GetInstanceId() ?? 0);
 
         public int GetHashCode(Node3D obj) => obj.GetInstanceId().GetHashCode();
+    }
+}
+
+public sealed partial class AnimRuntime
+{
+    /// <summary>One <c>FOG_STATE</c> event as authored: an inline fog, not a zone pick. Each field
+    /// is present only when the event carries it, mirroring the compiled flag bits the original's
+    /// handler tests before each write; an absent field leaves that global as it was. The colour
+    /// is in the zone table's own space (sRGB), the ranges in metres.</summary>
+    public readonly record struct FogStateChange(string Name, Color? Color, Vector2? Altitude, Vector2? Range)
+    {
+        /// <summary>Reads the compiled event's payload (<c>name</c>, <c>color</c>, <c>altitude</c>
+        /// min/max, <c>range</c> min/max; <c>type_</c> is the D3D fog mode and ships null).</summary>
+        public static FogStateChange From(AnimData d)
+        {
+            Color? color = d.Obj("color") is { } c
+                ? new Color(c.Num("r") ?? 0f, c.Num("g") ?? 0f, c.Num("b") ?? 0f)
+                : null;
+            return new FogStateChange(d.Str("name") ?? string.Empty, color,
+                MinMax(d.Obj("altitude")), MinMax(d.Obj("range")));
+        }
+
+        private static Vector2? MinMax(AnimData? pair) =>
+            pair is { } p ? new Vector2(p.Num("min") ?? 0f, p.Num("max") ?? 0f) : null;
     }
 }

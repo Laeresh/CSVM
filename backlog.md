@@ -447,28 +447,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Weapons & combat
 
-- `BL-407` `[Bug]` **World objects are hostile to everyone; the original leaves an unauthored one
-  neutral.** *Evidence:* the team-space decode ([`docs/org/targeting.md`](docs/org/targeting.md)
-  "The team space"), taken while unifying the emplacement and aircraft team spaces
-  (`git log --grep=BL-403`). CSVM stamps every destructible with
-  `AimAssist.WorldTeam` (100) through `AddStructures`'s default, which `FlightController.cs:1873`
-  takes on every frame of every session, so a crate is hostile to every pilot alike. The original
-  builds a world object through the same constructor as an aircraft (`FUN_004a3360` →
-  `FUN_004a2570`) and takes its team from a **two-bit ownership field** on the scene node, walking
-  the node then its ancestors (`FUN_004a32f0`, called at `0x004a3493`); when no ancestor carries
-  one it falls through to **neutral**, and the hostility predicate's neutral clause is what makes
-  it untargetable.
-  ⚠ **Do not just change the constant to 0.** CSVM reads no ownership field, so every world object
-  would go neutral at once and the gun assist would fall silent over every ground target and every
-  zeppelin gasbag. The work is to find whether any CSVM world node carries authored ownership
-  first, and only then to decide whether hostile-to-all stays as a remake-only rule.
-  *How you'd know it worked:* ground targets and gasbags still take assisted fire, and whatever the
-  ownership field turns out to select still does.
-  *Cross-refs:* `BL-400` (the other half: structures on the Non-Aircraft SELECTION cycle need a
-  curated `targets.zrd`-equivalent list — this item is the gun assist's team, they fail in
-  different subsystems), `AimAssist.WorldTeam`, [`docs/org/targeting.md`](docs/org/targeting.md)
-  ("The team space", where the decode this splits off from is written up).
-
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
   (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research
   risk:** the pickup entities have not been located, and they may be mission-scripted rather
@@ -599,112 +577,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   mixed fits make the direction matter, so this item's value went up when that shipped;
   `BL-296` (ActionMap/rebinding seam), `git log --grep=BL-062` for what settled the
   per-hardpoint half.
-
-- `BL-363` `[Bug]` **Only aircraft are AI targeting candidates, so an escort with no enemy planes
-  has nothing to do.** *Evidence:* the user at the controls, 2026-08-15, flying a zeppelin run
-  configured with no enemy planes: the wingmen never engaged the zeppelin and flew straight away.
-  `FlightController.SelectRankedTarget` (`FlightController.cs:2233`) builds its candidate list from
-  `Projectiles.CollectAircraft` alone and then drops any candidate whose source is not a
-  `FlightController`. A zeppelin is a kinematic world node owned by `ZeppelinRuntime` (F17), never a
-  `FlightController`, so it cannot be ranked, cannot resolve as a `primary_target`, and cannot put
-  an AI into pursue. The same holds for every world destructible and turret emplacement. The decoded
-  ranking already expects these candidates: `AiTargetRanking`'s own module doc names the "+0.4
-  dynamics / −0.5 structure terms unmodelled (no non-aircraft candidates reach this path)", which is
-  exactly this gap.
-  *Fix shape:* widen the collector to the roster the aim assist already scans (it lists vehicles and
-  turrets, not just aircraft), keeping the `Live` and team gates as they are, then wire the two
-  unmodelled class terms in `AiTargetRanking`.
-  ⚠ *Traps.* (a) **The ranking is MINIMISED**, so a large nearby structure can outrank a distant
-  fighter for every pilot at once. Settle the structure term's sign and scale before widening the
-  pool, or one zeppelin becomes the whole sky's target. (b) `AiGunner` solves its intercept from the
-  target's `WorldVelocity` and gates on an aircraft-sized cone; a zeppelin also needs
-  `DAMAGES_ZEPPELIN` ordnance (F18) or every round is refused, so a wingman with the stock fit would
-  fly a pursuit it can never convert. (c) **Attacking the objective is not automatic in the
-  original**: it is assigned through `primary_target` and `rating_biases`. Widening the candidate
-  pool must not turn every AI into a zeppelin attacker.
-  ✔ **DECODED 2026-08-15**, in [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "Target acquisition".
-  The pool is four typed lists, not one: `TargetVehicle` (`DAT_0071dabc`), `TargetTurret`
-  (`DAT_0071d914`), `TargetStruct` (`DAT_0071d33c`) and `TargetProjectile` (`DAT_0064f78c`), swept
-  by `FUN_0041f9c0` for one global minimum. Both unmodelled terms are named: **+0.4** is a candidate
-  whose `mode` (`+0x67c`) is 4, a `wingman`, so enemy wingmen are de-prioritised by 480 m; **−0.5**
-  is a **zeppelin gasbag** and nothing else, worth 600 m in its favour, reached through the `Target`
-  virtual at vtable `+0x1c` (`0x004227a0`, the same one the overlay prints `Gasbag targeted` from).
-  Trap (a) is smaller than feared and trap (b) is answered at admission: the struct list is always
-  swept (the literal `1` at `0x00420002`), and its gasbag members are admitted only for a pilot
-  carrying loaded `DAMAGES_ZEPPELIN` ordnance (`FUN_00420070`, flag bit `0x1000`), so a stock fit is
-  never offered a gasbag. **Three constants we already ship are wrong** and are independent of the
-  widening: `AiTargetRanking.BiasScale` is `+1200` where `FUN_0041ae40` returns `bias × −750` with
-  `≤ −1.0` a hard exclusion, `≥ 1.0` = `−100000` and a flat `+37.5` on turrets; the bearing term's
-  sign is inverted and its ±0.5 is a half-metre ahead/behind deadband, not `cos 60°`; and the ±0.2
-  terms are aircraft-only (`FUN_00421950` has none). Acquisition also has a sticky standing target
-  and a real attacker count our invented deconfliction does not match.
-  *Cross-refs:* `BL-362` (the wingmen half of the same playtest), `AiTargetRanking`,
-  [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) "AI modes, engine-side" (whose "+0.4
-  for one dynamics class" and "−0.5 for one structure case" are now named, and whose "dynamics" is
-  the `mode` field), [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode).
-
-- `BL-364` `[Bug]` `[Blocked: campaign missions]` **Our AI aircraft have no patrol net, and the original gives
-  every one of them one. DECODED and the Instant Action half LANDED 2026-08-15; what is left is
-  the campaign roster path, which has no spawner to plumb into yet.** *Evidence:* the user at the controls,
-  2026-08-15: the default mode of enemy AI is to fly straight in one direction, and an enemy wave
-  out of engagement range never turns back. `AiPilot.SteerPatrol` returns immediately when `Patrol`
-  is null (`AiPilot.cs:266`), leaving `TargetHeadingDeg`/`TargetAltitude` at whatever
-  `HoldingCourse` set at spawn.
-  **The research half is answered, in [`docs/org/aiPilot.md`](docs/org/aiPilot.md).** The engine has
-  no netless patrol at all: `FUN_0041d1f0`, the net follower, resolves the net unconditionally and
-  has no fallback branch. A netless aircraft is instead a `mode wingman` aircraft flying a fixed
-  formation station on its `primary_target` (`FUN_0041e760`), and a `wingman` that is given a net is
-  demoted to `jet` at spawn. Two censuses settle who is which: of 414 shipped `aiv` blocks, the only
-  106 netless ones are `player`, `wingman_N` and `bswingman_N`, and every enemy, boat and truck
-  carries a real net id; of 75 `vehicle.json` defs, only 12 author `mode wingman` and every enemy
-  resolves `jet` through `basic_airplane`.
-  ⚠ **The entry's own premise was wrong, and so was the doc it rested on.** Instant Action does
-  NOT leave `netids` at `-1`: all three branches of `FUN_0045a390` write a one-entry list holding
-  the chapter's first net id (`0x0045a8b4` / `0x0045ab18` / `0x0045ae85`), so in the original the
-  ace, the waves and the wingmen all walk that graph.
-  [`docs/formats/instant-action.md`](docs/formats/instant-action.md) is corrected.
-  *Fix shape:* give AI aircraft a patrol net, which is `AiNets` data we already parse
-  (`src/Mech3/AiNets.cs`) plumbed into `AiPilot.Patrol` at spawn. Instant Action actors take the
-  chapter's first net, exactly as the original does. Campaign rosters take their authored `netids`.
-  ✔ **The Instant Action half landed 2026-08-15** (`git log --grep=BL-364`): the ace, the wingmen
-  and every wave member take the chapter's first net, `AiNets.ChapterFirst` reads it in `neindex`
-  FILE order (**not** ascending id: C1B opens on 29 and C1C on 25 against a lowest of 11, decoded
-  from `FUN_004311c0` and pinned in `AiNetsTests`), `FlightController.Activate` re-seats the walk
-  the way the original's activation snap does, and `SteerPatrol` re-asserts `PatrolThrottle` so a
-  plane leaving pursue does not patrol at the chase throttle. Two more decodes are in
-  [`docs/org/aiPilot.md`](docs/org/aiPilot.md): the roster block's volumes are copied over the
-  net's afterwards (so trap (d) below cannot bite an Instant Action actor, whose block authors all
-  nine at ±10000 m), and `min_ai_active_dist` (2000 m, `player.zrd.json`) floors every activation
-  volume twice over. **What is left:** a campaign roster spawner reading each block's authored
-  `netids`. Nothing in `src/` reads `aiv` as a spawn roster today, so there is no seam to plumb.
-  ⚠ **The net Instant Action hands out is a campaign MISSION's asset, not a patrol area meant for
-  free play** (censused 2026-08-15, at the user's prompting after seeing the shapes at the
-  controls). Net names are mission-scoped and the census bears the convention out: 103 of the 222
-  nets are referenced by an `aiv` block and every one is used by the single mission its `M<N>`
-  prefix names. Each chapter's first net is then one mission's: C1 `M4ReinfAce` is M04's
-  `blakebloodhawk_8`, C1B `Patrolboat3` is M03's objectives, **C2B `PirateZep1` is the pirate
-  zeppelin's own flight path**, C5 `M1Bravo` is used by nothing at all. Faithful, not a bug, but it
-  is why an Instant Action flight walks an odd-looking graph; see
-  [`docs/formats/instant-action.md`](docs/formats/instant-action.md) for the per-chapter table.
-  ⚠ `--ai=<plane>` without a net ref still spawns a course-holder; that is the debug flag's own
-  documented behaviour, kept deliberately, not a leftover of this item.
-  ✔ **Flown 2026-08-15 and the landed half PASSES** (`PT-51`, now retired). A wave that loses the
-  player turns and comes back rather than shrinking to a dot; an enemy breaking off an engagement
-  settles back onto the graph instead of orbiting one waypoint, so trap (a)'s known failure did not
-  appear; wave 2 patrols from where it teleports in; and a shared net reads as a busy patrol rather
-  than a conga line. So what remains here is only the campaign roster spawner.
-  ⚠ *Traps.* (a) **`AiPilot.PatrolThrottle` (0.5) is an invention that exists because the
-  placeholder steering law cannot hold the tightest net rings at cruise** (`architecture.md`). Do
-  not read a net-follow regression as a net-data problem before checking it. (b) `pref_engage_alt`
-  is decoded and is **not** an altitude order: its one reader weights the evasive-maneuver draw
-  (`FUN_004201a0`). Nothing steers toward it, so do not build an altitude hold on it. (c) The
-  engagement gate was 2000 m until the 10000 m volume fix (`git log --grep=ApplyActorVolumes`),
-  which is part of why waves read as flying away. (d) A net assignment also **overwrites the
-  vehicle's three volumes** from the net's own where the net authors non-zero values
-  (`FUN_00475fc0`), which interacts with that fix and must not be dropped.
-  *Cross-refs:* [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode), `BL-362` (the wingman
-  half, whose blocker this decode voids), `docs/formats/ai-nets.md`, `docs/architecture.md` on
-  `AiPilot` and `AiModeMachine`.
 
 - `BL-398` `[Feature]` **A rebindable keymap — the real answer to targeting's key placement, not a
   targeting-specific fix.** *Evidence:* the player-targeting plan's own out-of-scope call (a),
@@ -862,42 +734,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `AiRocketeer` (whose launch direction creates the mismatch), `BL-404` (whether the
   player's rocket gets a direction at all), `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
 
-- `BL-401` `[Bug]` **The node names we spawn do not match the names the rosters author, so
-  `rating_biases` matches nothing.** *Evidence:* `ObjectiveBiasFor(fc.Name, gunner.RatingBiases)`
-  (`FlightController.cs:2427`) matches an authored pattern against the candidate's Godot node name.
-  Those names are ours, not the mission's: `AiAircraftSpawner.cs:140` names an AI plane
-  `ai{n}_{plane}` (`ai1_player_fury`) and `FlightRigAssembler.cs:421` names a human rig
-  `player{n}` (`player1`). The shipped patterns are mission node names — a census of all 53
-  `aiv.zrd.json` (414 blocks, 697 entries) gives `hafury*`, `bswingman_1`, `devastator_1`,
-  `medkestrel_5`, `piratezep`, `fuel_truck*`, `aagun*` and the bare `player`. `AiRatingBias.Matches`
-  treats `*` as the only wildcard, so `player` does not match `player1`, and `hafury*` does not
-  match `ai1_player_fury`. The term is therefore decoded correctly and firing on almost nothing.
-  The `player` case is the sharpest: it is authored 157 times and never negative (40 of them at
-  exactly `1.0`, the always-target saturation), so the pilots most explicitly told to come after
-  the player get no bias at all.
-  *Fix shape:* decide what identity the bias is supposed to match, then make one side produce it.
-  Either resolve the authored pattern to a spawned plane the way `PrimaryTargetName` already does,
-  or carry the roster's own block name onto the spawned `FlightController` beside its Godot name
-  and match on that. Prefer the second: it makes `--target=`, the breadcrumbs and the biases agree
-  on one identity string instead of three.
-  ⚠ *Traps.* (a) **`PrimaryTargetName` already special-cases this and the bias path does not** —
-  `FlightController.cs:2395` matches the name exactly, then `:2399` falls back to
-  `IsHumanPiloted` for `"player"` (`AiGunner.cs:34`). That asymmetry is the bug, so do not "fix"
-  it by copying the human-piloted fallback into `ObjectiveBiasFor`: it would paper over the
-  general naming problem while leaving every non-`player` pattern broken. (b) Renaming the spawned
-  nodes is not the fix. `player` is `EffectCatalogue.CrashAnimRoot` and the crash-scaffold anchor,
-  and the `ai{n}_` prefix is what `TargetHud.HostileTag` reads for the marker tag. (c) Only
-  aircraft are candidates today (`BL-363`), so the ground and zeppelin patterns cannot match
-  regardless of naming; fixing names alone will not make `fuel_truck*` reachable. (d) First match
-  wins per block, so a pattern's position matters once names do resolve — do not sort them.
-  *Playtest after fix:* an Instant Action wave whose roster authors `["player", 1.0]`; the pilot
-  carrying it should come for the player over a nearer AI, and the `target rank` breadcrumb should
-  show the `-100000` saturation rather than `0`.
-  *Cross-refs:* `BL-363` (the candidate pool is aircraft-only, the other half of why the biases do
-  nothing), [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) (slot 33 and the
-  `bias × −750` decode), `AiTargetRanking.ObjectiveBiasFor`, `AiSkills.RosterRatingBiases`.
-
 ## Flight model & collision physics
+
 
 - `BL-443` `[Fidelity]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
   late.** `FUN_0048fc40` (call `0x48c883`) writes the delivered body-up G and the ramp reads it at
@@ -943,41 +781,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   whom it is set so the wreck can fly the decoded arm.
 
 ## Environment & world
-
-- `BL-037` `[Feature]` {CAMPAIGN} **`WorldPartitionSetActive` is decoded and unimplemented — `NodeSetActive`
-  selected by area.** **Decoded 2026-08-09** from `crimson.exe` in Ghidra and written up in
-  [`docs/formats/interp.md`](docs/formats/interp.md) § "`WorldPartitionSetActive` — `NodeSetActive`,
-  selected by area" (dispatch `FUN_005b80a0`, rectangle walk `FUN_004db790`, shared toggle
-  `FUN_004cca30` = the authored `gwNodeSetActive`). The verb walks the partition grid over its
-  rectangle and calls **the same toggle `NodeSetActive` calls** — bit `0x4` of the node's flag
-  word — so there is no second visibility system to build; the research question is answered and
-  what is left is the decision to implement or drop. ⚠ It is NOT the C5 ground-LOD mechanism —
-  that is the **subface flag** (`analysis/item9-depth-bias/CBLOCK-LOD.md`; the clutter side closed
-  as `BL-250`, `git log --grep=BL-250`) — and not "the runtime system that picks between coarse
-  and fine ground", a claim this entry once made and retracted (⛔ 2026-07-23), and which
-  `docs/HISTORY.md`'s M2 polish-4 entry still restates.
-  *Scope if built:* all 25 uses are `support\c3\*.gw` and resolve to three distinct rectangles;
-  every `off` sits in a story mission, so **IA1 is unaffected in all eight chapters** and no golden
-  can see it. The one real code change is in `GameZ.cs`, which parses the World `partitions` array
-  but dedups it into one flat `PartitionNodes` list, discarding the per-cell membership a rectangle
-  query needs (`MapEdgeExtender` already maps a world position to a cell). ⚠ Two traps recorded in
-  the doc: corner order is normalised by the engine, and the rectangle is **half-open** in cell
-  space — an inclusive test over-selects by one row and one column.
-  *Needs:* a decision. Verifying it means a C3 story-mission A/B against the original, since
-  Instant Action cannot show it.
-
-- `BL-038` `[Feature]` {CAMPAIGN} **`FogState` is a decoded animation event we do not act on** (found 2026-07-22). Fog **can** be
-  changed mid-mission by animation, but the data uses it exactly once install-wide:
-  `extracted/C1/M04/mis_anim/camera1-mission_intro_animation.json`, `reset_state/events[4]` —
-  `FogState { name: "drop_fog", color 0.69/0.69/0.69, altitude 10000–11000, range 1000–1500 }`.
-  It carries fog parameters **inline** and matches neither C1 zone, so it is an ad-hoc third fog
-  state on the intro cutscene camera, not a zone selector. Relevant because it is the only
-  evidence that weather is scriptable at all; zone *selection* still appears to happen engine-side
-  in the binary (same shape as the `fire2` trigger the user searched the disassembly for).
-  **Documented 2026-07-22** (polish-3 item 2) in `docs/formats/anim-definitions.md` as
-  decoded-but-unacted-on, with the reason: implementing it means a second write path onto the
-  `csky_fog_*` globals `PlaneViewer.SetupWeather` owns, for one cutscene the remake does not run.
-  Revisit if the user ever sees fog visibly change *during* a mission elsewhere.
 
 - `BL-070` `[Bug]` **C5's `poleflare` clutter renders with the wrong billboard axis** (one of two residuals
   from polish-3 item 5, 2026-07-22; the other — the static collider probe's off-by-6/11 — closed
@@ -1304,6 +1107,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
+- `BL-484` `[Bug]` **An `AT_NODE` pose run during the animation bootstrap reads and writes global
+  transforms on out-of-tree nodes, so Godot returns identity and the pose lands at the world
+  origin.** *Evidence:* `PoseChannel.PoseAtNode` (`PoseChannel.cs:383,386,391`) takes the host's
+  `GlobalTransform` and assigns the target's `GlobalBasis`/`GlobalPosition`. During the bootstrap the
+  world root is not yet parented, which `AnimRuntime.WorldTransform`'s own comment already records
+  as a known condition and works around for sound positions. The pose path has no such fallback, so
+  Godot's `!is_inside_tree()` guard fires and both reads return `Transform3D()`. Reached through
+  `AnimRuntime.Start` into `SequenceRunner.Advance` into `HandleTranslateState`, and measured at
+  exactly **4 per world built with `CutsceneRoots`**, from `landings-approach-trigger` and
+  `cutscene-letterbox`. ⚠ The harness allowlist previously attributed these lines to a sound bind,
+  which is wrong; the entry and its cap are corrected to name this and to carry the per-world rate.
+  *Fix shape:* give `PoseAtNode` the composition `AnimRuntime.WorldTransform` already implements,
+  and write the target's LOCAL transform when it is out of tree, so a bootstrap pose lands where the
+  same pose lands a frame later. *⚠ Traps:* the letterbox bars and `camera1` are both world roots
+  posed through this path, so a change here moves cutscene framing and must be judged against
+  `cutscene-letterbox` and a `--campaign=` shot rather than against the error count alone. Do not
+  raise the allowlist cap again instead of fixing this: the cap is the rate times the number of
+  suites, so a third such suite is meant to trip it. *Cross-refs:*
+  `CSVM/src/Testing/TestHarness.cs`'s `ErrorAllowlist`; `PLAN-M5-polish.md` A5, whose second world
+  build is what made the count visible.
+
 - `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
   flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
   traced the same day and **fully decoded 2026-08-13**. The decode is
@@ -1409,7 +1233,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   lens flare's anchor (`BL-165`, closed; `analysis/bl-165-lens-flare/FINDINGS.md`,
   `CSVM/src/Session/LensFlareRig.cs`).
 
-- `BL-035` `[Feature]` `[Blocked: cutscene player]` **Animation event kinds that need weapons or cutscenes — `CALLBACK`, `OBJECT_CYCLE_TEXTURE`,
+- `BL-035` `[Feature]` **Animation event kinds that need weapons or cutscenes — `CALLBACK`, `OBJECT_CYCLE_TEXTURE`,
   one-shot `SOUND`** (triaged 2026-07-22, the last of `docs/plans/PLAN-anim-rendering-followups.md`
   item 2 after `OBJECT_MOTION` landed). All three still dispatch at bootstrap, so the counts in
   the "not yet acted on" report look like open work — **they are not**. Each was probed at the
@@ -1419,12 +1243,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
   | Kind | Count | Why it cannot do anything |
   |---|---|---|
-  | `Callback` | ×8 every chapter | Every dispatch is `def=camera1`, **unanchored**, values 1/2/10/11/14/20/913/914 — engine notifications for the intro **cutscene** camera. This project has no cutscenes, and a callback's whole purpose is to notify mission logic that does not exist here. |
+  | `Callback` | ×8 every chapter | **Answered.** The values 1/2/10/11/14/20/913/914 are the cutscene vocabulary, decoded in `docs/formats/anim-definitions/cutscenes.md`, and `CutsceneController` is the host that raises them, for a story mission's intro and for the `landings.zrd` approach triggers `LandingApproachRuntime` starts. What is left here is only the OTHER codes the mission-script host reads: **3, 12, 13, 86, 701, 702, 800–803, 950, 951, 965–968**. Those reach the host today and are declined, so they are now testable rather than unreachable. C3/M01's own drop raises `951` (teleport the player to the camera pose) and it is the first one worth doing. |
   | `ObjectCycleTexture` | ×1–2 per chapter | Every dispatch is `node=taildamage` with **`targets=0`** — the node never resolves, so there is nothing to cycle. The one real use of this mechanism (the cockpit damage-indicator hilite) is already a build-time material swap in `GaugeCluster.cs`. |
 
-  **Pick these up when the thing they depend on exists** — a cutscene player for `Callback` — not
-  before. `ObjectCycleTexture` needs neither; it needs a mission that
-  actually builds a `taildamage` node, which none of the ones this project defaults to do.
+  **The blocker on the `Callback` half is gone**: the approach trigger exists, so the remaining
+  codes now arrive at a live host and each can be implemented and tested against C3/M01's own drop
+  and hookup. `ObjectCycleTexture` still needs a mission that actually builds a `taildamage` node,
+  which none of the ones this project defaults to do.
 
 - `BL-218` `[Tuning]` `[Owed-playtest]` **Puffer `NUMBER` default (2026-08-01)** — `NUMBER` is absent from 680 of C1's 721
   `PufferState` events, including `large_30sec_fire`'s `fire_n_smoke`, and `PufferState.FromAnimEvent`
@@ -1634,6 +1459,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `BL-418`, `BL-406` (closed).
 
 ## Audio
+
+- `BL-455` `[Feature]` **There is no audio options menu, so the music level is a hard-coded
+  stand-in.** *Evidence:* at the controls the music drowned the briefing narration, so
+  `MusicPlayer.ChannelLevel` now mixes the channel at 0.2 of the master bus. That constant is a
+  stand-in for a control, not a tuned value: the original mixes music against a user setting, and
+  with no options menu there is nothing to read. *Fix shape:* an options menu carrying at least a
+  music level, then delete `ChannelLevel` and read the setting. *⚠ Traps:* do not re-tune
+  `ChannelLevel` as if it were a fidelity constant; it is a placeholder and its own doc comment says
+  to remove rather than adjust it. `MusicPlayer.Gain` deliberately stays the fade's own 0..1 value
+  so the decoded ramp assertions still read what the decode describes. *Cross-refs:*
+  `docs/org/music.md` for the fade rates the level does not affect.
 
 - `BL-079` `[Feature]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;
   the original's IA traffic is clearly audible in the reference video.
@@ -2112,17 +1948,98 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-503` `[Feature]` **An airframe swap leaves the captured aircraft flying, and never hands the
+  outgoing one over.** *Evidence:* found by G76, which wired the swap itself and reported this
+  rather than folding it in. The original's 967 case does two more things than the swap. It hides
+  the aircraft the capture animation belongs to and scales the new airframe's four hull sections by
+  that aircraft's own armour and structure fractions, so a Balmoral shot half to pieces is the one
+  the player inherits. And it hands the aircraft the player just left to `wingman_4`: the exe
+  resolves that name only in `c3`/`m05` and `c4`/`m04`, gives a record of that name the player's own
+  aircraft type and livery, places it 100 m off the nose at 45° with the outgoing airframe's armour
+  and structure sums, and reveals it. In CM02 that is the wingman flying off in your old plane while
+  you fly the Balmoral. *Fix shape:* the anim's root vehicle has to be reachable from the callback,
+  which needs the definition's root node name plumbed through `CallbackHost`; it passes only the
+  anim name today, and that is the whole of what blocks the first half. *⚠ Traps:* neither behaviour
+  is asked for by anything in the data. Both are keyed on chapter and mission strings inside the
+  exe, so nothing in the shipped files will tell a reader they should happen, and a search of the
+  data for a trigger will come back empty. Do not read that emptiness as the behaviour not existing.
+  The captured aircraft's damage carries into the player's hull, so wiring the handover without the
+  scaling gives the player a pristine Balmoral and makes the ending easier than the original's.
+  *Cross-refs:* `PLAN-M5-polish.md` G76, which landed the swap; `BL-495`'s marker graft, which is
+  what makes the capture that raises this fire at all.
+
+- `BL-496` `[Feature]` **The aiv `ace` flag reaches the entity and nothing is known about what it
+  does there.** *Evidence:* found by G75 while binding the pilot name. Slot 67 `ace` is read by the
+  block reader into `CCEVeh+0xa4` and carried by the spawn path into entity `+0x988`. That field has
+  four touches program-wide: the constructor default, that write, a read at `0x0047cde2` sitting
+  immediately ahead of the skill block, and a read in a runtime function that was not chased. So the
+  flag gates something in skill interpolation, and 26 blocks across the campaign carry it. CSVM
+  parses the slot and uses it for nothing. *Fix shape:* decode the `0x0047cde2` branch and the
+  runtime read before changing any rating, since what an ace gets is the question and "it is flagged"
+  is only the input. *⚠ Traps:* the flag is narrower than a complete skill vector (26 blocks against
+  29), so the two are not interchangeable and neither is a proxy for the other. Do not give aces a
+  blanket rating bonus on the strength of the flag alone; the branch may scale an interpolation
+  rather than add to it. *Cross-refs:* `BL-497` (the other rating that does not reach the runtime),
+  `PLAN-M5-polish.md` G75.
+
+- `BL-497` `[Bug]` **A campaign spawn's talker and constitution ratings never reach
+  `AiVoiceRuntime`.** *Evidence:* found by G75. `CampaignDirector` passes null where the ratings
+  would go, so every campaign pilot is equally talkative regardless of what its block authors: an ace
+  rated 9 on `talker` says no more than a mook rated 1. The ratings are parsed and carried as far as
+  the plan. *Fix shape:* thread the spawn's ratings through to the voice runtime the way the roster
+  now threads the pilot name. *⚠ Traps:* `docs/formats/combat-voice.md` carried a stale note claiming
+  this already worked, corrected by G75, so check the doc's current claim rather than an older
+  reading. A pilot whose accent resolves to a VO id with no WAVs stays silent whatever its `talker`
+  rating is, so a fix here will not be visible on those eight named aces. *Cross-refs:* `BL-496`,
+  `PLAN-M5-polish.md` G75.
+
+- `BL-491` `[Bug]` `[Deferred: useful while debugging]` **Crashing the player's aircraft does not end
+  a campaign mission.** *Evidence:* reported at the controls. A campaign mission ends through
+  `ObjectiveGraph.End`, and the three endings it has are the authored end, an `INSTANTLOSS`
+  objective, and the countdown expiring (`ObjectiveGraph.cs:354`); none of them is the player dying,
+  and nothing in `CampaignDirector` watches the player's own crash state. `GameSession` subscribes to
+  the graph's `MissionEnded` alone. ⚠ **Deferred by the player's own decision, not blocked**: flying
+  on after a crash is convenient while the campaign is still being built, so the current behaviour
+  stays for now. Re-open it when the campaign is being judged as a game rather than debugged. ⚠ That
+  reason decays, so read it as a decision with a date in `git log --grep=BL-491` rather than as a
+  rule. *Fix shape:* whatever ends the mission on a player death has to name which of the original's
+  endings it is, since the graph's own three are all authored and a fourth is not yet decoded.
+  *⚠ Traps:* `FlightController.UnderMapY` teleports an aircraft that goes below the map WITHOUT
+  setting a crash flag and without logging (`docs/verification.md` INSTR-22 records what that cost
+  once), so "the player crashed" is not a state that can be read casually. `BL-486`'s persist-log
+  gate means a lost mission writes no world state, so making crashes lose changes what a retry
+  starts from. *Cross-refs:* `PLAN-M5-polish.md` A6 and G66.
+
+
+- `BL-483` `[Bug]` **`campaign-objectives-hud` fails on C4 and C5, on its wake-cue check rather than
+  its readout check.** *Evidence:* found while fixing the same suite's completion driver, which now
+  passes on C1, C2 and C3. What fails on C4 and C5 is `DriveWakeCue`'s assertion that at least one
+  `WAKEUP_SOUND_GROUP` the mission authors started a real one-shot player; the row-marking half of
+  the suite passes on both. **Confirmed pre-existing rather than caused by the driver work**
+  (METHOD-8): `CampaignHudSuites.cs` was reverted to its committed state, rebuilt, and both failures
+  reproduced identically. *Fix shape:* unknown until the wake cue is traced on those two chapters;
+  the question is whether the mission authors a group our wake path never reaches, or whether the
+  one-shot is started somewhere the suite does not look. *⚠ Traps:* do not weaken the wake-cue
+  assertion to make two chapters green, which is the same move `BL-481` forbade for the readout
+  check. C6 and beyond have no extracted data, so a chapter sweep stops at C5. *Cross-refs:*
+  `BL-481`, closed by the work that filed this; `docs/verification.md` METHOD-8 and DIAG-15.
+
 - `BL-113` `[Tuning]` `[Owed-playtest]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
 
-- `BL-181` `[Tuning]` `[Blocked: menu hub]` **Marker HUD + scoreboard layout is a provisional pass, not a fidelity sign-off — pending
-  the menu hub.** Playtested 2026-07-30
+- `BL-181` `[Tuning]` `[Blocked: a shared type scale]` **Marker HUD + scoreboard layout is a provisional pass, not a
+  fidelity sign-off.** Playtested 2026-07-30
   (`./RunGame.ps1 --stunt --chapter=C4 --plane=player_fury`): `MarkerHud`/`StuntScoreboard` placement,
-  fonts and distance units "work for now." The verdict is explicitly contingent on the menu hub not
-  existing yet — once it lands, distance units, font choice and scoreboard layout may need to match
-  its chrome rather than today's placeholder styling. Blocked on the menu-hub milestone, not on data.
-  *Fix shape:* re-review `MarkerHud.cs`/`StuntScoreboard.cs` placement once the menu hub UI exists,
-  against the hub's own type scale/units rather than in isolation.
+  fonts and distance units "work for now." The verdict is explicitly contingent: it says these read
+  acceptably in isolation, and a fidelity sign-off needs them read against the chrome the rest of the
+  game's UI uses, which does not exist yet. ⚠ **The composed campaign boards do not discharge this,
+  and should not be read as doing so.** They are painted original artwork positioned at authored
+  pixels with a per-background ink palette (`BoardPalette`), so they carry no type scale, no distance
+  units and no shared font choice for an in-flight overlay to match. What this waits on is a UI
+  surface that defines those three things for chrome the original did not paint, which is what the
+  menu-hub milestone was standing in for. Blocked on that surface, not on data.
+  *Fix shape:* re-review `MarkerHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
+  against it rather than in isolation. *Cross-refs:* `BL-449`, whose landing prompted this wording.
 
 - `BL-296` `[Feature]` **Per-player ActionMap: named actions over the raw key/pad polling, as the
   rebinding seam.** Every control is hard-polled today (`Input.IsKeyPressed`/`IsJoyButtonPressed`
@@ -2150,67 +2067,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   key cycles hostile aircraft; the non-aircraft key walks the zeppelin and turrets; each pane
   tracks its own pick. Depends on H22's target-tracking plumbing; `docs/controls.md` gains the
   bindings when it lands.
-
-- `BL-409` `[Feature]` **The load screen shows a plain panel, not the original's artwork.** A
-  session build stalls the frame loop for several seconds, so both interactive paths into one (the
-  launchscreen's Fly and an Instant Action Restart) draw `UI/LoadBoard` first: the shared board
-  style, the chapter and mode named, no progress. The original draws a composed screen, and every
-  piece of it sits in `extracted/rimage/`, which we already read for the HUD font and the impact
-  pipper, so no new asset pipeline is needed. The background is `loadframempt.png` (800×600: riveted
-  metal border, black interior, filmstrip column, winged skull at bottom centre), with
-  `loadframempt2.png` a second variant. The load bar is `prog_blk.png` and `prog_red.png` (236×54
-  each, the same strip of six round lamps, unlit and lit), drawn part-filled as the build proceeds;
-  `prog_blkload.png`/`prog_redload.png` (338×28) and `blkprog.png` (297×14) are other bar styles the
-  game ships. The three photos are shipped artwork rather than captures: `mp-shotdown`, `mp-crash`,
-  `mp-cannon`, `mp-zepdown`, `mp-gasbag`, `mp-torpedo`, `mp-flagcapture`, `mp-flagreturn`,
-  `mp-dangerzone2` (about 230×190 RGBA, sepia, the polaroid border and tilt baked in), named for
-  objective and event types, with per-mission campaign sets alongside them (`nw-m1*`, `rm-m4*`,
-  `ha-m2*`, `hw-m5*`, `mh-m3*`).
-  *Decoded, see [`docs/org/loading-screen.md`](docs/org/loading-screen.md).* The screen is a `zrdr`
-  dialog (`extracted/zrdr/Loading.zrd.json`, 81 of them) named by `sprintf` from `loading_i%d%c` /
-  `loading_c%d%d` / `loading_m%d%c` (`0x0062950c`, `FUN_004a1910`). **There is no per-mission photo
-  choice:** every Instant Action dialog carries the same three, `MP-shotdown`, `MP-crash`,
-  `mp-dangerzone2`, and the environment digit selects nothing; only the mission letter varies, and
-  only the text (`a` DOGFIGHT AN ACE, `d` SQUADRON, `s` STUNT FLYING, `z` ZEPPELIN RUN). Multiplayer
-  varies its pictures by game mode, campaign carries none. **The bar is not measured:**
-  `FUN_004a2100` is called at 16 fixed points with a literal fraction (0.01, 0.02, 0.04, 0.07, 0.10,
-  0.20 … 0.80, 0.90), is monotonic, and never reaches 1.0; the repaint (`0x005c3d40`) fills
-  `floor(bitmapWidth × fraction)` pixels of `prog_red` over `prog_blk`, a pixel clip rather than a
-  lamp count. **The original does not decouple its build either:** `FUN_004a18a0` is a redraw pump
-  called after each milestone and throttled to one draw per 0.1 s, so the load screen runs at 10 fps
-  off the loading thread itself. A propeller cycles beside the bar at 6.0 fps (`prp0`…`prp37`).
-  *The bar needs the build decoupled first.* Godot cannot draw while `GameSession.StartSession` is
-  on the stack, so an animated bar needs the build to yield. The cheap route is an `async`
-  `StartSession` awaiting `SceneTree.ProcessFrame` at the phase boundaries the
-  `StartupProfile.Mark`/`Record` pairs already mark (`gamez`, `world`, `bind`, `anim`, `plane` and
-  the rest); C# carries the `using` scopes and the early `return false` paths across a yield
-  unchanged. Four things break and need handling: `Launcher._Process` ticking the capture director,
-  the glTF exporter and the hitch monitor against a half-built `_session`; `_hitchMonitor.Rearm` and
-  `PerfSample.Reset`, which assume the build is one block between two frames; `StartupProfile`'s
-  `total = boot + Σ(phases) + rest + first_frame` invariant, which stops holding once render time
-  lands inside `rest`; and the CLI path, which must gain no frames at all or `--det`, `--screenshot`
-  and the goldens shift (`BeginLaunch` is already the interactive-only door).
-  ⚠ *Traps:* (a) Do NOT derive the bar from measured phase durations. The original hand-assigns a
-  fraction per step, and that is the shape to copy: our `StartupProfile.Mark`/`Record` pairs already
-  bracket the same kind of boundary, so each gets a literal fraction and a monotonic setter. A
-  measured bar is the thing that misbehaves here, because on the menu-driven path a build takes
-  about 6.75 s of which `rest` is 3.63 s, so a bar weighted by the named phases alone sits near half
-  and then jumps. The yield is the real prerequisite, not the attribution.
-  (b) `SavedGames/<pilot>/Snap_*.png` is the scrapbook memento system
-  (`MOMENTOSELECTION.SCRIPT`, the `MS_` widgets in `LAYOUT.CSV`), not this screen, and
-  `loadframe.png` is a different screen again (the light route-planning frame). (c) The artwork is
-  4:3 at 800×600 with the border painted into it, so meeting a widescreen window (pillarbox, crop,
-  or nearest-neighbour upscale for a period look) is a taste call the binary cannot settle. (d) The
-  board must stay cheap to construct: it is built on the frame BEFORE the build, so a large decode
-  there just moves the stall earlier. (e) Whatever it draws, the Launcher frees it in the same tick
-  the build returns, so it can never draw over the world's first frame or a `--screenshot` capture.
-  *Still open, and prior to the work:* whether to reproduce the original screen at all. Its art is
-  800×600 with the frame painted in, which is below our window and cannot be re-rendered at a higher
-  resolution. Reproducing it means accepting a visibly soft screen, so the alternative is to keep a
-  screen of our own and take only the mechanism (yield, milestone fractions, an animated element).
-  The decode above serves either choice.
-  *Cross-refs:* `UI/LoadBoard.cs`, `Launcher.BeginLaunch`/`RunOwedLaunch`, `Utils/StartupProfile.cs`,
-  [`docs/org/loading-screen.md`](docs/org/loading-screen.md), `docs/architecture.md`.
 
 - `BL-431` `[Feature]` **The cockpit interior's `gauges` subtree (39 meshes, `cockpit1`) renders as
   static geometry — the needles never move, and two interior warning lamps ship parked hidden.**
@@ -2319,9 +2175,210 @@ usual.
 
 ## Missions, modes & campaign
 
+- `BL-482` `[Feature]` **The intro cutscene stages no aircraft: the two it animates live in the
+  aircraft archive, which the world build never puts in the animation node table.** ⚠ **Decoded, so
+  this is scoped work and no longer an open question.** *Evidence:* a definition's symbol table
+  addresses two node tables. A chapter node's `ptr` is its position in that chapter's `nodes.json`; a
+  node from the shared aircraft archive is its position in `planes/nodes.json` plus a base, and that
+  base is the chapter's own node count rounded up to the next multiple of 2500 (holds for all eight
+  chapters: C2/C2B 5000, C1/C1B/C1C/C3 7500, C4 10000, C5 12500, and for all nine cross-archive
+  pointers in C3's intro). So `camera1-generic_intro.json`'s ptr 8918 is aircraft-archive node 1418,
+  named `player`, a parentless `Object3d` whose one child `player_pfighter` the airframe name table at
+  `0x00620cc0` identifies as the Devastator's player-model node. **`player` is the flown aircraft**,
+  established by decode rather than by the name: `FUN_004d0280(7, "player")` resolves it by string
+  comparison over node table 7, `FUN_0042e5e0` switches it off around a render pass, and mission setup
+  passes the same literal with the player's loadout record (`FUN_004136e0` into `FUN_00414f40`). The
+  node ships wrapping a Devastator because that is what sat in the slot when the archive was built,
+  not because the intro is about one. *Fix shape:* the intro stages two aircraft, `piratefighter`
+  (activated, `wing_lights_blink` and `spinprops`, reparented under `piratezep`, flown by
+  `gi_pfighter1`/`gi_pfighter2`) and `player` (activated with `healthy` on and `cockpit1` off, flown
+  by `gi_player1`, launched by `gi_playerdrop`/`gi_player2` with `snd_droplaunch`). Building it needs
+  aircraft-archive subtrees in the animation runtime's node table at the bootstrap, before the world
+  root is in the scene; needs the flown `FlightController`'s model posed by the runtime while it is
+  `Held`/`Inert`, which is the state callback 11 puts it in; and needs a second Devastator staged as an
+  AI-less prop. *⚠ Traps:* that reaches the world build, the flight roster and the anim runtime at
+  once, and a wrong reading of which airframe fills the slot puts a wrong aircraft in every chapter's
+  intro. Do not relax `AnimRuntime.cs:2954-2966`: `player` drops because the node is missing, not
+  because the guard refuses to name-match, and relaxing it would bind `player` to any unrelated node
+  sharing the name. Two limits are stated rather than closed: `FUN_0041a320`'s use of the pair was not
+  read, and no exe site computing the 2500 rounding was traced. *Cross-refs:*
+  `docs/formats/anim-definitions/cutscenes.md` ("`player`, and the two pointer spaces a definition
+  addresses"), which carries the decode; `BL-470` and `BL-471`, closed by the work that filed this.
+
+- `BL-501` `[Feature]` **Nothing exercises avoid-crash probing between aircraft flying one net in
+  formation.** *Evidence:* flagged by G77, which fixed the branch draw that split CM02's three
+  bombers and then measured them holding 82 m to 219 m apart on one route. That suite builds its
+  world with collision off, so the probing three aircraft at roughly a hundred metres would do to
+  each other is never run, and that spacing is exactly the geometry that can arm it. *Fix shape:*
+  drive the same formation in a collision world and see whether avoid-crash promotes, and if it
+  does, whether it takes an aircraft off its route. *⚠ Traps:* do not widen the formation to quiet
+  a probe. The separation is what the net and the cross-track carry produce from authored data, and
+  a formation that holds only because its members are far apart is not the one the original flies.
+  *Cross-refs:* `PLAN-M5-polish.md` G77, whose `campaign-bomber-formation` suite is the harness to
+  extend.
+
+- `BL-507` `[Bug]` **An AI pilot sees an enemy aircraft's own turret as a target beside the
+  aircraft.** *Evidence:* found by G83. `FlightController.AddRankedNonAircraft` walks the gunner
+  scan's turrets and files them into the AI's ranked pool with no discriminator on
+  `TurretController.Site`, so a carried turret is offered as a target in its own right and one
+  silhouette carries two entries. The player's own `TargetPool.Rebuild` guards exactly this, which
+  the `carried-turrets` suite pins, so the rule is known and the AI path simply does not apply it.
+  ⚠ **This predates G83**, since the player's own mounts were always in that pool, but every AI
+  aircraft now carrying mounts multiplies how often it happens. *Fix shape:* give the AI path the
+  same site discriminator the player's pool uses, so a carried turret is not a candidate while a
+  world emplacement still is. *⚠ Traps:* the two kinds share one controller and only `Site` tells
+  them apart, so a fix that drops all turrets from the AI pool would stop AI aircraft attacking
+  ground emplacements, which is a different behaviour and not this. *Cross-refs:*
+  `PLAN-M5-polish.md` G83, which surfaced it.
+
+- `BL-506` `[Bug]` **An AI aircraft's defensive turrets are never built, so a bomber shoots back at
+  nothing.** *Evidence:* reported at the controls, that CM02's Balmorals should have turrets firing
+  on the Fortune Hunters. The data agrees and so does the code. `britbalmoral` authors
+  `turrets = [thirdp, [...]]` with two mounts, and sixteen vehicle defs across the install author a
+  `thirdp` turret block: the five player Kestrel/Avenger/Brigand/Firebrand/Balmoral rigs, their five
+  AI counterparts, the five `r`-prefixed variants and `britbalmoral`. `TurretController.BuildCarried`
+  has exactly two callers, `HumanFlightAdapter` and the `carried-turrets` suite;
+  `AiFlightAssembler` never calls it. So the machinery exists and works, and no AI aircraft is ever
+  given any of it. *Fix shape:* build the host's `thirdp` mounts in the AI assembler the way the
+  human adapter does, which is a call and its wiring rather than new turret code. *⚠ Traps:* hits
+  must land under the HOST's shooter id and never on the host's own airframe, which is what the
+  existing suite pins; keep that arm honest for an AI host. A turret is a separate gunner from the
+  pilot, so an aircraft whose net gates hold its PILOT out of combat can still shoot back, and that
+  is the case CM02's bomb-run Balmorals are (`PLAN-M5-polish.md` G81): do not gate the turret on the
+  pilot's attack range. The turrets go quiet with a crashed host, already covered. Sixteen defs
+  means this is not a Balmoral fix, and a per-airframe special case would be the wrong shape.
+  *Cross-refs:* `PLAN-M5-polish.md` G81, G82 and G83.
+
+- `BL-502` `[Feature]` **`SET_AI_NET` and `SET_AI_TEAM` reach no zeppelin.** *Evidence:* found by
+  G80, which wired both clauses for roster-spawned aircraft and could not carry the same lookup to
+  airships. Six clauses across four missions name one: `blackswanzep` (C1C/M01), `blackhatzep`
+  (C4/M05), `piratezep` (C5/M04) and `cargozep2`/`cargozep3` (C2/M05 and C4/M05). None is in CM02,
+  so no mission the player is currently trying to finish depends on this. `ZeppelinMotion` holds its
+  net follower and `LiveZeppelin.Team` read-only, so this is a change to `ZeppelinRuntime` rather
+  than to the director's lookup. Those names surface through the `Gap` line today, so a mission
+  hitting this says so. *Fix shape:* give `ZeppelinRuntime` the same two writes the aircraft arm
+  got, re-seating the follower from the airship's current position rather than restarting its route.
+  *⚠ Traps:* a zeppelin is not a vehicle in the original and does not run the nose-aligned edge pick
+  (`PLAN-M5-polish.md` G77), so a re-seat here keeps the nearest-node rule and must not inherit the
+  aircraft path's heading argument. The record's own team fans across the whole airship including
+  its guns, so a script-side team write has to fan the same way or half the hull keeps the old side.
+  *Cross-refs:* `PLAN-M5-polish.md` G80, which landed the aircraft arm.
+
+- `BL-499` `[Bug]` **CM02's second Peacemaker squad is present from the start and attacks the
+  Pandora rather than the player.** *Evidence:* reported at the controls against the original, where
+  the squad carrying the ace appears partway through and comes for the player. Both halves are
+  authored. `OBJECTIVE8` is dormant and carries `WAKEUP_ENEMIES [britpeace_7, britpeace_8,
+  britpeace_9]`, so the squad is asleep at mission start; completing it also wakes `OBJECTIVE9` (the
+  `snd_HA5Wave2` Winthrop chain), `OBJECTIVE10` (the SECONDARY that kills the ace) and `OBJECTIVE68`
+  (`SET_AI_NET M5Escort` on the same three, two seconds later). The gate is `OBJECTIVE5`'s
+  `DEDG [1, 0]`, and group 1 is `britpeace_1/2/3`, the FIRST Peacemaker squad; on completion it naps
+  `OBJECTIVE8` awake after 15 s. Targeting is authored too: `britpeace_8` and `britpeace_9` carry
+  `rating_biases [piratezep, -0.8] [player, 1.0]`, and `britpeace_7` carries `[player, 1.0]` alone.
+  *Fix shape:* two questions in order. Whether `WAKEUP_ENEMIES` reaches an aircraft roster block at
+  all, since a squad that spawns at mission start has had its dormancy dropped rather than its
+  targeting broken. Then whether those biases reach the pick for a woken spawn, which
+  `roster-spawn-names` proves they do for a spawn present from the start. *⚠ Traps:* ⚠ the user's
+  recollection is "after 2 Balmoral kills" and the authored gate is the first Peacemaker squad being
+  wiped out; both may be true of one playthrough, so treat the recollection as the lead and the
+  `DEDG` as the specification. Group 5 down to one IS a real gate in this mission (`OBJECTIVE20`,
+  `55`, `63`), which is what makes the two easy to conflate. Do not hand the squad a hardcoded player
+  target: the bias table is what expresses this and it already ships. *Cross-refs:* `BL-493`'s ace
+  decode, `BL-498`, `PLAN-M5-polish.md` G78.
+
+- `BL-469` `[Feature]` **An escort cannot hold station on a leader using nitro, and nothing measures
+  the case.** *Evidence:* the two injectors are independent switches, so the asymmetry is reachable
+  in a real game: a wingman gets one only when its own `aiv` block authors `nitro` slot 34
+  (`AiFlightAssembler.cs:112` through `AiSkills.RosterNitro`, and only three shipped blocks author
+  1), while the player's comes from their own customised aircraft
+  (`HumanFlightAdapter.cs:138`, `CustomPlaneBuild.HasNitrous`). A player who has bought an injector,
+  escorted by a wingman whose block authors none, gives the leader a thrust term the escort cannot
+  command at any lever, so no desired-speed ceiling can keep it in place. `wingman-station` measures
+  the symmetric no-nitro case on both sides, which is the right default and the one the reported
+  symptom came from, but its comment does not say so. *Fix shape:* a second `[flown]` leg with the
+  leader's `Nitro.Installed` true and the wingman's false, and then a decision about what the escort
+  should do when it cannot match its leader at all. *⚠ Traps:* do not fold this into `BL-457`: that
+  item's numbers are the symmetric case and are sound; this is a different pairing. Do not "fix" it
+  by installing nitro on every wingman, which would contradict the roster data.
+
+- `BL-458` `[Bug]` **`DANGER_ZONES_COMPLETED` can never be satisfied in a flown campaign mission.**
+  *Evidence:* a campaign mission's danger zones are the same `dzpathN` gate geometry `--stunt`
+  reads, authored from a different surface: no `ia.json` `dzones` list, but the mission's own
+  `objectives.zrd` names `dzpathN` directly inside `DANGER_ZONES_COMPLETED` (C3/M01's `OBJECTIVE3`
+  on `dzpath1`, `OBJECTIVE11` on `dzpath4`), narrowed by `dzones.zrd`'s `disable` list.
+  `CampaignDangerZones` (new) reads that surface and calls the existing
+  `CampaignDirector.NotifyDangerZoneCompleted` (`:345`); `Attach`/`Step` wire it off a new
+  `WorldInputs.Gamez` field, which `GameSession`'s own `Attach` call now passes. Proven against real
+  C3/M01 data (`campaign-danger-zones` suite): gate-crossing completes the zone, and
+  `OBJECTIVE3`/`OBJECTIVE11` complete off the real notify path. **Still open** until the secondary
+  is seen to complete in a mission flown at the controls, which is the one thing no suite can show.
+  *⚠ Traps:* ⚠ `ObjectiveGraph.ScanForCompletion` resolves one objective per tick round-robin, so a
+  single step after a notify is not enough to see a completion; step several seconds. ⚠ C3's gate
+  pairs sit close enough that one crossing can legitimately complete both zones, which is correct
+  behaviour rather than a test defect.
+
+- `BL-457` `[Bug]` **The campaign wingman ends up high and far behind, so it reads as having spawned
+  in the wrong place.** Seen at the controls: "in the original the wingman spawns beside me. here he
+  spawns above the island flying towards me."
+  ⚠ **Merging main's flight model made this materially WORSE, and `wingman-station` is red on the
+  merged tree.** Same suite file, byte-identical, same seed, `player_pfighter`, leader on a plain
+  full-throttle human stick: our own plant read mean 296 m / worst 702 m without the ceiling lift
+  and 256 m / 590 m with it; main's plant reads **mean 1096 m without the lift and 415 m with it**.
+  The `player_bhawk` arm moves the same way (1023 m to 267 m). Three of the suite's gates now fail.
+  Two conclusions. The `StationCeiling` lift is doing MORE work under main's plant, not less: it cuts
+  the mean by roughly two thirds and collapses the escort's time on the far-field plant from 26.8 %
+  of steps to 3.0 %, so the open question of whether to keep it resolves toward keeping it. And the
+  remaining defect now has a second, larger contributor in `FlightModel` itself.
+  *⚠ Traps:* ⚠ **Nitro is ruled out and must not be re-chased.** A runtime probe on both rigs reads
+  `leader installed=False everBoosted=False, wingman installed=False`, and the suite file is
+  unchanged across the merge, so the harness is not the variable. ⚠ The `1.50` lever in the trace is
+  the WINGMAN's, capped by `AiLawParams.Wingman`'s own `SpeedCap`, not the leader's; the leader peaks
+  at lever 1.00 and its 127 m/s against `fd_speed` 113.0 is an ordinary shallow dive, not a boost.
+  ⚠ Main's deletion of `AiControlLaw`'s far-field branch is not the cause either: that branch keyed
+  off `AiPilot.PlayerPosition`, which this suite never assigned, so it was already dead here.
+  ⚠ **Trust the `mean` column, not `worst`.** The sampled trace never exceeds 470 m over a 120 s run
+  while `worst` reads 3797 m, so that excursion is a between-samples transient and possibly a
+  position discontinuity (`INSTR-18`'s altitude-cap teleport is a candidate); it needs a finer trace
+  before anyone tunes against it. *Evidence:* **the spawn is correct and this is not a
+  placement bug.** `C3/M01`'s `aiv.zrd` authors `player` at `[-1426, 150, -1813]` yaw 40 and
+  `wingman_1` at `[-1378, 150, -1706]` yaw 40, 117 m apart at the same altitude and heading, and the
+  spawner puts it exactly there (`CampaignRoster.cs:191-192`, confirmed in a live run). Traced from
+  the intro's end, separation runs 117 m, 95 m, 102 m, 133 m at t=0/1/3/5 s, then 289 m at 10 s,
+  597 m at 20 s and 838 m at 26 s, ending 130 m above the player. **One contributing cause is fixed
+  and does not account for that magnitude:** the decoded 250 mph desired-speed ceiling
+  (`AiControlLaw.SpeedCeiling`, `def+0x1e8`, written by `FUN_00478a00` at `0x478d52`) sits 1.24 m/s
+  below the Devastator's own 113 m/s cruise, so an escort holds no closure margin and never regains
+  ground lost in a turn; `AiPilot.FlyEscort` now lifts it through `AiControlLaw.StationCeiling`, and
+  on `player_pfighter` that moves a flown hold from mean 296 m / worst 702 m to mean 256 m /
+  worst 590 m. *What is still unexplained:* the 838 m at 26 s and the 130 m of altitude. *Fix shape:*
+  look at the HANDOFF at the intro's end, not the cruise. The escort law never leaves the formation
+  state once joined (decode: "nothing inside it leaves state 1"; `AiEscort.cs:233-235`, and a joined
+  escort 5 km out still reads `Station` in the `wingman-station` suite), so the 200 m overfly the
+  report describes belongs to a wingman that NEVER joined. The join gate is a range AND a speed,
+  `< 700 m` and `> 20.576 m/s`, so establish what the wingman's speed and range actually are on the
+  first frame it is stepped after the cutscene.
+  *Two leads, one already retired:* an airframe mismatch between the pilot and the wingman is NOT
+  in play, so do not chase it: the reporting profile carries `selectedPlane 0` and `wingmanPlane 1`
+  and both are airframe 5, the Devastator, which matches the report ("i did not fly a bloodhawk but
+  a devastator same as my wingmen") and the campaign's own two-Devastator start. A probe that flew
+  the pilot on a Bloodhawk against a Devastator wingman was a test-rig artefact. Still untested:
+  `WithAiSpawnJitter` scales a spawned wingman's `fd_speed` by up to 5 % (`PlaneStats.cs:95`,
+  applied at `FlightRoster.cs:63`), worth up to 5.6 m/s on the same airframe, which the suite legs
+  do not apply. *⚠ Traps:* ⚠ **measure on `player_pfighter`.** The
+  Devastator is 113 m/s against the ceiling's 111.76; the Bloodhawk is 135 m/s, which overstates the
+  ceiling's share about eighteenfold, and a number quoted off it is not a statement about the
+  campaign. ⚠ `BL-457`'s earlier line that the escort "re-enters `Joining`" past 700 m is WRONG: the
+  law has no such transition. ⚠ The far-field plant is not the original's answer to a fast leader and
+  must not be re-derived as one: its target is `fd_speed · lever + 5` off the lever at `[obj+0x128]`
+  (`0x48c593`-`0x48c5ae`), which slews toward the ceiling-clamped `[obj+0x124]`, so the cap reaches
+  both plants; measured, an escort is far-field for 54.3 % of a flown run and holds 114.0 m/s there.
+  ⚠ The two SCRIPTED `wingman-station` legs fly a cruise lever, a speed any escort matches, so their
+  leashes are not evidence here; the `[flown]` leg is. ⚠ Do not re-tune the decoded station offsets,
+  the 700 m join gate, or `SpeedCeiling`. *Cross-refs:* `docs/org/aiPilot.md`,
+  `docs/org/aiControlLaw.md`; `docs/PLAN-M5-polish.md` A3.
+
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
   controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.
-  **The mechanism.** `GameSession.StuntSummaryFor` (`GameSession.cs:3083-3094`) calls
+  **The mechanism.** `InstantActionDirector.StuntSummaryFor` (`Session/InstantActionDirector.cs:761-764`) calls
   `store.RecordIfBest(key, run.Elapsed)` behind two guards and no third: the objective is
   `ZonesFlown`, and player 1 has a `Stunt` run at all. Neither asks whether the run was
   **finished**. So every end of an Instant Action stunt mission records a time, a loss included.
@@ -2349,22 +2406,6 @@ usual.
   *How you'd know it worked:* fail a stunt mission deliberately, confirm the wrap-up claims no best
   and `user://stunt_scores.json` is byte-identical afterwards; then complete one and confirm it
   does record.
-
-- `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
-  (C1/M04 `--generators`, user-reported 2026-08-13).** The spawn position is decoded-correct: the
-  original's launch routine (`FUN_00452450`) teleports the launched vehicle to the same generator
-  node, joined by roster `group` over parked vehicles. What differs is the mission layer: the
-  original plays a hangar-door-open animation (mission scripting/`WAKE_ANIM`, out of M4's scope)
-  before launch, so the geometry the plane flies through is open. Ours never plays it, the door
-  stays closed, and the collision sweep kills the plane on frame one.
-  ⚠ **Traps.** (a) Do NOT "fix" the spawn placement — it matches the decode; the missing piece is
-  the door animation, not the position. (b) Leads preserved from a partial decode: the launch also
-  sets two timers (`+0xac = now + 1.5`, `+0xb4 = now + 2.5`) and an initial velocity with a
-  −22.352 m/s vertical component (the zeppelin drop case). The carrier path now carries both timers:
-  `+0xac` suppresses collision and AI ground blow for 1.5 s, then `+0xb4` limits the ground-blow
-  response to ×0.15 until 2.5 s. (c) The launched-vehicle mechanism itself
-  (parked roster planes, not fresh spawns) is a separate fidelity gap from this bug; B6's fresh-spawn
-  stand-in is documented in its landing commit.
 
 - `BL-314` `[Feature]` `[Blocked: PT-45]` **Race countdown — a rolling start on rails before the run clock
   opens.** The abreast starting grid landed 2026-08-08 (`RaceGrid`), so every pilot in a splitscreen
@@ -2454,113 +2495,6 @@ usual.
   Spawn spacing here stays this item's call from `PT-43`, and copying the grid over is the wrong
   reflex: four dogfighters 60 m apart on one heading is an instant head-on merge every round.
 
-- `BL-134` `[Feature]` **Cutscene player — the missing consumer (M04's zeppelin, `letterbox`, `CALLBACK`).**
-  **This is a missing subsystem, not a bug.** The cutscene defs run because nothing tells them they
-  are cutscenes. What is absent is a **cutscene player** owning camera control, the `letterbox`
-  bars, scene sequencing, and the end-of-cutscene handoff to gameplay. Same dependency as the
-  `CALLBACK` event kind (see `BL-035` — all 8
-  dispatches are `def=camera1`, unanchored, triaged as intro-cutscene notifications). **Pick the two
-  up together.**
-
-  **⚠ Traps — read before touching this.**
-
-  1. **Do NOT skip the cutscene defs at bootstrap.** That fix was proposed, scoped, and
-     **REJECTED by the user 2026-07-22**: *"the M0x missions are campaign missions and we need those
-     animations if we want to restore the campaign."* `generic_intro` ×12 and
-     `mission_intro_animation` ×1 are decoded, working **assets** — the missions' authored intro
-     movies. Deleting their bootstrap throws away campaign capability to suppress a cosmetic symptom.
-  2. **C1/M04's pirate zeppelin flying above the overcast is an ACCEPTED artifact**, not a defect to
-     work around. Do not lower the zeppelin, do not suppress the def, do not "fix" `letterbox` bars
-     if they appear. Lowering it is content invention — the same trap as the C3 palms.
-  3. **An 8-chapter regression is inert here by construction.** The default mission is IA1, which
-     has no intro at all; no `IA1` and no `MP` mission bootstraps a cutscene def. Verify per-mission
-     or not at all (`docs/verification.md` DIAG-10).
-  4. **Verify by what disappears, not by what looks right** — `generic_intro` is shared across 12
-     missions and may currently be driving things nobody has looked at.
-
-  **M04 is the ready-made first test case.**
-
-  Its data is fully decoded, so it is an end-to-end exercise for free. The symptom that exposed all
-  of this: the pirate zeppelin builds, renders complete and flies — it is simply **above the
-  clouds**, at y 1505→1546 while C1's opaque `cloudlayer` deck sits at y = 960 and the player spawns
-  at y ≈ 110. Freecam onto it with `--freecam --chapter=C1 --mission=M04
-  "--pos=-5358,1505,-2200" "--lookat=-5358,1505,-1810" --no-fog`.
-
-  **Confirmed 2026-07-22 from the script data — the "jumps" are cutscene cuts, not waypoints.**
-  The user watched it move smoothly for ~20 s, jump twice about 10 s apart, then vanish, and asked
-  whether the jumps were AI waypoints. They are not:
-
-  - `data-c1-m04-zrdr-introanm-pzep1-piratezep.zan.json` is **48 frames at exactly 1/3 s apart, a
-    uniform straight line**: each frame steps a constant (−13.4, +2.1, −17.3), from
-    (−5352, 1504, −1802) to (−5981, 1602, −2611) over **15.67 s** (≈66 units/s). Frame 0 and frame
-    47 carry translate+rotate+scale; all 46 between are translate-only. There is no dwell, no
-    branch and no waypoint structure anywhere in it — so the smooth phase is this script, and it
-    simply **ends**.
-  - The jumps are therefore what happens *after* it runs out, and the dispatch graph says what
-    that is: `camera1-scene1` and `piratezep-scene2` **both call `letterbox`** — the cinematic
-    black-bars overlay — and `scene2` also calls `pfighter11` and `open_pzeplaunchdoors`, while
-    `piratezep-pzep_launch_player` calls `pz_open_hanger_doors` / `pz_deploy_hook` /
-    `pz_retract_hook`. That is the M04 **intro movie**: zeppelin flies in, cut, launch doors open,
-    a fighter launches.
-
-  So each jump is a **hard cut between cutscene beats** — correct for a movie, nonsense as
-  gameplay — and "then it's gone" is the last beat deactivating it. **User-confirmed 2026-07-22:**
-  *"Yeah those are the cut scenes."* The same def demonstrably drives `letterbox` too, so a useful
-  open check remains: **are we currently drawing letterbox bars in M04?** If so that is the same
-  missing consumer with a far more visible symptom, and a good first target for the player.
-
-  **Scope, surveyed across all 53 missions' `startanims.zrd.json`: 13 bootstrap a cutscene def.**
-
-  | def | missions |
-  |---|---|
-  | `generic_intro` | 12 — C1/M05, C1B/M03, C1C/M01, C2B/M04, C3/M01, C3/M02, C3/M05, C4/M01, C4/M02, C4/M04, C5/M01, C5/M04 |
-  | `mission_intro_animation` | 1 — C1/M04 (the bespoke one) |
-
-  **No `IA1` and no `MP` mission names one** — all 13 are `M0x` story missions, so this is invisible
-  in instant action and multiplayer, which is what the project defaults to. That bounds the blast
-  radius neatly and explains why it went unnoticed until someone flew `--mission=M04`.
-
-  **❌ The fix this evidence originally led to was REJECTED — see Trap 1.** For the record, it was:
-  skip those two def names when the animation bootstrap walks `startanims`. Small and data-driven, a
-  name check against the start-anim list rather than a new subsystem — and wrong, because it buys a
-  cosmetic fix with campaign capability. Kept here so nobody re-derives it and thinks it is new.
-
-  **Verification note that outlives the rejected fix:** verify *by what disappears, not by what
-  looks right*. `generic_intro` is shared across 12 missions and may currently be driving things
-  nobody has looked at, so a change here is checked by enumerating removed motion per mission. An
-  8-chapter regression cannot catch any of it: the default mission is IA1, which has no intro at
-  all, so the regression is inert here by construction (`docs/verification.md` DIAG-10).
-
-- `BL-243` `[Feature]` **The original carries destruction across missions in a state log; CSVM has no log, so a
-  warm instant action starts clean where the original does not.** Decoded 2026-08-02 out of
-  `BL-099` — the mechanism, the user's five-step A/B in the original, and the 62-definition
-  `PERSIST_LOG` list are written up in `docs/formats/anim-definitions.md` ("`SAVE_LOG` /
-  `PERSIST_LOG` are the cross-mission state log"); read that before touching this. The rule:
-  **every mission load applies the log, only campaign missions write it, and it commits to the save
-  and survives a process restart.** `SAVE_LOG ON` (568 defs) puts a definition in the log at all;
-  `PERSIST_LOG ON` (62 defs, a strict subset, all fixed world scenery) additionally carries it
-  across mission boundaries.
-  **Scope of the divergence is narrow.** CSVM builds every session from the bootstrap, so we match
-  the original for campaign missions and for a cold instant action; we differ only for an instant
-  action loaded after a campaign mission **in the same process** — the exact case that produced
-  `BL-099`'s burning fuel depot. There is no campaign flow yet, so today this is unobservable in
-  practice.
-  **What implementing it would take:** a chapter-scoped store of `PERSIST_LOG` definition states
-  that outlives `Launcher.ReturnToMenu`'s teardown (which currently QueueFrees the whole session
-  subtree), applied after the `RESET_STATE` bootstrap and before `zepstate`/`startanims`/the `.gw`,
-  written only on a campaign-mission exit. Because `fuelboxconnect*` is a persisted def, the stored
-  state cannot be just a destroyed/healthy flag — a *running* looping animation is part of what the
-  original carries. (The `BL-099` fuel-depot report that produced this item is answered in full in
-  that doc — a cold IA1 renders intact tanks by spec, in the original and in CSVM alike; do not
-  "fix" the depot, and do not re-derive the depot chain analysis it records.)
-  ⚠ **Traps.** (a) **Do not use this to explain away a rendering difference.** It is the reason a
-  screenshot of the original is not evidence about the shipped data, which makes it an equally good
-  way to hand-wave a real bug; anything blamed on the log needs the mission sequence that produced
-  it. (b) Two facts are still untested and would change the design: whether the commit happens at
-  damage time or at mission completion, and a direct A/B separating the two flags (destroy a
-  `PERSIST_LOG` object and a save-only one in one campaign mission, then load an IA — the first
-  should carry, the second should not).
-
 - `BL-256` `[Feature]` **Stunt screenshot feature, triggered off `DzRadius` — much later, by user decision
   (2026-08-04).** `DzRadius` (15 m, user-hand-tuned) is settled
   as the **marker-centre radius**: scoring crosses the authored `dzpathN` gate pair
@@ -2572,149 +2506,47 @@ usual.
   the automatic-screenshot sting, not a zone-cleared cue — formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
-- `BL-361` `[Feature]` {CAMPAIGN} **Scripted-path vehicles: a second movement law, decoded, with
-  nothing in `CSVM/src` for it.** Surfaced 2026-08-15 by the ground-blow emitter decode (`BL-359`,
-  since closed — `git log --grep=BL-359`), which had to establish what the byte at `+0xcc` means
-  before it could say whether zeppelins repel the player. Write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow".
-  *What it is:* the aircraft update dispatcher `FUN_00489ea0` branches on `obj+0xcc` **before** it
-  reaches any flight law. Non-zero, and the object is driven by the path follower `FUN_0048a110`;
-  zero, and it runs the movement law selected by `obj+0x67C` (`0`/`4` being `FUN_0048e580`, the
-  flight integrator). So a placed vehicle can be a puppet on an authored waypoint list rather than a
-  simulated aeroplane, and it hands itself back to the flight model on reaching the last waypoint.
-  *The lifecycle, decoded:* the spawner `FUN_0047c210` sets `+0xcc = 1` when the spawn record carries
-  a path (`0x0047c568`) together with a freeze flag `+0xd4 = 1` (`0x0047c57e`), so the vehicle sits
-  motionless at its first waypoint until a mission goal releases it (`FUN_0046a2b0`, `0x0046a2c3`,
-  reached from the goal-action runtime `FUN_0046a490`). That same runtime can attach a path at any
-  time with `FUN_004940d0` (`0x0049427c`), which sets `+0xcc = 1` and `+0xd4 = 0` so the vehicle
-  starts moving at once. Only `FUN_0048a110` clears `+0xcc` (`0x0048a863`), and only on the final leg.
-  *The follower's law*, per tick, with `dt` = `DAT_009ad744`:
+- `BL-446` `[Feature]` **The MPG movie cinemas do not play.** *Evidence:* Decision 2 of
+  `docs/PLAN-M5-campaign.md` put them out of scope for the campaign milestone: plain MPG playback
+  is a codec and container problem orthogonal to the campaign flow, and the loop reaches the cabin
+  and the mission without one. **The decision this entry was waiting on is made and recorded in
+  [`docs/formats/cinemas.md`](docs/formats/cinemas.md); what remains is the work itself.** The ten
+  shipped files are MPEG-1 system streams, MPEG-1 video 320x240 at 856 to 1500 kbps with MPEG-1
+  audio layer II at 44.1 kHz, and Godot 4.7 compiles in exactly one video decoder, Ogg Theora, so
+  they cannot play as they ship. The decision is to transcode at extract time to `.ogv` and play
+  through a stock `VideoStreamPlayer`, with a C# `VideoStreamPlayback` subclass recorded as the
+  reversible alternative. *Fix shape:* the transcode step in the extraction pipeline and the player.
+  *⚠ Traps:* two files break the otherwise uniform profile and a reader must not assume one
+  (`msopen1.mpg` is 29.97 fps at 1500 kbps, `crimflag.mpg` is mono). `fmv.zrd`'s `PLAYAVI` actions
+  name `MSopen1.mpg`, `zipper.mpg` and `Chap0.mpg` in a case the on-disk names do not have, so a
+  case-sensitive lookup fails on all three. The chapter array at `0x0061e68c` names `chap1.mpg`
+  through `chap6.mpg` and `chap6.mpg` has no file in the install. Nobody has judged a transcode at
+  the controls, which is a presentation call and not a technical one.
+  *Cross-refs:* `docs/PLAN-M5-campaign.md` Decision 2, which filed it; `docs/formats/cinemas.md`.
 
-      target   = next waypoint, y raised by the vehicle type's ride height at type+0x218
-                 (a flat 0.2 m for movement classes other than 0/4)
-      heading += clamp(headingError / 60°, ±1) · dt        radians, so ≥60° of error gives 1 rad/s
-      speed    = 17.8816 m/s, which is exactly 40 mph      held until the final leg
-      forward  = speed · (1 − |clamped heading error|)     it barely advances while turning hard
-      advance the leg when dot(target − pos, legDir) ≤ 5.0
+- `BL-463` `[Feature]` **The cabin ships without Change Memento.** *Evidence:* Decision 3 of
+  `docs/PLAN-M5-campaign.md` deferred it: the function is cosmetic and rests on the undecoded
+  snapshot flow, so the cabin's other rows shipped without it rather than waiting.
+  *Cross-refs:* `BL-256` is the adjacent snapshot work; `docs/PLAN-M5-campaign.md` Decision 3.
 
-  On the **final** leg the target is replaced by a point **300 m** along the leg direction, its y
-  gains `(speed/110mph − 0.4) · 83.3` once speed passes 0.4 of 110 mph (44 mph), and the speed term
-  becomes `speed += 4.0302024 · dt` instead of the fixed 40 mph. Fixed taxi speed, a ground-height
-  offset from the vehicle type, a final-leg acceleration with a climb-out, and a handoff to the
-  flight model at the end read as **the runway takeoff run**, though `FUN_004940d0` shows a goal can
-  attach a path for any purpose.
-  ⚠ *Traps.* (a) **It is not AI behaviour and not our `AiMode.AvoidCrash`.** The follower replaces the
-  flight model outright; nothing in it is a steering input to `FlightModel.Step`. (b) **The freeze
-  flag `+0xd4` is separate from the path flag `+0xcc`**, and only the follower clears the path flag. A
-  design folding the two into one boolean cannot express "placed and waiting", which is the state
-  most authored vehicles spend most of a mission in. (c) `FUN_004afd00` gates AI radio chatter on
-  `+0xcc` too, so a path-driven vehicle is silent; do not model the movement and leave the voice on.
-  (d) **`4.0302024` and the `83.3` climb gain were read but not identified**, unlike `17.8816` (40 mph
-  exactly), `0.020335784` (1/110 mph) and `0.95492965` (3/π, the 60° heading-error normaliser). Nail
-  those two before shipping a takeoff that looks right at one airframe and wrong at another.
-  *Size:* LARGER. It needs a path source in the mission data, the follower, and a hook in the goal
-  runtime. Campaign-scoped: Instant Action places no vehicle on a path (`ia.zrd.json`'s
-  `dzpath1`–`dzpath5` are danger-zone gates, not vehicle paths), so no golden can see it.
-  *How you'd know it worked:* a mission-opening aircraft sits still on the strip until its goal
-  fires, then rolls at a steady 40 mph, accelerates and climbs out on the last leg, and flies
-  normally from the moment it leaves the path.
-  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow" —
-  ground blow's own emitter test reads this byte, so a spawned vehicle put on a path stops repelling
-  the player the moment it completes the path and drops into the flight model. Ground blow itself
-  shipped without the registry filter (its player probe simply excludes aircraft), so building the
-  follower means revisiting whether a path-driven vehicle needs to become an emitter in this build.
-
-- `BL-362` `[Feature]` **Instant Action wingmen never form up on the player.** *Evidence:* the user at the controls,
-  2026-08-15: wingmen fly away instead of staying near the player, with no formation-flying
-  behaviour anywhere in the engine and the placeholder law driving them.
-  *What we do today:* `GameSession.BuildFlightRigs` places wingman `i` on the decoded spawn fan
-  (`InstantActionRuntime.WingmanSlotFor`) and hands it `AiPilot.HoldingCourse`, so it holds the
-  player's spawn heading and altitude for the rest of the mission. The decoded escort chain (0/1/3
-  escort the player, 2/4 escort 1/3) is wired only into `AiGunner.PrimaryTargetName`, which names
-  who to SHOOT, not who to stay near.
-  ⚠ **And that assignment is unreachable in our engine:** `SelectRankedTarget` skips every same-team
-  candidate before it tests `PrimaryTargetName` (`FlightController.cs:2253`), and a wingman sits on
-  `AimAssist.PlayerTeam` exactly like the player it is pointed at. So the chain resolves to nothing,
-  on every wingman, in every mission. Verify that before designing on top of it.
-  *What the decode says:* [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) on
-  `primary_target` says formation-looking behaviour in the original rides nets whose trailer names
-  `player`, and `primary_target`, "not this slot". Both halves turn out to be real, and which one
-  applies depends on whether the wingman has a net.
-  ⚠ **This paragraph used to rest on "a wingman gets no patrol net (`netids` keeps its `-1`)",
-  quoted from `instant-action.md`. That was wrong and the page is corrected** (`BL-364`,
-  2026-08-15): an Instant Action wingman IS given the chapter's first net. So the sentence that
-  followed it here, "a wingman has no net, so the trailer half cannot be the mechanism", was wrong
-  twice over, and is struck: in C1 that first net is `[10, "player"]`, so the trailer half is
-  exactly the mechanism there (`BL-377`, landed and closed).
-  *Fix shape:* answer the decode question first, then a station-keeping input source in `AiPilot`
-  dispatched from `AiModeMachine`. Do not invent a formation offset ahead of it: `WingmanSlotFor`'s
-  fan is decoded as a SPAWN placement, and reusing it as a flying station is a guess wearing a
-  decoded number.
-  ⚠ *Traps.* (a) The nine `AiMode` values are decoded from the engine's own debug readout and none
-  of them is "form up"; a tenth is invented and has to be named as such, out of `NameOf`'s verbatim
-  vocabulary. (b) **Friendly fire is decoded as real** (M4 A2): a wingman holding a tight station
-  will die to the player's guns, which is correct, and must not be papered over with a damage or
-  collision exemption. (c) It is a chain, not a star: 2 and 4 station on 1 and 3, so a dead leader
-  leaves its follower without one, and that case needs an answer rather than a crash.
-  ⚠ **DECODED 2026-08-15, and the blocker above is void.** [`docs/org/aiPilot.md`](docs/org/aiPilot.md):
-  a netless `mode wingman` aircraft flies a fixed formation station on its `primary_target`
-  (`FUN_0041e760`), so `primary_target` on a friendly is a **formation leader**, not a target
-  assignment, and `SelectRankedTarget` skipping same-team candidates never mattered. The station is
-  a body-frame offset from the leader: **(6, 0, 18)** when the leader is the player (6 m out, level,
-  18 m astern) and **(8, −2, −8)** when it is another AI, with an 80 m separation push, a 700 m
-  join threshold and a speed-ramped trail distance of 106.68 m to 259.08 m when it is chasing
-  instead. So `WingmanSlotFor`'s spawn fan was indeed the wrong thing to reuse, and the real offset
-  is now decoded rather than invented.
-  ⚠ **But it is a campaign behaviour, not an Instant Action one.** `BL-364`'s decode shows Instant
-  Action gives every actor a patrol net, and a net demotes a `wingman` to `jet` at spawn, so in the
-  original an IA wingman walks the chapter's first net and does **not** hold station. The shipped
-  netless wingmen are the campaign's `wingman_N` / `bswingman_N` roster blocks. Read off the code
-  path, not observed at the controls of the original, so an IA capture would be worth having before
-  building station-keeping for that mode.
-  ✔ **And Instant Action's half is now DELIVERED, by a different mechanism** (`BL-377`, landed and
-  closed 2026-08-15; [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer" is the decode, and
-  `git log --grep=BL-377` the work). An IA wingman takes the chapter's first net, and in C1 that
-  net is anchored to the
-  `player`, so the whole graph is carried around the player and the wingman patrols around them
-  without any station-keeping at all. So "wingmen never form up on the player" is answered for
-  Instant Action by the original's own means; what remains here is the CAMPAIGN's netless
-  `mode wingman` station, whose offsets are decoded above and which nothing in `src/` yet flies.
-  ⚠ It is not a formation and should not be judged as one: the wingman walks a figure-eight
-  ~1 km across that happens to travel with the player, so it comes close and then swings out again.
-  ✔ **The Instant Action side was flown 2026-08-15 and passes** (`PT-50`, now retired): the three
-  Fury wingmen spawn as a plausible flight, they start patrolling and are carried along by the
-  player-anchored net rather than drifting off alone, and friendly fire is confirmed possible as
-  Decision 3/A2 requires. That verdict covers Instant Action only, which is why the item stays open
-  on the campaign station below.
-  *Playtest after fix:* fly a CAMPAIGN mission whose roster has netless `wingman_N` blocks and watch
-  one hold the decoded body-frame station on its leader, 6 m out and 18 m astern of the player, from
-  the 700 m join threshold inward, and trail at the speed-ramped distance when it is chasing.
-  *Cross-refs:* [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode), `BL-363` (the other half
-  of the same playtest: an escort with nothing targetable), `BL-364` (the patrol nets, and the
-  correction to `instant-action.md` this rests on),
-  [`docs/formats/ai-nets.md`](docs/formats/ai-nets.md) (the anchored net that delivers the IA half,
-  closed as `BL-377`).
+- `BL-460` `[Feature]` **The auto-land the approach table offers has no button.** *Evidence:* every
+  chapter's `landings.zrd` carries one `auto` row, a 500 m sphere around `pz_auto_land` with no
+  attitude cone and no speed band. The original does not start the animation on it: `FUN_0045df60`
+  raises `DAT_00719109`, and `FUN_0045e120` turns that into an on-screen prompt (message `0xb5`, or
+  `0xb6` when the binding is a pad button, over key binding `0x6a`) that the player then presses to
+  start the same hookup the manual row starts. CSVM decodes and ticks the row
+  (`LandingApproachRuntime.AutoLandOffered` goes true exactly when the original lights the prompt),
+  but nothing draws the prompt or reads a key off it, so the row is observable and inert.
+  *Fix shape:* a HUD line off `AutoLandOffered` plus a binding that calls `Play` on the row's
+  animation, which is the same call the manual row already makes.
+  *⚠ Traps:* ⚠ The manual and auto rows name the SAME animation, so a session that starts it from
+  both would double-fire; the trigger already returns after the first row that passes, and a button
+  path has to respect the cutscene guard the same way. ⚠ The prompt's own message ids are `langui`
+  ids, which `BL-427` has not extracted, so the text is not in `extracted/messages.json`.
+  *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md` "The per-frame test"; `BL-427` for the
+  string. Split out while the approach trigger landed (`git log --grep=BL-467`).
 
 ## Tooling, platform & docs
-
-- `BL-427` `[Feature]` **Extract `langui.dll`'s string table.** Split out while the Ammo Selection
-  screen was built (`git log --grep=BL-353`). `extracted/messages.json` carries the weapon **names**
-  (`MSG_WEAP_APIERCING_ROCKET` → "Armor-piercing rocket", the `MSG_WEAP_*` block at ids 12124–12160)
-  but no prose beyond them. The original's Ammo Selection screen also shows a description pane for
-  the highlighted round ("Slugs — These standard lead bullets do damage equally well to both armor
-  and internal components", visible in `OriginalScreenshots/Ammo Selection Gun DropDown.png`), and
-  nothing in the extracted data contains that text. It can only be in
-  `CrimsonSkiesGame/GOSDATA/ASSETS/BINARIES/langui.dll`, a Win32 resource table no tool of ours
-  reads.
-  **Why it is worth its own item.** The wizard's own decoded facts already cite langui ids (the
-  thirteen militias at 3670, the presets at 3600–3618), so the table is being read second-hand today
-  from decode notes rather than from the file. It no longer carries `BL-352` with it: the *View
-  Story* page has no per-preset prose to find, which the decode of that screen settled.
-  ⚠ **Traps.** (a) Our Ammo Selection screen ships without description panes, which is a stated
-  divergence rather than an oversight; adding them is this item, not a bug fix on that screen. (b) A
-  quarter-width four-player pane has no room for a prose block, so the panes are not simply "the
-  screen plus a description" once the strings exist. (c) `langui.dll` is in the game install, which
-  is git-ignored and absent from worktrees — read it by absolute path.
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled

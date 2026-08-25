@@ -29,9 +29,11 @@ patrol-net follower and the formation escort, behind [ai-rosters.md](ai-rosters.
 [textures.md](../org/textures.md) (the texture header layout and the additive-vs-mix blend rule
 behind [effects.md](effects.md)'s sprites),
 [loading-screen.md](../org/loading-screen.md) (how the mission load screen is named, filled and
-redrawn, behind the `Loading.zrd` dialogs in [zrdr.md](zrdr.md)) and
+redrawn, behind the `Loading.zrd` dialogs in [zrdr.md](zrdr.md)),
 [shakes.md](../org/shakes.md) (how the original consumes the shake laws — the per-shot/per-frame
-magnitudes and the consumer that rocks the plane, behind [shakes.md](shakes.md) here).
+magnitudes and the consumer that rocks the plane, behind [shakes.md](shakes.md) here) and
+[music.md](../org/music.md) (the music channel's routing, variant choice, battle timer and fades,
+behind [sounds.md](sounds.md)'s `MUSIC` groups).
 
 ## Reader map
 
@@ -47,6 +49,7 @@ magnitudes and the consumer that rocks the plane, behind [shakes.md](shakes.md) 
 - [weather.md](weather.md), [anim-definitions.md](anim-definitions.md), [destructibles.md](destructibles.md), and [effects.md](effects.md).
   - [Weather atmosphere controls](weather/atmosphere.md) — cloud cover, wind, and precipitation.
   - [Compiled animation archives](anim-definitions/compiled-archives.md) — the compiled archive and SI-script reference.
+  - [Cutscenes](anim-definitions/cutscenes.md) — the `letterbox` bars and the `CALLBACK` code table.
 
 ### Aircraft and combat
 
@@ -57,14 +60,22 @@ magnitudes and the consumer that rocks the plane, behind [shakes.md](shakes.md) 
 
 ### Missions and AI
 
-- [spawns.md](spawns.md), [missions.md](missions.md), [mission-entities.md](mission-entities.md), and [instant-action.md](instant-action.md).
+- [spawns.md](spawns.md), [missions.md](missions.md), [objectives.md](objectives.md), [mission-entities.md](mission-entities.md), and [instant-action.md](instant-action.md).
   - [Enemy generators](mission-entities/enemy-generators.md) — host, launch cycle, and capacity rules.
   - [Instant Action wrap-up](instant-action/wrap-up.md) — scoring and friendly-fire rules.
 - [ai-nets.md](ai-nets.md), [ai-rosters.md](ai-rosters.md), and [combat-voice.md](combat-voice.md).
+- [saved-games.md](saved-games.md) — the `SavedGames\` container, the campaign profile, and what
+  `Persist.NNN` and `Mission.NNN` carry.
+- [campaign-sequence.md](campaign-sequence.md) — the campaign's 24-mission order, its mission ids,
+  and the progression rule.
 
 ### Presentation and UI
 
-- [hud.md](hud.md), [rof.md](rof.md), and [strings.md](strings.md).
+- [hud.md](hud.md), [rof.md](rof.md), [strings.md](strings.md), and [briefing.md](briefing.md).
+- [campaign-screens.md](campaign-screens.md) — the campaign GUI scripts: profile, cabin, chapter
+  intro, flight check, and ammo selection.
+- [cinemas.md](cinemas.md) — the shipped `.mpg` cinemas, their container and codecs, and how CSVM
+  would play them.
 ## Shared conventions (zrdr readers)
 
 The zrdr "reader" files are the engine's config/script lists; mech3ax extracts each to a

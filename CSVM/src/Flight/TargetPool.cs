@@ -48,13 +48,13 @@ public sealed class TargetPool
     }
 
     /// <summary>Rebuilds all three cycles through <see cref="TargetRef.Classify"/>, dropping
-    /// <paramref name="self"/> by reference. ⚠ Walk <see cref="AimCandidateSet.Vehicles"/> and
-    /// <c>Turrets</c> only: <c>Structures</c> is the destructible registry, so walking it puts every
-    /// crate on the cycle, and the selectable ones come through <paramref name="subParts"/>.
-    /// ⚠ <paramref name="ownTeam"/> is the <see cref="FlightController.Team"/> FIELD, never
-    /// <see cref="AimAssist.TeamOfPilot"/> (see <see cref="TargetHud.OwnTeam"/>).</summary>
+    /// <paramref name="self"/> by reference. Selectable structures reach it through
+    /// <paramref name="subParts"/> and the mission's objective sites through
+    /// <paramref name="objectives"/>. ⚠ Never walk <see cref="AimCandidateSet.Structures"/>: it is
+    /// the destructible registry, so every crate would land on a cycle. ⚠ <paramref name="ownTeam"/>
+    /// is the <see cref="FlightController.Team"/> FIELD (see <see cref="TargetHud.OwnTeam"/>).</summary>
     public void Rebuild(AimCandidateSet scan, IReadOnlyList<AimCandidate>? subParts, int ownTeam,
-        object? self)
+        object? self, IReadOnlyList<AimCandidate>? objectives = null)
     {
         Clear();
         foreach (var c in scan.Vehicles)
@@ -74,14 +74,22 @@ public sealed class TargetPool
             Offer(c, AimTargetKind.Ordnance, ownTeam, self);
         }
 
-        if (subParts == null)
+        if (subParts != null)
+        {
+            foreach (var c in subParts)
+            {
+                Offer(c, AimTargetKind.Structure, ownTeam, self);
+            }
+        }
+
+        if (objectives == null)
         {
             return;
         }
 
-        foreach (var c in subParts)
+        foreach (var c in objectives)
         {
-            Offer(c, AimTargetKind.Structure, ownTeam, self);
+            Offer(c, AimTargetKind.Structure, ownTeam, self, objectiveTarget: true);
         }
     }
 
@@ -103,25 +111,37 @@ public sealed class TargetPool
         }
     }
 
-    /// <summary>Whether a turret candidate stands in the world rather than being carried by an
-    /// aircraft. Only emplacements are selectable: a carried gunner's host is already a target in
-    /// its own right, and offering both would put two entries on one silhouette. An emplacement is
-    /// the one with a placement <see cref="TurretController.Site"/>.</summary>
-    private static bool IsEmplacement(object? source) =>
-        source is TurretController { Site: not null };
-
     /// <summary>The IDENTITY name for a source: the plain node/label name. What <c>--target=</c>
     /// matches and what the breadcrumbs print — see <see cref="TargetRef.DisplayName"/> for what the
-    /// marker prints instead.</summary>
-    private static string NameOf(object? source) => source switch
+    /// marker prints instead. Internal rather than private: <c>FlightController.SelectRankedTarget</c>
+    /// (D12/D36) reuses this same identity for a turret/structure candidate's
+    /// <c>rating_biases</c> name match, rather than growing a second name-of-source switch.</summary>
+    internal static string NameOf(object? source) => source switch
     {
         FlightController fc => fc.Name,
+        ObjectiveSite site => site.Node,
         TurretController t => t.Label,
         ProjectilePool.Flyout f => f.Name,
         DestructibleRegistry.Instance inst =>
             GodotObject.IsInstanceValid(inst.Anchor) ? inst.Anchor.Name : inst.Def.Name,
         _ => "",
     };
+
+    /// <summary>The name of the entity a candidate is a PART of, or null where it is a whole thing
+    /// in its own right. Only a zeppelin zone has one today. Kept beside <see cref="NameOf"/> so the
+    /// ranker's <c>rating_biases</c> match has one source-type switch, not two.</summary>
+    internal static string? OwnerOf(object? source) => source switch
+    {
+        DestructibleRegistry.Instance inst => inst.Owner,
+        _ => null,
+    };
+
+    /// <summary>Whether a turret candidate stands in the world rather than being carried by an
+    /// aircraft. Only emplacements are selectable: a carried gunner's host is already a target in
+    /// its own right, and offering both would put two entries on one silhouette. An emplacement is
+    /// the one with a placement <see cref="TurretController.Site"/>.</summary>
+    private static bool IsEmplacement(object? source) =>
+        source is TurretController { Site: not null };
 
     /// <summary>Wraps one classed candidate as a <see cref="TargetRef"/>. The KIND picks the shape
     /// (which is why an unrecognised source still lands in the right cycle with an empty name rather
@@ -154,13 +174,22 @@ public sealed class TargetPool
                 return TargetRef.ForOrdnance(c, cls, name, round?.Weapon.DisplayName,
                     round == null ? null : TargetRef.Fraction(round.Health, round.HealthMax));
             default:
+                // An objective site is scenery the MISSION named, so its two label lines and its
+                // own name come off the target table rather than off a health model it has none of.
+                if (c.Source is ObjectiveSite site)
+                {
+                    return TargetRef.ForStructure(c, cls, name, site.TypeLabel, site.Category,
+                        objective: true, displayName: site.DisplayName);
+                }
+
                 var inst = c.Source as DestructibleRegistry.Instance;
                 return TargetRef.ForStructure(c, cls, name,
                     health: inst == null ? null : TargetRef.Fraction(inst.Health, inst.MaxHealth));
         }
     }
 
-    private void Offer(AimCandidate c, AimTargetKind kind, int ownTeam, object? self)
+    private void Offer(AimCandidate c, AimTargetKind kind, int ownTeam, object? self,
+        bool objectiveTarget = false)
     {
         if (c.Source == null || ReferenceEquals(c.Source, self))
         {
@@ -175,16 +204,17 @@ public sealed class TargetPool
             return;
         }
 
-        // CSVM carries no mission otherTarget/objectiveTarget data, so the per-entity flag is stood
-        // in for by what the candidate IS: a world emplacement and a sub-part are selectable, a
-        // carried gunner is not. Everything reaching the Structure branch came through subParts.
-        bool otherTarget = kind switch
+        // ⚠ Plumb objectiveTarget, never fake it through otherTarget: that lands an objective site
+        // on the Non-Aircraft cycle instead of the Enemy one. Only otherTarget is stood in for by
+        // what the candidate is, a world emplacement and a sub-part being selectable.
+        bool otherTarget = !objectiveTarget && kind switch
         {
             AimTargetKind.Turret => IsEmplacement(c.Source),
             AimTargetKind.Structure => true,
             _ => false,
         };
-        if (TargetRef.Classify(kind, c.Live, c.Team, ownTeam, otherTarget) is not { } cls)
+        if (TargetRef.Classify(kind, c.Live, c.Team, ownTeam, otherTarget, objectiveTarget)
+            is not { } cls)
         {
             return;
         }

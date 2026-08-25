@@ -35,6 +35,11 @@ public sealed partial class WorldSounds : Node3D
     /// host never resolved", which look identical from the outside.</summary>
     public bool Debug;
 
+    /// <summary>The session's mission radio queue, or null when the session built none. Cues whose
+    /// definition is a radio line belong there and not on a positional emitter; the mission layer
+    /// reads this to find the channel rather than being handed a second reference.</summary>
+    public MissionRadio? Radio;
+
     private const float OneShotGrace = 0.5f; // s before a non-playing one-shot is swept
 
     private readonly Dictionary<string, SoundDef> _defs;
@@ -58,6 +63,13 @@ public sealed partial class WorldSounds : Node3D
     }
 
     public int Count => _emitters.Count;
+
+    /// <summary>How many one-shots actually started an <see cref="AudioStreamPlayer3D"/> playing,
+    /// the <see cref="Mech3.Anim.SoundChannel.OneShotSoundsPlayed"/> precedent for this class: an
+    /// in-engine suite counts this rather than grepping a Debug-gated log line, and it moves only
+    /// when <see cref="Spawn"/> actually resolved a stream (--mute or an unknown group leaves it
+    /// unchanged, which is why a cue-firing assertion must run at --volume=0, never --mute).</summary>
+    public int OneShotsStarted { get; private set; }
 
     public IEnumerable<string> Names
     {
@@ -122,19 +134,25 @@ public sealed partial class WorldSounds : Node3D
     /// the voice dispatch needs (a def is not proof of a WAV: see <see cref="CombatVoice"/>).
     /// Reads the prewarm cache; while the <see cref="Loader"/> is still open it decodes on demand,
     /// so the answer is the same before and after the build scope closes.</summary>
-    public bool HasStream(string name)
+    public bool HasStream(string name) => StreamFor(name) != null;
+
+    /// <summary>The decoded stream behind a definition name, or null when the name is unknown or
+    /// its WAV is missing. The same cache <see cref="Create"/> and <see cref="Spawn"/> read, so a
+    /// channel that sits beside this one (<see cref="MissionRadio"/>) plays the prewarmed stream
+    /// rather than decoding the archive a second time.</summary>
+    public AudioStreamWav? StreamFor(string name)
     {
         if (_streams.TryGetValue(name, out var cached))
         {
-            return cached != null;
+            return cached;
         }
         if (Loader != null && _defs.TryGetValue(name, out var def))
         {
             var stream = Loader(def, false);
             _streams[name] = stream;
-            return stream != null;
+            return stream;
         }
-        return false;
+        return null;
     }
 
     /// <summary>
@@ -382,6 +400,7 @@ public sealed partial class WorldSounds : Node3D
         // Swept when it stops (Tick), no reliance on the Finished signal.
         _oneShots.Add(new OneShot { Player = player, Source = source });
         player.Play();
+        OneShotsStarted++;
         if (Debug)
         {
             GD.Print($"sound one-shot: {name}"

@@ -32,8 +32,8 @@ instances; the rest are conditional.
 | `left_cannons` / `right_cannons` | `[[node, deployAnim, retractAnim], …]` | the broadside guns and the animations that run them out and back in |
 | `cannon_health` | see below | per-cannon damage record (24 of 58 instances) |
 | `cannon_inaccuracy` | ° | on 3 instances: 10.0 on C2B/M04's pair, 6.0 on C4/M05's `blackhatzep`. An absent key scatters nothing — the remake reads it as 0 |
-| `team` | `enemy` / `ally` / `neutral` | 16 instances. The parser accepts all three names (case-insensitively) **and** a bare integer team id; this install only authors the names, and only two of the three |
-| `deactivated` | `[0]` / `[1]` | the KEY is on 9 instances but the VALUE decides: 7 author `1` (starts switched off, waiting on script), and C1/M04 + C2/M03 author `0` (active). Asserted in `CSVM.Tests/ZeppelinsTests.cs` |
+| `team` | `enemy` / `ally` / `neutral` | 16 instances. The parser accepts all three names (case-insensitively) **and** a bare integer team id; this install only authors the names, and only two of the three. The names mint ids in the one shared team space — `neutral` 0, `ally` 1, `enemy` 2 — and a bare integer is stored raw; the engine then fans that one value across the whole airship ([../org/targeting.md](../org/targeting.md), "Zeppelins carry a record override") |
+| `deactivated` | `[0]` / `[1]` | the KEY is on 9 instances but the VALUE decides: 7 author `1` (starts switched off, waiting on the script's `WAKEUP_ENEMIES`, and hidden until then — C3/M01's `cargozep1` is revealed by the same objective's `WAKE_ANIM fadein_cg1zep`, an opacity 0 → 1 fade), and C1/M04 + C2/M03 author `0` (active). Asserted in `CSVM.Tests/ZeppelinsTests.cs` |
 
 **`cannon_health` entry** —
 `[cannonNode, "gunback", "frame", gasbagName, hp, [destroyAnim], [[frac, stageAnim], …]]`.

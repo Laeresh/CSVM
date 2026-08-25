@@ -42,10 +42,11 @@ public static class TestHarness
         // Cap set just above the worst measured chapter (C2 4) so a new source still trips it.
         new ErrorAllowance(@"Condition ""det == 0"" is true\.", 8,
             "pre-existing singular-basis guard in the destructible death path (backlog: det == 0 invert error)"),
-        // A one-shot SOUND event whose anchor is read for its world position during the animation
-        // bootstrap, before the subtree is in the tree. Measured: C3 1, every other chapter 0.
-        new ErrorAllowance(@"Condition ""!is_inside_tree\(\)"" is true", 4,
-            "pre-existing bootstrap sound-position read on an out-of-tree anchor (backlog: C3 sound bind)"),
+        // An AT_NODE pose run during the animation bootstrap, before the world root is parented,
+        // which Godot's guard answers with identity for both transforms (BL-484). Measured at 4
+        // per CutsceneRoots world and three suites build one, so a fourth still trips this cap.
+        new ErrorAllowance(@"Condition ""!is_inside_tree\(\)"" is true", 16,
+            "pre-existing bootstrap AT_NODE pose on an out-of-tree node (backlog: BL-484)"),
     };
 
     // The engine's own error format (print_error): "ERROR: …", "SCRIPT ERROR: …", "USER ERROR: …".
@@ -463,6 +464,18 @@ public sealed class TestContext
     /// property held first — is never silently reused in its place.</summary>
     public IEmitterFactory? EmitterFactory { get; set; }
 
+    /// <summary>Extra sound-group names to prewarm for the next world this builds, a mission's own
+    /// vocabulary the anim program never sees (<c>ObjectiveScript.SoundGroupNames()</c>). Mutable,
+    /// the same reason <see cref="EmitterFactory"/> is: a suite sets it right before its own
+    /// <see cref="WithWorld(string, bool, Action{TestWorld})"/> call.</summary>
+    public IReadOnlyCollection<string>? ExtraPrewarmSoundNames { get; set; }
+
+    /// <summary>Builds the next world the way a STORY mission session does: the cutscene roots
+    /// stand up and the chapter's landings table resolves. Mutable for the reason
+    /// <see cref="EmitterFactory"/> is, and off by default because those roots add nodes a
+    /// per-chapter census counts.</summary>
+    public bool CutsceneRoots { get; set; }
+
     /// <summary>Where a suite parents anything that must be in the scene tree — a built plane whose
     /// markers are read by global transform, a chapter world whose death sequences are ticked.</summary>
     public required Node3D Host { get; init; }
@@ -516,7 +529,9 @@ public sealed class TestContext
 
     /// <summary>Leaves a suite's full report in the scratch folder, so a failure is diagnosable
     /// without re-running the equivalent <c>--dump-*</c> tool by hand. Absolute path, inside
-    /// <c>.scratch/</c> — the only place a suite may write.</summary>
+    /// <c>.scratch/</c>, where every suite artifact belongs. The one exception is a suite proving
+    /// persistence ACROSS processes: <c>.scratch/</c> is swept, so <c>campaign-loop</c> keeps its
+    /// own store under <c>user://Testing/</c>, never <c>user://Profiles</c>.</summary>
     public void WriteArtifact(string fileName, string text)
     {
         Directory.CreateDirectory(ScratchDir);
@@ -606,6 +621,9 @@ public sealed class TestContext
                 Collision = collision,
                 RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
                 EmitterFactory = EmitterFactory,
+                ExtraPrewarmNames = ExtraPrewarmSoundNames,
+                CutsceneRoots = CutsceneRoots,
+                LandingTriggers = CutsceneRoots,
                 TexturesOutliveBuild = archives.TexturesOutliveBuild,
                 SoundsOutliveBuild = archives.SoundsOutliveBuild,
             },

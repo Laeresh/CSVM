@@ -85,8 +85,14 @@ rejections: a generator whose `node` cannot be resolved is **dropped**, and so i
 of its `vehicle.nets` names resolve — a generator with no valid net does not load inert, it does not
 load at all.
 
-Smaller loader findings: `open_anim`/`close_anim` **default from the node name** when unauthored
-(`<node>_open_<nn>` / `close_<nn>`), so the 6 non-zeppelin generators still get a door pair;
+Smaller loader findings: `open_anim`/`close_anim` **default from the node name** when unauthored.
+The loader (`FUN_00452850`) formats `sprintf("%.5s_open%.2s", node, node + len - 2)`, the first
+five characters, `_open`, the last two, so `eairg31` asks for `eairg_open31`; it then formats
+`close%.2s` into a second buffer but looks the FIRST buffer up again, so an unauthored close
+resolves the open definition, and the close call replays the open. Three unauthored hosts ship
+the def that default names (C1's `eairg31`/`eairg32`, C2/M01's `eshipg31`, each a `cam_anim`
+def rooted on the host sliding its `ldoor`/`rdoor` 8 m over 4 s, the door lead); C3/M03's
+`barracuda` asks for `barra_openda` and gets nothing;
 `choose_nets` parses only its first letter and accepts **`random`** as well as the `cyclic` every
 file authors; and the `vehicle` block additionally accepts **`primary_target`** and **`title`**,
 neither authored in this install.
@@ -95,8 +101,8 @@ What the door names resolve to: every authored `open_anim`/
 `close_anim` is a **compiled `mis_anim` definition** — root `hangerdoors` under the host
 zeppelin, activation OnCall — whose sequences `OBJECT_MOTION_FROM_TO` the hull's `door_left`/
 `door_right` nodes 0 → ±90° about Z over **5 s** (close is the reverse), with the open's first
-event activating `cargobay`. No non-zeppelin host ships a def matching the node-name default, so
-that fallback resolves nothing in this install. Two placement facts that bite: the chapter can
+event activating `cargobay`. The ground hangars' defaulted defs above are the same shape at a
+smaller scale. Two placement facts that bite: the chapter can
 carry several `hangerdoors` namesakes (C1 has three — the zeppelin's and two ground hangars'),
 so a door call must be scoped to the host's subtree; and the `cargobay` origin node sits ON the
 bay floor inside the hull. The remake releases fighters exactly there: the decoded 1.5 s carrier

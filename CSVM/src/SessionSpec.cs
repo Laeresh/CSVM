@@ -61,6 +61,10 @@ public sealed record SessionSpec
     // the default `--frames=` screenshot lands mid-break-up rather than pre-impact.
     private const int DefaultCrashFrame = 5;
 
+    // The sim frame a bare `--debug-pause` (no `=frame`) opens the board at: one step, so the
+    // scripted pause is as early as a shot of the board alone can want it.
+    private const int DefaultDebugPauseFrame = 1;
+
     // The frame a bare `--hitch-inject=` (no `@frame`) fires at, in FrameCount's own space.
     // The wall-time margin this gives on the dev box is measured in docs/cli.md.
     private const int DefaultHitchInjectFrame = 300;
@@ -193,6 +197,16 @@ public sealed record SessionSpec
     /// the path; loading it is the runtime's job, which keeps this
     /// type free of file I/O.</summary>
     public string? IaPath { get; private set; }
+    /// <summary><c>--campaign=&lt;profile&gt;:&lt;seq&gt;</c>: a campaign session, a selected
+    /// <see cref="Session.CampaignProfileStore"/> profile plus a <c>cm_sequence.zrd</c> mission
+    /// index, carried here as plain values. Null when the flag was absent; loading the profile and
+    /// building the mission are the runtime's job, the contract <see cref="IaPath"/> keeps. No new
+    /// <see cref="SessionMode"/>: a content arg with no other mode vote resolves to
+    /// <see cref="SessionMode.Fly"/>, the same way <c>--stunt</c>/<c>--vs</c> ride it.</summary>
+    public string? CampaignProfile { get; private set; }
+    /// <summary>The <c>:&lt;seq&gt;</c> half of <c>--campaign=</c>; null when it was omitted or
+    /// unparseable, in which case a warning is recorded and only the profile name is kept.</summary>
+    public int? CampaignMissionSeq { get; private set; }
     /// <summary>Set only by <see cref="FromMenu"/>: the launchscreen wizard's own built
     /// <c>InstantActionDef</c>, null on every CLI launch since <c>--ia=</c> carries a path
     /// instead. Only ever carried onto the record here, never loaded or built — the same
@@ -514,6 +528,20 @@ public sealed record SessionSpec
 
     public bool DebugScoreboard { get; private set; }
 
+    /// <summary><c>--debug-pause[=frame]</c>: open the pause board at that sim frame, the scripted
+    /// twin of the Start press, so a <c>--screenshot</c> captures the pause screen with nobody at
+    /// the controls. A frame late enough for the mission to have run is the point: the objectives
+    /// readout is drawn there, and it can only show a completion the sim has actually reached.
+    /// Null when the flag was absent.</summary>
+    public int? DebugPauseFrame { get; private set; }
+
+    /// <summary><c>--debug-objective=N</c>: wake campaign objective N on the first sim step, the
+    /// scripted twin of whatever the mission normally wakes it with. A dormant objective cannot
+    /// complete, so this is what lets a headless run reach a completion (pair it with
+    /// <c>--destroy=</c> on the nodes its INACTIVEn conditions name). Null when the flag was
+    /// absent.</summary>
+    public int? DebugObjective { get; private set; }
+
     /// <summary><c>--debug-wash=N</c>: address two scripted blend washes to viewer N (1-based)
     /// through <c>ScreenFlash.PlayBlend</c>, a red one on the first sim step and a white one two
     /// seconds later, so the victim-routed channel and its blending can be seen at the controls
@@ -755,6 +783,9 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--paint-seed=")) { s.PaintSeed = ulong.Parse(arg["--paint-seed=".Length..]); s.PaintSeedExplicit = true; }
             else if (arg.StartsWith("--rof=")) { s.Rof = arg["--rof=".Length..]; }
             else if (arg == "--debug-scoreboard") { s.DebugScoreboard = true; }
+            else if (arg == "--debug-pause") { s.DebugPauseFrame = DefaultDebugPauseFrame; }
+            else if (arg.StartsWith("--debug-pause=")) { s.DebugPauseFrame = int.Parse(arg["--debug-pause=".Length..]); }
+            else if (arg.StartsWith("--debug-objective=")) { s.DebugObjective = int.Parse(arg["--debug-objective=".Length..]); }
             else if (arg.StartsWith("--debug-wash=")) { s.DebugWash = int.Parse(arg["--debug-wash=".Length..]); }
             else if (arg == "--debug-markers") { s.DebugMarkers = true; }
             else if (arg == "--debug-spectate") { s.DebugSpectate = true; }
@@ -970,6 +1001,23 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--mission=")) { s.Mission = arg["--mission=".Length..]; }
             else if (arg.StartsWith("--scenario=")) { s.Scenario = arg["--scenario=".Length..]; s.ScenarioExplicit = true; }
             else if (arg.StartsWith("--ia=")) { s.IaPath = arg["--ia=".Length..]; }
+            else if (arg.StartsWith("--campaign="))
+            {
+                string val = arg["--campaign=".Length..];
+                int lastColon = val.LastIndexOf(':');
+                if (lastColon > 0
+                    && int.TryParse(val[(lastColon + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out int seq))
+                {
+                    s.CampaignProfile = val[..lastColon];
+                    s.CampaignMissionSeq = seq;
+                }
+                else
+                {
+                    s.CampaignProfile = val;
+                    notes.Add(new Note("core", $"--campaign={val} has no ':<seq>' mission index — profile only, no mission chosen"));
+                }
+                s.HasContentArg = true;
+            }
             else if (arg.StartsWith("--spawn=")) { s.SpawnIndex = int.Parse(arg["--spawn=".Length..]); }
             else if (arg.StartsWith("--spawn-at=")) { s.SpawnAt = ParseVec3(arg["--spawn-at=".Length..]); Deprecate("--spawn-at", "--pos"); }
             else if (arg.StartsWith("--spawn-dir=")) { s.SpawnDir = ParseVec3(arg["--spawn-dir=".Length..]); Deprecate("--spawn-dir", "--direction"); }
@@ -1100,6 +1148,31 @@ public sealed record SessionSpec
         };
     }
 
+    /// <summary>The campaign cabin's FLY MISSION, <see cref="FromMenu"/>'s counterpart for a story
+    /// mission: the profile and story position <c>--campaign=</c> would name, plus the pilot's
+    /// aircraft. The chapter and mission are NOT settled here: they come out of
+    /// <c>cm_sequence.zrd</c>, so <see cref="Session.CampaignDirector.ResolveSpec"/> resolves them
+    /// in the session's constructor as for a command-line <c>--campaign=</c>. ⚠ Derived from
+    /// <paramref name="cli"/>, the pristine command line, as <see cref="FromMenu"/> is.</summary>
+    public static SessionSpec FromCampaign(SessionSpec cli, string profile, int seq,
+        string planeNode, LoadoutChoice? fit = null, CustomPlaneDef? custom = null) =>
+        cli with
+        {
+            CampaignProfile = profile,
+            CampaignMissionSeq = seq,
+            MenuLoadouts = new[] { fit },
+            MenuCustomPlanes = new[] { custom },
+            PlaneNames = new[] { planeNode },
+            PlaneName = planeNode,
+            Players = 1,
+            Stunt = false,
+            Versus = false,
+            IaDef = null,
+            Mode = SessionMode.Fly,
+            WorldMode = true,
+            ChapterGiven = true,
+        };
+
     /// <summary>Parse <c>--plane=</c>: one node name, or a comma-separated list — one plane per
     /// player for splitscreen (the launchscreen's simultaneous pick produces the same list).</summary>
     public static IReadOnlyList<string> ParsePlanes(string value)
@@ -1227,6 +1300,20 @@ public sealed record SessionSpec
         }
         return (Flt(s), alloc, frame);
     }
+
+    /// <summary>A copy pointed at the chapter and mission a <c>--campaign=</c> story position
+    /// resolves to. Resolving it needs <c>cm_sequence.zrd</c> off disk, which this type never
+    /// touches, so <see cref="Session.CampaignDirector.ResolveSpec"/> reads the sequence and calls
+    /// this; the rest of the build then sees an ordinary chapter/mission session.</summary>
+    public SessionSpec WithCampaignMission(string chapter, string mission) =>
+        this with { Chapter = chapter, Mission = mission, ChapterGiven = true };
+
+    /// <summary>A copy with <see cref="Zeppelins"/>/<see cref="Generators"/> turned on for a
+    /// campaign mission that ships the data; <see cref="Session.GameSession"/> calls this once
+    /// <see cref="WithCampaignMission"/> has settled the chapter/mission <see cref="FromCampaign"/>
+    /// could not yet know. ORs rather than overwrites, so an explicit CLI flag survives.</summary>
+    public SessionSpec WithCampaignZeppelins(bool hasZeppelins, bool hasGenerators) =>
+        this with { Zeppelins = Zeppelins || hasZeppelins, Generators = Generators || hasGenerators };
 
     private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 

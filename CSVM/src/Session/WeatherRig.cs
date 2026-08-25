@@ -98,6 +98,11 @@ public sealed class WeatherRig
     // mission that has none.
     private WorldWind _wind = WorldWind.Still();
 
+    // Whether Build has written its zone yet, and the FOG_STATE received before it did. The
+    // world's animations start inside the world build, ahead of this rig.
+    private bool _zoneWritten;
+    private AnimRuntime.FogStateChange? _pendingFogState;
+
     public WeatherRig(SessionSpec spec, Node3D worldRoot, DirectionalLight3D sun,
         EffectAmbience? ambience = null, ViewerSet? viewers = null)
     {
@@ -108,6 +113,11 @@ public sealed class WeatherRig
         _ambience = ambience ?? new EffectAmbience();
         _viewers = viewers ?? new ViewerSet();
     }
+
+    /// <summary>The fog this rig last wrote into the three <c>csky_fog_*</c> globals (colour in
+    /// linear, range and altitude in metres). A mirror, because the renderer refuses to read a
+    /// global back outside the editor; it is what a suite asserts a fog change by.</summary>
+    public FogWritten FogGlobals { get; private set; }
 
     /// <summary>The deck's regime for one camera: the tiles' own world-fixed altitude in every
     /// regime, wearing the dimmed underside below <paramref name="bandCentre"/> and the undimmed
@@ -141,6 +151,40 @@ public sealed class WeatherRig
         LoadWeather(missionZrdrPath, horizonZones);
         buildDomes(_activeZone);
         SetupWeather(rigs);
+        _zoneWritten = true;
+        if (_pendingFogState is { } pending)
+        {
+            _pendingFogState = null;
+            ApplyFogState(pending);
+        }
+    }
+
+    /// <summary>An animation's <c>FOG_STATE</c>: writes only the fields the event carries onto the
+    /// fog globals <c>ApplyZone</c> owns, and the next camera-state edge writes the zone back over
+    /// them, the original's own last-writer order (both go through one fog record, decoded in
+    /// docs/org/weather.md). Before <see cref="Build"/> the event is held and applied after the
+    /// zone. <c>--no-fog</c> keeps the range out of reach, as it does for the zone.</summary>
+    public void ApplyFogState(AnimRuntime.FogStateChange fog)
+    {
+        if (!_zoneWritten)
+        {
+            _pendingFogState = fog;
+            return;
+        }
+        if (fog.Color is { } color)
+        {
+            var linear = color.SrgbToLinear();
+            WriteFogColor(new Vector3(linear.R, linear.G, linear.B));
+        }
+        if (fog.Range is { } range && !_spec.NoFog)
+            WriteFogRange(range);
+        if (fog.Altitude is { } altitude)
+            WriteFogAltitude(altitude);
+        GD.Print($"weather: FOG_STATE '{fog.Name}' over zone '{_activeZone}': "
+                 + (fog.Color is { } c ? $"fog {c.R:0.00} gray, " : "")
+                 + (fog.Range is { } r ? $"range {r.X:0}–{r.Y:0} m, " : "")
+                 + (fog.Altitude is { } a ? $"altitude {a.X:0}–{a.Y:0} m" : "")
+                 + (_spec.NoFog ? " (--no-fog: range untouched)" : ""));
     }
 
     /// <summary>The deck geometry's original AABB centre, so <see cref="Tick"/> can re-anchor it
@@ -559,19 +603,18 @@ public sealed class WeatherRig
         // FOG_COLOR is a DX7-era sRGB framebuffer value; the shader mixes ALBEDO in linear
         // space, so convert here. See docs/org/weather.md for the 176-gray measurement.
         var fogLinear = fog.FogColor.SrgbToLinear();
-        RenderingServer.GlobalShaderParameterSet("csky_fog_color",
-            new Vector3(fogLinear.R, fogLinear.G, fogLinear.B));
+        WriteFogColor(new Vector3(fogLinear.R, fogLinear.G, fogLinear.B));
         // ⚠ Do not scale the authored fog ranges. VIEWING_RANGE ships FOG_SCALE 1.0 at HIGH in
         // every chapter, and no screenshot residual licenses re-opening it — see
         // docs/org/weather.md.
         var fogRange = _spec.NoFog
             ? new Vector2(1e8f, 1e9f)   // out of reach; --no-fog writes the range, not the unused csky_fog_on toggle
             : new Vector2(fog.FogNear, fog.FogFar);
-        RenderingServer.GlobalShaderParameterSet("csky_fog_range", fogRange);
+        WriteFogRange(fogRange);
         // FOG_ALTITUDE: the fog cylinder's vertical extent — full fog below FogLow, fading to
         // none at FogHigh (FRAGMENT altitude, settled in C2 at the controls of the original —
         // see csky_atmosphere.gdshaderinc and docs/org/weather.md).
-        RenderingServer.GlobalShaderParameterSet("csky_fog_alt", new Vector2(fog.FogLow, fog.FogHigh));
+        WriteFogAltitude(new Vector2(fog.FogLow, fog.FogHigh));
         // World brightness from the zone's SUNLIGHT, applied as a scalar on the fullbright
         // world/deck/dome. Applied in gamma space, matching the DX7 baked-lighting chain — see
         // docs/org/weather.md for the measured gamma-vs-linear difference.
@@ -613,6 +656,7 @@ public sealed class WeatherRig
                 rig.Whiteout.SetAnchorsPreset(Control.LayoutPreset.FullRect);
                 canvas.AddChild(rig.Whiteout);
                 rig.HudParent.AddChild(canvas);
+                rig.WorldOverlays.Add(canvas);
             }
         }
 
@@ -623,6 +667,27 @@ public sealed class WeatherRig
         if (_precip != null)
             _worldRoot.AddChild(_precip);
     }
+
+    private void WriteFogColor(Vector3 linear)
+    {
+        RenderingServer.GlobalShaderParameterSet("csky_fog_color", linear);
+        FogGlobals = FogGlobals with { ColorLinear = linear };
+    }
+
+    private void WriteFogRange(Vector2 range)
+    {
+        RenderingServer.GlobalShaderParameterSet("csky_fog_range", range);
+        FogGlobals = FogGlobals with { Range = range };
+    }
+
+    private void WriteFogAltitude(Vector2 altitude)
+    {
+        RenderingServer.GlobalShaderParameterSet("csky_fog_alt", altitude);
+        FogGlobals = FogGlobals with { Altitude = altitude };
+    }
+
+    /// <summary>The three fog globals as last written (<see cref="FogGlobals"/>).</summary>
+    public readonly record struct FogWritten(Vector3 ColorLinear, Vector2 Range, Vector2 Altitude);
 
     /// <summary>What one camera-state change asks the fog chain to do: which state it is, the zone
     /// that state resolved to, whether the globals need re-writing at all

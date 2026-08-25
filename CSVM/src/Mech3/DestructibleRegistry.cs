@@ -144,6 +144,25 @@ public sealed class DestructibleRegistry
         public float Health { get; set; }
         public State Status { get; set; } = State.Healthy;
 
+        /// <summary>The owning side, where the mission data names one, or null where nothing does.
+        /// Only a zeppelin record authors one today (docs/org/targeting.md "The team space"); a null
+        /// reaches the candidate builder as neutral, so the object is nobody's target.
+        /// ⚠ Never write a literal here for an unauthored object. Doing so is what made every
+        /// crate and every gasbag hostile to all comers.</summary>
+        public int? Team { get; set; }
+
+        /// <summary>Out of play: the pool exists, but its object is not in the world yet — a
+        /// mission's <c>deactivated</c> zeppelin before its script wakes it. Refused as a target
+        /// while set. ⚠ Not a death state: <see cref="Status"/> stays healthy and the HP stands.</summary>
+        public bool Dormant { get; set; }
+
+        /// <summary>The name of the mission entity this pool is a PART of, where one owns it — a
+        /// zeppelin record's node name on each of its zones. Null for scenery, which belongs to
+        /// nothing. A zone's own anchor is named `gasbag1`/`leng11`, so this is the only identity a
+        /// `rating_biases` pattern naming the airship can match
+        /// (<see cref="Flight.AiTargetRanking.ObjectiveBiasFor"/>).</summary>
+        public string? Owner { get; set; }
+
         /// <summary>How many of the DAMAGE_SEQUENCE's descending health thresholds this instance
         /// has fallen past — the deepest progressive-damage stage it has escalated to. Only ever
         /// increases (damage escalates, never heals), so a stage effect fires exactly once; a

@@ -172,11 +172,12 @@ public static class AimAssist
     /// particular pilot's default.</summary>
     public const int PlayerTeam = 1;
 
-    /// <summary>The team CSVM's world objects (destructibles) sit on: hostile to every pilot, since
-    /// nothing CSVM reads out of the world data makes them anyone's own.
-    /// ⚠ A remake-only rule: the original leaves an unauthored world object NEUTRAL, and so
-    /// untargetable (docs/org/targeting.md "The team space"). Do not port that until the ownership
-    /// field is read, or the gun assist goes quiet over every ground target — <c>BL-407</c>.</summary>
+    /// <summary>The team a selectable zeppelin sub-part takes when its record authors none, so it
+    /// lands on the player's Enemy cycle rather than the Ally one
+    /// (<see cref="Session.ZeppelinRuntime.CollectTargetParts"/>, the only reader left).
+    /// ⚠ A remake-only rule, and the SELECTION cycle's alone. Hostility does not use it: an
+    /// unauthored world object is neutral there, which is the original's own fall-through
+    /// (docs/org/targeting.md "World objects are in the same space, and are normally neutral").</summary>
     public const int WorldTeam = 100;
 
     /// <summary>Where the extra humans of a splitscreen <c>--vs</c> session sit, clear of every id
@@ -488,19 +489,20 @@ public sealed class AimCandidateSet
         Ordnance.Add(Make(position, velocity, team, live: true, source, coneOverride));
 
     /// <summary>Every registered destructible that is not already destroyed, as structure
-    /// candidates. <paramref name="team"/> defaults to <see cref="AimAssist.WorldTeam"/> — the
-    /// world's shootables are nobody's own, so they are hostile to every pilot; CSVM has no team
-    /// data to read this from. An anchor outside the tree is skipped rather than read (its global
-    /// transform is meaningless until it is in one).</summary>
-    public void AddStructures(DestructibleRegistry registry, int team = AimAssist.WorldTeam)
+    /// candidates. A pool carrying <see cref="DestructibleRegistry.Instance.Team"/> uses it; a pool
+    /// carrying none falls through to <see cref="AimAssist.NeutralTeam"/> and is nobody's target,
+    /// the original's own rule (docs/org/targeting.md "World objects are in the same space, and are
+    /// normally neutral"). Skipped: an anchor outside the tree (its global transform is meaningless
+    /// until it is in one) and a dormant pool, whose object is not in the world yet.</summary>
+    public void AddStructures(DestructibleRegistry registry)
     {
         foreach (var inst in registry.All)
         {
-            if (!inst.Anchor.IsInsideTree())
+            if (inst.Dormant || !inst.Anchor.IsInsideTree())
             {
                 continue;
             }
-            AddStructure(inst.Anchor.GlobalPosition, team,
+            AddStructure(inst.Anchor.GlobalPosition, inst.Team ?? AimAssist.NeutralTeam,
                 inst.Status != DestructibleRegistry.State.Destroyed, inst);
         }
     }

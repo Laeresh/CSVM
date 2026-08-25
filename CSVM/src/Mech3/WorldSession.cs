@@ -46,6 +46,18 @@ public sealed class WorldSession
     /// teardown) so a rebuild drops the previous world's lights.</summary>
     public WorldLights Lights { get; private set; } = null!;
 
+    /// <summary>The chapter's <c>landings.zrd</c> approach triggers this mission can run, resolved
+    /// against the built gamez. Empty unless <see cref="Options.CutsceneRoots"/> asked for them,
+    /// and empty in any mission carrying none of the chapter's approach animations.</summary>
+    public IReadOnlyList<LandingApproach> Landings { get; private set; } =
+        Array.Empty<LandingApproach>();
+
+    /// <summary>Every definition those triggers can reach, their own plus the
+    /// <c>CALL_ANIMATION</c> closure: what a cutscene host has to answer for, asked by definition
+    /// rather than by callback code.</summary>
+    public IReadOnlyList<string> LandingCutsceneAnims { get; private set; } =
+        Array.Empty<string>();
+
     /// <summary>Build the world named <c>world1</c> and bind its animation program. The archives
     /// are the caller's <c>using</c> locals — see the disposal-lifetime contract on the class.
     /// ⚠ Keep each phase's <see cref="StartupProfile.Record"/> call next to its step; moving one
@@ -84,6 +96,9 @@ public sealed class WorldSession
         {
             GD.Print($"effect cycles: {effectCycles.Count} material(s): " + string.Join(", ", effectCycles));
         }
+        // The area-selected toggles are resolved to gamez node indices here, while the gamez is in
+        // hand: Apply runs inside the animation bootstrap, which sees only the built tree.
+        missionSetup?.BindPartitions(gamez);
         mark = StartupProfile.Mark();
         var builder = new WorldBuilder(gamez, textures, collision: o.Collision,
             scrollOverrides: missionSetup?.ScrollByModel(gamez),
@@ -187,6 +202,12 @@ public sealed class WorldSession
             chapterAnimPath, missionAnimPath);
         StartupProfile.Record("anim", mark);
         s.Program = animProgram;
+        if (o.LandingTriggers)
+        {
+            s.Landings = LandingApproaches.Resolve(
+                chapterZrdrPath, gamez, name => animProgram.ByAnimName(name).Count > 0);
+            s.LandingCutsceneAnims = CutsceneAnimsOf(animProgram, s.Landings);
+        }
         // Puffer factory retirement: see Options.TexturesOutliveBuild.
         var lights = new WorldLights();
         s.Lights = lights;
@@ -230,6 +251,12 @@ public sealed class WorldSession
             SuppressRootLift = o.NodeSubtree != null,
         };
         s.Runtime = animRuntime;
+        animRuntime.CallbackHost = o.CallbackHost;
+        animRuntime.FogStateSink = o.FogStateSink;
+        if (o.CutsceneRoots && (BootstrapsCutscene(animProgram) || s.Landings.Count > 0))
+        {
+            BuildCutsceneRoots(root, gamez, builder);
+        }
         // The emitter pool has to be in the tree before the bootstrap builds into it.
         if (animRuntime.Sounds is { } worldSounds)
         {
@@ -309,6 +336,10 @@ public sealed class WorldSession
                 GD.Print($"anim: prewarmed {voiced} combat-voice stream(s) "
                          + $"of {voiceNames.Count} roster clip def(s)");
             }
+            if (o.ExtraPrewarmNames is { Count: > 0 } extraNames)
+            {
+                prewarmed += builtSounds.Prewarm(extraNames);
+            }
             StartupProfile.Record("prewarm", mark);
             if (prewarmed > 0)
             {
@@ -322,6 +353,79 @@ public sealed class WorldSession
         root.AddChild(animRuntime);
 
         return s;
+    }
+
+    // Does this mission bootstrap one of the story-mission intros? ⚠ Ask by name, not by the
+    // callback codes: Instant Action's own `player_setup` authors the same nine, so a code test
+    // would give every mission in the install a cutscene camera and a held world.
+    private static bool BootstrapsCutscene(AnimProgram program)
+    {
+        foreach (string name in program.StartAnims)
+        {
+            if (Session.CutsceneController.IsIntro(name))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Every definition the chapter's approach triggers can raise a callback from: the row's own
+    // animation plus what it reaches by CALL_ANIMATION, which is where the drop and hookup movies
+    // actually live (the row's definition only aims the drop and calls one).
+    private static List<string> CutsceneAnimsOf(
+        AnimProgram program, IReadOnlyList<LandingApproach> landings)
+    {
+        var roots = new List<string>(landings.Count);
+        foreach (var approach in landings)
+        {
+            roots.Add(approach.Anim);
+        }
+
+        var names = new List<string>();
+        foreach (var def in program.Subset(roots).Defs)
+        {
+            if (def.AnimName is { } name && !names.Contains(name))
+            {
+                names.Add(name);
+            }
+        }
+
+        return names;
+    }
+
+    // The two roots a cutscene definition drives, neither of which the world1 walk reaches: the
+    // bodiless `camera1` the definitions pose, and the parentless `letterbox` bars, built here so
+    // the bind anchors both and the shared letterbox definition's own base state switches the bars
+    // off. Standing them up before the bind is what makes the bars data rather than an overlay
+    // (docs/formats/anim-definitions/cutscenes.md).
+    private static void BuildCutsceneRoots(Node3D root, GameZ gamez, WorldBuilder builder)
+    {
+        var camera = new Node3D { Name = Session.CutsceneController.CameraNode };
+        // ⚠ Stamp the gamez index a scene-built node would carry. Every compiled cutscene binds
+        // `camera1` through its symbol table, and a claimed index with no node behind it makes
+        // AnimRuntime.Targets drop the event rather than name-match around it.
+        if (gamez.FindByName(Session.CutsceneController.CameraNode) is { } cameraNode)
+        {
+            camera.SetMeta(AnimRuntime.NameMeta, cameraNode.Name);
+            camera.SetMeta(AnimRuntime.IndexMeta, cameraNode.Index);
+        }
+
+        root.AddChild(camera);
+        if (gamez.FindByName(Session.CutsceneController.BarsNode) is not { } bars)
+        {
+            return;
+        }
+
+        if (builder.Scene.BuildSubtree(bars, collisionSkip: _ => true) is not { } built)
+        {
+            return;
+        }
+
+        built.Transform = Transform3D.Identity;
+        AnimRuntime.SetSubtreeActive(built, false);
+        root.AddChild(built);
     }
 
     // Stamps SceneBuilder.ClutterColor onto every clutter draw under
@@ -438,6 +542,12 @@ public sealed class WorldSession
         /// talk is session policy, not world-build mechanics.</summary>
         public IReadOnlyCollection<string>? VoiceClipNames { get; init; }
 
+        /// <summary>Extra sound-group names to prewarm alongside the anim program's own, for a
+        /// vocabulary <see cref="AnimProgram"/> never sees (the campaign's
+        /// <c>ObjectiveScript.SoundGroupNames()</c> is the only caller today). Null or empty (the
+        /// default) prewarms nothing extra: a non-campaign session has no such names.</summary>
+        public IReadOnlyCollection<string>? ExtraPrewarmNames { get; init; }
+
         /// <summary>The caller's <see cref="SoundArchive"/> outlives this build, so
         /// <c>WorldSounds.Loader</c> stays live for names the prewarm did not reach. Separate from
         /// <see cref="TexturesOutliveBuild"/> because the lifetimes are separate: a game session
@@ -458,6 +568,30 @@ public sealed class WorldSession
         /// construction — sealed onto the runtime's template stage, not writable
         /// afterwards.</summary>
         public bool PlacesCalledTemplates { get; init; }
+
+        /// <summary>Build the two roots a cutscene definition drives (<c>camera1</c> and the
+        /// <c>letterbox</c> bars), which the <c>world1</c> walk never reaches. False (default)
+        /// leaves every session's node census exactly as it was; a flown chapter session sets it,
+        /// because that is where an intro definition can play.</summary>
+        public bool CutsceneRoots { get; init; }
+
+        /// <summary>Resolve the chapter's <c>landings.zrd</c> approach triggers. Set by a STORY
+        /// mission only. ⚠ Not by an Instant Action one, although the original's shared mission
+        /// load arms the table there too: C3/IA1 carries <c>hooked_to_klondike</c> and ships its
+        /// <c>pz_manual_land/land_on</c> active, so arming it would give an Instant Action sortie a
+        /// docking cutscene. Whether the original means to is undecoded
+        /// (docs/formats/anim-definitions/cutscenes.md).</summary>
+        public bool LandingTriggers { get; init; }
+
+        /// <summary>The <c>CALLBACK</c> host installed on the world runtime before the bootstrap
+        /// starts anything, since an intro definition raises its codes the instant it starts. Null
+        /// leaves every code to the runtime's own two seams and its census.</summary>
+        public Func<int, string?, bool>? CallbackHost { get; init; }
+
+        /// <summary>Where a <c>FOG_STATE</c> event goes, installed before the bootstrap for the
+        /// same reason as <see cref="CallbackHost"/>: the one shipped use is in an intro
+        /// definition's RESET_STATE, applied while the world is still being built.</summary>
+        public Action<AnimRuntime.FogStateChange>? FogStateSink { get; init; }
 
         /// <summary>Pins the runtime's RNG for a reproducible run (see
         /// <see cref="AnimRuntime.Seed"/>). Null — the default — leaves it unseeded: the game.</summary>

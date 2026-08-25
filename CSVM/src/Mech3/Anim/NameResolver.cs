@@ -261,6 +261,11 @@ public sealed class NameResolver<TNode>
         return true;
     }
 
+    /// <summary>The world node bound to a gamez node index, or null when this build never created
+    /// it. The by-index map is the only way to reach a node the caller cannot name, which is what
+    /// an area-selected toggle needs; it is empty on a <see cref="NameResolveFallback"/> runtime.</summary>
+    public TNode? ByGamezIndex(int index) => _byIndex.TryGetValue(index, out var node) ? node : null;
+
     /// <summary>Opens the bind-census window (a no-op unless <see cref="ReportResolution"/>): the
     /// owning runtime calls this before its bootstrap passes and <see cref="CloseCensus"/> after
     /// them, so the census is a statement about what the BIND could reach — a later runtime miss

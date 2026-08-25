@@ -125,6 +125,14 @@ public static class AiControlLaw
     private const float LeadSpeedHi = 102.880005f;  // 230 mph
     private const float LeadSlope = 1.8516719f;     // metres of offset per m/s between the two
 
+    /// <summary>The ceiling a station-keeping escort flies under: the decoded one, or the leader's
+    /// speed plus <see cref="DesiredSpeedBand"/> when the leader is faster. ⚠ A remake-only lift,
+    /// not a decoded value: <see cref="SpeedCeiling"/> sits below a fighter's own cruise
+    /// (<c>fd_speed</c> is 302 mph on a Bloodhawk), so under it an escort throttles back the moment
+    /// it passes 250 mph and never rejoins. Keep it keyed on station-keeping alone.</summary>
+    public static float StationCeiling(float leaderSpeed) =>
+        Mathf.Max(SpeedCeiling, leaderSpeed + DesiredSpeedBand);
+
     /// <summary>How far ahead of a target, along the target's own facing, the combat driver puts
     /// the aim point (<c>FUN_0041d9f0</c>): 350 ft at or below 46 mph, ramping linearly to 850 ft
     /// at or above 230 mph. This is the driver's, not the law's, and lives here because it is the
@@ -136,10 +144,12 @@ public static class AiControlLaw
 
     /// <summary>One step's stick and throttle for an aim point. <paramref name="emergency"/> is the
     /// crash-recovery arm; <paramref name="engaged"/> is the combat driver's authority bonus;
-    /// <paramref name="gunLead"/> swaps the fly-to solve for a firing solution.</summary>
+    /// <paramref name="gunLead"/> swaps the fly-to solve for a firing solution.
+    /// <paramref name="stationKeeping"/> swaps the desired-speed ceiling for
+    /// <see cref="StationCeiling"/>, and is the escort's alone.</summary>
     public static FlightInput Steer(FlightModel model, Vector3 aimPoint, Vector3 aimVelocity,
         in AiLawParams p, float throttle, float dt, bool emergency = false, bool engaged = false,
-        bool gunLead = false, float skillFactor = 1f)
+        bool gunLead = false, float skillFactor = 1f, bool stationKeeping = false)
     {
         var stats = model.Stats;
         var att = model.Attitude;
@@ -169,7 +179,7 @@ public static class AiControlLaw
         if (rangeSq < 1e-6f)
             return new FlightInput { Throttle = Mathf.Clamp(throttle, 0f, 1f) };
 
-        float want = DesiredSpeed(stats, delta, rangeSq, aimVelocity, p, emergency, noseY);
+        float want = DesiredSpeed(stats, delta, rangeSq, aimVelocity, p, emergency, noseY, stationKeeping);
         var aimDir = AimDirection(model, pos, aimPoint, aimVelocity, delta, want, gunLead);
 
         float bx = aimDir.Dot(att.X);   // + = the aim point is to the right
@@ -260,7 +270,7 @@ public static class AiControlLaw
     }
 
     private static float DesiredSpeed(PlaneStats stats, Vector3 delta, float rangeSq,
-        Vector3 aimVelocity, in AiLawParams p, bool emergency, float noseY)
+        Vector3 aimVelocity, in AiLawParams p, bool emergency, float noseY, bool stationKeeping)
     {
         if (emergency)
         {
@@ -289,7 +299,7 @@ public static class AiControlLaw
         // That order is the original's and it matters when fd_speed · SpeedCap is itself tiny.
         float cap = stats.FdSpeed * p.SpeedCap;
         want = want > cap ? cap : Mathf.Max(want, MinDesiredSpeed);
-        return Mathf.Clamp(want, 0f, SpeedCeiling);
+        return Mathf.Clamp(want, 0f, stationKeeping ? StationCeiling(aimSpeed) : SpeedCeiling);
     }
 
     private static Vector3 AimDirection(FlightModel model, Vector3 pos, Vector3 aimPoint,

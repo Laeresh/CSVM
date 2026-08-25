@@ -1,0 +1,319 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using Godot;
+
+namespace CSVM.UI;
+
+/// <summary>
+/// Draws a <see cref="ComposedBoard"/> over the whole window: the authored 800x600 composition
+/// mapped through <see cref="BoardFit"/>, letterboxed, sampled nearest so the original's pixel grid
+/// stays hard instead of turning soft on a large display. Owns nothing but its texture cache; what
+/// a screen is made of is <see cref="CampaignBoards"/>'s, and where the cursor is the shell's.
+/// </summary>
+public sealed partial class ComposedBoardView : Control
+{
+    // The controls hint and the focused row's description. Neither is the original's chrome, which
+    // said both with a mouse pointer; a pad player has no pointer, so the board says it in words.
+    private const float HintFont = 12f;
+
+    // How many characters of a description the one-line hint band holds at the authored width.
+    private const int HintCap = 110;
+
+    // The band's own height in authored pixels: two lines and a little air.
+    private const float HintBand = 32f;
+
+    // How far a synthetic italic leans, as the shear of one em. The extraction ships no italic
+    // face, so a slanted draw of the board's own face is the stand-in for the original's; the
+    // value is chosen to read like the reference screenshot's note, not decoded from anything.
+    private const float Slant = 0.25f;
+
+    private readonly Dictionary<string, Texture2D?> _textures = new();
+
+    private FontVariation? _slanted;
+
+    private ComposedBoard? _board;
+    private string _dataRoot = string.Empty;
+    private string _detail = string.Empty;
+    private string _footer = string.Empty;
+    private BoardPalette _palette = BoardPalette.Paper;
+
+    /// <summary>The board last handed to <see cref="Show"/>, which is what the surface is
+    /// drawing.</summary>
+    public ComposedBoard? Board => _board;
+
+    /// <summary>Builds the view over the extraction root its art loads from.</summary>
+    public static ComposedBoardView Build(string dataRoot)
+    {
+        var view = new ComposedBoardView
+        {
+            _dataRoot = dataRoot,
+            MouseFilter = MouseFilterEnum.Ignore,
+            TextureFilter = TextureFilterEnum.Nearest,
+        };
+        view.SetAnchorsPreset(LayoutPreset.FullRect);
+        return view;
+    }
+
+    /// <summary>How tall an entry of <paramref name="note"/> draws, in authored pixels, for the
+    /// font and scale a frame is being drawn at. This is the measurement <see cref="BoardNote"/>
+    /// cannot make for itself, and the only reason a flowed list is not composed engine-free.</summary>
+    public static Func<string, float, float> Measure(BoardFit fit, Font font, BoardNote note)
+    {
+        int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(note.Size)));
+        return (text, width) => font.GetMultilineStringSize(
+            text, HorizontalAlignment.Left, fit.Length(width), points).Y / fit.Scale;
+    }
+
+    /// <summary>Puts a composed board on screen, with the two lines the shell adds under it.</summary>
+    public void Show(ComposedBoard board, BoardPalette palette, string detail, string footer)
+    {
+        _board = board;
+        _palette = palette;
+        _detail = detail;
+        _footer = footer;
+        QueueRedraw();
+    }
+
+    /// <inheritdoc/>
+    public override void _Draw()
+    {
+        var size = GetViewportRect().Size;
+        var fit = BoardFit.For(size.X, size.Y);
+        DrawRect(new Rect2(Vector2.Zero, size), Colors.Black);
+        if (_board is not { } board)
+        {
+            return;
+        }
+
+        foreach (var picture in board.Pictures)
+        {
+            DrawPicture(fit, picture);
+        }
+
+        foreach (var stroke in board.Strokes)
+        {
+            DrawLine(
+                new Vector2(fit.X(stroke.X1), fit.Y(stroke.Y1)),
+                new Vector2(fit.X(stroke.X2), fit.Y(stroke.Y2)),
+                new Color(stroke.R / 255f, stroke.G / 255f, stroke.B / 255f, stroke.Opacity),
+                Mathf.Max(1f, fit.Length(2f)));
+        }
+
+        var font = GetThemeDefaultFont();
+        foreach (var line in board.Lines)
+        {
+            DrawText(fit, line.Italic ? Slanted(font) : font, line);
+        }
+
+        foreach (var note in board.Notes)
+        {
+            DrawNote(fit, font, note);
+        }
+
+        foreach (var plaque in board.Plaques)
+        {
+            DrawPlaque(fit, font, plaque);
+        }
+
+        DrawHints(fit, font);
+    }
+
+    // The hint band is one line, so a multi-line description is joined and cut rather than allowed
+    // to run off both edges of the board.
+    private static string Flatten(string text)
+    {
+        string one = text.Replace('\n', ' ').Replace('\r', ' ');
+        return one.Length <= HintCap ? one : one[..HintCap] + "…";
+    }
+
+    // One frame of a stacked strip, in texture pixels. A strip's frames divide its height evenly,
+    // and a name the extraction is missing simply draws nothing.
+    private static Rect2 FrameRect(Texture2D texture, int frames, int frame)
+    {
+        var size = texture.GetSize();
+        int count = Mathf.Max(1, frames);
+        float height = Mathf.Floor(size.Y / count);
+        float top = Mathf.Clamp(frame, 0, count - 1) * height;
+        return new Rect2(0f, top, size.X, height);
+    }
+
+    // The palette a piece of text takes. A plaque's label is the one place the state is in the ink
+    // rather than in the art, which is what the original's three label fonts are.
+    private Color InkOf(BoardInk ink) => ink switch
+    {
+        BoardInk.RowFocused => _palette.Focus,
+        BoardInk.Heading => _palette.Heading,
+        BoardInk.Detail => _palette.Detail,
+        BoardInk.LabelNormal => _palette.LabelNormal,
+        BoardInk.LabelRollover => _palette.LabelRollover,
+        BoardInk.LabelActivate => _palette.LabelActivate,
+        _ => _palette.Row,
+    };
+
+    // The board's own face sheared into an oblique, built once. Godot's variation transform is a
+    // 2x3 matrix over the glyph outline, so the x-shear is the whole of the lean.
+    private FontVariation? Slanted(Font? font)
+    {
+        if (font == null)
+        {
+            return null;
+        }
+
+        if (_slanted == null)
+        {
+            _slanted = new FontVariation { BaseFont = font };
+            _slanted.VariationTransform = new Transform2D(
+                new Vector2(1f, 0f), new Vector2(Slant, 1f), Vector2.Zero);
+        }
+
+        return _slanted;
+    }
+
+    private void DrawPicture(BoardFit fit, BoardPicture picture)
+    {
+        if (Load(picture.Art) is not { } texture)
+        {
+            return;
+        }
+
+        var frame = FrameRect(texture, picture.Art.Frames, picture.Frame);
+        var span = new Vector2(
+            fit.Length(picture.Width > 0f ? picture.Width : frame.Size.X),
+            fit.Length(picture.Height > 0f ? picture.Height : frame.Size.Y));
+        var at = new Vector2(fit.X(picture.X), fit.Y(picture.Y));
+        if (picture.Centered)
+        {
+            at -= span / 2f;
+        }
+
+        var tint = new Color(1f, 1f, 1f, Mathf.Clamp(picture.Opacity, 0f, 1f));
+        if (picture.Revs == 0f)
+        {
+            DrawTextureRectRegion(texture, new Rect2(at, span), frame, tint);
+            return;
+        }
+
+        // A spin turns the element about its own middle, which is where the script's own centred
+        // placement puts it; drawing through a transform keeps the frame region intact.
+        var middle = at + (span / 2f);
+        DrawSetTransform(middle, picture.Revs * Mathf.Tau, Vector2.One);
+        DrawTextureRectRegion(texture, new Rect2(-span / 2f, span), frame, tint);
+        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+    }
+
+    private void DrawPlaque(BoardFit fit, Font? font, BoardPlaque plaque)
+    {
+        if (Load(plaque.Art) is not { } texture)
+        {
+            return;
+        }
+
+        var frame = FrameRect(texture, plaque.Art.Frames, plaque.Frame);
+        var span = new Vector2(fit.Length(frame.Size.X), fit.Length(frame.Size.Y));
+        var at = new Vector2(fit.X(plaque.X), fit.Y(plaque.Y));
+        DrawTextureRectRegion(texture, new Rect2(at, span), frame, Colors.White);
+        if (plaque.Label.Length == 0 || font == null)
+        {
+            return;
+        }
+
+        // A one-frame plaque bakes no words in, so the label is drawn over it, centred in the
+        // frame and shadowed the way the original's own outlined face reads.
+        int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(13f)));
+        float baseline = at.Y + (span.Y / 2f) + (points * 0.38f);
+        DrawString(font, new Vector2(at.X + 1f, baseline + 1f), plaque.Label,
+            HorizontalAlignment.Center, span.X, points, Colors.Black);
+        DrawString(font, new Vector2(at.X, baseline), plaque.Label,
+            HorizontalAlignment.Center, span.X, points, InkOf(plaque.Ink));
+    }
+
+    private void DrawText(BoardFit fit, Font? font, BoardLine line)
+    {
+        if (font == null || line.Text.Length == 0)
+        {
+            return;
+        }
+
+        int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(line.Size)));
+        var at = new Vector2(fit.X(line.X), fit.Y(line.Y) + points);
+        if (line.Width <= 0f)
+        {
+            DrawString(font, at, line.Text, HorizontalAlignment.Left, -1f, points, InkOf(line.Ink));
+            return;
+        }
+
+        // Wrapped, because a description panel's text is a block and a row's own text may still be
+        // longer than the widget it sits in; a single-line draw would run off the board.
+        DrawMultilineString(font, at, line.Text, HorizontalAlignment.Left, fit.Length(line.Width),
+            points, -1, InkOf(line.Ink));
+    }
+
+    private void DrawNote(BoardFit fit, Font? font, BoardNote note)
+    {
+        if (font == null)
+        {
+            return;
+        }
+
+        foreach (var line in note.Flow(Measure(fit, font, note)))
+        {
+            DrawText(fit, font, line);
+        }
+    }
+
+    private void DrawHints(BoardFit fit, Font? font)
+    {
+        if (font == null)
+        {
+            return;
+        }
+
+        int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(HintFont)));
+        float width = fit.Length(BoardFit.AuthoredWidth);
+        if (_detail.Length > 0 || _footer.Length > 0)
+        {
+            // A scrim under the band, so it reads as something laid over the screen rather than as
+            // words stuck to the artwork, and stays legible on a light board and a dark one alike.
+            DrawRect(
+                new Rect2(fit.X(0f), fit.Y(0f), width, fit.Length(HintBand)),
+                new Color(0f, 0f, 0f, 0.45f));
+        }
+
+        for (int i = 0; i < 2; i++)
+        {
+            string text = Flatten(i == 0 ? _detail : _footer);
+            if (text.Length == 0)
+            {
+                continue;
+            }
+
+            var at = new Vector2(fit.X(0f), fit.Y(2f + (i * 15f)) + points);
+            DrawString(font, at + Vector2.One, text, HorizontalAlignment.Center, width, points, Colors.Black);
+            DrawString(font, at, text, HorizontalAlignment.Center, width, points, _palette.Hint);
+        }
+    }
+
+    // The decoded texture for a board bitmap, kept including a miss so an absent extraction is
+    // probed once per name rather than once per frame. Godot's own loader reads the JPG the
+    // screen backgrounds ship as, which no engine-free decoder here covers.
+    private Texture2D? Load(BoardArt art)
+    {
+        string path = art.Library == BoardArtLibrary.Rimage
+            ? Path.Combine(_dataRoot, "extracted", "rimage", art.Name.ToLowerInvariant() + ".png")
+            : Path.Combine(_dataRoot, "extracted", "rof", "ASSETS", "GRAPHICS", art.Name);
+        if (_textures.TryGetValue(path, out var cached))
+        {
+            return cached;
+        }
+
+        Texture2D? texture = null;
+        if (File.Exists(path) && Image.LoadFromFile(path) is { } image && !image.IsEmpty())
+        {
+            texture = ImageTexture.CreateFromImage(image);
+        }
+
+        _textures[path] = texture;
+        return texture;
+    }
+}

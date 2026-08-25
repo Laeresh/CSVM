@@ -34,6 +34,16 @@ public static class EnemyGenerators
         return defs;
     }
 
+    /// <summary>The door name an unauthored <c>open_anim</c> takes: the loader's
+    /// <c>sprintf("%.5s_open%.2s", node, node + len - 2)</c>, so <c>eairg31</c> asks for
+    /// <c>eairg_open31</c>. Public so a suite can name the definition it expects.</summary>
+    public static string DefaultDoorAnim(string node)
+    {
+        string head = node.Length > 5 ? node[..5] : node;
+        string tail = node.Length > 2 ? node[^2..] : node;
+        return $"{head}_open{tail}";
+    }
+
     private static EnemyGeneratorDef ParseRecord(int index, List<object?> record)
     {
         var d = ZrdrDict.FromAlternating(record);
@@ -65,8 +75,11 @@ public static class EnemyGenerators
             WavePeriod = d.Float("wave_period"),
             IndPeriod = d.Float("ind_period"),
             IsZeppelin = d.Has("zeppelin"),
-            OpenAnim = d.Str("open_anim"),
-            CloseAnim = d.Str("close_anim"),
+            OpenAnim = d.Str("open_anim") ?? DefaultDoorAnim(node),
+            // ⚠ Keep the close default the OPEN name. The loader formats "close%.2s" into a
+            // second buffer and then looks the first one up again, so an unauthored close resolves
+            // the open definition (docs/formats/mission-entities/enemy-generators.md).
+            CloseAnim = d.Str("close_anim") ?? (d.Str("open_anim") == null ? DefaultDoorAnim(node) : null),
             Origin = d.Str("origin"),
             RotationDeg = d.List("rotation") is { Count: 3 } r
                 && r[0] is float rx && r[1] is float ry && r[2] is float rz
@@ -127,9 +140,9 @@ public sealed class EnemyGeneratorDef
     /// <summary>The zeppelin-hangar variant (authored as <c>zeppelin [1]</c> on 17 of 23).</summary>
     public bool IsZeppelin { get; init; }
 
-    /// <summary>Hangar-door animations, run before and after a wave. Null when unauthored; the
-    /// engine then defaults them from the node name (<c>&lt;node&gt;_open_&lt;nn&gt;</c> /
-    /// <c>close_&lt;nn&gt;</c>), which is F20's to reproduce with the door choreography.</summary>
+    /// <summary>Hangar-door animations, run before and after a wave. Unauthored, both take the
+    /// node-name default (<see cref="EnemyGenerators.DefaultDoorAnim"/>); the name may still
+    /// resolve no definition, which the runtime reports and runs log-only.</summary>
     public string? OpenAnim { get; init; }
 
     /// <summary>See <see cref="OpenAnim"/>.</summary>

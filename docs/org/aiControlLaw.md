@@ -127,6 +127,20 @@ regardless of airframe**, and on the faster fighters that ceiling binds well bef
 `fd_speed · params[1]` does: a Bloodhawk chasing at `params[1] = 1.3` would ask for 393 mph and
 gets 250. Recovered 2026-08-15 while landing `E41`; D31 left it named as unresolved.
 
+⚠ **CSVM lifts that ceiling for a station-keeping escort alone** (`AiControlLaw.StationCeiling`,
+reached only from `AiPilot.FlyEscort`): every player airframe cruises above the ceiling, the
+campaign's Devastator by 1.24 m/s and a Bloodhawk by 23 m/s, so under the decoded value an escort
+holds no closure margin and never regains ground lost in a turn. The lift goes no further than the
+leader's speed plus the law's own 26.8224 m/s band, and `fd_speed · params[1]` still caps it. Every
+other caller reads the decoded value.
+
+⚠ **The far-field plant does not bypass this ceiling, and reading it as an escape from the cap is a
+mistake to make once.** `FUN_0048c470`'s far branch holds `fd_speed · lever + 5` reading the lever
+at `[obj+0x128]` (`0x48c593`-`0x48c5ae`), that lever slews toward the commanded `[obj+0x124]`
+(`FUN_0048e580`, `0x48e58f` loads it and `0x48e59b` subtracts the current one), and `[obj+0x124]` is
+what step 5 above writes from the already-clamped `want`. The cap therefore reaches both plants, and
+the most a far-field AI holds is the ceiling plus that 5 m/s.
+
 When `emergency` is set, `want` is 22.352 m/s, and with the nose at or below the horizon
 (`noseY >= 0`) the law **writes the aircraft's own state**: it adds `dt · noseY · 4.0` to the
 altitude and, if the vertical velocity is below `-22.352 · noseY`, eases it toward that value at

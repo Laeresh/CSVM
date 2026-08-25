@@ -120,6 +120,15 @@ public partial class Launcher : Node3D
     private GameSession? _session; // the current session node (null at the launchscreen)
     private LaunchMenu? _menu;     // the in-game launchscreen (shown on a no-content-arg launch)
     private bool _menuDriven;      // launched into the menu → Esc from flight returns here, not quit
+    // The score, and the archive it streams from. Both are process-lifetime, unlike the
+    // build-scoped SessionArchives.Sounds: one channel has to survive a mission launch, or the
+    // cabin track would restart every time the player left a board. See docs/org/music.md.
+    private MusicPlayer? _music;
+    private SoundArchive? _musicArchive;
+    private System.Random _musicRng = new();
+    // The profile a just-ended campaign mission belongs to, acted on at the top of the next frame:
+    // the mission ends inside the session's own physics step, which is no place to free it.
+    private string? _pendingCabin;
 
     // The load screen and the deferred build behind it (BeginLaunch → _Process). A build is one
     // synchronous block, so the screen has to be DRAWN before it starts: _launchFramesWaited counts
@@ -516,6 +525,11 @@ public partial class Launcher : Node3D
         };
         AddChild(_perfHud);
 
+        // The music channel, once per process and after every early-quit probe: one player that
+        // outlives every session, over a sound archive of its own for the same reason (D37's
+        // wiring contract, step 1).
+        BuildMusic();
+
         // No content-selecting arg (or explicit --menu): show the launchscreen. Its selection
         // derives the session spec and calls LaunchSession, so there is one downstream build
         // path; Esc from a menu-launched flight returns here (ReturnToMenu).
@@ -549,6 +563,8 @@ public partial class Launcher : Node3D
     public override void _ExitTree()
     {
         _hitchSidecar.Flush();
+        _musicArchive?.Dispose();
+        _musicArchive = null;
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -641,13 +657,48 @@ public partial class Launcher : Node3D
         if (_spec.Perf)
             ReportPerf(delta, counters);
 
+        // Wall time, like the instruments above: the score is not part of the simulation, and a
+        // paused or stepped session must not stall a fade halfway.
+        _music?.Tick((float)delta, _musicRng);
+
         _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
             _session?.Plane, _menu is { Visible: true });
         _gltfExporter.Tick(_session?.Plane, GetTree(), _spec);
 
+        // A campaign mission that ended during the session's own step: free it and reopen the
+        // launchscreen on the cabin, here where a QueueFree is safe.
+        if (_pendingCabin is { } cabinProfile)
+        {
+            _pendingCabin = null;
+            OpenCabin(cabinProfile);
+        }
+
         // Last in the frame, where the build used to happen anyway: the launchscreen and the boards
         // are children, so they process AFTER this node, and a build they asked for landed here.
         RunOwedLaunch();
+    }
+
+    // The process's one music channel and the archive it streams from. Everything here is
+    // optional: an install without soundsh or without a readable sounds.json leaves the game
+    // silent, which is what a missing extraction has always meant.
+    private void BuildMusic()
+    {
+        try
+        {
+            _musicArchive = new SoundArchive(_soundsPath);
+            _music = new MusicPlayer(SoundDefs.Load(_zrdrPath), SoundDefs.LoadGroups(_zrdrPath))
+            {
+                Loader = (def, looped) => _musicArchive.Find(def.WavName, looped, warn: false),
+            };
+            AddChild(_music);
+            _musicRng = new System.Random((int)(_masterSeed & 0x7fffffff));
+        }
+        catch (System.Exception e)
+        {
+            _music = null;
+            _musicArchive = null;
+            Log.Warn("sound", $"music: no channel this process ({e.GetType().Name}: {e.Message})");
+        }
     }
 
     // The deferred half of BeginLaunch: builds once the load screen has had a frame to render.
@@ -677,10 +728,22 @@ public partial class Launcher : Node3D
     // not, so no scripted or golden run gains a frame it did not have before.
     private void BeginLaunch()
     {
-        _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.HudLayers.Board };
-        _loadLayer.AddChild(UI.LoadBoard.Build($"{_spec.Chapter}   ·   {LaunchSubject()}"));
-        AddChild(_loadLayer);
+        // The one place the session leaves the boards for a mission, so the one place the menu
+        // score stops. What plays next is the mission's own business: a campaign mission cues
+        // prebattle from its objectives graph, and Instant Action ships silent (docs/org/music.md).
+        _music?.Stop();
+        ShowLoadScreen(_spec.CampaignProfile != null);
         _launchFramesWaited = 0;
+    }
+
+    // The load screen over the whole window, on the board layer. Campaign launches take the
+    // original's chart sheet and everything else its blackboard (docs/org/loading-screen.md).
+    private void ShowLoadScreen(bool campaign)
+    {
+        _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.HudLayers.Board };
+        _loadLayer.AddChild(UI.LoadBoard.Build(
+            _dataRoot, campaign, $"{_spec.Chapter}   ·   {LaunchSubject()}"));
+        AddChild(_loadLayer);
     }
 
     // What the load screen calls this flight: an Instant Action mission by the wizard's own name
@@ -733,6 +796,8 @@ public partial class Launcher : Node3D
             MenuPads = _menuPads,
             ExitSession = ExitSession,
             RestartSession = RestartSession,
+            ReturnToCabin = _menuDriven ? profile => _pendingCabin = profile : null,
+            Music = _music,
         });
         AddChild(_session);
         bool built = _session.StartSession();
@@ -784,10 +849,26 @@ public partial class Launcher : Node3D
         {
             _menu = LaunchMenu.Build(_zrdrPath, _dataRoot);
             _menu.Launch = StartSessionFromMenu;
+            _menu.LaunchCampaign = StartCampaignFromMenu;
             _menu.Quit = () => GetTree().Quit();
+            // The board's own two audio needs, both over the process-lifetime channel and archive:
+            // the score it enters on every screen, and the briefing narration it plays itself.
+            _menu.Music = _music;
+            _menu.MusicRng = _musicRng;
+            _menu.Sounds = (wav, looped) => _musicArchive?.Find(wav, looped, warn: false);
             AddChild(_menu);
         }
         _menu.ShowMenu(_spec.MenuStartScreen);
+        // The load screen is up for two frames during a build and torn down before anything
+        // renders, so a shot of it needs a door of its own that leaves it standing.
+        if (_spec.MenuStartScreen is "loadboard" or "loadboard-campaign")
+        {
+            ShowLoadScreen(_spec.MenuStartScreen == "loadboard-campaign");
+        }
+
+        // Safe on every entry: a cue for the track already playing is a no-op, which is exactly
+        // what the original's own mail(11004) does (docs/org/music.md).
+        _music?.Enter(MusicState.Menu, _musicRng);
         // --debug-join=N: synthesize N extra device-less players so the splitscreen aircraft
         // select can be screenshot on a one-controller machine (they can never act, so the
         // shot is deterministic; the last one starts locked to show both panel states).
@@ -881,6 +962,35 @@ public partial class Launcher : Node3D
         }
         _menu!.HideMenu();
         BeginLaunch();
+    }
+
+    // The campaign cabin's FLY MISSION: the same derive-spec-then-build path as the launchscreen's
+    // own launch, over the profile and story position the flow settled. The chapter and mission are
+    // NOT named here — CampaignDirector.ResolveSpec reads them out of cm_sequence in the session's
+    // constructor, so one place resolves a story position whether it came from a cabin or a
+    // --campaign= command line.
+    private void StartCampaignFromMenu(LaunchMenu.CampaignLaunch launch)
+    {
+        _spec = SessionSpec.FromCampaign(_cli, launch.Profile, launch.Seq, launch.PlaneNode,
+            launch.Fit, launch.Custom);
+        if (!_spec.SeedPinned)
+        {
+            _sortie++;
+            _masterSeed = Rng.SortieSeed(_processSeed, _sortie);
+        }
+        LogMasterSeed();
+        _menuPads = null;
+        _menu!.HideMenu();
+        BeginLaunch();
+    }
+
+    // A flown campaign mission is over: free the world and put the player back in the cabin, on a
+    // flow seated on the profile the director just wrote. Reached from the session's MissionEnded
+    // by way of _pendingCabin, one frame later.
+    private void OpenCabin(string profile)
+    {
+        ReturnToMenu();
+        _menu!.OpenCampaignCabin(profile);
     }
 
     // The Instant Action boards' Restart: free this session and build a fresh one from the same
@@ -1120,4 +1230,14 @@ public sealed class LauncherContext
     /// screen — the Instant Action boards' Restart item. The mission's opposition lives in the
     /// world, so putting it back means rebuilding the world, which only the Launcher can do.</summary>
     public required System.Action RestartSession { get; init; }
+
+    /// <summary>Frees this session and reopens the launchscreen on the named profile's campaign
+    /// cabin — a campaign mission's end (D31's <c>MissionEnded</c>). Null when this process was
+    /// not launched into the menu, where there is no cabin to return to.</summary>
+    public System.Action<string>? ReturnToCabin { get; init; }
+
+    /// <summary>The process's music channel, so a mission's own cues reach the one player that
+    /// outlives every session. Null when the sound archive or the sound definitions would not
+    /// load, which leaves the game silent rather than refusing to launch.</summary>
+    public MusicPlayer? Music { get; init; }
 }

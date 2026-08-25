@@ -30,14 +30,19 @@ internal static class ZeppelinSuites
         ctx.Check(net != null, $"its net '{def.Net}' resolves in C1's neindex");
         if (net == null)
             return;
-        int tagged = 0;
+        int tagged = 0, armed = 0;
         foreach (var n in net.Nodes)
         {
-            if (n.Tags.Count > 0)
+            if (n.StopPointId > 0)
                 tagged++;
+            if (n.StopsHere)
+                armed++;
         }
-        ctx.Check(tagged > 0,
-            $"the zeppelin route carries raw shape-A tags, preserved and acted on by nothing (stop-point vs segment id undecoded) tagged={tagged}/{net.Nodes.Count}");
+        ctx.Check(tagged > 0 && armed > 0,
+            $"the route carries stop points, armed in the file ids={tagged} armed={armed} of {net.Nodes.Count} nodes");
+        ctx.Check(net.Nodes[0].StopPointId == 1 && net.Nodes[0].StopsHere
+            && def.Position.DistanceTo(net.Nodes[0].Position) < 5f,
+            $"…and the record spawns ON node 0, which is stop point 1 and armed — so C1/M04's PANDORA starts docked, not flying");
 
         Node3D? host = null;
         Node3D? heldHost = null;
@@ -62,9 +67,26 @@ internal static class ZeppelinSuites
             if (motion == null)
                 return;
 
+            const float dt = 1f / 60f;
+
+            // Docked: the armed stop point under the spawn holds the hull where it was placed,
+            // which is the state OBJECTIVE-side COMPLETED_STOPPOINT releases.
+            var docked = host.GlobalPosition;
+            for (int i = 0; i < 60 * 60; i++)
+                runtime.SimStep(dt);
+            ctx.Check(motion.Follower.Holding && motion.Speed == 0f
+                && docked.DistanceTo(host.GlobalPosition) < 1f,
+                $"a minute on an armed stop point moves it {docked.DistanceTo(host.GlobalPosition):0.##} m, speed={motion.Speed:0.##}");
+            ctx.Same(0, motion.Follower.Advances, $"…and the walk never left node 0");
+
+            // COMPLETED_STOPPOINT ["PirateZep1", 1, 0]: the mission's own release.
+            ctx.Same(1, runtime.SetStopPoint(def.Net, 1, false),
+                $"SetStopPoint('{def.Net}', 1, false) writes the one follower flying it");
+            ctx.Same(-1, runtime.MotionFor("piratezep")!.Follower.StopPointNode(9),
+                $"…and an id no node carries addresses nothing");
+
             // Fly until three node captures, checking per-step displacement against the
             // record's own speed limit and every hop against the edge list.
-            const float dt = 1f / 60f;
             var hops = new List<(int From, int To)>();
             int last = motion.Follower.CurrentIndex;
             int speedViolations = 0;
@@ -109,6 +131,18 @@ internal static class ZeppelinSuites
             runtime.SimStep(dt);
             ctx.Check(stopped.DistanceTo(host.GlobalPosition) < 1e-3f,
                 $"…and the node no longer moves");
+
+            // Engines back, and the route's far end holds it for good: node 4 is armed but carries
+            // stop-point id 0, the "no stop point" id the script side refuses, so nothing can
+            // release it. An open path therefore ENDS at its dock instead of shuttling back.
+            motion.AliveEngines = motion.TotalEngines;
+            for (int i = 0; i < 60 * 600 && !motion.Follower.Holding; i++)
+                runtime.SimStep(dt);
+            ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == net.Nodes.Count - 1
+                && motion.Speed == 0f,
+                $"the far end holds it for good node={motion.Follower.CurrentIndex} id={net.Nodes[^1].StopPointId} speed={motion.Speed:0.##}");
+            ctx.Same(-1, motion.Follower.SetStopPoint(0, false),
+                $"…and stop-point id 0 addresses no node, so no script can release that dock");
 
             // A deactivated record is placed at its pose but held (mission script would wake
             // it; out of M4 scope).

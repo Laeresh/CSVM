@@ -96,6 +96,11 @@ rows (`af_t_title`, `af_s_airframedesc`). The customisation flow is `PLANESELECT
 `PLANECONSTRUCTION`, `AIRFRAME`, `ARMOR`, `ENGINE`, `GUNS`, `HARDPOINTS`, `PAINT`,
 `PLANENAME`, `PURCHASE`.
 
+The campaign flow's scripts (`CAMPAIGN`, `PASSENGERCABIN`, `CAMPAIGNINTRO`, `FLIGHTCHECK`,
+`ORDINANCELAYOUT`) are decoded behaviourally in
+[campaign-screens.md](campaign-screens.md), which also maps every `@ctl@XX` script class onto its
+`LAYOUT.CSV` type letter.
+
 `LAYOUT.CSV` is a commented widget table: `ID=<type>,<art>,X,Y,Z,TabOrder,ResID,HelpID,…`,
 where `ResID` is the `IDS_*` string ID. Its header comments document the column meanings,
 which is how the widget types (`B`utton, `T`ext, `S`crolltext, `D`ropdown) were identified.

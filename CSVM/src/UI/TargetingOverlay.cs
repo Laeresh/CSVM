@@ -207,12 +207,15 @@ public sealed partial class TargetingOverlay : Node
             {
                 Turret(t);
             }
-            // The AI gunner's own standing target: its line starts at the airframe, not at a
-            // muzzle, because the D14 gunner aims the whole aeroplane.
-            if (rig.Pilot?.Gunner is { Target: { } prey } gunner && GodotObject.IsInstanceValid(prey))
+            // The AI gunner's own standing target (Target or D36's GroundTarget): its line starts
+            // at the airframe, not at a muzzle, because the D14 gunner aims the whole aeroplane.
+            if (rig.Pilot?.Gunner is { } gunner
+                && FlightController.TryTargetGeometry((object?)gunner.Target ?? gunner.GroundTarget,
+                    out var preyPos, out _, out _, out bool preyLive)
+                && preyLive)
             {
                 var color = gunner.WantsFire ? FiringColor : TrackingColor;
-                Line(rig.WorldPosition, prey.WorldPosition, color);
+                Line(rig.WorldPosition, preyPos, color);
                 if (gunner.WantsFire)
                 {
                     firing++;
@@ -224,7 +227,7 @@ public sealed partial class TargetingOverlay : Node
                 if (rows.Count < 12)
                 {
                     rows.Add($"{rig.Name}  {(gunner.WantsFire ? "firing" : "tracking")}  " +
-                             $"{rig.WorldPosition.DistanceTo(prey.WorldPosition):0} m");
+                             $"{rig.WorldPosition.DistanceTo(preyPos):0} m");
                 }
             }
         }

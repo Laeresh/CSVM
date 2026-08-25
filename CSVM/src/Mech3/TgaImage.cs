@@ -47,6 +47,14 @@ public sealed class TgaImage
         }
     }
 
+    /// <summary>Wraps already-decoded top-down RGBA8 as one of these, for the sibling decoders that
+    /// feed the same art path (<see cref="PngImage"/>, the menus' <c>rimage</c> art). Null when the
+    /// buffer is not exactly <paramref name="width"/> x <paramref name="height"/> x 4 bytes.</summary>
+    public static TgaImage? FromRgba(int width, int height, byte[] rgba) =>
+        width > 0 && height > 0 && rgba.Length == width * height * 4
+            ? new TgaImage(width, height, rgba)
+            : null;
+
     /// <summary>Decodes one TGA, or null for anything outside this decoder's coverage.</summary>
     public static TgaImage? Decode(ReadOnlySpan<byte> tga)
     {

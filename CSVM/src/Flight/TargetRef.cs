@@ -143,14 +143,16 @@ public readonly struct TargetRef
         new(candidate, AimTargetKind.Vehicle, cls, objective: false, name, displayName, null, null,
             health, armor);
 
-    /// <summary>A mission structure, which covers CSVM's zeppelin sub-parts and destructibles.
-    /// Health only: <c>DestructibleRegistry.Instance</c> carries <c>Health</c>/<c>MaxHealth</c> and
-    /// no armor pool.</summary>
+    /// <summary>A mission structure, which covers CSVM's zeppelin sub-parts, destructibles and
+    /// objective sites. Health only: <c>DestructibleRegistry.Instance</c> carries
+    /// <c>Health</c>/<c>MaxHealth</c> and no armor pool.</summary>
+    /// <param name="displayName">What the marker prints instead of the node name, which is the
+    /// site's own name on an objective; null prints the node name, as a sub-part does.</param>
     public static TargetRef ForStructure(AimCandidate candidate, TargetClass cls, string name,
         string? typeLabel = null, string? category = null, bool objective = false,
-        float? health = null) =>
-        new(candidate, AimTargetKind.Structure, cls, objective, name, null, typeLabel, category,
-            health, armor: null);
+        float? health = null, string? displayName = null) =>
+        new(candidate, AimTargetKind.Structure, cls, objective, name, displayName, typeLabel,
+            category, health, armor: null);
 
     /// <summary>A turret. **No health figure exists** (see <see cref="Health"/>); do not invent one
     /// from the gate state.</summary>

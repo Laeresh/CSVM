@@ -27,6 +27,7 @@ bottom rather than hidden.
 | Address | Role |
 |---|---|
 | `FUN_0042ee40` | The per-frame camera weather state machine (1/2/3), **and** the in-cloud whiteout opacity remap that flickers with it |
+| `FUN_004e8540` | The `FOG_STATE` animation event's handler (dispatch slot 28): the same four fog setters the zone apply calls, one per flag bit |
 | `FUN_004735b0` | World init — precomputes the whiteout core's bottom edge into `0071c2d0`, the altitude the state-2 test reads every frame |
 | `FUN_00472ea0` | The zone apply: indexes `ZONE1`–`ZONE3` straight off the camera state and writes the fog parameters, then the sunlight |
 | `FUN_004dc610` | Writes the `sunlight` gamez node's rotation triple (`zclass\Light.c`) — the second half of the zone apply |
@@ -124,6 +125,25 @@ clip range through is changing behaviour, not fixing an omission.
 
 ⚠ **The fog parameters are GLOBAL, one set for the world.** The original has one such set and one
 `sunlight` node, not one per view.
+
+## The `FOG_STATE` animation event
+
+The animation interpreter's dispatch slot 28 (`FUN_004e8540`, the table `FUN_004ee1a0` fills at
+`0x727de0`) is the second writer of the same fog record. It reads a flag byte at event `+0x2c` and
+calls, per set bit, one of the four setters the zone apply above calls: bit 1 the fog type
+(`FUN_004da800`, word 4 of the record), bit 2 the colour (`FUN_004da820`, words 5 to 7), bit 4 the
+altitude pair (`FUN_004da850`, words 10 and 11), bit 8 the range pair (`FUN_004da870`, words 8
+and 9). Every setter raises a dirty bit in word 0, so a field the event omits keeps its last value.
+The handler returns 2 (complete) immediately and takes no reset-versus-sequence branch, so it fires
+from a `RESET_STATE` walk as it does from a sequence.
+
+Consequences: the two writers are in last-writer order, the zone apply on a camera-state edge and
+the event whenever its walker reaches it. The one shipped use (`drop_fog` in C1/M04's intro
+definition, [`formats/anim-definitions.md`](../formats/anim-definitions.md#fogstate--an-inline-fog-written-over-the-zone))
+sits in a reset block, so it lands over the zone at load and holds until the camera next crosses a
+state boundary. The zone apply multiplies its range pair by the detail level's `FOG_SCALE`; the
+event writes its range raw. Which of the altitude pair is the low edge is not distinguished by the
+shipped use (10000 and 11000 m, above any C1 flight); CSVM reads `min` as `FogLow`.
 
 ## The in-cloud band flicker (`FUN_0042ee40`, `_DAT_0064efcc`/`_DAT_0062154c`)
 

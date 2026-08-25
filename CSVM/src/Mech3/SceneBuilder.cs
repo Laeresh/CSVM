@@ -620,6 +620,8 @@ void fragment() {
 
     // Same triangulation as EmitPolygon/PolygonArea (strip order for tri_strips, a fan
     // otherwise), but positions only — a collision shape carries no material/UV/normal data.
+    // ⚠ Do not filter polygons here by texture alpha. The original's weapon ray reads no texture
+    // at all (docs/org/weaponRay.md), so an alpha-cutout card is solid to it too.
     private static void EmitCollisionFaces(GameZMesh mesh, GameZPolygon poly, Vector3 offset, List<Vector3> faces)
     {
         int n = poly.VertexIndices.Count;

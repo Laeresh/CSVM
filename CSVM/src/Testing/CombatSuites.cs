@@ -1069,10 +1069,18 @@ internal static class CombatSuites
             var player = PlaneStats.Load(ctx.ZrdrPath, node);
             ctx.Check(ai.DefName == player.DefName && ai.AiDefName != ai.DefName,
                 $"{node} keeps the player def '{ai.DefName}' as its identity while damage reads '{ai.AiDefName}'");
+            // The turrets move with the damage model: an AI def carries the thirdp mounts alone,
+            // under its own MSG_TUR_*_G3 titles, where the player def adds the firstp cockpit rig
+            // and names MSG_TUR_P*_G3 entries that are a different, shorter-sighted gun.
+            int aiThird = ai.TurretMounts.Count(m => !m.FirstPerson);
+            int playerThird = player.TurretMounts.Count(m => !m.FirstPerson);
             ctx.Check(Mathf.IsEqualApprox(ai.FdSpeed, player.FdSpeed)
                       && Mathf.IsEqualApprox(ai.EnginePower, player.EnginePower)
-                      && ai.TurretMounts.Count == player.TurretMounts.Count,
-                $"{node} flies the same plant and carries the same turrets on both loads");
+                      && aiThird == playerThird,
+                $"{node} flies the same plant and carries as many thirdp mounts on both loads (ai {aiThird}, player {playerThird})");
+            ctx.Check(ai.TurretMounts.All(m => !m.FirstPerson)
+                      && ai.TurretMounts.All(m => !m.Title.StartsWith("MSG_TUR_P", System.StringComparison.Ordinal)),
+                $"…and the AI load names '{aiDef}'s own entries, not the player rig's: [{string.Join(", ", ai.TurretMounts.Select(m => m.Title))}]");
             ctx.Check(player.DestroyableParts.Count == 4 && player.VehicleHealth == null,
                 $"…and the player load is untouched: {player.DestroyableParts.Count} zones, no authored pair");
         }

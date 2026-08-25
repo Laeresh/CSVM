@@ -12,6 +12,11 @@ namespace CSVM.Flight;
 /// aggregator drives, re-scaling the live limits through <see cref="EngineFactor"/>.</summary>
 public sealed class ZeppelinMotion
 {
+    // The stop-point approach ramp (FUN_004bf360): full speed until the along-forward range to an
+    // armed stop point falls under 250 m, then linearly down to zero, and a hold inside the
+    // follower's 30 m. Only the zeppelin follower reads a node's halt flag at all.
+    private const float StopApproachM = 250f;
+
     private readonly float _maxRateYaw;      // rad/s
     private readonly float _maxRatePitch;    // rad/s
     private readonly float _accelYaw;        // rad/s²
@@ -102,6 +107,8 @@ public sealed class ZeppelinMotion
         {
             return;
         }
+        // No heading: the nose-aligned edge pick is the aeroplane AI's rule (FUN_00431e40), and a
+        // zeppelin is not a vehicle in the original at all. It keeps the nearest-node seat.
         Follower.Update(Position);
         var to = Follower.CurrentTarget - Position;
 
@@ -116,14 +123,16 @@ public sealed class ZeppelinMotion
             YawRad = Mathf.Wrap(YawRad + (_yawRate * dt), -Mathf.Pi, Mathf.Pi);
         }
 
-        // Pitch toward the node's altitude, inside the record's flight band.
-        float desiredPitch = Mathf.Clamp(
-            Mathf.Atan2(to.Y, Mathf.Max(flat.Length(), 1f)), _minPitch, _maxPitch);
+        // Pitch toward the node's altitude, inside the record's flight band — but a zeppelin
+        // holding on its stop point levels off instead (FUN_004bf500 asks for pitch 0 and keeps
+        // the heading it arrived on).
+        float desiredPitch = Follower.Holding ? Mathf.Clamp(0f, _minPitch, _maxPitch)
+            : Mathf.Clamp(Mathf.Atan2(to.Y, Mathf.Max(flat.Length(), 1f)), _minPitch, _maxPitch);
         _pitchRate = TurnRate(_pitchRate, desiredPitch - PitchRad, dt, _maxRatePitch, _accelPitch);
         PitchRad = Mathf.Clamp(PitchRad + (_pitchRate * dt), _minPitch, _maxPitch);
 
         // Speed toward the engine-scaled maximum, at the engine-scaled acceleration.
-        Speed = Mathf.MoveToward(Speed, EffectiveMaxSpeed, EffectiveMaxAccel * dt);
+        Speed = Mathf.MoveToward(Speed, TargetSpeed(to), EffectiveMaxAccel * dt);
         Position += Forward * (Speed * dt);
     }
 
@@ -133,5 +142,27 @@ public sealed class ZeppelinMotion
     {
         float desired = Mathf.Clamp(error / Mathf.Max(dt, 1e-4f), -maxRate, maxRate);
         return Mathf.MoveToward(rate, desired, Mathf.Max(accel, 1e-4f) * dt);
+    }
+
+    // What the throttle asks for this step: the engine-scaled maximum, or the stop-point ramp
+    // when the node ahead halts. The range measured is ALONG the facing, not the straight-line
+    // distance, so a zeppelin that has overshot its stop point is already at zero.
+    private float TargetSpeed(Vector3 toNode)
+    {
+        if (Follower.Holding)
+        {
+            return 0f;
+        }
+        if (!Follower.StopsAt(Follower.CurrentIndex))
+        {
+            return EffectiveMaxSpeed;
+        }
+        float along = toNode.Dot(Forward);
+        if (along >= StopApproachM)
+        {
+            return EffectiveMaxSpeed;
+        }
+        return along <= AiNetFollower.StopPointHoldM
+            ? 0f : EffectiveMaxSpeed * (along / StopApproachM);
     }
 }

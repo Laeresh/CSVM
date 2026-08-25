@@ -196,6 +196,21 @@ engines, turrets and cannons, which are ordinary members of the turret and struc
 `object+0x4` is a live count of how many AI hold that target and the scorer simply excludes its own
 contribution. There is no drop-and-reselect pass.
 
+### What CSVM ports of this (D36)
+
+`FlightController.SelectRankedTarget` sweeps `TargetVehicle`/`TargetTurret`/`TargetStruct` (the
+gun aim assist's own three lists) for one global minimum, and `AiTargetRanking.ObjectiveBiasFor`
+carries the turret's flat `+37.5`. Routed into `AiGunner.GroundTarget` rather than the
+aircraft-only `Target` field, so `AiPilot`'s flight law never chases a turret or structure through
+the sky — it keeps flying its assigned course while the gunner alone aims and fires at it.
+
+Unmodelled, named rather than guessed: the `wingman` **+0.4** de-prioritisation and the zeppelin
+gasbag **−0.5**/ordnance-gated admission (`TargetStruct`'s `+0x65` members) both need a `mode`
+field and a gasbag identity CSVM's session wiring does not carry into `FlightController` yet; the
+ahead/behind deadband, altitude sign and facing ±0.2 terms stay the pre-D36 cone/sign reading
+rather than the decoded half-metre-deadband geometry above; and `TargetProjectile` is not part of
+the acquisition sweep at all.
+
 ## The chapter's net table, and what "the first net" means
 
 `DAT_0064f610` points at a 16-byte header built by `FUN_004311c0`: an allocation figure at `+0x00`,
@@ -364,7 +379,7 @@ Net assignment is `FUN_00475fc0`. On `netids == -1` it returns immediately, leav
 untouched. On a valid net it:
 
 - sets the current node `+0x2e8` to the nearest node to the spawn position (`FUN_00431900`) and the
-  current edge `+0x2ec` (`FUN_00431e40`);
+  current edge `+0x2ec` (`FUN_00431e40`, below);
 - sets the task `+0x2f0` to **2 when the net record's `+0x10` field is non-zero, else 0**;
 - **overwrites the vehicle's three volumes from the net's own**, where the net authors a non-zero:
   activation from net `+0x24`² / `+0x28` / `+0x2c` into `+0x318` / `+0x31c` / `+0x320`, attack from
@@ -392,6 +407,36 @@ with `+0x67c = 0` on every path, including the failure path where the net id did
 So `mode wingman` is not "this aircraft escorts". It is **"this aircraft escorts when it has no
 net"**, and the net wins whenever one is authored.
 
+## Which edge a vehicle leaves a node on: the nose, never a draw
+
+`FUN_00431e40(net, nodeIndex, excludeEdgeIndex, direction)` picks the edge, and it has exactly two
+callers: the net assignment `FUN_00475fc0` at seat, with no edge excluded, and the walk step
+`FUN_0041d8f0` after an arrival, excluding the edge just flown. Both pass the same direction, the
+vehicle's `+0x198`–`+0x1a0` basis row with each float's sign bit flipped, which is its backward axis
+negated and so its **nose**.
+
+The pick walks the node's own edge list, skips the excluded edge, resolves each edge's far end,
+normalises `farEnd − node` through `FUN_00422690`, dots it with the direction and keeps the maximum,
+seeded at `−FLT_MAX` so the first of equal maxima wins. A node with no edges returns −1.
+
+Three things follow. **The walk is deterministic**: nothing draws, so two vehicles seated on one node
+facing one way leave it on one edge, which is how the campaign's grouped aircraft fly a shared net in
+formation. **The seat is the node, not a destination**: `+0x2e8` holds the node the vehicle is flying
+FROM and the aim point is the far end of that edge, so a vehicle offset to the side of the leg keeps
+that offset through the cross-track carry below rather than converging on a node. And the direction
+is the nose rather than the velocity, so a slipping or rolled aeroplane picks the same edge as a
+coordinated one.
+
+⚠ One arm ahead of all of that is unread: when net `+0x10` is non-zero the function instead returns
+the first non-negative entry of the node's `+0x20` array. That is the same field the net assignment
+tests to seat task 2 rather than 0, so it belongs with the undecoded danger-zone path tags
+([`../formats/ai-nets.md`](../formats/ai-nets.md)) and no shipped net this reaches has been read.
+
+CSVM ports the pick as `AiNetFollower.PickOnward`, taking the nose through `AiNetFollower.Update`;
+`AiPilot.FlyPatrol` passes `−model.Attitude.Z`. A caller with no facing keeps the older
+nearest-node seat and a seeded draw, which is `ZeppelinMotion` alone, because a zeppelin is not a
+vehicle in this engine at all and does not reach `FUN_00431e40`.
+
 ## The escort law, `FUN_0041e760`
 
 Its leader is `primary_target` at `+0x2fc`, dereferenced through `+4` to the leader's vehicle with
@@ -416,16 +461,63 @@ to compute the station):
 
 | state | station | leaves when |
 |---|---|---|
-| 0 | trail the selected target, or the leader's position +200 m of altitude when the target is beyond **1800 m** | leader live, within **700 m**, own speed above **20.576 m/s** → 1 |
+| 0 | the target station, or the leader's position +200 m of altitude when there is no target or the LEADER is beyond **1800 m** | leader live, within **700 m**, own speed above **20.576 m/s** → 1 |
 | 1 | the formation offset above | (set from 0, 2 or 4) |
-| 2 | trail the selected target | no target → 1; or `(3 × altitude error)² + range²` above **1200 m** squared for a player leader, **800 m** squared for an AI leader → 1 |
+| 2 | the target station | no target → 1; or `(3 × altitude error)² + horizontal range²` above **1200 m** squared for a player leader, **800 m** squared for an AI leader → 1 |
 | 3 | re-join | within **50 m** of the station → 4; target acquired → 2 |
 | 4 | the formation offset | within **50 m** → 1; target acquired → 2 |
 
-Nothing inside this function enters state 3.
+Both distances in state 2's break-off are measured to the **leader**, not to the target, and the
+range term is the horizontal one alone (`FUN_00538920`, x and z); every other test on this page is
+a 3-D distance (`FUN_00538880`).
 
-**The trail station** behind the selected target (states 0 and 2) ramps with the *target's* speed,
-placed along the target's backward axis:
+Nothing inside this function enters state 3, and **nothing inside it leaves state 1**: the column
+above lists that state's entries, not an exit. A wingman on a player leader therefore joins once
+and holds the formation offset for the rest of the mission, target or no target. The engaging
+state is reachable only through the every-frame forcing an AI leader applies (above), which is why
+a wingman-of-a-wingman is the one that alternates.
+
+Nothing OUTSIDE the function moves the state either. `+0xd8` is written at six sites, all of them
+inside `FUN_0041e760` (`0x0041e7b0`, `0x0041e8d1`, `0x0041e9f6`, `0x0041ea21`, `0x0041ea37`,
+`0x0041ea62`) plus the constructor's zero at `0x004b05a3`; no other function in the image writes a
+vehicle's escort state at all.
+
+### A wingman still selects a target, and still shoots
+
+Holding the formation is not the same as ignoring the war, which is why a `mode wingman` block
+authoring `rating_biases` is coherent.
+
+**It acquires.** `FUN_0041c270` calls the acquisition `FUN_0041fe10` at the top of every AI frame
+before it forks on `mode`, so a wingman runs it exactly as a jet does: the same ranked pick
+(`FUN_0041f9c0`) against the same bias table at `+0x344`. Two arms of that function are keyed on
+`mode` being 0 or 4, which is the wingman's own class: the scorer it picks (`PTR_FUN_00603544`
+rather than `PTR_FUN_0060354c`), and the arm that would prefer `primary_target` as the target,
+which is gated on `mode != 4` so a wingman never shoots at its own leader.
+
+**It fires.** The escort law's tail, after it has handed the station to the steering law, is
+`if (+0x948 != 0) { … FUN_0041afe0(); FUN_0041f420(1,1); }`, the same fire routine the pursuit path
+in `FUN_0041c270` ends on. The gate ahead of it is `FUN_00460be0`'s firing solution against the
+gun group at `+0x950`, refused when the solution's dot against the aircraft's own forward row falls
+below −0.9, so a wingman fires whenever the target it selected happens to lie ahead of the station
+it is flying. The engagement a player sees from a wingman is that, not a pursuit.
+
+### The release that is not wired up
+
+`FUN_0049c880` walks every vehicle: alive (`+0x91d == 0`), `mode` 4, a non-null `+0x2fc` whose
+leader answers its vtable `+0x38` test, and hands each one to `FUN_0049c920`. That function assigns
+the chapter's first net (`+0x2e4`, with `+0x2e8`/`+0x2ec` from the node and edge lookups), sets the
+AI state at `+0x2f0` from the net record, and clears `mode` to 0. A vehicle it has touched is an
+ordinary netted AI: `FUN_0041c270` stops forking to the escort law for it and runs the patrol and
+pursue machine instead, which is the only "wingman leaves formation and fights" mechanism in the
+image.
+
+⚠ **It is unreachable.** `FUN_0049c880` has no callers and no 4-byte pointer to it anywhere in the
+image, so nothing in the shipped build can run it. Whatever it was for (the shape reads as a
+release order given to the flight), the shipped game never gives it.
+
+**The target station** (states 0 and 2) ramps with the *target's* speed and is placed along the
+NEGATION of the target's backward axis, i.e. that far AHEAD of it along its own facing, a cut-off
+point rather than a trail:
 
 ```
 d = 106.68                                   for v <= 20.576 m/s
@@ -435,13 +527,59 @@ d = 259.08                                   for v >= 102.880005 m/s
 
 Those are imperial figures in metric storage: 350 ft at 46 mph ramping to 850 ft at 230 mph.
 
+⚠ Pursue computes the same ramp from the same immediates and applies it with the OPPOSITE sign
+(`FUN_0041d9f0`: the aim point is the victim's position plus `d ×` its backward axis, so pursue
+stations itself that far BEHIND its victim). The two laws differ in that one sign alone. The aim
+velocity handed to the steering law goes with the station: the target's own on states 0 and 2, the
+LEADER's on states 1 and 4, and zero on the "fly at the leader" arm of state 0.
+
 **Separation.** Inside **80 m** of the leader (6400 m² compared before the square root), the station
 is pushed away from the leader along the leader-to-follower vector scaled by `80 / distance`.
+⚠ The player station is 18.97 m from its leader, so this push ALWAYS fires there: the commanded
+point alternates between the station itself and a point about 99 m out along the current
+leader-to-wingman line, and the hold that results is a weave around the leader rather than a
+parade-tight join.
 
 **Two AI modes short-circuit the law.** Avoid crash (`+0x358 == 3`) steers at the aircraft's own
 position plus **1000 m** of altitude, and stunned (`+0x358 == 4`) returns immediately with no input
 at all. The net follower's avoid-crash case does the same 1000 m climb-out with its own parameter
-block, so **avoid crash is "aim 1000 m above yourself" in both laws**.
+block, so **avoid crash is "aim 1000 m above yourself" in both laws**. The escort law flies its own
+climb-out on `DAT_0061fb28`, the wingman table, where the net follower uses `DAT_0061fb48`.
+
+### What CSVM ports of this (D34)
+
+`src/Flight/AiEscort.cs` is the law: the five-state machine, both station offsets, the ramp, the
+break-off test and the separation push, pure over a leader/target snapshot. `AiPilot.Escort` holds
+it and, when its leader is in play, dispatches to it INSTEAD of pursue, lay off, patrol, evade and
+a running maneuver, keeping only stunned and avoid crash ahead of it, which is the original's own
+fork order. The station is flown through `AiControlLaw` on `AiLawParams.Wingman`.
+
+Not ported: the radio call the join plays (`DAT_0071c3b0`) and the re-acquire sweep state 2 runs
+when its target is lost (`FUN_0041f9c0` again, with its own 3600 m test and second cue,
+`DAT_0071c3b4`); the fire decision the law ends on, which in CSVM is the host's `AiGunner` pass;
+and the null-leader dereference, which CSVM answers by falling back to the pilot's standing orders.
+
+The acquisition and the guns come out the same way. `AiPilot.Escort` short-circuits the STEERING
+dispatch only; `FlightController`'s gunner pass runs on every AI tick regardless, so a CSVM wingman
+ranks targets against its own `rating_biases` and fires from the station exactly as the law's tail
+does. The `wingman-engage` suite measures it on a flown leg: the wingman holds one bandit as its
+target throughout, opens fire, and its escort state never leaves the formation.
+
+**The spawner.** A campaign session spawns the mission's `aiv` roster through
+`Session/CampaignRoster.cs` (the plan) and `CampaignDirector.BuildRoster` (the placement). The fork
+above is applied per block from the def's `mode` (`Mech3/VehicleDefs.cs`, resolved through
+`kind_of`) and the block's `netids`: a netless `mode wingman` block gets `AiPilot.Escort` on the rig
+its `primary_target` names (the literal `player` is the first human), resolved in a second pass once
+every rig exists; any authored net becomes `AiPilot.Patrol` on that net and no escort. The net's
+volumes (record elements 2–10) are applied first and the block's own slots 8–19 over them, each
+field on the non-zero test, then the activation radius is floored at `min_ai_active_dist`, which is
+the order decoded under "Net assignment". A `deactivated` block is built inert and `WAKEUP_ENEMIES`
+re-activates it. The `campaign-roster` suite pins all of it over C1/M04.
+
+⚠ **A leader flying faster than 250 mph cannot be formated on at all.** The steering law caps an
+AI's desired speed at `AiControlLaw.SpeedCeiling` (111.76 m/s) whatever the airframe can do, so a
+wingman handed a faster leader falls behind for the rest of the mission. That is the original's
+ceiling, not a port artifact, and it is why the in-engine check flies its leader at a cruise lever.
 
 ## Crash avoidance is a STATE, not an altitude rule
 
@@ -801,7 +939,8 @@ is where to start.
 | `FUN_004314e0` | builds one `CCENet` from its record: nodes, edges, volumes, and the trailer's name→object resolve |
 | `FUN_00431a90` | per edge at net load: the delta, its 3-D length, and the arrival radius squared into `edge+0x1c` |
 | `FUN_004303d0` | the `CCENet` constructor, whose `+0x28` default is the 10 m arrival-radius floor |
-| `FUN_0041d8f0` | steps the walk to the next edge once the arrival test fires |
+| `FUN_0041d8f0` | steps the walk to the next edge once the arrival test fires, excluding the edge just flown |
+| `FUN_00431e40` | which edge leaves a node: the one whose leg best lines up with the vehicle's nose |
 | `FUN_00432010` | node position with the trailer offset applied: the "this net rides that object" rule |
 | `FUN_00432140` | node position by index, the wrapper every consumer calls |
 | `FUN_00431900` | nearest node to a point, skipping edgeless nodes |
@@ -809,6 +948,7 @@ is where to start.
 | `FUN_00475f30` | the by-name net assignment: table scan on the entry name, then `FUN_00475fc0` |
 | `FUN_004735b0` | the `player.zrd.json` loader, including `min_ai_active_dist` |
 | `FUN_0049c920` | script-side net assignment, always forces `mode` to `jet` |
+| `FUN_0049c880` | releases every wingman onto a net through the above; UNREFERENCED in the image |
 | `FUN_00475820` | def to vehicle copy, including `mode` |
 | `FUN_00476250` | post-spawn vehicle init, including the wingman demotion |
 | `FUN_0047c210` | the roster spawn: `netids` draw, `preferred_engagement_altitude`, activation |

@@ -1236,6 +1236,48 @@ public sealed partial class ProjectilePool : Node3D
 
     internal void UnregisterAircraft(AircraftBody body) => _aircraft.Remove(body);
 
+    /// <summary>The splash cover test itself, naming what it met so an instrument reports the
+    /// occluder rather than a bare verdict (INSTR-3: the census and the damage path share one
+    /// predicate). Its decode sits on <see cref="BlastCovered"/>, the damage path's entry.
+    /// <paramref name="cover"/> can be null on a hit whose collider is not a node.</summary>
+    internal bool BlastCoverBetween(PhysicsDirectSpaceState3D space, Vector3 point, Vector3 normal,
+        Vector3 centre, Rid candidate, out Node? cover)
+    {
+        cover = null;
+        var from = point + normal * CoverRayLift;
+        if (from.DistanceSquaredTo(centre) <= 1e-6f)
+            return false;
+        _coverRay.From = from;
+        _coverRay.To = centre;
+        _coverRay.Exclude = new Godot.Collections.Array<Rid> { candidate };
+        var hit = space.IntersectRay(_coverRay);
+        _coverRay.Exclude = NoExclude;
+        if (hit.Count == 0)
+            return false;
+        cover = hit["collider"].Obj as Node;
+        return true;
+    }
+
+    /// <summary>The production splash gather and the production cover ray over one burst, dealing
+    /// no damage: what a burst at <paramref name="point"/> reaches and what stops the rest. The
+    /// aircraft half is deliberately absent, since a census over world geometry has no roster.
+    /// </summary>
+    internal void BlastCoverCensus(PhysicsDirectSpaceState3D space, Vector3 point, Vector3 normal,
+        float radius, List<BlastCoverRow> into)
+    {
+        _blastCandidates.Clear();
+        GatherWorldCandidates(space, point, radius, struck: null);
+        _blastCandidates.Sort(ByDistance);
+        foreach (var c in _blastCandidates)
+        {
+            bool covered = BlastCoverBetween(space, point, normal, c.Centre, c.Rid, out var cover);
+            into.Add(new BlastCoverRow(c.Body, c.Centre, Mathf.Sqrt(c.DistanceSq),
+                covered ? cover : null, covered));
+        }
+
+        _blastCandidates.Clear();
+    }
+
     private static int CountMeshes(Node n)
     {
         int c = n is MeshInstance3D ? 1 : 0;
@@ -2447,18 +2489,8 @@ public sealed partial class ProjectilePool : Node3D
     // wall the round hit is cover for what stands behind it and transparent to its own side; a
     // fuse or range burst in the air has no normal and no lift.
     private bool BlastCovered(PhysicsDirectSpaceState3D space, Vector3 point, Vector3 normal,
-        in BlastCandidate c)
-    {
-        var from = point + normal * CoverRayLift;
-        if (from.DistanceSquaredTo(c.Centre) <= 1e-6f)
-            return false;
-        _coverRay.From = from;
-        _coverRay.To = c.Centre;
-        _coverRay.Exclude = new Godot.Collections.Array<Rid> { c.Rid };
-        var hit = space.IntersectRay(_coverRay);
-        _coverRay.Exclude = NoExclude;
-        return hit.Count > 0;
-    }
+        in BlastCandidate c) =>
+        BlastCoverBetween(space, point, normal, c.Centre, c.Rid, out _);
 
     // Whether this gun's impact effect may play again now, stamping the time when it may.
     // The throttle is per effect name = per firing group (see _gunEffectAt).
@@ -2984,6 +3016,12 @@ public sealed partial class ProjectilePool : Node3D
         public Vector3 Centre;
         public float DistanceSq;
     }
+
+    /// <summary>One row of <see cref="BlastCoverCensus"/>: a world body the burst sphere overlapped,
+    /// the point the cover ray aimed at, its surface distance from the burst, and the node that
+    /// stopped the ray (null when the body is clear, or when the cover has no node).</summary>
+    internal readonly record struct BlastCoverRow(Node? Body, Vector3 Centre, float Distance,
+        Node? Cover, bool Covered);
 
     private struct Proj
     {

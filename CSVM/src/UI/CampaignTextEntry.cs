@@ -1,0 +1,144 @@
+using System;
+using System.Text;
+
+namespace CSVM.UI;
+
+/// <summary>
+/// A campaign screen's one-line text field, the original's <c>cm_e_name</c> edit box. The keyboard
+/// types into it and a pad drives the same buffer through an alphabet stepper, so the field needs
+/// no keyboard at all. What it accepts is the original's own rule: letters, digits and spaces
+/// (langui 707), at most <see cref="MaxLength"/> characters (langui 212). Restricting the alphabet
+/// this far is also what keeps <see cref="CSVM.Session.CampaignProfileStore.DirFor"/>'s
+/// sanitisation from ever having anything to change, since a profile name becomes a directory name.
+/// </summary>
+public sealed class CampaignTextEntry
+{
+    /// <summary>The longest name the field holds. The original's roster is 24 slots of 33 bytes,
+    /// a 32-character name plus its terminator (docs/formats/campaign-screens.md).</summary>
+    public const int MaxLength = 32;
+
+    // What the pad steps through, in the order the stepper walks it. Upper case then digits then
+    // the space, all of which the accept rule already admits, so a stepped name is always valid.
+    private const string PadAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ";
+
+    /// <summary>What has been typed, always a string the accept rule admits.</summary>
+    public string Text { get; private set; } = string.Empty;
+
+    /// <summary>Whether the field is armed: the keyboard's letters are text rather than
+    /// navigation, and the cursor axes edit the name rather than the screen's list.</summary>
+    public bool Active { get; private set; }
+
+    /// <summary>The field as a row draws it, with a caret while armed.</summary>
+    public string Display => Active ? Text + "_" : Text;
+
+    /// <summary>Whether one character may be typed: the original's alphanumeric-and-space
+    /// rule (langui 707).</summary>
+    public static bool Accepts(char c) => char.IsAsciiLetterOrDigit(c) || c == ' ';
+
+    /// <summary>Whether a whole name is one the field would hold, empty names excluded.</summary>
+    public static bool Valid(string text)
+    {
+        if (text.Length == 0 || text.Length > MaxLength)
+        {
+            return false;
+        }
+
+        foreach (char c in text)
+        {
+            if (!Accepts(c))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Arms the field for typing.</summary>
+    public void Arm() => Active = true;
+
+    /// <summary>Disarms the field, leaving what was typed.</summary>
+    public void Disarm() => Active = false;
+
+    /// <summary>Replaces the contents, dropping anything the accept rule refuses and truncating to
+    /// <see cref="MaxLength"/>, so a name from any source is one the field could have typed.</summary>
+    public void Set(string text)
+    {
+        var kept = new StringBuilder();
+        foreach (char c in text)
+        {
+            if (Accepts(c) && kept.Length < MaxLength)
+            {
+                kept.Append(c);
+            }
+        }
+
+        Text = kept.ToString();
+    }
+
+    /// <summary>Appends the characters typed this frame, silently dropping the ones the rule
+    /// refuses and everything past the length cap. Returns whether the text changed.</summary>
+    public bool Type(string chars)
+    {
+        string was = Text;
+        var text = new StringBuilder(Text);
+        foreach (char c in chars)
+        {
+            if (Accepts(c) && text.Length < MaxLength)
+            {
+                text.Append(c);
+            }
+        }
+
+        Text = text.ToString();
+        return Text != was;
+    }
+
+    /// <summary>Removes the last character. Returns whether anything went.</summary>
+    public bool Backspace()
+    {
+        if (Text.Length == 0)
+        {
+            return false;
+        }
+
+        Text = Text[..^1];
+        return true;
+    }
+
+    /// <summary>Adds one character at the alphabet's first entry, the pad's way of growing the
+    /// name; the stepper then edits it. Returns whether one was added.</summary>
+    public bool Append()
+    {
+        if (Text.Length >= MaxLength)
+        {
+            return false;
+        }
+
+        Text += PadAlphabet[0];
+        return true;
+    }
+
+    /// <summary>Steps the last character through the alphabet, the pad's letter control. Returns
+    /// whether it changed.</summary>
+    public bool StepLast(int dir)
+    {
+        if (dir == 0 || Text.Length == 0)
+        {
+            return false;
+        }
+
+        char current = Text[^1];
+        int at = PadAlphabet.IndexOf(current, StringComparison.Ordinal);
+        int next = at < 0
+            ? (dir > 0 ? 0 : PadAlphabet.Length - 1)
+            : (((at + dir) % PadAlphabet.Length) + PadAlphabet.Length) % PadAlphabet.Length;
+        if (PadAlphabet[next] == current)
+        {
+            return false;
+        }
+
+        Text = Text[..^1] + PadAlphabet[next];
+        return true;
+    }
+}

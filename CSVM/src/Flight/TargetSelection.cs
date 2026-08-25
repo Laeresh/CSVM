@@ -77,8 +77,11 @@ public sealed class TargetSelection
     /// (<c>FUN_004b5fb0</c>). With the selection cleared the pool is left EMPTY rather than built and
     /// discarded, which is the original's own short-circuit and the mechanism behind the sticky
     /// clear.</summary>
+    /// <param name="objectives">The mission's objective-flagged sites, which sort ahead of every
+    /// sector on the Enemy cycle.</param>
     public void Rebuild(AimCandidateSet scan, IReadOnlyList<AimCandidate>? subParts, int ownTeam,
-        object? self, Vector3 position, Basis basis)
+        object? self, Vector3 position, Basis basis,
+        IReadOnlyList<AimCandidate>? objectives = null)
     {
         if (ActiveClass == null)
         {
@@ -87,7 +90,7 @@ public sealed class TargetSelection
             return;
         }
 
-        Pool.Rebuild(scan, subParts, ownTeam, self);
+        Pool.Rebuild(scan, subParts, ownTeam, self, objectives);
         Resolve(position, basis);
         // Verification breadcrumb, once per selector: which cycles this session has anything in.
         // It waits for the first NON-EMPTY pool because the things that fill it (AI spawns, the

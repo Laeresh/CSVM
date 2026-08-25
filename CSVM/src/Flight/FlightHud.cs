@@ -337,13 +337,16 @@ public sealed class FlightHud
     }
 
     /// <summary>Show or hide everything this pane draws for its pilot: the dial cluster, the
-    /// reticle, the weapon readout, the text block and the marker/target HUD. Photo mode hides the
-    /// lot, since instruments belonging to an aircraft you are looking at from outside are noise in
-    /// a picture (BL-429). ⚠ Not what <c>--debug-spectate</c> wants: that mode keeps the marker HUD
+    /// compass tape, the reticle, the weapon readout, the text block and the marker/target HUD.
+    /// A cutscene hides the lot, and so does photo mode, since instruments belonging to an
+    /// aircraft you are looking at from outside are noise in a picture (BL-429).
+    /// ⚠ Not what <c>--debug-spectate</c> wants: that mode keeps the marker HUD
     /// deliberately, so it calls <see cref="SetInstrumentsVisible"/> instead.</summary>
     public void SetVisible(bool visible)
     {
         SetInstrumentsVisible(visible);
+        if (Compass != null)
+            Compass.Visible = visible;
         if (_text != null)
             _text.Visible = visible;
         if (Marker != null)

@@ -2581,7 +2581,7 @@ A non-zero `+0xd4` makes `FUN_0048a110` return on its first line, so the vehicle
 clears `+0xcc`; the release is `FUN_0046a2b0` (`0x0046a2c3`), a mission-goal action. A vehicle
 spawned with a path is therefore a frozen emitter from placement until a goal releases it, and stops
 being one the moment it completes the path and drops into the flight model. No vehicle type holds the
-flag by identity. The follower itself is written up under `BL-361`.
+flag by identity. The follower itself is the next section.
 
 **Zeppelins: yes, and by the default rather than by a zeppelin rule.** `extracted/zrdr/vehicle.zrd.json`
 names no zeppelin, blimp or airship type, so a zeppelin is never a spawned registry vehicle in this
@@ -2615,6 +2615,75 @@ additionally gated on `AiModeMachine.Mode != AiMode.Stunned` (`0x0048c317`'s own
 flightModel.md above), reproducing "a stunned AI flies into terrain". Carrier releases now carry
 both timers: the 2.5 s post-drop ×0.15 window and the per-object `obj+0xAC` collision grace. The
 carrier grace also suppresses AI ground blow; its probe and both output terms begin only after it.
+
+## The scripted-path follower (`FUN_0048a110`), the second movement law
+
+A placed vehicle can be a puppet on an authored waypoint list rather than a simulated aeroplane. The
+aircraft update dispatcher `FUN_00489ea0` branches on `obj+0xcc` **before** it reaches any flight
+law: non-zero and the object is driven by the path follower `FUN_0048a110`, zero and it runs the
+movement law selected by `obj+0x67C` (`0`/`4` being `FUN_0048e580`, the flight integrator). The two
+are exclusive, so nothing in the follower is a steering input to the flight model, and it is not AI
+behaviour either.
+
+**The lifecycle.** The spawner `FUN_0047c210` sets `+0xcc = 1` when the spawn record carries a path
+(`0x0047c568`) together with a freeze flag `+0xd4 = 1` (`0x0047c57e`), so the vehicle sits motionless
+at its first waypoint until a mission goal releases it (`FUN_0046a2b0`, `0x0046a2c3`, reached from
+the goal-action runtime `FUN_0046a490`). That same runtime can attach a path at any time with
+`FUN_004940d0` (`0x0049427c`), which sets `+0xcc = 1` and `+0xd4 = 0` so the vehicle starts moving at
+once. Only `FUN_0048a110` clears `+0xcc` (`0x0048a863`), and only on the final leg.
+⚠ **The freeze flag `+0xd4` is a separate flag from the path flag `+0xcc`.** A design folding the two
+into one boolean cannot express "placed and waiting", which is the state most authored path vehicles
+spend most of a mission in.
+⚠ `FUN_004afd00` gates AI radio chatter on `+0xcc`, so a path-driven vehicle is silent. Do not model
+the movement and leave the voice on.
+
+**The law**, per tick, with `dt` = `DAT_009ad744`:
+
+    target   = next waypoint, y raised by the vehicle type's ride height at type+0x218
+               (a flat 0.2 m for movement classes other than 0/4)
+    heading += clamp(headingError / 60°, ±1) · dt        radians, so ≥60° of error gives 1 rad/s
+    speed    = 17.8816 m/s, which is exactly 40 mph      held until the final leg
+    forward  = speed · (1 − |clamped heading error|)     it barely advances while turning hard
+    advance the leg when dot(target − pos, legDir) ≤ 5.0
+
+On the **final** leg the steering target is replaced by a point **300 m** along the leg direction,
+its y gains `(speed/110mph − 0.4) · 83.3` once speed passes 0.4 of 110 mph (44 mph), and the speed
+term becomes `speed += 4.0302024 · dt` instead of the fixed 40 mph. Reaching that leg's own waypoint
+clears the path flag, which is the handoff to the flight model.
+
+The constants: `17.8816` is 40 mph exactly, `0.020335784` is 1/110 mph and `0.95492965` is 3/π, the
+60° heading-error normaliser. ⚠ **`4.0302024` and the `83.3` climb gain were read but not
+identified.** They are used as read, not as tuning knobs, and nothing may retune them; what is open
+is which authored quantity they come from.
+
+**The path source.** The roster's `taxiPath` slot ([formats/ai-rosters.md](../formats/ai-rosters.md))
+names a path (`pp1`); the chapter's gamez carries it as the transform-only subtree `pp1_aipath`,
+whose `pp1_aipN` children are the waypoints in ordinal order. Ten vehicles carry one, in three
+missions: C1/M04 (`blakepeace_2_3`…`_6` on `pp1`…`pp4`), C2/M02 (five) and C5/M01 (one). C1/M04's
+four sit on an airfield runway and its `objectives.zrd` releases them with `START_TAXI` two to three
+seconds apart, which is a flight taking off one aeroplane at a time. Fixed taxi speed, a ground-height
+offset, a final-leg acceleration with a climb-out and a handoff to the flight model read as the
+runway takeoff run, though `FUN_004940d0` shows a goal can attach a path for any purpose. Instant
+Action places no vehicle on a path (`ia.zrd.json`'s `dzpath1`–`dzpath5` are danger-zone gates), so no
+golden can see it.
+
+**What CSVM ports of this.** `Flight/PathFollower.cs` is the law with every constant above,
+`Mech3/ScriptedPath.cs` the route, and `Session/ScriptedPathVehicles.cs` the lifecycle, released by
+`CampaignDirector`'s `START_TAXI`. Pinned by the `scripted-path` suite over C1's real `pp1`.
+Two things the decode does not pin, chosen here rather than found: the altitude between waypoints
+(the follower is taken to the target's height over the horizontal distance still to run), and the
+leg-advance test, which is measured against the leg's own waypoint on every leg including the last,
+so the 300 m point steers and does not also delay the handoff.
+⚠ **The ride height for movement classes 0 and 4 is not identified.** Those are the aircraft classes,
+so it is the one every shipped path vehicle needs, and `vehicle.json` has no field traced to
+`type+0x218`. The port leaves it at zero and says so rather than reusing the 0.2 m the other classes
+take.
+⚠ **Nothing spawns the `aiv` roster yet**, so no session places a vehicle on a path and the registry
+is empty at run time; `START_TAXI` reports itself unconsumed until a roster spawner calls
+`ScriptedPathVehicles.Place`. Ground blow's own emitter test reads `+0xcc`, so a spawned vehicle put
+on a path would stop repelling the player the moment it completes the path; ground blow shipped
+without the registry filter (its player probe simply excludes aircraft), so whether a path-driven
+vehicle needs to become an emitter in this build is open, and only becomes answerable once one exists.
 
 ## Collision response and `bounce_factor` (`FUN_0048d7f0`)
 

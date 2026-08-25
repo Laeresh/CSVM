@@ -48,6 +48,7 @@ be scanned across all three:
 | `shakes.json`, `damage_shakes.json` (plane-wobble oscillator sources + ON_CALL shake defs) | [shakes.md](shakes.md) |
 | `templates.zrd` (the clutter decorations' per-model substitution/scale/fade properties) | [templates.md](templates.md) |
 | `interp.json` boot scripts (not zrdr, but the same config ecosystem) | [clutter.md](clutter.md) |
+| `Briefing.zrd` (the shared briefing dialog and its per-mission reveal scripts); `map.zrd`/`location.zrd` (the in-flight cockpit map, not the briefing) | [briefing.md](briefing.md) |
 
 ## Evidence & limits
 

@@ -142,6 +142,7 @@ public sealed class LensFlareRig
             spriteRoot.SetAnchorsPreset(Control.LayoutPreset.FullRect);
             spriteCanvas.AddChild(spriteRoot);
             rig.HudParent.AddChild(spriteCanvas);
+            rig.WorldOverlays.Add(spriteCanvas);
             // Godot adds children last-on-top within a layer; the whiteout canvas is added later
             // (WeatherRig runs after this), so it already wins. Nothing to reorder.
 
@@ -178,6 +179,7 @@ public sealed class LensFlareRig
             inst.Wash.SetAnchorsPreset(Control.LayoutPreset.FullRect);
             washCanvas.AddChild(inst.Wash);
             rig.HudParent.AddChild(washCanvas);
+            rig.WorldOverlays.Add(washCanvas);
 
             _instances.Add(inst);
         }

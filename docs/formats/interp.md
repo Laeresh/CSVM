@@ -218,7 +218,7 @@ reciprocal cell size at `+0x84` / `+0x88`, cell counts at `+0x98` (x) / `+0x9c` 
 row-pointer table at `+0xa0` with a cell stride of `0x58`. Each cell holds a `short` count at
 `+0x3a` and a pointer at `+0x3c` to 12-byte entries whose first dword is the node.
 
-Two traps for anyone reimplementing it:
+Three traps for anyone reimplementing it:
 
 - **Corner order does not matter.** Each coordinate becomes
   `floor((coord - origin) * reciprocalCellSize)`, is clamped to `[0, count-1]`, and the code
@@ -227,6 +227,21 @@ Two traps for anyone reimplementing it:
 - **The rectangle is half-open in cell space.** Both loops are strict `<` against the max cell
   index, so the last row and column are excluded — and **a rectangle that lands inside a single
   cell toggles nothing at all**. An inclusive `<=` over-selects by one row and one column.
+- ⚠ **The two axes index in opposite directions.** The x origin is the grid's LOW edge and its
+  cell size is positive; the z origin is the grid's HIGH edge and its authored cell size is
+  **negative** (`virt_partition_y_size == -256`, `virt_partition_y_inv == 1/-256` in the mech3ax
+  world reader, `crates/nodes/src/pm/world/data.rs`), so `z` cell indices grow as z falls. The
+  extraction preserves it: each cell stores its own low x and its own **high** z, and the file's
+  row order runs z downward from the grid's high edge, which is the engine's own row table. Read
+  the origin and cell size off the cells rather than deriving them from `area`, and a rectangle
+  mirrors onto the wrong half of the map cannot happen.
+
+**Consumed.** `MissionSetup.BindPartitions(gamez)` resolves each rectangle to gamez node indices
+through `WorldPartitionGrid`, and `Apply` switches them with the same subtree toggle `NodeSetActive`
+uses, reached by index because the verb names no node. `GameZ` keeps the per-cell membership as
+`GameZNode.PartitionCellNodes` beside the flat `PartitionNodes` the placement walks use. C3's three
+rectangles select 71, 36 and 131 of the chapter's 439 partition roots; the selections are terrain and
+scenery, so a story mission really swaps its map. Regression: the `partition-areas` suite.
 
 All 25 uses are `support\c3\*.gw`, and they resolve to just three distinct rectangles:
 `(-10240,-2048)→(-2048,-6144)`, `(-8192,-6144)→(-2048,-8192)` and
@@ -237,10 +252,9 @@ Three sibling verbs exist in the same dispatch and appear in no shipped script: 
 (`FUN_004daa20`, sets the grid up), `WorldPartitionInclusionTolerance` and
 `WorldPartitionMaxDECFeatureCount`.
 
-**Not consumed.** `GameZ.cs` already parses the World node's `partitions` array, but it
-dedups every cell into one flat `PartitionNodes` list behind a `HashSet<int>`, discarding the
-per-cell membership a rectangle query needs; the source JSON still carries it.
-`MapEdgeExtender` already has the world-position → cell-index helper.
+⚠ `MapEdgeExtender` has a world-position → cell-index helper of its own, and it is NOT this one: it
+bins geometry it has already collected and needs indices outside the grid, so it derives both axes
+from `area` and never sees the z inversion. Do not merge the two.
 
 ## Relationship to the animation definitions
 

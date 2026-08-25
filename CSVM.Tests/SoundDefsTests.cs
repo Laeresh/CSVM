@@ -56,6 +56,16 @@ public class SoundDefsTests
     }
 
     [Fact]
+    public void QueueMarksARadioLineAndNeverCoexistsWith3D()
+    {
+        var defs = Defs();
+        Assert.Equal(45f, defs["snd_probe_pitched"].QueueSeconds);
+        Assert.True(defs["snd_probe_pitched"].Queued);
+        Assert.False(defs["snd_probe_loop"].Queued);
+        Assert.False(defs["snd_probe_oneshot"].Queued);
+    }
+
+    [Fact]
     public void LookupIsCaseInsensitive()
     {
         Assert.True(Defs().ContainsKey("SND_PROBE_LOOP"));

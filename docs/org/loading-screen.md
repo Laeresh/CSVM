@@ -14,9 +14,10 @@ whose entry in [`architecture.md`](../architecture.md) carries the plumbing and 
 is the original's runtime: how it picks a screen, what fills its bar, and how it keeps drawing while
 the mission loads.
 
-⚠ **This page is a decode, not a proposal.** Whether CSVM should match this screen at all is an open
-question in `BL-409`, not a conclusion of this page: the source artwork is 800x600 and the frame is
-painted into the image, so meeting a modern window is a taste call the executable cannot settle.
+⚠ **Everything below is a decode of the original, not a description of ours.** How the 800x600
+source artwork meets a modern window is settled in [`campaign-board.md`](campaign-board.md), which
+this screen inherits; what our own load screen draws out of the decode, and what it deliberately
+does not, is in "Where CSVM differs" at the foot of this page.
 
 ## Function map
 
@@ -155,9 +156,21 @@ the load straight through on one thread and yields a rate-limited repaint from i
 
 ## Where CSVM differs
 
-`UI/LoadBoard.cs` draws a plain opaque panel in the shared board style, naming the chapter and the
-flight, with no artwork, no propeller and no bar. The build is one synchronous block, so nothing can
-be drawn during it at all: `Launcher.BeginLaunch` shows the board, lets one frame render, and builds
-on the next tick. Closing that gap is `BL-409`, and this page supplies the two pieces it was missing,
-namely that the milestone fractions are authored rather than measured, and that the original's own
-answer to a blocking load is a throttled pump rather than an incremental build.
+`UI/LoadBoard.cs` draws the composition above at its authored coordinates, through the campaign
+boards' own surface (`docs/org/campaign-board.md`): the chart sheet for a campaign launch, the
+blackboard with its three centred photographs for everything else. Free flight and dogfight are
+ours rather than the original's and take the non-campaign screen; the multiplayer family has no
+caller here. The two text lines are placed by us, since the coordinates for `HEAD1`/`HEAD2`/`OBJ1`/
+`OBJ2` live in `Loading.zrd.json` and not in this decode.
+
+**What is drawn from the bar and the propeller is their still art alone.** The unlit strip
+(`prog_blkload`, `prog_blk`) is drawn at its authored position and nothing ever fills it; the
+propeller draws frame `prp0` and never steps. Both are the same blocker: the build is one
+synchronous block, so `Launcher.BeginLaunch` shows the board, lets one frame render, and builds on
+the next tick, and nothing can be redrawn during the build at all. A fill or a turning propeller
+needs that build decoupled from the draw, which is its own item; the two pieces this page supplies
+towards it are that the milestone fractions are authored rather than measured, and that the
+original's own answer to a blocking load is a throttled pump rather than an incremental build.
+The extraction also carries only the six range endpoints of the propeller cycle
+(`prp0`, `prp7`, `prp15`, `prp22`, `prp30`, `prp37`), so the authored 6 fps cycle cannot be
+reproduced from it as it stands.

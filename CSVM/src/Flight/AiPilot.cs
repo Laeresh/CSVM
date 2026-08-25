@@ -45,6 +45,14 @@ public sealed class AiPilot
     /// hands it the gunner's. Steering never reads it.</summary>
     public AiRocketeer? Rocketeer;
 
+    /// <summary>The formation escort (<see cref="AiEscort"/>), or null for a pilot that flies no
+    /// station. When it has a live leader it is the WHOLE dispatch, exactly as the original's
+    /// <c>mode wingman</c> fork is: only the two AI states its own law short-circuits on, stunned
+    /// and avoid crash, run instead of it. ⚠ Invented: a leader out of play falls back to the
+    /// orders below, where the original dereferences its leader with no null check at all
+    /// (docs/org/aiPilot.md, "The escort law").</summary>
+    public AiEscort? Escort;
+
     /// <summary>The nine-mode state machine, or null for the bare-orders pilot above.
     /// When set, each <see cref="Next"/> steps the machine and dispatches on its mode: patrol
     /// flies <see cref="Patrol"/>, pursue chases the gunner's target, lay off holds its entry
@@ -253,11 +261,18 @@ public sealed class AiPilot
                 quarry?.WorldPosition, quarry?.Pilot?.Machine?.Mode, dt,
                 quarry?.WorldVelocity, quarry?.IsHumanPiloted ?? false,
                 nose: -model.Attitude.Z);
+            // The two states the escort law itself short-circuits on come first, then the escort,
+            // which is the whole dispatch for a wingman, a maneuver included, since the original
+            // never reaches its maneuver arm from the mode-4 fork.
+            if (mode == AiMode.Stunned)
+                return StunnedInput();
+            if (mode == AiMode.AvoidCrash)
+                return FlyClimbOut(model, dt, machine);
+            if (Escort is { Leader.InPlay: true } escorting)
+                return FlyEscort(model, dt, escorting, quarry);
+
             switch (mode)
             {
-                case AiMode.Stunned:
-                    return StunnedInput();
-
                 case AiMode.EvasiveManeuver when machine.Executor is { } executor:
                     return executor.Next(model, dt);
 
@@ -265,15 +280,6 @@ public sealed class AiPilot
                     TargetHeadingDeg = machine.EvadeHeadingDeg;
                     TargetAltitude = machine.EvadeAltitude;
                     return Fly(model, dt, OrderAim(model), Vector3.Zero, AiLawParams.Cruise);
-
-                case AiMode.AvoidCrash:
-                    // The reported order and the flown aim are the same 1000 m of climb; ClimbOutAim
-                    // only adds the invented break to the right, which is lateral.
-                    var climbOut = ClimbOutAim(model.Position, model.VelocityDir * model.Speed);
-                    TargetHeadingDeg = HeadingDegOf(climbOut - model.Position);
-                    TargetAltitude = machine.ClimbOutAltitude;
-                    return Fly(model, dt, climbOut, Vector3.Zero, AiLawParams.AvoidCrash,
-                        emergency: true);
 
                 case AiMode.Pursue when quarry != null:
                     return FlyPursuit(model, dt, quarry);
@@ -293,6 +299,9 @@ public sealed class AiPilot
             return StunnedInput();
         }
 
+        if (Escort is { Leader.InPlay: true } escort)
+            return FlyEscort(model, dt, escort, quarry);
+
         return quarry != null ? FlyPursuit(model, dt, quarry) : FlyPatrol(model, dt);
     }
 
@@ -307,10 +316,11 @@ public sealed class AiPilot
     // The skill factor is the machine's `sixth_sense_factor`, which the decode shows
     // multiplies all three channels every step; a pilot with no machine gets a neutral 1.
     private FlightInput Fly(FlightModel model, float dt, Vector3 aimPoint, Vector3 aimVelocity,
-        in AiLawParams p, bool emergency = false, bool engaged = false, bool gunLead = false)
+        in AiLawParams p, bool emergency = false, bool engaged = false, bool gunLead = false,
+        bool stationKeeping = false)
     {
         var input = AiControlLaw.Steer(model, aimPoint, aimVelocity, p, Throttle, dt,
-            emergency, engaged, gunLead, Machine?.SixthSenseFactor ?? 1f);
+            emergency, engaged, gunLead, Machine?.SixthSenseFactor ?? 1f, stationKeeping);
         Throttle = input.Throttle;
         return input;
     }
@@ -342,6 +352,55 @@ public sealed class AiPilot
         return Fly(model, dt, aim, aimVelocity, AiLawParams.Engaged, engaged: true, gunLead: onAxis);
     }
 
+    // The climb-out both laws share: 1000 m above the aeroplane itself, on the emergency arm. The
+    // reported order and the flown aim are the same climb; ClimbOutAim only adds the invented
+    // break to the right, which is lateral. An escorting pilot flies it on the wingman table,
+    // which is the one the escort law passes where the net follower passes its own.
+    private FlightInput FlyClimbOut(FlightModel model, float dt, AiModeMachine machine)
+    {
+        var climbOut = ClimbOutAim(model.Position, model.VelocityDir * model.Speed);
+        TargetHeadingDeg = HeadingDegOf(climbOut - model.Position);
+        TargetAltitude = machine.ClimbOutAltitude;
+        var table = Escort is { Leader.InPlay: true } ? AiLawParams.Wingman : AiLawParams.AvoidCrash;
+        return Fly(model, dt, climbOut, Vector3.Zero, table, emergency: true);
+    }
+
+    // The formation escort: the station AiEscort computes, flown on the wingman table. The
+    // leader's frame comes off its published transform, the sim pose between sim steps.
+    // ⚠ The one call that lifts the desired-speed ceiling (AiControlLaw.StationCeiling): a leader
+    // cruising above 250 mph is faster than anything the decoded ceiling lets an escort ask for,
+    // so under it the escort throttles back while behind and the station is never regained.
+    private FlightInput FlyEscort(FlightModel model, float dt, AiEscort escort,
+        FlightController? quarry)
+    {
+        var leader = escort.Leader!;
+        var station = escort.Next(
+            model.Position,
+            model.Speed,
+            new EscortLeader
+            {
+                Position = leader.WorldPosition,
+                Attitude = leader.GlobalTransform.Basis,
+                Velocity = leader.WorldVelocity,
+                IsPlayer = leader.IsHumanPiloted,
+            },
+            quarry is null
+                ? null
+                : new EscortQuarry
+                {
+                    Position = quarry.WorldPosition,
+                    Backward = -quarry.NoseDirection,
+                    Velocity = quarry.WorldVelocity,
+                },
+            out var aimVelocity);
+
+        var toStation = station - model.Position;
+        if (new Vector2(toStation.X, toStation.Z).LengthSquared() > 1f)
+            TargetHeadingDeg = HeadingDegOf(toStation);
+        TargetAltitude = station.Y;
+        return Fly(model, dt, station, aimVelocity, AiLawParams.Wingman, stationKeeping: true);
+    }
+
     // Lay off (the rubber-band assist): steers the course captured at mode entry on the cruise
     // table, then OVERRIDES the law's lever with a walk toward SixthSenseFactor × the pursuer's
     // speed. ⚠ That override is a remake-only assist, not the original's lay-off, which flies the
@@ -363,16 +422,16 @@ public sealed class AiPilot
 
     // Patrol: the node is a point with no velocity, which is the shape the law wants, but it is
     // NOT the aim point — PatrolAim displaces it off the aeroplane's own cross-track error, and
-    // flying at the node itself is what BL-387 was. Until the walk has advanced once there is no
-    // leg to be off, so the node is flown directly. Without a net the standing heading/altitude
-    // orders are projected into a point. All of it on the cruise table, the original's patrol arm.
+    // flying at the node itself is what BL-387 was. The nose seats the walk on a real edge from
+    // the first step, so there is a leg to be off straight away. Without a net the standing
+    // heading/altitude orders are projected into a point. All of it on the original's cruise table.
     private FlightInput FlyPatrol(FlightModel model, float dt)
     {
         if (Patrol is not { } patrol)
             return Fly(model, dt, OrderAim(model), Vector3.Zero, AiLawParams.Cruise);
 
         SteeringPatrol = true;
-        patrol.Update(model.Position);
+        patrol.Update(model.Position, -model.Attitude.Z);
         var node = patrol.CurrentTarget;
         var toNode = node - model.Position;
         if (new Vector2(toNode.X, toNode.Z).LengthSquared() > 1f)

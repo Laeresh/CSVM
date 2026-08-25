@@ -11,15 +11,32 @@ using CSVM.Utils;
 using Godot;
 
 using static CSVM.Testing.AiSuites;
+using static CSVM.Testing.AlphaCutoutRaySuites;
 using static CSVM.Testing.AnimationAndEffectsSuites;
+using static CSVM.Testing.CampaignBriefingNoteSuites;
+using static CSVM.Testing.CampaignBriefingRepaintSuites;
+using static CSVM.Testing.CampaignHudSuites;
+using static CSVM.Testing.CampaignLoopSuites;
+using static CSVM.Testing.CampaignMarkerSuites;
+using static CSVM.Testing.CampaignRosterSuites;
+using static CSVM.Testing.CampaignSuites;
+using static CSVM.Testing.CampaignZeppelinSuites;
+using static CSVM.Testing.CampaignZeppelinWakeSuites;
 using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
 using static CSVM.Testing.InstantActionSuites;
+using static CSVM.Testing.LandingApproachSuites;
+using static CSVM.Testing.MenuCaptureSuites;
+using static CSVM.Testing.MusicSuites;
 using static CSVM.Testing.OrdnanceSuites;
 using static CSVM.Testing.PufferSuites;
+using static CSVM.Testing.TargetingCandidateSuites;
 using static CSVM.Testing.TargetingSuites;
+using static CSVM.Testing.WingmanSuites;
 using static CSVM.Testing.WorldAndToolSuites;
+using static CSVM.Testing.WorldFidelitySuites;
+using static CSVM.Testing.ZeppelinIdentitySuites;
 using static CSVM.Testing.ZeppelinSuites;
 namespace CSVM.Testing;
 
@@ -122,6 +139,39 @@ public static class SuiteCatalog
         "target-flag",
         "splitscreen-listeners",
         "world-lights-nearest-viewer",
+        "campaign-persistence",
+        "music-states",
+        "campaign-objectives",
+        "campaign-mission-end",
+        "targeting-candidates",
+        "partition-areas",
+        "scripted-path",
+        "wingman-station",
+        "wingman-engage",
+        "campaign-objectives-hud",
+        "campaign-cutscene",
+        "cutscene-letterbox",
+        "hangar-door-wake",
+        "fog-state",
+        "campaign-roster",
+        "campaign-bomber-formation",
+        "campaign-loop",
+        "campaign-zeppelins",
+        "campaign-danger-zones",
+        "campaign-objective-markers",
+        "landings-approach-trigger",
+        "landings-wingwalk-gate",
+        "campaign-airframe-swap",
+        "roster-spawn-names",
+        "mission-radio",
+        "campaign-zeppelin-wakeup",
+        "campaign-squad-wakeup",
+        "campaign-set-ai-net",
+        "alpha-cutout-ray-census",
+        "zeppelin-identity",
+        "campaign-briefing-repaint",
+        "menu-screenshot-key",
+        "campaign-briefing-note",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -440,17 +490,19 @@ public static class SuiteCatalog
             + "plays the dead pilot's own death cry through the force flag while an unforced "
             + "dispatch on the same dead speaker stays silent", AiVoice));
         into.Add(new TestHarness.Suite("ai-net-follow",
-            "net following (B5): a real chapter net resolves by id and by name, its tags ride " +
-            "along unacted-on, and an AI plane with a net-following pilot captures node after " +
+            "net following (B5): a real chapter net resolves by id and by name, its node fields " +
+            "ride along inert on an AIRCRAFT walk, and an AI plane with a net-following pilot captures node after " +
             "node with every hop an EDGE of the graph, never node order. Then the same net, " +
             "anchored (BL-377), rides its target 6 km east and the plane laps the MOVED ring at " +
             "its authored altitude, never seating on the edgeless anchor node", AiNetFollow));
         into.Add(new TestHarness.Suite("zeppelin-motion",
             "zeppelin motion (F17): C1/M04's piratezep record loads, its world node is placed at " +
-            "the authored pose and flown along PirateZep1 between manual sim steps — every hop an " +
-            "EDGE, displacement never over max_speed·dt, the route's raw shape-A tags acted on by " +
-            "NOTHING (stop nodes undecoded) — total engine loss decelerates it to a stop through " +
-            "the decoded sqrt curve, and a deactivated record is placed but held", ZeppelinMotionSuite));
+            "the authored pose, which is PirateZep1's node 0 and an ARMED stop point, so it sits " +
+            "docked until SetStopPoint releases stop-point id 1 — then flown between manual sim " +
+            "steps (every hop an EDGE, displacement never over max_speed·dt) until the route's " +
+            "far end, armed under the unaddressable id 0, docks it for good; total engine loss " +
+            "decelerates it to a stop through the decoded sqrt curve, and a deactivated record " +
+            "is placed but held", ZeppelinMotionSuite));
         into.Add(new TestHarness.Suite("zeppelin-launch",
             "zeppelin fighter launch (F20): C1/IA1's zeppelin-launch generator authors the " +
             "decoded shape (cargobay origin, −90° drop, mp1 door anims — both shipped as " +
@@ -616,6 +668,308 @@ public static class SuiteCatalog
             + "light 2000 m from a lone P1 stays committed once a second viewer sits 100 m from it, "
             + "the able-to-fail control against P1 alone drops the same light, and the one-viewer "
             + "case reads exactly what it read before", WorldLightsNearestViewer));
+        into.Add(new TestHarness.Suite("campaign-persistence",
+            "the cross-mission state log (B12, BL-243): three PERSIST_LOG objects destroyed in one "
+            + "campaign mission are captured, survive the profile file and a second store instance, "
+            + "and start the next mission of the SAME chapter destroyed, while a save-only "
+            + "destructible killed alongside them never enters the log and starts that mission "
+            + "intact; the later world is built from the bootstrap, so the log is the only thing "
+            + "that could have wrecked them",
+            CampaignPersistence));
+        into.Add(new TestHarness.Suite("music-states",
+            "the state-driven score (D37): each game state cues the track family its data names, "
+            + "prebattle and battle loop while the stingers and the success tracks play once, "
+            + "re-entering the playing state never restarts it, the objective stingers alternate "
+            + "their two takes instead of drawing at random, and a combat ping cuts prebattle to "
+            + "battle at silence, ramps it to full in a quarter second, holds it 20 s and fades it "
+            + "out over four",
+            MusicStates));
+        into.Add(new TestHarness.Suite("campaign-objectives",
+            "the objectives runtime (D31) over a shipped mission's own choreography, headless: the "
+            + "BEGIN_DORMANT wake timings and their sound/turret actions, the primary completing "
+            + "off an INACTIVEn node, its KILL/WAKE/NAP chains and target-list edits, the display "
+            + "rows and the mask's bit 0, plus BOTH endings the script authors — the INSTANTWIN "
+            + "path and the 300 s reminder fuse that naps the INSTANTLOSS objective",
+            CampaignObjectives));
+        into.Add(new TestHarness.Suite("campaign-mission-end",
+            "the campaign mission-end flow against a BUILT world (D31): a scripted kill drives an "
+            + "INACTIVEn condition off real node state, the graph's own end ends the mission, and "
+            + "the result reaches the profile through CampaignProgression with the destruction log "
+            + "captured and the return-to-cabin exit raised",
+            CampaignMissionEnd));
+        into.Add(new TestHarness.Suite("targeting-candidates",
+            "the D36 widened AI acquisition (BL-363): a registered structure whose pool authors no " +
+            "team is nobody's target and a same-team one is refused, while " +
+            "a real team's AI routes a winning structure candidate into AiGunner.GroundTarget " +
+            "rather than the aircraft-only Target field (so AiPilot's flight law sees nothing new), " +
+            "and the gunner fires real rounds at a zeppelin structure with no aircraft in the scan " +
+            "at all",
+            TargetingCandidates));
+        into.Add(new TestHarness.Suite("partition-areas",
+            "the area-selected node toggle (BL-037) over C3's own three story rectangles: each " +
+            "resolves through the partition grid to real world content, the half-open cell rule " +
+            "holds (a rectangle inside one cell selects nothing), corner order does not change " +
+            "the selection, and C3/M01's built world really has its third area switched off with " +
+            "the first left standing",
+            PartitionAreas));
+        into.Add(new TestHarness.Suite("scripted-path",
+            "the second movement law (BL-361) over C1's authored pp1 takeoff path: a placed " +
+            "vehicle sits frozen on its first waypoint however long the mission runs, START_TAXI " +
+            "releases it onto a 40 mph taxi, the final leg accelerates past that speed and lifts " +
+            "it off the strip, and reaching the last waypoint hands it back at the speed it " +
+            "reached",
+            ScriptedPathTaxi));
+        into.Add(new TestHarness.Suite("wingman-station",
+            "the D34 campaign wingman (BL-362): the decoded netless mode-wingman escort law as " +
+            "geometry (both body-frame stations, the rolled-leader frame, the 106.68/259.08 m " +
+            "target station, the 80 m separation push, the 700 m and 20.576 m/s join gates) and " +
+            "then flown against a scripted leader, a live wingman joining from 1200 m abeam, " +
+            "staying with the leader for the rest of the run, and riding the aft station behind " +
+            "a player leader where it rides the forward one behind an AI leader",
+            WingmanStation));
+        into.Add(new TestHarness.Suite("wingman-engage",
+            "what a campaign wingman does about a hostile (BL-505): every escorting block CM02 " +
+            "plans flies an attack gate wider than BL-504's 1 m and most author rating_biases, " +
+            "and over a flown leg with one bandit ahead of the pair the wingman acquires it " +
+            "through the ordinary ranking and fires from the station, while the decoded escort " +
+            "state never leaves the formation, which is FUN_0041e760's own shape",
+            WingmanEngage));
+        into.Add(new TestHarness.Suite("campaign-objectives-hud",
+            "D33's in-flight objectives display and cue firing against a BUILT campaign world: " +
+            "ObjectivesHud carries one line per ObjectiveGraph display row, a scripted " +
+            "IDENTITY objective completing off whichever condition the chapter's own mission " +
+            "authors (an INACTIVEn node list, a danger zone, or no condition at all) marks its " +
+            "own readout line " +
+            "(not only the graph's), and both a WAKEUP_SOUND_GROUP and a COMPLETED_SOUND_GROUP " +
+            "the mission authors start a real AudioStreamPlayer3D through WorldSounds (D31's " +
+            "existing routing, counted rather than duplicated)",
+            CampaignObjectivesHud));
+        into.Add(new TestHarness.Suite("campaign-cutscene",
+            "the cutscene host over C1/M04's shipped intro definition (D32): its authored callback "
+            + "codes reach the host through the runtime's own dispatch, the world and the "
+            + "objectives update stop while callback 20 holds them, the vehicle-death codes are "
+            + "declined, and the definition's end hands off with every piece of cutscene state put "
+            + "back",
+            CampaignCutscene));
+        into.Add(new TestHarness.Suite("cutscene-letterbox",
+            "the letterbox bars are data (D32): the chapter ships the node switched off as its "
+            + "definition's base state, calling the definition switches it on outright with no "
+            + "reveal, and the AT_NODE re-assert copies the cutscene camera's whole frame onto it "
+            + "every tick",
+            CutsceneLetterbox));
+        into.Add(new TestHarness.Suite("hangar-door-wake",
+            "hangar doors over C1/M04's real world (BL-350): OBJECTIVE1's WAKE_ANIM reaches "
+            + "'hangar3_doors' through the director at its authored 2 s dormancy and its four "
+            + "panels slide their authored 50 m by 12 s; the generator eairg31's own hangar takes "
+            + "the loader's node-name door default (eairg_open31, the close resolving the open), "
+            + "and its door starts opening the decoded 4 s before the spawn, which lands at that "
+            + "hangar",
+            HangarDoorWake));
+        into.Add(new TestHarness.Suite("fog-state",
+            "the FOG_STATE animation event (BL-038) over C1/M04's intro definition: a weather "
+            + "rig writes the zone's fog at build, playing the intro raises its RESET_STATE fog "
+            + "through the runtime's own dispatch, the three fog globals change to the event's "
+            + "authored 'drop_fog' values, an event raised before the rig has built lands after "
+            + "the zone, and a field the event omits is left as the zone wrote it",
+            FogStateEvent));
+        into.Add(new TestHarness.Suite("campaign-roster",
+            "the campaign roster spawner (D34, BL-362/BL-364) over C1/M04's shipped aiv roster in "
+            + "its built world: every non-player block gets a rig, the decoded fork puts an escort "
+            + "on the netless wingman_1 (leader: the player rig) and on wingman_2/3 (leaders: the "
+            + "devastator blocks) and a patrol net on every netted block with no block carrying "
+            + "both, the deactivated blocks are inert, the four taxiPath vehicles are placed frozen, "
+            + "a net's authored 700 m return radius reaches its block under the min_ai_active_dist "
+            + "floor, and over a two-minute flown run wingman_1 holds the scripted player inside "
+            + "the wingman-station leash",
+            CampaignRoster));
+        into.Add(new TestHarness.Suite("campaign-bomber-formation",
+            "CM02's three netted bombers (BL-498) spawned from C3/M05's own aiv roster into its "
+            + "built world: all three carry net 19, they leave their shared seat node the same way "
+            + "and fly one node of it together for a minute with nobody engaging them, and a "
+            + "certain steady-hand failure on one leaves it on that node and back with the other two",
+            BomberFormation));
+
+        // ⚠ Keep after every other content suite: it leaves its own profile file behind for the
+        // next process to read. campaign-zeppelins below touches none of that state.
+        into.Add(new TestHarness.Suite("campaign-loop",
+            "the whole campaign loop on the campaign's first mission (E41): a profile created on a "
+            + "store holding none, the cabin, the briefing, the flight check, an ammunition change "
+            + "that reaches the flown aircraft's guns, the mission's intro cutscene holding the "
+            + "objectives clock, its primary objective completed by flying the approach it names, a "
+            + "track its own data cues, the authored end recorded into the profile, and the cabin "
+            + "again with Next Mission advanced; the profile is left on disk, so a second run "
+            + "reads what the first one wrote",
+            CampaignLoop));
+
+        // BL-451: a --campaign= launch's SessionSpec never carried Zeppelins/Generators, so the
+        // mission's zeppelins sat deactivated at the origin.
+        into.Add(new TestHarness.Suite("campaign-zeppelins",
+            "SessionSpec.FromCampaign sets neither Zeppelins nor Generators; GameSession's "
+            + "campaign-mission peek turns Zeppelins on for C3/M01 (ships zeppelins.zrd) and leaves "
+            + "Generators off (its egen.zrd is authored empty), and the mission's own zeppelins "
+            + "place live once the flag is on",
+            CampaignZeppelins));
+        // Registered after campaign-loop, not because order matters to it: this suite's director
+        // uses no file-backed store (profile is in-memory), so it cannot disturb what campaign-loop
+        // left on disk for a later process.
+        into.Add(new TestHarness.Suite("campaign-danger-zones",
+            "BL-458's campaign danger zones over C3/M01's own dzpathN gates, resolved against real "
+            + "world geometry: the mission's DANGER_ZONES_COMPLETED names (dzpath1, dzpath4) are "
+            + "armed and no others, a scripted crossing of both authored gates fires each zone's "
+            + "completion, and the director's real NotifyDangerZoneCompleted path completes the "
+            + "SECONDARY (OBJECTIVE3) and OBJECTIVE11 the way a flown mission would",
+            CampaignDangerZoneObjectives));
+
+        // BL-468: the objective-target store had no consumer, so a flown mission never showed the
+        // player where its sites were.
+        into.Add(new TestHarness.Suite("campaign-objective-markers",
+            "the campaign's objective markers over the first story mission's BUILT world: every "
+            + "site its targets.zrd flags carries a marker with the original's category line over "
+            + "the site name, in the decoded blue, sitting on the world node the mission named, "
+            + "and flying one site's own TRAVELERS approach retires that marker alone",
+            CampaignObjectiveMarkers));
+
+        // BL-467: nothing read landings.zrd, so no mission could ever play the cutscene an
+        // ANIM_STATE objective waits on.
+        into.Add(new TestHarness.Suite("landings-approach-trigger",
+            "the mid-mission cutscene trigger over the first story mission's BUILT world: the "
+            + "chapter's landings.zrd rows resolve to the cone, half-cone and sphere volumes their "
+            + "approach nodes author, a mission carrying none of the animations resolves none of "
+            + "them, the drop-off rows start disarmed and fire nothing, the mission's own objective "
+            + "chain arms them, and flying one cone starts the drop cutscene through the cutscene "
+            + "host, runs it to EXECUTED and completes the primary objective gated on it",
+            LandingApproachTrigger));
+
+        // BL-492/BL-495: CM02's wing-walk capture, whose approach rows the mission gates on a
+        // land_on node state switched for all three Balmorals at once, and whose approach nodes
+        // reach the world only on the rigs the roster spawns.
+        into.Add(new TestHarness.Suite("landings-wingwalk-gate",
+            "CM02's Balmoral capture gate over its BUILT world with its own roster spawned: the "
+            + "mission's three approach rows resolve and differ only by index, the world build "
+            + "alone reaches none of them, the roster spawn grafts each onto the rig its block "
+            + "spawned so all five rows bind, one pair of definitions arms and un-arms all three "
+            + "land_on nodes by gamez index, the objective calling the arming one waits on those "
+            + "planes' aiv group being down to one, and a driven approach at an armed Balmoral "
+            + "starts the capture where the same approach before the gate starts nothing",
+            WingWalkCaptureGate));
+
+        // BL-494: callback codes 965 to 967, which put the player in a different airframe mid
+        // mission and reached nothing until the roster grew a swap.
+        into.Add(new TestHarness.Suite("campaign-airframe-swap",
+            "the mission-script host's airframe swap over CM02's BUILT world: the three decoded "
+            + "codes name the defs the shipped stat rows carry, the mission's own capture "
+            + "definition authors the Balmoral one, and driving that code through the host "
+            + "rebuilds the player's rig on the named airframe at the pose, heading and speed it "
+            + "was flying, with that airframe's stock hardpoint table at full ammunition and its "
+            + "own armour pools and damage zones rather than the airframe it replaced, the "
+            + "outgoing aircraft out of the world with no registration of its own left in the "
+            + "projectile pool, and the cutscene flags the code sets landing on the aircraft the "
+            + "swap built",
+            AirframeSwapSuites.AirframeSwap));
+
+        // BL-401: the assembler named every spawn ai{n}_{plane}, which no authored pattern can
+        // match, so rating_biases was dead on the campaign path.
+        into.Add(new TestHarness.Suite("roster-spawn-names",
+            "BL-401's authored spawn identity over C1/M02's shipped roster: a campaign spawn "
+            + "wears its roster block's own name while a spawn with none keeps the counter form, "
+            + "wingman_4's authored exclusion on the bloodhawk_2 BLOCK matches the spawned node "
+            + "and moves the live pick off it, and bloodhawk_2's always-target on the 'player' "
+            + "role takes the human rig over a nearer aircraft",
+            RosterSpawnNames));
+
+        // BL-465/BL-461: mission callouts played from a point in the world, and a cue naming a VO
+        // dialogue chain played nothing at all.
+        into.Add(new TestHarness.Suite("mission-radio",
+            "the mission radio queue over the first story mission's own callout vocabulary: every "
+            + "wake/complete cue the mission authors is a queued radio line or a chain of them and "
+            + "none is a positional definition, a chain speaks all of its lines in order, a second "
+            + "cue queues behind the one speaking instead of cutting in, the whole queue drains "
+            + "without starting a positional player, and STOP_QUEUED_SOUNDS drops a call that has "
+            + "not begun",
+            CampaignHudSuites.MissionRadioCallouts));
+
+        // BL-476: a zeppelin's authored team reached nothing and its `deactivated` flag held only
+        // the motion, so the airship a mission reveals partway through was in play from t=0.
+        into.Add(new TestHarness.Suite("campaign-zeppelin-wakeup",
+            "the hidden zeppelin and the authored team over the first story mission's BUILT world: "
+            + "the three parser team names resolve to the ids the one shared team space mints, an "
+            + "authored pool team beats the world fall-through while an unauthored one keeps it, a "
+            + "dormant pool is no candidate at all, C3/M01's deactivated cargozep1 starts "
+            + "uncollidable and out of both target pools while its sibling does not, and "
+            + "OBJECTIVE39's own WAKEUP_ENEMIES puts it into the world through the real graph",
+            CampaignZeppelinWakeup));
+
+        // BL-499: the aircraft arm of the same directive, which the zeppelin arm above does not
+        // stand in for. CM02's ace squad is the worked case.
+        into.Add(new TestHarness.Suite("campaign-squad-wakeup",
+            "CM02's ace squad over C3/M05's own BUILT world: britpeace_7/8/9 ship deactivated and "
+            + "OBJECTIVE8 names exactly them in WAKEUP_ENEMIES, the three are inert and out of play "
+            + "at mission start while the first Peacemaker squad flies, wiping group 1 completes "
+            + "OBJECTIVE5 and its authored nap puts them into the world 15 s later through the real "
+            + "graph, each woken block walks a patrol net, and britpeace_8's authored always-target "
+            + "on the player role moves its live pick off a nearer candidate onto the human",
+            CampaignSquadWakeSuites.CampaignSquadWakeup));
+
+        // BL-500: the three SET_AI_* directives were named no-ops, so most of what CM02 does to
+        // its own aircraft never happened and every one of them flew its roster block all mission.
+        into.Add(new TestHarness.Suite("campaign-set-ai-net",
+            "a mission re-commanding the aircraft it spawned, over C3/M05's own BUILT world: the "
+            + "three Balmorals fly the M5Bombers their own blocks author until OBJECTIVE4 puts all "
+            + "three on M5Bombrun, each capturing the route at the node nearest where it is rather "
+            + "than restarting it, the net's own volumes reaching the aeroplane; the ace squad is "
+            + "on M5Escort after the mission's own wake chain naps OBJECTIVE68 awake; an "
+            + "appended objective drives SET_AI_TEAM and SET_AI_ATTACK_RADIUS, which no shipped "
+            + "mission authors, including a name that is there for neither; and a bomber on that "
+            + "1 m attack radius still carries the two turret gunners britbalmoral authors, "
+            + "tracking and hitting a Fortune Hunter under its own shooter id while its pilot "
+            + "stays out of combat, taking nothing on its own airframe and going quiet when it is "
+            + "downed",
+            CampaignSetAiSuites.CampaignSetAiNet));
+
+        // BL-477: what stops a shot at the cargo zeppelin's slung tanks was inferred from the
+        // geometry; this measures it. The original's own ray test reads no texture at all
+        // (docs/org/weaponRay.md), so this is a census of OUR occluders, not a fidelity gate.
+        into.Add(new TestHarness.Suite("alpha-cutout-ray-census",
+            "the occluders standing between a weapon ray and C3/M01's cargo zeppelin: rays at "
+            + "hydrogentank1's mesh centre from 36 azimuths at five elevations, each naming the "
+            + "first collider's gamez node, over the mission's own world with the zeppelins placed "
+            + "at their authored pose; then the splash half, a burst on the hull underside plate "
+            + "g482 run through the production cover ray down to each of hydrogentank1..4",
+            AlphaCutoutRayCensus));
+        into.Add(new TestHarness.Suite("zeppelin-identity",
+            "the owning-zeppelin identity a zone and a gun carry (BL-476): C5/M03's authored "
+            + "cargozep* exclusion reaches a gasbag only through its hull's name and not through "
+            + "the zone's own, and over C1/MP3's built world the record team fans onto every "
+            + "emplacement standing on the ally hull while the unauthored sibling's guns keep "
+            + "their TURRET default",
+            ZeppelinIdentity));
+
+        // BL-485: the shell advanced the reveal every frame and repainted the board only when a
+        // discrete property moved, which a shot taken at a named second cannot see.
+        into.Add(new TestHarness.Suite("campaign-briefing-repaint",
+            "the briefing reveal reaching the screen, driven frame by frame through a real "
+            + "LaunchMenu: the composed board the surface holds is compared against a board "
+            + "composed from the page on each of 5400 driven frames, the reveal must compose the "
+            + "screen afresh on far more than the handful of frames an objective count moves on, "
+            + "and one frame's board is counted so the cost of repainting it is on the record",
+            CampaignBriefingRepaint));
+
+        // BL-489: the screenshot key reached the launcher only when no menu was up, so a menu
+        // defect could be described but not shown.
+        into.Add(new TestHarness.Suite("menu-screenshot-key",
+            "the screenshot key on the menu screens: a real key event is pushed through the real "
+            + "viewport with a LaunchMenu standing, once on the launchscreen and once on a "
+            + "campaign board, and each press must leave one more file in the folder the flight "
+            + "capture writes to",
+            MenuScreenshotKey));
+        // BL-490: an objective wrapped to a second line drew over the next one's authored slot,
+        // which only shows on a mission whose sentences are longer than the first's.
+        into.Add(new TestHarness.Suite("campaign-briefing-note",
+            "how the briefing's objectives note flows (BL-490): all 24 missions' reveals driven to "
+            + "their end, each composed note measured with the font the screen writes it in, and "
+            + "no entry allowed to start above the bottom of the one before it or to run past the "
+            + "parchment's authored 240 px box",
+            CampaignBriefingNote));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

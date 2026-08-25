@@ -128,6 +128,15 @@ The extraction shows:
   is 7 ids, the def-side set 8), and the accent table maps ids 5 and 40 which have neither defs
   nor WAVs. Id 47 (the multiplayer announcer) is the inverse: 51 WAVs with no `id47` set.
   Availability is only answerable after decode, per pilot, per clip.
+- ⚠ **Nine of the 35 accent rows reach an unplayable pilot, and seven of those are single-id pools
+  with nothing to fall back to**: accents 14 → id 5, 19 → id 15, 20 → id 17, 21 → id 17, 27 → id 35,
+  28 → id 36, 30 → id 40. Accents 0 and 9 name a dead id inside a pool that also holds live ones, so
+  they still speak. This is not confined to the far end of the table: **eight of the campaign's 26
+  named aces (slot 67, [ai-rosters.md](ai-rosters.md)) sit on a dead single-id accent** and are
+  silent on this channel — A. Dixon (accent 20), C. Steele (28), Sir Charles Emmett Winthrop (19)
+  and Utah Blacke (30), across seven missions. Two further ace blocks author no accent at all. A
+  named ace's combat chatter therefore cannot be assumed to exist; where an ace speaks in the
+  original it is usually the mission's own dialogue chain, which is a different system (below).
 
 **Runtime (`CSVM/src/Mech3/CombatVoice.cs`).** The chain above is a queryable service:
 `accentID` → pool → `PilotFor` (random pick, clipless ids skipped) → `PlayableFor(voId, family)`,
@@ -221,8 +230,10 @@ Stand-ins and inventions, named:
   Only the index formula itself is decoded.
 - **Pilot identity**: an `--ai=` spawn takes an optional `accent=<id>` segment
   ([cli.md](../cli.md)); its accents join the mission roster's prewarm set. A spawn without one
-  is voiceless. Talker/constitution ratings come from the session's `--ai-attack=` skill
-  (default 5) until roster spawns carry their own slot 65 + skill vector.
+  is voiceless. A campaign roster spawn carries its own slot 65 (`CampaignDirector` hands
+  `AiSpawn.AccentId` to `RegisterVoice`), but ⚠ **its talker and constitution ratings still do
+  not**: the third argument is passed null and the session's `--ai-attack=` skill (default 5)
+  stands in, so an ace rated 9 on `talker` is no chattier here than a mook rated 1.
 - The gate's "must not already be talking" is a hook (`AiVoiceDispatcher.IsTalking`), unwired:
   the remake's one-shots carry no per-speaker playing state yet.
 - **Force bypasses only the aliveness check**, as decoded — a forced death cry still respects

@@ -184,6 +184,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
   of the same frame. Same camera, same flags, 600× the signal: what fails a golden is the size of
   the subject in frame, and a burning wreck is a different subject from the plane that was flying.
 
+- **SHOT-32** — **A shot of an animated screen proves the frame it drew, never that the screen
+  keeps drawing; check an animation by driving frames.** `--menu=campaign-briefing:<s>` advances
+  the reveal itself and then renders, so it draws a correct picture out of a shell that had
+  repainted nothing since the last keypress: the timed shots at 6, 12, 24, 40 and 70 s all read
+  correctly while the live screen was frozen (BL-485). Driving 5400 frames of the real menu and
+  comparing the surface's board against one composed from the page found 5193 stale frames and
+  two distinct compositions over a whole reveal.
+
 ## GOLD — golden images
 
 - **GOLD-1** — **Update moved hashes with the visual change, and explain each moved shot in the
@@ -381,6 +389,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
   `no_focus` in project.godot; setting `WindowSetFlag` at runtime after the fact does not hand
   focus back, so an interactive session must request focus explicitly instead
   (`Launcher._Ready`).
+- **SHELL-15** — **A BOM a PowerShell write left on a source file comes BACK the next time the
+  Edit tool touches that file, so strip it as the LAST step and confirm with `git diff`, not with
+  `ReadAllBytes`.** Edit rewrites from its own cached read of the file, which still carries the
+  byte-order mark, so a strip followed by any edit silently restores it. Measured while flipping one
+  constant back for a perturbation run: `Set-Content -Encoding utf8` added the mark, a
+  `[IO.File]::WriteAllText` with `UTF8Encoding($false)` removed it, and the next `Edit` call put it
+  back, with `ReadAllBytes` reporting the file clean in between. The visible symptom is a diff whose
+  first line is the file's unchanged `using`, which reads as a line-ending problem and is not one.
 - **SHELL-14** — **Test window-focus handling by alt-tabbing, not minimising.** Minimising a
   Godot window delivers only the mouse enter/exit pair, never a focus notification; on Windows
   11 / Godot 4.7 a real focus change delivers `APPLICATION_FOCUS_OUT`/`_IN`, not the
@@ -472,6 +488,45 @@ loss. What the engine renders was decodable from the authored constants + oscill
   nearest 10 m**, so an altitude move smaller than that does not show in the dump at all; every
   other column lost one digit. The asserted rows are unaffected, since `KnifeEdgeTests` and
   `ParityLedgerTests` read the probe's values rather than this text.
+- **INSTR-20** — **A negative test that also steps the mission script can arm the very gate it is
+  asserting stays shut.** Drive only the subsystem under test through the control leg. Measured on
+  the `landings-approach-trigger` suite: "flying the drop approach before the mission arms it starts
+  nothing" was written as a flight that stepped the objective graph too, and C3/M01's drop cones sit
+  9 m from the `shipwreck` the first primary approaches, so the same 6 s flight completed that
+  objective and its 2 s + 3 s nap chain armed the trigger mid-leg. The assertion still passed, on
+  the aircraft having left the cone by then rather than on the gate being shut.
+- **INSTR-21** — **An animation that completes instantly satisfies every end-state assertion, so a
+  suite that only reads end state is blind to a sequence that never played.** Assert the episode's
+  DURATION as well: that it still owns its host a frame on, or how long it ran. Measured on the
+  `landings-approach-trigger` suite: with `camera1` unbound, C3/M01's drop reported `ANIM_STATE`
+  EXECUTED and completed its gated primary in the frame it started, and the suite was green for the
+  whole of `BL-467`; bound, the same episode runs 4.43 s. The suite was also building a world with
+  no `camera1` in it at all, so a suite over a subsystem must build the world the way the session
+  that runs it does.
+- **INSTR-22** — **An aircraft that sinks below `FlightController`'s under-map backstop is teleported
+  to its spawn with no crash flag and no log line, so any distance a suite is accumulating swallows
+  the jump. Gate a flown leg on an altitude floor.** The backstop fires at y = 0 on a stage that has
+  no ground at all, `Crashed` is never set, and the reset is invisible to a `Crashed` check sampled
+  every step. Measured on `wingman-station`: the scripted leader descended through y = 0 twice in a
+  120 s run and reappeared at its 1200 m spawn, and those two jumps are the whole of a reported
+  3797 m worst separation and most of a 415 m mean, on a leg that plateaued at 254 m and never read
+  above 470 m while both aircraft were flying. INSTR-18 is the same failure at the altitude cap.
+- **INSTR-23** — **A scripted stick authored in deflection-seconds measures the plant, not the pilot:
+  when a plant's rate changes, the same script flies a different aeroplane.** Author such a profile
+  by the attitude each segment is meant to reach and re-derive the hold from the plant's own rate,
+  and say in the constant that this is what it is. Measured on `wingman-station`'s flown leader:
+  after the quaternion half-angle integration doubled every angular rate, its 1.5 s of 0.6 roll
+  reached 95° of bank rather than about 47°, so the 8 s pull that followed dug a knife-edge descent
+  instead of a climbing turn and put the leader into the ground. Nothing in the AI under test had
+  moved. The companion trap is the reverse read: a suite that goes red across a plant change is a
+  claim about the instrument until the instrument has been shown to still fly what it names.
+- **INSTR-24** — **A raycast taken in the same call that moved a static body reads the collider at
+  its OLD pose, and reports empty space as "nothing there".** A `StaticBody3D`'s transform reaches
+  the physics server on the next frame, which never arrives inside a suite; call
+  `ForceUpdateTransform()` over the moved subtree first. Measured on `alpha-cutout-ray-census`:
+  placing C3/M01's `cargozep1` at its authored pose and immediately casting 180 rays at
+  `hydrogentank1` returned 108 clean misses through 140 live collider bodies, which reads exactly
+  like an airship with no collision at all.
 
 ## SRC — sources and documents
 

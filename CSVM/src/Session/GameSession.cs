@@ -106,6 +106,13 @@ public partial class GameSession : Node3D
     // The boards' Restart item on an Instant Action mission: the Launcher frees this session and
     // builds a fresh one. Nothing here can put a mission's opposition back on its own.
     private readonly Action _restartSession;
+    // A campaign mission's end: the Launcher frees this session and reopens the launchscreen on
+    // the named profile's cabin. Null outside a menu-driven process (a --campaign= run from the
+    // command line has no cabin to return to and simply stays in the flown world).
+    private readonly Action<string>? _returnToCabin;
+    // The process's music channel, owned by the Launcher so one channel outlives every session.
+    // Handed to CampaignDirector, which is what routes the mission's own music cues into it.
+    private readonly MusicPlayer? _music;
     // Base (chapter-independent) paths, settled by the Launcher once per process and handed in via
     // the context; StartSession reads them each build and recomputes the chapter-dependent
     // gamez/texture/mission paths from _spec.Chapter.
@@ -138,6 +145,8 @@ public partial class GameSession : Node3D
     private bool _crashFired;
     // --debug-scoreboard --vs: fires once, on the first sim step — see DriveSimSteps.
     private bool _versusDebugKillFired;
+    // --debug-pause[=frame]: fires once, the frame the sim clock first reaches it.
+    private bool _debugPauseFired;
     // --debug-wash=N: how many of its two scripted washes have fired — see DriveSimSteps.
     private int _debugWashesFired;
     private SpectatorCamera? _spectator;
@@ -162,6 +171,9 @@ public partial class GameSession : Node3D
     // session (same lifetime as _worldEffectsFactory); null before the first weathered build and
     // nulled by ReturnToMenu so _Process's null guard covers the frame before the deferred free.
     private WeatherRig? _weatherRig;
+    // A FOG_STATE raised during the world bootstrap, before _weatherRig exists; applied once the
+    // rig has written its zone, which keeps the original's order (the zone first, the event over it).
+    private Mech3.AnimRuntime.FogStateChange? _fogStateBeforeWeather;
     // The world state every puffer in this session reads but none of them owns — the wind and the
     // camera position (see Effects/WorldWind.cs). Constructed here rather than on
     // _weatherRig because the emitter factories need it at StartSession, long before the first
@@ -195,6 +207,9 @@ public partial class GameSession : Node3D
     // The E16 voice dispatch (built with the rigs when the world has sounds; its mission clock
     // steps in DriveSimSteps). Null in a soundless/world-less session — chatter simply off.
     private AiVoiceRuntime? _aiVoice;
+    // The mission radio queue the campaign's objective callouts speak on. Built with the rigs when
+    // the world has sounds, stepped beside the director, freed with the world subtree.
+    private MissionRadio? _radio;
     // The egen enemy generators (--generators): loaded with the rigs, stepped in
     // DriveSimSteps before the AI planes it spawns into AiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
@@ -204,6 +219,16 @@ public partial class GameSession : Node3D
     // StartSession — null outside a mission, which is what keeps every other session mode
     // (free flight, Dogfight) untouched by its existence.
     private InstantActionDirector? _iaDirector;
+    // The active campaign mission's director: the objectives graph, its world seam and the mission
+    // end/return flow (see CampaignDirector). Built at the top of StartSession alongside the
+    // Instant Action one — null outside a --campaign= launch.
+    private CampaignDirector? _campaign;
+    // The cutscene host: built for any flown chapter session, since a story mission's intro
+    // definition starts itself out of startanims and needs its CALLBACK codes hosted from the
+    // bootstrap on. Null everywhere else, which leaves the world build's node census untouched.
+    private CutsceneController? _cutscene;
+    // The landings.zrd approach trigger, built and bound alongside the cutscene host it feeds.
+    private LandingApproachRuntime? _landings;
     // The world AA emplacements: built with the rigs whenever a chapter world and the
     // shared pool exist, stepped in DriveSimSteps after the zeppelins (slung mounts read the
     // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
@@ -254,6 +279,10 @@ public partial class GameSession : Node3D
     // published as StartupProfile.Current so the shared build code can record into it, and cleared
     // when the line is emitted.
     private StartupProfile? _startup;
+    // DiagTraceRoster's own state: the objective-graph campaign diagnostic below.
+    private int _diagTick;
+    private AnimRuntime? _diagRuntime;
+    private bool _diagRefsDone;
 
     /// <summary>Constructs the session node for one launch. <paramref name="spec"/> is what this
     /// session is built from (the command line verbatim, or the launchscreen's pick);
@@ -267,7 +296,9 @@ public partial class GameSession : Node3D
         // priority first (the Launcher sits one notch behind at -999).
         ProcessPriority = -1000;
         Name = "GameSession";
-        _spec = spec;
+        // ⚠ Resolved here, before any consumer reads Chapter/Mission: a --campaign= launch names a
+        // story position, not a chapter, and every path below is derived from those two fields.
+        _spec = ResolveCampaignZeppelins(CampaignDirector.ResolveSpec(spec, ctx.ZrdrPath), ctx.DataRoot);
         _repoRoot = ctx.RepoRoot;
         _dataRoot = ctx.DataRoot;
         _planesGamezPath = ctx.PlanesGamezPath;
@@ -287,6 +318,8 @@ public partial class GameSession : Node3D
         _menuPads = ctx.MenuPads;
         _exitSession = ctx.ExitSession;
         _restartSession = ctx.RestartSession;
+        _returnToCabin = ctx.ReturnToCabin;
+        _music = ctx.Music;
     }
 
     /// <summary>Whether the build completed — the Launcher's Esc routing reads it (return to the
@@ -295,6 +328,11 @@ public partial class GameSession : Node3D
 
     /// <summary>The session's per-player rigs — the Launcher's F11 placement print reads them.</summary>
     internal List<PlayerRig> Rigs => _rigs;
+
+    /// <summary>The campaign mission's director, null outside a <c>--campaign=</c> launch. The
+    /// session layer reads its <see cref="CampaignDirector.ReturnToCabin"/> to know the mission is
+    /// over and the player belongs back in the cabin; C22 builds that screen.</summary>
+    internal CampaignDirector? Campaign => _campaign;
 
     /// <summary>The session's subject plane (null until the build lands one) — the Launcher's
     /// capture tick reads it, because CaptureDirector only shoots once a plane exists.</summary>
@@ -406,6 +444,33 @@ public partial class GameSession : Node3D
         // A fresh director per build, or null: construction (and its one-InstantActionRuntime ⚠)
         // lives on InstantActionDirector.TryCreate.
         _iaDirector = InstantActionDirector.TryCreate(_spec);
+        // The campaign's sibling, on the same "a load failure flies without a mission" contract.
+        _campaign = CampaignDirector.TryCreate(_spec, _zrdrPath, state.MissionZrdrPath);
+        if (_campaign is { } campaign)
+        {
+            // The mission's own WAKEUP_SOUND_GROUP is what cues every campaign track, so the
+            // channel is handed over rather than driven from here; the end event is this
+            // session's cue to hand the player back to the cabin.
+            campaign.Music = _music;
+            campaign.MissionEnded += OnCampaignMissionEnded;
+        }
+
+        // The cutscene host, before the world build hands it to the animation runtime. Its world
+        // hold stops the objectives update as well as the per-step world update (callback 20).
+        _cutscene = _spec.Fly && _spec.WorldMode ? new CutsceneController() : null;
+        if (_cutscene != null)
+        {
+            _cutscene.WorldHeld = held => _campaign?.HoldForCutscene(held);
+            AddChild(_cutscene);
+            // The mid-mission cutscene trigger, hosted by the same controller. ⚠ Story missions
+            // only: C3/IA1 carries hooked_to_klondike with its approach armed, so an Instant
+            // Action sortie would take a docking cutscene (WorldSession.Options.LandingTriggers).
+            if (_campaign != null)
+            {
+                _landings = new LandingApproachRuntime();
+                AddChild(_landings);
+            }
+        }
 
         Stopwatch sw;
         try
@@ -439,8 +504,16 @@ public partial class GameSession : Node3D
             {
                 BuildFlightRigs(state);
                 ApplyDebugSpectate();
+                // AFTER the rigs, for the same reason the spectate override is: a cutscene that
+                // started during the world build has nothing to hide until they exist.
+                _cutscene?.BindRigs(_rigs, () => AiPlanes);
+                if (_cutscene != null)
+                {
+                    _cutscene.SwapAirframe = SwapPlayerAirframe;
+                }
             }
             ApplyDestroyOverride(state);
+            ApplyObjectiveOverride(state);
             LogBuildSummary(state, sw);
         }
         catch (Exception e)
@@ -498,6 +571,16 @@ public partial class GameSession : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        // A cutscene skips on any input, as the original's state core does. ⚠ Escape is exempt: it
+        // is the way out of the session. ⚠ Pads count only where this session reads pads at all,
+        // since a connected pad reports button 0 pressed as it arrives.
+        if (_cutscene is { Playing: true }
+            && (@event is InputEventKey { Pressed: true, Echo: false, Keycode: not Key.Escape }
+                || (!_spec.PadsDisabled && @event is InputEventJoypadButton { Pressed: true }))
+            && _cutscene.Skip())
+        {
+            return;
+        }
         // P halts the sim and . steps it one frame, in freecam and the static viewer. ⚠ Do not
         // handle either for flight or the animation lab; both own their own transport.
         if (!_spec.AnimLab && @event is InputEventKey { Pressed: true, Echo: false } clockKey
@@ -604,15 +687,40 @@ public partial class GameSession : Node3D
         float dt = _clock?.PhysicsDt(delta) ?? (float)delta;
         if (dt <= 0f)
             return;
+        // ⚠ A cutscene holds the world in BOTH drive paths, the way callback 20 stops the
+        // original's per-frame world update and its objectives update together. The animation
+        // runtime is deliberately outside the hold: the movie is animation.
+        if (_cutscene is { HoldsWorld: true })
+        {
+            return;
+        }
         _versus?.Advance(dt);
         // ⚠ Step the mission director from BOTH drive paths, like the match clock above: a
         // realtime session never enters DriveSimSteps, so a sequencer stepped only there
         // advances no wave at the controls.
         _iaDirector?.Step(dt);
+        _campaign?.Step(dt);
+        _radio?.Tick(dt);
         // On a realtime clock the walk reads whatever pose each aircraft holds at this node's
         // tick; a step's stale pose is at most one 60 Hz frame of a 600 m cone.
         _smokeScreens?.SimStep(dt);
         _beeperTags?.SimStep(dt);
+    }
+
+    // BL-451: a --campaign= launch never carries --zeppelins/--generators (FromCampaign resolves
+    // before the mission is known), so this peeks both loaders once ResolveSpec has settled
+    // Chapter/Mission. Internal, not private, so the campaign-zeppelins suite exercises the exact
+    // code the constructor runs rather than a copy of it. See WithCampaignZeppelins for the why.
+    internal static SessionSpec ResolveCampaignZeppelins(SessionSpec spec, string dataRoot)
+    {
+        if (spec.CampaignProfile == null)
+        {
+            return spec;
+        }
+        var missionZrdr = SessionPaths.MissionZrdr(dataRoot, spec.Chapter, spec.Mission);
+        return spec.WithCampaignZeppelins(
+            HasMissionRecords(() => Zeppelins.Load(missionZrdr)),
+            HasMissionRecords(() => EnemyGenerators.Load(missionZrdr)));
     }
 
     private static void CopyInstanceShaderParams(Node source, Node copy)
@@ -627,6 +735,36 @@ public partial class GameSession : Node3D
         int n = Math.Min(source.GetChildCount(), copy.GetChildCount());
         for (int i = 0; i < n; i++)
             CopyInstanceShaderParams(source.GetChild(i), copy.GetChild(i));
+    }
+
+    // The --campaign= zeppelin/generator peek's plumbing: true when the loader's list is
+    // non-empty, false on an empty (authored [null]) or altogether missing mission file. Both
+    // loaders already tolerate [null]; only the "no file at all" case needs the catch.
+    private static bool HasMissionRecords<T>(Func<List<T>> load)
+    {
+        try
+        {
+            return load().Count > 0;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
+    // A campaign mission has ended and its result is banked (D31 records the attempt and saves the
+    // profile before raising this). The world stays up for the rest of the frame; the Launcher
+    // frees this session and reopens the launchscreen on the cabin, which re-reads the profile
+    // this director just wrote.
+    private void OnCampaignMissionEnded(CampaignMissionResult result)
+    {
+        if (_spec.CampaignProfile is not { } profile || _returnToCabin == null)
+        {
+            return;
+        }
+
+        GD.Print($"campaign: {result.Outcome} — returning '{profile}' to the cabin");
+        _returnToCabin(profile);
     }
 
     /// <summary>Every aircraft in the session, the rigs' controllers first and then the AI
@@ -811,6 +949,9 @@ public partial class GameSession : Node3D
                 TexturesOutliveBuild = state.TexturesOutliveBuild,
                 SoundsOutliveBuild = state.SoundsOutliveBuild,
                 VoiceClipNames = voiceClips,
+                // The mission's own WAKEUP_SOUND_GROUP/COMPLETED_SOUND_GROUP names, never
+                // referenced by the anim program, so nothing else would prewarm them (D33).
+                ExtraPrewarmNames = _campaign?.Script.SoundGroupNames(),
                 // The lab's quiet stage: ambient playback deferred to its A toggle, staged templates
                 // relocated onto the call site. Safe this early, since a quiet-stage bootstrap
                 // dispatches only RESET_STATEs and never consults it.
@@ -821,6 +962,20 @@ public partial class GameSession : Node3D
                 RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
                 // --node=: one subtree instead of the whole world (null = the full build).
                 NodeSubtree = state.NodeSubtree,
+                // The cutscene seam, wired before the bootstrap because an intro definition raises
+                // its codes the instant startanims starts it, long before a rig exists.
+                CutsceneRoots = _cutscene != null,
+                LandingTriggers = _landings != null,
+                CallbackHost = _cutscene != null ? _cutscene.Host : null,
+                // The weather rig is built after the world, and the intro's fog fires inside the
+                // bootstrap, so the event is held until the rig has applied its zone.
+                FogStateSink = fog =>
+                {
+                    if (_weatherRig != null)
+                        _weatherRig.ApplyFogState(fog);
+                    else
+                        _fogStateBeforeWeather = fog;
+                },
             },
             state.Gamez, state.Textures, state.Sounds, state.SoundDefs, state.SoundGroups);
         _plane = session.Root;
@@ -834,6 +989,16 @@ public partial class GameSession : Node3D
         state.CrashProgram = session.Program;
         state.WorldScene = session.Builder.Scene;
         state.WorldRuntime = session.Runtime;
+        // After the bootstrap: an intro definition has already raised its codes, and this is where
+        // the host picks up the two nodes it drives.
+        _cutscene?.BindWorld(session.Runtime);
+        state.Landings = session.Landings;
+        if (_cutscene != null && _landings != null)
+        {
+            _cutscene.HostDefinitions(session.LandingCutsceneAnims);
+            _landings.Bind(session.Runtime, session.Landings, _cutscene,
+                () => _rigs.Count > 0 ? _rigs[0].Controller : null);
+        }
         // The screen wash. Set here rather than inside WorldSession for the same reason the
         // contact mask below is: the overlay is a session-owned surface and WorldSession builds
         // runtimes for the test harness too, where there is no session to own one.
@@ -1105,6 +1270,11 @@ public partial class GameSession : Node3D
                              + (built.Count > 1 ? "; shown by camera weather state" : ""));
                 }
             });
+            if (_fogStateBeforeWeather is { } heldFog)
+            {
+                _fogStateBeforeWeather = null;
+                _weatherRig.ApplyFogState(heldFog);
+            }
             StartupProfile.Record("weather", weatherMark);
         }
 
@@ -1942,6 +2112,11 @@ public partial class GameSession : Node3D
             var combatVoice = new CombatVoice(vDefs, vGroups, CombatVoice.LoadAccents(state.ZrdrPath));
             _aiVoice = new AiVoiceRuntime(combatVoice, worldSounds, Rng.NewSystemRandom(Rng.Ai));
             _worldRoot!.AddChild(_aiVoice); // its realtime tick; freed with the world subtree
+            // The radio plays the streams the world's prewarm already decoded, so a callout survives
+            // the sound archive's build scope closing exactly as a one-shot does.
+            _radio = new MissionRadio(vDefs, vGroups, worldSounds.StreamFor);
+            worldSounds.Radio = _radio;
+            _worldRoot!.AddChild(_radio);
             foreach (var rig in _rigs)
             {
                 if (rig.Controller is { } human)
@@ -1981,6 +2156,42 @@ public partial class GameSession : Node3D
                         Inert: inert, ShippedSkins: shipped, Fit: fit, AttackRating: rating)),
                 RegisterVoice = RegisterAiVoice,
             });
+        }
+        // The campaign's roster build, at the same point and for the same reason: every block is
+        // placed against the built human field, and the leader pass names the player rig.
+        if (_campaign is { } campaignRoster)
+        {
+            int grafted = 0;
+            state.What += campaignRoster.BuildRoster(new CampaignDirector.RosterInputs
+            {
+                ChapterZrdrPath = worldBindings.ChapterZrdrPath,
+                MissionZrdrPath = state.MissionZrdrPath,
+                ZrdrPath = state.ZrdrPath,
+                MinAiActiveDist = MinAiActiveDist(),
+                Player = () => _rigs.Count > 0 ? _rigs[0].Controller : null,
+                NetTrailers = netTrailers,
+                FindNodes = worldBindings.WorldRuntime is { } rosterWorld
+                    ? name => rosterWorld.FindNodes(name)
+                    : null,
+                Spawn = (plan, pos, look, pilot) => flightRoster.SpawnAi(
+                    CampaignRosterPlan.SpawnFor(plan, pos, look, pilot)),
+                AttachMarkers = state.WorldRuntime is { } markerWorld
+                    && state.WorldScene is { } markerScene && state.Gamez is { } markerGamez
+                    ? (block, rig) => grafted +=
+                        RosterMarkers.Attach(markerGamez, markerScene, markerWorld, block, rig)
+                    : null,
+                RegisterVoice = RegisterAiVoice,
+                Rng = Rng.NewSystemRandom(Rng.Ai),
+            });
+            // ⚠ The first bind ran before any roster rig existed, so a row whose approach node the
+            // graft above has just created was dropped there. Re-bound here, and only when
+            // something was grafted, so a mission that adds nothing keeps one bind and one log line.
+            if (grafted > 0 && _landings != null && _cutscene != null
+                && state.WorldRuntime is { } landingWorld && state.Landings is { } landingRows)
+            {
+                _landings.Bind(landingWorld, landingRows, _cutscene,
+                    () => _rigs.Count > 0 ? _rigs[0].Controller : null);
+            }
         }
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
             && _rigs[0].Controller is { } lead)
@@ -2179,6 +2390,8 @@ public partial class GameSession : Node3D
             // ⚠ Into the tree AFTER the zeppelin runtime: the physics tick follows tree order, so
             // this is what lets a slung mount read its ride's moved pose on a realtime clock.
             _worldRoot!.AddChild(_turretEmplacements);
+            // The rest of the zeppelin record's team fan: its guns, which do not exist until here.
+            _zeppelins?.FanTeamsOntoTurrets(_turretEmplacements);
             int awakeByData = _turretEmplacements.AwakeCount;
             // The zeppelin turret arm recorded above. ⚠ Run it BEFORE --wake-turrets, which stands
             // in for a mission script and therefore wins, the same order the original has.
@@ -2202,6 +2415,29 @@ public partial class GameSession : Node3D
             }
         }
 
+        // The campaign objectives graph (D31): armed once every runtime a directive can touch is
+        // up, which is why it sits after the emplacement block rather than with the other
+        // directors. It builds no node of its own.
+        _diagRuntime = state.WorldRuntime;
+        _campaign?.Attach(new CampaignDirector.WorldInputs
+        {
+            Runtime = state.WorldRuntime,
+            Turrets = _turretEmplacements,
+            Generators = _generators,
+            Zeppelins = _zeppelins,
+            // A6/BL-458: the campaign's danger-zone gates are chapter-world geometry, so the
+            // tracker needs the built gamez to resolve its dzpathN subtrees.
+            Gamez = state.Gamez,
+            Sounds = state.WorldRuntime?.Sounds,
+            Projectiles = _projectiles,
+            ListenerPosition = () => _rigs.Count > 0 && _rigs[0].Controller is { } pilot
+                ? pilot.WorldPosition
+                : Vector3.Zero,
+            PlayerAircraft = () => _rigs.Count > 0 ? _rigs[0].Controller : null,
+            Aircraft = AllAircraft,
+            Rng = Rng.NewSystemRandom(Rng.Ai),
+        });
+
         // F15 / --debug-targets: who is aiming at whom. Reads the live gunners through closures
         // rather than a snapshot — waves activate, AI planes spawn and emplacements die long
         // after this line runs. The roster list is reused, not rebuilt per frame.
@@ -2211,6 +2447,23 @@ public partial class GameSession : Node3D
         {
             DebugShow = _spec.DebugTargets,
         });
+
+        // The pause-screen objectives readout and the objective-site feed, both mounted only for a
+        // campaign session and both polling _campaign.Graph themselves once Attach (above) has
+        // built it. The sites go onto the player's target cycle, which is what marks them.
+        if (_campaign is { } campaign)
+        {
+            var objectiveMessages = Messages.Load(state.MessagesPath);
+            _worldRoot!.AddChild(UI.ObjectivesHud.Build(campaign, objectiveMessages, _pauseState!));
+            var sites = new ObjectiveSites(campaign, objectiveMessages,
+                MissionTargets.Load(state.MissionZrdrPath), state.WorldRuntime);
+            flightRoster.SetTargetObjectives(into => sites.Collect(into));
+            // Verification breadcrumb: how many sites the mission starts with. A zero here and a
+            // populated objectives readout means the target table, not the graph, is the problem.
+            var offered = new List<AimCandidate>();
+            sites.Collect(offered);
+            GD.Print($"campaign: {offered.Count} objective site(s) on the player's target cycle");
+        }
 
         if (_rigs.Count > 1)
         {
@@ -2223,6 +2476,21 @@ public partial class GameSession : Node3D
         {
             state.What += $" + '{iaPlayerNode ?? _spec.PlaneName}' flying";
         }
+    }
+
+    // --debug-objective=N: the scripted twin of flying whatever completes campaign objective N, so
+    // a --screenshot can show a marked objectives line with nobody at the controls. Runs at build,
+    // before the graph's first step, which is what lets that step complete it off its own
+    // conditions rather than a mark being faked into the display.
+    private void ApplyObjectiveOverride(BuildState state)
+    {
+        if (_spec.DebugObjective is not int number || _campaign is not { } campaign)
+        {
+            return;
+        }
+
+        bool armed = Testing.ProbeRunner.ForceObjective(state.WorldRuntime, campaign, number);
+        state.What += armed ? $" + forced OBJECTIVE{number}" : $" + OBJECTIVE{number} (not armed here)";
     }
 
     // --destroy=<name>: kill a named destructible at session build so a --screenshot captures its
@@ -2632,6 +2900,29 @@ public partial class GameSession : Node3D
         _orbit.Frame(aabb, _spec.CamPos, pivot);
     }
 
+    // The mission-script host's airframe swap (callback codes 965 to 967). Player 1 alone: the
+    // original has one player vehicle and the codes name it, so a splitscreen pane cannot be given
+    // an answer the data does not carry. A failed swap is reported rather than thrown: the player
+    // keeps the aircraft the exception left them without, and the mission goes on.
+    private bool SwapPlayerAirframe(string planeNode)
+    {
+        if (_flightRoster == null || _rigs.Count == 0 || _rigs[0].Controller == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            _flightRoster.SwapPlayerAirframe(_rigs[0], planeNode);
+            return true;
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"airframe swap to '{planeNode}' failed: {e.Message}");
+            return false;
+        }
+    }
+
     // --debug-spectate: build the whole session as it would be flown, then take every human out of
     // it, so the AI can be watched with nobody provoking it. Each human aircraft goes Held and
     // Inert, and its pane takes a SpectatorCamera following the first AI aircraft.
@@ -2812,6 +3103,13 @@ public partial class GameSession : Node3D
             foreach (var plane in AiPlanes)
                 plane.DebugForceCrash();
         }
+        // --debug-pause[=frame]: the scripted Start press, so a --screenshot catches the pause
+        // screen. Player 0 owns it, as a solo press would. Same single-fire shape as --crash above.
+        if (_spec.DebugPauseFrame is int pauseFrame && !_debugPauseFired && clock.Frame >= pauseFrame)
+        {
+            _debugPauseFired = true;
+            _pauseState?.TryToggle(0);
+        }
         // --debug-scoreboard --vs: one scripted, ATTRIBUTED kill on the first sim step, through the
         // same Downed path a real kill takes, so a screenshot has a real K/D and kill banner
         // without scripting a shot. Same single-fire shape as --crash above.
@@ -2826,6 +3124,12 @@ public partial class GameSession : Node3D
         if (_spec.DebugScoreboard)
         {
             _iaDirector?.ForceDebugScoreboard();
+        }
+        // The cutscene's world hold, the same one _PhysicsProcess takes: nothing below this line
+        // steps while a definition owns the session.
+        if (_cutscene is { HoldsWorld: true })
+        {
+            return;
         }
         for (int i = 0; i < clock.Steps; i++)
         {
@@ -2853,6 +3157,10 @@ public partial class GameSession : Node3D
             // planes above have taken this step's crashes — the alive count
             // InstantActionWaves.Step reads must reflect them. The other drive path steps it too.
             _iaDirector?.Step(dt);
+            // The objectives graph reads the same step's kills and node deactivations, so it ticks
+            // after the AI planes above, exactly where the IA sequencer does.
+            _campaign?.Step(dt);
+            _radio?.Tick(dt);
             // The smoke screens after every aircraft has moved this step: the walk reads the
             // layer's and the victims' poses as they stand now, as the original's does.
             _smokeScreens?.SimStep(dt);
@@ -2866,6 +3174,91 @@ public partial class GameSession : Node3D
             // The weapon lab has no sim step of its own: it is hosted by player 1's
             // FlightController, which owns the fire clock, and fires into _projectiles above.
             _versus?.Advance(dt);
+        }
+
+        DiagTraceRoster();
+    }
+
+    private void DiagTraceRoster()
+    {
+        if (_campaign?.Graph is not { } graph)
+        {
+            return;
+        }
+
+        if (!_diagRefsDone)
+        {
+            _diagRefsDone = true;
+            foreach (var def in _campaign.Script.Objectives)
+            {
+                if (def.Travelers is not { } spec)
+                {
+                    continue;
+                }
+
+                string where;
+                if (spec.WherePoint is { } pt)
+                {
+                    where = $"POINT ({pt[0]:0},{pt[1]:0},{pt[2]:0})";
+                }
+                else
+                {
+                    var found = _diagRuntime?.FindNodes(spec.WhereNode ?? "");
+                    where = found is { Count: > 0 }
+                        ? $"NODE '{spec.WhereNode}' x{found.Count} -> ({found[0].GlobalPosition.X:0},{found[0].GlobalPosition.Y:0},{found[0].GlobalPosition.Z:0}) inTree={found[0].IsInsideTree()} vis={found[0].Visible}"
+                        : $"NODE '{spec.WhereNode}' UNRESOLVED";
+                }
+
+                GD.Print($"DIAGREF OBJ{def.Number} id={def.Identity?.Class.ToString() ?? "-"}/{def.Identity?.Priority.ToString() ?? "-"} " +
+                         $"dormant={def.BeginDormant}:{def.DormantUntil} who='{spec.Who}' r={spec.Radius:0} {where}");
+            }
+        }
+
+        if ((_diagTick++ % 60) != 0)
+        {
+            return;
+        }
+
+        var p = _rigs.Count > 0 ? _rigs[0].Controller : null;
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"DIAG t={_diagTick / 60}s ");
+        if (p != null)
+        {
+            sb.Append($"player=({p.WorldPosition.X:0},{p.WorldPosition.Y:0},{p.WorldPosition.Z:0}) ");
+        }
+
+        foreach (var def in _campaign.Script.Objectives)
+        {
+            if (def.Travelers is not { } spec)
+            {
+                continue;
+            }
+
+            Vector3? refPos = spec.WherePoint is { } pt
+                ? new Vector3(pt[0], pt[1], pt[2])
+                : _diagRuntime?.FindNodes(spec.WhereNode ?? "") is { Count: > 0 } f
+                    ? f[0].GlobalPosition
+                    : null;
+            string d = refPos is { } r && p != null ? $"{p.WorldPosition.DistanceTo(r):0}" : "?";
+            sb.Append($"| O{def.Number} {graph.StateOf(def.Number)}{(graph.CompletedOf(def.Number) ? "*" : "")} d={d}/r{spec.Radius:0} ");
+        }
+
+        GD.Print(sb.ToString());
+    }
+
+    // player.json's activation floor, on the same lazily loaded skills table the spawner reads;
+    // the shipped default when the table cannot be read, so a roster still spawns.
+    private float MinAiActiveDist()
+    {
+        try
+        {
+            _aiSkills ??= AiSkills.Load(_zrdrPath);
+            return _aiSkills.MinAiActiveDist;
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"campaign: cannot load ai_skill_parameters: {e.Message}");
+            return 2000f;
         }
     }
 
@@ -2945,5 +3338,10 @@ public partial class GameSession : Node3D
         public AnimProgram? CrashProgram;
         public SceneBuilder? WorldScene;
         public AnimRuntime? WorldRuntime;
+
+        /// <summary>The chapter's resolved approach rows, kept so the actor build can re-bind the
+        /// trigger once the roster's own approach nodes exist (<see cref="Mech3.RosterMarkers"/>).
+        /// </summary>
+        public IReadOnlyList<LandingApproach>? Landings;
     }
 }

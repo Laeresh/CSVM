@@ -93,17 +93,34 @@ internal sealed class PoseChannel
     internal int HandleTranslateState(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
         int applied = 0;
+        var host = AtNode(ev.Data.Str("at_node"));
         foreach (var t in _targets(ev, def, anchor))
-            applied += PoseTranslate(t, ev.Data.Vec3("state"), ev.Data.Bool("relative"));
+            applied += host != null
+                ? PoseAtNode(t, host, ev.Data.Vec3("state"), rotate: false)
+                : PoseTranslate(t, ev.Data.Vec3("state"), ev.Data.Bool("relative"));
         return applied;
     }
 
     internal int HandleRotateState(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
         int applied = 0;
+        var host = AtNode(ev.Data.Obj("basis")?.Str("AtNodeMatrix"));
         foreach (var t in _targets(ev, def, anchor))
-            applied += PoseRotate(t, ev.Data.Vec3("state"));
+            applied += host != null
+                ? PoseAtNode(t, host, ev.Data.Vec3("state"), rotate: true)
+                : PoseRotate(t, ev.Data.Vec3("state"));
         return applied;
+    }
+
+    // The AT_NODE host, by name over the whole index: it is a world root of its own, not something
+    // the event's anchor contains. The resolver memoizes the lookup, which matters because the
+    // letterbox definition re-asserts this every tick.
+    internal Node3D? AtNode(string? name)
+    {
+        if (name == null)
+            return null;
+        var found = _rt.FindNodes(name);
+        return found.Count > 0 ? found[0] : null;
     }
 
     internal int HandleScaleState(AnimEvent ev, AnimDefinition def, Node3D? anchor)
@@ -354,6 +371,26 @@ internal sealed class PoseChannel
         var rest = _rt.RestOf(target);
         target.Basis = Basis.FromEuler(radians, EulerOrder.Yxz)
                             .Scaled(rest.Basis.Scale);
+        return 1;
+    }
+
+    // The AT_NODE form of the two pose events: the target takes another node's world frame, plus
+    // an authored offset in that frame. Written globally because the host is a root of its own and
+    // the target need not share its parent: the letterbox bars and camera1 are both world roots.
+    internal int PoseAtNode(Node3D target, Node3D host, Vector3 offset, bool rotate)
+    {
+        var rest = _rt.RestOf(target);
+        var frame = host.GlobalTransform.Orthonormalized();
+        if (rotate)
+        {
+            target.GlobalBasis = (frame.Basis * Basis.FromEuler(offset, EulerOrder.Yxz))
+                .Scaled(rest.Basis.Scale);
+        }
+        else
+        {
+            target.GlobalPosition = frame.Origin + (frame.Basis * offset);
+        }
+
         return 1;
     }
 
