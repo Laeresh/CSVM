@@ -3476,18 +3476,59 @@ against one it is not told to ignore. ⚠ `BL-504` was a real cause of exactly t
 different group of aircraft, so confirm the wingmen's own gates before reading their behaviour as
 this item.
 
-⚠ **Two things from the controls narrow this.** There is no wingman-command binding in this build,
-and `CSVM/project.godot` carries no wingman input action, so an ordered engage cannot be what the
-player is missing; if the original's wingmen only engage when ordered, the absent command IS the
-finding and the work is wiring it. And the authored data argues wingmen engage on their own:
-`wingman_4`'s exclusion list is only meaningful for an aircraft that picks targets, which a wingman
-holding station for the whole mission would never do.
+⚠ **Two things from the controls narrowed this.** There is no wingman-command binding in this build
+and `CSVM/project.godot` carries no wingman input action, so an ordered engage is not something the
+player can reach. And the authored data argues wingmen select targets: `wingman_4`'s exclusion list
+is only meaningful for an aircraft that picks them. The findings below answer both.
 
-**The behaviour asked for, which is this item's specification.** The wingmen switch to pursue in a
-fight and go back to escorting the player when no enemies are left. The return half is as much a
-part of this as the engage half, and a fix that engages but never re-forms is not done;
+**The behaviour asked for.** The wingmen switch to pursue in a fight and go back to escorting the
+player when no enemies are left. The return half is as much a part of it as the engage half, and
 `wingman-station` is the instrument for the re-formed state. Not attacking the Balmorals comes free
 from the bias table and wants no special case.
+
+**Landed.** The decode, read out of the image rather than out of the doc, and the instrument that
+measures our side of it. `docs/org/aiPilot.md`'s escort law gains three findings. Nothing outside
+`FUN_0041e760` writes the escort state at all: `+0xd8` is written at six sites inside it plus the
+constructor's zero, and nowhere else in the image, so the formation state has no external exit
+either. A `mode wingman` vehicle nevertheless runs the ordinary acquisition every frame,
+`FUN_0041fe10` being called at the top of `FUN_0041c270` ahead of the fork, on the same ranked pick
+and the same `rating_biases` table a jet uses, with the arm that would prefer `primary_target` as a
+target gated on `mode != 4` so it never shoots its own leader. And the law's own tail fires: with a
+selected target it runs `FUN_00460be0`'s firing solution against the gun group and calls
+`FUN_0041f420(1,1)`, the routine the pursuit path ends on. The engagement a player sees from an
+original wingman is that, guns from the station, not a pursuit. Our port already produces it,
+because `AiPilot.Escort` short-circuits the steering dispatch only while
+`FlightController.DriveAiGunner` runs on every AI tick.
+
+⚠ **The candidates, three killed and one found dead.** The player's own wingman orders: the only
+routine in the image that releases a wingman is `FUN_0049c880`, which sweeps every live `mode 4`
+vehicle whose leader passes a vtable test and hands it to `FUN_0049c920`, putting it on a net and
+clearing `mode` to 0 so the patrol and pursue machine takes over. It has no callers and no
+four-byte pointer to it anywhere in the image, so the shipped game cannot run it. An objective
+clause clearing `primary_target`: killed, the writers of `+0x2fc` are the spawn path, the
+`primary_target` setter and the two death paths. The target-selection path setting `mode`: killed,
+`FUN_0041fe10` writes only `+0x948`, and the `mode` writes are the def copy, the spawn-time net
+demotion, `FUN_0049c920` and the death path. `BL-504`'s 1 m gate: killed for these aircraft, all
+three of CM02's escorting blocks read attack 2000 m, return 1200 m, activation 2000 m.
+
+**Verified.** A new `wingman-engage` suite. Its authored arm reads every escorting block CM02
+plans: `wingman_2`, `wingman_3` and `wingman_4` each fly attack 2000 m, return 1200 m, activation
+2000 m, and each authors five `rating_biases`, which the acquisition decode above is what makes
+sense of. Its flown arm puts one hostile the biases do not name 700 m ahead of a leader and its
+wingman, 80 m off their track: over 45 s the wingman holds that bandit as its gunner target for all
+2699 steps, opens fire on 109 of them, puts 14 rounds into it, and its escort state never leaves
+the formation, holding the leader inside 417 m of the 700 m leash. `wingman-station` stays green,
+as do `ai-modes`, `ai-gunnery`, `campaign-roster` and `campaign-set-ai-net`; `dotnet build` clean,
+0 warnings, 2399 unit tests pass, comment caps clean.
+
+⚠ **What is NOT done, and needs the user's decision.** The user's stated intent is that the wingmen
+switch to pursue in a fight and re-form when the fight is over. The image says the original does
+neither: there is no ordered engage to bind a key to, and the formation state has no exit. Building
+that behaviour is therefore an invention, not a port, and it cannot be landed under this item's own
+constraint against trading the decode for an impression. It is the user's call whether to author it
+as a deliberate deviation. The clean seam is `AiPilot.Next`'s `Escort is { Leader.InPlay: true }`
+guard plus a re-form condition, and `wingman-station` and `wingman-engage` are both instruments that
+would catch a regression in the held state.
 
 ## G83 ☐ An AI aircraft's defensive turrets are never built (`BL-506`)
 

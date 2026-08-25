@@ -147,6 +147,7 @@ public static class SuiteCatalog
         "partition-areas",
         "scripted-path",
         "wingman-station",
+        "wingman-engage",
         "campaign-objectives-hud",
         "campaign-cutscene",
         "cutscene-letterbox",
@@ -726,6 +727,13 @@ public static class SuiteCatalog
             "staying with the leader for the rest of the run, and riding the aft station behind " +
             "a player leader where it rides the forward one behind an AI leader",
             WingmanStation));
+        into.Add(new TestHarness.Suite("wingman-engage",
+            "what a campaign wingman does about a hostile (BL-505): every escorting block CM02 " +
+            "plans flies an attack gate wider than BL-504's 1 m and most author rating_biases, " +
+            "and over a flown leg with one bandit ahead of the pair the wingman acquires it " +
+            "through the ordinary ranking and fires from the station, while the decoded escort " +
+            "state never leaves the formation, which is FUN_0041e760's own shape",
+            WingmanEngage));
         into.Add(new TestHarness.Suite("campaign-objectives-hud",
             "D33's in-flight objectives display and cue firing against a BUILT campaign world: " +
             "ObjectivesHud carries one line per ObjectiveGraph display row, a scripted " +

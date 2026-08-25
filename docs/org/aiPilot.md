@@ -477,6 +477,44 @@ and holds the formation offset for the rest of the mission, target or no target.
 state is reachable only through the every-frame forcing an AI leader applies (above), which is why
 a wingman-of-a-wingman is the one that alternates.
 
+Nothing OUTSIDE the function moves the state either. `+0xd8` is written at six sites, all of them
+inside `FUN_0041e760` (`0x0041e7b0`, `0x0041e8d1`, `0x0041e9f6`, `0x0041ea21`, `0x0041ea37`,
+`0x0041ea62`) plus the constructor's zero at `0x004b05a3`; no other function in the image writes a
+vehicle's escort state at all.
+
+### A wingman still selects a target, and still shoots
+
+Holding the formation is not the same as ignoring the war, which is why a `mode wingman` block
+authoring `rating_biases` is coherent.
+
+**It acquires.** `FUN_0041c270` calls the acquisition `FUN_0041fe10` at the top of every AI frame
+before it forks on `mode`, so a wingman runs it exactly as a jet does: the same ranked pick
+(`FUN_0041f9c0`) against the same bias table at `+0x344`. Two arms of that function are keyed on
+`mode` being 0 or 4, which is the wingman's own class: the scorer it picks (`PTR_FUN_00603544`
+rather than `PTR_FUN_0060354c`), and the arm that would prefer `primary_target` as the target,
+which is gated on `mode != 4` so a wingman never shoots at its own leader.
+
+**It fires.** The escort law's tail, after it has handed the station to the steering law, is
+`if (+0x948 != 0) { … FUN_0041afe0(); FUN_0041f420(1,1); }`, the same fire routine the pursuit path
+in `FUN_0041c270` ends on. The gate ahead of it is `FUN_00460be0`'s firing solution against the
+gun group at `+0x950`, refused when the solution's dot against the aircraft's own forward row falls
+below −0.9, so a wingman fires whenever the target it selected happens to lie ahead of the station
+it is flying. The engagement a player sees from a wingman is that, not a pursuit.
+
+### The release that is not wired up
+
+`FUN_0049c880` walks every vehicle: alive (`+0x91d == 0`), `mode` 4, a non-null `+0x2fc` whose
+leader answers its vtable `+0x38` test, and hands each one to `FUN_0049c920`. That function assigns
+the chapter's first net (`+0x2e4`, with `+0x2e8`/`+0x2ec` from the node and edge lookups), sets the
+AI state at `+0x2f0` from the net record, and clears `mode` to 0. A vehicle it has touched is an
+ordinary netted AI: `FUN_0041c270` stops forking to the escort law for it and runs the patrol and
+pursue machine instead, which is the only "wingman leaves formation and fights" mechanism in the
+image.
+
+⚠ **It is unreachable.** `FUN_0049c880` has no callers and no 4-byte pointer to it anywhere in the
+image, so nothing in the shipped build can run it. Whatever it was for (the shape reads as a
+release order given to the flight), the shipped game never gives it.
+
 **The target station** (states 0 and 2) ramps with the *target's* speed and is placed along the
 NEGATION of the target's backward axis, i.e. that far AHEAD of it along its own facing, a cut-off
 point rather than a trail:
@@ -520,6 +558,12 @@ Not ported: the radio call the join plays (`DAT_0071c3b0`) and the re-acquire sw
 when its target is lost (`FUN_0041f9c0` again, with its own 3600 m test and second cue,
 `DAT_0071c3b4`); the fire decision the law ends on, which in CSVM is the host's `AiGunner` pass;
 and the null-leader dereference, which CSVM answers by falling back to the pilot's standing orders.
+
+The acquisition and the guns come out the same way. `AiPilot.Escort` short-circuits the STEERING
+dispatch only; `FlightController`'s gunner pass runs on every AI tick regardless, so a CSVM wingman
+ranks targets against its own `rating_biases` and fires from the station exactly as the law's tail
+does. The `wingman-engage` suite measures it on a flown leg: the wingman holds one bandit as its
+target throughout, opens fire, and its escort state never leaves the formation.
 
 **The spawner.** A campaign session spawns the mission's `aiv` roster through
 `Session/CampaignRoster.cs` (the plan) and `CampaignDirector.BuildRoster` (the placement). The fork
@@ -904,6 +948,7 @@ is where to start.
 | `FUN_00475f30` | the by-name net assignment: table scan on the entry name, then `FUN_00475fc0` |
 | `FUN_004735b0` | the `player.zrd.json` loader, including `min_ai_active_dist` |
 | `FUN_0049c920` | script-side net assignment, always forces `mode` to `jet` |
+| `FUN_0049c880` | releases every wingman onto a net through the above; UNREFERENCED in the image |
 | `FUN_00475820` | def to vehicle copy, including `mode` |
 | `FUN_00476250` | post-spawn vehicle init, including the wingman demotion |
 | `FUN_0047c210` | the roster spawn: `netids` draw, `preferred_engagement_altitude`, activation |

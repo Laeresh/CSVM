@@ -76,6 +76,22 @@ internal static class WingmanSuites
     // that no aeroplane flew. Fail on the descent instead of averaging the jump.
     private const float FlownFloorM = 200f;
 
+    // The engagement leg's stage. The bandit flies the same course as the pair from this far
+    // ahead, so it sits in the wingman's own forward gun cone without the wingman maneuvering:
+    // the leg then answers what the guns do while the station is held, not what the flight law
+    // would do if it chased.
+    private const float EngageBanditAheadM = 700f;
+    private const float EngageRunS = 45f;
+
+    // How far off the pair's track the bandit is placed. Dead ahead the leader flies into it and
+    // the leg measures a ram; 80 m clears both airframes and still leaves the bandit well inside
+    // the wingman's own gun cone all the way in.
+    private const float EngageBanditAbeamM = 80f;
+
+    // CM02, whose wingman_4 authors the rating_biases the engagement question is asked against.
+    private const string EngageChapter = "C3";
+    private const string EngageMission = "M05";
+
     internal static void WingmanStation(TestContext ctx)
     {
         StationGeometry(ctx);
@@ -108,6 +124,210 @@ internal static class WingmanSuites
         {
             textures.Dispose();
         }
+    }
+
+    /// <summary>What a campaign wingman does about a hostile (<c>BL-505</c>): the gates CM02's own
+    /// wingman blocks fly, and then a flown leg with one bandit inside those gates, reporting
+    /// whether the wingman acquires it, whether the guns fire while the station is held, and
+    /// whether the decoded escort state moves.</summary>
+    internal static void WingmanEngage(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        EngageGates(ctx);
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        try
+        {
+            FlyEngageLeg(ctx, planesGamez, textures);
+        }
+        finally
+        {
+            textures.Dispose();
+        }
+    }
+
+    // The authored half: every escorting block CM02 plans, its effective engagement gates after
+    // the volume overlay, and whether it authors rating_biases at all. BL-504 was a 1 m attack
+    // gate reaching an aircraft it was not authored on, so the gate is read before the behaviour.
+    private static void EngageGates(TestContext ctx)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, EngageChapter, EngageMission);
+        ctx.RequireData(missionZrdr, $"{EngageChapter}/{EngageMission} zrdr");
+        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var plan = CampaignRosterPlan.Build(
+            AiSkills.LoadRoster(missionZrdr),
+            VehicleDefs.Load(ctx.ZrdrPath),
+            AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, EngageChapter)),
+            netDraw: _ => 0);
+
+        int escorts = 0, biased = 0, gated = 0;
+        foreach (var spawn in plan.Spawns)
+        {
+            if (!spawn.Escorts)
+            {
+                continue;
+            }
+            escorts++;
+            biased += spawn.Biases.Count > 0 ? 1 : 0;
+            var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, spawn.PlaneNode);
+            var machine = new AiModeMachine(new System.Random(7))
+            {
+                ActivationRange = skills.MinAiActiveDist,
+                AttackRange = stats.AiAttackRange,
+                ReturnRange = stats.AiReturnRange,
+            };
+            CampaignRosterPlan.ApplyVolumes(machine, spawn.Volumes, skills.MinAiActiveDist);
+            gated += machine.AttackRange > 1f ? 1 : 0;
+            ctx.Note($"[{spawn.Name}] escorts '{spawn.LeaderName}' as {spawn.PlaneNode}: attack {machine.AttackRange:0} m, return {machine.ReturnRange:0} m, activation {machine.ActivationRange:0} m, {spawn.Biases.Count} rating_biases");
+        }
+
+        ctx.Check(escorts > 0, $"{EngageChapter}/{EngageMission} plans {escorts} escorting wingman block(s)");
+        ctx.Check(escorts > 0 && gated == escorts,
+            $"…every one of them flies an attack gate wider than BL-504's 1 m: {gated} of {escorts}");
+        ctx.Check(biased > 0,
+            $"…and {biased} of {escorts} author rating_biases, which only a block that picks its own targets can use");
+    }
+
+    // The flown half: a scripted player leader on a straight cruise, its wingman on the decoded
+    // station, and one hostile ahead of both on the same course. The bandit is not a block CM02
+    // tells anyone to ignore, so nothing here is answered by a bias.
+    private static void FlyEngageLeg(TestContext ctx, GameZ planesGamez, TextureArchive textures)
+    {
+        var stats = PlaneStats.Load(ctx.ZrdrPath, FlownPlaneNode);
+        var aiStats = PlaneStats.LoadForAi(ctx.ZrdrPath, FlownPlaneNode);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        LoadoutDef? stock = null;
+        foreach (var def in StockLoadouts.Load().All.Values)
+        {
+            if (def.Model == FlownPlaneNode)
+            {
+                stock = def;
+                break;
+            }
+        }
+        if (stock == null)
+        {
+            throw new SuiteSkippedException($"no stock loadout for {FlownPlaneNode}");
+        }
+
+        ProjectilePool? pool = null;
+        FlightController? leader = null;
+        FlightController? wing = null;
+        FlightController? bandit = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var leaderPos = new Vector3(0f, FlownLeaderAltitudeM, 0f);
+            leader = EngageRig(ctx, planesGamez, textures, stats, live, leaderPos, true, null,
+                FlightRoster.ShooterIdBase, AimAssist.PlayerTeam, null, null, null);
+
+            var wingPos = AiEscort.FormationStation(leaderPos, Basis.Identity, playerLeader: true);
+            var escort = new AiEscort { Leader = leader };
+            var pilot = AiPilot.HoldingCourse(wingPos, wingPos + Vector3.Forward);
+            pilot.Escort = escort;
+            pilot.Machine = new AiModeMachine(new System.Random(7));
+            pilot.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 20260825 });
+            var leaderRig = leader;
+            var humans = new Vector3[1];
+            wing = EngageRig(ctx, planesGamez, textures, aiStats, live, wingPos, false, pilot,
+                FlightRoster.ShooterIdBase + 1, AimAssist.PlayerTeam, stock, weapons,
+                () => { humans[0] = leaderRig.WorldPosition; return humans; });
+            var gun = wing.Loadout!.FirableGuns.First();
+
+            // Pinned rather than flown: a bandit under its own stick drifts off the pair's course
+            // and the leg would then measure the drift instead of the wingman. The pair closes on
+            // it head-on at cruise, so the gun window opens and shuts on its own.
+            var banditPos = leaderPos + (Vector3.Forward * EngageBanditAheadM)
+                + (Vector3.Right * EngageBanditAbeamM);
+            bandit = EngageRig(ctx, planesGamez, textures, stats, live, banditPos, false, null,
+                FlightRoster.ShooterIdBase + 2, AimAssist.PlayerTeam + 1, null, null, null);
+            bandit.Held = true;
+            bandit.PlaceHeld(banditPos, banditPos + Vector3.Forward);
+
+            int ammoAtStart = gun.Ammo;
+            int acquired = 0, wantsFire = 0, engagingSteps = 0;
+            float worstRange = 0f, closest = float.MaxValue;
+            bool everCrashed = false;
+            for (int i = 0; i < (int)(EngageRunS / StepDt); i++)
+            {
+                live.SimStep(StepDt);
+                leader.SimStep(StepDt);
+                wing.SimStep(StepDt);
+                acquired += ReferenceEquals(pilot.Gunner.Target, bandit) ? 1 : 0;
+                wantsFire += pilot.Gunner.WantsFire ? 1 : 0;
+                engagingSteps += escort.State != EscortState.Station ? 1 : 0;
+                worstRange = Mathf.Max(worstRange, wing.WorldPosition.DistanceTo(leader.WorldPosition));
+                closest = Mathf.Min(closest, wing.WorldPosition.DistanceTo(bandit.WorldPosition));
+                everCrashed |= wing.Crashed || leader.Crashed;
+                if (i % 600 == 0)
+                {
+                    ctx.Note($"[engage] t={i * StepDt:0}s escort={escort.State} target={(pilot.Gunner.Target == null ? "-" : pilot.Gunner.Target.Name.ToString())} bandit={wing.WorldPosition.DistanceTo(bandit.WorldPosition):0} m leader={wing.WorldPosition.DistanceTo(leader.WorldPosition):0} m rounds={ammoAtStart - gun.Ammo}");
+                }
+            }
+
+            int fired = ammoAtStart - gun.Ammo;
+            ctx.Note($"[engage] {acquired} of {(int)(EngageRunS / StepDt)} steps on the bandit, {wantsFire} trigger steps, {fired} rounds, {engagingSteps} steps out of the formation state, closest pass {closest:0} m, worst leader range {worstRange:0} m");
+            ctx.Check(!everCrashed, $"neither the leader nor its wingman goes in over the {EngageRunS:0} s leg");
+            ctx.Check(acquired > 0,
+                $"a wingman holding station acquires the hostile through the same ranking every AI uses: {acquired} step(s)");
+            ctx.Check(fired > 0,
+                $"…and its guns fire from the station, which is the original's own tail arm of the escort law: {fired} round(s)");
+            ctx.Check(engagingSteps == 0,
+                $"…while the decoded escort state never leaves the formation, exactly as FUN_0041e760 has no exit from it: {engagingSteps} step(s)");
+            ctx.Check(worstRange < FlownLeashM,
+                $"…and the station is held throughout: worst {worstRange:0} m of {FlownLeashM:0}");
+        }
+        finally
+        {
+            bandit?.Free();
+            wing?.Free();
+            leader?.Free();
+            pool?.Free();
+        }
+    }
+
+    // The engagement leg's rig. Separate from Rig below because both the team and the stock arming
+    // have to be in place BEFORE the node enters the tree: the firing-state slots are built once,
+    // when the controller is readied, so a loadout bound afterwards never fires.
+    private static FlightController EngageRig(TestContext ctx, GameZ planesGamez,
+        TextureArchive textures, PlaneStats stats, ProjectilePool live, Vector3 pos, bool human,
+        AiPilot? pilot, int shooterId, int team, LoadoutDef? stock, WeaponDefs? weapons,
+        System.Func<System.Collections.Generic.IReadOnlyList<Vector3>>? humanPositions)
+    {
+        var model = new PlaneBuilder(planesGamez, textures).Build(FlownPlaneNode);
+        var rig = new FlightController();
+        rig.Bind(new FlightControllerBuild
+        {
+            PlaneModel = model,
+            Collider = PlaneCollider.Build(model),
+            Damage = new PlaneDamage(stats.DestroyableParts),
+            PlayerIndex = shooterId,
+            IsHumanPiloted = human,
+            Pilot = pilot,
+            HumanPositions = humanPositions,
+            Projectiles = live,
+            UseKeyboard = false,
+            PadDevices = System.Array.Empty<int>(),
+            AllowPause = false,
+            Team = team,
+        });
+        if (stock != null && weapons != null)
+        {
+            rig.Loadout = Loadout.Bind(stock, model, weapons);
+        }
+        rig.Setup(new FlightModel(stats, aiForcePath: pilot != null), null, new CamParams(),
+            pos, pos + Vector3.Forward, LeaderThrottle, LeaderSpeedMps);
+        rig.Name = $"{FlownPlaneNode}_{shooterId}";
+        ctx.Host.AddChild(rig);
+        return rig;
     }
 
     // The station geometry, with no engine state at all: the two decoded offsets in a leader's own
