@@ -47,6 +47,55 @@ plane `*_noselogo` decals (0.348 — soft-edged paint), zeppelin window skins
 et al. would flip wrongly; 0.40 misses `fadedsign02/03` and `shipwreck7`. The old
 max < 140 rule is subsumed (max < 140 ⇒ opaque = 0 ⇒ ratio 0).
 
+**Finding 3 — the coastline sheets need a name, not a threshold.** `beach1` (binary 0.685),
+`shore1` (0.539), `shore1_end` (0.608), `shore2` (0.542) and `shore_trans` (0.555) are the
+waterline art: a feathered ramp from land to water, 33–40% partial texels. The ratio is a
+whole-sheet vote and each sheet's dry-land half is solid, so it reads them as cutouts and the
+waterline scissors to a 1-bit sawtooth. No threshold fixes this — 0.6 catches three of the five
+and drags in unrelated art, and the inland transition sheets that share their role
+(`cliff01_trans1` 0.814, `terpat01_trans1` 0.928, and the rest of those two families) really are
+binary. They are named in `TextureArchive.SoftAlphaCoastline` instead, which also keeps them out
+of the scissor-coverage mip boost that would re-harden the ramp at distance.
+
+## The original has no cutout path, so no flag selects one
+
+Decoded from `crimson.exe` (Ghidra). The renderer is `D:\zipper\gamez\zvideo\zvid_ddd3d.c` over
+`IDirect3DDevice3`, whose vtable puts `SetRenderState` at `+0x58`, `SetTexture` at `+0x98` and
+`SetTextureStageState` at `+0xa0`.
+
+**`D3DRENDERSTATE_ALPHATESTENABLE` (15) is never set, anywhere.** The whole `0x0059e000–0x005ab000`
+D3D layer contains three `push 0xf` instructions and all three are 4-bit channel masks in the
+ARGB4444 blit, sitting between `push 0xf0`, `push 0xf00` and `push 0xf000`. `ALPHAREF` and
+`ALPHAFUNC` are likewise never touched, so alpha test stays at its Direct3D default of FALSE for
+the whole run. **Every surface the original draws is either opaque or alpha-BLENDED. There is no
+scissor, so nothing in the data selects one, and the coastline sheets differ from the trees in the
+pixels only.**
+
+Device init (`FUN_005a0e00`) fixes `SRCBLEND` = `SRCALPHA` and `DESTBLEND` = `INVSRCALPHA`, and
+caches `ALPHABLENDENABLE` in a global so the draw only re-issues it on change. The draw
+(`FUN_005a4210`) enables blending from one per-texture render-mode field, `tex+0x10 == 4`, which
+also selects `D3DTSS_ALPHAOP` = MODULATE; the sorted pass (`FUN_005a6160`) forces blending on,
+`ZWRITEENABLE` off, and promotes any primitive whose own colour alpha is below 255 to that mode. A
+per-primitive bit picks additive `ONE/ONE` over the normal `SRCALPHA/INVSRCALPHA`, matching the
+script vocabulary `am_alpha_onezero` / `am_alpha_oneone` / `am_alpha_alphainvalpha` /
+`am_alpha_oneinvalpha`.
+
+**What the archive's alpha class actually decides is precision, not blending.** In the texel blit
+`FUN_005a27e0`, a texture with no alpha plane (`TextureAlpha::Simple`) gets its alpha from a colour
+key — `alpha = (texel == key) ? 0 : 0x8000` in ARGB1555 — while a texture with a plane
+(`TextureAlpha::Full`, `TexFlags::FULL_ALPHA` = `0x08`, tested as `flags & 8`) takes RGBA8888 where
+the card supports it, else ARGB4444, else ARGB1555 with the 8-bit alpha thresholded at 128. So a
+1-bit look in the original is either colour-keyed art or a period video card without a 4444/8888
+texture format, never a render state — and on the hardware this project targets, the full ramp
+survives.
+
+The other candidates were checked and are not it. The material `flag` bit
+(`MaterialFlags::UNKNOWN`) is the decal-receiving surface (`docs/org/weaponRay.md`), 0 on every
+coastline and every soft texture. Polygon `in_out` is zero across C2/C3/C4; polygon `unk3` is
+105/12743, 1/16024 and 92/19476 polygons and lands on opaque terrain (`terpat01`, `river1`), zero
+on every coastline, cloud, waterfall and shadow polygon. `ALPHA_GRADIENT` is a `weather.cpp` key
+for precipitation particles, and `keyed`/`alpha` belong to the 2D UI pane vocabulary.
+
 **Landed** in `TextureArchive.AlphaIsSoft` (same census date). Re-run
 `python alpha_census.py` after any classifier change; it prints the flip lists at the
 landed 0.45 binary-ness threshold, and `alpha_census.json` carries the raw stats

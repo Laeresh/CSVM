@@ -1105,6 +1105,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
   file's own rule).
 
+- `BL-508` `[Research]` **The original never alpha-tests, so every alpha texture we scissor is an
+  invention rather than a reproduction.** *Evidence:* decoded from `crimson.exe`
+  (`analysis/alpha-classification/FINDINGS.md`, "The original has no cutout path"). The renderer is
+  `zvid_ddd3d.c` over `IDirect3DDevice3`, and `D3DRENDERSTATE_ALPHATESTENABLE` is set nowhere in
+  the whole `0x0059e000–0x005ab000` layer, nor are `ALPHAREF` and `ALPHAFUNC`, so alpha test holds
+  its Direct3D default of FALSE for the entire run. Blending is one per-texture mode field
+  (`tex+0x10 == 4`, `FUN_005a4210`) against a fixed `SRCALPHA`/`INVSRCALPHA` pair, and the
+  archive's `TextureAlpha` class decides pixel PRECISION only (`FUN_005a27e0`: colour key for
+  `Simple`, 8888 → 4444 → 1555-at-128 for `Full` depending on the card). Ours scissors 388 of the
+  604 alpha textures, tree and fence cards included. *Fix shape:* decide per family whether
+  faithfulness or the current look wins, then either widen `TextureArchive.SoftAlphaCoastline` or
+  drop the pixel rule entirely; if it goes all the way, `AlphaIsSoft` and its 0.45 threshold become
+  dead code and the census script goes with them. *⚠ Traps:* blending moves a surface into the
+  transparent pass with no depth write and per-object sorting, which is a real risk on the
+  thousands of coplanar foliage and railing cards a hard cutout currently keeps in the opaque pass
+  — the coastline sheets were safe because they are few and flat, and that does not generalise.
+  A period video card without a 4444 or 8888 texture format collapsed `Full` alpha to 1 bit at
+  threshold 128, so a 1-bit look in reference footage may be the hardware and not the intent; check
+  which the shot is before treating it as the target. *Playtest after fix:* a low pass over C1's
+  tree lines and C2's Eiffel replica, where the erosion this rule was written to prevent would show
+  first. *Cross-refs:* `analysis/alpha-classification/FINDINGS.md`, which carries the decode and the
+  install-wide census; the coastline commit that filed this (`git log --grep=SoftAlphaCoastline`).
+
 ## Effects & animation runtime
 
 - `BL-484` `[Bug]` **An `AT_NODE` pose run during the animation bootstrap reads and writes global

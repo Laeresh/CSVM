@@ -650,6 +650,21 @@ public sealed class TextureArchive : IDisposable
         "barngrill",   // C5 only
     };
 
+    // The coastline sheets: the waterline where a land tile meets water, authored as a wide
+    // feathered alpha ramp. Their dry-land half is solid, which carries the whole-sheet
+    // opaque/ink ratio above the cutout threshold even though the waterline itself is
+    // translucent, so the pixel rule alone scissors that ramp to a 1-bit sawtooth. Named because
+    // no per-texture statistic separates them; the inland transition sheets (`cliff*_trans*`,
+    // `terpat*_trans*`) measure 0.81-0.93 binary and are genuine cutouts.
+    private static readonly HashSet<string> SoftAlphaCoastline = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "beach1",     // C2
+        "shore1",     // C3, C4
+        "shore1_end", // C4
+        "shore2",     // C3
+        "shore_trans", // C3
+    };
+
     private readonly ZipArchive? _zip;
     private readonly string? _dir;
     // baseName (no extension) -> the PNG's retrieval name (a zip entry's FullName, or a file name under _dir).
@@ -951,7 +966,9 @@ public sealed class TextureArchive : IDisposable
             return null;
         }
         LastHadAlpha = ImageHasAlpha(img);
-        LastAlphaIsSoft = LastHadAlpha && AlphaIsSoft(img); // before mipmaps: raw pixels only
+        // Before mipmaps: raw pixels only. The named coastline sheets are soft whatever the
+        // pixel rule says about them (see SoftAlphaCoastline).
+        LastAlphaIsSoft = LastHadAlpha && (AlphaIsSoft(img) || SoftAlphaCoastline.Contains(baseName));
         // The drop-in instruments repaint the RGB flat and keep everything else — size, format,
         // alpha channel — so the alpha class read just above (and with it the blend/scissor choice
         // and the cutout silhouette) is unchanged.

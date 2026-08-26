@@ -50,14 +50,14 @@
     {
       "name": "c3-island",
       "frame": 120,
-      "hash": "e9a259003bf16ca89c29876394f8cac4",
+      "hash": "d075263a02595656d1cf31a0df7ad93f",
       "exercises": "coastline, surf edge and open water at close range; static — 9 px at 120 vs 360, so it proves geometry and shading, not the clock.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
     },
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "0de5cd01b233855c87f5ccb92ff0d299",
+      "hash": "7afba92b963fb582deca6ce901bce4a1",
       "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
