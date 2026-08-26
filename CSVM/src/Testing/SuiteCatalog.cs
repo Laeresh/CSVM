@@ -170,6 +170,7 @@ public static class SuiteCatalog
         "campaign-zeppelin-wakeup",
         "campaign-squad-wakeup",
         "campaign-set-ai-net",
+        "campaign-player-death",
         "alpha-cutout-ray-census",
         "zeppelin-identity",
         "campaign-briefing-repaint",
@@ -948,6 +949,18 @@ public static class SuiteCatalog
             + "stays out of combat, taking nothing on its own airframe and going quiet when it is "
             + "downed",
             CampaignSetAiSuites.CampaignSetAiNet));
+
+        // BL-491: a campaign mission had three endings and none of them was the player dying, so
+        // the aircraft could be lost and the mission flew on.
+        into.Add(new TestHarness.Suite("campaign-player-death",
+            "losing the player's aircraft over C3/M01's own BUILT world and shipped script, the "
+            + "mission being one of the four that author no loss at all, so a Lost outcome there "
+            + "can only be the death: a crash driven through the production death path ends the "
+            + "mission lost where the wreck lands rather than on either wrap-up delay, hands the "
+            + "player back to the cabin, and commits nothing to the persist log; --no-crash-loss "
+            + "leaves the same crash flying, a mission nobody crashes in runs on, and an aircraft "
+            + "the under-map backstop teleported ends nothing at all",
+            CampaignPlayerDeathSuites.CampaignPlayerDeath));
 
         // BL-477: what stops a shot at the cargo zeppelin's slung tanks was inferred from the
         // geometry; this measures it. The original's own ray test reads no texture at all

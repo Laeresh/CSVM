@@ -54,6 +54,8 @@ public sealed class CampaignDirector
     // that finds one.
     private float _scanClock;
     private bool _damageWired;
+    private bool _deathWired;
+    private bool _playerLost;
 
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
@@ -86,6 +88,11 @@ public sealed class CampaignDirector
     /// <summary>The wingman aircraft's ammunition and ordnance picks off the profile, or null when
     /// this mission has no wingman.</summary>
     public LoadoutChoice? WingmanFit { get; private set; }
+
+    /// <summary>Whether losing the player's aircraft ends the mission, which is the original's rule
+    /// and the default here. <c>--no-crash-loss</c> clears it so a session being debugged can fly
+    /// on past a crash; <c>GameSession</c> is the only writer.</summary>
+    public bool EndsOnPlayerDeath { get; set; } = true;
 
     /// <summary>The mission's parsed choreography script.</summary>
     public ObjectiveScript Script { get; }
@@ -355,11 +362,13 @@ public sealed class CampaignDirector
     /// cutscene hold nothing advances, which is callback 20's objectives half.</summary>
     internal void Step(float dt)
     {
+        WirePlayerDeath();
         if (_cutsceneHold)
         {
             return;
         }
 
+        StepPlayerLost();
         Graph?.Step(dt);
         if (_dangerZones != null && _world?.Player() is { } player)
         {
@@ -389,6 +398,48 @@ public sealed class CampaignDirector
         }
 
         return null;
+    }
+
+    // The player's own death, subscribed on the first step that finds an aircraft: the player rig
+    // is built after Attach has run, the same reason the music channel's damage ping waits.
+    private void WirePlayerDeath()
+    {
+        if (_deathWired || _world?.Player() is not { } player)
+        {
+            return;
+        }
+
+        _deathWired = true;
+        player.Downed += (_, _) => OnPlayerDown();
+    }
+
+    // Losing the aircraft loses the mission, in the original's two stages: the death stops the
+    // objectives, and the wreck reaching the ground reaches the debrief. ⚠ Read the aircraft's own
+    // Downed report, which is raised once per real death; the under-map backstop teleports without
+    // one, so an altitude test here would end missions nobody lost (docs/verification.md INSTR-22).
+    private void OnPlayerDown()
+    {
+        if (!EndsOnPlayerDeath || Graph is not { } graph || !graph.NotifyPlayerLost())
+        {
+            return;
+        }
+
+        _playerLost = true;
+        GD.Print("campaign: the player's aircraft is lost — the objectives stop, and the mission ends where the wreck does");
+    }
+
+    // The second stage: a hull that is still falling has not landed yet, which is the whole of the
+    // delay between the kill and the debrief.
+    private void StepPlayerLost()
+    {
+        if (!_playerLost || Graph is not { } graph
+            || _world?.Player() is { WreckFalling: true })
+        {
+            return;
+        }
+
+        _playerLost = false;
+        graph.EndAfterPlayerLost();
     }
 
     // A path-driven aircraft: held (no flight integration) and re-pinned to the follower's pose

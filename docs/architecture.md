@@ -4861,6 +4861,10 @@ priority the row key and the sort key), `ObjectiveTargets`/`OtherTargets`/`HelpL
 `WAKEUP_SOUND_GROUP` / `COMPLETED_SOUND_GROUP` names, which is also how D37 sees the music groups.
 `CompletedMask` is bit-per-row, so bit 0 is the lowest priority and therefore the primary objective
 the profile's merge gates on (docs/formats/saved-games.md).
+The fourth ending, the player's own death, is `NotifyPlayerLost` then `EndAfterPlayerLost`: the
+first stops `Step` entirely, countdown and pending wrap-up included, and the second delivers the
+outcome. ⚠ That outcome is the won flag alone, so a mission won before the death is still won, and
+neither call plays a sound.
 
 ## src/Session/CampaignDirector.cs
 The engine side of one campaign mission, behind `GameSession`'s one nullable `_campaign` field and
@@ -4907,6 +4911,11 @@ fallback. `Roster` is the spawned map by block name; the player's block is skipp
 vehicle (`mode ship`) has no airframe and is reported, not spawned.
 `HoldForCutscene(bool)` is callback 20's objectives half: a held director advances no dormancy
 timer or reminder fuse while a cutscene owns the session (`Session/CutsceneController.cs`).
+The player's own death is the graph's fourth ending, in the original's two stages: the aircraft's
+`Downed` report closes the graph's gate, and the wreck no longer falling ends the mission.
+`EndsOnPlayerDeath` (false under `--no-crash-loss`) is the only switch; `GameSession` is its writer.
+A lost attempt is recorded like any other and commits nothing to the persist log, so a retry starts
+from the chapter state the profile already held (`CampaignPersistLog.CommitsOn`).
 
 ## src/Session/CampaignRoster.cs
 The engine-free half of the campaign roster spawner: `CampaignRosterPlan.Build` turns

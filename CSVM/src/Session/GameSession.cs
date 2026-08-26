@@ -453,6 +453,9 @@ public partial class GameSession : Node3D
             // session's cue to hand the player back to the cabin.
             campaign.Music = _music;
             campaign.MissionEnded += OnCampaignMissionEnded;
+            // Losing the aircraft loses the mission; --no-crash-loss keeps the debugging
+            // convenience of flying on past a crash.
+            campaign.EndsOnPlayerDeath = !_spec.NoCrashLoss;
         }
 
         // The cutscene host, before the world build hands it to the animation runtime. Its world

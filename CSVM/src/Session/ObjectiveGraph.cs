@@ -140,6 +140,7 @@ public sealed class ObjectiveGraph
     private int _scan;
     private MissionOutcome _pending;
     private float _wrapUp;
+    private bool _playerLost;
 
     /// <summary>Builds the runtime over a parsed script. Every objective starts in the state its
     /// <c>BEGIN_DORMANT</c> asks for, and the display rows are built once, one per unique
@@ -249,6 +250,38 @@ public sealed class ObjectiveGraph
     public bool CompletedOf(int number) =>
         number >= 1 && number <= _live.Count && _live[number - 1].Complete;
 
+    /// <summary>The player's own aircraft is lost: the fourth ending, which stops this runtime dead
+    /// rather than setting a flag (docs/formats/objectives.md, "Win and loss"). Nothing advances
+    /// afterwards, so no sound, no completion and no countdown belongs to it. Answers whether this
+    /// call is the one that closed the gate. ⚠ Take the aircraft's own crash report, never an
+    /// altitude: the under-map backstop teleports without one (docs/verification.md INSTR-22).</summary>
+    public bool NotifyPlayerLost()
+    {
+        if (_playerLost || Ended)
+        {
+            return false;
+        }
+
+        _playerLost = true;
+        return true;
+    }
+
+    /// <summary>The lost player's wreck is down, which is where the original reaches its debrief.
+    /// The outcome is the won flag alone, so a mission already won when the player died is still
+    /// won; anything else is a loss. Answers whether this call ended the mission.</summary>
+    public bool EndAfterPlayerLost()
+    {
+        if (!_playerLost || Ended)
+        {
+            return false;
+        }
+
+        Outcome = _pending == MissionOutcome.Won ? MissionOutcome.Won : MissionOutcome.Lost;
+        _pending = Outcome;
+        MissionEnded?.Invoke(Outcome);
+        return true;
+    }
+
     /// <summary>The player completed a danger zone. The zone module walks every AWAKE objective and
     /// flags matching names; a zone completed while an objective is dormant or napping does not
     /// count for it.</summary>
@@ -270,9 +303,16 @@ public sealed class ObjectiveGraph
     }
 
     /// <summary>Advances the mission by one step: the countdown, every objective's own timers, and
-    /// the rotating completion scan that completes at most one objective.</summary>
+    /// the rotating completion scan that completes at most one objective. ⚠ A lost player stops all
+    /// of it, countdown and pending wrap-up included, until
+    /// <see cref="EndAfterPlayerLost"/>.</summary>
     public void Step(float dt)
     {
+        if (_playerLost)
+        {
+            return;
+        }
+
         if (dt <= 0f || _live.Count == 0)
         {
             StepWrapUp(dt);

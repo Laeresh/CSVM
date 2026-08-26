@@ -896,6 +896,17 @@ public class SessionSpecTests
         Assert.Single(s.Warnings);
     }
 
+    /// <summary>`--no-crash-loss` is off by default, so the game rule is what an unflagged
+    /// campaign launch gets.</summary>
+    [Fact]
+    public void NoCrashLossIsOffUnlessAskedFor()
+    {
+        Assert.False(S("--campaign=Zachary:3").NoCrashLoss);
+        var s = S("--campaign=Zachary:3", "--no-crash-loss");
+        Assert.True(s.NoCrashLoss);
+        Assert.Empty(s.Warnings);
+    }
+
     /// <summary>Globals are recorded, never applied — that is what keeps the type reachable from
     /// here, with no engine under it.</summary>
     [Fact]

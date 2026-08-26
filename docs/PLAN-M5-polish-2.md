@@ -121,7 +121,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☐ A campaign spawn's talker and constitution ratings never reach `AiVoiceRuntime` (`BL-497`)
 4. ❌ CM02's second Peacemaker squad is awake from the start and attacks the Pandora (`BL-499`)
 5. ☑ The campaign wingman ends up high and far behind (`BL-457`)
-6. ☐ Crashing the player's aircraft does not end a campaign mission (`BL-491`, deferral reopened first)
+6. ☑ Crashing the player's aircraft does not end a campaign mission (`BL-491`, deferral reopened first)
 
 ### Wave B — the intro and the swap
 
@@ -386,7 +386,7 @@ the island, the mode machine enters `avoid crash`, whose climb-out runs ahead of
 left for the sortie and for its own item rather than re-tuned here, because the fork order is
 decoded while the climb-out's geometry is a named invention. <pending orchestrator run>
 
-## A6 ☐ Crashing the player's aircraft does not end a campaign mission
+## A6 ☑ Crashing the player's aircraft does not end a campaign mission
 
 **Goal.** Losing the aircraft loses the mission, so the campaign can be played as a game rather than
 debugged.
@@ -411,9 +411,20 @@ code. If not lifted, close this item as deferred and say so.
 answer, and the blast radius (what a lost mission writes, and what a retry starts from) reaches
 persistence.
 
-**Verify.** <TODO: not settled; depends on whether the deferral is lifted and on which ending the
-decode names. At minimum, a deliberate crash in a campaign mission ends it, and `BL-486`'s persist
-gate is checked for what the retry then starts from.>
+**Verify.** The deferral is lifted, and the decode named a fourth ending rather than one of the
+three: a player death closes a gate that stops the objectives runtime dead, and the mission is over
+where the wreck comes to rest, with the outcome read off the won flag alone
+(`docs/formats/objectives.md`, "Win and loss"). The `campaign-player-death` suite is the check,
+over C3/M01's built world and shipped script, that mission being one of the four that author no
+loss at all so a Lost outcome there can only be the death. Four legs: the crash ends the mission
+lost, hands the player back to the cabin and commits nothing to the persist log; `--no-crash-loss`
+leaves the same crash flying; a mission nobody crashes in runs on; and an aircraft the under-map
+backstop teleported ends nothing. Three off-engine tests in `CSVM.Tests/ObjectiveGraphTests.cs` pin
+the graph's own rule, including that a mission already won when the player dies stays won. The
+baseline is the same suite with the death hook neutralised, which reproduces today's behaviour: the
+crashed leg reads still-running and the suite fails.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** ⚠ `FlightController.UnderMapY` teleports an aircraft that goes below the map WITHOUT
 setting a crash flag and without logging (`docs/verification.md` INSTR-22 records what that cost
