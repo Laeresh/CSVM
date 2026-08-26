@@ -119,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ Retire the record's three stale pointers (`BL-506`, both M5 plan banners, "Current status")
 2. ☐ An AI pilot sees an enemy aircraft's own turret as a target beside the aircraft (`BL-507`)
 3. ☐ A campaign spawn's talker and constitution ratings never reach `AiVoiceRuntime` (`BL-497`)
-4. ☐ CM02's second Peacemaker squad is awake from the start and attacks the Pandora (`BL-499`)
+4. ❌ CM02's second Peacemaker squad is awake from the start and attacks the Pandora (`BL-499`)
 5. ☐ The campaign wingman ends up high and far behind (`BL-457`)
 6. ☐ Crashing the player's aircraft does not end a campaign mission (`BL-491`, deferral reopened first)
 
@@ -256,7 +256,7 @@ corrected by G75; check the doc's current claim rather than an older reading. �
 resolves to a VO id with no WAVs stays silent whatever its `talker` rating is, so this fix will not
 be visible on those eight named aces, and their silence is not a failed verification.
 
-## A4 ☐ CM02's second Peacemaker squad is awake from the start and attacks the Pandora
+## A4 ❌ CM02's second Peacemaker squad is awake from the start and attacks the Pandora
 
 **Goal.** CM02's second Peacemaker squad, the one carrying the ace, is asleep at mission start,
 wakes when its authored gate opens, and comes for the player.
@@ -289,6 +289,31 @@ Peacemaker squad being wiped out; both may be true of one playthrough, so treat 
 the lead and the `DEDG` as the specification. ⚠ Group 5 down to one IS a real gate in this mission
 (`OBJECTIVE20`, `55`, `63`), which is what makes the two easy to conflate. ⚠ Do not hand the squad a
 hardcoded player target: the bias table expresses this and it already ships.
+
+**Closed as already answered; no code changed.** Neither of the two questions holds a defect, and
+the item was answered in full before this plan was written. The first question answers no:
+`WAKEUP_ENEMIES` reaches an aircraft roster block end to end, `aiv` slot 21 into
+`RosterSpawnPlan.Inert` (`CSVM/src/Session/CampaignRoster.cs:201`), carried by `SpawnFor` (`:256`),
+applied at `CSVM/src/Session/AiFlightAssembler.cs:115` through `CSVM/src/Flight/FlightControllerBuild.cs:79`,
+and re-homed by name in `CampaignDirector.WakeupEnemies` (`CSVM/src/Session/CampaignDirector.cs:666-694`).
+The second answers no as well: `britpeace_8`'s authored `[player, 1.0]` moves its live pick off a
+nearer same-side candidate onto the human. What the report saw was a third mechanism, `SET_AI_NET`
+being a named no-op, so `OBJECTIVE68` never moved the woken three onto `M5Escort` and they flew
+their roster block's route. That was filed as `BL-500` and landed by `PLAN-M5-polish.md` G80; the
+`piratezep` arm of the same bias list is unreachable in this mission for a reason `BL-407` settled
+(an unauthored record stays neutral and neutral is nobody's target). The plan's own re-verification
+missed this because G78 and G80 name `BL-500` rather than `BL-499` in their messages, so
+`git log --grep=BL-499` saw only the filing commit. The `BL-499` entry is deleted from
+`backlog.md`; there is no follow-up to rewrite, both threads it left being closed.
+
+**Verified.** <pending orchestrator run>. In the lane, on the unchanged build:
+`--run-tests=campaign-squad-wakeup` PASS (1 passed, 0 failed, 0 skipped, errors clean), driving
+C3/M05's own roster through the session's `FlightRoster` and its own objective graph:
+`britpeace_7/8/9` inert and out of play at t=0, in the world 15.03 s after group 1 goes down, all
+three on `M5Escort#21` once `OBJECTIVE68` has fired, and the pick moving from `devastator_1` at
+400 m to the human at 900 m when the block's own list is armed. `--run-tests=campaign-set-ai-net`
+PASS beside it. The only edits are this plan, the `backlog.md` deletion, and one stale sentence in
+`docs/architecture.md` that still called the three `SET_AI_*` verbs named no-ops.
 
 ## A5 ☐ The campaign wingman ends up high and far behind
 

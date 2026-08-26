@@ -4877,7 +4877,10 @@ a named net, and the airship holds or leaves), and, over the spawned roster, `DE
 (`GroupLiveCount`: not-crashed members of the block group, a parked one counting as alive) and
 `WAKEUP_ENEMIES`, one directive over two deactivated flags: an inert named aircraft re-activated at
 its spawn pose, or a dormant `ZeppelinRuntime` record put into the world.
-The rest (the group form of `TRAVELERS`, `SET_AI_*`, `WARP_VEHICLE`) and the
+`SET_AI_NET` / `SET_AI_TEAM` / `SET_AI_ATTACK_RADIUS` share one lookup by roster block name
+(`Commanded`) and write the follower, the team and the attack range over the spawned roster; their
+zeppelin arm has no seam here, so an unmatched name is always reported.
+The rest (the group form of `TRAVELERS`, `WARP_VEHICLE`) and the
 untraced `COMPLETED_ZEPCANNONS` reader are NAMED no-ops, each logged once per kind. ⚠ Never turn one of those into an invented
 behaviour: the missing consumer is the finding.
 `BuildRoster(RosterInputs)` is the roster phase, called by `GameSession` right after

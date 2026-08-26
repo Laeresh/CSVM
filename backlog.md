@@ -2269,27 +2269,6 @@ usual.
   its guns, so a script-side team write has to fan the same way or half the hull keeps the old side.
   *Cross-refs:* `PLAN-M5-polish.md` G80, which landed the aircraft arm.
 
-- `BL-499` `[Bug]` **CM02's second Peacemaker squad is present from the start and attacks the
-  Pandora rather than the player.** *Evidence:* reported at the controls against the original, where
-  the squad carrying the ace appears partway through and comes for the player. Both halves are
-  authored. `OBJECTIVE8` is dormant and carries `WAKEUP_ENEMIES [britpeace_7, britpeace_8,
-  britpeace_9]`, so the squad is asleep at mission start; completing it also wakes `OBJECTIVE9` (the
-  `snd_HA5Wave2` Winthrop chain), `OBJECTIVE10` (the SECONDARY that kills the ace) and `OBJECTIVE68`
-  (`SET_AI_NET M5Escort` on the same three, two seconds later). The gate is `OBJECTIVE5`'s
-  `DEDG [1, 0]`, and group 1 is `britpeace_1/2/3`, the FIRST Peacemaker squad; on completion it naps
-  `OBJECTIVE8` awake after 15 s. Targeting is authored too: `britpeace_8` and `britpeace_9` carry
-  `rating_biases [piratezep, -0.8] [player, 1.0]`, and `britpeace_7` carries `[player, 1.0]` alone.
-  *Fix shape:* two questions in order. Whether `WAKEUP_ENEMIES` reaches an aircraft roster block at
-  all, since a squad that spawns at mission start has had its dormancy dropped rather than its
-  targeting broken. Then whether those biases reach the pick for a woken spawn, which
-  `roster-spawn-names` proves they do for a spawn present from the start. *⚠ Traps:* ⚠ the user's
-  recollection is "after 2 Balmoral kills" and the authored gate is the first Peacemaker squad being
-  wiped out; both may be true of one playthrough, so treat the recollection as the lead and the
-  `DEDG` as the specification. Group 5 down to one IS a real gate in this mission (`OBJECTIVE20`,
-  `55`, `63`), which is what makes the two easy to conflate. Do not hand the squad a hardcoded player
-  target: the bias table is what expresses this and it already ships. *Cross-refs:* `BL-493`'s ace
-  decode, `BL-498`, `PLAN-M5-polish.md` G78.
-
 - `BL-469` `[Feature]` **An escort cannot hold station on a leader using nitro, and nothing measures
   the case.** *Evidence:* the two injectors are independent switches, so the asymmetry is reachable
   in a real game: a wingman gets one only when its own `aiv` block authors `nitro` slot 34
