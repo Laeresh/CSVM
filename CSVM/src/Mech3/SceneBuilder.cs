@@ -113,6 +113,8 @@ public sealed class SceneBuilder
         "#include \"res://shaders/csky_srgb.gdshaderinc\"";
     internal const string AtmosphereInclude =
         "#include \"res://shaders/csky_atmosphere.gdshaderinc\"";
+    internal const string ClutterFadeInclude =
+        "#include \"res://shaders/csky_clutter_fade.gdshaderinc\"";
     internal const string LightsInclude =
         "#include \"res://shaders/csky_lights.gdshaderinc\"";
     internal const string TimeInclude =
@@ -236,17 +238,17 @@ void fragment() {
     // about every one of them: scroll rate, ClampUv, NoClutter, the model's own Lit/Fogged render
     // flags, and Pass. Dropping one hands a cached material back at the wrong setting.
     // Non-scrolling surfaces all key on (0,0), so the common path's cache behaviour is unchanged.
-    private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass), Material> _materialCache = new();
+    private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass, bool ClutterFade), Material> _materialCache = new();
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
     private readonly Dictionary<int, Shader> _cylindricalShaderCache = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
-    // Keyed by (model index, force-double-sided, force-lit): both overrides are baked into the
-    // built surfaces (sidedness into the geometry groups, `lit` into which material/shader a
-    // surface gets), so a deck tile's forced build must not be handed back for the same model
-    // referenced normally. No model in this install is referenced both ways (the deck's 144
-    // tiles have exclusive model indices in every chapter that has a deck), so this is defence,
-    // not a live case. `ForceLit` is the deck-underside exception — see `WorldBuilder.Add`.
-    private readonly Dictionary<(int Model, bool Force, bool ForceLit), ArrayMesh?> _meshCache = new();
+    // Keyed by (model index, force-double-sided, force-lit, clutter-fade): every override is baked
+    // into the built surfaces (sidedness into the geometry groups, `lit` and the fade into which
+    // material/shader a surface gets), so a forced build must not be handed back for the same
+    // model referenced normally. No model in this install is referenced both ways (the deck's 144
+    // tiles have exclusive model indices), so this is defence. `ForceLit` is the deck-underside
+    // exception (`WorldBuilder.Add`); `ClutterFade` is ClutterBuilder's 3D-decoration build.
+    private readonly Dictionary<(int Model, bool Force, bool ForceLit, bool ClutterFade), ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
     private readonly Dictionary<int, List<(string? Surface, int SurfaceId, ConcavePolygonShape3D Shape)>> _colliderCache = new();
@@ -470,12 +472,13 @@ void fragment() {
     /// <summary>The built <see cref="ArrayMesh"/> for one gamez model index, from this builder's
     /// shared cache and carrying this builder's materials. Exists for
     /// <see cref="ClutterBuilder"/>'s 3D-decoration path, which draws one MultiMesh over this single
-    /// mesh rather than a node per copy; the transform, the <c>node_bias</c> instance uniform and
-    /// the collider are the caller's to supply. The two override flags hit the same cache
-    /// <see cref="BuildSubtree"/> uses, so both lit variants of a deck tile can be held at once.</summary>
-    internal ArrayMesh? SharedMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false) =>
+    /// mesh; the transform, the <c>node_bias</c> instance uniform and the collider are the caller's.
+    /// The override flags share <see cref="BuildSubtree"/>'s cache; <paramref name="clutterFade"/>
+    /// selects the bias shader's per-instance fade variant over the MultiMesh custom data.</summary>
+    internal ArrayMesh? SharedMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false,
+        bool clutterFade = false) =>
         meshIndex >= 0 && meshIndex < _gamez.Meshes.Count
-            ? GetMesh(meshIndex, forceDoubleSided, forceLit)
+            ? GetMesh(meshIndex, forceDoubleSided, forceLit, clutterFade)
             : null;
 
     /// <summary>An untextured quad-frame mesh carrying the SAME fog-pipelined material a
@@ -880,16 +883,18 @@ void fragment() {
         return mesh;
     }
 
-    private ArrayMesh? GetMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false)
+    private ArrayMesh? GetMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false,
+        bool clutterFade = false)
     {
-        if (_meshCache.TryGetValue((meshIndex, forceDoubleSided, forceLit), out var cached))
+        if (_meshCache.TryGetValue((meshIndex, forceDoubleSided, forceLit, clutterFade), out var cached))
             return cached;
-        var mesh = BuildMesh(_gamez.Meshes[meshIndex], meshIndex, forceDoubleSided, forceLit);
-        _meshCache[(meshIndex, forceDoubleSided, forceLit)] = mesh;
+        var mesh = BuildMesh(_gamez.Meshes[meshIndex], meshIndex, forceDoubleSided, forceLit, clutterFade);
+        _meshCache[(meshIndex, forceDoubleSided, forceLit, clutterFade)] = mesh;
         return mesh;
     }
 
-    private ArrayMesh? BuildMesh(GameZMesh mesh, int meshIndex, bool forceDoubleSided, bool forceLit)
+    private ArrayMesh? BuildMesh(GameZMesh mesh, int meshIndex, bool forceDoubleSided, bool forceLit,
+        bool clutterFade = false)
     {
         if (mesh.Polygons.Count == 0)
             return null;
@@ -1014,10 +1019,11 @@ void fragment() {
             else if (edgeClamp != UvClampAxes.None)
                 EdgeClampedSurfaceTotal++;
             // The glow/cylindrical paths take only the full clamp: their quads' UVs are
-            // authored inside the unit square, so the partial case cannot arise there.
+            // authored inside the unit square, so the partial case cannot arise there. They also
+            // carry no clutter fade: no 3D decoration in the install is a glow or a facade.
             st.SetMaterial(glowSprite ? GetGlowMaterial(materialIndex, fogged, clampUv)
                 : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis, lit, fogged, clampUv)
-                : GetMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp));
+                : GetMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade));
             st.Commit(arrayMesh);
         }
         return arrayMesh;
@@ -1122,13 +1128,13 @@ void fragment() {
 
     private Material GetMaterial(int materialIndex, int priority, int rank, bool noClutter, bool doubleSided,
         Vector2 scroll = default, bool clampUv = false, bool lit = true, bool fogged = true, int pass = 0,
-        UvClampAxes edgeClamp = UvClampAxes.None)
+        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false)
     {
         rank = Math.Min(rank, SurfaceRankCap);
-        var key = (materialIndex, priority, rank, noClutter, doubleSided, scroll.X, scroll.Y, clampUv, edgeClamp, lit, fogged, pass);
+        var key = (materialIndex, priority, rank, noClutter, doubleSided, scroll.X, scroll.Y, clampUv, edgeClamp, lit, fogged, pass, clutterFade);
         if (_materialCache.TryGetValue(key, out var cached))
             return cached;
-        var mat = BuildMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp);
+        var mat = BuildMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade);
         _materialCache[key] = mat;
         return mat;
     }
@@ -1168,7 +1174,8 @@ void fragment() {
     }
 
     private Material BuildMaterial(int materialIndex, int priority, int rank, bool noClutter, bool doubleSided,
-        Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass, UvClampAxes edgeClamp = UvClampAxes.None)
+        Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass, UvClampAxes edgeClamp = UvClampAxes.None,
+        bool clutterFade = false)
     {
         var src = materialIndex >= 0 && materialIndex < _gamez.Materials.Count
             ? _gamez.Materials[materialIndex]
@@ -1200,7 +1207,7 @@ void fragment() {
                 RegisterCycle(src, billboard); // same albedo_tex, see GetCylindricalMaterial
                 return billboard;
             }
-            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp);
+            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade);
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);
             return textured;
@@ -1208,7 +1215,7 @@ void fragment() {
 
         var color = src?.Color ?? Colors.White;
         return BiasMaterial(priority, rank, noClutter, doubleSided, null, color, blend: color.A < 1f, scissor: false,
-            scroll: Vector2.Zero, clampUv: false, lit: lit, fogged: fogged, pass: pass);
+            scroll: Vector2.Zero, clampUv: false, lit: lit, fogged: fogged, pass: pass, clutterFade: clutterFade);
     }
 
     private StandardMaterial3D NewStandard(Color? albedoColor = null)
@@ -1234,7 +1241,7 @@ void fragment() {
     // The per-node draw-order term is added at instance level (see BuildSubtree).
     private ShaderMaterial BiasMaterial(int priority, int rank, bool noClutter, bool doubleSided, ImageTexture? tex,
         Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0,
-        UvClampAxes edgeClamp = UvClampAxes.None)
+        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
         bool scrolls = tex != null && scroll != Vector2.Zero;
@@ -1243,7 +1250,7 @@ void fragment() {
         var mat = new ShaderMaterial
         {
             Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor, doubleSided,
-                scrolls, clampUv && tex != null, lit, fogged, edgeClamp),
+                scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade),
         };
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         if (noClutter)
@@ -1273,11 +1280,12 @@ void fragment() {
     // the shader text it always did, so honouring the flags cannot perturb the overwhelming
     // majority of the world through float rounding in a mix().
     private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
-        bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None)
+        bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
+        bool clutterFade = false)
     {
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
-            | ((int)edgeClamp << 9);
+            | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0);
         if (_biasShaderCache.TryGetValue(key, out var cached))
             return cached;
 
@@ -1298,6 +1306,13 @@ void fragment() {
         sb.AppendLine(InstanceUniformsInclude);
         // Distance fog + the per-mission SUNLIGHT dimming.
         sb.AppendLine(AtmosphereInclude);
+        // The clutter variant only: the authored far fade off the MultiMesh custom data. A discard
+        // in the fragment stage is what keeps this out of every world shader.
+        if (clutterFade)
+        {
+            sb.AppendLine(ClutterFadeInclude);
+            sb.AppendLine("varying flat float v_clutter_alpha;");
+        }
         if (!shaded)
             sb.AppendLine(LightsInclude); // LIGHT_STATE spill — fullbright passes only
         if (textured)
@@ -1330,9 +1345,15 @@ void fragment() {
         // back-facing under cull_front and Godot negates NORMAL there, so without this every
         // upward-facing surface shades as though lit from underneath (docs/formats/gotchas.md).
         string normalSign = shaded ? "-" : "";
+        // Past its far fade an instance collapses to its origin and costs no fragments; inside the
+        // ramp the fragment stage dithers it out.
+        string clutterVertex = clutterFade
+            ? "    v_clutter_alpha = csky_clutter_fade_alpha(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n"
+              + "    VERTEX *= step(0.004, v_clutter_alpha);\n"
+            : "";
         sb.AppendLine($@"
 void vertex() {{
-    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+{clutterVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
     // depth nudged nearer by bias × distance — a scale-invariant polygon offset.
@@ -1340,6 +1361,8 @@ void vertex() {{
 }}
 
 void fragment() {{");
+        if (clutterFade)
+            sb.AppendLine("    if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_clutter_alpha)) { discard; }");
         // Shaded (planes) keeps raw COLOR for the real-lighting path; fullbright (world) applies
         // the gamma-space vertex modulate (see SrgbToLinearFn above).
         string vcol = shaded ? "COLOR" : "vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a)";

@@ -282,6 +282,7 @@ The things every subsystem depends on: the clock, the log, the seed. Changing on
 determinism repo-wide — read `docs/verification.md` first.
 
 - `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the in-code `const`.
+- `src/Utils/EffectsLevel.cs`: the original's graphics EffectsLevel option (`graphics.effectsLevel`, default `high`) and the one global it drives, the clutter fade's squared distance scale.
 - `src/Utils/GameClock.cs` — the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt + single-step, time scale.
 - `src/Utils/Log.cs` — the diagnostic log: 9 categories × 4 levels, `--log=` console filter, always-on full-detail `.scratch/logs/` file sink.
 - `src/Utils/ShaderTime.cs` — the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
@@ -604,8 +605,9 @@ Static helpers (`HorizonZonesOf`, `CloudDeckAltitudeOf`, `DomeZonesToBuild`, `De
 
 ## src/Mech3/MapEdgeExtender.cs
 Rolling window (`Rings`=5 of 1024 m cells, diffed only on cell crossings) of repeated border tiles +
-clutter (grown from `ClutterBuilder.ExportedKinds`) continuing the world past the map edge, one
-window per session shared by every player camera. `ClassifyGroundMesh`/`IsCompletionStrip`/
+clutter (grown from `ClutterBuilder.ExportedKinds`, each copy keeping its source stamp's fade
+thresholds) continuing the world past the map edge, one window per session shared by every player
+camera; the window's 5120 m reach exceeds the largest authored clutter fade at every detail level. `ClassifyGroundMesh`/`IsCompletionStrip`/
 `FoldAxis` are pure statics pinned by `MapEdgeTileTests`/`MapEdgeFoldTests`; `--dump-tilegrid` writes
 the per-cell acceptance census `WriteCensus` builds. The original's own continuation behaviour and
 the per-chapter fold measurements: docs/formats/world-structure.md.
@@ -618,7 +620,10 @@ MultiMesh per kind, solids → `SceneBuilder.SharedMesh`; the split is `SceneBui
 The sprite shader takes the decoration model's own `lighting`/`fog` flags as variants (every tree and
 bush card in the install is `lighting: false`, so clutter does not dim with the mission SUNLIGHT),
 plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's own card UVs.
-`TemplateNames` reads the chapter's `AddClutterTemplates` list **unfiltered** — which district
+Every stamp carries its authored far fade as MultiMesh custom data (`Kind.Fades`, exported beside
+`Placements`), applied by the sprite shader and by `SceneBuilder.SharedMesh(clutterFade: true)`
+for the solid kinds, under the `EffectsLevel` global; the fade's draw is its own stream off the
+placement seed. `TemplateNames` reads the chapter's `AddClutterTemplates` list **unfiltered** — which district
 dresses a given patch is the per-polygon `no_clutter` gate's decision (`PlaceOnMesh`), not a
 curated list here; `OverrideTemplateNames` is `--clutter-templates=`'s replacement for it — the caller's names,
 filtered to the ones this gamez carries a root for — so one district can be loaded alone and A/B'd
@@ -640,7 +645,8 @@ clutter DECORATION MODEL — `substitute`'s weighted roll, `scale_range`, `far_f
 jitter/rotation/slope/damage keys the retail data leaves at their defaults. Schema, offsets and the
 per-chapter census: docs/formats/templates.md. Static over a reader list, so all eight chapters are
 pinned off-engine (`CSVM.Tests/ClutterTemplatesTests.cs`). Consumed by `ClutterBuilder` for
-`substitute` + `scale_range`; `far_fade_range` is read and unapplied. See the class and member doc
+`substitute`, `scale_range` and `far_fade_range`, the last through `FadeThresholds`, the pure
+per-stamp `(near², far², reciprocal)` the fade shaders read. See the class and member doc
 comments in the file, and docs/formats/templates.md, for the decode detail — the keying by
 decoration model rather than template, the nested-pair bound grouping, the slope-key inversion, and
 the substitute-roll/duplicate-name resolution rules are all there.
@@ -5324,6 +5330,15 @@ the typed getters (`GetFloat`/`GetInt`/`GetBool`/`GetString`) return the file's 
 key, else the caller's in-code `const` default — read-through at the point of use, keys
 `moduleCamelCase.fieldCamelCase`, grouped one nesting level in the JSON and flattened to dot-keys.
 Read-only — nothing writes the file; `config.json` is git-ignored, so the consts stay canonical.
+
+## src/Utils/EffectsLevel.cs
+The original's graphics EffectsLevel option as a config key (`graphics.effectsLevel`: `high`,
+`medium`, `low`; default `high`, which `detail.zrd` selects on any CPU over 600 MHz), and the one
+global it drives today: `csky_clutter_fade_scale_sq`, the squared distance scale every
+templates-clutter fade multiplies into its camera distance (1.0/4.0/9.0), registered once by
+`Launcher` beside the fog globals and declared in `shaders/csky_clutter_fade.gdshaderinc`. The
+level's meaning and direction: docs/formats/templates.md. Consumed by `ClutterBuilder`'s sprite
+shader and `SceneBuilder`'s `clutterFade` bias-shader variant.
 
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on

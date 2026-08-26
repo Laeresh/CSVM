@@ -278,10 +278,20 @@ max-pair grouping applies to `translate_uv_range` and `rotation_range`. `scale_r
 ⚠ **Both fade distances come from ONE `rand()` draw** — near and far are perfectly correlated per
 instance, not rolled independently.
 
-⚠ **The authored metres are a base distance, not a literal one.**
-`CameraSetClutterFadeScaleSq` (`0x0063f5bc`) scales every type-5 scene node's LOD/distance fade
-from the graphics detail level (×1/×2/×3, `FUN_00440750`), overridable per mission. Implementing
-the fade means implementing the detail-scale system alongside it.
+The stamp stores the two distances SQUARED, plus `1/(far² − near²)` (0 when they coincide), and a
+`farMax` of 0 stores `FLT_MAX` for both: never fades. The consumer (`FUN_004d5de0`) multiplies
+`_DAT_0062d170` into the node's squared camera distance, draws opaque inside near², skips the node
+at or beyond far², and blends `(far² − scaled) × recip` between, dropping anything under 0.004 and
+treating anything over 0.996 as opaque. So the ramp is linear in squared distance.
+
+⚠ **The authored metres are literal at HIGH and SHORTEN as detail drops.**
+`CameraSetClutterFadeScaleSq` (`0x0063f5bc`) writes that one global for every type-5 scene node,
+and the graphics EffectsLevel setter (`FUN_00440750`) defaults it: 1.0/4.0/9.0 for levels 0/1/2,
+where `FUN_0043f6d0`'s word table maps HIGH/MEDIUM/LOW to 0/1/2. Because the scale multiplies the
+distance rather than the thresholds, MEDIUM fades at half the authored metres and LOW at a third.
+The earlier reading of "×1/×2/×3 with detail" had the direction backwards. No shipped mission
+script issues the command. The remake's global is `csky_clutter_fade_scale_sq`
+(`CSVM.Utils.EffectsLevel`, default HIGH as `detail.zrd` selects on any modern CPU).
 
 ## The weight list (`FUN_004deab0`)
 
@@ -324,7 +334,8 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 
 | Divergence | Why |
 |---|---|
-| **Step 11's `far_fade_range` is read and not applied** | It *removes* distant clutter and would confound every density comparison; and doing it properly needs `CameraSetClutterFadeScaleSq`'s detail-scale global, not just a shader. Deferred by Decision 3 of the plan; tracked as `BL-337` |
+| **Step 11's fade draw is off its own stream** | The engine draws the fade in the same `rand()` stream as the substitute and scale; the remake draws it from a second generator on the same seed, so landing the fade left every species and scale draw where it was. The stream is not the original's either way |
+| **Step 11's ramp is dithered, not alpha-blended** | The original blends the node's alpha; the remake keeps the sprites and blocks in the cutout pass and dithers the ramp (`csky_clutter_dither_keep`), because moving C5's 139k sprites into the transparent pass is a frame-time risk |
 | **Step 5's jitter, and step 10's rotation / `align_normal`** | INERT, not missing: no chapter authors any of the three, so they cannot move a decoration on retail data. Implementing them would change nothing |
 | **A quarter-metre `seen` dedup per (kind, x, z)** | Remake-only; the original has no such set. It once stood in for the missing `no_clutter` gate (retired) and for an inclusive step-6 edge test (fixed 2026-08-10). ⚠ It is still earning its keep: after the strict-edge fix C1B/C2/C3/C5 drop to exactly 0 rejections but **C1 only drops 38→36 and C4 is unchanged at 139**, so most of *their* duplicates come from a source nobody has found. Do not remove it on the strength of the edge fix |
 | **A `MaxLatticeCells = 4096` tripwire** | The original has the same exposure to a hugely stretched triangle and no bound. A1 measured every shipped span as modest (`terpat02` runs 134–561 m per U), so this should never fire; if it does, the count is a finding |

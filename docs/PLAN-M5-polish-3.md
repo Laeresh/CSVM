@@ -76,7 +76,7 @@ a different item first.
 | 6 | The puffer `NUMBER` default is too low, leaving unnumbered emitters thin (`BL-218`). | Withdrawn. The puffer ctor `FUN_00550100` writes `1` to `+0x04` before any authored key applies, so our 1 is the original's. The sibling `large_10sec_fire`'s `NUMBER 3` is that puffer's own authored value and was never evidence about the unauthored case. **Do not raise the fallback.** |
 | 7 | `BL-336` is one constant swapped from `0.1` to `1.0`. | The same `0.1` does double duty at `Puffer.cs:174` as the synthetic still-host sputter cadence handed to every DISTANCE state, which is our own invention for a mode the engine does not have. Moving that one would make every static building's sputter ten times slower. |
 | 8 | A build-time CLI preset can be used to verify a hitch fix. | `docs/verification.md` PERF-14: a preset can never trip `HitchMonitor`. `--crash=300` under `--no-vsync` is the live, scriptable event that does. |
-| 9 | `far_fade_range`'s authored metres are literal distances (`BL-337`). | They are a base scaled by the graphics detail level: `FUN_00440750` writes 1.0/4.0/9.0 to `_DAT_0062d170` for levels 0/1/2, so fade distance scales ×1/×2/×3, before any per-mission script override. |
+| 9 | `far_fade_range`'s authored metres scale UP with the graphics detail level, ×1/×2/×3 (`BL-337`, and this table's own first draft). | Backwards. `FUN_00440750` does write 1.0/4.0/9.0 to `_DAT_0062d170` for levels 0/1/2, but `FUN_0043f6d0`'s word table maps HIGH/MEDIUM/LOW to 0/1/2, and the consumer `FUN_004d5de0` multiplies the scale into the SQUARED CAMERA DISTANCE before comparing it with the node's near²/far². So HIGH leaves the authored metres literal and MEDIUM/LOW cull at 1/2 and 1/3 of them. `detail.zrd` selects HIGH on any CPU over 600 MHz. |
 | 10 | Nothing in CSVM renders a `far_fade_range` (`BL-337`'s "read but not applied"). | Half wrong, and this is the shape to copy rather than a gap to invent: `FogVolumeClutter.cs:263-274` declares a `far_fade` uniform with a `smoothstep` alpha and a `step` cull, fed at `:533` from the fog-volume block. It is the **templates** clutter path that stores the pair (`ClutterTemplates.cs:45,51,282-283`) and ignores it. |
 
 | Confidence | Items | What that means for you |
@@ -120,7 +120,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the per-frame cost the data authors and we ignore
 
-4. ☐ Apply `far_fade_range` on the templates clutter path, with its detail scale (`BL-337`)
+4. ☑ Apply `far_fade_range` on the templates clutter path, with its detail scale (`BL-337`)
 5. ☐ An unauthored puffer `TIME_INTERVAL` is `1.0` s, not our `0.1` (`BL-336`)
 6. ☐ Judge puffer density at the controls now the fire's shape is right (`BL-218`)
 
@@ -308,7 +308,7 @@ check. ⚠ Sizing a root **0** does not disable pooling, it clamps to 1.
 
 # Wave B — the per-frame cost the data authors and we ignore
 
-## B4 ☐ Apply `far_fade_range` on the templates clutter path, with its detail scale
+## B4 ☑ Apply `far_fade_range` on the templates clutter path, with its detail scale
 
 **Goal.** Distant templates clutter fades and stops drawing at the distance its own block authors,
 scaled by the graphics detail level, instead of being drawn all the way out.
@@ -350,6 +350,28 @@ level (⚠ row 9). ⚠ The two fade bounds are one draw, not independent: `trans
 ignore differences below measured noise and an absolute floor; PERF-9: two unchanged pairs for noise
 before the A/B. ⚠ Do not re-derive the fade from `FogVolumes.cs`'s `FarFadeNear`/`FarFade` fields;
 those are the fog-volume blocks' own pair on a different reader.
+
+**Verified.** <pending orchestrator run>
+
+**Landed.** Every templates-clutter stamp now carries its own `(near², far², 1/(far² − near²))` as
+MultiMesh custom data, drawn once per stamp from the source kind's min and max pairs
+(`ClutterKindProps.FadeThresholds`), and both clutter shaders (the sprite card, and a `clutterFade`
+variant of `SceneBuilder`'s bias shader for the solid city blocks) apply the engine's own test:
+`csky_clutter_fade_scale_sq × distance²` against the stored squares, opaque inside near, collapsed
+to a point past far, a ramp linear in squared distance between, dithered in the cutout pass rather
+than alpha-blended. The scale is a global registered once by `Launcher` from the new
+`CSVM.Utils.EffectsLevel` (`graphics.effectsLevel` config key, `high`/`medium`/`low`, default
+`high`, the level `detail.zrd` selects on any CPU over 600 MHz). ⚠ row 9's direction was backwards
+and is corrected in the table: the scale multiplies the distance, so HIGH is literal and lower
+levels shorten the fade. `MapEdgeExtender` mirrors each stamp's thresholds into its extension cells;
+its 5-ring window (5120 m) exceeds the largest authored far (2000 m) at every level, so nothing pops
+at the window edge. The item's frame-time premise did not survive measurement: at the `c5-city`
+perf pose the draw, primitive and node counts are identical before and after (a vertex-stage cull
+changes nothing that is submitted) and `gpu_ms` sits inside PERF-5's floor, so this is a fidelity
+change with no measurable cost either way. The look it produces at HIGH is drastic by construction,
+C5's blocks end 300 to 450 m out under fog that starts at 1500 m, and is owed a check against the
+original's C5 footage (`CAP-22`) at the controls. Eleven goldens moved (every world shot that frames
+clutter) and are re-pinned in the landing commit.
 
 ## B5 ☐ An unauthored puffer `TIME_INTERVAL` is `1.0` s, not our `0.1`
 
@@ -526,7 +548,7 @@ default 0, and exactly one shipped def authoring it (`player_airplane` at 54926,
 caller, which keeps the term off the AI and scripted paths and out of the plant entirely.
 `FlightEnvelopeTests` and `FlightConstantInventoryTests` are untouched and green.
 
-## C10 ☐ The mission spawner does not read roster blocks
+## C10 ☑ The mission spawner does not read roster blocks
 
 **Goal.** An AI spawned by the mission spawner carries the roster block's fields, so an authored nitro
 injector has a live producer.

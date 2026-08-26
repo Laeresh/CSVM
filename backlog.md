@@ -1044,32 +1044,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* the C2B low pose (`--pos=-3843,200,-1101`) against
   `playtest/CAP-11/t0.5-c2b-spawn-ocean.png`.
 
-- `BL-337` `[Feature]` **`far_fade_range` is authored on all 143 `templates.zrd` clutter blocks and
-  read but not applied** (C23, 2026-08-10; deferred since Decision 3 of
-  `docs/PLAN-clutter-uv-placement.md`, which held mid-plan because a fade that removes distant
-  clutter would confound Wave B's density A/Bs — see [`docs/formats/templates.md`](docs/formats/templates.md)).
-  *Evidence:* `far_fade_range` decodes to `[[nearMin, farMin], [nearMax, farMax]]`, both distances
-  drawn from **one** `rand()` per instance (`FUN_004dd6e0` step 11); C5's city blocks fade
-  200–350 m, C1's firs 500–2000 m, the install spans 50–2000 m over 27 distinct pairs. The runtime
-  scale is `CameraSetClutterFadeScaleSq` (script-command string `0x0063f5bc`, dispatch
-  `FUN_005b80a0` case `'C'`), which writes a single global `_DAT_0062d170` via `FUN_004d2120`. That
-  global is **not clutter-specific and not per-mission** — it is the squared distance-fade scale
-  for every type-5 scene node's LOD/fade (consumers `FUN_004d5de0`/`FUN_004d6010`, which compute
-  `fadeScale * distanceSq` against each node's near²/far² thresholds and blend an alpha). Its
-  default comes from the graphics **detail-level** setter `FUN_00440750`: level 0/1/2 write
-  `0x3f800000`/`0x40800000`/`0x41100000` = 1.0/4.0/9.0, i.e. fade distance scales ×1/×2/×3 with
-  detail. The script command can override it per mission on top of that. So the authored metres are
-  **not literal** — they are a base multiplied by up to 3× depending on the detail setting, before
-  any mission script override.
-  *Fix shape:* a rendering-side change, not a placement one — a distance-fade path in (at least) the
-  clutter draw shader(s), fed by the per-instance near/far pair `ClutterBuilder` already stores but
-  ignores, plus a detail-level-driven global scale mirroring `_DAT_0062d170` (currently nothing in
-  the remake reads the graphics detail setting for this). Interacts with `MapEdgeExtender` (fringe
-  clutter must not pop at the same distance the authored fade would remove it in the original).
-  ⚠ Traps: implementing this without the detail-scale half only matches the game at one detail
-  level; the two fade bounds are one draw, not independent ("`translate_uv_range`, `far_fade_range`
-  and `rotation_range` are grouped by BOUND" — `docs/formats/templates.md`).
-
 - `BL-341` `[Research]` **Reopened `BL-250`: with the real `no_clutter` gate landed, 7.6% of C5's ground
   (13.8 million m², the flagged overlay area with no base layer beneath it) renders bare, and
   whether that is what the original does is untested.** `BL-250` closed 2026-08-07 on a curated

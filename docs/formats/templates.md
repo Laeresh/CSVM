@@ -202,14 +202,23 @@ chapter authors — the negative is only a measurement if the reader would have 
 `ClutterKindProps` holds one block; `Find` resolves a model name the way the engine does
 (first block wins); `Census()` prints the per-key counts the table above pins.
 
-`ClutterBuilder` consumes `substitute` and `scale_range`: a stamp rolls its model against
-the kind's table and takes a uniform scale from its range. `far_fade_range` is read and **not
-applied** — deferred to `BL-337`. It is a rendering-side feature, not a
-placement one: the runtime's `CameraSetClutterFadeScaleSq` (`0x0063f5bc`) writes one global that
-scales *every* type-5 scene node's LOD/distance fade, defaulted by the graphics detail level
-(×1/×2/×3, `FUN_00440750`) and overridable per mission — so the authored metres in this file are a
-base distance, not a literal one, and implementing the fade needs the detail-scale system alongside
-the shader path. `rotation_range`, `align_normal` and `translate_uv_range` are unauthored
+`ClutterBuilder` consumes `substitute`, `scale_range` and `far_fade_range`: a stamp rolls its model
+against the kind's table, takes a uniform scale from its range, and draws its near and far fade
+distances from the min and max pairs with one further draw (`ClutterKindProps.FadeThresholds`).
+The fade is rendered the engine's way: the stamp stores `(near², far², 1/(far² − near²))`
+(MultiMesh custom data), and the shader compares `scale × distance²` against them, with opacity
+linear in the squared distance between the two and the card collapsed past far. The `scale` is
+one global, `csky_clutter_fade_scale_sq` (`CSVM.Utils.EffectsLevel`), the twin of the runtime's
+`_DAT_0062d170`: `CameraSetClutterFadeScaleSq` (`0x0063f5bc`) writes it and the graphics
+EffectsLevel option defaults it (`FUN_00440750`). No shipped mission script issues that command, so
+the option alone sets it. ⚠ **The scale shortens the fade as detail drops, and HIGH is literal.**
+The option's words map HIGH/MEDIUM/LOW to levels 0/1/2 (`FUN_0043f6d0`'s table), the setter writes
+1.0/4.0/9.0 for those levels, and the consumer (`FUN_004d5de0`) multiplies the scale into the
+squared camera distance before the compare, so MEDIUM culls at half the authored metres and LOW
+at a third. `detail.zrd` selects HIGH on any CPU over 600 MHz, so HIGH is the remake's default
+(`graphics.effectsLevel` config key). The original alpha-blends the ramp; the remake dithers it in
+the cutout pass, since 139k sprites in the transparent pass is the cost the item exists to avoid.
+`rotation_range`, `align_normal` and `translate_uv_range` are unauthored
 everywhere in the install (censused under B14/C21) and so need no decision beyond "document,
 don't build" — recorded above. The five unauthored keys are read and, being unauthored, do
 nothing.
