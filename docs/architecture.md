@@ -2204,7 +2204,10 @@ target, and the two re-join states nothing in the law enters. Every constant is 
 stations included ((6, 0, 18) off the player, (8, −2, −8) off an AI); the 80 m separation push is
 what makes the hold a weave rather than a tight join. Engine-free and deterministic, holding only
 its state and last station; the driver is `AiPilot.Escort`, the table `AiLawParams.Wingman`, and
-the live check is the `wingman-station` suite.
+the live check is the `wingman-station` suite. The campaign hand-off is not a join problem: at the
+first stepped frame after C3/M01's intro the wingman reads 117.6 m and 53.6 m/s against the 700 m /
+20.576 m/s gate and is in `Station` on the next frame, so a wingman that ends up high and behind
+left the escort law rather than never entering it.
 
 ## src/Flight/AiModeMachine.cs
 The nine-mode AI state machine, owned by `AiPilot.Machine` and stepped from its `Next`:
@@ -2354,6 +2357,9 @@ Two flavours of one airframe: `Load` resolves everything down the player chain, 
   `LoadForAi` also reads the AI chain's `title` message key into `AiTitleKey`, the authored name a
   militia def carries ("MSG_VEH_MEDUSA_KESTREL") and a plain def inherits from its airframe;
   `AiFlightAssembler` resolves it into `AiTitle` for the targeting readout.
+  `VehicleMode` carries the def chain's own `mode` key, and `WithAiSpawnJitter` is gated on it: the
+  original jitters the `jet` and `heli` classes only, so the `mode wingman` family flies its authored
+  dynamics (`docs/org/flightModel.md`, "The per-spawn jitter").
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a

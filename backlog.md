@@ -2265,65 +2265,43 @@ usual.
   pairs sit close enough that one crossing can legitimately complete both zones, which is correct
   behaviour rather than a test defect.
 
-- `BL-457` `[Bug]` **The campaign wingman ends up high and far behind, so it reads as having spawned
-  in the wrong place.** Seen at the controls: "in the original the wingman spawns beside me. here he
-  spawns above the island flying towards me."
-  ⚠ **Merging main's flight model made this materially WORSE, and `wingman-station` is red on the
-  merged tree.** Same suite file, byte-identical, same seed, `player_pfighter`, leader on a plain
-  full-throttle human stick: our own plant read mean 296 m / worst 702 m without the ceiling lift
-  and 256 m / 590 m with it; main's plant reads **mean 1096 m without the lift and 415 m with it**.
-  The `player_bhawk` arm moves the same way (1023 m to 267 m). Three of the suite's gates now fail.
-  Two conclusions. The `StationCeiling` lift is doing MORE work under main's plant, not less: it cuts
-  the mean by roughly two thirds and collapses the escort's time on the far-field plant from 26.8 %
-  of steps to 3.0 %, so the open question of whether to keep it resolves toward keeping it. And the
-  remaining defect now has a second, larger contributor in `FlightModel` itself.
-  *⚠ Traps:* ⚠ **Nitro is ruled out and must not be re-chased.** A runtime probe on both rigs reads
-  `leader installed=False everBoosted=False, wingman installed=False`, and the suite file is
-  unchanged across the merge, so the harness is not the variable. ⚠ The `1.50` lever in the trace is
-  the WINGMAN's, capped by `AiLawParams.Wingman`'s own `SpeedCap`, not the leader's; the leader peaks
-  at lever 1.00 and its 127 m/s against `fd_speed` 113.0 is an ordinary shallow dive, not a boost.
-  ⚠ Main's deletion of `AiControlLaw`'s far-field branch is not the cause either: that branch keyed
-  off `AiPilot.PlayerPosition`, which this suite never assigned, so it was already dead here.
-  ⚠ **Trust the `mean` column, not `worst`.** The sampled trace never exceeds 470 m over a 120 s run
-  while `worst` reads 3797 m, so that excursion is a between-samples transient and possibly a
-  position discontinuity (`INSTR-18`'s altitude-cap teleport is a candidate); it needs a finer trace
-  before anyone tunes against it. *Evidence:* **the spawn is correct and this is not a
-  placement bug.** `C3/M01`'s `aiv.zrd` authors `player` at `[-1426, 150, -1813]` yaw 40 and
-  `wingman_1` at `[-1378, 150, -1706]` yaw 40, 117 m apart at the same altitude and heading, and the
-  spawner puts it exactly there (`CampaignRoster.cs:191-192`, confirmed in a live run). Traced from
-  the intro's end, separation runs 117 m, 95 m, 102 m, 133 m at t=0/1/3/5 s, then 289 m at 10 s,
-  597 m at 20 s and 838 m at 26 s, ending 130 m above the player. **One contributing cause is fixed
-  and does not account for that magnitude:** the decoded 250 mph desired-speed ceiling
-  (`AiControlLaw.SpeedCeiling`, `def+0x1e8`, written by `FUN_00478a00` at `0x478d52`) sits 1.24 m/s
-  below the Devastator's own 113 m/s cruise, so an escort holds no closure margin and never regains
-  ground lost in a turn; `AiPilot.FlyEscort` now lifts it through `AiControlLaw.StationCeiling`, and
-  on `player_pfighter` that moves a flown hold from mean 296 m / worst 702 m to mean 256 m /
-  worst 590 m. *What is still unexplained:* the 838 m at 26 s and the 130 m of altitude. *Fix shape:*
-  look at the HANDOFF at the intro's end, not the cruise. The escort law never leaves the formation
-  state once joined (decode: "nothing inside it leaves state 1"; `AiEscort.cs:233-235`, and a joined
-  escort 5 km out still reads `Station` in the `wingman-station` suite), so the 200 m overfly the
-  report describes belongs to a wingman that NEVER joined. The join gate is a range AND a speed,
-  `< 700 m` and `> 20.576 m/s`, so establish what the wingman's speed and range actually are on the
-  first frame it is stepped after the cutscene.
-  *Two leads, one already retired:* an airframe mismatch between the pilot and the wingman is NOT
-  in play, so do not chase it: the reporting profile carries `selectedPlane 0` and `wingmanPlane 1`
-  and both are airframe 5, the Devastator, which matches the report ("i did not fly a bloodhawk but
-  a devastator same as my wingmen") and the campaign's own two-Devastator start. A probe that flew
-  the pilot on a Bloodhawk against a Devastator wingman was a test-rig artefact. Still untested:
-  `WithAiSpawnJitter` scales a spawned wingman's `fd_speed` by up to 5 % (`PlaneStats.cs:95`,
-  applied at `FlightRoster.cs:63`), worth up to 5.6 m/s on the same airframe, which the suite legs
-  do not apply. *⚠ Traps:* ⚠ **measure on `player_pfighter`.** The
-  Devastator is 113 m/s against the ceiling's 111.76; the Bloodhawk is 135 m/s, which overstates the
-  ceiling's share about eighteenfold, and a number quoted off it is not a statement about the
-  campaign. ⚠ `BL-457`'s earlier line that the escort "re-enters `Joining`" past 700 m is WRONG: the
-  law has no such transition. ⚠ The far-field plant is not the original's answer to a fast leader and
-  must not be re-derived as one: its target is `fd_speed · lever + 5` off the lever at `[obj+0x128]`
-  (`0x48c593`-`0x48c5ae`), which slews toward the ceiling-clamped `[obj+0x124]`, so the cap reaches
-  both plants; measured, an escort is far-field for 54.3 % of a flown run and holds 114.0 m/s there.
-  ⚠ The two SCRIPTED `wingman-station` legs fly a cruise lever, a speed any escort matches, so their
-  leashes are not evidence here; the `[flown]` leg is. ⚠ Do not re-tune the decoded station offsets,
-  the 700 m join gate, or `SpeedCeiling`. *Cross-refs:* `docs/org/aiPilot.md`,
-  `docs/org/aiControlLaw.md`; `docs/PLAN-M5-polish.md` A3.
+- `BL-457` `[Bug]` `[Owed-playtest]` **The campaign wingman ends up high and far behind, so it reads
+  as having spawned in the wrong place.** Seen at the controls: "in the original the wingman spawns
+  beside me. here he spawns above the island flying towards me."
+  *What is fixed.* Two of the three contributors are closed. The decoded 250 mph desired-speed
+  ceiling (`AiControlLaw.SpeedCeiling`, `def+0x1e8`, written by `FUN_00478a00` at `0x478d52`) sits
+  1.24 m/s below the Devastator's own 113 m/s cruise, leaving an escort no closure margin;
+  `AiPilot.FlyEscort` lifts it through `AiControlLaw.StationCeiling`. And the per-spawn dynamics
+  jitter was reaching the wingman: the original runs it for vehicle classes `jet` and `heli` only
+  (`docs/org/flightModel.md`, "The per-spawn jitter"), and the shipped `w*` family authors
+  `mode wingman`, so a campaign wingman flies its authored `fd_speed`. Measured on C3/M01,
+  `wingman_1` spawned at `fd 108.5` against the leader's 113.0 and now spawns at 113.0.
+  *What is left, and what the sortie must judge.* The wingman leaves the escort law rather than
+  never entering it. On C3/M01 with both aircraft on `player_pfighter` it holds 94–98 m for the
+  first nine seconds, then the mode machine enters `avoid crash` at 109 m over the island, and the
+  climb-out (which runs AHEAD of the escort in `AiPilot.Next`'s fork) takes it to 128 m above the
+  player and 302 m behind before the station is recovered over the following ten seconds. Whether
+  that break-off is the original's behaviour is not decided: the fork ORDER is decoded, but the
+  climb-out's own geometry inside the middle altitude band is a named invention
+  (`docs/architecture.md` on `AiModeMachine.cs`). The sortie judges whether the wingman reads as
+  flying with the player over the island, and whether that break-off is what a player sees.
+  *⚠ Traps:* ⚠ **The join gate is not the problem, and must not be re-chased.** On the first frame
+  the wingman is stepped after C3/M01's intro it reads range 117.6 m and speed 53.6 m/s against the
+  `< 700 m` / `> 20.576 m/s` gate, and is in `Station` on the very next frame. ⚠ Nothing runs during
+  the intro either: `GameSession.DriveSimSteps` returns while `CutsceneController.HoldsWorld`, so no
+  separation can open there. ⚠ `wingman-station` cannot see either remaining effect: it builds its
+  pair at 1200 m over a stage with no terrain and never applies the spawn jitter
+  (`docs/verification.md` INSTR-25). ⚠ **Measure on `player_pfighter`,** and check the profile's own
+  airframe: a profile flying a 136 m/s airframe leaves a 113 m/s wingman behind by arithmetic, which
+  is not this defect. ⚠ **Trust the `mean` column, not `worst`** in that suite (`INSTR-22`).
+  ⚠ Nitro is ruled out (`BL-469` is the separate case), an airframe mismatch between pilot and
+  wingman is ruled out, main's deletion of `AiControlLaw`'s far-field branch is ruled out, and the
+  law has no re-entry into `Joining`. ⚠ Do not re-tune the decoded station offsets, the 700 m join
+  gate, or `SpeedCeiling`. ⚠ The far-field plant is not the original's answer to a fast leader and
+  must not be re-derived as one. ⚠ The two SCRIPTED `wingman-station` legs fly a cruise lever, a
+  speed any escort matches, so their leashes are not evidence here; the `[flown]` leg is.
+  *Cross-refs:* `docs/org/aiPilot.md`, `docs/org/aiControlLaw.md`, `docs/org/flightModel.md`;
+  `docs/PLAN-M5-polish-2.md` A5.
 
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
   controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.

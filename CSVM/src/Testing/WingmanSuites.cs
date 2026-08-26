@@ -37,6 +37,11 @@ internal static class WingmanSuites
     // suite's default Bloodhawk has 23 m/s. Quote a campaign figure off this one only.
     private const string FlownPlaneNode = "player_pfighter";
 
+    // The AI def a campaign wingman block resolves to, and how many spawn draws the jitter gate is
+    // swept over: a pinned seed makes one draw, and a gate that leaks on some draws survives it.
+    private const string WingmanAiDef = "wingman";
+    private const int JitterSeeds = 64;
+
     // The flown-leader leg: its spawn altitude, how long it runs, and from when it is judged. The
     // first seconds are the leader's own acceleration off the spawn lever, which no station-keeper
     // can be inside of, so the hold is judged after them.
@@ -95,6 +100,7 @@ internal static class WingmanSuites
     internal static void WingmanStation(TestContext ctx)
     {
         StationGeometry(ctx);
+        JitterGate(ctx);
 
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -328,6 +334,31 @@ internal static class WingmanSuites
         rig.Name = $"{FlownPlaneNode}_{shooterId}";
         ctx.Host.AddChild(rig);
         return rig;
+    }
+
+    // The per-spawn jitter's vehicle-class gate, over the campaign's own airframe: the wingman def
+    // must come out of a spawn draw with the dynamics it authors, while the same airframe's jet def
+    // must be moved by one. The jet arm is the able-to-fail control for the wingman arm.
+    private static void JitterGate(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var wingman = PlaneStats.LoadForAi(ctx.ZrdrPath, FlownPlaneNode, WingmanAiDef);
+        var jet = PlaneStats.LoadForAi(ctx.ZrdrPath, FlownPlaneNode);
+        ctx.Note($"[jitter] '{wingman.AiDefName}' mode={wingman.VehicleMode} fd_speed {wingman.FdSpeed:0.0} m/s, '{jet.AiDefName}' mode={jet.VehicleMode} fd_speed {jet.FdSpeed:0.0} m/s");
+
+        float worstWingman = 0f, worstJet = 0f;
+        for (int seed = 0; seed < JitterSeeds; seed++)
+        {
+            var spun = wingman.WithAiSpawnJitter(new System.Random(seed));
+            worstWingman = Mathf.Max(worstWingman, Mathf.Abs(spun.FdSpeed - wingman.FdSpeed));
+            var spunJet = jet.WithAiSpawnJitter(new System.Random(seed));
+            worstJet = Mathf.Max(worstJet, Mathf.Abs(spunJet.FdSpeed - jet.FdSpeed));
+        }
+
+        ctx.Check(worstWingman == 0f,
+            $"[jitter] a mode-wingman spawn keeps its authored fd_speed over {JitterSeeds:0} seeds: worst drift {worstWingman:0.000} m/s");
+        ctx.Check(worstJet > 0f,
+            $"…while the same airframe's jet def is moved by the same draw, so the check above can fail: worst drift {worstJet:0.000} m/s");
     }
 
     // The station geometry, with no engine state at all: the two decoded offsets in a leader's own

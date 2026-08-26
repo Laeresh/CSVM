@@ -528,6 +528,16 @@ loss. What the engine renders was decodable from the authored constants + oscill
   `hydrogentank1` returned 108 clean misses through 140 live collider bodies, which reads exactly
   like an airship with no collision at all.
 
+- **INSTR-25** — **`wingman-station` builds its own pair by hand at 1200 m over a stage with no
+  terrain, so two of the campaign's biggest station-keeping effects cannot reach it: measure those
+  in a `--campaign=` run.** The suite calls `PlaneStats.Load`/`LoadForAi` directly and never
+  `WithAiSpawnJitter`, so a per-spawn dynamics difference between leader and wingman is invisible to
+  it; and with no ground under either aircraft the mode machine's `avoid crash` never arms, so the
+  climb-out that pre-empts the escort law never runs. Measured on C3/M01: the flown leg reads
+  mean 270 m while the same pair over Hawaii at 150 m breaks off into `avoid crash` nine seconds in
+  and ends 128 m above the player and 302 m behind. A green `wingman-station` is a statement about
+  the law, never about the sortie.
+
 ## SRC — sources and documents
 
 - **SRC-1** — **Validate whether bytes are meaningful before numeric sanity checks.**

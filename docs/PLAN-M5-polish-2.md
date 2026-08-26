@@ -120,7 +120,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ An AI pilot sees an enemy aircraft's own turret as a target beside the aircraft (`BL-507`)
 3. ☐ A campaign spawn's talker and constitution ratings never reach `AiVoiceRuntime` (`BL-497`)
 4. ❌ CM02's second Peacemaker squad is awake from the start and attacks the Pandora (`BL-499`)
-5. ☐ The campaign wingman ends up high and far behind (`BL-457`)
+5. ☑ The campaign wingman ends up high and far behind (`BL-457`)
 6. ☐ Crashing the player's aircraft does not end a campaign mission (`BL-491`, deferral reopened first)
 
 ### Wave B — the intro and the swap
@@ -317,7 +317,7 @@ three on `M5Escort#21` once `OBJECTIVE68` has fired, and the pick moving from `d
 PASS beside it. The only edits are this plan, the `backlog.md` deletion, and one stale sentence in
 `docs/architecture.md` that still called the three `SET_AI_*` verbs named no-ops.
 
-## A5 ☐ The campaign wingman ends up high and far behind
+## A5 ☑ The campaign wingman ends up high and far behind
 
 **Goal.** The campaign wingman reads at the controls as flying with the player out of the intro,
 rather than as having spawned above the island flying towards them.
@@ -368,6 +368,23 @@ matches, so their leashes are not evidence here; the `[flown]` leg is. ⚠ Do no
 station offsets, the 700 m join gate, or `SpeedCeiling`. ⚠ Do not fold `BL-469` (the nitro
 asymmetry) into this; it is a different pairing and is not in this plan. ⚠ See the ⚠ table above:
 nitro, the airframe mismatch, the far-field branch and the `Joining` re-entry are all dead.
+
+**Verified.** `wingman-station` is GREEN on this tree at the baseline, before any change: `[flown
+player_pfighter]` reads mean 270 m, settled 199 m, worst 523 m against the 700 m leash, and the
+far-field plant is entered on 0 of 7199 steps. The Evidence above describes an earlier tree; the
+three gates it calls failing are not failing now, and no number in this item should be quoted off
+it. The hand-off itself is not a join problem: on the first frame the wingman is stepped after
+C3/M01's intro it reads range 117.6 m and speed 53.6 m/s against the `< 700 m` / `> 20.576 m/s`
+gate, and is in `Station` on the next frame; nothing runs during the intro at all, because
+`GameSession.DriveSimSteps` returns while `CutsceneController.HoldsWorld`. The untested lead HELD
+and is landed: `WithAiSpawnJitter` was reaching the wingman, which the original's own gate excludes
+(vehicle classes `jet` and `heli` only, and the `w*` family authors `mode wingman`), and C3/M01's
+`wingman_1` spawned at `fd 108.5` against its leader's 113.0. It now spawns at 113.0 and holds
+94–98 m out of the intro. What remains is a break-off, not a drift: nine seconds in, at 109 m over
+the island, the mode machine enters `avoid crash`, whose climb-out runs ahead of the escort in
+`AiPilot.Next`'s fork, and the wingman ends 128 m above and 302 m behind before recovering. That is
+left for the sortie and for its own item rather than re-tuned here, because the fork order is
+decoded while the climb-out's geometry is a named invention. <pending orchestrator run>
 
 ## A6 ☐ Crashing the player's aircraft does not end a campaign mission
 

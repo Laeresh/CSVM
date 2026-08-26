@@ -117,6 +117,12 @@ public sealed class PlaneStats
     /// player defs alone, so swapping it would leave every AI plane unarmed.</summary>
     public string? AiDefName;
 
+    /// <summary>The def chain's own <c>mode</c> key ("jet", "wingman", "ship"), nearest wins: the AI
+    /// chain on an AI load, the player chain otherwise. It is the vehicle class the original stores
+    /// at <c>obj+0x67c</c>, and the only consumer here is <see cref="WithAiSpawnJitter"/>'s gate.
+    /// Null where no def in the chain authors one.</summary>
+    public string? VehicleMode;
+
     /// <summary>The AI def's <c>title</c> message KEY ("MSG_VEH_MEDUSA_KESTREL"), nearest in the AI
     /// chain, null on a player load. Resolve it through the string table for the name the targeting
     /// readout prints; unresolved it is a key, not a name.</summary>
@@ -341,18 +347,25 @@ public sealed class PlaneStats
         LoadCore(zrdrPath, planeNodeName, forAi: true, aiDefName);
 
     /// <summary>The original's per-spawn dynamics jitter (docs/org/flightModel.md "The per-spawn
-    /// jitter"). Returns a jittered COPY: the caller's object is the shared per-airframe cache.
+    /// jitter"), applied only to the two vehicle classes it reaches. Always returns a COPY: the
+    /// caller's object is the shared per-airframe cache and callers mutate what they get back.
     /// ⚠ Only the whole-vehicle pair scales, never per-part pools — <see cref="LoadForAi"/>'s
     /// zone-less pair takes the full effect; a player airframe's resolved sum is written out
-    /// explicitly so <see cref="PlaneDamage"/> sees the scaled hull. <c>veh_weight</c>/<c>ref_area</c>
-    /// are not among the jittered slots.</summary>
+    /// explicitly so <see cref="PlaneDamage"/> sees the scaled hull.</summary>
     public PlaneStats WithAiSpawnJitter(Random rng)
     {
         // Shallow: DestroyableParts / TurretMounts / VehicleInjureAnims / AiWeapons are read-only after Load and
         // nothing below touches them, so the copy shares them with the cached original on purpose.
         var jittered = (PlaneStats)MemberwiseClone();
-        jittered.VehicleHealth = (VehicleHealth ?? SumParts(static p => p.MaxHp)) * Factor(rng);
-        jittered.VehicleArmor = (VehicleArmor ?? SumParts(static p => p.MaxArmor)) * Factor(rng);
+        // ⚠ Do not widen this to the wingman class. A downward draw leaves an escort slower than the
+        // leader it shares an airframe with, and the station is unreachable for the rest of the run.
+        bool takes = VehicleMode == null
+            || VehicleMode.Equals(Mech3.VehicleDefs.JetMode, StringComparison.OrdinalIgnoreCase)
+            || VehicleMode.Equals("heli", StringComparison.OrdinalIgnoreCase);
+        jittered.VehicleHealth = (VehicleHealth ?? SumParts(static p => p.MaxHp)) * (takes ? Factor(rng) : 1f);
+        jittered.VehicleArmor = (VehicleArmor ?? SumParts(static p => p.MaxArmor)) * (takes ? Factor(rng) : 1f);
+        if (!takes)
+            return jittered;
         jittered.FdSpeed *= Factor(rng);
         jittered.EnginePower *= Factor(rng);
         jittered.DragFactor *= Factor(rng);
@@ -489,11 +502,20 @@ public sealed class PlaneStats
             return null;
         }
 
+        string? ChainMode()
+        {
+            foreach (var d in damageChain)
+                if (d.Str("mode") is { Length: > 0 } m)
+                    return m;
+            return null;
+        }
+
         var stats = new PlaneStats
         {
             DefName = found,
             NodeName = planeNodeName,
             AiDefName = aiName,
+            VehicleMode = ChainMode(),
             PitchTorque = Dyn("pitch_torque", 2.4f),
             RollTorque = Dyn("roll_torque", 6f),
             RudderTorque = Dyn("rudder_torque", 1.4f),
