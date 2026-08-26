@@ -968,7 +968,7 @@ public sealed class TextureArchive : IDisposable
         LastHadAlpha = ImageHasAlpha(img);
         // Before mipmaps: raw pixels only. The named coastline sheets are soft whatever the
         // pixel rule says about them (see SoftAlphaCoastline).
-        LastAlphaIsSoft = LastHadAlpha && (AlphaIsSoft(img) || SoftAlphaCoastline.Contains(baseName));
+        LastAlphaIsSoft = LastHadAlpha && (AlphaIsSoft(img) || SoftAlphaCoastline.Contains(baseName) || baseName.Contains("trans"));
         // The drop-in instruments repaint the RGB flat and keep everything else — size, format,
         // alpha channel — so the alpha class read just above (and with it the blend/scissor choice
         // and the cutout silhouette) is unchanged.
