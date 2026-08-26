@@ -80,6 +80,13 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **DIAG-21** — **A puffer's particle spread is unseeded RNG, not the pinned run seed.** Two
   captures at the same step can differ in particle placement alone; do not read that difference as
   a behaviour change (the anim lab's own determinism boundary).
+- **DIAG-22** — **A suite that asserts over a directive the data may not author fails vacuously,
+  not correctly.** Loop over the authored candidates, then branch on the count: an empty candidate
+  set is a coverage gap to name, and only a non-empty one may fail. Measured: the
+  `campaign-objectives-hud` wake cue asserted "at least one `WAKEUP_SOUND_GROUP` started a
+  one-shot" with no candidate in hand, and `c4/m01` and `c5/m01` author none, so both chapters read
+  as a sound defect while their objective audio rides `COMPLETED_SOUND_GROUP` and plays. The
+  authored-count line the check now prints is what separates the two readings.
 
 ## SHOT — screenshots and pixel evidence
 

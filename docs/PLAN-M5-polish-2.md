@@ -132,7 +132,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — offered but inert, and the red suite
 
 10. ☐ The auto-land the approach table offers has no button (`BL-460`)
-11. ☐ `campaign-objectives-hud` fails on C4 and C5 on its wake-cue check (`BL-483`)
+11. ☑ `campaign-objectives-hud` fails on C4 and C5 on its wake-cue check (`BL-483`)
 12. ☐ Fly a campaign mission end to end: the Wave A/B/C sortie, closing `BL-458`
 
 ## Dependency and parallelism notes
@@ -574,7 +574,7 @@ which `BL-427` has not extracted, so the text is not in `extracted/messages.json
 <TODO: decide what the prompt reads in the meantime, and whether that placeholder is acceptable to
 ship or whether this item pulls `BL-427` in.>
 
-## C11 ☐ `campaign-objectives-hud` fails on C4 and C5 on its wake-cue check
+## C11 ☑ `campaign-objectives-hud` fails on C4 and C5 on its wake-cue check
 
 **Goal.** `campaign-objectives-hud` is green on all five extracted chapters, with the wake-cue
 assertion intact.
@@ -601,6 +601,18 @@ must end up stronger, not weaker.
 **⚠ Traps.** ⚠ **Do not weaken the wake-cue assertion to make two chapters green**, which is the same
 move `BL-481` forbade for the readout check. ⚠ C6 and beyond have no extracted data, so a chapter
 sweep stops at C5. ⚠ `docs/verification.md` METHOD-8 and DIAG-15 apply.
+
+**Outcome: neither candidate cause. The suite failed vacuously.** `c4/m01` and `c5/m01` author not
+one `WAKEUP_SOUND_GROUP` between them (0 occurrences in either `objectives.zrd.json`, against 18 and
+33 `COMPLETED_SOUND_GROUP`), so `DriveWakeCue`'s loop body never ran and it asserted `false` over an
+empty candidate set. Those chapters' objective audio rides the completion surface and plays there:
+C4's one-shots run 1 to 7 on `snd_RM1Lastgun`, C5's 1 to 17 on `snd_c5-MN-m1_Zachary_22`. The fix is
+in the suite, and the assertion is stronger rather than weaker: the wake check is unchanged where a
+mission authors the directive, gated on the authored count where it does not, and a new check that
+runs on all five chapters requires one of the mission's own objective sound groups, whichever
+surface it chose, to reach a real player. `docs/verification.md` DIAG-22 records the rule.
+
+**Verified.** <pending orchestrator run>
 
 ## C12 ☐ Fly a campaign mission end to end: the Wave A/B/C sortie, closing `BL-458`
 

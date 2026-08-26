@@ -2013,19 +2013,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   starts from. *Cross-refs:* `PLAN-M5-polish.md` A6 and G66.
 
 
-- `BL-483` `[Bug]` **`campaign-objectives-hud` fails on C4 and C5, on its wake-cue check rather than
-  its readout check.** *Evidence:* found while fixing the same suite's completion driver, which now
-  passes on C1, C2 and C3. What fails on C4 and C5 is `DriveWakeCue`'s assertion that at least one
-  `WAKEUP_SOUND_GROUP` the mission authors started a real one-shot player; the row-marking half of
-  the suite passes on both. **Confirmed pre-existing rather than caused by the driver work**
-  (METHOD-8): `CampaignHudSuites.cs` was reverted to its committed state, rebuilt, and both failures
-  reproduced identically. *Fix shape:* unknown until the wake cue is traced on those two chapters;
-  the question is whether the mission authors a group our wake path never reaches, or whether the
-  one-shot is started somewhere the suite does not look. *⚠ Traps:* do not weaken the wake-cue
-  assertion to make two chapters green, which is the same move `BL-481` forbade for the readout
-  check. C6 and beyond have no extracted data, so a chapter sweep stops at C5. *Cross-refs:*
-  `BL-481`, closed by the work that filed this; `docs/verification.md` METHOD-8 and DIAG-15.
-
 - `BL-113` `[Tuning]` `[Owed-playtest]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
 

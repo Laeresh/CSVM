@@ -748,9 +748,10 @@ public static class SuiteCatalog
             "IDENTITY objective completing off whichever condition the chapter's own mission " +
             "authors (an INACTIVEn node list, a danger zone, or no condition at all) marks its " +
             "own readout line " +
-            "(not only the graph's), and both a WAKEUP_SOUND_GROUP and a COMPLETED_SOUND_GROUP " +
-            "the mission authors start a real AudioStreamPlayer3D through WorldSounds (D31's " +
-            "existing routing, counted rather than duplicated)",
+            "(not only the graph's), a WAKEUP_SOUND_GROUP the mission authors starts a real " +
+            "AudioStreamPlayer3D through WorldSounds (D31's existing routing, counted rather than " +
+            "duplicated), and whichever cue surface the mission chose, WAKEUP_SOUND_GROUP or " +
+            "COMPLETED_SOUND_GROUP, one of its groups reaches a real player (BL-483)",
             CampaignObjectivesHud));
         into.Add(new TestHarness.Suite("campaign-cutscene",
             "the cutscene host over C1/M04's shipped intro definition (D32): its authored callback "
