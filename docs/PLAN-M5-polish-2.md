@@ -116,9 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the record, then the flown mission
 
-1. ☑ Retire the record's three stale pointers (`BL-506`, both M5 plan banners, "Current status")
-2. ☑ An AI pilot sees an enemy aircraft's own turret as a target beside the aircraft (`BL-507`)
-3. ☐ A campaign spawn's talker and constitution ratings never reach `AiVoiceRuntime` (`BL-497`)
+$13. ☑ A campaign spawn's talker and constitution ratings never reach `AiVoiceRuntime` (`BL-497`)
 4. ❌ CM02's second Peacemaker squad is awake from the start and attacks the Pandora (`BL-499`)
 5. ☑ The campaign wingman ends up high and far behind (`BL-457`)
 6. ☑ Crashing the player's aircraft does not end a campaign mission (`BL-491`, deferral reopened first)
@@ -234,7 +232,7 @@ a re-pin, never appended to.
 
 **Verified.** <pending orchestrator run>
 
-## A3 ☐ A campaign spawn's talker and constitution ratings never reach `AiVoiceRuntime`
+## A3 ☑ A campaign spawn's talker and constitution ratings never reach `AiVoiceRuntime`
 
 **Goal.** A campaign pilot chatters according to the `talker` and constitution ratings its own block
 authors, so an ace rated 9 is audibly different from a mook rated 1.
@@ -249,14 +247,23 @@ the pilot name (G75 landed that path, so the plumbing shape exists and is the on
 **Model recommendation.** medium. Mechanical threading along a path that landed one field ago; the
 judgement is only in choosing the same seam rather than a parallel one.
 
-**Verify.** <TODO: name the suite arm or `--campaign=` run that reads a spawned pilot's effective
-talker rating; the sweep did not settle whether an existing voice suite can assert it headless.>
-Audibly, the ratings' effect is judged in C12's sortie.
+**Verify.** No existing voice suite spawned a campaign block through `CampaignDirector.BuildRoster`
+with a real `AiVoiceRuntime` behind it, so a new arm, `roster-voice-ratings`, was the smallest way to
+settle the question: it builds C5/M01's roster (no chapter world needed) and reads the resolved
+`Speaker.TalkerChance`/`ConstitutionChance` for `autogyro_1`, the one shipped block that authors both
+slots (7, 8) and an accent. Failing baseline confirmed first: both chances read the session's flat
+rating-5 fallback (0.639 / 0.683). After widening `RegisterVoice` to carry one override per stat and
+threading `spawn.Skills.Talker`/`spawn.Skills.Constitution` through the hand-off, talker reads its own
+rating (7: 0.794) and constitution reads its own, independent rating (8: 0.883), and `campaign-roster`,
+`roster-spawn-names`, `campaign-bomber-formation`, `voice-runtime`, `ai-voice` and `instant-action`
+stay green. Audibly, the ratings' effect is still judged in C12's sortie.
 
 **⚠ Traps.** ⚠ `docs/formats/combat-voice.md` carried a stale note claiming this already worked,
 corrected by G75; check the doc's current claim rather than an older reading. ⚠ A pilot whose accent
 resolves to a VO id with no WAVs stays silent whatever its `talker` rating is, so this fix will not
 be visible on those eight named aces, and their silence is not a failed verification.
+
+**Verified.** <pending orchestrator run>.
 
 ## A4 ❌ CM02's second Peacemaker squad is awake from the start and attacks the Pandora
 

@@ -166,6 +166,7 @@ public static class SuiteCatalog
         "landings-train-pickup-gate",
         "campaign-airframe-swap",
         "roster-spawn-names",
+        "roster-voice-ratings",
         "mission-radio",
         "campaign-zeppelin-wakeup",
         "campaign-squad-wakeup",
@@ -900,6 +901,14 @@ public static class SuiteCatalog
             + "and moves the live pick off it, and bloodhawk_2's always-target on the 'player' "
             + "role takes the human rig over a nearer aircraft",
             RosterSpawnNames));
+
+        // BL-497: CampaignDirector passed null where a spawn's own talker/constitution ratings
+        // would go, so every campaign pilot chattered at the session's flat rating-5 default.
+        into.Add(new TestHarness.Suite("roster-voice-ratings",
+            "BL-497's voice hand-off over C5/M01's shipped roster: autogyro_1 authors both talker "
+            + "and constitution (7, 8) and an accent, and its resolved chances each read their own "
+            + "authored rating on their own curve rather than the session's rating-5 fallback",
+            RosterVoiceRatings));
 
         // BL-465/BL-461: mission callouts played from a point in the world, and a cue naming a VO
         // dialogue chain played nothing at all.

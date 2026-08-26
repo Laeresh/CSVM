@@ -1981,19 +1981,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is only the input. *⚠ Traps:* the flag is narrower than a complete skill vector (26 blocks against
   29), so the two are not interchangeable and neither is a proxy for the other. Do not give aces a
   blanket rating bonus on the strength of the flag alone; the branch may scale an interpolation
-  rather than add to it. *Cross-refs:* `BL-497` (the other rating that does not reach the runtime),
-  `PLAN-M5-polish.md` G75.
-
-- `BL-497` `[Bug]` **A campaign spawn's talker and constitution ratings never reach
-  `AiVoiceRuntime`.** *Evidence:* found by G75. `CampaignDirector` passes null where the ratings
-  would go, so every campaign pilot is equally talkative regardless of what its block authors: an ace
-  rated 9 on `talker` says no more than a mook rated 1. The ratings are parsed and carried as far as
-  the plan. *Fix shape:* thread the spawn's ratings through to the voice runtime the way the roster
-  now threads the pilot name. *⚠ Traps:* `docs/formats/combat-voice.md` carried a stale note claiming
-  this already worked, corrected by G75, so check the doc's current claim rather than an older
-  reading. A pilot whose accent resolves to a VO id with no WAVs stays silent whatever its `talker`
-  rating is, so a fix here will not be visible on those eight named aces. *Cross-refs:* `BL-496`,
-  `PLAN-M5-polish.md` G75.
+  rather than add to it. *Cross-refs:* `PLAN-M5-polish.md` G75.
 
 - `BL-113` `[Tuning]` `[Owed-playtest]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).

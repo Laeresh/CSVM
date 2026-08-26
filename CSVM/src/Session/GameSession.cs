@@ -3311,10 +3311,12 @@ public partial class GameSession : Node3D
         }
     }
 
-    // Gives a spawned AI aircraft its voice: the talker and constitution chances come from
-    // ai_skill_parameters at ratingOverride when given, else the session's skill rating. A missing
-    // accent, voice runtime or skills table means a silent pilot, never an error.
-    private void RegisterAiVoice(FlightController? ai, int? accentId, int? ratingOverride = null)
+    // Gives a spawned AI aircraft its voice: each chance comes from ai_skill_parameters at its
+    // own override when given, else the session's skill rating, so talker and constitution read
+    // two independent curves. A missing accent, voice runtime or skills table means a silent
+    // pilot, never an error.
+    private void RegisterAiVoice(FlightController? ai, int? accentId, int? talkerOverride = null,
+        int? constitutionOverride = null)
     {
         if (ai == null || accentId is not { } accent || _aiVoice == null)
         {
@@ -3327,9 +3329,10 @@ public partial class GameSession : Node3D
         _aiSkills ??= _flightRoster?.AiSkills;
         if (_aiSkills == null)
             return;
-        int rating = ratingOverride ?? _spec.AiAttackSkill ?? 5;
-        _aiVoice.RegisterAi(ai, accent,
-            _aiSkills.At("talker_chance", rating), _aiSkills.At("constitution_chance", rating));
+        int talkerRating = talkerOverride ?? _spec.AiAttackSkill ?? 5;
+        int constitutionRating = constitutionOverride ?? _spec.AiAttackSkill ?? 5;
+        _aiVoice.RegisterAi(ai, accent, _aiSkills.At("talker_chance", talkerRating),
+            _aiSkills.At("constitution_chance", constitutionRating));
     }
 
     // Per-build state threaded through StartSession's phase methods: the archives, world-build

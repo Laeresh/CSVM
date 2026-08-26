@@ -280,7 +280,7 @@ public sealed class CampaignDirector
                     gunner.PrimaryTargetName = spawn.LeaderName;
                 }
             }
-            inputs.RegisterVoice(rig, spawn.AccentId, null);
+            inputs.RegisterVoice(rig, spawn.AccentId, spawn.Skills.Talker, spawn.Skills.Constitution);
 
             bool placed = false;
             if (spawn.TaxiPath is { } taxi && _paths != null)
@@ -597,7 +597,7 @@ public sealed class CampaignDirector
         /// chapter's additions to a vehicle unreachable exactly as they were before.</summary>
         public Action<string, Node3D>? AttachMarkers;
 
-        public Action<FlightController?, int?, int?> RegisterVoice = (_, _, _) => { };
+        public Action<FlightController?, int?, int?, int?> RegisterVoice = (_, _, _, _) => { };
         public Random Rng = new();
     }
 
