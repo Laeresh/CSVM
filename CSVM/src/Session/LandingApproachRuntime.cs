@@ -15,6 +15,10 @@ namespace CSVM.Session;
 public sealed partial class LandingApproachRuntime : Node
 {
     private readonly List<Bound> _bound = new();
+    private readonly List<LandingApproach> _approaches = new();
+    private readonly HashSet<int> _boundIds = new();
+    private readonly List<PickupSpec> _pickups = new();
+    private readonly HashSet<string> _startedPickups = new(StringComparer.OrdinalIgnoreCase);
     // Rows that have fired and whose condition has not stopped passing since. A cutscene ends with
     // the aircraft parked where the definition left it, which is still inside the volume that
     // started it, so without this the row re-fires on the frame after the handoff.
@@ -51,24 +55,24 @@ public sealed partial class LandingApproachRuntime : Node
         AnimRuntime runtime,
         IReadOnlyList<LandingApproach> approaches,
         CutsceneController cutscene,
-        Func<FlightController?> player)
+        Func<FlightController?> player,
+        IReadOnlyList<PickupSpec>? pickups = null)
     {
         _runtime = runtime;
         _cutscene = cutscene;
         _player = player;
         _bound.Clear();
-        _latched.Clear();
-        foreach (var approach in approaches)
+        _approaches.Clear();
+        _approaches.AddRange(approaches);
+        _boundIds.Clear();
+        _pickups.Clear();
+        if (pickups != null)
         {
-            var found = runtime.FindNodes(approach.Node);
-            if (found.Count == 0)
-            {
-                continue;
-            }
-
-            var arm = runtime.FindNodes(LandingApproaches.ArmNode, found[0]);
-            _bound.Add(new Bound(approach, found[0], arm.Count > 0 ? arm[0] : null));
+            _pickups.AddRange(pickups);
         }
+        _startedPickups.Clear();
+        _latched.Clear();
+        RefreshBindings();
 
         if (_bound.Count > 0)
         {
@@ -83,7 +87,15 @@ public sealed partial class LandingApproachRuntime : Node
     public void Tick()
     {
         AutoLandOffered = false;
-        if (_runtime == null || _bound.Count == 0 || _cutscene is not { Playing: false })
+        if (_runtime == null || _cutscene is not { Playing: false })
+        {
+            return;
+        }
+        if (RefreshBindings() > 0)
+        {
+            GD.Print($"landings: {_bound.Count} approach trigger(s) armed after world staging");
+        }
+        if (_bound.Count == 0)
         {
             return;
         }
@@ -95,13 +107,15 @@ public sealed partial class LandingApproachRuntime : Node
             return;
         }
 
+        StartPickupTiming(plane.WorldPosition);
+
         float speed = plane.WorldVelocity.Length();
         for (int i = 0; i < _bound.Count; i++)
         {
             var bound = _bound[i];
             if (!Passes(bound, plane, speed))
             {
-                _latched.Remove(i);
+                _latched.Remove(bound.Id);
                 continue;
             }
 
@@ -111,7 +125,7 @@ public sealed partial class LandingApproachRuntime : Node
                 continue;
             }
 
-            if (!_latched.Add(i))
+            if (!_latched.Add(bound.Id))
             {
                 continue;
             }
@@ -119,6 +133,53 @@ public sealed partial class LandingApproachRuntime : Node
             Start(bound.Approach);
             return;
         }
+    }
+
+    private void StartPickupTiming(Vector3 playerPosition)
+    {
+        foreach (var pickup in _pickups)
+        {
+            if (_startedPickups.Contains(pickup.Node))
+            {
+                continue;
+            }
+            var sensors = _runtime!.FindNodes(pickup.Node);
+            if (sensors.Count == 0 || !sensors[0].Visible
+                || sensors[0].GlobalPosition.DistanceSquaredTo(playerPosition)
+                    > pickup.Radius * pickup.Radius)
+            {
+                continue;
+            }
+            if (_runtime.Play(Pickups.TimingAnim).Count > 0)
+            {
+                _startedPickups.Add(pickup.Node);
+            }
+        }
+    }
+
+    private int RefreshBindings()
+    {
+        int added = 0;
+        for (int i = 0; i < _approaches.Count; i++)
+        {
+            if (_boundIds.Contains(i))
+            {
+                continue;
+            }
+
+            var approach = _approaches[i];
+            var found = _runtime!.FindNodes(approach.Node);
+            if (found.Count == 0)
+            {
+                continue;
+            }
+
+            var arm = _runtime.FindNodes(LandingApproaches.ArmNode, found[0]);
+            _bound.Add(new Bound(i, approach, found[0], arm.Count > 0 ? arm[0] : null));
+            _boundIds.Add(i);
+            added++;
+        }
+        return added;
     }
 
     private bool Passes(Bound bound, FlightController plane, float speed)
@@ -139,11 +200,11 @@ public sealed partial class LandingApproachRuntime : Node
     // lands (CutsceneController.HostDefinitions).
     private void Start(LandingApproach approach)
     {
-        int started = _runtime!.Play(approach.Anim).Count;
+        int started = _runtime!.PlayMissionTrigger(approach.Anim).Count;
         LastStarted = approach.Anim;
         GD.Print($"landings: '{approach.Node}' flown, started '{approach.Anim}' " +
                  $"({started} definition(s))");
     }
 
-    private readonly record struct Bound(LandingApproach Approach, Node3D Node, Node3D? Arm);
+    private readonly record struct Bound(int Id, LandingApproach Approach, Node3D Node, Node3D? Arm);
 }

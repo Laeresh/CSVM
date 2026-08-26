@@ -17,6 +17,7 @@ internal static class LandingApproachSuites
     // mission's own data, so nothing here names a shipped world node by hand.
     private const int FirstSeq = 0;
     private const int WingWalkSeq = 1;
+    private const int TrainPickupSeq = 6;
     private const float StepDt = 1f / 60f;
     private const string PlaneNode = "player_bhawk";
 
@@ -58,6 +59,12 @@ internal static class LandingApproachSuites
     /// approach at an armed Balmoral starting the capture.</summary>
     internal static void WingWalkCaptureGate(TestContext ctx) =>
         DriveMission(ctx, WingWalkSeq, "test-wingwalk-gate", DriveWingWalk);
+
+    /// <summary>Drives CM07's caboose pickup through its range-triggered start animation: the
+    /// passenger's library-root rig appears on the train, its 100 m pickup timing opens the late
+    /// approach cone, and flying that cone starts the pickup cutscene and clears its objective.</summary>
+    internal static void TrainPickupGate(TestContext ctx) =>
+        DriveMission(ctx, TrainPickupSeq, "test-train-pickup-gate", DriveTrainPickup);
 
     // The world build every landings suite needs: the story mission at this sequence position, its
     // objective script, an in-memory campaign profile, and the cutscene roots the definitions pose.
@@ -134,7 +141,8 @@ internal static class LandingApproachSuites
         CampaignDirector director,
         IReadOnlyList<LandingApproach> armed,
         Action<LandingApproachRuntime, CutsceneController, FlightController, ObjectiveGraph> body,
-        Action<ProjectilePool>? beforeBind = null)
+        Action<ProjectilePool>? beforeBind = null,
+        IReadOnlyList<PickupSpec>? pickups = null)
     {
         var cutscene = new CutsceneController();
         ctx.Host.AddChild(cutscene);
@@ -152,11 +160,22 @@ internal static class LandingApproachSuites
         {
             rig = BuildRig(ctx, world, pool);
             var craft = rig;
+            cutscene.BindRigs(new[]
+            {
+                new PlayerRig
+                {
+                    Index = 0,
+                    Camera = ctx.Camera,
+                    HudParent = ctx.Host,
+                    Controller = craft,
+                },
+            }, () => Array.Empty<FlightController>());
+            cutscene.WorldHeld = director.HoldForCutscene;
             // The mission's own actors, before the bind: a row whose approach node arrives with a
             // roster spawn is only there to bind once that spawn has happened, which is the whole
             // ordering the session repeats when it re-binds after its roster build.
             beforeBind?.Invoke(pool);
-            trigger.Bind(world.Runtime, armed, cutscene, () => craft);
+            trigger.Bind(world.Runtime, armed, cutscene, () => craft, pickups);
             director.Attach(new CampaignDirector.WorldInputs
             {
                 Runtime = world.Runtime,
@@ -225,6 +244,122 @@ internal static class LandingApproachSuites
                 RunTheCapture(ctx, world, trigger, cutscene, rig, carried, gate, report);
             },
             beforeBind: pool => SpawnRoster(ctx, world, director, missionZrdr, pool, report));
+    }
+
+    private static void DriveTrainPickup(TestContext ctx, TestWorld world, CampaignDirector director,
+        ObjectiveScript script, string missionZrdr, StringBuilder report)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        var rows = LandingApproaches.Resolve(
+            chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
+        var pickup = RowFor(rows, "lookat_copilotpkup")
+            ?? throw new InvalidOperationException("CM07 carries no copilot pickup approach row");
+        Node3D? caboose = null;
+        foreach (var def in world.Session.Program.ByAnimName("trigger_copilot"))
+        {
+            var anchors = world.Runtime.AnchorsOf(def);
+            if (anchors.Count > 0)
+            {
+                caboose = anchors[0];
+                break;
+            }
+        }
+        ctx.Check(caboose != null, $"CM07's trigger_copilot resolves its authored caboose anchor");
+        if (caboose == null)
+        {
+            return;
+        }
+
+        WithTrigger(ctx, world, director, rows, (trigger, cutscene, rig, graph) =>
+        {
+            ctx.Same(0, world.Runtime.FindNodes(pickup.Node).Count,
+                $"the pickup approach starts outside the world as library content");
+            int armedBefore = trigger.Armed;
+            world.Runtime.PlayerPositions = () => new[] { caboose.GlobalPosition };
+            rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null,
+                new CamParams(), caboose.GlobalPosition, caboose.GlobalPosition + Vector3.Forward,
+                0f, 0f);
+            world.Runtime.Advance(StepDt);
+            trigger.Tick();
+
+            var agents = world.Runtime.FindNodes("pickup_agent");
+            var sensors = world.Runtime.FindNodes("ladder_pickup_sensor");
+            var approaches = world.Runtime.FindNodes(pickup.Node);
+            report.AppendLine($"near caboose: agent={agents.Count} sensor={sensors.Count} " +
+                $"approach={approaches.Count} armed={armedBefore}->{trigger.Armed}");
+            ctx.Same(1, agents.Count,
+                $"trigger_copilot stages the passenger and flare rig on the caboose");
+            ctx.Same(1, sensors.Count,
+                $"the same call stages the ladder pickup sensor");
+            ctx.Same(1, approaches.Count,
+                $"and attaches the authored docking approach under that sensor");
+            ctx.Same(armedBefore + 1, trigger.Armed,
+                $"the landing trigger discovers the approach created after its initial bind");
+            if (approaches.Count == 0)
+            {
+                return;
+            }
+
+            var arm = world.Runtime.FindNodes(LandingApproaches.ArmNode, approaches[0]);
+            for (float t = 0f; t < 14f; t += StepDt)
+            {
+                world.Runtime.Advance(StepDt);
+                trigger.Tick();
+            }
+            ctx.Check(arm.Count > 0 && arm[0].Visible,
+                $"entering the 100 m pickup sensor runs pickup_timing and opens land_on");
+            ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, pickup, report),
+                $"flying CM07's staged train approach starts '{pickup.Anim}'");
+            ctx.Check(cutscene.Playing,
+                $"'{pickup.Anim}' takes ownership of the session instead of ending immediately");
+            var gated = ObjectiveForInactive(script, "pickup_objective");
+            ctx.Check(gated != null,
+                $"CM07 gates an objective on pickup_objective becoming inactive");
+            if (gated == null)
+            {
+                return;
+            }
+
+            var objectiveNodes = world.Runtime.FindNodes("pickup_objective");
+            ctx.Check(objectiveNodes.Count > 0 && !objectiveNodes[0].Visible,
+                $"the pickup calls got_the_pilot and deactivates pickup_objective");
+            var authoredCameras = world.Runtime.FindNodes(CutsceneController.CameraNode);
+            var authoredCamera = authoredCameras.Count > 0 ? authoredCameras[0] : null;
+            var cameraParent = authoredCamera?.GetParent() as Node3D;
+            float agentFacing = authoredCamera != null && agents.Count > 0
+                ? -authoredCamera.GlobalBasis.Z.Dot(
+                    authoredCamera.GlobalPosition.DirectionTo(agents[0].GlobalPosition))
+                : -1f;
+            report.AppendLine($"pickup camera=({ctx.Camera.GlobalPosition.X:0.#}," +
+                $"{ctx.Camera.GlobalPosition.Y:0.#},{ctx.Camera.GlobalPosition.Z:0.#}) " +
+                $"authored-parent={cameraParent?.Name} parent-distance=" +
+                $"{(cameraParent?.GlobalPosition.DistanceTo(ctx.Camera.GlobalPosition) ?? -1f):0.#} " +
+                $"agent-facing={agentFacing:0.##}");
+            ctx.Check(cameraParent?.Name == "caboose"
+                    && cameraParent.GlobalPosition.DistanceTo(ctx.Camera.GlobalPosition) < 100f
+                    && agentFacing > 0f,
+                $"the player view follows the pickup camera beside the caboose and faces the passenger");
+
+            float played = 0f;
+            for (float t = 0f; t < PlayBudgetS
+                    && (cutscene.Playing || !graph.CompletedOf(gated.Number)); t += StepDt)
+            {
+                world.Runtime.Advance(StepDt);
+                cutscene.Tick();
+                director.Step(StepDt);
+                if (cutscene.Playing)
+                {
+                    played += StepDt;
+                }
+            }
+
+            report.AppendLine($"pickup episode ran {played:0.##} s; " +
+                $"OBJECTIVE{gated.Number} completed={graph.CompletedOf(gated.Number)}");
+            ctx.Check(!cutscene.Playing && played > 2f,
+                $"the authored pickup camera episode runs to its handoff");
+            ctx.Check(graph.CompletedOf(gated.Number),
+                $"finishing the train pickup clears OBJECTIVE{gated.Number}");
+        }, pickups: Pickups.Load(missionZrdr));
     }
 
     // The three rows are symmetric and each belongs to a plane the mission's roster spawns. Read
@@ -960,6 +1095,23 @@ internal static class LandingApproachSuites
             if (def.AnimStates.Count > 0 && Names(closure, def.AnimStates[0].Name))
             {
                 return def;
+            }
+        }
+
+        return null;
+    }
+
+    private static ObjectiveDef? ObjectiveForInactive(ObjectiveScript script, string node)
+    {
+        foreach (var def in script.Objectives)
+        {
+            foreach (var path in def.Inactive)
+            {
+                if (path.Count > 0 && string.Equals(path[0], node,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return def;
+                }
             }
         }
 

@@ -162,6 +162,7 @@ public static class SuiteCatalog
         "campaign-objective-markers",
         "landings-approach-trigger",
         "landings-wingwalk-gate",
+        "landings-train-pickup-gate",
         "campaign-airframe-swap",
         "roster-spawn-names",
         "mission-radio",
@@ -858,6 +859,15 @@ public static class SuiteCatalog
             + "planes' aiv group being down to one, and a driven approach at an armed Balmoral "
             + "starts the capture where the same approach before the gate starts nothing",
             WingWalkCaptureGate));
+
+        into.Add(new TestHarness.Suite("landings-train-pickup-gate",
+            "CM07's caboose pickup through its real range-triggered mission path: approaching the "
+            + "train stages the passenger and flare rig, ladder sensor and docking cone from their "
+            + "library root, entering the authored 100 m pickup sensor runs the timing that opens "
+            + "land_on, the landing trigger discovers that late-created cone, and flying it starts "
+            + "the hosted pickup cutscene beside the caboose, faces the passenger, runs to handoff "
+            + "and clears the primary pickup objective",
+            TrainPickupGate));
 
         // BL-494: callback codes 965 to 967, which put the player in a different airframe mid
         // mission and reached nothing until the roster grew a swap.

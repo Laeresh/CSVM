@@ -305,6 +305,9 @@ internal sealed class PoseChannel
             _count("ObjectMotionSiScript(no script)");
             return 0;
         }
+        // A mission cutscene's SI script owns its clock even when one staged actor is absent.
+        // Keep ordinary ambient misses inert; widening this changes unrelated world timelines.
+        duration = !instant && _rt.MissionTriggerActive ? script.Duration : 0f;
         int applied = 0;
         foreach (var t in _targets(ev, def, anchor))
         {

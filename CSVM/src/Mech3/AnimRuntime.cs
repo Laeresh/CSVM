@@ -451,10 +451,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // Anim/PoseChannel.cs with the rest of the object-pose family; `_rest` stays here (above)
     // because the death flow reads it too.
 
-    // ON_STARTUP defs carrying EXECUTION_BY_RANGE wait here instead of starting at bootstrap:
+    // Ambient defs carrying EXECUTION_BY_RANGE wait here instead of starting at bootstrap:
     // each (def, anchor) starts once, the first time the player is inside its distance band.
     // Checked on a cell-crossing cadence (see TickDeferredByRange), never per frame.
     private readonly List<(AnimDefinition Def, Node3D Anchor)> _rangeDeferred = new();
+
+    // The subset deferred from the mission startanim list because their call target is library
+    // content. Ordinary ON_STARTUP range defs must retain their old call-resolution behavior.
+    private readonly HashSet<AnimDefinition> _rangeLibraryCallDefs = new();
 
     private readonly List<Vector3I> _rangeCheckCells = new();
 
@@ -479,6 +483,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // ⚠ Never widen this to the ambient world boot or RESET_STATE; those must leave a shared
     // template at its gamez origin, and the goldens are byte-identical on that.
     private int _deathCallDepth;
+
+    // Nonzero while a deferred EXECUTION_BY_RANGE definition starts. Its immediate calls may
+    // summon mission props from the gamez library; unrelated ambient bootstrap calls may not.
+    private int _rangeCallDepth;
+
+    // Nonzero while an explicit mission trigger starts. Its call closure has the same right to
+    // summon authored library roots as a range trigger, without widening ordinary Play calls.
+    private int _missionCallDepth;
 
     private EmitterDirector? _emitters;
 
@@ -597,6 +609,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     Action<EventDispatch>? ISequenceHost.OnEventDispatched => OnEventDispatched;
 
     Func<bool>? ISequenceHost.PendingWait => _pendingWait;
+
+    /// <summary>Whether a landings/mission trigger currently owns the synchronous call closure.
+    /// PoseChannel uses this to preserve an authored SI-script clock when a cross-archive actor is
+    /// absent; ambient scripts keep their established zero-duration miss.</summary>
+    internal bool MissionTriggerActive => _missionCallDepth > 0;
 
     /// <summary>How many <see cref="PlayEffectAt"/> calls took a pool slot whose previous instance
     /// was still live — the pool being smaller than the concurrency it met, so those two calls
@@ -793,8 +810,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// for what the lines mean and why they exist.</summary>
     public IReadOnlyList<string> ResolutionLines() => _resolver.ResolutionLines();
 
-    /// <summary>Starts every definition carrying this ANIMATION_NAME, exactly the way bootstrap
-    /// pass 3 starts a startanim: an anchored def starts once per anchor, an unanchored one gets
+    /// <summary>Starts every definition carrying this ANIMATION_NAME immediately: an anchored def
+    /// starts once per anchor, an unanchored one gets
     /// a single global-resolution instance (null anchor), and each instance's RESET_STATE is
     /// re-applied first. Returns the (def, anchor) pairs started — empty when the name matches no
     /// definition in this program. This is the animation debugger's <c>--play-anim</c> path; its
@@ -828,6 +845,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             }
         }
         return started;
+    }
+
+    /// <summary>Starts a mission trigger and lets its immediate <c>CALL_ANIMATION</c> closure
+    /// materialize library-root actors. Use for authored runtime gates such as
+    /// <c>landings.zrd</c>, never for ambient bootstrap or the animation debugger.</summary>
+    public List<(AnimDefinition Def, Node3D? Anchor)> PlayMissionTrigger(string animName)
+    {
+        _missionCallDepth++;
+        try
+        {
+            return Play(animName);
+        }
+        finally
+        {
+            _missionCallDepth--;
+        }
     }
 
     /// <summary><see cref="Play"/>, scoped to one world subtree: starts only the instances
@@ -1724,6 +1757,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // only near the player. An unanchored one has no position to measure from.
         int startupRun = 0;
         _rangeDeferred.Clear();
+        _rangeLibraryCallDefs.Clear();
         foreach (var def in _program.Defs.Where(d => d.OnStartup))
             foreach (var anchor in Anchors(def))
             {
@@ -1736,29 +1770,75 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 startupRun++;
             }
         _rangeCheckCells.Clear(); // force a sweep on the first Advance
-        if (_rangeDeferred.Count > 0)
-            Log.Info("anim", $"anim: {_rangeDeferred.Count} ON_STARTUP def(s) deferred by EXECUTION_BY_RANGE: {string.Join(", ", _rangeDeferred.Select(e => $"{e.Def.AnimName ?? e.Def.Name}({Mathf.Sqrt(e.Def.RangeMax):0} m)").Distinct().Take(10))}{(_rangeDeferred.Count > 10 ? ", ..." : "")}");
-
-        // Pass 3: the mission's start animations, by ANIMATION_NAME, in list order — each
-        // through Play, which is also the debugger's --play-anim/Restart path, so the lab
-        // starts a definition exactly the way the bootstrap does.
+        // Pass 3: the mission's start animations, by ANIMATION_NAME, in list order. Keep the
+        // ordinary Play path exact; only a ranged definition whose immediate call points at
+        // unplaced library content waits for proximity.
         var ran = new List<string>();
         var missing = new List<string>();
         foreach (var animName in _program.StartAnims)
         {
-            if (Play(animName).Count == 0)
+            var defs = _program.ByAnimName(animName).ToList();
+            if (defs.Count == 0)
             {
                 missing.Add(animName);
+                continue;
             }
-            else
+
+            bool needsRangeDeferral = defs.Any(def => def.ByRange
+                && CallsUnplacedDefinition(def) && Anchors(def).Count > 0);
+            if (!needsRangeDeferral)
             {
+                Play(animName);
                 ran.Add(animName);
+                continue;
             }
+
+            foreach (var def in defs)
+            {
+                var anchors = Anchors(def);
+                if (anchors.Count == 0)
+                    anchors.Add(null);
+                foreach (var anchor in anchors)
+                {
+                    if (def.ResetState != null)
+                    {
+                        _invalidated.Remove(def);
+                        ApplyInstant(def.ResetState.Events, def, anchor);
+                    }
+                    if (def.ByRange && anchor != null && CallsUnplacedDefinition(def))
+                    {
+                        _rangeDeferred.Add((def, anchor));
+                        _rangeLibraryCallDefs.Add(def);
+                    }
+                    else
+                    {
+                        Start(def, anchor);
+                    }
+                }
+            }
+            ran.Add(animName);
         }
+        _rangeCheckCells.Clear();
+        if (_rangeDeferred.Count > 0)
+            Log.Info("anim", $"anim: {_rangeDeferred.Count} ambient def(s) deferred by EXECUTION_BY_RANGE: {string.Join(", ", _rangeDeferred.Select(e => $"{e.Def.AnimName ?? e.Def.Name}({Mathf.Sqrt(e.Def.RangeMax):0} m)").Distinct().Take(10))}{(_rangeDeferred.Count > 10 ? ", ..." : "")}");
         return (startupRun, ran, missing);
     }
 
-    // Starts any deferred ON_STARTUP EXECUTION_BY_RANGE def whose anchor the player has come
+    private bool CallsUnplacedDefinition(AnimDefinition caller)
+    {
+        foreach (var seq in caller.Sequences)
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Kind != "CallAnimation" || ev.Data.Str("name") is not { } called)
+                    continue;
+                foreach (var target in _program.ByAnimName(called))
+                    if (Anchors(target).Count == 0)
+                        return true;
+            }
+        return false;
+    }
+
+    // Starts any deferred ambient EXECUTION_BY_RANGE def whose anchor the player has come
     // within range of. One-shot per (def, anchor): once started, the def runs exactly as an
     // undeferred ON_STARTUP would (its own events decide what persists).
     private void TickDeferredByRange()
@@ -1791,7 +1871,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 continue;
             _rangeDeferred.RemoveAt(i);
             Log.Info("anim", $"anim: EXECUTION_BY_RANGE reached - starting {def.AnimName ?? def.Name} at {Mathf.Sqrt(d2):0} m (range {Mathf.Sqrt(def.RangeMax):0} m)");
-            Start(def, anchor);
+            bool libraryCalls = _rangeLibraryCallDefs.Contains(def);
+            if (libraryCalls)
+                _rangeCallDepth++;
+            try
+            {
+                Start(def, anchor);
+            }
+            finally
+            {
+                if (libraryCalls)
+                    _rangeCallDepth--;
+            }
         }
     }
 
@@ -2092,8 +2183,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     foreach (var target in _program.ByAnimName(callName))
                     {
                         // ⚠ Keep the library-root test data-driven, never name-based, and gated on
-                        // a non-instant death call. Most LOCAL_CHOREOGRAPHY targets sit at an
-                        // authored position, and the ambient boot must relocate nothing.
+                        // a death or range-triggered mission call. Other ambient calls keep their
+                        // authored positions and must not relocate during bootstrap.
                         Node3D? libraryCopy = null;
                         bool relocate = false;
                         if (!instant && callAnchor != null)
@@ -2102,7 +2193,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             {
                                 relocate = true;
                             }
-                            else if (_deathCallDepth > 0 && !operandRedirect && ResolveLibraryRoot != null)
+                            else if ((_deathCallDepth > 0 || _rangeCallDepth > 0
+                                    || _missionCallDepth > 0)
+                                && !operandRedirect && ResolveLibraryRoot != null)
                             {
                                 libraryCopy = ResolveLibraryRoot(
                                     string.IsNullOrEmpty(target.Name) ? target.RootName ?? "" : target.Name,
@@ -2430,8 +2523,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         if (ev.Data.Str("child") is not { } childName || ev.Data.Str("parent") is not { } parentName)
             return false;
-        if (Resolve(childName, def, anchor) is not { } child
-            || Resolve(parentName, def, anchor) is not { } named)
+        var named = Resolve(parentName, def, anchor);
+        if (named == null)
+            return false;
+        var child = Resolve(childName, def, anchor);
+        if (child == null && adopt && ResolveLibraryRoot != null
+            && (_deathCallDepth > 0 || _rangeCallDepth > 0 || _missionCallDepth > 0))
+            child = ResolveLibraryRoot(childName, named);
+        if (child == null)
             return false;
         // A delete names the parent it detaches FROM, so a child hanging somewhere else is a
         // no-op rather than a move: the intro's own RESET_STATE names a parent it never had.

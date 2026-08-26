@@ -15,7 +15,7 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "6078a938831f24af80cfc5ae20bb564e",
+      "hash": "177c325d394f6a18d1b3979334a36429",
       "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
@@ -36,7 +36,7 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "e2f15a2d103dcb8ab06c08c513bf0aa9",
+      "hash": "69c97cee6b2652cf29921b943aba986b",
       "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog, and the harbour wake spray the boat start anims emit; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
@@ -85,7 +85,7 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "a262f6cd70b605dbf3bf0d5bbff3a9cd",
+      "hash": "7bdc9726cfc852be6a34a5c17f741547",
       "exercises": "Held pitch-and-roll flight: quaternion physical rates, chase camera, default livery, prop and surface animators, gauges, compass, weapon readout, pipper, exhaust and SpeedCue; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
@@ -99,28 +99,28 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "da86eda6b07e2c7cf4f9ba96aa1ddd80",
+      "hash": "6e8983e62bdc73e300c553870e12a5a3",
       "exercises": "player_crash_default after five flight steps: corrected pre-crash attitude, crash rig and airframe, moving distance puffers, ranged tumble, vector-form pieces, flydirt delta and pooled repeat calls.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-debris-rest",
       "frame": 360,
-      "hash": "7939b6fce72a6fbb233b16b9e23381ad",
+      "hash": "5fe44049c3564ed08db0538d6cb5fb6b",
       "exercises": "the column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer as the visible signal.",
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "1542f5665a9e8b740e4972f65bfb73ca",
+      "hash": "41e7e271cdb9f1f19abc5ab4b4cce555",
       "exercises": "Targeting a live AI in flight: its quaternion-driven pose and its crewed rear turret's barrel feed fixed antialiased in-range brackets, the label below the plane and --debug-markers identity/health text; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "96450fedd0d1fac9e7a1918c4be0af89",
+      "hash": "1070206f2377a03212b87eb3c8adfdfa",
       "exercises": "A shot-down AI three seconds after the kill: quaternion flight state under frozen commands, the auto-selected target's antialiased brackets, second fireball and trail at the handover where randomdestseq inherits the hull's world velocity.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     }

@@ -20,6 +20,9 @@
   asset data). Code + format docs only.
 - **Probes/scratch output → `./.scratch/`**, never the OS temp. Print the workspace-relative
   path. `CleanScratch.ps1` sweeps it; `playtest/` and `analysis/` are the durable homes.
+- **Launch Godot through `RunProbe.ps1` with sandbox escalation on the first attempt.** Godot's
+  `user://logs` directory is outside the workspace; a denied log write can crash Godot 4.7 with
+  `-1073741819` before the CLI command runs. Do not waste a sandboxed first launch reproducing it.
 - **Update docs in the same change as the code it describes.** New formats land with their
   `docs/formats/` page. Diagnosis narratives go in the commit body, not the docs.
 - **`AGENTS.md` / `CLAUDE.md` are not yours to simplify** — they are the pointer files other

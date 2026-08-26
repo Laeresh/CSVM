@@ -993,11 +993,12 @@ public partial class GameSession : Node3D
         // the host picks up the two nodes it drives.
         _cutscene?.BindWorld(session.Runtime);
         state.Landings = session.Landings;
+        state.Pickups = session.Pickups;
         if (_cutscene != null && _landings != null)
         {
             _cutscene.HostDefinitions(session.LandingCutsceneAnims);
             _landings.Bind(session.Runtime, session.Landings, _cutscene,
-                () => _rigs.Count > 0 ? _rigs[0].Controller : null);
+                () => _rigs.Count > 0 ? _rigs[0].Controller : null, session.Pickups);
         }
         // The screen wash. Set here rather than inside WorldSession for the same reason the
         // contact mask below is: the overlay is a session-owned surface and WorldSession builds
@@ -2190,7 +2191,7 @@ public partial class GameSession : Node3D
                 && state.WorldRuntime is { } landingWorld && state.Landings is { } landingRows)
             {
                 _landings.Bind(landingWorld, landingRows, _cutscene,
-                    () => _rigs.Count > 0 ? _rigs[0].Controller : null);
+                    () => _rigs.Count > 0 ? _rigs[0].Controller : null, state.Pickups);
             }
         }
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
@@ -3371,5 +3372,7 @@ public partial class GameSession : Node3D
         /// trigger once the roster's own approach nodes exist (<see cref="Mech3.RosterMarkers"/>).
         /// </summary>
         public IReadOnlyList<LandingApproach>? Landings;
+
+        public IReadOnlyList<PickupSpec>? Pickups;
     }
 }

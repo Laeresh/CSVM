@@ -280,6 +280,12 @@ registration is why a mid-mission cutscene's `CALLBACK`s are live. 32 distinct a
 appear across the eight files, all of them approach cones, hookups and landings; **no intro
 definition is named in any `landings.zrd`**.
 
+The started definition's call closure can carry actors that are parentless gamez library roots.
+C1/M02's `lookat_copilotpkup` calls `got_the_pilot`, whose `pickup_objective` root becomes inactive
+and satisfies OBJECTIVE3, and `cabpkup_player`, whose player and camera choreography runs beside the
+caboose. Resolving the row itself without materializing those callees starts presentation but leaves
+the camera at an unrelated world pose and the primary objective uncleared.
+
 #### The condition object is an authored triangle
 
 The loader `FUN_0045d8f0` reads the file and hands each record to the parser `FUN_0045da80`, which
@@ -348,6 +354,13 @@ from mission load. `OBJECTIVE21`'s `WAKE_ANIM [enable_dropoff]` sets them `ACTIV
 `OBJECTIVE22`'s `WAKE_ANIM [disable_dropoff]` closes them again once the drop has played. The
 klondike hookup is armed the same way, by `OBJECTIVE14`'s `WAKE_ANIM [pzhomebase]`. **The approach
 table is the mechanism; the objective script decides when each row is live.**
+
+CM07 adds a pickup gate in front of that arming step. `C1/M02/zrdr/pickups.zrd` is the compact
+table `[[["ladder_pickup_sensor", 100.0]]]`: sensor node plus radius in metres. Once
+`trigger_copilot` has staged that sensor on the caboose, entering its active 100 m sphere starts
+the mission's `pickup_timing` definition. Its authored sequence opens
+`agent_approach_cone/land_on` 13.46 seconds later, synchronised with the ladder pickup window;
+the ordinary `landings.zrd` test then owns the final approach and cutscene start.
 
 #### Limits and readings
 
@@ -595,7 +608,7 @@ beat deactivating it; the smooth phase between them is
 - Geometry, material and node flags read from `extracted/<Cx>/gamez/{nodes,models,materials}.json`
   for all eight chapters; the `letterbox` subtree is identical in each.
 - Reader values read from `extracted/zrdr/{letterbox,generic_intro}.zrd.json`,
-  `extracted/<Cx>/zrdr/landings.zrd.json` and `extracted/C1/M04/zrdr/{intro,scenes,mis_anim,
+  `extracted/<Cx>/zrdr/landings.zrd.json`, `extracted/C1/M02/zrdr/pickups.zrd.json` and `extracted/C1/M04/zrdr/{intro,scenes,mis_anim,
   startanims}.zrd.json`. Counts are over every `*.zrd.json` in the extraction.
 - Exe claims name the function they came from. The registration census is complete: `FUN_004ee160`
   is the only writer of the host pointer at `anim+0x74` on an animation instance, and its 13 call

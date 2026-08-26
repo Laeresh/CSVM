@@ -52,6 +52,10 @@ public sealed class WorldSession
     public IReadOnlyList<LandingApproach> Landings { get; private set; } =
         Array.Empty<LandingApproach>();
 
+    /// <summary>The mission's pickup proximity sensors, empty outside the four missions that
+    /// carry <c>pickups.zrd</c>.</summary>
+    public IReadOnlyList<PickupSpec> Pickups { get; private set; } = Array.Empty<PickupSpec>();
+
     /// <summary>Every definition those triggers can reach, their own plus the
     /// <c>CALL_ANIMATION</c> closure: what a cutscene host has to answer for, asked by definition
     /// rather than by callback code.</summary>
@@ -206,6 +210,7 @@ public sealed class WorldSession
         {
             s.Landings = LandingApproaches.Resolve(
                 chapterZrdrPath, gamez, name => animProgram.ByAnimName(name).Count > 0);
+            s.Pickups = CSVM.Mech3.Pickups.Load(o.MissionZrdrPath);
             s.LandingCutsceneAnims = CutsceneAnimsOf(animProgram, s.Landings);
         }
         // Puffer factory retirement: see Options.TexturesOutliveBuild.
