@@ -394,7 +394,7 @@ and is landed: `WithAiSpawnJitter` was reaching the wingman, which the original'
 the island, the mode machine enters `avoid crash`, whose climb-out runs ahead of the escort in
 `AiPilot.Next`'s fork, and the wingman ends 128 m above and 302 m behind before recovering. That is
 left for the sortie and for its own item rather than re-tuned here, because the fork order is
-decoded while the climb-out's geometry is a named invention. <pending orchestrator run>
+decoded while the climb-out's geometry is a named invention. Full `RunTests.ps1` battery on the merged plan tree at `fbe97195`: units 2406/2406, engine suites 135/135 with errors clean, goldens 16/16 hash-identical.
 
 ## A6 ☑ Crashing the player's aircraft does not end a campaign mission
 
