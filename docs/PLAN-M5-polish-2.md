@@ -116,7 +116,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the record, then the flown mission
 
-$13. ☑ A campaign spawn's talker and constitution ratings never reach `AiVoiceRuntime` (`BL-497`)
+1. ☑ Retire the record's three stale pointers (`BL-506`, both M5 plan banners, "Current status")
+2. ☑ An AI pilot sees an enemy aircraft's own turret as a target beside the aircraft (`BL-507`)
+3. ☑ A campaign spawn's talker and constitution ratings never reach `AiVoiceRuntime` (`BL-497`)
 4. ❌ CM02's second Peacemaker squad is awake from the start and attacks the Pandora (`BL-499`)
 5. ☑ The campaign wingman ends up high and far behind (`BL-457`)
 6. ☑ Crashing the player's aircraft does not end a campaign mission (`BL-491`, deferral reopened first)
@@ -161,7 +163,7 @@ and closes `BL-458`.
 
 # Wave A — the record, then the flown mission
 
-## A1 ☐ Retire the record's three stale pointers
+## A1 ☑ Retire the record's three stale pointers
 
 **Goal.** The record says what is true: `backlog.md` carries no closed item, a completed plan does
 not call itself active, and "Current status" names this plan.
@@ -198,7 +200,7 @@ the outcome, per the docs-state-what-is rule.
 
 **Verified.** <pending orchestrator run>
 
-## A2 ☐ An AI pilot sees an enemy aircraft's own turret as a target beside the aircraft
+## A2 ☑ An AI pilot sees an enemy aircraft's own turret as a target beside the aircraft
 
 **Goal.** An enemy aircraft carrying a defensive turret presents one target to an AI pilot, not two;
 a world emplacement still presents one.
