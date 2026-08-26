@@ -422,6 +422,8 @@ docs/formats/gamez.md) and classifies each texture's alpha channel via LastHadAl
 LastAlphaIsSoft ("soft" = the ink is mostly partial alpha: opaque/ink < 0.45, measured install-wide
 in `analysis/alpha-classification/`; drives blend-vs-scissor — scissor both erases sub-0.5 ink AND
 solidifies partial alpha above it, so only essentially-binary ink scissors faithfully).
+`SoftAlphaCoastline` names the five waterline sheets the ratio misreads, because their solid
+dry-land half outvotes the feathered ramp that is the point of the texture.
 `Build` is the one construction path — decode, classify, drop-in, mip chain — and `Find` caches
 its result; `BuildMipped` hands the same Image to `--dump-mips` un-cached.
 

@@ -47,6 +47,16 @@ plane `*_noselogo` decals (0.348 — soft-edged paint), zeppelin window skins
 et al. would flip wrongly; 0.40 misses `fadedsign02/03` and `shipwreck7`. The old
 max < 140 rule is subsumed (max < 140 ⇒ opaque = 0 ⇒ ratio 0).
 
+**Finding 3 — the coastline sheets need a name, not a threshold.** `beach1` (binary 0.685),
+`shore1` (0.539), `shore1_end` (0.608), `shore2` (0.542) and `shore_trans` (0.555) are the
+waterline art: a feathered ramp from land to water, 33–40% partial texels. The ratio is a
+whole-sheet vote and each sheet's dry-land half is solid, so it reads them as cutouts and the
+waterline scissors to a 1-bit sawtooth. No threshold fixes this — 0.6 catches three of the five
+and drags in unrelated art, and the inland transition sheets that share their role
+(`cliff01_trans1` 0.814, `terpat01_trans1` 0.928, and the rest of those two families) really are
+binary. They are named in `TextureArchive.SoftAlphaCoastline` instead, which also keeps them out
+of the scissor-coverage mip boost that would re-harden the ramp at distance.
+
 **Landed** in `TextureArchive.AlphaIsSoft` (same census date). Re-run
 `python alpha_census.py` after any classifier change; it prints the flip lists at the
 landed 0.45 binary-ness threshold, and `alpha_census.json` carries the raw stats
