@@ -125,7 +125,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the intro and the swap
 
-7. ☐ A bootstrap `AT_NODE` pose lands at the world origin (`BL-484`)
+7. ☑ A bootstrap `AT_NODE` pose lands at the world origin (`BL-484`)
 8. ☐ The intro cutscene stages no aircraft (`BL-482`)
 9. ☐ An airframe swap leaves the captured aircraft flying, and never hands the outgoing one over (`BL-503`)
 
@@ -407,7 +407,7 @@ it as decoded.
 
 # Wave B — the intro and the swap
 
-## B7 ☐ A bootstrap `AT_NODE` pose lands at the world origin
+## B7 ☑ A bootstrap `AT_NODE` pose lands at the world origin
 
 **Goal.** A pose run during the animation bootstrap lands where the same pose lands a frame later,
 and the per-world error rate goes to zero.
@@ -436,6 +436,8 @@ change here moves cutscene framing and must be judged against `cutscene-letterbo
 `--campaign=` shot rather than against the error count alone. ⚠ Do not raise the allowlist cap again
 instead of fixing this: the cap is the rate times the number of suites, so a third such suite is
 meant to trip it.
+
+**Verified.** <pending orchestrator run>
 
 ## B8 ☐ The intro cutscene stages no aircraft
 

@@ -380,18 +380,32 @@ internal sealed class PoseChannel
     // The AT_NODE form of the two pose events: the target takes another node's world frame, plus
     // an authored offset in that frame. Written globally because the host is a root of its own and
     // the target need not share its parent: the letterbox bars and camera1 are both world roots.
+    // ⚠ Read the host's frame through AnimRuntime.WorldTransform, not GlobalTransform: during the
+    // bootstrap the world root is not yet parented and Godot's !is_inside_tree() guard answers a
+    // bare global read or write with identity. A detached target gets its LOCAL transform instead.
     internal int PoseAtNode(Node3D target, Node3D host, Vector3 offset, bool rotate)
     {
         var rest = _rt.RestOf(target);
-        var frame = host.GlobalTransform.Orthonormalized();
-        if (rotate)
+        var frame = AnimRuntime.WorldTransform(host, out _).Orthonormalized();
+        var current = AnimRuntime.WorldTransform(target, out bool detached);
+        var desired = rotate
+            ? new Transform3D((frame.Basis * Basis.FromEuler(offset, EulerOrder.Yxz)).Scaled(rest.Basis.Scale), current.Origin)
+            : new Transform3D(current.Basis, frame.Origin + (frame.Basis * offset));
+
+        if (detached)
         {
-            target.GlobalBasis = (frame.Basis * Basis.FromEuler(offset, EulerOrder.Yxz))
-                .Scaled(rest.Basis.Scale);
+            var parentWorld = target.GetParent() is Node3D parent
+                ? AnimRuntime.WorldTransform(parent, out _)
+                : Transform3D.Identity;
+            target.Transform = parentWorld.AffineInverse() * desired;
+        }
+        else if (rotate)
+        {
+            target.GlobalBasis = desired.Basis;
         }
         else
         {
-            target.GlobalPosition = frame.Origin + (frame.Basis * offset);
+            target.GlobalPosition = desired.Origin;
         }
 
         return 1;

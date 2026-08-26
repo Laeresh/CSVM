@@ -1034,7 +1034,10 @@ this family's state is per-instance the way emitters, lights and sounds are.
 The `AT_NODE` form of the translate and rotate poses (`PoseAtNode`) takes another node's world
 frame with `state` as an offset inside it, rather than an absolute pose; the host is resolved by
 name over the whole index because it is a root of its own, not something the event's anchor
-contains. Spellings and census: docs/formats/anim-definitions/cutscenes.md.
+contains. It reads the host's frame through `AnimRuntime.WorldTransform`, so a bootstrap-time pose
+(the world root not yet parented) still composes correctly instead of reading Godot's identity
+fallback, and writes the target's LOCAL transform when the target itself is out of tree. Spellings
+and census: docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/Anim/NameResolver.cs
 Name→node resolution as one public module, generic over the node type (`NameResolver<TNode>`): the
