@@ -129,7 +129,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 7. ☐ A stopped sequence stays callable; instrument before implementing (`BL-334`)
 8. ☐ Tighter aircraft collision shapes, convex hulls per clipped region (`BL-300`)
 9. ☑ Fuel burn and the empty-tank lever freeze (`BL-450`)
-10. ☐ The mission spawner does not read roster blocks (`BL-453`)
+10. ☑ The mission spawner does not read roster blocks (`BL-453`)
 11. ☐ The flown session: the hitch sortie and the two density judgements
 
 ## Dependency and parallelism notes
@@ -546,9 +546,12 @@ census is part of the item, not a follow-up.
 **Model recommendation.** medium. Mechanical threading along a path that already exists for the
 campaign; the judgement is the census of what else is dropped.
 
-**Verify.** <TODO: name the arm. The sweep did not settle whether an existing AI suite can assert a
-mission-spawned AI's `Nitro.Installed` off a roster that authors slot 34; `CampaignRosterSuites`
-covers the campaign producer, not this one.> The census result belongs in the landing commit's
+**Verify.** The `generator-roster-params` suite, a new arm: no existing suite could carry this,
+because `CampaignRosterSuites` covers the campaign producer and nothing anywhere asserted
+`Nitro.Installed` at all. It resolves C5/M04's generator parameter with no campaign profile in the
+run, spawns the block through the light `FlightRoster` harness the `flight-roster-transaction`
+suite uses, and asserts the injector, the block's own node name and the volume floor against a
+parameterless spawn that installs nothing. The census result belongs in the landing commit's
 message whether or not it finds anything.
 
 **⚠ Traps.** ⚠ Do not fold `BL-469` (an escort cannot hold station on a leader using nitro) into this.
@@ -556,6 +559,21 @@ That is a different item, it is not in this plan, and `PLAN-M5-polish-2`'s A5 ex
 folding it into the wingman work; giving the mission path a live nitro producer makes the two easier
 to conflate, not harder. ⚠ Three shipped rosters author the slot, so this changes AI behaviour in
 those missions; take the behaviour baseline before landing it.
+
+**Verified.** <pending orchestrator run>
+
+**Landed.** The dropped read was the campaign gate on the generator-template map: the parameter
+blocks an enemy generator's `vehicle.params` names were only loaded when a campaign profile was
+flying, so every other run took the `--generators=` airframe fallback and carried no roster field
+at all. `CampaignRosterPlan.GeneratorTemplates` now builds that map from mission data alone and
+`GameSession.SpawnFromGenerator` uses it on any generator session, spawning the matched block
+through `SpawnFor`, applying the rest of its slots through the new shared `ApplyPlan` (which the
+campaign placement now calls too, so the two paths cannot drift) and registering the block's
+accent. Of the three shipped blocks authoring slot 34, two are enabled campaign blocks the
+campaign roster already served; the third, C5/M04's `stihellhound_5_7`, is the `dantezep`
+generator's `Miles` template and is the case this changes. The `generator-roster-params` suite is
+the arm, and the shipped `--ai=` and Instant Action spawn sites stay unthreaded because no roster
+block names them.
 
 ## C11 ☐ The flown session: the hitch sortie and the two density judgements
 

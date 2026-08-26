@@ -4945,8 +4945,15 @@ its stats; a def that is no `kind_of` variant of its airframe flies the plain ba
 block's own def still deciding the mode. `ResolveLeader` is the second-pass lookup (`player` = the
 first human). An `enabled 0` block is excluded from the initial roster and
 `BuildGeneratorTemplate` resolves it separately when an enemy generator's `vehicle.params` names
-its positional header label. Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`; the placement half
-is the `campaign-roster` suite.
+its positional header label; `GeneratorTemplates` is the whole mission's map of those, keyed by
+that label, and `GameSession` builds it on any run with the generators on rather than only a
+campaign one, since the parameter blocks are mission data and a launch that misses its block flies
+a CLI airframe carrying none of the authored fields. `ApplyPlan` is the after-the-spawn half of a
+plan (volumes under the floor, signature maneuvers, the gunner's rating biases and its assignment),
+shared by the campaign placement and the generator launch so the two cannot drift; ⚠ it leaves an
+escorting block's `primary_target` alone, because there it names a leader and not a target.
+Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`; the placement half
+is the `campaign-roster` suite, the generator half the `generator-roster-params` suite.
 
 ## src/Session/ScriptedPathVehicles.cs
 One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored
@@ -5023,7 +5030,11 @@ Pinned by the `zeppelin-launch` suite. For campaign missions, `RequireWakeupCred
 starts cycles named by a script's `WAKEUP_GENERATOR` empty, and
 `GrantWaveCapacity(hostNode, n)` is its top-up; the spawn
 callback receives the whole `EnemyGeneratorDef`, allowing `vehicle.params` to select its AIV
-template while position is still read from the live host.
+template while position is still read from the live host. That selection is the mission spawner's
+roster read and runs on any generator session: `GameSession.SpawnFromGenerator` spawns the matched
+template through `CampaignRosterPlan.SpawnFor`, applies the rest of its slots with `ApplyPlan` and
+registers the block's accent, and falls back to the `--generators=` airframe only when no parameter
+resolves. C5/M04's `dantezep` is the one shipped case whose block authors the nitro slot.
 `UseInstantActionLaunches(hostNode, release)` plus the same credit are F12's arm: the
 objective zeppelin's generator goes onto the wave-credit budget and its launches RELEASE an
 already-built (inert) wave member through the caller's hook instead of spawning a fresh aircraft —

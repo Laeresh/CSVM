@@ -762,10 +762,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (2000 m, `6561.6796875` ft, writer `FUN_00463640`). If the original's ceiling is the thin band's
   own lift loss rather than a separate cap, the exception becomes a decoded mechanism and the cap
   constant goes. Lead recorded in the plan's A1 section; `AtmosphereBandTests` has the band.
-- `BL-453` `[Feature]` **The mission spawner does not read roster blocks.** `AiSpawn.Nitro` reads
-  roster slot 34 (`0x475c9a`, three shipped rosters author it) but the mission spawner never
-  fills it, so an AI nitro injector has no live producer (ledger row, unsupported). Read the roster
-  block at spawn; check which other roster slots the spawner drops on the same path.
 - `BL-454` `[Owed-playtest]` **Nitro dial sweep against the original.** `NitroGaugeNeedleTests`
   pins the needle law, but nobody has put the moving dial beside a screenshot of the original's.
   One screenshot of each at full, half and empty tank.

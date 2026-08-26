@@ -25,6 +25,7 @@ using static CSVM.Testing.CampaignZeppelinWakeSuites;
 using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
+using static CSVM.Testing.GeneratorRosterSuites;
 using static CSVM.Testing.InstantActionSuites;
 using static CSVM.Testing.LandingApproachSuites;
 using static CSVM.Testing.MenuCaptureSuites;
@@ -156,6 +157,7 @@ public static class SuiteCatalog
         "fog-state",
         "campaign-submarine",
         "campaign-roster",
+        "generator-roster-params",
         "campaign-bomber-formation",
         "campaign-loop",
         "campaign-zeppelins",
@@ -793,6 +795,14 @@ public static class SuiteCatalog
             + "floor, and over a two-minute flown run wingman_1 holds the scripted player inside "
             + "the wingman-station leash",
             CampaignRoster));
+        into.Add(new TestHarness.Suite("generator-roster-params",
+            "the mission spawner's roster read (BL-453) over C5/M04: the dantezep generator's "
+            + "vehicle.params label 'Miles' resolves to the disabled block stihellhound_5_7 with "
+            + "no campaign profile in the run, the aircraft it launches carries that block's "
+            + "nitro slot and its own authored name, its volumes reach the machine under the "
+            + "min_ai_active_dist floor, and the CLI-airframe fallback a parameterless generator "
+            + "takes installs no injector",
+            GeneratorRosterParams));
         into.Add(new TestHarness.Suite("campaign-bomber-formation",
             "CM02's three netted bombers (BL-498) spawned from C3/M05's own aiv roster into its "
             + "built world: all three carry net 19, they leave their shared seat node the same way "
