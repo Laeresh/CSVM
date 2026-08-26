@@ -113,12 +113,18 @@ public sealed class CampaignRosterPlan
         string? wingmanNode = null,
         LoadoutChoice? wingmanFit = null,
         string wingmanName = CampaignDirector.WingmanName,
-        Func<int, int>? netDraw = null)
+        Func<int, int>? netDraw = null,
+        bool includeDisabled = false)
     {
         var spawns = new List<RosterSpawnPlan>();
         var skipped = new List<(string, string)>();
         foreach (var (name, fields) in blocks)
         {
+            if (!includeDisabled && !AiSkills.RosterEnabled(fields))
+            {
+                skipped.Add((name, "enabled 0 generator template"));
+                continue;
+            }
             if (name.Equals(PlayerBlock, StringComparison.OrdinalIgnoreCase))
             {
                 skipped.Add((name, "the human player's own block"));
@@ -210,6 +216,17 @@ public sealed class CampaignRosterPlan
             });
         }
         return new CampaignRosterPlan { Spawns = spawns, Skipped = skipped };
+    }
+
+    /// <summary>Plans one authored-disabled generator parameter block. Enabled roster members are
+    /// rejected here because they belong to the initial mission roster instead.</summary>
+    public static RosterSpawnPlan? BuildGeneratorTemplate(string name, List<object?> fields,
+        VehicleDefs defs, IReadOnlyList<AiNet> nets)
+    {
+        if (AiSkills.RosterEnabled(fields))
+            return null;
+        var plan = Build(new[] { (name, fields) }, defs, nets, includeDisabled: true);
+        return plan.Spawns.Count == 1 ? plan.Spawns[0] : null;
     }
 
     /// <summary>Writes a plan's volumes onto a spawned pilot's range gates: each authored

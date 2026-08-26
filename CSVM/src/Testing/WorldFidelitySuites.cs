@@ -61,6 +61,61 @@ internal static class WorldFidelitySuites
         (-15360f, -7168f, -8192f, -14336f),
     };
 
+    internal static void CampaignSubmarine(TestContext ctx)
+    {
+        ctx.WithWorld("C3", collision: false, mission: "M03", world =>
+        {
+            var submarines = world.Runtime.FindNodes("barracuda");
+            ctx.Same(1, submarines.Count,
+                $"C3/M03 keeps the authored-inactive submarine available to mission choreography");
+            if (submarines.Count == 0)
+                return;
+
+            var submarine = submarines[0];
+            ctx.Check(!submarine.Visible,
+                $"the submarine begins hidden until the patrol phase completes");
+            var started = world.Runtime.Play("sub_movement");
+            ctx.Check(started.Count == 1 && submarine.Visible,
+                $"sub_movement resolves its anchor and activates the submarine started={started.Count}");
+
+            string mission = SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03");
+            var defs = EnemyGenerators.Load(mission);
+            var parameters = AiSkills.LoadGeneratorRoster(mission);
+            var template = parameters.Count == 1
+                ? CampaignRosterPlan.BuildGeneratorTemplate(parameters[0].Name, parameters[0].Fields,
+                    VehicleDefs.Load(ctx.ZrdrPath),
+                    AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C3")))
+                : null;
+            ctx.Check(parameters.Count == 1 && parameters[0].Parameter == "BarracudaPlanes"
+                && template?.PlaneNode == "player_peacemaker",
+                $"BarracudaPlanes resolves the disabled britpeace_5 Peacemaker template");
+
+            EnemyGeneratorDef? launchedDef = null;
+            Vector3 launchedAt = default;
+            var generators = new AiGeneratorRuntime(defs,
+                (name, scope) => world.Runtime.FindNodes(name, scope) is { Count: > 0 } hits
+                    ? hits[0] : null,
+                AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C3")), ctx.PlaneName,
+                (EnemyGeneratorDef def, Vector3 pos, Vector3 look, AiPilot pilot) =>
+                {
+                    launchedDef = def;
+                    launchedAt = pos;
+                    return null;
+                });
+            ctx.Same(0, generators.RequireWakeupCredits("cargozep1"),
+                $"an unrelated mission host does not gate the submarine generator");
+            ctx.Same(1, generators.RequireWakeupCredits("barracuda"),
+                $"the campaign generator waits for WAKEUP_GENERATOR credit");
+            generators.SimStep(10f);
+            ctx.Check(launchedDef == null, $"the submarine launches nothing before the patrol phase");
+            generators.GrantWaveCapacity("barracuda", 4);
+            generators.SimStep(0.01f);
+            ctx.Check(launchedDef?.VehicleParams == "BarracudaPlanes"
+                && launchedAt.DistanceTo(submarine.GlobalPosition) < 0.01f,
+                $"the credited launch identifies its template and uses the live submarine pose");
+        });
+    }
+
     internal static void PartitionAreas(TestContext ctx)
     {
         ctx.WithWorld(AreaChapter, collision: false, AreaMission, world =>

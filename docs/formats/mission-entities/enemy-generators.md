@@ -128,16 +128,19 @@ generator with the member count of each newly-current wave. The generator uses t
 rule in this mode: nothing launches before the first credit, and one wave's worth may launch after
 it. This accounts for `capacity 0` plus live capacity credits in this mission type.
 
-Campaign missions may use a different capacity source or path. Reading the raw `capacity` bytes
-from `egen.zbd` is still the discriminating evidence for that case.
+Campaign objective scripts supply the same kind of live top-up through `WAKEUP_GENERATOR node n`.
+C3/M03 is the direct case: the patrol phase completes before the script credits `barracuda` by 4;
+its `vehicle.params BarracudaPlanes` then selects the authored-disabled `britpeace_5` AIV block,
+so launches are Peacemakers configured from that template and appear at the submarine's live pose.
 
 ## CSVM handling
 
-CSVM applies the decoded capacity check when `capacity > 0`. At `capacity <= 0`, its general
-runtime leaves the check disabled rather than treating zero as a confirmed unlimited budget. A
-positive value initializes `capacityRemaining`, decrements per spawn, and blocks when
+CSVM applies the decoded capacity check when `capacity > 0`. Campaign generators named by a
+mission's `WAKEUP_GENERATOR` additionally start on the zero-credit budget and receive its top-ups;
+their `vehicle.params` label resolves the disabled AIV template used for each fresh spawn. A positive
+standalone value initializes `capacityRemaining`, decrements per spawn, and blocks when
 `wave_size - spawnedThisWave > capacityRemaining`.
 
-The Instant Action `zeppelin_run` path instead enables the decoded rule from zero and grants the
+The Instant Action `zeppelin_run` path also enables the decoded rule from zero and grants the
 objective generator one wave's capacity at each wave change. That is the current evidence-backed
-case for zero-capacity generators; it does not establish campaign behavior.
+release path for its already-built wave members.

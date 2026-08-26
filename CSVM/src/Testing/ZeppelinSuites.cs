@@ -275,7 +275,8 @@ internal static class ZeppelinSuites
             var resolvedHost = host;
             var resolvedBay = cargobay;
 
-            FlightController? SpawnPlane(string planeName, Vector3 pos, Vector3 look, AiPilot pilot)
+            FlightController? SpawnPlane(EnemyGeneratorDef generator, Vector3 pos, Vector3 look,
+                AiPilot pilot)
             {
                 var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
                 var c = new FlightController
