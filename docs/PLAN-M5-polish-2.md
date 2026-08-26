@@ -127,7 +127,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 7. ☑ A bootstrap `AT_NODE` pose lands at the world origin (`BL-484`)
 8. ☐ The intro cutscene stages no aircraft (`BL-482`)
-9. ☐ An airframe swap leaves the captured aircraft flying, and never hands the outgoing one over (`BL-503`)
+9. ☑ An airframe swap leaves the captured aircraft flying, and never hands the outgoing one over (`BL-503`)
 
 ### Wave C — offered but inert, and the red suite
 
@@ -527,7 +527,7 @@ has to be relied on beyond the eight measured chapters, say so.
 definition addresses") carries the decode; `BL-470` and `BL-471` were closed by the work that filed
 this.
 
-## B9 ☐ An airframe swap leaves the captured aircraft flying, and never hands the outgoing one over
+## B9 ☑ An airframe swap leaves the captured aircraft flying, and never hands the outgoing one over
 
 **Goal.** The mid-mission airframe swap hides the aircraft the capture animation belongs to, carries
 that aircraft's damage into the player's new hull, and hands the player's outgoing aeroplane to
@@ -550,17 +550,35 @@ that is the whole of what blocks the first half.
 **Model recommendation.** high. Two behaviours keyed on hardcoded exe strings with no data trigger,
 plus a damage-carry that changes difficulty if got wrong.
 
-**Verify.** <TODO: the sweep did not settle whether the existing swap suite can assert the hand-over
-headless; name the arm or the `--campaign=` capture.> The visible half is judged in C12's sortie:
-the captured Balmoral's damage should be inherited and the old aeroplane should be visible 100 m off
-the nose.
+**Verify.** The existing `campaign-airframe-swap` suite CAN assert the hand-over headless, and was
+extended rather than replaced: it already builds C3/M05's own world and drives the mission's own
+authored 967 through the real host. Two arms were added on that real data. A pure one over the
+mission's `aiv` blocks, which reads `wingman_4` as authored deactivated and flying
+`player_pfighter` on its own def and the player's `player_bhawk` under the hand-over, and asserts
+the mission gate opens for C3/M05 and not for C3/M01. And a driven one that stages the capture
+aircraft and the hand-over block, damages the capture, raises 967 with the definition's real root
+name, and reads back: the captured aircraft hidden, the player's new hull carrying its armour and
+structure fractions, and `wingman_4` revealed 100 m off the old nose at −45° on the player's own
+heading with the sums measured off the aeroplane it was given. The able-to-fail control is
+recorded: with the two new halves of `FlightRoster.RunSwap` bypassed, those seven checks fail and
+nothing else does. The visible half is judged in C12's sortie: fly CM02's wing walk to the capture
+and watch for three things at the cut back to flight. The Balmoral you inherit should read damaged
+on the HUD's DMG line rather than pristine, by roughly what the Balmoral you shot at had left. The
+Balmoral the capture animation belongs to should be gone from the sky, not still flying beside you.
+And your old Bloodhawk should be visible about 100 m ahead and to the right, in your own livery,
+flying your heading rather than turning across you.
 
 **⚠ Traps.** ⚠ Neither behaviour is asked for by anything in the data. Both are keyed on chapter and
 mission strings inside the exe, so nothing in the shipped files will tell a reader they should
 happen, and a search of the data for a trigger comes back empty. **Do not read that emptiness as the
 behaviour not existing.** ⚠ The captured aircraft's damage carries into the player's hull, so wiring
 the handover without the scaling gives the player a pristine Balmoral and makes the ending easier
-than the original's.
+than the original's. ⚠ Only 967 places `wingman_4`; 966 hands over the sums and reveals it where it
+stands. ⚠ The original writes the handed-over sums with no cap because its `wingman_4` flies the
+player's own airframe; CSVM caps them at the receiver's own maxima, because one airframe's pools
+read as a zone sum on a human rig and as the AI def's authored pair on an AI one.
+
+**Verified.** <pending orchestrator run>
 
 ---
 

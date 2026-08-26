@@ -453,11 +453,12 @@ walk.
 
 Each case does the same five things, in this order.
 
-1. **Measure the outgoing airframe.** `FUN_0047bcd0(name, &armour, &structure)` reads one hull
-   section's CURRENT pair off the vehicle's section array (at `veh+0x9c`, stride `0x58`, name at
-   `+4`, armour max/current at `+0x24`/`+0x28` and structure max/current at `+0x2c`/`+0x30`),
-   answering −1/−1 for a section the airframe has none of. The four sections are the body, the tail
-   and the two wings, and the two sums are kept for step 5. 965 skips this step.
+1. **Measure the outgoing airframe.** `FUN_0047bcd0(name, &armour, &structure)` is a `__thiscall`
+   on the player vehicle (`DAT_0071c298`) that reads one hull section's CURRENT pair off the
+   section array (at `veh+0x9c`, stride `0x58`, name at `+4`, armour max/current at `+0x24`/`+0x28`
+   and structure max/current at `+0x2c`/`+0x30`), answering −1/−1 for a section the airframe has
+   none of. The four sections are `nose`, `tail`, `leftwing` and `rightwing` (`0x00628640` in the
+   967 case), and the two sums are kept for step 5. 965 skips this step.
 2. **Rebuild the vehicle.** `FUN_0047fd50(<def>, <planes.zbd node>)` returns immediately if the
    player is already in that def. Otherwise it saves the attitude quaternion (`+0x54`), the velocity
    (`+0x81`) and two further fields, tears the old vehicle body down (`FUN_0047bab0`), builds the
@@ -483,20 +484,45 @@ Each case does the same five things, in this order.
    ending does, through the ordinary handoff. 965 additionally sets `player+0x946`, the nitrous
    injector bit.
 5. **Hand the outgoing airframe to `wingman_4`** (966 and 967 only). `DAT_0071c4f0` is resolved once
-   at mission start by `FUN_004735b0`, which looks `wingman_4` up in the live vehicle list in
-   `c3`/`m05` and `c4`/`m04` and holds 0 everywhere else. The same function gives a record named
-   `wingman_4` **the player's own aircraft type and livery** in those two missions. The case places
-   it 100 m from the player at 45° off the nose, gives it the section sums measured in step 1 and
-   reveals it (`FUN_004b0f40`). 967 also hides the aircraft the capture animation belongs to, and
-   scales the new airframe's four sections by that aircraft's own armour and structure fractions,
-   so the captured plane's damage carries onto the one the player is now flying.
+   at mission start by `FUN_004735b0`, which at `0x00475018` compares each roster name against
+   `wingman_4` (`0x00627b34`) and then the chapter/mission pair against `c3`/`m05` and `c4`/`m04`
+   (`0x00627b40`–`0x00627b4c`), holding nothing everywhere else. Only inside that arm does it give
+   the record **the player's own aircraft type and livery** (`DAT_0071daec`, with airframe id 0xb
+   substituted by 5, and the paint pair at `DAT_0071daf0`/`DAT_0071daf4`). Both cases then give it
+   the section sums measured in step 1 (`+0x2c8` armour, `+0x2d0` structure) and reveal it
+   (`FUN_004b0f40(0)`, which clears the hidden bit `+0x945` and the three cutscene flags and
+   reactivates the scene node). **Only 967 places it**: 100 m along the bearing `yaw − 45°` with its
+   own nose left on the player's `yaw`, so the two are flying alongside rather than converging.
+   967 alone also resolves the raising animation's own vehicle (`FUN_00523990(anim)` reads the root
+   node at `anim+0x48`, `FUN_004afee0` finds the vehicle whose `+0xc` is that node), hides it with
+   `FUN_004b0f40(1)`, and scales the new airframe's four sections by that vehicle's WHOLE armour
+   and structure fractions (`+0x2c8/+0x2c4` and `+0x2d0/+0x2cc`) through `FUN_0047bf70`, so the
+   captured plane's damage carries onto the one the player is now flying. It also copies the
+   captured vehicle's `+0x388` onto the player, the field `FUN_0047c210` writes at build and the
+   wave and targeting code reads as the vehicle's cohort.
 
-⚠ **CSVM implements steps 2, 3 and 4 and not steps 1 and 5.** The rig is rebuilt through the flight
-roster's own assembler on the named airframe, at the pose, heading, throttle and speed the outgoing
-aircraft held, with that airframe's stock fit at full ammunition and its own armour pools; the
-cutscene flags land on the aircraft the swap built. The `wingman_4` handover and the damage
-carry-over are per-mission exe behaviour keyed on the chapter and mission strings, and nothing in
-the data asks for them.
+**CSVM implements all five steps.** The rig is rebuilt through the flight roster's own assembler on
+the named airframe, at the pose, heading, throttle and speed the outgoing aircraft held, with that
+airframe's stock fit at full ammunition and its own armour pools; the cutscene flags land on the
+aircraft the swap built. `Session/AirframeSwap.cs`'s `AirframeHandover` carries the mission gate,
+the 100 m / −45° placement and the capture test; `FlightRoster.RunSwap` runs the whole order, and
+the definition's root node reaches it through `AnimRuntime.CallbackHost`. Three divergences, each
+deliberate:
+
+- **The airframe and livery are decided at the roster spawn, not at the swap.** The original writes
+  them at mission start and so does CSVM (`CampaignRosterPlan.Build`'s `handover` argument), which
+  is why `wingman_4` is a Devastator in `player_fortune` paint everywhere else and the player's own
+  aeroplane in these two missions.
+- **The handed-over sums are capped at the receiving aircraft's own maxima.** The original needs no
+  cap: its `wingman_4` flies the player's airframe, so the sums cannot exceed its pools. CSVM reads
+  one airframe's pools as a zone sum on a human rig and as the AI def's authored pair on an AI one
+  (`docs/org/vehicleDamage.md`), so an undamaged hand-over lands at the receiver's full pools rather
+  than at the player's larger number.
+- **`+0x388` is not copied.** CSVM's `wingman_4` is already on the player's team.
+
+⚠ Neither the hand-over nor the damage carry-over is asked for by anything in the shipped data.
+Both are keyed on the chapter and mission strings above, so a search of the data for a trigger comes
+back empty and **that emptiness is not evidence they do not exist.**
 
 ### Handoff and skip
 

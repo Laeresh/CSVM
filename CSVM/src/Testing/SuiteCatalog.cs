@@ -897,7 +897,12 @@ public static class SuiteCatalog
             + "own armour pools and damage zones rather than the airframe it replaced, the "
             + "outgoing aircraft out of the world with no registration of its own left in the "
             + "projectile pool, and the cutscene flags the code sets landing on the aircraft the "
-            + "swap built",
+            + "swap built; plus the two things 967 does past that rebuild, on the same data: the "
+            + "capture definition's own aircraft hidden with what is left of its hull carried onto "
+            + "the player's, and the outgoing aeroplane handed to wingman_4 -- authored "
+            + "deactivated, flying the player's own airframe in this mission and its own def's "
+            + "everywhere else, revealed 100 m off the old nose at -45 degrees on the player's own "
+            + "heading with the sums measured off the hull it was given",
             AirframeSwapSuites.AirframeSwap));
 
         // BL-401: the assembler named every spawn ai{n}_{plane}, which no authored pattern can

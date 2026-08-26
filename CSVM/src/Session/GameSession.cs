@@ -2181,6 +2181,7 @@ public partial class GameSession : Node3D
                 ZrdrPath = state.ZrdrPath,
                 MinAiActiveDist = MinAiActiveDist(),
                 Player = () => _rigs.Count > 0 ? _rigs[0].Controller : null,
+                PlayerAirframe = flightRoster.FlyingAirframeOf(0),
                 NetTrailers = netTrailers,
                 FindNodes = worldBindings.WorldRuntime is { } rosterWorld
                     ? name => rosterWorld.FindNodes(name)
@@ -2944,21 +2945,21 @@ public partial class GameSession : Node3D
     // original has one player vehicle and the codes name it, so a splitscreen pane cannot be given
     // an answer the data does not carry. A failed swap is reported rather than thrown: the player
     // keeps the aircraft the exception left them without, and the mission goes on.
-    private bool SwapPlayerAirframe(string planeNode)
+    private bool SwapPlayerAirframe(AirframeSwapOrder order)
     {
-        if (_flightRoster == null || _rigs.Count == 0 || _rigs[0].Controller == null)
+        if (_flightRoster == null || _rigs.Count == 0)
         {
             return false;
         }
 
         try
         {
-            _flightRoster.SwapPlayerAirframe(_rigs[0], planeNode);
-            return true;
+            return _flightRoster.RunSwap(_rigs[0], order,
+                AirframeHandover.Resolves(_spec.Chapter, _spec.Mission));
         }
         catch (Exception e)
         {
-            GD.PushWarning($"airframe swap to '{planeNode}' failed: {e.Message}");
+            GD.PushWarning($"airframe swap to '{order.Airframe.PlaneNode}' failed: {e.Message}");
             return false;
         }
     }

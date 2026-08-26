@@ -77,6 +77,11 @@ public sealed class RosterSpawnPlan
     /// <summary>The menu-chosen loadout laid over the stock table, the campaign wingman's only.</summary>
     public LoadoutChoice? Fit { get; init; }
 
+    /// <summary>The paint this block is built in, overriding whatever its own def and team would
+    /// resolve. Set only for the airframe hand-over's <c>wingman_4</c>, which wears the player's
+    /// own livery because it is about to be handed the player's own aeroplane.</summary>
+    public PaintScheme? Scheme { get; init; }
+
     /// <summary>The spawn nose, from the block's yaw in the mission-data convention.</summary>
     public Vector3 Forward => new Basis(Vector3.Up, Mathf.DegToRad(YawDeg)) * Vector3.Forward;
 }
@@ -105,7 +110,9 @@ public sealed class CampaignRosterPlan
     /// <summary>Plans the roster. <paramref name="wingmanNode"/> is the profile's wingman
     /// airframe for the block named <paramref name="wingmanName"/>, or null to fly the block's
     /// own def; <paramref name="netDraw"/> is the <c>rand() % count</c> draw a multi-entry
-    /// <c>netids</c> takes, given the count.</summary>
+    /// <c>netids</c> takes, given the count. <paramref name="handover"/> is the player's own
+    /// airframe and paint, which <see cref="AirframeHandover.WingmanName"/> flies in the two
+    /// missions that resolve it; null everywhere else.</summary>
     public static CampaignRosterPlan Build(
         IReadOnlyList<(string Name, List<object?> Fields)> blocks,
         VehicleDefs defs,
@@ -114,7 +121,8 @@ public sealed class CampaignRosterPlan
         LoadoutChoice? wingmanFit = null,
         string wingmanName = CampaignDirector.WingmanName,
         Func<int, int>? netDraw = null,
-        bool includeDisabled = false)
+        bool includeDisabled = false,
+        FlyingAirframe? handover = null)
     {
         var spawns = new List<RosterSpawnPlan>();
         var skipped = new List<(string, string)>();
@@ -150,6 +158,15 @@ public sealed class CampaignRosterPlan
             {
                 planeNode = wingmanNode;
                 baseDef = defs.BaseDefForPlayerNode(wingmanNode);
+            }
+            // The hand-over block flies the player's own aeroplane from mission start, because the
+            // swap is about to give it that aeroplane. The original decides the same thing at the
+            // same point (docs/formats/anim-definitions/cutscenes.md, step 5).
+            else if (handover is { } handed
+                     && name.Equals(AirframeHandover.WingmanName, StringComparison.OrdinalIgnoreCase))
+            {
+                planeNode = handed.PlaneNode;
+                baseDef = defs.BaseDefForPlayerNode(handed.PlaneNode);
             }
             if (planeNode == null || baseDef == null)
             {
@@ -213,6 +230,10 @@ public sealed class CampaignRosterPlan
                 PrefEngageAlt = AiSkills.RosterPrefEngageAlt(fields),
                 Title = AiSkills.RosterTitle(fields),
                 Fit = planeNode == wingmanNode ? wingmanFit : null,
+                Scheme = handover is { } paint
+                         && name.Equals(AirframeHandover.WingmanName, StringComparison.OrdinalIgnoreCase)
+                    ? paint.Scheme
+                    : null,
             });
         }
         return new CampaignRosterPlan { Spawns = spawns, Skipped = skipped };
@@ -254,7 +275,7 @@ public sealed class CampaignRosterPlan
     /// the assembler's counter form, because <c>primary_target</c> and <c>rating_biases</c> are
     /// authored against it (BL-401).</summary>
     public static AiSpawn SpawnFor(RosterSpawnPlan plan, Vector3 pos, Vector3 lookAt, AiPilot pilot) =>
-        new(plan.PlaneNode, pos, lookAt, pilot, Scheme: null, Team: plan.Team,
+        new(plan.PlaneNode, pos, lookAt, pilot, Scheme: plan.Scheme, Team: plan.Team,
             Inert: plan.Inert, ShippedSkins: plan.Team != AimAssist.PlayerTeam,
             AiDef: plan.AiDef, Fit: plan.Fit,
             AttackRating: InstantActionRuntime.RepresentativeRating(plan.Skills),

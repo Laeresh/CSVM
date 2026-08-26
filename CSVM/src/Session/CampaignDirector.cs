@@ -211,8 +211,13 @@ public sealed class CampaignDirector
         _netTrailers = inputs.NetTrailers;
         _minAiActiveDist = inputs.MinAiActiveDist;
 
+        // wingman_4 flies the player's own aeroplane in the two missions the swap hands it over in,
+        // and its own def's everywhere else.
+        var handover = AirframeHandover.Resolves(_mission.ChapterFolder, _mission.MissionFolder)
+            ? inputs.PlayerAirframe
+            : null;
         var plan = CampaignRosterPlan.Build(blocks, defs, nets, WingmanNode, WingmanFit,
-            netDraw: count => inputs.Rng.Next(count));
+            netDraw: count => inputs.Rng.Next(count), handover: handover);
         foreach (var (name, why) in plan.Skipped)
         {
             if (!name.Equals(CampaignRosterPlan.PlayerBlock, StringComparison.OrdinalIgnoreCase))
@@ -586,6 +591,10 @@ public sealed class CampaignDirector
         /// <summary>player.json's <c>min_ai_active_dist</c>, the floor under every activation
         /// radius.</summary>
         public float MinAiActiveDist = 2000f;
+
+        /// <summary>What player 1 is flying, for the airframe hand-over's own roster block. Null
+        /// leaves that block on its own def, which is what every other mission wants.</summary>
+        public FlyingAirframe? PlayerAirframe;
 
         public Func<FlightController?> Player = () => null;
         public NetTrailerTargets? NetTrailers;

@@ -27,6 +27,13 @@ internal static class AirframeSwapSuites
     private const float PoseTolerance = 1f;
     private const float SpeedTolerance = 2f;
 
+    // The hand-over's own tolerances. The placement is arithmetic off one pose, so metres and
+    // degrees are generous; the pools are floats carried through two divisions.
+    private const float RangeTolerance = 1f;
+    private const float BearingTolerance = 1f;
+    private const float FractionTolerance = 0.02f;
+    private const float PoolTolerance = 0.5f;
+
     /// <summary>Drives the swap CM02 authors against CM02's own built world: the code comes out of
     /// the mission's compiled definitions, the rig off the session's roster, and the replacement is
     /// read for the named airframe's own stock fit, hardpoint table and armour rather than the
@@ -45,6 +52,7 @@ internal static class AirframeSwapSuites
         var report = new StringBuilder();
         report.AppendLine($"seq {Cm02Seq} -> {chapter}/{folder}");
         CheckTable(ctx, report);
+        CheckHandoverPlan(ctx, mission, report);
         ctx.CutsceneRoots = true;
         try
         {
@@ -81,13 +89,46 @@ internal static class AirframeSwapSuites
             $"and a cutscene code that is not a swap names no airframe, so the two vocabularies stay apart");
     }
 
+    // Step 5's mission gate and its placement, read off CM02's own roster rather than named here.
+    // The hand-over is keyed on chapter and mission strings inside the executable, so nothing in
+    // the shipped data asks for it and only the exe decode says these two missions are special.
+    private static void CheckHandoverPlan(TestContext ctx, CampaignMission mission,
+        StringBuilder report)
+    {
+        ctx.Check(AirframeHandover.Resolves(mission.ChapterFolder, mission.MissionFolder),
+            $"'{AirframeHandover.WingmanName}' resolves in {mission.ChapterFolder}/{mission.MissionFolder}, one of the two missions the exe names");
+        ctx.Check(!AirframeHandover.Resolves(mission.ChapterFolder, "m01"),
+            $"and in no other mission of the same chapter, so the hand-over is not a chapter-wide rule");
+
+        var blocks = AiSkills.LoadRoster(SessionPaths.MissionZrdr(ctx.DataRoot,
+            mission.ChapterFolder.ToUpperInvariant(), mission.MissionFolder.ToUpperInvariant()));
+        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var nets = Array.Empty<AiNet>();
+        var own = PlanNamed(CampaignRosterPlan.Build(blocks, defs, nets),
+            AirframeHandover.WingmanName);
+        var handed = PlanNamed(
+            CampaignRosterPlan.Build(blocks, defs, nets,
+                handover: new FlyingAirframe(StartPlane, null)),
+            AirframeHandover.WingmanName);
+        report.AppendLine($"{AirframeHandover.WingmanName}: own def flies '{own?.PlaneNode ?? "-"}', " +
+            $"handed over it flies '{handed?.PlaneNode ?? "-"}'");
+        ctx.Check(own != null && handed != null,
+            $"the mission's own roster carries a '{AirframeHandover.WingmanName}' block for the swap to hand over to");
+        ctx.Check(own!.Inert,
+            $"authored deactivated, so it is built out of the world until the swap reveals it");
+        ctx.Check(string.Equals(handed!.PlaneNode, StartPlane, StringComparison.OrdinalIgnoreCase),
+            $"and in this mission it flies the player's own '{StartPlane}', which is the aeroplane it is about to be given");
+        ctx.Check(!string.Equals(own.PlaneNode, StartPlane, StringComparison.OrdinalIgnoreCase),
+            $"rather than the '{own.Def}' def's own airframe it flies everywhere else");
+    }
+
     private static void Drive(TestContext ctx, TestWorld world, string chapter, string folder,
         StringBuilder report)
     {
         var authored = SwapCallsIn(world.Session.Program);
-        foreach (var (anim, code) in authored)
+        foreach (var (anim, code, root) in authored)
         {
-            report.AppendLine($"'{anim}' authors callback {code} -> " +
+            report.AppendLine($"'{root}-{anim}' authors callback {code} -> " +
                 $"'{AirframeSwapCodes.For(code)!.Value.PlaneNode}'");
         }
 
@@ -112,7 +153,7 @@ internal static class AirframeSwapSuites
             roster = BuildRoster(ctx, world, chapter, textures, pool, rigs);
             roster.BuildPlayers(rigs);
             var before = rig.Controller ?? throw new InvalidOperationException("no rig was built");
-            RunSwap(ctx, world, roster, rig, before, cutscene, wanted, authored[0].Anim, pool, report);
+            RunSwap(ctx, world, roster, rig, before, cutscene, wanted, authored[0], pool, report);
         }
         finally
         {
@@ -132,17 +173,16 @@ internal static class AirframeSwapSuites
     // The swap itself, driven through the host the runtime dispatches a CALLBACK to, then read on
     // both sides: what the aircraft was, what it became, and what carried across.
     private static void RunSwap(TestContext ctx, TestWorld world, FlightRoster roster, PlayerRig rig,
-        FlightController before, CutsceneController cutscene, AirframeSwapCode wanted, string anim,
-        ProjectilePool pool, StringBuilder report)
+        FlightController before, CutsceneController cutscene, AirframeSwapCode wanted,
+        (string Anim, int Code, string Root) call, ProjectilePool pool, StringBuilder report)
     {
+        string anim = call.Anim;
         cutscene.BindWorld(world.Runtime);
         cutscene.BindRigs(rigs: new[] { rig }, aiPlanes: Array.Empty<FlightController>);
         cutscene.HostDefinitions(new[] { anim });
-        cutscene.SwapAirframe = node =>
-        {
-            roster.SwapPlayerAirframe(rig, node);
-            return true;
-        };
+        // The whole swap, the way the session runs it: this mission is one of the two that resolve
+        // the hand-over name, so the seam is armed for it here too.
+        cutscene.SwapAirframe = order => roster.RunSwap(rig, order, handsOver: true);
 
         var wasPos = before.WorldPosition;
         var wasNose = before.NoseDirection;
@@ -154,10 +194,22 @@ internal static class AirframeSwapSuites
         ctx.Check(!string.Equals(wasDef, wanted.Def, StringComparison.OrdinalIgnoreCase),
             $"and it is not already '{wanted.Def}', so the swap has something to change");
 
-        ctx.Check(cutscene.Host(wanted.Code, anim),
+        var captured = StageAi(roster, call.Root, wanted.PlaneNode, wasPos + (wasNose * 300f), inert: false);
+        var wingman = StageAi(roster, AirframeHandover.WingmanName, StartPlane,
+            wasPos + new Vector3(0f, 0f, 5000f), inert: true);
+        Damage(wingman, 0.10f);
+        var (armorLeft, healthLeft) = Damage(captured, 0.25f);
+        float outgoingArmor = before.Damage!.WholeArmor;
+        float outgoingHealth = before.Damage!.WholeHealth;
+        report.AppendLine($"capture '{call.Root}': armour {armorLeft * 100f:0}% structure {healthLeft * 100f:0}% of its own maxima");
+        int registered = pool.NearMissTargets.Count;
+
+        ctx.Check(cutscene.Host(wanted.Code, anim, call.Root),
             $"the mission-script host answers callback {wanted.Code} rather than declining it");
         var after = rig.Controller ?? throw new InvalidOperationException("the swap built no aircraft");
         report.AppendLine(Describe("after", after));
+        CheckCapturedHull(ctx, captured, after, armorLeft, healthLeft, report);
+        CheckHandover(ctx, wingman, wasPos, wasNose, outgoingArmor, outgoingHealth, report);
 
         ctx.Check(!ReferenceEquals(before, after),
             $"the swap replaces the player's aircraft rather than editing the one that was flying");
@@ -173,8 +225,8 @@ internal static class AirframeSwapSuites
             $"and at the speed it was flying, so the swap is not a respawn");
         ctx.Same(before.PlayerIndex, after.PlayerIndex,
             $"the pilot keeps their shooter id, which is what a round already in the air scores to");
-        ctx.Same(1, pool.NearMissTargets.Count,
-            $"and exactly one near-miss registration survives, so nothing of the old rig is left in the pool");
+        ctx.Same(registered, pool.NearMissTargets.Count,
+            $"and the pool holds the registrations it held before, so the old rig left exactly one behind and the replacement took its place");
 
         // The cutscene flags codes 965 to 967 set are the player vehicle's own +0x91d/+0x91e pair
         // and the chrome off: the state code 11 and code 2 assert between them
@@ -183,6 +235,77 @@ internal static class AirframeSwapSuites
             $"the swap sets the cutscene flags, so the player is out of flight with the chrome down while the capture plays");
         ctx.Check(after.Held && after.Inert,
             $"and that state lands on the aircraft the swap built, not on the one it replaced");
+    }
+
+    // One roster aircraft standing in for a block this suite's world builds no roster for: the
+    // capture animation's own aircraft, and the block the outgoing aeroplane is handed to. Their
+    // names are what the swap resolves them by, and that is all it reads them for.
+    // ⚠ Staged facing BACKWARDS and damaged where the reveal is the subject: an aircraft parked
+    // on the player's own heading with full pools passes the placement and pool checks without the
+    // hand-over having run at all (INSTR-10).
+    private static FlightController StageAi(FlightRoster roster, string name, string planeNode,
+        Vector3 at, bool inert)
+    {
+        var aim = at - Vector3.Forward;
+        return roster.SpawnAi(new AiSpawn(planeNode, at, aim, AiPilot.HoldingCourse(at, aim),
+            Team: AimAssist.PlayerTeam, Inert: inert, NodeName: name));
+    }
+
+    // Shoots the stand-in down and answers what is left. Two hits, not one: armour still standing
+    // against a hit that carries no armour damage nulls the health damage outright, so structure
+    // is only reachable once the armour is spent (docs/org/vehicleDamage.md). An AI aircraft
+    // resolves no zones, so both spends land on the whole pair (BL-386).
+    private static (float Armor, float Health) Damage(FlightController plane, float health)
+    {
+        var hull = plane.Damage!;
+        hull.Apply("nose", 0f, hull.WholeArmorMax);
+        hull.Apply("nose", hull.WholeHealthMax * (1f - health), 0f);
+        return (hull.WholeArmorMax > 0f ? hull.WholeArmor / hull.WholeArmorMax : 1f,
+            hull.WholeHealthMax > 0f ? hull.WholeHealth / hull.WholeHealthMax : 1f);
+    }
+
+    // Code 967's first half: the aircraft the capture animation belongs to is out of the world, and
+    // what is left of its hull is what the player's new one is flying on.
+    private static void CheckCapturedHull(TestContext ctx, FlightController captured,
+        FlightController after, float armor, float health, StringBuilder report)
+    {
+        var hull = after.Damage!;
+        float gotArmor = hull.WholeArmorMax > 0f ? hull.WholeArmor / hull.WholeArmorMax : 1f;
+        float gotHealth = hull.WholeHealthMax > 0f ? hull.WholeHealth / hull.WholeHealthMax : 1f;
+        report.AppendLine($"inherited hull: armour {gotArmor * 100f:0}% structure {gotHealth * 100f:0}%");
+        ctx.Check(captured.Inert,
+            $"the aircraft the capture animation belongs to is hidden, not left flying beside the player");
+        ctx.Check(Mathf.Abs(gotArmor - armor) < FractionTolerance
+                  && Mathf.Abs(gotHealth - health) < FractionTolerance,
+            $"and the new hull carries that aircraft's own armour and structure fractions, so a Balmoral shot half to pieces is the one the player inherits");
+        ctx.Check(gotHealth < 1f - FractionTolerance,
+            $"which leaves the player damaged rather than handing them a pristine airframe and making the ending easier than the original's");
+    }
+
+    // Step 5: the aeroplane the player just left, in the hands of wingman_4 and visible.
+    private static void CheckHandover(TestContext ctx, FlightController wingman, Vector3 wasPos,
+        Vector3 wasNose, float armor, float health, StringBuilder report)
+    {
+        var offset = wingman.WorldPosition - wasPos;
+        var flatNose = new Vector3(wasNose.X, 0f, wasNose.Z).Normalized();
+        var flatOffset = new Vector3(offset.X, 0f, offset.Z);
+        float bearing = Mathf.RadToDeg(flatNose.SignedAngleTo(flatOffset.Normalized(), Vector3.Up));
+        report.AppendLine($"{AirframeHandover.WingmanName}: {offset.Length():0.#} m off at {bearing:0.#} deg, " +
+            $"armour {wingman.Damage?.WholeArmor ?? 0f:0.#}/{armor:0.#} structure {wingman.Damage?.WholeHealth ?? 0f:0.#}/{health:0.#}");
+        ctx.Check(!wingman.Inert && wingman.InPlay,
+            $"'{AirframeHandover.WingmanName}' is revealed by the swap rather than left built out of the world");
+        ctx.Check(Mathf.Abs(offset.Length() - AirframeHandover.RangeM) < RangeTolerance,
+            $"{AirframeHandover.RangeM:0} m from where the player was flying");
+        ctx.Check(Mathf.Abs(bearing - AirframeHandover.BearingDeg) < BearingTolerance,
+            $"at {AirframeHandover.BearingDeg:0} degrees off that aircraft's own nose");
+        ctx.Check(wingman.NoseDirection.Dot(flatNose) > 0.99f,
+            $"pointed the way the player was pointed, so the two are flying alongside rather than converging");
+        // ⚠ Against the sums CAPPED at this aircraft's own maxima: one airframe reads a zone-sum on
+        // a human rig and the AI def's own authored pair here (BL-386), so the cap does real work.
+        ctx.Check(wingman.Damage is { } hull
+                  && Mathf.Abs(hull.WholeArmor - Mathf.Min(armor, hull.WholeArmorMax)) < PoolTolerance
+                  && Mathf.Abs(hull.WholeHealth - Mathf.Min(health, hull.WholeHealthMax)) < PoolTolerance,
+            $"carrying the armour and structure sums measured off the aeroplane the player left, not a repaired hull");
     }
 
     // What the replacement is: the named airframe's own def, its own stock hardpoint table, and its
@@ -223,8 +346,8 @@ internal static class AirframeSwapSuites
             $"whose armour and health pools are '{wanted.PlaneNode}'s own, off its own stat rows");
         ctx.Same(stock.Parts.Count, damage.Parts.Count,
             $"over that airframe's own damage zones, which is the ladder the capture's aircraft has to fly on");
-        ctx.Check(Mathf.IsEqualApprox(damage.WorstFraction, 1f),
-            $"and it starts undamaged, the original rebuilding the vehicle from the record rather than carrying the old hull across");
+        ctx.Check(damage.WorstFraction < 1f,
+            $"whose zones start at what is left of the CAPTURED aircraft's hull rather than at the record's own full pools, which is the whole of the swap's difficulty");
     }
 
     private static string Describe(string when, FlightController controller) =>
@@ -238,15 +361,17 @@ internal static class AirframeSwapSuites
     // Every definition in the mission's compiled program that raises one of the swap codes, with the
     // code it raises. Read out of the shipped data rather than named here: what the mission asks for
     // is the mission's own business, and this suite only drives it.
-    private static List<(string Anim, int Code)> SwapCallsIn(AnimProgram program)
+    private static List<(string Anim, int Code, string Root)> SwapCallsIn(AnimProgram program)
     {
-        var found = new List<(string, int)>();
+        var found = new List<(string, int, string)>();
         foreach (var def in program.Defs)
         {
             if (def.AnimName is not { } anim)
             {
                 continue;
             }
+
+            string root = def.RootName is { Length: > 0 } named ? named : def.Name;
 
             foreach (var sequence in def.Sequences)
             {
@@ -260,7 +385,7 @@ internal static class AirframeSwapSuites
                     int code = (int)(ev.Data.Num("value") ?? -1f);
                     if (AirframeSwapCodes.For(code) != null)
                     {
-                        found.Add((anim, code));
+                        found.Add((anim, code, root));
                     }
                 }
             }
@@ -305,6 +430,19 @@ internal static class AirframeSwapSuites
                 MenuInputFor = _ => new MenuInput(),
                 ExitSession = () => { },
             }, new SwapFlightStarts());
+    }
+
+    private static RosterSpawnPlan? PlanNamed(CampaignRosterPlan plan, string name)
+    {
+        foreach (var spawn in plan.Spawns)
+        {
+            if (string.Equals(spawn.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return spawn;
+            }
+        }
+
+        return null;
     }
 
     private static CampaignMission? MissionOf(IReadOnlyList<CampaignMission> missions, int seq)

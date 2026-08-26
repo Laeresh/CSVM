@@ -911,7 +911,8 @@ delegate to `Pose` the same way, each adding the handler's returned op count to 
 the `_rest` pose table stays here, since the death flow (`RestoreRestPoses`/`ApplyDeathSwap`) reads
 it too, and both the family and the motion value types reach it only through `RestOf`.
 `CALLBACK` offers each code to `CallbackHost` first (the mission-script host, given the raising
-definition's animation name — `Session/CutsceneController.cs`), then raises the two vehicle-death
+definition's animation name and its root node name, `ANIMATION_ROOT_NAME` before the anchoring
+`NAME` — `Session/CutsceneController.cs`), then raises the two vehicle-death
 codes through caller-supplied seams (`WreckVelocity`, `StopDamageStages`) and counts every other
 one; decodes in `docs/org/vehicleDamage.md` and
 `docs/formats/anim-definitions/cutscenes.md`.
@@ -3290,7 +3291,10 @@ whole health ≤ 0 (reachable with zones still healthy — the overflow kill). S
 the hull pair for the HUD DMG line; SummaryHealthFraction reads the whole pool (DI voice);
 WorstFraction stays the worst PART on the combined pool (the injure_anims scale);
 WorstHealthFraction is the decoded damage-state reading (worst zone on health alone, the hull
-pair where an airframe resolves no zones) and is what the engine-audio swap gates on. The stock
+pair where an airframe resolves no zones) and is what the engine-audio swap gates on. `ScalePools`
+and `SetWholePools` are the airframe swap's two writers, the only ones outside the take-hit flow:
+one scales every zone by a fraction and recomputes the whole pair, the other writes that pair
+directly. The stock
 armor/HP doubling and the kill rule are decoded in
 docs/org/vehicleDamage.md and docs/formats/vehicle.md.
 
@@ -4930,7 +4934,10 @@ onto an `AiModeMachine` and floors activation at `min_ai_active_dist`. The profi
 airframe replaces the block's own for the named block (`wingman_1`), taking the `w<plane>` def for
 its stats; a def that is no `kind_of` variant of its airframe flies the plain base def, with the
 block's own def still deciding the mode. `ResolveLeader` is the second-pass lookup (`player` = the
-first human). An `enabled 0` block is excluded from the initial roster and
+first human). The `handover` argument is the airframe-swap counterpart of the wingman override:
+in the two missions that resolve `wingman_4`, that block flies the PLAYER's airframe and paint from
+mission start, because the swap is about to hand it that aeroplane. An `enabled 0` block is
+excluded from the initial roster and
 `BuildGeneratorTemplate` resolves it separately when an enemy generator's `vehicle.params` names
 its positional header label. Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`; the placement half
 is the `campaign-roster` suite.
@@ -4954,9 +4961,11 @@ re-asserted), 11 the player out of flight (`Held` + `Inert` + engine audio pause
 reveal the AI (only what this controller parked comes back), 666/667 the camera-parameter gate
 (tracked, not acted on — this engine applies that profile once per rig and never on a view change),
 1/10 the handoff and the in-flight systems; 965/966/967 the mid-mission airframe swap, through the
-`SwapAirframe` seam the session fills with `FlightRoster.SwapPlayerAirframe` (the three codes and
-their def/node pairs are `Session/AirframeSwap.cs`); 14 and 123 are named gaps with one log line
-each. A swap sets the cutscene flags 11 and 2 set between them, and clears nothing: the definition
+`SwapAirframe` seam the session fills with `FlightRoster.RunSwap` (the three codes, their def/node
+pairs and the hand-over decode are `Session/AirframeSwap.cs`); 14 and 123 are named gaps with one
+log line each. `Host` takes the raising definition's ROOT node name beside its anim name and passes
+it into the swap order, which is how 967 reaches the aircraft its capture animation belongs to.
+A swap sets the cutscene flags 11 and 2 set between them, and clears nothing: the definition
 ending is what gives the player flight back, now in the new airframe. The
 handoff raises the gameplay state the definition's own `RESET_STATE` asserts, because a CSVM
 `RESET_STATE` dispatch deliberately raises no callbacks and `RESET_TIME` is undecoded; it also
@@ -5126,7 +5135,11 @@ are unaffected, since they belong to the shared pool under the pilot's unchanged
 livery stream is captured and restored around the build so a swap cannot change what a later AI
 wave is painted, and a swap builds no stunt run, scoreboard or custom-plane fit: the run belongs to
 the pilot, and a bought plane's armour and pylon counts belong to the airframe they were bought
-for.
+for. `RunSwap` is the whole order a callback raises: that rebuild, then 967's capture half (the
+definition's root node resolved through `AiNamed`, hidden, and what is left of its hull scaled onto
+the new one) and the hand-over of the outgoing aeroplane to `wingman_4` where the mission resolves
+that name. Decode and the three deliberate divergences:
+`docs/formats/anim-definitions/cutscenes.md`.
 
 ## src/Session/FlightRosterInputs.cs
 The grouped construction facts accepted by `FlightRoster`: copied `FlightRosterPolicy`, immutable

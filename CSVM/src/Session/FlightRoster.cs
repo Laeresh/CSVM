@@ -258,6 +258,81 @@ public sealed class FlightRoster
         _spawned = 0;
     }
 
+    /// <summary>The airframe and paint one human rig is flying. Read before a swap replaces it: the
+    /// mission-script hand-over gives the aeroplane the player is leaving to another pilot.</summary>
+    internal FlyingAirframe? FlyingAirframeOf(int rigIndex) => _players?.Flying(rigIndex);
+
+    /// <summary>The live AI aircraft carrying <paramref name="name"/>, or null. Roster blocks name
+    /// their own spawns, so this is the same identity a definition's root node names.
+    /// </summary>
+    internal FlightController? AiNamed(string? name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return null;
+        }
+
+        foreach (var ai in _ai)
+        {
+            if (string.Equals(ai.Name.ToString(), name, StringComparison.OrdinalIgnoreCase))
+            {
+                return ai;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The whole of one mission-script airframe swap, as codes 965 to 967 raise it: the
+    /// rig rebuilt on the named airframe, the capture animation's own aircraft hidden with what is
+    /// left of its hull carried onto the new one (967), and the aeroplane the player just left
+    /// handed to <see cref="AirframeHandover.WingmanName"/> off the nose when
+    /// <paramref name="handsOver"/> says this mission resolves that name.</summary>
+    internal bool RunSwap(PlayerRig rig, AirframeSwapOrder order, bool handsOver)
+    {
+        ArgumentNullException.ThrowIfNull(rig);
+        if (rig.Controller is not { } outgoing)
+        {
+            return false;
+        }
+
+        // Measured off the hull the player is LEAVING, before the rebuild tears it down. Both are
+        // whole-vehicle currents, which is what the original's four per-section reads sum to.
+        var leaving = FlyingAirframeOf(rig.Index);
+        float armorLeft = outgoing.Damage?.WholeArmor ?? 0f;
+        float healthLeft = outgoing.Damage?.WholeHealth ?? 0f;
+        var wasAt = outgoing.WorldPosition;
+        var wasNose = outgoing.NoseDirection;
+        var captured = AirframeHandover.CarriesCapturedDamage(order.Airframe)
+            ? AiNamed(order.CaptureRoot)
+            : null;
+        SwapPlayerAirframe(rig, order.Airframe.PlaneNode);
+        CarryCapturedDamage(captured, rig.Controller?.Damage);
+        if (handsOver)
+        {
+            HandOverOutgoing(leaving, wasAt, wasNose, armorLeft, healthLeft);
+        }
+
+        return true;
+    }
+
+    // Code 967's other half: the aircraft the capture animation belongs to goes out of the world,
+    // and the fractions left of ITS hull scale the new airframe's zones, so the player inherits
+    // the Balmoral they shot at rather than a pristine one.
+    private static void CarryCapturedDamage(FlightController? captured, PlaneDamage? fresh)
+    {
+        if (captured?.Damage is not { } hull || fresh == null)
+        {
+            return;
+        }
+
+        float armor = hull.WholeArmorMax > 0f ? hull.WholeArmor / hull.WholeArmorMax : 1f;
+        float health = hull.WholeHealthMax > 0f ? hull.WholeHealth / hull.WholeHealthMax : 1f;
+        captured.Inert = true;
+        fresh.ScalePools(armor, health);
+        Log.Info("flight", $"airframe swap: '{captured.Name}' hidden, its hull (armour {armor * 100f:0}%, structure {health * 100f:0}%) carried onto the player's");
+    }
+
     // The session-wide sinks a human controller takes after assembly rather than during it. One
     // place, because an airframe swap builds a replacement that has to end up bound to exactly what
     // the initial build bound.
@@ -267,6 +342,24 @@ public sealed class FlightRoster
         controller.PauseState = _human.PauseState;
         controller.TargetSubParts = _targetSubParts;
         controller.TargetObjectives = _targetObjectives;
+    }
+
+    // Step 5: the aeroplane the player just left is given to wingman_4, placed off the nose with
+    // the sums measured off that aeroplane, and revealed. The block is authored deactivated, so
+    // until this call it is a built-inert aircraft nobody can see.
+    private void HandOverOutgoing(FlyingAirframe? leaving, Vector3 wasAt, Vector3 wasNose,
+        float armor, float health)
+    {
+        if (AiNamed(AirframeHandover.WingmanName) is not { } wingman)
+        {
+            Log.Info("flight", $"airframe swap: no '{AirframeHandover.WingmanName}' in this mission's roster, so the outgoing aeroplane is not handed over");
+            return;
+        }
+
+        var (position, lookAt) = AirframeHandover.Placement(wasAt, wasNose);
+        wingman.Activate(position, lookAt);
+        wingman.Damage?.SetWholePools(armor, health);
+        Log.Info("flight", $"airframe swap: '{wingman.Name}' takes the player's '{leaving?.PlaneNode ?? "?"}' {AirframeHandover.RangeM:0} m off the nose at {AirframeHandover.BearingDeg:0} deg, armour {armor:0.#} structure {health:0.#}");
     }
 
     private void RollBackPlayers(IReadOnlyList<PlayerRig> rigs,

@@ -591,7 +591,7 @@ public sealed class WorldSession
         /// <summary>The <c>CALLBACK</c> host installed on the world runtime before the bootstrap
         /// starts anything, since an intro definition raises its codes the instant it starts. Null
         /// leaves every code to the runtime's own two seams and its census.</summary>
-        public Func<int, string?, bool>? CallbackHost { get; init; }
+        public Func<int, string?, string?, bool>? CallbackHost { get; init; }
 
         /// <summary>Where a <c>FOG_STATE</c> event goes, installed before the bootstrap for the
         /// same reason as <see cref="CallbackHost"/>: the one shipped use is in an intro

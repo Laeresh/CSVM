@@ -165,11 +165,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public Action<Color, Color, float, Vector3, float>? ScreenFlash;
 
     /// <summary>The mission-script host a <c>CALLBACK</c> code is offered to first, with the
-    /// raising definition's animation name: the cutscene vocabulary (presentation, world hold, AI
-    /// park, handoff) belongs to the session, not to this runtime. Returning false leaves the code
-    /// to the two vehicle-death seams below and to the census, which is what every runtime with no
-    /// host wired reports. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
-    public Func<int, string?, bool>? CallbackHost;
+    /// raising definition's animation name and its ROOT node name: the cutscene vocabulary belongs
+    /// to the session, and the root name is how the airframe swap reaches the vehicle its
+    /// definition belongs to. Returning false leaves the code to the two vehicle-death seams below
+    /// and to the census, which is what every runtime with no host wired reports.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public Func<int, string?, string?, bool>? CallbackHost;
 
     /// <summary>Where a <c>FOG_STATE</c> event's inline fog goes: the session's weather rig, which
     /// owns the fog globals. Null counts the event. ⚠ Raised under a RESET_STATE as well as in a
@@ -2384,7 +2385,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         int code = (int)(ev.Data.Num("value") ?? -1f);
         // The mission-script host first: its vocabulary is the session's, and it declines every
         // code it does not own, so the two seams below keep the codes they always had.
-        if (CallbackHost != null && CallbackHost(code, def.AnimName))
+        if (CallbackHost != null && CallbackHost(code, def.AnimName, RootNodeNameOf(def)))
         {
             _opsApplied++;
             return;
@@ -2416,6 +2417,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return;
         }
     }
+
+    // The node a definition is rooted on, for the mission-script host. ANIMATION_ROOT_NAME first
+    // and the anchoring NAME behind it: CM02's capture defs author the same aircraft in both, and
+    // a def with no root at all still names the object it belongs to in its NAME.
+    private string? RootNodeNameOf(AnimDefinition def) =>
+        def.RootName is { Length: > 0 } root ? root
+        : def.Name.Length > 0 ? def.Name
+        : null;
 
     // How far from its anchor a definition's own `If PlayerRange` gate admits its wash, in metres
     // SQUARED (the compiled convention both sources normalise to), and 0 for a def that gates on

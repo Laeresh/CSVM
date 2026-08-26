@@ -47,11 +47,12 @@ public sealed partial class CutsceneController : Node
     /// director alongside its own per-step world update (code 20 stops both).</summary>
     public Action<bool>? WorldHeld;
 
-    /// <summary>Puts the player into the named <c>planes.zbd</c> airframe, codes 965 to 967. The
-    /// session fills this in with its roster's own swap; unbound, the three codes are hosted and
-    /// counted rather than reaching an aircraft, which is what a session with no rigs wants.
-    /// Returning false says no aircraft changed.</summary>
-    public Func<string, bool>? SwapAirframe;
+    /// <summary>Puts the player into the airframe codes 965 to 967 name, and carries out whatever
+    /// else the raised code asks of the mission (<see cref="AirframeHandover"/>). The session fills
+    /// this in with its roster's own swap; unbound, the three codes are hosted and counted rather
+    /// than reaching an aircraft, which is what a session with no rigs wants. Returning false says
+    /// no aircraft changed.</summary>
+    public Func<AirframeSwapOrder, bool>? SwapAirframe;
 
     // The rest of the mission-script host's codes the intro definitions author. Each is the whole
     // message: the definition it sits in never qualifies it
@@ -86,6 +87,10 @@ public sealed partial class CutsceneController : Node
     private IReadOnlyList<PlayerRig> _rigs = Array.Empty<PlayerRig>();
     private Func<IReadOnlyList<FlightController>>? _aiPlanes;
     private Node3D? _cutsceneCamera;
+    // The node the code being dispatched was raised from, which is the aircraft a capture
+    // definition belongs to. Set per dispatch, not per episode: a called definition raises its own
+    // codes off its own root.
+    private string? _codeRoot;
     // The world root `camera1` belongs under, so Restore can undo a definition's own reparent.
     private Node3D? _cameraHome;
     private Node3D? _bars;
@@ -237,8 +242,10 @@ public sealed partial class CutsceneController : Node
 
     /// <summary>The <c>CALLBACK</c> host itself: answers one authored code, returning whether this
     /// host acted on it. A code outside the cutscene vocabulary is declined, so the runtime's own
-    /// two vehicle-death codes and every unknown one keep the answer they had.</summary>
-    public bool Host(int code, string? animName)
+    /// two vehicle-death codes and every unknown one keep the answer they had.
+    /// <paramref name="rootName"/> is the raising definition's root node, which the airframe swap
+    /// resolves the capture's own aircraft by.</summary>
+    public bool Host(int code, string? animName, string? rootName = null)
     {
         if (!Hosts(animName) && !(Playing && animName == Anim))
         {
@@ -288,6 +295,7 @@ public sealed partial class CutsceneController : Node
             GD.Print($"cutscene: '{animName}' has the session");
         }
 
+        _codeRoot = rootName;
         Act(code);
         return true;
     }
@@ -490,7 +498,7 @@ public sealed partial class CutsceneController : Node
     // does, which is how the player gets flight back in the new airframe.
     private void Swap(AirframeSwapCode airframe)
     {
-        if (SwapAirframe == null || !SwapAirframe(airframe.PlaneNode))
+        if (SwapAirframe == null || !SwapAirframe(new AirframeSwapOrder(airframe, _codeRoot)))
         {
             GD.Print($"cutscene: callback {airframe.Code} names '{airframe.PlaneNode}' " +
                      "but no aircraft was there to swap");

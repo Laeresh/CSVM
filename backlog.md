@@ -1950,26 +1950,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-503` `[Feature]` **An airframe swap leaves the captured aircraft flying, and never hands the
-  outgoing one over.** *Evidence:* found by G76, which wired the swap itself and reported this
-  rather than folding it in. The original's 967 case does two more things than the swap. It hides
-  the aircraft the capture animation belongs to and scales the new airframe's four hull sections by
-  that aircraft's own armour and structure fractions, so a Balmoral shot half to pieces is the one
-  the player inherits. And it hands the aircraft the player just left to `wingman_4`: the exe
-  resolves that name only in `c3`/`m05` and `c4`/`m04`, gives a record of that name the player's own
-  aircraft type and livery, places it 100 m off the nose at 45° with the outgoing airframe's armour
-  and structure sums, and reveals it. In CM02 that is the wingman flying off in your old plane while
-  you fly the Balmoral. *Fix shape:* the anim's root vehicle has to be reachable from the callback,
-  which needs the definition's root node name plumbed through `CallbackHost`; it passes only the
-  anim name today, and that is the whole of what blocks the first half. *⚠ Traps:* neither behaviour
-  is asked for by anything in the data. Both are keyed on chapter and mission strings inside the
-  exe, so nothing in the shipped files will tell a reader they should happen, and a search of the
-  data for a trigger will come back empty. Do not read that emptiness as the behaviour not existing.
-  The captured aircraft's damage carries into the player's hull, so wiring the handover without the
-  scaling gives the player a pristine Balmoral and makes the ending easier than the original's.
-  *Cross-refs:* `PLAN-M5-polish.md` G76, which landed the swap; `BL-495`'s marker graft, which is
-  what makes the capture that raises this fire at all.
-
 - `BL-496` `[Feature]` **The aiv `ace` flag reaches the entity and nothing is known about what it
   does there.** *Evidence:* found by G75 while binding the pilot name. Slot 67 `ace` is read by the
   block reader into `CCEVeh+0xa4` and carried by the spawn path into entity `+0x988`. That field has
