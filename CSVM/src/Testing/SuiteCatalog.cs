@@ -167,6 +167,7 @@ public static class SuiteCatalog
         "landings-wingwalk-gate",
         "landings-train-pickup-gate",
         "landings-auto-land-button",
+        "landings-hangar-drop-gate",
         "campaign-airframe-swap",
         "roster-spawn-names",
         "roster-voice-ratings",
@@ -899,6 +900,14 @@ public static class SuiteCatalog
             + "it starts the same animation the manual row would, the cutscene host still runs it, "
             + "and holding the button past the handoff does not re-fire the row",
             AutoLandButton));
+        into.Add(new TestHarness.Suite("landings-hangar-drop-gate",
+            "CM07's zeppelin-hangar drop over its BUILT world, every name read from the mission's "
+            + "own data: the one cutscene definition it range-gates, the ambient definition that "
+            + "calls it, and the objective node the drop's RESET_STATE clears. The call ARMS the "
+            + "drop without running it while the player is outside the authored band, reaching the "
+            + "hangar runs it and hands it to the cutscene host, and the reset block at the handoff "
+            + "clears that node, which is what completes the fly-through objective",
+            HangarDropGate));
 
         // BL-494: callback codes 965 to 967, which put the player in a different airframe mid
         // mission and reached nothing until the roster grew a swap.

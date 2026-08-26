@@ -1,0 +1,25 @@
+[
+  [
+    "ANIMATION_DEFINITIONS",
+    [
+      "ANIMATION_LIST",
+      [
+        "ANIMATION_DEFINITION",
+        [
+          "NAME",
+          [
+            "probe_windsock"
+          ],
+          "ANIMATION_NAME",
+          [
+            "probe_ambient_loop"
+          ],
+          "ACTIVATION",
+          [
+            "ON_STARTUP"
+          ]
+        ]
+      ]
+    ]
+  ]
+]

@@ -61,9 +61,14 @@ public sealed class WorldSession
     /// carry <c>pickups.zrd</c>.</summary>
     public IReadOnlyList<PickupSpec> Pickups { get; private set; } = Array.Empty<PickupSpec>();
 
-    /// <summary>Every definition those triggers can reach, their own plus the
-    /// <c>CALL_ANIMATION</c> closure: what a cutscene host has to answer for, asked by definition
-    /// rather than by callback code.</summary>
+    /// <summary>The mission's own <c>cutscenes\</c> definitions, by <c>ANIMATION_NAME</c>
+    /// (<see cref="MissionCutscenes"/>). Empty outside the nine story missions that ship the
+    /// directory.</summary>
+    public IReadOnlyList<string> MissionCutsceneAnims { get; private set; } = Array.Empty<string>();
+
+    /// <summary>Every definition the landing triggers and <see cref="MissionCutsceneAnims"/> can
+    /// reach, their own plus the <c>CALL_ANIMATION</c> closure: what a cutscene host has to answer
+    /// for, asked by definition rather than by callback code.</summary>
     public IReadOnlyList<string> LandingCutsceneAnims { get; private set; } =
         Array.Empty<string>();
 
@@ -216,7 +221,8 @@ public sealed class WorldSession
             s.Landings = LandingApproaches.Resolve(
                 chapterZrdrPath, gamez, name => animProgram.ByAnimName(name).Count > 0);
             s.Pickups = CSVM.Mech3.Pickups.Load(o.MissionZrdrPath);
-            s.LandingCutsceneAnims = CutsceneAnimsOf(animProgram, s.Landings);
+            s.MissionCutsceneAnims = MissionCutscenes.AnimNames(o.MissionZrdrPath);
+            s.LandingCutsceneAnims = CutsceneAnimsOf(animProgram, s.Landings, s.MissionCutsceneAnims);
         }
         // Puffer factory retirement: see Options.TexturesOutliveBuild.
         var lights = new WorldLights();
@@ -263,6 +269,20 @@ public sealed class WorldSession
         s.Runtime = animRuntime;
         animRuntime.CallbackHost = o.CallbackHost;
         animRuntime.FogStateSink = o.FogStateSink;
+        // A mission cutscene the mission ALSO lists in startanims is armed at the bootstrap, where
+        // the range gate already holds it; only one armed by a runtime CALL_ANIMATION needs the
+        // gate at the call, and giving both to the same definition would let the call jump it.
+        if (s.MissionCutsceneAnims.Count > 0)
+        {
+            var armedAtStart = new HashSet<string>(animProgram.StartAnims, StringComparer.OrdinalIgnoreCase);
+            foreach (var anim in s.MissionCutsceneAnims)
+            {
+                if (!armedAtStart.Contains(anim))
+                {
+                    animRuntime.RangeGatedCalls.Add(anim);
+                }
+            }
+        }
         bool intro = BootstrapsCutscene(animProgram);
         if (o.CutsceneRoots && (intro || s.Landings.Count > 0))
         {
@@ -394,13 +414,17 @@ public sealed class WorldSession
     // animation plus what it reaches by CALL_ANIMATION, which is where the drop and hookup movies
     // actually live (the row's definition only aims the drop and calls one).
     private static List<string> CutsceneAnimsOf(
-        AnimProgram program, IReadOnlyList<LandingApproach> landings)
+        AnimProgram program, IReadOnlyList<LandingApproach> landings, IReadOnlyList<string> mission)
     {
-        var roots = new List<string>(landings.Count);
+        var roots = new List<string>(landings.Count + mission.Count);
         foreach (var approach in landings)
         {
             roots.Add(approach.Anim);
         }
+
+        // The mission's own cutscene definitions are roots too: CM07's hangar drop is armed by an
+        // ambient CALL_ANIMATION, so no landings row names it and the host would decline its codes.
+        roots.AddRange(mission);
 
         var names = new List<string>();
         foreach (var def in program.Subset(roots).Defs)
