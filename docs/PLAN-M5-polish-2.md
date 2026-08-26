@@ -117,7 +117,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the record, then the flown mission
 
 1. ☑ Retire the record's three stale pointers (`BL-506`, both M5 plan banners, "Current status")
-2. ☐ An AI pilot sees an enemy aircraft's own turret as a target beside the aircraft (`BL-507`)
+2. ☑ An AI pilot sees an enemy aircraft's own turret as a target beside the aircraft (`BL-507`)
 3. ☐ A campaign spawn's talker and constitution ratings never reach `AiVoiceRuntime` (`BL-497`)
 4. ❌ CM02's second Peacemaker squad is awake from the start and attacks the Pandora (`BL-499`)
 5. ☐ The campaign wingman ends up high and far behind (`BL-457`)
@@ -231,6 +231,8 @@ and is the shot most likely to move again.
 fix that drops all turrets from the AI pool would stop AI aircraft attacking ground emplacements.
 That is a different behaviour and not this. ⚠ `c1-targeting-hud`'s `exercises` field is rewritten on
 a re-pin, never appended to.
+
+**Verified.** <pending orchestrator run>
 
 ## A3 ☐ A campaign spawn's talker and constitution ratings never reach `AiVoiceRuntime`
 

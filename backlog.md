@@ -2219,20 +2219,6 @@ usual.
   *Cross-refs:* `PLAN-M5-polish.md` G77, whose `campaign-bomber-formation` suite is the harness to
   extend.
 
-- `BL-507` `[Bug]` **An AI pilot sees an enemy aircraft's own turret as a target beside the
-  aircraft.** *Evidence:* found by G83. `FlightController.AddRankedNonAircraft` walks the gunner
-  scan's turrets and files them into the AI's ranked pool with no discriminator on
-  `TurretController.Site`, so a carried turret is offered as a target in its own right and one
-  silhouette carries two entries. The player's own `TargetPool.Rebuild` guards exactly this, which
-  the `carried-turrets` suite pins, so the rule is known and the AI path simply does not apply it.
-  ⚠ **This predates G83**, since the player's own mounts were always in that pool, but every AI
-  aircraft now carrying mounts multiplies how often it happens. *Fix shape:* give the AI path the
-  same site discriminator the player's pool uses, so a carried turret is not a candidate while a
-  world emplacement still is. *⚠ Traps:* the two kinds share one controller and only `Site` tells
-  them apart, so a fix that drops all turrets from the AI pool would stop AI aircraft attacking
-  ground emplacements, which is a different behaviour and not this. *Cross-refs:*
-  `PLAN-M5-polish.md` G83, which surfaced it.
-
 - `BL-502` `[Feature]` **`SET_AI_NET` and `SET_AI_TEAM` reach no zeppelin.** *Evidence:* found by
   G80, which wired both clauses for roster-spawned aircraft and could not carry the same lookup to
   airships. Six clauses across four missions name one: `blackswanzep` (C1C/M01), `blackhatzep`

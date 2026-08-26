@@ -2895,6 +2895,10 @@ public partial class FlightController : Node3D
             if (c.Team == AimAssist.NeutralTeam || ownTeam == AimAssist.NeutralTeam
                 || c.Team == ownTeam)
                 continue;
+            // A carried turret's host is already ranked as a vehicle above; offering it again
+            // here would put two entries on one silhouette. Mirrors TargetPool.Offer's guard.
+            if (isTurret && !TargetPool.IsEmplacement(c.Source))
+                continue;
 
             int attackers = 0;
             foreach (var a in _gunnerScan.Vehicles)
@@ -2919,10 +2923,19 @@ public partial class FlightController : Node3D
         }
     }
 
+#pragma warning disable SA1202
+    // Internal rather than private: the carried-turret dedup suite asserts on the ranked pool's
+    // shape directly (one entry per silhouette) rather than inferring it from which one thing
+    // ranking picks, which a same-position duplicate could still pass by accident.
+    internal IReadOnlyList<object?> RankedPoolSourcesForTest(AiGunner gunner)
+    {
+        SelectRankedTarget(gunner, out _, out _);
+        return _rankSources;
+    }
+
     // Internal rather than private: PilotInputSource/KeyboardInputSource (IFlightInputSource.cs)
     // call this and its sibling above to keep each body exactly where it always lived among the
     // other sim-step helpers, rather than hoisting it for SA1202's sake.
-#pragma warning disable SA1202
     internal FlightInput ReadKeyboard(float dt)
     {
         // this player's gamepad(s) fly the plane (see PadPressed/PadAxis);

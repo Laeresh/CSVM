@@ -144,6 +144,7 @@ public static class SuiteCatalog
         "campaign-objectives",
         "campaign-mission-end",
         "targeting-candidates",
+        "ranked-pool-carried-turret-dedup",
         "partition-areas",
         "scripted-path",
         "wingman-station",
@@ -707,6 +708,11 @@ public static class SuiteCatalog
             "and the gunner fires real rounds at a zeppelin structure with no aircraft in the scan " +
             "at all",
             TargetingCandidates));
+        into.Add(new TestHarness.Suite("ranked-pool-carried-turret-dedup",
+            "the AI ranked pool's carried-turret guard (BL-507): a hostile aircraft with a crewed " +
+            "rear mount rides the pool as one Vehicle entry, never a second entry for its own " +
+            "turret, while a world emplacement in the same scene still reaches the pool",
+            RankedPoolCarriedTurretDedup));
         into.Add(new TestHarness.Suite("partition-areas",
             "the area-selected node toggle (BL-037) over C3's own three story rectangles: each " +
             "resolves through the partition grid to real world content, the half-open cell rule " +
