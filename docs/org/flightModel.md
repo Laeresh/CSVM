@@ -1906,13 +1906,25 @@ contact side) is one of these five, and only the first is a force:
 
 Nothing else in the chain reads it. The fuel test at `0x48e5ec` guards more than the burn: a player
 whose `[obj+0x134]` has reached zero jumps past the slew as well (`0x48e5f7` to `0x48e6c9`), so an
-empty tank freezes the lever where it stands rather than closing it. Neither fuel nor that freeze
-is implemented here. The lever reaches drag only through the boost flag
+empty tank freezes the lever where it stands rather than closing it. CSVM flies both, on the human
+lever path only, in `FuelTank` and `FlightController.ReadKeyboard`. The lever reaches drag only
+through the boost flag
 (`[obj+0x947]`), which does not scale the lever but **replaces** it with a flat 1.8 while setting
 the drag multiplier `[ebp−0xc]` to 0.8 (`0x48fcb6`–`0x48fcbd`, against 1.0 on the normal branch at
 `0x48fccf`). Lift (`FUN_0041abd0`), the weathervane, ground blow and the collision impulse carry no
 throttle input at all. At a fixed lever the plant is therefore the full-throttle plant with exactly
 one term scaled, which is what makes the equilibrium solvable in closed form.
+
+**Where the tank comes from.** The aircraft carries a capacity at `[obj+0x130]` beside the
+remaining fuel at `[obj+0x134]`, and the object initialiser `FUN_004aff80` zeroes both
+(`0x4b064b`, `0x4b0651`). The capacity is copied off the def record at `0x475ca6`, from `[def+0x154]`,
+the slot the vehicle-def parser fills from the `fuel` key (`0x47a7d7`, key string at `0x627f3c`, one
+slot along from `nitro` at `+0x150`). The compiled default is 0 (`0x478c57`, with `EBX` cleared at
+`0x478a1d`), and exactly one shipped def authors the key: `player_airplane`, at **54926**, which every
+`player_*` airframe inherits through `kind_of`. No AI def authors it, which costs nothing because the
+burn is player-only. The refill is at placement: `FUN_0047f1f0` (`0x47f6a7`) and `FUN_0047f740`
+(`0x47fa56`) both write `[player+0x134] = [player+0x130]`. At a fully open lever 54926 units is
+about three hours of flying, which is why nothing shipped runs a tank dry.
 
 **The level balance.** In steady level flight at zero incidence the wings carry the weight, the
 attitude scale is exactly 1 and thrust opposes drag along the path, so with the thrust curve and

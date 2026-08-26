@@ -128,7 +128,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 7. ☐ A stopped sequence stays callable; instrument before implementing (`BL-334`)
 8. ☐ Tighter aircraft collision shapes, convex hulls per clipped region (`BL-300`)
-9. ☐ Fuel burn and the empty-tank lever freeze (`BL-450`)
+9. ☑ Fuel burn and the empty-tank lever freeze (`BL-450`)
 10. ☐ The mission spawner does not read roster blocks (`BL-453`)
 11. ☐ The flown session: the hitch sortie and the two density judgements
 
@@ -483,7 +483,7 @@ both ways: the false crash is overhang, but the Bloodhawk's canard tips are curr
 "smaller everywhere" is not the fix. ⚠ Convex hulls are more expensive per contact than boxes, so this
 item can cost frame time rather than save it; measure it rather than assuming, per PERF-9.
 
-## C9 ☐ Fuel burn and the empty-tank lever freeze
+## C9 ☑ Fuel burn and the empty-tank lever freeze
 
 **Goal.** The player's tank burns with throttle, and a dry tank freezes the throttle lever where it
 stands rather than closing it.
@@ -512,6 +512,19 @@ touches thrust rather than the lever would move speed and, through it, the yaw `
 fuel, and the site reads the lever rather than the boost flag; do not "fix" that. ⚠ Nothing shipped
 runs a tank dry, so this cannot be verified by flying a mission, and the absence of a visible change
 in play is the expected result.
+
+**Verified.** `<pending orchestrator run>`
+
+**Landed.** The decode was re-read at the binary and holds: `0x48e5d4` gates on the local player,
+`0x48e5dc` on the crashed flag `[obj+0x384]`, `0x48e5e6`/`0x48e5f7` skip everything to `0x48e6c9` on
+a tank at or below zero, and `0x48e5fd`–`0x48e628` burn `dt · [obj+0x128] · 5` with a clamp at zero.
+The burn reads the live lever, so nitro costs nothing. The sweep the item asked for found the rest
+of the tank: capacity at `[obj+0x130]`, copied from the def's `fuel` key (`0x475ca6` off
+`[def+0x154]`, parsed at `0x47a7d7`), refilled at placement (`0x47f6a7`, `0x47fa56`), compiled
+default 0, and exactly one shipped def authoring it (`player_airplane` at 54926, inherited by every
+`player_*` airframe). `FuelTank` holds the arithmetic and `FlightController.ReadKeyboard` is the only
+caller, which keeps the term off the AI and scripted paths and out of the plant entirely.
+`FlightEnvelopeTests` and `FlightConstantInventoryTests` are untouched and green.
 
 ## C10 ☐ The mission spawner does not read roster blocks
 

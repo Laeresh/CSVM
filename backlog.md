@@ -755,18 +755,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `docs/org/flightModel.md` "Parity ledger", class unsupported, beyond `BL-443`: the thin
   atmosphere band above 2000 m, the `level_off_rate` auto-level torque, the AI's `medium_aishake`
   on a nitro engage, the AI's positional `snd_nitro` blip, the nitro decay lockout on a runtime
-  callback, the mouse-flying arm's `is_autogyro` roll/yaw exchange, plus `BL-448` and `BL-450`.
+  callback, the mouse-flying arm's `is_autogyro` roll/yaw exchange, plus `BL-448`.
   Each is small and independently landable; each names its address in the table.
 - `BL-448` `[Research]` **Is the 2003 m `AltitudeCapM` the dense-band edge?** The measured
   flight ceiling (an intentional exception) sits 3 m above the decoded atmosphere band boundary
   (2000 m, `6561.6796875` ft, writer `FUN_00463640`). If the original's ceiling is the thin band's
   own lift loss rather than a separate cap, the exception becomes a decoded mechanism and the cap
   constant goes. Lead recorded in the plan's A1 section; `AtmosphereBandTests` has the band.
-- `BL-450` `[Feature]` **Fuel burn and the empty-tank lever freeze.** `FUN_0048e580` burns
-  `[obj+0x134] −= dt · throttle · 5` (player-only, `0x48e603`), and a zero tank jumps past the
-  throttle slew (`0x48e5f7` to `0x48e6c9`), freezing the lever where it stands rather than closing
-  it. No fuel model exists here; the shipped missions never run a tank dry, so this matters only
-  for a long-flight mode. Nitro burns no fuel (`0x48e603` reads the lever, not the boost flag).
 - `BL-453` `[Feature]` **The mission spawner does not read roster blocks.** `AiSpawn.Nitro` reads
   roster slot 34 (`0x475c9a`, three shipped rosters author it) but the mission spawner never
   fills it, so an AI nitro injector has no live producer (ledger row, unsupported). Read the roster

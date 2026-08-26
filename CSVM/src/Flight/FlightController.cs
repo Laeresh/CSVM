@@ -269,6 +269,12 @@ public partial class FlightController : Node3D
     /// AI maneuver arm, the tank and the animation edges run from <see cref="SimStep"/>.</summary>
     public NitroSystem Nitro = new();
 
+    /// <summary>The flown tank, burned by <see cref="ReadKeyboard"/> and refilled at every spawn.
+    /// Only the human lever path touches it, which is the original's player-only gate; a pilot-flown
+    /// aircraft leaves it full. Nitro burns nothing here: the burn reads the lever, not the boost
+    /// flag.</summary>
+    public FuelTank Fuel = new();
+
     /// <summary>Where the human pilots are, as one snapshot per call — the seam the flight model's
     /// far-field plant is selected on (<see cref="FlightModel.FarFieldPlant"/>). The session binds
     /// the same snapshot every other "who is nearest" consumer reads. Null (every rig built without
@@ -895,6 +901,9 @@ public partial class FlightController : Node3D
         ApplyPresence();
         _throttle = _spawnThrottle;
         _keyPitch = _keyRoll = _keyYaw = 0f;  // a fresh airframe spawns with the stick centred
+        // The original tops the tank up where it places the aircraft, from the def-derived capacity.
+        Fuel.Capacity = Stats?.FuelCapacity ?? 0f;
+        Fuel.Fill();
         // First setup precedes adapter construction, so the adapter replays startprops after attachment.
         CrashRuntime?.Play("startprops", PlaneModel, applyReset: false);
         // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → the spawn
@@ -2939,8 +2948,13 @@ public partial class FlightController : Node3D
         if (KeyDown(Key.R))
             Respawn();
 
-        _throttle = Mathf.Clamp(
-            _throttle + (KeyAxis(Key.Shift, Key.Ctrl) + padThrottle) * ThrottleRate * dt, 0f, 1f);
+        // The burn reads the lever as it stands entering this tick, and a dry tank skips the step
+        // below, so the lever freezes rather than closing. A crashed airframe burns nothing and
+        // still moves its lever, which is the arm the original's crashed-flag test takes.
+        bool leverFree = Crashed || Fuel.Step(dt, _throttle);
+        if (leverFree)
+            _throttle = Mathf.Clamp(
+                _throttle + (KeyAxis(Key.Shift, Key.Ctrl) + padThrottle) * ThrottleRate * dt, 0f, 1f);
 
         // pull = S/Down, push = W/Up; bank/yaw left = A/Left/Q
         _keyPitch = StickRamp.Step(

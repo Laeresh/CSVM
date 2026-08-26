@@ -182,6 +182,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PathFollower.cs` — the second movement law: a placed vehicle driven along an authored waypoint path instead of through the flight model, handing itself back at the last waypoint.
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/ThrottleSlamSmoke.cs` — a large throttle jump streams dark exhaust trail smoke for a few seconds; a single notch or a decrease shows nothing.
+- `src/Flight/FuelTank.cs` — the flown tank: burns with the lever, and a dry one freezes the throttle lever where it stands. Engine-free.
 - `src/Flight/SpeedCue.cs` — chapter-authored pale smoke wisps emitted 60 m ahead of each player, density selected by camera altitude.
 - `src/Flight/ControlSurfaceMix.cs` — the decoded control-surface angle solver: three stick channels into six clamped slots, smoothed at 2/s, with the human-pilot guard. No scene node.
 - `src/Flight/ControlSurfaceAnimator.cs` — poses ailerons/elevators/rudders from those slot angles; `--fly` only.
@@ -2888,6 +2889,20 @@ puffers via `Puffer.Emit`/`Stop` (DISTANCE_INTERVAL, the same mechanism
 `DamageVisuals` uses for the nose smoke trail) — the authored def is a distance-triggered trail,
 not a time-interval burst. `Reset(throttle)` (crash/respawn) hard-stops any plume and re-anchors the
 climb tracker so the throttle jump those moments make is never itself read as a slam.
+
+## src/Flight/FuelTank.cs
+The flown aircraft's tank, engine-free so the arithmetic is testable without a scene. `Step(dt,
+lever)` takes `dt · lever · 5` off `Remaining`, clamps at zero, and returns whether the throttle
+lever may move this tick; it returns false on a dry tank, which is what freezes the lever where it
+stands rather than closing it. The lever handed in is the value entering the tick, before that
+tick's slew, matching the original's ordering. `Capacity` comes from `PlaneStats.FuelCapacity` (the
+def's `fuel` key, 54926 on every player airframe) and `Fill` is the spawn-time top-up; a
+non-positive capacity frees the lever instead of freezing it, so a fixture without the authored key
+still flies. Only `FlightController.ReadKeyboard` burns, which is the original's player-only gate:
+an AI-flown or scripted aircraft leaves its tank full, and a crashed airframe burns nothing while
+still moving its lever. Nitro costs no fuel, because the burn reads the lever and not the boost
+flag. Decode: `docs/org/flightModel.md`, "Part-throttle equilibrium"; the key:
+`docs/formats/vehicle.md`.
 
 ## src/Flight/SpeedCue.cs
 Its internal `Dispose` removes every puffer node when roster assembly is rolled back.
