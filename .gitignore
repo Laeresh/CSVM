@@ -93,3 +93,4 @@ analysis/capture-rigs/*-log.txt
 
 .mcp.json
 .pi/mcp.json
+.claude/settings.local.json
