@@ -199,7 +199,7 @@ obviously finished merely because the polish plan that followed it is. ⚠ `BL-5
 lives in `43b47435`'s message body, so the deletion commit should cite that hash rather than restate
 the outcome, per the docs-state-what-is rule.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `fbe97195`: build clean, units 2406/2406, engine suites 135/135 with engine errors clean, goldens 16/16 hash-identical
 
 ## A2 ☑ An AI pilot sees an enemy aircraft's own turret as a target beside the aircraft
 
@@ -233,7 +233,7 @@ fix that drops all turrets from the AI pool would stop AI aircraft attacking gro
 That is a different behaviour and not this. ⚠ `c1-targeting-hud`'s `exercises` field is rewritten on
 a re-pin, never appended to.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `fbe97195`: build clean, units 2406/2406, engine suites 135/135 with engine errors clean, goldens 16/16 hash-identical
 
 ## A3 ☑ A campaign spawn's talker and constitution ratings never reach `AiVoiceRuntime`
 
@@ -266,7 +266,7 @@ corrected by G75; check the doc's current claim rather than an older reading. �
 resolves to a VO id with no WAVs stays silent whatever its `talker` rating is, so this fix will not
 be visible on those eight named aces, and their silence is not a failed verification.
 
-**Verified.** <pending orchestrator run>.
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `fbe97195`: build clean, units 2406/2406, engine suites 135/135 with engine errors clean, goldens 16/16 hash-identical.
 
 ## A4 ❌ CM02's second Peacemaker squad is awake from the start and attacks the Pandora
 
@@ -318,7 +318,7 @@ missed this because G78 and G80 name `BL-500` rather than `BL-499` in their mess
 `git log --grep=BL-499` saw only the filing commit. The `BL-499` entry is deleted from
 `backlog.md`; there is no follow-up to rewrite, both threads it left being closed.
 
-**Verified.** <pending orchestrator run>. In the lane, on the unchanged build:
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `fbe97195`: build clean, units 2406/2406, engine suites 135/135 with engine errors clean, goldens 16/16 hash-identical. In the lane, on the unchanged build:
 `--run-tests=campaign-squad-wakeup` PASS (1 passed, 0 failed, 0 skipped, errors clean), driving
 C3/M05's own roster through the session's `FlightRoster` and its own objective graph:
 `britpeace_7/8/9` inert and out of play at t=0, in the world 15.03 s after group 1 goes down, all
@@ -434,7 +434,7 @@ the graph's own rule, including that a mission already won when the player dies 
 baseline is the same suite with the death hook neutralised, which reproduces today's behaviour: the
 crashed leg reads still-running and the suite fails.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `fbe97195`: build clean, units 2406/2406, engine suites 135/135 with engine errors clean, goldens 16/16 hash-identical
 
 **⚠ Traps.** ⚠ `FlightController.UnderMapY` teleports an aircraft that goes below the map WITHOUT
 setting a crash flag and without logging (`docs/verification.md` INSTR-22 records what that cost
@@ -505,7 +505,7 @@ change here moves cutscene framing and must be judged against `cutscene-letterbo
 instead of fixing this: the cap is the rate times the number of suites, so a third such suite is
 meant to trip it.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `fbe97195`: build clean, units 2406/2406, engine suites 135/135 with engine errors clean, goldens 16/16 hash-identical
 
 ## B8 ☑ The intro cutscene stages no aircraft
 
@@ -570,7 +570,7 @@ end pose. The name guard was not relaxed. The 2500 rounding is relied on only fo
 chapters, and `docs/formats/anim-definitions/cutscenes.md` now says so, including that an exact
 multiple of 2500 does not occur in this install and its rounding is therefore undecided.
 
-**Verified.** <pending orchestrator run>. In the lane: `--run-tests=intro-aircraft-stage` PASS
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `fbe97195`: build clean, units 2406/2406, engine suites 135/135 with engine errors clean, goldens 16/16 hash-identical. In the lane: `--run-tests=intro-aircraft-stage` PASS
 (1 passed, 0 failed, errors clean) over C3/M01's built world, base 7500 over 5408 chapter nodes,
 `player` ptr 8918 and `piratefighter` ptr 9824 both answered by the staged node in the runtime's
 node table, the prop posed 125.7 m off `piratezep` at 15.9 s and reparented under it, the marker
@@ -639,7 +639,7 @@ stands. ⚠ The original writes the handed-over sums with no cap because its `wi
 player's own airframe; CSVM caps them at the receiver's own maxima, because one airframe's pools
 read as a zone sum on a human rig and as the AI def's authored pair on an AI one.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `fbe97195`: build clean, units 2406/2406, engine suites 135/135 with engine errors clean, goldens 16/16 hash-identical
 
 ---
 
@@ -678,7 +678,7 @@ placeholder** (`AUTO-LAND AVAILABLE` plus the bound key), marked in `FlightHud.c
 as a stand-in for the unresolved original string, rather than pulling in a fresh string-mapping
 investigation here.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `fbe97195`: build clean, units 2406/2406, engine suites 135/135 with engine errors clean, goldens 16/16 hash-identical
 
 ## C11 ☑ `campaign-objectives-hud` fails on C4 and C5 on its wake-cue check
 
@@ -718,7 +718,7 @@ mission authors the directive, gated on the authored count where it does not, an
 runs on all five chapters requires one of the mission's own objective sound groups, whichever
 surface it chose, to reach a real player. `docs/verification.md` DIAG-22 records the rule.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `fbe97195`: build clean, units 2406/2406, engine suites 135/135 with engine errors clean, goldens 16/16 hash-identical
 
 ## C12 ☐ Fly a campaign mission end to end: the Wave A/B/C sortie, closing `BL-458`
 
