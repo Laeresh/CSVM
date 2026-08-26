@@ -1,0 +1,30 @@
+[
+  [
+    "ANIMATION_DEFINITIONS",
+    [
+      "GRAVITY",
+      [
+        -9.8
+      ],
+      "ANIMATION_PATH",
+      [
+        "..\\data\\probe\\m01\\zrdr\\envmodels;"
+      ],
+      "ANIMATION_LIST",
+      [
+        "ANIMATION_DEFINITION_FILE",
+        [
+          "..\\data\\probe\\m01\\zrdr\\cutscenes\\probe_drop.zrd"
+        ],
+        "ANIMATION_DEFINITION_FILE",
+        [
+          "..\\data\\probe\\m01\\zrdr\\envmodels\\probe_ambient.zrd"
+        ],
+        "ANIMATION_DEFINITION_FILE",
+        [
+          "probe_ambient.zrd"
+        ]
+      ]
+    ]
+  ]
+]

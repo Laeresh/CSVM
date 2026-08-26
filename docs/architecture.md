@@ -47,6 +47,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
 - `src/Mech3/LandingApproaches.cs` — a chapter's `landings.zrd` approach table resolved against the gamez: each row's condition volume (the `cone`/`half_cone`/`sphere` child's single authored triangle, expressed in the approach node's own frame), its attitude cone and its speed band, plus the geodesic attitude test. Engine-free geometry; `LandingApproachRuntime` flies a player against it. Decode: `docs/formats/anim-definitions/cutscenes.md`.
 - `src/Mech3/Pickups.cs` — a mission's compact `pickups.zrd` sensor/radius table. `LandingApproachRuntime` uses it to start the shared pickup timing choreography when the player reaches an active sensor. Decode: `docs/formats/anim-definitions/cutscenes.md`.
+- `src/Mech3/MissionCutscenes.cs` — which of a mission's `mis_anim.zrd` `ANIMATION_DEFINITION_FILE` entries sit under its own `cutscenes\` directory, and the `ANIMATION_NAME`s they define. That directory is the authored classifier for mid-mission choreography (nine story missions ship one); `WorldSession` hands the names to the cutscene host and to `AnimRuntime.RangeGatedCalls`. Decode: `docs/formats/anim-definitions/cutscenes.md`.
 - `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer and the net's own three volumes included.
 - `src/Mech3/AiVolumes.cs` — `AiVolume`/`AiVolumeSet`: the activation/attack/return volumes as a roster block (slots 8–19) and a net record (elements 2–10) author them, with the engine's non-zero overlay.
 - `src/Mech3/RosterMarkers.cs` — grafts a roster block's authored marker scaffolding onto the rig its spawn built: the chapter's own copy of a vehicle is a library root the world never places, so whatever that copy adds under `markers` past the shared airframe's is built there, hung under the airframe's mark of the same name, switched to its authored `active` bit and indexed on the world runtime, which is what gives an index-addressed definition a node to write and a condition volume that moves with its aircraft.
@@ -4937,8 +4938,11 @@ their def/node pairs are `Session/AirframeSwap.cs`); 14 and 123 are named gaps w
 each. A swap sets the cutscene flags 11 and 2 set between them, and clears nothing: the definition
 ending is what gives the player flight back, now in the new airframe. The
 handoff raises the gameplay state the definition's own `RESET_STATE` asserts, because a CSVM
-`RESET_STATE` dispatch deliberately raises no callbacks and `RESET_TIME` is undecoded; it also
-retracts the bars, returns `camera1` to the runtime's world root (a definition composes itself by
+`RESET_STATE` dispatch deliberately raises no callbacks and `RESET_TIME` is undecoded; it then runs
+the rest of that same block through `AnimRuntime.RunResetStateEvents` (callbacks still suppressed, so
+the codes are recorded once), which is where a definition's authored calls and child detaches land —
+CM07's hangar drop clears its objective node through a `CALL_ANIMATION` there and nowhere else. It
+also retracts the bars, returns `camera1` to the runtime's world root (a definition composes itself by
 reparenting it) and parks it at the origin, which other definitions pose against.
 Skip is any key (not Escape) or pad button: force-stop the definition, then the same restore, so
 dropping the remaining beats cannot leave the mission held, hidden or unflyable.

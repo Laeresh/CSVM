@@ -37,6 +37,10 @@ internal static class LandingApproachSuites
     // How long the trigger is ticked after a handoff to catch the row re-firing.
     private const int RestartFrames = 30;
 
+    // How far outside its band the hangar drop is called from. Anything past the authored 75 m
+    // does; this is far enough that no bounds reading of the hangar could land inside it.
+    private const float AwayM = 2000f;
+
     // What a landings suite does with the built world: the harness owns the build, the suite owns
     // the drive. The mission's own zrdr path comes with it, for the readers that are not the
     // objective script.
@@ -65,6 +69,13 @@ internal static class LandingApproachSuites
     /// approach cone, and flying that cone starts the pickup cutscene and clears its objective.</summary>
     internal static void TrainPickupGate(TestContext ctx) =>
         DriveMission(ctx, TrainPickupSeq, "test-train-pickup-gate", DriveTrainPickup);
+
+    /// <summary>Drives CM07's zeppelin-hangar drop, the mission's other cutscene: the depot chain
+    /// reaction's <c>CALL_ANIMATION</c> only ARMS it, because the definition is range-gated;
+    /// reaching the hangar runs it; and the authored <c>RESET_STATE</c> at the handoff is what
+    /// clears the objective node the mission gates "Fly Through Zeppelin Hangar" on.</summary>
+    internal static void HangarDropGate(TestContext ctx) =>
+        DriveMission(ctx, TrainPickupSeq, "test-hangar-drop-gate", DriveHangarDrop);
 
     // The world build every landings suite needs: the story mission at this sequence position, its
     // objective script, an in-memory campaign profile, and the cutscene roots the definitions pose.
@@ -360,6 +371,189 @@ internal static class LandingApproachSuites
             ctx.Check(graph.CompletedOf(gated.Number),
                 $"finishing the train pickup clears OBJECTIVE{gated.Number}");
         }, pickups: Pickups.Load(missionZrdr));
+    }
+
+    // CM07's hangar drop, every name read out of the mission's own data: the one cutscene
+    // definition it range-gates, whatever calls that, and the objective node the drop's own reset
+    // block flips through its CALL_ANIMATION.
+    private static void DriveHangarDrop(TestContext ctx, TestWorld world, CampaignDirector director,
+        ObjectiveScript script, string missionZrdr, StringBuilder report)
+    {
+        var cutscenes = MissionCutscenes.AnimNames(missionZrdr);
+        report.AppendLine($"cutscene definitions: {string.Join(", ", cutscenes)}");
+        var drop = RangeGatedOf(world, cutscenes);
+        ctx.Check(drop?.AnimName != null,
+            $"CM07 loads a range-gated cutscene definition out of its own cutscenes directory");
+        if (drop?.AnimName is not { } dropAnim)
+        {
+            return;
+        }
+
+        string? caller = CallerAnimOf(world, dropAnim);
+        string? node = ResetObjectiveNodeOf(world, script, drop);
+        var gated = node != null ? ObjectiveForInactive(script, node) : null;
+        report.AppendLine($"'{dropAnim}' range={Mathf.Sqrt(drop.RangeMax):0} m " +
+            $"called by '{caller ?? "-"}', reset clears '{node ?? "-"}' " +
+            $"gating OBJECTIVE{gated?.Number ?? -1}");
+        ctx.Check(caller != null,
+            $"an ambient definition calls '{dropAnim}', which is the only thing that arms it");
+        ctx.Check(gated != null,
+            $"and '{dropAnim}' clears the node an objective waits on, through its own RESET_STATE");
+        if (caller == null || node == null || gated == null)
+        {
+            return;
+        }
+
+        RunTheDrop(ctx, world, director, drop, caller, node, gated, report);
+    }
+
+    // The armed-then-flown drive. The player is parked well outside the band for the call, then
+    // put on the hangar, which is the only difference between the two halves.
+    private static void RunTheDrop(
+        TestContext ctx, TestWorld world, CampaignDirector director, AnimDefinition drop,
+        string caller, string node, ObjectiveDef gated, StringBuilder report)
+    {
+        var anchors = world.Runtime.AnchorsOf(drop);
+        var anchor = anchors.Count > 0 ? anchors[0] : null;
+        ctx.Check(anchor != null, $"'{drop.AnimName}' resolves its authored hangar anchor");
+        if (anchor == null)
+        {
+            return;
+        }
+
+        var site = AnimRuntime.VisualOriginOf(anchor);
+        WithTrigger(ctx, world, director, Array.Empty<LandingApproach>(),
+            (trigger, cutscene, rig, graph) =>
+        {
+            cutscene.HostDefinitions(ClosureOf(world, drop.AnimName!));
+            graph.Wake(gated.Number);
+            world.Runtime.PlayerPositions = () => new[] { site + (Vector3.Right * AwayM) };
+            world.Runtime.Play(caller);
+            for (float t = 0f; t < ArmBudgetS; t += StepDt)
+            {
+                world.Runtime.Advance(StepDt);
+                director.Step(StepDt);
+            }
+
+            report.AppendLine($"{AwayM:0} m away: '{drop.AnimName}' state=" +
+                $"{world.Runtime.AnimStateOf(drop.AnimName!)} playing={cutscene.Playing} " +
+                $"'{node}' built={world.Runtime.FindNodes(node).Count} " +
+                $"OBJECTIVE{gated.Number} completed={graph.CompletedOf(gated.Number)}");
+            ctx.Same(0, world.Runtime.AnimStateOf(drop.AnimName!),
+                $"'{caller}' arms the drop without running it, the player being outside its band");
+            ctx.Check(!graph.CompletedOf(gated.Number),
+                $"so OBJECTIVE{gated.Number} stays open with the objective awake and stepping");
+
+            world.Runtime.PlayerPositions = () => new[] { site };
+            float played = 0f;
+            for (float t = 0f; t < PlayBudgetS && (played == 0f || cutscene.Playing); t += StepDt)
+            {
+                world.Runtime.Advance(StepDt);
+                cutscene.Tick();
+                director.Step(StepDt);
+                played += cutscene.Playing ? StepDt : 0f;
+            }
+
+            var placed = world.Runtime.FindNodes(node);
+            report.AppendLine($"at the hangar: episode ran {played:0.##} s, " +
+                $"'{node}' built={placed.Count} active={Active(world, node)}, " +
+                $"OBJECTIVE{gated.Number} completed={graph.CompletedOf(gated.Number)}");
+            ctx.Check(played > 0f,
+                $"reaching the hangar runs the armed drop and hands it to the cutscene host");
+            ctx.Check(placed.Count > 0 && !Active(world, node),
+                $"and its RESET_STATE at the handoff stands '{node}' up and clears it");
+            ctx.Check(graph.CompletedOf(gated.Number),
+                $"which completes OBJECTIVE{gated.Number}, the fly-through the mission asks for");
+        });
+    }
+
+    // The mission cutscene definition whose EXECUTION_BY_RANGE is an arming gate: a call is its
+    // only way in, so a definition the mission also lists in startanims is not this one.
+    private static AnimDefinition? RangeGatedOf(TestWorld world, IReadOnlyList<string> cutscenes)
+    {
+        foreach (string name in cutscenes)
+        {
+            foreach (var def in world.Session.Program.ByAnimName(name))
+            {
+                if (def.ByRange && !world.Session.Program.StartAnims.Contains(name))
+                {
+                    return def;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string? CallerAnimOf(TestWorld world, string called)
+    {
+        foreach (var def in world.Session.Program.Defs)
+        {
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind == "CallAnimation" && ev.Data.Str("name") is { } name
+                        && name.Equals(called, StringComparison.OrdinalIgnoreCase)
+                        && def.AnimName is { Length: > 0 } caller)
+                    {
+                        return caller;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // What the drop's own RESET_STATE calls, resolved to the node that call deactivates: the
+    // objective flag definitions name their node, and the mission gates an INACTIVE on it.
+    private static string? ResetObjectiveNodeOf(
+        TestWorld world, ObjectiveScript script, AnimDefinition drop)
+    {
+        if (drop.ResetState == null)
+        {
+            return null;
+        }
+
+        foreach (var ev in drop.ResetState.Events)
+        {
+            if (ev.Kind != "CallAnimation" || ev.Data.Str("name") is not { } called)
+            {
+                continue;
+            }
+
+            foreach (var def in world.Session.Program.ByAnimName(called))
+            {
+                if (def.Name is { Length: > 0 } named
+                    && ObjectiveForInactive(script, named) != null)
+                {
+                    return named;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static bool Active(TestWorld world, string node)
+    {
+        var found = world.Runtime.FindNodes(node);
+        return found.Count > 0 && found[0].Visible;
+    }
+
+    private static IReadOnlyList<string> ClosureOf(TestWorld world, string root)
+    {
+        var names = new List<string>();
+        foreach (var def in world.Session.Program.Subset(root).Defs)
+        {
+            if (def.AnimName is { } name && !names.Contains(name))
+            {
+                names.Add(name);
+            }
+        }
+
+        return names;
     }
 
     // The three rows are symmetric and each belongs to a plane the mission's roster spawns. Read

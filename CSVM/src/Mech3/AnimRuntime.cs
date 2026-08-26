@@ -171,6 +171,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// host wired reports. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
     public Func<int, string?, bool>? CallbackHost;
 
+    /// <summary>Animation names whose <c>EXECUTION_BY_RANGE</c> is an ARMING gate, not a LOD one:
+    /// a <c>CALL_ANIMATION</c> only arms them and the player reaching the band is what runs them.
+    /// Bind the mission's own cutscene definitions; left empty, every call starts its callee at
+    /// once, which is what the ambient props and light loops carrying the same key want.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public HashSet<string> RangeGatedCalls = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Where a <c>FOG_STATE</c> event's inline fog goes: the session's weather rig, which
     /// owns the fog globals. Null counts the event. ⚠ Raised under a RESET_STATE as well as in a
     /// sequence: the original's handler (dispatch slot 28) writes the fog record from either
@@ -861,6 +868,38 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             _missionCallDepth--;
         }
+    }
+
+    /// <summary>Runs a definition's authored <c>RESET_STATE</c> as the event block the original's
+    /// reset schedule runs when the definition ends: the <c>CALL_ANIMATION</c>s and child detaches
+    /// the bootstrap's pose-only walk suppresses. ⚠ Callbacks stay suppressed — the cutscene host
+    /// raises the gameplay end state itself, and raising them here would double-record the
+    /// episode's codes. Returns how many definitions ran one.</summary>
+    public int RunResetStateEvents(string animName)
+    {
+        int ran = 0;
+        _missionCallDepth++;
+        try
+        {
+            foreach (var def in _program.ByAnimName(animName))
+            {
+                if (def.ResetState == null)
+                    continue;
+                var anchors = Anchors(def);
+                if (anchors.Count == 0)
+                    anchors.Add(null);
+                foreach (var anchor in anchors)
+                    foreach (var ev in def.ResetState.Events)
+                        if (ev.Kind != "Callback")
+                            Dispatch(ev, def, anchor, instant: false, out _);
+                ran++;
+            }
+        }
+        finally
+        {
+            _missionCallDepth--;
+        }
+        return ran;
     }
 
     /// <summary><see cref="Play"/>, scoped to one world subtree: starts only the instances
@@ -1599,6 +1638,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return xform.Origin;
     }
 
+    // Where a range gate measures FROM. Not the node origin: an absolute-modelled gamez subtree
+    // holds its vertices in world space under an identity transform, so its origin is the map
+    // corner and a band around it can never be entered (CM07's `hangar_3` is one). VisualOriginOf
+    // IS the origin for a normally-transformed node, so the defs deferred at bootstrap keep the
+    // distance they have always measured.
+    private static Vector3 RangeOriginOf(Node3D node) =>
+        node.IsInsideTree() ? VisualOriginOf(node) : WorldPos(node);
+
     private static Vector3I CheckCellOf(Vector3 pos) => new(
         Mathf.FloorToInt(pos.X / RangeCheckCellSize),
         Mathf.FloorToInt(pos.Y / RangeCheckCellSize),
@@ -1824,6 +1871,31 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return (startupRun, ran, missing);
     }
 
+    // A CALL_ANIMATION onto a range-gated cutscene definition: the call ARMS it, and the player
+    // reaching its band is what runs it. ⚠ Measure from the callee's OWN anchor, the way the
+    // bootstrap deferral does; a call with no target site would otherwise measure from whatever
+    // node the caller happens to sit on. Returns whether the call was parked rather than started.
+    private bool DeferRangedCall(AnimDefinition target, Node3D? fallbackAnchor)
+    {
+        if (!target.ByRange || target.AnimName is not { } name || !RangeGatedCalls.Contains(name))
+            return false;
+        var anchors = Anchors(target);
+        var anchor = anchors.Count > 0 ? anchors[0] : fallbackAnchor;
+        if (anchor == null)
+            return false;
+        foreach (var (deferred, at) in _rangeDeferred)
+            if (ReferenceEquals(deferred, target) && ReferenceEquals(at, anchor))
+                return true;
+        float d2 = NearestPlayerDistanceSquared(RangeOriginOf(anchor));
+        if (d2 >= target.RangeMin && d2 <= target.RangeMax)
+            return false;
+        _rangeDeferred.Add((target, anchor));
+        _rangeLibraryCallDefs.Add(target);
+        _rangeCheckCells.Clear(); // force a sweep on the next Advance
+        Log.Info("anim", $"anim: '{name}' armed by call at {Mathf.Sqrt(d2):0} m, waiting for EXECUTION_BY_RANGE ({Mathf.Sqrt(target.RangeMax):0} m)");
+        return true;
+    }
+
     private bool CallsUnplacedDefinition(AnimDefinition caller)
     {
         foreach (var seq in caller.Sequences)
@@ -1863,7 +1935,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 _rangeDeferred.RemoveAt(i);
                 continue;
             }
-            var anchorPos = WorldPos(anchor);
+            var anchorPos = RangeOriginOf(anchor);
             float d2 = float.MaxValue;
             foreach (var p in positions)
                 d2 = Mathf.Min(d2, anchorPos.DistanceSquaredTo(p));
@@ -2182,6 +2254,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         ev.WaitsForCompletion && !instant ? new() : null;
                     foreach (var target in _program.ByAnimName(callName))
                     {
+                        // A range-gated cutscene: the call arms it, the player arriving runs it.
+                        if (!instant && DeferRangedCall(target, callAnchor))
+                            continue;
                         // ⚠ Keep the library-root test data-driven, never name-based, and gated on
                         // a death or range-triggered mission call. Other ambient calls keep their
                         // authored positions and must not relocate during bootstrap.

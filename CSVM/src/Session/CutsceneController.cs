@@ -386,6 +386,14 @@ public sealed partial class CutsceneController : Node
     {
         GD.Print($"cutscene: '{Anim}' {why} at t={Utils.GameClock.Current?.Time ?? 0.0:0.##}, " +
                  $"handing off after {_codes.Count} code(s)");
+        // What the ending definition's own RESET_STATE asserts beyond the codes below: CM07's
+        // hangar drop calls `got_the_plane` there, and that call is the only thing in the mission
+        // that completes its "Fly Through Zeppelin Hangar" objective.
+        if (Anim != null && _runtime?.RunResetStateEvents(Anim) > 0)
+        {
+            GD.Print($"cutscene: '{Anim}' ran its authored RESET_STATE at the handoff");
+        }
+
         foreach (int code in RestoreCodes)
         {
             _codes.Add(code);
