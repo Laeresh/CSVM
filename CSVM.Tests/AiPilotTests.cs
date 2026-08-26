@@ -244,6 +244,25 @@ public class AiPilotTests
         Assert.True(still.IsFinite() && still.Y > pos.Y);
     }
 
+    /// <summary>The decoded climb-out an escort flies has NO lateral term at all: the aim point is
+    /// the aeroplane's own position with 1000 m added to Y, whatever way it is pointing
+    /// (<c>FUN_0041e760</c> at <c>0x0041e7c8</c>). It is the same point the net follower's own
+    /// case 3 builds; only the parameter table differs between the two laws.</summary>
+    [Fact]
+    public void TheDecodedClimbOutIsPurelyVertical()
+    {
+        var pos = new Vector3(-1378f, 109f, -1706f);
+        var aim = AiPilot.ClimbOutAim(pos);
+
+        Assert.Equal(pos.X, aim.X, 3);
+        Assert.Equal(pos.Z, aim.Z, 3);
+        Assert.Equal(pos.Y + 1000f, aim.Y, 3);
+
+        // The break the netted overload adds is exactly what this one must not have.
+        var broken = AiPilot.ClimbOutAim(pos, new Vector3(0f, 0f, -100f));
+        Assert.True(broken.X > pos.X + 500f, $"the netted break went to X={broken.X:0}");
+    }
+
     /// <summary>The patrol aim carries 0.9 of the aeroplane's own cross-track error onto the node,
     /// capped at 200 m (<c>FUN_0041d1f0</c> case 0). What that buys is a commanded course nearly
     /// PARALLEL to the leg: the residual convergence is a tenth of the offset, which is small

@@ -122,7 +122,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ❌ CM02's second Peacemaker squad is awake from the start and attacks the Pandora (`BL-499`)
 5. ☑ The campaign wingman ends up high and far behind (`BL-457`)
 6. ☑ Crashing the player's aircraft does not end a campaign mission (`BL-491`, deferral reopened first)
-13. ☐ The mode machine's `avoid crash` pre-empts a joined escort (`BL-509`, minted by A5)
+13. ◐ The mode machine's `avoid crash` pre-empts a joined escort (`BL-509`, minted by A5)
 
 ### Wave B — the intro and the swap
 
@@ -443,7 +443,7 @@ gate means a lost mission writes no world state, so making crashes lose changes 
 from; decide that explicitly rather than discovering it. ⚠ Do not invent a fourth ending and present
 it as decoded.
 
-## A13 ☐ The mode machine's `avoid crash` pre-empts a joined escort
+## A13 ◐ The mode machine's `avoid crash` pre-empts a joined escort
 
 **Goal.** A campaign wingman low over terrain does what the original's escort does when its
 avoid-crash test fires, rather than flying an invented 1000 m climb-out that leaves it 128 m
@@ -464,12 +464,32 @@ a plan item over leaving it to the sortie.
 **Model recommendation.** high. A decode against the exe with the escort and the mode machine
 both in play, and an invented constant to retire.
 
-**Verify.** A `--campaign=` trace on C3/M01 (`player_pfighter`) showing the wingman inside 150 m
-through the low pass, plus `wingman` and `ai` suites green. `wingman-station` cannot see this
-(INSTR-25).
+**Verify.** The decode is landed and the invented constants it contradicts are retired, measured on
+a `--campaign=` C3/M01 trace (`player_pfighter`, both aircraft airframe 5, a per-second print in
+`AiPilot.Next` removed afterwards): the second and third break-offs are gone and the recovery is
+monotonic, but the wingman is not inside 150 m through the low pass and the altitude excursion grew,
+so the item is partial. `wingman` 2/2, `ai` 36/36, `dotnet test` 2407/2407, comment caps clean.
+`wingman-station` cannot see this (INSTR-25).
 
 **⚠ Traps.** ⚠ Do not suppress `avoid crash` for an escort as a shortcut; the short-circuit is the
 original's. ⚠ Measure on `player_pfighter`. ⚠ Everything `BL-457`'s traps retire stays retired.
+⚠ A `--campaign=<profile>:N` run WRITES BACK to that profile's `latest` mission record; run a copy.
+
+**Verified.** The escort's avoid-crash arm is decoded whole (`FUN_0041e760` `0x0041e7bd`–`0x0041e814`:
+own position with `DAT_00603464` = 1000.0 added to Y, X and Z untouched, the zero aim velocity
+`0x0075d1b8`, the wingman table `0x0061fb28`, `emergency` set, and a `return` that never touches the
+escort state at `+0xd8`, so it resumes station and never re-joins). Neither law carries a lateral
+term, so `AiPilot.ClimbOutBreakM` is retired for an escorting pilot and kept for a netted one, whose
+furball measurement is the only place it was ever taken; the invented second, deck-slanted probe ray
+is retired outright, the original casting one. Measured, C3/M01, per second: baseline holds 94–98 m
+to 8.1 s, arms on `player1/airframe` at a 511 m reach, peaks 303.0 m / 128.0 m above at 14.2 s,
+re-breaks on the deck ray at 24.3 s and ends 354.3 m / 128.9 m; after, one break-off on the same
+obstacle, peak 294.7 m / 174.8 m at 13–14 s, then monotonic to 236.4 m / 50.5 m and still closing.
+The item is ◐ because the excursion is reshaped, not removed: the wingman is not inside 150 m, and
+the vertical excursion is 47 m larger by construction. What remains is not decodable from the
+climb-out at all — the wingman sits 94.5 m DEAD ASTERN because `SpeedCeiling` caps it below the
+leader, which is what puts the leader on its ray, and re-tuning that is out of this plan by its own
+traps. <pending orchestrator run>
 
 ---
 

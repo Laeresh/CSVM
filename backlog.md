@@ -2222,22 +2222,36 @@ usual.
   *Cross-refs:* `docs/org/aiPilot.md`, `docs/org/aiControlLaw.md`, `docs/org/flightModel.md`;
   `docs/PLAN-M5-polish-2.md` A5.
 
-- `BL-509` `[Research]` `[Owed-playtest]` **The mode machine's `avoid crash` pre-empts a joined
-  escort, so the campaign wingman breaks off and climbs low over terrain.** *Evidence:* traced on
-  C3/M01 with both aircraft on `player_pfighter`: the wingman joins on the first stepped frame,
-  holds 94-98 m for nine seconds, then `avoid crash` arms at 109 m over the island and, because
-  that mode runs ahead of the escort in `AiPilot.Next`'s fork (`AiPilot.cs:269-272`), the escort
-  law is dropped for a 1000 m climb-out and a 1000 m lateral break, ending 128 m above the player
-  and 302 m behind before the station is recovered. The fork ORDER is decoded (the original's
-  mode 4 fork short-circuits on stunned and avoid crash), but the climb-out's own geometry inside
-  the middle altitude band is a named invention (`docs/architecture.md` on `AiModeMachine.cs`).
-  *Fix shape:* decode what the original's escort does when its avoid-crash test fires with a live
-  leader (the altitude band, the pull-up it flies, and whether it returns to station or re-joins),
-  then re-shape the climb-out from that rather than from the invented constants. *⚠ Traps:* ⚠ Do
-  not suppress `avoid crash` for an escort as a shortcut; the short-circuit is the original's.
+- `BL-509` `[Research]` `[Owed-playtest]` **A campaign wingman still leaves its station when
+  `avoid crash` arms, and the excursion is now taller rather than wider.** *What is decoded and
+  landed.* The original's escort climb-out is read out instruction by instruction
+  (`FUN_0041e760` at `0x0041e7c8`–`0x0041e814`, `docs/org/aiPilot.md`): own position with 1000 m
+  added to Y and X and Z untouched, a zero aim velocity, the wingman parameter table
+  `DAT_0061fb28`, `emergency` set, and a `return` that never touches the escort state, so the
+  wingman resumes its station on the first clear ray and never re-joins. **There is no lateral
+  term in either law.** CSVM's escort was flying `AiPilot.ClimbOutBreakM`, a 1000 m displacement
+  right of its own ground track whose merge measurement was taken on netted aircraft in a
+  ten-plane furball and never on an escort; an escorting pilot now flies the decoded vertical
+  climb and every other pilot keeps the break. The invented second, deck-slanted probe ray
+  (`ProbeDeckM`) is retired with it: the original casts one ray, and the extra one armed twice
+  more on a low pass over water the decoded ray was clear of. *What is left, and what the sortie
+  must judge.* Measured on C3/M01, `player_pfighter`, both break-offs before and after: the
+  wingman still leaves. Before, separation peaked 303 m and altitude difference 128 m, then a
+  second break-off took it back to 305 m / 132 m. After, one break-off, peak 294.6 m / 174.8 m,
+  then a monotonic recovery to 236.4 m / 50.5 m still closing when the trace ends. So the
+  ALTITUDE excursion grew (the decoded climb puts all of the pull into Y where the break spent
+  some of it sideways) and the recovery became clean. Whether that reads better at the controls
+  is not decidable from the trace. *⚠ Traps:* ⚠ Do not suppress `avoid crash` for an escort; the
+  short-circuit is the original's. ⚠ **The arming is decoded, not a defect.** The ray excludes
+  only the caster and the station sits astern of a player leader, so a wingman inside 4.5 s of
+  travel is looking straight at its leader: the measured break-off arms on `player1/airframe` at
+  511 m with the wingman 94.5 m dead astern. ⚠ Do not re-derive the lateral break for an escort;
+  it is retired on the decode, not on the numbers, and the numbers are worse for it.
   ⚠ `wingman-station` cannot see this (`docs/verification.md` INSTR-25, no terrain under its
-  pair); measure in a `--campaign=` run on `player_pfighter`. ⚠ Whether the break-off reads wrong
-  at the controls is `BL-457`'s sortie question; this entry is the mechanism behind it.
+  pair); measure in a `--campaign=` run on `player_pfighter`. ⚠ **A `--campaign=<profile>:N` run
+  WRITES BACK to that profile's `latest` mission record** — copy the profile and run the copy.
+  ⚠ The trace's leader is an aeroplane nobody is flying, at throttle 1.00, descending into the
+  sea inside 30 s, so it is a repeatable scenario and not a representative sortie.
   *Cross-refs:* `BL-457`; `docs/org/aiPilot.md`; `docs/PLAN-M5-polish-2.md` A13.
 
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
