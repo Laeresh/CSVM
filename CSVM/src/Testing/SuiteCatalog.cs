@@ -164,6 +164,7 @@ public static class SuiteCatalog
         "landings-approach-trigger",
         "landings-wingwalk-gate",
         "landings-train-pickup-gate",
+        "landings-auto-land-button",
         "campaign-airframe-swap",
         "roster-spawn-names",
         "roster-voice-ratings",
@@ -877,6 +878,13 @@ public static class SuiteCatalog
             + "the hosted pickup cutscene beside the caboose, faces the passenger, runs to handoff "
             + "and clears the primary pickup objective",
             TrainPickupGate));
+
+        into.Add(new TestHarness.Suite("landings-auto-land-button",
+            "the auto-land button over the first story mission's BUILT world: flying the chapter's "
+            + "auto row lights AutoLandOffered but starts nothing while the button is up, pressing "
+            + "it starts the same animation the manual row would, the cutscene host still runs it, "
+            + "and holding the button past the handoff does not re-fire the row",
+            AutoLandButton));
 
         // BL-494: callback codes 965 to 967, which put the player in a different airframe mid
         // mission and reached nothing until the roster grew a swap.

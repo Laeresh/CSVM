@@ -2413,23 +2413,6 @@ usual.
   snapshot flow, so the cabin's other rows shipped without it rather than waiting.
   *Cross-refs:* `BL-256` is the adjacent snapshot work; `docs/PLAN-M5-campaign.md` Decision 3.
 
-- `BL-460` `[Feature]` **The auto-land the approach table offers has no button.** *Evidence:* every
-  chapter's `landings.zrd` carries one `auto` row, a 500 m sphere around `pz_auto_land` with no
-  attitude cone and no speed band. The original does not start the animation on it: `FUN_0045df60`
-  raises `DAT_00719109`, and `FUN_0045e120` turns that into an on-screen prompt (message `0xb5`, or
-  `0xb6` when the binding is a pad button, over key binding `0x6a`) that the player then presses to
-  start the same hookup the manual row starts. CSVM decodes and ticks the row
-  (`LandingApproachRuntime.AutoLandOffered` goes true exactly when the original lights the prompt),
-  but nothing draws the prompt or reads a key off it, so the row is observable and inert.
-  *Fix shape:* a HUD line off `AutoLandOffered` plus a binding that calls `Play` on the row's
-  animation, which is the same call the manual row already makes.
-  *⚠ Traps:* ⚠ The manual and auto rows name the SAME animation, so a session that starts it from
-  both would double-fire; the trigger already returns after the first row that passes, and a button
-  path has to respect the cutscene guard the same way. ⚠ The prompt's own message ids are `langui`
-  ids, which `BL-427` has not extracted, so the text is not in `extracted/messages.json`.
-  *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md` "The per-frame test"; `BL-427` for the
-  string. Split out while the approach trigger landed (`git log --grep=BL-467`).
-
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in

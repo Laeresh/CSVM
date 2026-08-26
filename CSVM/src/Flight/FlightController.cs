@@ -149,6 +149,14 @@ public partial class FlightController : Node3D
     /// Unlike a human pull (one rocket per press), this auto-repeats at the launch cooldown.</summary>
     public bool AutoFireRockets;
 
+    /// <summary>Forces <see cref="AutoLandPressed"/> true, the way <see cref="AutoFire"/> forces the
+    /// gun trigger: a suite's twin for the auto-land button, with no live key or pad to press.</summary>
+    public bool AutoLand;
+
+    /// <summary>Whether <see cref="LandingApproachRuntime"/>'s auto row currently passes for this
+    /// aircraft, fed once a frame by the session that owns the trigger. Drives the HUD prompt.</summary>
+    public bool AutoLandOffered;
+
     /// <summary>--gun-select=N: the gun selector's initial firable group (0-based; 0 = the first
     /// group, the default). Only one gun group fires at a time. A headless testing hook so a scripted
     /// run can fire one group in isolation; interactively the selector cycles with G / gamepad D-pad Left.</summary>
@@ -1772,6 +1780,13 @@ public partial class FlightController : Node3D
     // … → 1). Only ONE group fires at a time; the gun trigger fires the selected one. Caller edge-detects.
     private bool GunSelectPressed() => KeyDown(Key.G) || PadPressed(JoyButton.DpadLeft);
 
+    // F9 / gamepad left-stick click, the auto-land button, read live by
+    // LandingApproachRuntime.Tick() so a press lands in the same frame it happens. Kept beside the
+    // other button reads rather than hoisted for SA1202's sake, the same trade made elsewhere here.
+#pragma warning disable SA1202
+    internal bool AutoLandPressed() => AutoLand || KeyDown(Key.F9) || PadPressed(JoyButton.LeftStick);
+#pragma warning restore SA1202
+
     // H / gamepad D-pad Right — moves the hardpoint selector to the next pylon that still
     // carries ordnance (each pylon is its own selectable slot, whatever it loads — even a plane with
     // one uniform ordnance type). The rocket trigger then launches from the selected pylon. Caller
@@ -1807,6 +1822,7 @@ public partial class FlightController : Node3D
             StallWarned = _model.IsStallWarned(),
             StallFraction = _model.StallFraction,
             Stalled = _model.isStalled(),
+            AutoLandOffered = AutoLandOffered,
             WallDt = wallDt,
             SimDt = simDt,
             DamageSummary = _pilotHud.DrawsTextBlock ? Damage?.Summary() : null,

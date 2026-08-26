@@ -131,7 +131,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — offered but inert, and the red suite
 
-10. ☐ The auto-land the approach table offers has no button (`BL-460`)
+10. ☑ The auto-land the approach table offers has no button (`BL-460`)
 11. ☑ `campaign-objectives-hud` fails on C4 and C5 on its wake-cue check (`BL-483`)
 12. ☐ Fly a campaign mission end to end: the Wave A/B/C sortie, closing `BL-458`
 
@@ -566,7 +566,7 @@ than the original's.
 
 # Wave C — offered but inert, and the red suite
 
-## C10 ☐ The auto-land the approach table offers has no button
+## C10 ☑ The auto-land the approach table offers has no button
 
 **Goal.** When the approach table offers an auto-land, the player is prompted and can take it.
 
@@ -588,11 +588,18 @@ and an input binding, with one double-fire guard to respect.
 plus a check that the manual row still fires exactly once when both are reachable.
 
 **⚠ Traps.** ⚠ The manual and auto rows name the SAME animation, so a session that starts it from
-both would double-fire; the trigger already returns after the first row that passes, and a button
-path has to respect the cutscene guard the same way. ⚠ The prompt's message ids are `langui` ids,
-which `BL-427` has not extracted, so the text is not in `extracted/messages.json`.
-<TODO: decide what the prompt reads in the meantime, and whether that placeholder is acceptable to
-ship or whether this item pulls `BL-427` in.>
+both would double-fire; the button check sits inside `LandingApproachRuntime.Tick()`'s own top-level
+cutscene guard, the same one the manual row's return already relies on, so nothing outside that
+method has to re-derive it. ⚠ The prompt's message ids are `langui` ids CSVM has not resolved to
+their text. The extraction pipeline that reads `langui.dll`'s STRINGTABLE already exists
+(`ExtractRof.ps1`, `UiStrings.cs`), so this is not the missing pipeline `BL-427` once was: that entry
+is closed, its premise already stale, and the gap here is narrower, that ids `0xb5`/`0xb6` are not
+present in today's extracted `langui` table under that numbering. **Decision: ship a plain-English
+placeholder** (`AUTO-LAND AVAILABLE` plus the bound key), marked in `FlightHud.cs` at its declaration
+as a stand-in for the unresolved original string, rather than pulling in a fresh string-mapping
+investigation here.
+
+**Verified.** <pending orchestrator run>
 
 ## C11 ☑ `campaign-objectives-hud` fails on C4 and C5 on its wake-cue check
 

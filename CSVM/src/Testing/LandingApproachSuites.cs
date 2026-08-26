@@ -34,6 +34,10 @@ internal static class LandingApproachSuites
     private const float ArmBudgetS = 12f;
     private const float PlayBudgetS = 45f;
 
+    // How long the auto row's own WAKE_ANIM is given to reach the node write, polled rather than
+    // assumed instant.
+    private const float AutoArmBudgetS = 30f;
+
     // How long the trigger is ticked after a handoff to catch the row re-firing.
     private const int RestartFrames = 30;
 
@@ -65,6 +69,13 @@ internal static class LandingApproachSuites
     /// approach cone, and flying that cone starts the pickup cutscene and clears its objective.</summary>
     internal static void TrainPickupGate(TestContext ctx) =>
         DriveMission(ctx, TrainPickupSeq, "test-train-pickup-gate", DriveTrainPickup);
+
+    /// <summary>Drives the auto-land button over the campaign's first mission's BUILT world: flying
+    /// into the chapter's <c>auto</c> row lights <see cref="LandingApproachRuntime.AutoLandOffered"/>
+    /// but starts nothing on its own, pressing the button starts the row's animation the way the
+    /// manual row would, and holding the button past the handoff does not re-fire it.</summary>
+    internal static void AutoLandButton(TestContext ctx) =>
+        DriveMission(ctx, FirstSeq, "test-autoland-button", DriveAutoLand);
 
     // The world build every landings suite needs: the story mission at this sequence position, its
     // objective script, an in-memory campaign profile, and the cutscene roots the definitions pose.
@@ -130,6 +141,91 @@ internal static class LandingApproachSuites
             ctx.Same(armed.Count, trigger.Armed, $"every resolved row binds to a node this world built");
             RunTheDrop(ctx, world, graph, script, armed, trigger, cutscene, rig, report);
         });
+    }
+
+    private static void DriveAutoLand(TestContext ctx, TestWorld world, CampaignDirector director,
+        ObjectiveScript script, string missionZrdr, StringBuilder report)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        var armed = LandingApproaches.Resolve(
+            chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
+        if (AutoFor(armed) is not { } auto)
+        {
+            ctx.Check(false, $"the chapter's landings.zrd carries an auto row to fly");
+            return;
+        }
+
+        WithTrigger(ctx, world, director, armed, (trigger, cutscene, rig, graph) =>
+            RunAutoLandButton(ctx, world, graph, script, trigger, cutscene, rig, auto, report));
+    }
+
+    // Arms the row the mission's own way (whatever objective's WAKE_ANIM writes its land_on),
+    // flies the sphere with the button up (offered, but inert), presses it (starts the SAME
+    // animation the manual row would), then holds it past the handoff to prove the row does not
+    // re-fire while the aircraft is still parked inside it, the manual row's own guard, reused.
+    private static void RunAutoLandButton(
+        TestContext ctx, TestWorld world, ObjectiveGraph graph, ObjectiveScript script,
+        LandingApproachRuntime trigger, CutsceneController cutscene, FlightController rig,
+        LandingApproach auto, StringBuilder report)
+    {
+        var nodes = world.Runtime.FindNodes(auto.Node);
+        ctx.Check(nodes.Count > 0, $"the auto row's own node '{auto.Node}' is built");
+        if (nodes.Count == 0)
+        {
+            return;
+        }
+
+        ArmRow(ctx, world, graph, script, auto, report);
+
+        var frame = nodes[0].GlobalTransform;
+        var centre = frame * auto.Apex;
+        report.AppendLine($"'{auto.Node}' sphere centre world pos=({centre.X:0},{centre.Y:0}," +
+            $"{centre.Z:0}) r={auto.Radius:0.#}");
+        rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null, new CamParams(),
+            frame * Lerp(auto, AxisFraction), frame * auto.Apex, ApproachThrottle, ApproachSpeedMps);
+
+        bool offered = false;
+        for (int i = 0; i < RestartFrames; i++)
+        {
+            rig.SimStep(StepDt);
+            world.Runtime.Advance(StepDt);
+            trigger.Tick();
+            cutscene.Tick();
+            offered |= trigger.AutoLandOffered;
+        }
+
+        report.AppendLine($"auto row offered={offered} with the button up, started=" +
+            $"'{trigger.LastStarted ?? "(none)"}'");
+        ctx.Check(offered, $"flying into '{auto.Node}' lights AutoLandOffered");
+        ctx.Check(trigger.LastStarted == null, $"and starts nothing while the button is up");
+
+        rig.AutoLand = true;
+        for (int i = 0; i < RestartFrames && !cutscene.Playing; i++)
+        {
+            rig.SimStep(StepDt);
+            world.Runtime.Advance(StepDt);
+            trigger.Tick();
+            cutscene.Tick();
+        }
+
+        report.AppendLine($"button pressed: started='{trigger.LastStarted}', playing={cutscene.Playing}");
+        ctx.Check(trigger.LastStarted == auto.Anim,
+            $"pressing the button starts '{auto.Anim}', the row's own animation");
+        ctx.Check(cutscene.Playing, $"which the cutscene host runs the same as the manual row's");
+
+        float played = 0f;
+        for (float t = 0f; t < PlayBudgetS && cutscene.Playing; t += StepDt)
+        {
+            world.Runtime.Advance(StepDt);
+            trigger.Tick();
+            cutscene.Tick();
+            graph.Step(StepDt);
+            played += StepDt;
+        }
+
+        report.AppendLine($"episode ran {played:0.##} s before handoff, playing={cutscene.Playing}");
+        ctx.Check(!cutscene.Playing, $"and the auto-land episode completes within budget");
+        CheckNoRestart(ctx, world, trigger, cutscene, graph, rig, auto, report);
     }
 
     // The session wiring a flown story mission has and the suite harness's world build does not:
@@ -857,6 +953,45 @@ internal static class LandingApproachSuites
             $"the mission's own objective chain arms '{cone.Node}' by flying its site");
     }
 
+    // Arms a row generically: whichever objective's WAKE_ANIM writes its land_on gamez node,
+    // found from the compiled definitions rather than named here, woken directly rather than
+    // waited on, since the row's own site is not necessarily on the mission's main path.
+    private static void ArmRow(TestContext ctx, TestWorld world, ObjectiveGraph graph,
+        ObjectiveScript script, LandingApproach approach, StringBuilder report)
+    {
+        var node = world.Runtime.FindNodes(approach.Node)[0];
+        int armIndex = ArmIndexOf(world.Gamez, approach.Node);
+        var gate = armIndex >= 0 ? GateDefs(world, new[] { armIndex }) : new List<string>();
+        var caller = gate.Count > 0 ? CallerOf(script, gate[0]) : null;
+        report.AppendLine($"'{approach.Node}' land_on gamez node {armIndex}, gate def(s) " +
+            $"[{string.Join(", ", gate)}], caller OBJECTIVE{caller?.Number.ToString() ?? "?"}");
+        ctx.Check(caller != null, $"an objective's WAKE_ANIM arms '{approach.Node}'");
+        if (caller is { } found)
+        {
+            graph.Wake(found.Number);
+        }
+
+        // Polled rather than a fixed budget: WAKE_ANIM's own animation runs its authored timeline
+        // before it touches the node state, and that duration is not this suite's to guess at.
+        var arm = world.Runtime.FindNodes(LandingApproaches.ArmNode, node);
+        float armedAt = -1f;
+        for (float t = 0f; t < AutoArmBudgetS; t += StepDt)
+        {
+            world.Runtime.Advance(StepDt);
+            graph.Step(StepDt);
+            if (arm.Count > 0 && arm[0].Visible)
+            {
+                armedAt = t;
+                break;
+            }
+        }
+
+        report.AppendLine($"armed: '{approach.Node}' land_on " +
+            $"{(arm.Count > 0 ? arm[0].Visible.ToString() : "absent")} at t={armedAt:0.#}s");
+        ctx.Check(arm.Count > 0 && arm[0].Visible,
+            $"the mission's own objective chain arms '{approach.Node}'");
+    }
+
     private static FlightController BuildRig(TestContext ctx, TestWorld world, ProjectilePool pool)
     {
         var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
@@ -1151,6 +1286,19 @@ internal static class LandingApproachSuites
         foreach (var approach in armed)
         {
             if (approach.Shape == ApproachShape.Cone && !approach.Auto)
+            {
+                return approach;
+            }
+        }
+
+        return null;
+    }
+
+    private static LandingApproach? AutoFor(IReadOnlyList<LandingApproach> armed)
+    {
+        foreach (var approach in armed)
+        {
+            if (approach.Auto)
             {
                 return approach;
             }

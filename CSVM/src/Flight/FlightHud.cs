@@ -42,6 +42,11 @@ public struct FlightHudState
     /// <summary>The flight model is actually stalled, not merely warning.</summary>
     public bool Stalled;
 
+    /// <summary>Whether the approach table's <c>auto</c> row currently passes for this aircraft
+    /// (<see cref="CSVM.Session.LandingApproachRuntime.AutoLandOffered"/>), so the auto-land button
+    /// does something right now.</summary>
+    public bool AutoLandOffered;
+
     /// <summary>Wall seconds this frame: the damage flash counts down on wall time, so a halted
     /// session does not burn the flash off while nothing is drawn.</summary>
     public float WallDt;
@@ -129,6 +134,9 @@ public sealed class FlightHud
     private const float ReticleRatePerGap = 1.9848576f; // rate ceiling per metre of remaining gap
     private const float ReticleFarGap = 900f;          // m past which the ceiling is flat
     private const float ReticleFarRate = 1788.1599f;   // m/s that flat ceiling
+    // The original's line comes from a `langui` string this remake has not extracted; only the
+    // message id is decoded, not the text. This stand-in is plain English, not the shipped wording.
+    private const string AutoLandPrompt = "AUTO-LAND AVAILABLE — PRESS F9 (GAMEPAD L3) TO LAND";
     private const float DamageFlashTime = 2.5f;        // s the text block shows the impact line
     private const int TextFontSize = 22;               // text block, full-screen (shrunk per pane)
     private const float AglRayLength = 1000f;          // m the altimeter's down ray reaches
@@ -414,10 +422,10 @@ public sealed class FlightHud
     }
 
     /// <summary>The flight text block's lines in the shipped order: speed/altitude/throttle, then
-    /// whichever of the stall, damage flash, damage summary, stunt status and paused/crashed lines
-    /// apply. Returns the reused instance list, valid until the next call. Public so CSVM.Tests can
-    /// assert the ordering with no text Control in the process, off the numbers
-    /// <see cref="MphFromSpeedMps"/> and <see cref="FeetFromWorldY"/> already expose.</summary>
+    /// whichever of the stall, auto-land prompt, damage flash, damage summary, stunt status and
+    /// paused/crashed lines apply. Returns the reused instance list, valid until the next call.
+    /// Public so CSVM.Tests can assert the ordering with no text Control in the process, off the
+    /// numbers <see cref="MphFromSpeedMps"/> and <see cref="FeetFromWorldY"/> already expose.</summary>
     public List<string> ComposeTextLines(in FlightHudState state, float mph, float ft, bool wide)
     {
         _textLines.Clear();
@@ -434,6 +442,8 @@ public sealed class FlightHud
         }
         if (!state.Held && state.Stalled)
             _textLines.Add("⚠ STALLED - SPEED UP");
+        if (!state.Held && !state.Crashed && !state.Halted && state.AutoLandOffered)
+            _textLines.Add(AutoLandPrompt);
         if (AdvanceDamageFlash(state.WallDt, state.Halted, state.Crashed) is { } flashLine)
             _textLines.Add(flashLine);
         if (state.DamageSummary is { Length: > 0 } dmgSummary)

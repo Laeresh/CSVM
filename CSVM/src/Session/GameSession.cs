@@ -679,6 +679,14 @@ public partial class GameSession : Node3D
                 _focusPoints.Add(rig.Camera.Position);
             _edgeExtender.Update(_focusPoints);
         }
+
+        // One frame behind: LandingApproachRuntime ticks after this node (ProcessPriority), so this
+        // reads last frame's verdict. The HUD prompt is not a fast-twitch readout, so the lag is
+        // fine, and Bind() already flies only _rigs[0] against the trigger.
+        if (_landings != null && _rigs.Count > 0 && _rigs[0].Controller is { } flown)
+        {
+            flown.AutoLandOffered = _landings.AutoLandOffered;
+        }
     }
 
     /// <summary>The match clock and the Instant Action mission's own step on a realtime session:
