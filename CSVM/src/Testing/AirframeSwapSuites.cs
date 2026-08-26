@@ -157,10 +157,15 @@ internal static class AirframeSwapSuites
         }
         finally
         {
-            if (rig.Controller is { } live)
+            // Only what this suite put on the host, the two AI rigs it staged included: the host is
+            // shared with every suite in the run, and a leaked 'wingman_4' renames the next one.
+            var live = rig.Controller;
+            var members = new List<FlightController>(roster?.AiAircraft ?? Array.Empty<FlightController>());
+            roster?.ClearMembership();
+            live?.Free();
+            foreach (var ai in members)
             {
-                roster?.ClearMembership();
-                live.Free();
+                ai.Free();
             }
 
             cutscene.Free();
