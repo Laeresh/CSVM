@@ -134,7 +134,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 10. ☑ The auto-land the approach table offers has no button (`BL-460`)
 11. ☑ `campaign-objectives-hud` fails on C4 and C5 on its wake-cue check (`BL-483`)
-12. ☐ Fly a campaign mission end to end: the Wave A/B/C sortie, closing `BL-458`
+12. ◐ Fly a campaign mission end to end: the Wave A/B/C sortie, closing `BL-458`
 
 ## Dependency and parallelism notes
 
@@ -489,7 +489,7 @@ The item is ◐ because the excursion is reshaped, not removed: the wingman is n
 the vertical excursion is 47 m larger by construction. What remains is not decodable from the
 climb-out at all — the wingman sits 94.5 m DEAD ASTERN because `SpeedCeiling` caps it below the
 leader, which is what puts the leader on its ray, and re-tuning that is out of this plan by its own
-traps. <pending orchestrator run>
+traps. Full `RunTests.ps1` battery on the merged plan tree at `bb2d1a81`: units 2407/2407, engine suites 135/135 with errors clean, goldens 16/16 hash-identical.
 
 ---
 
@@ -740,7 +740,7 @@ surface it chose, to reach a real player. `docs/verification.md` DIAG-22 records
 
 **Verified.** Full `RunTests.ps1` battery on the merged plan tree at `fbe97195`: build clean, units 2406/2406, engine suites 135/135 with engine errors clean, goldens 16/16 hash-identical
 
-## C12 ☐ Fly a campaign mission end to end: the Wave A/B/C sortie, closing `BL-458`
+## C12 ◐ Fly a campaign mission end to end: the Wave A/B/C sortie, closing `BL-458`
 
 **Goal.** One campaign mission is flown to its end at the controls, judging this plan's visible items
 together, and `BL-458`'s secondary is seen to complete.
@@ -762,6 +762,8 @@ holding station out of the intro (A5), the intro staging two aircraft (B8), the 
 inherited damage (B9), the auto-land prompt (C10), pilot chatter varying by rating (A3), the wingman breaking off to climb low over the island (A13), and a deliberate crash ending the mission with the debrief reached once the wreck is down (A6). Record
 what the sortie reports; findings that are not these items become new `backlog.md` entries with their
 own IDs from `New-ItemId.ps1`.
+**Sortie brief (the stop).** Build: branch `worktree-m5-polish-2` at its head, `dotnet build CSVM/CSVM.sln`, then launch from the menu with a campaign profile flying the Devastator (`selectedPlane` and `wingmanPlane` both on `player_pfighter`, which is what every A5/A13 number was measured on). Mission one: C3/M01 (the campaign's first mission). Watch, in order: (1) the intro stages the prop Devastator beside the airship and your own aeroplane in the launch bay, and the drop launches from it (B8); (2) out of the intro the wingman sits about 95 m off and stays with you over the island, or breaks off into a vertical climb low over terrain and comes back to station (A13, the open question, `BL-509`); (3) the secondary completes when you cross the `dzpath1`/`dzpath4` gates (`BL-458`), and one crossing completing both is correct; (4) pilots chatter unevenly by rating (A3), the eight named aces on dead accents stay silent; (5) fly into the sea once: the objectives stop, and the debrief arrives once the wreck is down (A6; `--no-crash-loss` restores the old behaviour); (6) any AI flying into a hillside, since the retired second probe ray applies to every AI (A13). Mission two: C3/M05 (CM02). Watch: (7) the captured Balmoral disappears at the swap, your new hull reads damaged on the DMG line, and your old aeroplane appears about 100 m ahead-right in your livery flying your heading (B9); (8) inside the `auto` approach sphere the HUD line `AUTO-LAND AVAILABLE` appears and `F9` (left-stick click) starts the hookup once (C10); (9) an AI bomber's rear turret is never a second target beside it, while ground emplacements still are (A2). Findings outside these become new `backlog.md` entries with ids from `New-ItemId.ps1`.
+
 
 **Model recommendation.** medium. The agent's work is preparing the build, the watch-list and the
 write-up; the instrument is the user.
