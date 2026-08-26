@@ -102,10 +102,10 @@ public sealed partial class ColliderOverlay : Node
     /// for the C press.</summary>
     public bool DebugShow { get; init; }
 
-    /// <summary>The flown aircraft and their swept airframe boxes. Those are shape resources the
+    /// <summary>The flown aircraft and their swept airframe hulls. Those are shape resources the
     /// flight code casts with directly, not scene nodes, so they are passed in rather than found.
     /// <c>Frame</c> is the FlightController, not the plane model — <see cref="PlaneCollider"/>'s
-    /// boxes are expressed in the model's PARENT frame, so drawing them under the model itself
+    /// hulls are expressed in the model's PARENT frame, so drawing them under the model itself
     /// would apply its own local transform a second time.</summary>
     public IReadOnlyList<(Node3D Frame, PlaneCollider Collider)> Planes { get; init; } =
         Array.Empty<(Node3D, PlaneCollider)>();
@@ -235,9 +235,12 @@ public sealed partial class ColliderOverlay : Node
             case ConcavePolygonShape3D concave:
                 boxed = EmitTriangles(mesh, concave.GetFaces(), at, col, ref lines);
                 break;
+            case ConvexPolygonShape3D convex when convex.Points.Length >= 4:
+                lines += EmitHull(mesh, ConvexHull.Of(convex.Points, 0f), at, col);
+                break;
             default:
-                // Anything else (convex hulls, capsules): its own bounds, which is still an honest
-                // "something solid is here" rather than nothing.
+                // Anything else (capsules, a degenerate hull): its own bounds, which is still an
+                // honest "something solid is here" rather than nothing.
                 EmitBox(mesh, at, Vector3.One, col);
                 lines += 12;
                 boxed = true;
@@ -332,6 +335,18 @@ public sealed partial class ColliderOverlay : Node
             mesh.SurfaceAddVertex(corners[pairs[i]]);
             mesh.SurfaceAddVertex(corners[pairs[i + 1]]);
         }
+    }
+
+    // Every hull edge once; returns the line count.
+    private static int EmitHull(ImmediateMesh mesh, ConvexHull hull, Transform3D xf, Color col)
+    {
+        mesh.SurfaceSetColor(col);
+        foreach (var (a, b) in hull.Edges)
+        {
+            mesh.SurfaceAddVertex(xf * hull.Points[a]);
+            mesh.SurfaceAddVertex(xf * hull.Points[b]);
+        }
+        return hull.Edges.Length;
     }
 
     private static void EmitSphere(ImmediateMesh mesh, Transform3D xf, float radius, Color col)
@@ -478,10 +493,7 @@ public sealed partial class ColliderOverlay : Node
             var mesh = new ImmediateMesh();
             mesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
             foreach (var part in collider.Parts)
-            {
-                EmitBox(mesh, part.Local, part.Shape.Size, PlaneColor);
-                lines += 12;
-            }
+                lines += EmitHull(mesh, part.Hull, part.Local, PlaneColor);
             mesh.SurfaceEnd();
             // Drawn under FlightController (frame), the space Collider.Parts.Local is already
             // in; parenting to the model itself would double its own transform.

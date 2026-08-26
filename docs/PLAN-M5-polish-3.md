@@ -127,7 +127,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — the same runtime's correctness, and the two cheap features
 
 7. ☐ A stopped sequence stays callable; instrument before implementing (`BL-334`)
-8. ☐ Tighter aircraft collision shapes, convex hulls per clipped region (`BL-300`)
+8. ☑ Tighter aircraft collision shapes, convex hulls per clipped region (`BL-300`)
 9. ☑ Fuel burn and the empty-tank lever freeze (`BL-450`)
 10. ☑ The mission spawner does not read roster blocks (`BL-453`)
 11. ☐ The flown session: the hitch sortie and the two density judgements
@@ -474,7 +474,7 @@ wrongly left disabled fails *silently*, which is the hardest class of bug to att
 is on `PLAYER_LINED_UP`); do not reopen it. ⚠ `98948b25` already removed the stopper idiom itself, so
 "a stop starts a parked sequence" is fixed and is not this.
 
-## C8 ☐ Tighter aircraft collision shapes, convex hulls per clipped region
+## C8 ☑ Tighter aircraft collision shapes, convex hulls per clipped region
 
 **Goal.** An aircraft's collision shape follows its silhouette closely enough that a close stunt pass
 does not read as a terrain crash, and that being shot is fair.
@@ -495,9 +495,13 @@ the result (see its `docs/architecture.md` ⚠), and `MapStruckPart` consumes th
 **Model recommendation.** high. It changes both the terrain sweep and the damage mapping at once, and
 the overlap rule at `:16` means the ordering semantics have to survive the shape change.
 
-**Verify.** <TODO: name the suite arm. The sweep did not settle whether an existing collision or
-damage suite can assert per-part hull coverage headless, or whether this needs a new arm measuring
-overhang against the mesh.> The close-stunt half is judged in C11.
+**Verify.** No existing suite measures the shapes against the mesh (`air-to-air` and
+`graze-bounce` fire through and sweep the shapes, but assert damage and bounce outcomes), so a new
+arm does: `airframe-hull-coverage` builds all eleven player airframes headless and measures
+`PlaneCollider.Layout` against each one's own triangles, per part (hull inside its box, above the
+thickness floor, the part names and order, the silhouette's uncovered triangle area) and writes the
+per-part box and hull volumes to its artifact. `CSVM.Tests/ConvexHullTests.cs` pins the hull itself.
+The close-stunt half is judged in C11.
 
 **⚠ Traps.** ⚠ The overlap is deliberate and order-dependent (`:16`); a hull set that removes the
 overlap changes which part a hit maps to even where the geometry is unchanged. ⚠ Tighter shapes cut

@@ -2391,14 +2391,6 @@ usual.
   authored for exactly this mode. MP worlds already load (`--mission=MP1`); only their spawns fall
   back today (`SpawnPicker` warns).
 
-- `BL-300` `[Cleanup]` **Tighter aircraft collision shapes — convex hulls per clipped region instead of
-  boxes.** Pays off twice since PLAN-vs-mode A1 single-sourced the shape set: the same
-  `PlaneCollider.Parts` feed the terrain sweep (close-stunt false crashes from box overhang —
-  user-reported 2026-08-06) and the aircraft body (being-shot fairness, blast nearest-point
-  falloff). Keep the `Relabel`/part-name contract intact — `PlaneDamage`'s "tail" arm depends on
-  it (its architecture.md ⚠), and `MapStruckPart` consumes the names unchanged. The Bloodhawk's
-  uncovered canard tips are the known gap to close.
-
 - `BL-301` `[Tuning]` `[Owed-playtest]` **Dogfight (VS mode) tuning** — every deliberate v1 deferral, to be re-judged from
   `PT-43` evidence, not speculation. **Aim-assist strength settled 2026-08-13** from `PT-43`(a)/(b):
   the shipped `sticky_bullet_*` constants (decoded in

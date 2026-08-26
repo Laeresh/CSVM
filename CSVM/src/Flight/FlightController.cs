@@ -3101,7 +3101,7 @@ public partial class FlightController : Node3D
     }
 
     // Debug view of the collision test: the swept center ray with a cross at
-    // its tip, plus the airframe boxes drawn at where this frame's sweep stopped.
+    // its tip, plus the airframe hulls drawn at where this frame's sweep stopped.
     // Freezes red at the impact pose while crashed.
     private void DrawProbe(Vector3 from, Vector3 end, Vector3 shapePos, bool hit)
     {
@@ -3121,30 +3121,16 @@ public partial class FlightController : Node3D
         {
             var baseXf = new Transform3D(_model.Attitude, shapePos);
             foreach (var p in Collider.Parts)
-                AddBoxEdges(baseXf * p.Local, p.Shape.Size * 0.5f);
+            {
+                var xf = baseXf * p.Local;
+                foreach (var (a, b) in p.Hull.Edges)
+                {
+                    _probe.SurfaceAddVertex(xf * p.Hull.Points[a]);
+                    _probe.SurfaceAddVertex(xf * p.Hull.Points[b]);
+                }
+            }
         }
         _probe.SurfaceEnd();
-    }
-
-    // Adds the 12 wireframe edges of a box (half-extents h) to the probe mesh.
-    private void AddBoxEdges(Transform3D xf, Vector3 h)
-    {
-        Span<Vector3> c = stackalloc Vector3[8];
-        for (int i = 0; i < 8; i++)
-            c[i] = xf * new Vector3((i & 1) == 0 ? -h.X : h.X,
-                                    (i & 2) == 0 ? -h.Y : h.Y,
-                                    (i & 4) == 0 ? -h.Z : h.Z);
-        ReadOnlySpan<int> edges = stackalloc int[]
-        {
-            0, 1, 2, 3, 4, 5, 6, 7, // along X
-            0, 2, 1, 3, 4, 6, 5, 7, // along Y
-            0, 4, 1, 5, 2, 6, 3, 7, // along Z
-        };
-        for (int i = 0; i < edges.Length; i += 2)
-        {
-            _probe!.SurfaceAddVertex(c[edges[i]]);
-            _probe.SurfaceAddVertex(c[edges[i + 1]]);
-        }
     }
 
     /// <summary>Places the camera at its settled pose immediately (spawn, respawn, the weapon

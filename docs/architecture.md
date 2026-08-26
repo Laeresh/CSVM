@@ -190,9 +190,10 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PylonOrdnance.cs` — the rockets under the wings: one FLYOUT-model body per loaded pylon, hidden as its ammo depletes; `--fly` only.
 - `src/Flight/PlaneShake.cs` — the plane-wobble oscillators (gunfire buzz, overspeed rattle, being-hit rocks, the nitro engage) summed to visual-only roll on the rig's ShakePivot.
 - `src/Flight/NitroSystem.cs` — the nitro boost lifecycle: the decoded tank, one-shot engage, cutoff, gates and animation edges, engine-free.
-- `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's triangles, with no per-plane data.
+- `src/Flight/PlaneCollider.cs` — derives up to 8 plane-frame convex collision hulls from the built model's triangles, with no per-plane data.
+- `src/Flight/ConvexHull.cs` — an engine-free convex hull over a point cloud: vertices, outward faces, thickness padding, and the point-distance query the fuse and blast passes ask.
 - `src/Flight/CollisionLayers.cs` — the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.
-- `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` boxes on the aircraft layer; struck shape → part name.
+- `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` hulls on the aircraft layer; struck shape → part name.
 - `src/Flight/IWorldQuery.cs` — the one seam onto the live physics world: a shape swept along a motion, a ray, and a standing overlap test.
 - `src/Flight/GodotWorldQuery.cs` — the only adapter over `DirectSpaceState`; implements `IWorldQuery`.
 - `src/Flight/ContactReport.cs` — one detected contact as a value: impact, normal, struck part, collider name, stop fraction, and whether an aeroplane was struck.
@@ -2967,11 +2968,23 @@ set back off — detaching each body from its pylon IMMEDIATELY, not merely queu
 lab's rebuild-on-swap cannot leave the old ordnance hanging beside the new.
 
 ## src/Flight/PlaneCollider.cs
-Derives 5–8 plane-frame collision boxes from the built model's mesh triangles alone (no per-plane
-data): region-clipped geometry (tail/wing/fuselage), then greedy volume-guided refinement cutting
-one OR two parallel planes per axis (the double cut separates bilateral pairs like twin fins).
-Single-sourced: the terrain sweep casts these boxes AND `AircraftBody` mounts the same
-`BoxShape3D` resources as the plane's hittable body — never a second derivation.
+Derives up to 8 plane-frame convex hulls from the built model's mesh triangles alone (no per-plane
+data): region-clipped geometry (tail, wing, fuselage out to the wing band), greedy volume-guided
+refinement cutting one OR two parallel planes per axis (the double cut separates bilateral pairs
+like twin fins), then one `ConvexHull` per refined piece. The refinement and the part order are
+judged on the pieces' boxes, so the hull is only the emitted shape and never moves a cut or a name.
+Single-sourced: the terrain sweep casts these hulls AND `AircraftBody` mounts the same
+`ConvexPolygonShape3D` resources as the plane's hittable body — never a second derivation.
+`Layout` is the engine-free half (`Triangle`s in, named `Region`s out) the `airframe-hull-coverage`
+suite and the unit tests measure; `Build` wraps it in shapes.
+
+## src/Flight/ConvexHull.cs
+A convex hull over a point cloud with no engine dependency: vertices, outward faces, edges, bounds
+and volume, plus `Contains` and the point-to-surface `Distance` the fuse and blast passes ask.
+Incremental construction on millimetre integer coordinates with exact 64-bit volume signs, so a
+near-coplanar mesh cannot fold it (a float-epsilon hull did, on two airframes). A cloud thinner
+than the thickness floor along an axis is padded to it first, the per-dimension floor the box
+shapes applied; a cloud too degenerate to hull falls back to its padded bounding box.
 
 ## src/Flight/ShakeDefs.cs
 Typed reader over the shared `shakes.zrd.json` — the six shake-oscillator sources
@@ -4517,9 +4530,14 @@ slot 0's `sonic_ring1..5` read three frames into play 1 and play 5: visible-in-t
 per-instance opacity must agree, and both plays must be drawing at least one ring. Without the
 re-reset the fifth play's rings read INACTIVE at opacity 0, which is the sortie-long dead-burst
 symptom this suite exists to hold shut.
+`airframe-hull-coverage` builds all eleven player airframes and measures `PlaneCollider.Layout`
+against each one's own triangles: every hull inside the box it replaces and above the thickness
+floor, the fuselage leading the part order with only the four names `PlaneDamage.MapStruckPart`
+knows, and no more than 0.5 % of the silhouette's triangle area outside every hull; its artifact
+lists the per-part box and hull volumes, which is the overhang the sweep no longer bridges.
 
 ## src/Testing/*Suites.cs
-Sixteen domain modules hold the in-engine scenario bodies, each named for the whole of what it
+Seventeen domain modules hold the in-engine scenario bodies, each named for the whole of what it
 files: `PufferSuites` (the emitter model's modes, wind, fades and fire column), `CombatSuites`
 (loadouts, live fire, aim assist and the hit chain), `OrdnanceSuites` (a round's flight, guidance
 and ends), `InstantActionSuites` (the mission runtime from spawn to wrap-up), `AiSuites` (how a
@@ -4540,7 +4558,8 @@ mid-mission world behaviours the shipped data drives: the area-selected node tog
 story rectangles, the scripted-path follower over C1's own takeoff path, the mission script's and
 the generator's hangar doors over C1/M04, and the `FOG_STATE` event over its intro), plus
 `AlphaCutoutRaySuites` (the BL-477 census: what actually stops a weapon ray short of C3/M01's cargo
-zeppelin's slung tanks, as first-collider node names over a sphere of aspects). They depend on
+zeppelin's slung tanks, as first-collider node names over a sphere of aspects) and
+`AirframeColliderSuites` (the collision hulls measured against the mesh they came from). They depend on
 `TestHarness` through
 `TestContext`; shared fixtures are separate focused modules, not an all-purpose suite helper.
 
@@ -5359,17 +5378,17 @@ The first and only place a layer bit is assigned a meaning; new layers go here, 
 
 ## src/Flight/AircraftBody.cs
 The flying aircraft's physics body: one `AnimatableBody3D` child of `FlightController`, one
-`CollisionShape3D` per `PlaneCollider.Part` reusing the SAME `BoxShape3D` + local transform the
-terrain sweep casts, on the aircraft layer. Rides the controller's transform; `PartName(shapeIdx)`
-maps a query's struck shape back to the part (shapes added in `Parts` order); `ExcludeSelf` is the
-cached one-entry RID list the owner's own queries pass; `SetHittable` drops it to layer 0 while
-the plane is out of play — crashed, or INERT — and back when it is in play again, both
-driven from `FlightController.ApplyPresence`. Also the fuse/blast geometry oracle, answering from the same box
-set without a physics query: `NearestShape(point)` (nearest box, its skin distance + surface
-point — blast falloff), `SegmentDistance(from,to)` (closest approach of a swept round, ternary
-search per box — distance to a box is convex along the segment), `BoundRadius` for the cheap
-per-step reject, and `TakeProjectileHit(..., damageScale)` scaling both damage magnitudes by the
-blast falloff share (1 = direct round).
+`CollisionShape3D` per `PlaneCollider.Part` reusing the SAME `ConvexPolygonShape3D` + local
+transform the terrain sweep casts, on the aircraft layer. Rides the controller's transform;
+`PartName(shapeIdx)` maps a query's struck shape back to the part (shapes added in `Parts` order);
+`ExcludeSelf` is the cached one-entry RID list the owner's own queries pass; `SetHittable` drops it
+to layer 0 while the plane is out of play — crashed, or INERT — and back when it is in play again,
+both driven from `FlightController.ApplyPresence`. Also the fuse/blast geometry oracle, answering
+from the same `ConvexHull` set without a physics query: `NearestShape(point)` (nearest hull, its
+skin distance + surface point — blast falloff), `SegmentDistance(from,to)` (closest approach of a
+swept round, ternary search per hull — distance to a convex set is convex along the segment),
+`BoundRadius` for the cheap per-step reject, and `TakeProjectileHit(..., damageScale)` scaling
+both damage magnitudes by the blast falloff share (1 = direct round).
 
 ## src/Flight/IWorldQuery.cs
 The one seam onto the live physics world: `Sweep` (a shape moved along a motion, earliest stop

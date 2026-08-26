@@ -178,6 +178,7 @@ public static class SuiteCatalog
         "campaign-briefing-repaint",
         "menu-screenshot-key",
         "campaign-briefing-note",
+        "airframe-hull-coverage",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -1009,6 +1010,12 @@ public static class SuiteCatalog
             + "no entry allowed to start above the bottom of the one before it or to run past the "
             + "parchment's authored 240 px box",
             CampaignBriefingNote));
+        into.Add(new TestHarness.Suite("airframe-hull-coverage",
+            "every player airframe's collision hulls measured against its own mesh: each hull "
+            + "inside the box it replaces, the whole silhouette's triangle area covered by some hull "
+            + "within the tolerance, the part names and their order the damage mapping relies on, "
+            + "and the per-part box-to-hull volume the sweep no longer bridges",
+            AirframeColliderSuites.AirframeHullCoverage));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------
