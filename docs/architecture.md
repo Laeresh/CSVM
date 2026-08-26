@@ -887,7 +887,15 @@ sequences end INACTIVE (the sonic burst's `ring_up1..4`/`ring_down1` on `sonic_r
 per slot and drew nothing from the wrap on. `RESET_TIME -1` is "never self-reset while playing", not
 an exemption from this. Scoped to the call's own closure and its slot, never the whole `pool<N>`
 container: another effect live on the same slot number must not be re-posed under its running
-motions. Regression: the `effect-pool-reset` suite. `Play`/`PlayWithin`/`StopWithin` start a def's
+motions. Regression: the `effect-pool-reset` suite. **`PrewarmEmitters(params Node3D[]
+callSiteAnchors)` builds every emitter the bound program's `PUFFER_STATE 1` events can name before
+anything plays**, through `EmitterDirector.Prewarm`: a named `at_node` resolves to every node of that
+name in the runtime's scope (one emitter per pool copy, filtered by the global tier's own staging
+admission), and an `INPUT_NODE` host to every node a `CALL_ANIMATION` in the program targets the
+def with, the def's own staged copies, and the anchors handed in. It starts and poses nothing. The
+crash rig calls it at bind (`WorldEffectsFactory.BuildFlightCrashRuntime`); the world-effects
+runtime is the other intended caller, never the ambient world runtime. Regression: the
+`emitter-prewarm` suite. `Play`/`PlayWithin`/`StopWithin` start a def's
 instances by anim name, the latter two scoped to one subtree (a NAME can repeat across a chapter,
 e.g. C1's three `hangerdoors`). `OBJECT_ADD_CHILD`/`OBJECT_DELETE_CHILD` take their node-reparent
 form here (`Reparent`, keeping the LOCAL transform) once the sound-emitter form has declined,
@@ -980,7 +988,12 @@ follow, and `Census`. `AnimRuntime` keeps only the dispatch case, the `at_node` 
 and the `active_state` read. One director per runtime; `IEmitterFactory` is what builds (`Puffer`,
 `TextureArchive` and the parent node sit behind that seam), so a suite can install a fake. The
 selector/disposition split across the four stops, the emitter-keying tradeoff and the stop-family
-history live in this file's own doc comments, not here.
+history live in this file's own doc comments, not here. `Prewarm` builds the emitter for a key ahead
+of any assert and leaves it unclaimed: the first `Assert` on that key takes it over (ownership, the
+start and the `Built` count) exactly as if it had constructed it, the owner-selected stops pass an
+unclaimed entry over, and `Prewarmed` counts what was built ahead. `Reset` keeps every emitter whose
+host node still exists, returned to that unclaimed state, so a respawned rig's next crash builds
+nothing; only an emitter whose host is gone is destroyed.
 
 ## src/Mech3/Anim/SoundChannel.cs
 One runtime's `SOUND_NODE`/`SOUND` events as a module: `HandleSoundNode` (declare/place/start the
@@ -2673,6 +2686,9 @@ all three modes with no atlas, no `TextureArchive` and no GPU. The continuous su
 `Emit(worldPos, worldBasis, dt, staticBurnMps = 0f)` / `Stop()`, plus the one-shot `Burst` and the
 hard-kill `Clear` — the authored state picks burst, trail or sustained mode, callers never do.
 `PufferState.FromAnimEvent` parses the compiled anim payloads; `Parse` reads the reader form.
+`Create`'s atlas comes from a per-archive cache keyed by the frame list and the sequenced flag
+(`BuildAtlas` over `BakeAtlas`), so a state many emitters share is baked and luminance-measured
+once; the archive is the key, so a chapter change never serves another chapter's frames.
 Three config knobs (`puffer.burstSizeScale`/`trailSizeScale`/`sustainSizeScale`) scale `BaseSize`
 per spawn path, registered in `Config.WarmTuningRegistry` for `--dump-config`.
 The wind it reads is `Effects/WorldWind.cs` — see its own entry below.
@@ -2722,7 +2738,10 @@ authored in DX7 framebuffer bytes, so multiplied in raw it drew every ramped puf
 too pale (the smoke screen's `53,74,37` came out `109,126,92` against the reference's `50,68,35`).
 The atlas and the blend verdict both arrive already resolved from `Puffer.Create`, which is what
 keeps the three modes reachable with no `TextureArchive` below this seam. Reached in a suite by
-`RecordingEmitterRenderer`.
+`RecordingEmitterRenderer`. `Attach` takes its `Shader` from a static per-variant cache (blend ×
+soft, four at most): a `Shader` per emitter compiled in about 6 ms, which was most of a live
+`effect_pool_miss` and of a crash rig's pre-warm; the `ShaderMaterial` stays per emitter, since it
+carries the atlas.
 
 ## src/Effects/FogVolumeClutter.cs
 The ambient cloud field, entirely authored: `fogvol.zrd`'s weighted clutter table scattered
@@ -5177,6 +5196,13 @@ copy — see `AnimRuntime`'s pool paragraphs for the mechanism and the `damage-t
 for the regression shape. The stage has **two** sources: the chapter gamez, then the planes gamez
 for a root it has none of, which is the only place the destroy def's parachute (`chuteman`) lives;
 both spawners pass it, and its own builder is cached here for the session.
+After the bind, `BuildFlightCrashRuntime` pre-warms the rig's emitters
+(`AnimRuntime.PrewarmEmitters` with the plane model and the crash root as the call-site anchors),
+recorded as the `emitters` startup phase and logged per rig, so a crash or a damage stage finds its
+puffers and materials built and trips no `effect_pool_miss`. Measured on the Bloodhawk in C1: 217
+emitters in about 45 ms, of which the shader and atlas caches (`EmitterRenderer`, `Puffer`) are the
+difference from 2.3 s. Every rig kind is pre-warmed, an AI rig included, since its crash pays the
+same first-use cost.
 `LevelPlacedTemplateNames` is set once, from `EffectCatalogue.CrashSurfaceLevelAnimNames`
 (`BL-292`) plus `EffectCatalogue.BailoutAnimNames` — the named defs only ever play from within a
 crash sequence, so unlike `InheritedWorldVelocity` (written per anim instance by `Callback 16`,

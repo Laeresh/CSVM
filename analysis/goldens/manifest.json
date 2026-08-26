@@ -92,14 +92,14 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "4302c25eb8b13fe71322f8068c72e5f6",
+      "hash": "55c8a20dea17afc65c1bed88ca343047",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage, flight-state-dependent SpeedCue and seeded puffer placement; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "6e8983e62bdc73e300c553870e12a5a3",
+      "hash": "d0d41ce42151ef0814cb75ec8e3db44d",
       "exercises": "player_crash_default after five flight steps: corrected pre-crash attitude, crash rig and airframe, moving distance puffers, ranged tumble, vector-form pieces, flydirt delta and pooled repeat calls.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
@@ -113,14 +113,14 @@
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "41e7e271cdb9f1f19abc5ab4b4cce555",
+      "hash": "205671f38c050e99450c454d1cdbf4f9",
       "exercises": "Targeting a live AI in flight: its quaternion-driven pose and its crewed rear turret's barrel feed fixed antialiased in-range brackets, the label below the plane and --debug-markers identity/health text; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "1070206f2377a03212b87eb3c8adfdfa",
+      "hash": "d24ef6d9cb3db7e8b4bf25902c4c904f",
       "exercises": "A shot-down AI three seconds after the kill: quaternion flight state under frozen commands, the auto-selected target's antialiased brackets, second fireball and trail at the handover where randomdestseq inherits the hull's world velocity.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     }

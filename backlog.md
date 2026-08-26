@@ -1368,72 +1368,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   state rules). The `PLAYER_RANGE` `* 4.0` divergence the same decode opened is closed as a
   disproof — the `* 4.0` is on `PLAYER_LINED_UP`, not `PLAYER_RANGE` (`git log --grep=BL-333`).
 
-- `BL-355` `[Bug]` **The damage/crash effect cascade hitches on first use — synchronous emitter
-  construction (shader material + particle system), not GC and not allocation volume.** Diagnosed
-  under the frame-hitch instrument (`PLAN-perf-hitches` G15/G16), via the scripted proxy G15 landed
-  since the aircraft `DamageLab`'s own burst has no CLI repro (E13): `--crash=300 --no-vsync` (`--fly
-  --chapter=C1 --plane=player_bhawk`) tripped `HitchMonitor` twice, frame 300 `frame_ms=48.43`
-  (`samples=part_detach:1x33.01`) and frame 301 `frame_ms=62.11`
-  (`samples=effect_pool_miss:7x54.36`), sidecar `.scratch/logs/fly-20260814-203733.hitches.jsonl`.
-  **Ruled out, from the record itself:** GC — `gc0_delta`/`gc1_delta`/`gc2_delta` are **0** on both
-  hitching frames, no collection of any generation fired. Allocation volume —
-  `allocated_bytes_delta` is 300-350 KB on each hitching frame, three orders of magnitude under the
-  ~860 MB burst `PLAN-perf-hitches` B5 needed to move the GC/alloc columns at all. GPU/render —
-  `render_cpu_ms`/`gpu_ms` stay at their normal ~0.5/0.2 ms on both frames; the cost is entirely
-  inside the CPU/script span `HitchMonitor`'s `frame_ms` measures.
-  **Mechanism, traced live** (a temporary, reverted `GD.Print` in `EmitterDirector.Assert`'s miss
-  branch — `git diff` empty afterward): the crash's own dispatch names ten distinct first-time
-  misses in the same one-two frames — `lgpuffer` on `piece1`/`piece3`/`piece4` (`large_firetrail`),
-  `spurtpuffer1`..`5` on `fly_trail1`..`5` (`call_crash_trails`), `fierypuffer` on `flame_ball_01`
-  (`large_fireball`), `trailpuffer2` on `yellow_spark_01` (`small_yellow_sparks`) — every one a
-  `(name, host, def)` key `EmitterDirector.Assert` has never seen before, each paying
-  `_factory.Create`'s full build (a `Puffer` plus, nested inside the same scope per the code's own
-  comment, `EmitterRenderer.Attach`'s `MaterialCreate`) synchronously, inline in the frame the crash
-  fires.
-  **This is NOT pool exhaustion — raising `effect_pools.json`'s `crashRoots` sizes will not fix
-  it.** `large_firetrail` is sized 6 and only 3 concurrent pieces were in flight; no
-  `AnimRuntime.PoolRecycles` wrap occurred. The pool avoids RELOCATING an already-built emitter onto
-  a new call; it does nothing for the first build of a distinct key, which is what costs here.
-  *Fix shape:* pre-warm the crash rig's (and, by the same mechanism, `DamageLab`'s) effect
-  templates — construct each `crashRoots`/damage-stage emitter once, off the frame that needs it
-  (plane spawn, session build, or a loading beat), the idea `StartupProfile`'s `prewarm` phase
-  already applies elsewhere — rather than leaving the first assert to build synchronously.
-  Alternatively, spread a compound event's misses across several frames instead of one dispatch
-  batch.
-  **Confirmed at the controls, 2026-08-14** (interactive `--fly`, vsync on, real play — not the
-  `--crash=` proxy): `.scratch/logs/fly-20260814-210336.{log,hitches.jsonl}`, a session working
-  through the `DamageLab` panel, tripped `HitchMonitor` 31 times in ~7 s (frames 3373-4243; 6 of
-  those records lost to a sidecar-queue overflow, filed separately as `BL-356`) — **24 of the 25
-  that survived carry `effect_pool_miss`** as their named site, in the same paired-consecutive-frame
-  shape the `--crash=` proxy showed, spaced roughly every 40-90 frames as different parts/thresholds
-  were dragged for the first time. **This answers the open recurrence question below: yes,
-  repeatedly** — not a one-time session cost. It recurs because there are enough distinct
-  `(name, host, def)` keys (8 parts x armor+health x several `injure_anims` thresholds each) that a
-  real sweep through the panel keeps finding new, never-before-built ones; it is not that any single
-  key re-triggers construction on a repeat. The 25th trip (frame 4243) is a genuine outlier worth
-  naming separately: `frame_ms=79.91` with `samples=[]` — nothing in `PerfSample` claims any of it,
-  and every counter (`draws`/`prims`/`nodes`/`gc*`/`alloc`) sits at baseline. Unexplained by this
-  item's mechanism and not chased further here; possibly an OS-level stall rather than a CSVM one.
-  ⚠ **Traps.** The original diagnosis was the `--crash=` proxy alone (`FlightController.Crash()` →
-  `CrashRuntime`), not a captured aircraft `DamageLab` slider-drag session — `DamageLab.Reapply()`
-  still has no *scripted* repro (E13/G15). The 2026-08-14 controls capture above closes that gap
-  with a real one: the two share the same `EmitterDirector.Assert`/`WorldEffectsFactory`
-  construction path, and the crash rig plays the same damage-stage template family
-  (`crashRoots`'s `planeflakes`/`yellow_spark_02`/etc. are the `pdpanelN` effects `DamageLab`
-  triggers) — no longer inference alone.
-  ⚠ **Formerly-open question, now answered: does the cost recur across a session, or only once?**
-  Recurs — see the 2026-08-14 capture above (24 separate trips, not one). Still open: whether any
-  SINGLE `(name, host, def)` key re-triggers construction on its own repeat (a second drag of the
-  SAME slider back past the SAME threshold) — the capture shows many DIFFERENT keys firing once
-  each, not one key firing twice, so that narrower question is untested either way.
-  *Cross-refs:* `PLAN-perf-hitches` G15/G16 (the diagnosis), `BL-356` (the sidecar losing 6 of this
-  session's 31 trips to its queue — fixed in commit `73512b47` by raising the defaults to fit the
-  storm), `BL-231` (the pool-size tuning item
-  this is explicitly NOT — a size increase would not touch this cost), `docs/verification.md`
-  PERF-14.
-
 - `BL-418` `[Bug]` **The sonic burst hitches on its first plays: first-time emitter/material
-  construction for its nine puffers, the `BL-355` mechanism on the world-effects runtime.**
+  construction for its nine puffers, the crash rig's first-use mechanism on the world-effects
+  runtime.**
   *Evidence:* the sonic weapon-lab probe (`--chapter=C1 --weapon-lab=wep_08 --weapon-fire
   --infinite-ammo --weapon-surface=default --weapon-standoff=90`) trips `HitchMonitor` on the first
   bursts (sim frames 141/202/263, one per fresh slot copy) with 130-290 ms frames whose samples read
@@ -1446,14 +1383,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the burst fires. With four pool slots per root, four bursts each pay it once per slot copy before
   every key exists.
   *Fix shape:* pre-warm those emitter keys at stage build (`WorldEffectsFactory.BuildWorldEffectsRuntime`,
-  once per pool copy), the same idea `BL-355` names for the crash rig, so the first burst finds every
-  emitter built. Not a pool-size change (`effect_pools.json` sizes concurrency, not first construction).
+  once per pool copy) through `AnimRuntime.PrewarmEmitters`, the seam the crash rig already calls
+  after its bind, so the first burst finds every emitter built. Not a pool-size change
+  (`effect_pools.json` sizes concurrency, not first construction).
   *How you would know:* the same probe run to eight bursts shows no `effect_pool_miss` sample after
   the build, and no `HitchMonitor` trip whose samples name `effect_checkout`.
   ⚠ *Trap:* the checkout re-reset (`AnimRuntime.ResetCheckedOutCopies`) runs in the same
   `effect_checkout` scope; a hitch attributed to that site is this item's construction cost, not the
   reset, until measured otherwise.
-  *Cross-refs:* `BL-355` (the crash/damage cascade's identical mechanism), `BL-406` (closed).
+  *Cross-refs:* `BL-406` (closed); the crash rig's own pre-warm is `AnimRuntime.PrewarmEmitters`
+  (`docs/architecture.md`).
 - `BL-419` `[Fidelity]` **The sonic ground burst does not read like the original's: ours is soft cyan
   hoops rising in the air, the original is one flat crisp pale-green ring growing on the terrain.**
   *Evidence:* `OriginalScreenshots/Videos/CAP-23 Rocket Sonic Ground.mp4` (frames 200-330 at 30 fps,

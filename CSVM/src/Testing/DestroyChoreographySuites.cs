@@ -618,6 +618,120 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // The pre-warm's contract on a replica rig: after Bind and PrewarmEmitters nothing emits, a
+    // crash and a panel tear reach the factory for no emitter, the claims count as built, and
+    // respawn keeps the emitters so the next crash builds nothing either.
+    internal static void EmitterPrewarm(TestContext ctx)
+    {
+        const string model = "player_bhawk";
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var controller = new Node3D { Name = "controller_replica" };
+            var fake = new CountingEmitterFactory();
+            var runtime = AnimRuntime.ForCrashRig(
+                Session.WorldEffectsFactory.NewCrashTemplateStage(), 1, fake, false);
+            runtime.ManualAdvance = true;
+            try
+            {
+                var builder = new PlaneBuilder(planesGamez, textures);
+                var planeModel = builder.Build(model);
+                controller.AddChild(planeModel);
+                var crashRoot = new Node3D { Name = "player" };
+                crashRoot.SetMeta(AnimRuntime.NameMeta, "player");
+                crashRoot.Transform = planeModel.Transform;
+                controller.AddChild(crashRoot);
+                var program = world.Session.Program;
+                var crashDefs = Session.EffectCatalogue.CrashDefTable(program);
+                var rootNames = Session.WorldEffectsFactory.CrashStageRootNames(
+                    program, world.Gamez, controller, crashDefs);
+                Session.WorldEffectsFactory.StageCrashTemplates(world.Gamez,
+                    world.Session.Builder.Scene, crashRoot, rootNames, Utils.EffectPools.Load());
+                var wreck = builder.BuildDestroyed(model);
+                if (wreck != null)
+                {
+                    wreck.Visible = false;
+                    crashRoot.AddChild(wreck);
+                }
+
+                ctx.Host.AddChild(controller);
+                ctx.Host.AddChild(runtime);
+                runtime.Bind(controller,
+                    program.Subset(Session.EffectCatalogue.CrashRigAnimNames(crashDefs)));
+                for (int i = 0; i < 6; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                int factoryAtBind = fake.Built.Count;
+                int builtAtBind = runtime.PuffersBuilt;
+                var warmed = runtime.PrewarmEmitters(planeModel, crashRoot);
+                int warmedCount = fake.Built.Count;
+                ctx.Note($"pre-warm: built={warmed.Built} unhosted={warmed.Unhosted} self_hosted={warmed.SelfHosted} factory_calls={warmedCount - factoryAtBind}");
+                ctx.Check(warmed.Built > 0 && warmedCount - factoryAtBind == warmed.Built,
+                    $"{model}: the pre-warm built its emitters through the factory built={warmed.Built}");
+                ctx.Check(fake.Built.All(e => e.Started == 0 && !e.Sustaining),
+                    $"{model}: nothing the pre-warm built has started");
+                ctx.Check(runtime.PuffersBuilt == builtAtBind,
+                    $"{model}: the pre-warm does not count as built (PuffersBuilt {runtime.PuffersBuilt})");
+                ctx.Check(runtime.Emitters.Census.All(r => !r.Emitting),
+                    $"{model}: no census row emits after the pre-warm");
+
+                // The crash: every emitter it asserts must already exist.
+                runtime.Play("player_crash_dirt", crashRoot, applyReset: false);
+                for (int i = 0; i < 180; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                ctx.Check(fake.Built.Count == warmedCount,
+                    $"{model}: the crash reaches the factory for no emitter (built {fake.Built.Count - warmedCount} more)");
+                ctx.Check(fake.Built.Any(e => e.Started > 0),
+                    $"{model}: the crash started pre-warmed emitters");
+                ctx.Check(runtime.PuffersBuilt > builtAtBind,
+                    $"{model}: a claimed emitter counts as built (PuffersBuilt {runtime.PuffersBuilt})");
+
+                // A panel tear, the damage sink's own call shape.
+                runtime.Play("pdpanel5", planeModel, applyReset: false);
+                for (int i = 0; i < 6; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                var late = fake.Built.Skip(warmedCount).Select(e => e.Key).ToList();
+                var lateRows = runtime.Emitters.Census
+                    .Where(r => late.Contains(r.Name) && r.Emitting)
+                    .Select(r => $"{r.Name}@{r.Host}[{r.Def}]");
+                ctx.Check(fake.Built.Count == warmedCount,
+                    $"{model}: the tear reaches the factory for no emitter (built {late.Count} more: {string.Join(", ", lateRows)})");
+                int afterTear = fake.Built.Count;
+
+                // Respawn keeps the emitters, so the second crash builds nothing either.
+                runtime.ResetToBaseState();
+                ctx.Check(fake.Built.All(e => e.IsValid && !e.Sustaining),
+                    $"{model}: respawn keeps every emitter, stopped");
+                runtime.Play("player_crash_dirt", crashRoot, applyReset: false);
+                for (int i = 0; i < 60; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                ctx.Check(fake.Built.Count == afterTear,
+                    $"{model}: the second crash reaches the factory for no emitter (built {fake.Built.Count - afterTear} more)");
+                ctx.Check(fake.Built.Any(e => e.Sustaining),
+                    $"{model}: the second crash emits from the kept emitters");
+            }
+            finally
+            {
+                runtime.Free();
+                controller.Free();
+                textures.Dispose();
+            }
+        });
+    }
+
     // Every wreck node's rest pose — the local mirror of
     // `WorldEffectsFactory.CollectRestPoses`, so the suite's respawn ritual can re-home the
     // flung pieces the way `FlightController.Respawn` does.

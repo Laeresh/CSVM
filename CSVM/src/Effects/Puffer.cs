@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Utils;
@@ -366,6 +367,11 @@ public sealed partial class Puffer : Node3D
     // engine accumulates `dt` unconditionally.
     private const float TeleportGuardMeters = 200f;
 
+    // Baked atlases per archive, keyed by the frame list: a state many emitters share (a crash
+    // rig builds 28 lgpuffers ahead) bakes and measures its frames once. Keyed by the archive so
+    // a chapter change can never serve another chapter's frames.
+    private static readonly ConditionalWeakTable<TextureArchive, Dictionary<string, (ImageTexture Atlas, bool DiesDark)>> AtlasCache = new();
+
     // Particle spread/size/life/frame jitter. One stream per emitter, drawn off the master seed's
     // puffer stream, so a run repeats and two emitters still scatter independently.
     private readonly System.Random _rng = Rng.NewSystemRandom(Rng.Puffer);
@@ -647,11 +653,25 @@ public sealed partial class Puffer : Node3D
         : lifeFrac > FadeOutStart ? Mathf.Max(0f, 1f - (lifeFrac - FadeOutStart) / (1f - FadeOutStart))
         : 1f;
 
+    // The cached form of BakeAtlas: one bake per (archive, frame list, sequenced).
+    private static (ImageTexture? Atlas, bool DiesDark) BuildAtlas(IReadOnlyList<string> names,
+        TextureArchive textures, bool sequenced)
+    {
+        var cache = AtlasCache.GetOrCreateValue(textures);
+        string key = (sequenced ? "seq:" : "pool:") + string.Join("\n", names);
+        if (cache.TryGetValue(key, out var hit))
+            return hit;
+        var baked = BakeAtlas(names, textures, sequenced);
+        if (baked.Atlas is { } atlas)
+            cache[key] = (atlas, baked.DiesDark);
+        return baked;
+    }
+
     // Packs the frames side by side into one atlas, and measures whether a particle DIES
     // on a dark sprite — the flipbook's last frame, or a static pool's mean luminance. This is what
     // distinguishes "fire_n_smoke", whose flipbook ends near-black despite starting bright; see
     // `docs/org/puffer.md`. Null atlas when a frame is missing.
-    private static (ImageTexture? Atlas, bool DiesDark) BuildAtlas(IReadOnlyList<string> names,
+    private static (ImageTexture? Atlas, bool DiesDark) BakeAtlas(IReadOnlyList<string> names,
         TextureArchive textures, bool sequenced)
     {
         if (names.Count == 0)

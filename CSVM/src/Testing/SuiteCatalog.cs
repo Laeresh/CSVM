@@ -128,6 +128,7 @@ public static class SuiteCatalog
         "damage-stage-slots",
         "ai-damage-stages",
         "crash-rig-anchors",
+        "emitter-prewarm",
         "ai-crash-defs",
         "ai-wreck-fall",
         "player-destroy-choreography",
@@ -600,6 +601,8 @@ public static class SuiteCatalog
             "an AI plane spawned through FlightRoster stages end to end: its hull falls through the take-hit path and the rig runtime starts six random_remote_damage instances plus one pfsmoketrail, all anchored inside that aircraft, a repair tears each stage down once, and the Bloodhawk's missing elevator pair is named (BL-385)", AiDamageStages));
         into.Add(new TestHarness.Suite("crash-rig-anchors",
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
+        into.Add(new TestHarness.Suite("emitter-prewarm",
+            "a crash rig's PUFFER_STATE emitters are built at bind, unstarted: a crash, a panel tear and a post-respawn crash all reach the factory for no emitter, and the claims still count as built", EmitterPrewarm));
         into.Add(new TestHarness.Suite("ai-crash-defs",
             "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default, and the def switches off both the airframe's healthy subtree and the crash root's wreck — while a human rig off the same factory keeps player_crash_* (G21)", AiCrashDefs));
         into.Add(new TestHarness.Suite("ai-wreck-fall",

@@ -1217,6 +1217,52 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return matched;
     }
 
+    /// <summary>Builds every emitter this program's <c>PUFFER_STATE 1</c> events can build before
+    /// anything plays, and starts or poses nothing. A named <c>at_node</c> resolves to every node
+    /// of that name in this runtime's scope, one emitter per pool copy. A call-site host
+    /// (<c>INPUT_NODE</c>) is every node a <c>CALL_ANIMATION</c> targets the def with, the def's
+    /// own staged copies, and <paramref name="callSiteAnchors"/>. Call once after <see cref="Bind"/>.
+    /// ⚠ For the crash-rig and world-effects runtimes only, never the ambient world runtime.</summary>
+    public EmitterPrewarm PrewarmEmitters(params Node3D[] callSiteAnchors)
+    {
+        var callTargets = CallTargetNames();
+        int built = 0, unhosted = 0, selfHosted = 0;
+        foreach (var def in _program.Defs)
+        {
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind != "PufferState" || (ev.Data.Num("active_state") ?? 0f) < 1f
+                        || ev.Data.Str("name") is not { } name || !ev.Data.Objects("textures").Any())
+                        continue;
+                    IEnumerable<Node3D> hosts;
+                    if (ev.Data.Str("at_node") is not { } atNode || IsSelfNodeRef(atNode))
+                    {
+                        selfHosted++;
+                        hosts = CallSiteHostsOf(def, callTargets, callSiteAnchors);
+                    }
+                    else
+                    {
+                        // The global tier's own admission rule, so a staged copy this def could
+                        // never resolve onto gets no emitter.
+                        hosts = FindAll(atNode, null).Where(h => StagingAdmits(def, null, h));
+                    }
+                    int hosted = 0;
+                    foreach (var host in hosts)
+                    {
+                        hosted++;
+                        if (Emitters.Prewarm(name, host, def, ev.Data))
+                            built++;
+                    }
+                    if (hosted == 0)
+                        unhosted++;
+                }
+            }
+        }
+        return new EmitterPrewarm(built, unhosted, selfHosted);
+    }
+
     /// <summary>Applies weapon damage to whatever destructible a struck world node belongs to, and
     /// escalates its visible damage. <paramref name="struck"/> resolves to the owning instance by
     /// walking up to the nearest registered anchor. World destructibles carry HEALTH only, with no
@@ -2519,6 +2565,51 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private Color Rgba(AnimData? d) => d == null
         ? new Color(0f, 0f, 0f, 0f)
         : new Color(d.Num("r") ?? 0f, d.Num("g") ?? 0f, d.Num("b") ?? 0f, d.Num("a") ?? 0f);
+
+    // Every node name a CALL_ANIMATION in this program targets, per callee anim name: the site a
+    // called def's INPUT_NODE stands for. Same two spellings CallTargetSite reads.
+    private Dictionary<string, HashSet<string>> CallTargetNames()
+    {
+        var targets = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var def in _program.Defs)
+        {
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind != "CallAnimation" || ev.Data.Str("name") is not { } callee)
+                        continue;
+                    string? target = null;
+                    if (ev.Data.Obj("parameters")?.Union() is { Value: Dictionary<string, object?> p })
+                        target = new AnimData(p).Str("node");
+                    target ??= ev.Data.Str("operand_node");
+                    if (target == null)
+                        continue;
+                    if (!targets.TryGetValue(callee, out var set))
+                        targets[callee] = set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    set.Add(target);
+                }
+            }
+        }
+        return targets;
+    }
+
+    // Where a call-site hosted puffer of this def can land: the nodes its calls target, its own
+    // staged copies (a placing call anchors the callee on its copy, not the site), and the anchors
+    // handed in. An over-count here costs one idle emitter; an under-count costs a frame.
+    private IEnumerable<Node3D> CallSiteHostsOf(AnimDefinition def,
+        Dictionary<string, HashSet<string>> callTargets, Node3D[] callSiteAnchors)
+    {
+        var hosts = new List<Node3D>(callSiteAnchors);
+        if (def.AnimName != null && callTargets.TryGetValue(def.AnimName, out var targets))
+        {
+            foreach (var target in targets)
+                hosts.AddRange(FindAll(target, null));
+        }
+        if (!string.IsNullOrEmpty(def.Name))
+            hosts.AddRange(FindAll(def.Name, null).Where(n => _templateStage.SlotOf(n) >= 0));
+        return hosts.Distinct();
+    }
 
     private void HandlePufferState(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {

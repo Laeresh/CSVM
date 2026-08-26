@@ -114,7 +114,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — first-use construction, the named mechanism
 
-1. ☐ Pre-warm the crash and damage-stage emitter keys (`BL-355`)
+1. ☑ Pre-warm the crash and damage-stage emitter keys (`BL-355`)
 2. ☐ Pre-warm the sonic burst's nine puffer keys at stage build (`BL-418`)
 3. ☐ Re-judge `effect_pools.json` against a build with no first-use cost (`BL-231`)
 
@@ -161,7 +161,7 @@ controls.
 
 # Wave A — first-use construction, the named mechanism
 
-## A1 ☐ Pre-warm the crash and damage-stage emitter keys
+## A1 ☑ Pre-warm the crash and damage-stage emitter keys
 
 **Goal.** A crash, and a sweep through the `DamageLab` panel, play their effects without building
 emitters or materials in the frame that needs them, so neither trips `HitchMonitor`.
@@ -210,6 +210,24 @@ unexplained by this mechanism and is not this item's; do not chase it here. ⚠ 
 dropping records under a hitch storm) is already fixed in `73512b47`; do not re-file it.
 
 *Cross-refs:* `PLAN-perf-hitches` G15/G16, `docs/verification.md` PERF-14.
+
+**Verified.** <pending orchestrator run>
+
+**Landed.** The seam is `AnimRuntime.PrewarmEmitters(params Node3D[] callSiteAnchors)`, called
+once after `Bind` by `WorldEffectsFactory.BuildFlightCrashRuntime` with the plane model and the
+crash root as the anchors its callers play on. It walks the bound program's `PUFFER_STATE 1` events
+and hands `EmitterDirector.Prewarm` one `(name, host, def)` per host: a named `at_node` resolves to
+every node of that name in the runtime's scope (one per pool copy), and an `INPUT_NODE` host to
+every node a `CALL_ANIMATION` targets the def with, the def's own staged copies, and the anchors
+handed in, since the crash's `lgpuffer on piece1` and the tear's `trailpuffer2` on the airframe are
+both that shape. A pre-built emitter is unclaimed until the first `Assert` takes it over, and
+`EmitterDirector.Reset` now keeps emitters across a respawn. The cost was measured before it was
+accepted: 217 emitters on the Bloodhawk took 2.3 s, of which a `Shader` compiled per emitter and an
+atlas baked per emitter were 1.9 s, so `EmitterRenderer.Attach` caches the four shader variants and
+`Puffer.BuildAtlas` caches per archive and frame list; the same pre-warm then takes 44 ms, and every
+remaining live miss is cheaper by the same two terms. A2 calls the same method on the world-effects
+runtime after its `Bind`, with no anchors (its callers place copies, so the staged-copy term covers
+the `INPUT_NODE` hosts). Regression: the `emitter-prewarm` suite.
 
 ## A2 ☐ Pre-warm the sonic burst's nine puffer keys at stage build
 
