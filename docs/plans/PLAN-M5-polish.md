@@ -1,10 +1,10 @@
 # Milestone 5 polish: the campaign at the controls
 
-**ACTIVE PLAN** (written 2026-08-24). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE.** 48 items landed, 3 disproved (`BL-480`: the music channel's 15 s refusal hold is real
+and unreachable; `BL-479`: the 26 `GRAPHICS/*.JPG` already draw as board pictures; `BL-477`'s
+scaffolding-read question: ours reproduces the original).
 
-This plan finishes what [`PLAN-M5-campaign.md`](PLAN-M5-campaign.md) started. It carries two kinds
+This plan finishes what [`PLAN-M5-campaign.md`](../PLAN-M5-campaign.md) started. It carries two kinds
 of item: the corrective items from that plan's E42 at-the-controls pass, and the gaps the milestone
 deliberately named rather than built. The loop is walkable and the `campaign-loop` suite pins it
 headless, but the pass found that a mission cannot in fact be flown to its end at the controls, so
@@ -1058,7 +1058,7 @@ original's own order (arming gate, speed band, attitude, volume) and starts the 
 an `auto` row raises `AutoLandOffered` rather than starting anything, which is the auto-land prompt.
 The condition object was decoded rather than guessed: the three shape classes, their vtables and
 their containment tests are written up on
-[`docs/formats/anim-definitions/cutscenes.md`](formats/anim-definitions/cutscenes.md), and the
+[`docs/formats/anim-definitions/cutscenes.md`](../formats/anim-definitions/cutscenes.md), and the
 `angle` test is exact rather than approximate, a geodesic quaternion angle over the player's whole
 orientation, roll included. Hosting widened by definition, never by code:
 `CutsceneController.HostDefinitions` takes the names `WorldSession` computes from the resolved rows
@@ -2910,7 +2910,7 @@ silences the gate itself, since `activate_wingwalk` and `deactivate_wingwalk` wr
 rows, `pz_manual_land` and `pz_auto_land`, hang under the placed `world1` root and do bind, which is
 the whole of the asymmetry with the Pandora's approach volume. Landed as the
 `landings-wingwalk-gate` suite plus the caveat on `LandingApproachRuntime` in
-[`docs/architecture.md`](architecture.md).
+[`docs/architecture.md`](../architecture.md).
 
 **The gate is authored all-three-at-once and waits on one Balmoral being left.** `OBJECTIVE26`'s
 `WAKE_ANIM activate_wingwalk` sets `land_on` active on all three planes in one sequence and
@@ -3055,7 +3055,7 @@ sequencing rather than running together.
 **Landed.** A mission can put the player in a different airframe mid-flight, and CM02's capture is
 the one that asks for it: `C3/M05`'s three `britbalmoral_<n>-ww_balmoral<n>` definitions each end
 the wing-walk sequence with `Callback 967`, the last event before the definition finishes.
-[`CSVM/src/Session/AirframeSwap.cs`](../CSVM/src/Session/AirframeSwap.cs) holds the three codes and
+[`CSVM/src/Session/AirframeSwap.cs`](../../CSVM/src/Session/AirframeSwap.cs) holds the three codes and
 their def/node pairs, which are the pair every other player-airframe path already uses
 (`PlaneStats.DefName` and the picker's planes.zbd node), so the swap needs no table of its own.
 `CutsceneController` hosts them and acts on them (`CutsceneController.cs:256` for the accept,
@@ -3087,7 +3087,7 @@ player out of flight, the chrome and view target off. `FUN_0047fd50` clears all 
 afterwards, so the order is part of the answer. Nothing in the case ends that state; the definition
 ending does, through the ordinary handoff, which is how the player gets flight back in the new
 airframe. The whole five-step decode is now in
-[`docs/formats/anim-definitions/cutscenes.md`](formats/anim-definitions/cutscenes.md#the-airframe-swap-codes-965-966-and-967).
+[`docs/formats/anim-definitions/cutscenes.md`](../formats/anim-definitions/cutscenes.md#the-airframe-swap-codes-965-966-and-967).
 
 **Verified.** `dotnet build CSVM/CSVM.sln` clean, 0 warnings; `dotnet test` 2397 passed. The new
 `campaign-airframe-swap` suite drives CM02's own built world: the three decoded codes name the defs
@@ -3294,7 +3294,7 @@ This is not Balmoral-specific. Any roster block whose model authors markers is i
 so a fix keyed to `britbalmoral` would be the wrong shape even if it made CM02 work.
 
 **Landed.** A roster-spawned aircraft carries whatever its own gamez node authors past the shared
-airframe. [`CSVM/src/Mech3/RosterMarkers.cs`](../CSVM/src/Mech3/RosterMarkers.cs) walks the block's
+airframe. [`CSVM/src/Mech3/RosterMarkers.cs`](../../CSVM/src/Mech3/RosterMarkers.cs) walks the block's
 library-root `markers` subtree against the rig's own marks by their `cs_name`: a mark both sides
 carry is descended into rather than duplicated, and only what the chapter added is built, hung under
 the airframe's mark of the same name, switched to its authored `active` bit and handed to

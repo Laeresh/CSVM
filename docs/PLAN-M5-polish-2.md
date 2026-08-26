@@ -116,7 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the record, then the flown mission
 
-1. ☐ Retire the record's three stale pointers (`BL-506`, both M5 plan banners, "Current status")
+1. ☑ Retire the record's three stale pointers (`BL-506`, both M5 plan banners, "Current status")
 2. ☐ An AI pilot sees an enemy aircraft's own turret as a target beside the aircraft (`BL-507`)
 3. ☐ A campaign spawn's talker and constitution ratings never reach `AiVoiceRuntime` (`BL-497`)
 4. ☐ CM02's second Peacemaker squad is awake from the start and attacks the Pandora (`BL-499`)
@@ -197,6 +197,8 @@ paragraph carries an unresolved `<TODO: re-verify each absorbed BL still-open ..
 obviously finished merely because the polish plan that followed it is. ⚠ `BL-506`'s closure record
 lives in `43b47435`'s message body, so the deletion commit should cite that hash rather than restate
 the outcome, per the docs-state-what-is rule.
+
+**Verified.** <pending orchestrator run>
 
 ## A2 ☐ An AI pilot sees an enemy aircraft's own turret as a target beside the aircraft
 
