@@ -2044,6 +2044,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
 
+- `BL-510` `[Feature]` **The auto-land prompt shows a placeholder line instead of the original's
+  `langui` string.** *Evidence:* the original lights message `0xb5` (or `0xb6` for a pad binding)
+  when the approach table's `auto` row passes (`FUN_0045e120`). `ExtractRof.ps1` already produces
+  `extracted/rof/ui_strings.json` from `langui.dll`'s STRINGTABLE (1247 rows), but ids `181` and
+  `182` are not present under that table's numbering, so `FlightHud.AutoLandPrompt` ships a
+  plain-English stand-in marked as such. *Fix shape:* find how the exe maps a message id onto the
+  STRINGTABLE (an offset or a second table), resolve `0xb5`/`0xb6`, and draw the resolved string
+  through `UiStrings`. *⚠ Traps:* ⚠ Do not guess the wording; the placeholder stays until the
+  mapping is decoded. ⚠ The binding is `F9` / left-stick click, not the original's `A`
+  (`docs/controls.md`), so a resolved string that names the key needs the port's key substituted.
+  *Cross-refs:* `docs/PLAN-M5-polish-2.md` C10.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2239,6 +2251,24 @@ usual.
   speed any escort matches, so their leashes are not evidence here; the `[flown]` leg is.
   *Cross-refs:* `docs/org/aiPilot.md`, `docs/org/aiControlLaw.md`, `docs/org/flightModel.md`;
   `docs/PLAN-M5-polish-2.md` A5.
+
+- `BL-509` `[Research]` `[Owed-playtest]` **The mode machine's `avoid crash` pre-empts a joined
+  escort, so the campaign wingman breaks off and climbs low over terrain.** *Evidence:* traced on
+  C3/M01 with both aircraft on `player_pfighter`: the wingman joins on the first stepped frame,
+  holds 94-98 m for nine seconds, then `avoid crash` arms at 109 m over the island and, because
+  that mode runs ahead of the escort in `AiPilot.Next`'s fork (`AiPilot.cs:269-272`), the escort
+  law is dropped for a 1000 m climb-out and a 1000 m lateral break, ending 128 m above the player
+  and 302 m behind before the station is recovered. The fork ORDER is decoded (the original's
+  mode 4 fork short-circuits on stunned and avoid crash), but the climb-out's own geometry inside
+  the middle altitude band is a named invention (`docs/architecture.md` on `AiModeMachine.cs`).
+  *Fix shape:* decode what the original's escort does when its avoid-crash test fires with a live
+  leader (the altitude band, the pull-up it flies, and whether it returns to station or re-joins),
+  then re-shape the climb-out from that rather than from the invented constants. *⚠ Traps:* ⚠ Do
+  not suppress `avoid crash` for an escort as a shortcut; the short-circuit is the original's.
+  ⚠ `wingman-station` cannot see this (`docs/verification.md` INSTR-25, no terrain under its
+  pair); measure in a `--campaign=` run on `player_pfighter`. ⚠ Whether the break-off reads wrong
+  at the controls is `BL-457`'s sortie question; this entry is the mechanism behind it.
+  *Cross-refs:* `BL-457`; `docs/org/aiPilot.md`; `docs/PLAN-M5-polish-2.md` A13.
 
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
   controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.

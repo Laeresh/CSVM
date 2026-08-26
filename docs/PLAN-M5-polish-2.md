@@ -122,6 +122,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ❌ CM02's second Peacemaker squad is awake from the start and attacks the Pandora (`BL-499`)
 5. ☑ The campaign wingman ends up high and far behind (`BL-457`)
 6. ☑ Crashing the player's aircraft does not end a campaign mission (`BL-491`, deferral reopened first)
+13. ☐ The mode machine's `avoid crash` pre-empts a joined escort (`BL-509`, minted by A5)
 
 ### Wave B — the intro and the swap
 
@@ -442,6 +443,34 @@ gate means a lost mission writes no world state, so making crashes lose changes 
 from; decide that explicitly rather than discovering it. ⚠ Do not invent a fourth ending and present
 it as decoded.
 
+## A13 ☐ The mode machine's `avoid crash` pre-empts a joined escort
+
+**Goal.** A campaign wingman low over terrain does what the original's escort does when its
+avoid-crash test fires, rather than flying an invented 1000 m climb-out that leaves it 128 m
+above and 302 m behind the player.
+
+**Evidence (confidence: traced for the mechanism, lead-only for the fix).** `BL-509`, found by A5.
+On C3/M01 with both aircraft on `player_pfighter` the wingman joins on the first stepped frame and
+holds 94-98 m for nine seconds; then `avoid crash` arms at 109 m over the island and, because that
+mode runs ahead of the escort in `AiPilot.Next`'s fork (`AiPilot.cs:269-272`), the escort law is
+dropped for the climb-out. The fork ORDER is decoded; the climb-out's geometry inside the middle
+altitude band is a named invention (`docs/architecture.md` on `AiModeMachine.cs`).
+
+**Approach.** Decode first: what the original's mode 4 does when its avoid-crash test fires with a
+live leader (the altitude band it tests, the pull-up it flies, whether it returns to station or
+re-joins), then re-shape the climb-out from that. Added by user decision after A5; the user chose
+a plan item over leaving it to the sortie.
+
+**Model recommendation.** high. A decode against the exe with the escort and the mode machine
+both in play, and an invented constant to retire.
+
+**Verify.** A `--campaign=` trace on C3/M01 (`player_pfighter`) showing the wingman inside 150 m
+through the low pass, plus `wingman` and `ai` suites green. `wingman-station` cannot see this
+(INSTR-25).
+
+**⚠ Traps.** ⚠ Do not suppress `avoid crash` for an escort as a shortcut; the short-circuit is the
+original's. ⚠ Measure on `player_pfighter`. ⚠ Everything `BL-457`'s traps retire stays retired.
+
 ---
 
 # Wave B — the intro and the swap
@@ -678,7 +707,7 @@ show.
 **Approach.** ⚠ **This is a stop, not a task an agent completes.** Hand the build to the user with a
 named mission and a list of what to watch: `BL-458`'s secondary completing (C3/M01), the wingman
 holding station out of the intro (A5), the intro staging two aircraft (B8), the swap's hand-over and
-inherited damage (B9), the auto-land prompt (C10), and pilot chatter varying by rating (A3). Record
+inherited damage (B9), the auto-land prompt (C10), pilot chatter varying by rating (A3), the wingman breaking off to climb low over the island (A13), and a deliberate crash ending the mission with the debrief reached once the wreck is down (A6). Record
 what the sortie reports; findings that are not these items become new `backlog.md` entries with their
 own IDs from `New-ItemId.ps1`.
 
