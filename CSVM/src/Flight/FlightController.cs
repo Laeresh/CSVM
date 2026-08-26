@@ -470,6 +470,9 @@ public partial class FlightController : Node3D
     private Transform3D _simPrev = Transform3D.Identity;
     private Transform3D _simCurr = Transform3D.Identity;
     private Transform3D _renderPose = Transform3D.Identity; // the pose actually drawn this frame
+    // Where the aircraft stood when a cutscene began staging it (StageAt), and the flag that it is
+    // being staged at all.
+    private Transform3D? _stagedFrom;
 
     /// <summary>Raised once per crash, at <see cref="Crash"/>: (victim <see cref="PlayerIndex"/>,
     /// killer shooter id). Null for terrain, mid-air, an unowned round or any other crash cause. A
@@ -992,6 +995,37 @@ public partial class FlightController : Node3D
         GlobalTransform = _simCurr;
         if (_cam != null && IsInsideTree())
             SnapCamera();
+    }
+
+    /// <summary>An intro cutscene's own aircraft motion: draw this airframe at
+    /// <paramref name="pose"/> while it is out of flight, or null to hand it back the pose it held
+    /// when the staging began. The animation runtime owns the pose, so this writes it rather than
+    /// deriving one; <see cref="Inert"/> keeps the aircraft out of play throughout, and the model's
+    /// visibility is re-asserted on every call because a respawn resets it.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public void StageAt(Transform3D? pose)
+    {
+        if (pose is { } staged)
+        {
+            _stagedFrom ??= GlobalTransform;
+            GlobalTransform = staged;
+            if (PlaneModel != null)
+            {
+                PlaneModel.Visible = true;
+            }
+
+            return;
+        }
+
+        if (_stagedFrom is not { } home)
+        {
+            return;
+        }
+
+        _stagedFrom = null;
+        GlobalTransform = home;
+        _simPrev = _simCurr = _renderPose = home;
+        ApplyPresence();
     }
 
     /// <summary>Weapon lab: point the gun selector at a firable gun group (0-based, clamped) —

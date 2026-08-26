@@ -83,6 +83,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ScriptedPath.cs` — resolves an authored waypoint path (`pp1` → the gamez `pp1_aipath` subtree) into ordered world-space waypoints.
 - `src/Mech3/WorldPartitionGrid.cs` — which gamez nodes a world-space XZ rectangle covers, off the World node's own cell table; the area verb's selector.
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
+- `src/Mech3/AircraftStage.cs` — stages the two aircraft-archive subtrees a story-mission intro animates into a chapter world's animation node table, at that chapter's cross-archive pointer base.
 - `src/Mech3/SessionArchives.cs` — `OpenFor(ArchiveIntent)` opens the five archives a chapter build needs and the matching `WorldSession.Options` lifetime flags, so `GameSession`, the anim lab and the test harness open the same five without hand-setting the flags.
 - `src/Mech3/EmptyStage.cs` — the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
@@ -3076,7 +3077,10 @@ rig's own grace window goes through its `ArmCollisionGrace()`, a narrow public m
 a direct write to the other instance's private field.
 Which state the aircraft is in, and what moves it between states, is `AircraftLifecycle`'s (see that
 entry): this node holds one privately, forwards `Crashed`/`Destroyed`/`WreckFalling`/`Inert`/`InPlay`
-onto it, and performs what a transition reports rather than deciding it. `BindCrashRig` takes the
+onto it, and performs what a transition reports rather than deciding it. `StageAt` is the one
+exception to `Inert` meaning undrawn: an intro cutscene writes the pose the animation runtime put
+its `player` marker in and draws the model there, then hands back the pose the aircraft held when
+the staging began (`Session/CutsceneController.cs`). `BindCrashRig` takes the
 crash runtime, the def table, the anchor and the two respawn snapshots in one call, so the rig
 cannot be half-bound and only `CrashRuntime`/`CrashAnchor` stay readable as properties. The DEATH family (`CRASH into`, `midair aspect`, every
 `vehicle health exhausted`, `graze`, `embedded in terrain`, `AI ram`, `impact`) routes through
@@ -4201,6 +4205,19 @@ mission whose start-anims name one of `CutsceneController.IntroAnims` or that ar
 trigger, so every other session's node census is exactly what it was. The synthetic `camera1`
 carries the gamez name and INDEX metadata a scene-built node would, because every compiled
 cutscene binds it through its symbol table and an unbuilt claim makes the runtime drop the event.
+`Options.PlanesGamezPath` feeds `AircraftStage` beside those roots, for a mission that bootstraps an
+intro alone: the archive is opened nowhere else in this build, so no other session pays for it.
+
+## src/Mech3/AircraftStage.cs
+The two aircraft a story-mission intro animates, staged into a chapter world before the animation
+bind: `piratefighter` built from the shared aircraft archive as a prop with no pilot and switched
+off until the intro activates it, and a bodiless `player` marker the flown aircraft is posed onto.
+Both carry a rebased gamez index (`PointerBaseOf`: the chapter's node count rounded up to the next
+multiple of 2500), which is what makes a compiled intro's cross-archive symbol table bind them
+instead of claiming a name with no node. Built only for a mission whose start-anims name an intro,
+so every other session's node census is exactly what it was. The pose half is
+`Session/CutsceneController.cs`; the decode is
+`docs/formats/anim-definitions/cutscenes.md`.
 
 ## src/Mech3/SessionArchives.cs
 `OpenFor(ArchiveIntent, gamezPath, texturesPath, soundsPath, zrdrPath, mute)` opens the five
@@ -4957,7 +4974,8 @@ rig cameras take the pose that frame's animation advance put `camera1` in, so th
 that advance, never sit against a camera one frame behind them. Hosted: 20 world+objectives hold
 (`GameSession`'s drive paths and `CampaignDirector.HoldForCutscene` read it), 2 chrome off and the
 view off the aircraft (`FlightController.CameraOwned`, which also stops the cockpit rules being
-re-asserted), 11 the player out of flight (`Held` + `Inert` + engine audio paused), 913/914 park and
+re-asserted), 11 the player out of flight (`Held` + `Inert` + engine audio paused, and the airframe posed on the
+staged `player` marker through `FlightController.StageAt` while that state holds), 913/914 park and
 reveal the AI (only what this controller parked comes back), 666/667 the camera-parameter gate
 (tracked, not acted on — this engine applies that profile once per rig and never on a view change),
 1/10 the handoff and the in-flight systems; 965/966/967 the mid-mission airframe swap, through the

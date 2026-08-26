@@ -199,6 +199,12 @@ cross-archive `ptr` against the chapter's table is what makes `player` look like
 node behind it, and it is why the same name carries a different number in every chapter while the
 aircraft archive it points into is one shared file.
 
+⚠ The rule is measured over these eight chapters and nothing else. No site in `crimson.exe`
+computing the rounding has been traced, so a ninth chapter's base would be a prediction. CSVM
+implements it as `(count / 2500 + 1) * 2500` (`AircraftStage.PointerBaseOf`), which reproduces all
+eight; a count that is already an exact multiple of 2500 does not occur in this install, so which
+way the rounding breaks there is undecided.
+
 ### `player` is the player's own aircraft
 
 `player` (aircraft-archive node 1418) is a parentless `Object3d` whose single child is
@@ -242,11 +248,20 @@ Two aircraft, both from the aircraft archive rather than the chapter's gamez.
   `wing_lights_blink` addressed to `player_pfighter` **by name**, the one place the authored data
   reaches past the slot to the Devastator's model directly.
 
-⚠ CSVM stages neither. The world build puts no aircraft-archive node into the animation runtime's
-node table, so both names claim a symbol with a null binding and every event that poses them drops
-(`BL-482`). The camera move plays over an empty stage; what CSVM does instead of
-`OBJECT_ACTIVE_STATE [player, false]` is callback 11's own out-of-flight state, which holds the
-flown airframe undrawn for the whole cutscene rather than posing it.
+CSVM stages both, from the aircraft archive, only for a mission that bootstraps an intro
+(`Mech3/AircraftStage.cs`). `piratefighter` is built as a prop with no pilot and no flight model,
+switched off until `gi_pfighter1` activates it; `player` is a bodiless marker, since the aeroplane
+it stands for is the one the pilot flies and that model belongs to the flown `FlightController`.
+Every staged node's compiled pointer is rebased onto the chapter's own base, so the definition's
+symbol table binds the names it addresses. `OBJECT_ACTIVE_STATE [player, false]` stays callback 11's
+out-of-flight state, and the pose half is the marker: while that state holds, the flown airframe is
+drawn on the marker's world pose and put back where the mission spawned it at the handoff. The
+drop's own end pose is not what a CSVM session starts flying from.
+
+⚠ The cross-archive names below `player` — `healthy`, `cockpit1`, `shadow`, `destroyed` — are the
+DEVASTATOR's copies, since that is the airframe the archive's `player` wrapper holds. A pilot flying
+anything else leaves those four events unresolved, which is correct: the states they assert are the
+model's own base states, and the flown airframe already carries them.
 
 ## `CALLBACK`: the dispatch chain
 

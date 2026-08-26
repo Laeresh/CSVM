@@ -52,6 +52,11 @@ public sealed class WorldSession
     public IReadOnlyList<LandingApproach> Landings { get; private set; } =
         Array.Empty<LandingApproach>();
 
+    /// <summary>The aircraft an intro definition animates, staged into this world's node table.
+    /// Null unless the mission bootstraps a story-mission intro; see <see cref="AircraftStage"/>.
+    /// </summary>
+    public AircraftStage? Aircraft { get; private set; }
+
     /// <summary>The mission's pickup proximity sensors, empty outside the four missions that
     /// carry <c>pickups.zrd</c>.</summary>
     public IReadOnlyList<PickupSpec> Pickups { get; private set; } = Array.Empty<PickupSpec>();
@@ -258,9 +263,18 @@ public sealed class WorldSession
         s.Runtime = animRuntime;
         animRuntime.CallbackHost = o.CallbackHost;
         animRuntime.FogStateSink = o.FogStateSink;
-        if (o.CutsceneRoots && (BootstrapsCutscene(animProgram) || s.Landings.Count > 0))
+        bool intro = BootstrapsCutscene(animProgram);
+        if (o.CutsceneRoots && (intro || s.Landings.Count > 0))
         {
             BuildCutsceneRoots(root, gamez, builder);
+        }
+
+        // The two aircraft an intro animates live in the shared archive, not the chapter gamez, so
+        // only a mission that bootstraps one pays for them. Before the bind, like the cutscene
+        // roots: an intro starts inside the animation bootstrap.
+        if (o.CutsceneRoots && intro && o.PlanesGamezPath is { Length: > 0 } planesPath)
+        {
+            s.Aircraft = AircraftStage.Build(root, gamez.Nodes.Count, GameZ.Load(planesPath), textures);
         }
         // The emitter pool has to be in the tree before the bootstrap builds into it.
         if (animRuntime.Sounds is { } worldSounds)
@@ -467,6 +481,11 @@ public sealed class WorldSession
         public required string ZrdrPath { get; init; }
         public required string InterpPath { get; init; }
         public required string MissionZrdrPath { get; init; }
+
+        /// <summary>The shared aircraft archive, for <see cref="AircraftStage"/>. Read only when
+        /// this mission bootstraps an intro; every other session leaves it unopened, so its node
+        /// census is exactly what it was.</summary>
+        public string? PlanesGamezPath { get; init; }
 
         /// <summary>Parent for the effect siblings the bootstrap builds — the world's ambient
         /// SOUND_NODE emitters and every PUFFER_STATE emitter. In the viewer this is the session

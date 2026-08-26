@@ -29,6 +29,12 @@ public sealed partial class CutsceneController : Node
     /// world.</summary>
     public const int CodeHoldsWorld = 20;
 
+    /// <summary>The code that takes the player out of flight, and with them the pose half: the
+    /// flown airframe rides the staged <c>player</c> marker while it holds. Public because a suite
+    /// driving an intro over a world built before any rig existed has to re-raise it, the way
+    /// <see cref="BindRigs"/> re-applies the state for a session.</summary>
+    public const int CodeOutOfFlight = 11;
+
     /// <summary>How far the card is made to overhang the pane it covers. The unmargined fit is an
     /// equality wherever the width term binds (every ratio at or above 1.64211, the 1280x720
     /// default included), so the card's outer edge lands on the frame edge and the world shows
@@ -60,7 +66,6 @@ public sealed partial class CutsceneController : Node
     private const int CodeHandoff = 1;
     private const int CodePresentation = 2;
     private const int CodeRestoreSystems = 10;
-    private const int CodeOutOfFlight = 11;
     private const int CodeCamParamsFree = 666;
     private const int CodeCamParamsRestore = 667;
     private const int CodeParkAi = 913;
@@ -94,6 +99,8 @@ public sealed partial class CutsceneController : Node
     // The world root `camera1` belongs under, so Restore can undo a definition's own reparent.
     private Node3D? _cameraHome;
     private Node3D? _bars;
+    // The staged `player` marker an intro poses, or null in a session with no aircraft stage.
+    private Node3D? _playerMarker;
     private Node3D? _card;
     private Aabb _cardBox;
     // The bars node's authored scale, read alongside the card measurement and for the same reason:
@@ -194,9 +201,10 @@ public sealed partial class CutsceneController : Node
     /// once the world is built, before any rig exists: the intro definitions start during the
     /// animation bootstrap, so their codes are hosted before there is anything to apply them to.
     /// </summary>
-    public void BindWorld(AnimRuntime? runtime)
+    public void BindWorld(AnimRuntime? runtime, AircraftStage? aircraft = null)
     {
         _runtime = runtime;
+        _playerMarker = aircraft?.PlayerMarker;
         if (runtime == null)
         {
             return;
@@ -314,6 +322,7 @@ public sealed partial class CutsceneController : Node
         }
 
         MirrorCamera();
+        StagePlayerAircraft();
         PinBars();
         FrameBars();
         WatchBars();
@@ -400,6 +409,9 @@ public sealed partial class CutsceneController : Node
             Act(code);
         }
 
+        // After the restore codes, so OutOfFlight is already down and this hands every aircraft
+        // back the pose it held before the intro staged it.
+        StagePlayerAircraft();
         if (_bars != null)
         {
             AnimRuntime.SetSubtreeActive(_bars, false);
@@ -575,6 +587,27 @@ public sealed partial class CutsceneController : Node
         }
 
         _parked.Clear();
+    }
+
+    // The pose half of the original's `player` node: an intro activates it, reparents it under the
+    // airship and flies it on an SI script, and the aeroplane that follows it is whichever airframe
+    // the pilot flies. Re-asserted every tick rather than latched, so a respawn cannot take the
+    // model back off the screen mid-cutscene. Cleared at the handoff, which puts the aircraft back
+    // where the mission spawned it: the drop's own end pose is not what a CSVM session starts from.
+    private void StagePlayerAircraft()
+    {
+        if (_playerMarker == null)
+        {
+            return;
+        }
+
+        var pose = OutOfFlight && _playerMarker.Visible
+            ? AnimRuntime.WorldTransform(_playerMarker, out _)
+            : (Transform3D?)null;
+        foreach (var pilot in Pilots())
+        {
+            pilot.StageAt(pose);
+        }
     }
 
     private void MirrorCamera()

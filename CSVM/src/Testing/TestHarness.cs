@@ -619,6 +619,7 @@ public sealed class TestContext
                 ExtraPrewarmNames = ExtraPrewarmSoundNames,
                 CutsceneRoots = CutsceneRoots,
                 LandingTriggers = CutsceneRoots,
+                PlanesGamezPath = PlanesGamezPath,
                 TexturesOutliveBuild = archives.TexturesOutliveBuild,
                 SoundsOutliveBuild = archives.SoundsOutliveBuild,
             },

@@ -127,7 +127,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the intro and the swap
 
 7. ☑ A bootstrap `AT_NODE` pose lands at the world origin (`BL-484`)
-8. ☐ The intro cutscene stages no aircraft (`BL-482`)
+8. ☑ The intro cutscene stages no aircraft (`BL-482`)
 9. ☑ An airframe swap leaves the captured aircraft flying, and never hands the outgoing one over (`BL-503`)
 
 ### Wave C — offered but inert, and the red suite
@@ -507,7 +507,7 @@ meant to trip it.
 
 **Verified.** <pending orchestrator run>
 
-## B8 ☐ The intro cutscene stages no aircraft
+## B8 ☑ The intro cutscene stages no aircraft
 
 **Goal.** The chapter intro cutscene stages the two aircraft it animates, so it plays over aeroplanes
 rather than over an empty sky.
@@ -555,6 +555,38 @@ has to be relied on beyond the eight measured chapters, say so.
 *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md` ("`player`, and the two pointer spaces a
 definition addresses") carries the decode; `BL-470` and `BL-471` were closed by the work that filed
 this.
+
+**Landed.** `Mech3/AircraftStage.cs` builds both aircraft under the world root before the animation
+bind, for a mission whose start-anims name an intro and for no other session. `piratefighter` comes
+off the aircraft archive on its own `SceneBuilder`, switched off until `gi_pfighter1` activates it;
+`player` is a bodiless marker, because the aeroplane it stands for is the one the pilot flies. Every
+staged node's stamped gamez index is rebased by `PointerBaseOf` (`(count / 2500 + 1) * 2500`), which
+is what makes the compiled intro's symbol table bind the names instead of claiming a symbol with a
+null binding. The pose half is `CutsceneController.StagePlayerAircraft` into the new
+`FlightController.StageAt`: while callback 11's out-of-flight state holds and the marker is active,
+the flown airframe is drawn on the marker's world pose; the handoff hands back the pose it held when
+the staging began, so the mission still starts from its authored spawn rather than from the drop's
+end pose. The name guard was not relaxed. The 2500 rounding is relied on only for the eight measured
+chapters, and `docs/formats/anim-definitions/cutscenes.md` now says so, including that an exact
+multiple of 2500 does not occur in this install and its rounding is therefore undecided.
+
+**Verified.** <pending orchestrator run>. In the lane: `--run-tests=intro-aircraft-stage` PASS
+(1 passed, 0 failed, errors clean) over C3/M01's built world, base 7500 over 5408 chapter nodes,
+`player` ptr 8918 and `piratefighter` ptr 9824 both answered by the staged node in the runtime's
+node table, the prop posed 125.7 m off `piratezep` at 15.9 s and reparented under it, the marker
+posed 63.5 m off it at 28.3 s, the flown airframe tracking the marker from the same instant, three
+one-shots over the window. Neutralising the archive path in `TestHarness` makes it fail on the first
+check (METHOD-9). `cutscene-letterbox`, `campaign-cutscene`, `landings-approach-trigger`,
+`campaign-airframe-swap` and `campaign-objectives-hud` PASS beside it; units 2401/2401 with the
+suite-count assertion moved 130 → 131. The 8-chapter `--freecam` regression is unchanged in every
+count and bit-identical in all 8 screenshots, and the 16 goldens are 16/16 hash-identical with
+`manifest.json` unmodified in the tree (GOLD-9). `--campaign=` captures on two chapters, against a
+neutralised-build before-image that reproduces HEAD's own counts: C3/M01 shows the Devastator prop
+flying beside the airship and the pilot's own Bloodhawk in the launch bay with the doors open, C5/M01
+shows the prop alongside its airship at night, and both read as an empty sky on the before-image.
+
+**Note for the next reader.** The `⚠ Traps` above cite `AnimRuntime.cs:2954-2966` for the name
+guard; that guard is the claimed-but-unbuilt branch in `AnimRuntime.Targets`, which B7's edit moved.
 
 ## B9 ☑ An airframe swap leaves the captured aircraft flying, and never hands the outgoing one over
 

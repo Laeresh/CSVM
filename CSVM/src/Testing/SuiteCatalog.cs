@@ -26,6 +26,7 @@ using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
 using static CSVM.Testing.InstantActionSuites;
+using static CSVM.Testing.IntroAircraftSuites;
 using static CSVM.Testing.LandingApproachSuites;
 using static CSVM.Testing.MenuCaptureSuites;
 using static CSVM.Testing.MusicSuites;
@@ -152,6 +153,7 @@ public static class SuiteCatalog
         "campaign-objectives-hud",
         "campaign-cutscene",
         "cutscene-letterbox",
+        "intro-aircraft-stage",
         "hangar-door-wake",
         "fog-state",
         "campaign-submarine",
@@ -769,6 +771,18 @@ public static class SuiteCatalog
             + "reveal, and the AT_NODE re-assert copies the cutscene camera's whole frame onto it "
             + "every tick",
             CutsceneLetterbox));
+
+        // BL-482: the world build put no aircraft-archive node in the runtime's node table, so both
+        // names an intro animates claimed a symbol with a null binding and the camera moved over an
+        // empty sky.
+        into.Add(new TestHarness.Suite("intro-aircraft-stage",
+            "the two aircraft a story-mission intro animates, over the first story mission's BUILT "
+            + "world: the aircraft archive's 'player' and 'piratefighter' answer the compiled "
+            + "intro's own cross-archive pointers in the runtime's node table, the intro's scripts "
+            + "fly both away from the world origin, its OBJECT_ADD_CHILD puts the prop under the "
+            + "airship, the flown airframe is drawn on the 'player' marker while callback 11 holds "
+            + "the pilot out of flight, and the drop's launch cue fires",
+            IntroAircraftStage));
         into.Add(new TestHarness.Suite("hangar-door-wake",
             "hangar doors over C1/M04's real world (BL-350): OBJECTIVE1's WAKE_ANIM reaches "
             + "'hangar3_doors' through the director at its authored 2 s dormancy and its four "

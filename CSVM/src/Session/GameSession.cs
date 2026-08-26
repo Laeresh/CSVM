@@ -977,6 +977,7 @@ public partial class GameSession : Node3D
                 // its codes the instant startanims starts it, long before a rig exists.
                 CutsceneRoots = _cutscene != null,
                 LandingTriggers = _landings != null,
+                PlanesGamezPath = state.PlanesGamezPath,
                 CallbackHost = _cutscene != null ? _cutscene.Host : null,
                 // The weather rig is built after the world, and the intro's fog fires inside the
                 // bootstrap, so the event is held until the rig has applied its zone.
@@ -1002,7 +1003,8 @@ public partial class GameSession : Node3D
         state.WorldRuntime = session.Runtime;
         // After the bootstrap: an intro definition has already raised its codes, and this is where
         // the host picks up the two nodes it drives.
-        _cutscene?.BindWorld(session.Runtime);
+        _cutscene?.BindWorld(session.Runtime, session.Aircraft);
+        state.StagedAircraftMeshes = session.Aircraft?.MeshInstances ?? 0;
         state.Landings = session.Landings;
         state.Pickups = session.Pickups;
         if (_cutscene != null && _landings != null)
@@ -1295,7 +1297,7 @@ public partial class GameSession : Node3D
         // chapter data decides whether anything is built.
         _lensFlareRig = new LensFlareRig(_spec);
         _lensFlareRig.Build(_rigs, state.Textures, _interpPath, _spec.Chapter);
-        state.MeshInstances = builder.MeshInstanceCount;
+        state.MeshInstances = builder.MeshInstanceCount + state.StagedAircraftMeshes;
         state.Colliders = builder.ColliderCount;
         // Read after the domes, since C1's daytime sky layer is a horizon child.
         if (builder.ScrollingModelCount > 0)
@@ -3374,6 +3376,9 @@ public partial class GameSession : Node3D
         public Aabb? NodeAabb;
 
         public int MeshInstances;
+        // The intro's staged prop aircraft, counted apart because the world builder never saw it:
+        // it comes off the aircraft archive on its own SceneBuilder (Mech3/AircraftStage.cs).
+        public int StagedAircraftMeshes;
         public int Colliders;
         public string What = "";
 
