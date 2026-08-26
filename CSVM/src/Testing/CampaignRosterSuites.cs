@@ -10,7 +10,7 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>The campaign roster spawner over a shipped story mission's <c>aiv</c> roster and its
-/// built chapter world: every block gets a rig, the decoded net-versus-escort fork is applied per
+/// built chapter world: every enabled block gets a rig, the decoded net-versus-escort fork is applied per
 /// block, the leader pass names the player rig, a deactivated block is inert, the taxi-path
 /// vehicles are placed, and the escorting wingman then holds the player within the
 /// <c>wingman-station</c> leash over a two-minute flown run.</summary>
@@ -153,7 +153,17 @@ internal static class CampaignRosterSuites
                 report.AppendLine($"build summary suffix: '{what}'");
 
                 var roster = director.Roster;
-                ctx.Same(blocks.Count - 1, roster.Count, $"every non-player roster block has a rig");
+                int expectedRoster = 0;
+                foreach (var (name, fields) in blocks)
+                {
+                    if (!name.Equals(CampaignRosterPlan.PlayerBlock,
+                            StringComparison.OrdinalIgnoreCase) && AiSkills.RosterEnabled(fields))
+                    {
+                        expectedRoster++;
+                    }
+                }
+                ctx.Same(expectedRoster, roster.Count,
+                    $"every enabled non-player roster block has a rig");
                 CheckFork(ctx, roster, player, report);
                 CheckPaths(ctx, director, report);
                 CheckVolumes(ctx, roster, skills, report);

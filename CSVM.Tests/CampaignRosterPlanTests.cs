@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using CSVM;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -194,6 +196,36 @@ public class CampaignRosterPlanTests
         Assert.Equal(90f, spawn.YawDeg);
         Assert.Equal("player", spawn.LeaderName);   // a jet's assignment, not a leader
         Assert.False(spawn.Escorts);
+    }
+
+    [Fact]
+    public void DisabledGeneratorTemplate_IsNotAnInitialRosterSpawn()
+    {
+        var fields = Block(5f, "player");
+        fields[5] = 0f;
+
+        var plan = CampaignRosterPlan.Build(
+            new List<(string, List<object?>)> { ("secfury_1", fields) }, Defs, Nets);
+
+        Assert.Empty(plan.Spawns);
+        Assert.Equal(("secfury_1", "enabled 0 generator template"), Assert.Single(plan.Skipped));
+    }
+
+    [ExtractedDataFact]
+    public void Cm04GeneratorParameterSelectsTheDisabledPeacemakerTemplate()
+    {
+        string mission = SessionPaths.MissionZrdr(TestData.DataRoot!, "C3", "M03");
+        var template = Assert.Single(AiSkills.LoadGeneratorRoster(mission),
+            block => block.Parameter.Equals("BarracudaPlanes", System.StringComparison.OrdinalIgnoreCase));
+        string zrdr = SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+        var plan = CampaignRosterPlan.BuildGeneratorTemplate(template.Name, template.Fields,
+            VehicleDefs.Load(zrdr), AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, "C3")));
+
+        Assert.NotNull(plan);
+        Assert.Equal("britpeace_5", plan.Name);
+        Assert.Equal("player_peacemaker", plan.PlaneNode);
+        Assert.Equal(2, plan.Team);
+        Assert.Equal(3, plan.Group);
     }
 
     [Fact]

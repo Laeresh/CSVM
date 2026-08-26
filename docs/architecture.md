@@ -386,8 +386,9 @@ plain C# objects, reading both the v0.6.1 "legacy" and the fork "unified" shapes
 docs/formats/gamez.md); `WorldTransformOf` resolves a node's world transform without building it.
 Carries the node's `flags.intersect_surface` as `IntersectSurface` (default true when flags are
 absent) — the original's collision-participation flag, honoured by WorldBuilder.NoCollisionNode.
-Carries `flags.active` as `Active` (same default) — the build script's own `NodeSetActive` record,
-honoured by `WorldBuilder.Add`, which skips building an inactive world-build root outright.
+Carries `flags.active` as `Active` (same default) — initial runtime visibility, honoured by
+`WorldBuilder.Add`, which stages an inactive world-build root hidden so mission choreography can
+still resolve and activate it later.
 Carries the node's `zone_id` as `ZoneId` (default −1 when the field is absent, i.e. ungated) — the
 original's per-node visibility zone, honoured per node by `SceneBuilder` and per camera by
 `Mech3/ZoneGate.cs`.
@@ -587,8 +588,10 @@ original's own zone-selection function map.
 
 `HideUnplacedEntities`/`RestorePlacedEntities` switch off, then restore, the entities a chapter
 parks at the world origin awaiting mission placement. `NoCollisionNode` exempts sky/cloud/billboard
-geometry and anything authoring `intersect_surface: false` from colliders (docs/formats/gamez.md);
-a static probe (`analysis/collider-probe/probe.py`) reproduces `ColliderCount` independently
+geometry and anything authoring `intersect_surface: false` from colliders (docs/formats/gamez.md).
+Placed roots whose authored `active` flag is false are built and indexed but begin hidden; C3/M03's
+`barracuda` is activated later by `sub_movement`.
+A static probe (`analysis/collider-probe/probe.py`) reproduces `ColliderCount` independently
 (`BL-070`). `CreateEdgeExtender` hands off to `MapEdgeExtender.cs`; clutter decoration is
 `Clutter.cs`.
 
@@ -730,8 +733,9 @@ The AI pilot-skill constants (docs/formats/ai-rosters.md): player.json's
 (`RosterSkills`: aiv slots 22–30 by stat name, `-1`/omitted = null; `RosterPrimaryTarget`:
 slot 6; `RosterRatingBiases`: slot 33 as `AiRatingBias` — wildcard `Matches`, shipped pairs,
 a third element accepted and preserved raw, never acted on; the spawn-facing `Roster*` readers for
-slots 0–4, 20, 21, 31, 32, 40 and 65, every one defensive over a short block) and the thin
-per-mission roster loader (`LoadRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
+slots 0–5, 20, 21, 31, 32, 40 and 65, every one defensive over a short block) and the thin
+per-mission roster loader (`LoadRoster`), plus the positional-header join that exposes disabled
+generator parameter blocks (`LoadGeneratorRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
 slot 6/33 census goldens in `AiTargetRankingTests`; the spawn slots in `CampaignRosterPlanTests`.
 
 ## src/Mech3/AiVolumes.cs
@@ -4898,8 +4902,10 @@ onto an `AiModeMachine` and floors activation at `min_ai_active_dist`. The profi
 airframe replaces the block's own for the named block (`wingman_1`), taking the `w<plane>` def for
 its stats; a def that is no `kind_of` variant of its airframe flies the plain base def, with the
 block's own def still deciding the mode. `ResolveLeader` is the second-pass lookup (`player` = the
-first human). Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`; the placement half is the
-`campaign-roster` suite.
+first human). An `enabled 0` block is excluded from the initial roster and
+`BuildGeneratorTemplate` resolves it separately when an enemy generator's `vehicle.params` names
+its positional header label. Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`; the placement half
+is the `campaign-roster` suite.
 
 ## src/Session/ScriptedPathVehicles.cs
 One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored
@@ -4969,8 +4975,12 @@ close is the open, as in the loader) through host-scoped hooks (`AnimRuntime.Pla
 this cycle's, not the mission script's (`hangar-door-wake` suite). Every drop/live/door/spawn prints an `egen:`
 line, which is the flag's observability. `NotifyHostDied(node)`: the zeppelin death aggregator
 (`ZeppelinRuntime.ZeppelinKilled`, F18) calls it and the matching cycles disable permanently.
-Pinned by the `zeppelin-launch` suite.
-`UseInstantActionLaunches(hostNode, release)` + `GrantWaveCapacity(hostNode, n)` are F12's arm: the
+Pinned by the `zeppelin-launch` suite. For campaign missions, `RequireWakeupCredits(hostNode)`
+starts cycles named by a script's `WAKEUP_GENERATOR` empty, and
+`GrantWaveCapacity(hostNode, n)` is its top-up; the spawn
+callback receives the whole `EnemyGeneratorDef`, allowing `vehicle.params` to select its AIV
+template while position is still read from the live host.
+`UseInstantActionLaunches(hostNode, release)` plus the same credit are F12's arm: the
 objective zeppelin's generator goes onto the wave-credit budget and its launches RELEASE an
 already-built (inert) wave member through the caller's hook instead of spawning a fresh aircraft —
 the decoded shape, since `FUN_00452450` finds the parked airframes whose group matches and drops

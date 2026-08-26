@@ -153,6 +153,7 @@ public static class SuiteCatalog
         "cutscene-letterbox",
         "hangar-door-wake",
         "fog-state",
+        "campaign-submarine",
         "campaign-roster",
         "campaign-bomber-formation",
         "campaign-loop",
@@ -772,9 +773,14 @@ public static class SuiteCatalog
             + "authored 'drop_fog' values, an event raised before the rig has built lands after "
             + "the zone, and a field the event omits is left as the zone wrote it",
             FogStateEvent));
+        into.Add(new TestHarness.Suite("campaign-submarine",
+            "CM04's authored-inactive barracuda remains built but hidden until sub_movement "
+            + "resolves and activates it after the patrol phase",
+            CampaignSubmarine));
         into.Add(new TestHarness.Suite("campaign-roster",
             "the campaign roster spawner (D34, BL-362/BL-364) over C1/M04's shipped aiv roster in "
-            + "its built world: every non-player block gets a rig, the decoded fork puts an escort "
+            + "its built world: every enabled non-player block gets a rig, while disabled blocks "
+            + "remain generator templates; the decoded fork puts an escort "
             + "on the netless wingman_1 (leader: the player rig) and on wingman_2/3 (leaders: the "
             + "devastator blocks) and a patrol net on every netted block with no block carrying "
             + "both, the deactivated blocks are inert, the four taxiPath vehicles are placed frozen, "

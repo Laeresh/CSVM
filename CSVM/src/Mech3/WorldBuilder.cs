@@ -751,7 +751,7 @@ public sealed class WorldBuilder
             if (idx < 0 || idx >= _gamez.Nodes.Count)
                 continue;
             var rootNode = _gamez.Nodes[idx];
-            if (!rootNode.Active || SkipWorldNode(rootNode))
+            if (SkipWorldNode(rootNode))
                 continue;
             subtree.Clear();
             Collect(rootNode, Transform3D.Identity, subtree);
@@ -1021,8 +1021,6 @@ public sealed class WorldBuilder
         if (nodeIndex < 0 || nodeIndex >= _gamez.Nodes.Count)
             return;
         var node = _gamez.Nodes[nodeIndex];
-        if (!node.Active)
-            return; // the build script's own NodeSetActive off — never built, like the original
         bool isDeck = _deckNodes.Contains(nodeIndex);
         // ⚠ Deck tiles are the one exception to the world's backface culling. They are authored
         // single-sided, but the player flies through the deck, so the same quad must read as a
@@ -1031,6 +1029,9 @@ public sealed class WorldBuilder
             forceDoubleSided: isDeck, forceLit: isDeck, zoneGate: !isDeck);
         if (built != null)
         {
+            // ACTIVE is live visibility, not existence. Mission choreography can switch an
+            // authored-inactive entity on later, so it must already be indexed and staged.
+            built.Visible = node.Active;
             if (IsParkedAtOrigin(node, built))
             {
                 _parkedAtOrigin.Add((node, built));

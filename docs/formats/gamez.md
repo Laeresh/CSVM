@@ -17,6 +17,11 @@ This page documents format facts only and contains no game asset data.
 - `nodes.json` `children`/`parent` are **flat list positions**, NOT the `node_index` field (node_index has duplicates).
 - Euler `transformation.rotation` composes **R = Ry(y)·Rx(x)·Rz(z)** = Godot's `EulerOrder.Yxz` (fit numerically, zero error, against the 221 nodes that also carry a matrix). When `matrix` is present, use it instead; it is stored transposed — real columns are (a,b,c),(d,e,f),(g,h,i).
 - Coordinates are right-handed Y-up with the nose at **-Z** — Godot's frame exactly; no mirroring, no UV V-flip.
+- **A node's `flags.active` is initial runtime visibility, not an existence/build flag.** Mission
+  animation and objective code can resolve an authored-inactive node and activate it later. C3/M03
+  is the direct shipped case: `barracuda` begins inactive, then `sub_movement` activates and moves
+  the submarine before its enemy generator is credited. A world builder must therefore stage an
+  inactive placed root and hide it; dropping the root makes the later name/index references fail.
 - **Node origins locate nothing reliably.** A node's transform origin is frequently nowhere near its mesh geometry, and many world nodes share a single origin (measured in C1 flight: origin-anchored labels drew 6 distinct labels out of 183 candidate nodes; mesh-AABB-centre anchoring drew 14, on the objects). Anything needing "where the object is" must derive it from mesh vertex data (e.g. the mesh AABB centre), not the node origin. The player planes' `_h` damage panels are the extreme case — identity node transforms with the placement baked into the mesh vertices (see the damage-states bullet below).
 - `meshes.json` has `null` entries (empty slots) — keep them to preserve `mesh_index` alignment.
 - Polygons are n-gons (3..35 verts): triangulate as fan, or as strip when `flags.triangle_strip`; `normal_indices`/`uv_coords` may be null (272 polys have no normals → flat-shade fallback).

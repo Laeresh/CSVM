@@ -2326,6 +2326,20 @@ public partial class GameSession : Node3D
                 egenDefs = new List<EnemyGeneratorDef>();
             }
             var chapterNets = AiNets.Load(worldBindings.ChapterZrdrPath);
+            var generatorTemplates = new Dictionary<string, RosterSpawnPlan>(
+                StringComparer.OrdinalIgnoreCase);
+            if (_campaign != null)
+            {
+                var vehicleDefs = VehicleDefs.Load(state.ZrdrPath);
+                foreach (var template in AiSkills.LoadGeneratorRoster(state.MissionZrdrPath))
+                {
+                    if (CampaignRosterPlan.BuildGeneratorTemplate(template.Name, template.Fields,
+                            vehicleDefs, chapterNets) is { } plan)
+                    {
+                        generatorTemplates[template.Parameter] = plan;
+                    }
+                }
+            }
             var wr = worldBindings.WorldRuntime;
             _generators = new AiGeneratorRuntime(egenDefs,
                 wr == null ? null
@@ -2334,12 +2348,26 @@ public partial class GameSession : Node3D
                 // overload, and a generated aircraft is the mission's enemy, so it keeps its own
                 // textures rather than the player militia's default.
                 chapterNets, _spec.GeneratorsPlane,
-                (plane, pos, look, pilot) => flightRoster.SpawnAi(new AiSpawn(
-                    plane, pos, look, pilot, ShippedSkins: true)),
+                (def, pos, look, pilot) => def.VehicleParams is { } parameter
+                    && generatorTemplates.TryGetValue(parameter, out var plan)
+                        ? flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot))
+                        : flightRoster.SpawnAi(new AiSpawn(
+                            _spec.GeneratorsPlane, pos, look, pilot, ShippedSkins: true)),
                 wr == null ? null : (name, host) => wr.PlayWithin(host, name, applyReset: false).Count,
                 wr == null ? null : (name, host) => wr.StopWithin(host, name),
                 netTrailers.For);
             _worldRoot!.AddChild(_generators);
+            if (_campaign is { } campaignGenerators)
+            {
+                var wakeupHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var objective in campaignGenerators.Script.Objectives)
+                {
+                    if (objective.WakeupGenerator is { } wakeup && wakeupHosts.Add(wakeup.Name))
+                    {
+                        _generators.RequireWakeupCredits(wakeup.Name);
+                    }
+                }
+            }
             // A dead zeppelin permanently disables its generator (the decoded rule; F18
             // supplies the death the B6 stub waited on).
             if (_zeppelins != null)

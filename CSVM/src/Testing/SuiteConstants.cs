@@ -55,17 +55,18 @@ internal static class SuiteConstants
     internal const int RigGunGroups = 4;
 
     // Destructible instances / distinct node groups per chapter, at each chapter's default mission.
+    // Authored-inactive placed roots are staged hidden and therefore contribute to this registry.
     // Instances exceed node groups where a reader wildcard def and its compiled per-instance twin
     // bind the same nodes. Both columns sit far below plain NAME matching because a compiled def
     // binds the one instance its symbol table names (AnimRuntime.Anchors).
     internal static readonly (string Chapter, int Instances, int Anchors)[] Census =
     {
-        ("C1", 210, 143),
+        ("C1", 214, 145),
         ("C1B", 29, 29),
         ("C1C", 28, 28),
         ("C2", 200, 133),
         ("C2B", 28, 28),
-        ("C3", 221, 147),
+        ("C3", 228, 151),
         ("C4", 92, 67),
         ("C5", 176, 112),
     };

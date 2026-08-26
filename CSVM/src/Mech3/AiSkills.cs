@@ -119,6 +119,7 @@ public sealed class AiSkills
     private const int YawSlot = 2;
     private const int TeamSlot = 3;
     private const int GroupSlot = 4;
+    private const int EnabledSlot = 5;
     private const int TitleSlot = 20;
     private const int DeactivatedSlot = 21;
     private const int PrefEngageAltSlot = 31;
@@ -253,6 +254,11 @@ public sealed class AiSkills
     /// when unset (the at-mission-start population).</summary>
     public static int RosterGroup(IReadOnlyList<object?> fields) => IntSlot(fields, GroupSlot) ?? 0;
 
+    /// <summary>Reads a roster block's <c>enabled</c> flag (slot 5). Zero marks a parameter
+    /// template consumed by an enemy generator, not an aircraft present at mission start.</summary>
+    public static bool RosterEnabled(IReadOnlyList<object?> fields) =>
+        fields.Count > EnabledSlot && fields[EnabledSlot] is float f && f >= 1f;
+
     /// <summary>Reads a roster block's <c>title</c> (slot 20), the <c>MSG_*_NAME</c> display key,
     /// or null when empty or unset.</summary>
     public static string? RosterTitle(IReadOnlyList<object?> fields) => StrSlot(fields, TitleSlot);
@@ -314,6 +320,32 @@ public sealed class AiSkills
                 blocks.Add((name, fields));
         }
         return blocks;
+    }
+
+    /// <summary>Loads the disabled roster blocks that an enemy generator's
+    /// <c>vehicle.params</c> names. The positional header carries one designer label per following
+    /// block; its numeric ids are not contiguous, so block order is the join.</summary>
+    public static List<(string Parameter, string Name, List<object?> Fields)> LoadGeneratorRoster(
+        string missionZrdrPath)
+    {
+        var root = Zrdr.LoadFileOrEmpty(missionZrdrPath, "aiv.json");
+        var templates = new List<(string, string, List<object?>)>();
+        if (root.Count == 0 || root[0] is not List<object?> header)
+            return templates;
+
+        int blockIndex = 1;
+        for (int i = 1; i + 1 < header.Count && blockIndex < root.Count; i += 2, blockIndex++)
+        {
+            if (header[i + 1] is not string { Length: > 0 } parameter
+                || root[blockIndex] is not List<object?> { Count: >= 2 } entry
+                || entry[0] is not string name || entry[1] is not List<object?> fields
+                || RosterEnabled(fields))
+            {
+                continue;
+            }
+            templates.Add((parameter, name, fields));
+        }
+        return templates;
     }
 
     /// <summary>The stat parameter at a 1–9 rating: the engine's own formula, <c>lo + (hi-lo) ·

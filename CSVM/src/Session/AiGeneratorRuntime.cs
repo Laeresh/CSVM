@@ -34,7 +34,7 @@ public sealed partial class AiGeneratorRuntime : Node
 
     private readonly List<LiveGenerator> _live = new();
     private readonly string _planeName;
-    private readonly Func<string, Vector3, Vector3, AiPilot, FlightController?> _spawn;
+    private readonly Func<EnemyGeneratorDef, Vector3, Vector3, AiPilot, FlightController?> _spawn;
     private readonly Func<string, Node3D, int>? _playAnim;
     private readonly Action<string, Node3D>? _stopAnim;
     private readonly Func<AiNet, Func<Vector3?>?>? _trailerTarget;
@@ -45,7 +45,7 @@ public sealed partial class AiGeneratorRuntime : Node
     /// hypothetical.</param>
     public AiGeneratorRuntime(IReadOnlyList<EnemyGeneratorDef> defs,
         Func<string, Node3D?, Node3D?>? resolveNode, IReadOnlyList<AiNet> chapterNets,
-        string planeName, Func<string, Vector3, Vector3, AiPilot, FlightController?> spawn,
+        string planeName, Func<EnemyGeneratorDef, Vector3, Vector3, AiPilot, FlightController?> spawn,
         Func<string, Node3D, int>? playAnim = null, Action<string, Node3D>? stopAnim = null,
         Func<AiNet, Func<Vector3?>?>? trailerTarget = null)
     {
@@ -100,6 +100,21 @@ public sealed partial class AiGeneratorRuntime : Node
 
     /// <summary>Generators that survived the load drops.</summary>
     public int LiveCount => _live.Count;
+
+    /// <summary>Puts generators hosted on <paramref name="hostNode"/> behind their mission-authored
+    /// <c>WAKEUP_GENERATOR</c> credit. Returns the number armed.</summary>
+    public int RequireWakeupCredits(string hostNode)
+    {
+        int armed = 0;
+        foreach (var gen in _live)
+        {
+            if (!gen.Def.Node.Equals(hostNode, StringComparison.OrdinalIgnoreCase))
+                continue;
+            gen.Cycle.UseWaveCredits();
+            armed++;
+        }
+        return armed;
+    }
 
     /// <summary>Instant Action's zeppelin arm: every generator hosted on
     /// <paramref name="hostNode"/> goes onto the wave-credit budget and releases an already-built
@@ -276,7 +291,7 @@ public sealed partial class AiGeneratorRuntime : Node
         var pilot = AiPilot.HoldingCourse(pos, pos + forward);
         pilot.Patrol = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai),
             trailerTarget: _trailerTarget?.Invoke(net));
-        var controller = _spawn(_planeName, pos, pos + drop, pilot);
+        var controller = _spawn(gen.Def, pos, pos + drop, pilot);
         if (controller == null)
         {
             gen.Cycle.SpawnRemoved();   // the slot was counted before the spawn could fail
@@ -286,7 +301,7 @@ public sealed partial class AiGeneratorRuntime : Node
             controller.Activate(pos, pos + drop, velocity, carrierDrop: true);
         gen.SpawnCount++;
         controller.Downed += (_, _) => gen.Cycle.SpawnRemoved();
-        GD.Print($"egen: '{gen.Def.Node}' spawn #{gen.SpawnCount}: '{_planeName}' dropped at " +
+        GD.Print($"egen: '{gen.Def.Node}' spawn #{gen.SpawnCount}: '{controller.Name}' dropped at " +
                  $"({pos.X:0},{pos.Y:0},{pos.Z:0}) patrolling net '{net.Name}', " +
                  $"active {gen.Cycle.Active}/{gen.Def.MaxActive}" +
                  (gen.Def.VehicleParams != null ? $", params '{gen.Def.VehicleParams}'" : ""));

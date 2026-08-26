@@ -41,7 +41,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 2 | `yaw` | spawn heading, degrees |
 | 3 | `team` | |
 | 4 | `group` | **mission-logic cohort id, not a formation** (see [below](#group-is-a-cohort-id-not-a-formation)). Values 0-8; `0` (the default) is the at-mission-start population |
-| 5 | `enabled` | |
+| 5 | `enabled` | `1` = an aircraft present in the initial mission roster; `0` = a generator parameter template, not an initially placed aircraft. Exactly 14 blocks author `0`, and all 14 carry header labels consumed by `egen.json`'s `vehicle.params` (including the shipped spelling mismatch described in [enemy generators](mission-entities/enemy-generators.md)) |
 | 6 | `primary_target` | an assigned target node name. 6 distinct: `""` (346), `player` (27), `devastator_1/2/3`, `piratezep`. The engine's own debug readout prints it as "Primary target: %s". ⚠ **Its meaning depends on `mode`:** on a `jet` it is a targeting assignment, but on a netless `wingman` it is the **formation leader**, and the escort law flies a fixed offset from it ([`org/aiPilot.md`](../org/aiPilot.md)). Corrects the "not a formation leader" reading, which was right about `jet`s and wrong about wingmen |
 | 7 | `init_health` | starting health override; `0.0` = use the airframe default. Real values do occur (e.g. `216.0`) |
 | 8–19 | the activation/attack/return volumes | 12 slots for the 9 named `{active,attack,return}_{rad,u,l}` — see [below](#the-three-unnamed-slots). `rad` is a radius, `u`/`l` an upper/lower altitude band |
@@ -92,8 +92,10 @@ that author `mode wingman`, and a netless `wingman` flies a formation station on
 graph like everything else. [`org/aiPilot.md`](../org/aiPilot.md) has the mechanism and the
 constants.
 
-**What CSVM reads of this.** A campaign session spawns every non-`player` block of the mission's
-roster (`Session/CampaignRoster.cs` plans it, `CampaignDirector.BuildRoster` places it). The block
+**What CSVM reads of this.** A campaign session initially spawns every enabled non-`player` block
+of the mission's roster (`Session/CampaignRoster.cs` plans it, `CampaignDirector.BuildRoster`
+places it). Disabled blocks remain generator templates: `egen.json`'s `vehicle.params` selects one
+by its positional header label when the mission later credits that generator. The block
 name resolves to its `vehicle.json` def by stripping trailing `_N` ordinals (`blakepeace_2_1` →
 `blakepeace_2`), and the def's `mode` plus slot 0 decide the fork above. Read at spawn: slots 0–7,
 the twelve volume slots 8–19 (over the net's own, see [ai-nets.md](ai-nets.md)), 20, 21, 22–30,
