@@ -1072,6 +1072,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _resolver.ClearFindCache();
     }
 
+    /// <summary>Makes one live aircraft answer for the gamez LIBRARY-ROOT vehicle node it was
+    /// spawned from, by that node's name and compiled index. A chapter's own copy of a vehicle is
+    /// never placed, so a definition written against it addresses a name with nothing behind it;
+    /// the mission's roster is what actually put that aeroplane in the world. ⚠ The rig root ALONE,
+    /// never its subtree: the model carries the shared airframe's own node names, and indexing
+    /// those globally would let an unrelated definition claim them. Additive.</summary>
+    public void IndexSpawnedVehicle(Node3D rig, string libraryRootName, int gamezIndex)
+    {
+        _resolver.Add(rig, libraryRootName, rig.GetParent() as Node3D, gamezIndex);
+        _resolver.ClearFindCache();
+    }
+
     // ---- ISequenceHost: the sequence interpreter's 3-point view of this runtime, satisfied by
     // explicit interface implementation so Dispatch/EvaluateCondition stay off AnimRuntime's own
     // surface. See SequenceRunner.cs. ----
@@ -2350,10 +2362,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                     || _missionCallDepth > 0)
                                 && !operandRedirect && ResolveLibraryRoot != null)
                             {
-                                libraryCopy = ResolveLibraryRoot(
-                                    string.IsNullOrEmpty(target.Name) ? target.RootName ?? "" : target.Name,
-                                    callAnchor);
-                                relocate = libraryCopy != null;
+                                string rootName = string.IsNullOrEmpty(target.Name)
+                                    ? target.RootName ?? "" : target.Name;
+                                // ⚠ A call whose AT_NODE site IS the callee's own root node names
+                                // the node to run on; a pooled copy beside it would drive one node
+                                // while the shot composed in the other hangs off it.
+                                if (!string.Equals(NameOf(callAnchor), rootName,
+                                        StringComparison.OrdinalIgnoreCase))
+                                {
+                                    libraryCopy = ResolveLibraryRoot(rootName, callAnchor);
+                                    relocate = libraryCopy != null;
+                                }
                             }
                         }
                         // A relocating call outside the pool claims its sticky slot before the

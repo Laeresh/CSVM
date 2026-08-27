@@ -175,6 +175,7 @@ public static class SuiteCatalog
         "landings-hookup-airframe",
         "landings-hangar-drop-gate",
         "campaign-airframe-swap",
+        "campaign-wingwalk-camera",
         "roster-spawn-names",
         "roster-voice-ratings",
         "mission-radio",
@@ -971,6 +972,18 @@ public static class SuiteCatalog
             + "everywhere else, revealed 100 m off the old nose at -45 degrees on the player's own "
             + "heading with the sums measured off the hull it was given",
             AirframeSwapSuites.AirframeSwap));
+
+        // BL-542: the capture cutscene's camera rides the wing walk's moving frame, and that frame
+        // is posed onto the aeroplane the capture belongs to.
+        into.Add(new TestHarness.Suite("campaign-wingwalk-camera",
+            "CM02's capture cutscene framing over that mission's BUILT world: the mission's own "
+            + "capture definition started through the mission-trigger seam its approach table "
+            + "starts it with, played on a realtime clock with each aircraft stepping itself, "
+            + "with the captured aeroplane spawned from its own roster block at the position the "
+            + "mission authors it -- far from the world origin, so a shot posed off nothing is not "
+            + "mistaken for a framed one -- and camera1 read once a second against that "
+            + "aeroplane's own position",
+            WingWalkCameraSuites.WingWalkCamera));
 
         // BL-401: the assembler named every spawn ai{n}_{plane}, which no authored pattern can
         // match, so rating_biases was dead on the campaign path.

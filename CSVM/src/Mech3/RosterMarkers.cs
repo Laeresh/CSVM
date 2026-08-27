@@ -32,6 +32,11 @@ public static class RosterMarkers
             return 0;
         }
 
+        // The rig answers for the library root itself, not only for what hangs under its marks: a
+        // cutscene posed AT_NODE the chapter's copy of this vehicle otherwise addresses a name with
+        // no node, and composes its shot at the world origin.
+        runtime.IndexSpawnedVehicle(rig, vehicle.Name, vehicle.Index);
+
         var built = MarksOf(rig);
         if (ChildNamed(gamez, vehicle, MarkersNode) is not { } authored
             || !built.TryGetValue(authored.Name, out var host))

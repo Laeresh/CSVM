@@ -286,7 +286,7 @@ public sealed class WorldSession
         bool intro = BootstrapsCutscene(animProgram);
         if (o.CutsceneRoots && (intro || s.Landings.Count > 0))
         {
-            BuildCutsceneRoots(root, gamez, builder);
+            BuildCutsceneRoots(root, gamez, builder, animProgram);
         }
 
         // The two aircraft an intro animates live in the shared archive, not the chapter gamez, so
@@ -443,8 +443,10 @@ public sealed class WorldSession
     // the bind anchors both and the shared letterbox definition's own base state switches the bars
     // off. Standing them up before the bind is what makes the bars data rather than an overlay
     // (docs/formats/anim-definitions/cutscenes.md).
-    private static void BuildCutsceneRoots(Node3D root, GameZ gamez, WorldBuilder builder)
+    private static void BuildCutsceneRoots(Node3D root, GameZ gamez, WorldBuilder builder,
+        AnimProgram program)
     {
+        BuildCompositionFrames(root, gamez, program);
         var camera = new Node3D { Name = Session.CutsceneController.CameraNode };
         // ⚠ Stamp the gamez index a scene-built node would carry. Every compiled cutscene binds
         // `camera1` through its symbol table, and a claimed index with no node behind it makes
@@ -469,6 +471,62 @@ public sealed class WorldSession
         built.Transform = Transform3D.Identity;
         AnimRuntime.SetSubtreeActive(built, false);
         root.AddChild(built);
+    }
+
+    // The composition frames this program reparents into: a bodiless, childless gamez library root
+    // the world1 walk never reaches, named as an OBJECT_ADD_CHILD parent. A cutscene writes its
+    // keyframes in such a frame's space and moves the camera under it, so a frame with no node
+    // behind it leaves the whole shot in world space at the gamez origin. Two exist in this
+    // install, CM02's `wingwalk_parent` and CM07's `carney_pickup_parent`
+    // (docs/formats/anim-definitions/cutscenes.md).
+    private static void BuildCompositionFrames(Node3D root, GameZ gamez, AnimProgram program)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var def in program.Defs)
+        {
+            foreach (var sequence in Blocks(def))
+            {
+                foreach (var ev in sequence.Events)
+                {
+                    if (!string.Equals(ev.Kind, "ObjectAddChild", StringComparison.Ordinal)
+                        || ev.Data.Str("parent") is not { } parent
+                        || !seen.Add(parent)
+                        || gamez.FindByName(parent) is not { } node
+                        || node.Children.Count > 0 || node.MeshIndex >= 0
+                        || !gamez.IsLibraryRoot(node))
+                    {
+                        continue;
+                    }
+
+                    // ⚠ Stamp name and gamez index, the way `camera1` above is stamped: a compiled
+                    // definition binds this node through its symbol table, and a claimed index
+                    // with no node behind it is dropped rather than name-matched.
+                    var frame = new Node3D { Name = node.Name };
+                    frame.SetMeta(AnimRuntime.NameMeta, node.Name);
+                    frame.SetMeta(AnimRuntime.IndexMeta, node.Index);
+                    root.AddChild(frame);
+                    frame.Transform = node.Local ?? Transform3D.Identity;
+                    // ⚠ Keep this: a placed root, and its motion must launch from where the
+                    // definition put it rather than re-home to its authored rest at the map
+                    // origin (docs/org/objectMotion.md, "The re-home rule").
+                    frame.TopLevel = true;
+                    Log.Info("anim", $"anim: composition frame '{node.Name}' (gamez {node.Index}) stood up for a cutscene reparent");
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<AnimSequence> Blocks(AnimDefinition def)
+    {
+        if (def.ResetState is { } reset)
+        {
+            yield return reset;
+        }
+
+        foreach (var sequence in def.Sequences)
+        {
+            yield return sequence;
+        }
     }
 
     // Stamps SceneBuilder.ClutterColor onto every clutter draw under

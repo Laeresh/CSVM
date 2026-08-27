@@ -2171,12 +2171,28 @@ usual.
   (`docs/verification.md` INSTR-28), so read the handoff off the log rather than a frame count.
   *Cross-refs:* `docs/PLAN-M5-polish-2.md` D18.
 
-- `BL-542` `[Bug]` `[Owed-playtest]` **CM02's capture cutscene camera is misplaced.** Seen at the
-  controls: the camera sat directly above the water showing only the player's aeroplane, never the
-  Balmoral nor the player leaving one aircraft and boarding the other. *Fix shape:* the capture
-  definition's camera is posed off a node (`AT_NODE`) or an absolute pose; find which, and whether
-  the node it wants is the captured aircraft's own (which the swap now reaches by root name).
-  *Cross-refs:* `docs/PLAN-M5-polish-2.md` C12 and D15.
+- `BL-549` `[Bug]` **`OBJECT_ROTATE_STATE`'s `AT_NODE` basis reaches nothing on a compiled
+  definition, so every authored one lands as an absolute zero rotation.**
+  `PoseChannel.HandleRotateState` reads `basis.AtNodeMatrix`, which is the spelling the READER
+  parser writes (`AnimDefs.AddAtNode`, `AT_NODE_MATRIX`); mech3ax's compiled extraction spells the
+  same field `AtNodeXYZ`. Census over the whole install: **132 `AtNodeXYZ`, 0 `AtNodeMatrix`**, so
+  the handled branch is dead here and all 132 fall through to `PoseRotate(target, state)` with the
+  authored zero vector, taking world axes instead of the host node's. Found while fixing CM02's
+  capture framing: `britbalmoral_1-ww_balmoral1` poses its wing-walk frame `AT_NODE_XYZ
+  britbalmoral_1`, so the shot now sits on the captured aeroplane but faces the world's axes rather
+  than the aeroplane's heading. *Fix shape:* read both spellings in `HandleRotateState`, then check
+  whether the compiled field is degrees or radians the way the reader/compiled split goes elsewhere.
+  ⚠ `PoseAtNode`'s composition is shared by every cutscene (`BL-484`), so judge the change against
+  `cutscene-letterbox`, `campaign-wingwalk-camera` and a `--campaign=` shot, not against a count.
+  *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md`, "A composition frame is a bodiless
+  gamez node".
+
+- `BL-545` `[Bug]` `[Owed-playtest]` **The landing animation plays with no hook, the aeroplane too
+  high, and unfolded wings.** Seen at the controls on CM02's auto-land: the landing hook was not
+  deployed, the aeroplane sat too high on the trapeze, and a Balmoral folds its wings in the
+  original's landing cutscenes. *Fix shape:* three separate reads of the hookup definition and the
+  airframe's own nodes (the hook and the wing-fold are per-airframe animated parts, the height is
+  the `AT_NODE` pose's offset). *Cross-refs:* `BL-544`; `docs/PLAN-M5-polish-2.md` C10 and C12.
 
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
   controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.

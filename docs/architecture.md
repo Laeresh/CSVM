@@ -50,7 +50,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/MissionCutscenes.cs` — which of a mission's `mis_anim.zrd` `ANIMATION_DEFINITION_FILE` entries sit under its own `cutscenes\` directory, and the `ANIMATION_NAME`s they define. That directory is the authored classifier for mid-mission choreography (nine story missions ship one); `WorldSession` hands the names to the cutscene host and to `AnimRuntime.RangeGatedCalls`. Decode: `docs/formats/anim-definitions/cutscenes.md`.
 - `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer and the net's own three volumes included.
 - `src/Mech3/AiVolumes.cs` — `AiVolume`/`AiVolumeSet`: the activation/attack/return volumes as a roster block (slots 8–19) and a net record (elements 2–10) author them, with the engine's non-zero overlay.
-- `src/Mech3/RosterMarkers.cs` — grafts a roster block's authored marker scaffolding onto the rig its spawn built: the chapter's own copy of a vehicle is a library root the world never places, so whatever that copy adds under `markers` past the shared airframe's is built there, hung under the airframe's mark of the same name, switched to its authored `active` bit and indexed on the world runtime, which is what gives an index-addressed definition a node to write and a condition volume that moves with its aircraft.
+- `src/Mech3/RosterMarkers.cs` — grafts a roster block's authored marker scaffolding onto the rig its spawn built: the chapter's own copy of a vehicle is a library root the world never places, so whatever that copy adds under `markers` past the shared airframe's is built there, hung under the airframe's mark of the same name, switched to its authored `active` bit and indexed on the world runtime, which is what gives an index-addressed definition a node to write and a condition volume that moves with its aircraft. It also makes the rig itself answer for that library root's own name and index (`AnimRuntime.IndexSpawnedVehicle`), so a definition posed `AT_NODE` the vehicle reaches the aeroplane the mission actually spawned.
 - `src/Mech3/VehicleDefs.cs` — the `vehicle.json` def index a roster spawn resolves a block against: the def behind a block name, its `mode` through `kind_of`, and the player airframe node its model is built from.
 - `src/Mech3/Maneuvers.cs` — the shared maneuver library (`zrdr/maneuvers.zrd`): 17 timed attitude-step programs with `natural_touch` difficulty gates, the eligibility cull, and the `signature_maneuvers` bitmask decode.
 - `src/Mech3/CampaignSequence.cs` — the shared `cm_sequence.zrd` reader: the campaign's 24 flat mission entries, each one's storage address (world folder, mission folder, `Persist.NNN`/`Mission.NNN` save id) and the backwards walk to the previous mission of the same world folder that cross-mission persistence is scoped by. Decode: `docs/formats/campaign-sequence.md`.
@@ -915,7 +915,12 @@ form here (`Reparent`, keeping the LOCAL transform) once the sound-emitter form 
 which is how a cutscene composes its camera inside the node it frames; the decode is
 `docs/formats/anim-definitions/cutscenes.md`. A ranged startanim with an unplaced immediate callee is
 deferred until range; range-triggered and explicit mission-trigger calls may then lazily build their
-library-root callees, and an add-child may do the same for an explicitly named child. The range
+library-root callees, and an add-child may do the same for an explicitly named child — except where
+the call's own `AT_NODE` site IS the callee's root node, which names the node to run on rather than
+asking for a copy. `IndexSpawnedVehicle` is the other half of that resolution: it makes one live
+aircraft answer for the gamez library-root vehicle node its roster block was spawned from, by name
+and compiled index, which is what a cutscene posed `AT_NODE` that vehicle needs
+(`Mech3/RosterMarkers.cs` is the caller). The range
 sweep (`TickDeferredByRange`) runs only when a player crosses an 8 m check cell, and it measures
 each anchor's range origin (`VisualOriginOf`, a mesh-bounds walk) once, carrying it in the anchor's
 own frame (`_rangeOriginLocal`) from then on: at cruise the sweep runs every few frames, and
@@ -4310,6 +4315,10 @@ mission whose start-anims name one of `CutsceneController.IntroAnims` or that ar
 trigger, so every other session's node census is exactly what it was. The synthetic `camera1`
 carries the gamez name and INDEX metadata a scene-built node would, because every compiled
 cutscene binds it through its symbol table and an unbuilt claim makes the runtime drop the event.
+`BuildCompositionFrames` stands up the same-shaped third case beside them, data-driven off the bound
+program: a bodiless, childless gamez library root the program names as an `OBJECT_ADD_CHILD` parent
+is the frame a cutscene composes its shot in (two in this install, CM02's `wingwalk_parent` and
+CM07's `carney_pickup_parent`). It is built `TopLevel` — see docs/org/objectMotion.md's re-home rule.
 `Options.PlanesGamezPath` feeds `AircraftStage` beside those roots, for a mission that bootstraps an
 intro alone: the archive is opened nowhere else in this build, so no other session pays for it.
 

@@ -142,7 +142,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 14. ☑ The cutscene's world hold does not reach an aircraft's own realtime tick (`BL-457`, minted by C12)
 15. ☑ The captured Balmoral is not hidden by the swap in a flown session (`BL-541`)
 16. ☑ The captured aircraft keeps its British livery after the capture (`BL-543`)
-17. ☐ CM02's capture cutscene camera sits over the water (`BL-542`)
+17. ☑ CM02's capture cutscene camera sits over the water (`BL-542`)
 18. ☑ The auto-land prompt is not drawn in a flown session (`BL-544`)
 19. ☑ The landing animation: no hook, too high, wings not folded (`BL-545`)
 20. ☑ CM01's drop-off cutscene shows no parachutist (`BL-540`)
@@ -919,7 +919,7 @@ carries the finding as a fourth deliberate divergence.
 
 **Verified.** <pending orchestrator run>
 
-## D17 ☐ CM02's capture cutscene camera sits over the water
+## D17 ☑ CM02's capture cutscene camera sits over the water
 
 **Goal.** The capture cutscene shows the Balmoral and the player's wing-walk, framed as authored.
 
@@ -940,6 +940,44 @@ staging is the precedent for a node that resolves in the data and not in the tre
 one definition.
 
 ## D18 ☑ The auto-land prompt is not drawn in a flown session
+**Landed.** The camera is not posed by the capture definition at all. `britbalmoral_1-ww_balmoral1`
+poses `wingwalk_parent` (C3 gamez node 661) `AT_NODE britbalmoral_1`, calls `wingwalk` on it, and
+`wingwalk_parent-wingwalk`'s `ww_player` adds both `camera1` and the `player` marker under that node
+and runs SI scripts `ww_cam1`–`ww_cam4` on the camera. The whole shot is written in one frame whose
+authored transform is the map origin, and three things had to be true before it reached the
+aeroplane. `wingwalk_parent` is a bodiless, childless library root the `world1` walk never builds,
+so it is stood up beside `camera1` and the `letterbox` bars, found off the bound program as a gamez
+library root named as an `OBJECT_ADD_CHILD` parent (`WorldSession.BuildCompositionFrames`; two
+exist in this install, this one and CM07's `carney_pickup_parent`). The `AT_NODE` host resolved to
+nothing, because the chapter's copy of the vehicle is a library root the world never places and the
+mission's roster spawns the aeroplane from the shared airframe instead, so `RosterMarkers.Attach`
+now also makes the rig answer for that name and gamez index (`AnimRuntime.IndexSpawnedVehicle`),
+which is the marker graft's own rule applied to the vehicle root. And the frame is stood up
+`TopLevel`, because `MotionRuntime` re-homes a launch to the node's authored rest and the wing
+walk's 19.25 s motion otherwise replayed the shot at the map origin
+(`docs/org/objectMotion.md`'s re-home rule). One further guard: a `CALL_ANIMATION` whose `AT_NODE`
+site IS the callee's own root node no longer takes a pooled library copy beside it, which would
+leave the wing walk driving one node while the shot hung off the other. `PoseAtNode` is untouched
+and the name guard was not relaxed.
+
+**Verified.** <pending orchestrator run>. In the lane: the new `campaign-wingwalk-camera` suite
+plays CM02's own `ww_balmoral1` through `PlayMissionTrigger` (the seam the approach table starts it
+with) on a Realtime `GameClock` with each aircraft stepping itself (INSTR-26), over C3/M05's built
+world with `britbalmoral_1` spawned from its own roster block at the authored `(-3960, 500, -5059)`,
+6.5 km from the world origin so a shot posed off nothing cannot read as framed (DIAG-19). Baseline
+on the unfixed build: `camera1` played its authored scripts 18–545 m from the world origin and
+**6473–6688 m** from the aeroplane, dipping to y = −28 m, with `wingwalk_parent` absent from the
+node table entirely. After: the walk frame lands **1 m** off the captured aeroplane, the shot opens
+**30 m** off it and stays composed inside that frame for **19.25 s**, never nearer the world origin
+than its subject. A deliberate perturbation of both halves reproduced the baseline and turned the
+suite red on all four framing checks with zero composed samples (METHOD-9), and `git diff` proves
+the perturbation and a temporary `PoseChannel` diagnostic restored (METHOD-17). Beside it: all 20
+`campaign-*` suites, `cutscene-letterbox`, the five `landings-*`, `intro-aircraft-stage`,
+`dropoff-chuteman-stage` and the three `world-*` PASS with engine errors clean; `dotnet test`
+2443/2443 (the suite-count assertion moved 141 → 142); `CheckCommentCaps.ps1 -Summary` clean. No
+`--campaign=` capture was taken: reaching the capture needs two Balmorals shot down plus the
+approach cone, and no cheap route to it was found, so the picture rides D21.
+
 
 **Goal.** The player sees the auto-land prompt whenever the button would do something.
 

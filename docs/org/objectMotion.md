@@ -430,7 +430,11 @@ re-basing them is visibly wrong rather than merely different:
 
 - **A placed template ROOT** (`TopLevel`). The CALL that started the motion has just placed it, so
   its authored rest is wherever it was authored, not where it now stands. Re-basing replays every
-  repeat at the first placement's site.
+  repeat at the first placement's site. A cutscene's composition frame is the same case and is
+  stood up `TopLevel` for it (`WorldSession.BuildCompositionFrames`): CM02's `wingwalk_parent` is
+  authored at the map origin and the capture poses it onto the aeroplane the shot is about an
+  instant before launching its 19.25 s motion, so re-basing plays the whole wing walk over the
+  water 6.5 km away.
 - **A piece continuing from a contact landing** (`AnimRuntime._resumeFromLanding`, one-shot and
   consumed by the launch that follows). A bounce is a continuation; re-basing teleports the piece
   back to the crash point mid-flight.

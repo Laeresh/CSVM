@@ -15,6 +15,7 @@ compiled shape are on the [landing page](../anim-definitions.md) and in
 - [Conceptual model](#conceptual-model)
 - [The `letterbox` node](#the-letterbox-node)
 - [The reparent is how a cutscene is composed](#the-reparent-is-how-a-cutscene-is-composed)
+  - [A composition frame is a bodiless gamez node the `world1` walk never reaches](#a-composition-frame-is-a-bodiless-gamez-node-the-world1-walk-never-reaches)
 - [`player`, and the two pointer spaces a definition addresses](#player-and-the-two-pointer-spaces-a-definition-addresses)
 - [`CALLBACK`: the dispatch chain](#callback-the-dispatch-chain)
 - [`CALLBACK` code reference](#callback-code-reference)
@@ -158,6 +159,32 @@ inside a node at y = 500, and in world space it is 62 m under the sea.
 ⚠ The reparent is authored as a live sequence event. A `RESET_STATE` walk carries the undo, and a
 consumer that applies it during a bootstrap pass moves shipped nodes off a parent no definition
 has changed yet.
+
+### A composition frame is a bodiless gamez node the `world1` walk never reaches
+
+`piratezep` and `do_direction` are placed world content, so a consumer that walks `world1` has them
+in hand. Two shots instead compose inside a node that is nowhere in that walk: a **parentless,
+childless, model-less `Object3d`** whose only job is to be the frame a shot is written in. C3's
+`wingwalk_parent` (node 661) and C5's `carney_pickup_parent` (node 5633) are the whole set in this
+install, and both are addressed the same way — named as an `OBJECT_ADD_CHILD` parent by their
+mission's own definitions, and posed onto the vehicle the scene is about before anything plays.
+
+`britbalmoral_1-ww_balmoral1` is the worked example. Its second sequence poses `wingwalk_parent`
+`AT_NODE britbalmoral_1` (translate and `AT_NODE_XYZ` rotate), moves `britbalmoral_1` under it and
+zeroes that node's local translation, then calls `wingwalk` `AT_NODE wingwalk_parent` and its own
+`ww_balmoral` SI script before raising 967. `wingwalk_parent-wingwalk` calls `ww_player`,
+`ww_ladder` and `ww_zachary` and drives its own node 30 m/s forward for **19.25 s** between codes
+913 and 914; `player-ww_player` adds both `player` and `camera1` under `wingwalk_parent` and runs
+SI scripts `ww_cam1`–`ww_cam4` on `camera1`. So the entire shot — the camera, the player's
+aeroplane, the wing-walk figures — is written in the frame of one node whose authored transform is
+the map origin, and every one of those keyframes reads as a position over the water unless that
+node is standing in the world and has been posed onto the captured aeroplane.
+
+CSVM stands such a frame up beside `camera1` and the `letterbox` bars
+(`WorldSession.BuildCompositionFrames`), found off the bound program rather than by name, and the
+mission's roster rig answers for the vehicle's own library-root name so the `AT_NODE` pose has a
+host (`Mech3/RosterMarkers.cs`). ⚠ The frame is placed rather than authored, so its motion must
+launch from where the definition put it: see `docs/org/objectMotion.md`'s re-home rule.
 
 ## `player`, and the two pointer spaces a definition addresses
 
