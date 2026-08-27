@@ -483,6 +483,69 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   voice line is flavour and this closes. *Cross-refs:*
   `BL-512` (the same sub's launch motion), `BL-522` (its launched fighters).
 
+- `BL-570` `[Feature]` **The difficulty setting has no menu row.** *Evidence:* the scale itself is
+  live (`Flight/Difficulty`, `--difficulty=<normal|hard|hardest>`), but a CLI flag is the only way to
+  change it, so a player launching normally always flies the default Normal. The original puts it on
+  the game-options screen: `IDS_GO_DIFFICULTY_TITLE` "Difficulty" with
+  `IDS_GO_DIFFICULTY_DESC` "Select the difficulty level for a solo campaign", over the three
+  `IDS_DIFFICULTY` rows Normal / Hard / Hardest (`rof/ui_strings.json` ids 109-111).
+  *Fix shape:* a row on the options screen writing the same 0/1/2 the flag parses, persisted with the
+  rest of the profile so it survives a launch, with the flag continuing to win for a scripted run.
+  *⚠ Traps:* it is a campaign-scope setting, not a per-mission one, and Instant Action does not read
+  it: an IA wave's own skill stands in for that spawn, which is a different control the wizard
+  already owns. Do not wire the menu row into the IA path or a wave will fly at two difficulties.
+  And it selects a hit-point tier only, so it must not be presented as changing how well the enemy
+  flies or shoots, which it does not.
+  *Cross-refs:* `Flight/Difficulty`, `docs/formats/instant-action.md`, `docs/cli.md`'s
+  `--difficulty`.
+
+- `BL-557` `[Bug]` **The roster's `init_health` and `armor` overrides are parsed away, so the named
+  aces spawn too soft.** *Evidence:* the original's roster spawn applies slot 7 `init_health` when
+  greater than zero and slot 66 `armor` when greater than or equal to zero, then the difficulty
+  scale ([`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md),
+  [`docs/org/vehicleDamage.md`](docs/org/vehicleDamage.md)). `RosterSpawnPlan` carries neither value,
+  `CampaignRosterPlan.Build` does not read them, `SpawnFor` cannot forward them, and the assembler
+  seeds the airframe defaults instead. There is no `InitHealth` symbol in the tree at all. The census
+  (`analysis/aim-assist-ttk/Census-RosterDurability.ps1`) over the 414 extracted blocks finds, among
+  the 251 enabled non-player-team ones, **25 authoring a positive `init_health` and 20 a non-negative
+  `armor`**, every armour value between 90 and 132 and every one of them an override that RAISES
+  durability above the airframe default. They are the mission's named aces: `hafury_1`-`_6` at
+  108/108 in C2/M03, `hkfirebrand_9` at 132/132, the Black Hat Brigands at 126/126, and so on.
+  *Fix shape:* add the two fields to `RosterSpawnPlan`, read them in `CampaignRosterPlan.Build`,
+  forward them through `SpawnFor`, and apply them in the assembler before the difficulty scale and
+  the jitter, at `AiFlightAssembler.Assemble`'s `WithEnemyDurability` call, which is where the
+  engine's spawn order is already reproduced.
+  *⚠ Traps:* **a missing slot is not a zero.** Blocks are not fixed-width (field-count histogram
+  42/65/66/67/68/81) and 33 of the 414 stop at 66 fields, so slot 66 does not exist on them; a reader
+  that maps absent to `0.0` invents 18 armour-stripped hostiles in C2/M05, C2B/M04 and C3/M01 that
+  the data does not author. No shipped hostile authors `armor 0`. The two gates also differ and both
+  matter, `init_health` only when `> 0` but `armor` when `>= 0`. The eight per-zone roster slots are
+  `-1` on all 414 blocks and stay parsed-and-ignored; do not revive that path. And note the
+  direction: fixing this makes those enemies TOUGHER, so it does not relieve a long time-to-kill, it
+  lengthens it on exactly the fights that should be hard.
+  *Cross-refs:* `Flight/Difficulty` (the scale this lands in front of),
+  `analysis/aim-assist-ttk/FINDINGS.md` (whose census of this field is superseded by the script
+  beside it).
+
+- `BL-561` `[Research]` **Aircraft projectile hit volumes are tuned convex decompositions, and the
+  original's hit geometry is untraced.** *Evidence:* `PlaneCollider` builds an aircraft's hit boxes
+  from model triangles under several constants marked `TUNE` (wing band, tail split, minimum
+  thickness, volume split, part limits). Those boxes are what a round is tested against. The original
+  runs a polygon-accurate segment query gated by per-node flags, with `INTERSECT_BBOX` nodes swapping
+  the polygon test for a bounding-box one
+  ([`docs/org/weaponRay.md`](docs/org/weaponRay.md)). Hit-rate parity is therefore unestablished, and
+  the direction of any error is unmeasured: a collider narrower than the model loses hits, a wider
+  one invents them.
+  *What to settle:* whether the aircraft nodes the original tests carry `INTERSECT_BBOX` (in which
+  case a box decomposition is the right shape and only its extents are in question) or reach the
+  polygon loop, and how our boxes compare with the model's own silhouette.
+  *⚠ Traps:* this is a hit-RATE question, not a damage-per-hit one; do not chase it with a TTK
+  stopwatch, which cannot separate the two. Measure rounds fired against rounds registered on a held
+  burst at a fixed target, then compare. And settle `BL-557` first, and take the reading at a known
+  `--difficulty=`: with the pools wrong, any TTK number here is unusable as evidence either way.
+  *Cross-refs:* `BL-557`, `Flight/Difficulty`, `docs/org/weaponRay.md`,
+  `analysis/aim-assist-ttk/FINDINGS.md`.
+
 ## Weapons & combat
 
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
@@ -604,10 +667,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   being a two-line change: the flight keymap has no spare paired keys and the pad's D-pad is
   already spent on the two forward steps. `BL-296`'s per-player ActionMap is the natural home for
   the four named actions if it lands first.
-  ⚠ Traps: (a) **The cycle order itself is right and must not be touched** (user, 2026-08-14: ours
-  walks the pylons in the same order the original does). What is missing is the second direction,
-  nothing else, so a reverse step is `NextSelectable` walked backwards over the same sequence, not
-  a re-derivation of the order. (b) The observation is about hardpoints. The gun-group selector is
+  ⚠ Traps: (a) **The cycle sequence is settled and must not be re-derived**: the selector walks the
+  hardpoints in physical mount order (`Loadout.PylonStepOrder`, `FireControl`'s `pylonStepOrder`),
+  which is NOT the order the list is built in (`Loadout.PylonFillOrder`, 1,5,2,6,3,7,4,8, which says
+  only which pylons a fit occupies). Stepping the list itself sent the gauge arrow back and forth
+  across the belt on a full fit. What is missing here is the second direction, nothing else, so a
+  reverse step is `NextSelectable` walked backwards over that same sequence.
+  (b) The observation is about hardpoints. The gun-group selector is
   the analogous case but was not observed, so do not assume it cycles both ways either.
   (c) Empty-slot skipping is not in question and must survive the change: both directions land on
   an armed slot.
@@ -799,6 +865,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   hitting friendlies; stop the cannons choosing one. *Cross-refs:* `BL-502`,
   `docs/formats/mission-entities.md`.
 
+- `BL-559` `[Research]` **Do the original's gun rounds carry the launcher's velocity?** *Evidence:*
+  [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md) ("Launch velocity is inherited, and decays
+  over `LOCK_ON`") decodes `FUN_005aef40` as copying the launcher's velocity into a round only when
+  the weapon carries `LOCK_ON`, and writing a zero vector otherwise. No gun authors `LOCK_ON`.
+  `ProjectilePool.InheritedAtLaunch` deliberately holds guns outside that rule, and the comment above
+  it says so and states the question was never settled. Two decoded facts pull the other way and are
+  the reason this is worth reading rather than assuming: the aim assist solves its intercept on the
+  RELATIVE velocity, which is the correct solve only for an inheriting round, and the decoded pipper
+  places itself at `muzzle + 0.5 × (VELOCITY × nose + planeVelocity)`
+  ([`docs/org/aim-assist.md`](docs/org/aim-assist.md)), which is where an inheriting round would be.
+  Either guns take a spawn path other than `FUN_005aef40`, or the `LOCK_ON` gate is narrower than the
+  ordnance page states, or the original's sight and its rounds genuinely disagree.
+  *What to settle:* which spawn function the `CANNON` branch of `FUN_004b6820` calls, and whether the
+  `+0x30`..`+0x38` launch-velocity copy is reached on that path.
+  *⚠ Traps:* not a TTK item. If CSVM is wrong here it is wrong in the player's FAVOUR, since an
+  inheriting round lands where the relative-frame lead predicts and a non-inheriting one falls short
+  of it. Do not "fix" it as part of a lethality pass, and do not change the pipper formula or the
+  assist's relative-velocity solve to match a change here without re-reading both: the three are one
+  system and the decode page records the sight and the assist as deliberately disagreeing already.
+  *Cross-refs:* `docs/org/aim-assist.md`, `docs/org/ordnanceTypes.md`, `ProjectilePool.Ballistics`.
+
 ## Flight model & collision physics
 
 
@@ -832,6 +919,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
   so the ledger keeps "a wreck flies the near-field plant" as an exception. Decode when and by
   whom it is set so the wreck can fly the decoded arm.
+- `BL-562` `[Perf]` **The physics tick costs ~39 ms per frame late in CM11 (C2/M02), so the sim runs
+  at about half of wall time.** *Evidence:* a flown CM11 session's hitch records
+  (`.scratch/logs/game-*.out`, `[perf] hitch … physics_ms=…`) show the frame baseline rising from
+  9 ms at launch to 30–40 ms with `physics_ms` at ~39 ms of it once six aircraft, the trailer's dust
+  puffers and the roadblocks are live; 2770 rendered frames then covered 52 sim seconds (one
+  parked-plane `flight:` line per sim second). Godot caps physics catch-up per frame, so a
+  physics-bound frame lets the sim clock fall behind the wall clock: the mission takes about twice
+  as long to play as its `TimeMs` records, and every `_Process`-driven consumer that still reads wall
+  time drifts against the aircraft (the animation runtime moved onto the physics tick for this
+  reason, see `AnimRuntime._PhysicsProcess` and the `anim-clock-realtime` suite). *Fix shape:* profile
+  one CM11 session past the roadblocks with `--perf` and the hitch sidecar's `samples`, attribute
+  the physics step (`FlightController._PhysicsProcess` chain: six flight models, AI mode machines,
+  projectile sweeps, the objective graph's per-tick scans, puffer emitters at 1 m distance
+  intervals on the trailer) and bring the step under the 16.7 ms budget on the reference rig; a
+  perf scenario in `analysis/perf/scenarios.json` for the late-CM11 state is the regression gate.
+  *⚠ Traps:* a wall-clock measurement of anything in that session is not a sim measurement, so
+  compare durations in sim seconds (the log's 1 Hz `flight:` cadence, `GameClock.Frame`), never in
+  wall seconds; do not raise `max_physics_steps_per_frame`, which only deepens the catch-up spiral.
 
 ## Environment & world
 
@@ -2444,6 +2549,87 @@ usual.
   mission headless with the generator log on and follow each spawn's first seconds. *⚠ Traps:* the
   zeppelin launch-altitude gate does not apply to a ground start; do not read a ground hangar
   through the zeppelin-launch shape. *Cross-refs:* `BL-522`, `BL-527`.
+
+- `BL-558` `[Research]` **A damaged AI flies a full evasive maneuver where the original may only set a
+  flag.** *Evidence:* [`docs/org/aiControlLaw.md`](docs/org/aiControlLaw.md) records `obj+0xBA` as an
+  **evade flag**, set to 1 by the damage handler `FUN_004b9bc0` when the steady-hand test fails
+  ("Absorbed %f damage; steady hand test failed. Evading."), cleared in `FUN_0041d9f0` once the
+  pursuer's nose alignment on this aircraft drops below 0.85, and while set it suppresses the lay-off
+  branch and the voice callouts. `AiModeMachine.NotifyDamage` instead picks a maneuver and transitions
+  to `EvasiveManeuver`, falling back to an explicitly invented eight-second plain evade with random
+  60 to 120 degree heading scrambles when no maneuver is eligible. Observed at runtime: a Fury takes
+  its first 40-calibre hit, fails the roll, enters `scissors` immediately and leaves the player's
+  6-degree assist cone (`analysis/aim-assist-ttk/FINDINGS.md`). If the decode is complete, CSVM is
+  manufacturing a break-off the original does not have, and it costs hit rate on every first hit.
+  *What to settle:* whether anything else in the executable reads `+0xBA`, in particular whether the
+  mode field is written anywhere on the damage path, before deciding the flag is the whole story.
+  *⚠ Traps:* `NotifyDamage`'s own doc comment claims a decoded basis for the maneuver behaviour, so
+  two readings of the same path are in the tree and one is stale; reconcile them before touching the
+  code. Removing evasive maneuvers on damage is a large behavioural change to make on one line of a
+  decode page, and the steady-hand roll itself is not in question, only what a failed roll does.
+  *Cross-refs:* `BL-557` (the other open TTK cause), `docs/org/aiControlLaw.md`.
+
+- `BL-563` `[Bug]` **CM12 (C2/M01) cannot be won: `DEDG` counts a deactivated roster member as
+  alive, so the wave chain that wakes the security Furys and the Knight Firebrands never fires.**
+  *Evidence:* a flown CM12 session (`.scratch/logs/menu-20260827-215135.log`): the four
+  `secgyro_*` are downed, and after that no `ai mode:` line ever names `secfury_1..4` or
+  `hkfirebrand_1/2/3/9`, which spawn `deactivated 1` and are only put in play by OBJECTIVE66 /
+  OBJECTIVE67's `WAKEUP_ENEMIES`. Both sit behind `DEDG [1, 2]` (OBJECTIVE12, OBJECTIVE65), "group 1
+  down to two". Group 1 is the four gyros plus the seven deactivated blocks, and
+  `CampaignDirector.RosterInputs.GroupLiveCount` counts every un-crashed member, deactivated ones
+  included, so the count can never fall below seven and the mission stalls with no enemy left to
+  find. "Destroy all enemy fighters" (OBJECTIVE46, `PRIMARY 3`, `DEDG [1, 0]`) is only woken by
+  OBJECTIVE68 (`DEDG [2, 0]`, `hkfirebrand_9`'s death) at the end of that chain. The comment on
+  `GroupLiveCount` ("a deactivated member counts as alive, as the decoded walk counts a parked
+  one") is wrong: the activate/deactivate primitive `FUN_004b0f40` sets the dead byte `+0x91d`
+  together with `+0x945` on deactivation, and the DEDG counter `FUN_00465850` counts a vehicle only
+  when `+0x91d == 0`, so a deactivated member is dead to `DEDG` until `WAKEUP_ENEMIES` clears both
+  bytes. *Fix shape:* skip `Inert` members in `GroupLiveCount` (crashed OR inert is "not
+  counted"), correct the comment, and add a unit test on a two-member group with one inert block
+  (`ObjectiveGraphTests` has the DEDG harness). Then fly CM12 through: two gyros down wakes the
+  Furys, the Goose flying plus group 1 down to two wakes the Firebrands, `hkfirebrand_9` down wakes
+  primary 3. *⚠ Traps:* CM02's `campaign-squad-wake` suite (BL-499) has a deactivated squad behind
+  a `DEDG [1, 0]` gate; check which group that squad authors before assuming the suite's
+  expectation survives the change, and mint a follow-up if it does not. The `DEDG` generator form
+  (third argument) is a separate, unimplemented count and not this bug. *Cross-refs:* `BL-499`,
+  `BL-564`, `BL-565`, `docs/formats/objectives.md` (`DEDG` row), `docs/org/aiPilot.md`
+  (the activation primitive).
+
+- `BL-564` `[Bug]` **CM12 (C2/M01): the `eshipg31` generator launches Bloodhawks at the world
+  origin instead of patrol boats at the pirate ship.** *Evidence:* the same session: the wave
+  arrives as `ai17_player_bhawk`, `ai18_player_bhawk`, `ai19_player_bhawk`, tracked by the target
+  HUD at 7.6 km from the player, and two of the three ram terrain `g34586` within seconds at
+  `pos=(5,5,-109)`, the world origin; the third patrols `M2Patrol1`, a water net, and is shot down
+  later. Two causes. (1) The generator's `vehicle.params` label `Eshipg31_params` resolves to the
+  roster block `patrolboat_eg0` (def 4, `patrolboat`, a surface vehicle), which
+  `CampaignRosterPlan.Build` reports in `Skipped` rather than planning, so `GeneratorTemplates`
+  has no entry and `GameSession.SpawnFromGenerator` falls back to `SessionSpec.GeneratorsPlane`,
+  `player_bhawk`. The mission's boats are the `patrolboat_eg0..5` that OBJECTIVE58-63 and
+  OBJECTIVE70 move between `M2GoosePatrol` and `M2PatrolStop`. (2) The host node `eshipg31` is a
+  model-less group node with a zero local translation whose geometry sits at its node bbox,
+  about (-5892, 10, -4412); `AiGeneratorRuntime.Spawn` drops at `Host.GlobalPosition`, which is
+  (0, 0, 0). *Fix shape:* decode the original's launch position for a generator whose host has no
+  model (`FUN_00452450`: the node's world matrix, or its bbox centre) and use that; then decide
+  what a surface-vehicle launch is in CSVM (a boat on a water net, not an aircraft), or at least
+  refuse the fallback airframe for a surface def so a boat generator launches nothing rather than
+  fighters. *⚠ Traps:* the three Bloodhawks are group 3 and never count toward "Destroy all
+  enemy fighters" (`DEDG [1, 0]`); killing them is not progress. Do not "fix" (1) by handing the
+  generator a fighter def. *Cross-refs:* `BL-522` (launch placement from a surface host),
+  `BL-527`, `BL-563`, `docs/formats/mission-entities/enemy-generators.md`.
+
+- `BL-565` `[Fidelity]` **`DEDG`'s decoded side effect, widening every counted member's engagement
+  volume to 9,000 m, is not applied.** *Evidence:* `docs/formats/objectives.md`'s `DEDG` row and
+  `FUN_00465850`: each tick an awake `DEDG` objective raises every live member of the watched
+  group to a 9,000 m activation radius and a ±9,000 m altitude band, so a watched group never
+  disengages by distance and comes to the player from anywhere on the map. CSVM's `DedgMet` only
+  counts; the members keep `AiModeMachine.ActivationRange` at the 2,000 m `min_ai_active_dist`
+  floor and drop back to patrol at "target lost" / "beyond return range", which is how a
+  survivor of a wave sits on its net 8 km away while the objective waits on it. *Fix shape:*
+  have `GroupLiveCount` (or a sibling the graph calls per awake DEDG) apply the widening to each
+  counted member's machine: `ActivationRange = max(ActivationRange, 9000)`, and the altitude bands
+  once they have a consumer. *⚠ Traps:* the widening is per awake objective per tick, so a
+  napped or killed `DEDG` stops widening but the original never shrinks the volume back; match
+  that (set, never reset). *Cross-refs:* `BL-563`, `BL-523` (the patrol/pursue cycle).
 
 ## Tooling, platform & docs
 

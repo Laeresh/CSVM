@@ -133,6 +133,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/DisablingIntensity.cs` — the decoded `SONIC`/`FLASH` intensity plateau and `FLASH`'s facing test, on squared distances; feeds the player's wash weight and the AI stun's duration.
+- `src/Flight/Difficulty.cs` — the difficulty setting as the engine's 0/1/2, its two naming vocabularies, and the enemy armour/health multiplier it scales spawns by; it reaches nothing else.
 - `src/Flight/TanglerChoke.cs` — the choker's engine-dead duration and the `ENGINE_DEAD` globals it reads; the original's squared-distance-over-raw-radius mismatch, reproduced.
 - `src/Flight/SmokeScreens.cs` — the smoke screen's stun trap: the world's active screens, walked over the roster every sim step to stun AI and wash humans behind the layer; the cone rule, the wash cadence and the three `player.json` tunables beside it.
 - `src/Flight/BeeperTags.cs` — the beeper's paint and the seeker's pick: the world's tag list with its countdown, dead-aircraft slam and five-second tail, the tagging gate, and the per-frame query with the original's inverted-dot, squared-distance selection rule.
@@ -924,7 +925,8 @@ e.g. C1's three `hangerdoors`). `OBJECT_ADD_CHILD`/`OBJECT_DELETE_CHILD` take th
 form here (`Reparent`, keeping the LOCAL transform) once the sound-emitter form has declined,
 which is how a cutscene composes its camera inside the node it frames; the decode is
 `docs/formats/anim-definitions/cutscenes.md`. A ranged startanim with an unplaced immediate callee is
-deferred until range; range-triggered and explicit mission-trigger calls may then lazily build their
+deferred until range; range-triggered and explicit mission-trigger calls (`PlayMissionTrigger`: the
+`landings.zrd` rows and the objective script's `WAKE_ANIM`) may then lazily build their
 library-root callees, and an add-child may do the same for an explicitly named child — except where
 the call's own `AT_NODE` site IS the callee's root node, which names the node to run on rather than
 asking for a copy. `IndexSpawnedVehicle` is the other half of that resolution: it makes one live
@@ -1536,6 +1538,18 @@ returns a square and this path never takes a root. `FLASH` adds the facing test 
 victim, scaled by twice the dot below 0.5); `SONIC` does not, and that is the only behavioural
 difference between the flags. The consumers are the player's screen wash, the AI stun and the smoke
 screen; the module itself knows about none of them.
+
+## src/Flight/Difficulty.cs
+The difficulty setting, as the engine's own 0/1/2, and the single thing it does: multiply an enemy
+vehicle's armour and health maxima at spawn by 0.75 / 1.0 / 1.25 (`FUN_0047c210`, decoded in
+[org/vehicleDamage.md](org/vehicleDamage.md)). `Parse` takes both shipped vocabularies, the campaign
+selector's Normal/Hard/Hardest and Instant Action's novice/veteran/ace, which name the same three
+tiers; `FactorForSpawn` owns the team gate, which is inequality with the player's team and not
+hostility, so a neutral or team-less spawn is scaled too. `PlaneStats.WithEnemyDurability` applies
+the factor, and the per-spawn jitter runs after it, banding around the scaled hull. The setting
+reaches nothing else: in the executable it is readable only through `FUN_00440710`, whose four
+callers are that spawn, the options screen, the settings save pass, and Instant Action's
+save/set/restore around the same spawn. No AI skill, accuracy or aggression is keyed to it.
 
 ## src/Flight/TanglerChoke.cs
 The choker's engine-dead duration (`FUN_004b9bc0`'s `TANGLER` branch, decoded in
@@ -4414,7 +4428,10 @@ sets `Steps` + `Dt`; consumers read `FrameDt`, or loop `Steps` times on `Dt`. Mo
 FixedAccum (interactive anim lab), FixedStep (scripted runs / `--det`); `Halted` is orthogonal.
 `SimHeld` freezes the `PhysicsDt` consumers alone, which is how a cutscene's world hold reaches an
 aircraft stepping itself on a realtime tick; `FrameDt` is untouched, so animation keeps playing.
-Published as `GameClock.Current` (session-scoped, nulled on teardown; null = raw frame delta).
+On a realtime session `AnimRuntime` is a `PhysicsDt` consumer too (its `_PhysicsProcess`), so the
+world's motions step on the same tick as the aircraft and the objective graph; its `_Process` takes
+over only under `SimHeld`, a halt, or a parent-driven mode. Regression: the `anim-clock-realtime`
+suite. Published as `GameClock.Current` (session-scoped, nulled on teardown; null = raw frame delta).
 
 ## src/Utils/Log.cs
 The diagnostic log: `Log.Info("world", $"…")` / `Warn` / `Error` / `Debug` over nine categories
@@ -5073,7 +5090,8 @@ called from BOTH of `GameSession`'s drive paths. Mission end records the attempt
 Which directives reach the engine today: `INACTIVEn` (node visibility, the decoded active bit),
 `ANIM_STATE` (`AnimRuntime.AnimStateOf`), the node form of `TRAVELERS`, `WAKEUP_TURRETS` /
 `WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
-(`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM`, both sound-group directives through
+(`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM` (`AnimRuntime.PlayMissionTrigger`, so the
+woken definition may stage library roots), both sound-group directives through
 `MissionRadio`, falling through to `WorldSounds.PlayOneShot` for a cue the radio does not own,
 `STOP_QUEUED_SOUNDS` through `MissionRadio.Cancel`, `START_TAXI` through the director's own
 `ScriptedPathVehicles` registry (`Paths`), which it also steps beside the graph,

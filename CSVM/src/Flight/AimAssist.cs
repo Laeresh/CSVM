@@ -190,8 +190,8 @@ public static class AimAssist
     /// <summary>The proximity fuse that puts a round in flight on the assist's ordnance list: the
     /// engine tests the def's <c>DETONATION_DISTANCE²</c> against 0.01, i.e. a fuse longer than
     /// 0.1 m — the 13 ordnance carriers in docs/formats/weapons.md. (The engine also admits a round
-    /// whose def sets secondary-block flag <c>0x20</c>; CSVM does not read that block, so this is
-    /// the whole test here.)</summary>
+    /// whose def sets secondary-block flag <c>0x20</c>; CSVM does not read that block, and
+    /// <see cref="ProjectilePool.CollectFusedOrdnance"/> stands <c>TARGETABLE</c> in for it.)</summary>
     public const float MinFuseDistance = 0.1f;
 
     /// <summary>Local forward — the "no target found" answer a slot's target unwinds to.</summary>

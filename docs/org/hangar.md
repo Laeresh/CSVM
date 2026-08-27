@@ -201,8 +201,9 @@ structure at +0x2c/+0x30; an argument of `-1.0` leaves that pool alone, and the 
 only the armour pool (structure comes from the mission file, `CCEVeh+0xe0/+0xe8/+0xf0/+0xf8`).
 Vehicle totals (`veh+0x2c4/+0x2c8` armour max/current, `+0x2cc/+0x2d0` structure) are
 recomputed on every zone write as the sum over zones of values > 0, so they are derived state,
-never independent. Difficulty scales an enemy's pools and totals by 0.875 / 1.0 / 1.125
-(`FUN_00440710` mapped through `d*0.125 + 1.0` at `0x0047cc00..0x0047cd10`), suppressed when
+never independent. Difficulty scales an enemy's pools and totals by 0.75 / 1.0 / 1.25
+(`FUN_00440710` mapped through `k*0.125 + 1.0` at `0x0047cc00..0x0047cd10`, where `k` is -2 / 0 / +2
+and the middle tier skips the block; see [`vehicleDamage.md`](vehicleDamage.md)), suppressed when
 `CCEVeh+0xa4` is set; the player's plane is never scaled. Both pools feed combat: the
 damage-callout thresholds read `(armourCur + structCur) / (armourMax + structMax)` against
 0.3/0.5/0.7 (`FUN_00498170` at `0x00498513..59`), and the totals are read across the damage

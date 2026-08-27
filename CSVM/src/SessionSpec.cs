@@ -345,6 +345,14 @@ public sealed record SessionSpec
     /// arms the gunnery without an opinion on skill, so each plane flies its own vehicle def's
     /// authored slots; a typed rating pins every plane to it instead.</summary>
     public bool AiAttackSkillExplicit { get; private set; }
+
+    /// <summary><c>--difficulty=&lt;normal|hard|hardest&gt;</c> (or <c>game.difficulty</c>): the
+    /// setting enemy armour and health scale by at spawn, 0.75 / 1.0 / 1.25
+    /// (<see cref="CSVM.Flight.Difficulty"/>). Defaults to Normal, which is what the executable's
+    /// own settings registration writes. ⚠ It reaches nothing but those pools: no AI skill,
+    /// accuracy or aggression is keyed to it in the original.</summary>
+    public int Difficulty { get; private set; } = CSVM.Flight.Difficulty.Normal;
+
     /// <summary><c>--no-assist</c>: disable the D15 rubber-band assist — every spawned AI mode
     /// machine gets <c>AssistEnabled</c> false, so the lay-off mode is never entered (pursue
     /// only). Default off: the assist is the original's shipped behaviour.</summary>
@@ -940,6 +948,9 @@ public sealed record SessionSpec
                 s.AiAttackSkill = Math.Clamp(int.Parse(arg["--ai-attack=".Length..]), 1, 9);
                 s.AiAttackSkillExplicit = true;
             }
+            // An unparseable tier keeps the default rather than picking one: silently flying
+            // Hardest because a name was misspelled is a balance change nobody asked for.
+            else if (arg.StartsWith("--difficulty=")) { s.Difficulty = Flight.Difficulty.Parse(arg["--difficulty=".Length..]) ?? s.Difficulty; }
             else if (arg == "--no-assist") { s.NoAssist = true; }
             else if (arg == "--generators") { s.Generators = true; }
             else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }

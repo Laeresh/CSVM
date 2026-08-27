@@ -490,11 +490,13 @@ whole-vehicle pair as their plain **sum** rather than a fraction, making the zon
 all 414 shipped blocks leave those eight slots at `-1`, so that path never runs.
 
 Two spawn-time modifiers scale the authored numbers. An enemy vehicle (one whose team differs from
-the player's) has both maxima multiplied by a difficulty factor of **0.875, 1.0 or 1.25**. On top of
+the player's) has both maxima multiplied by a difficulty factor of **0.75, 1.0 or 1.25** on the
+campaign's Normal / Hard / Hardest ([`org/vehicleDamage.md`](../org/vehicleDamage.md) has the
+branch: `1 + k * 0.125` with `k` of -2, 0 or +2). On top of
 that, an **aircraft or autogyro that is not the player** draws a fresh uniform **±5 %** on both
 maxima (and on nine other def-derived numbers) every time it spawns, which is why two AI planes of
 the same type are never quite identical. Ships and ground vehicles are excluded from the jitter, so
-a patrol boat is exactly its authored 40 times the difficulty factor: 35, 40 or 50.
+a patrol boat is exactly its authored 40 times the difficulty factor: 30, 40 or 50.
 
 **The patrol boat has two sets of hit points because it is authored as two things, and both are
 live** (settled; the decode is [`org/vehicleDamage.md`](../org/vehicleDamage.md)). A boat

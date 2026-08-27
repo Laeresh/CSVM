@@ -158,10 +158,27 @@ and all 414 shipped roster blocks carry `-1` in all eight zone slots, so the sum
 in this install and the def's own `health` stays authoritative.
 
 **3. The difficulty scale.** Still in `FUN_0047c210`, and only when the spawned vehicle's team
-differs from the player's: armour max and health max are multiplied by `1 + k * 0.125`, where `k`
-comes from the difficulty query `FUN_00440710` as `-1` on one tier and `+2` on another, with the
-middle tier skipping the block entirely. Enemy vehicles are therefore on **0.875x, 1.0x or 1.25x**
-their authored pools. Current is re-seeded from max afterwards.
+differs from the player's: armour max and health max are multiplied by `1 + k * 0.125`
+(`0x0047cc1b`-`0x0047cc2d`: `FILD` the integer `k`, `FMUL [0x0060802c]` = `0.125`,
+`FADD [0x006032dc]` = `1.0`), and a `k` of zero skips the whole block (`0x0047cc13`). Current is
+re-seeded from max afterwards. The same factor then multiplies each zone pair
+(`0x0047cca4`-`0x0047cd15`), so the per-zone pools scale with the totals.
+
+`k` comes from the difficulty query `FUN_00440710` at `0x0047cb32`-`0x0047cb4e`, and its three
+values are read off the branch directly:
+
+| Difficulty | Campaign label | `k` | Factor |
+|---|---|---|---|
+| 0 | Normal | `MOV EDI,0xfffffffe` = **-2** (`0x0047cb3b`) | **0.75** |
+| 1 | Hard | 0, the block is skipped | 1.0 |
+| 2 | Hardest | `MOV EDI,EAX` = **+2** (`0x0047cb4c`) | **1.25** |
+
+⚠ **The low tier is `0.75`, not `0.875`.** This page previously read `k` as `-1` on the low tier,
+and [`hangar.md`](hangar.md) previously gave the high tier as `1.125`; both are refuted by the
+`0xfffffffe` immediate and the `CMP EAX,0x2` above. The spread is symmetric at two eighths either
+side of 1.0, not one. The campaign selector's own labels are `IDS_DIFFICULTY` in
+`rof/ui_strings.json` ids 109-111, Normal / Hard / Hardest in that order, so the default campaign
+setting is difficulty 0 and enemies there carry **three quarters** of their authored pools.
 
 **4. The per-spawn jitter, aircraft only.** At the end of `FUN_00476250`, a vehicle whose name is
 not `player`, in single player, and whose `mode` is `jet` (0) or `heli` (1), gets each
@@ -738,7 +755,7 @@ What each downstream item consumes:
   `destroyable_parts` plus `armor`/`health`" and was wrong on both counts) — then the roster's
   `init_health` (only if > 0) and `armor` (if >= 0). The eight per-zone roster slots are parsed for
   index alignment and ignored (`-1` on all 414 blocks; the sum-derivation path is dead in this install).
-  The difficulty scale (0.875/1.0/1.25) and the aircraft-only per-spawn jitter (uniform 5 %) are
+  The difficulty scale (0.75/1.0/1.25) and the aircraft-only per-spawn jitter (uniform 5 %) are
   decoded constants to apply when a difficulty setting exists, not TUNEs.
 - **G21** keys its crash choreography off the vehicle death event (the whole-vehicle kill raising
   `FlightController.Downed`), never off `DestructibleRegistry`.

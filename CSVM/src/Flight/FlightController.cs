@@ -873,7 +873,7 @@ public partial class FlightController : Node3D
             // The state machine sees the loadout through its node-free slot views; --gun-select
             // (0-based group index, clamped) seeds its cursor.
             _fire = new FireControl(_firableGuns, Loadout.Hardpoints,
-                AutoFireRockets, InfiniteAmmo, InitialGunSelect);
+                AutoFireRockets, InfiniteAmmo, InitialGunSelect, Loadout.PylonStepOrder);
             _gunLoggedFirst = new bool[n];
 
             // One aim-assist slot per muzzle, seeded to "no assist" (both directions local

@@ -71,7 +71,7 @@ public sealed class InstantActionDirector
     /// AiGeneratorRuntime takes one: the spawner and its roster stay GameSession's.</summary>
     internal delegate FlightController? SpawnAuthoredAircraft(string planeName, Vector3 pos,
         Vector3 lookAt, AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating,
-        bool inert, bool shippedSkins, Flight.LoadoutChoice? fit);
+        bool inert, bool shippedSkins, Flight.LoadoutChoice? fit, int? difficulty);
 
     /// <summary>GameSession.RegisterAiVoice: the voice runtime serves non-mission spawns too.</summary>
     internal delegate void RegisterAiVoice(FlightController? ai, int? accentId, int? talkerOverride,
@@ -181,7 +181,8 @@ public sealed class InstantActionDirector
                 // to its own textures, never the player militia's Fortune Hunters default.
                 var ace = inputs.Spawn(aceNode, sp.Position, sp.Position + fwd, pilot,
                     ia.Def.AceLivery, InstantActionRuntime.EnemyTeam,
-                    rating, inert: false, shippedSkins: true, fit: null);
+                    rating, inert: false, shippedSkins: true, fit: null,
+                    difficulty: Flight.Difficulty.Parse(ia.Def.AceSkill));
                 inputs.RegisterVoice(ace, ia.Def.AceAccentId, rating, rating);
                 _ace = ace;
                 InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
@@ -246,7 +247,8 @@ public sealed class InstantActionDirector
                     // stock-table branch it lands in also catches enemies on player airframes.
                     var wingman = inputs.Spawn(wingmanNode, pos, pos + wmFwd, pilot,
                         wingmanScheme, AimAssist.PlayerTeam, attackRating: 5,
-                        inert: false, shippedSkins: false, fit: ia.Def.WingmanLoadout);
+                        inert: false, shippedSkins: false, fit: ia.Def.WingmanLoadout,
+                        difficulty: null); // on the player's team, so the scale never reaches it
                     wingmen[i] = wingman;
                     if (wingman == null)
                         continue;
@@ -307,10 +309,13 @@ public sealed class InstantActionDirector
                         var waveScheme = WaveMilitiaScheme(inputs, wave.EnemyName);
                         int rating = InstantActionRuntime.RepresentativeRating(
                             InstantActionRuntime.RandomPilotStats(Rng.Stream(Rng.Ai).Randi()));
+                        // The wave's skill is not a pilot rating: its whole effect is standing in
+                        // as the difficulty for this one spawn (docs/formats/instant-action.md).
                         var enemy = inputs.Spawn(waveNode, Vector3.Zero, Vector3.Forward,
                             pilot, waveScheme, InstantActionRuntime.EnemyTeam,
                             rating, inert: true,
-                            shippedSkins: waveScheme == null, fit: null);
+                            shippedSkins: waveScheme == null, fit: null,
+                            difficulty: Flight.Difficulty.Parse(wave.EnemySkill));
                         if (enemy == null)
                         {
                             continue;
