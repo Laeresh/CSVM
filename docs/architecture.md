@@ -5093,7 +5093,9 @@ reveal the AI (only what this controller parked comes back), 666/667 the camera-
 `SwapAirframe` seam the session fills with `FlightRoster.RunSwap` (the three codes, their def/node
 pairs and the hand-over decode are `Session/AirframeSwap.cs`); 14 and 123 are named gaps with one
 log line each. `Host` takes the raising definition's ROOT node name beside its anim name and passes
-it into the swap order, which is how 967 reaches the aircraft its capture animation belongs to.
+it into the swap order, which is how 967 reaches the aircraft its capture animation belongs to;
+whatever the swap hid then leaves the parked list, since 913 parks that aircraft before 967 hides it
+and 914 would otherwise put it back.
 A swap sets the cutscene flags 11 and 2 set between them, and clears nothing: the definition
 ending is what gives the player flight back, now in the new airframe. The
 handoff raises the gameplay state the definition's own `RESET_STATE` asserts, because a CSVM
@@ -5274,7 +5276,8 @@ the pilot, and a bought plane's armour and pylon counts belong to the airframe t
 for. `RunSwap` is the whole order a callback raises: that rebuild, then 967's capture half (the
 definition's root node resolved through `AiNamed`, hidden, and what is left of its hull scaled onto
 the new one) and the hand-over of the outgoing aeroplane to `wingman_4` where the mission resolves
-that name. Decode and the three deliberate divergences:
+that name. It answers an `AirframeSwapResult` naming the aircraft it hid, because the cutscene that
+raised the code may be holding that aircraft too. Decode and the three deliberate divergences:
 `docs/formats/anim-definitions/cutscenes.md`.
 
 ## src/Session/FlightRosterInputs.cs

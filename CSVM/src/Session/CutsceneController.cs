@@ -56,9 +56,9 @@ public sealed partial class CutsceneController : Node
     /// <summary>Puts the player into the airframe codes 965 to 967 name, and carries out whatever
     /// else the raised code asks of the mission (<see cref="AirframeHandover"/>). The session fills
     /// this in with its roster's own swap; unbound, the three codes are hosted and counted rather
-    /// than reaching an aircraft, which is what a session with no rigs wants. Returning false says
-    /// no aircraft changed.</summary>
-    public Func<AirframeSwapOrder, bool>? SwapAirframe;
+    /// than reaching an aircraft, which is what a session with no rigs wants. A result reporting no
+    /// swap says no aircraft changed.</summary>
+    public Func<AirframeSwapOrder, AirframeSwapResult>? SwapAirframe;
 
     // The rest of the mission-script host's codes the intro definitions author. Each is the whole
     // message: the definition it sits in never qualifies it
@@ -518,11 +518,20 @@ public sealed partial class CutsceneController : Node
     // does, which is how the player gets flight back in the new airframe.
     private void Swap(AirframeSwapCode airframe)
     {
-        if (SwapAirframe == null || !SwapAirframe(new AirframeSwapOrder(airframe, _codeRoot)))
+        var swapped = SwapAirframe?.Invoke(new AirframeSwapOrder(airframe, _codeRoot)) ?? default;
+        if (!swapped.Swapped)
         {
             GD.Print($"cutscene: callback {airframe.Code} names '{airframe.PlaneNode}' " +
                      "but no aircraft was there to swap");
             return;
+        }
+
+        // ⚠ Drop the capture's aircraft from the parked list, or 914 reveals it again. CM02's
+        // capture is called from the wing walk, whose 913 parks that aircraft BEFORE 967 hides it,
+        // and the swap's hide is the mission's to keep rather than this episode's to undo.
+        if (swapped.Hidden is { } hidden)
+        {
+            _parked.Remove(hidden);
         }
 
         OutOfFlight = true;

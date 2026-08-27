@@ -2156,30 +2156,31 @@ usual.
   *Cross-refs:* `BL-457`; `docs/org/aiPilot.md`; `docs/PLAN-M5-polish-2.md` A13.
   *Sortie:* not judged on CM01, because the wingman was kilometres away after the intro (`BL-457`).
 
-- `BL-541` `[Bug]` `[Owed-playtest]` **The captured Balmoral is not hidden by the airframe swap at the
-  controls.** Seen on CM02: after the capture cutscene the captured Balmoral sat in front of the
-  player instead of vanishing; the hand-over to `wingman_4` (Jack flying the old aeroplane) worked.
-  The swap suite passes, so the failure is between the suite's staging and the live session: either
-  `CallbackHost`'s root name does not resolve to the live aircraft (`FlightRoster.AiNamed` returns
-  null and `CarryCapturedDamage` does nothing), or `Inert = true` does not take the model off screen
-  for an aircraft that is stepping itself on a realtime clock. The damage carry-over is untested at
-  the controls (the player took no damage). *⚠ Traps:* ⚠ Reproduce in a realtime session; the suite
-  drives the swap through the parent-driven clock. *Cross-refs:* `BL-457` (the same realtime gap);
-  `docs/formats/anim-definitions/cutscenes.md`; `docs/PLAN-M5-polish-2.md` B9 and C12.
+- `BL-547` `[Bug]` `[Owed-playtest]` **The Balmoral the capture hands the player is untested at the
+  controls for the damage it carries.** The swap scales the new hull by what is left of the captured
+  aircraft's own armour and structure, so a Balmoral shot half to pieces is the one the player
+  inherits; the sortie that found the hide defect took no damage on the way in, so the carry-over
+  has only ever been read in a suite. *Fix shape:* nothing to build; fly CM02, shoot a Balmoral
+  down to a readable fraction before the wing walk, and check the HUD's DMG line after the cut back
+  to flight reads roughly what that aeroplane had left rather than a full hull. *⚠ Traps:* ⚠ An
+  undamaged capture reads identically whether the scaling ran or not, so the sortie has to arrive
+  with the Balmoral damaged. ⚠ The hand-over to `wingman_4` carries the PLAYER's outgoing sums, not
+  the capture's; do not read one for the other. *Cross-refs:*
+  `docs/formats/anim-definitions/cutscenes.md`; `docs/PLAN-M5-polish-2.md` D15 and D21.
 
 - `BL-542` `[Bug]` `[Owed-playtest]` **CM02's capture cutscene camera is misplaced.** Seen at the
   controls: the camera sat directly above the water showing only the player's aeroplane, never the
   Balmoral nor the player leaving one aircraft and boarding the other. *Fix shape:* the capture
   definition's camera is posed off a node (`AT_NODE`) or an absolute pose; find which, and whether
   the node it wants is the captured aircraft's own (which the swap now reaches by root name).
-  *Cross-refs:* `BL-541`; `docs/PLAN-M5-polish-2.md` C12.
+  *Cross-refs:* `docs/PLAN-M5-polish-2.md` C12 and D15.
 
 - `BL-543` `[Bug]` **After the capture the player's Balmoral wears the Fortune Hunters livery; the
   original keeps the British one.** Seen at the controls on CM02. The swap rebuilds the player's rig
   on `player_balmoral` with the player's own paint; the original hands over the CAPTURED aircraft's
   livery. *Fix shape:* `FlightRoster.RunSwap` has the captured rig in hand (`AiNamed(CaptureRoot)`),
   so its `PaintScheme` can be carried onto the rebuilt rig alongside its damage. *Cross-refs:*
-  `BL-541`; `docs/PLAN-M5-polish-2.md` B9.
+  `docs/PLAN-M5-polish-2.md` B9 and D15.
 
 - `BL-545` `[Bug]` `[Owed-playtest]` **The landing animation plays with no hook, the aeroplane too
   high, and unfolded wings.** Seen at the controls on CM02's auto-land: the landing hook was not

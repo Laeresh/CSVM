@@ -6,6 +6,7 @@ using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
 using CSVM.UI;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -33,6 +34,11 @@ internal static class AirframeSwapSuites
     private const float BearingTolerance = 1f;
     private const float FractionTolerance = 0.02f;
     private const float PoolTolerance = 0.5f;
+
+    // The played leg's frame. Long enough to outlast the wing walk's own 19.25 s motion, which is
+    // what the capture's called definition raises its reveal behind.
+    private const float StepDt = 1f / 60f;
+    private const float PlayBudgetS = 30f;
 
     /// <summary>Drives the swap CM02 authors against CM02's own built world: the code comes out of
     /// the mission's compiled definitions, the rig off the session's roster, and the replacement is
@@ -138,6 +144,18 @@ internal static class AirframeSwapSuites
         ctx.Check(string.Equals(wanted.PlaneNode, "player_balmoral", StringComparison.Ordinal),
             $"and the airframe it names is the Balmoral the mission's capture hands the player");
 
+        WithStagedCapture(ctx, world, chapter, wanted, authored[0],
+            staged => RunSwap(ctx, world, staged, wanted, authored[0], report));
+        WithStagedCapture(ctx, world, chapter, wanted, authored[0],
+            staged => PlayTheCapture(ctx, world, staged, authored[0], report));
+    }
+
+    // One staged capture: the mission's own world, a flown human rig off the session's roster, the
+    // capture animation's aircraft and the hand-over block, then the leg. Two legs share it because
+    // a swap replaces the rig it ran on, so neither can read the other's world back.
+    private static void WithStagedCapture(TestContext ctx, TestWorld world, string chapter,
+        AirframeSwapCode wanted, (string Anim, int Code, string Root) call, Action<Staged> leg)
+    {
         var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
@@ -153,7 +171,12 @@ internal static class AirframeSwapSuites
             roster = BuildRoster(ctx, world, chapter, textures, pool, rigs);
             roster.BuildPlayers(rigs);
             var before = rig.Controller ?? throw new InvalidOperationException("no rig was built");
-            RunSwap(ctx, world, roster, rig, before, cutscene, wanted, authored[0], pool, report);
+            var captured = StageAi(roster, call.Root, wanted.PlaneNode,
+                before.WorldPosition + (before.NoseDirection * 300f), inert: false);
+            var wingman = StageAi(roster, AirframeHandover.WingmanName, StartPlane,
+                before.WorldPosition + new Vector3(0f, 0f, 5000f), inert: true);
+            Damage(wingman, 0.10f);
+            leg(new Staged(roster, rig, before, cutscene, captured, wingman, pool));
         }
         finally
         {
@@ -177,10 +200,10 @@ internal static class AirframeSwapSuites
 
     // The swap itself, driven through the host the runtime dispatches a CALLBACK to, then read on
     // both sides: what the aircraft was, what it became, and what carried across.
-    private static void RunSwap(TestContext ctx, TestWorld world, FlightRoster roster, PlayerRig rig,
-        FlightController before, CutsceneController cutscene, AirframeSwapCode wanted,
-        (string Anim, int Code, string Root) call, ProjectilePool pool, StringBuilder report)
+    private static void RunSwap(TestContext ctx, TestWorld world, Staged staged,
+        AirframeSwapCode wanted, (string Anim, int Code, string Root) call, StringBuilder report)
     {
+        var (roster, rig, before, cutscene, captured, wingman, pool) = staged;
         string anim = call.Anim;
         cutscene.BindWorld(world.Runtime);
         cutscene.BindRigs(rigs: new[] { rig }, aiPlanes: Array.Empty<FlightController>);
@@ -199,10 +222,6 @@ internal static class AirframeSwapSuites
         ctx.Check(!string.Equals(wasDef, wanted.Def, StringComparison.OrdinalIgnoreCase),
             $"and it is not already '{wanted.Def}', so the swap has something to change");
 
-        var captured = StageAi(roster, call.Root, wanted.PlaneNode, wasPos + (wasNose * 300f), inert: false);
-        var wingman = StageAi(roster, AirframeHandover.WingmanName, StartPlane,
-            wasPos + new Vector3(0f, 0f, 5000f), inert: true);
-        Damage(wingman, 0.10f);
         var (armorLeft, healthLeft) = Damage(captured, 0.25f);
         float outgoingArmor = before.Damage!.WholeArmor;
         float outgoingHealth = before.Damage!.WholeHealth;
@@ -240,6 +259,88 @@ internal static class AirframeSwapSuites
             $"the swap sets the cutscene flags, so the player is out of flight with the chrome down while the capture plays");
         ctx.Check(after.Held && after.Inert,
             $"and that state lands on the aircraft the swap built, not on the one it replaced");
+    }
+
+    // The capture as a flown session runs it: the mission's own definition played through the
+    // runtime on a realtime clock, with the AI list the park and reveal codes actually see. The
+    // dispatched leg raises 967 by itself, so it can see neither the 913/914 pair the capture's own
+    // wing walk wraps that code in nor an aircraft stepping itself (INSTR-26).
+    private static void PlayTheCapture(TestContext ctx, TestWorld world, Staged staged,
+        (string Anim, int Code, string Root) call, StringBuilder report)
+    {
+        var (roster, rig, before, cutscene, captured, _, _) = staged;
+        Damage(captured, 0.25f);
+        var savedClock = GameClock.Current;
+        var savedHost = world.Runtime.CallbackHost;
+        try
+        {
+            var clock = new GameClock { Mode = GameClock.RunMode.Realtime };
+            GameClock.Current = clock;
+            cutscene.BindWorld(world.Runtime);
+            cutscene.HostDefinitions(ClosureOf(world, call.Anim));
+            cutscene.BindRigs(new[] { rig }, () => roster.AiAircraft);
+            cutscene.SwapAirframe = order => roster.RunSwap(rig, order, handsOver: true);
+            world.Runtime.CallbackHost = cutscene.Host;
+            world.Runtime.Play(call.Anim);
+
+            bool swapped = false;
+            bool hiddenAtSwap = false;
+            bool shownAgain = false;
+            float shownAtS = -1f;
+            for (int i = 0; i < (int)(PlayBudgetS / StepDt); i++)
+            {
+                clock.BeginFrame(StepDt);
+                world.Runtime.Advance(StepDt);
+                cutscene.Tick();
+                rig.Controller?._PhysicsProcess(StepDt);
+                captured._PhysicsProcess(StepDt);
+                if (!swapped && !ReferenceEquals(rig.Controller, before))
+                {
+                    swapped = true;
+                    hiddenAtSwap = captured.Inert;
+                }
+
+                // ⚠ Read the hidden bit, never InPlay: a stand-in flown into the sea reads out of
+                // the world for a reason this leg is not about (INSTR-10).
+                if (swapped && !captured.Inert && !shownAgain)
+                {
+                    shownAgain = true;
+                    shownAtS = i * StepDt;
+                }
+            }
+
+            report.AppendLine($"played '{call.Anim}' for {PlayBudgetS:0} s on a realtime clock: " +
+                $"codes {string.Join(",", cutscene.Codes)}, swapped={swapped} " +
+                $"hidden-at-swap={hiddenAtSwap} shown-again={shownAgain} at {shownAtS:0.##} s, " +
+                $"'{call.Root}' end inert={captured.Inert} crashed={captured.Crashed}");
+            ctx.Check(swapped,
+                $"playing the mission's own '{call.Anim}' reaches callback {call.Code} through the runtime, the way a flown session reaches it");
+            ctx.Check(hiddenAtSwap,
+                $"and the capture animation's own aircraft is hidden as the swap runs");
+            ctx.Check(!shownAgain,
+                $"and stays hidden for the rest of the episode, rather than coming back in front of the player when the wing walk reveals the parked AI");
+        }
+        finally
+        {
+            world.Runtime.CallbackHost = savedHost;
+            GameClock.Current = savedClock;
+        }
+    }
+
+    // Every definition the capture can reach, its own plus the CALL_ANIMATION closure: what the
+    // session's own host answers for, and the only way the called wing walk's codes are hosted.
+    private static IReadOnlyList<string> ClosureOf(TestWorld world, string anim)
+    {
+        var names = new List<string>();
+        foreach (var def in world.Session.Program.Subset(new[] { anim }).Defs)
+        {
+            if (def.AnimName is { } name && !names.Contains(name))
+            {
+                names.Add(name);
+            }
+        }
+
+        return names;
     }
 
     // One roster aircraft standing in for a block this suite's world builds no roster for: the
@@ -462,6 +563,18 @@ internal static class AirframeSwapSuites
 
         return null;
     }
+
+    // The actors one staged capture hands its leg: the session-shaped roster and rig, the aircraft
+    // that was flying before the swap, the host, the capture animation's own aircraft, the block the
+    // outgoing aeroplane goes to, and the pool the registrations are counted in.
+    private sealed record Staged(
+        FlightRoster Roster,
+        PlayerRig Rig,
+        FlightController Before,
+        CutsceneController Cutscene,
+        FlightController Captured,
+        FlightController Wingman,
+        ProjectilePool Pool);
 
     // One start, high enough over the mission's own terrain that the aircraft is flying rather than
     // resolving a ground contact on the frame the swap rebuilds it.

@@ -558,6 +558,17 @@ deliberate:
   than at the player's larger number.
 - **`+0x388` is not copied.** CSVM's `wingman_4` is already on the player's team.
 
+⚠ **967's hide has to outlive the reveal of code 914.** In `C3/M05` the capture definition raises
+967 from the same sequence that calls `wingwalk`, and `wingwalk_parent-wingwalk` brackets its own
+19.25 s motion with **913 then 914**: the captured aircraft is parked by 913, hidden by 967 while it
+is already parked, and then handed back by 914 at the end of the wing walk. The original keeps the
+two apart, since 913/914 drive the vehicle's hold flag and scene node while 967's
+`FUN_004b0f40(1)` sets the vehicle's own hidden bit `+0x945`; CSVM carries both on one `Inert` flag,
+so `CutsceneController` drops whatever the swap hid out of its parked list instead. Measured on
+CM02's own definition, played through the runtime: without that drop the Balmoral comes back
+**19.25 s** after the swap, which is the aeroplane sitting in front of the player at the cut back to
+flight.
+
 ⚠ Neither the hand-over nor the damage carry-over is asked for by anything in the shipped data.
 Both are keyed on the chapter and mission strings above, so a search of the data for a trigger comes
 back empty and **that emptiness is not evidence they do not exist.**

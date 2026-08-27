@@ -287,13 +287,14 @@ public sealed class FlightRoster
     /// rig rebuilt on the named airframe, the capture animation's own aircraft hidden with what is
     /// left of its hull carried onto the new one (967), and the aeroplane the player just left
     /// handed to <see cref="AirframeHandover.WingmanName"/> off the nose when
-    /// <paramref name="handsOver"/> says this mission resolves that name.</summary>
-    internal bool RunSwap(PlayerRig rig, AirframeSwapOrder order, bool handsOver)
+    /// <paramref name="handsOver"/> says this mission resolves that name. What the capture half hid
+    /// comes back in the <see cref="AirframeSwapResult"/>.</summary>
+    internal AirframeSwapResult RunSwap(PlayerRig rig, AirframeSwapOrder order, bool handsOver)
     {
         ArgumentNullException.ThrowIfNull(rig);
         if (rig.Controller is not { } outgoing)
         {
-            return false;
+            return default;
         }
 
         // Measured off the hull the player is LEAVING, before the rebuild tears it down. Both are
@@ -307,23 +308,23 @@ public sealed class FlightRoster
             ? AiNamed(order.CaptureRoot)
             : null;
         SwapPlayerAirframe(rig, order.Airframe.PlaneNode);
-        CarryCapturedDamage(captured, rig.Controller?.Damage);
+        var hidden = CarryCapturedDamage(captured, rig.Controller?.Damage);
         if (handsOver)
         {
             HandOverOutgoing(leaving, wasAt, wasNose, armorLeft, healthLeft);
         }
 
-        return true;
+        return new AirframeSwapResult(true, hidden);
     }
 
     // Code 967's other half: the aircraft the capture animation belongs to goes out of the world,
     // and the fractions left of ITS hull scale the new airframe's zones, so the player inherits
     // the Balmoral they shot at rather than a pristine one.
-    private static void CarryCapturedDamage(FlightController? captured, PlaneDamage? fresh)
+    private static FlightController? CarryCapturedDamage(FlightController? captured, PlaneDamage? fresh)
     {
         if (captured?.Damage is not { } hull || fresh == null)
         {
-            return;
+            return null;
         }
 
         float armor = hull.WholeArmorMax > 0f ? hull.WholeArmor / hull.WholeArmorMax : 1f;
@@ -331,6 +332,7 @@ public sealed class FlightRoster
         captured.Inert = true;
         fresh.ScalePools(armor, health);
         Log.Info("flight", $"airframe swap: '{captured.Name}' hidden, its hull (armour {armor * 100f:0}%, structure {health * 100f:0}%) carried onto the player's");
+        return captured;
     }
 
     // The session-wide sinks a human controller takes after assembly rather than during it. One

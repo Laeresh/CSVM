@@ -80,6 +80,7 @@ a different item first.
 | 7 | `campaign-objectives-hud`'s C4/C5 failures were caused by the completion-driver work (`BL-483`). | `CampaignHudSuites.cs` was reverted to its committed state, rebuilt, and both failures reproduced identically (METHOD-8). They are pre-existing. |
 | 8 | `docs/formats/combat-voice.md` states the campaign voice ratings already work (`BL-497`). | Corrected by G75. Read the doc's current claim, not an older one. |
 | 9 | `BL-506` (an AI aircraft's defensive turrets are never built) is open. | Closed by `43b47435`. The `backlog.md` entry is stale, and A1 deletes it. |
+| 10 | The captured Balmoral survives the swap because the root name misses or because `Inert` does not hide an aircraft stepping itself (`BL-541`'s two candidates). | Both dead. The root name resolves, the `'britbalmoral_1' hidden` line prints, and the model does come off screen. Code **914** puts it back 19.25 s later: the wing walk's 913 parked it before 967 hid it. D15's played leg is the measurement. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -139,7 +140,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — what the sortie opened
 
 14. ☑ The cutscene's world hold does not reach an aircraft's own realtime tick (`BL-457`, minted by C12)
-15. ☐ The captured Balmoral is not hidden by the swap in a flown session (`BL-541`)
+15. ☑ The captured Balmoral is not hidden by the swap in a flown session (`BL-541`)
 16. ☐ The captured aircraft keeps its British livery after the capture (`BL-543`)
 17. ☐ CM02's capture cutscene camera sits over the water (`BL-542`)
 18. ☐ The auto-land prompt is not drawn in a flown session (`BL-544`)
@@ -172,8 +173,8 @@ C12 runs last by construction: it is the flown sortie that judges A5, B8, B9 and
 and closes `BL-458`.
 
 **Wave D ordering.** D14 runs first and alone: it is the realtime gap behind `BL-457` and, on the
-evidence, behind `BL-541` (an aircraft stepping itself past `Inert`) and `BL-544` (a rig fed on the
-parent-driven path only), so D15 and D18 are re-measured after it lands before anything is built. D16
+evidence, behind `BL-544` (a rig fed on the parent-driven path only), so D18 is re-measured after it
+lands before anything is built. `BL-541` was expected to be the same gap and is not (row 10). D16
 and D17 both reach the capture definition and `FlightRoster.RunSwap`, so they share one lane after
 D15. D19 and D20 are independent animation reads and can run in parallel worktrees. D21 is judged at
 the controls after D14, and is a stop like C12.
@@ -848,7 +849,7 @@ hold removed it reads 4809.9 m of drift and goes red.
 
 **Verified.** <pending orchestrator run>
 
-## D15 ☐ The captured Balmoral is not hidden by the swap in a flown session
+## D15 ☑ The captured Balmoral is not hidden by the swap in a flown session
 
 **Goal.** At CM02's capture the Balmoral the animation belongs to leaves the sky, and the player's
 new hull carries its damage.
@@ -871,6 +872,21 @@ green.
 
 **⚠ Traps.** ⚠ Do not weaken the suite to match the live run; extend it with a realtime-shaped arm
 if the gap is the clock.
+
+**Landed.** Neither candidate was the gap. The root name resolves, the hidden line prints, and
+`Inert = true` does take the model off screen; what puts the Balmoral back is **code 914**. CM02's
+capture raises 967 from the same sequence that calls `wingwalk`, and `wingwalk_parent-wingwalk`
+brackets its own 19.25 s motion with 913 and 914: 913 parks the captured aircraft into
+`CutsceneController`'s revealed-later list, 967 then hides an aircraft that is already inert so
+nothing observes the flip, and 914 hands it back. `FlightRoster.RunSwap` now answers an
+`AirframeSwapResult` naming the aircraft it hid, and the host drops that aircraft out of its parked
+list, so a swap's hide is the mission's rather than the episode's to undo. `campaign-airframe-swap`
+carries a second leg that plays the mission's own `ww_balmoral1` through the runtime on a Realtime
+`GameClock`, driving each aircraft's own `_PhysicsProcess` (INSTR-26): on the unfixed build it reads
+the Balmoral back in the world 19.25 s after the swap and goes red. The damage carry-over is still
+owed at the controls and rides `BL-547`.
+
+**Verified.** <pending orchestrator run>
 
 ## D16 ☐ The captured aircraft keeps its British livery after the capture
 

@@ -16,6 +16,12 @@ public readonly record struct AirframeSwapCode(int Code, string Def, string Plan
 /// </summary>
 public readonly record struct AirframeSwapOrder(AirframeSwapCode Airframe, string? CaptureRoot);
 
+/// <summary>What one raised swap did: whether an aircraft was replaced at all, and the aircraft the
+/// swap took out of the world (967's capture, null for the other two codes and for a root that
+/// resolved to nothing). ⚠ The caller must hand <c>Hidden</c> back to whatever else is holding that
+/// aircraft out of play, or a cutscene's own reveal puts it back in front of the player.</summary>
+public readonly record struct AirframeSwapResult(bool Swapped, Flight.FlightController? Hidden);
+
 /// <summary>What one mid-mission airframe swap replaces on a player's rig: the planes.zbd node to
 /// build, and the flight state the replacement starts in, lifted off the aircraft being left.
 /// ⚠ Three things a swap deliberately does NOT rebuild. A custom plane, whose bought armour and

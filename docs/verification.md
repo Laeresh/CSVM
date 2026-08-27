@@ -88,6 +88,13 @@ loss. What the engine renders was decodable from the authored constants + oscill
   as a sound defect while their objective audio rides `COMPLETED_SOUND_GROUP` and plays. The
   authored-count line the check now prints is what separates the two readings.
 
+- **DIAG-23** — **Dispatching a callback directly tests what the code does, never what the codes
+  around it undo — play the definition that raises it.** A direct raise has no neighbours, so an
+  effect a later code reverses reads as a clean success. Measured on CM02's capture: driving 967
+  alone left the captured Balmoral hidden and the suite green, while playing the mission's own
+  `ww_balmoral1` showed the wing walk's `913`/`914` pair bracketing it and putting that aeroplane
+  back **19.25 s** later, which is the defect a player sees.
+
 ## SHOT — screenshots and pixel evidence
 
 - **SHOT-1** — **Respect capture quantisation; tiny effects need another metric.**
@@ -364,6 +371,16 @@ loss. What the engine renders was decodable from the authored constants + oscill
   read `rot (0.7, -92.2, -9.3)` while its wreck read `(39.5, 19.6, -118.3)`, two frames that only
   looked comparable.
 
+- **LOG-19** — **`RunProbe.ps1`'s hidden desktop is shared by every worktree on the machine, so a
+  SIBLING agent's probe finishing mid-run kills your viewport and fills your census with errors your
+  change did not cause.** The signature is a repeating per-frame quartet — a C# `NullReferenceException`,
+  a `global_shader_parameter_set` condition, and two `viewport is null` render-time lines — after
+  every suite has already reported PASS, with `errors=UNEXPECTED` as the only failure. Measured:
+  four consecutive `campaign-airframe-swap` runs failed that way, `cutscene` failed identically
+  though nothing in it had changed, and the same command came back `0 line(s)` the moment the other
+  worktree's `--campaign=` probe had exited. LOG-13 across processes: count the Godot processes whose
+  command line names another worktree before believing an error census.
+
 ## WORLD — world data and runtime traps
 
 - **WORLD-8** — **Resolve objects by source identity, not normalized node names.**
@@ -552,6 +569,13 @@ loss. What the engine renders was decodable from the authored constants + oscill
   reachable from a suite as soon as one leg paces a node the way Godot's tick does. Measured with
   the cutscene clock hold removed: `wingman-station`'s hold leg reads 4809.9 m of drift over a 40 s
   hold and goes red, while every `SimStep`-driven leg beside it stays green.
+
+- **INSTR-27** — **On a realtime leg a stand-in flies, so read the STATE under test, never a
+  presence flag that its flying can also answer.** `FlightController.InPlay` folds `Inert` together
+  with `Crashed`, so a stand-in released on a realtime clock and flown into the sea reports "out of
+  the world" exactly as a correct hide does. Measured on CM02's capture: the un-fixed build read
+  `in-play=False` and passed, and reading `Inert` on the same run read `False` with `Crashed` true.
+  INSTR-10's rule at the other end of the assertion.
 
 ## SRC — sources and documents
 
