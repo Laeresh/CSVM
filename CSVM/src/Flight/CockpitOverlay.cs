@@ -19,6 +19,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
     private readonly Node3D _interior;
     private readonly DirectionalLight3D? _light;
     private readonly DirectionalLight3D? _sun;
+    private readonly Basis _mount;
 
     private CockpitOverlay(SubViewport view, Camera3D camera, Node3D interior,
         DirectionalLight3D? light, DirectionalLight3D? sun)
@@ -28,6 +29,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
         _interior = interior;
         _light = light;
         _sun = sun;
+        _mount = interior.Transform.Basis;
     }
 
     /// <summary>The camera looking at the interior from that world's origin. The overlay's own,
@@ -57,11 +59,19 @@ public sealed partial class CockpitOverlay : CanvasLayer
         return overlay;
     }
 
+    /// <summary>The interior's basis for one frame: the wobble pivot's roll, about the plane's Z,
+    /// applied over the mount basis exactly as the plane model's pivot applies it over the model.
+    /// Public so the suite can assert the roll reaches the panel without a rig.</summary>
+    public static Basis WobbledMount(Basis mount, float shakeRoll) =>
+        new Basis(Vector3.Back, shakeRoll) * mount;
+
     /// <summary>Point the overlay camera where the pilot's head points and re-light the panel for
     /// this frame's attitude, then show or hide the pass to match the interior's own visibility so
     /// <see cref="CockpitVisibility"/> keeps deciding which views draw a cockpit. Called every
-    /// frame the rig owns its camera; <paramref name="attitude"/> is the DRAWN plane basis.</summary>
-    public void Sync(Basis attitude, CameraController camera)
+    /// frame the rig owns its camera; <paramref name="attitude"/> is the DRAWN plane basis and
+    /// <paramref name="shakeRoll"/> the wobble pivot's roll, which the interior inherited below
+    /// that pivot in the main world and takes here through <see cref="WobbledMount"/>.</summary>
+    public void Sync(Basis attitude, CameraController camera, float shakeRoll)
     {
         bool shown = GodotObject.IsInstanceValid(_interior) && _interior.Visible;
         Visible = shown;
@@ -72,6 +82,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
         {
             return;
         }
+        _interior.Transform = new Transform3D(WobbledMount(_mount, shakeRoll), Vector3.Zero);
         var (_, basis) = CameraController.FirstPersonPose(Vector3.Zero, Basis.Identity, Vector3.Zero,
             camera.Head.Elevation, camera.Head.Azimuth);
         _camera.Transform = new Transform3D(basis, Vector3.Zero);

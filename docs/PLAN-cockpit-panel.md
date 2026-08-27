@@ -456,6 +456,16 @@ from small numbers. The FOV comes from the camera's own per-mode law, now
 `CameraController.FirstPersonFovDeg`, at the pass viewport's live aspect. Head look is not applied
 to the interior, as it is not today.
 
+The plane wobble (overspeed and firing, `PlaneShake`) is applied in the main world as a roll on the
+pivot the plane model hangs under, and the first-person camera reads the controller above that
+pivot, so the wobble reaches the pilot as the panel rolling against a steady eye. The first flight
+of the pass had no wobble at all: the interior left the pivot's subtree and nothing carried the
+roll across. `CockpitOverlay.Sync` now takes the frame's `Shake.Roll` and poses the interior as
+`Rz(roll) · mount` (`WobbledMount`), which the suite asserts, so the pass shows the wobble the main
+world did. Whether the original's camera rides the rocked plane instead, so that the world rolls
+and the panel holds, is `BL-266` (f) and unchanged by this item. It is also the pose's blind spot:
+a frame pair cannot show a wobble, only a flight can.
+
 The viewport is transparent-backed and sits on `HudLayers.CockpitPass` (−1): 3D draws before any
 canvas layer, so the world still shows under the panel while the cloud whiteout, `ScreenFlash` and
 the HUD keep drawing over it, exactly as they do with the interior in the main world. Lighting is a
@@ -514,4 +524,7 @@ one panel it is not worth it, which is why the pass exists.
 This stays a prototype until it is judged at the controls, in the condition the report came from.
 The flag is the switch for that judgement.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery with the flag off: units 2444 passed; in-engine suites 147/147 passed,
+engine errors clean; goldens 16 shots hash-identical; hitch stage clean (awareness only). The
+registration with the flag on reads 0.000 px on every dial region at 20 km rotated, at the C1
+mission spawn and on the wall clock. Judgement at the controls is what remains.

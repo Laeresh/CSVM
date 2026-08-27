@@ -213,6 +213,14 @@ internal static class WorldAndToolSuites
             ctx.Check(Mathf.Abs(CameraController.FirstPersonFovDeg(PilotViewMode.Cockpit, 16f / 9f)
                     - CameraController.HorizontalToVerticalFovDeg(80f, 16f / 9f)) < 0.001f,
                 $"the pass's FOV law is the camera's own per-mode law");
+            // The wobble the interior inherited below the shake pivot has to reach the pass. The
+            // mount's tilt is about X, so its Right axis is the witness: a Z roll of r turns it by
+            // exactly r, and a pass that forgot the wobble leaves it at 0.
+            float rolled = CockpitOverlay.WobbledMount(mountBasis, 0.3f).X.AngleTo(mountBasis.X);
+            ctx.Check(Mathf.Abs(rolled - 0.3f) < 0.001f,
+                $"the shake pivot's roll reaches the panel in the pass angle={rolled:0.###} rad");
+            ctx.Check(CockpitOverlay.WobbledMount(mountBasis, 0f).IsEqualApprox(mountBasis),
+                $"no wobble leaves the mount basis untouched");
         }
         finally
         {
