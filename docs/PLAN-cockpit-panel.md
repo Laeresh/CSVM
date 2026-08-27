@@ -73,7 +73,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 ### Wave A — the two drives that are built but never reached
 
-1. ☐ Pass the interior's materials to `CockpitGauges.Bind` in the live flight path
+1. ☑ Pass the interior's materials to `CockpitGauges.Bind` in the live flight path
 2. ☐ Make the belt and damage drives fail loudly when nothing binds
 
 ### Wave B — the artificial horizon
@@ -100,7 +100,7 @@ C20 is the cheap test that says whether it is the right one. C21 contends with `
 
 # Wave A — the two drives that are built but never reached
 
-## A1 ☐ Pass the interior's materials to `CockpitGauges.Bind` in the live flight path
+## A1 ☑ Pass the interior's materials to `CockpitGauges.Bind` in the live flight path
 
 **Goal.** The belt lights and the damage zones change colour in a flown Cockpit view, the same way
 they already do in the in-engine suite.
@@ -108,19 +108,21 @@ they already do in the in-engine suite.
 **Evidence (confidence: traced).** The drives are written and correct. `CockpitGauges.Bind` takes an
 optional `materials` argument, defaulting to null, and builds from it the instance-id to
 texture-name map that `Skin.For` needs to tell an indicator's light from its hilite bar.
-`Session/HumanFlightAdapter.cs:140` calls `CockpitGauges.Bind(planeBuilder.CockpitInterior)` with no
-second argument. The map is therefore empty in every flown session, `Skin.For` finds no named
-surface on any node and returns null, and `Belt.FindAll` and `DamageZoneSkin.FindAll` both return
-empty lists. `Apply` then loops over nothing.
+`Session/HumanFlightAdapter.cs` called `CockpitGauges.Bind(planeBuilder.CockpitInterior)` with no
+second argument. The map was therefore empty in every flown session, `Skin.For` found no named
+surface on any node and returned null, and `Belt.FindAll` and `DamageZoneSkin.FindAll` both returned
+empty lists, so `Apply` looped over nothing.
 
-This also explains why the readouts work and these two do not: `Readout.Build` does not consult the
+This also explains why the readouts work and these two did not: `Readout.Build` does not consult the
 name map at all, it duplicates whatever material each surface carries. And it explains why the
-in-engine suite passes while the controls do not: `Testing/WorldAndToolSuites.cs:229` passes
-`builder.InteriorMaterials` explicitly, so the suite exercises a binding the game never makes.
+in-engine suite passed while the controls did not: `Testing/WorldAndToolSuites.cs:229` passes
+`builder.InteriorMaterials` explicitly, so the suite exercised a binding the game never made.
 
-**Approach.** Pass `planeBuilder.InteriorMaterials` as the second argument at
-`HumanFlightAdapter.cs:140`. Then check for any other production caller of `Bind` and give it the
-same argument. Do not change `Bind`'s signature to make the argument required in this item; A2
+**Approach.** Pass `planeBuilder.InteriorMaterials` as the second argument at the
+`CockpitGauges.Bind` call in `HumanFlightAdapter.cs`. `WorldAndToolSuites.cs:170` is the only other
+caller, and it stays without materials on purpose: that suite drives only the needles and lamps,
+which `Skin.For` never touches, so passing the map there would test nothing the suite doesn't
+already cover. Do not change `Bind`'s signature to make the argument required in this item; A2
 covers the reason that would not have caught this anyway.
 
 **Model recommendation.** Medium, low effort. The fix is one argument and the trace is already done;
@@ -134,6 +136,8 @@ produces and an unchanged image would otherwise look like a pass. Full battery a
 **⚠ Traps.** The suite's green is not evidence. `DrivenBelts` passed throughout the period the
 feature was broken at the controls, because it constructs the binding the bug is in. Any check added
 for this must go through the same call the game makes.
+
+**Verified.** <pending orchestrator run>
 
 ## A2 ☐ Make the belt and damage drives fail loudly when nothing binds
 
