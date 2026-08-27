@@ -155,7 +155,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 24. ☑ A cutscene the original arms no skip on is cut short by the skip key (`BL-552`)
 25. ☑ The capture cutscene plays without the enemy Balmoral or the pilot switch, and inherits the roll (`BL-551`)
 26. ☑ The original re-places the player after CM01's drop-off (`BL-553`)
-27. ☐ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
+27. ◐ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
 
 ## Dependency and parallelism notes
 
@@ -1217,7 +1217,7 @@ default/custom paint. The suite's `CheckLivery` compares the two rigs' actual pa
 (`PlanePainter.Substitute("bal_taillogo", …)` pixel bytes, or both painters being null) rather than
 the scheme record alone.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full RunTests.ps1 battery on the merged plan tree at `2e91746b`: build clean, 2443 units, 146 in-engine suites with engine errors clean, 16 goldens hash-identical.
 
 ## E24 ☑ A cutscene the original arms no skip on is cut short by the skip key
 
@@ -1267,7 +1267,7 @@ and with the key pressed at t=2 s: on the unfixed build the pressed leg reads
 definitions for E26: code 951 is raised by `texdrop` and that mission authors no 20, so the
 re-place can never be dropped by a key press.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full RunTests.ps1 battery on the merged plan tree at `2e91746b`: build clean, 2443 units, 146 in-engine suites with engine errors clean, 16 goldens hash-identical.
 
 ## E25 ☑ The capture cutscene plays without the enemy Balmoral or the pilot switch, and inherits the roll
 
@@ -1326,7 +1326,7 @@ matrix. `PoseAtNode` gains a `scripted` arm reading `AnimRuntime.PlacedRotationO
 still contributes its live frame, so the rule is shared by every cutscene rather than special-cased.
 The name guard was not relaxed and `PoseAtNode`'s composition is otherwise untouched.
 
-**Verified.** <pending orchestrator run> In the lane: `campaign-wingwalk-camera` extended with five
+**Verified.** Full RunTests.ps1 battery on the merged plan tree at `2e91746b`: build clean, 2443 units, 146 in-engine suites with engine errors clean, 16 goldens hash-identical. In the lane: `campaign-wingwalk-camera` extended with five
 checks — the three vehicle parts bound inside the spawned aeroplane, drawn while the shot is
 composed and driven by their authored motions; both figures staged, visible and under the walk
 frame; and the frame level with the host held rolled 90° through the pose. A perturbation of all
@@ -1387,7 +1387,7 @@ other twelve 951s) never puts `player` back under `world1` and is called by no m
 `player` marker logs the callback and re-places nothing, which is the same gate D20 named.
 `CampaignDirector`'s `WARP_VEHICLE` no-op is left as it was: nothing in CM01 reaches it.
 
-**Verified.** <pending orchestrator run>. In the lane: the new `dropoff-placement` suite drives
+**Verified.** Full RunTests.ps1 battery on the merged plan tree at `2e91746b`: build clean, 2443 units, 146 in-engine suites with engine errors clean, 16 goldens hash-identical.. In the lane: the new `dropoff-placement` suite drives
 C3/M01's own `texdrop` over its built world with the pilot flown in at the origin, finds the
 re-placing definition by scanning the mission's own `cutscenes\` definitions for callback 951, and
 reads `authored placement (-8469.094, 170.02452, -4790.2573), 9731.4 m apart` from the fly-in pose:
@@ -1400,12 +1400,28 @@ emptied (METHOD-9): `released at (0, 0, 0), 9731.45 m off the placement, facing 
 2443/2443 with the suite-count assertion moved 144 → 145; `CheckCommentCaps.ps1 -Summary` clean.
 Judged at the controls in E27.
 
-## E27 ☐ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
+## E27 ◐ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
 
 **Goal.** E23 to E26 judged at the controls, and the manual (non-auto) dock's hook, height and
 wing fold seen once.
 
-**Approach.** ⚠ **A stop, not a task an agent completes.** The brief is written when E23 to E26
-land.
+**Approach.** ⚠ **A stop, not a task an agent completes.** The brief below is the stop.
 
 **Verify.** The user's report.
+
+**Sortie brief (the stop).** Build: branch `worktree-m5-polish-2` at its head, `dotnet build
+CSVM/CSVM.sln`, launch from the menu on a profile COPY with `selectedPlane 0` and `wingmanPlane 1`
+(the D21 pairing). CM01 (C3/M01): (1) after the drop-off cutscene you are re-placed south of the
+archipelago facing east, flying out at speed, not resumed where the cutscene left you (E26); (2)
+pressing the skip key during the drop-off does nothing, since the original arms no skip there
+(E24; the intro still skips). CM02 (C3/M05), with a Balmoral rolled or banked when the capture
+fires if you can manage it: (3) the capture cutscene shows the enemy Balmoral, the pilot leaving
+the aeroplane down the rope ladder and boarding, and the frame stays level regardless of the
+Balmoral's roll (E25); (4) the skip key does nothing during the capture, and the swap happens at
+its authored time with no second cutscene behind it (E24); (5) after the cut your hull wears the
+Balmoral's bare British skin, not the Fortune Hunters paint (E23; enemies flying unpainted shipped
+skins is `BL-394`, not this); (6) land on the Balmoral WITHOUT the auto-land (fly the trapeze
+yourself): the hook deploys, the height reads right and the wings fold, as D19 showed on the
+auto-land. If the unskippable capture or drop-off is unwanted, say so: a fast-forward is a
+deliberate divergence and a new item. Findings outside these become new `backlog.md` entries
+with ids from `New-ItemId.ps1`.
