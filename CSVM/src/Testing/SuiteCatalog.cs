@@ -102,6 +102,7 @@ public static class SuiteCatalog
         "stop-sequence",
         "first-person-condition",
         "death-slot",
+        "start-state-swap-pool",
         "wait-for-completion",
         "emitter-host-deactivation",
         "effect-template-mesh",
@@ -561,6 +562,8 @@ public static class SuiteCatalog
             "the PLAYER_1ST_PERSON condition follows the pilot's selected view mode: the bullethole def's else branch runs in Chase and is skipped in Cockpit and Nose (A1)", PlayerFirstPersonCondition));
         into.Add(new TestHarness.Suite("death-slot",
             "a killed destructible dispatches its compiled destruction slot — the block carrying the 30 s fire's 1,035 death calls (BL-276)", DeathSlotDispatches));
+        into.Add(new TestHarness.Suite("start-state-swap-pool",
+            "a destructible whose own Initial sequence authors the healthy/destroyed swap directly (a start-state script's shape, never DamageAt) leaves the HP pool destroyed too, so a later hit does not replay the death choreography (BL-513, BL-521)", StartStateSwapSyncsThePool));
         into.Add(new TestHarness.Suite("wait-for-completion",
             "a WAIT_FOR_COMPLETION call holds the caller's next event for its callee, and an unflagged one beside it does not (BL-228)", WaitForCompletion));
         into.Add(new TestHarness.Suite("emitter-host-deactivation",

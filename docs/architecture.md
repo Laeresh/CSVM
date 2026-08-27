@@ -977,6 +977,19 @@ evaluation: the session hands over "any human pilot is in Cockpit or Nose"
 runtime with no seam wired — a lab, a test, the bootstrap before any rig exists — reads false,
 which is what this condition answered everywhere before the view modes existed. Regression: the
 `first-person-condition` suite, over the shipped `bullet1` def.
+`SyncDestructiblePool` keeps a destructible's `DestructibleRegistry` instance in step with an
+`OBJECT_ACTIVE_STATE` healthy/destroyed role swap dispatched outside `DamageAt`'s own kill — a
+start-state script or an ON_STARTUP sequence authoring an object destroyed before the player
+arrives. Called from the `ObjectActiveState` dispatch case right after `Pose.HandleActiveState`,
+it matches the same role-name convention `AuthorsSwap`/`ApplyDeathSwap` already use and writes
+`Health`/`Status` only when they still disagree with the swap direction, so a live kill's own
+dispatch (which already set the pool via `DamageAt` before running the death sequence) is a
+no-op there. Bootstrap's Pass 1 registers each anchored destructible in `_destructibles` BEFORE
+dispatching its `RESET_STATE`, not after, so a def authored to start destroyed (its own
+`RESET_STATE` puts the destroyed role ACTIVE) reaches this same sync with a pool already there
+to find; no shipped def uses that shape today, but the ordering is the general contract every
+other `OBJECT_ACTIVE_STATE` dispatch site already follows. Regression: the
+`start-state-swap-pool` suite.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own

@@ -84,7 +84,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ `BL-548`: `--pos=` with `--campaign=` stalls the intro cutscene's completion
 2. ☑ `BL-534`: a debug key that kills the player's selected target
 3. ☑ `BL-516`: CM03's AA turret never fires
-4. ☐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
+4. ◐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
 5. ☐ `BL-512` + `BL-522`: the Barracuda's drive jumps, its launch faces the wrong way, and its fighters crash at once
 6. ☑ `BL-556`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
 
@@ -277,7 +277,7 @@ objective directive.
 
 **Verified.** <pending orchestrator run>.
 
-## A4 ☐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
+## A4 ◐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
 
 **Goal.** In CM04 (C3/M03) the buildings and barrage balloons the setup script starts destroyed
 are destroyed: the balloons are down at mission open, and a hit on a pre-destroyed building finds
@@ -286,25 +286,61 @@ no healthy pool and runs no destroy sequence.
 **Evidence (confidence: lead-only).** Two controls reports on one mission with a likely shared
 cause: buildings starting destroyed still run their destruction sequence when hit, and the
 balloons stand intact where the original opens with them down. C3/C4 drive the balloons through
-`bont*`/`balloon_t*`/`tether*` state events (`docs/formats/anim-definitions.md` 116). `<TODO:
-re-verify still-open against the code>`
+`bont*`/`balloon_t*`/`tether*` state events (`docs/formats/anim-definitions.md` 116).
 
-**Approach.** Read CM04's interp setup script for the `ObjectActiveState`/destroyed-state verbs,
-check whether they run, and whether they reach the destructibles' HP pools as well as the nodes'
-visual swap. If only the visual swap lands, the fix is at the pool. Decode lane: the original's
-handling of a destroyed-state verb on a destructible, if the data shows the script running and
-the pool untouched by design.
+**Re-verified against the code: the architecture bug is real and general; landed, but the exact
+CM04 trigger was not pinned down.** `AnimRuntime.Dispatch`'s `ObjectActiveState` case only ever
+called `Pose.HandleActiveState` (the visual swap, `SetTargetActive`); nothing synced
+`DestructibleRegistry`. Any healthy/destroyed role swap dispatched outside `DamageAt`'s own kill
+(a start-state script, an `ON_STARTUP` sequence, or a def's own `RESET_STATE` authored to start
+destroyed) left the pool at full HP and `Healthy` while the node already read destroyed — exactly
+the shape both reports describe. Fixed with `AnimRuntime.SyncDestructiblePool`, called right after
+`Pose.HandleActiveState`, and Bootstrap's Pass 1 now registers a destructible before dispatching
+its own `RESET_STATE` (previously after, so a def starting destroyed by its own `RESET_STATE`
+found no pool yet to sync). Verified by a new engine suite, `start-state-swap-pool`, against a
+real shipped def whose own Initial sequence authors the role swap directly: the pool follows to
+`Destroyed`/HP 0 with no `DamageAt` call in the picture, and a later `DamageAt` on it is a no-op
+rather than a second death.
+
+**The CM04-specific mechanism was not found.** M03's own compiled `mis_anim` set carries no
+`ON_STARTUP` building-destroy content, no `PERSIST_LOG` reader def (`ucamp_dest`/`tower_dest`/…)
+is compiled into this mission at all, and `support\c3\m03.gw` switches `bont1..6`/`b_turret1..6`
+fully OFF rather than to a destroyed variant. The one concrete "starts destroyed" content M03
+does ship is `cargozep1`'s own `calldestroy_the_cargozep` → `destroy_the_cargozep`
+(`startanims.zrd`'s `NEW_GAME_START` list), a scripted cutscene that deactivates `tntbox1..4`/
+`gasbag1`/`gasbag5` by name rather than by the `healthy`/`destroyed`/`dbase` role convention this
+fix (and `AuthorsSwap`/`ApplyDeathSwap` before it) key on — headless `--campaign=<probe>:3`
+confirms it runs (the fireball/tntbox retargets log, `AnimHealth(15)` on `cargozep1` reads false
+throughout), but `SyncDestructiblePool` does not reach it, since no event in that cutscene names a
+role node. Whether `cargozep1` itself needs the same treatment on its ad hoc node names, and
+where CM04's reported buildings/balloons actually live in the data, are open.
+
+**Wiring contract (not landed here).** If `cargozep1`'s own HP pool turns out to be the reported
+building/balloon symptom's actual carrier, widen the sync to cargozep1's own destroy cutscene (a
+def-specific rule, or a generic "this def's own DAMAGE_SEQUENCE testing `ANIM_HEALTH` while its
+own OBJECT_ACTIVE_STATE events never ran DamageAt" gate) rather than hardcoding cargozep1 by
+name. Otherwise, find CM04's actual pre-destroyed content with a debug pass at the controls
+(`--debug-anim` over a full CM04 flight, watching for any node the player sees destroyed at open)
+and trace it from there; the architecture fix landed here will apply automatically once that
+trigger is identified, if it is a role-named swap.
 
 **Model recommendation.** medium.
 
-**Verify.** `--campaign=<CM04>` headless: the balloons' state at first frame, and a scripted hit on
-a pre-destroyed building logs no kill; a new engine suite on the start state if one fits the
-harness. Then at the controls in D32.
+**Verify.** `--campaign=<CM04>` headless: `cargozep1`'s scripted destruction runs clean, no new
+engine errors (confirmed). `start-state-swap-pool` suite green against real shipped data
+(confirmed). The balloons'/buildings' state at first frame and a scripted hit on them: not
+confirmed, since their authoring was not found. D32 must judge this item at the controls with A2's
+kill key or a fresh look, since the closing sortie is the only remaining way to see whether the
+reported symptom still reproduces on the landed build.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not gate the sequence on the visual state alone; a building destroyed in play and
 hit again is the same symptom on another path, and the fix belongs at the pool.
 `PLAN-c3-balloon-kill-chain.md` settled the live kill chain for C3/M02; that is not this mission's
-start state, so do not reopen it.
+start state, so do not reopen it. Do not read `cargozep1`'s untouched `AnimHealth(15)` condition
+in the probe log as proof of a live bug on its own; nothing in this playtest damaged it, so the
+condition never had a reason to flip regardless of the pool's state.
 
 ## A5 ☐ `BL-512` + `BL-522`: the Barracuda's drive jumps, its launch faces the wrong way, and its fighters crash at once
 

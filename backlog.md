@@ -446,16 +446,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `ZeppelinDamage.cs` bullet (the survivor-count kill that fires the def).
 
 - `BL-513` `[Bug]` **CM04 (C3/M03) plays a building's destroy animation on a building that is already
-  destroyed.** *Evidence:* reported at the controls in CM04: buildings that start the mission in
-  their destroyed state still run the destruction sequence when hit. The mission's setup script puts
-  a set of the base's buildings into their destroyed state before the player arrives; a hit on one of
-  them should find no healthy pool to kill and no sequence to run. *Fix shape:* find where the setup
-  script's destroyed state is applied and whether it reaches the destructible's HP pool as well as
-  its visual swap. If only the visual swap lands, the pool is still alive and the kill chain is
-  reachable a second time. *⚠ Traps:* do not gate the sequence on the visual state alone; a building
-  destroyed during play and then hit again is the same symptom on a different path, and the fix
-  belongs at the pool. *Cross-refs:* `BL-521` (the balloons in the same mission's start state),
-  `docs/formats/anim-definitions.md`'s `ObjectActiveState` handling.
+  destroyed.** *Evidence (traced, architecture; CM04's own trigger unfound):* `AnimRuntime.Dispatch`'s
+  `ObjectActiveState` case only ever ran the visual swap (`Pose.HandleActiveState`); nothing synced
+  `DestructibleRegistry`, so ANY healthy/destroyed role swap dispatched outside `DamageAt`'s own kill
+  (a start-state script, an `ON_STARTUP` sequence, or a def's own `RESET_STATE` authored to start
+  destroyed) left the pool `Healthy` at full HP while the node already read destroyed — a later hit
+  found a live pool and replayed the whole death sequence. Fixed generally
+  (`AnimRuntime.SyncDestructiblePool`, plus registering a destructible before dispatching its own
+  `RESET_STATE` in Bootstrap), verified by the `start-state-swap-pool` engine suite against a real
+  shipped def. CM04's own compiled `mis_anim` carries no `ON_STARTUP` building-destroy content and no
+  `PERSIST_LOG` reader def compiles into this mission; the one "starts destroyed" content M03 does
+  ship, `cargozep1`'s scripted `destroy_the_cargozep` cutscene, deactivates named nodes
+  (`tntbox1..4`/`gasbag1`/`gasbag5`) rather than the `healthy`/`destroyed`/`dbase` role convention this
+  fix keys on, so it is not reached. *Fix shape:* find CM04's actual pre-destroyed building content at
+  the controls (nothing in the compiled data matches the report) and confirm whether it is a role-named
+  swap the landed fix already covers, or a `cargozep1`-shaped ad hoc node set that needs its own rule.
+  *⚠ Traps:* do not gate the sequence on the visual state alone; a building destroyed during play and
+  then hit again is the same symptom on a different path, and the fix belongs at the pool. *Cross-refs:*
+  `BL-521` (the balloons in the same mission's start state), `docs/formats/destructibles.md` "Starting
+  destroyed".
 
 - `BL-515` `[Research]` **CM04 (C3/M03): the Barracuda takes damage from every side, and the original may
   only accept hits inside its hangar.** *Evidence:* reported at the controls as a question: the
@@ -2217,15 +2226,19 @@ usual.
   *Cross-refs:* `BL-256` is the adjacent snapshot work; `docs/PLAN-M5-campaign.md` Decision 3.
 
 - `BL-521` `[Bug]` **CM04 (C3/M03)'s barrage balloons should already be destroyed at mission start.**
-  *Evidence:* reported at the controls: the balloons stand intact where the original's mission opens
-  with them already down. The mission's setup script carries the initial states; C3/C4 drive the
-  balloons through `bont*`/`balloon_t*`/`tether*` state events (`docs/formats/anim-definitions.md`
-  116). *Fix shape:* read CM04's interp setup script for the balloons' `ObjectActiveState`/
-  destroyed-state verbs and check whether they run, and whether they reach the destructibles'
-  pools as well as the nodes. *⚠ Traps:* `PLAN-c3-balloon-kill-chain.md` settled the balloons'
-  kill chain for C3/M02; that is the live kill path and not this mission's start state, so do not
-  reopen it. *Cross-refs:* `BL-513` (the same mission's destroyed buildings, likely one cause),
-  `BL-348`'s plan.
+  *Evidence (re-verified against the code, still open):* `support\c3\m03.gw` switches
+  `bont1..6`/`b_turret1..6` fully OFF (`NodeSetActive off`), not to a destroyed variant, so those are
+  not this mission's balloons; M03's own compiled `mis_anim` carries no other pre-destroyed balloon
+  content, and no `PERSIST_LOG` reader def (`ucamp_dest`/`tower_dest`/…) compiles into this mission.
+  `BL-513`'s general architecture fix (`AnimRuntime.SyncDestructiblePool`, `docs/formats/destructibles.md`
+  "Starting destroyed") landed and would apply here too if the balloons' authored trigger is a
+  `healthy`/`destroyed`/`dbase` role swap, but that trigger was not found in the data. *Fix shape:*
+  find the balloons' actual content at the controls (`--debug-anim` over a CM04 flight, watching what
+  the player sees at open) and trace it from there; the landed fix already covers a role-named swap,
+  a `cargozep1`-shaped ad hoc node set needs its own rule. *⚠ Traps:* `PLAN-c3-balloon-kill-chain.md`
+  settled the balloons' kill chain for C3/M02; that is the live kill path and not this mission's start
+  state, so do not reopen it. *Cross-refs:* `BL-513` (the same mission's destroyed buildings, one
+  shared architecture fix, unfound shared trigger), `BL-348`'s plan.
 
 - `BL-522` `[Bug]` **CM04 (C3/M03): fighters launched from the Barracuda crash at once.**
   *Evidence:* `playtest/game-20260826-085720.out`, `c3/m03` leg: `britpeace_5` and three unnamed
