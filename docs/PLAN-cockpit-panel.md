@@ -83,8 +83,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 ### Wave C — the panel vibration
 
-20. ☐ Confirm or kill the float-precision hypothesis with a near-origin capture
-21. ☐ Prototype the interior in its own pass with the camera at the origin
+20. ❌ Confirm or kill the float-precision hypothesis with a near-origin capture
+21. ❌ Prototype the interior in its own pass with the camera at the origin
 
 ## Dependency and parallelism notes
 
@@ -247,7 +247,7 @@ the horizon's convention from the decode rather than by flipping signs until it 
 
 # Wave C — the panel vibration
 
-## C20 ☐ Confirm or kill the float-precision hypothesis with a near-origin capture
+## C20 ❌ Confirm or kill the float-precision hypothesis with a near-origin capture
 
 **Goal.** A yes or no on whether the panel's motion is float32 rounding in the transform chain,
 established cheaply before anyone builds the expensive fix.
@@ -293,7 +293,62 @@ coordinates'. And a near-origin scene may sit over different terrain with differ
 changes the centroid measurement's noise floor even when the geometry is steady; measure the noise
 floor in each scene before comparing the two.
 
-## C21 ☐ Prototype the interior in its own pass with the camera at the origin
+**Result.** `--hold` truly does not pin the transform (it glides), so a `--weapon-lab` capture was
+used instead: `Held` re-asserts the flight model's pinned position and attitude every physics step
+through `FlightModel.Reset`, which under `--det`'s parent-driven clock renders the plane's transform
+bit-identical frame to frame. `FlightController._Process`'s `bool orbiting = Held;` forces the lab's
+own orbit camera whenever the plane is held, which never reaches the cockpit-view render path at
+all; a temporary, fully reverted edit (`orbiting = false`) let the pinned-position capture still run
+through `--view=cockpit`'s normal camera and panel code, confirmed clean afterward by
+`git status --short` and a rebuild.
+
+A truly bit-identical transform cannot show frame-to-frame jitter by construction: identical inputs
+render identically, so three consecutive frames at a fixed pose came back pixel-hash-identical in
+both scenes (noise floor 0.000 px on all four instruments, at both distances). The informative
+comparison instead nudges the pinned position by 0.3 m along the direction of flight, roughly one
+physics tick's travel at the trimmed glide speed the original measurement was taken at, and reads
+each instrument's centroid shift for that one nudge:
+
+Near origin, `--pos=0,300,0` vs `--pos=0,300,-0.3` (`.scratch/c20/origin_00.png`,
+`.scratch/c20/origin_nudge.png`):
+
+| instrument | dx (px) | dy (px) | \|d\| (px) |
+|---|---|---|---|
+| altimeter | +0.025 | -0.035 | 0.043 |
+| gun_gauge | -0.006 | -0.103 | 0.103 |
+| rockets | +0.029 | -0.080 | 0.085 |
+| speedometer | +0.018 | -0.020 | 0.027 |
+
+At chapter scale, `--pos=10000,300,0` vs `--pos=10000,300,-0.3` (`.scratch/c20/far_00.png`,
+`.scratch/c20/far_nudge.png`):
+
+| instrument | dx (px) | dy (px) | \|d\| (px) |
+|---|---|---|---|
+| altimeter | -0.026 | +0.075 | 0.080 |
+| gun_gauge | -0.006 | -0.122 | 0.122 |
+| rockets | +0.011 | -0.057 | 0.058 |
+| speedometer | +0.017 | +0.033 | 0.038 |
+
+Both pairs are bit-reproducible (repeat captures hash-identical, confirmed with `Get-FileHash`), so
+the numbers are the renderer's real output, not capture noise. The residual does not collapse near
+the origin: it is the same order of magnitude at both scales (0.027-0.103 px near the origin,
+0.038-0.122 px at 10 km), the per-instrument ranking is not preserved (rockets is the largest mover
+near the origin and the second-smallest at 10 km), and every ratio between the two scales sits
+between 0.68x and 1.86x, nowhere near the several-times-larger reading the hypothesis predicts for a
+10 km displacement. The float32-rounding-of-world-coordinates hypothesis is killed: whatever produces
+the sub-pixel per-instrument divergence, it is present at comparable strength when the aircraft sits
+metres from the origin, so moving the panel's render pass to origin-relative coordinates (C21) would
+not remove it.
+
+**Verified.** <pending orchestrator run>
+
+## C21 ❌ Prototype the interior in its own pass with the camera at the origin
+
+**Closed as disproven.** C20 killed the float-precision hypothesis this item exists to fix: the
+per-instrument centroid divergence from a small position nudge is the same order of magnitude near
+the world origin as at chapter-scale coordinates, so composing the interior's render pass in a
+small origin-relative space would not remove it. The cause is elsewhere in the render/shading path,
+undiagnosed here and out of this plan's scope.
 
 **Goal.** The panel is drawn in a coordinate frame small enough that float32 rounding is below a
 pixel, so the instruments hold still relative to each other and to the cockpit shell.
