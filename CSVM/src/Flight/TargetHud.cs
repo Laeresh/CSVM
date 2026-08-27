@@ -432,7 +432,7 @@ public sealed partial class TargetHud : Control
 
         // Drawn at the source's render pose, like --debug-markers; the candidate's own Position is
         // the physics pose the gun solves to, and projecting that through a camera on the render
-        // pose is the fly-by shake (BL-519). The gate in UpdateBrackets stays on the physics pose.
+        // pose is a fly-by shake. The gate in UpdateBrackets stays on the physics pose.
         if (!FlightController.TryRenderPosition(target.Source, out var pos))
         {
             pos = target.Position;

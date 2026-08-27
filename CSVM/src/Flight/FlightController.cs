@@ -2644,7 +2644,7 @@ public partial class FlightController : Node3D
     // aircraft's WorldPosition is the last physics pose; its node sits on _renderPose, the pose
     // interpolated between sim steps that the chase camera follows too. A marker projected from
     // the physics pose through that camera stalls between ticks and jumps on each, a shake that
-    // grows with angular rate (BL-519). Turret and structure positions are node positions already.
+    // grows with angular rate. Turret and structure positions are node positions already.
     // False on a freed, out-of-tree or unknown source: the caller keeps its physics snapshot.
     internal static bool TryRenderPosition(object? source, out Vector3 position)
     {
