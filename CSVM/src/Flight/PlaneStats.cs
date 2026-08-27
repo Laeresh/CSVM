@@ -379,6 +379,24 @@ public sealed class PlaneStats
         return jittered;
     }
 
+    /// <summary>The difficulty scale on an enemy vehicle's whole-vehicle pair
+    /// (docs/org/vehicleDamage.md "The difficulty scale"), which the engine applies at spawn BEFORE
+    /// the per-spawn jitter. Resolves a parts-only airframe's pair to its sum on the way, the same
+    /// derivation <see cref="WithAiSpawnJitter"/> makes, so the jitter after it sees the scaled hull.
+    /// ⚠ The player's own aircraft is never scaled, and neither is a vehicle on the player's team;
+    /// the caller owns that test. An unscaled tier returns THIS, uncopied.</summary>
+    public PlaneStats WithEnemyDurability(float factor)
+    {
+        if (Mathf.IsEqualApprox(factor, 1f))
+        {
+            return this;
+        }
+        var scaled = (PlaneStats)MemberwiseClone();
+        scaled.VehicleHealth = (VehicleHealth ?? SumParts(static p => p.MaxHp)) * factor;
+        scaled.VehicleArmor = (VehicleArmor ?? SumParts(static p => p.MaxArmor)) * factor;
+        return scaled;
+    }
+
     /// <summary>A shallow copy carrying a different engine power, for the hangar's engine pick
     /// (PLAN-hangar; the original's registry override onto <c>veh+0x66c</c>). The caller's object
     /// is the shared per-airframe cache and is never mutated; the copy shares the read-only

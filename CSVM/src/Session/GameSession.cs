@@ -2176,9 +2176,10 @@ public partial class GameSession : Node3D
                 SpawnBase = spawnBase,
                 LiveryResolver = _liveryResolver,
                 NetTrailers = netTrailers,
-                Spawn = (plane, pos, look, pilot, scheme, team, rating, inert, shipped, fit) =>
+                Spawn = (plane, pos, look, pilot, scheme, team, rating, inert, shipped, fit, difficulty) =>
                     flightRoster.SpawnAi(new AiSpawn(plane, pos, look, pilot, scheme, team,
-                        Inert: inert, ShippedSkins: shipped, Fit: fit, AttackRating: rating)),
+                        Inert: inert, ShippedSkins: shipped, Fit: fit, AttackRating: rating,
+                        Difficulty: difficulty)),
                 RegisterVoice = RegisterAiVoice,
             });
         }

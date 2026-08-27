@@ -483,41 +483,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   voice line is flavour and this closes. *Cross-refs:*
   `BL-512` (the same sub's launch motion), `BL-522` (its launched fighters).
 
-- `BL-556` `[Bug]` **Enemy armour and health are not scaled by the difficulty setting.** *Evidence:*
-  the roster spawn `FUN_0047c210` multiplies the armour and health maxima of any vehicle whose team
-  differs from the player's by **0.75 / 1.0 / 1.25** on difficulty 0 / 1 / 2
-  ([`docs/org/vehicleDamage.md`](docs/org/vehicleDamage.md), "Where the numbers come from at spawn",
-  which records the scale as a decoded constant to apply, not a TUNE). In Instant Action the wave's
-  Novice/Veteran/Ace skill *is* that multiplier and nothing else: it stands in as the global
-  difficulty for the duration of one spawn
-  ([`docs/formats/instant-action.md`](docs/formats/instant-action.md), "So the skill names are a
-  hit-point scale in Instant Action, and nothing else"). CSVM applies no scale at any difficulty:
-  `InstantAction.cs` stores `InstantActionWave.EnemySkill` and says in its own doc comment that
-  nothing on the path reads it, and no difficulty or health-scale term exists in `CSVM/src`.
-  `AiFlightAssembler` seeds the unscaled airframe pools and applies only the faithful ±5 % per-spawn
-  jitter. **The campaign's own selector is the lowest of the three by default**: `rof/ui_strings.json`
-  ids 109-111 are `IDS_DIFFICULTY` = **Normal / Hard / Hardest** in that order, under
-  `IDS_GO_DIFFICULTY_DESC` "Select the difficulty level for a solo campaign", a separate vocabulary
-  from Instant Action's `IDS_IA_DIFFICULTY` novice/veteran/ace. Campaign Normal is therefore
-  difficulty 0 and takes the **0.75** multiplier, so CSVM's hostiles carry **a third more armour and
-  health than the original does on the setting the campaign is normally played at** (1 / 0.75), in
-  every mission. On Hard the omission is invisible and on Hardest CSVM is easier.
-  ⚠ The factor is `1 + k * 0.125` with `k` of **-2 / 0 / +2**, not -1 / 0 / +2: `MOV EDI,0xfffffffe`
-  at `0x0047cb3b` and `CMP EAX,0x2` / `MOV EDI,EAX` at `0x0047cb47`, raw bytes
-  `bf feffffff eb0c e8c93bfcff 83f802 7505 8bf8`. The spread is a symmetric two eighths either side
-  of 1.0. `docs/org/vehicleDamage.md` and `docs/org/hangar.md` gave the low tier as 0.875 and the
-  high as 1.125 and were corrected against the disassembly, along with the arithmetic they fed
-  (a patrol boat is 30/40/50, not 35/40/50).
-  *Fix shape:* carry the resolved difficulty to the spawn (the Instant Action wave's own skill for
-  that spawn, the session difficulty elsewhere) and apply the multiplier to the armour and health
-  maxima before the jitter, in the same place the jitter is applied.
-  *⚠ Traps:* the multiplier is on the MAXIMA at spawn, not on incoming damage, so it must not be
-  applied at the hit site. It applies only to a vehicle whose team differs from the player's, so the
-  player and the wingmen keep unscaled pools. The wave skill is not a pilot rating and must not be
-  routed into the nine-slot skill vector. And the ±5 % jitter is independent of it: apply both, in
-  that order, not one instead of the other.
-  *Cross-refs:* `BL-557` (the roster overrides that land in the same spawn path),
-  `analysis/aim-assist-ttk/FINDINGS.md`.
+- `BL-570` `[Feature]` **The difficulty setting has no menu row.** *Evidence:* the scale itself is
+  live (`Flight/Difficulty`, `--difficulty=<normal|hard|hardest>`), but a CLI flag is the only way to
+  change it, so a player launching normally always flies the default Normal. The original puts it on
+  the game-options screen: `IDS_GO_DIFFICULTY_TITLE` "Difficulty" with
+  `IDS_GO_DIFFICULTY_DESC` "Select the difficulty level for a solo campaign", over the three
+  `IDS_DIFFICULTY` rows Normal / Hard / Hardest (`rof/ui_strings.json` ids 109-111).
+  *Fix shape:* a row on the options screen writing the same 0/1/2 the flag parses, persisted with the
+  rest of the profile so it survives a launch, with the flag continuing to win for a scripted run.
+  *⚠ Traps:* it is a campaign-scope setting, not a per-mission one, and Instant Action does not read
+  it: an IA wave's own skill stands in for that spawn, which is a different control the wizard
+  already owns. Do not wire the menu row into the IA path or a wave will fly at two difficulties.
+  And it selects a hit-point tier only, so it must not be presented as changing how well the enemy
+  flies or shoots, which it does not.
+  *Cross-refs:* `Flight/Difficulty`, `docs/formats/instant-action.md`, `docs/cli.md`'s
+  `--difficulty`.
 
 - `BL-557` `[Bug]` **The roster's `init_health` and `armor` overrides are parsed away, so the named
   aces spawn too soft.** *Evidence:* the original's roster spawn applies slot 7 `init_health` when
@@ -532,8 +512,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   durability above the airframe default. They are the mission's named aces: `hafury_1`-`_6` at
   108/108 in C2/M03, `hkfirebrand_9` at 132/132, the Black Hat Brigands at 126/126, and so on.
   *Fix shape:* add the two fields to `RosterSpawnPlan`, read them in `CampaignRosterPlan.Build`,
-  forward them through `SpawnFor`, and apply them in the assembler before `BL-556`'s difficulty
-  scale and the jitter.
+  forward them through `SpawnFor`, and apply them in the assembler before the difficulty scale and
+  the jitter, at `AiFlightAssembler.Assemble`'s `WithEnemyDurability` call, which is where the
+  engine's spawn order is already reproduced.
   *⚠ Traps:* **a missing slot is not a zero.** Blocks are not fixed-width (field-count histogram
   42/65/66/67/68/81) and 33 of the 414 stop at 66 fields, so slot 66 does not exist on them; a reader
   that maps absent to `0.0` invents 18 armour-stripped hostiles in C2/M05, C2B/M04 and C3/M01 that
@@ -542,8 +523,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `-1` on all 414 blocks and stay parsed-and-ignored; do not revive that path. And note the
   direction: fixing this makes those enemies TOUGHER, so it does not relieve a long time-to-kill, it
   lengthens it on exactly the fights that should be hard.
-  *Cross-refs:* `BL-556`, `analysis/aim-assist-ttk/FINDINGS.md` (whose census of this field is
-  superseded by the script beside it).
+  *Cross-refs:* `Flight/Difficulty` (the scale this lands in front of),
+  `analysis/aim-assist-ttk/FINDINGS.md` (whose census of this field is superseded by the script
+  beside it).
 
 - `BL-561` `[Research]` **Aircraft projectile hit volumes are tuned convex decompositions, and the
   original's hit geometry is untraced.** *Evidence:* `PlaneCollider` builds an aircraft's hit boxes
@@ -559,9 +541,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   polygon loop, and how our boxes compare with the model's own silhouette.
   *⚠ Traps:* this is a hit-RATE question, not a damage-per-hit one; do not chase it with a TTK
   stopwatch, which cannot separate the two. Measure rounds fired against rounds registered on a held
-  burst at a fixed target, then compare. And settle `BL-556`/`BL-557` first: with the pools wrong,
-  any TTK reading taken here is unusable as evidence either way.
-  *Cross-refs:* `BL-556`, `BL-557`, `docs/org/weaponRay.md`, `analysis/aim-assist-ttk/FINDINGS.md`.
+  burst at a fixed target, then compare. And settle `BL-557` first, and take the reading at a known
+  `--difficulty=`: with the pools wrong, any TTK number here is unusable as evidence either way.
+  *Cross-refs:* `BL-557`, `Flight/Difficulty`, `docs/org/weaponRay.md`,
+  `analysis/aim-assist-ttk/FINDINGS.md`.
 
 ## Weapons & combat
 
@@ -2582,7 +2565,7 @@ usual.
   two readings of the same path are in the tree and one is stale; reconcile them before touching the
   code. Removing evasive maneuvers on damage is a large behavioural change to make on one line of a
   decode page, and the steady-hand roll itself is not in question, only what a failed roll does.
-  *Cross-refs:* `BL-556`, `BL-557` (the other two TTK causes), `docs/org/aiControlLaw.md`.
+  *Cross-refs:* `BL-557` (the other open TTK cause), `docs/org/aiControlLaw.md`.
 
 - `BL-563` `[Bug]` **CM12 (C2/M01) cannot be won: `DEDG` counts a deactivated roster member as
   alive, so the wave chain that wakes the security Furys and the Knight Firebrands never fires.**
