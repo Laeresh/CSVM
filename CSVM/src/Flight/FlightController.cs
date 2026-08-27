@@ -56,9 +56,9 @@ public partial class FlightController : Node3D
     /// <see cref="Cockpit"/> is.</summary>
     public Node3D? CockpitInterior;
 
-    /// <summary>The interior's own render pass (<c>--cockpit-pass</c>), which takes
-    /// <see cref="CockpitInterior"/> out of the plane model and draws it at the origin. Null unless
-    /// the flag asked for it, and then the interior renders in the main world as before.</summary>
+    /// <summary>The interior's own render pass, which takes <see cref="CockpitInterior"/> out of
+    /// the plane model and draws it at the origin. Null under <c>--no-cockpit-pass</c>, when the
+    /// interior renders in the main world instead.</summary>
     public CockpitOverlay? CockpitPass;
 
     /// <summary>The wobble oscillators and the pivot they roll — the node the assembler hung

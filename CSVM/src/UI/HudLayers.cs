@@ -12,7 +12,7 @@ namespace CSVM.UI;
 /// </summary>
 internal static class HudLayers
 {
-    /// <summary>The cockpit interior's own render pass (<c>--cockpit-pass</c>), under everything
+    /// <summary>The cockpit interior's own render pass (<c>Flight/CockpitOverlay</c>), under everything
     /// else: 3D always draws before any canvas layer, so a negative layer still composites over
     /// the world while the whiteout, the screen wash and the HUD keep drawing over the panel,
     /// exactly as they do when the interior is in the main world.</summary>

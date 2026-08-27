@@ -10,7 +10,7 @@ namespace CSVM.Flight;
 /// survives the move, because the plane position and the <c>cockpit_camera</c> offset cancel
 /// between the eye and the panel. What is left is small, so float32 rounds it far below a pixel,
 /// which the interior's world transform at chapter-scale coordinates does not.
-/// Behind <c>--cockpit-pass</c>: default off, so the shipped picture is the main world's.
+/// The shipped path; <c>--no-cockpit-pass</c> leaves the interior in the main world instead.
 /// One per player, built on that player's own HUD parent (<see cref="PlayerRig.HudParent"/>).
 /// </summary>
 public sealed partial class CockpitOverlay : CanvasLayer
@@ -127,11 +127,10 @@ public sealed partial class CockpitOverlay : CanvasLayer
         };
         if (env != null)
         {
-            // Duplicated rather than shared, because the background has to go: a sky drawn here
-            // would paint over the main view. Ambient still reads the Sky resource it keeps.
-            var copy = (Godot.Environment)env.Duplicate();
-            copy.BackgroundMode = Godot.Environment.BGMode.ClearColor;
-            view.World3D.Environment = copy;
+            // The sky stays: a transparent viewport never paints its background, and clearing it
+            // stopped the sky radiance the ambient reads, which darkened the panel and lost its
+            // blue. Duplicated so the pass owns its copy rather than the world's resource.
+            view.World3D.Environment = (Godot.Environment)env.Duplicate();
         }
         var camera = new Camera3D { Name = "interior_camera", Near = 0.01f, Far = 100f, Current = true };
         DirectionalLight3D? light = null;

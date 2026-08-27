@@ -2846,8 +2846,8 @@ public partial class GameSession : Node3D
                  $"({(count == 2 ? "stacked top/bottom" : "2×2 grid")})");
     }
 
-    // --cockpit-pass: one interior render pass per rig, on that player's own HUD parent, so
-    // splitscreen gets a pass per pane rather than one for the window. Built after the rigs, since
+    // One interior render pass per rig, on that player's own HUD parent, so splitscreen gets a
+    // pass per pane rather than one for the window (--no-cockpit-pass opts out). Built after the rigs, since
     // the interior it moves is the plane build's and the sun and environment it copies are the
     // session's. ⚠ An airframe swap rebuilds the interior and leaves this pass holding the old
     // node; the prototype hides itself rather than drawing a freed one (CockpitOverlay.Sync).

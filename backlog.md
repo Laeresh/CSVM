@@ -1973,9 +1973,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   priority 1 over the `dash` panel at 0) swapped winner with the panel from frame to frame. The
   interior now builds on its own `SceneBuilder` carrying `DepthBiasScale = 1/InteriorScale`, which
   restores the absolute separation the authoring assumed; the airframe, the world and all four
-  plane-bearing goldens are untouched by it. What remains in a Cockpit capture is a sub-pixel
-  wobble of each instrument's projected position, different per instrument, which is `BL-556`;
-  driving the authored needles did not change it either way.
+  plane-bearing goldens are untouched by it. The per-instrument jitter that survived that fix was
+  float32 rounding of the interior's world transform at chapter-scale coordinates, and the
+  interior now draws in its own origin-relative pass (`Flight/CockpitOverlay`,
+  `--no-cockpit-pass` opts out). One observation stays: pitched up toward the sun, the compass
+  drum's upper face reads as a bright bar inside the window, with and without the pass, so it is
+  the authored geometry under the sun rather than a render defect; whether the original shows it
+  is unchecked.
   *Cross-refs:* `PLAN-cockpit-view.md` B11 (parked the states; also settles that the `gauges` child
   itself must stay visible — it is not a needle overlay). The windshield bullet-hole decals
   (`bullet1`-`bullet5`) share the same parked-state mechanism but are driven by the unrelated
@@ -1983,42 +1987,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Neither that family nor either other `PLAYER_1ST_PERSON` def (`muzzle_burst`, `player-1`'s
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
-
-- `BL-556` `[Bug]` **The 3D cockpit instruments jitter against a still cockpit shell: float32
-  rounding of the interior's world transform at chapter-scale coordinates.** Reported at the
-  controls and reproduced unattended: in a flown Cockpit view the dial faces move 1-3 px frame to
-  frame, each by its own amount, inside bezels, struts and a dash that hold still. *Evidence:* a
-  bezel-only phase-correlation registration of each dial against strut and dash control regions
-  over consecutive `--shots=4` frames of a `--fly --det` capture. At `--pos=0,300,0` every region
-  holds within 0.02 px whatever the heading; at `--pos=10000,300,0 --direction=-0.743,0,-0.669`
-  the gun and damage dials jump 0.6-0.7 px; at `--pos=20000,300,0` with that heading the
-  speedometer jumps 2.7 px, the gun gauge 1.7 and the altimeter 1.5; at the same 10 km position
-  with heading 0 nothing moves, because an axis-aligned basis multiplies by exact 0s and 1s. At the
-  C1 mission spawn (`-7066, 326, -5519`, heading -48°) the faces jump 1-3 px on both the wall clock
-  and `--det`. The struts hold at 0.004 px throughout: a few large instances round elsewhere than
-  the many small dial-face instances, which is why the instruments move relative to each other and
-  to the shell. *Ruled out:* the gauge drive, the camera shake pivot, mipmaps and anisotropy,
-  temporal antialiasing, the autohead idle aim, the depth-bias vertex scale (green at the origin
-  with the same biases), the bezel-versus-panel draw-order fight (real, fixed by the interior's
-  `DepthBiasScale`), and texture shimmer (the registration measures geometry and is green at the
-  origin with the same textures). *Fix shape:* built behind `--cockpit-pass`, default off
-  (`PLAN-cockpit-panel.md` C21, `Flight/CockpitOverlay`): the interior rendered in its own
-  `SubViewport` with its own `World3D`, camera and interior both at the origin, so no
-  chapter-scale coordinate enters the chain. Every dial region reads 0.000 px with the flag on;
-  what remains is the judgement at the controls before the flag becomes the default. The
-  alternative, an engine build with double-precision coordinates, fixes the class outright at the
-  cost of a custom Godot build.
-  *⚠ Traps:* ⚠ A pinned aircraft at heading 0 cannot show this at any distance, and a
-  luminance-weighted centroid moves with shading: the plan's first C20 reading closed the fix
-  unbuilt on exactly those two choices. Measure flown, rotated, over consecutive frames, with a
-  shell control (`docs/verification.md`). `--hold` holds inputs and the plane glides, so it is not
-  a static scene either. The eye reported this and the eye closes it; the registration table is
-  the instrument, not the verdict.
-  *How you'd know it worked:* the same registration at `--pos=20000,300,0` with the rotated heading
-  reads the struts' 0.004 px floor on every dial region, and in a flown Cockpit view the dial
-  graduations hold still against the bezel and the shell.
-  *Cross-refs:* `BL-431` (the drive and the draw-order fix), `PLAN-cockpit-panel.md` C20/C21,
-  `docs/verification.md`.
 
 - `BL-510` `[Feature]` **The auto-land prompt shows a placeholder line instead of the original's
   `langui` string.** *Evidence:* the original lights message `0xb5` (or `0xb6` for a pad binding)

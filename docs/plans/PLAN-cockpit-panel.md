@@ -1,8 +1,8 @@
 # Cockpit panel: the four open instrument defects
 
-**ACTIVE PLAN** (written 2026-08-27). It sits in `docs/`, which by this repo's convention makes it a
-live plan. Move it to `docs/plans/` with a `COMPLETE` banner, and add its row to
-[`plans.md`](plans.md), when every item lands.
+**COMPLETE** (2026-08-28). Six items: A1, A2, B11, B12, C20 and C21 landed; C20's first reading
+closed C21 as disproven and its re-measurement reopened and confirmed it. Kept for its evidence
+and its dead ends; the live work is in `backlog.md`.
 
 This plan finishes the authored 3D instrument panel inside the pilot's own `cockpit1`. The needle
 drive, the two warning lamps, the nitro dial gate and the character readouts landed under `BL-431`
@@ -84,7 +84,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 ### Wave C — the panel vibration
 
 20. ☑ Confirm or kill the float-precision hypothesis with a near-origin capture
-21. ◐ Prototype the interior in its own pass with the camera at the origin
+21. ☑ Prototype the interior in its own pass with the camera at the origin
 
 ## Dependency and parallelism notes
 
@@ -397,7 +397,7 @@ passed, engine errors clean; goldens 16 shots hash-identical; hitch stage clean 
 The belt and damage recolour and the horizon ball were then confirmed at the controls in a flown
 Cockpit view.
 
-## C21 ◐ Prototype the interior in its own pass with the camera at the origin
+## C21 ☑ Prototype the interior in its own pass with the camera at the origin
 
 **Reopened.** C20's first reading closed this item as disproven; its re-measurement with a rotated
 attitude confirmed the hypothesis instead (see C20's Result), so this is the fix. The regression
@@ -484,6 +484,16 @@ aircraft's rotation and drops only the translation, camera and interior both rot
 origin, so the sun, the sky ambient and the flash positions are the main world's with nothing
 re-aimed, and the dial face reads 16,14,5. A rotation at the origin rounds far below a pixel: the
 20 km registration with the rotation kept is 0.000 px on every dial.
+
+Judged at the controls with all of that in: no jitter, the wobble and the muzzle lighting back,
+and the pass is the shipped path, `--no-cockpit-pass` the opt-out. Two more numbers came out of
+the last A/B. The pass's environment copy had its background cleared, which stopped the sky
+radiance the ambient reads and left the panel darker and less blue (dial 13,11,3 against
+17,15,11); a transparent viewport never paints its background, so the copy keeps the sky and the
+dial reads 14,12,4. And the bright bar that appears along the top of the compass window pitched up
+toward the sun is the drum's upper face under the sun: it reads the same with the pass and
+without it (51 and 46 toward the sun, 15 and 0 away, at the same pose), and the user saw it in
+both, so it is the authored geometry and not this item's; it is noted under `BL-431`.
 
 The viewport is transparent-backed and sits on `HudLayers.CockpitPass` (−1): 3D draws before any
 canvas layer, so the world still shows under the panel while the cloud whiteout, `ScreenFlash` and
