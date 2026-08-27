@@ -183,6 +183,10 @@ public sealed class CameraController
     /// must be able to replace it without touching these modes (PLAN-cockpit-view, Decision 2).</summary>
     public PilotViewMode ViewMode { get; set; }
 
+    /// <summary>Where the owned camera's eye is in the world this frame, for a pass that draws
+    /// relative to it (<see cref="CockpitOverlay"/>).</summary>
+    public Vector3 EyePosition => _camera.GlobalPosition;
+
     /// <summary>The pilot's head in the two first-person views: snap, free-look and the center key,
     /// smoothed to the angles <see cref="FirstPersonView"/> aims with. Built with the first-person
     /// elevation floor (level), which is the floor the original's own first-person caller passes;

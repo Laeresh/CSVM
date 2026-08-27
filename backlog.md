@@ -1769,7 +1769,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     every frame the excess-over-gate law (`(speedRatio − min_speed)/magnitude_quotient`,
     `PlaneShake.SetSpeedRatio`) is positive. CSVM's `_speed` oscillator is a deterministic damped
     sawtooth, a different mechanism from the original's random walk, and next to the gun buzz now
-    ported to its own random-walk step, the sawtooth dive rattle reads muted. **Open/fidelity
+    ported to its own random-walk step, the sawtooth dive rattle reads muted; in the Cockpit view
+    at full speed it is too small to see at all, while the firing wobble reads. **Open/fidelity
     action:** give `_speed` a random-walk accumulator on the pattern of `_fire` (a
     `GunBuzzKickScale`-equivalent tune knob), fed by the existing `SetSpeedRatio` law, then playtest
     the dive against the original clip to judge the ported magnitude. Trace:

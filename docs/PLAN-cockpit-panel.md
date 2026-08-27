@@ -466,6 +466,18 @@ world did. Whether the original's camera rides the rocked plane instead, so that
 and the panel holds, is `BL-266` (f) and unchanged by this item. It is also the pose's blind spot:
 a frame pair cannot show a wobble, only a flight can.
 
+The same flight found the muzzle flashes no longer lighting the cockpit: they are pooled
+`OmniLight3D`s on the projectile node in the main world, which the pass's world cannot see.
+`ProjectilePool.ActiveMuzzleLights` now lists the lit flashes and `Sync` mirrors each into the
+pass at its eye-relative offset with the attitude taken out (`ToOverlay`, asserted by the suite),
+so the two big first-person flashes reach the struts as they did. Two reports from that flight
+stay open: the high-speed wobble is too small to see in the Cockpit view at all, which is
+`BL-266` (d) and not the pass's doing; and the upper side of the compass housing turns white in a
+Bloodhawk pitched up into the sky with the pass on. The session sun casts no shadows, so it is not
+a lost fuselage shadow; the pass's environment copy keeps the sky for ambient but clears the
+background, and the interior's frame no longer turns under the sky, so the candidates are the
+ambient or reflection source. It needs a capture pair at the chapter and attitude it was seen in.
+
 The viewport is transparent-backed and sits on `HudLayers.CockpitPass` (−1): 3D draws before any
 canvas layer, so the world still shows under the panel while the cloud whiteout, `ScreenFlash` and
 the HUD keep drawing over it, exactly as they do with the interior in the main world. Lighting is a

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 
 namespace CSVM.Flight;
@@ -20,6 +21,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
     private readonly DirectionalLight3D? _light;
     private readonly DirectionalLight3D? _sun;
     private readonly Basis _mount;
+    private readonly List<OmniLight3D> _flashes = new();
 
     private CockpitOverlay(SubViewport view, Camera3D camera, Node3D interior,
         DirectionalLight3D? light, DirectionalLight3D? sun)
@@ -65,14 +67,22 @@ public sealed partial class CockpitOverlay : CanvasLayer
     public static Basis WobbledMount(Basis mount, float shakeRoll) =>
         new Basis(Vector3.Back, shakeRoll) * mount;
 
+    /// <summary>A main-world point in the pass's frame: the overlay camera sits at the eye with
+    /// the plane's attitude taken out, so a light at <paramref name="world"/> lands at the
+    /// eye-relative offset turned back into the plane's own frame. Public for the suite.</summary>
+    public static Vector3 ToOverlay(Vector3 world, Vector3 eye, Basis attitude) =>
+        attitude.Orthonormalized().Transposed() * (world - eye);
+
     /// <summary>Point the overlay camera where the pilot's head points and re-light the panel for
     /// this frame's attitude, then show or hide the pass to match the interior's own visibility so
     /// <see cref="CockpitVisibility"/> keeps deciding which views draw a cockpit. Called every
     /// frame the rig owns its camera; <paramref name="attitude"/> is the DRAWN plane basis and
     /// <paramref name="shakeRoll"/> the wobble pivot's roll, which the interior inherited below
     /// that pivot in the main world and takes here through <see cref="WobbledMount"/>.</summary>
-    public void Sync(Basis attitude, CameraController camera, float shakeRoll)
+    public void Sync(Basis attitude, CameraController camera, float shakeRoll,
+        IEnumerable<(Vector3 Position, float Range, Color Color, float Energy)>? flashes = null)
     {
+        MirrorFlashes(flashes, camera.EyePosition, attitude);
         bool shown = GodotObject.IsInstanceValid(_interior) && _interior.Visible;
         Visible = shown;
         _view.RenderTargetUpdateMode = shown
@@ -161,5 +171,34 @@ public sealed partial class CockpitOverlay : CanvasLayer
         // the mount PlaneBuilder built, and the pass changes only where the frame's origin is.
         interior.Transform = new Transform3D(interior.Transform.Basis, Vector3.Zero);
         _view.AddChild(interior);
+    }
+
+    // The muzzle flashes are OmniLight3Ds in the main world, which this world cannot see, so each
+    // lit one gets a twin here at the same eye-relative place; twins past the lit count go dark.
+    private void MirrorFlashes(
+        IEnumerable<(Vector3 Position, float Range, Color Color, float Energy)>? flashes,
+        Vector3 eye, Basis attitude)
+    {
+        int used = 0;
+        if (flashes != null)
+        {
+            foreach (var f in flashes)
+            {
+                if (used >= _flashes.Count)
+                {
+                    var twin = new OmniLight3D { Name = $"interior_flash_{used}", ShadowEnabled = false };
+                    _view.AddChild(twin);
+                    _flashes.Add(twin);
+                }
+                var light = _flashes[used++];
+                light.Position = ToOverlay(f.Position, eye, attitude);
+                light.OmniRange = f.Range;
+                light.LightColor = f.Color;
+                light.LightEnergy = f.Energy;
+                light.Visible = true;
+            }
+        }
+        for (int i = used; i < _flashes.Count; i++)
+            _flashes[i].Visible = false;
     }
 }

@@ -1677,7 +1677,7 @@ public partial class FlightController : Node3D
             // Same rule, so the panel is driven exactly on the frames it is on the screen.
             _panelShown = CockpitVisibility.Rules(_cam.ViewMode, firstPersonPose).Interior;
             // After the hide, so the pass shows exactly the frames the interior itself does.
-            CockpitPass?.Sync(_renderPose.Basis, _cam, Shake?.Roll ?? 0f);
+            CockpitPass?.Sync(_renderPose.Basis, _cam, Shake?.Roll ?? 0f, Projectiles?.ActiveMuzzleLights());
             _cam.LogView(view, _model.Position, _model.Attitude);
         }
 
