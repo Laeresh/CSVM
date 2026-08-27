@@ -2640,6 +2640,32 @@ public partial class FlightController : Node3D
         }
     }
 
+    // Where a target source is DRAWN this frame, as opposed to where the gun solves to. An
+    // aircraft's WorldPosition is the last physics pose; its node sits on _renderPose, the pose
+    // interpolated between sim steps that the chase camera follows too. A marker projected from
+    // the physics pose through that camera stalls between ticks and jumps on each, a shake that
+    // grows with angular rate. Turret and structure positions are node positions already.
+    // False on a freed, out-of-tree or unknown source: the caller keeps its physics snapshot.
+    internal static bool TryRenderPosition(object? source, out Vector3 position)
+    {
+        switch (source)
+        {
+            case FlightController fc when GodotObject.IsInstanceValid(fc) && fc.IsInsideTree():
+                position = fc.GlobalPosition;
+                return true;
+            case TurretController t:
+                position = t.WorldPosition;
+                return true;
+            case DestructibleRegistry.Instance inst when GodotObject.IsInstanceValid(inst.Anchor)
+                && inst.Anchor.IsInsideTree():
+                position = inst.Anchor.GlobalPosition;
+                return true;
+            default:
+                position = Vector3.Zero;
+                return false;
+        }
+    }
+
     // The breadcrumb label for a standing target: "P{n}" for a human-readable aircraft slot, the
     // node/label name (TargetPool.NameOf) for a turret or structure.
     private static string TargetLabel(object? source) =>

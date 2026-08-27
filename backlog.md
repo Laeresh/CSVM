@@ -2228,22 +2228,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
 
-- `BL-519` `[Bug]` **The target marker jitters at high angular rate, and the `--debug-markers`
-  overlay does not.** *Evidence:* reported at the controls, again after anti-aliasing was ruled
-  out: the selected-target bracket and label shake during a close fly-by of an enemy, when the
-  target's bearing changes fast. The user's impression is that the `--debug-markers` tag on the
-  same aircraft is steady. Both project through the pane's `Camera3D` in `TargetHud`
-  (`DrawSelected` at `TargetHud.cs:434-437`, `DrawOpponent` at `:520-522`), so a difference between
-  them is in what position each reads (`target.Position` against `plane.GlobalPosition`) or in
-  when each is sampled against the camera's own update. A marker read from a position updated in
-  the physics step and projected through a camera updated in the render step, or the reverse, shows
-  exactly this at high angular rate. *Fix shape:* log both screen positions per frame during a
-  scripted fly-by and diff them; then unify the two draws on one position source sampled in one
-  place. *⚠ Traps:* the previous round blamed anti-aliasing and was wrong; do not chase the
-  renderer again. Pixel snapping of the bracket lines is a separate, smaller effect and not the
-  cause of a shake that tracks angular velocity. *Cross-refs:* `BL-397`, `BL-181`,
-  `docs/org/targeting.md`.
-
 - `BL-520` `[Bug]` **The nitro gauge draws wrong while the injector works.** *Evidence:* reported
   at the controls: nitro boosts the aircraft as expected, and the dial's display is "completely
   wrong". The gauge is `GaugeCluster`'s two needles fed by `NitroInstalled`/`NitroBoosting`/
