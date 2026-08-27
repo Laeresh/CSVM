@@ -2601,9 +2601,13 @@ usual.
   when `+0x91d == 0`, so a deactivated member is dead to `DEDG` until `WAKEUP_ENEMIES` clears both
   bytes. *Fix shape:* skip `Inert` members in `GroupLiveCount` (crashed OR inert is "not
   counted"), correct the comment, and add a unit test on a two-member group with one inert block
-  (`ObjectiveGraphTests` has the DEDG harness). Then fly CM12 through: two gyros down wakes the
-  Furys, the Goose flying plus group 1 down to two wakes the Firebrands, `hkfirebrand_9` down wakes
-  primary 3. *⚠ Traps:* CM02's `campaign-squad-wake` suite (BL-499) has a deactivated squad behind
+  (`ObjectiveGraphTests` has the DEDG harness). Then fly CM12 through in its authored order:
+  the harbor gate, then convoys 1 to 3, which sends the Goose onto its fourth taxi leg
+  (`path4_continue`, `goosepath.zrd`) and completes OBJECTIVE11; only then is OBJECTIVE12's
+  `DEDG [1, 2]` evaluated, and with the gyros already down it completes at once and wakes the
+  Furys. The Goose airborne (`fly_the_goose`) re-evaluates `DEDG [1, 2]` through OBJECTIVE65 and
+  wakes the Firebrands; `hkfirebrand_9` down wakes primary 3. Killing the gyros early triggers
+  nothing by itself. *⚠ Traps:* CM02's `campaign-squad-wake` suite (BL-499) has a deactivated squad behind
   a `DEDG [1, 0]` gate; check which group that squad authors before assuming the suite's
   expectation survives the change, and mint a follow-up if it does not. The `DEDG` generator form
   (third argument) is a separate, unimplemented count and not this bug. *Cross-refs:* `BL-499`,
