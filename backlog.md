@@ -1221,61 +1221,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   and hookup. `ObjectCycleTexture` still needs a mission that actually builds a `taildamage` node,
   which none of the ones this project defaults to do.
 
-- `BL-218` `[Tuning]` `[Owed-playtest]` **Puffer `NUMBER` default (2026-08-01)** — `NUMBER` is absent from 680 of C1's 721
-  `PufferState` events, including `large_30sec_fire`'s `fire_n_smoke`, and `PufferState.FromAnimEvent`
-  falls back to **1** sprite per `TIME_INTERVAL`.
-  ✅ **The default half is SETTLED, and our 1 is right** (2026-08-10, `PLAN-puffer-engine-deltas`
-  D10): the puffer object's ctor `FUN_00550100` writes `1` to `+0x04` before any authored key is
-  applied ([`docs/org/puffer.md`](docs/org/puffer.md)). This entry's original reasoning — that the
-  sibling `large_10sec_fire`'s `NUMBER 3` implied a higher default, leaving every unnumbered emitter
-  thin — is **withdrawn**: 3 is that puffer's own authored value and was never evidence about the
-  unauthored case. **Do not raise the fallback**; a
-  density gap is now a look question about our sprites, never a default question. What remains:
-  judge the density at the controls now that the fire's *shape* is right
-  (`PT-22`) — it is a whole-effect multiplier, so a wrong value is visible on the destruction fires,
-  the damage-stage sputters and the wreck smoke at once.
-  ⚠ Traps: this is not the `puffer.*SizeScale` knobs — those scale sprite size, and trading
-  count for size is exactly the substitution that makes a too-sparse plume read as "too small"
-  instead. That substitution shipped for a while as the global 4× `SizeScaleDefault`; `BL-282`
-  reverted it to the authored 1× (2026-08-05), so a density verdict now measures `NUMBER`
-  alone. Do not tune it from a single `--screenshot`: sprite count only reads over a time series
-  (SHOT-19). And do not infer the default from the effects readers — the `NUMBER`-carrying states
-  are a biased sample, since `PufferState.FindInReader` treats the presence of `NUMBER` as what
-  makes a state "fully defined" in the first place.
 
-- `BL-231` `[Tuning]` `[Owed-playtest]` **Effect-template pool sizes (D10, 2026-08-02).** `CSVM/data/effect_pools.json` — how many
-  copies of each effect template the world-effects stage holds, so that many overlapping calls to one
-  effect each keep their own (`BL-225`). **Invented, and the data cannot settle it**: the original
-  copies its template per call and has no such number, so any finite pool is our approximation of
-  "unbounded" — which is why it is an editable file and not a `const`. Shipped: default **4 base
-  +1 per extra player**, `partial_damage_obj` **8 +1**, the three gun roots **1 +0**, ceiling
-  **16**. The default came from rocket concurrency (`FIRE_RATE` 1/s against ~2.5 s of authored trail
-  motion → at most 3 overlapping blasts) plus a spare; the sputter root from measurement (five
-  simultaneous `ap_h2otwr` kills wrapped a 4-slot pool exactly once, and do not wrap an 8).
-  Judge it where concurrency is highest — a rocket burst into a cluster of destructibles, and
-  splitscreen/multiplayer, where each extra aircraft is another source. **The per-player term and
-  the ceiling are the two knobs a many-player build should re-judge**: at 16 players the default
-  root wants 19 and gets 16.
-  The instrument is in the build: `AnimRuntime.PoolRecycles` counts every call that wrapped onto a
-  still-live slot and the runtime names the first per effect (`anim: effect pool for '<name>'
-  recycled slot …`); the world-effects build line prints the sizes actually staged. A scripted run
-  that logs no recycle had enough pool — raise the root that logs one, not the default.
-  ⚠ Traps: it is not free — each slot is one more copy of that root's subtree (1 player: 147
-  templates; 4 players: 252), so raising the default multiplies world-build cost and memory for
-  effects that are mostly not concurrent. The three gun-impact roots stay at **1** deliberately: C8
-  throttles the gun family to one play per 0.1 s per name, so pooling them buys copies nothing uses;
-  raising them belongs with removing that throttle (its own step, its own emitter-count check).
-  Sizing a root **0** is not a way to disable pooling — it clamps to 1, because staging no template
-  at all reads in-game as a broken effect.
-  **Extended 2026-08-04 (`BL-253`) with a second, smaller pool in the same file** —
-  `localCallRoots`/`localCallDefault`, for `AnimRuntime.ResolveLibraryRoot`'s death-triggered
-  library-root call templates (`docs/formats/gamez.md`), kept apart from `roots` because that map
-  is validated against `WorldEffectsFactory.EffectStageRoots` and these names never are one. Same
-  invented-number caveat, narrower scope: `facdsticks` (C2's facade-panel debris template) is the
-  one entry, **base 6**, no per-player term (world geometry, not per-player ordnance) — sized
-  against a facade row breaking panels ~0.2–0.5 s apart with each set's flight lasting 4–5 s, so a
-  10-panel row can want 8–10 concurrent sets; 6 covers most passes and wraps (recycles the oldest,
-  still-flying set) on a longer burst.
 
 - `BL-293` `[Tuning]` **Rocket impact rings: the fixed-axis upper ring is faithful but reads
   poorly — parked** (PT-35). Faithfulness versus feels-good, decide later: the original
@@ -1324,10 +1270,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-535` `[Bug]` **A repeat sonic burst pays a 10 to 14 ms slot re-reset on every play from the third on.** With every emitter pre-built at bind (`AnimRuntime.PrewarmEmitters`), the weapon-lab probe (`--chapter=C1 --weapon-lab=wep_08 --weapon-fire --infinite-ammo --weapon-surface=default --weapon-standoff=90`) still records one `effect_checkout` sample per burst once `hitchMonitor.floorMs` is 10 and `medianMultiple` 1.2 under `--no-det --no-vsync`: 0.6 ms for the first two bursts, 10.2 to 13.9 ms for every burst from the third on, one call each. The step lands two bursts before a 4-slot pool could recycle, so it is not a wrap and not construction; it is the cost of re-resetting a slot copy that has run before, in `AnimRuntime.ResetCheckedOutCopies` (the re-reset that fixed the rings vanishing from the fifth burst on). Under the stock monitor it never trips, so it is a per-burst cost rather than a hitch, and at vsync it is inside a frame.
   *Where to look:* what the re-reset walks per copy (every template node of the subtree, or only the ones the last run posed), and whether the END pose can be recorded at stop time so the reset is a replay of a short list. ⚠ `docs/verification.md` PERF-14: the stock probe cannot fail on this; the lowered monitor is the only instrument that sees it, and it needs both knobs, since the trigger is the larger of the floor and median × multiple.
-  *Cross-refs:* `BL-231` (the pool-size judgement this was measured under), the `effect-pool-reset` suite (the pose contract the re-reset keeps).
+  *Cross-refs:* `BL-231` (closed; the pool-size judgement this was measured under), the `effect-pool-reset` suite (the pose contract the re-reset keeps).
 - `BL-536` `[Bug]` **Every .NET collection in flight is a gen1 collection with ~45k objects pending finalization and ~30 MB promoted, pausing 24 to 29 ms about every 12 s.** The 90 to 120 ms stall every ~190 frames that this item was filed on is gone: it was the `EXECUTION_BY_RANGE` sweep re-measuring 69 deferred anchors' mesh bounds on every 8 m cell crossing, ~25 MB/s of finalizable `StringName`/`Godot.Collections.Array` wrappers (now measured once per anchor, `AnimRuntime._rangeOriginLocal`). What remains is under `HitchMonitor`'s 40 ms floor and no longer trips, but a `dotnet-trace` GC-verbose capture on `--fly --chapter=C1 --plane=player_bhawk --perf --no-vsync` still shows every collection as gen1 (`gc0_delta` and `gc1_delta` move together), `FinalizationPendingCount` ~45k at each one and a residual 1.7 MB per 60-frame `--perf` window, of which `GodotWorldQuery.Ray` (a `PhysicsRayQueryParameters3D`, an `Array<Rid>` and a result `Dictionary` per cast, several casts a sim step), `AnimInstance.Live()` (an iterator per frame from `AnimRuntime.Retirable`) and `GaugeCluster.DrawGaugePoly` (a `Color[]` and `Vector2[]` per polygon per draw) are the sampled allocators.
   *Where to look:* what keeps promoting ~30 MB into gen1 per collection when the allocation rate is 3 MB/s (finalizable Godot wrappers survive their first collection by construction, so the ray-query objects are the first suspect: reuse one `PhysicsRayQueryParameters3D` per caster), and whether the 24 to 29 ms pause is the finalizer queue's registration rather than marking. ⚠ PERF-13: compare only within one vsync mode; the residual pause needs `hitchMonitor.floorMs` lowered to be seen at all (PERF-14's lowered-monitor caveat).
   *Cross-refs:* `BL-355` (closed; the capture that first showed the unexplained trip), `PLAN-perf-hitches`.
+- `BL-537` `[Owed-playtest]` **Effect pools at four players, judged in play.** The pool sizes in `CSVM/data/effect_pools.json` were re-judged on a build with no first-use construction cost: rockets and the sonic burst never wrap, a four-object simultaneous death wraps `flame_ball_01` at 4 and 6 slots and is quiet at 8 (now shipped), and seven or more identical deaths in one frame wrap at the 16 ceiling and cannot be sized away. At the controls the single-player half reads right: four fireballs burn out in place, and the seven-death wrap is not visible under the debris. Still owed: a 4-player splitscreen session with everyone firing, judged for anything that reads as shared between panes, and the ceiling for many-player builds (at 16 players the default root wants 19 and gets 16). The instrument is `AnimRuntime.PoolRecycles` and the `anim: effect pool for '<name>' recycled slot` DEBUG line in the log file sink; the sizes staged print on the world-effects build line. ⚠ Raise only a root that logs a recycle, never the default; the three gun roots stay at 1; a root sized 0 clamps to 1. Each slot copies the root's subtree (155 templates at 1 player, 263 at 4).
+  *Cross-refs:* `BL-535` (the per-burst re-reset cost measured under the same instrument), `BL-296`/`BL-299` (the other splitscreen-scoped items).
+- `BL-538` `[Bug]` **A dark band on the large buildings at the distance the templates clutter fades out.** Reported at the controls in C5 with the authored `far_fade_range` applied: in the original the fade reaches the other buildings as well as downtown, and in the remake the larger (gamez) buildings show a dark area at the range where the downtown clutter vanishes, with buildings nearer and farther than that band reading brighter. Not the dither itself, which reads as the original's fade in motion.
+  *Where to look:* whether the collapsed clutter cards still write depth or a dark fragment behind the band (the `csky_clutter_fade` cutout keeps a card in the pass until `step(d, far)` culls it, and a card collapsed to zero size should contribute nothing), whether the fog-volume clutter's own `far_fade` and the templates fade overlap at that range, and whether the gamez buildings carry a `far_fade_range` of their own the remake ignores (`FUN_004d5de0` applies the scaled test to every type-5 scene node, not only clutter). A C5 screenshot pair at the band distance with `graphics.clutterFarFade` on and off separates the two.
+  *Cross-refs:* `BL-337` (closed; the fade), `docs/org/clutter.md`.
+
 ## Audio
 
 - `BL-455` `[Feature]` **There is no audio options menu, so the music level is a hard-coded
@@ -1985,7 +1937,7 @@ nearest/union rule, or record it as deliberately single/global. This theme colle
 viewer set behind `ProjectilePool.Viewers` / `ScreenSize.NearestFloor` for draw rules that say
 "the camera". Sim state stays global — the mission wind is the worked example
 (`Session/WeatherRig.Tick`, stepped once per frame outside the per-rig loop on purpose). Splitscreen-scoped items that live with
-their own system: `BL-231` (per-player pool term), `BL-296` (per-player ActionMap), `BL-299`
+their own system: `BL-537` (the 4-player pool judgement), `BL-296` (per-player ActionMap), `BL-299`
 (MP spawn maps), `BL-301` (Dogfight tuning), `BL-314` (race countdown), `BL-351` (per-pane target
 cycling).
 
