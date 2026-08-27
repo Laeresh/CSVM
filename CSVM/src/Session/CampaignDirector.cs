@@ -822,7 +822,10 @@ public sealed class CampaignDirector
         public void WakeAnim(string anim, string? node)
         {
             var anchor = node != null ? Resolve(new[] { node }) : null;
-            int started = _in.Runtime?.Play(anim, anchor).Count ?? 0;
+            // A mission trigger, not a plain Play: the definition's immediate closure may stage a
+            // library root, which only a trigger call is allowed to build (CM11's activate_pickup
+            // parents the dock's approach cone under the trailer's sensor this way).
+            int started = _in.Runtime?.PlayMissionTrigger(anim, anchor).Count ?? 0;
             GD.Print($"campaign: WAKE_ANIM '{anim}' started {started} definition(s)");
         }
 

@@ -485,7 +485,7 @@ difficulty(saved)
 ```
 
 `FUN_0047c210` is where that lands: a vehicle whose team differs from the player's has its armour
-and health maxima multiplied by **0.875 / 1.0 / 1.25** on difficulty 0 / 1 / 2
+and health maxima multiplied by **0.75 / 1.0 / 1.25** on difficulty 0 / 1 / 2
 ([`org/vehicleDamage.md`](../org/vehicleDamage.md)). So the skill names are a **hit-point** scale in
 Instant Action, and nothing else. Nothing on this path converts them to a 1-to-9 rating.
 

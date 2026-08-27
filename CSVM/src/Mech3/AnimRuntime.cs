@@ -645,6 +645,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// absent; ambient scripts keep their established zero-duration miss.</summary>
     internal bool MissionTriggerActive => _missionCallDepth > 0;
 
+    /// <summary>Sim seconds this runtime has advanced, for a suite reading which callback fed
+    /// <see cref="Advance"/>.</summary>
+    internal float Elapsed => _elapsed;
+
     /// <summary>How many <see cref="PlayEffectAt"/> calls took a pool slot whose previous instance
     /// was still live — the pool being smaller than the concurrency it met, so those two calls
     /// share one template copy (<see cref="TemplateStage{TNode}.Pooled"/>). Zero
@@ -877,15 +881,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return started;
     }
 
-    /// <summary>Starts a mission trigger and lets its immediate <c>CALL_ANIMATION</c> closure
-    /// materialize library-root actors. Use for authored runtime gates such as
-    /// <c>landings.zrd</c>, never for ambient bootstrap or the animation debugger.</summary>
-    public List<(AnimDefinition Def, Node3D? Anchor)> PlayMissionTrigger(string animName)
+    /// <summary>Starts a mission trigger and lets its immediate <c>CALL_ANIMATION</c> and
+    /// <c>OBJECT_ADD_CHILD</c> closure materialize library-root actors. Use for authored runtime
+    /// gates such as <c>landings.zrd</c> rows and the objective script's <c>WAKE_ANIM</c>, never
+    /// for ambient bootstrap or the animation debugger. <paramref name="fallbackAnchor"/> is
+    /// <see cref="Play"/>'s: the anchor a placeless definition runs on.</summary>
+    public List<(AnimDefinition Def, Node3D? Anchor)> PlayMissionTrigger(string animName,
+        Node3D? fallbackAnchor = null)
     {
         _missionCallDepth++;
         try
         {
-            return Play(animName);
+            return Play(animName, fallbackAnchor);
         }
         finally
         {
@@ -1169,6 +1176,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // per step, so one 4/60 s call and four 1/60 s calls are not the same playback.
         if (GameClock.Current is { } clock)
         {
+            // A realtime session advances on the physics tick (_PhysicsProcess); the frame keeps
+            // the advance only while the sim is held for a cutscene, since the movie is animation.
+            if (clock.Mode == GameClock.RunMode.Realtime && !clock.Halted && !clock.SimHeld)
+            {
+                return;
+            }
             for (int i = 0; i < clock.Steps; i++)
             {
                 Advance(clock.Dt);
@@ -1176,6 +1189,25 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return;
         }
         Advance((float)delta);
+    }
+
+    /// <summary>The realtime advance: one step per Godot physics tick, the tick the flight models
+    /// and the objective graph step on. ⚠ Never the frame's wall delta: physics catch-up is capped
+    /// per frame, so under load the sim falls behind wall time and a frame-driven advance runs
+    /// every authored motion faster than the aircraft beside it (CM11's trailer, CM10's balloons).
+    /// <see cref="GameClock.PhysicsDt"/> answers zero under a cutscene hold and in every
+    /// parent-driven mode, where <see cref="_Process"/> owns the advance.</summary>
+    public override void _PhysicsProcess(double delta)
+    {
+        if (ManualAdvance || GameClock.Current is not { Mode: GameClock.RunMode.Realtime } clock)
+        {
+            return;
+        }
+        float dt = clock.PhysicsDt(delta);
+        if (dt > 0f)
+        {
+            Advance(dt);
+        }
     }
 
     /// <summary>Advances the whole runtime by <paramref name="dt"/> seconds: motions, puffers,

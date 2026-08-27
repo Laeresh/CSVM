@@ -481,6 +481,86 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   voice line is flavour and this closes. *Cross-refs:*
   `BL-512` (the same sub's launch motion), `BL-522` (its launched fighters).
 
+- `BL-556` `[Bug]` **Enemy armour and health are not scaled by the difficulty setting.** *Evidence:*
+  the roster spawn `FUN_0047c210` multiplies the armour and health maxima of any vehicle whose team
+  differs from the player's by **0.75 / 1.0 / 1.25** on difficulty 0 / 1 / 2
+  ([`docs/org/vehicleDamage.md`](docs/org/vehicleDamage.md), "Where the numbers come from at spawn",
+  which records the scale as a decoded constant to apply, not a TUNE). In Instant Action the wave's
+  Novice/Veteran/Ace skill *is* that multiplier and nothing else: it stands in as the global
+  difficulty for the duration of one spawn
+  ([`docs/formats/instant-action.md`](docs/formats/instant-action.md), "So the skill names are a
+  hit-point scale in Instant Action, and nothing else"). CSVM applies no scale at any difficulty:
+  `InstantAction.cs` stores `InstantActionWave.EnemySkill` and says in its own doc comment that
+  nothing on the path reads it, and no difficulty or health-scale term exists in `CSVM/src`.
+  `AiFlightAssembler` seeds the unscaled airframe pools and applies only the faithful ±5 % per-spawn
+  jitter. **The campaign's own selector is the lowest of the three by default**: `rof/ui_strings.json`
+  ids 109-111 are `IDS_DIFFICULTY` = **Normal / Hard / Hardest** in that order, under
+  `IDS_GO_DIFFICULTY_DESC` "Select the difficulty level for a solo campaign", a separate vocabulary
+  from Instant Action's `IDS_IA_DIFFICULTY` novice/veteran/ace. Campaign Normal is therefore
+  difficulty 0 and takes the **0.75** multiplier, so CSVM's hostiles carry **a third more armour and
+  health than the original does on the setting the campaign is normally played at** (1 / 0.75), in
+  every mission. On Hard the omission is invisible and on Hardest CSVM is easier.
+  ⚠ The factor is `1 + k * 0.125` with `k` of **-2 / 0 / +2**, not -1 / 0 / +2: `MOV EDI,0xfffffffe`
+  at `0x0047cb3b` and `CMP EAX,0x2` / `MOV EDI,EAX` at `0x0047cb47`, raw bytes
+  `bf feffffff eb0c e8c93bfcff 83f802 7505 8bf8`. The spread is a symmetric two eighths either side
+  of 1.0. `docs/org/vehicleDamage.md` and `docs/org/hangar.md` gave the low tier as 0.875 and the
+  high as 1.125 and were corrected against the disassembly, along with the arithmetic they fed
+  (a patrol boat is 30/40/50, not 35/40/50).
+  *Fix shape:* carry the resolved difficulty to the spawn (the Instant Action wave's own skill for
+  that spawn, the session difficulty elsewhere) and apply the multiplier to the armour and health
+  maxima before the jitter, in the same place the jitter is applied.
+  *⚠ Traps:* the multiplier is on the MAXIMA at spawn, not on incoming damage, so it must not be
+  applied at the hit site. It applies only to a vehicle whose team differs from the player's, so the
+  player and the wingmen keep unscaled pools. The wave skill is not a pilot rating and must not be
+  routed into the nine-slot skill vector. And the ±5 % jitter is independent of it: apply both, in
+  that order, not one instead of the other.
+  *Cross-refs:* `BL-557` (the roster overrides that land in the same spawn path),
+  `analysis/aim-assist-ttk/FINDINGS.md`.
+
+- `BL-557` `[Bug]` **The roster's `init_health` and `armor` overrides are parsed away, so the named
+  aces spawn too soft.** *Evidence:* the original's roster spawn applies slot 7 `init_health` when
+  greater than zero and slot 66 `armor` when greater than or equal to zero, then the difficulty
+  scale ([`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md),
+  [`docs/org/vehicleDamage.md`](docs/org/vehicleDamage.md)). `RosterSpawnPlan` carries neither value,
+  `CampaignRosterPlan.Build` does not read them, `SpawnFor` cannot forward them, and the assembler
+  seeds the airframe defaults instead. There is no `InitHealth` symbol in the tree at all. The census
+  (`analysis/aim-assist-ttk/Census-RosterDurability.ps1`) over the 414 extracted blocks finds, among
+  the 251 enabled non-player-team ones, **25 authoring a positive `init_health` and 20 a non-negative
+  `armor`**, every armour value between 90 and 132 and every one of them an override that RAISES
+  durability above the airframe default. They are the mission's named aces: `hafury_1`-`_6` at
+  108/108 in C2/M03, `hkfirebrand_9` at 132/132, the Black Hat Brigands at 126/126, and so on.
+  *Fix shape:* add the two fields to `RosterSpawnPlan`, read them in `CampaignRosterPlan.Build`,
+  forward them through `SpawnFor`, and apply them in the assembler before `BL-556`'s difficulty
+  scale and the jitter.
+  *⚠ Traps:* **a missing slot is not a zero.** Blocks are not fixed-width (field-count histogram
+  42/65/66/67/68/81) and 33 of the 414 stop at 66 fields, so slot 66 does not exist on them; a reader
+  that maps absent to `0.0` invents 18 armour-stripped hostiles in C2/M05, C2B/M04 and C3/M01 that
+  the data does not author. No shipped hostile authors `armor 0`. The two gates also differ and both
+  matter, `init_health` only when `> 0` but `armor` when `>= 0`. The eight per-zone roster slots are
+  `-1` on all 414 blocks and stay parsed-and-ignored; do not revive that path. And note the
+  direction: fixing this makes those enemies TOUGHER, so it does not relieve a long time-to-kill, it
+  lengthens it on exactly the fights that should be hard.
+  *Cross-refs:* `BL-556`, `analysis/aim-assist-ttk/FINDINGS.md` (whose census of this field is
+  superseded by the script beside it).
+
+- `BL-561` `[Research]` **Aircraft projectile hit volumes are tuned convex decompositions, and the
+  original's hit geometry is untraced.** *Evidence:* `PlaneCollider` builds an aircraft's hit boxes
+  from model triangles under several constants marked `TUNE` (wing band, tail split, minimum
+  thickness, volume split, part limits). Those boxes are what a round is tested against. The original
+  runs a polygon-accurate segment query gated by per-node flags, with `INTERSECT_BBOX` nodes swapping
+  the polygon test for a bounding-box one
+  ([`docs/org/weaponRay.md`](docs/org/weaponRay.md)). Hit-rate parity is therefore unestablished, and
+  the direction of any error is unmeasured: a collider narrower than the model loses hits, a wider
+  one invents them.
+  *What to settle:* whether the aircraft nodes the original tests carry `INTERSECT_BBOX` (in which
+  case a box decomposition is the right shape and only its extents are in question) or reach the
+  polygon loop, and how our boxes compare with the model's own silhouette.
+  *⚠ Traps:* this is a hit-RATE question, not a damage-per-hit one; do not chase it with a TTK
+  stopwatch, which cannot separate the two. Measure rounds fired against rounds registered on a held
+  burst at a fixed target, then compare. And settle `BL-556`/`BL-557` first: with the pools wrong,
+  any TTK reading taken here is unusable as evidence either way.
+  *Cross-refs:* `BL-556`, `BL-557`, `docs/org/weaponRay.md`, `analysis/aim-assist-ttk/FINDINGS.md`.
+
 ## Weapons & combat
 
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
@@ -602,10 +682,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   being a two-line change: the flight keymap has no spare paired keys and the pad's D-pad is
   already spent on the two forward steps. `BL-296`'s per-player ActionMap is the natural home for
   the four named actions if it lands first.
-  ⚠ Traps: (a) **The cycle order itself is right and must not be touched** (user, 2026-08-14: ours
-  walks the pylons in the same order the original does). What is missing is the second direction,
-  nothing else, so a reverse step is `NextSelectable` walked backwards over the same sequence, not
-  a re-derivation of the order. (b) The observation is about hardpoints. The gun-group selector is
+  ⚠ Traps: (a) **The cycle sequence is settled and must not be re-derived**: the selector walks the
+  hardpoints in physical mount order (`Loadout.PylonStepOrder`, `FireControl`'s `pylonStepOrder`),
+  which is NOT the order the list is built in (`Loadout.PylonFillOrder`, 1,5,2,6,3,7,4,8, which says
+  only which pylons a fit occupies). Stepping the list itself sent the gauge arrow back and forth
+  across the belt on a full fit. What is missing here is the second direction, nothing else, so a
+  reverse step is `NextSelectable` walked backwards over that same sequence.
+  (b) The observation is about hardpoints. The gun-group selector is
   the analogous case but was not observed, so do not assume it cycles both ways either.
   (c) Empty-slot skipping is not in question and must survive the change: both directions land on
   an armed slot.
@@ -770,6 +853,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `AiRocketeer` (whose launch direction creates the mismatch), `BL-404` (whether the
   player's rocket gets a direction at all), `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
 
+
+- `BL-559` `[Research]` **Do the original's gun rounds carry the launcher's velocity?** *Evidence:*
+  [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md) ("Launch velocity is inherited, and decays
+  over `LOCK_ON`") decodes `FUN_005aef40` as copying the launcher's velocity into a round only when
+  the weapon carries `LOCK_ON`, and writing a zero vector otherwise. No gun authors `LOCK_ON`.
+  `ProjectilePool.InheritedAtLaunch` deliberately holds guns outside that rule, and the comment above
+  it says so and states the question was never settled. Two decoded facts pull the other way and are
+  the reason this is worth reading rather than assuming: the aim assist solves its intercept on the
+  RELATIVE velocity, which is the correct solve only for an inheriting round, and the decoded pipper
+  places itself at `muzzle + 0.5 × (VELOCITY × nose + planeVelocity)`
+  ([`docs/org/aim-assist.md`](docs/org/aim-assist.md)), which is where an inheriting round would be.
+  Either guns take a spawn path other than `FUN_005aef40`, or the `LOCK_ON` gate is narrower than the
+  ordnance page states, or the original's sight and its rounds genuinely disagree.
+  *What to settle:* which spawn function the `CANNON` branch of `FUN_004b6820` calls, and whether the
+  `+0x30`..`+0x38` launch-velocity copy is reached on that path.
+  *⚠ Traps:* not a TTK item. If CSVM is wrong here it is wrong in the player's FAVOUR, since an
+  inheriting round lands where the relative-frame lead predicts and a non-inheriting one falls short
+  of it. Do not "fix" it as part of a lethality pass, and do not change the pipper formula or the
+  assist's relative-velocity solve to match a change here without re-reading both: the three are one
+  system and the decode page records the sight and the assist as deliberately disagreeing already.
+  *Cross-refs:* `docs/org/aim-assist.md`, `docs/org/ordnanceTypes.md`, `ProjectilePool.Ballistics`.
 
 ## Flight model & collision physics
 
@@ -2429,6 +2533,25 @@ usual.
   *Cross-refs:* `BL-522`, `BL-457`, `docs/formats/ai-rosters.md`,
   `docs/formats/mission-entities/enemy-generators.md`.
 
+
+- `BL-558` `[Research]` **A damaged AI flies a full evasive maneuver where the original may only set a
+  flag.** *Evidence:* [`docs/org/aiControlLaw.md`](docs/org/aiControlLaw.md) records `obj+0xBA` as an
+  **evade flag**, set to 1 by the damage handler `FUN_004b9bc0` when the steady-hand test fails
+  ("Absorbed %f damage; steady hand test failed. Evading."), cleared in `FUN_0041d9f0` once the
+  pursuer's nose alignment on this aircraft drops below 0.85, and while set it suppresses the lay-off
+  branch and the voice callouts. `AiModeMachine.NotifyDamage` instead picks a maneuver and transitions
+  to `EvasiveManeuver`, falling back to an explicitly invented eight-second plain evade with random
+  60 to 120 degree heading scrambles when no maneuver is eligible. Observed at runtime: a Fury takes
+  its first 40-calibre hit, fails the roll, enters `scissors` immediately and leaves the player's
+  6-degree assist cone (`analysis/aim-assist-ttk/FINDINGS.md`). If the decode is complete, CSVM is
+  manufacturing a break-off the original does not have, and it costs hit rate on every first hit.
+  *What to settle:* whether anything else in the executable reads `+0xBA`, in particular whether the
+  mode field is written anywhere on the damage path, before deciding the flag is the whole story.
+  *⚠ Traps:* `NotifyDamage`'s own doc comment claims a decoded basis for the maneuver behaviour, so
+  two readings of the same path are in the tree and one is stale; reconcile them before touching the
+  code. Removing evasive maneuvers on damage is a large behavioural change to make on one line of a
+  decode page, and the steady-hand roll itself is not in question, only what a failed roll does.
+  *Cross-refs:* `BL-556`, `BL-557` (the other two TTK causes), `docs/org/aiControlLaw.md`.
 
 ## Tooling, platform & docs
 

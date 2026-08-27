@@ -166,6 +166,7 @@ public static class SuiteCatalog
         "dropoff-chuteman-stage",
         "dropoff-placement",
         "hangar-door-wake",
+        "anim-clock-realtime",
         "fog-state",
         "campaign-submarine",
         "campaign-roster",
@@ -178,6 +179,7 @@ public static class SuiteCatalog
         "landings-approach-trigger",
         "landings-wingwalk-gate",
         "landings-train-pickup-gate",
+        "landings-trailer-pickup-gate",
         "landings-auto-land-button",
         "landings-hookup-airframe",
         "landings-hangar-drop-gate",
@@ -854,6 +856,13 @@ public static class SuiteCatalog
             + "and its door starts opening the decoded 4 s before the spawn, which lands at that "
             + "hangar",
             HangarDoorWake));
+        into.Add(new TestHarness.Suite("anim-clock-realtime",
+            "which callback feeds the animation runtime under each clock mode: on a realtime "
+            + "session the physics tick advances it by its own dt and the frame's wall delta "
+            + "advances nothing, a cutscene hold hands the advance back to the frame, a halt "
+            + "advances neither until a queued step, and fixed-step takes exactly one step per "
+            + "frame from the frame",
+            AnimClockRealtime));
         into.Add(new TestHarness.Suite("fog-state",
             "the FOG_STATE animation event (BL-038) over C1/M04's intro definition: a weather "
             + "rig writes the zone's fog at build, playing the intro raises its RESET_STATE fog "
@@ -963,6 +972,13 @@ public static class SuiteCatalog
             + "the hosted pickup cutscene beside the caboose, faces the passenger, runs to handoff "
             + "and clears the primary pickup objective",
             TrainPickupGate));
+
+        into.Add(new TestHarness.Suite("landings-trailer-pickup-gate",
+            "CM11's trailer pickup through the objective script's own WAKE_ANIM: the dock "
+            + "objective's definition stages the approach cone from its library root under the "
+            + "trailer's sensor, the landing trigger discovers that late-created cone, and flying "
+            + "it starts the hosted pickup cutscene, runs to handoff and clears the dock objective",
+            TrailerPickupGate));
 
         into.Add(new TestHarness.Suite("landings-auto-land-button",
             "the auto-land button over the first story mission's BUILT world: flying the chapter's "

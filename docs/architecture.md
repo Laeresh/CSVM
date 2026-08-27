@@ -925,7 +925,8 @@ e.g. C1's three `hangerdoors`). `OBJECT_ADD_CHILD`/`OBJECT_DELETE_CHILD` take th
 form here (`Reparent`, keeping the LOCAL transform) once the sound-emitter form has declined,
 which is how a cutscene composes its camera inside the node it frames; the decode is
 `docs/formats/anim-definitions/cutscenes.md`. A ranged startanim with an unplaced immediate callee is
-deferred until range; range-triggered and explicit mission-trigger calls may then lazily build their
+deferred until range; range-triggered and explicit mission-trigger calls (`PlayMissionTrigger`: the
+`landings.zrd` rows and the objective script's `WAKE_ANIM`) may then lazily build their
 library-root callees, and an add-child may do the same for an explicitly named child — except where
 the call's own `AT_NODE` site IS the callee's root node, which names the node to run on rather than
 asking for a copy. `IndexSpawnedVehicle` is the other half of that resolution: it makes one live
@@ -4442,7 +4443,10 @@ sets `Steps` + `Dt`; consumers read `FrameDt`, or loop `Steps` times on `Dt`. Mo
 FixedAccum (interactive anim lab), FixedStep (scripted runs / `--det`); `Halted` is orthogonal.
 `SimHeld` freezes the `PhysicsDt` consumers alone, which is how a cutscene's world hold reaches an
 aircraft stepping itself on a realtime tick; `FrameDt` is untouched, so animation keeps playing.
-Published as `GameClock.Current` (session-scoped, nulled on teardown; null = raw frame delta).
+On a realtime session `AnimRuntime` is a `PhysicsDt` consumer too (its `_PhysicsProcess`), so the
+world's motions step on the same tick as the aircraft and the objective graph; its `_Process` takes
+over only under `SimHeld`, a halt, or a parent-driven mode. Regression: the `anim-clock-realtime`
+suite. Published as `GameClock.Current` (session-scoped, nulled on teardown; null = raw frame delta).
 
 ## src/Utils/Log.cs
 The diagnostic log: `Log.Info("world", $"…")` / `Warn` / `Error` / `Debug` over nine categories
@@ -5106,7 +5110,8 @@ Which directives reach the engine today: `INACTIVEn` (node visibility, the decod
 members of the named group inside or outside the radius against `spec.Count`, the decoded
 `FUN_00465b40` shape `docs/formats/objectives.md` already carried), `WAKEUP_TURRETS` /
 `WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
-(`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM`, both sound-group directives through
+(`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM` (`AnimRuntime.PlayMissionTrigger`, so the
+woken definition may stage library roots), both sound-group directives through
 `MissionRadio`, falling through to `WorldSounds.PlayOneShot` for a cue the radio does not own,
 `STOP_QUEUED_SOUNDS` through `MissionRadio.Cancel`, `START_TAXI` through the director's own
 `ScriptedPathVehicles` registry (`Paths`), which it also steps beside the graph,

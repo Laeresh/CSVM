@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -399,6 +400,72 @@ internal static class WorldFidelitySuites
 
             generators.Free();
         });
+    }
+
+    // Which Godot callback feeds the runtime under each clock mode. Read off the runtime's own
+    // sim-seconds accumulator, with the clock's BeginFrame run the way GameSession runs it.
+    internal static void AnimClockRealtime(TestContext ctx)
+    {
+        const float physicsDt = 1f / 60f;
+        const float wallDt = 0.5f;
+        var stage = new Node3D { Name = "ClockStage" };
+        var runtime = new AnimRuntime { AutoStart = false, SoundHandledElsewhere = true };
+        var saved = GameClock.Current;
+        var clock = new GameClock { Mode = GameClock.RunMode.Realtime };
+        GameClock.Current = clock;
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(stage, new AnimProgram());
+
+            clock.BeginFrame(wallDt);
+            runtime._Process(wallDt);
+            ctx.Check(Mathf.IsZeroApprox(runtime.Elapsed),
+                $"realtime: the frame's wall delta advances nothing");
+            runtime._PhysicsProcess(physicsDt);
+            runtime._PhysicsProcess(physicsDt);
+            ctx.Check(Mathf.IsEqualApprox(runtime.Elapsed, 2f * physicsDt),
+                $"realtime: each physics tick advances the runtime by its own dt");
+
+            clock.SimHeld = true;
+            clock.BeginFrame(wallDt);
+            runtime._PhysicsProcess(physicsDt);
+            ctx.Check(Mathf.IsEqualApprox(runtime.Elapsed, 2f * physicsDt),
+                $"under a cutscene hold the physics tick advances nothing");
+            runtime._Process(wallDt);
+            ctx.Check(Mathf.IsEqualApprox(runtime.Elapsed, (2f * physicsDt) + wallDt),
+                $"and the frame keeps the movie running on wall time");
+            clock.SimHeld = false;
+
+            clock.Halted = true;
+            clock.BeginFrame(wallDt);
+            runtime._PhysicsProcess(physicsDt);
+            runtime._Process(wallDt);
+            ctx.Check(Mathf.IsEqualApprox(runtime.Elapsed, (2f * physicsDt) + wallDt),
+                $"halted: neither callback advances");
+            clock.StepOnce();
+            clock.BeginFrame(wallDt);
+            runtime._Process(wallDt);
+            ctx.Check(Mathf.IsEqualApprox(runtime.Elapsed, (3f * physicsDt) + wallDt),
+                $"a queued single step advances one fixed step from the frame");
+            clock.Halted = false;
+
+            clock.Mode = GameClock.RunMode.FixedStep;
+            clock.BeginFrame(wallDt);
+            runtime._PhysicsProcess(physicsDt);
+            ctx.Check(Mathf.IsEqualApprox(runtime.Elapsed, (3f * physicsDt) + wallDt),
+                $"fixed-step: the physics tick advances nothing");
+            runtime._Process(wallDt);
+            ctx.Check(Mathf.IsEqualApprox(runtime.Elapsed, (4f * physicsDt) + wallDt),
+                $"fixed-step: the frame advances exactly one fixed step, wall time ignored");
+        }
+        finally
+        {
+            GameClock.Current = saved;
+            runtime.Free();
+            stage.Free();
+        }
     }
 
     internal static void FogStateEvent(TestContext ctx)
