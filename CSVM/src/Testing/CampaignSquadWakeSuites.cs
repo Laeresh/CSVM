@@ -254,7 +254,7 @@ internal static class CampaignSquadWakeSuites
         }
         ctx.Check(!rigs[FirstSquad[0]].InPlay, $"group 1 is down: '{FirstSquad[0]}' is no longer in play");
 
-        // BL-563: a deactivated block is dead to DEDG (the original's deactivate primitive sets the
+        // A deactivated block is dead to DEDG (the original's deactivate primitive sets the
         // dead byte too), so the ace's two group-2 blocks count zero while parked and two once woken.
         int? parked = director.GroupLiveCount(AceGroup);
         report.AppendLine($"dedg: group {AceGroup} counts {parked?.ToString() ?? "-"} while the squad is parked");

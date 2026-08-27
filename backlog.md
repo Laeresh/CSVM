@@ -2584,38 +2584,9 @@ usual.
   decode page, and the steady-hand roll itself is not in question, only what a failed roll does.
   *Cross-refs:* `BL-556`, `BL-557` (the other two TTK causes), `docs/org/aiControlLaw.md`.
 
-- `BL-563` `[Bug]` **CM12 (C2/M01) cannot be won: `DEDG` counts a deactivated roster member as
-  alive, so the wave chain that wakes the security Furys and the Knight Firebrands never fires.**
-  *Evidence:* a flown CM12 session (`.scratch/logs/menu-20260827-215135.log`): the four
-  `secgyro_*` are downed, and after that no `ai mode:` line ever names `secfury_1..4` or
-  `hkfirebrand_1/2/3/9`, which spawn `deactivated 1` and are only put in play by OBJECTIVE66 /
-  OBJECTIVE67's `WAKEUP_ENEMIES`. Both sit behind `DEDG [1, 2]` (OBJECTIVE12, OBJECTIVE65), "group 1
-  down to two". Group 1 is the four gyros plus the seven deactivated blocks, and
-  `CampaignDirector.RosterInputs.GroupLiveCount` counts every un-crashed member, deactivated ones
-  included, so the count can never fall below seven and the mission stalls with no enemy left to
-  find. "Destroy all enemy fighters" (OBJECTIVE46, `PRIMARY 3`, `DEDG [1, 0]`) is only woken by
-  OBJECTIVE68 (`DEDG [2, 0]`, `hkfirebrand_9`'s death) at the end of that chain. The comment on
-  `GroupLiveCount` ("a deactivated member counts as alive, as the decoded walk counts a parked
-  one") is wrong: the activate/deactivate primitive `FUN_004b0f40` sets the dead byte `+0x91d`
-  together with `+0x945` on deactivation, and the DEDG counter `FUN_00465850` counts a vehicle only
-  when `+0x91d == 0`, so a deactivated member is dead to `DEDG` until `WAKEUP_ENEMIES` clears both
-  bytes. *Fix shape:* skip `Inert` members in `GroupLiveCount` (crashed OR inert is "not
-  counted"), correct the comment, and add a unit test on a two-member group with one inert block
-  (`ObjectiveGraphTests` has the DEDG harness). Then fly CM12 through in its authored order:
-  the harbor gate, then convoys 1 to 3, which sends the Goose onto its fourth taxi leg
-  (`path4_continue`, `goosepath.zrd`) and completes OBJECTIVE11; only then is OBJECTIVE12's
-  `DEDG [1, 2]` evaluated, and with the gyros already down it completes at once and wakes the
-  Furys. The Goose airborne (`fly_the_goose`) re-evaluates `DEDG [1, 2]` through OBJECTIVE65 and
-  wakes the Firebrands; `hkfirebrand_9` down wakes primary 3. Killing the gyros early triggers
-  nothing by itself. *⚠ Traps:* CM02's `campaign-squad-wake` suite (BL-499) has a deactivated squad behind
-  a `DEDG [1, 0]` gate; check which group that squad authors before assuming the suite's
-  expectation survives the change, and mint a follow-up if it does not. The `DEDG` generator form
-  (third argument) is a separate, unimplemented count and not this bug. *Cross-refs:* `BL-499`,
-  `BL-564`, `BL-565`, `docs/formats/objectives.md` (`DEDG` row), `docs/org/aiPilot.md`
-  (the activation primitive).
-
 - `BL-564` `[Bug]` **CM12 (C2/M01): the `eshipg31` generator launches Bloodhawks at the world
-  origin instead of patrol boats at the pirate ship.** *Evidence:* the same session: the wave
+  origin instead of patrol boats at the pirate ship.** *Evidence:* a flown CM12 session
+  (`.scratch/logs/menu-20260827-215135.log`): the wave
   arrives as `ai17_player_bhawk`, `ai18_player_bhawk`, `ai19_player_bhawk`, tracked by the target
   HUD at 7.6 km from the player, and two of the three ram terrain `g34586` within seconds at
   `pos=(5,5,-109)`, the world origin; the third patrols `M2Patrol1`, a water net, and is shot down
@@ -2634,7 +2605,7 @@ usual.
   fighters. *⚠ Traps:* the three Bloodhawks are group 3 and never count toward "Destroy all
   enemy fighters" (`DEDG [1, 0]`); killing them is not progress. Do not "fix" (1) by handing the
   generator a fighter def. *Cross-refs:* `BL-522` (launch placement from a surface host),
-  `BL-527`, `BL-563`, `docs/formats/mission-entities/enemy-generators.md`.
+  `BL-527`, `docs/formats/mission-entities/enemy-generators.md`.
 
 - `BL-565` `[Fidelity]` **`DEDG`'s decoded side effect, widening every counted member's engagement
   volume to 9,000 m, is not applied.** *Evidence:* `docs/formats/objectives.md`'s `DEDG` row and
@@ -2648,12 +2619,12 @@ usual.
   counted member's machine: `ActivationRange = max(ActivationRange, 9000)`, and the altitude bands
   once they have a consumer. *⚠ Traps:* the widening is per awake objective per tick, so a
   napped or killed `DEDG` stops widening but the original never shrinks the volume back; match
-  that (set, never reset). *Cross-refs:* `BL-563`, `BL-523` (the patrol/pursue cycle).
+  that (set, never reset). *Cross-refs:* `BL-523` (the patrol/pursue cycle).
 
 - `BL-566` `[Bug]` **CM12 (C2/M01): the ace `hkfirebrand_9` flies under the terrain after its wake,
   and nothing stops it until it rams a tile from below.** *Evidence:* reported at the controls
   (the ace seen under the ground, not crashing, not surfacing) and the session
-  `.scratch/logs/menu-20260828-001548.log` in the BL-563 worktree: once OBJECTIVE67 wakes it, the
+  `.scratch/logs/menu-20260828-001548.log`: once OBJECTIVE67 wakes it, the
   ace alternates `pursue -> avoid crash (below the 20 m floor)` and back a dozen times, with a few
   `obstacle inside NNN m (tagged/col)` probes, and dies minutes later as `AI ram into tagged/col`
   (no shooter). The floor test is the decoded absolute one, `pos.Y < 20` world metres, not height
@@ -2675,7 +2646,7 @@ usual.
   (`DAT_0071c3f0`) and the original has no AGL floor either. Do not add a spawn lift. The ace did
   count for "Destroy all enemy fighters" in the end (its ram death dropped group 2 to zero and
   primary 3 completed), so this is not an objective bug. *Cross-refs:* `BL-527` (CM07's Peacemaker
-  under the ground), `BL-563`, `docs/org/aiPilot.md` (the activation primitive and
+  under the ground), `docs/org/aiPilot.md` (the activation primitive and
   `FUN_00432010`).
 
 ## Tooling, platform & docs
