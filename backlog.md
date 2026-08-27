@@ -936,6 +936,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
   so the ledger keeps "a wreck flies the near-field plant" as an exception. Decode when and by
   whom it is set so the wreck can fly the decoded arm.
+- `BL-562` `[Perf]` **The physics tick costs ~39 ms per frame late in CM11 (C2/M02), so the sim runs
+  at about half of wall time.** *Evidence:* a flown CM11 session's hitch records
+  (`.scratch/logs/game-*.out`, `[perf] hitch … physics_ms=…`) show the frame baseline rising from
+  9 ms at launch to 30–40 ms with `physics_ms` at ~39 ms of it once six aircraft, the trailer's dust
+  puffers and the roadblocks are live; 2770 rendered frames then covered 52 sim seconds (one
+  parked-plane `flight:` line per sim second). Godot caps physics catch-up per frame, so a
+  physics-bound frame lets the sim clock fall behind the wall clock: the mission takes about twice
+  as long to play as its `TimeMs` records, and every `_Process`-driven consumer that still reads wall
+  time drifts against the aircraft (the animation runtime moved onto the physics tick for this
+  reason, see `AnimRuntime._PhysicsProcess` and the `anim-clock-realtime` suite). *Fix shape:* profile
+  one CM11 session past the roadblocks with `--perf` and the hitch sidecar's `samples`, attribute
+  the physics step (`FlightController._PhysicsProcess` chain: six flight models, AI mode machines,
+  projectile sweeps, the objective graph's per-tick scans, puffer emitters at 1 m distance
+  intervals on the trailer) and bring the step under the 16.7 ms budget on the reference rig; a
+  perf scenario in `analysis/perf/scenarios.json` for the late-CM11 state is the regression gate.
+  *⚠ Traps:* a wall-clock measurement of anything in that session is not a sim measurement, so
+  compare durations in sim seconds (the log's 1 Hz `flight:` cadence, `GameClock.Frame`), never in
+  wall seconds; do not raise `max_physics_steps_per_frame`, which only deepens the catch-up spiral.
+
 
 ## Environment & world
 
