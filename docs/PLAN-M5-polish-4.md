@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ❌ `BL-527`: the second patrol's Peacemaker spawns under the ground
 23. ❌ `BL-518`: a stripe-textured surface stands in front of the zeppelin hangar
 24. ☑ `BL-528`: the Blue Streak flies with the stock Bloodhawk fit and no nitro
-25. ☑ `BL-529`: the Pandora porpoises along its route and past its end
+25. ☑ `BL-529`: the Pandora porpoises along its route and past its end (the route half reopened by D32 as `BL-576`)
 
 ### Wave D — CM09 and the sortie
 
@@ -1022,3 +1022,15 @@ one confirmation:
    build. C24 closed the in-mission half on the roster block alone and did not look at this
    swap. Filed as `BL-574`; C24's award half is confirmed (the profile's Blue Streak has nitro
    after the mission).
+
+**CM08 (C1B/M03).** Log: `.scratch/logs/menu-20260827-234016.log`; screenshot
+`Screenshots/crimsonskies_2026-08-27_23-47-46-050.png`. Three reports:
+
+1. The Pandora still pitches up and down along the Klondike net (nose down about 30 degrees in
+   the screenshot, mid-route). C25's dead-end hold stands; the route-following half of
+   `BL-529`'s report is reopened as `BL-576`.
+2. The patrol boats never spawn: `patrolboat_1..4` are surface-vehicle roster blocks that
+   `CampaignRosterPlan` skips, and CSVM has no surface-vehicle runtime. Filed as `BL-577`.
+3. The tanker jumps and sits at the wrong position. Filed as `BL-578` (the `ObjectMotion`
+   `rnd_xz` drift of `BL-512`, or a follower writing over the motion); whether the Pandora and
+   the tanker play the cargo-crane choreography is still to be checked and is noted there.

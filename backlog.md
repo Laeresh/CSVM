@@ -2761,6 +2761,59 @@ usual.
   start. *⚠ Traps:* the swap itself works and must stay; the missing part is the choreography
   around it. *Cross-refs:* `BL-574`, `BL-521`, `docs/formats/anim-definitions/cutscenes.md`.
 
+- `BL-576` `[Bug]` **CM08 (C1B/M03): the Pandora pitches steeply up and down along the Klondike
+  net, following every altitude step of the route at full pitch.** *Evidence (seen at the
+  controls, mechanism lead-only):* the screenshot
+  `Screenshots/crimsonskies_2026-08-27_23-47-46-050.png` (plan worktree) shows `piratezep` nose
+  down about 30 degrees, diving along the green `Klondike1` segment toward a lower node with the
+  ai-nets overlay on. `Klondike1` is a 13-node open chain whose nodes swing between about 400 m
+  and 93 m, and the record's pitch band is -30 to 30 degrees at `max_rate_pitch` 5. The dead-end
+  shuttle `BL-529` fixed was one cause of the porpoising report and the hold at the far end is
+  confirmed; the up-and-down along the route itself is still there and was the report's first
+  half. *Fix shape:* read `FUN_004bf9d0`'s pitch term against `ZeppelinMotion`: whether the
+  original steers pitch at the node's altitude difference directly, clamps it under a smaller
+  authored limit for route following, or eases altitude over the edge length, and whether the
+  net's node altitudes are the airship's targets at all (a zeppelin net may carry its own altitude
+  field). Then match. *⚠ Traps:* the initial-pitch clamp that never fires (`ZeppelinMotion.cs`)
+  is decoded verbatim and stays; do not "fix" it as part of this. Do not flatten the net.
+  *Cross-refs:* `BL-529`'s closing commit (`git log --grep=BL-529`), `docs/org/flightModel.md`,
+  `docs/formats/mission-entities.md` "Route ends and stop points".
+
+- `BL-577` `[Bug]` **CM08 (C1B/M03): the patrol boats never spawn.** *Evidence (traced):*
+  reported at the controls: no boats. `aiv.zrd` carries four enabled roster blocks
+  `patrolboat_1..4` (defs 37 to 39, positions at `y = 0` such as `(-7614.8, 0, -5556.5)`,
+  `-90` yaw, nets `Patrolboat1..4`), and `objectives.zrd` wakes them by `WAKEUP_ENEMIES
+  [patrolboat_1, patrolboat_2, patrolboat_3, patrolboat_4]` (line 164) and moves them between
+  nets (lines 241 to 253). `CampaignRosterPlan.Build` reports a surface-vehicle block in
+  `Skipped` (`'{def}' ({mode}) has no player airframe`, `CampaignRoster.cs`) and never spawns it,
+  so the wake finds nothing; CSVM has no runtime for a roster surface vehicle at all. The same gap
+  is what makes C2/M01's boat generator launch fighters (`BL-564`). *Fix shape:* a surface
+  vehicle runtime for roster blocks: spawn the def on its net at water height, drive it along the
+  net with the scripted-path follower's law (`docs/org/flightModel.md`), and give it the turret
+  and destructible wiring the `patrolboat-*` mis_anim defs (`ptboat_50damage`, `ptboat_75damage`,
+  `emit_ptsplash*`) expect; then the generator case in `BL-564` is the same runtime launched.
+  *⚠ Traps:* do not spawn a boat as an aircraft with a low ceiling. *Cross-refs:* `BL-564`,
+  `BL-531` (the scripted-path follower), `docs/formats/ai-rosters.md`.
+
+- `BL-578` `[Bug]` **CM08 (C1B/M03): the tanker jumps and sits at the wrong position.**
+  *Evidence (lead-only):* reported at the controls: the tanker makes a jump and is not where it
+  should be. Its motion is authored as `ObjectMotion`: `freighter-freightercruise.json` drives
+  `freighter` (with its wakes, hold and hold doors), and `freighter-freighterwavemotion.json`
+  loops two `ObjectMotion` events on `tanker`, both in M03's `NEW_GAME_START` list, and the
+  mission's anim census reports `ObjectMotion×1` not yet acted on. Two leads: the `rnd_xz` start
+  velocity drift that `BL-512` traced on the Barracuda (a normalized direction read as a random
+  amplitude, snapped away at the next absolute placement) applies to every `ObjectMotion`, so a
+  jump on the tanker is the same defect; and the tanker is `Russian`'s net trailer
+  (`ai nets: #28 'Russian' nodes=9 edges=8 trailer=tanker@node8`), so a net or scripted-path
+  placement (`BL-531`'s waypoint-0 snap) may be writing its pose against the motion. Whether the
+  Pandora and the tanker play the cargo-crane choreography is untested and belongs to this item's
+  check. *Fix shape:* `--anim-lab --node=tanker` on C1B, play `freightercruise`/`freighterwavemotion`
+  and log the pose at each event boundary; if the discontinuity is `rnd_xz`, fold it into `BL-512`'s
+  `ObjectMotion` fix; if a follower writes the pose, exclude a node an `ObjectMotion` owns.
+  *⚠ Traps:* do not special-case the tanker; the `ObjectMotion` semantics are shared with the
+  Barracuda and the airships. *Cross-refs:* `BL-512`, `BL-531`, `BL-568` (the Pandora's own
+  scripted motion), `docs/org/objectMotion.md`.
+
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
