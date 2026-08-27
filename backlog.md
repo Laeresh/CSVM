@@ -2593,9 +2593,14 @@ usual.
   doing), and the `player_bhawk` on the egen load line is the fallback-plane label, not the launch.
   The launch pose is decoded and landed (`BL-522`): it now sits on `eag31_aip0`/`eag32_aip0` plus
   0.2 m instead of the host origin, and the generators are gated behind four `WAKEUP_GENERATOR`
-  credits, so no headless run launches there without playing the mission. *Fix shape:* re-judge at
-  the controls against the landed launch pose; if the Peacemaker is still under the ground, the
-  residual is `BL-522`'s take-off run, not a `CampaignRoster.cs` change. *⚠ Traps:* do not add a
+  credits, so no headless run launches there without playing the mission. Re-judged at the
+  controls on the landed launch pose: the launches now come out of the hangar in the air but crash
+  at once. The sortie log shows `blakepeace_2_eg0..eg4` launching in turn and `eg1`, `eg2`, `eg3`
+  and `eg4` each ending on `AI ram into a5/col — destroyed outright` at about `(-5940,165,-4164)`,
+  `spd=104 m/s`; `eg0` survived long enough to pursue. So the residual is `BL-522`'s take-off run:
+  handed to the patrol net from the launch pose, the aircraft flies through `a5` (a structure
+  beside `eag31`'s path) instead of along the authored run that clears it. *Fix shape:* `BL-522`,
+  not a `CampaignRoster.cs` change. *⚠ Traps:* do not add a
   blanket spawn lift; `BL-457` shows authored spawns are otherwise exact, and the roster-spawned
   formation here is one more confirmation of that.
   *Cross-refs:* `BL-522`, `BL-457`, `docs/formats/ai-rosters.md`,
@@ -2705,6 +2710,56 @@ usual.
   an objective display line built from those message ids, and keep the node name for the debug
   tag only. *⚠ Traps:* `BL-397` is the marker's bracket
   range rule and not this. *Cross-refs:* `BL-397`, `docs/formats/markers.md`, `docs/org/targeting.md`.
+
+- `BL-573` `[Bug]` **CM07 (C1/M02): the AA guns damage themselves, one blowing itself up while
+  firing at the barrier in front of it.** *Evidence (lead-only):* reported at the controls: an AA
+  gun exploded on its own while shooting at a barrier. The sortie log shows `aagun32` taking four
+  hits in a row with no player round near it (`damage: -10 on aagun32 HP 30→20 [stage 0]`,
+  `-9.58`, `-9.2`, `-10 ... DESTROYED — death sequence run`), then `aagun33`, `aagun34` and
+  `aagun36` taking the same `-10`, `-9.58` pair; the identical decrements across four guns read as
+  one weapon's rounds, the guns' own, bursting on the obstruction and splashing the shooter. Not
+  traced: whether the flak's burst damage excludes its own shooter in `crimson.exe`, and whether
+  the original's gun fires at all when a structure blocks its line. *Fix shape:* trace which
+  shooter id lands those hits (`--debug` hit logging on the turret pool), then decode the flak
+  burst's damage application for a self-exclusion and the turret fire gate for a line-of-fire
+  test; apply what the decode says. *⚠ Traps:* do not exclude turrets from splash wholesale, a
+  rocket into a gun pit must still kill it. *Cross-refs:* `BL-516` (turret waking), `BL-514`,
+  `docs/org/weaponImpact.md`.
+
+- `BL-574` `[Bug]` **CM07 (C1/M02): the hangar hand-over gives the player a stock Bloodhawk in the
+  ordinary player paint and without nitro, where the original hands over the Blue Streak in Blake
+  Aviation livery.** *Evidence (traced to the swap, lead-only on the livery):* at the controls the
+  aircraft flown out of the hangar has the Fortune Hunters livery and no nitro, and the profile's
+  Blue Streak has nitro only after the mission (`BL-528`'s award half works). The log shows the
+  swap: `EXECUTION_BY_RANGE reached - starting hangar_drop at 67 m`, then `airframe swap: P1 is
+  now flying 'player_bhawk'`. `AirframeSwapCodes` maps code 965 to `pbloodhawk`/`player_bhawk`
+  and `FlightRoster.SwapPlayerAirframe` assembles that node through the ordinary player build
+  with the shared paint stream, so it is the stock airframe. `BL-528`'s in-mission half was closed
+  on the `aiv.zrd` `player` block authoring no aircraft, which is true, but the mission's aircraft
+  hand-over is this swap, not the roster, and it was not examined. The Blue Streak template
+  (`docs/org/hangar.md`, `0x0061a9b8`) carries engine 4 (nitrous), twin 40 and twin 30 guns and
+  1/1 hardpoints; its paint is the shared custom scheme, so where the Blake Aviation livery the
+  user remembers comes from (the swap code's own skin set, `blake*` in the faction table, or the
+  cutscene's captured rig) is the decode. *Fix shape:* decode what swap code 965 builds in the
+  original (the template at `0x0061a9b8` or a stock def) and which skin it draws; then have the
+  hand-over assemble the Blue Streak build (`CustomPlaneBuild` from `CampaignProgression.AwardBuild`'s
+  template, `Nitro.Installed` true) in that livery. *⚠ Traps:* do not give the stock Bloodhawk
+  nitro, and do not touch the post-mission grant, which is correct. *Cross-refs:* `BL-528`,
+  `docs/org/hangar.md`, `docs/formats/anim-definitions/cutscenes.md` (the swap codes),
+  `docs/formats/paint.md`.
+
+- `BL-575` `[Bug]` **CM07 (C1/M02): the hangar cutscene plays with none of its animations.**
+  *Evidence (lead-only):* reported at the controls: during the hangar hand-over cutscene nothing
+  animates. The log shows `'hangar_drop' armed by call at 1167 m, waiting for EXECUTION_BY_RANGE
+  (75 m)`, `EXECUTION_BY_RANGE reached - starting hangar_drop at 67 m (range 75 m)`, the airframe
+  swap, and `4 call(s) retargeted onto a named node`, but no line for the hangar's own motion
+  (doors, lift, the aircraft's drop) and no cutscene hold. Not traced: which defs `hangar_drop`
+  calls, whether they are among the `431 reader def(s) superseded by this mission's compiled
+  manifest` (the same drop `BL-521`'s `balloon_downa*` shows) or run on nodes the cutscene
+  reparents. *Fix shape:* read `hangar_drop`'s call list from `extracted/C1/M02/mis_anim`, run
+  the mission headless with `--debug-anim` to the hangar, and trace the first callee that does not
+  start. *⚠ Traps:* the swap itself works and must stay; the missing part is the choreography
+  around it. *Cross-refs:* `BL-574`, `BL-521`, `docs/formats/anim-definitions/cutscenes.md`.
 
 ## Tooling, platform & docs
 

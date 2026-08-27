@@ -1005,3 +1005,20 @@ the data (`NEW_GAME_START` is `player_setup`, `pzep_engines_start`, `flag_state_
    after flying off. B13's mechanism (`BL-525`, the unparsed node-active
    `ACTIVATION_PREREQUISITE` letting the wrong hook-up leg run on the first docking) covers it;
    `BL-525` extended with the symptom.
+
+**CM07 (C1/M02).** Log: `.scratch/logs/menu-20260827-232253.log`, first run. Five reports and
+one confirmation:
+
+1. The hangar launches come out in the air but crash at once: `blakepeace_2_eg1..eg4` each end
+   on `AI ram into a5/col` at about `(-5940,165,-4164)`. C22's redirect holds; the residual is
+   `BL-522`'s take-off run. `BL-527` extended.
+2. An AA gun blew itself up firing at the barrier: `aagun32` takes `-10`, `-9.58`, `-9.2`,
+   `-10` with no player round near it, and `aagun33/34/36` take the same pair. Filed as
+   `BL-573`.
+3. No animations in the hangar cutscene: `hangar_drop` starts at 67 m and the swap runs, but
+   nothing of the hangar's own choreography logs. Filed as `BL-575`.
+4. The Blue Streak in the mission has the Fortune Hunters livery and no nitro: the hangar
+   hand-over is `AirframeSwapCodes` 965 → a stock `player_bhawk` through the ordinary player
+   build. C24 closed the in-mission half on the roster block alone and did not look at this
+   swap. Filed as `BL-574`; C24's award half is confirmed (the profile's Blue Streak has nitro
+   after the mission).
