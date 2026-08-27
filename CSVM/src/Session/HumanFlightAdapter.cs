@@ -137,6 +137,7 @@ internal sealed class HumanFlightAdapter
             HudParent = rig.Viewport,
             // Null when the airframe ships no cockpit1 — the rig then hides nothing, as before B11.
             Cockpit = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior),
+            CockpitPanel = CockpitGauges.Bind(planeBuilder.CockpitInterior),
         };
         if (verbose && controller.Cockpit != null)
             GD.Print($"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");

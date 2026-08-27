@@ -104,6 +104,11 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   needles): the lit window quad (`lowalt.tif` / `stall.tif`, 64×32, red) **plus two
   red bezel slashes** (`redhilite.tif` quads at the dial edge, left+right of the
   window's side). The whole node toggles/blinks.
+- **Both instrument sets run off one state in the remake.** `GaugeCluster` owns the readings and
+  the lamps' blink phase for the screen-space dials, and `CockpitGauges` mirrors the same values
+  onto the authored 3D panel inside `cockpit1` (five needle nodes, both lamps) on the frames the
+  interior is on the screen. ⚠ The cluster processes ahead of the `FlightController` for that
+  reason; the two copies of a lamp must toggle on the same frame.
 - **Both lamps are decoded, and both are player-only.** Each is a plain visibility toggle
   (`FUN_004cca30` on bit `0x4` of the node's flag word at `+0x24`) driven once per frame from the
   cockpit update `FUN_0049f6a0`, against an absolute deadline stored beside the lamp. Neither has a

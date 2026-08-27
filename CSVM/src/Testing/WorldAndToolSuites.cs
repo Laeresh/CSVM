@@ -149,6 +149,8 @@ internal static class WorldAndToolSuites
             ctx.Check(!interior.Visible && body is { Visible: true }
                 && markers is { Visible: true } && dontmove is { Visible: true },
                 $"a held external view restores the aircraft while Cockpit stays selected");
+
+            DrivenPanel(ctx, interior);
         }
         finally
         {
@@ -156,6 +158,80 @@ internal static class WorldAndToolSuites
             withInterior?.Free();
             textures.Dispose();
         }
+    }
+
+    // The authored panel driven off live readings (BL-431): the needles take an absolute angle and
+    // the two lamps follow the cluster's own blink state. Able to fail: a needle left at its modeled
+    // rest rotation, a lamp still parked while its condition holds, or a drive that moves the panel
+    // geometry around the needle instead of the needle itself.
+    internal static void DrivenPanel(TestContext ctx, Node3D interior)
+    {
+        var panel = CockpitGauges.Bind(interior);
+        ctx.Check(panel != null, $"the gauge drive binds to the built interior");
+        var speed = FindNamed(interior, "speed");
+        var hundreds = FindNamed(interior, "hundreds");
+        var lowAlt = FindNamed(interior, "lowalt_on");
+        var face = FindNamed(interior, "speedometer");
+        if (panel == null || speed == null || hundreds == null || lowAlt == null || face == null)
+        {
+            ctx.Check(false, $"the panel's needles, lamp and face were all found");
+            return;
+        }
+
+        // ⚠ The rotation axis is only right if the needle is authored flat in its own XY plane.
+        // If the import left the dial in XZ, spinning about Z would tip the needle out of the face
+        // instead of sweeping it, and every angle assertion below would still pass.
+        if (FirstMesh(speed) is { } needleMesh)
+        {
+            var size = needleMesh.GetAabb().Size;
+            ctx.Check(size.Z < size.Y * 0.1f && size.Y > 0f,
+                $"the needle is flat in its own XY plane, so +Z is the sweep axis size={size}");
+        }
+
+        var faceRest = face.Transform;
+        var cluster = new GaugeCluster { SpeedMph = 200f, AltitudeFt = 500f };
+        try
+        {
+            panel.Apply(cluster);
+            // 0.7199957 deg/mph clockwise, i.e. negative about +Z.
+            float wantSpeed = -Mathf.DegToRad(GaugeCluster.SpeedAngleDeg(200f));
+            float gotSpeed = speed.Transform.Basis.GetEuler().Z;
+            ctx.Check(Mathf.Abs(Mathf.AngleDifference(gotSpeed, wantSpeed)) < 0.01f,
+                $"the speed needle takes its absolute angle got={gotSpeed:0.000} want={wantSpeed:0.000} rad");
+            float wantAlt = -Mathf.DegToRad(GaugeCluster.AltHundredsAngleDeg(500f));
+            float gotAlt = hundreds.Transform.Basis.GetEuler().Z;
+            ctx.Check(Mathf.Abs(Mathf.AngleDifference(gotAlt, wantAlt)) < 0.01f,
+                $"the long altimeter needle takes its absolute angle got={gotAlt:0.000} want={wantAlt:0.000} rad");
+            // ⚠ Only the needle moves: the dial it sweeps over is authored geometry.
+            ctx.Check(face.Transform.IsEqualApprox(faceRest), $"the dial face is left where it was built");
+            ctx.Check(!lowAlt.Visible, $"LOW ALT stays parked while the cluster's lamp is dark");
+
+            // A second write must REPLACE the angle, not accumulate onto it.
+            panel.Apply(cluster);
+            ctx.Check(Mathf.Abs(Mathf.AngleDifference(speed.Transform.Basis.GetEuler().Z, wantSpeed)) < 0.01f,
+                $"a second frame writes the same absolute angle rather than turning again");
+        }
+        finally
+        {
+            cluster.Free();
+        }
+    }
+
+    // The first mesh at or under this node, for a geometry assertion about it.
+    internal static MeshInstance3D? FirstMesh(Node3D root)
+    {
+        if (root is MeshInstance3D mesh)
+        {
+            return mesh;
+        }
+        foreach (var child in root.GetChildren())
+        {
+            if (child is Node3D n3d && FirstMesh(n3d) is { } hit)
+            {
+                return hit;
+            }
+        }
+        return null;
     }
 
     // The first node in the subtree carrying this ORIGINAL gamez name (SceneBuilder sanitizes and

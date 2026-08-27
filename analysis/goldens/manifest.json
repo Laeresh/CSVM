@@ -120,8 +120,8 @@
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "d308d92f7674005fa775c3cc1134984b",
-      "exercises": "A shot-down AI three seconds after the kill: quaternion flight state under frozen commands, the auto-selected target's antialiased brackets, second fireball and trail at the handover where randomdestseq inherits the hull's world velocity.",
+      "hash": "720c60126f6dbfc15db3243daeeaf551",
+      "exercises": "A shot-down AI three seconds after the kill: quaternion flight state under frozen commands, the target's antialiased brackets, the handover fireball where randomdestseq inherits the hull's velocity, and the LOW ALT lamp lit inside its 60 m gate.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     }
   ]

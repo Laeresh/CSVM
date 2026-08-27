@@ -36,8 +36,9 @@ public struct FlightHudState
     /// <summary>The flight model's own stall warning, before the crashed/halted/held gates.</summary>
     public bool StallWarned;
 
-    /// <summary>How far into the stall the airframe is, for the warning lamp's ramp.</summary>
-    public float StallFraction;
+    /// <summary>How far into the stall the airframe is, for the warning lamp's ramp: the wing's
+    /// available lift as a multiple of weight (FlightModel.AvailableLoadFactor).</summary>
+    public float AvailableLoadFactor;
 
     /// <summary>The flight model is actually stalled, not merely warning.</summary>
     public bool Stalled;
@@ -323,7 +324,7 @@ public sealed class FlightHud
             Gauges.SpeedMph = mph;
             Gauges.AltitudeFt = ft;
             Gauges.StallWarning = ComputeStallWarning(in state);
-            Gauges.StallFrac = state.StallFraction;
+            Gauges.AvailableLoadFactor = state.AvailableLoadFactor;
             Gauges.NitroInstalled = state.NitroInstalled;
             Gauges.NitroBoosting = state.NitroBoosting;
             Gauges.NitroChargeFrac = state.NitroChargeFrac;

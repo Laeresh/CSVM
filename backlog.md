@@ -1993,18 +1993,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   tracks its own pick. Depends on H22's target-tracking plumbing; `docs/controls.md` gains the
   bindings when it lands.
 
-- `BL-431` `[Feature]` **The cockpit interior's `gauges` subtree (39 meshes, `cockpit1`) renders as
-  static geometry — the needles never move, and two interior warning lamps ship parked hidden.**
-  `PLAN-cockpit-view.md` (Wave B) built the interior render but deliberately kept `GaugeCluster` as
-  the only DRIVEN instrument set (Decision 1): the in-3D dial faces, bezels and panel are authored
-  geometry with no needle animation wired to them, so a Cockpit-view capture shows the screen-space
-  HUD dials drawn over a static 3D panel holding a fixed pose. Two lamp nodes, `lowalt_on` and
-  `stallwarning_on` (present on all 11 airframes, shipped `active: true`), are parked hidden by
-  `PlaneBuilder.ParkInteriorStates`/`IsInteriorDrivenState` alongside the windshield bullet-hole
-  decals — nothing lights them.
-  *Fix shape:* drive the authored needles and the two lamps off the same telemetry `GaugeCluster`
-  already reads, then decide whether the screen-space cluster retires in first person or keeps
-  doubling up over the 3D panel as it does today.
+- `BL-431` `[Feature]` **The screen-space `GaugeCluster` doubles up over the driven 3D panel in
+  first person, and whether it should is undecided.** The drive itself has landed:
+  `CockpitGauges` (`src/Flight/CockpitGauges.cs`) binds the five needle nodes and the two warning
+  lamps inside the pilot's own `cockpit1` and writes them each frame from the readings
+  `GaugeCluster` already holds, so the authored panel and the screen-space dials cannot disagree.
+  `FlightController` applies it on exactly the frames `CockpitVisibility` puts the interior on the
+  screen. The lamps stay parked by `PlaneBuilder.ParkInteriorStates` at build, which is still right:
+  a build with no rig driving it (every lab and suite) must render a pristine cockpit.
+  *What remains:* the choice this item was filed with, now the only open part. In Cockpit the 3D
+  panel and the flat dials both read live, one over the other. Retire the screen-space cluster in
+  first person, move it, or keep the doubling. Nothing in the original settles it (see below), so
+  it is a judgement at the controls.
   ⚠ *The `POSITION_1ST` half of this item is answered and carries no work.* It was filed asking
   whether `GaugeCluster` should adopt a first-person layout from `hud_v2.zrd`'s
   `POSITION_1ST`/`POSITION_3RD` keys; `FUN_00454e70` reads those into a per-section debug text
@@ -2012,17 +2012,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   in y, written only under `DAT_00624df0`), not into dial placement. There is no per-view gauge
   layout in the original to port, so the retire-or-double-up choice above is CSVM's own call
   (`docs/formats/hud.md`, "Cockpit gauges").
-  *Decoded, ready to build against* (`docs/formats/hud.md`, "Cockpit gauges", carries the addresses
-  and conditions): the needle laws are 0.36°/ft and 0.036°/ft on world-Y ASL (`00607704`,
-  `00607700`) and 0.7199957°/mph (`006076e8`), all three confirming what `GaugeCluster` already
-  ships. Both lamps differ from what we ship. LOW ALT lights below **60.0 m AGL** (`006076fc`, not
-  our 50 m) and its blink RAMPS, half-period `0.14 + 0.006·agl_m` (`006076f4`, `006076f8`), not our
-  fixed 400 ms. STALL is gated on **available load factor below 2.35 g** (`00608334`, `00608338`),
-  not on a speed fraction, with half-period `0.100375 + 0.1275·n_avail` bounded to (0.100, 0.400] s
-  (`00603538`, `006034ac`), which supersedes the footage-derived 0.30 fd and 2.10 s-per-fraction
-  pair. ⚠ The lamps and the flight model share one dt (copied bit-for-bit at `004897d8`), so these
-  go in without a k = 1.390 conversion. Changing the four `GaugeCluster` constants is part of this
-  item's work; the damage-dial blink (5 s, 0.32 s) is NOT in the gauge cluster and stays undecoded.
+  *The decoded laws are in the code and in* `docs/formats/hud.md`, "Cockpit gauges", which carries
+  every address and condition. Both lamps changed on the way in: LOW ALT now lights below 60.0 m
+  AGL rather than a guessed 50 m, and its blink ramps (`0.14 + 0.006·agl_m`) rather than sitting at
+  a fixed 400 ms; STALL gates on available load factor under 2.35 g rather than a speed fraction,
+  with a half-period bounded to (0.100, 0.400] s. The needle laws confirmed what was already
+  shipping. ⚠ The lamps and the flight model share one dt in the original, so none of these takes a
+  k = 1.390 conversion. The damage-dial blink (5 s, 0.32 s) is NOT in the gauge cluster and stays
+  undecoded, an open TUNE.
   *Residue:* nothing is hidden for this, and nothing needs to be. The instruments were reported
   flickering, and the mechanism turned out to be the mount scale rather than the missing needle
   drive: every depth bias `SceneBuilder` emits is a fraction of VIEW DISTANCE, so mounting the
@@ -2035,7 +2032,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   plane-bearing goldens are untouched by it. What remains in a Cockpit capture is texture shimmer
   on the finest dial markings (the compass drum's ticks, the small dials' graduations) as the
   panel's projected position wobbles sub-pixel — an aliasing artifact of high-frequency instrument
-  textures, not a draw-order one, and driving the authored needles will not change it either way.
+  textures, not a draw-order one, and driving the authored needles did not change it either way.
   *Cross-refs:* `PLAN-cockpit-view.md` B11 (parked the states; also settles that the `gauges` child
   itself must stay visible — it is not a needle overlay). The windshield bullet-hole decals
   (`bullet1`-`bullet5`) share the same parked-state mechanism but are driven by the unrelated
