@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -37,7 +39,22 @@ public sealed class CockpitGauges
         _lowAltLamp = FindNamed(gauges, "lowalt_on");
         _stallLamp = FindNamed(gauges, "stallwarning_on");
         _nitroDial = FindNamed(gauges, "nitrogauge");
+        // A bind that locates the panel but finds zero belts or zero damage zones is an anomaly
+        // that used to be silent; this line is what makes it visible again.
+        int needles = new[]
+            { _altHundreds, _altThousands, _speed, _nitroBoost, _nitroCharge, _gunArrow, _missileArrow }
+            .Count(n => n.IsBound);
+        int lamps = new[] { _lowAltLamp, _stallLamp, _nitroDial }.Count(n => n != null);
+        Log.Debug("flight", $"cockpit gauges bound needles={needles} lamps={lamps} readouts={_readouts.Count} belts={_belts.Count} zones={_zones.Count}");
     }
+
+    /// <summary>How many belt positions this bind found a matching skin for. Not a fixed
+    /// constant across airframes; diagnostic and suite use only.</summary>
+    public int BeltCount => _belts.Count;
+
+    /// <summary>How many damage zones this bind found a matching skin for. Per-model, not a
+    /// fixed constant; diagnostic and suite use only.</summary>
+    public int DamageZoneCount => _zones.Count;
 
     /// <summary>Finds the panel inside one built interior, or null when there is no interior (an AI
     /// plane, or any build that did not ask <see cref="PlaneBuilder"/> for one) or no
@@ -58,6 +75,14 @@ public sealed class CockpitGauges
         }
         return new CockpitGauges(gauges, names);
     }
+
+    /// <summary>Binds through the one expression every caller must use: this builder's own
+    /// interior paired with its own materials, so a caller cannot supply one without the other.
+    /// The live flight path and the in-engine suite both call this rather than repeating the two
+    /// arguments, so a regression back to the interior alone breaks both instead of only the
+    /// controls.</summary>
+    public static CockpitGauges? Bind(PlaneBuilder builder) =>
+        Bind(builder.CockpitInterior, builder.InteriorMaterials);
 
     /// <summary>Write this frame's readings onto the panel. Called only while the interior is on
     /// the screen, so an external view costs nothing; the needles hold their last pose behind the
@@ -172,6 +197,8 @@ public sealed class CockpitGauges
             _origin = node.Transform.Origin;
             _scale = node.Transform.Basis.Scale;
         }
+
+        public bool IsBound => _node != null;
 
         public static Needle Find(Node3D gauges, string name) =>
             FindNamed(gauges, name) is { } node ? new Needle(node) : default;

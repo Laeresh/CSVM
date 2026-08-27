@@ -74,7 +74,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 ### Wave A — the two drives that are built but never reached
 
 1. ☑ Pass the interior's materials to `CockpitGauges.Bind` in the live flight path
-2. ☐ Make the belt and damage drives fail loudly when nothing binds
+2. ☑ Make the belt and damage drives fail loudly when nothing binds
 
 ### Wave B — the artificial horizon
 
@@ -139,7 +139,7 @@ for this must go through the same call the game makes.
 
 **Verified.** <pending orchestrator run>
 
-## A2 ☐ Make the belt and damage drives fail loudly when nothing binds
+## A2 ☑ Make the belt and damage drives fail loudly when nothing binds
 
 **Goal.** A future caller that binds the panel without its materials is caught by the suite rather
 than by a report at the controls.
@@ -149,21 +149,31 @@ coverage constructed its own binding. The optional parameter is what allowed a c
 wrong: an omitted argument produced an empty map, an empty map produced empty lists, and empty lists
 are indistinguishable from a plane whose panel genuinely has no belts.
 
-**Approach.** Two changes, either of which would have caught it and both of which are cheap. Make
-the in-engine cockpit suite bind the panel through the same path `HumanFlightAdapter` uses, so the
-production call is what gets exercised. And have `Bind` report the count it found, so a bind that
-locates the `gauges` subtree, the needles and the readouts but zero belts and zero damage zones is a
-visible anomaly rather than silence. A `Log.Debug` line under the existing flight channel is enough;
-an airframe that genuinely ships no indicators would then say so once at bind rather than never.
+**Approach.** Two changes landed. `CockpitGauges` gained a `Bind(PlaneBuilder)` overload that reads
+through the one expression every caller must use, `Bind(builder.CockpitInterior,
+builder.InteriorMaterials)`; `HumanFlightAdapter` and the in-engine `cockpit-interior` suite's
+`DrivenBelts` both call it now instead of repeating the two arguments, so a caller that regresses to
+the interior alone breaks both rather than only the controls. The suite also gained `BeltCount`- and
+`DamageZoneCount`-derived assertions: not a fixed number, but counted from the interior's own
+materials (the `greenindicator` and `hatchptrn` texture names), so a caller that binds without
+materials fails there rather than passing with an all-green panel. And `CockpitGauges`'s constructor
+now emits one `Log.Debug("flight", …)` line reporting needles, lamps, readouts, belts and zones
+found, so a bind with zero belts and zero zones is visible in the log rather than silent.
 
 **Model recommendation.** Medium. Choosing what the suite should assert without making it brittle
 across airframes is a judgement call.
 
-**Verify.** Revert A1's argument locally, confirm the suite now fails, restore it, confirm it passes.
-An unchanged number is not evidence unless you have seen it able to fail. Full battery after.
+**Verify.** Reverted `Bind(PlaneBuilder)`'s body locally to drop the materials argument: the suite
+failed with `belts bound … found=0 materials=12` and eight further cascading failures, and the log
+line read `belts=0 zones=0`. Restored the argument: the suite passed again with `found=12
+materials=12` belts and `found=4 materials=4` zones. Full battery after.
 
 **⚠ Traps.** Do not assert a fixed belt count. The ring is 8 positions on every airframe but the
-damage zones are per-model, and a hard count would break on the next airframe read.
+damage zones are per-model, and a hard count would break on the next airframe read. The bare
+substring `indicator` also matches `horizonindicator.tif`, the still-unwired artificial horizon's
+texture; `greenindicator` is the unambiguous marker for the belt light.
+
+**Verified.** <pending orchestrator run>
 
 # Wave B — the artificial horizon
 

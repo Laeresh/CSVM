@@ -221,12 +221,14 @@ internal static class WorldAndToolSuites
     // The belt lights take the loadout's colour tier (BL-431). A pristine plane reads all-green,
     // which proves nothing, so this drives a spent belt and reads the material back. Able to fail:
     // a drive that recolours nothing, or one that writes the shared built material and so repaints
-    // every indicator at once instead of the one position.
+    // every indicator at once instead of the one position. Binds through CockpitGauges.Bind(builder),
+    // the same expression the live flight path calls, so a caller that regresses to the interior
+    // alone breaks here rather than only at the controls.
     internal static void DrivenBelts(TestContext ctx, Node3D interior, PlaneBuilder builder,
         GameZ planesGamez, TextureArchive textures)
     {
         var cluster = GaugeCluster.Build(planesGamez, ctx.PlaneName, textures, new List<DestroyablePart>());
-        var panel = CockpitGauges.Bind(interior, builder.InteriorMaterials);
+        var panel = CockpitGauges.Bind(builder);
         if (cluster == null || panel == null)
         {
             ctx.Check(false, $"a real cluster and panel were built for the belt drive");
@@ -234,6 +236,17 @@ internal static class WorldAndToolSuites
         }
         try
         {
+            // Not a fixed count: derived from the interior's own materials, so an empty-materials
+            // regression fails here instead of an all-green panel. "greenindicator", not bare
+            // "indicator", which also matches the still-unwired horizon's texture.
+            int expectedBelts = builder.InteriorMaterials.Count(m =>
+                m.TextureName.Contains("greenindicator", System.StringComparison.OrdinalIgnoreCase));
+            int expectedZones = builder.InteriorMaterials.Count(m =>
+                m.TextureName.Contains("hatchptrn", System.StringComparison.OrdinalIgnoreCase));
+            ctx.Check(panel.BeltCount > 0 && panel.BeltCount == expectedBelts,
+                $"belts bound matches the indicator-light materials the interior carries found={panel.BeltCount} materials={expectedBelts}");
+            ctx.Check(panel.DamageZoneCount > 0 && panel.DamageZoneCount == expectedZones,
+                $"damage zones bound matches the hatch materials the interior carries found={panel.DamageZoneCount} materials={expectedZones}");
             // Position 0 spent, position 1 full: one dial, two tiers, so a shared-material write
             // cannot pass this.
             cluster.GunGauge = new GaugeCluster.WeaponGauge { Slots = new[] { 0f, 1f } };
