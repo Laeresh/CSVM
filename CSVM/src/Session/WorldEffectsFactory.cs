@@ -608,6 +608,14 @@ public sealed class WorldEffectsFactory
         // runtime node itself under the visible world root, a plain logic node that self-ticks.
         var bound = EffectCatalogue.WorldEffectAnimNames(worldProgram);
         effects.Bind(stage, worldProgram.Subset(bound));
+        // Every emitter the bound defs name is built here, off the frame that plays it, so a first
+        // burst finds its puffers and materials already made. No call-site anchors: this runtime's
+        // callers place pooled copies, so the staged-copy term already covers the INPUT_NODE hosts.
+        var warmMark = StartupProfile.Mark();
+        var warmed = effects.PrewarmEmitters();
+        StartupProfile.Record("emitters", warmMark);
+        double warmMs = Stopwatch.GetElapsedTime(warmMark).TotalMilliseconds;
+        Log.Info("anim", $"world effects: pre-warmed {warmed.Built} emitter(s) in {warmMs:0} ms ({warmed.SelfHosted} call-site hosted, {warmed.Unhosted} unhosted here)");
         _worldRoot.AddChild(effects);
         int wanted = 0;
         foreach (var r in roots)

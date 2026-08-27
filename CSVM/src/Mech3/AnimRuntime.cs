@@ -1244,9 +1244,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     }
                     else
                     {
-                        // The global tier's own admission rule, so a staged copy this def could
-                        // never resolve onto gets no emitter.
-                        hosts = FindAll(atNode, null).Where(h => StagingAdmits(def, null, h));
+                        // Unfiltered: a play anchors this def inside its CALLER's copy, which is
+                        // exactly what StagingAdmits rejects with no scope. Over-counting costs one
+                        // idle emitter, under-counting the frame this exists to save.
+                        hosts = FindAll(atNode, null);
                     }
                     int hosted = 0;
                     foreach (var host in hosts)

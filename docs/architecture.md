@@ -898,11 +898,12 @@ container: another effect live on the same slot number must not be re-posed unde
 motions. Regression: the `effect-pool-reset` suite. **`PrewarmEmitters(params Node3D[]
 callSiteAnchors)` builds every emitter the bound program's `PUFFER_STATE 1` events can name before
 anything plays**, through `EmitterDirector.Prewarm`: a named `at_node` resolves to every node of that
-name in the runtime's scope (one emitter per pool copy, filtered by the global tier's own staging
-admission), and an `INPUT_NODE` host to every node a `CALL_ANIMATION` in the program targets the
-def with, the def's own staged copies, and the anchors handed in. It starts and poses nothing. The
-crash rig calls it at bind (`WorldEffectsFactory.BuildFlightCrashRuntime`); the world-effects
-runtime is the other intended caller, never the ambient world runtime. Regression: the
+name in the runtime's scope, unfiltered, since a play anchors the def inside its CALLER's pool copy
+and the staging-admission rule with no scope rejects exactly those copies; an `INPUT_NODE` host
+resolves to every node a `CALL_ANIMATION` in the program targets the def with, the def's own staged
+copies, and the anchors handed in. It starts and poses nothing. Both the crash rig and the
+world-effects runtime call it at bind (`WorldEffectsFactory.BuildFlightCrashRuntime` and
+`BuildWorldEffectsRuntime`), never the ambient world runtime. Regression: the
 `emitter-prewarm` suite. `Play`/`PlayWithin`/`StopWithin` start a def's
 instances by anim name, the latter two scoped to one subtree (a NAME can repeat across a chapter,
 e.g. C1's three `hangerdoors`). `OBJECT_ADD_CHILD`/`OBJECT_DELETE_CHILD` take their node-reparent
@@ -5253,7 +5254,10 @@ recorded as the `emitters` startup phase and logged per rig, so a crash or a dam
 puffers and materials built and trips no `effect_pool_miss`. Measured on the Bloodhawk in C1: 217
 emitters in about 45 ms, of which the shader and atlas caches (`EmitterRenderer`, `Puffer`) are the
 difference from 2.3 s. Every rig kind is pre-warmed, an AI rig included, since its crash pays the
-same first-use cost.
+same first-use cost. `BuildWorldEffectsRuntime` pre-warms the same way after its own `Bind`, with
+no call-site anchors, since its callers place pooled copies and the staged-copy term already covers
+the `INPUT_NODE` hosts: 455 emitters in about 65 ms at one player in C1, so an ordnance impact's
+puffers (the sonic burst's nine) exist before the first burst rather than being built inside it.
 `LevelPlacedTemplateNames` is set once, from `EffectCatalogue.CrashSurfaceLevelAnimNames`
 (`BL-292`) plus `EffectCatalogue.BailoutAnimNames` — the named defs only ever play from within a
 crash sequence, so unlike `InheritedWorldVelocity` (written per anim instance by `Callback 16`,

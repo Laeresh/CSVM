@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — first-use construction, the named mechanism
 
 1. ☑ Pre-warm the crash and damage-stage emitter keys (`BL-355`)
-2. ☐ Pre-warm the sonic burst's nine puffer keys at stage build (`BL-418`)
+2. ☑ Pre-warm the sonic burst's nine puffer keys at stage build (`BL-418`)
 3. ☐ Re-judge `effect_pools.json` against a build with no first-use cost (`BL-231`)
 
 ### Wave B — the per-frame cost the data authors and we ignore
@@ -229,7 +229,7 @@ remaining live miss is cheaper by the same two terms. A2 calls the same method o
 runtime after its `Bind`, with no anchors (its callers place copies, so the staged-copy term covers
 the `INPUT_NODE` hosts). Regression: the `emitter-prewarm` suite.
 
-## A2 ☐ Pre-warm the sonic burst's nine puffer keys at stage build
+## A2 ☑ Pre-warm the sonic burst's nine puffer keys at stage build
 
 **Goal.** The first sonic burst finds every emitter it needs already built, so the first plays cost
 what the fifth does.
@@ -265,6 +265,29 @@ until measured otherwise. ⚠ A pre-warm must not leave a copy started or posed:
 finding is that a pooled copy starts from whatever END pose its last run left, and the re-reset is
 what fixes that. Building an emitter is not the same as playing it, and the `effect-pool-reset` suite
 is the guard. ⚠ See ⚠ rows 4 and 5.
+
+**Verified.** <pending orchestrator run>
+
+**Landed.** `BuildWorldEffectsRuntime` calls `AnimRuntime.PrewarmEmitters()` with no anchors right
+after its `Bind`, recorded under the `emitters` startup phase and logged: 455 emitters in about
+65 ms at one player in C1, cheap enough that restricting the pre-warm below the bound
+`WorldEffectAnimNames` subset would buy nothing. A1's seam needed one correction to reach the
+sonic keys at all. Its named-`at_node` branch filtered candidate hosts through `StagingAdmits` with
+no scope, and that rule rejects precisely the staged copies a placing `CALL_ANIMATION` retargets a
+def into: `sonic_emit1` exists in each pool slot both under `sonic_puff1`'s own copy and under the
+caller `sonic_effect`'s, the pre-warm took only the first, and every burst then built the second.
+The branch now takes every node of the name, since over-counting costs one idle emitter and
+under-counting costs the frame the pre-warm exists to save. The `emitter-prewarm` suite gained the
+world-effects arm that proves it, and that arm fails on the unfixed branch, naming eight of the nine
+puffers. The item's own premise did not survive re-measurement: with A1's shader and atlas caches in
+the tree the weapon-lab probe no longer trips `HitchMonitor` at all, before or after, so the
+130 to 290 ms baseline is gone and the gain here is that the builds no longer happen rather than a
+frame time recovered. Lowering `hitchMonitor.floorMs` to 12 to make the probe able to fail leaves
+two `effect_checkout` trips of 10 to 12 ms, unchanged in count and size across the fix, so ⚠ the
+`effect_checkout` cost this item's trap provisionally claimed is now measured NOT to be emitter
+construction; it belongs with the pool work in A3. Six goldens move on puffer seed order alone
+(`c1-flight`, `c1-destroy-effects`, `c1-crash`, `c1-debris-rest`, `c1-targeting-hud`,
+`c1-ai-wreck`), each the same effect at the same place in a different random phase.
 
 ## A3 ☐ Re-judge `effect_pools.json` against a build with no first-use cost
 

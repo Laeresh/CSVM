@@ -1333,31 +1333,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   state rules). The `PLAYER_RANGE` `* 4.0` divergence the same decode opened is closed as a
   disproof — the `* 4.0` is on `PLAYER_LINED_UP`, not `PLAYER_RANGE` (`git log --grep=BL-333`).
 
-- `BL-418` `[Bug]` **The sonic burst hitches on its first plays: first-time emitter/material
-  construction for its nine puffers, the crash rig's first-use mechanism on the world-effects
-  runtime.**
-  *Evidence:* the sonic weapon-lab probe (`--chapter=C1 --weapon-lab=wep_08 --weapon-fire
-  --infinite-ammo --weapon-surface=default --weapon-standoff=90`) trips `HitchMonitor` on the first
-  bursts (sim frames 141/202/263, one per fresh slot copy) with 130-290 ms frames whose samples read
-  `effect_pool_miss:8x`, and once with a 70 ms frame naming `effect_checkout` alone; `PoolRecycles`
-  stays 0, so it is not the pool wrapping. `sonic_ground_effect` calls nine puffer defs (`sonic_puff1`,
-  `sonic_puff4`..`sonic_puff11`, `extracted/zrdr/sonic_control.zrd.json`), and each first
-  `PUFFER_STATE 1` on a never-seen `(name, host, def)` key takes `EmitterDirector.Assert`'s miss
-  branch (`CSVM/src/Mech3/Anim/EmitterDirector.cs`, the `PerfSite.EffectPoolMiss` scope), building
-  the `Puffer` and, nested inside it, `EmitterRenderer.Attach`'s material, synchronously in the frame
-  the burst fires. With four pool slots per root, four bursts each pay it once per slot copy before
-  every key exists.
-  *Fix shape:* pre-warm those emitter keys at stage build (`WorldEffectsFactory.BuildWorldEffectsRuntime`,
-  once per pool copy) through `AnimRuntime.PrewarmEmitters`, the seam the crash rig already calls
-  after its bind, so the first burst finds every emitter built. Not a pool-size change
-  (`effect_pools.json` sizes concurrency, not first construction).
-  *How you would know:* the same probe run to eight bursts shows no `effect_pool_miss` sample after
-  the build, and no `HitchMonitor` trip whose samples name `effect_checkout`.
-  ⚠ *Trap:* the checkout re-reset (`AnimRuntime.ResetCheckedOutCopies`) runs in the same
-  `effect_checkout` scope; a hitch attributed to that site is this item's construction cost, not the
-  reset, until measured otherwise.
-  *Cross-refs:* `BL-406` (closed); the crash rig's own pre-warm is `AnimRuntime.PrewarmEmitters`
-  (`docs/architecture.md`).
 - `BL-419` `[Fidelity]` **The sonic ground burst does not read like the original's: ours is soft cyan
   hoops rising in the air, the original is one flat crisp pale-green ring growing on the terrain.**
   *Evidence:* `OriginalScreenshots/Videos/CAP-23 Rocket Sonic Ground.mp4` (frames 200-330 at 30 fps,
@@ -1383,7 +1358,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   a brief sparkle.
   *Cross-refs:* `CAP-26` (the rocket-impact rings capture; the sonic half is answered by the CAP-23
   clips above, and its "look for" list should gain the flat-ring-versus-airborne-hoops question),
-  `BL-418`, `BL-406` (closed).
+  `BL-406` (closed).
 
 ## Audio
 

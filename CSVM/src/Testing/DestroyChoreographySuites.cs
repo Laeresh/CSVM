@@ -730,6 +730,7 @@ internal static class DestroyChoreographySuites
                 textures.Dispose();
             }
         });
+        WorldEffectsPrewarm(ctx);
     }
 
     // Every wreck node's rest pose — the local mirror of
@@ -891,6 +892,61 @@ internal static class DestroyChoreographySuites
         float spend = damage.WholeHealth - (fraction * damage.WholeHealthMax);
         if (spend > 0f)
             ai.TakeCollisionHit(0f, spend, ai.GlobalPosition, 0);
+    }
+
+    // The same pre-warm at the second host, the world-effects stage: the sonic burst's puffer defs
+    // are built at bind, and five plays over a four-slot pool then reach the factory for none of
+    // them. Five, not one, because each fresh slot copy is its own host and so its own key.
+    private static void WorldEffectsPrewarm(TestContext ctx)
+    {
+        const int slots = 4;
+        const string anim = "sonic_ground_effect";
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var stage = OrdnanceSuites.StageBurstRoots(ctx, world, anim, slots);
+            var fake = new CountingEmitterFactory();
+            var runtime = AnimRuntime.ForEffects(
+                AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
+                1, fake, false, SuiteConstants.BurstTtl, () => ctx.Camera.GlobalPosition);
+            runtime.ManualAdvance = true;
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, world.Session.Program.Subset(anim));
+                int atBind = fake.Built.Count;
+                var warmed = runtime.PrewarmEmitters();
+                int warmedCount = fake.Built.Count;
+                ctx.Note($"world-effects pre-warm: built={warmed.Built} unhosted={warmed.Unhosted} self_hosted={warmed.SelfHosted}");
+                ctx.Check(warmed.Built > 0 && warmedCount - atBind == warmed.Built,
+                    $"{anim}: the pre-warm built its emitters through the factory built={warmed.Built}");
+                ctx.Check(fake.Built.All(e => e.Started == 0 && !e.Sustaining),
+                    $"{anim}: nothing the pre-warm built has started");
+                ctx.Check(runtime.Emitters.Census.All(r => !r.Emitting),
+                    $"{anim}: no census row emits after the pre-warm");
+
+                int steps = Mathf.RoundToInt(SuiteConstants.BurstSeconds * 60f);
+                for (int play = 1; play <= slots + 1; play++)
+                {
+                    ctx.Check(runtime.PlayEffectAt(anim, ctx.Camera.GlobalPosition), $"burst {play} started");
+                    for (int i = 0; i < steps; i++)
+                    {
+                        runtime.Advance(1f / 60f);
+                    }
+                }
+
+                var late = fake.Built.Skip(warmedCount).Select(e => e.Key).Distinct().ToList();
+                ctx.Check(late.Count == 0,
+                    $"{anim}: {slots + 1} bursts over {slots} slot(s) reach the factory for no emitter{(late.Count == 0 ? string.Empty : $", built {string.Join(", ", late)}")}");
+                ctx.Check(fake.Built.Any(e => e.Started > 0),
+                    $"{anim}: the bursts started pre-warmed emitters");
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
     }
 
     // One start of the bullethole def, advanced past its authored second (its last event sits at
