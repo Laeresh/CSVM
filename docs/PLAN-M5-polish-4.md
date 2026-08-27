@@ -86,6 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☐ `BL-516`: CM03's AA turret never fires
 4. ☐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
 5. ☐ `BL-512` + `BL-522`: the Barracuda's drive jumps, its launch faces the wrong way, and its fighters crash at once
+6. ☑ `BL-556`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
 
 ### Wave B — CM05 and CM06
 
@@ -282,6 +283,43 @@ with the generator log on shows each launched fighter's first seconds airborne; 
 **⚠ Traps.** The zeppelin launch-altitude gate is a decoded rule for airships and not a general
 one: do not lift the sub's launch by borrowing it, and do not add a spawn-height offset. `BL-515`
 (where the Barracuda takes damage) is research and stays in the backlog.
+
+## A6 ☑ `BL-556`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
+
+**Goal.** Confirming a cutscene skip or the pause menu's Resume with gamepad A (or F on the
+keyboard) launches nothing; the next fresh pull of the trigger fires as before.
+
+**Evidence (confidence: traced).** Reported at the controls, added during Wave A.
+`RocketFirePressed()` (`FlightController.cs:1871`) is a level read of `JoyButton.A`, and the
+press that `CutsceneController.Skip()` or `BoardMenu`'s confirm consumes is still down on the
+first flight frame after the world resumes. The rocket read's own comment names the spawn-frame
+form of the same defect.
+
+**Approach.** Latch the rocket trigger when flight regains input after a skip or a resume, and
+release the latch on the first frame the button is up; the keyboard F takes the same latch.
+Decode lane: none; a port-side input interaction.
+
+**Model recommendation.** medium, low effort.
+
+**Verify.** A unit or engine test that holds A across a skip and across a Resume and asserts no
+launch, then releases and pulls and asserts one launch; `cutscene-skip-*` and pause suites
+unchanged; at the controls in D32.
+
+**⚠ Traps.** Do not turn the trigger into an edge read (a held A fires once by design). B and X
+are not confirm buttons and stay untouched. Cover Resume, dismiss and the skip; Photo mode and
+Restart resume by other paths.
+
+**Landed.** A new pure `RocketTriggerLatch` (`src/Flight/RocketTriggerLatch.cs`) sits behind
+`FlightController.RocketFirePressed()`: it arms when `RocketButtonDown()` (F/A) reads true at the
+two re-entry points flight regains input from — the `Inert` setter clearing (a cutscene's skip or
+its own handoff) and `PollPauseAndHalt`'s halt-clearing edge (a pause-menu Resume, Restart, or a
+dismiss, all of which route through the same `PauseState.Halted` transition) — and reads the
+trigger released until the physical button lets go, at which point it disarms and a fresh pull
+fires normally. `FireControl`'s own edge detector (`_rocketFirePrev`) is untouched; the fix is
+entirely upstream of it, so the gun trigger (B) and the selectors are unaffected. Both
+`Inert=false` sites (`Activate`, the wave/respawn re-entry) and the pause halt clearing are
+covered by the same two hooks, closing the spawn-frame sibling the original comment named as well.
+**Verified.** <pending orchestrator run>
 
 # Wave B — CM05 and CM06
 
