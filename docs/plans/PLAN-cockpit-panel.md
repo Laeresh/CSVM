@@ -390,7 +390,8 @@ C1 mission spawn (`-7066, 326, -5519`, heading -48°) the dial faces jump 1-3 px
 clock and `--det`, which is the report at the controls. Confirmed: the motion is float32 rounding of
 the interior's world-space transform at chapter-scale coordinates, exposed by a rotated attitude,
 and C21 is the right fix. The instrument is `.scratch/bl556/register2.py` over consecutive
-`--shots`, recorded in `BL-556`.
+`--shots`; the item minted for the symptom during this plan was closed by C21 and its number was
+re-used on `main` for an unrelated item, so this section is the record.
 
 **Verified.** Full battery on the plan's final tree: units 2444 passed; in-engine suites 146/146
 passed, engine errors clean; goldens 16 shots hash-identical; hitch stage clean (awareness only).
