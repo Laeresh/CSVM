@@ -182,6 +182,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PathFollower.cs` — the second movement law: a placed vehicle driven along an authored waypoint path instead of through the flight model, handing itself back at the last waypoint.
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/ThrottleSlamSmoke.cs` — a large throttle jump streams dark exhaust trail smoke for a few seconds; a single notch or a decrease shows nothing.
+- `src/Flight/FuelTank.cs` — the flown tank: burns with the lever, and a dry one freezes the throttle lever where it stands. Engine-free.
 - `src/Flight/SpeedCue.cs` — chapter-authored pale smoke wisps emitted 60 m ahead of each player, density selected by camera altitude.
 - `src/Flight/ControlSurfaceMix.cs` — the decoded control-surface angle solver: three stick channels into six clamped slots, smoothed at 2/s, with the human-pilot guard. No scene node.
 - `src/Flight/ControlSurfaceAnimator.cs` — poses ailerons/elevators/rudders from those slot angles; `--fly` only.
@@ -189,9 +190,10 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PylonOrdnance.cs` — the rockets under the wings: one FLYOUT-model body per loaded pylon, hidden as its ammo depletes; `--fly` only.
 - `src/Flight/PlaneShake.cs` — the plane-wobble oscillators (gunfire buzz, overspeed rattle, being-hit rocks, the nitro engage) summed to visual-only roll on the rig's ShakePivot.
 - `src/Flight/NitroSystem.cs` — the nitro boost lifecycle: the decoded tank, one-shot engage, cutoff, gates and animation edges, engine-free.
-- `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's triangles, with no per-plane data.
+- `src/Flight/PlaneCollider.cs` — derives up to 8 plane-frame convex collision hulls from the built model's triangles, with no per-plane data.
+- `src/Flight/ConvexHull.cs` — an engine-free convex hull over a point cloud: vertices, outward faces, thickness padding, and the point-distance query the fuse and blast passes ask.
 - `src/Flight/CollisionLayers.cs` — the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.
-- `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` boxes on the aircraft layer; struck shape → part name.
+- `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` hulls on the aircraft layer; struck shape → part name.
 - `src/Flight/IWorldQuery.cs` — the one seam onto the live physics world: a shape swept along a motion, a ray, and a standing overlap test.
 - `src/Flight/GodotWorldQuery.cs` — the only adapter over `DirectSpaceState`; implements `IWorldQuery`.
 - `src/Flight/ContactReport.cs` — one detected contact as a value: impact, normal, struck part, collider name, stop fraction, and whether an aeroplane was struck.
@@ -281,6 +283,7 @@ The things every subsystem depends on: the clock, the log, the seed. Changing on
 determinism repo-wide — read `docs/verification.md` first.
 
 - `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the in-code `const`.
+- `src/Utils/EffectsLevel.cs`: the original's graphics EffectsLevel option (`graphics.effectsLevel`, default `high`) and the one global it drives, the clutter fade's squared distance scale; `graphics.clutterFarFade` (default `true`) switches the authored fade off entirely.
 - `src/Utils/GameClock.cs` — the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt + single-step, time scale.
 - `src/Utils/Log.cs` — the diagnostic log: 9 categories × 4 levels, `--log=` console filter, always-on full-detail `.scratch/logs/` file sink.
 - `src/Utils/ShaderTime.cs` — the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
@@ -603,8 +606,9 @@ Static helpers (`HorizonZonesOf`, `CloudDeckAltitudeOf`, `DomeZonesToBuild`, `De
 
 ## src/Mech3/MapEdgeExtender.cs
 Rolling window (`Rings`=5 of 1024 m cells, diffed only on cell crossings) of repeated border tiles +
-clutter (grown from `ClutterBuilder.ExportedKinds`) continuing the world past the map edge, one
-window per session shared by every player camera. `ClassifyGroundMesh`/`IsCompletionStrip`/
+clutter (grown from `ClutterBuilder.ExportedKinds`, each copy keeping its source stamp's fade
+thresholds) continuing the world past the map edge, one window per session shared by every player
+camera; the window's 5120 m reach exceeds the largest authored clutter fade at every detail level, and is unchanged by `graphics.clutterFarFade=false`, which simply leaves the window edge (under the mission's fog) as the extension's visible limit. `ClassifyGroundMesh`/`IsCompletionStrip`/
 `FoldAxis` are pure statics pinned by `MapEdgeTileTests`/`MapEdgeFoldTests`; `--dump-tilegrid` writes
 the per-cell acceptance census `WriteCensus` builds. The original's own continuation behaviour and
 the per-chapter fold measurements: docs/formats/world-structure.md.
@@ -617,7 +621,10 @@ MultiMesh per kind, solids → `SceneBuilder.SharedMesh`; the split is `SceneBui
 The sprite shader takes the decoration model's own `lighting`/`fog` flags as variants (every tree and
 bush card in the install is `lighting: false`, so clutter does not dim with the mission SUNLIGHT),
 plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's own card UVs.
-`TemplateNames` reads the chapter's `AddClutterTemplates` list **unfiltered** — which district
+Every stamp carries its authored far fade as MultiMesh custom data (`Kind.Fades`, exported beside
+`Placements`), applied by the sprite shader and by `SceneBuilder.SharedMesh(clutterFade: true)`
+for the solid kinds, under the `EffectsLevel` global; the fade's draw is its own stream off the
+placement seed. `TemplateNames` reads the chapter's `AddClutterTemplates` list **unfiltered** — which district
 dresses a given patch is the per-polygon `no_clutter` gate's decision (`PlaceOnMesh`), not a
 curated list here; `OverrideTemplateNames` is `--clutter-templates=`'s replacement for it — the caller's names,
 filtered to the ones this gamez carries a root for — so one district can be loaded alone and A/B'd
@@ -639,7 +646,8 @@ clutter DECORATION MODEL — `substitute`'s weighted roll, `scale_range`, `far_f
 jitter/rotation/slope/damage keys the retail data leaves at their defaults. Schema, offsets and the
 per-chapter census: docs/formats/templates.md. Static over a reader list, so all eight chapters are
 pinned off-engine (`CSVM.Tests/ClutterTemplatesTests.cs`). Consumed by `ClutterBuilder` for
-`substitute` + `scale_range`; `far_fade_range` is read and unapplied. See the class and member doc
+`substitute`, `scale_range` and `far_fade_range`, the last through `FadeThresholds`, the pure
+per-stamp `(near², far², reciprocal)` the fade shaders read. See the class and member doc
 comments in the file, and docs/formats/templates.md, for the decode detail — the keying by
 decoration model rather than template, the nested-pair bound grouping, the slope-key inversion, and
 the substitute-roll/duplicate-name resolution rules are all there.
@@ -895,14 +903,29 @@ own closure and its slot, never the whole `pool<N>` container: another effect li
 number must not be re-posed under its running motions. The authored pose the restore reads is banked
 for a whole pooled copy at `IndexPooledCopy` (`PrimeRest`), as-built, rather than left to `RestOf`'s
 lazy capture on the first thing that moves a node — on a reused copy that first mover has already
-displaced it. Regressions: the `effect-pool-reset` and `effect-pool-spawn-pose` suites. `Play`/`PlayWithin`/`StopWithin` start a def's
+displaced it. Regressions: the `effect-pool-reset` and `effect-pool-spawn-pose` suites.
+**`PrewarmEmitters(params Node3D[]
+callSiteAnchors)` builds every emitter the bound program's `PUFFER_STATE 1` events can name before
+anything plays**, through `EmitterDirector.Prewarm`: a named `at_node` resolves to every node of that
+name in the runtime's scope, unfiltered, since a play anchors the def inside its CALLER's pool copy
+and the staging-admission rule with no scope rejects exactly those copies; an `INPUT_NODE` host
+resolves to every node a `CALL_ANIMATION` in the program targets the def with, the def's own staged
+copies, and the anchors handed in. It starts and poses nothing. Both the crash rig and the
+world-effects runtime call it at bind (`WorldEffectsFactory.BuildFlightCrashRuntime` and
+`BuildWorldEffectsRuntime`), never the ambient world runtime. Regression: the
+`emitter-prewarm` suite. `Play`/`PlayWithin`/`StopWithin` start a def's
 instances by anim name, the latter two scoped to one subtree (a NAME can repeat across a chapter,
 e.g. C1's three `hangerdoors`). `OBJECT_ADD_CHILD`/`OBJECT_DELETE_CHILD` take their node-reparent
 form here (`Reparent`, keeping the LOCAL transform) once the sound-emitter form has declined,
 which is how a cutscene composes its camera inside the node it frames; the decode is
 `docs/formats/anim-definitions/cutscenes.md`. A ranged startanim with an unplaced immediate callee is
 deferred until range; range-triggered and explicit mission-trigger calls may then lazily build their
-library-root callees, and an add-child may do the same for an explicitly named child.
+library-root callees, and an add-child may do the same for an explicitly named child. The range
+sweep (`TickDeferredByRange`) runs only when a player crosses an 8 m check cell, and it measures
+each anchor's range origin (`VisualOriginOf`, a mesh-bounds walk) once, carrying it in the anchor's
+own frame (`_rangeOriginLocal`) from then on: at cruise the sweep runs every few frames, and
+re-walking every deferred anchor's subtree per sweep allocated tens of MB/s of finalizable Godot
+wrappers, which is what fed the periodic gen1 collection pause.
 Every construction site hands over a sealed `TemplateStage`
 (`NewTemplateStage`/`ForEffects`/`ForCrashRig`). Sibling modules, each with its own entry: the
 sequence interpreter is `SequenceRunner.cs`, live motions are `Anim/MotionSet.cs`, name resolution
@@ -988,7 +1011,12 @@ follow, and `Census`. `AnimRuntime` keeps only the dispatch case, the `at_node` 
 and the `active_state` read. One director per runtime; `IEmitterFactory` is what builds (`Puffer`,
 `TextureArchive` and the parent node sit behind that seam), so a suite can install a fake. The
 selector/disposition split across the four stops, the emitter-keying tradeoff and the stop-family
-history live in this file's own doc comments, not here.
+history live in this file's own doc comments, not here. `Prewarm` builds the emitter for a key ahead
+of any assert and leaves it unclaimed: the first `Assert` on that key takes it over (ownership, the
+start and the `Built` count) exactly as if it had constructed it, the owner-selected stops pass an
+unclaimed entry over, and `Prewarmed` counts what was built ahead. `Reset` keeps every emitter whose
+host node still exists, returned to that unclaimed state, so a respawned rig's next crash builds
+nothing; only an emitter whose host is gone is destroyed.
 
 ## src/Mech3/Anim/SoundChannel.cs
 One runtime's `SOUND_NODE`/`SOUND` events as a module: `HandleSoundNode` (declare/place/start the
@@ -1124,9 +1152,17 @@ unnamed sequences), which is why identity is the object. `StopSequence` halts ev
 **and does nothing else** (`004eb610` writes the sequence DONE and has no start-if-not-running
 path): a stop naming a parked ON_CALL sequence therefore runs no teardown at all, which is what 16
 shipped definitions author (`flame_ball_01/02 → stop_p1trail`, every chapter, inside the HE
-explosion's chain). CSVM does not persist the resulting DISABLE, so a later CALL_SEQUENCE can still
-start a stopped sequence where the original would refuse it — 123 definitions name one sequence in
-both a call and a stop, but no def is known to reach the stop first. Both are
+explosion's chain). The stop is also a DISABLE for the life of the instance: `AnimInstance` keeps
+the set of sequences a stop has named, and `CallSequence` refuses a call into one of them, which is
+what `004eb570`'s parked-only start does to a sequence `004eb610` wrote DONE. 123 definitions name
+one sequence in both a call and a stop, and four reach the refusal: C1's `car_loop1_start`,
+`car_go_home_start`, `hauler1_start` and `truck1_start`, whose lap loop calls a dust or exhaust
+sequence, stops it later in the lap and calls it again on the next lap, so the called sequence
+runs on the first lap only (the `stop-sequence` suite drives `car_loop1_start`). The other 119
+(`flame_light_seq` in the destroy defs, `chuteman_drop`/`chuteman_sway`, the `sail_splash*`/
+`yacht_splash*` sets, `warhawk`'s `smokepuff1..3`) stop after their last call, so the refusal
+never fires for them; `RefusedStoppedCalls` is the counter and the `anim: CALL_SEQUENCE … refused`
+log line names any new one. A restart builds a fresh instance and clears the set. Both are
 public so `CSVM.Tests` drives them against a fake host; the host is any `ISequenceHost` (the game's
 real one is `AnimRuntime`, tests pass a recorder). Anchors are opaque `Node3D?` pass-through — the
 interpreter never dereferences them.
@@ -1505,9 +1541,9 @@ the layer's live pose every step, and the same teardown both end conditions reac
 `SmokeScreenEmitters` is the engine side of that seam, reading `generate_smokescreen`'s
 DISTANCE_INTERVAL `PUFFER_STATE`s out of the world `AnimProgram` (the session wires it once the
 chapter's textures exist) and pooling one `Puffer` per authored state, reused only once its previous
-screen's puffs have decayed. ⚠ Take the definition from the COMPILED archive: `AnimDefs`' reader
-normalizer carries no `DISTANCE_INTERVAL`, so the reader form of the same definition reads as no
-trail at all. The cloud's look is the authored numbers through `Puffer` unchanged (`smokerpuff`:
+screen's puffs have decayed. The compiled archive is where the definition is taken from; the reader
+normalizer now carries `DISTANCE_INTERVAL` too, so the reader form of the same definition is a trail
+rather than the no-trail sustain it used to read as. The cloud's look is the authored numbers through `Puffer` unchanged (`smokerpuff`:
 four puffs per 0.65 m, `SIZE_RANGE` 0.15–0.25 growing 85× over a 2.5–4 s life, `LOCAL_VELOCITY`
 10 m/s astern plus ±17 m/s of random, `NEAR_FADE 30,10` so a camera nearer than 30 m of depth
 sees none of it, the `53,74,37` ramp at alpha 0.8; `smokerpuff2` is the thin 1–1.3 s ribbon at the
@@ -2682,6 +2718,16 @@ all three modes with no atlas, no `TextureArchive` and no GPU. The continuous su
 `Emit(worldPos, worldBasis, dt, staticBurnMps = 0f)` / `Stop()`, plus the one-shot `Burst` and the
 hard-kill `Clear` — the authored state picks burst, trail or sustained mode, callers never do.
 `PufferState.FromAnimEvent` parses the compiled anim payloads; `Parse` reads the reader form.
+**Two different numbers answer "no `TIME_INTERVAL` authored"**, and both parsers keep them apart:
+`TimeIntervalDefault` is the engine constructor's 1 s, and `StillHostSputterInterval` is CSVM's own
+0.1 s cadence for a `DISTANCE_INTERVAL` state whose host holds still (a mode the engine does not
+have at all). A compiled event says "unauthored" with a **zero** interval, which the engine's own
+setter refuses; a reader block says it by omitting the key, and every reader block that omits it is
+a distance block. Merging the two constants moves either every static building's sputter or every
+unauthored state by a factor of ten, so the `puffer-modes` suite asserts both cadences.
+`Create`'s atlas comes from a per-archive cache keyed by the frame list and the sequenced flag
+(`BuildAtlas` over `BakeAtlas`), so a state many emitters share is baked and luminance-measured
+once; the archive is the key, so a chapter change never serves another chapter's frames.
 Three config knobs (`puffer.burstSizeScale`/`trailSizeScale`/`sustainSizeScale`) scale `BaseSize`
 per spawn path, registered in `Config.WarmTuningRegistry` for `--dump-config`.
 The wind it reads is `Effects/WorldWind.cs` — see its own entry below.
@@ -2731,7 +2777,10 @@ authored in DX7 framebuffer bytes, so multiplied in raw it drew every ramped puf
 too pale (the smoke screen's `53,74,37` came out `109,126,92` against the reference's `50,68,35`).
 The atlas and the blend verdict both arrive already resolved from `Puffer.Create`, which is what
 keeps the three modes reachable with no `TextureArchive` below this seam. Reached in a suite by
-`RecordingEmitterRenderer`.
+`RecordingEmitterRenderer`. `Attach` takes its `Shader` from a static per-variant cache (blend ×
+soft, four at most): a `Shader` per emitter compiled in about 6 ms, which was most of a live
+`effect_pool_miss` and of a crash rig's pre-warm; the `ShaderMaterial` stays per emitter, since it
+carries the atlas.
 
 ## src/Effects/FogVolumeClutter.cs
 The ambient cloud field, entirely authored: `fogvol.zrd`'s weighted clutter table scattered
@@ -2879,6 +2928,20 @@ puffers via `Puffer.Emit`/`Stop` (DISTANCE_INTERVAL, the same mechanism
 not a time-interval burst. `Reset(throttle)` (crash/respawn) hard-stops any plume and re-anchors the
 climb tracker so the throttle jump those moments make is never itself read as a slam.
 
+## src/Flight/FuelTank.cs
+The flown aircraft's tank, engine-free so the arithmetic is testable without a scene. `Step(dt,
+lever)` takes `dt · lever · 5` off `Remaining`, clamps at zero, and returns whether the throttle
+lever may move this tick; it returns false on a dry tank, which is what freezes the lever where it
+stands rather than closing it. The lever handed in is the value entering the tick, before that
+tick's slew, matching the original's ordering. `Capacity` comes from `PlaneStats.FuelCapacity` (the
+def's `fuel` key, 54926 on every player airframe) and `Fill` is the spawn-time top-up; a
+non-positive capacity frees the lever instead of freezing it, so a fixture without the authored key
+still flies. Only `FlightController.ReadKeyboard` burns, which is the original's player-only gate:
+an AI-flown or scripted aircraft leaves its tank full, and a crashed airframe burns nothing while
+still moving its lever. Nitro costs no fuel, because the burn reads the lever and not the boost
+flag. Decode: `docs/org/flightModel.md`, "Part-throttle equilibrium"; the key:
+`docs/formats/vehicle.md`.
+
 ## src/Flight/SpeedCue.cs
 Its internal `Dispose` removes every puffer node when roster assembly is rolled back.
 
@@ -2936,11 +2999,23 @@ set back off — detaching each body from its pylon IMMEDIATELY, not merely queu
 lab's rebuild-on-swap cannot leave the old ordnance hanging beside the new.
 
 ## src/Flight/PlaneCollider.cs
-Derives 5–8 plane-frame collision boxes from the built model's mesh triangles alone (no per-plane
-data): region-clipped geometry (tail/wing/fuselage), then greedy volume-guided refinement cutting
-one OR two parallel planes per axis (the double cut separates bilateral pairs like twin fins).
-Single-sourced: the terrain sweep casts these boxes AND `AircraftBody` mounts the same
-`BoxShape3D` resources as the plane's hittable body — never a second derivation.
+Derives up to 8 plane-frame convex hulls from the built model's mesh triangles alone (no per-plane
+data): region-clipped geometry (tail, wing, fuselage out to the wing band), greedy volume-guided
+refinement cutting one OR two parallel planes per axis (the double cut separates bilateral pairs
+like twin fins), then one `ConvexHull` per refined piece. The refinement and the part order are
+judged on the pieces' boxes, so the hull is only the emitted shape and never moves a cut or a name.
+Single-sourced: the terrain sweep casts these hulls AND `AircraftBody` mounts the same
+`ConvexPolygonShape3D` resources as the plane's hittable body — never a second derivation.
+`Layout` is the engine-free half (`Triangle`s in, named `Region`s out) the `airframe-hull-coverage`
+suite and the unit tests measure; `Build` wraps it in shapes.
+
+## src/Flight/ConvexHull.cs
+A convex hull over a point cloud with no engine dependency: vertices, outward faces, edges, bounds
+and volume, plus `Contains` and the point-to-surface `Distance` the fuse and blast passes ask.
+Incremental construction on millimetre integer coordinates with exact 64-bit volume signs, so a
+near-coplanar mesh cannot fold it (a float-epsilon hull did, on two airframes). A cloud thinner
+than the thickness floor along an axis is padded to it first, the per-dimension floor the box
+shapes applied; a cloud too degenerate to hull falls back to its padded bounding box.
 
 ## src/Flight/ShakeDefs.cs
 Typed reader over the shared `shakes.zrd.json` — the six shake-oscillator sources
@@ -3977,6 +4052,13 @@ Fed the same raw `Stopwatch` `frameMs` `HitchMonitor` ticks on (never Godot's `d
 frame, unconditionally — the worst-frame peak has to already be warm the instant F14 is pressed,
 or it would have nothing to say about the hitch that made someone look. Off by default and builds
 nothing until switched on, so the 11 golden screenshots stay byte-identical.
+Both its controls are placed by their **right edge only** (`PlaceTopRight`: `OffsetRight = -8`,
+`OffsetLeft` derived from the width, `GrowHorizontal.Begin`), so the readout's right edge stays
+8 px inside the window at every window size and font scale while the text grows leftward. A
+right-anchored control's `OffsetLeft` is where its box was pinned, not where grow-left ended up
+drawing it, so reading it back (or assigning `Size`, which derives `OffsetRight` from it) walks the
+control a full width off the side of the window; that is what put the frame-time strip off screen,
+and `--run-tests=perf-hud-layout` is the arm that holds it.
 On `HudLayers.PerfReadout` (11), **above `HudLayers.Board`**: the launchscreen's background is a
 full-screen opaque `ColorRect` on `Board`, and this readout has to read there too. Sized off
 `HudMetrics.ReferenceHeight` through the plain window-height ratio, not `HudMetrics.Scale` —
@@ -4047,6 +4129,10 @@ the current rung. `Current`/`Ladder`/`Level`/`CurrentBox` + the `Changed` event 
 other inspect tools read; `Select(node)` is the programmatic entry; `--debug-select=x,y[,up]`
 replays a click for scripted runs. `ExtraRoots` walks props parked beside the world content rather
 than under it (the anim lab's `--plane=` prop), each also capping its own ancestor ladder.
+`SubtreeWorldAabb` is the shared box measurement (`AnimRuntime.VisualOriginOf` and `NodeLab` read
+it too) and walks children by index with a prebuilt `StringName` for the overlay key: `GetChildren()`
+and a string-to-`StringName` conversion each allocate a finalizable wrapper per node visited, which
+a walk over a world subtree cannot afford on a per-frame path.
 
 ## src/UI/TargetingOverlay.cs
 The targeting overlay (F15, `--debug-targets`): a per-frame line from every turret gunner
@@ -4488,9 +4574,14 @@ slot 0's `sonic_ring1..5` read three frames into play 1 and play 5: visible-in-t
 per-instance opacity must agree, and both plays must be drawing at least one ring. Without the
 re-reset the fifth play's rings read INACTIVE at opacity 0, which is the sortie-long dead-burst
 symptom this suite exists to hold shut.
+`airframe-hull-coverage` builds all eleven player airframes and measures `PlaneCollider.Layout`
+against each one's own triangles: every hull inside the box it replaces and above the thickness
+floor, the fuselage leading the part order with only the four names `PlaneDamage.MapStruckPart`
+knows, and no more than 0.5 % of the silhouette's triangle area outside every hull; its artifact
+lists the per-part box and hull volumes, which is the overhang the sweep no longer bridges.
 
 ## src/Testing/*Suites.cs
-Sixteen domain modules hold the in-engine scenario bodies, each named for the whole of what it
+Seventeen domain modules hold the in-engine scenario bodies, each named for the whole of what it
 files: `PufferSuites` (the emitter model's modes, wind, fades and fire column), `CombatSuites`
 (loadouts, live fire, aim assist and the hit chain), `OrdnanceSuites` (a round's flight, guidance
 and ends), `InstantActionSuites` (the mission runtime from spawn to wrap-up), `AiSuites` (how a
@@ -4511,7 +4602,8 @@ mid-mission world behaviours the shipped data drives: the area-selected node tog
 story rectangles, the scripted-path follower over C1's own takeoff path, the mission script's and
 the generator's hangar doors over C1/M04, and the `FOG_STATE` event over its intro), plus
 `AlphaCutoutRaySuites` (the BL-477 census: what actually stops a weapon ray short of C3/M01's cargo
-zeppelin's slung tanks, as first-collider node names over a sphere of aspects). They depend on
+zeppelin's slung tanks, as first-collider node names over a sphere of aspects) and
+`AirframeColliderSuites` (the collision hulls measured against the mesh they came from). They depend on
 `TestHarness` through
 `TestContext`; shared fixtures are separate focused modules, not an all-purpose suite helper.
 
@@ -4922,8 +5014,15 @@ its stats; a def that is no `kind_of` variant of its airframe flies the plain ba
 block's own def still deciding the mode. `ResolveLeader` is the second-pass lookup (`player` = the
 first human). An `enabled 0` block is excluded from the initial roster and
 `BuildGeneratorTemplate` resolves it separately when an enemy generator's `vehicle.params` names
-its positional header label. Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`; the placement half
-is the `campaign-roster` suite.
+its positional header label; `GeneratorTemplates` is the whole mission's map of those, keyed by
+that label, and `GameSession` builds it on any run with the generators on rather than only a
+campaign one, since the parameter blocks are mission data and a launch that misses its block flies
+a CLI airframe carrying none of the authored fields. `ApplyPlan` is the after-the-spawn half of a
+plan (volumes under the floor, signature maneuvers, the gunner's rating biases and its assignment),
+shared by the campaign placement and the generator launch so the two cannot drift; ⚠ it leaves an
+escorting block's `primary_target` alone, because there it names a leader and not a target.
+Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`; the placement half
+is the `campaign-roster` suite, the generator half the `generator-roster-params` suite.
 
 ## src/Session/ScriptedPathVehicles.cs
 One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored
@@ -5000,7 +5099,11 @@ Pinned by the `zeppelin-launch` suite. For campaign missions, `RequireWakeupCred
 starts cycles named by a script's `WAKEUP_GENERATOR` empty, and
 `GrantWaveCapacity(hostNode, n)` is its top-up; the spawn
 callback receives the whole `EnemyGeneratorDef`, allowing `vehicle.params` to select its AIV
-template while position is still read from the live host.
+template while position is still read from the live host. That selection is the mission spawner's
+roster read and runs on any generator session: `GameSession.SpawnFromGenerator` spawns the matched
+template through `CampaignRosterPlan.SpawnFor`, applies the rest of its slots with `ApplyPlan` and
+registers the block's accent, and falls back to the `--generators=` airframe only when no parameter
+resolves. C5/M04's `dantezep` is the one shipped case whose block authors the nitro slot.
 `UseInstantActionLaunches(hostNode, release)` plus the same credit are F12's arm: the
 objective zeppelin's generator goes onto the wave-credit budget and its launches RELEASE an
 already-built (inert) wave member through the caller's hook instead of spawning a fresh aircraft —
@@ -5188,6 +5291,16 @@ copy — see `AnimRuntime`'s pool paragraphs for the mechanism and the `damage-t
 for the regression shape. The stage has **two** sources: the chapter gamez, then the planes gamez
 for a root it has none of, which is the only place the destroy def's parachute (`chuteman`) lives;
 both spawners pass it, and its own builder is cached here for the session.
+After the bind, `BuildFlightCrashRuntime` pre-warms the rig's emitters
+(`AnimRuntime.PrewarmEmitters` with the plane model and the crash root as the call-site anchors),
+recorded as the `emitters` startup phase and logged per rig, so a crash or a damage stage finds its
+puffers and materials built and trips no `effect_pool_miss`. Measured on the Bloodhawk in C1: 217
+emitters in about 45 ms, of which the shader and atlas caches (`EmitterRenderer`, `Puffer`) are the
+difference from 2.3 s. Every rig kind is pre-warmed, an AI rig included, since its crash pays the
+same first-use cost. `BuildWorldEffectsRuntime` pre-warms the same way after its own `Bind`, with
+no call-site anchors, since its callers place pooled copies and the staged-copy term already covers
+the `INPUT_NODE` hosts: 455 emitters in about 65 ms at one player in C1, so an ordnance impact's
+puffers (the sonic burst's nine) exist before the first burst rather than being built inside it.
 `LevelPlacedTemplateNames` is set once, from `EffectCatalogue.CrashSurfaceLevelAnimNames`
 (`BL-292`) plus `EffectCatalogue.BailoutAnimNames` — the named defs only ever play from within a
 crash sequence, so unlike `InheritedWorldVelocity` (written per anim instance by `Callback 16`,
@@ -5284,6 +5397,20 @@ key, else the caller's in-code `const` default — read-through at the point of 
 `moduleCamelCase.fieldCamelCase`, grouped one nesting level in the JSON and flattened to dot-keys.
 Read-only — nothing writes the file; `config.json` is git-ignored, so the consts stay canonical.
 
+## src/Utils/EffectsLevel.cs
+The original's graphics EffectsLevel option as a config key (`graphics.effectsLevel`: `high`,
+`medium`, `low`; default `high`, which `detail.zrd` selects on any CPU over 600 MHz), and the one
+global it drives today: `csky_clutter_fade_scale_sq`, the squared distance scale every
+templates-clutter fade multiplies into its camera distance (1.0/4.0/9.0), registered once by
+`Launcher` beside the fog globals and declared in `shaders/csky_clutter_fade.gdshaderinc`. The
+level's meaning and direction: docs/formats/templates.md. Consumed by `ClutterBuilder`'s sprite
+shader and `SceneBuilder`'s `clutterFade` bias-shader variant.
+A second key, `graphics.clutterFarFade` (bool, default `true`), is the remake's own switch rather
+than an engine option: `false` resolves the same global to 0, which is a never-fades scale because
+the shader multiplies it into the squared camera distance, so no stamp reaches its near² and
+clutter draws out to the fog instead of ending at the authored metres. Both keys and the resolved
+scale are on the `[world] clutter fade:` launch line.
+
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det` block — the same
@@ -5303,17 +5430,17 @@ The first and only place a layer bit is assigned a meaning; new layers go here, 
 
 ## src/Flight/AircraftBody.cs
 The flying aircraft's physics body: one `AnimatableBody3D` child of `FlightController`, one
-`CollisionShape3D` per `PlaneCollider.Part` reusing the SAME `BoxShape3D` + local transform the
-terrain sweep casts, on the aircraft layer. Rides the controller's transform; `PartName(shapeIdx)`
-maps a query's struck shape back to the part (shapes added in `Parts` order); `ExcludeSelf` is the
-cached one-entry RID list the owner's own queries pass; `SetHittable` drops it to layer 0 while
-the plane is out of play — crashed, or INERT — and back when it is in play again, both
-driven from `FlightController.ApplyPresence`. Also the fuse/blast geometry oracle, answering from the same box
-set without a physics query: `NearestShape(point)` (nearest box, its skin distance + surface
-point — blast falloff), `SegmentDistance(from,to)` (closest approach of a swept round, ternary
-search per box — distance to a box is convex along the segment), `BoundRadius` for the cheap
-per-step reject, and `TakeProjectileHit(..., damageScale)` scaling both damage magnitudes by the
-blast falloff share (1 = direct round).
+`CollisionShape3D` per `PlaneCollider.Part` reusing the SAME `ConvexPolygonShape3D` + local
+transform the terrain sweep casts, on the aircraft layer. Rides the controller's transform;
+`PartName(shapeIdx)` maps a query's struck shape back to the part (shapes added in `Parts` order);
+`ExcludeSelf` is the cached one-entry RID list the owner's own queries pass; `SetHittable` drops it
+to layer 0 while the plane is out of play — crashed, or INERT — and back when it is in play again,
+both driven from `FlightController.ApplyPresence`. Also the fuse/blast geometry oracle, answering
+from the same `ConvexHull` set without a physics query: `NearestShape(point)` (nearest hull, its
+skin distance + surface point — blast falloff), `SegmentDistance(from,to)` (closest approach of a
+swept round, ternary search per hull — distance to a convex set is convex along the segment),
+`BoundRadius` for the cheap per-step reject, and `TakeProjectileHit(..., damageScale)` scaling
+both damage magnitudes by the blast falloff share (1 = direct round).
 
 ## src/Flight/IWorldQuery.cs
 The one seam onto the live physics world: `Sweep` (a shape moved along a motion, earliest stop

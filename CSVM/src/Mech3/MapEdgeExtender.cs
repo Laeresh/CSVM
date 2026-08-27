@@ -63,7 +63,7 @@ public sealed partial class MapEdgeExtender : Node3D
     // Per source cell: its ground-tile nodes (with the accumulated ancestor transform —
     // identity for every observed tile, kept for correctness) and its clutter sprites.
     private readonly Dictionary<(int, int), List<(GameZNode Node, Transform3D ParentXf)>> _tiles = new();
-    private readonly Dictionary<(int, int), List<(int Kind, Transform3D Xf)>> _sprites = new();
+    private readonly Dictionary<(int, int), List<(int Kind, Transform3D Xf, Color Fade)>> _sprites = new();
     // Gamez node index -> its map cell, for every in-map ground tile. Lets the tile-grid overlay
     // colour the real world's own tiles through the same grid maths the extension uses, keyed on
     // the same AnimRuntime.IndexMeta stamp the built scene already carries.
@@ -526,16 +526,17 @@ public sealed partial class MapEdgeExtender : Node3D
     // ⚠ Extension 3D decorations ARE collidable, one PhysicsServer3D.BodyAddShape per building
     // against ClutterBuilder's one shared shape per mesh. Do not merge into one region trimesh;
     // that would have to rebuild on the frame the camera crosses a cell boundary.
-    private void AddCellClutter(Node3D cell, Transform3D mirror, List<(int Kind, Transform3D Xf)> sprites)
+    private void AddCellClutter(Node3D cell, Transform3D mirror, List<(int Kind, Transform3D Xf, Color Fade)> sprites)
     {
-        // Group the cell's decorations per kind (kept in kind order for determinism).
-        var byKind = new Dictionary<int, List<Transform3D>>();
-        foreach (var (kind, xf) in sprites)
+        // Group the cell's decorations per kind (kept in kind order for determinism). Each copy
+        // keeps its source stamp's fade thresholds, so the continuation fades where the map does.
+        var byKind = new Dictionary<int, List<(Transform3D Xf, Color Fade)>>();
+        foreach (var (kind, xf, fade) in sprites)
         {
             if (!byKind.TryGetValue(kind, out var list))
-                byKind[kind] = list = new List<Transform3D>();
-            list.Add(_clutter![kind].Solid ? mirror * xf
-                : new Transform3D(Basis.Identity, mirror * xf.Origin));
+                byKind[kind] = list = new List<(Transform3D, Color)>();
+            list.Add((_clutter![kind].Solid ? mirror * xf
+                : new Transform3D(Basis.Identity, mirror * xf.Origin), fade));
         }
 
         // One body for the whole cell's buildings, named so a crash log locates the cell.
@@ -554,17 +555,21 @@ public sealed partial class MapEdgeExtender : Node3D
                 }
                 var bodyRid = solidBody.GetRid();
                 var shapeRid = shape.GetRid();
-                foreach (var xf in placements)
+                foreach (var (xf, _) in placements)
                     PhysicsServer3D.BodyAddShape(bodyRid, shapeRid, xf);
             }
             var mm = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                UseCustomData = true,   // before InstanceCount, or the fade has no slot
                 Mesh = kind.Mesh,
                 InstanceCount = placements.Count,
             };
             for (int i = 0; i < placements.Count; i++)
-                mm.SetInstanceTransform(i, placements[i]);
+            {
+                mm.SetInstanceTransform(i, placements[i].Xf);
+                mm.SetInstanceCustomData(i, placements[i].Fade);
+            }
             var mmi = new MultiMeshInstance3D
             {
                 Multimesh = mm,
@@ -747,16 +752,21 @@ public sealed partial class MapEdgeExtender : Node3D
         if (_clutter == null)
             return;
         for (int k = 0; k < _clutter.Count; k++)
-            foreach (var xf in _clutter[k].Placements)
+        {
+            var placements = _clutter[k].Placements;
+            var fades = _clutter[k].Fades;
+            for (int i = 0; i < placements.Count; i++)
             {
+                var xf = placements[i];
                 int cx = Mathf.FloorToInt((xf.Origin.X - _x0) / _tileX);
                 int cz = Mathf.FloorToInt((xf.Origin.Z - _z0) / _tileZ);
                 if (cx < 0 || cx >= _cols || cz < 0 || cz >= _rows)
                     continue;
                 if (!_sprites.TryGetValue((cx, cz), out var list))
-                    _sprites[(cx, cz)] = list = new List<(int, Transform3D)>();
-                list.Add((k, xf));
+                    _sprites[(cx, cz)] = list = new List<(int, Transform3D, Color)>();
+                list.Add((k, xf, fades[i]));
             }
+        }
     }
 
     // ---------------------------------------------------------------- census (--dump-tilegrid)

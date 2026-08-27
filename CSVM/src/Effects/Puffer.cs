@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Utils;
@@ -34,8 +35,20 @@ public readonly record struct PufferFadeSwitches(
 /// </summary>
 public sealed class PufferState
 {
+    /// <summary>The emission cadence an unauthored state runs at: the puffer constructor writes
+    /// 1.0 s to the interval and its reciprocal before any authored key applies
+    /// (<c>docs/org/puffer.md</c>). ⚠ Not the same number as
+    /// <see cref="StillHostSputterInterval"/>, which is ours; do not merge them.</summary>
+    public const float TimeIntervalDefault = 1f;
+
+    /// <summary>The cadence a <see cref="DistanceInterval"/> state falls back to while its host
+    /// holds still. CSVM's own invention, not a decoded default: the engine emits nothing at all
+    /// from a motionless distance emitter, and a damaged building would stop smoking. It stays at
+    /// 0.1 s whatever the constructor default is (<c>docs/org/puffer.md</c>).</summary>
+    public const float StillHostSputterInterval = 0.1f;
+
     public string Name = "";
-    public float TimeInterval = 0.1f;
+    public float TimeInterval = TimeIntervalDefault;
     public Vector3 LocalVelocity, WorldVelocity;
     public Vector3 MinRandomVelocity, MaxRandomVelocity;
     public Vector3 WorldAcceleration;
@@ -166,12 +179,16 @@ public sealed class PufferState
         var ig = d.Obj("interval_garbage");
         bool byDistance = string.Equals(ig?.Str("interval_type"), "Distance",
             StringComparison.OrdinalIgnoreCase);
-        float intervalValue = d.Obj("interval")?.Num("value") ?? ig?.Num("interval_value") ?? 0.1f;
+        // A zero is the compiled shape's "never authored": the applier's interval setter refuses
+        // one and leaves the constructor's own value standing, and every state in the install that
+        // does not author the key carries 0 in the garbage field.
+        float intervalValue = d.Obj("interval")?.Num("value") ?? ig?.Num("interval_value") ?? 0f;
 
         var s = new PufferState
         {
             Name = d.Str("name") ?? "",
-            TimeInterval = byDistance ? 0.1f : intervalValue,
+            TimeInterval = byDistance ? StillHostSputterInterval
+                : intervalValue != 0f ? intervalValue : TimeIntervalDefault,
             DistanceInterval = byDistance ? intervalValue : 0f,
             LocalVelocity = Vec("local_velocity"),
             WorldVelocity = Vec("world_velocity"),
@@ -249,7 +266,11 @@ public sealed class PufferState
         var s = new PufferState
         {
             Name = d.Str("NAME") ?? "",
-            TimeInterval = d.Float("TIME_INTERVAL", 0.1f),
+            // Unauthored, the cadence is the constructor's 1.0 s — except on a DISTANCE_INTERVAL
+            // block, where it is not the emission cadence at all but our still-host sputter, and
+            // all 146 reader blocks that omit the key are of that kind.
+            TimeInterval = d.Has("TIME_INTERVAL") ? d.Float("TIME_INTERVAL")
+                : d.Has("DISTANCE_INTERVAL") ? StillHostSputterInterval : TimeIntervalDefault,
             LocalVelocity = Vec("LOCAL_VELOCITY"),
             WorldVelocity = Vec("WORLD_VELOCITY"),
             MinRandomVelocity = Vec("MIN_RANDOM_VELOCITY"),
@@ -365,6 +386,11 @@ public sealed partial class Puffer : Node3D
     // lays no line of puffs along the jump. The time path has no equivalent test: there the
     // engine accumulates `dt` unconditionally.
     private const float TeleportGuardMeters = 200f;
+
+    // Baked atlases per archive, keyed by the frame list: a state many emitters share (a crash
+    // rig builds 28 lgpuffers ahead) bakes and measures its frames once. Keyed by the archive so
+    // a chapter change can never serve another chapter's frames.
+    private static readonly ConditionalWeakTable<TextureArchive, Dictionary<string, (ImageTexture Atlas, bool DiesDark)>> AtlasCache = new();
 
     // Particle spread/size/life/frame jitter. One stream per emitter, drawn off the master seed's
     // puffer stream, so a run repeats and two emitters still scatter independently.
@@ -647,11 +673,25 @@ public sealed partial class Puffer : Node3D
         : lifeFrac > FadeOutStart ? Mathf.Max(0f, 1f - (lifeFrac - FadeOutStart) / (1f - FadeOutStart))
         : 1f;
 
+    // The cached form of BakeAtlas: one bake per (archive, frame list, sequenced).
+    private static (ImageTexture? Atlas, bool DiesDark) BuildAtlas(IReadOnlyList<string> names,
+        TextureArchive textures, bool sequenced)
+    {
+        var cache = AtlasCache.GetOrCreateValue(textures);
+        string key = (sequenced ? "seq:" : "pool:") + string.Join("\n", names);
+        if (cache.TryGetValue(key, out var hit))
+            return hit;
+        var baked = BakeAtlas(names, textures, sequenced);
+        if (baked.Atlas is { } atlas)
+            cache[key] = (atlas, baked.DiesDark);
+        return baked;
+    }
+
     // Packs the frames side by side into one atlas, and measures whether a particle DIES
     // on a dark sprite — the flipbook's last frame, or a static pool's mean luminance. This is what
     // distinguishes "fire_n_smoke", whose flipbook ends near-black despite starting bright; see
     // `docs/org/puffer.md`. Null atlas when a frame is missing.
-    private static (ImageTexture? Atlas, bool DiesDark) BuildAtlas(IReadOnlyList<string> names,
+    private static (ImageTexture? Atlas, bool DiesDark) BakeAtlas(IReadOnlyList<string> names,
         TextureArchive textures, bool sequenced)
     {
         if (names.Count == 0)

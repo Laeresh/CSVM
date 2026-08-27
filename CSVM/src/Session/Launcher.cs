@@ -410,6 +410,13 @@ public partial class Launcher : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
+        // The graphics EffectsLevel's one global: the clutter fade's squared distance scale, 0
+        // when the fade is switched off (never fades, clutter draws out to the fog).
+        float clutterFadeScaleSq = Utils.EffectsLevel.ResolveClutterFadeScaleSq();
+        RenderingServer.GlobalShaderParameterAdd(Utils.EffectsLevel.ShaderParam,
+            RenderingServer.GlobalShaderParameterType.Float, clutterFadeScaleSq);
+        string clutterFarFade = Utils.EffectsLevel.ClutterFarFadeEnabled() ? "true" : "false";
+        Log.Info("world", $"clutter fade: {Utils.EffectsLevel.FadeKey}={clutterFarFade} {Utils.EffectsLevel.Key}={Config.GetString(Utils.EffectsLevel.Key, Utils.EffectsLevel.Default)} scale_sq={clutterFadeScaleSq}");
         // The animated world's LIGHT_STATE point lights. Defaults to an empty set, so a session
         // with no lit animations renders exactly as it did before they existed.
         WorldLights.RegisterGlobals();

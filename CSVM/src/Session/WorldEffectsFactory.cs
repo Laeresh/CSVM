@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using CSVM.Effects;
 using CSVM.Flight;
@@ -403,6 +404,15 @@ public sealed class WorldEffectsFactory
         // Phase 2 of the damage-visuals setup: the sink and the stops, which need a live rig
         // runtime and so cannot be wired where the object is built.
         WireDamageStages(controller, crashProgram);
+        // Every emitter the rig's defs name is built here, off the frame that plays it, so a crash
+        // or a damage stage finds its puffers and materials already made.
+        var warmMark = StartupProfile.Mark();
+        var warmed = controller.PlaneModel is { } model
+            ? crashRuntime.PrewarmEmitters(model, crashRoot)
+            : crashRuntime.PrewarmEmitters(crashRoot);
+        StartupProfile.Record("emitters", warmMark);
+        double warmMs = Stopwatch.GetElapsedTime(warmMark).TotalMilliseconds;
+        Log.Info("anim", $"crash rig '{planeName}': pre-warmed {warmed.Built} emitter(s) in {warmMs:0} ms ({warmed.SelfHosted} call-site hosted, {warmed.Unhosted} unhosted here)");
         if (slot0Roots != rootNames.Count)
             Log.Warn("anim", $"crash rig '{planeName}': staged {slot0Roots} of {rootNames.Count} template root(s) the bound defs anchor on — the rest built nothing from this chapter's gamez, so their defs play nothing");
         // ⚠ Both kinds' roots, never this rig's alone: one crash section sizes two families that
@@ -598,6 +608,14 @@ public sealed class WorldEffectsFactory
         // runtime node itself under the visible world root, a plain logic node that self-ticks.
         var bound = EffectCatalogue.WorldEffectAnimNames(worldProgram);
         effects.Bind(stage, worldProgram.Subset(bound));
+        // Every emitter the bound defs name is built here, off the frame that plays it, so a first
+        // burst finds its puffers and materials already made. No call-site anchors: this runtime's
+        // callers place pooled copies, so the staged-copy term already covers the INPUT_NODE hosts.
+        var warmMark = StartupProfile.Mark();
+        var warmed = effects.PrewarmEmitters();
+        StartupProfile.Record("emitters", warmMark);
+        double warmMs = Stopwatch.GetElapsedTime(warmMark).TotalMilliseconds;
+        Log.Info("anim", $"world effects: pre-warmed {warmed.Built} emitter(s) in {warmMs:0} ms ({warmed.SelfHosted} call-site hosted, {warmed.Unhosted} unhosted here)");
         _worldRoot.AddChild(effects);
         int wanted = 0;
         foreach (var r in roots)

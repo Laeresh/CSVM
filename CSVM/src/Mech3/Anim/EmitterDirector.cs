@@ -67,6 +67,11 @@ public sealed class EmitterDirector
     /// nothing.</summary>
     public int Built { get; private set; }
 
+    /// <summary>How many emitters <see cref="Prewarm"/> built ahead of any assert. Kept apart from
+    /// <see cref="Built"/>, which counts what an assert took over, so a delta across a kill still
+    /// says the kill reached its emitters.</summary>
+    public int Prewarmed { get; private set; }
+
     /// <summary>Every KNOWN emitter, emitting or not — the module's own answer to "what exists and
     /// what is running", which the `--debug-anim` line and the bootstrap line are both projections
     /// of rather than parallel re-derivations.</summary>
@@ -98,6 +103,15 @@ public sealed class EmitterDirector
         var key = KeyFor(name, host, def);
         if (_emitters.TryGetValue(key, out var existing))
         {
+            // A pre-built emitter is taken over whole: ownership, the start and the Built count
+            // all read as if this assert had constructed it.
+            if (!existing.Claimed)
+            {
+                _emitters[key] = new Entry(existing.Emitter, def, anchor, Claimed: true);
+                _active.Add((existing.Emitter, host, _instant));
+                Built++;
+                return;
+            }
             // ⚠ A SustainEnd'ed emitter REVIVES on re-assert; reading "stopped" as "still running"
             // collapses the sputter loop to one burst per stage.
             if (!Emitting(existing.Emitter))
@@ -126,9 +140,27 @@ public sealed class EmitterDirector
                     GD.Print($"anim: puffer '{name}' on '{AnimRuntime.NameOf(host)}' builds beside "
                              + $"'{other.Value.Def.AnimName}''s emitter [def {def.AnimName}]");
         }
-        _emitters[key] = new Entry(emitter, def, anchor);
+        _emitters[key] = new Entry(emitter, def, anchor, Claimed: true);
         _active.Add((emitter, host, _instant));
         Built++;
+    }
+
+    /// <summary>Builds the emitter a <c>PUFFER_STATE 1</c> on this key would build, without
+    /// starting it; the first <see cref="Assert"/> takes it over as if it had built it. A key
+    /// already known builds nothing, and a factory miss is left for the assert to count. Returns
+    /// whether an emitter was built.
+    /// ⚠ Never joins the emitting set: building an emitter is not playing it, and the
+    /// <c>effect-pool-reset</c> suite guards the pose a staged copy is left in.</summary>
+    public bool Prewarm(string name, Node3D host, AnimDefinition def, AnimData data)
+    {
+        var key = KeyFor(name, host, def);
+        if (_emitters.ContainsKey(key))
+            return false;
+        if (_factory.Create(PufferState.FromAnimEvent(data), out _) is not { } emitter)
+            return false;
+        _emitters[key] = new Entry(emitter, def, null, Claimed: false);
+        Prewarmed++;
+        return true;
     }
 
     /// <summary>The authored stop: <c>PUFFER_STATE &lt;name&gt; 0</c>. Pauses the emitter on the
@@ -144,7 +176,8 @@ public sealed class EmitterDirector
             return;
         }
         var owned = _emitters
-            .Where(kv => kv.Key.Name == name && kv.Value.Def == def && kv.Value.Anchor == anchor)
+            .Where(kv => kv.Key.Name == name && kv.Value.Claimed && kv.Value.Def == def
+                         && kv.Value.Anchor == anchor)
             .Select(kv => kv.Value.Emitter)
             .ToList();
         foreach (var stray in owned)
@@ -206,7 +239,8 @@ public sealed class EmitterDirector
     {
         if (_emitters.Count == 0)
             return;
-        foreach (var entry in _emitters.Values.Where(v => v.Def == def && v.Anchor == anchor).ToList())
+        foreach (var entry in _emitters.Values
+                     .Where(v => v.Claimed && v.Def == def && v.Anchor == anchor).ToList())
         {
             entry.Emitter.SustainEnd();
             _active.RemoveAll(a => a.Emitter == entry.Emitter);
@@ -219,7 +253,7 @@ public sealed class EmitterDirector
     public void Discard(AnimDefinition def, Node3D? anchor)
     {
         var keys = _emitters
-            .Where(kv => kv.Value.Def == def && kv.Value.Anchor == anchor)
+            .Where(kv => kv.Value.Claimed && kv.Value.Def == def && kv.Value.Anchor == anchor)
             .Select(kv => kv.Key)
             .ToList();
         foreach (var key in keys)
@@ -231,21 +265,29 @@ public sealed class EmitterDirector
         }
     }
 
-    /// <summary>Destroys everything — the per-player crash rig's respawn. Particles are dropped at
-    /// once rather than left to finish, because respawn is immediate and must not leave fire
-    /// burning, and the emitters are released rather than kept, because the next crash builds fresh
-    /// ones and they must not accumulate. Wipes the whole pool, not just what live instances own: an
-    /// effect def whose sequence has already ended (`large_10sec_fire`, whose 10 s particles outlive
-    /// its instance) owns no live instance yet is still emitting.</summary>
+    /// <summary>The per-player crash rig's respawn: every emitter stops and drops its particles at
+    /// once, because respawn is immediate and must not leave fire burning. An emitter whose host
+    /// still exists is KEPT and returned to the pre-built state, so the next crash finds it made;
+    /// nothing accumulates, since the keys are the same nodes. One whose host is gone is destroyed.
+    /// Wipes the whole pool, not just what live instances own: an effect def whose sequence has
+    /// already ended (`large_10sec_fire`) owns no live instance yet is still emitting.</summary>
     public void Reset()
     {
-        foreach (var entry in _emitters.Values)
+        foreach (var key in _emitters.Keys.ToList())
         {
+            var entry = _emitters[key];
             entry.Emitter.SustainEnd();
             entry.Emitter.Clear();
-            entry.Emitter.Destroy();
+            if (entry.Emitter.IsValid && GodotObject.IsInstanceValid(key.Node))
+            {
+                _emitters[key] = entry with { Anchor = null, Claimed = false };
+            }
+            else
+            {
+                entry.Emitter.Destroy();
+                _emitters.Remove(key);
+            }
         }
-        _emitters.Clear();
         _active.Clear();
         _hostOffsets.Clear();
     }
@@ -302,5 +344,7 @@ public sealed class EmitterDirector
         return offset;
     }
 
-    private readonly record struct Entry(IEmitter Emitter, AnimDefinition Def, Node3D? Anchor);
+    // Claimed is false only for an emitter Prewarm built that no assert has taken yet: it has no
+    // owner, so the owner-selected stops (EndFor, Discard, End's fallback) pass it over.
+    private readonly record struct Entry(IEmitter Emitter, AnimDefinition Def, Node3D? Anchor, bool Claimed);
 }

@@ -125,12 +125,14 @@ internal static class DestroyChoreographySuites
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var program = world.Session.Program.Subset(new[] { "large_fireball", "large_30sec_fire" });
+            var program = world.Session.Program.Subset(new[] { "large_fireball", "large_30sec_fire", "car_loop1_start" });
             var fireball = program.ByAnimName("large_fireball");
             var fire30 = program.ByAnimName("large_30sec_fire");
+            var carLoop = program.ByAnimName("car_loop1_start");
             ctx.Check(fireball.Count > 0, $"chapter program has large_fireball defs={fireball.Count}");
             ctx.Check(fire30.Count > 0, $"chapter program has large_30sec_fire defs={fire30.Count}");
-            if (fireball.Count == 0 || fire30.Count == 0)
+            ctx.Check(carLoop.Count > 0, $"chapter program has car_loop1_start defs={carLoop.Count}");
+            if (fireball.Count == 0 || fire30.Count == 0 || carLoop.Count == 0)
             {
                 return;
             }
@@ -204,6 +206,36 @@ internal static class DestroyChoreographySuites
                 ctx.Same(1, stopPuffs, $"stop_fire_n_smoke PUFFER_STATE dispatches");
                 ctx.Check(stop30At >= 29.5f && stop30At <= 30.5f,
                     $"the fire's own puffer-off lands at the authored 30 s t={stop30At:0.0}");
+
+                // The car lap: start_cruisin CALLs car_dust1, STOPs it later in the lap, then LOOPs.
+                // A stopped sequence is DONE and a call starts only from PARKED, so every lap after
+                // the first is refused and car_dust1's own puffer event fires exactly once.
+                runtime.Start(carLoop[0], stage);
+                timeline.Clear();
+                // A lap is about 25 s; 150 s covers five of them.
+                for (int i = 0; i < 1500; i++)
+                {
+                    clock += 0.1f;
+                    runtime.Advance(0.1f);
+                }
+                int dustCalls = 0;
+                int dustRuns = 0;
+                float secondCallAt = -1f;
+                foreach (var e in timeline)
+                {
+                    if (e.Seq == "start_cruisin" && e.Kind == "CallSequence")
+                    {
+                        dustCalls++;
+                        if (dustCalls == 2)
+                            secondCallAt = e.T;
+                    }
+                    else if (e.Seq == "car_dust1")
+                    {
+                        dustRuns++;
+                    }
+                }
+                ctx.Check(dustCalls >= 2, $"the car's lap loop calls car_dust1 on at least two laps calls={dustCalls}");
+                ctx.Same(1, dustRuns, $"car_dust1 runs on the first lap only; the later calls are refused (second call at t={secondCallAt:0.0})");
             }
             finally
             {
@@ -618,6 +650,121 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // The pre-warm's contract on a replica rig: after Bind and PrewarmEmitters nothing emits, a
+    // crash and a panel tear reach the factory for no emitter, the claims count as built, and
+    // respawn keeps the emitters so the next crash builds nothing either.
+    internal static void EmitterPrewarm(TestContext ctx)
+    {
+        const string model = "player_bhawk";
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var controller = new Node3D { Name = "controller_replica" };
+            var fake = new CountingEmitterFactory();
+            var runtime = AnimRuntime.ForCrashRig(
+                Session.WorldEffectsFactory.NewCrashTemplateStage(), 1, fake, false);
+            runtime.ManualAdvance = true;
+            try
+            {
+                var builder = new PlaneBuilder(planesGamez, textures);
+                var planeModel = builder.Build(model);
+                controller.AddChild(planeModel);
+                var crashRoot = new Node3D { Name = "player" };
+                crashRoot.SetMeta(AnimRuntime.NameMeta, "player");
+                crashRoot.Transform = planeModel.Transform;
+                controller.AddChild(crashRoot);
+                var program = world.Session.Program;
+                var crashDefs = Session.EffectCatalogue.CrashDefTable(program);
+                var rootNames = Session.WorldEffectsFactory.CrashStageRootNames(
+                    program, world.Gamez, controller, crashDefs);
+                Session.WorldEffectsFactory.StageCrashTemplates(world.Gamez,
+                    world.Session.Builder.Scene, crashRoot, rootNames, Utils.EffectPools.Load());
+                var wreck = builder.BuildDestroyed(model);
+                if (wreck != null)
+                {
+                    wreck.Visible = false;
+                    crashRoot.AddChild(wreck);
+                }
+
+                ctx.Host.AddChild(controller);
+                ctx.Host.AddChild(runtime);
+                runtime.Bind(controller,
+                    program.Subset(Session.EffectCatalogue.CrashRigAnimNames(crashDefs)));
+                for (int i = 0; i < 6; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                int factoryAtBind = fake.Built.Count;
+                int builtAtBind = runtime.PuffersBuilt;
+                var warmed = runtime.PrewarmEmitters(planeModel, crashRoot);
+                int warmedCount = fake.Built.Count;
+                ctx.Note($"pre-warm: built={warmed.Built} unhosted={warmed.Unhosted} self_hosted={warmed.SelfHosted} factory_calls={warmedCount - factoryAtBind}");
+                ctx.Check(warmed.Built > 0 && warmedCount - factoryAtBind == warmed.Built,
+                    $"{model}: the pre-warm built its emitters through the factory built={warmed.Built}");
+                ctx.Check(fake.Built.All(e => e.Started == 0 && !e.Sustaining),
+                    $"{model}: nothing the pre-warm built has started");
+                ctx.Check(runtime.PuffersBuilt == builtAtBind,
+                    $"{model}: the pre-warm does not count as built (PuffersBuilt {runtime.PuffersBuilt})");
+                ctx.Check(runtime.Emitters.Census.All(r => !r.Emitting),
+                    $"{model}: no census row emits after the pre-warm");
+
+                // The crash: every emitter it asserts must already exist.
+                runtime.Play("player_crash_dirt", crashRoot, applyReset: false);
+                for (int i = 0; i < 180; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                ctx.Check(fake.Built.Count == warmedCount,
+                    $"{model}: the crash reaches the factory for no emitter (built {fake.Built.Count - warmedCount} more)");
+                ctx.Check(fake.Built.Any(e => e.Started > 0),
+                    $"{model}: the crash started pre-warmed emitters");
+                ctx.Check(runtime.PuffersBuilt > builtAtBind,
+                    $"{model}: a claimed emitter counts as built (PuffersBuilt {runtime.PuffersBuilt})");
+
+                // A panel tear, the damage sink's own call shape.
+                runtime.Play("pdpanel5", planeModel, applyReset: false);
+                for (int i = 0; i < 6; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                var late = fake.Built.Skip(warmedCount).Select(e => e.Key).ToList();
+                var lateRows = runtime.Emitters.Census
+                    .Where(r => late.Contains(r.Name) && r.Emitting)
+                    .Select(r => $"{r.Name}@{r.Host}[{r.Def}]");
+                ctx.Check(fake.Built.Count == warmedCount,
+                    $"{model}: the tear reaches the factory for no emitter (built {late.Count} more: {string.Join(", ", lateRows)})");
+                int afterTear = fake.Built.Count;
+
+                // Respawn keeps the emitters, so the second crash builds nothing either.
+                runtime.ResetToBaseState();
+                ctx.Check(fake.Built.All(e => e.IsValid && !e.Sustaining),
+                    $"{model}: respawn keeps every emitter, stopped");
+                runtime.Play("player_crash_dirt", crashRoot, applyReset: false);
+                for (int i = 0; i < 60; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                ctx.Check(fake.Built.Count == afterTear,
+                    $"{model}: the second crash reaches the factory for no emitter (built {fake.Built.Count - afterTear} more)");
+                ctx.Check(fake.Built.Any(e => e.Sustaining),
+                    $"{model}: the second crash emits from the kept emitters");
+            }
+            finally
+            {
+                runtime.Free();
+                controller.Free();
+                textures.Dispose();
+            }
+        });
+        WorldEffectsPrewarm(ctx);
+    }
+
     // Every wreck node's rest pose — the local mirror of
     // `WorldEffectsFactory.CollectRestPoses`, so the suite's respawn ritual can re-home the
     // flung pieces the way `FlightController.Respawn` does.
@@ -777,6 +924,61 @@ internal static class DestroyChoreographySuites
         float spend = damage.WholeHealth - (fraction * damage.WholeHealthMax);
         if (spend > 0f)
             ai.TakeCollisionHit(0f, spend, ai.GlobalPosition, 0);
+    }
+
+    // The same pre-warm at the second host, the world-effects stage: the sonic burst's puffer defs
+    // are built at bind, and five plays over a four-slot pool then reach the factory for none of
+    // them. Five, not one, because each fresh slot copy is its own host and so its own key.
+    private static void WorldEffectsPrewarm(TestContext ctx)
+    {
+        const int slots = 4;
+        const string anim = "sonic_ground_effect";
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var stage = OrdnanceSuites.StageBurstRoots(ctx, world, anim, slots);
+            var fake = new CountingEmitterFactory();
+            var runtime = AnimRuntime.ForEffects(
+                AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
+                1, fake, false, SuiteConstants.BurstTtl, () => ctx.Camera.GlobalPosition);
+            runtime.ManualAdvance = true;
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, world.Session.Program.Subset(anim));
+                int atBind = fake.Built.Count;
+                var warmed = runtime.PrewarmEmitters();
+                int warmedCount = fake.Built.Count;
+                ctx.Note($"world-effects pre-warm: built={warmed.Built} unhosted={warmed.Unhosted} self_hosted={warmed.SelfHosted}");
+                ctx.Check(warmed.Built > 0 && warmedCount - atBind == warmed.Built,
+                    $"{anim}: the pre-warm built its emitters through the factory built={warmed.Built}");
+                ctx.Check(fake.Built.All(e => e.Started == 0 && !e.Sustaining),
+                    $"{anim}: nothing the pre-warm built has started");
+                ctx.Check(runtime.Emitters.Census.All(r => !r.Emitting),
+                    $"{anim}: no census row emits after the pre-warm");
+
+                int steps = Mathf.RoundToInt(SuiteConstants.BurstSeconds * 60f);
+                for (int play = 1; play <= slots + 1; play++)
+                {
+                    ctx.Check(runtime.PlayEffectAt(anim, ctx.Camera.GlobalPosition), $"burst {play} started");
+                    for (int i = 0; i < steps; i++)
+                    {
+                        runtime.Advance(1f / 60f);
+                    }
+                }
+
+                var late = fake.Built.Skip(warmedCount).Select(e => e.Key).Distinct().ToList();
+                ctx.Check(late.Count == 0,
+                    $"{anim}: {slots + 1} bursts over {slots} slot(s) reach the factory for no emitter{(late.Count == 0 ? string.Empty : $", built {string.Join(", ", late)}")}");
+                ctx.Check(fake.Built.Any(e => e.Started > 0),
+                    $"{anim}: the bursts started pre-warmed emitters");
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
     }
 
     // One start of the bullethole def, advanced past its authored second (its last event sits at

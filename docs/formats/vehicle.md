@@ -568,6 +568,14 @@ range). The boat and truck add surface-vehicle motion keys (`platform`, `collisi
 liveries — see [paint.md](paint.md). A few airframe oddballs round out the set: `fuel`,
 `is_autogyro`, `rudder_tol`, `pilot`, `flight_ceiling`, `title`.
 
+**`fuel`** is a full tank, in the burn units the player's lever draws at five per second times the
+lever. **Exactly one def authors it, `player_airplane` at 54926**, so every `player_*` airframe
+inherits the same tank and no AI def has one; the compiled default is 0. The tank is refilled
+wherever the aircraft is placed, only the local player's burns, and a dry one freezes the throttle
+lever where it stands instead of closing it, all decoded in
+[../org/flightModel.md](../org/flightModel.md) under "Part-throttle equilibrium". At a fully open
+lever the authored tank lasts about three hours, so no shipped mission runs one dry.
+
 **`ai_input_*` / `ai_emerg_input_*`** are the AI control law's per-axis output stage, decoded in
 [../org/aiControlLaw.md](../org/aiControlLaw.md): the three `scale` keys multiply the law's roll,
 pitch and yaw commands and the three `limit` keys clamp them, with the `emerg` set substituted

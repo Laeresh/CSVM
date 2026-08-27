@@ -47,6 +47,11 @@ public sealed partial class PerfHud : Node
     private const float StripReferenceHeight = 60f;
     private const float StripReferenceGapY = 6f;
 
+    // How far inside the window's top-right corner the readout sits. Deliberately NOT scaled by
+    // WindowScale: this is a margin against the screen edge, not a HUD metric measured at 1440p,
+    // and a margin that grew with the window would drift away from the corner it marks.
+    private const float CornerInsetPx = 8f;
+
     private readonly PerfSampleFrame _samples = new();
 
     private CanvasLayer? _hudLayer;
@@ -75,6 +80,13 @@ public sealed partial class PerfHud : Node
     /// a history of its own, per this class's own Trap. Set once, before
     /// the first <see cref="SetMode"/> that could need it.</summary>
     public HitchMonitor Monitor { get; init; } = null!;
+
+    // The two placed controls, for the perf-hud-layout suite. Handed out rather than their rects,
+    // so the suite owns the settling a Godot Label needs (its minimum size is recomputed on a
+    // deferred call, which a suite running inside one frame never reaches).
+    internal Label? Readout => _hud;
+
+    internal PerfHudStrip? Strip => _strip;
 
     /// <summary>Parses the --debug-fps value. Absent value = Compact, the useful default.</summary>
     public static Mode ParseMode(string value) => value.Trim().ToLowerInvariant() switch
@@ -165,6 +177,20 @@ public sealed partial class PerfHud : Node
         _justRearmed = true;
     }
 
+    // Positions a control anchored to the window's top-right corner by its RIGHT edge, which is
+    // the only edge that can be trusted there: a right-anchored control's OffsetLeft stays where
+    // its box was pinned, while GrowHorizontal.Begin moves only the drawn rect, so reading
+    // OffsetLeft back (or assigning Size, which derives OffsetRight from OffsetLeft) places the
+    // control a full width off the right of the window. Width/height 0 hands sizing to the
+    // control's own minimum size, which is what the label wants.
+    private static void PlaceTopRight(Control control, float top, float width, float height)
+    {
+        control.OffsetRight = -CornerInsetPx;
+        control.OffsetLeft = control.OffsetRight - width;
+        control.OffsetTop = top;
+        control.OffsetBottom = top + height;
+    }
+
     private static string ModeLabel(Mode mode) => mode switch
     {
         Mode.Full => "full",
@@ -218,7 +244,10 @@ public sealed partial class PerfHud : Node
         _hud = new Label { Text = "" };
         _hud.SetAnchorsPreset(Control.LayoutPreset.TopRight);
         _hud.GrowHorizontal = Control.GrowDirection.Begin;
-        _hud.Position = new Vector2(-8, 8);
+        // A zero-width box on the corner inset; GrowHorizontal.Begin spends the label's minimum
+        // width leftward from there, so the right edge stays on the inset however wide the text
+        // and the font-size override make it. Not a Position, which is parent-space, not anchor.
+        PlaceTopRight(_hud, CornerInsetPx, 0f, 0f);
         root.AddChild(_hud);
         _hudLayer.AddChild(root);
         AddChild(_hudLayer);
@@ -279,13 +308,15 @@ public sealed partial class PerfHud : Node
 
         EnsureStrip();
         _strip!.Visible = true;
-        _strip.OffsetLeft = _hud.OffsetLeft;
         // GetLineHeight/GetLineCount read the font metrics Godot itself just laid the text out
-        // with (post the font-size override above), rather than a guessed line pitch — the strip
+        // with (post the font-size override above), rather than a guessed line pitch, so the strip
         // sits exactly under the label whatever its line count, at any window size.
         float textHeight = (_hud.GetLineHeight() + LabelLineSpacingPx) * _hud.GetLineCount();
-        _strip.OffsetTop = _hud.OffsetTop + textHeight + (StripReferenceGapY * scale);
-        _strip.Size = new Vector2(StripReferenceWidth * scale, StripReferenceHeight * scale);
+        PlaceTopRight(
+            _strip,
+            _hud.OffsetTop + textHeight + (StripReferenceGapY * scale),
+            StripReferenceWidth * scale,
+            StripReferenceHeight * scale);
     }
 
     // HudMetrics.Scale damps by PaneFactor (sqrt of the pane's share of the window), which is

@@ -47,3 +47,8 @@ public interface IEmitterFactory
 /// <see cref="EmitterDirector.Discard"/> exist to make.</summary>
 public readonly record struct EmitterCensusRow(
     string Name, string Host, string Def, bool Emitting, int LiveParticles);
+
+/// <summary>What one <c>AnimRuntime.PrewarmEmitters</c> pass did: emitters built ahead, events
+/// whose named host resolves to nothing on that runtime, and events hosted on their call site
+/// (<c>INPUT_NODE</c>), which have no host until called and so cannot be built ahead.</summary>
+public readonly record struct EmitterPrewarm(int Built, int Unhosted, int SelfHosted);

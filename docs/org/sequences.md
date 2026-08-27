@@ -525,6 +525,15 @@ definition resets. **16 shipped definitions hit exactly that** — `flame_ball_0
 `stop_p1trail`, in every chapter, inside the HE explosion's call chain — so the teardown those
 definitions name simply never runs.
 
+The same rule disables a sequence that was stopped while RUNNING, and shipped data reaches that
+case: C1's `car_loop1_start`, `car_go_home_start`, `hauler1_start` and `truck1_start` each run a
+lap loop that CALLs a dust or exhaust sequence, STOPs it later in the lap and LOOPs, so from the
+second lap on the call lands on a DONE sequence and is refused; the called sequence runs on the
+first lap only. CSVM keeps the disable per instance (`AnimInstance`'s stopped set, consulted by
+`CallSequence`), and a definition restart, which builds a fresh instance, is the reset. The other
+119 definitions that name one sequence in both a call and a stop place the stop after the last
+call, so the refusal never fires for them.
+
 A stop also reaches the caller's OWN runner, which is the data's break-out-of-my-own-IF-chain
 idiom (`test_player` ×33, `setprop` ×8), and it takes effect within the same tick rather than at
 the next one.

@@ -1213,8 +1213,7 @@ internal static class OrdnanceSuites
                 return fresh;
             };
             // The authored states the real factory reads, off the compiled chapter archive the
-            // session's own program is built from (docs/architecture.md, SmokeScreens.cs: the
-            // reader form of the same definition carries no DISTANCE_INTERVAL).
+            // session's own program is built from (docs/architecture.md, SmokeScreens.cs).
             var (chapterAnim, _) = AnimProgram.ArchivePaths(ctx.DataRoot, "C1", "IA1");
             var authored = new SmokeScreenEmitters(
                 AnimArchive.Load(chapterAnim, "cam_anim")?.Defs, textures, ctx.Host);
@@ -2165,6 +2164,36 @@ internal static class OrdnanceSuites
         });
     }
 
+    // A burst's miniature world-effects stage: the def's derived anchor roots (its CALL_ANIMATION
+    // closure against the chapter gamez, the production derivation, so an unresolvable anchor
+    // throws here naming itself) built once per pool slot, each copy hidden, exactly as
+    // WorldEffectsFactory stages them. The caller frees the returned stage.
+    internal static Node3D StageBurstRoots(TestContext ctx, TestWorld world, string animName, int slots)
+    {
+        var roots = Session.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
+            Session.WorldEffectsFactory.StageRootResolver(world.Gamez));
+        ctx.Check(roots.Count > 0,
+            $"{animName}: its call closure's anchor roots derived ({roots.Count}: {string.Join(", ", roots)})");
+        var stage = new Node3D { Name = $"BurstStage_{animName}" };
+        for (int slot = 0; slot < slots; slot++)
+        {
+            var pool = new Node3D { Name = $"pool{slot}" };
+            pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
+            stage.AddChild(pool);
+            int built = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+                world.Session.Builder.Scene, pool, roots);
+            ctx.Same(roots.Count, built, $"{animName}: template roots staged from the chapter gamez (slot {slot})");
+            foreach (var child in pool.GetChildren())
+            {
+                if (child is Node3D root)
+                {
+                    root.Visible = false;
+                }
+            }
+        }
+        return stage;
+    }
+
     // The screen's cloud through the particle runtime: `smokerpuff` (NUMBER 4 per 0.65 m,
     // SIZE_RANGE 0.15–0.25 growing 85×, LOCAL_VELOCITY 10 m/s astern, lifetime 2.5–4 s) driven
     // straight and level at 100 m/s for four seconds. What the authored numbers owe: every batch's
@@ -2262,36 +2291,6 @@ internal static class OrdnanceSuites
         into.Clear();
         pool.CollectLiveRounds(into);
         return into.Count;
-    }
-
-    // A burst's miniature world-effects stage: the def's derived anchor roots (its CALL_ANIMATION
-    // closure against the chapter gamez, the production derivation, so an unresolvable anchor
-    // throws here naming itself) built once per pool slot, each copy hidden, exactly as
-    // WorldEffectsFactory stages them. The caller frees the returned stage.
-    private static Node3D StageBurstRoots(TestContext ctx, TestWorld world, string animName, int slots)
-    {
-        var roots = Session.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
-            Session.WorldEffectsFactory.StageRootResolver(world.Gamez));
-        ctx.Check(roots.Count > 0,
-            $"{animName}: its call closure's anchor roots derived ({roots.Count}: {string.Join(", ", roots)})");
-        var stage = new Node3D { Name = $"BurstStage_{animName}" };
-        for (int slot = 0; slot < slots; slot++)
-        {
-            var pool = new Node3D { Name = $"pool{slot}" };
-            pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
-            stage.AddChild(pool);
-            int built = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
-                world.Session.Builder.Scene, pool, roots);
-            ctx.Same(roots.Count, built, $"{animName}: template roots staged from the chapter gamez (slot {slot})");
-            foreach (var child in pool.GetChildren())
-            {
-                if (child is Node3D root)
-                {
-                    root.Visible = false;
-                }
-            }
-        }
-        return stage;
     }
 
     // ---- a pooled copy is re-reset on checkout ------------------------------------------------

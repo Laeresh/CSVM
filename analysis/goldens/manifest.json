@@ -15,14 +15,14 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "177c325d394f6a18d1b3979334a36429",
+      "hash": "6410c3bdaf263124994aeaf0da892f0d",
       "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
     {
       "name": "c1b-night-sea",
       "frame": 120,
-      "hash": "322b8c77c64a0724f169e0c266d163f8",
+      "hash": "7d19876678eedebf567c8770359adb4d",
       "exercises": "night lighting, skydome, islands, the ambient cloud-puff field; static at 120 vs 121, 0.13 % at 120 vs 360 (puff drift).",
       "args": ["--freecam", "--chapter=C1B", "--pos=-6748,300,-8885", "--direction=0.242,-0.25,0.970", "--det", "--mute"]
     },
@@ -36,7 +36,7 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "69c97cee6b2652cf29921b943aba986b",
+      "hash": "2f871f2548e2ad675165b2ad525e7fba",
       "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog, and the harbour wake spray the boat start anims emit; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
@@ -50,21 +50,21 @@
     {
       "name": "c3-island",
       "frame": 120,
-      "hash": "d075263a02595656d1cf31a0df7ad93f",
+      "hash": "83fc2d56dc22aede46273f7f0994a45f",
       "exercises": "coastline, surf edge and open water at close range; static — 9 px at 120 vs 360, so it proves geometry and shading, not the clock.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
     },
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "7afba92b963fb582deca6ce901bce4a1",
+      "hash": "6cae7d234436874bccd6981b1cd36dce",
       "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "f3c776abc63175092faf21d32b48a90f",
+      "hash": "df2d38f0ffe20b824a0100dc55672da0",
       "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, lit window skins, moon and stars; static, 11 px at 120 vs 360.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
@@ -85,42 +85,42 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "7bdc9726cfc852be6a34a5c17f741547",
+      "hash": "1d4d08c44d4857c6052c7f0297d66e96",
       "exercises": "Held pitch-and-roll flight: quaternion physical rates, chase camera, default livery, prop and surface animators, gauges, compass, weapon readout, pipper, exhaust and SpeedCue; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "4302c25eb8b13fe71322f8068c72e5f6",
+      "hash": "1f003b16de22133f9ce22d3095f7dbcd",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage, flight-state-dependent SpeedCue and seeded puffer placement; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "6e8983e62bdc73e300c553870e12a5a3",
+      "hash": "8fcee916aac15011a13d0bd7418b9926",
       "exercises": "player_crash_default after five flight steps: corrected pre-crash attitude, crash rig and airframe, moving distance puffers, ranged tumble, vector-form pieces, flydirt delta and pooled repeat calls.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-debris-rest",
       "frame": 360,
-      "hash": "da78cb730e32d77267e930096be1ad68",
+      "hash": "a3d3033de10ba5648b985a6766aa399e",
       "exercises": "the column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer as the visible signal.",
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "41e7e271cdb9f1f19abc5ab4b4cce555",
+      "hash": "f207f91f46cd23589f9d3f730806c8ea",
       "exercises": "Targeting a live AI in flight: its quaternion-driven pose and its crewed rear turret's barrel feed fixed antialiased in-range brackets, the label below the plane and --debug-markers identity/health text; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "1070206f2377a03212b87eb3c8adfdfa",
+      "hash": "d308d92f7674005fa775c3cc1134984b",
       "exercises": "A shot-down AI three seconds after the kill: quaternion flight state under frozen commands, the auto-selected target's antialiased brackets, second fireball and trail at the handover where randomdestseq inherits the hull's world velocity.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     }

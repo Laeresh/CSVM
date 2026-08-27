@@ -2327,33 +2327,37 @@ public partial class GameSession : Node3D
                 egenDefs = new List<EnemyGeneratorDef>();
             }
             var chapterNets = AiNets.Load(worldBindings.ChapterZrdrPath);
-            var generatorTemplates = new Dictionary<string, RosterSpawnPlan>(
-                StringComparer.OrdinalIgnoreCase);
-            if (_campaign != null)
+            // The parameter blocks a generator's vehicle.params names are mission data, not
+            // campaign state: a launch resolves its block on any run that turns the generators on,
+            // or the aircraft flies a CLI airframe with none of the block's authored fields.
+            var generatorTemplates = CampaignRosterPlan.GeneratorTemplates(
+                state.MissionZrdrPath, VehicleDefs.Load(state.ZrdrPath), chapterNets);
+            float generatorActiveDist = MinAiActiveDist();
+
+            // The template's own fields, applied the way the campaign roster applies them, then
+            // its accent so a generated pilot is heard as the block the mission authored.
+            FlightController? SpawnFromGenerator(EnemyGeneratorDef def, Vector3 pos, Vector3 look,
+                AiPilot pilot)
             {
-                var vehicleDefs = VehicleDefs.Load(state.ZrdrPath);
-                foreach (var template in AiSkills.LoadGeneratorRoster(state.MissionZrdrPath))
+                if (def.VehicleParams is not { } parameter
+                    || !generatorTemplates.TryGetValue(parameter, out var plan))
                 {
-                    if (CampaignRosterPlan.BuildGeneratorTemplate(template.Name, template.Fields,
-                            vehicleDefs, chapterNets) is { } plan)
-                    {
-                        generatorTemplates[template.Parameter] = plan;
-                    }
+                    // ⚠ shippedSkins: a generated aircraft is the mission's enemy, so it keeps its
+                    // own textures rather than the player militia's default.
+                    return flightRoster.SpawnAi(new AiSpawn(
+                        _spec.GeneratorsPlane, pos, look, pilot, ShippedSkins: true));
                 }
+                var launched = flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot));
+                CampaignRosterPlan.ApplyPlan(pilot, plan, generatorActiveDist);
+                RegisterAiVoice(launched, plan.AccentId);
+                return launched;
             }
+
             var wr = worldBindings.WorldRuntime;
             _generators = new AiGeneratorRuntime(egenDefs,
                 wr == null ? null
                     : (name, scope) => wr.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
-                // ⚠ A lambda: shippedSkins rides the authoring
-                // overload, and a generated aircraft is the mission's enemy, so it keeps its own
-                // textures rather than the player militia's default.
-                chapterNets, _spec.GeneratorsPlane,
-                (def, pos, look, pilot) => def.VehicleParams is { } parameter
-                    && generatorTemplates.TryGetValue(parameter, out var plan)
-                        ? flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot))
-                        : flightRoster.SpawnAi(new AiSpawn(
-                            _spec.GeneratorsPlane, pos, look, pilot, ShippedSkins: true)),
+                chapterNets, _spec.GeneratorsPlane, SpawnFromGenerator,
                 wr == null ? null : (name, host) => wr.PlayWithin(host, name, applyReset: false).Count,
                 wr == null ? null : (name, host) => wr.StopWithin(host, name),
                 netTrailers.For);

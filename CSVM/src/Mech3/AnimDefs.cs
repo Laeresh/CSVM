@@ -399,9 +399,15 @@ public static class AnimDefs
                 && AnimData.AsNum(atNode[2]) is { } oy && AnimData.AsNum(atNode[3]) is { } oz)
                 data["translate"] = Obj3(ox, oy, oz);
         }
+        // The compiled shape carries ONE interval, tagged Time or Distance, so both reader
+        // spellings have to arrive here. A trail puffer that loses its metres on the way reads as a
+        // state authoring no interval at all, which is the constructor's 1 s and not a trail.
         if (Num(fields, "TIME_INTERVAL") is { } ti)
             data["interval_garbage"] = new Dictionary<string, object?>(StringComparer.Ordinal)
             { ["interval_value"] = ti };
+        else if (Num(fields, "DISTANCE_INTERVAL") is { } di)
+            data["interval_garbage"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+            { ["interval_value"] = di, ["interval_type"] = "Distance" };
         if (Vec(fields, "LOCAL_VELOCITY") is { } lv) data["local_velocity"] = lv;
         if (Vec(fields, "WORLD_VELOCITY") is { } wv) data["world_velocity"] = wv;
         if (Vec(fields, "MIN_RANDOM_VELOCITY") is { } minv) data["min_random_velocity"] = minv;
