@@ -147,6 +147,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 19. ☑ The landing animation: no hook, too high, wings not folded (`BL-545`)
 20. ☑ CM01's drop-off cutscene shows no parachutist (`BL-540`)
 21. ☐ The low-terrain break-off, judged once the wingman is there (`BL-509`, A13's open half)
+22. ☐ An `AT_NODE` rotate reads a spelling the compiled data never uses (`BL-549`, minted by D17)
 
 ## Dependency and parallelism notes
 
@@ -1107,3 +1108,31 @@ with the wingman on the same airframe and watch the first low pass over the isla
 **Verify.** The user's report.
 
 **⚠ Traps.** ⚠ Everything `BL-457` and `BL-509` retire stays retired.
+
+## D22 ☐ An `AT_NODE` rotate reads a spelling the compiled data never uses
+
+**Goal.** An authored `OBJECT_ROTATE_STATE` with an `AT_NODE` basis takes the host node's axes,
+so CM02's wing-walk frame faces the captured aeroplane's heading rather than the world's.
+
+**Evidence (confidence: traced).** `BL-549`, found by D17. `PoseChannel.HandleRotateState` reads
+`basis.AtNodeMatrix`, the reader parser's spelling (`AnimDefs.AddAtNode`, `AT_NODE_MATRIX`);
+mech3ax's compiled extraction spells the field `AtNodeXYZ`. Census over the install: 132
+`AtNodeXYZ`, 0 `AtNodeMatrix`, so the handled branch is dead and all 132 fall through to an
+absolute zero-euler rotate on world axes.
+
+**Approach.** Read both spellings in `HandleRotateState`, then settle whether the compiled field
+carries degrees or radians the way the reader/compiled split is handled elsewhere in
+`PoseChannel`. `PoseAtNode`'s composition (B7) is shared by every cutscene; do not special-case.
+
+**Model recommendation.** medium. One branch and one unit question, with a shared pose path to
+judge against.
+
+**Verify.** `campaign-wingwalk-camera` reading the frame's heading equal to the Balmoral's;
+`cutscene-letterbox`, `campaign-cutscene`, `landings` and `intro-aircraft-stage` green; the full
+8-chapter `--freecam` regression unchanged; the goldens unchanged (16, GOLD-9). Take the
+`AtNodeXYZ` count as the baseline: the change must reach all 132 sites, so any that now move a
+letterbox or a camera in a golden pose is the thing to look at, not to suppress.
+
+**⚠ Traps.** ⚠ Judge against the suites and a `--campaign=` shot, never against a count. ⚠ B7's
+detached-target branch must keep writing the local transform.
+
