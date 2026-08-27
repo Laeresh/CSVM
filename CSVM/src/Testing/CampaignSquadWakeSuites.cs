@@ -32,6 +32,10 @@ internal static class CampaignSquadWakeSuites
 
     private const float StepDt = 1f / 60f;
 
+    // The roster group two of the ace's three blocks author (britpeace_8/9; britpeace_7 is group 4).
+    private const int AceGroup = 2;
+    private const int AceGroupSize = 2;
+
     // The targeting arm: the block whose list carries both authored terms, a nearer candidate on
     // the player's own side so distance argues against the human, and the mission's airship.
     private const string BiasBlock = "britpeace_8";
@@ -250,6 +254,12 @@ internal static class CampaignSquadWakeSuites
         }
         ctx.Check(!rigs[FirstSquad[0]].InPlay, $"group 1 is down: '{FirstSquad[0]}' is no longer in play");
 
+        // BL-563: a deactivated block is dead to DEDG (the original's deactivate primitive sets the
+        // dead byte too), so the ace's two group-2 blocks count zero while parked and two once woken.
+        int? parked = director.GroupLiveCount(AceGroup);
+        report.AppendLine($"dedg: group {AceGroup} counts {parked?.ToString() ?? "-"} while the squad is parked");
+        ctx.Same(0, parked ?? -1, $"DEDG counts no member of group {AceGroup} while its two blocks are deactivated");
+
         float woke = -1f, elapsed = 0f;
         float limit = NapSeconds * 3f;
         while (elapsed < limit && woke < 0f)
@@ -267,6 +277,9 @@ internal static class CampaignSquadWakeSuites
             $"…and not before the authored {NapSeconds:0} s nap: {woke:0.00} s");
         ctx.Check(woke < NapSeconds + 1f,
             $"…arriving on that nap rather than some later objective: {woke:0.00} s");
+        int? awake = director.GroupLiveCount(AceGroup);
+        report.AppendLine($"dedg: group {AceGroup} counts {awake?.ToString() ?? "-"} once the squad is woken");
+        ctx.Same(AceGroupSize, awake ?? -1, $"…and counts both group-{AceGroup} blocks once WAKEUP_ENEMIES has put them in play");
 
         // Past OBJECTIVE68, the SET_AI_NET the wake chain naps awake two seconds later. The net the
         // squad is left flying is what decides where it goes, so it is measured rather than assumed.
