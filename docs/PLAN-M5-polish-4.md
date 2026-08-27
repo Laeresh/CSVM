@@ -90,7 +90,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — CM05 and CM06
 
 11. ❌ `BL-517`: the Pandora's broadside fires on a friendly player
-12. ☐ `BL-524`: a friendly patrol without a net flies away after its first fight
+12. ❌ `BL-524`: a friendly patrol without a net flies away after its first fight
 13. ☐ `BL-525`: the second Workers' Voyage docking completes without a docking
 14. ☐ `BL-514`: a shot-down carried turret keeps burning where it was
 
@@ -305,7 +305,7 @@ invented engine-side hostility filter.
 
 **Verified.** <pending orchestrator run>
 
-## B12 ☐ `BL-524`: a friendly patrol without a net flies away after its first fight
+## B12 ❌ `BL-524`: a friendly patrol without a net flies away after its first fight
 
 **Goal.** In CM05 (C3/M04) and CM07 (C1/M02) the friendly patrol returns after its first fight
 instead of continuing on its last heading out of the mission.
@@ -327,6 +327,53 @@ first kill stay within the mission area; D32.
 **⚠ Traps.** Do not give them the player's escort law as a default (`BL-457` shows the escort
 hand-off is itself unsettled). Do not add a leash constant. Anything deeper than the no-net
 lay-off is `BL-523`'s and goes back to the backlog with what was learned.
+
+**Verified.** <pending orchestrator run>
+
+**Outcome (disproven; no code landed).** Both halves of the item's stated cause are wrong, and the
+decode lane it names has no rule to give.
+
+*The data.* The netless friendly blocks are `wingman_1/2/3` in CM05 (C3/M04) and `wingman_2/3/4` in
+CM07 (C1/M02), every one of them a `mode wingman` block whose `primary_target` names a leader
+(`player`, or `devastator_1`/`devastator_2` in CM05 and `devastator_2`/`devastator_3` in CM07). The
+friendly aircraft that fly a route are the `devastator_N` blocks and they are netted: ids 11
+(`M4Bravo`) and 12 (`M4Charlie`) in C3, 25 (`M2Charlie`) and 26 (`M2Bravo`) in C1, all four carried
+by their chapter's `neindex`. Neither mission has a friendly patrol without a net, and the spawner
+drops no net here, so `BL-453` is not the cause.
+
+*The decode.* There is no no-net lay-off return rule to port. `lay off` is not a stored state: the
+debug readout derives it from having a target while the AI task at `+0x2f0` is not 1
+(`FUN_0041c470`). A netless non-`wingman` aeroplane has no behaviour at all in the original, since
+the follower `FUN_0041d1f0` resolves its net first and indexes -1 on no match with no guard, which
+is unreachable only because the shipped data never authors it. A netless `wingman` runs the escort
+law `FUN_0041e760`, re-read out of `crimson.exe` for this item: it dereferences its leader at
+`+0x2fc` through `+4` in the function's first block with no null check, and reads the leader's
+presence byte `+0x91d` only inside the state-0 join test and the state-2 re-acquire. The engine has
+no leaderless branch, and the one routine that would hand a wingman a default, `FUN_0049c920`
+(assign the chapter's first net, clear `mode` to `jet`), is reached only from `FUN_0049c880`, which
+Ghidra reports with zero callers and no pointer anywhere in the image.
+
+*What is left is CSVM's own.* The only code path that produces the reported symptom is `AiPilot`'s
+invented null-leader fallback (`Escort is { Leader.InPlay: true }`): when a leader leaves play the
+pilot drops to `FlyPatrol`, and with `Patrol` null that arm projects `TargetHeadingDeg` and
+`TargetAltitude` into an aim point. Those two fields are scratch as well as orders, and
+`FlyPursuit` overwrites both every step with the bearing to its quarry and the quarry's altitude. A
+netless pilot that fights and then loses its leader holds the last bearing it had to a dead enemy
+for the rest of the mission, which is what "continues on its last heading out of the mission"
+looks like. That is the escort hand-off's fallback rather than a lay-off rule, so it belongs with
+`BL-457` and `BL-523`; both entries carry it now, and `BL-524` is rewritten around it rather than
+closed.
+
+*Confirmed at runtime.* Both missions were flown headless under `--campaign=`. CM05 spawns 15 of 16
+blocks with 3 escorts, `wingman_1` on `player`, `wingman_2` on `devastator_1` and `wingman_3` on
+`devastator_2`, the two leaders netted `M4Bravo#11` and `M4Charlie#12`; CM07 spawns 10 of 13 with 3
+escorts and its leaders netted `M2Charlie#25` and `M2Bravo#26`. Nothing is missing a net and no
+block is dropped, which settles the item's premise. The fallback's trigger is real in the same run:
+`devastator_1` is shot down mid-mission, leaving `wingman_2` netless and leaderless. That run does
+not show the drift itself, because `wingman_2` held a live target from then until it was shot down
+too, and the drift needs a leaderless pilot to also lose its target. Which friendly the controls
+report watched is therefore still unpinned, and the last step of the mechanism is read off the code
+rather than observed.
 
 ## B13 ☐ `BL-525`: the second Workers' Voyage docking completes without a docking
 

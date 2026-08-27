@@ -2293,16 +2293,24 @@ usual.
   `Patrol` to `Pursue` on its own gates (`AiModeMachine.cs:314`); a patrol that never leaves the
   mode either never sees the player as a candidate (team, rating bias, range) or has its promotion
   gated by a net flag. The fly-away is the other end of the cycle: a pursuit that overshoots and
-  never lays off, a lay-off with no net to return to (`BL-524`'s friendly case), or a fly-away on
-  losing its target; the original's AI has a return rule that ours lacks. *Fix shape:* run both
+  never lays off, or a fly-away on losing its target; the original's AI has a return rule that
+  ours lacks. *Fix shape:* run both
   missions headless with the AI trace on; for CM05 read the second patrol's mode transitions and
   candidate scan against the first patrol, which does engage; for CM09 log the far aircraft's mode
   and target over the run. Then decode the promotion gate and the distance or lost-target rule in
   `AiModeMachine`'s source functions. *⚠ Traps:* `PLAN-M5-polish.md` 3450 recorded the
   never-pursues impression for wingmen and it closed on a different cause; check the log rather
   than reusing that answer. Do not add a leash constant; `docs/org/aiPilot.md` records that patrol
-  is built on a spawn table, and the return rule has to come from the decode. *Cross-refs:*
-  `BL-524`, `BL-531`, `docs/org/aiPilot.md`.
+  is built on a spawn table, and the return rule has to come from the decode.
+  `BL-524`'s half of the fly-away is settled and is not a lay-off question. Neither CM05 nor CM07
+  has a netless friendly patrol, and the original has no netless-patrol and no leaderless-wingman
+  branch at all: `FUN_0041d1f0` indexes -1 on an unresolved net with no guard, `FUN_0041e760`
+  dereferences its leader at `+0x2fc` with no null check, and `FUN_0049c880`, which would release a
+  wingman onto the chapter's first net, has no callers. The remaining fly-away path in CSVM is
+  `AiPilot.FlyPatrol`'s netless arm reading `TargetHeadingDeg` and `TargetAltitude` after
+  `FlyPursuit` has overwritten them, so a pilot with no net and no leader holds the last bearing to
+  a dead target.
+  *Cross-refs:* `BL-524`, `BL-531`, `docs/org/aiPilot.md`.
 
 - `BL-550` `[Feature]` **The AI's altitude floor is enforced at one site in CSVM and at three in
   the original: the manoeuvre veto and the mode-5 global disable are both missing.** *Evidence:*
@@ -2334,17 +2342,33 @@ usual.
   loses its floor at the same time. *Cross-refs:* `BL-523` (the same mode machine's
   patrol/pursue cycle), `docs/org/aiPilot.md`, `BL-431` (the decode session that found this).
 
-- `BL-524` `[Bug]` **CM05 (C3/M04) and CM07 (C1/M02): a friendly patrol without a net flies away after its first fight
-  and never returns to escort.** *Evidence:* reported at the controls in two missions: once the
-  first enemy patrol is destroyed, the friendlies on patrol have no net to return to and continue
-  on their last heading out of the mission, rather than rejoining the escort. Their `aiv` blocks
-  either author no net and the original's lay-off returns them to a default (the leader, the
-  spawn point, or the mission's escort net set later by `SET_AI_NET`), or the block authors a net
-  our spawner drops (`BL-453` records roster slots the spawner does not read). *Fix shape:* read the
-  two missions' `aiv.zrd` for the friendlies' net and mode fields, and decode what `LayOff` does with
-  no net (`docs/org/aiPilot.md`). *⚠ Traps:* do not give them the player's escort law as a default;
-  `BL-457` shows the escort hand-off is itself unsettled. *Cross-refs:* `BL-453`, `BL-457`,
-  `BL-502` (`SET_AI_NET` reach), `BL-523`.
+- `BL-524` `[Bug]` **CM05 (C3/M04) and CM07 (C1/M02): a friendly wingman whose leader leaves play
+  flies away after its first fight and never returns to escort.** *Evidence:* reported at the
+  controls in two missions: once the first enemy patrol is destroyed, friendly aircraft continue on
+  their last heading out of the mission instead of rejoining. The filing blamed a missing net and
+  both halves of that are disproven. Neither mission has a netless friendly patrol: the netless
+  friendly blocks are `wingman_1/2/3` (CM05) and `wingman_2/3/4` (CM07), every one a `mode wingman`
+  naming a leader in `primary_target`, and every friendly that flies a route is netted on an id its
+  chapter carries (C3 ids 11 `M4Bravo` and 12 `M4Charlie`, C1 ids 25 `M2Charlie` and 26 `M2Bravo`),
+  so the spawner drops nothing and `BL-453` is not the cause. There is also no lay-off return rule
+  to decode: `lay off` is derived rather than stored, the netless follower path `FUN_0041d1f0`
+  indexes -1 with no guard, the escort law `FUN_0041e760` dereferences its leader at `+0x2fc` with
+  no null check, and the release routine that would hand a wingman the chapter's first net
+  (`FUN_0049c920`, reached only from `FUN_0049c880`) has no callers in the image. What remains is
+  CSVM's own invented fallback: `AiPilot` drops an escort whose `Leader.InPlay` goes false to
+  `FlyPatrol`, and with no net that arm projects `TargetHeadingDeg` and `TargetAltitude`, which
+  `FlyPursuit` overwrote with the bearing to its quarry, so the pilot holds the last bearing to a
+  dead enemy for the rest of the mission. Both missions flown headless confirm the roster half
+  (CM05 spawns 3 escorts on `player`/`devastator_1`/`devastator_2` with the leaders netted
+  `M4Bravo#11` and `M4Charlie#12`, CM07 the same shape on `M2Charlie#25` and `M2Bravo#26`, nothing
+  dropped) and the trigger (`devastator_1` is shot down in CM05, leaving `wingman_2` netless and
+  leaderless); the drift itself did not show, because that wingman held a target until it too was
+  shot down. *Fix shape:* reproduce the last step, a leaderless netless pilot that also loses its
+  target, then decide what such a wingman does, which is a decision the binary cannot make for us
+  since the engine's own answer to "a wingman stops escorting" is unreachable code. *⚠ Traps:* do not give
+  them the player's escort law as a default; `BL-457` shows the escort hand-off is itself
+  unsettled. Do not add a leash constant. *Cross-refs:* `BL-457`, `BL-502` (`SET_AI_NET` reach),
+  `BL-523`, `docs/org/aiPilot.md`.
 
 - `BL-525` `[Bug]` **CM06 (C1C/M01): the second docking at the Workers' Voyage (to collect Dr. Fassenbender)
   completes without docking.** *Evidence:* reported at the controls: the objective to dock a second
