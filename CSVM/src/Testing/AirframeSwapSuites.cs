@@ -40,6 +40,20 @@ internal static class AirframeSwapSuites
     private const float StepDt = 1f / 60f;
     private const float PlayBudgetS = 30f;
 
+    // The livery the capture stand-in wears: the shipped 'british' pattern the real captured
+    // Balmoral carries, distinct from the player's own Fortune Hunters paint so the two cannot be
+    // mistaken for one another in CheckLivery.
+    private static readonly PaintScheme CapturedScheme = new()
+    {
+        Pattern = "british",
+        Color1 = PaintScheme.FromBytes(177, 130, 66),
+        Color2 = PaintScheme.FromBytes(48, 47, 39),
+        Color3 = PaintScheme.FromBytes(255, 255, 255),
+        NoseDecal = 21,
+        TailDecal = 4,
+        WingDecal = 4,
+    };
+
     /// <summary>Drives the swap CM02 authors against CM02's own built world: the code comes out of
     /// the mission's compiled definitions, the rig off the session's roster, and the replacement is
     /// read for the named airframe's own stock fit, hardpoint table and armour rather than the
@@ -172,7 +186,7 @@ internal static class AirframeSwapSuites
             roster.BuildPlayers(rigs);
             var before = rig.Controller ?? throw new InvalidOperationException("no rig was built");
             var captured = StageAi(roster, call.Root, wanted.PlaneNode,
-                before.WorldPosition + (before.NoseDirection * 300f), inert: false);
+                before.WorldPosition + (before.NoseDirection * 300f), inert: false, CapturedScheme);
             var wingman = StageAi(roster, AirframeHandover.WingmanName, StartPlane,
                 before.WorldPosition + new Vector3(0f, 0f, 5000f), inert: true);
             Damage(wingman, 0.10f);
@@ -233,6 +247,7 @@ internal static class AirframeSwapSuites
         var after = rig.Controller ?? throw new InvalidOperationException("the swap built no aircraft");
         report.AppendLine(Describe("after", after));
         CheckCapturedHull(ctx, captured, after, armorLeft, healthLeft, report);
+        CheckLivery(ctx, before, captured, after, report);
         CheckHandover(ctx, wingman, wasPos, wasNose, outgoingArmor, outgoingHealth, report);
 
         ctx.Check(!ReferenceEquals(before, after),
@@ -350,12 +365,19 @@ internal static class AirframeSwapSuites
     // on the player's own heading with full pools passes the placement and pool checks without the
     // hand-over having run at all (INSTR-10).
     private static FlightController StageAi(FlightRoster roster, string name, string planeNode,
-        Vector3 at, bool inert)
+        Vector3 at, bool inert, PaintScheme? scheme = null)
     {
         var aim = at - Vector3.Forward;
         return roster.SpawnAi(new AiSpawn(planeNode, at, aim, AiPilot.HoldingCourse(at, aim),
-            Team: AimAssist.PlayerTeam, Inert: inert, NodeName: name));
+            Scheme: scheme, Team: AimAssist.PlayerTeam, Inert: inert, NodeName: name));
     }
+
+    // Field-wise, since PaintScheme is a mutable reference type with no Equals override.
+    private static bool SchemeEquals(PaintScheme? a, PaintScheme? b) =>
+        a != null && b != null
+        && string.Equals(a.Pattern, b.Pattern, StringComparison.OrdinalIgnoreCase)
+        && a.Color1 == b.Color1 && a.Color2 == b.Color2 && a.Color3 == b.Color3
+        && a.NoseDecal == b.NoseDecal && a.TailDecal == b.TailDecal && a.WingDecal == b.WingDecal;
 
     // Shoots the stand-in down and answers what is left. Two hits, not one: armour still standing
     // against a hit that carries no armour damage nulls the health damage outright, so structure
@@ -386,6 +408,20 @@ internal static class AirframeSwapSuites
             $"and the new hull carries that aircraft's own armour and structure fractions, so a Balmoral shot half to pieces is the one the player inherits");
         ctx.Check(gotHealth < 1f - FractionTolerance,
             $"which leaves the player damaged rather than handing them a pristine airframe and making the ending easier than the original's");
+    }
+
+    // BL-543: the rebuilt rig wears the captured aircraft's own livery, not the player's, and the
+    // draw is not a coincidence of the two happening to share a pattern (CapturedScheme is 'british'
+    // against the player's own Fortune Hunters).
+    private static void CheckLivery(TestContext ctx, FlightController before,
+        FlightController captured, FlightController after, StringBuilder report)
+    {
+        report.AppendLine($"livery: was '{before.Scheme?.Label ?? "-"}', captured '{captured.Scheme?.Label ?? "-"}', " +
+            $"rebuilt '{after.Scheme?.Label ?? "-"}'");
+        ctx.Check(!SchemeEquals(before.Scheme, captured.Scheme),
+            $"the capture stand-in's livery is not the player's own, so a match below cannot be coincidence");
+        ctx.Check(SchemeEquals(after.Scheme, captured.Scheme),
+            $"the rebuilt rig wears the captured aircraft's own livery, as the original reads at the controls");
     }
 
     // Step 5: the aeroplane the player just left, in the hands of wingman_4 and visible.

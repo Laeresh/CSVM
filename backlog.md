@@ -2175,13 +2175,6 @@ usual.
   the node it wants is the captured aircraft's own (which the swap now reaches by root name).
   *Cross-refs:* `docs/PLAN-M5-polish-2.md` C12 and D15.
 
-- `BL-543` `[Bug]` **After the capture the player's Balmoral wears the Fortune Hunters livery; the
-  original keeps the British one.** Seen at the controls on CM02. The swap rebuilds the player's rig
-  on `player_balmoral` with the player's own paint; the original hands over the CAPTURED aircraft's
-  livery. *Fix shape:* `FlightRoster.RunSwap` has the captured rig in hand (`AiNamed(CaptureRoot)`),
-  so its `PaintScheme` can be carried onto the rebuilt rig alongside its damage. *Cross-refs:*
-  `docs/PLAN-M5-polish-2.md` B9 and D15.
-
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
   controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.
   **The mechanism.** `InstantActionDirector.StuntSummaryFor` (`Session/InstantActionDirector.cs:761-764`) calls

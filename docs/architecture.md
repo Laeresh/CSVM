@@ -5291,11 +5291,12 @@ livery stream is captured and restored around the build so a swap cannot change 
 wave is painted, and a swap builds no stunt run, scoreboard or custom-plane fit: the run belongs to
 the pilot, and a bought plane's armour and pylon counts belong to the airframe they were bought
 for. `RunSwap` is the whole order a callback raises: that rebuild, then 967's capture half (the
-definition's root node resolved through `AiNamed`, hidden, and what is left of its hull scaled onto
-the new one) and the hand-over of the outgoing aeroplane to `wingman_4` where the mission resolves
-that name. It answers an `AirframeSwapResult` naming the aircraft it hid, because the cutscene that
-raised the code may be holding that aircraft too. Decode and the three deliberate divergences:
-`docs/formats/anim-definitions/cutscenes.md`.
+definition's root node resolved through `AiNamed`, hidden, and what is left of its hull AND its own
+`PaintScheme` carried onto the new one, the livery read off `FlightController.Scheme`) and the
+hand-over of the outgoing aeroplane to `wingman_4` where the mission resolves that name. It answers
+an `AirframeSwapResult` naming the aircraft it hid, because the cutscene that raised the code may be
+holding that aircraft too. The livery carry is undecoded in the executable; decode and the three
+deliberate divergences: `docs/formats/anim-definitions/cutscenes.md`.
 
 ## src/Session/FlightRosterInputs.cs
 The grouped construction facts accepted by `FlightRoster`: copied `FlightRosterPolicy`, immutable

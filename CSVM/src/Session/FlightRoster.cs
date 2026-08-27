@@ -128,11 +128,11 @@ public sealed class FlightRoster
 
     /// <summary>Puts one player into a different airframe without ending the mission: the rig's
     /// aircraft is rebuilt from <paramref name="planeNode"/>'s own record, in the pose, attitude,
-    /// throttle and speed the aircraft being left was flying, carrying the NEW airframe's fit,
-    /// armour and audio and nothing of the outgoing one's. ⚠ Rounds already in the air are not the
-    /// outgoing aircraft's: they ride the shared pool under this pilot's unchanged shooter id.
-    /// Decode: docs/formats/anim-definitions/cutscenes.md, callback codes 965 to 967.</summary>
-    public FlightController SwapPlayerAirframe(PlayerRig rig, string planeNode)
+    /// throttle and speed the aircraft was flying, carrying the NEW airframe's fit and armour.
+    /// <paramref name="scheme"/> carries a captured rig's own livery onto the rebuild (967); null
+    /// draws the ordinary player paint. ⚠ Rounds already in the air ride the shared pool under
+    /// this pilot's unchanged shooter id. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public FlightController SwapPlayerAirframe(PlayerRig rig, string planeNode, PaintScheme? scheme = null)
     {
         ArgumentNullException.ThrowIfNull(rig);
         if (_players == null)
@@ -158,7 +158,7 @@ public sealed class FlightRoster
         rig.Controller = null;
         try
         {
-            _players.Assemble(rig.Index, rig, _ => { }, new AirframeSwapRequest(planeNode, start));
+            _players.Assemble(rig.Index, rig, _ => { }, new AirframeSwapRequest(planeNode, start, scheme));
         }
         finally
         {
@@ -285,8 +285,8 @@ public sealed class FlightRoster
 
     /// <summary>The whole of one mission-script airframe swap, as codes 965 to 967 raise it: the
     /// rig rebuilt on the named airframe, the capture animation's own aircraft hidden with what is
-    /// left of its hull carried onto the new one (967), and the aeroplane the player just left
-    /// handed to <see cref="AirframeHandover.WingmanName"/> off the nose when
+    /// left of its hull and its own livery carried onto the new one (967), and the aeroplane the
+    /// player just left handed to <see cref="AirframeHandover.WingmanName"/> off the nose when
     /// <paramref name="handsOver"/> says this mission resolves that name. What the capture half hid
     /// comes back in the <see cref="AirframeSwapResult"/>.</summary>
     internal AirframeSwapResult RunSwap(PlayerRig rig, AirframeSwapOrder order, bool handsOver)
@@ -307,7 +307,9 @@ public sealed class FlightRoster
         var captured = AirframeHandover.CarriesCapturedDamage(order.Airframe)
             ? AiNamed(order.CaptureRoot)
             : null;
-        SwapPlayerAirframe(rig, order.Airframe.PlaneNode);
+        // The captured rig's own scheme rides the rebuild: undecoded in the executable,
+        // whose case never touches a paint field, so this is the user's own controls reading.
+        SwapPlayerAirframe(rig, order.Airframe.PlaneNode, captured?.Scheme);
         var hidden = CarryCapturedDamage(captured, rig.Controller?.Damage);
         if (handsOver)
         {

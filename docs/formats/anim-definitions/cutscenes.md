@@ -594,7 +594,7 @@ the named airframe, at the pose, heading, throttle and speed the outgoing aircra
 airframe's stock fit at full ammunition and its own armour pools; the cutscene flags land on the
 aircraft the swap built. `Session/AirframeSwap.cs`'s `AirframeHandover` carries the mission gate,
 the 100 m / −45° placement and the capture test; `FlightRoster.RunSwap` runs the whole order, and
-the definition's root node reaches it through `AnimRuntime.CallbackHost`. Three divergences, each
+the definition's root node reaches it through `AnimRuntime.CallbackHost`. Four divergences, each
 deliberate:
 
 - **The airframe and livery are decided at the roster spawn, not at the swap.** The original writes
@@ -607,6 +607,15 @@ deliberate:
   (`docs/org/vehicleDamage.md`), so an undamaged hand-over lands at the receiver's full pools rather
   than at the player's larger number.
 - **`+0x388` is not copied.** CSVM's `wingman_4` is already on the player's team.
+- **967's rebuild carries the captured aircraft's own `PaintScheme` onto the player's new hull**
+  (`BL-543`). This is NOT in the executable: case 967 (`FUN_0047e080`, `0x3c7`) rebuilds through
+  `FUN_0047fd50(s_pbalmoral, s_player_balmoral)`, which reads no paint field off the captured
+  vehicle, and `DAT_0071daf0`/`DAT_0071daf4` (the paint pair step 5 writes) are touched only in
+  `FUN_004735b0` at mission start, giving `wingman_4` the PLAYER's own scheme, the opposite
+  direction. The original keeps the Fortune Hunters Balmoral seen at the controls; CSVM's carry is
+  the user's own at-the-controls reading, taken over that trace by this project's standing rule
+  that a human's seen result outranks an instrument. `FlightController.Scheme` records what painted
+  a rig so `FlightRoster.RunSwap` can read the captured rig's back.
 
 ⚠ **967's hide has to outlive the reveal of code 914.** In `C3/M05` the capture definition raises
 967 from the same sequence that calls `wingwalk`, and `wingwalk_parent-wingwalk` brackets its own

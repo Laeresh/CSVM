@@ -141,7 +141,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 14. ☑ The cutscene's world hold does not reach an aircraft's own realtime tick (`BL-457`, minted by C12)
 15. ☑ The captured Balmoral is not hidden by the swap in a flown session (`BL-541`)
-16. ☐ The captured aircraft keeps its British livery after the capture (`BL-543`)
+16. ☑ The captured aircraft keeps its British livery after the capture (`BL-543`)
 17. ☐ CM02's capture cutscene camera sits over the water (`BL-542`)
 18. ☐ The auto-land prompt is not drawn in a flown session (`BL-544`)
 19. ☑ The landing animation: no hook, too high, wings not folded (`BL-545`)
@@ -888,7 +888,7 @@ owed at the controls and rides `BL-547`.
 
 **Verified.** <pending orchestrator run>
 
-## D16 ☐ The captured aircraft keeps its British livery after the capture
+## D16 ☑ The captured aircraft keeps its British livery after the capture
 
 **Goal.** After the capture the player flies the Balmoral in the livery it was captured in.
 
@@ -905,6 +905,19 @@ original hands over the captured aircraft's.
 
 **⚠ Traps.** ⚠ The hand-over to `wingman_4` keeps the PLAYER's old scheme, which is decoded and
 correct; only the player's new hull changes.
+
+**Landed.** Not in the executable: case 967 (`FUN_0047e080`, `0x3c7`) rebuilds through
+`FUN_0047fd50(s_pbalmoral, s_player_balmoral)`, which reads no paint field off the captured
+vehicle, and the paint pair `DAT_0071daf0`/`DAT_0071daf4` is written only in `FUN_004735b0` at
+mission start, giving `wingman_4` the PLAYER's own scheme — the opposite direction. The carry is
+the user's own at-the-controls reading, taken over the trace by this project's standing rule. A new
+`FlightController.Scheme` field records what painted each built rig (both `HumanFlightAdapter` and
+`AiFlightAssembler` set it); `AirframeSwapRequest` carries an optional scheme through to
+`HumanFlightAdapter.Assemble`'s rebuild, which a swap's own draw now defers to; `RunSwap` reads
+`captured?.Scheme` before the rebuild and passes it to `SwapPlayerAirframe`. `docs/formats/anim-definitions/cutscenes.md`
+carries the finding as a fourth deliberate divergence.
+
+**Verified.** <pending orchestrator run>
 
 ## D17 ☐ CM02's capture cutscene camera sits over the water
 

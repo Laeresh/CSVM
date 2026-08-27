@@ -85,15 +85,15 @@ internal sealed class AiFlightAssembler
         Node3D planeModel;
         using (PerfSample.Scope(PerfSite.AiSpawn))
         {
-            var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
-                scheme: spawn.Scheme ?? MilitiaScheme(stats, spawn) ?? _liveries.SchemeFor(
+            var scheme = spawn.Scheme ?? MilitiaScheme(stats, spawn) ?? _liveries.SchemeFor(
                     _humanCount + index, _aircraft.ZrdrPath,
                     _aircraft.PaintRng, _liveries.PatternsForPlane(_aircraft.PlanesGamez, spawn.PlaneName),
-                    useDefaultPattern: !spawn.ShippedSkins),
-                patterns: _liveries.Patterns);
+                    useDefaultPattern: !spawn.ShippedSkins);
+            var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
+                scheme: scheme, patterns: _liveries.Patterns);
             planeModel = planeBuilder.Build(spawn.PlaneName);
 
-            controller = new FlightController();
+            controller = new FlightController { Scheme = scheme };
             controller.Bind(new FlightControllerBuild
             {
                 PlayerIndex = FlightRoster.ShooterIdBase + index,

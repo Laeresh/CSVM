@@ -128,15 +128,16 @@ internal sealed class HumanFlightAdapter
         }
 
         // Every player flies the Fortune Hunters livery unless --paint says otherwise, as the
-        // original's stock planes do; a custom plane wears the paint it was built with instead,
-        // through the same substitution path the livery lab drives. --paint still wins over both.
+        // original's stock planes do; a custom plane wears the paint it was built with instead.
+        // A swap carrying a captured rig's own scheme wins over all three (below).
         long mark = StartupProfile.Mark();
         // cockpitInterior: a human rig is the only one whose pilot can look out of a cockpit
         // (PLAN-cockpit-view, B11) — FlightRoster's AI builder deliberately does not ask for one.
-        var scheme = custom != null && !_liveries.PaintRequested
-            ? Flight.CustomPlaneBuild.PaintFor(custom, UI.HangarPaintPage.PatternName(custom.PaintPattern))
-            : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
-                _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName));
+        var scheme = swap?.Scheme
+            ?? (custom != null && !_liveries.PaintRequested
+                ? Flight.CustomPlaneBuild.PaintFor(custom, UI.HangarPaintPage.PatternName(custom.PaintPattern))
+                : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
+                    _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)));
         _flying[pi] = new FlyingAirframe(planeName, scheme);
         var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
             scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true);
@@ -152,6 +153,7 @@ internal sealed class HumanFlightAdapter
             HudParent = rig.Viewport,
             // Null when the airframe ships no cockpit1 — the rig then hides nothing, as before B11.
             Cockpit = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior),
+            Scheme = scheme,
         };
         if (verbose && controller.Cockpit != null)
             GD.Print($"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");

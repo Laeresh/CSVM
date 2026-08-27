@@ -88,6 +88,11 @@ public partial class FlightController : Node3D
     /// part and the plane flies on; null means any hit crashes.</summary>
     public PlaneDamage? Damage;
 
+    /// <summary>The livery this aircraft's model was painted with, set once by whichever assembler
+    /// built it. Read back by an airframe swap that needs to carry a captured rig's own scheme
+    /// onto the rig it rebuilds (docs/formats/anim-definitions/cutscenes.md).</summary>
+    public PaintScheme? Scheme;
+
     /// <summary>Applies a plane collision's health damage to the struck world node, returning true
     /// iff it was a <c>WeaponOrCollideHit</c> destructible (the 44 facades/windows/agyrobus), in
     /// which case the object breaks and the plane flies THROUGH it. EVERY destructible takes the
