@@ -2569,34 +2569,9 @@ usual.
   decode page, and the steady-hand roll itself is not in question, only what a failed roll does.
   *Cross-refs:* `BL-557` (the other open TTK cause), `docs/org/aiControlLaw.md`.
 
-- `BL-563` `[Bug]` **CM12 (C2/M01) cannot be won: `DEDG` counts a deactivated roster member as
-  alive, so the wave chain that wakes the security Furys and the Knight Firebrands never fires.**
-  *Evidence:* a flown CM12 session (`.scratch/logs/menu-20260827-215135.log`): the four
-  `secgyro_*` are downed, and after that no `ai mode:` line ever names `secfury_1..4` or
-  `hkfirebrand_1/2/3/9`, which spawn `deactivated 1` and are only put in play by OBJECTIVE66 /
-  OBJECTIVE67's `WAKEUP_ENEMIES`. Both sit behind `DEDG [1, 2]` (OBJECTIVE12, OBJECTIVE65), "group 1
-  down to two". Group 1 is the four gyros plus the seven deactivated blocks, and
-  `CampaignDirector.RosterInputs.GroupLiveCount` counts every un-crashed member, deactivated ones
-  included, so the count can never fall below seven and the mission stalls with no enemy left to
-  find. "Destroy all enemy fighters" (OBJECTIVE46, `PRIMARY 3`, `DEDG [1, 0]`) is only woken by
-  OBJECTIVE68 (`DEDG [2, 0]`, `hkfirebrand_9`'s death) at the end of that chain. The comment on
-  `GroupLiveCount` ("a deactivated member counts as alive, as the decoded walk counts a parked
-  one") is wrong: the activate/deactivate primitive `FUN_004b0f40` sets the dead byte `+0x91d`
-  together with `+0x945` on deactivation, and the DEDG counter `FUN_00465850` counts a vehicle only
-  when `+0x91d == 0`, so a deactivated member is dead to `DEDG` until `WAKEUP_ENEMIES` clears both
-  bytes. *Fix shape:* skip `Inert` members in `GroupLiveCount` (crashed OR inert is "not
-  counted"), correct the comment, and add a unit test on a two-member group with one inert block
-  (`ObjectiveGraphTests` has the DEDG harness). Then fly CM12 through: two gyros down wakes the
-  Furys, the Goose flying plus group 1 down to two wakes the Firebrands, `hkfirebrand_9` down wakes
-  primary 3. *⚠ Traps:* CM02's `campaign-squad-wake` suite (BL-499) has a deactivated squad behind
-  a `DEDG [1, 0]` gate; check which group that squad authors before assuming the suite's
-  expectation survives the change, and mint a follow-up if it does not. The `DEDG` generator form
-  (third argument) is a separate, unimplemented count and not this bug. *Cross-refs:* `BL-499`,
-  `BL-564`, `BL-565`, `docs/formats/objectives.md` (`DEDG` row), `docs/org/aiPilot.md`
-  (the activation primitive).
-
 - `BL-564` `[Bug]` **CM12 (C2/M01): the `eshipg31` generator launches Bloodhawks at the world
-  origin instead of patrol boats at the pirate ship.** *Evidence:* the same session: the wave
+  origin instead of patrol boats at the pirate ship.** *Evidence:* a flown CM12 session
+  (`.scratch/logs/menu-20260827-215135.log`): the wave
   arrives as `ai17_player_bhawk`, `ai18_player_bhawk`, `ai19_player_bhawk`, tracked by the target
   HUD at 7.6 km from the player, and two of the three ram terrain `g34586` within seconds at
   `pos=(5,5,-109)`, the world origin; the third patrols `M2Patrol1`, a water net, and is shot down
@@ -2615,7 +2590,7 @@ usual.
   fighters. *⚠ Traps:* the three Bloodhawks are group 3 and never count toward "Destroy all
   enemy fighters" (`DEDG [1, 0]`); killing them is not progress. Do not "fix" (1) by handing the
   generator a fighter def. *Cross-refs:* `BL-522` (launch placement from a surface host),
-  `BL-527`, `BL-563`, `docs/formats/mission-entities/enemy-generators.md`.
+  `BL-527`, `docs/formats/mission-entities/enemy-generators.md`.
 
 - `BL-565` `[Fidelity]` **`DEDG`'s decoded side effect, widening every counted member's engagement
   volume to 9,000 m, is not applied.** *Evidence:* `docs/formats/objectives.md`'s `DEDG` row and
@@ -2629,7 +2604,35 @@ usual.
   counted member's machine: `ActivationRange = max(ActivationRange, 9000)`, and the altitude bands
   once they have a consumer. *⚠ Traps:* the widening is per awake objective per tick, so a
   napped or killed `DEDG` stops widening but the original never shrinks the volume back; match
-  that (set, never reset). *Cross-refs:* `BL-563`, `BL-523` (the patrol/pursue cycle).
+  that (set, never reset). *Cross-refs:* `BL-523` (the patrol/pursue cycle).
+
+- `BL-566` `[Bug]` **CM12 (C2/M01): the ace `hkfirebrand_9` flies under the terrain after its wake,
+  and nothing stops it until it rams a tile from below.** *Evidence:* reported at the controls
+  (the ace seen under the ground, not crashing, not surfacing) and the session
+  `.scratch/logs/menu-20260828-001548.log`: once OBJECTIVE67 wakes it, the
+  ace alternates `pursue -> avoid crash (below the 20 m floor)` and back a dozen times, with a few
+  `obstacle inside NNN m (tagged/col)` probes, and dies minutes later as `AI ram into tagged/col`
+  (no shooter). The floor test is the decoded absolute one, `pos.Y < 20` world metres, not height
+  above ground, so over land it says nothing about terrain; the ace's authored spawn (-4518, 150,
+  -6233) and the fight sit beside terrain tile `tagged` (x -5120..-4096, z -6144..-5120, rising
+  to 215 m), and an aircraft repeatedly under world Y 20 m there is inside the hills. Its wake
+  places it at the authored roster position (`WakeupEnemies` calls `rig.Activate(plan.Position,
+  …)`), and the original does the same: `FUN_004b0f40`'s activation only re-derives the position
+  through `FUN_00432010`, the trailer-offset rule, and net 30 `M2Dummy` has no trailer. So the
+  spawn itself is not decoded to be lifted. *What to settle:* (1) where the ace goes under: whether
+  the authored 150 m at (-4518, -6233) is already below our terrain there (the adjacent tile
+  south of `tagged`; sample it with `--freecam`), or whether it dives through a tile while
+  pursuing a low player, which would mean the terrain contact test misses a steep fast crossing;
+  (2) why a plane under a tile flies on: terrain colliders are single-sided so a crossing from
+  below is silent, and the ram rule only fires on the way back up. *Fix shape:* answer (1) first;
+  if the spawn is under ground it is BL-527's question again (a decoded ground rule at spawn, or
+  none), and if it is a crossing, the contact test at the crossing is the bug, not the floor.
+  *⚠ Traps:* do not replace the absolute 20 m floor with an AGL floor; it is decoded
+  (`DAT_0071c3f0`) and the original has no AGL floor either. Do not add a spawn lift. The ace did
+  count for "Destroy all enemy fighters" in the end (its ram death dropped group 2 to zero and
+  primary 3 completed), so this is not an objective bug. *Cross-refs:* `BL-527` (CM07's Peacemaker
+  under the ground), `docs/org/aiPilot.md` (the activation primitive and
+  `FUN_00432010`).
 
 ## Tooling, platform & docs
 
