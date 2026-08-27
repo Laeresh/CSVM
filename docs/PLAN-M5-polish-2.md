@@ -146,7 +146,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 18. ☑ The auto-land prompt is not drawn in a flown session (`BL-544`)
 19. ☑ The landing animation: no hook, too high, wings not folded (`BL-545`)
 20. ☑ CM01's drop-off cutscene shows no parachutist (`BL-540`)
-21. ☐ The low-terrain break-off, judged once the wingman is there (`BL-509`, A13's open half)
+21. ◐ The low-terrain break-off, judged once the wingman is there (`BL-509`, A13's open half)
 22. ☑ An `AT_NODE` rotate reads a spelling the compiled data never uses (`BL-549`, minted by D17)
 
 ## Dependency and parallelism notes
@@ -848,7 +848,7 @@ seats: `wingman_1` 3742.3 m from the player at the handoff before, 117.3 m after
 carries a leg that paces one aircraft through its own `_PhysicsProcess` (INSTR-26); with the clock
 hold removed it reads 4809.9 m of drift and goes red.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `724fb0ae`: build clean, units 2443/2443, engine suites 143/143 with engine errors clean, goldens 16/16 hash-identical
 
 ## D15 ☑ The captured Balmoral is not hidden by the swap in a flown session
 
@@ -887,7 +887,7 @@ carries a second leg that plays the mission's own `ww_balmoral1` through the run
 the Balmoral back in the world 19.25 s after the swap and goes red. The damage carry-over is still
 owed at the controls and rides `BL-547`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `724fb0ae`: build clean, units 2443/2443, engine suites 143/143 with engine errors clean, goldens 16/16 hash-identical
 
 ## D16 ☑ The captured aircraft keeps its British livery after the capture
 
@@ -918,7 +918,7 @@ the user's own at-the-controls reading, taken over the trace by this project's s
 `captured?.Scheme` before the rebuild and passes it to `SwapPlayerAirframe`. `docs/formats/anim-definitions/cutscenes.md`
 carries the finding as a fourth deliberate divergence.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `724fb0ae`: build clean, units 2443/2443, engine suites 143/143 with engine errors clean, goldens 16/16 hash-identical
 
 ## D17 ☑ CM02's capture cutscene camera sits over the water
 
@@ -961,7 +961,7 @@ site IS the callee's own root node no longer takes a pooled library copy beside 
 leave the wing walk driving one node while the shot hung off the other. `PoseAtNode` is untouched
 and the name guard was not relaxed.
 
-**Verified.** <pending orchestrator run>. In the lane: the new `campaign-wingwalk-camera` suite
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `724fb0ae`: build clean, units 2443/2443, engine suites 143/143 with engine errors clean, goldens 16/16 hash-identical. In the lane: the new `campaign-wingwalk-camera` suite
 plays CM02's own `ww_balmoral1` through `PlayMissionTrigger` (the seam the approach table starts it
 with) on a Realtime `GameClock` with each aircraft stepping itself (INSTR-26), over C3/M05's built
 world with `britbalmoral_1` spawned from its own roster block at the authored `(-3960, 500, -5059)`,
@@ -1007,7 +1007,7 @@ to have passed, same as at the controls; nothing in the HUD or the feed was ever
 Realtime clock cannot pick a `--frames=` to land on a transient state reliably, since the run's own
 sim-frame-to-wall-time ratio is not repeatable.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `724fb0ae`: build clean, units 2443/2443, engine suites 143/143 with engine errors clean, goldens 16/16 hash-identical
 
 ## D19 ☑ The landing animation: no hook, too high, wings not folded
 
@@ -1029,7 +1029,7 @@ hook and fold parts, then the pose offset; land each half on its own evidence.
 **⚠ Traps.** ⚠ Do not scale the pose to look right; the offset is authored and the airframe's node
 frame is what to check.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `724fb0ae`: build clean, units 2443/2443, engine suites 143/143 with engine errors clean, goldens 16/16 hash-identical
 
 **What it turned out to be.** One mechanism behind all three symptoms, plus one build omission. The
 hookup's per-airframe branches (`player_extend_hook`'s eleven `IF NODE_ACTIVE` arms, and
@@ -1074,7 +1074,7 @@ mission with no intro of its own (C1/M02, C2/M05, C4/M03 all ship one) is not st
 named as a limit in `docs/architecture.md` and the cutscenes format page rather than fixed, since
 widening the gate reaches missions D20 was not asked to touch.
 
-**Verified.** <pending orchestrator run>. In the lane: a deliberate perturbation (`AircraftStage`'s
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `724fb0ae`: build clean, units 2443/2443, engine suites 143/143 with engine errors clean, goldens 16/16 hash-identical. In the lane: a deliberate perturbation (`AircraftStage`'s
 `chuteman` block disabled) reproduced the baseline — `[world] aircraft stage: … no chuteman …` and
 the new `dropoff-chuteman-stage` suite FAILing on `the world build staged the drop-off's 'chuteman'
 subtree` (METHOD-9) — restoring the block turned both green:
@@ -1092,7 +1092,7 @@ unlike the intro's B8 capture, which needed no such chain. Left for the orchestr
 flown check, matching the plan's existing practice for other at-the-controls confirmations
 (C12, D21).
 
-## D21 ☐ The low-terrain break-off, judged once the wingman is there
+## D21 ◐ The low-terrain break-off, judged once the wingman is there
 
 **Goal.** With the wingman beside the player out of the intro (D14), decide at the controls whether
 its avoid-crash break-off over the island reads as the original.
@@ -1108,6 +1108,7 @@ with the wingman on the same airframe and watch the first low pass over the isla
 **Verify.** The user's report.
 
 **⚠ Traps.** ⚠ Everything `BL-457` and `BL-509` retire stays retired.
+**Sortie brief (the stop).** Build: branch `worktree-m5-polish-2` at its head, `dotnet build CSVM/CSVM.sln`, launch from the menu on a profile COPY with `selectedPlane 0` and `wingmanPlane 1` (both Devastators; the Wave A and D numbers were measured on that pairing). CM01 (C3/M01), watch in order: (1) after the intro the wingman is beside you, about 100 m, not kilometres away (D14; if it is far, the realtime hold missed something); (2) over the island's first low pass, whether it breaks off into a vertical climb and comes back to station, and whether that reads as the original (D21's own question, `BL-509`); (3) the drop-off cutscene shows the parachutist (D20). CM02 (C3/M05), with a Balmoral shot down to a readable fraction BEFORE the wing walk: (4) the capture cutscene shows the Balmoral and you crossing to it, framed on the aeroplane (D17, D22); (5) after the cut back to flight the captured Balmoral is gone from the sky (D15), your new hull reads damaged on the DMG line (`BL-547`), and it wears the British livery (D16); (6) on the auto-land, the hook deploys, the aeroplane sits at the trapeze, and the Balmoral's wings fold (D19); (7) the `AUTO-LAND AVAILABLE` line on the HUD inside the sphere (D18 proved it draws on a realtime frame; if it is still not seen, re-mint with what the screen showed). Findings outside these become new `backlog.md` entries with ids from `New-ItemId.ps1`.
 
 ## D22 ☑ An `AT_NODE` rotate reads a spelling the compiled data never uses
 
@@ -1145,5 +1146,5 @@ is zero at all 180 sites (172 `AtNodeXYZ` plus 8 `AtNodeMatrix`, the eight chapt
 the unit question does not move any authored pose today, only a future non-zero one. `PoseAtNode`
 itself is untouched.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` battery on the merged plan tree at `724fb0ae`: build clean, units 2443/2443, engine suites 143/143 with engine errors clean, goldens 16/16 hash-identical
 
