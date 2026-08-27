@@ -122,6 +122,18 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `playtest/` — captures staged for a `playtest.md` item, one subfolder per ID (`playtest/PT-03/`). Git-ignored, and unlike `.scratch/` **not swept by `CleanScratch.ps1`** — they survive until the item closes, then the folder goes with it.
 - `OriginalScreenshots/` — user-captured reference shots + videos from the original game (git-ignored). `docs/` cites these by filename as evidence, so those citations resolve only in the user's local tree — **ask the user if a referenced capture is missing.**
 
+### Development verification loop
+
+- **During an edit, run the smallest red/green surface.** For an engine suite use
+  `.\RunTests.ps1 -Filter <suite> -SkipUnits -SkipGoldens -SkipHitch`; for a unit use
+  `dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter "FullyQualifiedName~<test>"`.
+- **Broad development confidence uses `.\RunTests.ps1 -Quick` after
+  [`PLAN-fast-verification` A1](docs/PLAN-fast-verification.md) lands.** While A1 is open, the flag
+  does not exist; use the targeted commands above and do not advertise or invoke it.
+- **Before landing any change under `CSVM/`, run the complete `.\RunTests.ps1`.** Targeted and quick
+  runs are partial by design and never satisfy that landing gate. `CSVM.Tests/`-only,
+  documentation, and tooling changes do not require the full run.
+
 ## Godot project (`CSVM/`)
 
 Godot 4.7 .NET, C# / net8.0. Build & run:
@@ -217,12 +229,12 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1 through 5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI (aircraft that patrol, engage, evade and die, turrets, zeppelins, pilot voice), and all four Instant Action mission types plus the 2–4-player splitscreen Dogfight deathmatch are playable and scored. M5 added the single-player campaign: per-profile progression across the cabin, briefing and flight-check screens, and missions that run their authored `objectives.zrd` choreography with intro cutscenes, letterbox and campaign wingmen.
 
-**Active plan:** none; `PLAN-M5-polish-4` is closed in [`docs/plans/plans.md`](docs/plans/plans.md).
-Next: the sortie's follow-ups, `BL-581` (objective transitions into the log) first, then
-`BL-522`, `BL-577`, `BL-513`. `PT-84` and the `BL-120`/`PT-53` corner graze are the freshest
-owed playtests.
+**Active plan:** [`PLAN-fast-verification`](docs/PLAN-fast-verification.md), Wave A.
+Next: `A1` (the explicit quick lane and exact selectors), then `A2` (the unit-test wall).
+The sortie follow-ups remain in `backlog.md`; `PT-84` and `BL-120`/`PT-53` remain owed playtests.
 
-Verify any change with **`.\RunTests.ps1`** (build → units →in-engine suites → golden hashes → one exit code); read[`docs/verification.md`](docs/verification.md) first.
+Use the targeted/quick development loop above, then verify landed code with the complete
+**`.\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.
 
 The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 

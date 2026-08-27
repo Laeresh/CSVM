@@ -4,6 +4,11 @@ Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) first — it has the project des
 architecture decisions, repo layout, the Godot project + CLI reference, coding conventions, and
 the "Current status" pointer. This file holds only what's specific to Claude Code as a tool.
 
+Follow PROJECT_CONTEXT.md's **Development verification loop**: run the exact affected suite or unit
+while editing, use `.\RunTests.ps1 -Quick` for broad development confidence once the active plan's
+A1 item is done, and run the complete `.\RunTests.ps1` before landing a change under `CSVM/`.
+Quick and targeted runs never satisfy that landing gate; `CSVM.Tests/`-only changes do not require it.
+
 ## Claude Code specifics
 
 - **Skills** live in `.claude/skills/` (mirrored at `.agents/skills/` via a local junction for
