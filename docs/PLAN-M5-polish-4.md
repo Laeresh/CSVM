@@ -1034,3 +1034,22 @@ one confirmation:
 3. The tanker jumps and sits at the wrong position. Filed as `BL-578` (the `ObjectMotion`
    `rnd_xz` drift of `BL-512`, or a follower writing over the motion); whether the Pandora and
    the tanker play the cargo-crane choreography is still to be checked and is noted there.
+
+**CM09 (C1/M04).** Log: `.scratch/logs/menu-20260828-002650.log`, three runs. Three reports:
+
+1. The intro cutscene does not play correctly. `mission_intro_animation` is in the start list
+   but nothing of it logs and its sound fires at bootstrap. Filed as `BL-579`.
+2. A "Defend rock_zeppelin" objective. Authored: `OBJECTIVE23` puts `MSG_OBJ_DEFEND` on the
+   Pandora's `rock_zeppelin` node once a Promised Land hatch anim is invalidated, and
+   `OBJECTIVE25` clears it when group 2 is dead; the node name in the label is `BL-572`. Not an
+   item of its own.
+3. With the tower down and every aircraft killed by F17 the mission does not go on; without
+   the tower a squad arrives, which is authored either way (`OBJECTIVE20` via 18 or 19). The
+   docking chain is decoded and the stall is filed as `BL-581`, with `BL-563` first suspect
+   and the objective graph's transitions absent from the file log as the tooling gap. The
+   extra Bloodhawk `player_bhawk_eg1` is `eairg32`'s launch falling back on a data typo
+   (`Earig32_params`); filed as `BL-580`.
+
+D31's four Peacemakers are in the mission: `blakepeace_2_3..6` are all downed in the log (three
+by F17 in the air) and `blakepeace_2_eg0` launches off `eag31`; the user did not report them
+hanging, which was the D31 symptom.

@@ -2814,6 +2814,65 @@ usual.
   Barracuda and the airships. *Cross-refs:* `BL-512`, `BL-531`, `BL-568` (the Pandora's own
   scripted motion), `docs/org/objectMotion.md`.
 
+- `BL-579` `[Bug]` **CM09 (C1/M04): the intro cutscene does not play correctly.** *Evidence
+  (lead-only):* reported at the controls. The mission's `NEW_GAME_START` list runs
+  `mission_intro_animation` (`camera1-mission_intro_animation.json`, `OnCall`, root `camera1`,
+  objects `player`, `piratezep`, `cockpit1`, `interior`, the hangar `front_door_*` and five
+  `bullet*` nodes: a hangar-interior camera scene with the Pandora), and the log shows it in the
+  start list (`start anims [pzep_engines_start, train_on_track, mission_intro_animation],
+  undefined here: [pure_panic]`) but no cutscene hold or handoff line for it, and the scene's
+  one-shot `snd_scene1` is `positioned by out-of-tree ancestor composition at (0, 0, 0) (world
+  root not parented at bootstrap)`, so at least its sound fires during bootstrap rather than in
+  the scene. `pure_panic` is a C1/M02 hangar def the list names and this mission does not
+  compile; whether the original plays it here is part of the question. What "not correctly"
+  covers (camera, timing, the hangar doors, the Pandora's place in it) is not recorded; ask at the
+  next sortie. *Fix shape:* run `--campaign=<CM09>` headless with `--debug-anim` and read
+  `mission_intro_animation`'s event log against the def; `BL-569` (C3/M03's opening scene fired
+  at bootstrap with no camera) is the same class and may be the same fix. *⚠ Traps:* `BL-548`'s
+  deferred `--pos=` handoff is for `generic_intro`; this mission's intro is its own def.
+  *Cross-refs:* `BL-569`, `BL-548`, `docs/formats/anim-definitions/cutscenes.md`.
+
+- `BL-580` `[Bug]` **CM09 (C1/M04): `eairg32`'s launch falls back to a `player_bhawk` because the
+  data misspells its parameter block.** *Evidence (traced):* the sortie log shows
+  `player_bhawk_eg1` launched beside `blakepeace_2_eg0` and pursued as an enemy Bloodhawk; that is
+  `SessionSpec.GeneratorsPlane`, the fallback `GameSession.SpawnFromGenerator` takes when
+  `CampaignRosterPlan.GeneratorTemplates` has no entry. `egen.zrd` names the block
+  `Eairg32_params` (line 54) while `aiv.zrd`'s label table spells it `Earig32_params` (slot 31),
+  so the join never matches; `eairg31`'s `Eairg31_params` (slot 30) matches and launches
+  Peacemakers. The extra Bloodhawk is therefore CSVM's invention on an authored typo, and it is
+  what reads as an additional squad at the airfield. *Fix shape:* decode what `crimson.exe` does
+  with a `vehicle.params` label that resolves to no roster block (`FUN_00452450`'s caller chain on
+  the generator record): a silent no-launch, the first block of the def, or the same generator's
+  other host. Then match it and drop the airframe fallback for campaign generators (`BL-564`
+  asks the same for a surface def). *⚠ Traps:* do not "fix" the data spelling; the shipped file
+  is the reference and the original ran with it. *Cross-refs:* `BL-564`, `BL-527`,
+  `docs/formats/mission-entities/enemy-generators.md`, `docs/formats/ai-rosters.md`.
+
+- `BL-581` `[Bug]` **CM09 (C1/M04): with the radio tower down and every aircraft killed, the
+  Pandora's Defend marker clears and the mission does not go on to the docking.** *Evidence
+  (chain decoded, stall cause open):* reported at the controls. The "Defend rock_zeppelin"
+  marker is authored: `OBJECTIVE23` (live from the start) completes when one of the Promised
+  Land's `destroy_hkzep_*broad*` anims goes `INVALID`, adds `[piratezep, rock_zeppelin]` as the
+  objective target with help label `MSG_OBJ_DEFEND` ("Defend"), naps `OBJECTIVE24` (25 s, wakes
+  `blakebloodhawk_9..13`), and `OBJECTIVE25` (`DEDG [2, 0]`) removes that target once group 2 is
+  dead; the node name in the label is `BL-572`. The radio tower is `OBJECTIVE15`/`33`
+  (`INACTIVE1 rtwr_healthy`); destroyed in time it kills `OBJECTIVE16` and routes through 17 to
+  19 (90 s) to `OBJECTIVE20`, otherwise 16 routes through 18 (30 s) to the same 20, which wakes
+  `blakebloodhawk_1/2/3/8`: the squad arrives either way, only later with the tower down. The
+  docking (`OBJECTIVE31`, primary 2, `pzhookpoint`) is reached only through `OBJECTIVE30`
+  (primary 1, `INACTIVE1 [lkgasbag05, panelleft1]`, the Promised Land destroyed) waking
+  `OBJECTIVE42` (`DEDG [1, 0]`, ticking on 40), then 43 (`DEDG [2, 0]`), then 44 (`DEDG [5, 0]`).
+  So a stall after every aircraft is dead is one of: primary 1 not met (the gasbag panel, not
+  the hatches), or a `DEDG` group never reading empty. For the latter `BL-563` (a deactivated
+  member counts as alive) is the first suspect, and the second is the fallback launch of
+  `BL-580`, whose group membership is whatever the fallback plane carries. Objective transitions
+  are not in the file log at all (no `[campaign]` objective line exists in the sink), which is
+  why this cannot be settled from the sortie. *Fix shape:* first route the graph's wake, nap,
+  complete and kill transitions through `Log.Info("campaign", ...)` so a sortie log carries them;
+  then fly CM09 again after `BL-563` lands and read which of 30, 42, 43, 44 never completed.
+  *⚠ Traps:* the Defend marker clearing is correct behaviour (`OBJECTIVE25`), not the bug.
+  *Cross-refs:* `BL-563`, `BL-565`, `BL-572`, `BL-580`, `docs/formats/objectives.md`.
+
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
