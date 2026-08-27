@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -131,35 +132,54 @@ public class EffectCatalogueTests
     /// exactly the three <c>ai_crash_*</c> defs (<c>default</c>/<c>dirt</c>/<c>water</c>) — the
     /// same trio as the player and touchdown families — carrying the shared <c>kestrel</c>
     /// anim-root NAME, and the family pick follows the pilot: a human rig binds
-    /// <c>player_crash_*</c>, an AI plane <c>ai_crash_*</c> off the same program.</summary>
+    /// <c>player_crash_*</c>, an AI plane <c>ai_crash_*</c> off the same program.
+    /// The eight loads run concurrently, not serially; assertions stay serial.</summary>
     [ExtractedDataFact]
     public void EveryChapterShipsExactlyTheThreeAiCrashDefs()
     {
         string dataRoot = TestData.DataRoot!;
         string shared = SharedZrdr;
-        foreach (var chapter in new[] { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" })
-        {
-            var (chapterAnim, missionAnim) = AnimProgram.ArchivePaths(dataRoot, chapter, "IA1");
-            var program = AnimProgram.Load(shared, SessionPaths.ChapterZrdr(dataRoot, chapter),
-                SessionPaths.MissionZrdr(dataRoot, chapter, "IA1"), chapterAnim, missionAnim);
-
-            var ai = EffectCatalogue.CrashDefTableFor(program, humanPiloted: false, "bloodhawk");
-            Assert.Equal(
-                new[] { "ai_crash_default", "ai_crash_water", "ai_crash_dirt" },
-                ai.PlayableDefs);
-            Assert.Equal("ai_crash_dirt", ai.DefForSurfaceId(13));
-            Assert.Equal("ai_crash_water", ai.DefForSurfaceId(1));
-            Assert.Equal("ai_crash_default", ai.DefForSurfaceId(0));
-            Assert.Equal("ai_crash_default", ai.DefForSurfaceId(null));
-            foreach (var def in ai.PlayableDefs)
+        var chapters = new[] { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
+        var programs = chapters
+            .Select(chapter => Task.Run(() =>
             {
-                Assert.All(program.ByAnimName(def),
-                    d => Assert.Equal(EffectCatalogue.AiCrashAnimRoot, d.Name));
-            }
+                var (chapterAnim, missionAnim) = AnimProgram.ArchivePaths(dataRoot, chapter, "IA1");
+                return AnimProgram.Load(shared, SessionPaths.ChapterZrdr(dataRoot, chapter),
+                    SessionPaths.MissionZrdr(dataRoot, chapter, "IA1"), chapterAnim, missionAnim);
+            }))
+            .ToArray();
+        Task.WaitAll(programs);
 
-            var human = EffectCatalogue.CrashDefTableFor(program, humanPiloted: true, "bloodhawk");
-            Assert.All(human.PlayableDefs,
-                def => Assert.StartsWith(EffectCatalogue.CrashDefPrefix, def, StringComparison.Ordinal));
+        for (int i = 0; i < chapters.Length; i++)
+        {
+            var chapter = chapters[i];
+            var program = programs[i].Result;
+            try
+            {
+                var ai = EffectCatalogue.CrashDefTableFor(program, humanPiloted: false, "bloodhawk");
+                Assert.Equal(
+                    new[] { "ai_crash_default", "ai_crash_water", "ai_crash_dirt" },
+                    ai.PlayableDefs);
+                Assert.Equal("ai_crash_dirt", ai.DefForSurfaceId(13));
+                Assert.Equal("ai_crash_water", ai.DefForSurfaceId(1));
+                Assert.Equal("ai_crash_default", ai.DefForSurfaceId(0));
+                Assert.Equal("ai_crash_default", ai.DefForSurfaceId(null));
+                foreach (var def in ai.PlayableDefs)
+                {
+                    Assert.All(program.ByAnimName(def),
+                        d => Assert.Equal(EffectCatalogue.AiCrashAnimRoot, d.Name));
+                }
+
+                var human = EffectCatalogue.CrashDefTableFor(program, humanPiloted: true, "bloodhawk");
+                Assert.All(human.PlayableDefs,
+                    def => Assert.StartsWith(EffectCatalogue.CrashDefPrefix, def, StringComparison.Ordinal));
+            }
+            catch (Exception ex)
+            {
+                // Naming the chapter here is the only reason for this catch: xUnit's own
+                // assertion messages carry the mismatch, not which of the eight loop bodies hit it.
+                throw new Xunit.Sdk.XunitException($"chapter {chapter}: {ex.Message}", ex);
+            }
         }
     }
 
