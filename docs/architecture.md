@@ -5056,7 +5056,10 @@ called from BOTH of `GameSession`'s drive paths. Mission end records the attempt
 `CampaignProgression`, merges `CampaignPersistLog.Capture` into the profile, saves it, and raises
 `ReturnToCabin` plus `MissionEnded` for the session layer; the cabin screen itself is C22's.
 Which directives reach the engine today: `INACTIVEn` (node visibility, the decoded active bit),
-`ANIM_STATE` (`AnimRuntime.AnimStateOf`), the node form of `TRAVELERS`, `WAKEUP_TURRETS` /
+`ANIM_STATE` (`AnimRuntime.AnimStateOf`), both forms of `TRAVELERS` (the node form against
+`ListenerPosition`/a named node; the group form tallying the spawned roster's live, non-inert
+members of the named group inside or outside the radius against `spec.Count`, the decoded
+`FUN_00465b40` shape `docs/formats/objectives.md` already carried), `WAKEUP_TURRETS` /
 `WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
 (`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM`, both sound-group directives through
 `MissionRadio`, falling through to `WorldSounds.PlayOneShot` for a cue the radio does not own,
@@ -5070,7 +5073,7 @@ its spawn pose, or a dormant `ZeppelinRuntime` record put into the world.
 `SET_AI_NET` / `SET_AI_TEAM` / `SET_AI_ATTACK_RADIUS` share one lookup by roster block name
 (`Commanded`) and write the follower, the team and the attack range over the spawned roster; their
 zeppelin arm has no seam here, so an unmatched name is always reported.
-The rest (the group form of `TRAVELERS`, `WARP_VEHICLE`) and the
+The rest (`WARP_VEHICLE`) and the
 untraced `COMPLETED_ZEPCANNONS` reader are NAMED no-ops, each logged once per kind. ⚠ Never turn one of those into an invented
 behaviour: the missing consumer is the finding.
 `BuildRoster(RosterInputs)` is the roster phase, called by `GameSession` right after

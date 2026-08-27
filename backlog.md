@@ -772,15 +772,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `AiRocketeer` (whose launch direction creates the mismatch), `BL-404` (whether the
   player's rocket gets a direction at all), `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
 
-- `BL-516` `[Bug]` **CM03: the AA turret never fires.** *Evidence:* reported at the controls: the
-  mission's anti-aircraft turret stays silent through the whole mission. Whether it is a world
-  emplacement or a carried mount, and whether it is unbuilt, built on the wrong team, or built with a
-  gunner that never acquires, is not established. *Fix shape:* find the turret in CM03's mission data
-  (`turrets`/targets), confirm it is built into the live `TurretController` set, then check its team
-  and its acquisition against the player. *⚠ Traps:* `BL-506` is the AI-carried case and is a
-  different path (`AiFlightAssembler` never calls `BuildCarried`); a world emplacement goes through
-  the world build, so do not assume this closes with `BL-506`. *Cross-refs:* `BL-506`, `BL-507`,
-  `docs/org/targeting.md`.
 
 ## Flight model & collision physics
 

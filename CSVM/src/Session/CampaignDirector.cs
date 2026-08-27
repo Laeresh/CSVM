@@ -674,9 +674,45 @@ public sealed class CampaignDirector
 
         public bool? TravelersMet(TravelersSpec spec)
         {
-            if (spec.Group != null || _in.ListenerPosition == null)
+            Vector3? reference = spec.WherePoint is { } p
+                ? new Vector3(p[0], p[1], p[2])
+                : Resolve(new[] { spec.WhereNode ?? string.Empty })?.GlobalPosition;
+            if (reference == null)
             {
-                _owner.Gap("TRAVELERS", "the group form needs a spawned aiv roster");
+                return null;
+            }
+
+            // The group form: count live, non-inert members of the named aiv roster group inside
+            // the radius, the same roster walk GroupLiveCount uses for DEDG. Null (not yet
+            // decidable) while no roster is spawned, so an empty world never wins the tally early.
+            if (spec.Group is { } group)
+            {
+                if (_owner._rosterPlans.Count == 0)
+                {
+                    _owner.Gap("TRAVELERS", $"group {group} has no spawned aiv roster to count");
+                    return null;
+                }
+
+                int matching = 0;
+                foreach (var (name, plan) in _owner._rosterPlans)
+                {
+                    if (plan.Group != group || !_owner._roster.TryGetValue(name, out var rig) || rig.Inert)
+                    {
+                        continue;
+                    }
+
+                    bool memberInside = rig.WorldPosition.DistanceSquaredTo(reference.Value) <= spec.Radius * spec.Radius;
+                    if (memberInside == spec.Approaching)
+                    {
+                        matching++;
+                    }
+                }
+
+                return matching >= spec.Count;
+            }
+
+            if (_in.ListenerPosition == null)
+            {
                 return null;
             }
 
@@ -689,14 +725,6 @@ public sealed class CampaignDirector
                 }
 
                 subject = who.GlobalPosition;
-            }
-
-            Vector3? reference = spec.WherePoint is { } p
-                ? new Vector3(p[0], p[1], p[2])
-                : Resolve(new[] { spec.WhereNode ?? string.Empty })?.GlobalPosition;
-            if (reference == null)
-            {
-                return null;
             }
 
             bool inside = subject.DistanceSquaredTo(reference.Value) <= spec.Radius * spec.Radius;

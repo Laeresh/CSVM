@@ -83,7 +83,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `BL-548`: `--pos=` with `--campaign=` stalls the intro cutscene's completion
 2. ☐ `BL-534`: a debug key that kills the player's selected target
-3. ☐ `BL-516`: CM03's AA turret never fires
+3. ☑ `BL-516`: CM03's AA turret never fires
 4. ☐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
 5. ☐ `BL-512` + `BL-522`: the Barracuda's drive jumps, its launch faces the wrong way, and its fighters crash at once
 6. ☑ `BL-556`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
@@ -199,27 +199,64 @@ unchanged.
 **⚠ Traps.** Kill through the damage model or objectives never fire. Debug only: no entry in the
 shipped keymap.
 
-## A3 ☐ `BL-516`: CM03's AA turret never fires
+## A3 ☑ `BL-516`: CM03's AA turret never fires
 
 **Goal.** CM03's anti-aircraft turret fires on the player in range.
 
-**Evidence (confidence: lead-only).** Reported at the controls: the turret is silent through the
-whole mission. Whether it is a world emplacement or a carried mount, and whether it is unbuilt, on
-the wrong team, or built with a gunner that never acquires, is not established. `<TODO: re-verify
-still-open against the code>`
+**Evidence (traced).** Reported at the controls: the turret was silent through the whole mission.
+CM03 (`C3/M02`) is a world-emplacement case, not a carried one: its `objectives.zrd` scripts
+`WAKEUP_TURRETS ["aagun01","aagun02"]` (OBJECTIVE37, napped by OBJECTIVE36's completion),
+`WAKEUP_TURRETS ["aagun30","aagun31","aagun32"]` (OBJECTIVE38, napped off OBJECTIVE2) and
+`WAKEUP_TURRETS ["b_turret*"]` (OBJECTIVE40, all six balloon-mounted rings). `ai.zrd`'s
+`aagun**`/`b_turret*` entries are both standalone world emplacements (`CREATE_STANDALONE` absent,
+`ACTIVATED 0`, no `TEAM` key, so `TurretDefs.DefaultTeamId` = 2, enemy) built into the live
+`TurretController` set on every C3 flight. The wake/acquire/fire path from
+`ObjectiveGraph.WakeLive` through `CampaignDirector.WakeupTurrets`,
+`TurretEmplacementRuntime.SetActivatedUnder` and `TurretController` itself was traced clean.
 
-**Approach.** Find the turret in CM03's mission data (`turrets`/targets), confirm it is in the
-live `TurretController` set, then check its team and its acquisition against the player. Decode
-lane: the world-turret build and acquisition routine, if the port-side check finds it built and
-still silent.
+**Root cause: OBJECTIVE36 never completed.** Its `TRAVELERS [4, "APPROACHING", "unit03", 700.0,
+1]` is the "group form" (subject = aiv roster group 4, not a named node): `CampaignDirector
+.World.TravelersMet` (`CampaignDirector.cs:675`, pre-fix) bailed on any `spec.Group != null` with
+`Gap("TRAVELERS", "the group form needs a spawned aiv roster")` and returned `null` unconditionally
+— the check that decides whether the condition is even met was never implemented, only the node
+form was. Since OBJECTIVE36 could never complete, it could never nap OBJECTIVE37, and `aagun01`/
+`aagun02` never woke. `docs/formats/objectives.md`'s `TRAVELERS` row already carried the decoded
+group-form shape (`FUN_00465b40`: each tick, every live group member inside/outside the radius
+adds 1 to a tally, true once the tally reaches `count`) — the decode existed, the engine consumer
+did not.
+
+**Fix landed.** `CampaignDirector.cs`'s `World.TravelersMet` now implements the group form: walks
+`_owner._rosterPlans` for live, non-inert members of the spec's group (the same roster walk
+`GroupLiveCount` uses for `DEDG`), counts how many sit inside (or outside, for a non-`APPROACHING`
+word) the radius of the resolved reference point, and returns whether that tally reaches
+`spec.Count`. Null only while no roster is spawned yet, matching `DEDG`'s "not yet decidable"
+convention.
+
+**Verified live.** `--campaign=<profile>:2` headless (a copied, renamed profile, deleted after)
+confirmed the fix end to end: before the fix, only OBJECTIVE1's `WAKEUP_ZEP_TURRETS ["piratezep"]`
+ever printed `campaign: WAKEUP_TURRETS armed N emplacement(s)`; `aagun01`/`aagun02` never woke
+(OBJECTIVE36 stuck `Awake`, unsatisfied, confirmed via the engine's own `DIAG`/`DIAGREF`
+objective-state trace). After the fix, on a fresh (no prior chapter-6 persist log) profile, all
+three CM03 `WAKEUP_TURRETS` calls fired (`armed 2` for OBJECTIVE37, `armed 3` for OBJECTIVE38,
+`armed 6` for OBJECTIVE40) and every one of the nine ground/balloon turrets
+(`aagun01`/`02`/`30`/`31`/`32`, `b_turret1`-`6`) logged `turret MSG_TUR_...: engaging (first shot,
+team 2)`, several taking return fire from the escorting wingmen in the same run.
 
 **Model recommendation.** medium.
 
-**Verify.** `--campaign=<CM03>` headless with the turret log on shows the turret acquiring and
-firing; then at the controls in D32.
+**Verify.** `--campaign=<profile>:2` headless (a copied profile) shows all three `WAKEUP_TURRETS`
+calls fire and every named turret logs `engaging`; `dotnet test` 2443/2443; `--run-tests` (146
+suites, including `world-turrets` and `campaign-objectives`) and the 16-shot golden set both clean
+on a re-run with no other Godot process live on the shared hidden desktop (the first two runs read
+FAIL on the `engine` stage only, from stray probe processes still exiting — a known contention
+hazard, not a regression: PASS on the third, uncontended run); then at the controls in D32.
 
 **⚠ Traps.** `BL-506` is the AI-carried case (`AiFlightAssembler` never calls `BuildCarried`) and a
-different path; do not assume this closes with it. Keep the two apart by `TurretController.Site`.
+different path; this closes separately from it, kept apart by `TurretController.Site`. The fix is
+scoped to `TravelersMet`'s group form only; it does not touch the node form, `DEDG`, or any other
+objective directive.
+
+**Verified.** <pending orchestrator run>.
 
 ## A4 ☐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
 
