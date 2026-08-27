@@ -1609,8 +1609,8 @@ numpad fixed views (`Views`, `ActiveView`, `FixedView`, `LogView`), the look-beh
 continuous twin of the fixed views at the SAME dynamic radius, rigid and instant so releasing the
 stick reads as a snap back to the ordinary chase pose), the authored crash camera (`CrashView`, a
 hard cut to a static elevated vantage `crash_horiz` behind / `crash_y` above the impact, held until
-respawn — framing decoded off the original's crash footage; `crash_elev`/`crash_chord_y` stay
-capture-gated on `BL-260`, as do the death and flyby cameras) and the free orbit used while the
+respawn — framing decoded off the original's crash footage; the shared world clearance and the
+decoded death/flyby modes remain unimplemented under `BL-260`) and the free orbit used while the
 weapon lab holds an airframe. ⚠ That orbit no longer answers to a HALT (`BL-429`): a board's menu
 cursor reads the same `WASD`/arrows/left stick `OrbitInput` does, so a halted world that also flew
 the camera meant choosing a menu row swung the view. `FlightController` writes nothing to the
