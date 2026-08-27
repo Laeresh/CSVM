@@ -124,11 +124,13 @@ public sealed class FlightModel
     // it as nom_gravity, which is why level flight at zero incidence cancels weight identically.
     private const float StandardG = 9.82f;
 
-    // The two stall thresholds are DIFFERENT numbers and neither is a TUNE. The nose-drop threshold
-    // (isStalled, below) is the aircraft's own computed StallSpeed; the STALL lamp lights at a fixed
-    // fraction of fd_speed, unrelated to the nose-drop mechanism.
+    // The two stall cues sit on DIFFERENT quantities and neither is a TUNE. The nose-drop threshold
+    // (isStalled, below) is the aircraft's own computed StallSpeed, an airspeed margin. The STALL
+    // lamp is a LOAD-FACTOR margin: it lights below 2.35 g of AVAILABLE lift, decoded.
+    // ⚠ Not a fraction of fd_speed. That reading came from footage and fits only because lift goes
+    // as v², so it silently drops the AoA-cap condition.
     // docs/org/flightModel.md, "The two stall cues".
-    private const float StallWarnFrac = 0.30f;    // STALL lamp lights below this fraction of fd_speed
+    private const float StallWarnLoadFactor = 2.35f;
 
     // Numerical backstop, NOT a terminal speed: it catches a loop energy pump or a dt spike.
     // ⚠ Do not tighten this until it binds. A cap that binds replaces a measured terminal with a
@@ -312,9 +314,9 @@ public sealed class FlightModel
     /// <see cref="UsesAiForcePath"/>: an aircraft crosses the boundary in both directions.</summary>
     public bool FarFieldPlant { get; private set; }
 
-    /// <summary>Airspeed as a fraction of fd_speed — the single stall-proximity scale both stall
-    /// thresholds are measured on, and the one the STALL lamp's blink rate ramps over. Every stall
-    /// cue derives from this; nothing recomputes its own margin.</summary>
+    /// <summary>Airspeed as a fraction of fd_speed, the airframe-independent speed scale the
+    /// authored stats are quoted on. ⚠ NOT a stall cue: neither threshold reads it. The lamp gates
+    /// on <see cref="AvailableLoadFactor"/> and the nose-drop on <see cref="StallSpeed"/>.</summary>
     public float StallFraction => Stats.FdSpeed > 0f ? Speed / Stats.FdSpeed : 0f;
 
     /// <summary>The speed (m/s) below which the wings' maximum available lift — the same aerodynamic
@@ -331,7 +333,12 @@ public sealed class FlightModel
     /// under <see cref="StallSpeed"/> — that speed is this equation solved for zero.
     /// ⚠ It is NOT the speed ratio it replaced: this is quadratic in speed, so the drop deepens
     /// faster as speed bleeds. docs/org/flightModel.md, "Stall".</summary>
-    public float StallFlag => 1f - LiftCapAt(Speed);
+    public float StallFlag => 1f - AvailableLoadFactor;
+
+    /// <summary>The wing's available lift at the current airspeed as a multiple of weight, the
+    /// original's <c>n_avail</c>. The STALL lamp gates on this and its blink rate ramps over it,
+    /// so the lamp reads a LOAD-FACTOR margin while the nose-drop reads an airspeed one.</summary>
+    public float AvailableLoadFactor => LiftCapAt(Speed);
 
     /// <summary>Seconds left on the choker's engine-dead timer (<c>TANGLER</c>, the victim's
     /// <c>+0x2e0</c> behind the disabled-systems bit): while it runs the thrust term is zero and
@@ -551,7 +558,7 @@ public sealed class FlightModel
         float rollTune = Config.GetFloat("flightModel.rollTune", RollTune);
         // Read here as well as at its own site (IsStallWarned, which Step never calls) purely so the
         // key registers on a launch that never flies — --dump-config's template and the orphan check.
-        _ = Config.GetFloat("flightModel.stallWarnFrac", StallWarnFrac);
+        _ = Config.GetFloat("flightModel.stallWarnLoadFactor", StallWarnLoadFactor);
         float liftGMin = Config.GetFloat("flightModel.liftGMin", LiftGMin);
         float liftGMax = Config.GetFloat("flightModel.liftGMax", LiftGMax);
         float altitudeCapM = Config.GetFloat("flightModel.altitudeCapM", AltitudeCapM);
@@ -782,10 +789,10 @@ public sealed class FlightModel
     /// fraction of fd_speed), see IsStallWarned.</summary>
     public bool isStalled() => StallFlag > 0f;
 
-    /// <summary>Below the warning threshold (0.30 fd) — the STALL lamp, which leads the break by a
-    /// measured 2.64 sim s / 14.9 mph.</summary>
+    /// <summary>Below the STALL lamp's warning threshold: the wing has less than 2.35 g of
+    /// available lift left. Leads the nose-drop, which needs the ceiling under 1 g.</summary>
     public bool IsStallWarned() =>
-        StallFraction < Config.GetFloat("flightModel.stallWarnFrac", StallWarnFrac);
+        AvailableLoadFactor < Config.GetFloat("flightModel.stallWarnLoadFactor", StallWarnLoadFactor);
 
     /// <summary>The decoded collision restitution: the velocity's component along the contact normal
     /// AFTER the original's impulse (docs/org/flightModel.md, "Collision response").

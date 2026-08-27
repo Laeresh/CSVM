@@ -225,6 +225,12 @@ public sealed record SessionSpec
     public bool SkyZoneExplicit { get; private set; }
     public bool NoFog { get; private set; }
 
+    /// <summary>Draw the cockpit interior in a world of its own with the camera and the panel at
+    /// the origin (<see cref="Flight.CockpitOverlay"/>) instead of at chapter-scale world
+    /// coordinates under the plane, where its dial faces jitter. On by default;
+    /// <c>--no-cockpit-pass</c> draws the interior in the main world for comparison.</summary>
+    public bool CockpitPass { get; private set; } = true;
+
     /// <summary><c>--no-clutter</c>: skip the chapter's ground-clutter build entirely
     /// (<see cref="Mech3.ClutterBuilder"/> — the scattered tree/bush cards and the C2/C5 3D
     /// city-block decorations), so the painted ground they stand on is visible. Does not touch the
@@ -339,6 +345,14 @@ public sealed record SessionSpec
     /// arms the gunnery without an opinion on skill, so each plane flies its own vehicle def's
     /// authored slots; a typed rating pins every plane to it instead.</summary>
     public bool AiAttackSkillExplicit { get; private set; }
+
+    /// <summary><c>--difficulty=&lt;normal|hard|hardest&gt;</c> (or <c>game.difficulty</c>): the
+    /// setting enemy armour and health scale by at spawn, 0.75 / 1.0 / 1.25
+    /// (<see cref="CSVM.Flight.Difficulty"/>). Defaults to Normal, which is what the executable's
+    /// own settings registration writes. ⚠ It reaches nothing but those pools: no AI skill,
+    /// accuracy or aggression is keyed to it in the original.</summary>
+    public int Difficulty { get; private set; } = CSVM.Flight.Difficulty.Normal;
+
     /// <summary><c>--no-assist</c>: disable the D15 rubber-band assist — every spawned AI mode
     /// machine gets <c>AssistEnabled</c> false, so the lay-off mode is never entered (pursue
     /// only). Default off: the assist is the original's shipped behaviour.</summary>
@@ -934,6 +948,9 @@ public sealed record SessionSpec
                 s.AiAttackSkill = Math.Clamp(int.Parse(arg["--ai-attack=".Length..]), 1, 9);
                 s.AiAttackSkillExplicit = true;
             }
+            // An unparseable tier keeps the default rather than picking one: silently flying
+            // Hardest because a name was misspelled is a balance change nobody asked for.
+            else if (arg.StartsWith("--difficulty=")) { s.Difficulty = Flight.Difficulty.Parse(arg["--difficulty=".Length..]) ?? s.Difficulty; }
             else if (arg == "--no-assist") { s.NoAssist = true; }
             else if (arg == "--generators") { s.Generators = true; }
             else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }
@@ -1036,6 +1053,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--sounds=")) { s.Sounds = arg["--sounds=".Length..]; }
             else if (arg.StartsWith("--messages=")) { s.Messages = arg["--messages=".Length..]; }
             else if (arg == "--no-fog") { s.NoFog = true; }
+            else if (arg == "--no-cockpit-pass") { s.CockpitPass = false; }
             else if (arg == "--no-clutter") { s.NoClutter = true; }
             else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }

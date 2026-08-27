@@ -1,0 +1,560 @@
+# Cockpit panel: the four open instrument defects
+
+**COMPLETE** (2026-08-28). Six items: A1, A2, B11, B12, C20 and C21 landed; C20's first reading
+closed C21 as disproven and its re-measurement reopened and confirmed it. Kept for its evidence
+and its dead ends; the live work is in `backlog.md`.
+
+This plan finishes the authored 3D instrument panel inside the pilot's own `cockpit1`. The needle
+drive, the two warning lamps, the nitro dial gate and the character readouts landed under `BL-431`
+on the `bl-431-cockpit-gauge-drive` branch. Four defects reported at the controls remain: the weapon
+gauges' belt lights never change colour, the damage display never changes colour, the artificial
+horizon is inert, and the whole panel vibrates against a cockpit that is still. Each was re-verified
+open against the code in this worktree, not taken from the backlog entry on trust.
+
+Out of scope, deliberately. The `comp` compass drum is unwired for the same reason the horizon is
+and would be a natural fifth item, but the user's list does not name it and it needs its own decode.
+`BL-431`'s remaining judgement call, whether the screen-space `GaugeCluster` retires in first person
+now that the 3D panel reads live, stays open and stays that item's; it is a taste call at the
+controls, not work this plan can settle. The damage-dial post-hit blink timing (5 s, 0.32 s) is an
+undecoded TUNE and stays one.
+
+## Milestone goal
+
+- Every belt position on both weapon gauges shows its loadout's colour, red for an empty or unfitted
+  slot, on the authored 3D dial as well as the flat one.
+- Every damage zone on the 3D dial shows its part's colour tier and blinks after a hit.
+- The artificial horizon tracks the aircraft's attitude under a law decoded from `crimson.exe`.
+- The panel is as steady against the airframe as the airframe is against the cockpit shell.
+
+**No new instrument gets a guessed law.** Every quantity this plan writes comes from `crimson.exe`
+or from the shipped model data. This project has been wrong repeatedly by measuring off footage, and
+the horizon is exactly the shape of item that invites it.
+
+## ⚠ Read this before implementing anything
+
+| # | The wrong claim | How it died |
+|---|---|---|
+| 1 | The character cells collapse into one surface on import, so the readouts cannot be addressed per cell. | `4char_ammo` carries four distinct material indices (355-358); the builder's group-by-material keeps them apart. |
+| 2 | An unwritten readout cell renders blank. | The blank is a real glyph at index 36 and the archives ship `space.png`; unwritten cells kept their authored characters, which is why the readouts first read `BOOMAA` and `1113`. |
+| 3 | The belt low tier is 0.15 and hardpoints never show yellow. | The threshold is a quarter full at `0x006034f4`, and one state function (`FUN_004547a0`) serves both gauges. A single-round pylon simply cannot reach the low tier. |
+| 4 | The arrow sweeps at 168.7 °/s with an ease. | `FUN_004544b0` steps at a constant 288 °/s, no easing. |
+| 5 | `--hold` pins the aircraft, so a capture under it is a static scene. | It holds control inputs. The aircraft glides, so every "static" vibration measurement taken under it was of a moving plane. |
+| 6 | The panel vibration is a draw-order fight between the bezel rings and the `dash` panel. | The interior's own `DepthBiasScale = 1 / InteriorScale` fixed the draw-order fight and the lateral motion survived it. |
+| 7 | The vibration is the depth bias moving the instruments. | `VERTEX *= 1.0 - (depth_bias + node_bias)` scales toward the eye, which preserves projected position exactly. It cannot be a lateral source. |
+
+| Confidence | Items | What that means for you |
+|---|---|---|
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2 | Confirm the trace, then implement. |
+| **Direction sound, magnitude a judgement call** | C21 | The measurement is real; whether the fix is worth its cost is the call. |
+| **Leads only — no mechanism yet** | B11, C20 | Budget for investigation. B11 may end in a disproof that the original drives it at all. |
+
+**⚠ Worktree hazard.** This plan runs on `bl-431-cockpit-gauge-drive` in
+`.claude/worktrees/bl-431`. `git stash` is repo-global and shared across worktrees; never use it
+here. Use a local commit or a file copy.
+
+## Ground rules
+
+- **Original-game data drives everything.** Read the binary or the compiled JSON before writing a
+  value; never guess one. Inventing content is the trap this project falls into most often.
+- **Evidence is a lead to verify, not a finding to implement.** Confirm every claim against the
+  data or code before building on it; a correct disproof that lands no code is a success here.
+- **`PROJECT_CONTEXT.md` and `docs/formats/hud.md` are updated in the same turn** as each landed
+  item; the landing commit's message carries what landed and how it was verified, and the item is
+  deleted from `backlog.md` rather than marked fixed there.
+- **The Ghidra project is read-only.** No renames, comments, structs, prototypes, analysis runs or
+  saves. Knowledge accumulates in the repo, never in the database.
+- **Read `docs/verification.md` before measuring anything.** The instruments here mislead.
+- **Every item ends on the full battery**: `RunTests.ps1` (build, units, in-engine suites, goldens,
+  hitch) plus a targeted Cockpit capture at the condition the report came from.
+
+## Checklist
+
+Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
+
+### Wave A — the two drives that are built but never reached
+
+1. ☑ Pass the interior's materials to `CockpitGauges.Bind` in the live flight path
+2. ☑ Make the belt and damage drives fail loudly when nothing binds
+
+### Wave B — the artificial horizon
+
+11. ☑ Decode the horizon's drive law out of `crimson.exe`
+12. ☑ Drive `horizn` from the decoded law
+
+### Wave C — the panel vibration
+
+20. ☑ Confirm or kill the float-precision hypothesis with a near-origin capture
+21. ☑ Prototype the interior in its own pass with the camera at the origin
+
+## Dependency and parallelism notes
+
+A1 blocks A2 and blocks any judgement of the belt and damage colours at the controls, so it runs
+first. Wave B is independent of both other waves and can run in parallel with them; it touches
+`CockpitGauges.cs` and `GaugeCluster.cs`, which A1 does not (A1's edit is in
+`Session/HumanFlightAdapter.cs`), but A2 does add to `CockpitGauges.cs`, so B12 and A2 must not run
+in parallel worktrees. C20 must complete before C21 is started at all: C21 is a large change and
+C20 is the cheap test that says whether it is the right one. C21 contends with `PlaneBuilder.cs`,
+`PlayerRig.cs` and `SplitScreen.cs`, none of which any other item here touches.
+
+---
+
+# Wave A — the two drives that are built but never reached
+
+## A1 ☑ Pass the interior's materials to `CockpitGauges.Bind` in the live flight path
+
+**Goal.** The belt lights and the damage zones change colour in a flown Cockpit view, the same way
+they already do in the in-engine suite.
+
+**Evidence (confidence: traced).** The drives are written and correct. `CockpitGauges.Bind` takes an
+optional `materials` argument, defaulting to null, and builds from it the instance-id to
+texture-name map that `Skin.For` needs to tell an indicator's light from its hilite bar.
+`Session/HumanFlightAdapter.cs` called `CockpitGauges.Bind(planeBuilder.CockpitInterior)` with no
+second argument. The map was therefore empty in every flown session, `Skin.For` found no named
+surface on any node and returned null, and `Belt.FindAll` and `DamageZoneSkin.FindAll` both returned
+empty lists, so `Apply` looped over nothing.
+
+This also explains why the readouts work and these two did not: `Readout.Build` does not consult the
+name map at all, it duplicates whatever material each surface carries. And it explains why the
+in-engine suite passed while the controls did not: `Testing/WorldAndToolSuites.cs:229` passes
+`builder.InteriorMaterials` explicitly, so the suite exercised a binding the game never made.
+
+**Approach.** Pass `planeBuilder.InteriorMaterials` as the second argument at the
+`CockpitGauges.Bind` call in `HumanFlightAdapter.cs`. `WorldAndToolSuites.cs:170` is the only other
+caller, and it stays without materials on purpose: that suite drives only the needles and lamps,
+which `Skin.For` never touches, so passing the map there would test nothing the suite doesn't
+already cover. Do not change `Bind`'s signature to make the argument required in this item; A2
+covers the reason that would not have caught this anyway.
+
+**Model recommendation.** Medium, low effort. The fix is one argument and the trace is already done;
+what remains is mechanical.
+
+**Verify.** A Cockpit capture with a partly spent gun belt and at least one damaged zone: the spent
+belt position reads red or yellow while a full one reads green, and the damaged zone's border and
+hatch leave green. Take the baseline capture first, since an all-green panel is what the bug also
+produces and an unchanged image would otherwise look like a pass. Full battery after.
+
+**⚠ Traps.** The suite's green is not evidence. `DrivenBelts` passed throughout the period the
+feature was broken at the controls, because it constructs the binding the bug is in. Any check added
+for this must go through the same call the game makes.
+
+**Verified.** Full battery on the plan's final tree: units 2444 passed; in-engine suites 146/146
+passed, engine errors clean; goldens 16 shots hash-identical; hitch stage clean (awareness only).
+The belt and damage recolour and the horizon ball were then confirmed at the controls in a flown
+Cockpit view.
+
+## A2 ☑ Make the belt and damage drives fail loudly when nothing binds
+
+**Goal.** A future caller that binds the panel without its materials is caught by the suite rather
+than by a report at the controls.
+
+**Evidence (confidence: traced).** A1's defect survived a green battery because the only in-engine
+coverage constructed its own binding. The optional parameter is what allowed a caller to be silently
+wrong: an omitted argument produced an empty map, an empty map produced empty lists, and empty lists
+are indistinguishable from a plane whose panel genuinely has no belts.
+
+**Approach.** Two changes landed. `CockpitGauges` gained a `Bind(PlaneBuilder)` overload that reads
+through the one expression every caller must use, `Bind(builder.CockpitInterior,
+builder.InteriorMaterials)`; `HumanFlightAdapter` and the in-engine `cockpit-interior` suite's
+`DrivenBelts` both call it now instead of repeating the two arguments, so a caller that regresses to
+the interior alone breaks both rather than only the controls. The suite also gained `BeltCount`- and
+`DamageZoneCount`-derived assertions: not a fixed number, but counted from the interior's own
+materials (the `greenindicator` and `hatchptrn` texture names), so a caller that binds without
+materials fails there rather than passing with an all-green panel. And `CockpitGauges`'s constructor
+now emits one `Log.Debug("flight", …)` line reporting needles, lamps, readouts, belts and zones
+found, so a bind with zero belts and zero zones is visible in the log rather than silent.
+
+**Model recommendation.** Medium. Choosing what the suite should assert without making it brittle
+across airframes is a judgement call.
+
+**Verify.** Reverted `Bind(PlaneBuilder)`'s body locally to drop the materials argument: the suite
+failed with `belts bound … found=0 materials=12` and eight further cascading failures, and the log
+line read `belts=0 zones=0`. Restored the argument: the suite passed again with `found=12
+materials=12` belts and `found=4 materials=4` zones. Full battery after.
+
+**⚠ Traps.** Do not assert a fixed belt count. The ring is 8 positions on every airframe but the
+damage zones are per-model, and a hard count would break on the next airframe read. The bare
+substring `indicator` also matches `horizonindicator.tif`, the still-unwired artificial horizon's
+texture; `greenindicator` is the unambiguous marker for the belt light.
+
+**Verified.** Full battery on the plan's final tree: units 2444 passed; in-engine suites 146/146
+passed, engine errors clean; goldens 16 shots hash-identical; hitch stage clean (awareness only).
+The belt and damage recolour and the horizon ball were then confirmed at the controls in a flown
+Cockpit view.
+
+# Wave B — the artificial horizon
+
+## B11 ☑ Decode the horizon's drive law out of `crimson.exe`
+
+**Goal.** A written rule, with addresses, for what `horizn` is posed by: which attitude angles feed
+it, in what order, about which axes, and whether the original clamps or wraps at extremes.
+
+**Evidence (confidence: lead-only).** `docs/formats/hud.md:207` records `horizn` as present in the
+`gauges` subtree and unwired in the remake, with no decode behind it. Nothing in CSVM poses it
+today. The node is named in `hud.md:66` among the dial meshes, and `backlog.md:2028` notes its bezel
+ring sits at authored priority 1 over the `dash` panel at 0, which is a draw-order fact and says
+nothing about its motion.
+
+Two questions have to be answered before any code is written, and neither can be answered from the
+model. Whether the horizon is posed as a node rotation the way the needles are, or by a texture
+cycle the way the belt lights and readouts are. And whether it carries both pitch and roll or roll
+alone. The needle laws all came from the same region of `crimson.exe` as the gauge state functions
+(`FUN_004544b0` and `FUN_004547a0` are the worked examples), so the callers of the same panel update
+are the place to start.
+
+**Approach.** Hand this to a fresh-context subagent, since the entry names no address for it. It
+prospects and reports; it writes nothing to the database and nothing to the repo. Require every
+constant back with the address it came from and the condition it applies under. Report the answer as
+numbers, then a formula, then a rule in prose with its constants when the value is conditional.
+Decompiler output only if a genuine multi-step algorithm is the answer.
+
+Also settle in the same pass how many airframes ship the node. The name appears on about half of
+them, which either means the other airframes' panels use a different name for the same instrument or
+that they genuinely ship none, and the drive has to be a no-op in the second case rather than a
+crash.
+
+**Model recommendation.** High. This is open-ended reverse engineering with no address to start
+from, and the failure mode is a plausible wrong law that then gets built on.
+
+**Verify.** The decode is verified by writing it down, not by running it: every claim names the
+function it came from and can be re-checked at the address. The behavioural check belongs to B12.
+
+**⚠ Traps.** If the decode does not find a driver, say so and stop. An inert `horizn` in the original
+is a real possible answer, and `hud.md` should then record it as decoded-and-inert rather than
+staying an open lead that gets re-chased. Do not fall back on measuring the instrument off footage
+if the MCP is unreachable; an unrun decode is an open question, not a licence to guess.
+
+**Result.** The law is a node rotation, on the ball mesh named `pfhorizon` (not `horizn`, which is
+only the dial-face name on 5 of 11 player airframes; `pfhorizon` ships on all 11). Neither `horizn`,
+the `horiz` face name the other 6 airframes use, nor `comp` ever appears in `crimson.exe` — the
+binary's own strings are `pfhorizon` and `compass`. Each frame (`FUN_0049f6a0`, player-only) the
+original decomposes the aircraft's own orientation basis into pitch and roll with `FUN_0053df30`
+(`0049f8e0`-`0049f98f`): pitch = `asin(-m[7])`, roll = `atan2(m[1], m[4])`, gimbal branch (`|m[7]|
+>= 1`) pitch = `-copysign(pi/2, m[7])`, roll = 0; heading is discarded. The node's rotation is set
+to `N = Rz(-roll) . Rx(pitch)` and written straight into the node's Euler fields — no gain, offset,
+clamp or smoothing. Full decode in `docs/formats/hud.md`, "Cockpit gauges".
+
+## B12 ☑ Drive `horizn` from the decoded law
+
+**Goal.** The horizon reads the aircraft's attitude in a flown Cockpit view.
+
+**Evidence (confidence: lead-only until B11 lands).** Whatever B11 returns.
+
+**Approach.** If the law is a node pose, it is a sixth `Needle` in `CockpitGauges` and the angle
+comes from `GaugeCluster`, computed there so the 3D panel and any future flat draw cannot disagree.
+That is the shape every other instrument here takes and there is no reason to break it. If the law
+turns out to be a texture cycle, it is a `Skin` and follows the belt lights instead.
+
+The attitude source is `FlightModel`'s own, not the camera's. The camera carries
+`CameraController.HeadPitchOffsetRad` and any look-around the pilot has applied, and an instrument
+that tracked the camera would read the pilot's head rather than the aircraft.
+
+**Model recommendation.** Medium. The pattern to follow is established; the judgement was spent in
+B11.
+
+**Verify.** A Cockpit capture in a banked turn and one in a climb: the horizon matches the view out
+of the canopy. An inverted or mirrored horizon is the likely failure and reads as obviously wrong at
+the controls, so this is a check the eye makes better than any hash. Then the full battery, and the
+goldens must be hash-identical since no golden flies the pilot's own cockpit.
+
+**⚠ Traps.** Note the sign convention that bit the needles: the exposed dial angles are
+clockwise-positive while a node rotation about +Z is counter-clockwise-positive, which is why
+`Apply` negates the altimeter, speedometer and belt arrows and does not negate the nitro pair. Decide
+the horizon's convention from the decode rather than by flipping signs until it looks right.
+
+**Result.** `CockpitGauges` finds `pfhorizon` by name under `gauges` (never `horizn`) and gained a
+`Horizon` node type shaped like `Needle`: only the authored translation and scale survive, the
+rotation is fully overwritten each frame. `GaugeCluster.HorizonAngles(Basis)` runs the decoded
+asin/atan2 decomposition (with its gimbal branch) and is fed `FlightController.Attitude`
+(`FlightModel`'s own orientation, threaded through a new `FlightHudState.Attitude` field) — the
+camera never enters. `CockpitGauges.Apply` composes `new Basis(Vector3.Back, -roll) * new
+Basis(Vector3.Right, pitch)`: the importer builds every other node rotation with
+`Basis.FromEuler(v, EulerOrder.Yxz)` = `Ry . Rx . Rz`, the same convention the decode's own Euler
+re-extraction uses, and `Vector3.Back`/`Vector3.Right` are the Z/X axes the needles and the
+interior's own head-pitch mount already rotate about, so composing Rz then Rx with Godot's `Basis`
+multiplication reproduces the engine's basis directly, with no axis remap and no extra sign.
+
+Two Cockpit captures on `player_bhawk` (`.scratch/b12/climb.png`, a held pitch-up; `.scratch/b12/
+bank.png`, a held roll) confirm the sense at the controls: the ball's fixed-aircraft symbol sits
+over a sky/ground disc that, in the climb shot, shows mostly sky (the horizon line pushed down, as
+pulling the nose up should read) and, in the bank shot, splits on a line tilted the same way the
+terrain tilts through the windscreen in the same frame (ground upper-left, sky lower-right in both).
+Neither inverted nor mirrored.
+
+**⚠ Where the dial actually sits.** `pfhorizon`'s container shares its screen position with
+`gungauge`/`missilegauge` (same authored y/z in the interior's local space, `pfhorizon` centred
+between them), not with `altimeter`/`damageindicator`/`speedometer`'s row — a reader expecting it
+beside the altimeter will look in the wrong place on the dash.
+
+**Verified.** Full battery on the plan's final tree: units 2444 passed; in-engine suites 146/146
+passed, engine errors clean; goldens 16 shots hash-identical; hitch stage clean (awareness only).
+The belt and damage recolour and the horizon ball were then confirmed at the controls in a flown
+Cockpit view.
+
+# Wave C — the panel vibration
+
+## C20 ☑ Confirm or kill the float-precision hypothesis with a near-origin capture
+
+**Goal.** A yes or no on whether the panel's motion is float32 rounding in the transform chain,
+established cheaply before anyone builds the expensive fix.
+
+**Evidence (confidence: measured symptom, hypothesised cause).** The instruments' projected centroids
+drift sub-pixel between consecutive frames and by different amounts from each other: between frames
+240 and 241 the gun gauge moved -0.224 px, the rockets -0.355 px and the altimeter -0.243 px, and
+between 241 and 242 the same three moved -0.327, -0.054 and -0.209. The differing per-instrument
+magnitude is the diagnostic fact, and it matches the report at the controls that the instruments
+move relative to each other rather than as a block.
+
+Already ruled out and not to be re-chased: the gauge drive itself, which is identical on `main`
+where the symptom also appears; the camera shake pivot; mipmaps and anisotropy; temporal
+antialiasing; the autohead idle aim; and the depth bias, which scales toward the eye and so
+preserves projected position exactly. The draw-order fight the backlog entry describes was real and
+was fixed by the interior's own `DepthBiasScale`; the lateral motion survived that fix.
+
+The hypothesis is that each dial's world transform is composed in float32 under an interior mounted
+at `PlaneBuilder.InteriorScale` (0.04) on an aircraft at chapter-scale world coordinates. At about
+10 km a float carries roughly 1 mm of resolution, which at the panel's 0.42 m from the eye is about
+0.14 degrees, several pixels. Each dial has its own local offset and so rounds differently, which is
+what would make them move relative to one another rather than together.
+
+**Approach.** The cheap discriminator is position, not pinning. Capture the same Cockpit scene with
+the aircraft near the world origin and again at chapter-scale coordinates, everything else equal,
+and measure the same per-instrument centroids across consecutive frames in both. If the residual
+collapses near the origin, the hypothesis is confirmed and C21 is the right fix. If it survives
+there, the cause is in the shading path and C21 would be wasted work.
+
+Take the second measurement with the aircraft's world transform genuinely fixed between the two
+frames. `--hold` does not do that: it holds control inputs and the aircraft glides on, which
+invalidated every earlier attempt at a static measurement.
+
+**Model recommendation.** Medium. The measurement technique is already built and the reasoning is
+done; what remains is running it carefully.
+
+**Verify.** The measurement is the deliverable. Record both centroid tables in the item's commit
+message so the next reader can see the magnitudes rather than the conclusion alone.
+
+**⚠ Traps.** A capture is not automatically comparable to another capture. Match the airframe, the
+view, the attitude and the frame indices, or the difference measured is the scene's rather than the
+coordinates'. And a near-origin scene may sit over different terrain with different lighting, which
+changes the centroid measurement's noise floor even when the geometry is steady; measure the noise
+floor in each scene before comparing the two.
+
+**Result.** `--hold` truly does not pin the transform (it glides), so a `--weapon-lab` capture was
+used instead: `Held` re-asserts the flight model's pinned position and attitude every physics step
+through `FlightModel.Reset`, which under `--det`'s parent-driven clock renders the plane's transform
+bit-identical frame to frame. `FlightController._Process`'s `bool orbiting = Held;` forces the lab's
+own orbit camera whenever the plane is held, which never reaches the cockpit-view render path at
+all; a temporary, fully reverted edit (`orbiting = false`) let the pinned-position capture still run
+through `--view=cockpit`'s normal camera and panel code, confirmed clean afterward by
+`git status --short` and a rebuild.
+
+A truly bit-identical transform cannot show frame-to-frame jitter by construction: identical inputs
+render identically, so three consecutive frames at a fixed pose came back pixel-hash-identical in
+both scenes (noise floor 0.000 px on all four instruments, at both distances). The informative
+comparison instead nudges the pinned position by 0.3 m along the direction of flight, roughly one
+physics tick's travel at the trimmed glide speed the original measurement was taken at, and reads
+each instrument's centroid shift for that one nudge:
+
+Near origin, `--pos=0,300,0` vs `--pos=0,300,-0.3` (`.scratch/c20/origin_00.png`,
+`.scratch/c20/origin_nudge.png`):
+
+| instrument | dx (px) | dy (px) | \|d\| (px) |
+|---|---|---|---|
+| altimeter | +0.025 | -0.035 | 0.043 |
+| gun_gauge | -0.006 | -0.103 | 0.103 |
+| rockets | +0.029 | -0.080 | 0.085 |
+| speedometer | +0.018 | -0.020 | 0.027 |
+
+At chapter scale, `--pos=10000,300,0` vs `--pos=10000,300,-0.3` (`.scratch/c20/far_00.png`,
+`.scratch/c20/far_nudge.png`):
+
+| instrument | dx (px) | dy (px) | \|d\| (px) |
+|---|---|---|---|
+| altimeter | -0.026 | +0.075 | 0.080 |
+| gun_gauge | -0.006 | -0.122 | 0.122 |
+| rockets | +0.011 | -0.057 | 0.058 |
+| speedometer | +0.017 | +0.033 | 0.038 |
+
+Both pairs are bit-reproducible (repeat captures hash-identical, confirmed with `Get-FileHash`), and
+the residual is the same order of magnitude at both scales (0.027-0.103 px near the origin,
+0.038-0.122 px at 10 km). **That negative was an artefact of the pose, not a disproof.** The
+`--weapon-lab` hold pins the aircraft at `dir=(0,0,-1)`, an axis-aligned basis whose products are
+exact 0s and 1s, which is the one attitude at which float32 rounding of a world transform cannot
+occur; and a luminance-weighted centroid moves with shading, so its 0.1 px floor was never the
+geometry. Re-measured with the aircraft flown (`--fly --det --shots=4`), a bezel-only
+phase-correlation registration of each dial against strut and dash control regions, and the
+mission's heading (`--direction=-0.743,0,-0.669`): at `--pos=0,300,0` every region holds within
+0.02 px; at `--pos=10000,300,0` the gun and damage dials jump 0.6-0.7 px frame to frame; at
+`--pos=20000,300,0` the speedometer jumps 2.7 px, the gun gauge 1.7 and the altimeter 1.5; with
+heading 0 the same 10 km position is green. The struts hold at 0.004 px throughout, and at the
+C1 mission spawn (`-7066, 326, -5519`, heading -48°) the dial faces jump 1-3 px on both the wall
+clock and `--det`, which is the report at the controls. Confirmed: the motion is float32 rounding of
+the interior's world-space transform at chapter-scale coordinates, exposed by a rotated attitude,
+and C21 is the right fix. The instrument is `.scratch/bl556/register2.py` over consecutive
+`--shots`; the item minted for the symptom during this plan was closed by C21 and its number was
+re-used on `main` for an unrelated item, so this section is the record.
+
+**Verified.** Full battery on the plan's final tree: units 2444 passed; in-engine suites 146/146
+passed, engine errors clean; goldens 16 shots hash-identical; hitch stage clean (awareness only).
+The belt and damage recolour and the horizon ball were then confirmed at the controls in a flown
+Cockpit view.
+
+## C21 ☑ Prototype the interior in its own pass with the camera at the origin
+
+**Reopened.** C20's first reading closed this item as disproven; its re-measurement with a rotated
+attitude confirmed the hypothesis instead (see C20's Result), so this is the fix. The regression
+instrument is C20's registration over four consecutive `--shots` at `--pos=20000,300,0
+--direction=-0.743,0,-0.669`: every dial region must fall to the struts' 0.004 px floor.
+
+**Goal.** The panel is drawn in a coordinate frame small enough that float32 rounding is below a
+pixel, so the instruments hold still relative to each other and to the cockpit shell.
+
+**Evidence (confidence: direction sound if C20 confirms, magnitude a judgement call).** This is the
+original's own architecture: the cockpit interior is a separate model in its own space, not a
+subtree of the airframe at world coordinates. It is also what `PLAN-cockpit-view.md` B11 noted when
+it parked the interior states. If C20 confirms precision, this fixes the whole panel at once rather
+than one instrument at a time, and no per-instrument workaround can do the same.
+
+**Approach.** A second `SubViewport` with its own `World3D`, holding a camera at the origin and the
+interior at the origin, composited over the main view underneath the HUD. The interior's transform
+in that world carries only the head pitch offset and any look-around, all of it small, so no large
+coordinate ever enters the chain.
+
+Three things need deciding as the prototype is built rather than after. The lighting and environment
+in the second world, since the interior currently takes the main world's and will look wrong under a
+default one. The composite order against `ScreenFlash` and the HUD, which draw into `HudParent`. And
+splitscreen, where `SplitScreen` already gives every player a `SubViewport` on the shared world and
+this would add a second one per player, so the cost is multiplied by the pane count and the rig has
+to build them per player rather than once.
+
+Build it as a prototype behind a flag first and judge it at the controls before committing to it.
+The alternative worth naming in the write-up, so it is not re-derived later, is a Godot build with
+large-world-coordinates doubles, which fixes the class of problem outright and costs a custom engine
+build; it is almost certainly not worth it for one panel, but the next session should not have to
+work that out again.
+
+**Model recommendation.** High. This is a large change across the render rig with real blast radius
+into splitscreen, and the judgement of whether the result is worth its cost is the item's actual
+deliverable.
+
+**Verify.** The same centroid measurement C20 built, on the prototype: the per-instrument residual
+must fall below the noise floor C20 established. Then at the controls, in the condition the report
+came from, since the eye is what reported this and the eye is what closes it. Then the full battery,
+with particular attention to the four plane-bearing goldens and to the hitch check, since this adds
+a render pass.
+
+**⚠ Traps.** Do not start this before C20 answers. It is the expensive item in the plan and the
+cheap test that justifies it costs an afternoon. If C20 comes back negative, this item closes as
+disproven and the write-up of why is the deliverable, which is a success here and not a failure.
+
+**Result.** Built behind `--cockpit-pass`, default off, so the shipped picture and the goldens are
+untouched. `Flight/CockpitOverlay` takes the built `cockpit1` node out of the plane model and
+re-parents it into a `SubViewport` with its own `World3D`, at zero translation carrying the mount
+basis `PlaneBuilder` gave it (the head-pitch tilt and `InteriorScale`, unchanged). The pass's camera
+sits at that world's origin, aimed by `CameraController.FirstPersonPose` with the plane position and
+the `cockpit_camera` offset both zero, which is exact: those two cancel between the eye and the
+panel in the main world too, so the composed camera-to-interior transform is the same one, computed
+from small numbers. The FOV comes from the camera's own per-mode law, now
+`CameraController.FirstPersonFovDeg`, at the pass viewport's live aspect. Head look is not applied
+to the interior, as it is not today.
+
+The plane wobble (overspeed and firing, `PlaneShake`) is applied in the main world as a roll on the
+pivot the plane model hangs under, and the first-person camera reads the controller above that
+pivot, so the wobble reaches the pilot as the panel rolling against a steady eye. The first flight
+of the pass had no wobble at all: the interior left the pivot's subtree and nothing carried the
+roll across. `CockpitOverlay.Sync` now takes the frame's `Shake.Roll` and poses the interior as
+`Rz(roll) · mount` (`WobbledMount`), which the suite asserts, so the pass shows the wobble the main
+world did. Whether the original's camera rides the rocked plane instead, so that the world rolls
+and the panel holds, is `BL-266` (f) and unchanged by this item. It is also the pose's blind spot:
+a frame pair cannot show a wobble, only a flight can.
+
+The same flight found the muzzle flashes no longer lighting the cockpit: they are pooled
+`OmniLight3D`s on the projectile node in the main world, which the pass's world cannot see.
+`ProjectilePool.ActiveMuzzleLights` now lists the lit flashes and `Sync` mirrors each into the
+pass at its eye-relative offset with the attitude taken out (`ToOverlay`, asserted by the suite),
+so the two big first-person flashes reach the struts as they did. Two reports from that flight
+stay open: the high-speed wobble is too small to see in the Cockpit view at all, which is
+`BL-266` (d) and not the pass's doing; and the surface above the compass housing turns white in a
+Bloodhawk pitched up into the sky with the pass on. That surface is the gunsight glass, and a
+near-vertical climb pair at C1 measured it: the glass pixel read 166 with the pass off and 154 on
+at the same 176 sky, and the gun-gauge face 18,16,6 off against 27,30,18 on. Two causes, both
+fixed. A transparent `SubViewport` writes premultiplied colour and the container composited it as
+straight alpha, so the glass took its alpha twice; the container now blends `PremultAlpha` and the
+glass reads 159. And the pass held the interior un-rotated under a sky-sourced ambient that is
+directional, so the panel was lit for level flight whatever the attitude; the pass now keeps the
+aircraft's rotation and drops only the translation, camera and interior both rotated at the
+origin, so the sun, the sky ambient and the flash positions are the main world's with nothing
+re-aimed, and the dial face reads 16,14,5. A rotation at the origin rounds far below a pixel: the
+20 km registration with the rotation kept is 0.000 px on every dial.
+
+Judged at the controls with all of that in: no jitter, the wobble and the muzzle lighting back,
+and the pass is the shipped path, `--no-cockpit-pass` the opt-out. Two more numbers came out of
+the last A/B. The pass's environment copy had its background cleared, which stopped the sky
+radiance the ambient reads and left the panel darker and less blue (dial 13,11,3 against
+17,15,11); a transparent viewport never paints its background, so the copy keeps the sky and the
+dial reads 14,12,4. And the bright bar that appears along the top of the compass window pitched up
+toward the sun is the drum's upper face under the sun: it reads the same with the pass and
+without it (51 and 46 toward the sun, 15 and 0 away, at the same pose), and the user saw it in
+both, so it is the authored geometry and not this item's; it is noted under `BL-431`.
+
+The viewport is transparent-backed and sits on `HudLayers.CockpitPass` (−1): 3D draws before any
+canvas layer, so the world still shows under the panel while the cloud whiteout, `ScreenFlash` and
+the HUD keep drawing over it, exactly as they do with the interior in the main world. Lighting is a
+copy of the world's `DirectionalLight3D`, re-aimed by the inverse plane attitude every frame since
+the interior's frame turns with the aircraft in the main world and does not here, plus a duplicate
+of the world environment with its background mode cleared and its `Sky` kept for ambient.
+`CockpitVisibility` is untouched and still owns the show/hide: `Sync` follows the interior node's
+own `Visible`, and parks the viewport's update mode when it is off. `CockpitGauges` binds nodes and
+materials, so re-parenting is invisible to it; the needles, belts, damage recolour and horizon all
+drive on the frames the panel is on the screen, as the captures below show.
+
+Splitscreen is covered by construction: the pass is built per `PlayerRig`, on that rig's own
+`HudParent`, which is the pane's `SubViewport` with two or more players. It has not been flown in
+splitscreen, and the second pass per pane is a real cost that a 4P run should be measured for before
+the flag becomes the default. Deliberately not covered: an airframe swap, which rebuilds the
+interior and leaves the pass holding the old node, where `Sync` hides itself rather than drawing a
+freed one.
+
+Registration over four consecutive `--det --shots` frames, `--fly --chapter=C1 --plane=player_bhawk
+--view=cockpit --pos=20000,300,0 --direction=-0.743,0,-0.669 --frames=240`, worst of the three
+frame pairs per region, in pixels:
+
+| region | flag off | flag on |
+|---|---|---|
+| speedometer | 2.721 | 0.000 |
+| gun_gauge | 1.735 | 0.000 |
+| altimeter | 1.517 | 0.000 |
+| damage_dial | 0.413 | 0.000 |
+| horizon | 0.148 | 0.000 |
+| rockets | 0.108 | 0.000 |
+| shell_dash_top | 0.052 | 0.000 |
+| shell_strut_L | 0.004 | 0.003 |
+| shell_strut_R | 0.004 | 0.006 |
+
+Every dial region falls to zero, below the struts' floor. The strut regions are full crops that
+include the world seen past the strut, which is why they never read zero in either column. With the
+flag on the same capture at the C1 mission spawn (no `--pos`) reads 0.001 px worst over any dial
+region, and on the wall clock (`--no-det --shots=6`) 0.002 px.
+
+A/B at the same pose (`.scratch/bl556/c21_off_00.png` against `.scratch/bl556/c21_on_00.png`):
+the two frames are the same picture. The HUD readouts, the compass strip, the ammo line and the
+reticle all draw over the panel in both, the dash, struts and dials sit at the same screen
+coordinates (registering the two against each other, the shell and dash regions agree within
+0.013 px; the dial regions differ by up to 0.72 px, which is the off path's own rounding error at
+that instant, not a shift). Lighting reads the same: the panel's brightness, the orange wood, the
+green faces and the shadowed side walls all match. One visible difference: the gunsight's
+transparent glass plate reads slightly more opaque with the pass on, because that alpha surface
+blends against the pass's empty buffer rather than against the sky behind it. It is the only region
+of the frame that differs by more than the jitter itself, and it is a compositing question rather
+than a placement one.
+
+The alternative, recorded so it is not re-derived: a Godot build with double-precision world
+coordinates fixes this whole class outright, at the cost of maintaining a custom engine build. For
+one panel it is not worth it, which is why the pass exists.
+
+This stays a prototype until it is judged at the controls, in the condition the report came from.
+The flag is the switch for that judgement.
+
+**Verified.** Full battery with the flag off: units 2444 passed; in-engine suites 147/147 passed,
+engine errors clean; goldens 16 shots hash-identical; hitch stage clean (awareness only). The
+registration with the flag on reads 0.000 px on every dial region at 20 km rotated, at the C1
+mission spawn and on the wall clock. Judgement at the controls is what remains.

@@ -25,7 +25,10 @@ public readonly record struct FlightRosterBuild(int MeshInstances, string Summar
 public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector3 LookAt, AiPilot Pilot,
     PaintScheme? Scheme = null, int? Team = null, bool Inert = false, bool ShippedSkins = false,
     string? AiDef = null, LoadoutChoice? Fit = null, int? AttackRating = null, bool Nitro = false,
-    AiSkillVector? RosterSkills = null, string? NodeName = null, string? PilotName = null);
+    AiSkillVector? RosterSkills = null, string? NodeName = null, string? PilotName = null,
+    // Overrides the session difficulty for this one spawn, which is all an Instant Action wave's
+    // skill is (Flight.Difficulty); null takes the session's.
+    int? Difficulty = null);
 
 /// <summary>The session's aircraft set: builds the human field in deterministic player order and
 /// introduces AI aircraft later for missions, waves, and generators. The roster is the assembly

@@ -16,31 +16,38 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class GaugeCluster : Control
 {
-    // Gun belt indicator colour by remaining fraction: green/yellow/red. Gun-only; hardpoints/
-    // pylons never show this tier. TUNE — see docs/formats/hud.md for the calibration and the
-    // still-owed playtest. ⚠ Do not raise it toward 1/3; that lights the cue at nearly two-thirds full.
-    public const float IndicatorLowFrac = 0.15f;
-    // Weapon-gauge arrow sweep rate, shared by both gauges (measured off original-game footage:
-    // 168.7 ± 1.6 °/sim-s, linear — the ~2-frame ease at each end is within noise and NOT a smoothstep).
-    // Public so CSVM.Tests (GaugeArrowTweenTests) can assert the rate directly.
-    public const float ArrowSweepDegPerSimS = 168.7f;
+    // Belt indicator colour by remaining fraction: the low tier lights at or below a quarter full.
+    // Decoded (0x006034f4, compared at 0x004547de) — one state function serves BOTH gauges, so this
+    // is not gun-only. ⚠ Was a 0.15 TUNE, and the gun-only reading came with it.
+    public const float IndicatorLowFrac = 0.25f;
+    // Weapon-gauge arrow sweep rate, shared by both gauges: 0.8 revolutions per second, constant,
+    // with no easing at either end (FUN_004544b0, step = frame dt x 5.0265484 = 0.8 x 2pi).
+    // ⚠ Supersedes a 168.7 °/s figure measured off footage. Public so CSVM.Tests can assert it.
+    public const float ArrowSweepDegPerSimS = 288f;
     // The two nitro needles' decoded law: each chases its target through the shared exponential
     // (slot = target + (slot − target)·exp(−rate·dt)), full sweep 3.7699 rad = 216°, the boost
     // needle at 3/s and the charge needle at 1.5/s (FUN_004568c0).
     public const float NitroNeedleSweepDeg = 216f;
     public const float NitroBoostNeedleRate = 3f;
     public const float NitroChargeNeedleRate = 1.5f;
+    // The needle laws, decoded. Each is a rate per unit of the value the needle shows, and the
+    // engine writes an ABSOLUTE angle (the modeled rest rotations are arbitrary). Quoted here
+    // clockwise-positive, which is what the screen-space draw wants; the in-3D drive negates them,
+    // since the authored Euler-z is counter-clockwise-positive.
+    public const float AltHundredsDegPerFt = 0.36f;     // 0x00607704, 1,000 ft per revolution
+    public const float AltThousandsDegPerFt = 0.036f;   // 0x00607700, 10,000 ft per revolution
+    public const float SpeedDegPerMph = 0.7199957f;     // 0x006076e8 with the mph factor at 0x006076e4
 
     // ---- state fed by the FlightController ----
     public float AltitudeFt;               // above sea level (the dial is in feet)
     public float AglMeters = float.MaxValue; // above ground (physics ray) — LOW ALT
     public float SpeedMph;
-    /// <summary>STALL lamp gate — the flight model's stall WARNING (0.30 fd), which lights well
-    /// before the nose-drop the model flies at 0.25 fd.</summary>
+    /// <summary>STALL lamp gate — the flight model's stall WARNING (under 2.35 g of available
+    /// lift), which lights well before the nose-drop the model flies at 1 g.</summary>
     public bool StallWarning;
-    /// <summary>Airspeed as a fraction of fd_speed (FlightModel.StallFraction): the STALL lamp's
-    /// blink RATE ramps over it. Only read while StallWarning is set.</summary>
-    public float StallFrac = 1f;
+    /// <summary>Available lift as a multiple of weight (FlightModel.AvailableLoadFactor): the
+    /// STALL lamp's blink RATE ramps over it. Only read while StallWarning is set.</summary>
+    public float AvailableLoadFactor = StallWarnLoadFactor;
     /// <summary>Part HP source for the damage display: name → fraction (1 = pristine).
     /// Flight binds PlaneDamage, the damage lab binds its sliders. Null = all green.</summary>
     public Func<string, float>? PartFraction;
@@ -57,22 +64,36 @@ public sealed partial class GaugeCluster : Control
     public bool NitroBoosting;
     public float NitroChargeFrac = 1f;
 
+    /// <summary>The artificial horizon's decoded pitch and roll (radians), from
+    /// <see cref="HorizonAngles"/> off the aircraft's own attitude — never the camera's. Computed
+    /// here so the 3D panel (<see cref="CockpitGauges"/>) and any future flat draw read the same
+    /// two numbers. Zero at spawn, matching an identity attitude.</summary>
+    public float HorizonPitchRad;
+
+    /// <inheritdoc cref="HorizonPitchRad"/>
+    public float HorizonRollRad;
+
     // ---- tuning ----
     // The hardpoint dial's belt-light ring is 8 positions on every airframe regardless of the
     // loadout's pylon count (user-confirmed against the original; markers.md) —
     // never derive it from the bound Hardpoints count. Indicator i is pylon i+1: the belt
     // light and arrow-target math both index by PYLON NUMBER, not by position in a compacted list.
     internal const int HardpointRingSize = 8;
-    // The STALL lamp's blink-RATE ramp: half-period proportional to the fd fraction, held flat
-    // below StallBlinkFracFloor. See docs/formats/hud.md for the measurement and its fit.
-    // ⚠ SIM seconds — the wall figures are 1/1.390 of these and would blink 39% fast.
-    internal const float StallBlinkHalfPeriodPerFrac = 2.10f;  // sim s of half-period per unit fd fraction
-    // The measurement spans 0.143–0.30 fd and neither fitted form extrapolates below ~43 mph, so the
-    // law HOLDS at its deepest measured value rather than ramping on toward a strobe at zero speed.
-    internal const float StallBlinkFracFloor = 0.15f;
-    private const float LowAltAglM = 50f;     // LOW ALT below this height over ground (user spec)
-    private const float WarnBlinkPeriod = 0.4f;  // s per on/off cycle of LOW ALT (TUNE) — the LOW ALT
-                                                 // cue is a plain fixed blink, not a ramp
+    // The STALL lamp's decoded law. The engine drives both the gate and the blink rate off one
+    // scalar s = (1 − n_avail + 1.35) × 0.425, and the half-period is 0.4 − 0.3·s, which bottoms out
+    // at 0.100 s and reaches 0.400 s at the gate. ⚠ Do NOT apply k = 1.390 to these: the lamp clock
+    // and the flight-model dt are the same variable in the original (docs/formats/hud.md).
+    internal const float StallWarnLoadFactor = 2.35f;   // lamp dark at or above this available g
+    internal const float StallDriverBias = 1.35f;       // 0x00608338
+    internal const float StallDriverScale = 0.425f;     // 0x00608334
+    internal const float StallBlinkBaseS = 0.4f;        // 0x00603538
+    internal const float StallBlinkPerDriverS = 0.3f;   // 0x006034ac
+    // LOW ALT's decoded law: it lights below 60 m ABOVE GROUND and its blink half-period RAMPS with
+    // height, 0.14 s on the deck widening to 0.50 s at the gate. Not a fixed period, and not an
+    // altitude above sea level.
+    internal const float LowAltAglM = 60f;              // 0x006076fc
+    internal const float LowAltBlinkBaseS = 0.14f;      // 0x006076f4
+    internal const float LowAltBlinkPerMetreS = 0.006f; // 0x006076f8
     private const float DamageBlinkTime = 5f;    // s a hit part blinks (user-observed in the original)
     private const float DamageBlinkPeriod = 0.32f; // s per on/off cycle of the hit part (TUNE)
     // Four color states (user-confirmed in the original: green/yellow/orange/red, the
@@ -146,9 +167,32 @@ public sealed partial class GaugeCluster : Control
     private ArrowSweep _gunArrow = new();
     private ArrowSweep _missileArrow = new();
     private StallLamp _stallLamp = new();
+    private LowAltLamp _lowAltLamp = new();
 
-    private bool WarnPhaseOn => Mathf.PosMod((float)_time, WarnBlinkPeriod) < WarnBlinkPeriod * 0.5f;
+    /// <summary>Whether the STALL overlay is lit this frame. <see cref="CockpitGauges"/> mirrors
+    /// this onto the authored <c>stallwarning_on</c> node so the 3D panel and the screen-space dial
+    /// blink in step rather than each integrating its own phase.</summary>
+    public bool StallLampLit => _stallLamp.Lit;
+
+    /// <inheritdoc cref="StallLampLit"/>
+    public bool LowAltLampLit => _lowAltLamp.Lit;
+
+    /// <summary>The nitro needles' live angles (decoded Euler-z, counter-clockwise-positive), for
+    /// the same mirroring. The screen-space draw negates them; the 3D drive does not.</summary>
+    public float NitroBoostAngleDeg => _nitroBoostNeedle.Angle;
+
+    /// <inheritdoc cref="NitroBoostAngleDeg"/>
+    public float NitroChargeAngleDeg => _nitroChargeNeedle.Angle;
+
+    /// <summary>The two weapon-gauge arrows' live sweep angles, clockwise degrees from the belt's
+    /// position 0. NaN before the first sweep, which is a gauge with no loadout bound.</summary>
+    public float GunArrowAngleDeg => _gunArrow.Angle;
+
+    /// <inheritdoc cref="GunArrowAngleDeg"/>
+    public float MissileArrowAngleDeg => _missileArrow.Angle;
+
     private bool DamagePhaseOn => Mathf.PosMod((float)_time, DamageBlinkPeriod) < DamageBlinkPeriod * 0.5f;
+
 
     /// <summary>Builds the cluster from the plane's 'gauges' subtree in planes.zbd and
     /// the chapter texture archive. Null when the subtree or its dial textures are
@@ -170,6 +214,10 @@ public sealed partial class GaugeCluster : Control
         {
             MouseFilter = MouseFilterEnum.Ignore,
             TextureRepeat = TextureRepeatEnum.Enabled, // the hatch fills tile their UVs
+            // ⚠ Ahead of the FlightController, which reads these lamps back out the same frame to
+            // drive the authored 3D panel (CockpitGauges). Both copies of a lamp must toggle on the
+            // same frame, and without an order the 3D one would trail the dial by a frame.
+            ProcessPriority = -1,
         };
         cluster.SetAnchorsPreset(LayoutPreset.FullRect);
 
@@ -219,14 +267,15 @@ public sealed partial class GaugeCluster : Control
         return cluster;
     }
 
-    // Guns: green > low > empty, indexing the 3 indicator colour variants. The low tier is
-    // gun-only — see IndicatorLowFrac's comment. Public so CSVM.Tests (GaugeColoursTests) can
-    // assert both colour paths directly.
+    // green > low > empty, indexing the 3 indicator colour variants. ONE decoded rule serves both
+    // gauges (FUN_004547a0 takes rounds and capacity from either a gun record or a pylon one).
+    // ⚠ The pylons' "no intermediate colour" reading is not a second rule: a pylon carrying a
+    // single round has a fraction of 1 or 0, so its low tier is unreachable rather than absent, and
+    // a pylon deep enough to sit at a quarter full does light it. Public for CSVM.Tests.
     public static int GunIndicatorColor(float frac) => frac <= 0f ? 2 : frac <= IndicatorLowFrac ? 1 : 0;
 
-    // Hardpoints/pylons: green > empty, no intermediate colour (confirmed against the
-    // original). Never reuse IndicatorLowFrac here.
-    public static int HardpointIndicatorColor(float frac) => frac <= 0f ? 2 : 0;
+    /// <inheritdoc cref="GunIndicatorColor"/>
+    public static int HardpointIndicatorColor(float frac) => GunIndicatorColor(frac);
 
     // The colour of belt indicator i, including positions past the end of the loadout: an unfitted
     // slot reads RED, the same as a fitted-but-spent one. In the original every belt light on the
@@ -262,13 +311,108 @@ public sealed partial class GaugeCluster : Control
         return Mathf.Abs(delta) <= maxStep ? target : current + Mathf.Sign(delta) * maxStep;
     }
 
-    /// <summary>Half of the STALL lamp's blink period, in SIM seconds, at an airspeed of
-    /// <paramref name="stallFrac"/> × fd_speed — proportional to speed, held flat below the deepest
-    /// speed the capture reached. Duty is 0.50, so the full period is twice this. Public so
-    /// CSVM.Tests (<c>StallWarningTests</c>) can assert the law against the capture's two measured
-    /// anchors directly.</summary>
-    public static float StallBlinkHalfPeriodS(float stallFrac) =>
-        StallBlinkHalfPeriodPerFrac * Mathf.Max(stallFrac, StallBlinkFracFloor);
+    /// <summary>The long altimeter needle's angle, clockwise degrees from the top. Wraps every
+    /// 1,000 ft; the short needle wraps every 10,000.</summary>
+    public static float AltHundredsAngleDeg(float altitudeFt) =>
+        Mathf.Max(0f, altitudeFt) % 1000f * AltHundredsDegPerFt;
+
+    /// <inheritdoc cref="AltHundredsAngleDeg"/>
+    public static float AltThousandsAngleDeg(float altitudeFt) =>
+        Mathf.Max(0f, altitudeFt) % 10000f * AltThousandsDegPerFt;
+
+    /// <summary>The speedometer needle's angle, clockwise degrees from the top. One revolution per
+    /// 500 mph, and the engine puts no wrap or clamp on it beyond the speed itself.</summary>
+    public static float SpeedAngleDeg(float speedMph) =>
+        Mathf.Max(0f, speedMph) * SpeedDegPerMph;
+
+    /// <summary>The artificial horizon's pitch and roll, decoded off the aircraft's own attitude
+    /// (FUN_0053df30; docs/formats/hud.md, "Cockpit gauges"). No axis remap: the original's
+    /// row-major body axes are exactly <paramref name="attitude"/>'s columns X/Y/Z. Heading is
+    /// discarded, as the original discards it here. Public for CSVM.Tests.</summary>
+    public static (float PitchRad, float RollRad) HorizonAngles(Basis attitude)
+    {
+        float m7 = attitude.Z.Y;
+        if (Mathf.Abs(m7) >= 1f)
+        {
+            return (-Mathf.Sign(m7) * Mathf.Pi / 2f, 0f);
+        }
+        return (Mathf.Asin(-m7), Mathf.Atan2(attitude.X.Y, attitude.Y.Y));
+    }
+
+    /// <summary>The engine's single STALL scalar: positive exactly where the lamp shows, and the
+    /// term its blink rate is built from. Public so CSVM.Tests can assert the gate and the rate
+    /// against one another rather than against two independent numbers.</summary>
+    public static float StallDriver(float availableLoadFactor) =>
+        (StallWarnLoadFactor - availableLoadFactor) * StallDriverScale;
+
+    /// <summary>Half of the STALL lamp's blink period at <paramref name="availableLoadFactor"/> g
+    /// of available lift. Duty is 0.50, so the full period is twice this. Bounded to
+    /// (0.100, 0.400] s by construction, since the driver lies in (0, 1] wherever the lamp is
+    /// lit at all.</summary>
+    public static float StallBlinkHalfPeriodS(float availableLoadFactor) =>
+        StallBlinkBaseS - (StallBlinkPerDriverS * StallDriver(availableLoadFactor));
+
+    /// <summary>Half of the LOW ALT lamp's blink period at <paramref name="aglMetres"/> above
+    /// ground: 0.14 s on the deck, 0.50 s at the 60 m gate. Recomputed at each toggle, so the ramp
+    /// tracks the aircraft rather than being latched at onset.</summary>
+    public static float LowAltBlinkHalfPeriodS(float aglMetres) =>
+        LowAltBlinkBaseS + (LowAltBlinkPerMetreS * Mathf.Max(aglMetres, 0f));
+
+    /// <summary>This frame's colour tier for one belt position, and the two colour-variant
+    /// textures a tier picks. <see cref="CockpitGauges"/> pushes the same choice onto the authored
+    /// 3D indicator's material, which is how one decode drives both instrument sets.</summary>
+    public int BeltTier(bool isGun, int position)
+    {
+        var state = isGun ? GunGauge : MissileGauge;
+        return state == null ? 0 : SlotIndicatorColor(state.Slots, position, isGun);
+    }
+
+    /// <inheritdoc cref="BeltTier"/>
+    public Texture2D? BeltLightTexture(int tier) => _indLight[Mathf.Clamp(tier, 0, 2)];
+
+    /// <inheritdoc cref="BeltTier"/>
+    public Texture2D? BeltHiliteTexture(int tier) => _indHilite[Mathf.Clamp(tier, 0, 2)];
+
+    /// <summary>This frame's colour tier for one damage zone, by the part name the zone carries.
+    /// Negative means the zone is in the dark half of its post-hit blink, which the screen-space
+    /// dial draws by skipping the zone outright.</summary>
+    public int ZoneTier(string part)
+    {
+        foreach (var z in _zones)
+        {
+            if (!z.Part.Equals(part, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (z.BlinkLeft > 0f && !DamagePhaseOn)
+                return -1;
+            return DamageZoneColor(PartFraction?.Invoke(z.Part) ?? 1f, z.YellowAt, z.OrangeAt, z.RedAt);
+        }
+        return 0;
+    }
+
+    /// <inheritdoc cref="ZoneTier"/>
+    public Texture2D? ZoneHiliteTexture(int tier) => _hilite[Mathf.Clamp(tier, 0, 3)];
+
+    /// <inheritdoc cref="ZoneTier"/>
+    public Texture2D? ZoneHatchTexture(int tier) => _hatch[Mathf.Clamp(tier, 0, 3)];
+
+    /// <summary>The glyph atlas entry for one character, or null for a blank cell. The authored
+    /// readouts cycle their per-character texture exactly this way.</summary>
+    public Texture2D? Glyph(char c) => _glyphs.TryGetValue(c, out var g) ? g : null;
+
+    /// <summary>The two readouts' text for this frame, already padded to the cell count the
+    /// authored quads provide. Empty when no loadout feeds that gauge.</summary>
+    public string BeltCountText(bool isGun, int cells)
+    {
+        var state = isGun ? GunGauge : MissileGauge;
+        return state == null ? string.Empty : FormatCount(state.Count, cells);
+    }
+
+    /// <inheritdoc cref="BeltCountText"/>
+    public string BeltTypeText(bool isGun, int cells)
+    {
+        var state = isGun ? GunGauge : MissileGauge;
+        return state == null ? string.Empty : FormatType(state.Type, cells);
+    }
 
     /// <summary>Restarts the warning/blink state (respawn).</summary>
     public void Reset()
@@ -278,6 +422,7 @@ public sealed partial class GaugeCluster : Control
         _gunArrow.Reset();
         _missileArrow.Reset();
         _stallLamp.Set();
+        _lowAltLamp.Set();
     }
 
     /// <summary>A part took damage: its fill + border blink for the next few seconds
@@ -299,7 +444,8 @@ public sealed partial class GaugeCluster : Control
             _gunArrow.Advance(TargetArrowAngle(_gunGaugeGeom.Positions, gg.Selected), simDt);
         if (MissileGauge is { } mg)
             _missileArrow.Advance(TargetArrowAngle(_missileGaugeGeom.Positions, mg.Selected), simDt);
-        _stallLamp.Advance(StallWarning, StallFrac, SpeedMph, simDt);
+        _stallLamp.Advance(StallWarning, AvailableLoadFactor, SpeedMph, simDt);
+        _lowAltLamp.Advance(AglMeters < LowAltAglM, AglMeters, simDt);
         _nitroBoostNeedle.Advance(NitroBoosting ? -NitroNeedleSweepDeg : 0f, simDt);
         _nitroChargeNeedle.Advance((1f - Mathf.Clamp(NitroChargeFrac, 0f, 1f)) * NitroNeedleSweepDeg, simDt);
         foreach (var z in _zones)
@@ -317,16 +463,15 @@ public sealed partial class GaugeCluster : Control
         float altR = AltRadius * s;
         foreach (var p in _altFace)
             DrawGaugePoly(p, altC, altR);
-        if (AglMeters < LowAltAglM && WarnPhaseOn)
+        if (_lowAltLamp.Lit)
             foreach (var p in _altWarn)
                 DrawGaugePoly(p, altC, altR);
-        float ft = Mathf.Max(0f, AltitudeFt);
         if (_altThousands != null)
-            DrawGaugePoly(_altThousands, altC, altR, ft % 10000f / 10000f * 360f);
+            DrawGaugePoly(_altThousands, altC, altR, AltThousandsAngleDeg(AltitudeFt));
         if (_altHundreds != null)
-            DrawGaugePoly(_altHundreds, altC, altR, ft % 1000f / 1000f * 360f);
+            DrawGaugePoly(_altHundreds, altC, altR, AltHundredsAngleDeg(AltitudeFt));
 
-        // speedometer: ~0.72°/mph (the face's 100-mph labels sit ~71.5° apart)
+        // speedometer: 0.7199957°/mph, decoded (500 mph per revolution)
         var spdC = new Vector2(vp.X - SpdCenterFromRight * s, FromBottom(SpdCenterY, s, vp.Y));
         float spdR = SpdRadius * s;
         foreach (var p in _spdFace)
@@ -335,7 +480,7 @@ public sealed partial class GaugeCluster : Control
             foreach (var p in _spdWarn)
                 DrawGaugePoly(p, spdC, spdR);
         if (_spdNeedle != null)
-            DrawGaugePoly(_spdNeedle, spdC, spdR, Mathf.Max(0f, SpeedMph) * 0.72f);
+            DrawGaugePoly(_spdNeedle, spdC, spdR, SpeedAngleDeg(SpeedMph));
 
         // damage display: face silhouette, then each zone's border bar + hatch fill
         // in its color; a freshly hit zone blinks (fill + border) for a few seconds
@@ -669,6 +814,10 @@ public sealed partial class GaugeCluster : Control
         {
             _glyphs[c] = textures.Find(c.ToString());
         }
+        // ⚠ The blank is a real glyph, not the absence of one. The screen-space draw can leave a
+        // cell unpainted, but the authored 3D cell already carries a character and has to be
+        // overwritten with this to clear it.
+        _glyphs[' '] = textures.Find("space");
         string[] hilite = { "greenhilite", "yellowhilite", "redhilite" };
         string[] light = { "greenindicator", "yellowindicator", "redindicator" };
         for (int i = 0; i < 3; i++)
@@ -710,7 +859,10 @@ public sealed partial class GaugeCluster : Control
     {
         for (int i = 0; i < quads.Count && i < text.Length; i++)
         {
-            if (_glyphs.TryGetValue(text[i], out var g) && g != null)
+            // ⚠ The space glyph is deliberately skipped HERE and drawn in the 3D panel. A cell this
+            // draw leaves alone shows the face beneath it, which is already blank; the authored 3D
+            // cell carries a character instead and has to be painted over.
+            if (text[i] != ' ' && _glyphs.TryGetValue(text[i], out var g) && g != null)
                 DrawGaugePoly(quads[i], center, radius, 0f, g);
         }
     }
@@ -818,16 +970,15 @@ public sealed partial class GaugeCluster : Control
 
         /// <summary>Integrates one sim step. The lamp lights the instant <paramref name="warning"/>
         /// does and its phase restarts when it clears — the original shows no hysteresis at the
-        /// threshold (on at 89.9/90.0 mph decelerating, 90.0/89.9 accelerating).
-        /// <paramref name="frac"/> is StallFrac (only read while warned); <paramref name="mph"/> is
-        /// for the crossing log only.</summary>
-        public void Advance(bool warning, float frac, float mph, float simDt)
+        /// threshold. <paramref name="nAvail"/> is the available load factor (only read while
+        /// warned); <paramref name="mph"/> is for the crossing log only.</summary>
+        public void Advance(bool warning, float nAvail, float mph, float simDt)
         {
             if (warning != _warnPrev)
             {
-                // The threshold crossing itself, with the fraction it happened at — the other half
-                // of what a scripted run needs to check the cue against the capture.
-                Log.Debug("flight", $"stall warning {(warning ? "on" : "off")} frac={frac:0.000} mph={mph:0.0}");
+                // The threshold crossing itself, with the load factor it happened at — the other
+                // half of what a scripted run needs to check the cue against.
+                Log.Debug("flight", $"stall warning {(warning ? "on" : "off")} n_avail={nAvail:0.000} mph={mph:0.0}");
                 _warnPrev = warning;
             }
             if (!warning)
@@ -839,16 +990,75 @@ public sealed partial class GaugeCluster : Control
                 return;
             }
             _dwellS += simDt;
-            _phase += simDt / StallBlinkHalfPeriodS(frac);
+            _phase += simDt / StallBlinkHalfPeriodS(nAvail);
             while (_phase >= 1.0)
             {
                 _phase -= 1.0;
                 _lampOn = !_lampOn;
-                // The dwell that just ended, in sim ms — the one number the blink law is measured
-                // in, so a run can be checked against the capture without eyes on the lamp. Carries its
-                // own times as values: the log has no timestamp column by design.
-                Log.Debug("flight", $"stall lamp {(_lampOn ? "lit" : "dark")} dwell_ms={_dwellS * 1000f:0} frac={frac:0.000} half_ms={StallBlinkHalfPeriodS(frac) * 1000f:0}");
+                // The dwell that just ended, in sim ms — the one number the blink law is expressed
+                // in, so a run can be checked without eyes on the lamp. Carries its own times as
+                // values: the log has no timestamp column by design.
+                Log.Debug("flight", $"stall lamp {(_lampOn ? "lit" : "dark")} dwell_ms={_dwellS * 1000f:0} n_avail={nAvail:0.000} half_ms={StallBlinkHalfPeriodS(nAvail) * 1000f:0}");
                 _dwellS = 0f;
+            }
+            Lit = _lampOn;
+        }
+    }
+
+    /// <summary>The LOW ALT lamp's blink. Same binary brightness and 0.50 duty as the STALL lamp,
+    /// but its half-period ramps with height above ground rather than with a stall margin, and it
+    /// carries the original's turn-off tail: climbing back through the gate does not snap the lamp
+    /// off mid-dwell, it finishes the half-period it is in. A plain struct so CSVM.Tests can drive
+    /// it without constructing a live Control.</summary>
+    public struct LowAltLamp
+    {
+        private double _phase;
+        private bool _lampOn;
+
+        public LowAltLamp() => Set();
+
+        /// <summary>Whether the lit LOW ALT overlay should draw this frame.</summary>
+        public bool Lit { get; private set; }
+
+        /// <summary>Clears the lamp dark and resets the blink phase (construction, respawn).</summary>
+        public void Set()
+        {
+            _phase = 0.0;
+            _lampOn = false;
+            Lit = false;
+        }
+
+        /// <summary>Integrates one sim step. <paramref name="aglMetres"/> sets the rate and is read
+        /// every step, so a descent tightens the blink as it happens.</summary>
+        public void Advance(bool belowGate, float aglMetres, float simDt)
+        {
+            if (!belowGate && !Lit)
+            {
+                // Already dark and out of the band: nothing pending, so stay put.
+                _phase = 0.0;
+                _lampOn = false;
+                return;
+            }
+            if (belowGate && !_lampOn && _phase <= 0.0)
+            {
+                _lampOn = true;  // entering the band lights it immediately
+                Lit = true;
+                return;
+            }
+            _phase += simDt / LowAltBlinkHalfPeriodS(aglMetres);
+            while (_phase >= 1.0)
+            {
+                _phase -= 1.0;
+                _lampOn = !_lampOn;
+                // ⚠ Out of the band the lamp goes dark at the END of the dwell it is serving and
+                // stays there: the original tests "lit AND expired", so it never re-lights.
+                if (!belowGate)
+                {
+                    _phase = 0.0;
+                    _lampOn = false;
+                    Lit = false;
+                    return;
+                }
             }
             Lit = _lampOn;
         }

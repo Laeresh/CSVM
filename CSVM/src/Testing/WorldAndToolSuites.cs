@@ -149,6 +149,9 @@ internal static class WorldAndToolSuites
             ctx.Check(!interior.Visible && body is { Visible: true }
                 && markers is { Visible: true } && dontmove is { Visible: true },
                 $"a held external view restores the aircraft while Cockpit stays selected");
+
+            DrivenPanel(ctx, interior);
+            DrivenBelts(ctx, interior, builder, planesGamez, textures);
         }
         finally
         {
@@ -156,6 +159,287 @@ internal static class WorldAndToolSuites
             withInterior?.Free();
             textures.Dispose();
         }
+    }
+
+    // The interior's own render pass (--cockpit-pass): the panel leaves the plane model for a
+    // world of its own, where both it and the camera sit at the origin, so no chapter-scale
+    // coordinate enters its transform chain. Able to fail: a pass that shares the main World3D, one
+    // that leaves the mount translation on the interior, a camera placed anywhere but the origin,
+    // or an FOV taken from a second copy of the per-mode table instead of the camera's own.
+    internal static void CockpitOverlayPass(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        Node3D? plane = null;
+        Node? host = null;
+        try
+        {
+            var builder = new PlaneBuilder(planesGamez, textures, spinningProps: true,
+                cockpitInterior: true);
+            plane = builder.Build(ctx.PlaneName);
+            if (builder.CockpitInterior is not { } interior)
+            {
+                ctx.Check(false, $"the interior build carries a cockpit1 subtree");
+                return;
+            }
+            var mountBasis = interior.Transform.Basis;
+            host = new Node();
+            var overlay = CockpitOverlay.Build(host, interior, null, null);
+            ctx.Check(overlay != null, $"the pass builds over a rig's HUD parent");
+            if (overlay == null)
+                return;
+
+            ctx.Check(interior.Position == Vector3.Zero,
+                $"the interior sits at the overlay world's origin pos={interior.Position}");
+            ctx.Check(interior.Transform.Basis.IsEqualApprox(mountBasis),
+                $"the head-pitch tilt and the interior scale survive the move");
+            ctx.Check(interior.Scale.IsEqualApprox(Vector3.One * PlaneBuilder.InteriorScale),
+                $"still at the port's interior scale scale={interior.Scale.X:0.###}");
+            ctx.Check(overlay.Camera.Transform.Origin == Vector3.Zero,
+                $"the overlay camera sits at the origin pos={overlay.Camera.Transform.Origin}");
+            var view = interior.GetParent() as SubViewport;
+            ctx.Check(view != null, $"the interior hangs in the pass's own SubViewport");
+            ctx.Check(view != null && view.TransparentBg,
+                $"the pass renders on a transparent background, so the main view shows under it");
+            ctx.Check(view != null && overlay.Camera.GetParent() == view,
+                $"the camera looks at the interior from inside that same viewport");
+            ctx.Check(view?.World3D != null && view.World3D != host.GetWindow()?.World3D,
+                $"the pass owns its World3D rather than sharing the main one");
+            // The same table the pilot's own camera reads, not a copy: 80° horizontal at 16:9.
+            ctx.Check(Mathf.Abs(CameraController.FirstPersonFovDeg(PilotViewMode.Cockpit, 16f / 9f)
+                    - CameraController.HorizontalToVerticalFovDeg(80f, 16f / 9f)) < 0.001f,
+                $"the pass's FOV law is the camera's own per-mode law");
+            // The wobble the interior inherited below the shake pivot has to reach the pass. The
+            // mount's tilt is about X, so its Right axis is the witness: a Z roll of r turns it by
+            // exactly r, and a pass that forgot the wobble leaves it at 0.
+            float rolled = CockpitOverlay.WobbledMount(mountBasis, 0.3f).X.AngleTo(mountBasis.X);
+            ctx.Check(Mathf.Abs(rolled - 0.3f) < 0.001f,
+                $"the shake pivot's roll reaches the panel in the pass angle={rolled:0.###} rad");
+            ctx.Check(CockpitOverlay.WobbledMount(mountBasis, 0f).IsEqualApprox(mountBasis),
+                $"no wobble leaves the mount basis untouched");
+            // The pass keeps the world's orientation, so a muzzle flash 11 m right of a yawed plane's
+            // eye at (1000, 50, -2000) lands at that same world offset from the pass's origin; a
+            // mirror that kept the eye's coordinates would put it thousands of metres out.
+            var yawed = new Basis(Vector3.Up, Mathf.Pi / 2f);
+            var eye = new Vector3(1000f, 50f, -2000f);
+            var offset = yawed * new Vector3(11f, 0f, 0f);
+            var mirrored = CockpitOverlay.ToOverlay(eye + offset, eye);
+            ctx.Check(mirrored.IsEqualApprox(offset) && mirrored.Length() < 12f,
+                $"a muzzle flash lands in the pass at its world offset from the eye got={mirrored}");
+        }
+        finally
+        {
+            host?.Free();
+            plane?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // The authored panel driven off live readings (BL-431): the needles take an absolute angle and
+    // the two lamps follow the cluster's own blink state. Able to fail: a needle left at its modeled
+    // rest rotation, a lamp still parked while its condition holds, or a drive that moves the panel
+    // geometry around the needle instead of the needle itself.
+    internal static void DrivenPanel(TestContext ctx, Node3D interior)
+    {
+        var panel = CockpitGauges.Bind(interior);
+        ctx.Check(panel != null, $"the gauge drive binds to the built interior");
+        var speed = FindNamed(interior, "speed");
+        var hundreds = FindNamed(interior, "hundreds");
+        var lowAlt = FindNamed(interior, "lowalt_on");
+        var face = FindNamed(interior, "speedometer");
+        if (panel == null || speed == null || hundreds == null || lowAlt == null || face == null)
+        {
+            ctx.Check(false, $"the panel's needles, lamp and face were all found");
+            return;
+        }
+
+        // ⚠ The rotation axis is only right if the needle is authored flat in its own XY plane.
+        // If the import left the dial in XZ, spinning about Z would tip the needle out of the face
+        // instead of sweeping it, and every angle assertion below would still pass.
+        if (FirstMesh(speed) is { } needleMesh)
+        {
+            var size = needleMesh.GetAabb().Size;
+            ctx.Check(size.Z < size.Y * 0.1f && size.Y > 0f,
+                $"the needle is flat in its own XY plane, so +Z is the sweep axis size={size}");
+        }
+
+        var faceRest = face.Transform;
+        var horizon = FindNamed(interior, "pfhorizon");
+        var horizonRest = horizon?.Transform;
+        var cluster = new GaugeCluster { SpeedMph = 200f, AltitudeFt = 500f };
+        try
+        {
+            panel.Apply(cluster);
+            // 0.7199957 deg/mph clockwise, i.e. negative about +Z.
+            float wantSpeed = -Mathf.DegToRad(GaugeCluster.SpeedAngleDeg(200f));
+            float gotSpeed = speed.Transform.Basis.GetEuler().Z;
+            ctx.Check(Mathf.Abs(Mathf.AngleDifference(gotSpeed, wantSpeed)) < 0.01f,
+                $"the speed needle takes its absolute angle got={gotSpeed:0.000} want={wantSpeed:0.000} rad");
+            float wantAlt = -Mathf.DegToRad(GaugeCluster.AltHundredsAngleDeg(500f));
+            float gotAlt = hundreds.Transform.Basis.GetEuler().Z;
+            ctx.Check(Mathf.Abs(Mathf.AngleDifference(gotAlt, wantAlt)) < 0.01f,
+                $"the long altimeter needle takes its absolute angle got={gotAlt:0.000} want={wantAlt:0.000} rad");
+            // ⚠ Only the needle moves: the dial it sweeps over is authored geometry.
+            ctx.Check(face.Transform.IsEqualApprox(faceRest), $"the dial face is left where it was built");
+            ctx.Check(!lowAlt.Visible, $"LOW ALT stays parked while the cluster's lamp is dark");
+
+            // A second write must REPLACE the angle, not accumulate onto it.
+            panel.Apply(cluster);
+            ctx.Check(Mathf.Abs(Mathf.AngleDifference(speed.Transform.Basis.GetEuler().Z, wantSpeed)) < 0.01f,
+                $"a second frame writes the same absolute angle rather than turning again");
+
+            // The horizon (BL-431 B12): N = Rz(-roll) . Rx(pitch), no gain/offset/clamp. A zero
+            // attitude first, since that has to equal the authored rest basis exactly.
+            ctx.Check(horizon != null && horizonRest != null, $"the interior carries pfhorizon");
+            if (horizon != null && horizonRest != null)
+            {
+                cluster.HorizonPitchRad = 0f;
+                cluster.HorizonRollRad = 0f;
+                panel.Apply(cluster);
+                ctx.Check(horizon.Transform.Basis.IsEqualApprox(horizonRest.Value.Basis),
+                    $"a zero attitude leaves pfhorizon at its authored basis");
+
+                float pitch = Mathf.DegToRad(12f);
+                float roll = Mathf.DegToRad(-25f);
+                cluster.HorizonPitchRad = pitch;
+                cluster.HorizonRollRad = roll;
+                panel.Apply(cluster);
+                var want = new Basis(Vector3.Back, -roll) * new Basis(Vector3.Right, pitch);
+                ctx.Check(horizon.Transform.Basis.IsEqualApprox(want),
+                    $"pfhorizon takes Rz(-roll).Rx(pitch) pitch={pitch:0.000} roll={roll:0.000} rad");
+                ctx.Check(horizon.Transform.Origin.IsEqualApprox(horizonRest.Value.Origin),
+                    $"pfhorizon's authored translation is untouched");
+            }
+        }
+        finally
+        {
+            cluster.Free();
+        }
+    }
+
+    // The belt lights take the loadout's colour tier (BL-431). A pristine plane reads all-green,
+    // which proves nothing, so this drives a spent belt and reads the material back. Able to fail:
+    // a drive that recolours nothing, or one that writes the shared built material and so repaints
+    // every indicator at once instead of the one position. Binds through CockpitGauges.Bind(builder),
+    // the same expression the live flight path calls, so a caller that regresses to the interior
+    // alone breaks here rather than only at the controls.
+    internal static void DrivenBelts(TestContext ctx, Node3D interior, PlaneBuilder builder,
+        GameZ planesGamez, TextureArchive textures)
+    {
+        var cluster = GaugeCluster.Build(planesGamez, ctx.PlaneName, textures, new List<DestroyablePart>());
+        var panel = CockpitGauges.Bind(builder);
+        if (cluster == null || panel == null)
+        {
+            ctx.Check(false, $"a real cluster and panel were built for the belt drive");
+            return;
+        }
+        try
+        {
+            // Not a fixed count: derived from the interior's own materials, so an empty-materials
+            // regression fails here instead of an all-green panel. "greenindicator", not bare
+            // "indicator", which also matches the still-unwired horizon's texture.
+            int expectedBelts = builder.InteriorMaterials.Count(m =>
+                m.TextureName.Contains("greenindicator", System.StringComparison.OrdinalIgnoreCase));
+            int expectedZones = builder.InteriorMaterials.Count(m =>
+                m.TextureName.Contains("hatchptrn", System.StringComparison.OrdinalIgnoreCase));
+            ctx.Check(panel.BeltCount > 0 && panel.BeltCount == expectedBelts,
+                $"belts bound matches the indicator-light materials the interior carries found={panel.BeltCount} materials={expectedBelts}");
+            ctx.Check(panel.DamageZoneCount > 0 && panel.DamageZoneCount == expectedZones,
+                $"damage zones bound matches the hatch materials the interior carries found={panel.DamageZoneCount} materials={expectedZones}");
+            // Position 0 spent, position 1 full: one dial, two tiers, so a shared-material write
+            // cannot pass this.
+            cluster.GunGauge = new GaugeCluster.WeaponGauge { Slots = new[] { 0f, 1f } };
+            panel.Apply(cluster);
+            var names = new Dictionary<ulong, string>();
+            foreach (var (material, texture) in builder.InteriorMaterials)
+                names[material.GetInstanceId()] = texture;
+            // ⚠ An indicator carries TWO driven surfaces on different colour cycles (the light and
+            // its hilite bar), so a check that reads "the first albedo" reads whichever the mesh
+            // happens to order first and proves nothing.
+            var spentLight = AlbedoOf(FindNamed(interior, "ggindicator0"), names, hilite: false);
+            var spentBar = AlbedoOf(FindNamed(interior, "ggindicator0"), names, hilite: true);
+            var fullLight = AlbedoOf(FindNamed(interior, "ggindicator1"), names, hilite: false);
+            ctx.Check(spentLight != null && spentBar != null && fullLight != null,
+                $"the light and the hilite bar were both found on the indicators");
+            ctx.Check(spentLight == cluster.BeltLightTexture(2),
+                $"a spent belt position's light takes the red variant");
+            ctx.Check(spentBar == cluster.BeltHiliteTexture(2),
+                $"and its hilite bar takes the red bar, on its own cycle");
+            ctx.Check(fullLight == cluster.BeltLightTexture(0),
+                $"the position beside it stays green, so the write is per-node");
+
+            // The damage zones read the PART name, which is the node's minus its "damage" suffix.
+            // A wrong key reads as a permanently green dial, so drive one zone to its red band.
+            cluster.PartFraction = part =>
+                part.Equals("nose", System.StringComparison.OrdinalIgnoreCase) ? 0.05f : 1f;
+            panel.Apply(cluster);
+            var hurt = AlbedoOf(FindNamed(interior, "nosedamage"), names, hilite: true);
+            var intact = AlbedoOf(FindNamed(interior, "taildamage"), names, hilite: true);
+            ctx.Check(hurt != null && intact != null, $"the damage dial's zones were found");
+            ctx.Check(hurt == cluster.ZoneHiliteTexture(3),
+                $"a zone at 5% takes the red border");
+            ctx.Check(intact == cluster.ZoneHiliteTexture(0),
+                $"an untouched zone beside it stays green");
+        }
+        finally
+        {
+            cluster.Free();
+        }
+    }
+
+    // The albedo the driven surface of the requested KIND is pointing at right now: the hilite bar
+    // or the light beside it, told apart by the texture each was built from.
+    internal static Texture2D? AlbedoOf(Node3D? node, IReadOnlyDictionary<ulong, string> names, bool hilite)
+    {
+        if (node == null)
+        {
+            return null;
+        }
+        if (node is MeshInstance3D mesh && mesh.Mesh != null)
+        {
+            for (int i = 0; i < mesh.Mesh.GetSurfaceCount(); i++)
+            {
+                if (mesh.Mesh.SurfaceGetMaterial(i) is not ShaderMaterial built
+                    || !names.TryGetValue(built.GetInstanceId(), out string? texture)
+                    || texture.Contains("hilite", System.StringComparison.OrdinalIgnoreCase) != hilite)
+                {
+                    continue;
+                }
+                if (mesh.GetSurfaceOverrideMaterial(i) is ShaderMaterial live)
+                {
+                    return live.GetShaderParameter("albedo_tex").As<Texture2D>();
+                }
+            }
+        }
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node3D n3d && AlbedoOf(n3d, names, hilite) is { } hit)
+            {
+                return hit;
+            }
+        }
+        return null;
+    }
+
+    // The first mesh at or under this node, for a geometry assertion about it.
+    internal static MeshInstance3D? FirstMesh(Node3D root)
+    {
+        if (root is MeshInstance3D mesh)
+        {
+            return mesh;
+        }
+        foreach (var child in root.GetChildren())
+        {
+            if (child is Node3D n3d && FirstMesh(n3d) is { } hit)
+            {
+                return hit;
+            }
+        }
+        return null;
     }
 
     // The first node in the subtree carrying this ORIGINAL gamez name (SceneBuilder sanitizes and
