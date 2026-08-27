@@ -919,6 +919,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
   so the ledger keeps "a wreck flies the near-field plant" as an exception. Decode when and by
   whom it is set so the wreck can fly the decoded arm.
+- `BL-562` `[Perf]` **The physics tick costs ~39 ms per frame late in CM11 (C2/M02), so the sim runs
+  at about half of wall time.** *Evidence:* a flown CM11 session's hitch records
+  (`.scratch/logs/game-*.out`, `[perf] hitch … physics_ms=…`) show the frame baseline rising from
+  9 ms at launch to 30–40 ms with `physics_ms` at ~39 ms of it once six aircraft, the trailer's dust
+  puffers and the roadblocks are live; 2770 rendered frames then covered 52 sim seconds (one
+  parked-plane `flight:` line per sim second). Godot caps physics catch-up per frame, so a
+  physics-bound frame lets the sim clock fall behind the wall clock: the mission takes about twice
+  as long to play as its `TimeMs` records, and every `_Process`-driven consumer that still reads wall
+  time drifts against the aircraft (the animation runtime moved onto the physics tick for this
+  reason, see `AnimRuntime._PhysicsProcess` and the `anim-clock-realtime` suite). *Fix shape:* profile
+  one CM11 session past the roadblocks with `--perf` and the hitch sidecar's `samples`, attribute
+  the physics step (`FlightController._PhysicsProcess` chain: six flight models, AI mode machines,
+  projectile sweeps, the objective graph's per-tick scans, puffer emitters at 1 m distance
+  intervals on the trailer) and bring the step under the 16.7 ms budget on the reference rig; a
+  perf scenario in `analysis/perf/scenarios.json` for the late-CM11 state is the regression gate.
+  *⚠ Traps:* a wall-clock measurement of anything in that session is not a sim measurement, so
+  compare durations in sim seconds (the log's 1 Hz `flight:` cadence, `GameClock.Frame`), never in
+  wall seconds; do not raise `max_physics_steps_per_frame`, which only deepens the catch-up spiral.
 
 ## Environment & world
 
@@ -2548,6 +2566,68 @@ usual.
   code. Removing evasive maneuvers on damage is a large behavioural change to make on one line of a
   decode page, and the steady-hand roll itself is not in question, only what a failed roll does.
   *Cross-refs:* `BL-557` (the other open TTK cause), `docs/org/aiControlLaw.md`.
+
+- `BL-563` `[Bug]` **CM12 (C2/M01) cannot be won: `DEDG` counts a deactivated roster member as
+  alive, so the wave chain that wakes the security Furys and the Knight Firebrands never fires.**
+  *Evidence:* a flown CM12 session (`.scratch/logs/menu-20260827-215135.log`): the four
+  `secgyro_*` are downed, and after that no `ai mode:` line ever names `secfury_1..4` or
+  `hkfirebrand_1/2/3/9`, which spawn `deactivated 1` and are only put in play by OBJECTIVE66 /
+  OBJECTIVE67's `WAKEUP_ENEMIES`. Both sit behind `DEDG [1, 2]` (OBJECTIVE12, OBJECTIVE65), "group 1
+  down to two". Group 1 is the four gyros plus the seven deactivated blocks, and
+  `CampaignDirector.RosterInputs.GroupLiveCount` counts every un-crashed member, deactivated ones
+  included, so the count can never fall below seven and the mission stalls with no enemy left to
+  find. "Destroy all enemy fighters" (OBJECTIVE46, `PRIMARY 3`, `DEDG [1, 0]`) is only woken by
+  OBJECTIVE68 (`DEDG [2, 0]`, `hkfirebrand_9`'s death) at the end of that chain. The comment on
+  `GroupLiveCount` ("a deactivated member counts as alive, as the decoded walk counts a parked
+  one") is wrong: the activate/deactivate primitive `FUN_004b0f40` sets the dead byte `+0x91d`
+  together with `+0x945` on deactivation, and the DEDG counter `FUN_00465850` counts a vehicle only
+  when `+0x91d == 0`, so a deactivated member is dead to `DEDG` until `WAKEUP_ENEMIES` clears both
+  bytes. *Fix shape:* skip `Inert` members in `GroupLiveCount` (crashed OR inert is "not
+  counted"), correct the comment, and add a unit test on a two-member group with one inert block
+  (`ObjectiveGraphTests` has the DEDG harness). Then fly CM12 through: two gyros down wakes the
+  Furys, the Goose flying plus group 1 down to two wakes the Firebrands, `hkfirebrand_9` down wakes
+  primary 3. *⚠ Traps:* CM02's `campaign-squad-wake` suite (BL-499) has a deactivated squad behind
+  a `DEDG [1, 0]` gate; check which group that squad authors before assuming the suite's
+  expectation survives the change, and mint a follow-up if it does not. The `DEDG` generator form
+  (third argument) is a separate, unimplemented count and not this bug. *Cross-refs:* `BL-499`,
+  `BL-564`, `BL-565`, `docs/formats/objectives.md` (`DEDG` row), `docs/org/aiPilot.md`
+  (the activation primitive).
+
+- `BL-564` `[Bug]` **CM12 (C2/M01): the `eshipg31` generator launches Bloodhawks at the world
+  origin instead of patrol boats at the pirate ship.** *Evidence:* the same session: the wave
+  arrives as `ai17_player_bhawk`, `ai18_player_bhawk`, `ai19_player_bhawk`, tracked by the target
+  HUD at 7.6 km from the player, and two of the three ram terrain `g34586` within seconds at
+  `pos=(5,5,-109)`, the world origin; the third patrols `M2Patrol1`, a water net, and is shot down
+  later. Two causes. (1) The generator's `vehicle.params` label `Eshipg31_params` resolves to the
+  roster block `patrolboat_eg0` (def 4, `patrolboat`, a surface vehicle), which
+  `CampaignRosterPlan.Build` reports in `Skipped` rather than planning, so `GeneratorTemplates`
+  has no entry and `GameSession.SpawnFromGenerator` falls back to `SessionSpec.GeneratorsPlane`,
+  `player_bhawk`. The mission's boats are the `patrolboat_eg0..5` that OBJECTIVE58-63 and
+  OBJECTIVE70 move between `M2GoosePatrol` and `M2PatrolStop`. (2) The host node `eshipg31` is a
+  model-less group node with a zero local translation whose geometry sits at its node bbox,
+  about (-5892, 10, -4412); `AiGeneratorRuntime.Spawn` drops at `Host.GlobalPosition`, which is
+  (0, 0, 0). *Fix shape:* decode the original's launch position for a generator whose host has no
+  model (`FUN_00452450`: the node's world matrix, or its bbox centre) and use that; then decide
+  what a surface-vehicle launch is in CSVM (a boat on a water net, not an aircraft), or at least
+  refuse the fallback airframe for a surface def so a boat generator launches nothing rather than
+  fighters. *⚠ Traps:* the three Bloodhawks are group 3 and never count toward "Destroy all
+  enemy fighters" (`DEDG [1, 0]`); killing them is not progress. Do not "fix" (1) by handing the
+  generator a fighter def. *Cross-refs:* `BL-522` (launch placement from a surface host),
+  `BL-527`, `BL-563`, `docs/formats/mission-entities/enemy-generators.md`.
+
+- `BL-565` `[Fidelity]` **`DEDG`'s decoded side effect, widening every counted member's engagement
+  volume to 9,000 m, is not applied.** *Evidence:* `docs/formats/objectives.md`'s `DEDG` row and
+  `FUN_00465850`: each tick an awake `DEDG` objective raises every live member of the watched
+  group to a 9,000 m activation radius and a ±9,000 m altitude band, so a watched group never
+  disengages by distance and comes to the player from anywhere on the map. CSVM's `DedgMet` only
+  counts; the members keep `AiModeMachine.ActivationRange` at the 2,000 m `min_ai_active_dist`
+  floor and drop back to patrol at "target lost" / "beyond return range", which is how a
+  survivor of a wave sits on its net 8 km away while the objective waits on it. *Fix shape:*
+  have `GroupLiveCount` (or a sibling the graph calls per awake DEDG) apply the widening to each
+  counted member's machine: `ActivationRange = max(ActivationRange, 9000)`, and the altitude bands
+  once they have a consumer. *⚠ Traps:* the widening is per awake objective per tick, so a
+  napped or killed `DEDG` stops widening but the original never shrinks the volume back; match
+  that (set, never reset). *Cross-refs:* `BL-563`, `BL-523` (the patrol/pursue cycle).
 
 ## Tooling, platform & docs
 
