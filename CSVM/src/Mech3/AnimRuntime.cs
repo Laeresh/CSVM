@@ -469,6 +469,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly List<Vector3I> _rangeCheckCells = new();
 
+    // Each deferred anchor's range origin in the anchor's own frame, measured once it is in the
+    // tree. The world-space origin is a mesh-bounds walk over the anchor's subtree, and re-walking
+    // 69 world subtrees on every cell crossing allocated tens of MB/s of finalizable Godot
+    // wrappers; the local offset only moves when the anchor does, so it is remeasured never.
+    private readonly Dictionary<Node3D, Vector3> _rangeOriginLocal = new();
+
     private Node3D _root = null!;
 
     private AnimProgram _program = null!;
@@ -1011,6 +1017,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         HideUncoveredDestroyed();
         _rangeDeferred.Clear(); // a quiet stage must not proximity-start ambient defs
+        _rangeOriginLocal.Clear();
         _ambientStarted = false;
         Log.Info("anim", $"anim: ambient stopped — {_instances.Count} live instance(s) kept, {Motions.Count} live motion(s)");
     }
@@ -1685,14 +1692,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return xform.Origin;
     }
 
-    // Where a range gate measures FROM. Not the node origin: an absolute-modelled gamez subtree
-    // holds its vertices in world space under an identity transform, so its origin is the map
-    // corner and a band around it can never be entered (CM07's `hangar_3` is one). VisualOriginOf
-    // IS the origin for a normally-transformed node, so the defs deferred at bootstrap keep the
-    // distance they have always measured.
-    private static Vector3 RangeOriginOf(Node3D node) =>
-        node.IsInsideTree() ? VisualOriginOf(node) : WorldPos(node);
-
     private static Vector3I CheckCellOf(Vector3 pos) => new(
         Mathf.FloorToInt(pos.X / RangeCheckCellSize),
         Mathf.FloorToInt(pos.Y / RangeCheckCellSize),
@@ -1851,6 +1850,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // only near the player. An unanchored one has no position to measure from.
         int startupRun = 0;
         _rangeDeferred.Clear();
+        _rangeOriginLocal.Clear();
         _rangeLibraryCallDefs.Clear();
         foreach (var def in _program.Defs.Where(d => d.OnStartup))
             foreach (var anchor in Anchors(def))
@@ -1957,6 +1957,23 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return false;
     }
 
+    // Where a range gate measures FROM. Not the node origin: an absolute-modelled gamez subtree
+    // holds its vertices in world space under an identity transform, so its origin is the map
+    // corner and a band around it can never be entered (CM07's `hangar_3` is one). VisualOriginOf
+    // IS the origin for a normally-transformed node, so the defs deferred at bootstrap keep the
+    // distance they have always measured. Measured once per anchor and carried in the anchor's
+    // frame from then on (see _rangeOriginLocal).
+    private Vector3 RangeOriginOf(Node3D node)
+    {
+        if (!node.IsInsideTree())
+            return WorldPos(node);
+        if (_rangeOriginLocal.TryGetValue(node, out var local))
+            return node.GlobalTransform * local;
+        var origin = VisualOriginOf(node);
+        _rangeOriginLocal[node] = node.GlobalTransform.AffineInverse() * origin;
+        return origin;
+    }
+
     // Starts any deferred ambient EXECUTION_BY_RANGE def whose anchor the player has come
     // within range of. One-shot per (def, anchor): once started, the def runs exactly as an
     // undeferred ON_STARTUP would (its own events decide what persists).
@@ -1980,6 +1997,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             if (!IsInstanceValid(anchor))
             {
                 _rangeDeferred.RemoveAt(i);
+                _rangeOriginLocal.Remove(anchor);
                 continue;
             }
             var anchorPos = RangeOriginOf(anchor);

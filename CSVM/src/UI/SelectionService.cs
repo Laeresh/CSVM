@@ -40,6 +40,10 @@ public sealed partial class SelectionService : Node
     // a truncated list that drops the rung under test is worse than a long one.
     private const int MaxCrumbs = 9;
 
+    // The same key as a StringName, built once: the string const converts to a fresh finalizable
+    // StringName on every HasMeta call, which the per-node box walk cannot afford.
+    private static readonly StringName OverlayMetaName = OverlayMeta;
+
     // The breadcrumb's text conventions follow NodeLabels: the same amber as a floating node name,
     // because this is the same question ("what is that thing called").
     private static readonly Color Amber = new(1f, 0.93f, 0.35f);
@@ -111,9 +115,12 @@ public sealed partial class SelectionService : Node
     {
         Aabb merged = default;
         bool any = false;
+        // Indexed children and a prebuilt StringName, never GetChildren() or the string const:
+        // each of those allocates a finalizable Godot wrapper per node visited, and a walk over a
+        // large world subtree every few frames is what fed the gen1 collection pauses.
         void Walk(Node n)
         {
-            if (n is Node3D overlay && overlay.HasMeta(OverlayMeta))
+            if (n is Node3D overlay && overlay.HasMeta(OverlayMetaName))
             {
                 return; // a tool's drawing parked on this object is not part of its extent
             }
@@ -127,9 +134,10 @@ public sealed partial class SelectionService : Node
                     any = true;
                 }
             }
-            foreach (var child in n.GetChildren())
+            int count = n.GetChildCount();
+            for (int i = 0; i < count; i++)
             {
-                Walk(child);
+                Walk(n.GetChild(i));
             }
         }
         Walk(root);

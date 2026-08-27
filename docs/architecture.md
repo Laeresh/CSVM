@@ -911,7 +911,12 @@ form here (`Reparent`, keeping the LOCAL transform) once the sound-emitter form 
 which is how a cutscene composes its camera inside the node it frames; the decode is
 `docs/formats/anim-definitions/cutscenes.md`. A ranged startanim with an unplaced immediate callee is
 deferred until range; range-triggered and explicit mission-trigger calls may then lazily build their
-library-root callees, and an add-child may do the same for an explicitly named child.
+library-root callees, and an add-child may do the same for an explicitly named child. The range
+sweep (`TickDeferredByRange`) runs only when a player crosses an 8 m check cell, and it measures
+each anchor's range origin (`VisualOriginOf`, a mesh-bounds walk) once, carrying it in the anchor's
+own frame (`_rangeOriginLocal`) from then on: at cruise the sweep runs every few frames, and
+re-walking every deferred anchor's subtree per sweep allocated tens of MB/s of finalizable Godot
+wrappers, which is what fed the periodic gen1 collection pause.
 Every construction site hands over a sealed `TemplateStage`
 (`NewTemplateStage`/`ForEffects`/`ForCrashRig`). Sibling modules, each with its own entry: the
 sequence interpreter is `SequenceRunner.cs`, live motions are `Anim/MotionSet.cs`, name resolution
@@ -4105,6 +4110,10 @@ the current rung. `Current`/`Ladder`/`Level`/`CurrentBox` + the `Changed` event 
 other inspect tools read; `Select(node)` is the programmatic entry; `--debug-select=x,y[,up]`
 replays a click for scripted runs. `ExtraRoots` walks props parked beside the world content rather
 than under it (the anim lab's `--plane=` prop), each also capping its own ancestor ladder.
+`SubtreeWorldAabb` is the shared box measurement (`AnimRuntime.VisualOriginOf` and `NodeLab` read
+it too) and walks children by index with a prebuilt `StringName` for the overlay key: `GetChildren()`
+and a string-to-`StringName` conversion each allocate a finalizable wrapper per node visited, which
+a walk over a world subtree cannot afford on a per-frame path.
 
 ## src/UI/TargetingOverlay.cs
 The targeting overlay (F15, `--debug-targets`): a per-frame line from every turret gunner
