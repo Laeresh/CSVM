@@ -97,7 +97,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — CM07 and CM08
 
-21. ☐ `BL-526`: the rope ladder never deploys
+21. ❌ `BL-526`: the rope ladder never deploys
 22. ❌ `BL-527`: the second patrol's Peacemaker spawns under the ground
 23. ❌ `BL-518`: a stripe-textured surface stands in front of the zeppelin hangar
 24. ☑ `BL-528`: the Blue Streak flies with the stock Bloodhawk fit and no nitro
@@ -624,7 +624,7 @@ already treats their moving platform correctly (`TurretController.PlatformOf`, t
 
 # Wave C — CM07 and CM08
 
-## C21 ☐ `BL-526`: the rope ladder never deploys
+## C21 ❌ `BL-526`: the rope ladder never deploys
 
 **Goal.** CM07 (C1/M02)'s pickup shows its rope ladder so the pickup step can be flown.
 
@@ -634,17 +634,48 @@ ladder is an animated node the pickup script activates, and `BL-035` lists the e
 runtime still drops, so a deploy driven by one of them is silent. `<TODO: re-verify still-open
 against the code>`
 
-**Approach.** Find the ladder's def and the event that shows it, then check the runtime's dispatch
-for that event kind. Decode lane: the dropped event kind's handler in the original's dispatch table
-(`PLAN-anim-original-match.md`'s 47-slot table), if it is one of `BL-035`'s.
+**Disproof.** Re-verified against the code and the decompile: not a dropped event kind. `player`'s
+`drop_ladder` def (`extracted/C1/M02/zrdr/ladder.zrd.json`) calls `gen_drop_ladder` with
+`WAIT_FOR_COMPLETION`, which does the visible work unconditionally with kinds `AnimRuntime` already
+handles (`OBJECT_ADD_CHILD`, `OBJECT_ACTIVE_STATE`, `OBJECT_MOTION_SI_SCRIPT`, `LOOP`,
+`CALL_SEQUENCE`), then a `CALLBACK[123]` fires only afterward. Code 123 is one of the two gap codes
+`docs/formats/anim-definitions/cutscenes.md` already names as reaching no case in the
+mission-script host and undecoded ("nothing in the exe tells us what 14 or 123 were meant to do");
+it is not gating the deploy. `BL-035`'s dropped kinds (`CALLBACK`, `OBJECT_CYCLE_TEXTURE`, one-shot
+`SOUND`) play no role here and are ruled out as the cause.
+
+The real gap: no `.zrd` file anywhere in C1/M02 or the shared chapter `landings.zrd` ever authors a
+`CALL_ANIMATION[drop_ladder]` — an exhaustive search of every reader-form `.zrd.json` under
+`extracted/C1/M02` (`copilot_pkup`, `ladder`, `objectives`, `startanims`, `pickups`, `dzones`,
+`mis_anim`, `hangar_drop`, `hangar_panic`, `objcomplete`) turns up `drop_ladder` only as a
+`STOP_ANIMATION`/`INVALIDATE_ANIMATION` target in the pickup-completion def (`lookat_copilotpkup`)
+and as its own definition; nothing ever calls it. Ghidra confirms why: the string `"drop_ladder"`
+(`00627b64`) has exactly one xref, inside `FUN_004735b0`, a hardcoded C1/M02-specific mission-init
+function, not the generic `.zrd` reader path. It resolves both `drop_ladder` and `retract_ladder`
+by name into a small heap object (`FUN_004456f0` ctor, global `DAT_0071c324`) that also resolves
+node `ladder_pos` and registers its own `CALLBACK` host (`FUN_004ee160`, one of the 13
+install-wide registration sites `cutscenes.md` already lists, distinct from `landings.zrd`'s). The
+per-frame trigger lives in the main world tick `FUN_004897c0`: outside a cutscene, gated on an
+attitude/alignment test (`0.707 < player_field[100]`, cos 45°, against the switch object's own
+facing) and a proximity/membership test (`FUN_00471690` against the switch object's own list), it
+deploys the ladder through the switch object's own vtable (`FUN_004455e0`) or retracts it
+(`FUN_00445620`) otherwise — never through `CALL_ANIMATION`, never through `pickups.zrd` or
+`landings.zrd`.
+
+This is not an `AnimRuntime` dispatch gap; it is a bespoke, per-mission native gameplay object
+CSVM has never modeled: an attitude-and-proximity-gated "ladder switch" evaluated every tick,
+independent of the pickup-timing/landing-approach machinery `2aa7d77d` already landed. Building it
+needs `FUN_00471690`'s membership test and `player_field[100]`'s exact meaning decoded further
+first; that decode, not an event-kind handler, is the next step, and it is out of this item's file
+scope (`AnimRuntime`'s event-kind dispatch, `AnimDefs`/`CompiledAnim` readers).
 
 **Model recommendation.** medium.
 
-**Verify.** `--anim-lab` on the pickup def shows the ladder node active; D32.
+**Verify.** <pending orchestrator run>
 
-**⚠ Traps.** If the fix is a new event kind, land it as such with its `docs/formats/` entry and
-strike it from `BL-035`, not as a special case for the ladder. The train pickup cutscene fix
-(`2aa7d77d`) is adjacent history.
+**⚠ Traps.** `BL-035` is not the cause; do not land a new event-kind handler here, it would be a
+no-op. The train pickup cutscene fix (`2aa7d77d`) already covers `pickups.zrd`/`landings.zrd`;
+the ladder switch is a separate, undecoded native object.
 
 ## C22 ❌ `BL-527`: the second patrol's Peacemaker spawns under the ground
 
