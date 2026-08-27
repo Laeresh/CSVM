@@ -359,6 +359,11 @@ public partial class FlightController : Node3D
     private const float FallbackSpawnThrottle = 0.5f;
     private const float FallbackSpawnSpeed = 53.6f;
     private const float CarrierDropThrottle = 0.1f;
+
+    // The speed a cutscene's re-placement flies out at, along the placed nose. The original writes
+    // it straight into the vehicle's velocity at the re-placing callback, as the placed rotation's
+    // own forward axis times this literal (docs/formats/anim-definitions/cutscenes.md).
+    private const float ReplacedSpeed = 53.6448f;
     private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
     // The nitro_decay def's authored opacity fade (RUN_TIME 1.0), which is how long a re-engage
@@ -482,8 +487,10 @@ public partial class FlightController : Node3D
     private Transform3D _simCurr = Transform3D.Identity;
     private Transform3D _renderPose = Transform3D.Identity; // the pose actually drawn this frame
     // Where the aircraft stood when a cutscene began staging it (StageAt), and the flag that it is
-    // being staged at all.
+    // being staged at all. ResumeAt replaces the pose with the one the cutscene re-places the pilot
+    // at, and raises the flag below so the hand-back moves the flight model too.
     private Transform3D? _stagedFrom;
+    private bool _resumePlaced;
 
     /// <summary>Raised once per crash, at <see cref="Crash"/>: (victim <see cref="PlayerIndex"/>,
     /// killer shooter id). Null for terrain, mid-air, an unowned round or any other crash cause. A
@@ -1044,7 +1051,29 @@ public partial class FlightController : Node3D
         _stagedFrom = null;
         GlobalTransform = home;
         _simPrev = _simCurr = _renderPose = home;
+        // A re-placement moves the flight model as well as the drawn pose: the pin the held steps
+        // re-assert is what the aeroplane flies out of once the hold clears.
+        if (_resumePlaced)
+        {
+            _resumePlaced = false;
+            _heldPos = home.Origin;
+            _heldAttitude = home.Basis;
+            _heldPinned = true;
+            _model.Reset(_heldPos, _heldAttitude, ReplacedSpeed, _model.Throttle);
+        }
+
         ApplyPresence();
+    }
+
+    /// <summary>The re-placement a cutscene's own callback authors: the aeroplane flies out of
+    /// <paramref name="pose"/> rather than out of where <see cref="StageAt"/> found it, at the
+    /// original's own release speed along the placed nose. Applied at the hand-back, because the
+    /// hold zeroes the model's speed on every step it runs.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public void ResumeAt(Transform3D pose)
+    {
+        _stagedFrom = pose.Orthonormalized();
+        _resumePlaced = true;
     }
 
     /// <summary>Weapon lab: point the gun selector at a firable gun group (0-based, clamped) —

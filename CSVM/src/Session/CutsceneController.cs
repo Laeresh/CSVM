@@ -70,6 +70,7 @@ public sealed partial class CutsceneController : Node
     private const int CodeCamParamsRestore = 667;
     private const int CodeParkAi = 913;
     private const int CodeRevealAi = 914;
+    private const int CodeReplacePlayer = 951;
 
     // ANIM_STATE's RUNNING, the value AnimRuntime.AnimStateOf reports while an instance is live.
     private const int AnimRunning = 2;
@@ -274,6 +275,7 @@ public sealed partial class CutsceneController : Node
             case CodeCamParamsRestore:
             case CodeHandoff:
             case CodeRestoreSystems:
+            case CodeReplacePlayer:
                 break;
             default:
                 if (AirframeSwapCodes.For(code) != null)
@@ -489,6 +491,9 @@ public sealed partial class CutsceneController : Node
                 OutOfFlight = false;
                 ApplyOutOfFlight(false);
                 break;
+            case CodeReplacePlayer:
+                ReplacePlayer();
+                break;
             case CodeRestoreSystems:
                 foreach (var pilot in Pilots())
                 {
@@ -628,8 +633,8 @@ public sealed partial class CutsceneController : Node
     // The pose half of the original's `player` node: an intro activates it, reparents it under the
     // airship and flies it on an SI script, and the aeroplane that follows it is whichever airframe
     // the pilot flies. Re-asserted every tick rather than latched, so a respawn cannot take the
-    // model back off the screen mid-cutscene. Cleared at the handoff, which puts the aircraft back
-    // where the mission spawned it: the drop's own end pose is not what a CSVM session starts from.
+    // model back off the screen mid-cutscene. Cleared at the handoff, which hands the aeroplane back
+    // the pose it held before the staging unless the definition re-placed it (ReplacePlayer).
     private void StagePlayerAircraft()
     {
         if (_playerMarker == null)
@@ -644,6 +649,28 @@ public sealed partial class CutsceneController : Node
         {
             pilot.StageAt(pose);
         }
+    }
+
+    // Where the pilot flies out of: the `player` node's world pose, read the moment the definition
+    // asks for it. The original writes that pose straight into the vehicle's own position, rotation
+    // and velocity, so this reads the marker whether or not it is drawn, and the aeroplane's own
+    // hand-back target moves with it (docs/formats/anim-definitions/cutscenes.md).
+    private void ReplacePlayer()
+    {
+        if (_playerMarker == null)
+        {
+            GD.Print($"cutscene: callback {CodeReplacePlayer} re-places the pilot, but this session " +
+                     $"staged no '{AircraftStage.PlayerNode}' to read a pose off");
+            return;
+        }
+
+        var pose = AnimRuntime.WorldTransform(_playerMarker, out _);
+        foreach (var pilot in Pilots())
+        {
+            pilot.ResumeAt(pose);
+        }
+
+        GD.Print($"cutscene: '{Anim}' re-places the pilot at {pose.Origin}");
     }
 
     private void MirrorCamera()

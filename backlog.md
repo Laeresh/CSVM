@@ -2120,15 +2120,6 @@ usual.
   have order dependencies (`BL-541`'s closing record); play them, do not drop them.
   *Cross-refs:* `BL-551`; `docs/PLAN-M5-polish-2.md` D15 and D21.
 
-- `BL-553` `[Fidelity]` **After CM01's drop-off cutscene the original re-places the player south of the
-  archipelago facing east; CSVM resumes where the cutscene left the aeroplane.** Seen at the
-  controls; the placement looked independent of the player's heading going in. *Fix shape:* the
-  drop-off definition's handoff or the mission script carries a placement (a `WARP_VEHICLE`, a
-  `RESET_STATE` pose, or a spawn record the handoff re-applies); read CM01's `objectives.zrd` and
-  the drop-off's closing sequence for it, and compare with the intro's handoff, which does re-place
-  (`FlightController.StageAt` hands back the spawn pose). *Cross-refs:* `docs/formats/objectives.md`;
-  `docs/PLAN-M5-polish-2.md` D20 and D21.
-
 - `BL-554` `[Bug]` `[Owed-playtest]` **The captured Balmoral's British livery still does not reach the
   player's hull in a flown session.** Seen at the controls on CM02 with the livery carry landed:
   the new hull wears the Fortune Hunters paint. The swap suite passes because its stand-in spawns

@@ -3186,7 +3186,8 @@ entry): this node holds one privately, forwards `Crashed`/`Destroyed`/`WreckFall
 onto it, and performs what a transition reports rather than deciding it. `StageAt` is the one
 exception to `Inert` meaning undrawn: an intro cutscene writes the pose the animation runtime put
 its `player` marker in and draws the model there, then hands back the pose the aircraft held when
-the staging began (`Session/CutsceneController.cs`). `BindCrashRig` takes the
+the staging began, or the one `ResumeAt` re-placed it at (`Session/CutsceneController.cs`).
+`BindCrashRig` takes the
 crash runtime, the def table, the anchor and the two respawn snapshots in one call, so the rig
 cannot be half-bound and only `CrashRuntime`/`CrashAnchor` stay readable as properties. The DEATH family (`CRASH into`, `midair aspect`, every
 `vehicle health exhausted`, `graze`, `embedded in terrain`, `AI ram`, `impact`) routes through
@@ -5127,7 +5128,10 @@ same instant rather than on the next tick, because the definition raising the co
 the aircraft in the same dispatch), 913/914 park and
 reveal the AI (only what this controller parked comes back), 666/667 the camera-parameter gate
 (tracked, not acted on — this engine applies that profile once per rig and never on a view change),
-1/10 the handoff and the in-flight systems; 965/966/967 the mid-mission airframe swap, through the
+1/10 the handoff and the in-flight systems; 951 the re-placement, which reads the staged `player`
+marker's world pose and moves the hand-back target through `FlightController.ResumeAt`, so a
+mid-mission drop or hookup leaves the pilot where its own definition parked that node rather than
+where it found them; 965/966/967 the mid-mission airframe swap, through the
 `SwapAirframe` seam the session fills with `FlightRoster.RunSwap` (the three codes, their def/node
 pairs and the hand-over decode are `Session/AirframeSwap.cs`); 14 and 123 are named gaps with one
 log line each. `Host` takes the raising definition's ROOT node name beside its anim name and passes

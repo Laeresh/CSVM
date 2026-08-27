@@ -26,6 +26,7 @@ using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
 using static CSVM.Testing.DropoffChutemanSuites;
+using static CSVM.Testing.DropoffPlacementSuites;
 using static CSVM.Testing.GeneratorRosterSuites;
 using static CSVM.Testing.InstantActionSuites;
 using static CSVM.Testing.IntroAircraftSuites;
@@ -159,6 +160,7 @@ public static class SuiteCatalog
         "cutscene-letterbox",
         "intro-aircraft-stage",
         "dropoff-chuteman-stage",
+        "dropoff-placement",
         "hangar-door-wake",
         "fog-state",
         "campaign-submarine",
@@ -811,6 +813,17 @@ public static class SuiteCatalog
             + "switched off as the shared def's own base state, and calling the drop's definition "
             + "directly (never the approach cone) switches it visible",
             DropoffChutemanStage));
+
+        // BL-553: the drop-off's handoff put the pilot back where the cutscene found them, so the
+        // pose its own definition parks the 'player' node at, and the callback that reads it, both
+        // went nowhere.
+        into.Add(new TestHarness.Suite("dropoff-placement",
+            "where a mid-mission cutscene leaves the pilot, over C3/M01's BUILT world: the mission's "
+            + "own cutscenes directory carries the definition raising the re-placement callback, and "
+            + "driving it directly (never the approach cone) flies the aeroplane out of the world "
+            + "pose that definition parked its 'player' node at, on that node's heading and at the "
+            + "original's release speed, rather than out of where the pilot flew in",
+            DropoffPlacement));
         into.Add(new TestHarness.Suite("hangar-door-wake",
             "hangar doors over C1/M04's real world (BL-350): OBJECTIVE1's WAKE_ANIM reaches "
             + "'hangar3_doors' through the director at its authored 2 s dormancy and its four "

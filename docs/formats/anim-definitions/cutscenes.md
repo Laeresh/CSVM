@@ -19,6 +19,7 @@ compiled shape are on the [landing page](../anim-definitions.md) and in
 - [`player`, and the two pointer spaces a definition addresses](#player-and-the-two-pointer-spaces-a-definition-addresses)
 - [`CALLBACK`: the dispatch chain](#callback-the-dispatch-chain)
 - [`CALLBACK` code reference](#callback-code-reference)
+  - [The re-placement code 951](#the-re-placement-code-951)
 - [The intro defs' eight dispatches](#the-intro-defs-eight-dispatches)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases)
 - [Evidence and limits](#evidence-and-limits)
@@ -548,7 +549,7 @@ install; the compiled archives carry the same events.
 | 800–803 | 1 each | mission-specific: damage `cargozep1`, and three "is any of this wing still alive" sweeps over `bhatwarhawk*`/`bhatbrigand*`/`bhatgyro*`. |
 | 913 | 7 | `FUN_0041f250` parks every AI vehicle that is not the player and not itself in a cutscene: sets its hold flag, pushes its next-think time far out, and deactivates its scene node. Plus `FUN_004a95f0` (detaches the wave director's node update), `FUN_004516e0(0)` and `FUN_00453660(0)`. **Clears the world of AI aircraft for the duration of the movie.** |
 | 914 | 8 | the exact inverse (`FUN_0041f2e0`, `FUN_004a9610`, `FUN_004516e0(1)`, `FUN_00453660(1)`), reactivating each AI vehicle with a randomised next-think. Skipped in multiplayer. |
-| 950, 951 | 14 for 951 | 951 teleports the player to the current camera pose and rebuilds its motion state; 950 is a lookup form. |
+| 950, 951 | 14 for 951 | 951 puts the player's aeroplane on its own `player` node's world pose and rebuilds its motion state from there. **The re-placement.** Decoded in full [below](#the-re-placement-code-951). 950 resolves the raising node to a vehicle (`FUN_00523990`) and hands it to `FUN_00422a70`; not decoded further, and authored nowhere in this install. |
 | 965, 966, 967 | 1, 1, 3 | swap the player onto a specific airframe (`pbloodhawk`/`player_bhawk`, `pwarhawk`/`player_warhawk`, `pbalmoral`/`player_balmoral`) with its armour and hardpoint table, and set the cutscene flags. The data-side counterpart of the intro defs' `check_balmoral`/`check_warhawk` branches. Decoded in full [below](#the-airframe-swap-codes-965-966-and-967). |
 | 968 | 1 | tests `bswingman_1`. |
 
@@ -658,6 +659,52 @@ flight.
 ⚠ Neither the hand-over nor the damage carry-over is asked for by anything in the shipped data.
 Both are keyed on the chapter and mission strings above, so a search of the data for a trigger comes
 back empty and **that emptiness is not evidence they do not exist.**
+
+### The re-placement code 951
+
+A cutscene that flies the pilot somewhere ends by leaving them there, and 951 is how. Case `0x3b7`
+of `FUN_0047e080` reads the player vehicle's own scene node (`DAT_0071c298+0xc`, which IS the
+`player` node the definition has been animating) and writes that node's world pose back into the
+vehicle's physics state:
+
+1. `FUN_004cf200(node, &pos)` and `FUN_004cf380(node, &rot)` read the node's WORLD position and
+   rotation, off its world matrix (`+0x84` and `+0x60`) or, for a node the walk has to resolve, off
+   a rebuilt one. Visibility does not enter it.
+2. `pos` goes to the vehicle's position `+0x204`, its previous position `+0x1a4`, and into every
+   entry of the trail list at `+0x6a4`..`+0x6a8` (stride `0x24`, offset `+0x18`), so no smoothing
+   drags the aeroplane back from where it was put.
+3. `rot` builds a quaternion at `+0x150` (`FUN_0053f610`) which `FUN_0053fa40` expands into the 3×3
+   basis at `+0x180`.
+4. The velocity `+0x924` is that basis's third axis (`+0x198`) times **-53.6448**, with `+0x930` and
+   `+0x934` its square and its length. The axis is unit length, so the aeroplane is released at
+   53.6448 units/s along its own nose. The same figure, rounded, is CSVM's fallback spawn speed.
+5. `FUN_004d1d50`/`FUN_004d1a30` write the pose back onto the node as a LOCAL transform, which is
+   what re-seats it after the definition's `OBJECT_ADD_CHILD` has put it back under `world1`.
+
+**Where the placement is authored: in the definition, not in the mission script.** `C3/M01`'s
+`player-texdrop` is the worked example. Its player sequence reparents `player` from `world1` under
+the chapter node `do_direction`, flies it there on SI script `td_player1` (local coordinates, ending
+about 123 m out), reparents it back under `world1`, and flies it on `td_player2`, whose keyframe
+bases are absolute world coordinates and which ends at **(-8469.09, 170.02, -4790.26)** on a fixed
+quaternion. Only then does it raise 951. The pose the pilot resumes at is therefore the last SI keyframe of the
+last script the definition runs in `world1`'s frame, and it is independent of the heading the pilot
+flew in on. `objectives.zrd` carries nothing about it; `WARP_VEHICLE` is a different verb on a
+different subject ([objectives.md](../objectives.md)).
+
+The 14 occurrences are one per mission's `piratezep-pzep_launch_player` (12 missions) plus every
+mid-mission definition that moves the pilot: the drops, the hookups and unhooks, the pickups, the
+wing walk and the trailer. `pzep_launch_player` never puts `player` back under `world1`, so its 951
+lands the pilot on `pzhookpoint`; **no mission in this install calls it**, and `generic_intro` raises
+no 951 at all, which is why the intro's own handoff is a hand-back to the authored spawn rather than
+a re-placement.
+
+**CSVM.** `CutsceneController.ReplacePlayer` reads the staged `player` marker's world transform and
+hands it to `FlightController.ResumeAt`, which moves the staging's hand-back target. The move is
+applied at the hand-back rather than at the callback, because the out-of-flight hold re-asserts its
+pin at zero speed on every step it runs and would wipe a speed written earlier. A session that
+staged no `player` marker (a mid-mission drop in a mission with no intro of its own, the limit named
+under [the `chuteman` staging gap](#a-mid-mission-drops-chuteman-is-the-same-staging-gap)) logs the
+callback and re-places nothing.
 
 ### Handoff and skip
 

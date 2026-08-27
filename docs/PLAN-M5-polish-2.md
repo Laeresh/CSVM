@@ -154,7 +154,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☐ The captured Balmoral's British livery still does not reach the player's hull live (`BL-554`)
 24. ☐ A skipped cutscene waits out the swap instead of jumping to its end (`BL-552`)
 25. ☐ The capture cutscene plays without the enemy Balmoral or the pilot switch, and inherits the roll (`BL-551`)
-26. ☐ The original re-places the player after CM01's drop-off (`BL-553`)
+26. ☑ The original re-places the player after CM01's drop-off (`BL-553`)
 27. ☐ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
 
 ## Dependency and parallelism notes
@@ -1262,7 +1262,7 @@ the goldens unchanged. Judged at the controls in E27.
 composition is shared (B7); a roll rule must be decoded, not tuned. ⚠ Extend
 `campaign-wingwalk-camera` rather than trust it: it reads the camera, not the figures.
 
-## E26 ☐ The original re-places the player after CM01's drop-off
+## E26 ☑ The original re-places the player after CM01's drop-off
 
 **Goal.** After the drop-off cutscene the player resumes where the original puts them, south of
 the archipelago facing east, whatever heading they flew in on.
@@ -1285,6 +1285,40 @@ controls in E27.
 
 **⚠ Traps.** ⚠ Do not hard-code the position; the data or the exe carries it. ⚠ The intro's
 `StageAt` hand-back must keep working.
+
+**Landed.** The placement is not in `objectives.zrd` and not a `WARP_VEHICLE`: CM01's
+`objectives.zrd` authors neither, and the only `WARP_VEHICLE` in the install (C4/M02, on
+`bhatgyro_1`) is a different verb on an AI vehicle, already decoded on
+`docs/formats/objectives.md`. It is the drop-off definition itself. `player-texdrop` reparents
+`player` under the chapter node `do_direction`, flies it there on SI script `td_player1`, reparents
+it back under `world1`, and flies it on `td_player2`, whose keyframe bases are absolute world
+coordinates and which ends at (-8469.09, 170.02, -4790.26) on one fixed quaternion. Only then does
+it raise callback **951**, which was a code no host answered. `FUN_0047e080` case `0x3b7` reads the player
+vehicle's own node's WORLD pose (`FUN_004cf200`/`FUN_004cf380`) into the vehicle's position, its
+previous position, every entry of its trail list and its orientation basis, and sets the velocity to
+that basis's third axis times -53.6448, so the aeroplane is released on the node's heading at
+53.6448 units/s. `CutsceneController.ReplacePlayer` hosts the code and hands the staged `player`
+marker's world transform to the new `FlightController.ResumeAt`, which moves `StageAt`'s hand-back
+target; the model move is applied at the hand-back rather than at the callback, because the
+out-of-flight hold re-asserts its pin at zero speed on every step it runs. `generic_intro` raises no
+951, so the intro's hand-back to the authored spawn is untouched. `pzep_launch_player` (the install's
+other twelve 951s) never puts `player` back under `world1` and is called by no mission here, so its
+951 landing the pilot on `pzhookpoint` is recorded rather than exercised. A session that staged no
+`player` marker logs the callback and re-places nothing, which is the same gate D20 named.
+`CampaignDirector`'s `WARP_VEHICLE` no-op is left as it was: nothing in CM01 reaches it.
+
+**Verified.** <pending orchestrator run>. In the lane: the new `dropoff-placement` suite drives
+C3/M01's own `texdrop` over its built world with the pilot flown in at the origin, finds the
+re-placing definition by scanning the mission's own `cutscenes\` definitions for callback 951, and
+reads `authored placement (-8469.094, 170.02452, -4790.2573), 9731.4 m apart` from the fly-in pose:
+`released at (-8469.094, 170.02452, -4790.2573), 0 m off the placement, facing dot 1, speed
+53.64 m/s`, PASS with engine errors clean. The baseline is the same run with `Act`'s 951 case
+emptied (METHOD-9): `released at (0, 0, 0), 9731.45 m off the placement, facing dot 0.315, speed
+0 m/s`, FAIL, and the tree restored (METHOD-17, `git diff` shows no leftover). Beside it: all 20
+`campaign-*` suites PASS, all 6 `landings-*` PASS, `intro-aircraft-stage`, `campaign-cutscene`,
+`cutscene-letterbox` and `dropoff-chuteman-stage` PASS, every run `errors=clean`; `dotnet test`
+2443/2443 with the suite-count assertion moved 144 → 145; `CheckCommentCaps.ps1 -Summary` clean.
+Judged at the controls in E27.
 
 ## E27 ☐ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
 
