@@ -4300,13 +4300,17 @@ cutscene binds it through its symbol table and an unbuilt claim makes the runtim
 intro alone: the archive is opened nowhere else in this build, so no other session pays for it.
 
 ## src/Mech3/AircraftStage.cs
-The two aircraft a story-mission intro animates, staged into a chapter world before the animation
-bind: `piratefighter` built from the shared aircraft archive as a prop with no pilot and switched
-off until the intro activates it, and a bodiless `player` marker the flown aircraft is posed onto.
-Both carry a rebased gamez index (`PointerBaseOf`: the chapter's node count rounded up to the next
-multiple of 2500), which is what makes a compiled intro's cross-archive symbol table bind them
-instead of claiming a name with no node. Built only for a mission whose start-anims name an intro,
-so every other session's node census is exactly what it was. The pose half is
+The three aircraft-archive subtrees a story-mission intro or a chuteman-carrying drop cutscene
+animates, staged into a chapter world before the animation bind: `piratefighter` built from the
+shared aircraft archive as a prop with no pilot and switched off until the intro activates it, a
+bodiless `player` marker the flown aircraft is posed onto, and `chuteman`'s parachutist subtree
+(`chutemanparent` → `pilot`/`stamp`), switched off the same way `piratefighter` is until a
+mid-mission drop's own definition (e.g. C3/M01's `tdchute`) reparents and activates it (`BL-540`).
+All three carry a rebased gamez index (`PointerBaseOf`: the chapter's node count rounded up to the
+next multiple of 2500), which is what makes a compiled definition's cross-archive symbol table
+bind them instead of claiming a name with no node. Built only for a mission whose start-anims name
+an intro (the same gate as before; a mid-mission drop with no intro of its own is not staged here,
+a named gap), so every other session's node census is exactly what it was. The pose half is
 `Session/CutsceneController.cs`; the decode is
 `docs/formats/anim-definitions/cutscenes.md`.
 

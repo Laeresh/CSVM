@@ -263,6 +263,29 @@ DEVASTATOR's copies, since that is the airframe the archive's `player` wrapper h
 anything else leaves those four events unresolved, which is correct: the states they assert are the
 model's own base states, and the flown airframe already carries them.
 
+### A mid-mission drop's `chuteman` is the same staging gap
+
+The intro is not the only definition that addresses a name below the aircraft archive's base.
+C3/M01's drop-off (`tex_drop.zrd`) plays `do_approachN` → `player-texdrop`, whose `CALL_ANIMATION
+[tdchute]` starts the `chuteman`-named definition compiled as `chuteman-tdchute.json`: it deletes
+`chuteman` from `world1`, adds it under `do_direction`, switches it `ACTIVE`, and runs an SI script
+over `chutemanparent`, `pilot` and `stamp` in turn (`snd_chuteopen` follows). `chuteman` is
+aircraft-archive node **2288** (a parentless `Object3d`, model-less, one child `chutemanparent` at
+2289, which fans to `pilot` at 2290, the parachutist's own mesh, and `stamp`, the parachute canopy,
+at 2291) — the same archive `player`/`piratefighter` come from, addressed the same way: C3's base
+7500 makes the compiled def's symbol table read `chuteman` 9788, `chutemanparent` 9789, `pilot`
+9790, `stamp` 9791, each exactly `2288..2291 + 7500`. The shared `chuteman.zrd` reader ships the
+node `INACTIVE` as its own `RESET_STATE`, the same base state `piratefighter` ships in.
+
+Before `BL-540`, `AircraftStage` staged `player`/`piratefighter` alone, so `chuteman`'s subtree
+never joined the runtime's node table: the drop's own definition claimed a symbol with a null
+binding and the parachutist was invisible, seen at the controls with no error (the resolver's
+"claimed-but-unbuilt index" guard is deliberately silent, `AnimRuntime.Targets`). CSVM now stages
+`chuteman` beside the other two, under the same gate (a mission whose start-anims name an intro —
+C3/M01 has one), switched off until the drop's own `CALL_ANIMATION` reparents and activates it. A
+mid-mission drop in a mission with no intro of its own is not staged by this path; see
+`docs/architecture.md`'s `AircraftStage` entry.
+
 ## `CALLBACK`: the dispatch chain
 
 | stage | where | what happens |

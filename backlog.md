@@ -2156,12 +2156,6 @@ usual.
   *Cross-refs:* `BL-457`; `docs/org/aiPilot.md`; `docs/PLAN-M5-polish-2.md` A13.
   *Sortie:* not judged on CM01, because the wingman was kilometres away after the intro (`BL-457`).
 
-- `BL-540` `[Bug]` `[Owed-playtest]` **CM01's drop-off cutscene shows no parachutist.** Seen at the
-  controls: the drop-off plays with the chute man invisible. *Fix shape:* find which node the
-  definition activates for him (the drop-off's own `ObjectActiveState` list) and why it does not
-  resolve or draw; the intro's aircraft needed the same cross-archive staging (`AircraftStage`), so
-  a node from the shared archive is the first suspect. *Cross-refs:* `docs/PLAN-M5-polish-2.md` C12.
-
 - `BL-541` `[Bug]` `[Owed-playtest]` **The captured Balmoral is not hidden by the airframe swap at the
   controls.** Seen on CM02: after the capture cutscene the captured Balmoral sat in front of the
   player instead of vanishing; the hand-over to `wingman_4` (Jack flying the old aeroplane) worked.

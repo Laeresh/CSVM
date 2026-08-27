@@ -4,11 +4,12 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The two aircraft a story-mission intro animates, staged into a chapter world so the animation
-/// runtime's node table can reach them: <c>piratefighter</c> as a prop with no pilot, and a
-/// bodiless <c>player</c> the flown aircraft follows. Both come from the shared aircraft archive
-/// rather than the chapter gamez, so their compiled pointers are rebased onto the chapter's own
-/// pointer space (<see cref="PointerBaseOf"/>).
+/// The aircraft-archive subtrees a story-mission intro or a chuteman-carrying cutscene animates,
+/// staged into a chapter world so the animation runtime's node table can reach them:
+/// <c>piratefighter</c> as a prop with no pilot, a bodiless <c>player</c> the flown aircraft
+/// follows, and <c>chuteman</c>'s parachutist subtree. All three come from the shared aircraft
+/// archive rather than the chapter gamez, so their compiled pointers are rebased onto the
+/// chapter's own pointer space (<see cref="PointerBaseOf"/>).
 /// Decode: docs/formats/anim-definitions/cutscenes.md.
 /// </summary>
 public sealed class AircraftStage
@@ -23,6 +24,13 @@ public sealed class AircraftStage
     /// <c>gi_pfighter1</c>/<c>gi_pfighter2</c> — the Devastator's remote model, carrying no
     /// pilot and no flight model.</summary>
     public const string PropNode = "piratefighter";
+
+    /// <summary>The aircraft-archive node a mid-mission drop/hookup cutscene reparents under its
+    /// own aiming node and activates: a parentless wrapper whose <c>chutemanparent</c> child carries
+    /// the visible <c>pilot</c> mesh and the parachute's <c>stamp</c>. Ships <c>INACTIVE</c>
+    /// (the shared <c>chuteman</c> def's own <c>RESET_STATE</c>), the same base state
+    /// <see cref="PropNode"/> ships in.</summary>
+    public const string ChuteNode = "chuteman";
 
     /// <summary>The block a chapter's pointer base is rounded up to. Measured over all eight
     /// chapters; no site in the executable computing it has been traced, so a ninth chapter's base
@@ -40,6 +48,11 @@ public sealed class AircraftStage
     /// <c>gi_pfighter1</c> is what activates it. Null when the archive carries no such node.
     /// </summary>
     public Node3D? Prop { get; private set; }
+
+    /// <summary>The staged <c>chuteman</c> subtree, built switched off: a mid-mission drop's own
+    /// called animation (e.g. C3/M01's <c>tdchute</c>) is what reparents and activates it. Null
+    /// when the archive carries no such node.</summary>
+    public Node3D? Chuteman { get; private set; }
 
     /// <summary>Mesh instances the prop build added, for the session's build summary.</summary>
     public int MeshInstances { get; private set; }
@@ -68,27 +81,36 @@ public sealed class AircraftStage
             stage.PlayerMarker = marker;
         }
 
-        if (planesGamez.FindByName(PropNode) is { } prop)
+        // One builder over the aircraft archive, shared by every archive subtree this stage builds:
+        // the world's own SceneBuilder reads the chapter gamez's meshes and materials, which none of
+        // these subtrees' model indices address.
+        var scene = new SceneBuilder(planesGamez, textures, cullBackfaces: true);
+        if (planesGamez.FindByName(PropNode) is { } prop
+            && scene.BuildSubtree(prop, collisionSkip: _ => true) is { } builtProp)
         {
-            // Its own builder over the aircraft archive: the world's SceneBuilder reads the chapter
-            // gamez's meshes and materials, which this subtree's model indices do not address.
-            var scene = new SceneBuilder(planesGamez, textures, cullBackfaces: true);
-            if (scene.BuildSubtree(prop, collisionSkip: _ => true) is { } built)
-            {
-                built.Transform = Transform3D.Identity;
-                Rebase(built, pointerBase);
-                AnimRuntime.SetSubtreeActive(built, false);
-                worldRoot.AddChild(built);
-                stage.Prop = built;
-                stage.MeshInstances = scene.MeshInstanceCount;
-            }
+            builtProp.Transform = Transform3D.Identity;
+            Rebase(builtProp, pointerBase);
+            AnimRuntime.SetSubtreeActive(builtProp, false);
+            worldRoot.AddChild(builtProp);
+            stage.Prop = builtProp;
         }
 
+        if (planesGamez.FindByName(ChuteNode) is { } chute
+            && scene.BuildSubtree(chute, collisionSkip: _ => true) is { } builtChute)
+        {
+            builtChute.Transform = Transform3D.Identity;
+            Rebase(builtChute, pointerBase);
+            AnimRuntime.SetSubtreeActive(builtChute, false);
+            worldRoot.AddChild(builtChute);
+            stage.Chuteman = builtChute;
+        }
+
+        stage.MeshInstances = scene.MeshInstanceCount;
+
         string marked = stage.PlayerMarker != null ? PlayerNode : $"no {PlayerNode}";
-        string staged = stage.Prop != null
-            ? $"{PropNode} ({stage.MeshInstances} mesh instances)"
-            : $"no {PropNode}";
-        Log.Info("world", $"aircraft stage: base {pointerBase} over {chapterNodeCount} chapter node(s), {marked}, {staged}");
+        string staged = stage.Prop != null ? PropNode : $"no {PropNode}";
+        string chuted = stage.Chuteman != null ? ChuteNode : $"no {ChuteNode}";
+        Log.Info("world", $"aircraft stage: base {pointerBase} over {chapterNodeCount} chapter node(s), {marked}, {staged}, {chuted}, {stage.MeshInstances} mesh instances");
         return stage;
     }
 

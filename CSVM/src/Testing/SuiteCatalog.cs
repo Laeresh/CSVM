@@ -25,6 +25,7 @@ using static CSVM.Testing.CampaignZeppelinWakeSuites;
 using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
+using static CSVM.Testing.DropoffChutemanSuites;
 using static CSVM.Testing.GeneratorRosterSuites;
 using static CSVM.Testing.InstantActionSuites;
 using static CSVM.Testing.IntroAircraftSuites;
@@ -156,6 +157,7 @@ public static class SuiteCatalog
         "campaign-cutscene",
         "cutscene-letterbox",
         "intro-aircraft-stage",
+        "dropoff-chuteman-stage",
         "hangar-door-wake",
         "fog-state",
         "campaign-submarine",
@@ -793,6 +795,17 @@ public static class SuiteCatalog
             + "airship, the flown airframe is drawn on the 'player' marker while callback 11 holds "
             + "the pilot out of flight, and the drop's launch cue fires",
             IntroAircraftStage));
+
+        // BL-540: the aircraft archive's 'chuteman' subtree never joined the world build, so a
+        // mid-mission drop-off's own definition claimed a symbol with a null binding, the same
+        // staging gap B8 fixed for the intro's two aircraft.
+        into.Add(new TestHarness.Suite("dropoff-chuteman-stage",
+            "the parachutist a mid-mission drop-off animates, over C3/M01's BUILT world: the "
+            + "aircraft archive's 'chuteman'/'chutemanparent'/'pilot'/'stamp' answer the compiled "
+            + "drop's own cross-archive pointers in the runtime's node table, the subtree ships "
+            + "switched off as the shared def's own base state, and calling the drop's definition "
+            + "directly (never the approach cone) switches it visible",
+            DropoffChutemanStage));
         into.Add(new TestHarness.Suite("hangar-door-wake",
             "hangar doors over C1/M04's real world (BL-350): OBJECTIVE1's WAKE_ANIM reaches "
             + "'hangar3_doors' through the director at its authored 2 s dormancy and its four "

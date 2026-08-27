@@ -144,7 +144,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 17. ☐ CM02's capture cutscene camera sits over the water (`BL-542`)
 18. ☐ The auto-land prompt is not drawn in a flown session (`BL-544`)
 19. ☐ The landing animation: no hook, too high, wings not folded (`BL-545`)
-20. ☐ CM01's drop-off cutscene shows no parachutist (`BL-540`)
+20. ☑ CM01's drop-off cutscene shows no parachutist (`BL-540`)
 21. ☐ The low-terrain break-off, judged once the wingman is there (`BL-509`, A13's open half)
 
 ## Dependency and parallelism notes
@@ -949,7 +949,7 @@ hook and fold parts, then the pose offset; land each half on its own evidence.
 **⚠ Traps.** ⚠ Do not scale the pose to look right; the offset is authored and the airframe's node
 frame is what to check.
 
-## D20 ☐ CM01's drop-off cutscene shows no parachutist
+## D20 ☑ CM01's drop-off cutscene shows no parachutist
 
 **Goal.** The drop-off plays with the parachutist visible.
 
@@ -966,6 +966,38 @@ the way B8 staged the aircraft if it is cross-archive.
 
 **⚠ Traps.** ⚠ If the node is chapter-local and merely switched off, this is an activation bug, not
 a staging one; do not stage what is already there.
+
+**Landed.** C3/M01's drop-off (`tex_drop.zrd` → `player-texdrop` → `CALL_ANIMATION[tdchute]`)
+activates `chuteman`, a parentless aircraft-archive node (`planes/nodes.json` index 2288) whose
+child `chutemanparent` fans to the parachutist's own `pilot` mesh and the `stamp` canopy — the same
+archive `player`/`piratefighter` come from, addressed by the compiled `chuteman-tdchute` def's
+symbol table at C3's own base (`chuteman` ptr 9788, `chutemanparent` 9789, `pilot` 9790, `stamp`
+9791, each exactly the archive index + 7500). B8's precedent held exactly: this is a staging gap,
+not an activation bug, since the subtree never reached the runtime's node table at all.
+`Mech3/AircraftStage.cs` now stages `chuteman` beside `piratefighter`, additively, under the same
+gate (a mission whose start-anims name an intro) and the same shared `SceneBuilder` instance,
+switched off until the drop's own definition reparents and activates it. A mid-mission drop in a
+mission with no intro of its own (C1/M02, C2/M05, C4/M03 all ship one) is not staged by this path;
+named as a limit in `docs/architecture.md` and the cutscenes format page rather than fixed, since
+widening the gate reaches missions D20 was not asked to touch.
+
+**Verified.** <pending orchestrator run>. In the lane: a deliberate perturbation (`AircraftStage`'s
+`chuteman` block disabled) reproduced the baseline — `[world] aircraft stage: … no chuteman …` and
+the new `dropoff-chuteman-stage` suite FAILing on `the world build staged the drop-off's 'chuteman'
+subtree` (METHOD-9) — restoring the block turned both green:
+`[world] aircraft stage: base 7500 over 5408 chapter node(s), player, piratefighter, chuteman, 35
+mesh instance(s)`, and the suite PASS with `'chuteman' ptr 9788 -> archive index 2288, bound=yes`
+(and 9789/9790/9791 the same) plus `'chuteman' visible=True under_aim=True` after driving `tdchute`
+directly (never the approach cone, so nothing INSTR-20 warns about is armed). Beside it:
+`intro-aircraft-stage`, `cutscene-letterbox`, `campaign-cutscene`, `landings-approach-trigger` and
+all 19 `campaign-*` suites PASS with engine errors clean; `dotnet test` 2443/2443 (the suite-count
+assertion moved 140 → 141, `CSVM.Tests/SuiteCatalogTests.cs`); `CheckCommentCaps.ps1 -Summary`
+clean. A live `--campaign=` capture of the drop-off in frame was not obtained in this session — the
+drop-off's own approach-cone arming needs the mission's full dormant objective chain run (or a
+precisely-placed scripted flight into the cone this session did not derive the geometry for),
+unlike the intro's B8 capture, which needed no such chain. Left for the orchestrator's own pass or a
+flown check, matching the plan's existing practice for other at-the-controls confirmations
+(C12, D21).
 
 ## D21 ☐ The low-terrain break-off, judged once the wingman is there
 
