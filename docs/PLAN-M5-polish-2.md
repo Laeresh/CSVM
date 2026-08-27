@@ -136,6 +136,17 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ `campaign-objectives-hud` fails on C4 and C5 on its wake-cue check (`BL-483`)
 12. ☑ Fly a campaign mission end to end: the Wave A/B/C sortie, closing `BL-458`
 
+### Wave D — what the sortie opened
+
+14. ☐ The cutscene's world hold does not reach an aircraft's own realtime tick (`BL-457`, minted by C12)
+15. ☐ The captured Balmoral is not hidden by the swap in a flown session (`BL-541`)
+16. ☐ The captured aircraft keeps its British livery after the capture (`BL-543`)
+17. ☐ CM02's capture cutscene camera sits over the water (`BL-542`)
+18. ☐ The auto-land prompt is not drawn in a flown session (`BL-544`)
+19. ☐ The landing animation: no hook, too high, wings not folded (`BL-545`)
+20. ☐ CM01's drop-off cutscene shows no parachutist (`BL-540`)
+21. ☐ The low-terrain break-off, judged once the wingman is there (`BL-509`, A13's open half)
+
 ## Dependency and parallelism notes
 
 A1 runs first and alone; it is a documentation edit and every other item's landing commit touches
@@ -159,6 +170,13 @@ nothing else here writes.
 
 C12 runs last by construction: it is the flown sortie that judges A5, B8, B9 and C10 at the controls
 and closes `BL-458`.
+
+**Wave D ordering.** D14 runs first and alone: it is the realtime gap behind `BL-457` and, on the
+evidence, behind `BL-541` (an aircraft stepping itself past `Inert`) and `BL-544` (a rig fed on the
+parent-driven path only), so D15 and D18 are re-measured after it lands before anything is built. D16
+and D17 both reach the capture definition and `FlightRoster.RunSwap`, so they share one lane after
+D15. D19 and D20 are independent animation reads and can run in parallel worktrees. D21 is judged at
+the controls after D14, and is a stop like C12.
 
 ---
 
@@ -788,3 +806,168 @@ sortie, but do not re-derive it. ⚠ The suite shows C3's gate pairs sit close e
 the user reports the original wants a fly-by and then the drop-off as two crossings, so "both
 completed at once" at the controls is a finding to file, not a pass. ⚠ Do not close `BL-458` on the suite alone; the suite already
 passes and that is exactly why the item is still open.
+
+---
+
+# Wave D — what the sortie opened
+
+## D14 ☐ The cutscene's world hold does not reach an aircraft's own realtime tick
+
+**Goal.** During a cutscene that holds the world, no aircraft moves, on a realtime clock as well as
+on the parent-driven one, so the campaign wingman is beside the player when the intro ends.
+
+**Evidence (confidence: traced).** `BL-457`, seen at the controls on CM01: skipping the intro leaves
+the wingman beside the player, playing it puts it about 4 km away. Callback 20's hold is honoured by
+`GameSession._PhysicsProcess` and `GameSession.DriveSimSteps`, but `FlightController._PhysicsProcess`
+steps the aircraft itself on any realtime tick with no hold check; callback 11 holds only the
+player. A probe (`--det`) steps through `DriveSimSteps`, which is why A5's trace read 117 m.
+
+**Approach.** Put the hold where every consumer already reads the clock: a `GameClock` hold that
+makes `PhysicsDt` answer zero while a definition owns the session, so every aircraft's own tick
+returns the way it does on a parent-driven frame. Do not add a per-class guard.
+
+**Model recommendation.** high. One seam, but it is the clock every physics consumer reads, and the
+realtime path has no suite; the verification needs a realtime instrument.
+
+**Verify.** A realtime `--campaign=` run (no `--det`) on CM01 with a wingman-separation print at the
+handoff reading under 150 m, then `wingman`, `cutscene` and `campaign` suites green, and the full
+battery. ⚠ A `--det` or suite run cannot show this (INSTR-25 and `BL-457`'s traps).
+
+**⚠ Traps.** ⚠ The animation runtime must stay OUTSIDE the hold: the movie is animation. ⚠ Measure in
+a realtime session. ⚠ `BL-457`'s retired leads stay retired.
+
+## D15 ☐ The captured Balmoral is not hidden by the swap in a flown session
+
+**Goal.** At CM02's capture the Balmoral the animation belongs to leaves the sky, and the player's
+new hull carries its damage.
+
+**Evidence (confidence: traced for the suite, lead-only for the live gap).** `BL-541`. The swap
+suite passes on C3/M05's own world; at the controls the captured Balmoral sat in front of the
+player. Two candidates: `CallbackHost`'s root name does not resolve to the live aircraft
+(`FlightRoster.AiNamed` null, so `CarryCapturedDamage` does nothing), or `Inert = true` does not stop
+an aircraft that steps itself on a realtime clock (D14's gap).
+
+**Approach.** Re-measure after D14 in a realtime session with the swap's own log lines
+(`airframe swap: '...' hidden`); if the line is absent the root name is the gap, if present the hide
+is. Then fix the one that shows. The damage carry-over is untested at the controls and is judged in
+D21.
+
+**Model recommendation.** medium.
+
+**Verify.** The log line and the Balmoral gone in a realtime CM02 run; `campaign-airframe-swap`
+green.
+
+**⚠ Traps.** ⚠ Do not weaken the suite to match the live run; extend it with a realtime-shaped arm
+if the gap is the clock.
+
+## D16 ☐ The captured aircraft keeps its British livery after the capture
+
+**Goal.** After the capture the player flies the Balmoral in the livery it was captured in.
+
+**Evidence (confidence: traced).** `BL-543`, seen at the controls: the rebuilt Balmoral wears the
+Fortune Hunters paint. `FlightRoster.RunSwap` rebuilds the rig with the player's own scheme; the
+original hands over the captured aircraft's.
+
+**Approach.** `RunSwap` already holds the captured rig (`AiNamed(order.CaptureRoot)`); carry its
+`PaintScheme` onto the rebuilt rig alongside its damage.
+
+**Model recommendation.** medium.
+
+**Verify.** A swap-suite check that the rebuilt rig's scheme equals the captured rig's; a CM02 shot.
+
+**⚠ Traps.** ⚠ The hand-over to `wingman_4` keeps the PLAYER's old scheme, which is decoded and
+correct; only the player's new hull changes.
+
+## D17 ☐ CM02's capture cutscene camera sits over the water
+
+**Goal.** The capture cutscene shows the Balmoral and the player's wing-walk, framed as authored.
+
+**Evidence (confidence: lead-only).** `BL-542`, seen at the controls: the camera sat directly above
+the water showing only the player's aeroplane. The definition poses its camera off a node or an
+absolute pose; which, and whether the node it wants is the captured aircraft's own, is not read.
+
+**Approach.** Read the capture definition's camera events (`docs/formats/anim-definitions/cutscenes.md`
+census), find the host node, and check whether it resolves in a live session (B8's cross-archive
+staging is the precedent for a node that resolves in the data and not in the tree).
+
+**Model recommendation.** high. A decode against the definition with a realtime-only symptom.
+
+**Verify.** A `--campaign=` capture of CM02's capture cutscene with both aircraft in frame, plus
+`campaign-cutscene` and `cutscene-letterbox` green.
+
+**⚠ Traps.** ⚠ B7's pose path is the one this camera goes through; do not touch `PoseAtNode` for
+one definition.
+
+## D18 ☐ The auto-land prompt is not drawn in a flown session
+
+**Goal.** The player sees the auto-land prompt whenever the button would do something.
+
+**Evidence (confidence: traced for the unit, lead-only for the live gap).** `BL-544`. `F9` worked,
+so `AutoLandOffered` was true, but the HUD line never appeared. `ComposeTextLines` is unit-tested;
+what is not is whether the text block draws in the player's HUD mode (`DrawsTextBlock`) and whether
+`GameSession` feeds the flag to the rig on a realtime clock (the feed sits in `_Process`).
+
+**Approach.** Re-measure after D14; then draw the prompt on the HUD surface the player actually sees
+rather than the text block if that is the gap.
+
+**Model recommendation.** medium.
+
+**Verify.** A realtime CM02 run with the prompt on screen (a shot), the unit and
+`landings-auto-land-button` green.
+
+**⚠ Traps.** ⚠ The placeholder wording stays until `BL-510` resolves the langui string.
+
+## D19 ☐ The landing animation: no hook, too high, wings not folded
+
+**Goal.** The hookup animation shows the hook deployed, the aeroplane at the trapeze's height, and a
+Balmoral's wings folded, as the original does.
+
+**Evidence (confidence: lead-only).** `BL-545`, seen at the controls on CM02's auto-land. Three
+separate reads: the hook and the wing fold are per-airframe animated parts, the height is the
+`AT_NODE` pose's offset.
+
+**Approach.** Read the hookup definition and the airframe's own nodes (`planes/nodes.json`) for the
+hook and fold parts, then the pose offset; land each half on its own evidence.
+
+**Model recommendation.** high. Three mechanisms in one symptom, two of them per-airframe.
+
+**Verify.** `--campaign=` captures of the hookup on a Balmoral and on a Devastator, plus the
+`landings` suites green.
+
+**⚠ Traps.** ⚠ Do not scale the pose to look right; the offset is authored and the airframe's node
+frame is what to check.
+
+## D20 ☐ CM01's drop-off cutscene shows no parachutist
+
+**Goal.** The drop-off plays with the parachutist visible.
+
+**Evidence (confidence: lead-only).** `BL-540`, seen at the controls. Which node the definition
+activates for him is not read; a node from the shared archive that never reaches the tree is the
+first suspect (B8's `AircraftStage` is the precedent).
+
+**Approach.** Read the drop-off definition's `ObjectActiveState` list, find the node, and stage it
+the way B8 staged the aircraft if it is cross-archive.
+
+**Model recommendation.** medium.
+
+**Verify.** A `--campaign=` capture of the drop-off with the parachutist in frame.
+
+**⚠ Traps.** ⚠ If the node is chapter-local and merely switched off, this is an activation bug, not
+a staging one; do not stage what is already there.
+
+## D21 ☐ The low-terrain break-off, judged once the wingman is there
+
+**Goal.** With the wingman beside the player out of the intro (D14), decide at the controls whether
+its avoid-crash break-off over the island reads as the original.
+
+**Evidence.** `BL-509`, A13's open half: the decoded vertical climb lands, the wingman is not yet
+inside 150 m through the low pass, and C12 could not judge it because the wingman was 4 km away.
+
+**Approach.** ⚠ **A stop, not a task an agent completes.** After D14, fly CM01 on `player_pfighter`
+with the wingman on the same airframe and watch the first low pass over the island.
+
+**Model recommendation.** medium (the brief and the write-up; the instrument is the user).
+
+**Verify.** The user's report.
+
+**⚠ Traps.** ⚠ Everything `BL-457` and `BL-509` retire stays retired.
