@@ -19,6 +19,7 @@ internal static class LandingApproachSuites
     private const int FirstSeq = 0;
     private const int WingWalkSeq = 1;
     private const int TrainPickupSeq = 6;
+    private const int TrailerPickupSeq = 10;
     private const float StepDt = 1f / 60f;
     private const string PlaneNode = "player_bhawk";
 
@@ -90,6 +91,13 @@ internal static class LandingApproachSuites
     /// approach cone, and flying that cone starts the pickup cutscene and clears its objective.</summary>
     internal static void TrainPickupGate(TestContext ctx) =>
         DriveMission(ctx, TrainPickupSeq, "test-train-pickup-gate", DriveTrainPickup);
+
+    /// <summary>Drives CM11's trailer pickup through the objective script's own <c>WAKE_ANIM</c>:
+    /// the dock objective's definition stages the approach cone from its library root under the
+    /// trailer's sensor, the landing trigger discovers it, and flying that cone starts the pickup
+    /// cutscene and clears the dock objective.</summary>
+    internal static void TrailerPickupGate(TestContext ctx) =>
+        DriveMission(ctx, TrailerPickupSeq, "test-trailer-pickup-gate", DriveTrailerPickup);
 
     /// <summary>Drives the auto-land button over the campaign's first mission's BUILT world: flying
     /// into the chapter's <c>auto</c> row lights <see cref="LandingApproachRuntime.AutoLandOffered"/>
@@ -818,6 +826,83 @@ internal static class LandingApproachSuites
         }, pickups: Pickups.Load(missionZrdr));
     }
 
+    // CM11's trailer pickup: unlike CM07's, the cone is staged by an objective's WAKE_ANIM rather
+    // than a range-triggered call, so this is the director's own trigger path. The staging
+    // definition and the objective that wakes it are read out of the mission's data.
+    private static void DriveTrailerPickup(TestContext ctx, TestWorld world, CampaignDirector director,
+        ObjectiveScript script, string missionZrdr, StringBuilder report)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        var rows = LandingApproaches.Resolve(
+            chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
+        var pickup = RowFor(rows, "lookat_pickfordpkup")
+            ?? throw new InvalidOperationException("CM11 carries no trailer pickup approach row");
+        var staging = StagerOf(world, pickup.Node);
+        var caller = staging?.Anim is { } stagerAnim ? CallerOf(script, stagerAnim) : null;
+        report.AppendLine($"'{pickup.Node}' is staged by '{staging?.Anim ?? "-"}' under " +
+            $"'{staging?.Parent ?? "-"}', woken by OBJECTIVE{caller?.Number.ToString() ?? "?"}");
+        ctx.Check(staging != null, $"a definition's OBJECT_ADD_CHILD stages '{pickup.Node}'");
+        ctx.Check(caller != null, $"and an objective's WAKE_ANIM wakes that definition");
+        if (staging is not { } stager || caller is not { } wakes)
+        {
+            return;
+        }
+
+        WithTrigger(ctx, world, director, rows, (trigger, cutscene, rig, graph) =>
+        {
+            ctx.Same(0, world.Runtime.FindNodes(pickup.Node).Count,
+                $"the pickup approach starts outside the world as library content");
+            int armedBefore = trigger.Armed;
+            graph.Wake(wakes.Number);
+            world.Runtime.Advance(StepDt);
+            graph.Step(StepDt);
+            trigger.Tick();
+
+            var approaches = world.Runtime.FindNodes(pickup.Node);
+            var parent = approaches.Count > 0 ? approaches[0].GetParent() as Node3D : null;
+            report.AppendLine($"after the wake: approach={approaches.Count} parent=" +
+                $"{parent?.Name ?? "-"} armed={armedBefore}->{trigger.Armed}");
+            ctx.Same(1, approaches.Count,
+                $"OBJECTIVE{wakes.Number}'s WAKE_ANIM '{stager.Anim}' stages the approach cone from its library root");
+            ctx.Check(parent != null && string.Equals(parent.Name, stager.Parent, StringComparison.OrdinalIgnoreCase),
+                $"under '{stager.Parent}', the node the event names, so the cone rides the trailer");
+            ctx.Same(armedBefore + 1, trigger.Armed,
+                $"the landing trigger discovers the approach staged after its initial bind");
+            if (approaches.Count == 0)
+            {
+                return;
+            }
+
+            var arm = world.Runtime.FindNodes(LandingApproaches.ArmNode, approaches[0]);
+            ctx.Check(arm.Count > 0 && arm[0].Visible,
+                $"the staged cone's land_on is open, this mission authoring no pickup timing in front of it");
+            ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, pickup, report),
+                $"flying CM11's staged trailer approach starts '{pickup.Anim}'");
+            ctx.Check(cutscene.Playing,
+                $"'{pickup.Anim}' takes ownership of the session instead of ending immediately");
+
+            float played = 0f;
+            for (float t = 0f; t < PlayBudgetS
+                    && (cutscene.Playing || !graph.CompletedOf(wakes.Number)); t += StepDt)
+            {
+                world.Runtime.Advance(StepDt);
+                cutscene.Tick();
+                director.Step(StepDt);
+                if (cutscene.Playing)
+                {
+                    played += StepDt;
+                }
+            }
+
+            report.AppendLine($"pickup episode ran {played:0.##} s; " +
+                $"OBJECTIVE{wakes.Number} completed={graph.CompletedOf(wakes.Number)}");
+            ctx.Check(!cutscene.Playing && played > 2f,
+                $"the authored pickup episode runs to its handoff");
+            ctx.Check(graph.CompletedOf(wakes.Number),
+                $"finishing the trailer pickup clears OBJECTIVE{wakes.Number}, the dock");
+        }, pickups: Pickups.Load(missionZrdr));
+    }
+
     // CM07's hangar drop, every name read out of the mission's own data: the one cutscene
     // definition it range-gates, whatever calls that, and the objective node the drop's own reset
     // block flips through its CALL_ANIMATION.
@@ -923,6 +1008,29 @@ internal static class LandingApproachSuites
                 if (def.ByRange && !world.Session.Program.StartAnims.Contains(name))
                 {
                     return def;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // The definition whose OBJECT_ADD_CHILD parents the named node, and the parent it names.
+    private static (string Anim, string Parent)? StagerOf(TestWorld world, string child)
+    {
+        foreach (var def in world.Session.Program.Defs)
+        {
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind == "ObjectAddChild" && ev.Data.Str("child") is { } named
+                        && named.Equals(child, StringComparison.OrdinalIgnoreCase)
+                        && ev.Data.Str("parent") is { } parent
+                        && def.AnimName is { Length: > 0 } anim)
+                    {
+                        return (anim, parent);
+                    }
                 }
             }
         }
