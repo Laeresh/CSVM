@@ -474,6 +474,66 @@ public class FireControlTests
         Assert.Equal(new[] { 1, 2, 0 }, trace);
     }
 
+    /// <summary>A full eight-pylon fit binds in <c>Loadout.PylonFillOrder</c> (1,5,2,6,3,7,4,8), so
+    /// stepping the list itself sent the gauge arrow back and forth across the belt. Given the step
+    /// order the arrow walks the belt: list positions 0,2,4,6,1,3,5,7 are pylons 1..8 in turn.</summary>
+    [Fact]
+    public void HWalksThePylonsInMountOrderNotInTheOrderTheFitWasBuilt()
+    {
+        var pylons = new List<FakePylon>();
+        for (int i = 0; i < 8; i++)
+        {
+            pylons.Add(Pylon(1f, 3, 3, $"wep_p{i}"));
+        }
+        // Loadout.StepOrder's output for the fill order 1,5,2,6,3,7,4,8.
+        var fc = Make(new List<FakeGun>(), pylons, stepOrder: new[] { 0, 2, 4, 6, 1, 3, 5, 7 });
+
+        var trace = new List<int> { fc.SelectedPylon };
+        for (int press = 0; press < 8; press++)
+        {
+            Step(fc, rocketSel: true);
+            trace.Add(fc.SelectedPylon);
+            Step(fc, rocketSel: false);
+        }
+
+        Assert.Equal(new[] { 0, 2, 4, 6, 1, 3, 5, 7, 0 }, trace);
+    }
+
+    /// <summary>The rocket trigger's own cursor walks the same sequence as H: with only pylons 1 and
+    /// 2 (list positions 0 and 2) armed, draining the first hands the next launch to the second
+    /// rather than to whichever slot happens to sit next in the list.</summary>
+    [Fact]
+    public void TheFiringCursorAdvancesAlongTheSameMountOrder()
+    {
+        var pylons = new List<FakePylon>();
+        for (int i = 0; i < 8; i++)
+        {
+            pylons.Add(Pylon(60f, i == 0 || i == 2 ? 1 : 0, 1, $"wep_p{i}"));
+        }
+        var fc = Make(new List<FakeGun>(), pylons, stepOrder: new[] { 0, 2, 4, 6, 1, 3, 5, 7 });
+
+        var launched = new List<int>();
+        for (int i = 0; i < 8; i++)
+        {
+            var o = Step(fc, rocket: i % 2 == 0); // discrete pulls: the gate is one launch per press
+            if (o.RocketPylon >= 0)
+            {
+                launched.Add(o.RocketPylon);
+            }
+        }
+
+        Assert.Equal(new[] { 0, 2 }, launched);
+    }
+
+    [Fact]
+    public void AStepOrderThatIsNotAPermutationIsALoudError()
+    {
+        var pylons = new List<FakePylon> { Pylon(1f, 1, 1), Pylon(1f, 1, 1) };
+
+        Assert.Throws<System.ArgumentException>(() => Make(new List<FakeGun>(), pylons, stepOrder: new[] { 1, 1 }));
+        Assert.Throws<System.ArgumentException>(() => Make(new List<FakeGun>(), pylons, stepOrder: new[] { 0 }));
+    }
+
     // ==== Fakes and builders ====================================================================
 
     private static FakeGun Gun(float fireRate, int ammo, int capacity, int muzzleCount = 1, string? loopSound = null, string id = "wep_gun") =>
@@ -494,8 +554,9 @@ public class FireControlTests
         };
 
     private static FireControl Make(List<FakeGun> guns, List<FakePylon> pylons,
-        bool autoFireRockets = false, bool infiniteAmmo = false, int initialGunSelect = 0) =>
-        new(guns, pylons, autoFireRockets, infiniteAmmo, initialGunSelect);
+        bool autoFireRockets = false, bool infiniteAmmo = false, int initialGunSelect = 0,
+        IReadOnlyList<int>? stepOrder = null) =>
+        new(guns, pylons, autoFireRockets, infiniteAmmo, initialGunSelect, stepOrder);
 
     // One tick. Held levels only (no edges — FireControl does its own edge
     // detection), dt fixed at 60 Hz throughout. The returned FireOutcome is the SAME

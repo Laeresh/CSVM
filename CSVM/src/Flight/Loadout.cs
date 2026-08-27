@@ -233,11 +233,19 @@ public sealed class Loadout
         Def = def;
         Guns = guns;
         Hardpoints = hardpoints;
+        PylonStepOrder = StepOrder(hardpoints);
     }
 
     public LoadoutDef Def { get; }
     public IReadOnlyList<GunGroup> Guns { get; }
     public IReadOnlyList<Hardpoint> Hardpoints { get; }
+
+    /// <summary><see cref="Hardpoints"/> positions sorted by <see cref="Hardpoint.Index"/> — the
+    /// sequence the hardpoint selector steps along, handed to <see cref="FireControl"/>.
+    /// ⚠ The list itself is in <see cref="PylonFillOrder"/>, which says which pylons a fit occupies,
+    /// NOT where they sit along the wing: stepping the list walks the gauge belt 1,5,2,6,… and back.
+    /// Those are two separate orders and neither may be respelt as the other.</summary>
+    public IReadOnlyList<int> PylonStepOrder { get; }
 
     /// <summary>The gun groups the player can actually fire (turret slots excluded — built inert).</summary>
     public IEnumerable<GunGroup> FirableGuns
@@ -505,6 +513,18 @@ public sealed class Loadout
         }
 
         return Bind(def, plane, weapons);
+    }
+
+    // The hardpoint list read in physical mount order: list positions sorted by pylon number.
+    private static int[] StepOrder(List<Hardpoint> hardpoints)
+    {
+        var order = new int[hardpoints.Count];
+        for (int i = 0; i < order.Length; i++)
+        {
+            order[i] = i;
+        }
+        Array.Sort(order, (a, b) => hardpoints[a].Index.CompareTo(hardpoints[b].Index));
+        return order;
     }
 
     private static Node3D Resolve(Dictionary<string, Node3D> markers, string name, LoadoutDef def, string where)
