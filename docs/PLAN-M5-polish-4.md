@@ -92,7 +92,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ❌ `BL-517`: the Pandora's broadside fires on a friendly player
 12. ❌ `BL-524`: a friendly patrol without a net flies away after its first fight
-13. ☐ `BL-525`: the second Workers' Voyage docking completes without a docking
+13. ◐ `BL-525`: the second Workers' Voyage docking completes without a docking
 14. ❌ `BL-514`: a shot-down carried turret keeps burning where it was
 
 ### Wave C — CM07 and CM08
@@ -555,26 +555,57 @@ too, and the drift needs a leaderless pilot to also lose its target. Which frien
 report watched is therefore still unpinned, and the last step of the mechanism is read off the code
 rather than observed.
 
-## B13 ☐ `BL-525`: the second Workers' Voyage docking completes without a docking
+## B13 ◐ `BL-525`: the second Workers' Voyage docking completes without a docking
 
 **Goal.** CM06 (C1C/M01)'s second docking objective completes only when the player docks.
 
-**Evidence (confidence: lead-only).** Reported at the controls. A self-completing docking points at
-the trigger volume being satisfied by the airship's motion, or the first docking's state not being
-cleared before the second objective arms. `<TODO: re-verify still-open against the code>`
+**Evidence (traced).** `objectives.zrd`'s two docking objectives both gate on `ANIM_STATE`:
+OBJECTIVE11 (first hook) waits on `wv_drop_copilot` RUNNING, OBJECTIVE15 (second hook) waits on
+`wv_pickup_copilot` EXECUTED. `ObjectiveGraph`'s reading of `ANIM_STATE` is correct against the
+decode (`AnimStateMet` calls `IObjectiveWorld.AnimState`, backed by `AnimRuntime.AnimStateOf`,
+faithfully). The bug is one level down: the hook node's own script
+(`extracted\C1C\M01\zrdr\wv_tailhook.zrd.json`, `wv_initiate_hookup`) `CALL_ANIMATION`s
+`wv_drop_copilot`, `wv_pickup_fassenb` and `wv_pickup_copilot` unconditionally on every dock; only
+each definition's own `ACTIVATION_PREREQUISITE` (`REQUIRED [OBJECT_ACTIVE_LIST [[wv_tailhook,
+dropoff_node]]]` / `[[wv_tailhook, pickup_node]]`) is authored to keep the wrong leg from running.
+CSVM parses neither path of that prerequisite shape: `AnimDefs.cs`'s reader case only reads
+`OPTIONS [MINIMUM_TO_SATISFY, ANIMATION_LIST]` (the zeppelin hull-death form), and
+`CompiledAnim.cs Parse`'s compiled-form read of `activ_prereqs` only accepts entries shaped
+`{"Animation": ...}`, silently dropping the `{"Parent": ...}`/`{"Object": ...}` node-active-state
+shape this def (and roughly 50 others census-wide: gasbag panel finishers, `chuteman`'s
+drop-direction gate, `pzep_cargo_point`'s cargo stop) actually carries. `ZeppelinRuntime.cs` is the
+only consumer of the parsed `PrereqAnims`/`PrereqMinToSatisfy` fields, so nothing enforces the
+node-active form anywhere. Net effect: `wv_pickup_copilot` reaches EXECUTED on the FIRST docking
+already, so OBJECTIVE15's `ANIM_STATE` condition is already true the instant it wakes on the
+second-docking nap chain (OBJ13 -> naps OBJ14 30s -> OBJ14 completes immediately (no condition) ->
+naps OBJ15 30s -> OBJ15 wakes with `wv_pickup_copilot` already EXECUTED), well before any real
+second hook-up.
 
 **Approach.** Read CM06's `objectives.zrd` for the two docking objectives and their gates, then
 trace `ObjectiveGraph` for what completed the second one. Decode lane: the docking objective's
-completion test in the original, if the graph's reading of the gate is the question.
+completion test in the original, if the graph's reading of the gate is the question. It is not:
+the gate reads correctly, and the animation it reads should not have reached EXECUTED yet.
 
 **Model recommendation.** medium.
+
+**Wiring contract (not landed here).** The fix is general `AnimRuntime`/`CompiledAnim` work, not an
+`ObjectiveGraph` one, and its blast radius (~50 defs across several chapters) is bigger than this
+item: parse the node-active `ACTIVATION_PREREQUISITE` shape on both paths (reader `REQUIRED
+[OBJECT_ACTIVE_LIST [[path...]]]`; compiled `Parent`+`Object` entry runs, the `Object` leaf's
+`active` field the required state) into a path/required-state list on `AnimDefinition`, and enforce
+it generically at `AnimRuntime`'s `CALL_ANIMATION`/`Start` dispatch (silent skip when unmet,
+mirroring the existing hull-death gate's own silence). Do not hardcode a CM06-specific exception:
+the prerequisite is data-authored and general, and a docking-only patch would leave the
+gasbag/cargo/chute defs carrying the same shape unfixed. Verify with the full 8-chapter freecam
+regression (parsing-only defs load the same way; only when a gated def may *start* changes) plus a
+targeted CM06 run confirming `wv_pickup_copilot` stays unstarted through the first docking.
 
 **Verify.** Headless CM06 with the objectives log on, the second docking stays open until a docking;
 a `campaign-objectives-*` suite row if the harness reaches it; D32.
 
 **⚠ Traps.** `ObjectiveGraph.ScanForCompletion` resolves one objective per tick round-robin
-(`BL-458`), so a completion can land frames after its cause. `BL-514` is the same airship and a
-separate item.
+(`BL-458`), so a completion can land frames after its cause; that round-robin is not this bug's
+mechanism.
 
 ## B14 ❌ `BL-514`: a shot-down carried turret keeps burning where it was
 

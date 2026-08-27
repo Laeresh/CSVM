@@ -2353,14 +2353,37 @@ usual.
   `BL-523`, `docs/org/aiPilot.md`.
 
 - `BL-525` `[Bug]` **CM06 (C1C/M01): the second docking at the Workers' Voyage (to collect Dr. Fassenbender)
-  completes without docking.** *Evidence:* reported at the controls: the objective to dock a second
-  time at the airship is marked complete when the player never docked. A docking objective that
-  completes on its own points at the objective's trigger volume being satisfied by the airship's
-  motion or by the first docking's state not being cleared before the second objective arms.
-  *Fix shape:* read CM06's `objectives.zrd` for the two docking objectives and their gates, then
-  trace `ObjectiveGraph` for what completed the second one. *⚠ Traps:* `ObjectiveGraph.
-  ScanForCompletion` resolves one objective per tick round-robin (`BL-458`), so a completion can land
-  frames after its cause. *Cross-refs:* `BL-458`.
+  completes without docking.** *Evidence (traced):* `objectives.zrd`'s two docking objectives
+  (OBJECTIVE11, first hook, `ANIM_STATE wv_drop_copilot RUNNING`; OBJECTIVE15, second hook,
+  `ANIM_STATE wv_pickup_copilot EXECUTED`) both gate on an animation the hook node's own script
+  (`extracted\C1C\M01\zrdr\wv_tailhook.zrd.json`) runs. That script's `wv_initiate_hookup` sequence
+  `CALL_ANIMATION`s `wv_drop_copilot`, `wv_pickup_fassenb` and `wv_pickup_copilot` unconditionally,
+  every time the player docks; only each definition's own `ACTIVATION_PREREQUISITE`
+  (`REQUIRED [OBJECT_ACTIVE_LIST [[wv_tailhook, dropoff_node]]]` /
+  `[[wv_tailhook, pickup_node]]`) is authored to keep the wrong leg from running. CSVM drops that
+  shape entirely: the reader parse (`AnimDefs.cs`, the `ACTIVATION_PREREQUISITE` case) only reads
+  `OPTIONS [MINIMUM_TO_SATISFY, ANIMATION_LIST]` (the zeppelin hull-death form), and the compiled
+  parse (`CompiledAnim.cs Parse`, `activ_prereqs`) only reads entries shaped `{"Animation": ...}`,
+  silently dropping the `{"Parent": ...}` / `{"Object": ...}` node-active-state shape every dock,
+  pickup and panel prerequisite in the extracted data actually carries (the same shape censuses on
+  roughly 50 files: zeppelin gasbag panel finishers, `chuteman`'s drop-direction gate,
+  `pzep_cargo_point`'s cargo stop). `ZeppelinRuntime.cs` is the only consumer of the parsed
+  `PrereqAnims`/`PrereqMinToSatisfy` fields, so nothing enforces the node-active form anywhere. Net
+  effect: `wv_pickup_copilot` reaches `EXECUTED` on the FIRST docking already (`dropoff_node` active,
+  `pickup_node` not), so `OBJECTIVE15`'s `ANIM_STATE` condition is already true the moment it wakes,
+  on the second-docking nap chain, well before any real second hook-up.
+  *Fix shape:* parse the node-active `ACTIVATION_PREREQUISITE` shape on both paths (reader
+  `REQUIRED [OBJECT_ACTIVE_LIST [[path...]]]`; compiled `Parent`+`Object` entry runs, the `Object`
+  leaf's `active` field the required state) into a path/required-state list on `AnimDefinition`, and
+  enforce it generically at `AnimRuntime`'s `CALL_ANIMATION`/`Start` dispatch (silent skip when
+  unmet, mirroring the existing hull-death gate's silence). `ObjectiveGraph`'s own reading of
+  `ANIM_STATE` is correct against the decode and needs no change; the gap is entirely
+  `AnimRuntime`/`CompiledAnim`'s, and its blast radius (~50 defs across several chapters) makes it
+  its own item rather than a docking-local patch. *⚠ Traps:* `ObjectiveGraph.ScanForCompletion`
+  resolves one objective per tick round-robin (`BL-458`), so a completion can land frames after its
+  cause; that round-robin is not this bug's mechanism. Do not hardcode a CM06-specific exception in
+  `AnimRuntime`: the prerequisite is data-authored and general, and a docking-only patch would leave
+  the gasbag/cargo/chute defs carrying the same shape unfixed. *Cross-refs:* `BL-458`.
 
 - `BL-526` `[Bug]` **CM07 (C1/M02): the rope ladder never deploys.** *Evidence:* reported at the
   controls: the pickup's rope ladder does not appear, so the pickup step cannot be flown.
