@@ -587,7 +587,7 @@ internal static class DestroyChoreographySuites
                             $"{model}: the burst's copy goes dark again once the effect is over");
                         ctx.Check(!planeModel.TopLevel
                                   && planeModel.GlobalTransform.Origin.DistanceTo(restOrigin) < 0.5f
-                                  && planeModel.Visible,
+                                  && planeModel.IsVisibleInTree(),
                             $"{model}: the airframe model is still parented, placed and visible after the tear");
 
                         // Crash, respawn, move, crash again: the wreck and every template a crash reveals must play at the

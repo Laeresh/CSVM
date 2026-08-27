@@ -1060,6 +1060,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         ApplyResetStatesWithin(subtree);
     }
 
+    /// <summary>Indexes a subtree built from ANOTHER archive: its stamped node indices are shifted
+    /// by <paramref name="indexOffset"/> into this chapter's cross-archive block, so a compiled
+    /// symbol table binds them (<see cref="AircraftStage.PointerBaseOf"/>). No RESET_STATE pass
+    /// runs over it, unlike <see cref="IndexStage"/>: the subtree is a live aircraft its own
+    /// builder already parked, and a chapter definition that happens to anchor on one of its
+    /// generic node names must not re-pose it.</summary>
+    public void IndexRebasedStage(Node3D subtree, int indexOffset)
+    {
+        IndexWorld(subtree, indexOffset: indexOffset);
+        _resolver.ClearFindCache();
+    }
+
     // ---- ISequenceHost: the sequence interpreter's 3-point view of this runtime, satisfied by
     // explicit interface implementation so Dispatch/EvaluateCondition stay off AnimRuntime's own
     // surface. See SequenceRunner.cs. ----
@@ -2029,12 +2041,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // only ever hold one winner per index — see that method's remark for why skipping it is
     // correct, not a loss (Targets' own symbol-miss rescue is anchor-scoped by name instead). The
     // resolver applies the flag, together with its own NameResolveFallback refusal, inside Add.
-    private void IndexWorld(Node3D worldRoot, bool indexByPointer = true)
+    private void IndexWorld(Node3D worldRoot, bool indexByPointer = true, int indexOffset = 0)
     {
         void Walk(Node3D n, Node3D? parent)
         {
             var srcName = n.HasMeta(NameMeta) ? n.GetMeta(NameMeta).AsString() : n.Name.ToString();
-            int? gamezIndex = n.HasMeta(IndexMeta) ? (int)n.GetMeta(IndexMeta) : null;
+            int? gamezIndex = n.HasMeta(IndexMeta) ? (int)n.GetMeta(IndexMeta) + indexOffset : null;
             _resolver.Add(n, srcName, parent, gamezIndex, indexByPointer);
             foreach (var child in n.GetChildren())
                 if (child is Node3D c)

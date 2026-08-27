@@ -144,7 +144,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 16. ☐ The captured aircraft keeps its British livery after the capture (`BL-543`)
 17. ☐ CM02's capture cutscene camera sits over the water (`BL-542`)
 18. ☐ The auto-land prompt is not drawn in a flown session (`BL-544`)
-19. ☐ The landing animation: no hook, too high, wings not folded (`BL-545`)
+19. ☑ The landing animation: no hook, too high, wings not folded (`BL-545`)
 20. ☑ CM01's drop-off cutscene shows no parachutist (`BL-540`)
 21. ☐ The low-terrain break-off, judged once the wingman is there (`BL-509`, A13's open half)
 
@@ -945,7 +945,7 @@ rather than the text block if that is the gap.
 
 **⚠ Traps.** ⚠ The placeholder wording stays until `BL-510` resolves the langui string.
 
-## D19 ☐ The landing animation: no hook, too high, wings not folded
+## D19 ☑ The landing animation: no hook, too high, wings not folded
 
 **Goal.** The hookup animation shows the hook deployed, the aeroplane at the trapeze's height, and a
 Balmoral's wings folded, as the original does.
@@ -964,6 +964,19 @@ hook and fold parts, then the pose offset; land each half on its own evidence.
 
 **⚠ Traps.** ⚠ Do not scale the pose to look right; the offset is authored and the airframe's node
 frame is what to check.
+
+**Verified.** <pending orchestrator run>
+
+**What it turned out to be.** One mechanism behind all three symptoms, plus one build omission. The
+hookup's per-airframe branches (`player_extend_hook`'s eleven `IF NODE_ACTIVE` arms, and
+`move_player`'s Balmoral arm calling `bal_wing_foldup`) test which `player_<airframe>` node is
+active, and the flown aeroplane's own subtree was not in the animation runtime's node table at all,
+so every arm read false: no hook call, no mount offset, no fold. The height is not an `AT_NODE`
+offset; it is the absolute `OBJECT_TRANSLATE_STATE` that arm writes on the airframe node
+(`(0, −2.172, −0.4)` for a Balmoral, `(0, 0, 0.5)` for a Devastator), and `player_retract_hook`
+writes it back to zero. Separately, `PlaneBuilder` skipped every `*_hook` subtree, so there was no
+hook to extend. And the airframe node's own visibility IS that active bit, which the flight rig was
+overwriting with its presence flag; presence now sits on the shake pivot one node higher.
 
 ## D20 ☑ CM01's drop-off cutscene shows no parachutist
 

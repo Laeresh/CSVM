@@ -139,7 +139,7 @@ internal sealed class HumanFlightAdapter
                 _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName));
         _flying[pi] = new FlyingAirframe(planeName, scheme);
         var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
-            scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true);
+            scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true);
         var planeModel = planeBuilder.Build(planeName);
         StartupProfile.Record("plane", mark);
         MeshInstances += planeBuilder.MeshInstanceCount;

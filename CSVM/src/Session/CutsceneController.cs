@@ -101,6 +101,7 @@ public sealed partial class CutsceneController : Node
     private Node3D? _bars;
     // The staged `player` marker an intro poses, or null in a session with no aircraft stage.
     private Node3D? _playerMarker;
+    private AircraftStage? _aircraft;
     private Node3D? _card;
     private Aabb _cardBox;
     // The bars node's authored scale, read alongside the card measurement and for the same reason:
@@ -204,6 +205,7 @@ public sealed partial class CutsceneController : Node
     public void BindWorld(AnimRuntime? runtime, AircraftStage? aircraft = null)
     {
         _runtime = runtime;
+        _aircraft = aircraft;
         _playerMarker = aircraft?.PlayerMarker;
         if (runtime == null)
         {
@@ -235,6 +237,7 @@ public sealed partial class CutsceneController : Node
     {
         _rigs = rigs;
         _aiPlanes = aiPlanes;
+        StageFlownAirframe();
         if (!Playing)
         {
             return;
@@ -534,10 +537,22 @@ public sealed partial class CutsceneController : Node
             _parked.Remove(hidden);
         }
 
+        StageFlownAirframe();
         OutOfFlight = true;
         ApplyOutOfFlight(true);
         Presenting = true;
         ApplyPresentation(true);
+    }
+
+    // Player 1's airframe subtree into the runtime's node table, the same restriction the swap
+    // keeps: the original has one player vehicle and the hookup definition names it. Run wherever
+    // that aircraft can have been replaced, since the definition resolves it by name and index.
+    private void StageFlownAirframe()
+    {
+        if (_runtime is { } runtime && _aircraft is { } aircraft && _rigs.Count > 0)
+        {
+            aircraft.StageFlown(runtime, _rigs[0].Controller?.PlaneModel);
+        }
     }
 
     // The chrome and the view target: CameraOwned is what silences the whole per-frame camera arm,
@@ -575,6 +590,10 @@ public sealed partial class CutsceneController : Node
             pilot.Inert = on;
             pilot.Audio?.SetPaused(on);
         }
+
+        // ⚠ In the same instant, not on the next tick: the definition raising this code goes on
+        // posing the aircraft in the same dispatch, so the pose it reads must be this one.
+        StagePlayerAircraft();
     }
 
     private void ParkAi()

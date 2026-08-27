@@ -172,6 +172,7 @@ public static class SuiteCatalog
         "landings-wingwalk-gate",
         "landings-train-pickup-gate",
         "landings-auto-land-button",
+        "landings-hookup-airframe",
         "landings-hangar-drop-gate",
         "campaign-airframe-swap",
         "roster-spawn-names",
@@ -930,6 +931,18 @@ public static class SuiteCatalog
             + "it starts the same animation the manual row would, the cutscene host still runs it, "
             + "and holding the button past the handoff does not re-fire the row",
             AutoLandButton));
+
+        // The hookup plays with no hook, the aeroplane too high and the wings unfolded when the
+        // flown airframe's own subtree is not in the runtime's node table.
+        into.Add(new TestHarness.Suite("landings-hookup-airframe",
+            "the zeppelin hookup on two airframes over the first story mission's BUILT world, "
+            + "every value read from the aircraft archive's own definitions: the flown aircraft is "
+            + "in the animation runtime's node table so the hookup's per-airframe branches can read "
+            + "its active bit, it carries its own docking-hook group built retracted, and the "
+            + "episode ends with that hook extended, the airframe hung at the mount offset the "
+            + "extend-hook definition authors for it, and its wings turned to the angles its own "
+            + "fold definition authors where the airframe has one",
+            HookupAirframe));
         into.Add(new TestHarness.Suite("landings-hangar-drop-gate",
             "CM07's zeppelin-hangar drop over its BUILT world, every name read from the mission's "
             + "own data: the one cutscene definition it range-gates, the ambient definition that "

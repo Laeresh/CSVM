@@ -400,6 +400,56 @@ the mission's `pickup_timing` definition. Its authored sequence opens
 `agent_approach_cone/land_on` 13.46 seconds later, synchronised with the ladder pickup window;
 the ordinary `landings.zrd` test then owns the final approach and cutscene start.
 
+#### The hookup poses the flown airframe's own parts
+
+A zeppelin hookup is one definition for eleven aeroplanes, and everything that differs between them
+is authored as a branch on which `player_<airframe>` node is ACTIVE. C3's `hooked_to_klondike`
+(`player` root, started by both `pz_manual_land` and `pz_auto_land`) is the worked example:
+
+| what the shot shows | where it is authored |
+|---|---|
+| the docking hook coming out | `CALL_ANIMATION [player_extend_hook]` in the opening sequence |
+| how high the aeroplane hangs | the `OBJECT_TRANSLATE_STATE` inside that def's own airframe branch |
+| a Balmoral folding its wings | `IF NODE_ACTIVE[8]` → `CALL_ANIMATION [bal_wing_foldup]` in `move_player` |
+
+`player_extend_hook` is a single `test_player` sequence of eleven `IF NODE_ACTIVE[n]` arms over its
+own eleven-name node list, each arm setting an absolute `OBJECT_TRANSLATE_STATE` on that airframe's
+node and then calling that airframe's hook definition before stopping the sequence:
+
+| airframe | mount offset | hook def |
+|---|---|---|
+| `player_balmoral` | `(0, −2.172, −0.4)` | `bal_hook_extend` |
+| `player_autogyro` | `(0, −0.948, −0.305)` | `gyro_hook_extend` |
+| `player_avenger` | `(0, −0.07, 0.5)` | `avenger_hook_extend` |
+| `player_bhawk` | `(0, 0, 0.8)` | `blood_hook_extend` |
+| `player_brigand` | `(0, −0.105, −0.37)` | `brig_hook_extend` |
+| `player_fbrand` | `(0, −0.4, 1.0)` | `fire_hook_extend` |
+| `player_fury` | `(0, −0.105, −0.37)` | `fury_hook_extend` |
+| `player_kestrel` | `(0, 0.27, 0.5)` | `kest_hook_extend` |
+| `player_peacemaker` | `(0, −0.377, −0.6)` | `peace_hook_extend` |
+| `player_pfighter` | `(0, 0, 0.5)` | `pirate_hook_extend` |
+| `player_warhawk` | `(0, −1.5, 0.2)` | `war_hook_extend` |
+
+The offset is the airframe's local transform inside the `player` wrapper, and `player_retract_hook`
+is the same eleven arms writing `(0, 0, 0)` back. **This is the height the aeroplane hangs at on
+the trapeze**: `player` is reparented under `pzhookpoint` and flown there by an SI script, and the
+airframe's own offset is the last term of that composition. It is authored, not a scale.
+
+Each `<x>_hook_extend` is rooted on that airframe's `<x>_hook` group node, which the shared archive
+ships INACTIVE with its arms and door already modelled; the definition's first sequence activates
+the group and the rest tweens the arms out. The wing fold is the same shape: `bal_wing_foldup` is
+rooted on `player_balmoral` and turns `rwingbend` and `lwingbend` ±1.9198622 rad over two seconds.
+`move_player` gives the Balmoral and Warhawk branches their own two-second wait and then `all_done`,
+so those two airframes end the episode sooner than the rest.
+
+**All three therefore need the flown aeroplane's own subtree in the animation runtime's node
+table.** CSVM indexes it there when the flight rigs are built, and again after an airframe swap,
+rebased onto the chapter's cross-archive base the same way the staged intro aircraft are
+(`AircraftStage.StageFlown`); the docking-hook group is built for a human rig and parked at its
+archive-authored inactive bit (`Mech3/PlaneBuilder.cs`). ⚠ The airframe node's own visibility is
+that ACTIVE bit, so the flight rig writes its presence one node higher, on the shake pivot: an
+aircraft a cutscene holds `Inert` while posing it must not read as "no airframe at all".
+
 #### Limits and readings
 
 - **Undecoded: whether the host reaches a called definition.** `FUN_004ee160` writes the host on the

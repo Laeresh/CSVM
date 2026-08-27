@@ -2182,13 +2182,6 @@ usual.
   so its `PaintScheme` can be carried onto the rebuilt rig alongside its damage. *Cross-refs:*
   `docs/PLAN-M5-polish-2.md` B9 and D15.
 
-- `BL-545` `[Bug]` `[Owed-playtest]` **The landing animation plays with no hook, the aeroplane too
-  high, and unfolded wings.** Seen at the controls on CM02's auto-land: the landing hook was not
-  deployed, the aeroplane sat too high on the trapeze, and a Balmoral folds its wings in the
-  original's landing cutscenes. *Fix shape:* three separate reads of the hookup definition and the
-  airframe's own nodes (the hook and the wing-fold are per-airframe animated parts, the height is
-  the `AT_NODE` pose's offset). *Cross-refs:* `BL-544`; `docs/PLAN-M5-polish-2.md` C10 and C12.
-
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
   controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.
   **The mechanism.** `InstantActionDirector.StuntSummaryFor` (`Session/InstantActionDirector.cs:761-764`) calls

@@ -136,9 +136,12 @@ public sealed class NameResolver<TNode>
     {
         _index.Add(new IndexRow(node, srcName, gamezIndex));
         _parentOf[node] = parent;
-        if (indexByPointer && !NameResolveFallback && gamezIndex is { } gi)
+        if (indexByPointer && !NameResolveFallback && gamezIndex is { } gi
+            && (!_byIndex.TryGetValue(gi, out var held) || !_isLive(held)))
         {
-            _byIndex.TryAdd(gi, node);
+            // First claimant wins, unless that claimant has since been freed: an airframe swap
+            // re-stages the same cross-archive block with a different aircraft in it.
+            _byIndex[gi] = node;
         }
     }
 
@@ -164,6 +167,12 @@ public sealed class NameResolver<TNode>
         var result = new List<TNode>();
         foreach (var row in _index)
         {
+            // A freed node stays in the index; nothing removes rows, and an airframe swap frees
+            // the aircraft it staged. Handing it out would be handing out a disposed object.
+            if (!_isLive(row.Node))
+            {
+                continue;
+            }
             var matches = match(row.SrcName)
                 || (row.SrcName.EndsWith(".flt", StringComparison.OrdinalIgnoreCase)
                     && match(row.SrcName[..^4]));
@@ -254,17 +263,14 @@ public sealed class NameResolver<TNode>
         {
             return false;
         }
-        if (_byIndex.TryGetValue(idx, out var bound))
-        {
-            node = bound;
-        }
+        node = BoundNode(idx);
         return true;
     }
 
     /// <summary>The world node bound to a gamez node index, or null when this build never created
     /// it. The by-index map is the only way to reach a node the caller cannot name, which is what
     /// an area-selected toggle needs; it is empty on a <see cref="NameResolveFallback"/> runtime.</summary>
-    public TNode? ByGamezIndex(int index) => _byIndex.TryGetValue(index, out var node) ? node : null;
+    public TNode? ByGamezIndex(int index) => BoundNode(index);
 
     /// <summary>Opens the bind-census window (a no-op unless <see cref="ReportResolution"/>): the
     /// owning runtime calls this before its bootstrap passes and <see cref="CloseCensus"/> after
@@ -339,6 +345,22 @@ public sealed class NameResolver<TNode>
 
     private static string Sample(List<string> shown, int total) =>
         string.Join(", ", shown) + (total > shown.Count ? $", … (+{total - shown.Count} more)" : "");
+
+    // The by-index map's one reader. A freed claimant answers null and gives the slot up, so the
+    // next Add for that index takes it: see Add's own remark.
+    private TNode? BoundNode(int index)
+    {
+        if (!_byIndex.TryGetValue(index, out var node))
+        {
+            return null;
+        }
+        if (_isLive(node))
+        {
+            return node;
+        }
+        _byIndex.Remove(index);
+        return null;
+    }
 
     // A parent->child NAME path: the first element within scope (falling back to the whole index
     // when that misses and localOnly is false), then each further element inside the previous
@@ -510,7 +532,7 @@ public sealed class NameResolver<TNode>
         if (anchors.Count < 2
             || def.RootName is not { } root
             || !def.NodeRefs.TryGetValue(root, out int idx)
-            || !_byIndex.TryGetValue(idx, out var exact))
+            || BoundNode(idx) is not { } exact)
         {
             return null;
         }

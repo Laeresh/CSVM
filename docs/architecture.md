@@ -486,7 +486,10 @@ still detached, where visibility writes emit nothing. `SetFaded` is the second i
 
 ## src/Mech3/PlaneBuilder.cs
 Builds one aircraft from its GameZ subtree (shaded, cullBackfaces: true — interior lattice must be
-backface-culled or it paints over the skin), skipping cockpit/destroyed/shadow/*_hook subtrees.
+backface-culled or it paints over the skin), skipping cockpit/destroyed/shadow subtrees, and
+`*_hook` unless `dockingHook` asks for it: a human rig gets the airframe's skyhook group built and
+parked at its archive-authored inactive bit, because the hookup cutscene's `<x>_hook_extend`
+activates that group rather than creating it (`docs/formats/anim-definitions/cutscenes.md`).
 Repaint(scheme) re-liveries the built plane in place; BuildDestroyed builds the wreck subtree with
 the plane-root→destroyed transform chain baked in; WingFlares/DamagePanels expose collected nodes.
 Flight (`spinningProps`) now builds the static `staticpropN` disc alongside the spinning blur discs
@@ -993,9 +996,12 @@ visibility rationale on their declarations — read those before touching either
 `LaunchCount`), the per-frame `Tick` sweep, `DiscardFor`/`Reset`, and the two predicates the rest of
 the runtime asks — `OwesBounce` (the retirement hold `AnimRuntime.Retirable` consults) and
 `HasSpinOn` (the `Loop{-1}` spin re-assert guard). Never constructs a motion — `PoseChannel` builds
-them and hands them over. `Node3D`-typed but never dereferenced: every operation here is identity
-comparison, so the behaviour is engine-free even though the type is not — the in-engine
-`bounce-launch` suite is what an off-engine fake cannot cover.
+them and hands them over. `Tick` drops a motion whose target node has been freed before touching it: a motion outlives the
+node it drives (an airframe swap, a rig torn down), and writing a transform to a disposed object
+throws out of the whole runtime advance rather than losing one motion. `Node3D`-typed and otherwise
+never dereferenced: every other operation here is identity comparison, so the behaviour is
+engine-free even though the type is not — the in-engine `bounce-launch` suite is what an off-engine
+fake cannot cover.
 
 ## src/Mech3/Anim/EmitterDirector.cs
 One runtime's `PUFFER_STATE` emitters as a module: `Assert` (start / revive / re-home), the four
@@ -1077,7 +1083,9 @@ the memoized `FindAll`, the scoped tier chain (`Resolve`/`ResolveScoped`), the s
 match → symbol narrowing → root lift, policy inputs `NameResolveFallback`/`SuppressRootLift`/
 `MaxRootLift`), and the bind census (`OpenCensus`/`CloseCensus`, `ResolutionLines`). Node identity
 is constructor-supplied (`IEqualityComparer<TNode>`; the engine keys on `GetInstanceId()`), never
-the node type's inherited `Equals`. `AnimRuntime`'s `Resolve`/`ResolveScoped`/`FindAll`/`Anchors`
+the node type's inherited `Equals`. Nothing removes a row, so `FindAll` and the by-index map both
+skip a node the caller's liveness test rejects and the map gives that index up to the next `Add`:
+an airframe swap frees the aircraft it staged and re-stages the same cross-archive block. `AnimRuntime`'s `Resolve`/`ResolveScoped`/`FindAll`/`Anchors`
 are one-line forwards; the engine-free instantiation over a plain token type is `CSVM.Tests`' suite.
 
 **Every tier is filtered by `AdmissibleStaging`, and the template pool is why.** The original
@@ -3295,9 +3303,13 @@ completely out of the session — not stepped (`SimStep` and `_Process` return a
 not on the aircraft collision layer, not hittable, not a targeting candidate, and not counted as
 living. `InPlay` (`!Crashed && !Inert`) is the one "is it there" question every roster asks; a
 consumer that still tests `Crashed` alone silently sees inert aircraft. Only two things are pushed
-as state, by the private `ApplyPresence()` — the model's `Visible` and `Body.SetHittable` — and it
+as state, by the private `ApplyPresence()` — `ShakePivot.Visible` and `Body.SetHittable` — and it
 runs from `Respawn` AND `_Ready`, because `Setup` calls `Respawn` before `_Ready` has built the
-body. Everything else consults the flag: `TakeProjectileHit`/`DebugForceCrash` refuse,
+body. **⚠ The pivot, never the model root**: that root is the airframe's own aircraft-archive node
+and its `Visible` is the ACTIVE bit a hookup definition reads to decide which aeroplane it is posing
+(`docs/formats/anim-definitions/cutscenes.md`), while a cutscene holds the aircraft `Inert`
+throughout. The two crash paths still hide the model itself, which is a death state rather than
+presence, and coming back into play undoes it. Everything else consults the flag: `TakeProjectileHit`/`DebugForceCrash` refuse,
 `DriveAiGunner` drops a standing target that leaves play, and outside this class
 `ProjectilePool.CollectAircraft` (which carries the aim assist, `SelectRankedTarget` and the
 hostile tracker with it), the pool's fuse/blast passes, `TurretController.Alive`, `AiPilot.Next`'s quarry
@@ -4310,7 +4322,7 @@ All three carry a rebased gamez index (`PointerBaseOf`: the chapter's node count
 next multiple of 2500), which is what makes a compiled definition's cross-archive symbol table
 bind them instead of claiming a name with no node. Built only for a mission whose start-anims name
 an intro (the same gate as before; a mid-mission drop with no intro of its own is not staged here,
-a named gap), so every other session's node census is exactly what it was. The pose half is
+a named gap), so every other session's node census is exactly what it was. `StageFlown` puts the FLOWN aircraft's own airframe subtree in the runtime's node table under the same rebase, run when the rigs are built and again after an airframe swap: that is what makes a hookup definition's per-airframe branches decidable, since each tests one `player_<airframe>` node's active bit and then poses that airframe's own hook, wing fold and mount offset. The pose half is
 `Session/CutsceneController.cs`; the decode is
 `docs/formats/anim-definitions/cutscenes.md`.
 
@@ -5086,7 +5098,9 @@ that advance, never sit against a camera one frame behind them. Hosted: 20 world
 itself on a realtime tick, and `CampaignDirector.HoldForCutscene` read it), 2 chrome off and the
 view off the aircraft (`FlightController.CameraOwned`, which also stops the cockpit rules being
 re-asserted), 11 the player out of flight (`Held` + `Inert` + engine audio paused, and the airframe posed on the
-staged `player` marker through `FlightController.StageAt` while that state holds), 913/914 park and
+staged `player` marker through `FlightController.StageAt` while that state holds, asserted in that
+same instant rather than on the next tick, because the definition raising the code goes on posing
+the aircraft in the same dispatch), 913/914 park and
 reveal the AI (only what this controller parked comes back), 666/667 the camera-parameter gate
 (tracked, not acted on — this engine applies that profile once per rig and never on a view change),
 1/10 the handoff and the in-flight systems; 965/966/967 the mid-mission airframe swap, through the
@@ -5105,6 +5119,9 @@ the codes are recorded once), which is where a definition's authored calls and c
 CM07's hangar drop clears its objective node through a `CALL_ANIMATION` there and nowhere else. It
 also retracts the bars, returns `camera1` to the runtime's world root (a definition composes itself by
 reparenting it) and parks it at the origin, which other definitions pose against.
+It also owns when player 1's flown airframe reaches the runtime's node table
+(`AircraftStage.StageFlown`), from `BindRigs` and again after a swap, which is what lets a hookup
+definition resolve that aeroplane's own hook, wings and mount offset.
 Skip is any key (not Escape) or pad button: force-stop the definition, then the same restore, so
 dropping the remaining beats cannot leave the mission held, hidden or unflyable.
 ⚠ `IntroAnims` is the scope, and it is a NAME test: Instant Action's `player_setup` authors the same

@@ -1018,6 +1018,11 @@ public partial class FlightController : Node3D
         {
             _stagedFrom ??= GlobalTransform;
             GlobalTransform = staged;
+            if (ShakePivot != null)
+            {
+                ShakePivot.Visible = true;
+            }
+
             if (PlaneModel != null)
             {
                 PlaneModel.Visible = true;
@@ -1890,8 +1895,15 @@ public partial class FlightController : Node3D
     // carry the state come (back) into existence.
     private void ApplyPresence()
     {
-        if (PlaneModel != null)
-            PlaneModel.Visible = InPlay;
+        // ⚠ Hide the pivot, never the model root: that root is the airframe's own archive node and
+        // its visibility is the ACTIVE bit a hookup definition reads.
+        // Decode: docs/formats/anim-definitions/cutscenes.md.
+        if (ShakePivot != null)
+            ShakePivot.Visible = InPlay;
+        // The crash paths hide the airframe itself, which is a death state rather than presence;
+        // coming back into play is what undoes it.
+        if (PlaneModel != null && InPlay)
+            PlaneModel.Visible = true;
         Body?.SetHittable(InPlay);
     }
 

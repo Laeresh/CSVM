@@ -1,3 +1,4 @@
+using System;
 using CSVM.Utils;
 using Godot;
 
@@ -57,6 +58,15 @@ public sealed class AircraftStage
     /// <summary>Mesh instances the prop build added, for the session's build summary.</summary>
     public int MeshInstances { get; private set; }
 
+    /// <summary>Where this chapter's cross-archive block starts (<see cref="PointerBaseOf"/>), so a
+    /// caller staging another aircraft-archive subtree rebases it the same way this build did.
+    /// </summary>
+    public int PointerBase { get; private set; }
+
+    /// <summary>The airframe subtree <see cref="StageFlown"/> last indexed, or null before the
+    /// flight rigs exist.</summary>
+    public Node3D? Flown { get; private set; }
+
     /// <summary>Where a chapter's own node table ends and the shared aircraft archive's begins: the
     /// chapter's node count rounded up to the next multiple of <see cref="PointerBlock"/>. Holds for
     /// all eight extracted chapters.</summary>
@@ -72,6 +82,7 @@ public sealed class AircraftStage
     {
         var stage = new AircraftStage();
         int pointerBase = PointerBaseOf(chapterNodeCount);
+        stage.PointerBase = pointerBase;
         if (planesGamez.FindByName(PlayerNode) is { } player)
         {
             var marker = new Node3D { Name = PlayerNode };
@@ -112,6 +123,25 @@ public sealed class AircraftStage
         string chuted = stage.Chuteman != null ? ChuteNode : $"no {ChuteNode}";
         Log.Info("world", $"aircraft stage: base {pointerBase} over {chapterNodeCount} chapter node(s), {marked}, {staged}, {chuted}, {stage.MeshInstances} mesh instances");
         return stage;
+    }
+
+    /// <summary>Puts the flown aircraft's own airframe subtree in the animation runtime's node
+    /// table, rebased onto <see cref="PointerBase"/>, which is what makes a hookup definition's
+    /// per-airframe branches decidable: each tests one <c>player_&lt;airframe&gt;</c> node's active
+    /// bit and then poses that airframe's own hook, wing fold and mount offset. Idempotent per
+    /// model; a swap stages the replacement and the freed one stops resolving on its own.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public void StageFlown(AnimRuntime runtime, Node3D? planeModel)
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        if (planeModel == null || ReferenceEquals(planeModel, Flown))
+        {
+            return;
+        }
+
+        Flown = planeModel;
+        runtime.IndexRebasedStage(planeModel, PointerBase);
+        Log.Info("world", $"aircraft stage: flown '{AnimRuntime.NameOf(planeModel)}' indexed at base {PointerBase}");
     }
 
     // Every built node's stamped archive index shifted into the chapter's cross-archive block. The

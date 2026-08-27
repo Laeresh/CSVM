@@ -21,6 +21,20 @@ internal static class LandingApproachSuites
     private const float StepDt = 1f / 60f;
     private const string PlaneNode = "player_bhawk";
 
+    // The definition the hookup calls to put the flown airframe on the trapeze, and the two
+    // airframes it is flown on: the one the defect was reported on, and one whose authored mount
+    // offset differs from it in every axis, so no single pose could satisfy both.
+    private const string ExtendHookAnim = "player_extend_hook";
+    private const string HookupPlayerSeq = "move_player";
+
+    // How close a pose has to land on its authored value to count as that value.
+    private const float PoseEpsilon = 1e-3f;
+
+    // How long the mission's own intro is given to run out before a hookup is flown, and how long
+    // the airframe's own wing-fold turn is given after the episode ends.
+    private const float IntroSettleS = 60f;
+    private const float FoldSettleS = 3f;
+
     // The flown approach: how far along the cone's own axis the aircraft starts, how long it is
     // given to reach the trigger, and the speed it flies at, which sits inside every band the
     // shipped table authors (50-320 mph).
@@ -48,6 +62,8 @@ internal static class LandingApproachSuites
     // What a landings suite does with the built world: the harness owns the build, the suite owns
     // the drive. The mission's own zrdr path comes with it, for the readers that are not the
     // objective script.
+    private static readonly string[] HookupPlanes = { "player_balmoral", "player_pfighter" };
+
     private delegate void MissionDrive(TestContext ctx, TestWorld world, CampaignDirector director,
         ObjectiveScript script, string missionZrdr, StringBuilder report);
 
@@ -80,6 +96,15 @@ internal static class LandingApproachSuites
     /// manual row would, and holding the button past the handoff does not re-fire it.</summary>
     internal static void AutoLandButton(TestContext ctx) =>
         DriveMission(ctx, FirstSeq, "test-autoland-button", DriveAutoLand);
+
+    /// <summary>Drives the hookup on two airframes and reads what it did to each: the flown
+    /// aircraft's own subtree is in the runtime's node table, so the definition's per-airframe
+    /// branches are decidable, and the episode ends with that airframe's docking hook extended, its
+    /// authored mount offset applied, and its wings folded where the airframe authors a fold.
+    /// </summary>
+    internal static void HookupAirframe(TestContext ctx) =>
+        DriveMission(ctx, FirstSeq, "test-hookup-airframe", DriveHookupAirframe);
+
     /// <summary>Drives CM07's zeppelin-hangar drop, the mission's other cutscene: the depot chain
     /// reaction's <c>CALL_ANIMATION</c> only ARMS it, because the definition is range-gated;
     /// reaching the hangar runs it; and the authored <c>RESET_STATE</c> at the handoff is what
@@ -238,6 +263,304 @@ internal static class LandingApproachSuites
         CheckNoRestart(ctx, world, trigger, cutscene, graph, rig, auto, report);
     }
 
+    // The hookup as the aircraft archive authors it: one branch per airframe in the extend-hook
+    // definition, and one more inside the hookup's own move_player sequence for the airframes that
+    // fold their wings. Every name below is read out of those definitions.
+    private static void DriveHookupAirframe(TestContext ctx, TestWorld world, CampaignDirector director,
+        ObjectiveScript script, string missionZrdr, StringBuilder report)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        var armed = LandingApproaches.Resolve(
+            chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
+        if (AutoFor(armed) is not { } auto)
+        {
+            ctx.Check(false, $"the chapter's landings.zrd carries an auto row to fly");
+            return;
+        }
+
+        var stage = world.Session.Aircraft;
+        report.AppendLine($"aircraft stage: {(stage != null ? $"base {stage.PointerBase}" : "none")}");
+        ctx.Check(stage != null,
+            $"the mission stages the aircraft archive, which is the frame the hookup poses in");
+        if (stage == null)
+        {
+            return;
+        }
+
+        foreach (var plane in HookupPlanes)
+        {
+            report.AppendLine($"--- {plane} ---");
+            WithTrigger(ctx, world, director, armed,
+                (trigger, cutscene, rig, graph) => RunHookupAirframe(
+                    ctx, world, graph, script, trigger, cutscene, rig, auto, plane, report),
+                planeNode: plane, aircraft: stage);
+        }
+    }
+
+    // Arms the auto row, flies it and presses the button (the path landings-auto-land-button
+    // already proves), then reads what the episode did to the airframe.
+    private static void RunHookupAirframe(
+        TestContext ctx, TestWorld world, ObjectiveGraph graph, ObjectiveScript script,
+        LandingApproachRuntime trigger, CutsceneController cutscene, FlightController rig,
+        LandingApproach auto, string planeNode, StringBuilder report)
+    {
+        if (MountBranch(world, planeNode) is not { } branch)
+        {
+            ctx.Check(false, $"'{ExtendHookAnim}' authors a branch for '{planeNode}'");
+            return;
+        }
+
+        if (rig.PlaneModel is not { } model)
+        {
+            ctx.Check(false, $"the rig built a '{planeNode}' model");
+            return;
+        }
+
+        var hook = branch.HookAnim is { } hookAnim ? NamedIn(world, hookAnim, model) : null;
+        var fold = FoldOf(world, auto.Anim, planeNode);
+        report.AppendLine($"authored mount offset {branch.Offset}, hook '{branch.HookAnim}' " +
+            $"group {(hook != null ? $"'{AnimRuntime.NameOf(hook)}' built" : "absent")}, " +
+            $"fold '{fold?.Anim ?? "(none)"}'");
+        bool reachable = false;
+        foreach (var found in world.Runtime.FindNodes(planeNode))
+        {
+            reachable |= ReferenceEquals(found, model);
+        }
+
+        ctx.Check(reachable,
+            $"the flown '{planeNode}' is in the animation runtime's node table, which is what the hookup's per-airframe branches read");
+        ctx.Check(hook != null,
+            $"and carries its own '{branch.HookAnim}' hook group rather than a skipped subtree");
+        ctx.Check(hook is not { Visible: true }, $"which starts retracted");
+
+        // Which definitions the episode actually reached, so a check that fails says whether the
+        // pose was wrong or the branch that writes it never ran at all (DIAG-20).
+        var started = new List<string>();
+        void Record(AnimDefinition def, Node3D? anchor)
+        {
+            if (def.AnimName is { Length: > 0 } name && !started.Contains(name))
+            {
+                started.Add(name);
+            }
+        }
+        world.Runtime.OnInstanceStarted += Record;
+        try
+        {
+            FlyTheAutoRow(ctx, world, graph, script, trigger, cutscene, rig, auto, planeNode, report);
+        }
+        finally
+        {
+            world.Runtime.OnInstanceStarted -= Record;
+        }
+
+        // The Balmoral branch ends its own sequence two seconds after calling the fold, so the
+        // episode is over while the authored two-second turn is still running. Let it finish.
+        for (float t = 0f; t < FoldSettleS; t += StepDt)
+        {
+            world.Runtime.Advance(StepDt);
+        }
+
+        report.AppendLine($"started: {string.Join(", ", started)}");
+        report.AppendLine($"after the episode: mount {model.Position}, hook visible={hook?.Visible}");
+        ctx.Check(hook is { Visible: true },
+            $"the hookup extends '{planeNode}'s own docking hook");
+        ctx.Check(Near(model.Position, branch.Offset),
+            $"and mounts it at the offset '{ExtendHookAnim}' authors for it, {branch.Offset}");
+        CheckWingFold(ctx, world, fold, model, report);
+
+        // ⚠ Last, and not optional: the rig this episode flew is freed when the body returns, and a
+        // motion still running on one of its nodes ticks into a disposed object on the next drive.
+        foreach (string anim in started)
+        {
+            world.Runtime.Stop(anim);
+        }
+    }
+
+    // The flight half, exactly as the auto row runs it: arm through the mission's own objective,
+    // fly the sphere, press the button, then step to the handoff.
+    private static void FlyTheAutoRow(
+        TestContext ctx, TestWorld world, ObjectiveGraph graph, ObjectiveScript script,
+        LandingApproachRuntime trigger, CutsceneController cutscene, FlightController rig,
+        LandingApproach auto, string planeNode, StringBuilder report)
+    {
+        // The mission's own intro is still playing at t=0 and raises the same out-of-flight code
+        // the hookup does, so its handoff would land in the middle of this episode and give the
+        // aircraft flight back mid-hookup. A player reaches the klondike minutes later.
+        for (float t = 0f; t < IntroSettleS; t += StepDt)
+        {
+            world.Runtime.Advance(StepDt);
+            cutscene.Tick();
+        }
+
+        report.AppendLine($"intro settled after {IntroSettleS:0}s, playing={cutscene.Playing}");
+        ArmRow(ctx, world, graph, script, auto, report);
+        var frame = world.Runtime.FindNodes(auto.Node)[0].GlobalTransform;
+        rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, planeNode)),
+            null, new CamParams(), frame * Lerp(auto, AxisFraction), frame * auto.Apex,
+            ApproachThrottle, ApproachSpeedMps);
+        rig.AutoLand = true;
+        for (int i = 0; i < RestartFrames && !cutscene.Playing; i++)
+        {
+            rig.SimStep(StepDt);
+            world.Runtime.Advance(StepDt);
+            trigger.Tick();
+            cutscene.Tick();
+        }
+
+        ctx.Check(cutscene.Playing, $"pressing the button starts '{auto.Anim}' under the host");
+        float played = 0f;
+        for (float t = 0f; t < PlayBudgetS && cutscene.Playing; t += StepDt)
+        {
+            world.Runtime.Advance(StepDt);
+            trigger.Tick();
+            cutscene.Tick();
+            graph.Step(StepDt);
+            played += StepDt;
+        }
+
+        report.AppendLine($"episode ran {played:0.##} s, playing={cutscene.Playing}");
+    }
+
+    // The wing fold's own two movers, checked against the rotations the fold definition authors.
+    // An airframe that authors no fold is a coverage statement, not a failure (DIAG-22).
+    private static void CheckWingFold(TestContext ctx, TestWorld world,
+        (string Anim, AnimDefinition Def)? fold, Node3D model, StringBuilder report)
+    {
+        if (fold is not { } authored)
+        {
+            report.AppendLine("no fold definition is rooted on this airframe");
+            return;
+        }
+
+        int checkedPairs = 0;
+        foreach (var seq in authored.Def.Sequences)
+        {
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Kind != "ObjectMotionFromTo" || ev.Data.Obj("rotate") is not { } rotate
+                    || ev.Data.Str("name") is not { } name)
+                {
+                    continue;
+                }
+
+                var want = rotate.Vec3("to");
+                var node = NamedNode(model, name);
+                var got = node?.Basis.GetEuler(EulerOrder.Yxz) ?? Vector3.Zero;
+                report.AppendLine($"fold '{name}': authored {want}, measured {got}");
+                ctx.Check(node != null, $"'{authored.Anim}' reaches the flown airframe's '{name}'");
+                ctx.Check(node != null && Near(got, want),
+                    $"and turns it to the {want} the definition authors");
+                checkedPairs++;
+            }
+        }
+
+        ctx.Check(checkedPairs > 0, $"'{authored.Anim}' authors the movers this reads");
+    }
+
+    // The airframe's branch of the extend-hook definition: the OBJECT_TRANSLATE_STATE on its own
+    // node is the offset it hangs at, and the CALL_ANIMATION after it is that airframe's hook.
+    private static (Vector3 Offset, string? HookAnim)? MountBranch(TestWorld world, string planeNode)
+    {
+        foreach (var def in world.Runtime.DefsFor(ExtendHookAnim))
+        {
+            foreach (var seq in def.Sequences)
+            {
+                for (int i = 0; i < seq.Events.Count; i++)
+                {
+                    if (seq.Events[i].Kind != "ObjectTranslateState"
+                        || !string.Equals(seq.Events[i].Data.Str("node"), planeNode,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    string? hook = null;
+                    for (int j = i + 1; j < seq.Events.Count && hook == null; j++)
+                    {
+                        if (seq.Events[j].Kind == "CallAnimation")
+                        {
+                            hook = seq.Events[j].Data.Str("name");
+                        }
+                    }
+
+                    return (seq.Events[i].Data.Vec3("state"), hook);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // The airframe's own wing fold, if it authors one: a CALL_ANIMATION inside the hookup's
+    // move_player sequence whose definition is rooted on this airframe's node.
+    private static (string Anim, AnimDefinition Def)? FoldOf(
+        TestWorld world, string hookupAnim, string planeNode)
+    {
+        foreach (var hookup in world.Runtime.DefsFor(hookupAnim))
+        {
+            foreach (var seq in hookup.Sequences)
+            {
+                if (!string.Equals(seq.Name, HookupPlayerSeq, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind != "CallAnimation" || ev.Data.Str("name") is not { } called)
+                    {
+                        continue;
+                    }
+
+                    foreach (var def in world.Runtime.DefsFor(called))
+                    {
+                        if (string.Equals(def.Name, planeNode, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return (called, def);
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // The node a definition anchors on, found inside one aircraft rather than the world index, so
+    // a second rig built for the next airframe cannot answer for the first.
+    private static Node3D? NamedIn(TestWorld world, string animName, Node3D model)
+    {
+        foreach (var def in world.Runtime.DefsFor(animName))
+        {
+            if (NamedNode(model, def.Name) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool Near(Vector3 a, Vector3 b) => (a - b).Length() <= PoseEpsilon;
+
+    private static Node3D? NamedNode(Node3D root, string name)
+    {
+        if (string.Equals(AnimRuntime.NameOf(root), name, StringComparison.OrdinalIgnoreCase))
+        {
+            return root;
+        }
+
+        foreach (var child in root.GetChildren())
+        {
+            if (child is Node3D n3d && NamedNode(n3d, name) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
     // The session wiring a flown story mission has and the suite harness's world build does not:
     // the cutscene host over the table's own definition closure, the trigger bound to the resolved
     // rows, a rig for it to fly, and the campaign director attached to that rig.
@@ -248,11 +571,13 @@ internal static class LandingApproachSuites
         IReadOnlyList<LandingApproach> armed,
         Action<LandingApproachRuntime, CutsceneController, FlightController, ObjectiveGraph> body,
         Action<ProjectilePool>? beforeBind = null,
-        IReadOnlyList<PickupSpec>? pickups = null)
+        IReadOnlyList<PickupSpec>? pickups = null,
+        string planeNode = PlaneNode,
+        AircraftStage? aircraft = null)
     {
         var cutscene = new CutsceneController();
         ctx.Host.AddChild(cutscene);
-        cutscene.BindWorld(world.Runtime);
+        cutscene.BindWorld(world.Runtime, aircraft);
         cutscene.HostDefinitions(ClosureOf(world, armed));
         world.Runtime.CallbackHost = cutscene.Host;
         var trigger = new LandingApproachRuntime();
@@ -264,7 +589,7 @@ internal static class LandingApproachSuites
         ctx.Host.AddChild(pool);
         try
         {
-            rig = BuildRig(ctx, world, pool);
+            rig = BuildRig(ctx, world, pool, planeNode);
             var craft = rig;
             cutscene.BindRigs(new[]
             {
@@ -1185,13 +1510,15 @@ internal static class LandingApproachSuites
             $"the mission's own objective chain arms '{approach.Node}'");
     }
 
-    private static FlightController BuildRig(TestContext ctx, TestWorld world, ProjectilePool pool)
+    private static FlightController BuildRig(TestContext ctx, TestWorld world, ProjectilePool pool,
+        string planeNode = PlaneNode)
     {
         var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
         try
         {
-            var stats = PlaneStats.Load(ctx.ZrdrPath, PlaneNode);
-            var model = new PlaneBuilder(GameZ.Load(ctx.PlanesGamezPath), textures).Build(PlaneNode);
+            var stats = PlaneStats.Load(ctx.ZrdrPath, planeNode);
+            var model = new PlaneBuilder(GameZ.Load(ctx.PlanesGamezPath), textures,
+                dockingHook: true).Build(planeNode);
             var rig = new FlightController
             {
                 PlaneModel = model,
