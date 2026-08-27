@@ -2689,12 +2689,21 @@ usual.
   read as green node names. The log's `targeting hud: P1 brackets on peoplehook at 999 m` /
   `pzhookpoint` / `workersvoyagezep` lines show `TargetRef.DisplayName` carrying the node name for
   an objective target, `TargetHud.LabelLines` drawing it as the second label line, and the colour
-  rule (`HudGreen` for a non-hostile team) applying as to any friendly vehicle. Not decoded: what
-  the original draws for an objective target (a message-table string such as the `MSG_TUR_*`
-  names the gunners log, an icon, a distinct colour) and which table maps a node to it.
-  *Fix shape:* decode the objective marker's label source (`objectives.zrd`'s target lists and the
-  message table they index) and its colour, give `TargetRef` an objective display name from it,
-  and keep the node name for the debug tag only. *⚠ Traps:* `BL-397` is the marker's bracket
+  rule (`HudGreen` for a non-hostile team) applying as to any friendly vehicle. The original's
+  marker, from the user's recollection of this mission: a red `Zeppelin [Disable] Worker's
+  Voyage` for the first objective, then a blue `[Dock] Worker's Voyage Docking Hook` for the hook,
+  so a category, an action verb in brackets, the target's proper name, and a colour by the
+  action rather than the team. The strings exist in `extracted/messages.json`: `MSG_OBJ_DOCK`
+  (8003, "Dock"), `MSG_OBJ_DISABLE` (8006, "Disable"), `MSG_OBJ_DISABLEENG` ("Disable Engines"),
+  `MSG_OBJ_WVOYAGE` (8025, "Worker's Voyage"), `MSG_OBJ_WVOYAGEHOOK` (8027, "Worker's Voyage
+  Docking Hook"), `MSG_OBJ_KLONDIKEHOOK` (8017, "Pandora Docking Hook"). `objectives.zrd` only
+  names the node (`ADD_OBJECTIVE_TARGET [workersvoyagezep]`, `[pzhookpoint]`,
+  `[[wv_tailhook, peoplehook]]`, `docs/formats/objectives.md` 173), so the node-to-name and the
+  node-to-verb maps live elsewhere (a vehicle or zeppelin record field, or a table `crimson.exe`
+  indexes by node name) and are the decode. *Fix shape:* decode where the objective marker's verb
+  and proper name come from for a target node and what sets the marker colour, give `TargetRef`
+  an objective display line built from those message ids, and keep the node name for the debug
+  tag only. *⚠ Traps:* `BL-397` is the marker's bracket
   range rule and not this. *Cross-refs:* `BL-397`, `docs/formats/markers.md`, `docs/org/targeting.md`.
 
 ## Tooling, platform & docs
