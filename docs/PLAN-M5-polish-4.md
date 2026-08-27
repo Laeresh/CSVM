@@ -93,7 +93,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ❌ `BL-517`: the Pandora's broadside fires on a friendly player (reopened by D32 as `BL-567`)
 12. ❌ `BL-524`: a friendly patrol without a net flies away after its first fight
 13. ◐ `BL-525`: the second Workers' Voyage docking completes without a docking
-14. ❌ `BL-514`: a shot-down carried turret keeps burning where it was
+14. ❌ `BL-514`: a shot-down carried turret keeps burning where it was (reopened by D32 as `BL-571`)
 
 ### Wave C — CM07 and CM08
 
@@ -986,3 +986,22 @@ none clean:
 
 A2's kill key is confirmed at the controls: `debug kill (F17): britpeace_2 crashed` and nine more
 in the same log, each followed by the `downed` line.
+
+**CM05 (C3/M04).** Log: `.scratch/logs/menu-20260827-225502.log`, first run. Two questions, no
+new item: the far-off explosions at open are the persist-log replay again (`BL-513`, the same
+fourteen camp objects re-killed at lines 158 to 171), and the mission has no intro cutscene in
+the data (`NEW_GAME_START` is `player_setup`, `pzep_engines_start`, `flag_state_pirate`; no
+`generic_intro` and no `camera1` def compiled into M04).
+
+**CM06 (C1C/M01).** Same log, second run. Four reports:
+
+1. A persistent flame stuck in the air, and the turret stuck with it. The death call
+   `large_30sec_fire` goes through `ExternalEffect` as a world-position snapshot and
+   `PlayEffectAt` stages it `TopLevel`; B14's disproof read the `PUFFER_STATE` path, which is
+   not the death-call path. `BL-514`'s disproof is reopened as `BL-571`.
+2. Objective markers read as green node names (`peoplehook`, `pzhookpoint`,
+   `workersvoyagezep`). Filed as `BL-572`.
+3. The docking ends too early and the player is teleported back onto the hook a few seconds
+   after flying off. B13's mechanism (`BL-525`, the unparsed node-active
+   `ACTIVATION_PREREQUISITE` letting the wrong hook-up leg run on the first docking) covers it;
+   `BL-525` extended with the symptom.

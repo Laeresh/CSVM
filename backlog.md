@@ -2539,7 +2539,11 @@ usual.
   `PrereqAnims`/`PrereqMinToSatisfy` fields, so nothing enforces the node-active form anywhere. Net
   effect: `wv_pickup_copilot` reaches `EXECUTED` on the FIRST docking already (`dropoff_node` active,
   `pickup_node` not), so `OBJECTIVE15`'s `ANIM_STATE` condition is already true the moment it wakes,
-  on the second-docking nap chain, well before any real second hook-up.
+  on the second-docking nap chain, well before any real second hook-up. At the controls the same
+  unconditional calls show as a docking that ends too early and, a few seconds after the player
+  has released and flown off, a teleport back onto the hook: the wrong leg's own hook-up
+  choreography (`wv_pickup_*`, which puts the flown airframe back on the trapeze) runs on the
+  first docking because nothing enforces its `pickup_node` prerequisite.
   *Fix shape:* parse the node-active `ACTIVATION_PREREQUISITE` shape on both paths (reader
   `REQUIRED [OBJECT_ACTIVE_LIST [[path...]]]`; compiled `Parent`+`Object` entry runs, the `Object`
   leaf's `active` field the required state) into a path/required-state list on `AnimDefinition`, and
@@ -2652,6 +2656,45 @@ usual.
   watches the cargo zeppelin go down and the skip works. *⚠ Traps:* the destruction itself already
   runs (fireballs, `tntbox`/`gasbag` deactivation); do not run it a second time under the camera.
   *Cross-refs:* `BL-548`, `BL-566`, `docs/formats/anim-definitions/cutscenes.md`.
+
+- `BL-571` `[Bug]` **A carried turret's death fire, and the turret itself, stay in the air where
+  the turret died while the zeppelin moves on.** *Evidence (traced for the fire, lead-only for the
+  turret):* reported at the controls in CM06 (C1C/M01) after a Workers' Voyage gun ring died: a
+  persistent flame hangs at the death position, and the turret is seen stuck there too. The fire
+  is `large_30sec_fire`, which the ring's destroy def (`doublecannon4-*doublecannon4-healthy.json`)
+  calls with `WithNode doublecannon4 (0, 2, 0)`. `AnimRuntime`'s `CallAnimation` case hands a
+  death's effect call to the world-effects runtime through `ExternalEffect` with a world POSITION
+  snapshot (`VisualOriginOf(callAnchor) + basis * offset`), and `PlayEffectAt` stages the template
+  root at that point with `TopLevel = true`; the site node rides along only as the callee's
+  `INPUT_NODE` for its condition gate, not as its parent. So the flame is world-anchored at the
+  death position for its authored 30 s while the hull flies away (the log's `WAIT_FOR_COMPLETION
+  on 'large_30sec_fire' not held — the callee is routed to the world-effects runtime` is that
+  hand-off). The earlier disproof (`BL-514`, closed as "the fire rides the hull") examined the
+  `PUFFER_STATE` path on the world runtime, which does re-read the host each frame; the
+  death-call path is this one. Whether the turret model itself is held back the same way (a
+  destroyed-role template placed through the same `PlayEffectAt`) or by something else is not
+  traced. *Fix shape:* an effect called `WithNode` on a node that moves (a carried site, any
+  vehicle sub-part) must follow that node: parent the staged template root under the site node,
+  or feed `EmitterDirector` the site's live transform each tick, keeping the `TopLevel` placement
+  for world-fixed sites. Then read how the ring's destroyed pose is placed and give it the same
+  rule. *⚠ Traps:* `trail-world-anchor` settled the opposite case (an emitter that must NOT ride
+  its host); keep both. Do not reopen `BL-514`'s `PUFFER_STATE` reading, it is correct for that
+  path. *Cross-refs:* `BL-514`'s closing commit (`git log --grep=BL-514`),
+  `docs/formats/anim-definitions.md` (`CALL_ANIMATION` `WithNode`), `docs/org/effects.md`.
+
+- `BL-572` `[Fidelity]` **A campaign objective's marker labels the raw node name in the team
+  colour (`peoplehook`, `pzhookpoint`, `workersvoyagezep`) instead of the original's objective
+  marker.** *Evidence (lead-only):* reported at the controls in CM06 (C1C/M01): objective markers
+  read as green node names. The log's `targeting hud: P1 brackets on peoplehook at 999 m` /
+  `pzhookpoint` / `workersvoyagezep` lines show `TargetRef.DisplayName` carrying the node name for
+  an objective target, `TargetHud.LabelLines` drawing it as the second label line, and the colour
+  rule (`HudGreen` for a non-hostile team) applying as to any friendly vehicle. Not decoded: what
+  the original draws for an objective target (a message-table string such as the `MSG_TUR_*`
+  names the gunners log, an icon, a distinct colour) and which table maps a node to it.
+  *Fix shape:* decode the objective marker's label source (`objectives.zrd`'s target lists and the
+  message table they index) and its colour, give `TargetRef` an objective display name from it,
+  and keep the node name for the debug tag only. *⚠ Traps:* `BL-397` is the marker's bracket
+  range rule and not this. *Cross-refs:* `BL-397`, `docs/org/hud.md`.
 
 ## Tooling, platform & docs
 
