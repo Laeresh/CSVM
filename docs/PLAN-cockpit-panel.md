@@ -83,8 +83,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 ### Wave C — the panel vibration
 
-20. ❌ Confirm or kill the float-precision hypothesis with a near-origin capture
-21. ❌ Prototype the interior in its own pass with the camera at the origin
+20. ☑ Confirm or kill the float-precision hypothesis with a near-origin capture
+21. ☐ Prototype the interior in its own pass with the camera at the origin
 
 ## Dependency and parallelism notes
 
@@ -292,7 +292,7 @@ Cockpit view.
 
 # Wave C — the panel vibration
 
-## C20 ❌ Confirm or kill the float-precision hypothesis with a near-origin capture
+## C20 ☑ Confirm or kill the float-precision hypothesis with a near-origin capture
 
 **Goal.** A yes or no on whether the panel's motion is float32 rounding in the transform chain,
 established cheaply before anyone builds the expensive fix.
@@ -374,30 +374,35 @@ At chapter scale, `--pos=10000,300,0` vs `--pos=10000,300,-0.3` (`.scratch/c20/f
 | rockets | +0.011 | -0.057 | 0.058 |
 | speedometer | +0.017 | +0.033 | 0.038 |
 
-Both pairs are bit-reproducible (repeat captures hash-identical, confirmed with `Get-FileHash`), so
-the numbers are the renderer's real output, not capture noise. The residual does not collapse near
-the origin: it is the same order of magnitude at both scales (0.027-0.103 px near the origin,
-0.038-0.122 px at 10 km), the per-instrument ranking is not preserved (rockets is the largest mover
-near the origin and the second-smallest at 10 km), and every ratio between the two scales sits
-between 0.68x and 1.86x, nowhere near the several-times-larger reading the hypothesis predicts for a
-10 km displacement. The float32-rounding-of-world-coordinates hypothesis is killed: whatever produces
-the sub-pixel per-instrument divergence, it is present at comparable strength when the aircraft sits
-metres from the origin, so moving the panel's render pass to origin-relative coordinates (C21) would
-not remove it.
+Both pairs are bit-reproducible (repeat captures hash-identical, confirmed with `Get-FileHash`), and
+the residual is the same order of magnitude at both scales (0.027-0.103 px near the origin,
+0.038-0.122 px at 10 km). **That negative was an artefact of the pose, not a disproof.** The
+`--weapon-lab` hold pins the aircraft at `dir=(0,0,-1)`, an axis-aligned basis whose products are
+exact 0s and 1s, which is the one attitude at which float32 rounding of a world transform cannot
+occur; and a luminance-weighted centroid moves with shading, so its 0.1 px floor was never the
+geometry. Re-measured with the aircraft flown (`--fly --det --shots=4`), a bezel-only
+phase-correlation registration of each dial against strut and dash control regions, and the
+mission's heading (`--direction=-0.743,0,-0.669`): at `--pos=0,300,0` every region holds within
+0.02 px; at `--pos=10000,300,0` the gun and damage dials jump 0.6-0.7 px frame to frame; at
+`--pos=20000,300,0` the speedometer jumps 2.7 px, the gun gauge 1.7 and the altimeter 1.5; with
+heading 0 the same 10 km position is green. The struts hold at 0.004 px throughout, and at the
+C1 mission spawn (`-7066, 326, -5519`, heading -48°) the dial faces jump 1-3 px on both the wall
+clock and `--det`, which is the report at the controls. Confirmed: the motion is float32 rounding of
+the interior's world-space transform at chapter-scale coordinates, exposed by a rotated attitude,
+and C21 is the right fix. The instrument is `.scratch/bl556/register2.py` over consecutive
+`--shots`, recorded in `BL-556`.
 
 **Verified.** Full battery on the plan's final tree: units 2444 passed; in-engine suites 146/146
 passed, engine errors clean; goldens 16 shots hash-identical; hitch stage clean (awareness only).
 The belt and damage recolour and the horizon ball were then confirmed at the controls in a flown
 Cockpit view.
 
-## C21 ❌ Prototype the interior in its own pass with the camera at the origin
+## C21 ☐ Prototype the interior in its own pass with the camera at the origin
 
-**Closed as disproven.** C20 killed the float-precision hypothesis this item exists to fix: the
-per-instrument centroid divergence from a small position nudge is the same order of magnitude near
-the world origin as at chapter-scale coordinates, so composing the interior's render pass in a
-small origin-relative space would not remove it. The cause is elsewhere in the render/shading path,
-undiagnosed here and out of this plan's scope; the open symptom, with everything ruled out so far,
-is `BL-556` in `backlog.md`.
+**Reopened.** C20's first reading closed this item as disproven; its re-measurement with a rotated
+attitude confirmed the hypothesis instead (see C20's Result), so this is the fix. The regression
+instrument is C20's registration over four consecutive `--shots` at `--pos=20000,300,0
+--direction=-0.743,0,-0.669`: every dial region must fall to the struts' 0.004 px floor.
 
 **Goal.** The panel is drawn in a coordinate frame small enough that float32 rounding is below a
 pixel, so the instruments hold still relative to each other and to the cockpit shell.

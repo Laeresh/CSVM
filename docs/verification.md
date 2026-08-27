@@ -595,6 +595,16 @@ loss. What the engine renders was decodable from the authored constants + oscill
   capture: rolling the captured aeroplane 90° at the top of the play loop left the wing-walk frame
   reading 0° roll under BOTH the old and the new rule, which reads as "the fix is unnecessary";
   banking before `PlayMissionTrigger` and holding the bank each step separated them at 90° versus 0°.
+- **INSTR-30** — **A world-coordinate precision effect cannot be measured at heading 0, nor with a
+  luminance centroid.** An axis-aligned basis multiplies by exact 0s and 1s, so float32 rounding of
+  a large world transform is zero there at any distance, and a `--weapon-lab` hold pins the aircraft
+  at exactly that attitude; a luminance-weighted centroid moves with shading, so its floor is never
+  the geometry. Measured on the cockpit panel (`BL-556`): the pinned heading-0 nudge read 0.03-0.12
+  px at both the origin and 10 km and closed the fix unbuilt, while a flown `--det --shots=4`
+  capture registered by bezel-only phase correlation against strut and dash control regions read
+  0.02 px at the origin, 0.7 px at 10 km and 2.7 px at 20 km under `--direction=-0.743,0,-0.669`,
+  and 0.00 px at 10 km with heading 0. Fly it, rotate it, take consecutive frames, keep a control
+  region that shares the transform but carries no drive.
 
 ## SRC — sources and documents
 

@@ -1983,34 +1983,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
 
-- `BL-556` `[Bug]` **The 3D cockpit instruments vibrate against a still cockpit shell.** Reported
-  at the controls and visible in a flown Cockpit view: the instruments move sub-pixel relative to
-  each other rather than as a block, a shimmer on the finest dial markings. *Evidence:* between
-  consecutive frames of a flown capture the gun gauge, rockets and altimeter centroids drift by
-  different amounts (-0.224, -0.355, -0.243 px on one frame pair, -0.327, -0.054, -0.209 px on the
-  next). *Ruled out, do not re-chase:* the gauge drive (the symptom is identical with it off); the
-  camera shake pivot; mipmaps and anisotropy; temporal antialiasing; the autohead idle aim; the
-  depth bias (it scales toward the eye and preserves projected position); the bezel-versus-panel
-  draw-order fight (real, fixed by the interior's `DepthBiasScale`, and the motion survived it);
-  and float32 rounding of the interior's world transform at chapter-scale coordinates. The last is
-  the one a near-origin test settles: with the aircraft pinned by `--weapon-lab` under `--det` and
-  nudged 0.3 m along the flight line, the four dial centroids move 0.03 to 0.10 px at the world
-  origin and 0.04 to 0.12 px at x = 10000 m, the same order of magnitude with a different
-  per-instrument ranking, where rounding predicts several pixels at 10 km. Rendering the interior
-  in its own origin-relative pass would therefore not remove it (`PLAN-cockpit-panel.md` C20,
-  C21). *Fix shape:* a new hypothesis is needed before any build. The residual is present with a
-  bit-identical transform chain, so the candidates left are in shading or rasterisation: the
-  panel's own vertex path (`VERTEX *= 1.0 - (depth_bias + node_bias)` is per vertex, so a
-  per-instrument bias would move each dial's projected outline differently), the interior's
-  `SceneBuilder` material path against the world's, or the reticle and HUD compositing under the
-  panel. Measure each candidate with the pinned-and-nudged capture pair before building on it.
-  *⚠ Traps:* `--hold` holds inputs and the plane glides, so it is not a static scene; every earlier
-  static measurement taken under it was of a moving aircraft. A frozen transform renders
-  bit-identical frames and shows no jitter at all, so the measurement needs a controlled nudge, not
-  a freeze. The eye reported this and the eye closes it; a centroid table alone does not.
-  *How you'd know it worked:* in a flown Cockpit view the dial graduations and the compass ticks
-  hold still against the bezel and the shell, and the per-instrument centroid residual under the
-  nudge falls below the 0.03 px noise floor the pinned captures established.
+- `BL-556` `[Bug]` **The 3D cockpit instruments jitter against a still cockpit shell: float32
+  rounding of the interior's world transform at chapter-scale coordinates.** Reported at the
+  controls and reproduced unattended: in a flown Cockpit view the dial faces move 1-3 px frame to
+  frame, each by its own amount, inside bezels, struts and a dash that hold still. *Evidence:* a
+  bezel-only phase-correlation registration of each dial against strut and dash control regions
+  over consecutive `--shots=4` frames of a `--fly --det` capture. At `--pos=0,300,0` every region
+  holds within 0.02 px whatever the heading; at `--pos=10000,300,0 --direction=-0.743,0,-0.669`
+  the gun and damage dials jump 0.6-0.7 px; at `--pos=20000,300,0` with that heading the
+  speedometer jumps 2.7 px, the gun gauge 1.7 and the altimeter 1.5; at the same 10 km position
+  with heading 0 nothing moves, because an axis-aligned basis multiplies by exact 0s and 1s. At the
+  C1 mission spawn (`-7066, 326, -5519`, heading -48°) the faces jump 1-3 px on both the wall clock
+  and `--det`. The struts hold at 0.004 px throughout: a few large instances round elsewhere than
+  the many small dial-face instances, which is why the instruments move relative to each other and
+  to the shell. *Ruled out:* the gauge drive, the camera shake pivot, mipmaps and anisotropy,
+  temporal antialiasing, the autohead idle aim, the depth-bias vertex scale (green at the origin
+  with the same biases), the bezel-versus-panel draw-order fight (real, fixed by the interior's
+  `DepthBiasScale`), and texture shimmer (the registration measures geometry and is green at the
+  origin with the same textures). *Fix shape:* `PLAN-cockpit-panel.md` C21, the interior rendered
+  in its own `SubViewport` with its own `World3D`, camera and interior both at the origin, so no
+  chapter-scale coordinate enters the chain; the alternative, an engine build with
+  double-precision coordinates, fixes the class outright at the cost of a custom Godot build.
+  *⚠ Traps:* ⚠ A pinned aircraft at heading 0 cannot show this at any distance, and a
+  luminance-weighted centroid moves with shading: the plan's first C20 reading closed the fix
+  unbuilt on exactly those two choices. Measure flown, rotated, over consecutive frames, with a
+  shell control (`docs/verification.md`). `--hold` holds inputs and the plane glides, so it is not
+  a static scene either. The eye reported this and the eye closes it; the registration table is
+  the instrument, not the verdict.
+  *How you'd know it worked:* the same registration at `--pos=20000,300,0` with the rotated heading
+  reads the struts' 0.004 px floor on every dial region, and in a flown Cockpit view the dial
+  graduations hold still against the bezel and the shell.
   *Cross-refs:* `BL-431` (the drive and the draw-order fix), `PLAN-cockpit-panel.md` C20/C21,
   `docs/verification.md`.
 
