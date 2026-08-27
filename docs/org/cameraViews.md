@@ -29,8 +29,8 @@ Two findings will not be guessed correctly:
 - **The Nose view and the Cockpit view are the same camera point.** Both place the camera at the
   plane's **`cockpit_camera` marker** — there is **no separate nose camera marker and no per-mode
   camera offset** anywhere. Mode 7 (nose) is the same physical position as mode 6 (cockpit); it
-  differs only in *rendering* (the cockpit interior and some plane nodes are hidden) and in
-  *head-look* (locked straight ahead) — and it runs the narrower 60° FOV.
+  differs in *rendering* (the cockpit interior and some plane nodes are hidden), runs player
+  head-look without the Cockpit-only autohead, and uses the narrower 60° FOV.
 - **The 62° vertical FOV the engine currently assumes does not exist in the binary.** The
   62°-in-radians constant `1.082104` (`63 82 8a 3f`) is absent. The correct base is **60° horizontal
   FOV**, with the single **80°** first-person cockpit exception.
@@ -88,7 +88,7 @@ game start / on the cycle key. So the selectable set is:
 |---|---|
 | `0` | **Chase** (3rd person) |
 | `6` | **Cockpit** (interior, 80°, free-look) |
-| `7` | **Nose** (no interior, 60°, head locked forward) |
+| `7` | **Nose** (no interior, 60°, player head-look with autohead off) |
 
 Modes `1`, `2`, `3`, `4`, `5`, `8`, `9` are **not** reachable as player-selected views — they are
 internal / context camera modes (e.g. other aircraft, cut-scene or context poses), which is why

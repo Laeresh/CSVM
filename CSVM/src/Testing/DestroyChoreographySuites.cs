@@ -1580,8 +1580,8 @@ internal static class DestroyChoreographySuites
             ctx.Check(rig.BallisticMotionsLaunched >= 4,
                 $"{planeName}: the rig launched {rig.BallisticMotionsLaunched} ballistic motion(s), one per piece at least");
 
-            // Callback 3 is a CAMERA command (docs/org/vehicleDamage.md), and CSVM has no view for
-            // it to leave, so the code stays counted rather than acted on.
+            // Callback 3 would leave the crash view that Destroy already selected, so it stays
+            // counted rather than overriding CSVM's crash-camera choreography.
             ctx.Check(rig.UnhandledEventCounts.TryGetValue("Callback(3)", out int three) && three > 0,
                 $"{planeName}: the authored Callback 3 is counted, not invented (×{(rig.UnhandledEventCounts.TryGetValue("Callback(3)", out int n3) ? n3 : 0)})");
             ctx.Check(chuteman is { Visible: true },

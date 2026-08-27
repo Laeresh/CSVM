@@ -196,12 +196,11 @@ public sealed class CameraController
     /// cockpit.</summary>
     public bool FirstPerson => PilotView.IsFirstPerson(ViewMode);
 
-    /// <summary>One press of the cycle key: Cockpit ↔ Nose, entering Cockpit from Chase, the
-    /// original's "Cycle Cockpit Views".</summary>
+    /// <summary>One press of the original's "Cycle Cockpit Views" key advances the three-stop
+    /// cycle: Cockpit → Nose → Chase → Cockpit.</summary>
     public void CycleCockpitViews() => ViewMode = PilotView.Cycle(ViewMode);
 
-    /// <summary>Select the chase view — the way back out of the first-person pair, which the
-    /// original reaches through its own view selector rather than through the cycle key.</summary>
+    /// <summary>Select the chase view directly, without walking the three-stop cycle.</summary>
     public void SelectChase() => ViewMode = PilotViewMode.Chase;
 
     /// <summary>The look-behind view is on: numpad 0 held, the run pinned it with

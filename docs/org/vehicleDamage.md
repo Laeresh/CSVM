@@ -567,9 +567,9 @@ matters here: `FUN_0047e080`'s case 3 reads the camera manager `DAT_0064ef78`'s 
 calls the mode setter `FUN_0042c280(0)` when it is not already 0, and clears the two view
 accumulators `DAT_0064ef60`/`DAT_0064ef64`. It is a CAMERA command: leave whatever view the player
 was in (modes 6 and 7 are the cockpit views) for the default external one, and drop the free-look
-pan. Code 15's own arm does the same one line up, setting mode 8, the death camera. CSVM ships no
-cockpit view and `FlightController.Destroy` cuts to the crash vantage outright, so code 3 has
-nothing to act on and stays counted.
+pan. Code 15's own arm does the same one line up, setting mode 8, the death camera.
+`FlightController.Destroy` already cuts from Cockpit or Nose to CSVM's crash vantage immediately;
+applying the later code 3 would incorrectly leave that crash view, so it stays counted.
 
 Code 0 is never authored. The authored `Callback` handler is `FUN_004ec5e0` and passes the event's
 own value; code 0 is emitted only by `FUN_004ebbb0`, which tears an anim instance down, and no
