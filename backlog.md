@@ -836,9 +836,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   roster slot 34 (`0x475c9a`, three shipped rosters author it) but the mission spawner never
   fills it, so an AI nitro injector has no live producer (ledger row, unsupported). Read the roster
   block at spawn; check which other roster slots the spawner drops on the same path.
-- `BL-454` `[Owed-playtest]` **Nitro dial sweep against the original.** `NitroGaugeNeedleTests`
-  pins the needle law, but nobody has put the moving dial beside a screenshot of the original's.
-  One screenshot of each at full, half and empty tank.
 - `BL-456` `[Research]` **Trace the writers of the crashed flag `[obj+0x384]`.** Its readers are
   decoded (`0x48c4ba` selects the far-field arm, `0x48cd4a`, `0x48dfbe` gives a crashed hull
   severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
@@ -1581,6 +1578,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   crashing fighters may be downstream of this heading (launched into the bay wall), so settle the
   heading first. *Cross-refs:* `BL-515`, `BL-522`.
 
+- `BL-546` `[Bug]` **A nitro engage produces none of its visuals: no prop swap, no exhaust smoke.**
+  *Evidence:* reported at the controls on a nitrous build whose boost accelerates the aircraft and
+  whose dial now reads correctly: nothing on the airframe changes. Every part of the
+  wiring is present, which is what makes this worth an item rather than a feature request. The
+  `nitro_boost` def ships in `plane_props.zrd` as `LOCAL_NODES_ONLY` / `ACTIVATION ON_CALL` /
+  `AUTO_RESET_NODE_STATES OFF`, and its sequences set `OBJECT_ACTIVE_STATE nitropropN ACTIVE`,
+  ramp `OBJECT_OPACITY_FROM_TO` 0→1 on the same discs, spin them through `spin_nitrorotorN`, and
+  play `snd_nitrostart AT_NODE nitroprop1`; `nitro_decay` reverses it. The airframes carry 34
+  `nitropropN` nodes between them. `PlaneBuilder` classifies the disc and builds it hidden for
+  that def (`PlaneBuilder.cs:275-277`, `PropParts.cs:25`), `EffectCatalogue.NitroAnims` binds both
+  defs, and `FlightController` plays them off the `NitroSystem` edges
+  (`FlightController.cs:1727-1741`). So the data is authored, the node is built, the def is bound
+  and the call site fires; the break is between the call and the frame.
+  *Fix shape:* establish first which half fails. Engage the boost with `--debug-anim` and see
+  whether `nitro_boost` starts at all. If it does not, the suspects are `CrashRuntime` or
+  `PlaneModel` being null on the human flight path, or `PlayWithin` failing to resolve
+  `nitropropN` inside `PlaneModel`. If it does start, the disc is being activated and then drawn
+  invisible, which points at `OBJECT_OPACITY_FROM_TO` against a material with no transparency, or
+  at the hidden build state surviving the `ACTIVE` event. Settle the prop first: the smoke is a
+  second question and the prop is the one whose whole chain is already readable.
+  *⚠ Traps:* ⚠ **The absence of a `nitro engaged` line proves nothing** — `FlightController.cs:1733`
+  logs through `Log.Debug("flight", …)`, which the file sink does not take. Do not conclude the
+  edge never fired from a quiet log. The `ai_nitro_boost` / `ai_nitro_decay` wrappers in the same
+  file are retargeting shims the executable never references, so do not wire the AI to them while
+  chasing this. `NitroSystem`'s own state machine is decoded and confirmed working (the boost does
+  accelerate the aircraft), so the defect is downstream of the edge, not in the tank or the arm.
+  *Cross-refs:* `BL-447` (the AI's `medium_aishake` and `snd_nitro` blip on an engage, and the
+  decay lockout that `_nitroDecayLeftS` stands in for), `docs/org/flightModel.md` "Nitro",
+  `docs/formats/hud.md` "Cockpit gauges" for the dial half, which is settled.
+
 ## Audio
 
 - `BL-455` `[Feature]` **There is no audio options menu, so the music level is a hard-coded
@@ -2227,17 +2254,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Neither that family nor either other `PLAYER_1ST_PERSON` def (`muzzle_burst`, `player-1`'s
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
-
-- `BL-520` `[Bug]` **The nitro gauge draws wrong while the injector works.** *Evidence:* reported
-  at the controls: nitro boosts the aircraft as expected, and the dial's display is "completely
-  wrong". The gauge is `GaugeCluster`'s two needles fed by `NitroInstalled`/`NitroBoosting`/
-  `NitroChargeFrac` (`FlightHud.cs:327-329`, `GaugeCluster.cs:306-307`); `NitroGaugeNeedleTests`
-  pins the needle law, so the defect is in the feed, the dial's art placement, or the sweep's zero
-  and direction against the face. What "wrong" means was not recorded (needle direction, needle
-  missing, face art, charge never moving) and is the first thing to establish. *Fix shape:* a
-  screenshot of ours at full, mid-boost and empty beside the original's dial, which is `BL-454`'s
-  owed sweep and now has a reported defect to explain. *Cross-refs:* `BL-454` (fold the screenshot
-  comparison into this), `BL-447`.
 
 ## Splitscreen
 
