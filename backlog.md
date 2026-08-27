@@ -457,17 +457,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   belongs at the pool. *Cross-refs:* `BL-521` (the balloons in the same mission's start state),
   `docs/formats/anim-definitions.md`'s `ObjectActiveState` handling.
 
-- `BL-514` `[Bug]` **CM06 (C1C/M01): a Workers' Voyage rocket turret shot down keeps burning in the air where
-  it was.** *Evidence:* reported at the controls: after the turret dies, the fire effect stays lit at
-  the turret's former position while the zeppelin moves on, so a flame hangs in empty sky. The
-  turret's death effects are parented to the world rather than to the turret's node on the moving
-  hull, or the part is removed while its effect emitter is left behind. *Fix shape:* anchor a
-  carried turret's death effect to the sub-part's node (or the hull's), the same `TopLevel` anchor
-  question the trail effects went through (`trail-world-anchor` suite), and stop it when the part is
-  gone. *⚠ Traps:* a ground emplacement's fire anchors correctly to the world, so the fix is on the
-  carried case only; keep the two apart by `TurretController.Site`. *Cross-refs:* `BL-121` (trail
-  anchors), `BL-507` (the same `Site` discriminator).
-
 - `BL-515` `[Research]` **CM04 (C3/M03): the Barracuda takes damage from every side, and the original may
   only accept hits inside its hangar.** *Evidence:* reported at the controls as a question: the
   submarine can be damaged from any angle, where the recollection is that the original demands
@@ -2348,7 +2337,7 @@ usual.
   *Fix shape:* read CM06's `objectives.zrd` for the two docking objectives and their gates, then
   trace `ObjectiveGraph` for what completed the second one. *⚠ Traps:* `ObjectiveGraph.
   ScanForCompletion` resolves one objective per tick round-robin (`BL-458`), so a completion can land
-  frames after its cause. *Cross-refs:* `BL-458`, `BL-514` (the same airship).
+  frames after its cause. *Cross-refs:* `BL-458`.
 
 - `BL-526` `[Bug]` **CM07 (C1/M02): the rope ladder never deploys.** *Evidence:* reported at the controls:
   the pickup's rope ladder does not appear, so the pickup step cannot be flown. CM07 arms a pickup

@@ -93,7 +93,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ❌ `BL-517`: the Pandora's broadside fires on a friendly player
 12. ❌ `BL-524`: a friendly patrol without a net flies away after its first fight
 13. ☐ `BL-525`: the second Workers' Voyage docking completes without a docking
-14. ☐ `BL-514`: a shot-down carried turret keeps burning where it was
+14. ❌ `BL-514`: a shot-down carried turret keeps burning where it was
 
 ### Wave C — CM07 and CM08
 
@@ -512,26 +512,51 @@ a `campaign-objectives-*` suite row if the harness reaches it; D32.
 (`BL-458`), so a completion can land frames after its cause. `BL-514` is the same airship and a
 separate item.
 
-## B14 ☐ `BL-514`: a shot-down carried turret keeps burning where it was
+## B14 ❌ `BL-514`: a shot-down carried turret keeps burning where it was
 
 **Goal.** A carried turret's death fire rides the hull (or the sub-part's node) and stops when the
 part is gone; a ground emplacement's fire stays world-anchored as it is.
 
 **Evidence (confidence: lead-only).** Reported at the controls in CM06: after a Workers' Voyage
 rocket turret dies, the fire stays lit at its former position while the zeppelin moves on. The
-effect is parented to the world, or the part is removed and its emitter left behind. `<TODO:
-re-verify still-open against the code>`
+effect is parented to the world, or the part is removed and its emitter left behind.
 
-**Approach.** Anchor a carried turret's death effect to the sub-part's node or the hull, the same
-`TopLevel` anchor question the trail effects went through (`trail-world-anchor` suite), keyed on
-`TurretController.Site`, and stop it with the part. Decode lane: none expected.
+**Disproof.** Re-verified against the code: the mechanism already anchors correctly. A world
+turret's `TurretController.Site` (built by `BuildEmplacements`, the only path a zeppelin's own
+gun rings take; there is no zeppelin `BuildCarried` host anywhere in the source) is an ordinary
+scene child of whatever it is mounted on. `ZeppelinRuntime.Place` moves a zeppelin by writing one
+`GlobalTransform` on the hull root every sim step, which the scene tree propagates to every
+descendant, `Site` included. A destroy sequence's `PUFFER_STATE` dispatch runs on the WORLD
+runtime, whose `TemplateStage` is unpooled and un-placing in real play
+(`WorldSession.Options.PlacesCalledTemplates` is true only under the anim-lab debug tool), so the
+fire's `PufferEmitterFactory`-built emitter is never `TopLevel`-frozen at a placement snapshot;
+`EmitterDirector.Tick` re-reads the host node's live `GlobalTransform` every frame regardless.
+Nothing in the turret-death path (`TurretController`, `TurretEmplacementRuntime`,
+`DestructibleRegistry.ApplyDeathSwap`) reparents or frees the site node early.
+
+**Approach (as evaluated).** Anchor a carried turret's death effect to the sub-part's node or the
+hull, the same `TopLevel` anchor question the trail effects went through (`trail-world-anchor`
+suite), keyed on `TurretController.Site`, and stop it with the part. Decode lane: none expected.
 
 **Model recommendation.** medium.
 
-**Verify.** A suite in the `trail-world-anchor` shape for a carried turret's death effect; a
-headless CM06 kill shows the effect's position tracking the hull; D32.
+**Verify.** `turret-death-effect-world-anchor`, in the `trail-world-anchor` shape: a real
+`TurretController.BuildEmplacements` turret's `Site` under a carrier posed off-axis (the same C1
+spawn pose that hid the original trail-world-anchor bug), a `PUFFER_STATE` dispatched through
+`AnimRuntime.Emitters` (the real `EmitterDirector`, a no-GPU `CountingEmitterFactory`), the
+carrier translated and re-yawed between two `Tick`s, and the emitter's fed position asserted to
+track the moved site rather than the pose it started at. Seen FAILING (able-to-fail probe:
+`EmitterDirector.Tick`'s host-transform read pinned to identity) and PASSING against the landed
+code.
 
-**⚠ Traps.** The fix is on the carried case only; the world emplacement is correct today.
+**⚠ Traps.** The fix is on the carried case only; the world emplacement is correct today. The
+report's own "carried" reads as "rides a moving zeppelin", not the code's `TurretController.Site
+== null` sense (aircraft `BuildCarried`) that `BL-507` used the same discriminator for; a
+zeppelin's own gun rings are `Site != null` structures exactly like a ground AA gun, and the code
+already treats their moving platform correctly (`TurretController.PlatformOf`, the differenced
+`PlatformVelocity` estimate).
+
+**Verified.** <pending orchestrator run>
 
 # Wave C — CM07 and CM08
 
