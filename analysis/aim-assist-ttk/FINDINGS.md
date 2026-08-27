@@ -140,7 +140,7 @@ The absorbed damage amount is logged but does not affect CSVM's roll. A design-l
 Focused in-engine suites:
 
 - `--run-tests=aim-assist`: **PASS 1/1, 0 errors**. This covers shipped constants, smoothing, forget timing, intercept, gates, ranking, ordnance candidates, scatter, and update order.
-- `--run-tests=air-to-air`: **PASS 1/1, 0 errors** on a clean retry. This covers real projectile/body hits, weapon pairing, armour-first damage, the whole-health kill rule, self-hit rejection, and rockets.
+- `--run-tests=air-to-air`: **PASS 1/1, 0 errors**. This covers real projectile/body hits, weapon pairing, armour-first damage, the whole-health kill rule, self-hit rejection, and rockets. (The first attempt did not run: the tree carried a compile error from concurrent editing. The suite itself is not intermittent.)
 
 Runtime diagnostic:
 
@@ -162,3 +162,41 @@ The decisive follow-up capture would use the same player aircraft and gun group 
 3. damage-triggered maneuver transition: confirmed CSVM invention and observed hit-rate loss;
 4. collision geometry: plausible but direction unmeasured;
 5. sticky aim-assist strength: low-probability cause; executable comparison and tests agree.
+
+## Correction: no shipped hostile authors `armor 0`
+
+A re-run of the roster census against the extracted data
+([`Census-RosterDurability.ps1`](Census-RosterDurability.ps1)) reproduces this report's structural
+numbers exactly (414 blocks, 251 enabled non-player-team, 25 with a positive `init_health`) and
+overturns the `armor 0` finding above.
+
+**Slot 66 does not exist on those 18 blocks.** Roster blocks are not fixed-width: the field-count
+histogram is `{42:20, 65:1, 66:33, 67:14, 68:39, 81:307}`, and a block of 66 fields carries indices
+0 to 65 only. The five Peacemakers in C2/M05, the ten Bloodhawks and Kestrels in C2B/M04 and the
+three Kestrels in C3/M01 are all 66-field blocks, which is why they add to exactly 18. They author
+no armour override, the airframe default applies, and CSVM's behaviour on them is already correct.
+The same off-by-one inflates the armour-override count: 20 blocks author a non-negative `armor`, not
+38, and the 18 absent slots make up the difference.
+
+Every real override RAISES durability. The 20 values run 90, 96 (x2), 102 (x2), 108 (x7), 114, 126
+(x6) and 132, and each sits on a mission's named ace. Dropping them therefore makes CSVM's aces
+**softer** than the original, not tougher, so the evidence ranking above inverts on this point:
+fixing `BL-557` lengthens time to kill on the hard fights rather than shortening it, and it cannot
+be the cause of a slow kill felt in ordinary play.
+
+The reading rule this cost, which [`docs/formats/ai-rosters.md`](../../docs/formats/ai-rosters.md)
+already states in bold: **treat a missing slot as unset, never as zero.** A census that maps absent
+to `0.0` invents authored data, and here it invented an entire class of armour-stripped enemy.
+
+## The difficulty scale is the campaign-wide one, not a Novice-only case
+
+The ranking above qualifies the missing `0.875` multiplier as costing 14.3 % "against original
+Novice", which reads as a corner case. It is not one. The campaign's difficulty selector has its own
+vocabulary: `rof/ui_strings.json` ids 109-111 are `IDS_DIFFICULTY` = **Normal / Hard / Hardest**,
+under `IDS_GO_DIFFICULTY_DESC` "Select the difficulty level for a solo campaign", where Instant
+Action's `IDS_IA_DIFFICULTY` is the separate novice/veteran/ace list. Normal is the lowest of the
+three, so it is difficulty 0 and takes the `0.875` scale.
+
+A campaign played on Normal therefore meets enemies with 14.3 % more armour and health in CSVM than
+in the original, in every mission. That makes the missing scale the broadest of the confirmed causes
+and the one to fix first, ahead of the roster overrides, which push time to kill the other way.
