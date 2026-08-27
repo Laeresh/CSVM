@@ -29,6 +29,11 @@ internal sealed class FlightRosterPolicy
     public int? AmmoCap { get; init; }
     public int? AiAttackSkill { get; init; }
     public bool AiAttackSkillExplicit { get; init; }
+
+    /// <summary>The session difficulty (<see cref="CSVM.Flight.Difficulty"/>), which scales enemy
+    /// armour and health at spawn and nothing else. An Instant Action wave's skill overrides it per
+    /// spawn through <see cref="AiSpawn.Difficulty"/>.</summary>
+    public int Difficulty { get; init; } = CSVM.Flight.Difficulty.Normal;
     public bool AutoFire { get; init; }
     public bool AutoFireRockets { get; init; }
     public bool DebugMarkers { get; init; }
@@ -60,6 +65,7 @@ internal sealed class FlightRosterPolicy
         AmmoCap = spec.AmmoCap,
         AiAttackSkill = spec.AiAttackSkill,
         AiAttackSkillExplicit = spec.AiAttackSkillExplicit,
+        Difficulty = spec.Difficulty,
         AutoFire = spec.AutoFire,
         AutoFireRockets = spec.AutoFireRockets,
         DebugMarkers = spec.DebugMarkers,

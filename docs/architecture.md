@@ -131,9 +131,10 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ZeppelinMotion.cs` — the kinematic zeppelin motion law (M4 F17): forward-only flight along a net under the record's speed/accel/rate/pitch limits, plus the decoded sqrt engine-loss curve behind the `AliveEngines` seam.
 - `src/Flight/ManeuverExecutor.cs` — plays one maneuver's attitude-step program as `FlightInput` per sim step: the input source D11's state machine runs during `evasive maneuver`.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
-- `src/Flight/RocketTriggerLatch.cs` — the rocket trigger's consumed-press latch (`BL-566`): arms when flight regains input (a cutscene skip, a pause-menu Resume) while F/A is still down, and reads the trigger released until that button lets go. Public so its own unit tests can drive it; `FlightController`'s only caller.
+- `src/Flight/RocketTriggerLatch.cs` — the rocket trigger's consumed-press latch (`BL-583`): arms when flight regains input (a cutscene skip, a pause-menu Resume) while F/A is still down, and reads the trigger released until that button lets go. Public so its own unit tests can drive it; `FlightController`'s only caller.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/DisablingIntensity.cs` — the decoded `SONIC`/`FLASH` intensity plateau and `FLASH`'s facing test, on squared distances; feeds the player's wash weight and the AI stun's duration.
+- `src/Flight/Difficulty.cs` — the difficulty setting as the engine's 0/1/2, its two naming vocabularies, and the enemy armour/health multiplier it scales spawns by; it reaches nothing else.
 - `src/Flight/TanglerChoke.cs` — the choker's engine-dead duration and the `ENGINE_DEAD` globals it reads; the original's squared-distance-over-raw-radius mismatch, reproduced.
 - `src/Flight/SmokeScreens.cs` — the smoke screen's stun trap: the world's active screens, walked over the roster every sim step to stun AI and wash humans behind the layer; the cone rule, the wash cadence and the three `player.json` tunables beside it.
 - `src/Flight/BeeperTags.cs` — the beeper's paint and the seeker's pick: the world's tag list with its countdown, dead-aircraft slam and five-second tail, the tagging gate, and the per-frame query with the original's inverted-dot, squared-distance selection rule.
@@ -142,6 +143,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, the pilot's selected view mode, the weapon lab's held-airframe orbit. Steers a `Camera3D` it does not own.
 - `src/Flight/HeadLook.cs` — the pilot's head in a first-person view: snap directions, free-look integration, the center key, and the exponential smoothing that carries the shown angles to their targets. Engine-free, so every law unit-tests.
 - `src/Flight/CockpitVisibility.cs` — the per-mode hiding of the pilot's OWN aircraft in a first-person view: interior in and body out for Cockpit, both out plus `markers`/`dontmove` for Nose, everything back for any external pose. `Rules` is pure; `Bind`/`Apply` write it onto one built plane model.
+- `src/Flight/CockpitOverlay.cs` — `--cockpit-pass`: the cockpit interior drawn in a `SubViewport` world of its own, camera and panel at the origin, composited under the HUD. One per player, on that rig's `HudParent`.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, the steering step (turn clamp, speed penalty, `LOCK_ON_LEAD`, the seeker's retarget), tracers, flashes, per-surface impact, damage to destructibles, the beeper's paint.
 - `src/Flight/ProjectileFlyoutAnim.cs` — `ProjectilePool`'s `FLYOUT MODEL_ANIMATION` half: each ordnance round runs its def on the sequence interpreter, the pool as host (trail puffers, the torpedo's launch look and switch, its sounds).
@@ -1552,6 +1554,18 @@ victim, scaled by twice the dot below 0.5); `SONIC` does not, and that is the on
 difference between the flags. The consumers are the player's screen wash, the AI stun and the smoke
 screen; the module itself knows about none of them.
 
+## src/Flight/Difficulty.cs
+The difficulty setting, as the engine's own 0/1/2, and the single thing it does: multiply an enemy
+vehicle's armour and health maxima at spawn by 0.75 / 1.0 / 1.25 (`FUN_0047c210`, decoded in
+[org/vehicleDamage.md](org/vehicleDamage.md)). `Parse` takes both shipped vocabularies, the campaign
+selector's Normal/Hard/Hardest and Instant Action's novice/veteran/ace, which name the same three
+tiers; `FactorForSpawn` owns the team gate, which is inequality with the player's team and not
+hostility, so a neutral or team-less spawn is scaled too. `PlaneStats.WithEnemyDurability` applies
+the factor, and the per-spawn jitter runs after it, banding around the scaled hull. The setting
+reaches nothing else: in the executable it is readable only through `FUN_00440710`, whose four
+callers are that spawn, the options screen, the settings save pass, and Instant Action's
+save/set/restore around the same spawn. No AI skill, accuracy or aggression is keyed to it.
+
 ## src/Flight/TanglerChoke.cs
 The choker's engine-dead duration (`FUN_004b9bc0`'s `TANGLER` branch, decoded in
 [org/ordnanceTypes.md](org/ordnanceTypes.md)): a static, Godot-`Node`-free `Duration` of
@@ -1751,6 +1765,21 @@ from an external selection, since in first person it drives the head instead of 
 so a pane whose pilot sits in the cockpit hides that plane's body in EVERY pane. Each rig owns its
 own plane model, so the rule is at least per-pilot rather than keyed to player 1; making it
 per-pane needs render layers, which Decision 5 defers.
+
+## src/Flight/CockpitOverlay.cs
+The cockpit interior's own render pass, behind `--cockpit-pass` and off by default. It takes the
+built `cockpit1` node out of the plane model and re-parents it into a `SubViewport` carrying its own
+`World3D`, at zero translation with the mount basis `PlaneBuilder` gave it (the head-pitch tilt and
+`InteriorScale`); the pass's camera sits at that world's origin, aimed by
+`CameraController.FirstPersonPose` with the plane position and the `cockpit_camera` offset both
+zero, since those two cancel between the eye and the panel. The projection is therefore the main
+world's exactly, computed from small numbers instead of chapter-scale ones. The viewport is
+transparent-backed on `HudLayers.CockpitPass`, so the world draws under the panel and the whiteout,
+the screen wash and the HUD still draw over it. Lighting is a copy of the world's sun, re-aimed by
+the inverse plane attitude each frame, plus the world environment duplicated with its background
+cleared. `GameSession.BuildCockpitPasses` builds one per `PlayerRig`, on that rig's own `HudParent`;
+`FlightController._Process` calls `Sync` beside the camera write, and `Sync` follows the interior's
+own `Visible` so `CockpitVisibility` keeps deciding which views show a cockpit.
 
 ## src/Flight/ImpactOutcome.cs
 "What should happen when this weapon hits this surface id" as a value — `EffectName` (the row's

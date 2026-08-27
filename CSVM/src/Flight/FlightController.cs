@@ -47,6 +47,20 @@ public partial class FlightController : Node3D
     /// was not built an interior — AI planes and the labs — which then never hides anything.</summary>
     public CockpitVisibility? Cockpit;
 
+    /// <summary>The authored instrument panel inside that interior: needles and the two warning
+    /// lamps, driven off the same readings the screen-space cluster draws. Null wherever
+    /// <see cref="Cockpit"/> is.</summary>
+    public CockpitGauges? CockpitPanel;
+
+    /// <summary>The <c>cockpit1</c> subtree itself, as the plane builder returned it. Null wherever
+    /// <see cref="Cockpit"/> is.</summary>
+    public Node3D? CockpitInterior;
+
+    /// <summary>The interior's own render pass, which takes <see cref="CockpitInterior"/> out of
+    /// the plane model and draws it at the origin. Null under <c>--no-cockpit-pass</c>, when the
+    /// interior renders in the main world instead.</summary>
+    public CockpitOverlay? CockpitPass;
+
     /// <summary>The wobble oscillators and the pivot they roll — the node the assembler hung
     /// <see cref="PlaneModel"/> under. Null when no rig assembly ran (parked lab planes).</summary>
     public PlaneShake? Shake;
@@ -485,6 +499,7 @@ public partial class FlightController : Node3D
     private int? _team;                          // Team's backing field — null until overridden (B7)
     private bool _held;                          // Held's backing field — the airframe is pinned (weapon lab)
     private bool _cameraOwned;                   // CameraOwned's backing field — the lab's free camera has the view
+    private bool _panelShown;                    // the cockpit interior is on the screen this frame
     private bool _orbitPrev;                     // edge detection for entering the orbit (halt or hold)
     private bool _reseedOrbit;                   // the free camera handed the view back; re-seed from where it left it
     private bool _heldPinned;                    // the pinned pose below is valid (captured on the first held step)
@@ -1670,6 +1685,10 @@ public partial class FlightController : Node3D
             // Keyed to the pose this frame actually took, not to the selection — a look-behind
             // puts the camera outside the aircraft and must bring its body back while held.
             Cockpit?.Apply(_cam.ViewMode, firstPersonPose);
+            // Same rule, so the panel is driven exactly on the frames it is on the screen.
+            _panelShown = CockpitVisibility.Rules(_cam.ViewMode, firstPersonPose).Interior;
+            // After the hide, so the pass shows exactly the frames the interior itself does.
+            CockpitPass?.Sync(_renderPose.Basis, _cam, Shake?.Roll ?? 0f, Projectiles?.ActiveMuzzleLights());
             _cam.LogView(view, _model.Position, _model.Attitude);
         }
 
@@ -1697,6 +1716,12 @@ public partial class FlightController : Node3D
             VersusHud.HeadingDeg = headingDeg;
         }
         _pilotHud.Draw(BuildHudState((float)delta, simDt, halted, headingDeg));
+        // After the HUD feed, so the authored needles show THIS frame's readings rather than
+        // trailing the screen-space dials by one.
+        if (_panelShown && CockpitPanel != null && _pilotHud.Gauges is { } panelSource)
+        {
+            CockpitPanel.Apply(panelSource);
+        }
         if (!halted && !Crashed)
         {
             float speedFrac = _model.Speed / _model.Stats.FdSpeed;
@@ -1933,7 +1958,7 @@ public partial class FlightController : Node3D
             Held = _held,
             Halted = halted,
             StallWarned = _model.IsStallWarned(),
-            StallFraction = _model.StallFraction,
+            AvailableLoadFactor = _model.AvailableLoadFactor,
             Stalled = _model.isStalled(),
             AutoLandOffered = AutoLandOffered,
             WallDt = wallDt,
@@ -1950,6 +1975,7 @@ public partial class FlightController : Node3D
             ReticleOrigin = reticleOrigin,
             ReticleNose = reticleNose,
             InheritedVelocity = inheritedVelocity,
+            Attitude = Attitude,
         };
     }
 

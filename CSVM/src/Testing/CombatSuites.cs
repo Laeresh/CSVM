@@ -1233,11 +1233,14 @@ internal static class CombatSuites
             if (spawned.Damage is { } dmg)
             {
                 ctx.Check(dmg.Parts.Count == 0, $"…with no zones: parts={dmg.Parts.Count}");
-                // The per-spawn ±5 % lands on the authored pair, so this is a band, not an equality.
-                float lo = 72f * (1f - PlaneStats.AiSpawnJitterSpread);
-                float hi = 72f * (1f + PlaneStats.AiSpawnJitterSpread);
+                // Two spawn-time modifiers stand between the authored 72 and this number, in the
+                // engine's order: the difficulty scale on a spawn carrying no team (so not the
+                // player's), then the per-spawn ±5 % around the scaled hull. Hence a band.
+                float scaled = 72f * Difficulty.EnemyDurabilityFactor(spec.Difficulty);
+                float lo = scaled * (1f - PlaneStats.AiSpawnJitterSpread);
+                float hi = scaled * (1f + PlaneStats.AiSpawnJitterSpread);
                 ctx.Check(dmg.WholeHealthMax >= lo && dmg.WholeHealthMax <= hi,
-                    $"…seeded off the authored 72 inside the jitter band: {dmg.WholeHealthMax:0.##} in [{lo:0.##}, {hi:0.##}]");
+                    $"…seeded off the authored 72 scaled to {scaled:0.##} at difficulty {Difficulty.Label(spec.Difficulty)}, inside the jitter band: {dmg.WholeHealthMax:0.##} in [{lo:0.##}, {hi:0.##}]");
                 ctx.Check(dmg.WholeHealthMax < summed * (1f - PlaneStats.AiSpawnJitterSpread),
                     $"…and strictly below the old summed-over-player-zones {summed:0.#}");
             }

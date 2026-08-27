@@ -39,8 +39,11 @@ public class GaugeArrowTweenTests
         Assert.Equal(step, afterOneStep, 3);
     }
 
+    /// <summary>The decoded rate is 0.8 revolutions per second (288 °/s), so the gun gauge's
+    /// 90°-per-position step takes 312 ms. ⚠ Supersedes a 533 ms span computed from the 168.7 °/s
+    /// figure measured off footage.</summary>
     [Fact]
-    public void ANinetyDegreeSweepSpansAboutFiveHundredThirtyThreeMillisecondsSim()
+    public void ANinetyDegreeSweepSpansAboutThreeHundredTwelveMillisecondsSim()
     {
         float angle = 0f;
         int steps = 0;
@@ -51,7 +54,7 @@ public class GaugeArrowTweenTests
         }
         float simMs = steps * (1000f / 60f);
         Assert.Equal(90f, angle, 3);
-        Assert.InRange(simMs, 510f, 560f);
+        Assert.InRange(simMs, 300f, 330f);
     }
 
     /// <summary>Shortest-way wrap: 170° → -170° is only 20° apart going UP through the ±180° seam,

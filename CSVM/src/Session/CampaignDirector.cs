@@ -381,6 +381,12 @@ public sealed class CampaignDirector
     /// <summary>A danger zone the player completed, routed into the graph's awake objectives.</summary>
     internal void NotifyDangerZoneCompleted(string zone) => Graph?.NotifyDangerZoneCompleted(zone);
 
+    /// <summary>What a <c>DEDG</c> over <paramref name="group"/> counts right now: the roster
+    /// members of that group neither crashed nor deactivated. Null before <see cref="Attach"/> or
+    /// with no roster spawned. Exposed so a suite can assert the count against the world it built
+    /// rather than infer it from which objective fired.</summary>
+    internal int? GroupLiveCount(int group) => _world?.GroupLiveCount(group, null);
+
     private static CampaignMission? MissionFor(string zrdrPath, int seq)
     {
         foreach (var mission in CampaignSequence.Load(zrdrPath))
@@ -679,7 +685,7 @@ public sealed class CampaignDirector
         {
             // Null while no roster is spawned keeps every DEDG false rather than reading an empty
             // world as "the group is wiped out", which would win a mission on its first tick. A
-            // deactivated member counts as alive, as the decoded walk counts a parked one.
+            // deactivated member is dead to DEDG (docs/formats/objectives.md, the DEDG row).
             if (_owner._roster.Count == 0)
             {
                 _owner.Gap("DEDG", $"group {group} has no spawned aiv roster to count");
@@ -688,7 +694,8 @@ public sealed class CampaignDirector
             int alive = 0;
             foreach (var (name, plan) in _owner._rosterPlans)
             {
-                if (plan.Group == group && !_owner._roster[name].Crashed)
+                var rig = _owner._roster[name];
+                if (plan.Group == group && !rig.Crashed && !rig.Inert)
                 {
                     alive++;
                 }

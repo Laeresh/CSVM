@@ -12,6 +12,12 @@ namespace CSVM.UI;
 /// </summary>
 internal static class HudLayers
 {
+    /// <summary>The cockpit interior's own render pass (<c>Flight/CockpitOverlay</c>), under everything
+    /// else: 3D always draws before any canvas layer, so a negative layer still composites over
+    /// the world while the whiteout, the screen wash and the HUD keep drawing over the panel,
+    /// exactly as they do when the interior is in the main world.</summary>
+    public const int CockpitPass = -1;
+
     /// <summary>Screen-space effects that belong to the world picture and sit *under* the HUD:
     /// the cloud whiteout (<c>Session/WeatherRig.cs</c>) and the splitscreen pane root.</summary>
     public const int WorldOverlay = 0;

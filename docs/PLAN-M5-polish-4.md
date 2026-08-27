@@ -86,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ `BL-516`: CM03's AA turret never fires
 4. ◐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
 5. ◐ `BL-512` + `BL-522`: the Barracuda's drive jumps, its launch faces the wrong way, and its fighters crash at once
-6. ☑ `BL-566`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
+6. ☑ `BL-583`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
 
 ### Wave B — CM05 and CM06
 
@@ -413,7 +413,7 @@ take-off run) is correct as built.
 2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
 16 shots hash-identical, hitch awareness-only; D32 judges it at the controls.
 
-## A6 ☑ `BL-566`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
+## A6 ☑ `BL-583`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
 
 (Minted as `BL-556` during the run and renumbered twice, because main minted its own `BL-556`, the
 difficulty scale, and then `BL-563` to `BL-565`, the CM12 `DEDG` items, in parallel. The landing

@@ -484,41 +484,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   voice line is flavour and this closes. *Cross-refs:*
   `BL-512` (the same sub's launch motion), `BL-522` (its launched fighters).
 
-- `BL-556` `[Bug]` **Enemy armour and health are not scaled by the difficulty setting.** *Evidence:*
-  the roster spawn `FUN_0047c210` multiplies the armour and health maxima of any vehicle whose team
-  differs from the player's by **0.75 / 1.0 / 1.25** on difficulty 0 / 1 / 2
-  ([`docs/org/vehicleDamage.md`](docs/org/vehicleDamage.md), "Where the numbers come from at spawn",
-  which records the scale as a decoded constant to apply, not a TUNE). In Instant Action the wave's
-  Novice/Veteran/Ace skill *is* that multiplier and nothing else: it stands in as the global
-  difficulty for the duration of one spawn
-  ([`docs/formats/instant-action.md`](docs/formats/instant-action.md), "So the skill names are a
-  hit-point scale in Instant Action, and nothing else"). CSVM applies no scale at any difficulty:
-  `InstantAction.cs` stores `InstantActionWave.EnemySkill` and says in its own doc comment that
-  nothing on the path reads it, and no difficulty or health-scale term exists in `CSVM/src`.
-  `AiFlightAssembler` seeds the unscaled airframe pools and applies only the faithful ±5 % per-spawn
-  jitter. **The campaign's own selector is the lowest of the three by default**: `rof/ui_strings.json`
-  ids 109-111 are `IDS_DIFFICULTY` = **Normal / Hard / Hardest** in that order, under
-  `IDS_GO_DIFFICULTY_DESC` "Select the difficulty level for a solo campaign", a separate vocabulary
-  from Instant Action's `IDS_IA_DIFFICULTY` novice/veteran/ace. Campaign Normal is therefore
-  difficulty 0 and takes the **0.75** multiplier, so CSVM's hostiles carry **a third more armour and
-  health than the original does on the setting the campaign is normally played at** (1 / 0.75), in
-  every mission. On Hard the omission is invisible and on Hardest CSVM is easier.
-  ⚠ The factor is `1 + k * 0.125` with `k` of **-2 / 0 / +2**, not -1 / 0 / +2: `MOV EDI,0xfffffffe`
-  at `0x0047cb3b` and `CMP EAX,0x2` / `MOV EDI,EAX` at `0x0047cb47`, raw bytes
-  `bf feffffff eb0c e8c93bfcff 83f802 7505 8bf8`. The spread is a symmetric two eighths either side
-  of 1.0. `docs/org/vehicleDamage.md` and `docs/org/hangar.md` gave the low tier as 0.875 and the
-  high as 1.125 and were corrected against the disassembly, along with the arithmetic they fed
-  (a patrol boat is 30/40/50, not 35/40/50).
-  *Fix shape:* carry the resolved difficulty to the spawn (the Instant Action wave's own skill for
-  that spawn, the session difficulty elsewhere) and apply the multiplier to the armour and health
-  maxima before the jitter, in the same place the jitter is applied.
-  *⚠ Traps:* the multiplier is on the MAXIMA at spawn, not on incoming damage, so it must not be
-  applied at the hit site. It applies only to a vehicle whose team differs from the player's, so the
-  player and the wingmen keep unscaled pools. The wave skill is not a pilot rating and must not be
-  routed into the nine-slot skill vector. And the ±5 % jitter is independent of it: apply both, in
-  that order, not one instead of the other.
-  *Cross-refs:* `BL-557` (the roster overrides that land in the same spawn path),
-  `analysis/aim-assist-ttk/FINDINGS.md`.
+- `BL-570` `[Feature]` **The difficulty setting has no menu row.** *Evidence:* the scale itself is
+  live (`Flight/Difficulty`, `--difficulty=<normal|hard|hardest>`), but a CLI flag is the only way to
+  change it, so a player launching normally always flies the default Normal. The original puts it on
+  the game-options screen: `IDS_GO_DIFFICULTY_TITLE` "Difficulty" with
+  `IDS_GO_DIFFICULTY_DESC` "Select the difficulty level for a solo campaign", over the three
+  `IDS_DIFFICULTY` rows Normal / Hard / Hardest (`rof/ui_strings.json` ids 109-111).
+  *Fix shape:* a row on the options screen writing the same 0/1/2 the flag parses, persisted with the
+  rest of the profile so it survives a launch, with the flag continuing to win for a scripted run.
+  *⚠ Traps:* it is a campaign-scope setting, not a per-mission one, and Instant Action does not read
+  it: an IA wave's own skill stands in for that spawn, which is a different control the wizard
+  already owns. Do not wire the menu row into the IA path or a wave will fly at two difficulties.
+  And it selects a hit-point tier only, so it must not be presented as changing how well the enemy
+  flies or shoots, which it does not.
+  *Cross-refs:* `Flight/Difficulty`, `docs/formats/instant-action.md`, `docs/cli.md`'s
+  `--difficulty`.
 
 - `BL-557` `[Bug]` **The roster's `init_health` and `armor` overrides are parsed away, so the named
   aces spawn too soft.** *Evidence:* the original's roster spawn applies slot 7 `init_health` when
@@ -533,8 +513,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   durability above the airframe default. They are the mission's named aces: `hafury_1`-`_6` at
   108/108 in C2/M03, `hkfirebrand_9` at 132/132, the Black Hat Brigands at 126/126, and so on.
   *Fix shape:* add the two fields to `RosterSpawnPlan`, read them in `CampaignRosterPlan.Build`,
-  forward them through `SpawnFor`, and apply them in the assembler before `BL-556`'s difficulty
-  scale and the jitter.
+  forward them through `SpawnFor`, and apply them in the assembler before the difficulty scale and
+  the jitter, at `AiFlightAssembler.Assemble`'s `WithEnemyDurability` call, which is where the
+  engine's spawn order is already reproduced.
   *⚠ Traps:* **a missing slot is not a zero.** Blocks are not fixed-width (field-count histogram
   42/65/66/67/68/81) and 33 of the 414 stop at 66 fields, so slot 66 does not exist on them; a reader
   that maps absent to `0.0` invents 18 armour-stripped hostiles in C2/M05, C2B/M04 and C3/M01 that
@@ -543,8 +524,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `-1` on all 414 blocks and stay parsed-and-ignored; do not revive that path. And note the
   direction: fixing this makes those enemies TOUGHER, so it does not relieve a long time-to-kill, it
   lengthens it on exactly the fights that should be hard.
-  *Cross-refs:* `BL-556`, `analysis/aim-assist-ttk/FINDINGS.md` (whose census of this field is
-  superseded by the script beside it).
+  *Cross-refs:* `Flight/Difficulty` (the scale this lands in front of),
+  `analysis/aim-assist-ttk/FINDINGS.md` (whose census of this field is superseded by the script
+  beside it).
 
 - `BL-561` `[Research]` **Aircraft projectile hit volumes are tuned convex decompositions, and the
   original's hit geometry is untraced.** *Evidence:* `PlaneCollider` builds an aircraft's hit boxes
@@ -560,9 +542,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   polygon loop, and how our boxes compare with the model's own silhouette.
   *⚠ Traps:* this is a hit-RATE question, not a damage-per-hit one; do not chase it with a TTK
   stopwatch, which cannot separate the two. Measure rounds fired against rounds registered on a held
-  burst at a fixed target, then compare. And settle `BL-556`/`BL-557` first: with the pools wrong,
-  any TTK reading taken here is unusable as evidence either way.
-  *Cross-refs:* `BL-556`, `BL-557`, `docs/org/weaponRay.md`, `analysis/aim-assist-ttk/FINDINGS.md`.
+  burst at a fixed target, then compare. And settle `BL-557` first, and take the reading at a known
+  `--difficulty=`: with the pools wrong, any TTK number here is unusable as evidence either way.
+  *Cross-refs:* `BL-557`, `Flight/Difficulty`, `docs/org/weaponRay.md`,
+  `analysis/aim-assist-ttk/FINDINGS.md`.
 
 ## Weapons & combat
 
@@ -950,7 +933,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps:* a wall-clock measurement of anything in that session is not a sim measurement, so
   compare durations in sim seconds (the log's 1 Hz `flight:` cadence, `GameClock.Frame`), never in
   wall seconds; do not raise `max_physics_steps_per_frame`, which only deepens the catch-up spiral.
-
 
 ## Environment & world
 
@@ -1894,7 +1876,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     every frame the excess-over-gate law (`(speedRatio − min_speed)/magnitude_quotient`,
     `PlaneShake.SetSpeedRatio`) is positive. CSVM's `_speed` oscillator is a deterministic damped
     sawtooth, a different mechanism from the original's random walk, and next to the gun buzz now
-    ported to its own random-walk step, the sawtooth dive rattle reads muted. **Open/fidelity
+    ported to its own random-walk step, the sawtooth dive rattle reads muted; in the Cockpit view
+    at full speed it is too small to see at all, while the firing wobble reads. **Open/fidelity
     action:** give `_speed` a random-walk accumulator on the pattern of `_fire` (a
     `GunBuzzKickScale`-equivalent tune knob), fed by the existing `SetSpeedRatio` law, then playtest
     the dive against the original clip to judge the ported magnitude. Trace:
@@ -2060,18 +2043,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   tracks its own pick. Depends on H22's target-tracking plumbing; `docs/controls.md` gains the
   bindings when it lands.
 
-- `BL-431` `[Feature]` **The cockpit interior's `gauges` subtree (39 meshes, `cockpit1`) renders as
-  static geometry — the needles never move, and two interior warning lamps ship parked hidden.**
-  `PLAN-cockpit-view.md` (Wave B) built the interior render but deliberately kept `GaugeCluster` as
-  the only DRIVEN instrument set (Decision 1): the in-3D dial faces, bezels and panel are authored
-  geometry with no needle animation wired to them, so a Cockpit-view capture shows the screen-space
-  HUD dials drawn over a static 3D panel holding a fixed pose. Two lamp nodes, `lowalt_on` and
-  `stallwarning_on` (present on all 11 airframes, shipped `active: true`), are parked hidden by
-  `PlaneBuilder.ParkInteriorStates`/`IsInteriorDrivenState` alongside the windshield bullet-hole
-  decals — nothing lights them.
-  *Fix shape:* drive the authored needles and the two lamps off the same telemetry `GaugeCluster`
-  already reads, then decide whether the screen-space cluster retires in first person or keeps
-  doubling up over the 3D panel as it does today.
+- `BL-431` `[Feature]` **The screen-space `GaugeCluster` doubles up over the driven 3D panel in
+  first person, and whether it should is undecided.** The drive itself has landed:
+  `CockpitGauges` (`src/Flight/CockpitGauges.cs`) binds the needle nodes, the artificial-horizon
+  ball, the two warning lamps, the belt lights, the damage zones and the character readouts inside
+  the pilot's own `cockpit1` and writes them each frame from the readings `GaugeCluster` already
+  holds, so the authored panel and the screen-space dials cannot disagree.
+  `FlightController` applies it on exactly the frames `CockpitVisibility` puts the interior on the
+  screen. The lamps stay parked by `PlaneBuilder.ParkInteriorStates` at build, which is still right:
+  a build with no rig driving it (every lab and suite) must render a pristine cockpit.
+  *What remains:* the choice this item was filed with, now the only open part. In Cockpit the 3D
+  panel and the flat dials both read live, one over the other. Retire the screen-space cluster in
+  first person, move it, or keep the doubling. Nothing in the original settles it (see below), so
+  it is a judgement at the controls.
   ⚠ *The `POSITION_1ST` half of this item is answered and carries no work.* It was filed asking
   whether `GaugeCluster` should adopt a first-person layout from `hud_v2.zrd`'s
   `POSITION_1ST`/`POSITION_3RD` keys; `FUN_00454e70` reads those into a per-section debug text
@@ -2079,17 +2063,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   in y, written only under `DAT_00624df0`), not into dial placement. There is no per-view gauge
   layout in the original to port, so the retire-or-double-up choice above is CSVM's own call
   (`docs/formats/hud.md`, "Cockpit gauges").
-  *Decoded, ready to build against* (`docs/formats/hud.md`, "Cockpit gauges", carries the addresses
-  and conditions): the needle laws are 0.36°/ft and 0.036°/ft on world-Y ASL (`00607704`,
-  `00607700`) and 0.7199957°/mph (`006076e8`), all three confirming what `GaugeCluster` already
-  ships. Both lamps differ from what we ship. LOW ALT lights below **60.0 m AGL** (`006076fc`, not
-  our 50 m) and its blink RAMPS, half-period `0.14 + 0.006·agl_m` (`006076f4`, `006076f8`), not our
-  fixed 400 ms. STALL is gated on **available load factor below 2.35 g** (`00608334`, `00608338`),
-  not on a speed fraction, with half-period `0.100375 + 0.1275·n_avail` bounded to (0.100, 0.400] s
-  (`00603538`, `006034ac`), which supersedes the footage-derived 0.30 fd and 2.10 s-per-fraction
-  pair. ⚠ The lamps and the flight model share one dt (copied bit-for-bit at `004897d8`), so these
-  go in without a k = 1.390 conversion. Changing the four `GaugeCluster` constants is part of this
-  item's work; the damage-dial blink (5 s, 0.32 s) is NOT in the gauge cluster and stays undecoded.
+  *The decoded laws are in the code and in* `docs/formats/hud.md`, "Cockpit gauges", which carries
+  every address and condition. Both lamps changed on the way in: LOW ALT now lights below 60.0 m
+  AGL rather than a guessed 50 m, and its blink ramps (`0.14 + 0.006·agl_m`) rather than sitting at
+  a fixed 400 ms; STALL gates on available load factor under 2.35 g rather than a speed fraction,
+  with a half-period bounded to (0.100, 0.400] s. The needle laws confirmed what was already
+  shipping. ⚠ The lamps and the flight model share one dt in the original, so none of these takes a
+  k = 1.390 conversion. The damage-dial blink (5 s, 0.32 s) is NOT in the gauge cluster and stays
+  undecoded, an open TUNE.
   *Residue:* nothing is hidden for this, and nothing needs to be. The instruments were reported
   flickering, and the mechanism turned out to be the mount scale rather than the missing needle
   drive: every depth bias `SceneBuilder` emits is a fraction of VIEW DISTANCE, so mounting the
@@ -2099,10 +2080,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   priority 1 over the `dash` panel at 0) swapped winner with the panel from frame to frame. The
   interior now builds on its own `SceneBuilder` carrying `DepthBiasScale = 1/InteriorScale`, which
   restores the absolute separation the authoring assumed; the airframe, the world and all four
-  plane-bearing goldens are untouched by it. What remains in a Cockpit capture is texture shimmer
-  on the finest dial markings (the compass drum's ticks, the small dials' graduations) as the
-  panel's projected position wobbles sub-pixel — an aliasing artifact of high-frequency instrument
-  textures, not a draw-order one, and driving the authored needles will not change it either way.
+  plane-bearing goldens are untouched by it. The per-instrument jitter that survived that fix was
+  float32 rounding of the interior's world transform at chapter-scale coordinates, and the
+  interior now draws in its own origin-relative pass (`Flight/CockpitOverlay`,
+  `--no-cockpit-pass` opts out). One observation stays: pitched up toward the sun, the compass
+  drum's upper face reads as a bright bar inside the window, with and without the pass, so it is
+  the authored geometry under the sun rather than a render defect; whether the original shows it
+  is unchecked.
   *Cross-refs:* `PLAN-cockpit-view.md` B11 (parked the states; also settles that the `gauges` child
   itself must stay visible — it is not a needle overlay). The windshield bullet-hole decals
   (`bullet1`-`bullet5`) share the same parked-state mechanism but are driven by the unrelated
@@ -2624,7 +2608,72 @@ usual.
   two readings of the same path are in the tree and one is stale; reconcile them before touching the
   code. Removing evasive maneuvers on damage is a large behavioural change to make on one line of a
   decode page, and the steady-hand roll itself is not in question, only what a failed roll does.
-  *Cross-refs:* `BL-556`, `BL-557` (the other two TTK causes), `docs/org/aiControlLaw.md`.
+  *Cross-refs:* `BL-557` (the other open TTK cause), `docs/org/aiControlLaw.md`.
+
+- `BL-564` `[Bug]` **CM12 (C2/M01): the `eshipg31` generator launches Bloodhawks at the world
+  origin instead of patrol boats at the pirate ship.** *Evidence:* a flown CM12 session
+  (`.scratch/logs/menu-20260827-215135.log`): the wave
+  arrives as `ai17_player_bhawk`, `ai18_player_bhawk`, `ai19_player_bhawk`, tracked by the target
+  HUD at 7.6 km from the player, and two of the three ram terrain `g34586` within seconds at
+  `pos=(5,5,-109)`, the world origin; the third patrols `M2Patrol1`, a water net, and is shot down
+  later. Two causes. (1) The generator's `vehicle.params` label `Eshipg31_params` resolves to the
+  roster block `patrolboat_eg0` (def 4, `patrolboat`, a surface vehicle), which
+  `CampaignRosterPlan.Build` reports in `Skipped` rather than planning, so `GeneratorTemplates`
+  has no entry and `GameSession.SpawnFromGenerator` falls back to `SessionSpec.GeneratorsPlane`,
+  `player_bhawk`. The mission's boats are the `patrolboat_eg0..5` that OBJECTIVE58-63 and
+  OBJECTIVE70 move between `M2GoosePatrol` and `M2PatrolStop`. (2) The host node `eshipg31` is a
+  model-less group node with a zero local translation whose geometry sits at its node bbox,
+  about (-5892, 10, -4412); `AiGeneratorRuntime.Spawn` drops at `Host.GlobalPosition`, which is
+  (0, 0, 0). *Fix shape:* decode the original's launch position for a generator whose host has no
+  model (`FUN_00452450`: the node's world matrix, or its bbox centre) and use that; then decide
+  what a surface-vehicle launch is in CSVM (a boat on a water net, not an aircraft), or at least
+  refuse the fallback airframe for a surface def so a boat generator launches nothing rather than
+  fighters. *⚠ Traps:* the three Bloodhawks are group 3 and never count toward "Destroy all
+  enemy fighters" (`DEDG [1, 0]`); killing them is not progress. Do not "fix" (1) by handing the
+  generator a fighter def. *Cross-refs:* `BL-522` (launch placement from a surface host),
+  `BL-527`, `docs/formats/mission-entities/enemy-generators.md`.
+
+- `BL-565` `[Fidelity]` **`DEDG`'s decoded side effect, widening every counted member's engagement
+  volume to 9,000 m, is not applied.** *Evidence:* `docs/formats/objectives.md`'s `DEDG` row and
+  `FUN_00465850`: each tick an awake `DEDG` objective raises every live member of the watched
+  group to a 9,000 m activation radius and a ±9,000 m altitude band, so a watched group never
+  disengages by distance and comes to the player from anywhere on the map. CSVM's `DedgMet` only
+  counts; the members keep `AiModeMachine.ActivationRange` at the 2,000 m `min_ai_active_dist`
+  floor and drop back to patrol at "target lost" / "beyond return range", which is how a
+  survivor of a wave sits on its net 8 km away while the objective waits on it. *Fix shape:*
+  have `GroupLiveCount` (or a sibling the graph calls per awake DEDG) apply the widening to each
+  counted member's machine: `ActivationRange = max(ActivationRange, 9000)`, and the altitude bands
+  once they have a consumer. *⚠ Traps:* the widening is per awake objective per tick, so a
+  napped or killed `DEDG` stops widening but the original never shrinks the volume back; match
+  that (set, never reset). *Cross-refs:* `BL-523` (the patrol/pursue cycle).
+
+- `BL-566` `[Bug]` **CM12 (C2/M01): the ace `hkfirebrand_9` flies under the terrain after its wake,
+  and nothing stops it until it rams a tile from below.** *Evidence:* reported at the controls
+  (the ace seen under the ground, not crashing, not surfacing) and the session
+  `.scratch/logs/menu-20260828-001548.log`: once OBJECTIVE67 wakes it, the
+  ace alternates `pursue -> avoid crash (below the 20 m floor)` and back a dozen times, with a few
+  `obstacle inside NNN m (tagged/col)` probes, and dies minutes later as `AI ram into tagged/col`
+  (no shooter). The floor test is the decoded absolute one, `pos.Y < 20` world metres, not height
+  above ground, so over land it says nothing about terrain; the ace's authored spawn (-4518, 150,
+  -6233) and the fight sit beside terrain tile `tagged` (x -5120..-4096, z -6144..-5120, rising
+  to 215 m), and an aircraft repeatedly under world Y 20 m there is inside the hills. Its wake
+  places it at the authored roster position (`WakeupEnemies` calls `rig.Activate(plan.Position,
+  …)`), and the original does the same: `FUN_004b0f40`'s activation only re-derives the position
+  through `FUN_00432010`, the trailer-offset rule, and net 30 `M2Dummy` has no trailer. So the
+  spawn itself is not decoded to be lifted. *What to settle:* (1) where the ace goes under: whether
+  the authored 150 m at (-4518, -6233) is already below our terrain there (the adjacent tile
+  south of `tagged`; sample it with `--freecam`), or whether it dives through a tile while
+  pursuing a low player, which would mean the terrain contact test misses a steep fast crossing;
+  (2) why a plane under a tile flies on: terrain colliders are single-sided so a crossing from
+  below is silent, and the ram rule only fires on the way back up. *Fix shape:* answer (1) first;
+  if the spawn is under ground it is BL-527's question again (a decoded ground rule at spawn, or
+  none), and if it is a crossing, the contact test at the crossing is the bug, not the floor.
+  *⚠ Traps:* do not replace the absolute 20 m floor with an AGL floor; it is decoded
+  (`DAT_0071c3f0`) and the original has no AGL floor either. Do not add a spawn lift. The ace did
+  count for "Destroy all enemy fighters" in the end (its ram death dropped group 2 to zero and
+  primary 3 completed), so this is not an objective bug. *Cross-refs:* `BL-527` (CM07's Peacemaker
+  under the ground), `docs/org/aiPilot.md` (the activation primitive and
+  `FUN_00432010`).
 
 - `BL-568` `[Bug]` **CM04 (C3/M03): the Pandora starts moored in the dry dock instead of flying in
   over the mission's first minute.** *Evidence:* at the controls the Pandora is already in the dry
@@ -2654,13 +2703,13 @@ usual.
   this mission, and `one-shot SOUND 'snd_IntrosceneHAch4' positioned by out-of-tree ancestor
   composition ... (world root not parented at bootstrap)` says the chain fired during bootstrap,
   before the world was in the tree, rather than as the mission's opening scene. `generic_intro` is
-  not in M03's start list, so the cutscene path `BL-548` and the trigger latch (`BL-566`) exercise
+  not in M03's start list, so the cutscene path `BL-548` and the trigger latch (`BL-583`) exercise
   is never entered here. *Fix shape:* settle how the original runs a `camera1`-object cutscene
   called from a start anim (the registration sites `docs/formats/anim-definitions/cutscenes.md`
   lists) and route `cgzep_camera` through the cutscene runner with the world held, so the player
   watches the cargo zeppelin go down and the skip works. *⚠ Traps:* the destruction itself already
   runs (fireballs, `tntbox`/`gasbag` deactivation); do not run it a second time under the camera.
-  *Cross-refs:* `BL-548`, `BL-566`, `docs/formats/anim-definitions/cutscenes.md`.
+  *Cross-refs:* `BL-548`, `BL-583`, `docs/formats/anim-definitions/cutscenes.md`.
 
 - `BL-571` `[Bug]` **A carried turret's death fire, and the turret itself, stay in the air where
   the turret died while the zeppelin moves on.** *Evidence (traced for the fire, lead-only for the

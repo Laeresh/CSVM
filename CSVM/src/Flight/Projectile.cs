@@ -802,6 +802,18 @@ public sealed partial class ProjectilePool : Node3D
     /// same distance term a player's own shots get.</summary>
     public void PlayShotSound(string sndName, Vector3 worldPos) => PlaySound(sndName, worldPos);
 
+    /// <summary>The muzzle flashes lit this frame, as world position, range, colour and energy.
+    /// A second world drawing the cockpit interior (<see cref="CockpitOverlay"/>) has no view of
+    /// these nodes and mirrors them from this list instead.</summary>
+    public IEnumerable<(Vector3 Position, float Range, Color Color, float Energy)> ActiveMuzzleLights()
+    {
+        foreach (var l in _lights)
+        {
+            if (l.InUse && l.Light.Visible)
+                yield return (l.Light.GlobalPosition, l.Light.OmniRange, l.Light.LightColor, l.Light.LightEnergy);
+        }
+    }
+
     public override void _Ready()
     {
         // Tracers are velocity-aligned streaks, not billboarded, or a long streak would collapse

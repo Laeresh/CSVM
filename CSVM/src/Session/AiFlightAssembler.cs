@@ -65,8 +65,11 @@ internal sealed class AiFlightAssembler
     {
         var baseStats = _aircraft.AiStatsFor(spawn.PlaneName, spawn.AiDef);
         PreparePilot(spawn, baseStats);
-        var stats = baseStats.WithAiSpawnJitter(
-            Rng.NewSystemRandom(Rng.Spawn, index, 0));
+        // The engine's spawn order: the difficulty scale lands on the authored pools and the
+        // per-spawn jitter on the scaled ones, never the reverse (docs/org/vehicleDamage.md).
+        var stats = baseStats
+            .WithEnemyDurability(Difficulty.FactorForSpawn(spawn.Team, spawn.Difficulty, _policy.Difficulty))
+            .WithAiSpawnJitter(Rng.NewSystemRandom(Rng.Spawn, index, 0));
         // The name the targeting readout prints, resolved here because this is where the string
         // table and the loaded def meet; a rig with no table keeps the def-name derivation.
         // ⚠ The block's own pilot name outranks the airframe title: docs/org/targeting.md.

@@ -63,8 +63,8 @@ public class FlightConstantInventoryTests
         ("FlightModel", "FeetPerMetre", 3.28084, Unit, "the aero path's imperial intermediates"),
         ("FlightModel", "MetresPerFoot", 0.3048, Unit, "the aero path's imperial intermediates"),
         ("FlightModel", "StandardG", 9.82, Decoded, "the force-to-acceleration multiply at 0x491290"),
-        ("FlightModel", "StallWarnFrac", 0.30, ProductException,
-            "the STALL lamp read 0.2989-0.2996 over four clips; a cue no force term reads"),
+        ("FlightModel", "StallWarnLoadFactor", 2.35, Decoded,
+            "0x00608338/0x00608334, the lamp driver at 0x0049f7e6; a cue no force term reads"),
         ("FlightModel", "MaxDiveSpeedFrac", 1.75, ProductException,
             "a CSVM numerical backstop with no counterpart; measured non-binding on all eleven"),
         ("FlightModel", "AltitudeCapM", 2003.0, ProductException,
@@ -120,7 +120,7 @@ public class FlightConstantInventoryTests
     private static readonly string[] ConfigKeys =
     {
         "altitudeCapM", "aoaLimiterFactor", "liftGMax", "liftGMin", "noseChaseFactor", "pitchTune",
-        "rollTune", "stallWarnFrac", "yawTune",
+        "rollTune", "stallWarnLoadFactor", "yawTune",
     };
 
     private static readonly Type[] InventoryTypes =
