@@ -81,7 +81,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the instruments, then CM03 and CM04
 
-1. ☐ `BL-548`: `--pos=` with `--campaign=` stalls the intro cutscene's completion
+1. ☑ `BL-548`: `--pos=` with `--campaign=` stalls the intro cutscene's completion
 2. ☐ `BL-534`: a debug key that kills the player's selected target
 3. ☐ `BL-516`: CM03's AA turret never fires
 4. ☐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
@@ -127,7 +127,7 @@ dispatch, they are adjacent in the same files and should not run concurrently.
 
 # Wave A — the instruments, then CM03 and CM04
 
-## A1 ☐ `BL-548`: `--pos=` with `--campaign=` stalls the intro cutscene's completion
+## A1 ☑ `BL-548`: `--pos=` with `--campaign=` stalls the intro cutscene's completion
 
 **Goal.** A `--campaign=` launch with `--pos=` set either ignores the flag while the intro's
 definition owns the session or applies it after the handoff; in both cases the intro hands off in
@@ -151,6 +151,28 @@ a port-side flag.
 
 **⚠ Traps.** A realtime run's frame-to-wall-time ratio is not repeatable (`docs/verification.md`
 INSTR-28): read the handoff off the log, never off a frame count.
+
+**Landed.** `SpawnPicker.ChooseSpawn` withholds `--pos=`'s placement while
+`CutsceneController.Playing` is already true at spawn time (`GameSession.BuildFlightRigs` sets
+`WithholdOverrideForCutscene` there, after the world build has run the intro's own animation
+bootstrap and settled that flag) — the player starts on the mission's authored spawn, exactly as
+with no flag, so whatever the intro's own progression tests the player's pose against still holds.
+`GameSession` applies the withheld placement through `FlightController.Activate` the instant the
+cutscene's `WorldHeld` callback goes false at the handoff (`SpawnPicker.TakeDeferredOverride`).
+Chose **deferred to after the handoff**, not a no-op: a mid-mission `--pos=` launch is what makes
+later items' targeted checks usable (Dependency note, A2's own text), and a no-op would strand a
+`--campaign=` launch at the mission spawn instead of the position asked for.
+
+Read off the log, per the trap above, not a frame count. Fixed build, C3/M05 ("Hawaii mission 2",
+seq 1), `--headless --no-pads --campaign=<profile>:1 "--pos=0,5000,0"`: the withhold logs at spawn
+(`spawn [override] withheld: an intro cutscene owns the session`), `generic_intro` ends at
+**t=40.19 s**, and the placement lands right after (`spawn [override] pos=(0,5000,0) …`,
+`campaign: --pos= applied at the intro's handoff`). The same mission with no `--pos=` hands off at
+**t=40.18 s** — the fix reproduces the no-flag timing, both inside the documented 16–40 s window
+(the unfixed build's first probe never reached this comparison cleanly: a connected pad's phantom
+button leaked through as a skip at t=12.56s before `--no-pads` was added to the probe).
+
+**Verified.** <pending orchestrator run>
 
 ## A2 ☐ `BL-534`: a debug key that kills the player's selected target
 

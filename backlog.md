@@ -2084,17 +2084,6 @@ usual.
   by installing nitro on every wingman, which would contradict the roster data.
 
 
-- `BL-548` `[Bug]` **`--pos=` with `--campaign=` stalls the intro cutscene's completion.** Found while
-  instrumenting the auto-land prompt: six trials with `--pos=` set on a `--campaign=` launch ran up
-  to 300 s and 20000 frames without the intro's handoff, against 16 to 40 s without `--pos=`.
-  *Fix shape:* find what `--pos=` overrides that the intro's closing sequence waits on (the player
-  rig's staged pose, the handoff's own restore, or a trigger the definition tests against the
-  authored spawn), and either make the flag a no-op while a definition owns the session or move it
-  after the handoff. *⚠ Traps:* ⚠ A realtime run's frame-to-wall-time ratio is not repeatable
-  (`docs/verification.md` INSTR-28), so read the handoff off the log rather than a frame count.
-  *Cross-refs:* `docs/plans/PLAN-M5-polish-2.md` D18.
-
-
 - `BL-545` `[Bug]` `[Owed-playtest]` **The landing animation plays with no hook, the aeroplane too
   high, and unfolded wings.** Seen at the controls on CM02's auto-land: the landing hook was not
   deployed, the aeroplane sat too high on the trapeze, and a Balmoral folds its wings in the
