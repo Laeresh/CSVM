@@ -137,7 +137,10 @@ produces and an unchanged image would otherwise look like a pass. Full battery a
 feature was broken at the controls, because it constructs the binding the bug is in. Any check added
 for this must go through the same call the game makes.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the plan's final tree: units 2444 passed; in-engine suites 146/146
+passed, engine errors clean; goldens 16 shots hash-identical; hitch stage clean (awareness only).
+The belt and damage recolour and the horizon ball were then confirmed at the controls in a flown
+Cockpit view.
 
 ## A2 ☑ Make the belt and damage drives fail loudly when nothing binds
 
@@ -173,7 +176,10 @@ damage zones are per-model, and a hard count would break on the next airframe re
 substring `indicator` also matches `horizonindicator.tif`, the still-unwired artificial horizon's
 texture; `greenindicator` is the unambiguous marker for the belt light.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the plan's final tree: units 2444 passed; in-engine suites 146/146
+passed, engine errors clean; goldens 16 shots hash-identical; hitch stage clean (awareness only).
+The belt and damage recolour and the horizon ball were then confirmed at the controls in a flown
+Cockpit view.
 
 # Wave B — the artificial horizon
 
@@ -279,7 +285,10 @@ Neither inverted nor mirrored.
 between them), not with `altimeter`/`damageindicator`/`speedometer`'s row — a reader expecting it
 beside the altimeter will look in the wrong place on the dash.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the plan's final tree: units 2444 passed; in-engine suites 146/146
+passed, engine errors clean; goldens 16 shots hash-identical; hitch stage clean (awareness only).
+The belt and damage recolour and the horizon ball were then confirmed at the controls in a flown
+Cockpit view.
 
 # Wave C — the panel vibration
 
@@ -376,7 +385,10 @@ the sub-pixel per-instrument divergence, it is present at comparable strength wh
 metres from the origin, so moving the panel's render pass to origin-relative coordinates (C21) would
 not remove it.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the plan's final tree: units 2444 passed; in-engine suites 146/146
+passed, engine errors clean; goldens 16 shots hash-identical; hitch stage clean (awareness only).
+The belt and damage recolour and the horizon ball were then confirmed at the controls in a flown
+Cockpit view.
 
 ## C21 ❌ Prototype the interior in its own pass with the camera at the origin
 
@@ -384,7 +396,8 @@ not remove it.
 per-instrument centroid divergence from a small position nudge is the same order of magnitude near
 the world origin as at chapter-scale coordinates, so composing the interior's render pass in a
 small origin-relative space would not remove it. The cause is elsewhere in the render/shading path,
-undiagnosed here and out of this plan's scope.
+undiagnosed here and out of this plan's scope; the open symptom, with everything ruled out so far,
+is `BL-556` in `backlog.md`.
 
 **Goal.** The panel is drawn in a coordinate frame small enough that float32 rounding is below a
 pixel, so the instruments hold still relative to each other and to the cockpit shell.

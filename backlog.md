@@ -1937,9 +1937,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-431` `[Feature]` **The screen-space `GaugeCluster` doubles up over the driven 3D panel in
   first person, and whether it should is undecided.** The drive itself has landed:
-  `CockpitGauges` (`src/Flight/CockpitGauges.cs`) binds the five needle nodes and the two warning
-  lamps inside the pilot's own `cockpit1` and writes them each frame from the readings
-  `GaugeCluster` already holds, so the authored panel and the screen-space dials cannot disagree.
+  `CockpitGauges` (`src/Flight/CockpitGauges.cs`) binds the needle nodes, the artificial-horizon
+  ball, the two warning lamps, the belt lights, the damage zones and the character readouts inside
+  the pilot's own `cockpit1` and writes them each frame from the readings `GaugeCluster` already
+  holds, so the authored panel and the screen-space dials cannot disagree.
   `FlightController` applies it on exactly the frames `CockpitVisibility` puts the interior on the
   screen. The lamps stay parked by `PlaneBuilder.ParkInteriorStates` at build, which is still right:
   a build with no rig driving it (every lab and suite) must render a pristine cockpit.
@@ -1971,10 +1972,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   priority 1 over the `dash` panel at 0) swapped winner with the panel from frame to frame. The
   interior now builds on its own `SceneBuilder` carrying `DepthBiasScale = 1/InteriorScale`, which
   restores the absolute separation the authoring assumed; the airframe, the world and all four
-  plane-bearing goldens are untouched by it. What remains in a Cockpit capture is texture shimmer
-  on the finest dial markings (the compass drum's ticks, the small dials' graduations) as the
-  panel's projected position wobbles sub-pixel — an aliasing artifact of high-frequency instrument
-  textures, not a draw-order one, and driving the authored needles did not change it either way.
+  plane-bearing goldens are untouched by it. What remains in a Cockpit capture is a sub-pixel
+  wobble of each instrument's projected position, different per instrument, which is `BL-556`;
+  driving the authored needles did not change it either way.
   *Cross-refs:* `PLAN-cockpit-view.md` B11 (parked the states; also settles that the `gauges` child
   itself must stay visible — it is not a needle overlay). The windshield bullet-hole decals
   (`bullet1`-`bullet5`) share the same parked-state mechanism but are driven by the unrelated
@@ -1982,6 +1982,37 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Neither that family nor either other `PLAYER_1ST_PERSON` def (`muzzle_burst`, `player-1`'s
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
+
+- `BL-556` `[Bug]` **The 3D cockpit instruments vibrate against a still cockpit shell.** Reported
+  at the controls and visible in a flown Cockpit view: the instruments move sub-pixel relative to
+  each other rather than as a block, a shimmer on the finest dial markings. *Evidence:* between
+  consecutive frames of a flown capture the gun gauge, rockets and altimeter centroids drift by
+  different amounts (-0.224, -0.355, -0.243 px on one frame pair, -0.327, -0.054, -0.209 px on the
+  next). *Ruled out, do not re-chase:* the gauge drive (the symptom is identical with it off); the
+  camera shake pivot; mipmaps and anisotropy; temporal antialiasing; the autohead idle aim; the
+  depth bias (it scales toward the eye and preserves projected position); the bezel-versus-panel
+  draw-order fight (real, fixed by the interior's `DepthBiasScale`, and the motion survived it);
+  and float32 rounding of the interior's world transform at chapter-scale coordinates. The last is
+  the one a near-origin test settles: with the aircraft pinned by `--weapon-lab` under `--det` and
+  nudged 0.3 m along the flight line, the four dial centroids move 0.03 to 0.10 px at the world
+  origin and 0.04 to 0.12 px at x = 10000 m, the same order of magnitude with a different
+  per-instrument ranking, where rounding predicts several pixels at 10 km. Rendering the interior
+  in its own origin-relative pass would therefore not remove it (`PLAN-cockpit-panel.md` C20,
+  C21). *Fix shape:* a new hypothesis is needed before any build. The residual is present with a
+  bit-identical transform chain, so the candidates left are in shading or rasterisation: the
+  panel's own vertex path (`VERTEX *= 1.0 - (depth_bias + node_bias)` is per vertex, so a
+  per-instrument bias would move each dial's projected outline differently), the interior's
+  `SceneBuilder` material path against the world's, or the reticle and HUD compositing under the
+  panel. Measure each candidate with the pinned-and-nudged capture pair before building on it.
+  *⚠ Traps:* `--hold` holds inputs and the plane glides, so it is not a static scene; every earlier
+  static measurement taken under it was of a moving aircraft. A frozen transform renders
+  bit-identical frames and shows no jitter at all, so the measurement needs a controlled nudge, not
+  a freeze. The eye reported this and the eye closes it; a centroid table alone does not.
+  *How you'd know it worked:* in a flown Cockpit view the dial graduations and the compass ticks
+  hold still against the bezel and the shell, and the per-instrument centroid residual under the
+  nudge falls below the 0.03 px noise floor the pinned captures established.
+  *Cross-refs:* `BL-431` (the drive and the draw-order fix), `PLAN-cockpit-panel.md` C20/C21,
+  `docs/verification.md`.
 
 - `BL-510` `[Feature]` **The auto-land prompt shows a placeholder line instead of the original's
   `langui` string.** *Evidence:* the original lights message `0xb5` (or `0xb6` for a pad binding)
