@@ -92,6 +92,24 @@ with the ±30 every instance ships, the comparison is `|0.52 rad| < 30`, so the 
 This is a unit bug in the original, harmless because no instance authors an out-of-range `pitch`.
 Do not "fix" it into a clamp that actually bites, and do not read the ±30 as radians.
 
+### Route ends and stop points
+
+The `net` a zeppelin flies is a patrol graph ([ai-nets.md](ai-nets.md)) walked by the shared
+`AiNetFollower`; a zeppelin observes its nodes' STOP-POINT flags, which an aircraft on the same
+net type does not. Two routines decode the halted state (`FUN_004bf9d0`'s own-node gate, called
+every step): `FUN_004bf500` levels the airship at an armed stop (commanded pitch 0, heading kept,
+speed 0) and `FUN_004bf360` ramps the throttle down from 250 m out to a full stop inside 30 m.
+**A structural dead end — the current node's only edge is the one just flown — holds the same way,
+unconditionally, ahead of and regardless of any authored stop-point id.** Some nets author their
+far node as an armed stop under an unaddressable id (id 0, which the script side rejects before it
+ever reaches a node lookup) so the existing stop-point mechanism already parks the airship there
+for good; a net that does not author that pattern at its far node (C1B/M03's `Klondike1`, ridden by
+`piratezep`) still holds there, because the dead-end rule is unconditional and does not depend on
+the file authoring anything at that node. Without it a follower reaching an unarmed dead end
+re-picks its only neighbour — the node it just left — and re-flies the route, which for a net whose
+nodes carry real altitude changes reads as the airship porpoising along its route and never
+levelling off at the end (`BL-529`).
+
 ### Broadside firing
 
 Behaviour rather than format, but it is what the cannon keys drive, and it is decoded from the
@@ -116,6 +134,16 @@ binary rather than inferred:
   design document instead describes a rolled hit chance ramping from 20 % at maximum range to
   100 % near 200 m. **Nothing like that roll is in the shipped fire path** — treat the design's
   curve as design-era and do not implement it.
+- ⚠ **The `targets` list carries no team or hostility test, at any stage.** A record's `targets`
+  names are parsed as unresolved pairs at load (`FUN_004bd8d0`), resolved once after every mission
+  zeppelin is placed by matching each name against the live zeppelin roster (`FUN_004bede0` calling
+  `FUN_004bd430`; the first name match wins, and a name matching no zeppelin (`player` is the only
+  one shipped data uses) falls through to a general named-object position lookup instead), and
+  consumed by the fire routine (`FUN_004bfe00`) on arc and intercept alone. No team, side, or ally
+  field is read anywhere in that chain. A record authoring `targets [player]` fires on the player
+  whenever in `cannon_fire_range` and arc, whether or not the record carries a `team` key at all;
+  the remake's `ZeppelinRuntime.Cannons.ResolveTarget` matches this: the first live authored name
+  wins, with no hostility filter to add.
 
 What the remake's implementation (M4 F19, `Flight/ZeppelinBroadside.cs` +
 `Session/ZeppelinRuntime.Cannons.cs`) added to the picture:
@@ -160,7 +188,7 @@ Instant Action's `zeppelin_run` wins on, ahead of the hull's own death byte. See
 the zeppelin module reads the vector, so a mission that is not an Instant Action zeppelin run feels
 engine loss only as the curve above.
 
-See [Enemy generators](mission-entities/enemy-generators.md) for `egen.json`, its launch cycle, capacity rules, and evidence limits.
+See [Enemy generators](mission-entities/enemy-generators.md) for `egen.json`, its launch cycle, the zeppelin drop and the surface hosts' take-off paths, launch naming, capacity rules, and evidence limits.
 
 ## Evidence & limits
 

@@ -277,6 +277,14 @@ public sealed class CampaignDirector
                 }
             }
 
+            // A downward probe against the built terrain collision, at the placed position: names
+            // whether a roster spawn actually lands above ground (an under-ground spawn report is
+            // settled off this line), sharing the World mask the flight model's ground-blow probe uses.
+            string groundNote = new GodotWorldQuery(rig).Ray(pos + Vector3.Up * 3000f,
+                pos - Vector3.Up * 3000f, CollisionLayers.World, null, out var groundHit)
+                ? $" terrain={groundHit.Position.Y:0} ({pos.Y - groundHit.Position.Y:+0;-0} above it)"
+                : " terrain=(no hit)";
+
             GD.Print($"campaign: roster '{spawn.Name}' ({spawn.Def} as {spawn.PlaneNode}, {spawn.Mode}) " +
                      $"team={spawn.Team?.ToString() ?? "-"} group={spawn.Group} " +
                      (spawn.Net is { } n ? $"net='{n.Name}#{n.Id}'"
@@ -285,7 +293,8 @@ public sealed class CampaignDirector
                          : "no net") +
                      (spawn.Inert ? " DEACTIVATED" : "") +
                      (placed ? $" on path '{spawn.TaxiPath}'" : "") +
-                     (spawn.Volumes.IsAuthored ? $" volumes act={spawn.Volumes.Activation.Radius:0} att={spawn.Volumes.Attack.Radius:0} ret={spawn.Volumes.Return.Radius:0}" : ""));
+                     (spawn.Volumes.IsAuthored ? $" volumes act={spawn.Volumes.Activation.Radius:0} att={spawn.Volumes.Attack.Radius:0} ret={spawn.Volumes.Return.Radius:0}" : "") +
+                     $" spawn=({pos.X:0},{pos.Y:0},{pos.Z:0}){groundNote}");
         }
 
         // The leader pass, once every rig exists: primary_target names a block that may be
@@ -539,12 +548,31 @@ public sealed class CampaignDirector
 
         var recorded = CampaignProgression.Record(_profile, attempt);
         _store?.Save(_profile);
+        SaveAwardedBuilds(recorded);
         Result = new CampaignMissionResult(outcome, attempt, recorded);
         ReturnToCabin = true;
         GD.Print($"campaign: mission {_mission.Ordinal} {outcome} — mask 0x{attempt.CompletedMask:x}, " +
                  $"{attempt.TimeMs / 1000}s, primary={recorded.PrimaryCompleted}, " +
                  $"advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s)");
         MissionEnded?.Invoke(Result.Value);
+    }
+
+    // An award is a whole aircraft in the original, not just an ownership row: its template record
+    // carries the guns, hardpoints, armour, paint and the engine tier that decides the nitrous
+    // injector. The cabin looks a plane's fit up in the build store by name at launch, so the grant
+    // has to land there as well as in the profile, or the aircraft flies as its stock airframe.
+    private void SaveAwardedBuilds(MissionRecorded recorded)
+    {
+        if (recorded.AwardedBuilds.Count == 0)
+        {
+            return;
+        }
+
+        var planes = CustomPlaneStore.UserPlanes();
+        foreach (var build in recorded.AwardedBuilds)
+        {
+            GD.Print($"campaign: award '{build.Name}' saved to {planes.Save(build)}");
+        }
     }
 
     // A directive whose consumer this session has no seam for. Logged once per kind so a mission
@@ -681,9 +709,45 @@ public sealed class CampaignDirector
 
         public bool? TravelersMet(TravelersSpec spec)
         {
-            if (spec.Group != null || _in.ListenerPosition == null)
+            Vector3? reference = spec.WherePoint is { } p
+                ? new Vector3(p[0], p[1], p[2])
+                : Resolve(new[] { spec.WhereNode ?? string.Empty })?.GlobalPosition;
+            if (reference == null)
             {
-                _owner.Gap("TRAVELERS", "the group form needs a spawned aiv roster");
+                return null;
+            }
+
+            // The group form: count live, non-inert members of the named aiv roster group inside
+            // the radius, the same roster walk GroupLiveCount uses for DEDG. Null (not yet
+            // decidable) while no roster is spawned, so an empty world never wins the tally early.
+            if (spec.Group is { } group)
+            {
+                if (_owner._rosterPlans.Count == 0)
+                {
+                    _owner.Gap("TRAVELERS", $"group {group} has no spawned aiv roster to count");
+                    return null;
+                }
+
+                int matching = 0;
+                foreach (var (name, plan) in _owner._rosterPlans)
+                {
+                    if (plan.Group != group || !_owner._roster.TryGetValue(name, out var rig) || rig.Inert)
+                    {
+                        continue;
+                    }
+
+                    bool memberInside = rig.WorldPosition.DistanceSquaredTo(reference.Value) <= spec.Radius * spec.Radius;
+                    if (memberInside == spec.Approaching)
+                    {
+                        matching++;
+                    }
+                }
+
+                return matching >= spec.Count;
+            }
+
+            if (_in.ListenerPosition == null)
+            {
                 return null;
             }
 
@@ -696,14 +760,6 @@ public sealed class CampaignDirector
                 }
 
                 subject = who.GlobalPosition;
-            }
-
-            Vector3? reference = spec.WherePoint is { } p
-                ? new Vector3(p[0], p[1], p[2])
-                : Resolve(new[] { spec.WhereNode ?? string.Empty })?.GlobalPosition;
-            if (reference == null)
-            {
-                return null;
             }
 
             bool inside = subject.DistanceSquaredTo(reference.Value) <= spec.Radius * spec.Radius;

@@ -1903,8 +1903,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             (t, r) => _opsApplied += Pose.PoseRotate(t, r),
             SetSubtreeActiveByIndex);
 
-        // Pass 1: base states, and the destructible registry. ⚠ Anchored defs only: a def whose
-        // NAME matches nothing here must not stomp globally-resolved bare names like 'destroyed'.
+        // Pass 1: the registry, THEN base states (docs/formats/destructibles.md "Starting
+        // destroyed"). ⚠ Anchored defs only: a def whose NAME matches nothing here must not
+        // stomp globally-resolved bare names like 'destroyed'.
         int anchored = 0;
         foreach (var def in program.Defs)
         {
@@ -1912,13 +1913,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             if (anchors.Count == 0)
                 continue;
             anchored++;
-            if (def.ResetState != null)
-                foreach (var anchor in anchors)
-                    ApplyInstant(def.ResetState.Events, def, anchor);
             if (def.Destructible)
                 foreach (var anchor in anchors)
                     if (anchor != null)
                         _destructibles.Register(def, anchor, def.Health);
+            if (def.ResetState != null)
+                foreach (var anchor in anchors)
+                    ApplyInstant(def.ResetState.Events, def, anchor);
         }
         long resetMs = sw.ElapsedMilliseconds;
 
@@ -2357,6 +2358,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 if (Sound.TrySetActive(ev, anchor))
                     return true;
                 _opsApplied += Pose.HandleActiveState(ev, def, anchor, instant);
+                SyncDestructiblePool(ev, def, anchor);
                 return true;
 
             case "ObjectTranslateState":
@@ -3212,6 +3214,39 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 continue;
             foreach (var node in Targets(ev, inst.Def, inst.Anchor))
                 SetSubtreeActive(node, state);
+        }
+    }
+
+    // Keeps a destructible's HP pool in step with a healthy/destroyed OBJECT_ACTIVE_STATE swap
+    // dispatched outside DamageAt's own kill, such as a start-state script authoring an object
+    // destroyed before the player arrives. Without this the pool stays Healthy at full HP
+    // while the node reads destroyed, so a later hit replays the whole death sequence on an
+    // object that already looks dead. A live kill reaches this same event after DamageAt has
+    // already set the pool, so the status guards below make it a no-op there.
+    private void SyncDestructiblePool(AnimEvent ev, AnimDefinition def, Node3D? anchor)
+    {
+        if (_destructibles.Get(def, anchor) is not { } inst)
+            return;
+        var name = RoleName(ev);
+        bool active = ev.Data.Bool("state");
+        bool destroyedRole = name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("dbase", StringComparison.OrdinalIgnoreCase);
+        bool healthyRole = name.Contains("healthy", StringComparison.OrdinalIgnoreCase);
+        if ((active && destroyedRole) || (!active && healthyRole))
+        {
+            if (inst.Status != DestructibleRegistry.State.Destroyed)
+            {
+                inst.Health = 0f;
+                inst.Status = DestructibleRegistry.State.Destroyed;
+            }
+        }
+        else if ((active && healthyRole) || (!active && destroyedRole))
+        {
+            if (inst.Status == DestructibleRegistry.State.Destroyed)
+            {
+                inst.Health = inst.MaxHealth;
+                inst.Status = DestructibleRegistry.State.Healthy;
+            }
         }
     }
 

@@ -474,6 +474,13 @@ public partial class GameSession : Node3D
                 }
 
                 _campaign?.HoldForCutscene(held);
+                // The handoff (held -> false) is also when a --pos= this cutscene made
+                // BuildFlightRigs withhold gets applied, so the intro's own progression tested the
+                // player's pose against the authored spawn it expected all along.
+                if (!held)
+                {
+                    ApplyDeferredSpawnOverride();
+                }
             };
             AddChild(_cutscene);
             // The mid-mission cutscene trigger, hosted by the same controller. ⚠ Story missions
@@ -787,6 +794,33 @@ public partial class GameSession : Node3D
 
         GD.Print($"campaign: {result.Outcome} — returning '{profile}' to the cabin");
         _returnToCabin(profile);
+    }
+
+    // Places every rig at the --pos= placement BuildFlightRigs withheld while the intro owned
+    // the session, the moment the intro's own handoff (WorldHeld -> false) says it is done
+    // testing the player against the authored spawn. A no-op when nothing was withheld: most
+    // WorldHeld(false) calls are an ordinary mid-mission cutscene ending, not this one.
+    private void ApplyDeferredSpawnOverride()
+    {
+        bool applied = false;
+        for (int i = 0; i < _rigs.Count; i++)
+        {
+            string tag = _rigs.Count > 1 ? $"P{i + 1} " : "";
+            if (_spawnPicker.TakeDeferredOverride(i, tag) is not { } placement
+                || _rigs[i].Controller is not { } pilot)
+            {
+                continue;
+            }
+
+            pilot.Activate(placement.pos, placement.lookAt);
+            applied = true;
+        }
+
+        if (applied)
+        {
+            _spawnPicker.ClearDeferredOverride();
+            GD.Print("campaign: --pos= applied at the intro's handoff");
+        }
     }
 
     /// <summary>Every aircraft in the session, the rigs' controllers first and then the AI
@@ -1757,6 +1791,10 @@ public partial class GameSession : Node3D
         // The empty stage has no mission, so nothing to read: ChooseSpawn takes the
         // --pos/default override placed over the grid origin.
         _spawnPicker.ScenarioOverride = iaRt != null ? iaScenario : null;
+        // The world build (above) has already run the intro's own animation bootstrap, so
+        // _cutscene.Playing is settled before the player's spawn is chosen. Only a campaign intro
+        // withholds --pos=; every other --pos= flight keeps landing on it immediately.
+        _spawnPicker.WithholdOverrideForCutscene = _campaign != null && _cutscene is { Playing: true };
         var spawnList = _spec.EmptyStage ? null : SpawnPoints.LoadIa(state.MissionZrdrPath, iaScenario);
         int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
 
@@ -2366,15 +2404,20 @@ public partial class GameSession : Node3D
             FlightController? SpawnFromGenerator(EnemyGeneratorDef def, Vector3 pos, Vector3 look,
                 AiPilot pilot)
             {
+                // The decoded launch name: one counter across the mission's generators, so a
+                // second launch off the same template is a distinct node rather than a rename.
+                int ordinal = _generators?.LaunchOrdinal ?? 0;
                 if (def.VehicleParams is not { } parameter
                     || !generatorTemplates.TryGetValue(parameter, out var plan))
                 {
                     // ⚠ shippedSkins: a generated aircraft is the mission's enemy, so it keeps its
                     // own textures rather than the player militia's default.
                     return flightRoster.SpawnAi(new AiSpawn(
-                        _spec.GeneratorsPlane, pos, look, pilot, ShippedSkins: true));
+                        _spec.GeneratorsPlane, pos, look, pilot, ShippedSkins: true,
+                        NodeName: EnemyGenerators.LaunchName(_spec.GeneratorsPlane, ordinal)));
                 }
-                var launched = flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot));
+                var launched = flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot,
+                    EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(plan.Name), ordinal)));
                 CampaignRosterPlan.ApplyPlan(pilot, plan, generatorActiveDist);
                 RegisterAiVoice(launched, plan.AccentId);
                 return launched;
@@ -2507,6 +2550,13 @@ public partial class GameSession : Node3D
         {
             DebugShow = _spec.DebugTargets,
         });
+
+        // F17: kill P1's TargetSelection.Current through its own death path, the playtester's
+        // escape hatch when a stray enemy blocks an objective chain. P1-only, the same precedent
+        // F5/F51 set for a single-pane debug tool.
+        _worldRoot!.AddChild(new UI.DebugKillTarget(
+            () => _rigs.Count > 0 ? _rigs[0].Controller : null,
+            () => _diagRuntime));
 
         // The pause-screen objectives readout and the objective-site feed, both mounted only for a
         // campaign session and both polling _campaign.Graph themselves once Attach (above) has

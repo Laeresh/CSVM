@@ -131,6 +131,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ZeppelinMotion.cs` — the kinematic zeppelin motion law (M4 F17): forward-only flight along a net under the record's speed/accel/rate/pitch limits, plus the decoded sqrt engine-loss curve behind the `AliveEngines` seam.
 - `src/Flight/ManeuverExecutor.cs` — plays one maneuver's attitude-step program as `FlightInput` per sim step: the input source D11's state machine runs during `evasive maneuver`.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
+- `src/Flight/RocketTriggerLatch.cs` — the rocket trigger's consumed-press latch (`BL-583`): arms when flight regains input (a cutscene skip, a pause-menu Resume) while F/A is still down, and reads the trigger released until that button lets go. Public so its own unit tests can drive it; `FlightController`'s only caller.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/DisablingIntensity.cs` — the decoded `SONIC`/`FLASH` intensity plateau and `FLASH`'s facing test, on squared distances; feeds the player's wash weight and the AI stun's duration.
 - `src/Flight/Difficulty.cs` — the difficulty setting as the engine's 0/1/2, its two naming vocabularies, and the enemy armour/health multiplier it scales spawns by; it reaches nothing else.
@@ -273,6 +274,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/PhotoModeHud.cs` — photo mode's fading hint line and its Escape/pad-B way out; raises an event, decides nothing.
 - `src/UI/PerfHud.cs` — the frame-cost readout (F14, `--debug-fps=`): fps/current-frame-cost/worst-recent-frame, once for the window, drawn above the launchscreen too.
 - `src/UI/TargetingOverlay.cs` — the targeting overlay (F15, `--debug-targets`): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
+- `src/UI/DebugKillTarget.cs` — the debug kill key (F17): kills P1's `TargetSelection.Current` through its own death path (`DebugForceCrash` for an aircraft, `AnimRuntime.DamageAt` for a zeppelin sub-part); inert on a turret, which has no `HEALTH` key at all.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
 - `src/UI/NodeLab.cs` — the `--freecam`/`--anim-lab` node lab (N, `--debug-nodelab`): lazy `cs_name` tree, search, frame/hide, dependencies, destructibles.
 - `src/UI/WorldDamageLab.cs` — the `--freecam`/`--anim-lab` world damage lab (F5, `--debug-damage`): HP slider + kill/reset on the selection's destructible pool.
@@ -341,7 +343,7 @@ clusters they delegate to.
 - `src/Session/InstantActionDirector.cs` — the engine-side sequencing of one Instant Action mission: construction, the actor build phases, the zeppelin switch and wave arm, the sequencer tick and the end-condition/wrap-up wiring, called by `GameSession` at its pinned build and drive points.
 - `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll), and F12's objective-zeppelin selection.
 - `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry, pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
-- `src/Session/ScriptedPathVehicles.cs` — one mission's scripted-path vehicles: placement, the freeze, `START_TAXI`'s release, and the handoff back to the flight model.
+- `src/Session/ScriptedPathVehicles.cs` — one mission's scripted-path vehicles: the snap onto waypoint 0, the freeze, `START_TAXI`'s release, and the handoff back to the flight model.
 - `src/Session/CampaignRoster.cs` — the engine-free plan of a campaign mission's `aiv` roster: each block resolved to an airframe, its authored net or the decoded netless-wingman escort (never both), the merged volumes and the leader lookup; `CampaignDirector.BuildRoster` places it.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in and F12's wave-credit budget that switches it back off.
 - `src/Session/NetTrailerTargets.cs` — resolves a patrol net's trailer name (`player`, a zeppelin, a train) to a live position, so an anchored net rides its target (`BL-377`).
@@ -350,7 +352,7 @@ clusters they delegate to.
 - `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17+F18+F19, `--zeppelins`): places each record's world node at its authored pose, flies it along its net through `ZeppelinMotion`, owns the multi-zone damage (per-part registry pools, the survivor-count kill, the authored hull death) and fires the broadside (`ZeppelinRuntime.Cannons.cs`: real unowned `wep_28` rounds through `ZeppelinBroadside`).
 - `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements: the standalone `ai.zrd` family placed at its `NODES` patterns against the built chapter world, shipped `ACTIVATED` honoured, `SetActivatedUnder` the Instant Action builder's subtree activation (what arms the objective zeppelin's rings), `--wake-turrets` the `WAKEUP_TURRETS` stand-in.
 - `src/Session/CampaignProfileStore.cs` — JSON persistence for a named campaign profile under `user://Profiles/<name>/profile.json`, following `ScoreStore`/`CustomPlaneStore`'s precedent: funds, owned planes (name-referenced into the global `user://Planes/` store, never a copy of it) with their per-gun ammo and per-pylon ordnance picks, mission results (the original's two halves, latest attempt and best-of merge), the completed-mission count, the granted aircraft awards and the cross-mission destruction log. `SessionSpec.CampaignProfile`/`CampaignMissionSeq` (`--campaign=<profile>:<seq>`) carry the launch-time selection as plain values; building the mission from them is the campaign director's job, not this store's.
-- `src/Session/CampaignProgression.cs` — the rules that write a profile: the best-of merge of one mission attempt (each field's rule is the original's), the monotonic position only a completed primary objective raises, the replay rule Previous Missions flies under, and the five aircraft awards granted once per profile. The cash half of the reward table stays with the hangar economy; this class banks the money an attempt reports.
+- `src/Session/CampaignProgression.cs` — the rules that write a profile: the best-of merge of one mission attempt (each field's rule is the original's), the monotonic position only a completed primary objective raises, the replay rule Previous Missions flies under, and the five aircraft awards granted once per profile, each with the build its special-plane template authors (`AwardBuild`, `docs/org/hangar.md`) so a reward aircraft flies its own guns, armour and engine tier rather than its stock airframe. The cash half of the reward table stays with the hangar economy; this class banks the money an attempt reports.
 - `src/Session/CampaignPersistLog.cs` — the cross-mission state log (`BL-243`): captures what `PERSIST_LOG` defs a mission left destroyed out of `AnimRuntime.Destructibles`, keyed by chapter and by gamez node index, and re-applies it to a later mission of that chapter through `AnimRuntime.DamageAt`, so the death runs the way a weapon kill's did. Persistence is read from the READER def bound to a node, never from the compiled twin, which drops the flag.
 - `src/Session/CampaignLoadout.cs` — the bridge between a profile's stored picks and a flying aircraft's fit: one `OwnedPlane`'s ammunition indices and ordnance table indices as the `LoadoutChoice` a launch hands the session, which `Loadout.Bind` then lays over the aircraft's base fit. Engine-free, and both encodings are the campaign screens' own rather than the original's per-pylon ordnance id, which is a rocket table index decoded in `docs/formats/saved-games.md` and deliberately not adopted here, so an unset pylon is left to the base rather than written back. ⚠ `PylonRow` is the one decoder of the stored one-based ordnance value, and every screen that reads the field calls it rather than subtracting one itself; a second reading of the field puts a different rocket on the flight check than the ammo screen just committed.
 - `src/Session/ObjectiveScript.cs` — one mission's parsed `objectives.zrd`: the file-level keys and the contiguous `OBJECTIVEn` blocks in the typed shape the graph runs, found by exact name so every shipped misspelling lands in no field and stays dead. Decode: `docs/formats/objectives.md`.
@@ -978,6 +980,19 @@ evaluation: the session hands over "any human pilot is in Cockpit or Nose"
 runtime with no seam wired — a lab, a test, the bootstrap before any rig exists — reads false,
 which is what this condition answered everywhere before the view modes existed. Regression: the
 `first-person-condition` suite, over the shipped `bullet1` def.
+`SyncDestructiblePool` keeps a destructible's `DestructibleRegistry` instance in step with an
+`OBJECT_ACTIVE_STATE` healthy/destroyed role swap dispatched outside `DamageAt`'s own kill — a
+start-state script or an ON_STARTUP sequence authoring an object destroyed before the player
+arrives. Called from the `ObjectActiveState` dispatch case right after `Pose.HandleActiveState`,
+it matches the same role-name convention `AuthorsSwap`/`ApplyDeathSwap` already use and writes
+`Health`/`Status` only when they still disagree with the swap direction, so a live kill's own
+dispatch (which already set the pool via `DamageAt` before running the death sequence) is a
+no-op there. Bootstrap's Pass 1 registers each anchored destructible in `_destructibles` BEFORE
+dispatching its `RESET_STATE`, not after, so a def authored to start destroyed (its own
+`RESET_STATE` puts the destroyed role ACTIVE) reaches this same sync with a pool already there
+to find; no shipped def uses that shape today, but the ordering is the general contract every
+other `OBJECT_ACTIVE_STATE` dispatch site already follows. Regression: the
+`start-state-swap-pool` suite.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
@@ -2232,6 +2247,14 @@ walk is inside 30 m of it (`StopPointHoldM`, the zeppelin follower's own hold di
 leg's arrival radius) `Holding` goes true. ⚠ Off by default — `observesStopPoints` is set only by
 `ZeppelinRuntime`, because only the zeppelin follower reads the flag; the aircraft one reads a
 node's danger-zone fields instead (`docs/formats/ai-nets.md`).
+`StopsAt`/`Holding` also cover a STRUCTURAL dead end — the current node's only edge is the one just
+flown — for an observing follower: decoded (`FUN_004bf9d0`'s own-node gate calls the level/hold
+routine, `FUN_004bf500`, unconditionally, ahead of and regardless of any armed stop point), this is
+what stops a zeppelin on an open route whose far node authors no stop point at all from re-picking
+its only neighbour and shuttling the route forever (`BL-529`, `docs/formats/mission-entities.md`
+"Route ends and stop points"). The aircraft follower keeps its own decoded turn-back at a dead end
+(`PickOnward`'s degree-1 short-circuit) unchanged; the unconditional hold is opt-in on
+`ObservesStopPoints`.
 Pinned by `AiNetFollowerTests` + the `ai-net-follow` suite.
 
 ## src/Flight/ZeppelinBroadside.cs
@@ -4228,6 +4251,27 @@ world-space lines draw in every pane on their own (default render layer, in ever
 `CullMask`) while the HUD roll-call is drawn once for the window, like `PerfHud`, because it is
 process-wide combat state.
 
+## src/UI/DebugKillTarget.cs
+The debug kill key (F17, `BL-534`): kills P1's currently selected `Flight.TargetSelection`
+target through its own death path, so kill-count and `ObjectiveGraph`/`GroupLiveCount`
+bookkeeping see it exactly as a real shot would, never by freeing the node. Routes on the
+selection's `Candidate.Source` type: a `FlightController` crashes through
+`FlightController.DebugForceCrash(killer)` — the same attributed `Crash`/`Downed` path
+`--debug-scoreboard`'s scripted kill and `--crash` already use; a
+`Mech3.DestructibleRegistry.Instance` (a zeppelin gasbag, cannon or engine) is destroyed through
+`AnimRuntime.DamageAt(inst.Anchor, inst.MaxHealth + 1f)`, the same call a rocket makes and
+`WorldDamageLab`'s own Kill button uses. A `TurretController` selection (world emplacement or
+carried) is left inert: `Flight.TargetRef.Health`'s own decoded rule is that a turret carries no
+`HEALTH` key at all, and nothing in the engine toggles a turret's kill switch
+(`TurretController.Alive`'s healthy-node visibility) today, so routing a kill through it would be
+an invented mechanism, not a decoded one. Nothing selected is inert too. P1-only, the precedent
+F5's `WorldDamageLab` and F51's weapon lab already set for a single-pane debug tool; wired into
+`GameSession` beside the F15 `TargetingOverlay` build, reading P1's own `FlightController` and
+the session's `AnimRuntime` through closures for the same reason `TargetingOverlay` does (both
+outlive the line that builds them: waves activate and turrets die long after). The routing switch
+is exposed as `KillSource` so a suite can drive it against hand-built sources with no live
+`AimCandidateSet` scan behind it.
+
 ## src/UI/TileGridOverlay.cs
 The map-edge tile-grid overlay, flag-only (`--debug-tilegrid`; no key is bound): every ground tile
 tinted 20 % by repetition band, so one colour band is one block. `--map-edge-block=` and
@@ -5085,10 +5129,15 @@ the sibling of `InstantActionDirector`: a plain sealed class that builds no node
 mission" contract `InstantActionDirector.TryCreate` has. `Attach(WorldInputs)` arms the graph once
 every runtime a directive can touch is up and applies the chapter's persist log; `Step(dt)` is
 called from BOTH of `GameSession`'s drive paths. Mission end records the attempt through
-`CampaignProgression`, merges `CampaignPersistLog.Capture` into the profile, saves it, and raises
+`CampaignProgression`, merges `CampaignPersistLog.Capture` into the profile, saves it, writes any
+aircraft award's build into `CustomPlaneStore` (`SaveAwardedBuilds`, which is where the cabin's
+launch looks a plane's fit up by name), and raises
 `ReturnToCabin` plus `MissionEnded` for the session layer; the cabin screen itself is C22's.
 Which directives reach the engine today: `INACTIVEn` (node visibility, the decoded active bit),
-`ANIM_STATE` (`AnimRuntime.AnimStateOf`), the node form of `TRAVELERS`, `WAKEUP_TURRETS` /
+`ANIM_STATE` (`AnimRuntime.AnimStateOf`), both forms of `TRAVELERS` (the node form against
+`ListenerPosition`/a named node; the group form tallying the spawned roster's live, non-inert
+members of the named group inside or outside the radius against `spec.Count`, the decoded
+`FUN_00465b40` shape `docs/formats/objectives.md` already carried), `WAKEUP_TURRETS` /
 `WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
 (`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM` (`AnimRuntime.PlayMissionTrigger`, so the
 woken definition may stage library roots), both sound-group directives through
@@ -5103,7 +5152,7 @@ its spawn pose, or a dormant `ZeppelinRuntime` record put into the world.
 `SET_AI_NET` / `SET_AI_TEAM` / `SET_AI_ATTACK_RADIUS` share one lookup by roster block name
 (`Commanded`) and write the follower, the team and the attack range over the spawned roster; their
 zeppelin arm has no seam here, so an unmatched name is always reported.
-The rest (the group form of `TRAVELERS`, `WARP_VEHICLE`) and the
+The rest (`WARP_VEHICLE`) and the
 untraced `COMPLETED_ZEPCANNONS` reader are NAMED no-ops, each logged once per kind. ⚠ Never turn one of those into an invented
 behaviour: the missing consumer is the finding.
 `BuildRoster(RosterInputs)` is the roster phase, called by `GameSession` right after
@@ -5156,7 +5205,9 @@ is the `campaign-roster` suite, the generator half the `generator-roster-params`
 
 ## src/Session/ScriptedPathVehicles.cs
 One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored
-`ScriptedPath` frozen at its own pose, `Release` is what `START_TAXI` calls, and `Step` drives each
+`ScriptedPath`, snapping it onto waypoint 0 facing down the first leg and freezing it there
+(`FUN_004940d0`, the same placement the non-zeppelin generator launch uses), `Release` is what
+`START_TAXI` calls, and `Step` drives each
 follower and writes its pose onto the body, or hands it to the caller's `setPose` for a body whose
 pose a simulation of its own owns (a held `FlightController`). A finished vehicle raises its handoff
 callback with the speed the path left it at and leaves the registry, so nothing keeps overwriting
@@ -5238,7 +5289,9 @@ Runs a mission's egen generators (M4 B6 + F20, behind `--generators[=plane]`): o
 `GeneratorCycle` per surviving `EnemyGeneratorDef`, host altitude read live off the resolved host
 node, spawns through the handed roster callback at the origin node's LIVE position (it rides
 F17's moving zeppelin) in the authored `rotation` drop attitude, each pilot patrolling the cyclic
-net pick through `AiNetFollower` (`SpawnedNet`). Door transitions play the authored or
+net pick through `AiNetFollower` (`SpawnedNet`). A surface host instead launches off its own
+`<base>_aip<n>` take-off path, whose absence is a third load drop, and `LaunchOrdinal` numbers
+every launch for the decoded `%s_eg%d` instance name. Door transitions play the authored or
 node-name-defaulted `open_anim`/`close_anim` (`EnemyGenerators.DefaultDoorAnim`; an unauthored
 close is the open, as in the loader) through host-scoped hooks (`AnimRuntime.PlayWithin`/
 `StopWithin`); a name resolving no def runs the timing machine log-only. A ground hangar's door is

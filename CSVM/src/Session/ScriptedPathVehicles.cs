@@ -28,12 +28,12 @@ public sealed class ScriptedPathVehicles
     /// <summary>Vehicles currently placed on a path, released or not.</summary>
     public int Count => _placed.Count;
 
-    /// <summary>Places a spawned vehicle on its authored path, frozen at its own pose. False when
-    /// the chapter carries no such path, which leaves the vehicle flight-simulated rather than
-    /// stationary. <paramref name="onComplete"/> is the handoff: it is raised once, with the speed
-    /// the path left the vehicle at, when the last waypoint is reached. <paramref name="setPose"/>
-    /// takes the per-tick position and heading (radians about up) in place of the body's own
-    /// transform write, for a body whose pose is owned by a simulation of its own.</summary>
+    /// <summary>Places a spawned vehicle on its authored path, frozen on the first waypoint facing
+    /// down the first leg. False when the chapter carries no such path, which leaves the vehicle
+    /// flight-simulated rather than stationary. <paramref name="onComplete"/> is the handoff, raised
+    /// once with the speed the path left the vehicle at. <paramref name="setPose"/> takes the
+    /// position and heading (radians about up) in place of the body's own transform write, for a
+    /// body whose pose a simulation of its own owns.</summary>
     public bool Place(string vehicle, string pathName, Node3D body, Action<float>? onComplete = null,
         Action<Vector3, float>? setPose = null)
     {
@@ -42,8 +42,18 @@ public sealed class ScriptedPathVehicles
             return false;
         }
 
-        var follower = new PathFollower(path.Waypoints, body.GlobalPosition, body.GlobalRotation.Y);
-        _placed[vehicle] = new Entry(follower, body, onComplete, setPose);
+        // ⚠ Never seed this from the body's own pose: a roster block that authors a path authors
+        // coordinates hundreds of metres off it, and the original overwrites them with waypoint 0
+        // and the leg into waypoint 1 (docs/org/flightModel.md, "The scripted-path follower").
+        var start = path.Waypoints[0];
+        var leg = path.Waypoints.Count > 1 ? path.Waypoints[1] - start : Vector3.Zero;
+        float heading = new Vector2(leg.X, leg.Z).LengthSquared() > 1e-6f
+            ? Mathf.Atan2(-leg.X, -leg.Z)
+            : body.GlobalRotation.Y;
+        var follower = new PathFollower(path.Waypoints, start, heading);
+        var entry = new Entry(follower, body, onComplete, setPose);
+        _placed[vehicle] = entry;
+        WritePose(entry, start, heading);
         return true;
     }
 
@@ -78,15 +88,7 @@ public sealed class ScriptedPathVehicles
             }
 
             entry.Follower.Step(dt);
-            if (entry.SetPose is { } setPose)
-            {
-                setPose(entry.Follower.Position, entry.Follower.Heading);
-            }
-            else
-            {
-                entry.Body.GlobalPosition = entry.Follower.Position;
-                entry.Body.GlobalRotation = new Vector3(0f, entry.Follower.Heading, 0f);
-            }
+            WritePose(entry, entry.Follower.Position, entry.Follower.Heading);
             if (!entry.Follower.Following)
             {
                 entry.OnComplete?.Invoke(entry.Follower.Speed);
@@ -103,6 +105,20 @@ public sealed class ScriptedPathVehicles
         {
             _placed.Remove(name);
         }
+    }
+
+    // The one pose write, so the placement and the per-tick step cannot disagree about which of the
+    // two channels a body takes.
+    private static void WritePose(Entry entry, Vector3 position, float heading)
+    {
+        if (entry.SetPose is { } setPose)
+        {
+            setPose(position, heading);
+            return;
+        }
+
+        entry.Body.GlobalPosition = position;
+        entry.Body.GlobalRotation = new Vector3(0f, heading, 0f);
     }
 
     private readonly record struct Entry(PathFollower Follower, Node3D Body, Action<float>? OnComplete,

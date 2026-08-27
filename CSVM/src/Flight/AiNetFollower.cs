@@ -6,13 +6,15 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>Walks an <see cref="AiNet"/> patrol graph as a stream of waypoints: positions in, the
-/// current target node out. Aircraft-agnostic on purpose, so <c>ZeppelinMotion</c> (F17) reuses it
-/// unchanged; <see cref="AiPilot.Patrol"/> is the aircraft consumer. Traversal is decoded in this
-/// module's docs/architecture.md entry; the anchored-trailer ride is docs/formats/ai-nets.md.
+/// current target node out. Aircraft-agnostic on purpose, so <c>ZeppelinMotion</c> (F17) reuses it;
+/// <see cref="AiPilot.Patrol"/> is the aircraft consumer, and turns back and re-flies a dead end
+/// (<see cref="PickOnward"/>) as its own decoded rule. Traversal is decoded in this module's
+/// docs/architecture.md entry; the anchored-trailer ride is docs/formats/ai-nets.md.
 /// Arrival is the decoded along-leg test (<see cref="ArrivalRadius"/>). A node's stop point
 /// (<see cref="AiNetNode.StopPointId"/>) is live state here, armed and disarmed by
 /// <see cref="SetStopPoint"/>; <see cref="AiNetNode.EntersDangerZone"/> is preserved unacted-on.
-/// </summary>
+/// A caller observing stop points (<see cref="ObservesStopPoints"/>) also holds unconditionally at
+/// a structural dead end instead of turning back (<see cref="Update"/>, `FUN_004bf9d0`).</summary>
 public sealed class AiNetFollower
 {
     /// <summary>The floor on a leg's arrival radius, metres: <c>CCENet+0x28</c>, whose constructor
@@ -110,10 +112,11 @@ public sealed class AiNetFollower
     /// </summary>
     public bool ObservesStopPoints { get; }
 
-    /// <summary>Parked on an armed stop point: <see cref="Update"/> has brought the follower
-    /// within <see cref="StopPointHoldM"/> of <see cref="CurrentIndex"/> and that node's halt flag
-    /// is set, so the walk goes no further until the flag is cleared. The zeppelin law reads this
-    /// to hold station.</summary>
+    /// <summary>Parked on an armed stop point, OR on a structural dead end (see
+    /// <see cref="ObservesStopPoints"/>): <see cref="Update"/> has brought the follower within
+    /// <see cref="StopPointHoldM"/> of <see cref="CurrentIndex"/> and either that node's halt
+    /// flag is set or it has no further edge to fly, so the walk goes no further. The zeppelin
+    /// law reads this to hold station.</summary>
     public bool Holding { get; private set; }
 
     /// <summary>True when this follower rides its net's trailer target: the net has an
@@ -178,8 +181,13 @@ public sealed class AiNetFollower
         Holding = false;
     }
 
-    /// <summary>Whether node <paramref name="index"/> currently halts whoever reaches it.</summary>
-    public bool StopsAt(int index) => index >= 0 && index < _stops.Length && _stops[index];
+    /// <summary>Whether node <paramref name="index"/> currently halts whoever reaches it: an
+    /// armed stop point, or (for a caller observing stop points) the structural dead end this
+    /// walk is currently sitting on. <see cref="ZeppelinMotion.TargetSpeed"/> reads this to ramp
+    /// the throttle down on approach, the same as an armed stop, so the dead-end hold below
+    /// (<see cref="Update"/>) is never reached still at cruise speed.</summary>
+    public bool StopsAt(int index) => index >= 0 && index < _stops.Length
+        && (_stops[index] || IsStructuralDeadEnd(index));
 
     /// <summary>The node an id addresses: the FIRST node carrying it, the engine's own scan
     /// (<c>FUN_004319a0</c>). −1 when no node does, and for id 0, which the script side rejects
@@ -247,9 +255,13 @@ public sealed class AiNetFollower
             return true;
         }
         var node = CurrentTarget;
-        if (ObservesStopPoints && _stops[CurrentIndex])
+        // ⚠ A structural dead end holds unconditionally, not via the aircraft follower's own
+        // turn-back (PickOnward's degree-1 short-circuit): decoded in
+        // docs/formats/mission-entities.md "Route ends and stop points" (FUN_004bf9d0).
+        if (ObservesStopPoints && StopsAt(CurrentIndex))
         {
-            // An armed stop point is never advanced past, however far past it the vehicle drifts.
+            // An armed stop point (or a structural dead end) is never advanced past, however far
+            // past it the vehicle drifts.
             Holding = position.DistanceSquaredTo(node) <= StopPointHoldM * StopPointHoldM;
             return false;
         }
@@ -323,6 +335,11 @@ public sealed class AiNetFollower
         }
         return candidates[0]; // unreachable; keeps the compiler satisfied
     }
+
+    // The current node's only edge is the one just flown: nowhere further to go. Scoped to
+    // CurrentIndex (never a lookahead) because _previousIndex describes THIS leg only.
+    private bool IsStructuralDeadEnd(int index) => ObservesStopPoints && index == CurrentIndex
+        && index >= 0 && _neighbors[index].Length == 1 && _neighbors[index][0] == _previousIndex;
 
     private Vector3 LiveOffset() =>
         _anchorIndex < 0 ? Vector3.Zero : TrailerOffset(Net, _trailerTarget!());

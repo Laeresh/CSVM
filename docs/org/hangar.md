@@ -340,6 +340,36 @@ their own mapping: the `langui` symbols are `IDS_HW5BALMORALNAME`, `IDS_NW2BLOOD
 **Total campaign cash income is $140,900**, from six paying objectives, plus whatever the
 awarded aircraft would fetch if they were sellable, which they are not.
 
+### The five special-plane templates at `0x0061a9b8`
+
+Five live 204-byte records, stride `0xcc`, in the layout
+[`../formats/paint.md`](../formats/paint.md) decodes for a saved custom plane. An award is a whole
+aircraft, not just an ownership row: the grant copies one of these wholesale and only then writes
+the name over `+0x04`, whose shipped value is the placeholder `??`. Read directly out of the
+executable's data.
+
+| Plane | Airframe | Engine | Hardpoints L/R | Armour units (nose/tail/left/right) | Guns |
+|---|---|---|---|---|---|
+| Minx | 0 Hoplite | 1 | 1/1 | 3/3/3/3 | twin 30 cal |
+| Jumping Jane | 2 Balmoral | 1 | 4/4 | 8/7/5/5 | twin 50, twin 50, 30, 30 |
+| Blue Streak | 3 Bloodhawk | 4 | 1/1 | 4/4/4/4 | twin 40, twin 30 |
+| Red Hot Spender | 7 Fury | 1 | 2/1 | 5/5/4/4 | twin 70, twin 30 |
+| Accipiter Annie | 10 Warhawk | 1 | 4/4 | 6/6/6/6 | twin 70, twin 50 |
+
+**Only the Blue Streak carries a nitrous engine.** Engine ids 3 to 5 are the three tiers with the
+injector and its 4 is the middle one; the other four templates take id 1, a plain Lvl-2 engine. A
+stock Bloodhawk has no injector at all, so the nitrous is the Blue Streak's own build and never a
+property of the airframe.
+
+The paint is one authoring shared by all five, byte for byte: pattern 4, swatch rows 1, 26 and 26
+at shade variants 8, 0 and 9, and decals 40 (nose), 8 (tail) and 7 (wing).
+
+The ammunition field at `+0x98` and the eight pylon cells at `+0xa8` are the commit-derived pair
+described in [`../formats/paint.md`](../formats/paint.md), and every template carries exactly what
+that derivation produces from its own gun ids and hardpoint counts: `4` in the slots whose gun id
+is `5`, and a live pylon inside each wing's count with `11` past it. They restate the fields above
+rather than adding to them.
+
 ### The purchase gate and what a build costs
 
 Callback 2264 (`0x0040b477`) computes `FUN_00405680` over the scratch record at `0x0064cb78`

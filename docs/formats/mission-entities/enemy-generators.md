@@ -23,7 +23,7 @@ has ground airfields `eairg31`/`eairg32`, a ship `eshipg31`, and a submarine `ba
 | `rotation` | 17/23 | `[-90, 0, 0]` throughout — the drop attitude. Read as **three** angles (all converted to radians), not the single value the data suggests |
 | `min_altitude` | 17/23 | **100–300 m: the launch gate** |
 | `healthy` | 1/23 | the node whose destruction stops the generator (`subhealthy`, the submarine) |
-| `moving_path` | 1/23 | bare flag |
+| `moving_path` | 1/23 | bare flag — it makes the take-off path **host-relative**, see [Launching from a surface host](#launching-from-a-surface-host) |
 
 **`min_altitude` is confirmed by the design document by name.** The design specifies that a
 zeppelin drops fighters through its hangar door and so must be high enough to do it; that the
@@ -85,6 +85,15 @@ rejections: a generator whose `node` cannot be resolved is **dropped**, and so i
 of its `vehicle.nets` names resolve — a generator with no valid net does not load inert, it does not
 load at all.
 
+**A non-zeppelin generator also needs a take-off path, and is dropped without one.** `FUN_004518d0`
+names it from the host node with `sprintf("%.2s%.3s")`, the first two characters and the last three,
+so `eairg31` asks for the host-relative subtree `eag31_aipath` and `barracuda` for `bauda_aipath`;
+fewer than two waypoints under it, or a host name shorter than five characters, and the generator
+does not load. The launch then places the aircraft on waypoint 0 (+0.2 m Y), faces it down the leg
+into waypoint 1, gives it zero velocity and a full throttle lever, and drives it along the path.
+This is the same movement law the roster's `taxiPath` uses, entered from a second site
+([org/flightModel.md](../../org/flightModel.md), "The scripted-path follower").
+
 Smaller loader findings: `open_anim`/`close_anim` **default from the node name** when unauthored.
 The loader (`FUN_00452850`) formats `sprintf("%.5s_open%.2s", node, node + len - 2)`, the first
 five characters, `_open`, the last two, so `eairg31` asks for `eairg_open31`; it then formats
@@ -111,6 +120,65 @@ then activates the zeppelin selected by `zeppelin_type` only for `zeppelin_run`;
 session leaves it inactive. The same builder path arms the hull's dormant gun rings
 ([turrets.md](../turrets.md#waking-a-whole-subtree)).
 
+## Launching from a surface host
+
+A generator without the `zeppelin` key does not drop fighters out of a hangar; it runs them off a
+**take-off path** authored in the host's own subtree. `FUN_00451bf0` is the launch, `FUN_004518d0`
+the host bind, and `FUN_00451440` the path build.
+
+**The path name comes from the host node name**, `sprintf("%.2s%.3s", node, node + len - 3)`: the
+first two characters plus the last three. So `barracuda` asks for `bauda`, `eairg31` for `eag31`,
+`eshipg31` for `esg31`. A host name shorter than five characters rejects the generator outright.
+The points are the nodes `<base>_aip0`, `<base>_aip1`, … under a `<base>_aipath` group, searched
+inside the host's subtree and read in order until one is missing. **A path shorter than two points
+is a load rejection**, alongside the unresolved-host and no-net drops above.
+
+All three surface hosts in this install ship one, and each reads as a runway:
+
+| Host | Path | Points, in the host's frame |
+|---|---|---|
+| `barracuda` (C3) | `bauda_aip0..3` | `(0, 2.5, 8.5)` → `(0.5, 3.757, -24.674)` → `(0.5, 6.375, -97.127)` → `(0.5, 10.775, -121.984)` |
+| `eairg31` (C1) | `eag31_aip0..4` | `(0, 0, -2)` → `(0, 0, -11)` → `(48, 0, -122)` → `(40, 0, -210)` → `(40, 0, -258)` |
+| `eairg32` (C1) | `eag32_aip0..4` | `(0, 0, -2)` → `(0, 0, -11)` → `(-16, 0, -114)` → `(8, 0, -178)` → `(40, 0, -210)` |
+
+The submarine's climbs from 2.5 m to 10.8 m over 130 m of deck and open water; the two airfields'
+stay flat and curve, which is a ground roll. Note that the sub's run points along its local −Z
+while its `sub_movement` drive travels local +Z: the Barracuda arrives in the bay and launches
+back out over the water it came from.
+
+**`moving_path` decides whose frame the points are kept in.** The flag clears a byte that the path
+builder tests: set (the default, no flag) bakes each point to world coordinates once at load; the
+flag, authored only on `barracuda`, keeps the host node on the path record so the points are
+stored host-relative and re-transformed by the host's live matrix at every launch. That is what
+lets a generator ride a hull that is still driving. Because the `_aip` nodes sit inside the host's
+subtree, reading their live global position gives the same answer without repeating the matrix
+work.
+
+**The launch state**, from the multi-point branch of `FUN_00451bf0`:
+
+- position: path point 0 through the host's live matrix, **plus 0.2 m in Y**;
+- attitude: the angles from point 0 to point 1, rotated by the same matrix, so the path's own
+  climb supplies the pitch;
+- velocity: **zero**, against the zeppelin drop's inherited carrier velocity;
+- throttle: the field pair at `+0x124`/`+0x128` set to **1.0**, where the drop sets them to 0.1;
+- the path is kept on the aircraft at `+0xc8` with the flag at `+0xcc`, which is the take-off run
+  it then flies, and which also suppresses the net-nearest-node snap an ordinary activation makes
+  (`FUN_004b0f40`).
+
+There is no altitude gate and no spawn-height offset on this path. `min_altitude` is a zeppelin
+key and does not appear on a surface record.
+
+## Launch names
+
+Every launch is renamed, `sprintf("%s_eg%d", base, counter)`. The base is the roster block's own
+name truncated at its **last** underscore, so C3/M03's `britpeace_5` template launches as
+`britpeace_eg0`; a generator with no roster block uses its authored vehicle name whole. The
+counter is a single mission-global value: zeroed when the egen file loads and advanced by every
+successful launch of any of the mission's generators, so C3/M03's four Barracuda launches are
+`britpeace_eg0` through `britpeace_eg3`. The spawner swaps the template block's name string for
+the launch, spawns from it, and restores the block's own name afterwards, so the block stays
+reusable while each launched aircraft carries a distinct identity.
+
 ## Capacity rule and limit
 
 `capacity` is `0` on all 23 generators. The decoded blocking rule is:
@@ -134,6 +202,12 @@ its `vehicle.params BarracudaPlanes` then selects the authored-disabled `britpea
 so launches are Peacemakers configured from that template and appear at the submarine's live pose.
 
 ## CSVM handling
+
+CSVM resolves a surface host's take-off path at load, drops the generator when it is shorter than
+two points, and launches on the decoded pose: point 0 plus 0.2 m, nose on point 1, at rest with
+the throttle open. The take-off **run** is not built: the aircraft is handed straight to its
+patrol net from that pose rather than flying the remaining path points, so the path's later points
+are read but unused.
 
 CSVM applies the decoded capacity check when `capacity > 0`. Campaign generators named by a
 mission's `WAKEUP_GENERATOR` additionally start on the zero-credit budget and receive its top-ups;

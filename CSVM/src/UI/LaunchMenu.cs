@@ -1887,7 +1887,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         flow.Store.Save(profile);
         int at = Math.Clamp(profile.SelectedPlane, 0, Math.Max(0, profile.Planes.Count - 1));
         var plane = profile.Planes.Count > 0 ? profile.Planes[at] : new OwnedPlane();
-        var custom = CustomPlaneStore.UserPlanes().Load(plane.Name);
+        // A reward aircraft with no file in the build store falls back to its own award template:
+        // the grant writes one, and this is what carries a profile granted before it did.
+        var custom = CustomPlaneStore.UserPlanes().Load(plane.Name)
+                     ?? CampaignProgression.BuildForOwned(plane);
         var launch = new CampaignLaunch(
             profile.Name, flow.MissionSeq, PlanePickerRoster.AirframeNode(plane.Airframe),
             custom, CampaignLoadout.For(plane, Fits));

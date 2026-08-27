@@ -433,6 +433,9 @@ public partial class FlightController : Node3D
     private readonly bool[] _targetKeyPrev = new bool[5];   // T/Y/U/I/O edge detection
     private readonly bool[] _viewModeKeyPrev = new bool[4]; // F8/F6 + pad view-selection edges
     private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // D-pad Up tap vs hold
+    // Suppresses the rocket trigger's next read when a cutscene skip or a pause-menu
+    // Resume hands input back while F/A is still down from confirming it.
+    private readonly RocketTriggerLatch _rocketLatch = new();
 
     private bool _initialTargetDone;             // --target= has had its one chance
     private int _initialTargetWaits;             // …frames it has waited for a non-empty pool
@@ -653,6 +656,11 @@ public partial class FlightController : Node3D
         {
             if (!_lifecycle.SetInert(value))
                 return;
+            // Going live is flight's own resume/skip re-entry point: a cutscene's skip or its
+            // natural handoff clears Inert on the same frame the button that ended it (F/A) can
+            // still be down.
+            if (!value)
+                SuppressRocketTriggerOnRegainedInput();
             ApplyPresence();
             InertChanged?.Invoke(this);
         }
@@ -997,7 +1005,7 @@ public partial class FlightController : Node3D
     /// start choreography), so a wave arrives flying rather than parked. Calling this on an
     /// aircraft already in play is simply that teleport-and-reset.</summary>
     public void Activate(Vector3 pos, Vector3 lookAt, Vector3? launchVelocity = null,
-        bool carrierDrop = false)
+        bool carrierDrop = false, float? launchThrottle = null)
     {
         var dir = lookAt - pos;
         _spawnPos = pos;
@@ -1013,12 +1021,15 @@ public partial class FlightController : Node3D
         Respawn();
         if (launchVelocity is { } velocity)
             _model.SetVelocity(velocity);
-        if (carrierDrop)
+        // A launch dictates the lever the aircraft leaves on: a carrier drop nearly closes it,
+        // a take-off run opens it. Written past the smoothing so the first step runs at it.
+        float? lever = carrierDrop ? CarrierDropThrottle : launchThrottle;
+        if (lever is { } opened)
         {
-            _throttle = CarrierDropThrottle;
-            _model.Throttle = CarrierDropThrottle;
+            _throttle = opened;
+            _model.Throttle = opened;
             if (Pilot != null)
-                Pilot.Throttle = CarrierDropThrottle;
+                Pilot.Throttle = opened;
             ThrottleSmoke?.Reset(_throttle);
         }
     }
@@ -1892,8 +1903,16 @@ public partial class FlightController : Node3D
     // F / gamepad A — the rocket trigger. One discrete pull launches one rocket (holding
     // does NOT auto-repeat; only the 1.0 s cooldown gates it), and `--fire-rockets` auto-repeats
     // for unattended runs. ⚠ Gamepad A must not also respawn: PadPressed is a level read, so a
-    // button still held when the plane goes live fires a rocket on the spawn frame.
-    private bool RocketFirePressed() => KeyDown(Key.F) || PadPressed(JoyButton.A);
+    // button still held when the plane goes live fires a rocket on the spawn frame, the same
+    // shape the latch below also catches, since it arms wherever flight regains input.
+    private bool RocketButtonDown() => KeyDown(Key.F) || PadPressed(JoyButton.A);
+
+    private bool RocketFirePressed() => _rocketLatch.Read(RocketButtonDown());
+
+    // Called at flight's own resume/skip re-entry points (the Inert setter above, and
+    // PollPauseAndHalt's halt-clearing edge) so a press that just confirmed a cutscene skip or a
+    // pause-menu Resume cannot also read as the rocket trigger's next pull.
+    private void SuppressRocketTriggerOnRegainedInput() => _rocketLatch.ArmIfHeld(RocketButtonDown());
 
     // G / gamepad D-pad Left — cycles the gun selector through the firable groups (1 → 2 →
     // … → 1). Only ONE group fires at a time; the gun trigger fires the selected one. Caller edge-detects.
@@ -2555,6 +2574,10 @@ public partial class FlightController : Node3D
             // The engine/whine/rattle loops hold their sample position through the freeze; the
             // one-shots already in flight are left to play out.
             Audio?.SetPaused(halted);
+            // Clearing is the pause board's own re-entry point: its Resume confirm can still have
+            // F/A down on this very frame.
+            if (!halted)
+                SuppressRocketTriggerOnRegainedInput();
         }
         return halted;
     }

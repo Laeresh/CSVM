@@ -63,6 +63,7 @@ Flags are specified in [`cli.md`](cli.md).
 | `F14` | frame-cost readout: fps / current frame cost / worst recent frame, cycling Off → Compact → Full — `--debug-fps=`. Works at the launchscreen too |
 | `F15` | targeting overlay — `--debug-targets`. A line from every turret gunner and AI gunner to the target it has acquired: red firing, amber tracking, grey held; the HUD names the gate holding each one (blocked / slewing / shot clock / bored / no solution) |
 | `F16` | node-name labels — `--debug-names[=meshes\|all]`. Migrated off `T`, which is free for targeting |
+| `F17` | kill the currently selected target through its own death path (an aircraft crashes, a zeppelin sub-part is destroyed) — the playtester's escape hatch for a stray enemy blocking an objective chain. No CLI flag. Inert with nothing selected; also inert on a turret selection, which carries no `HEALTH` key in the decoded data (`BL-534`) |
 | `F11` | print the mode's subject placement as ready-to-paste `--pos=` / `--direction=` (in `--viewer`: `--pos=` / `--lookat=`, the orbit pivot) |
 | `F10` | export the plane on screen (current livery + damage) to a timestamped `.glb` under `Exports/` — the `--export-gltf=` twin |
 | `Esc` | at the launchscreen: back, and quit from the Mode screen. In flight it opens the pause board instead — a board menu's Exit item is what leaves a session, so a pad can reach it too |

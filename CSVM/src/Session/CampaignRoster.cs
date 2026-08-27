@@ -271,15 +271,16 @@ public sealed class CampaignRosterPlan
     /// <summary>The spawn record a planned block launches as. The block's own representative
     /// rating arms the gunner and machine; its authored slots then outrank the def's inside the
     /// spawner. A campaign enemy keeps its militia's skins; the player's side takes the default
-    /// pattern like an Instant Action wingman. ⚠ <c>NodeName</c> is the block's own name and not
-    /// the assembler's counter form, because <c>primary_target</c> and <c>rating_biases</c> are
-    /// authored against it (BL-401).</summary>
-    public static AiSpawn SpawnFor(RosterSpawnPlan plan, Vector3 pos, Vector3 lookAt, AiPilot pilot) =>
+    /// pattern like an Instant Action wingman. ⚠ Leave <paramref name="nodeName"/> unset: the
+    /// block's own name is what <c>primary_target</c> and <c>rating_biases</c> are authored
+    /// against. Only a generator launch overrides it, with its decoded launch name.</summary>
+    public static AiSpawn SpawnFor(RosterSpawnPlan plan, Vector3 pos, Vector3 lookAt, AiPilot pilot,
+        string? nodeName = null) =>
         new(plan.PlaneNode, pos, lookAt, pilot, Scheme: plan.Scheme, Team: plan.Team,
             Inert: plan.Inert, ShippedSkins: plan.Team != AimAssist.PlayerTeam,
             AiDef: plan.AiDef, Fit: plan.Fit,
             AttackRating: InstantActionRuntime.RepresentativeRating(plan.Skills),
-            Nitro: plan.Nitro, RosterSkills: plan.Skills, NodeName: plan.Name,
+            Nitro: plan.Nitro, RosterSkills: plan.Skills, NodeName: nodeName ?? plan.Name,
             PilotName: plan.Title);
 
     /// <summary>The generator parameter blocks of one mission, keyed by the

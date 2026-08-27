@@ -40,11 +40,16 @@ public sealed record CountingEmitter(string Key) : IEmitter
 
     public int LiveCount => Sustaining ? 1 : 0;
 
+    /// <summary>The world position <see cref="SustainAt"/> was last fed — what a suite reads to
+    /// confirm the emitter is following its live host rather than a pose taken once at start.</summary>
+    public Vector3 LastPos { get; private set; }
+
     public void SustainAt(Vector3 worldPos, Basis worldBasis, float dt)
     {
         if (!Sustaining)
             Started++;
         Sustaining = true;
+        LastPos = worldPos;
     }
 
     public void SustainEnd()

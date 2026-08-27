@@ -18,10 +18,22 @@ public sealed class SpawnPicker : IFlightStarts
     /// rather than the stale <c>_spec.Scenario</c>. Null outside one.</summary>
     public string? ScenarioOverride;
 
+    /// <summary>Set by <c>GameSession</c> before the first <see cref="ChooseSpawn"/> call when an
+    /// intro cutscene already owns the session: the intro's own progression can test the
+    /// player's pose against the authored spawn it expects them to still be at, so applying
+    /// <c>--pos=</c> there and then can leave that test permanently unsatisfied and the intro never
+    /// hands off. Withheld here, not dropped: <see cref="TakeDeferredOverride"/> hands it back once
+    /// the cutscene lets go (docs/cli.md's <c>--pos=</c> entry).</summary>
+    public bool WithholdOverrideForCutscene;
+
     // Splitscreen: fan the players out abreast so they don't spawn inside each other.
     private const float SpawnAbreast = 60f;
 
     private readonly SessionSpec _spec;
+
+    // Set when ChooseSpawn withholds _spec.SpawnAt under WithholdOverrideForCutscene, so
+    // TakeDeferredOverride knows there is a placement still owed once the cutscene hands off.
+    private bool _overrideWithheld;
 
     public SpawnPicker(SessionSpec spec)
     {
@@ -99,14 +111,18 @@ public sealed class SpawnPicker : IFlightStarts
         // Bypasses the list entirely: a scripted run starts short of a target, no maneuvering.
         if (_spec.SpawnAt is { } at)
         {
-            var dir = _spec.SpawnDir ?? Vector3.Forward;
-            if (dir.LengthSquared() < 1e-6f)
-                dir = Vector3.Forward;
-            dir = dir.Normalized();
-            // Splitscreen: fan the players out abreast so they don't spawn inside each other.
-            at += dir.Cross(Vector3.Up).Normalized() * (playerIndex * SpawnAbreast);
-            Log.Info("flight", $"spawn [{tag}override] pos=({at.X:0},{at.Y:0},{at.Z:0}) dir=({dir.X:0.000},{dir.Y:0.000},{dir.Z:0.000})");
-            return (at, at + dir);
+            if (WithholdOverrideForCutscene)
+            {
+                // Spawning here would move the player off the authored point the intro owning
+                // the session is staged against; fall through to that authored spawn and hand
+                // the override to GameSession for TakeDeferredOverride once it lets go.
+                _overrideWithheld = true;
+                Log.Info("flight", $"spawn [{tag}override] withheld: an intro cutscene owns the session, applying at the handoff instead");
+            }
+            else
+            {
+                return ResolveOverride(at, playerIndex, tag);
+            }
         }
 
         if (spawns is { Count: > 0 })
@@ -121,6 +137,33 @@ public sealed class SpawnPicker : IFlightStarts
 
         GD.PushWarning($"no ia.json / PLAYER_INIT spawn for {_spec.Chapter}/{_spec.Mission} — using fallback spawn");
         return (new Vector3(-6200, 500, -3300), new Vector3(-5700, 350, -6300));
+    }
+
+    /// <summary>The <c>--pos=</c> placement <see cref="ChooseSpawn"/> withheld under
+    /// <see cref="WithholdOverrideForCutscene"/>, fanned out for <paramref name="playerIndex"/>
+    /// the same way an unwithheld override always is, or null when nothing was withheld (no
+    /// <c>--pos=</c> was given, or the cutscene never owned the session at spawn time). Read once
+    /// per player at the handoff; <see cref="ClearDeferredOverride"/> retires the record once every
+    /// rig has taken it.</summary>
+    public (Vector3 pos, Vector3 lookAt)? TakeDeferredOverride(int playerIndex, string tag) =>
+        _overrideWithheld && _spec.SpawnAt is { } at ? ResolveOverride(at, playerIndex, tag) : null;
+
+    /// <summary>Clears the record <see cref="TakeDeferredOverride"/> reads, once the cutscene's
+    /// handoff has placed every rig it applies to. A no-op when nothing was withheld.</summary>
+    public void ClearDeferredOverride() => _overrideWithheld = false;
+
+    // The --pos= placement, fanned SpawnAbreast apart per player index and logged: the one
+    // computation both the immediate path and the deferred (post-handoff) path in ChooseSpawn use.
+    private (Vector3 pos, Vector3 lookAt) ResolveOverride(Vector3 at, int playerIndex, string tag)
+    {
+        var dir = _spec.SpawnDir ?? Vector3.Forward;
+        if (dir.LengthSquared() < 1e-6f)
+            dir = Vector3.Forward;
+        dir = dir.Normalized();
+        // Splitscreen: fan the players out abreast so they don't spawn inside each other.
+        at += dir.Cross(Vector3.Up).Normalized() * (playerIndex * SpawnAbreast);
+        Log.Info("flight", $"spawn [{tag}override] pos=({at.X:0},{at.Y:0},{at.Z:0}) dir=({dir.X:0.000},{dir.Y:0.000},{dir.Z:0.000})");
+        return (at, at + dir);
     }
 
     // Turns a spawn (position + heading) into a (position, look-at) pair — the nose

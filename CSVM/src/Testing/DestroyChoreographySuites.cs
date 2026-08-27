@@ -370,6 +370,52 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // ---- a start-state swap must reach the pool, not only the node -----------------------------
+
+    // A destructible whose own Initial sequence authors the healthy/destroyed role swap directly
+    // is dispatched through the same Start() call a mission's start-state script reaches — never
+    // through DamageAt. A pool that does not follow stays Healthy at full HP while the swap
+    // already reads destroyed, so a later hit finds a live pool and replays the whole death
+    // choreography on an object that looks dead already. Subject: the first shipped destructible
+    // AuthorsOwnSwap finds; able to fail with SyncDestructiblePool's call site removed.
+    internal static void StartStateSwapSyncsThePool(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var runtime = world.Runtime;
+            DestructibleRegistry.Instance? subject = null;
+            foreach (var cand in runtime.Destructibles.All)
+            {
+                if (cand.Status == DestructibleRegistry.State.Healthy && cand.Anchor != null
+                    && AuthorsOwnSwap(cand.Def))
+                {
+                    subject = cand;
+                    break;
+                }
+            }
+            ctx.Check(subject != null,
+                $"chapter {ctx.Chapter} ships a destructible whose own Initial sequence authors the role swap");
+            if (subject is not { } inst)
+            {
+                return;
+            }
+
+            runtime.Start(inst.Def, inst.Anchor);
+            for (int i = 0; i < 6; i++)
+            {
+                runtime.Advance(1f / 60f);
+            }
+
+            ctx.Check(inst.Status == DestructibleRegistry.State.Destroyed && inst.Health <= 0f,
+                $"the pool follows a start-state swap with no DamageAt in the picture (status={inst.Status}, hp={inst.Health:0.##})");
+
+            bool landed = runtime.DamageAt(inst.Anchor, inst.MaxHealth + 1f);
+            ctx.Check(landed, $"a later hit still resolves to the destructible def={inst.Def.AnimName}");
+            ctx.Check(inst.Status == DestructibleRegistry.State.Destroyed,
+                $"…and finds the pool already dead rather than replaying the death choreography");
+        });
+    }
+
     // ---- an AI kill, from the death frame to the ground -----------------------------------------
 
     // The whole fall as one sequence: the kill starts the SELF-NAMED destroy def and nothing else,
@@ -925,6 +971,24 @@ internal static class DestroyChoreographySuites
         if (spend > 0f)
             ai.TakeCollisionHit(0f, spend, ai.GlobalPosition, 0);
     }
+
+    // The same healthy/destroyed role-swap test AnimRuntime.AuthorsSwap runs internally, exposed
+    // here so StartStateSwapSyncsThePool can find a subject without depending on that private
+    // method.
+    private static bool AuthorsOwnSwap(AnimDefinition def) =>
+        def.Sequences.Any(seq => !seq.OnCallOnly && seq.Events.Any(ev =>
+        {
+            if (ev.Kind != "ObjectActiveState")
+            {
+                return false;
+            }
+
+            var name = ev.Data.Str("node") ?? ev.Data.Str("name") ?? "";
+            bool active = ev.Data.Bool("state");
+            return (active && (name.Contains("destroyed", System.StringComparison.OrdinalIgnoreCase)
+                                || name.Contains("dbase", System.StringComparison.OrdinalIgnoreCase)))
+                || (!active && name.Contains("healthy", System.StringComparison.OrdinalIgnoreCase));
+        }));
 
     // The same pre-warm at the second host, the world-effects stage: the sonic burst's puffer defs
     // are built at bind, and five plays over a four-slot pool then reach the factory for none of

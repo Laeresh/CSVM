@@ -94,6 +94,7 @@ public static class SuiteCatalog
         "ai-voice",
         "ai-net-follow",
         "zeppelin-motion",
+        "zeppelin-pandora-dead-end",
         "zeppelin-launch",
         "zeppelin-damage",
         "zeppelin-broadside",
@@ -102,6 +103,7 @@ public static class SuiteCatalog
         "stop-sequence",
         "first-person-condition",
         "death-slot",
+        "start-state-swap-pool",
         "wait-for-completion",
         "emitter-host-deactivation",
         "effect-template-mesh",
@@ -128,6 +130,7 @@ public static class SuiteCatalog
         "collision-visibility",
         "nodelab-visibility",
         "trail-world-anchor",
+        "turret-death-effect-world-anchor",
         "damage-template-pool",
         "damage-staging-pool",
         "cockpit-panel-staging",
@@ -151,6 +154,7 @@ public static class SuiteCatalog
         "campaign-objectives",
         "campaign-mission-end",
         "targeting-candidates",
+        "debug-kill-target",
         "ranked-pool-carried-turret-dedup",
         "partition-areas",
         "scripted-path",
@@ -528,6 +532,12 @@ public static class SuiteCatalog
             "far end, armed under the unaddressable id 0, docks it for good; total engine loss " +
             "decelerates it to a stop through the decoded sqrt curve, and a deactivated record " +
             "is placed but held", ZeppelinMotionSuite));
+        into.Add(new TestHarness.Suite("zeppelin-pandora-dead-end",
+            "the structural dead-end hold (BL-529): CM08's piratezep flies its own Klondike1 " +
+            "chain, releasing the two stops the file arms (ids 7 and 8), pitch staying inside " +
+            "the record's band the whole route, until it reaches node 0 — an open end with NO " +
+            "stop point authored at all — and holds there for good rather than re-picking node " +
+            "1 and shuttling the altitude swing back and forth forever", ZeppelinPandoraDeadEndSuite));
         into.Add(new TestHarness.Suite("zeppelin-launch",
             "zeppelin fighter launch (F20): C1/IA1's zeppelin-launch generator authors the " +
             "decoded shape (cargobay origin, −90° drop, mp1 door anims — both shipped as " +
@@ -562,6 +572,8 @@ public static class SuiteCatalog
             "the PLAYER_1ST_PERSON condition follows the pilot's selected view mode: the bullethole def's else branch runs in Chase and is skipped in Cockpit and Nose (A1)", PlayerFirstPersonCondition));
         into.Add(new TestHarness.Suite("death-slot",
             "a killed destructible dispatches its compiled destruction slot — the block carrying the 30 s fire's 1,035 death calls (BL-276)", DeathSlotDispatches));
+        into.Add(new TestHarness.Suite("start-state-swap-pool",
+            "a destructible whose own Initial sequence authors the healthy/destroyed swap directly (a start-state script's shape, never DamageAt) leaves the HP pool destroyed too, so a later hit does not replay the death choreography (BL-513, BL-521)", StartStateSwapSyncsThePool));
         into.Add(new TestHarness.Suite("wait-for-completion",
             "a WAIT_FOR_COMPLETION call holds the caller's next event for its callee, and an unflagged one beside it does not (BL-228)", WaitForCompletion));
         into.Add(new TestHarness.Suite("emitter-host-deactivation",
@@ -614,6 +626,8 @@ public static class SuiteCatalog
             "the node lab's tree row follows live Visible, not the hide button's last action", NodeLabVisibility));
         into.Add(new TestHarness.Suite("trail-world-anchor",
             "a trail emitter under a rotated carrier anchors at world identity and drops puffs where it is fed", TrailWorldAnchor));
+        into.Add(new TestHarness.Suite("turret-death-effect-world-anchor",
+            "a carried turret's death fire, anchored on TurretController.Site under a moving/rotating hull, follows the hull between ticks rather than freezing at the pose it started at (BL-514)", TurretDeathEffectWorldAnchor));
         into.Add(new TestHarness.Suite("damage-template-pool",
             "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)", DamageTemplatePool));
         into.Add(new TestHarness.Suite("damage-staging-pool",
@@ -736,6 +750,13 @@ public static class SuiteCatalog
             "and the gunner fires real rounds at a zeppelin structure with no aircraft in the scan " +
             "at all",
             TargetingCandidates));
+        into.Add(new TestHarness.Suite("debug-kill-target",
+            "the F17 debug kill key's routing (A2, BL-534): an aircraft source crashes through the " +
+            "attributed DebugForceCrash/Downed path, a destructible source (a zeppelin sub-part) is " +
+            "destroyed through the same AnimRuntime.DamageAt a rocket uses, and a turret or any " +
+            "other source with no decoded HEALTH key is left inert rather than inventing a kill " +
+            "path for it; nothing selected does not throw",
+            DebugKillTargetRouting));
         into.Add(new TestHarness.Suite("ranked-pool-carried-turret-dedup",
             "the AI ranked pool's carried-turret guard (BL-507): a hostile aircraft with a crewed " +
             "rear mount rides the pool as one Vehicle entry, never a second entry for its own " +

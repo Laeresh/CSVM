@@ -17,6 +17,7 @@ mode, the `DAMAGE_SEQUENCE` threshold script, the death sequence, and the collid
 - [Activation](#activation)
 - [Health thresholds](#health-thresholds)
 - [Damage and death sequences](#damage-and-death-sequences)
+- [Starting destroyed](#starting-destroyed)
 - [Definition binding](#definition-binding)
 - [Water-tower example](#water-tower-example)
 ## Destructible pieces
@@ -144,6 +145,20 @@ every non-empty slot sits on a `health > 0` destructible (none elsewhere), and 1
 1,430 mission-archive slots dispatch calls no listed sequence reaches — this block is where
 ~all of `large_30sec_fire`'s 1,035 death calls live, so before it dispatched, the game's
 most-called death fire never played from a compiled death site at all.
+
+## Starting destroyed
+
+An object can read destroyed from the first frame without ever taking a hit: a start-state
+script or an `ON_STARTUP` sequence can author the same healthy→destroyed
+`OBJECT_ACTIVE_STATE` swap the death sequence runs, outside `DamageAt`. The engine's
+`AnimRuntime.SyncDestructiblePool` mirrors that swap into the object's `DestructibleRegistry`
+pool (`Health` to 0, `Status` to `Destroyed`) whenever the dispatched event's role name matches
+the healthy/destroyed/`dbase` convention, so a later hit finds the pool already dead instead of
+replaying the whole death choreography on an object that already looks wrecked. Bootstrap
+registers each anchored destructible before dispatching its own `RESET_STATE`, so a def
+authored to start destroyed in its `RESET_STATE` reaches the same sync; no shipped def in this
+install uses that shape, so it is verified structurally rather than against authored data.
+Regression: the `start-state-swap-pool` suite (`CSVM/src/Testing/DestroyChoreographySuites.cs`).
 
 ## Definition binding
 

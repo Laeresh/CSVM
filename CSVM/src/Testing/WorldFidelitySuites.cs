@@ -109,11 +109,17 @@ internal static class WorldFidelitySuites
                 $"the campaign generator waits for WAKEUP_GENERATOR credit");
             generators.SimStep(10f);
             ctx.Check(launchedDef == null, $"the submarine launches nothing before the patrol phase");
+            // The decoded launch point: the first node of the submarine's own take-off path,
+            // lifted 0.2 m, and riding the live hull because moving_path keeps it host-relative.
+            var runway = First(world.Runtime.FindNodes(
+                EnemyGenerators.LaunchPathNode("barracuda", 0), submarine));
             generators.GrantWaveCapacity("barracuda", 4);
             generators.SimStep(0.01f);
-            ctx.Check(launchedDef?.VehicleParams == "BarracudaPlanes"
-                && launchedAt.DistanceTo(submarine.GlobalPosition) < 0.01f,
-                $"the credited launch identifies its template and uses the live submarine pose");
+            ctx.Check(launchedDef?.VehicleParams == "BarracudaPlanes" && runway != null
+                && launchedAt.DistanceTo(runway.GlobalPosition + Vector3.Up * 0.2f) < 0.01f,
+                $"the credited launch identifies its template and starts on the hull's take-off path");
+            ctx.Check(runway != null && runway.GlobalPosition.DistanceTo(submarine.GlobalPosition) > 1f,
+                $"that path point is the deck ahead of the hull's origin, not the origin itself");
         });
     }
 
@@ -189,11 +195,21 @@ internal static class WorldFidelitySuites
             ctx.Note($"{PathName}: {path.Waypoints.Count} waypoint(s), first {path.Waypoints[0]}, last {path.Waypoints[^1]}");
             var body = new Node3D { Name = "taxi_body" };
             world.Stage.AddChild(body);
-            body.GlobalPosition = path.Waypoints[0];
+            // Off the apron and 200 m up, which is where the roster blocks that author a path put
+            // their aeroplane: the placement has to snap it onto waypoint 0, not fly the path from
+            // the spawn pose.
+            body.GlobalPosition = path.Waypoints[0] + new Vector3(700f, 200f, -400f);
             var registry = new ScriptedPathVehicles(name => world.Runtime.FindNodes(name));
             float handoffSpeed = -1f;
             ctx.Check(registry.Place(PathVehicle, PathName, body, s => handoffSpeed = s),
                 $"'{PathVehicle}' is placed on its authored path");
+            ctx.Check(body.GlobalPosition.IsEqualApprox(path.Waypoints[0]),
+                $"'{PathVehicle}' is snapped onto waypoint 0, not left at its roster pose");
+            var firstLeg = path.Waypoints[1] - path.Waypoints[0];
+            ctx.Check(Mathf.Abs(Mathf.Wrap(
+                    body.GlobalRotation.Y - Mathf.Atan2(-firstLeg.X, -firstLeg.Z),
+                    -Mathf.Pi, Mathf.Pi)) < 0.01f,
+                $"'{PathVehicle}' faces down the first leg");
 
             // Placed and waiting: the spawner's freeze holds it on the first waypoint until a
             // mission goal releases it, however long the mission steps.

@@ -810,6 +810,102 @@ internal static class CombatSuites
         }
     }
 
+    // Trail-world-anchor's own shape, for a death fire: PUFFER_STATE anchored on
+    // TurretController.Site, the node a real destroy sequence targets. Site sits under a carrier
+    // posed off-axis and translated between two ticks, the ZeppelinRuntime.Place shape (a plain
+    // GlobalTransform write on the hull root, propagated by the scene tree), and the emitter must
+    // follow rather than hold the pose it started at. The no-GPU CountingEmitterFactory lets the
+    // assertion read EmitterDirector.Tick's own fed position instead of a MultiMesh buffer.
+    internal static void TurretDeathEffectWorldAnchor(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        ProjectilePool? pool = null;
+        Node3D? carrier = null;
+        try
+        {
+            var live = new ProjectilePool(null!, null, null);
+            pool = live;
+
+            // The carrier: a moving hull section, posed off-axis first (the exact pose that hid
+            // the original trail-world-anchor bug) and translated on the second tick, the
+            // zeppelin's own Motion.Step / ZeppelinRuntime.Place shape, minus the AI-net plumbing.
+            var poseA = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(132f)),
+                new Vector3(-7065f, 326f, -5519f));
+            carrier = new Node3D();
+            ctx.Host.AddChild(carrier);
+            carrier.GlobalTransform = poseA;
+
+            var siteNode = new Node3D { Name = "test_turret_site" };
+            carrier.AddChild(siteNode);
+            var pitchNode = new Node3D();
+            pitchNode.SetMeta(AnimRuntime.NameMeta, "pitch");
+            siteNode.AddChild(pitchNode);
+            var muzzleNode = new Node3D();
+            muzzleNode.SetMeta(AnimRuntime.NameMeta, "muzzle");
+            siteNode.AddChild(muzzleNode);
+
+            var emplacementDef = turretDefs.All.First(d => !d.Carried);
+            emplacementDef.YawNode = null;
+            emplacementDef.PitchNode = "pitch";
+            emplacementDef.Firepoints = new[] { "muzzle" };
+            emplacementDef.HealthyNode = null;
+            emplacementDef.NodePatterns = new List<IReadOnlyList<string>>
+            {
+                new List<string> { "test_turret_site" },
+            };
+            var emplacements = TurretController.BuildEmplacements(turretDefs, weapons,
+                (name, _) => name == "test_turret_site"
+                    ? new[] { siteNode }
+                    : System.Array.Empty<Node3D>(),
+                live);
+            ctx.Check(emplacements.Length == 1 && ReferenceEquals(emplacements[0].Site, siteNode),
+                $"the carried-on-a-hull turret resolves its own Site node count={emplacements.Length}");
+            if (emplacements.Length != 1)
+            {
+                return;
+            }
+
+            var factory = new CountingEmitterFactory();
+            var runtime = new AnimRuntime(AnimRuntime.NewTemplateStage(placesCalled: false))
+            {
+                EmitterFactory = factory,
+            };
+            var deathDef = new AnimDefinition { Name = "test_turret_death" };
+            var site = emplacements[0].Site!;
+            runtime.Emitters.Assert("deathfire", site, deathDef, site, new AnimData(new()));
+            ctx.Check(factory.Built.Count == 1, $"the death fire asserts one emitter built={factory.Built.Count}");
+            if (factory.Built.Count != 1)
+            {
+                return;
+            }
+            var emitter = factory.Built[0];
+
+            runtime.Emitters.Tick(0.1f);
+            var atSite = site.GlobalPosition;
+            ctx.Check(emitter.LastPos.IsEqualApprox(atSite),
+                $"first tick lands on the site's pose fed=({emitter.LastPos.X:0},{emitter.LastPos.Y:0},{emitter.LastPos.Z:0}) site=({atSite.X:0},{atSite.Y:0},{atSite.Z:0})");
+
+            // The zeppelin moves on: a fresh translate+yaw on the SAME hull root, exactly what
+            // ZeppelinRuntime.Place writes every sim step while the turret it carries burns.
+            var poseB = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(150f)),
+                poseA.Origin + new Vector3(400f, 0f, -300f));
+            carrier.GlobalTransform = poseB;
+            runtime.Emitters.Tick(0.1f);
+            var atSiteMoved = site.GlobalPosition;
+            ctx.Check(!atSiteMoved.IsEqualApprox(atSite),
+                $"the carrier actually moved between ticks (test sanity) moved=({atSiteMoved.X:0},{atSiteMoved.Y:0},{atSiteMoved.Z:0})");
+            ctx.Check(emitter.LastPos.IsEqualApprox(atSiteMoved),
+                $"the death fire rides the hull, not the position it started at, fed=({emitter.LastPos.X:0},{emitter.LastPos.Y:0},{emitter.LastPos.Z:0}) site now=({atSiteMoved.X:0},{atSiteMoved.Y:0},{atSiteMoved.Z:0})");
+        }
+        finally
+        {
+            pool?.Free();
+            carrier?.Free();
+        }
+    }
+
     // The incoming-fire near-miss cue's wiring, with its able-to-fail baseline: a real round from
     // another pilot flying past registers a pass, the same round fired by the target's own identity
     // registers none, and a round a hundred metres wide of the aircraft registers none either, so a

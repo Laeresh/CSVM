@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Flight;
 using CSVM.Mech3;
 
 namespace CSVM.Session;
@@ -12,9 +13,11 @@ public readonly record struct MissionAttempt(
     int Airframe, string PlaneName);
 
 /// <summary>What recording an attempt changed: whether it completed the primary objective, whether
-/// it raised the campaign position, and the airframe ids of any aircraft awards it granted.</summary>
+/// it raised the campaign position, the airframe ids of any aircraft awards it granted, and the
+/// builds those awards fly, which the caller persists to the build store its launches read.</summary>
 public readonly record struct MissionRecorded(
-    bool PrimaryCompleted, bool Advanced, IReadOnlyList<int> AwardedAirframes);
+    bool PrimaryCompleted, bool Advanced, IReadOnlyList<int> AwardedAirframes,
+    IReadOnlyList<CustomPlaneDef> AwardedBuilds);
 
 /// <summary>One record of the campaign's aircraft-award table: the mission ordinal that pays it,
 /// the objective bit it is gated on, and the airframe and plane name it grants
@@ -48,6 +51,89 @@ public static class CampaignProgression
         new AircraftAward(19, 1, 10, "Accipiter Annie"),
     };
 
+    // The gun-slot dropdown's explicit empty row, one past the last calibre, as the record stores
+    // it (docs/formats/paint.md).
+    private const int AwardGunEmpty = 5;
+
+    // One award's build, in the 204-byte record's own field order (docs/formats/paint.md, "Saved
+    // custom planes"): airframe, engine, the two wing hardpoint counts, the four armour zones in
+    // units, the twin-mount bit field, then the four gun ids with 5 for an empty slot.
+    private static readonly int[][] AwardTemplates =
+    {
+        new[] { 0, 1, 1, 1, 3, 3, 3, 3, 1, 0, 5, 5, 5 },
+        new[] { 2, 1, 4, 4, 8, 7, 5, 5, 3, 2, 2, 0, 0 },
+        new[] { 3, 4, 1, 1, 4, 4, 4, 4, 3, 1, 0, 5, 5 },
+        new[] { 7, 1, 2, 1, 5, 5, 4, 4, 3, 4, 0, 5, 5 },
+        new[] { 10, 1, 4, 4, 6, 6, 6, 6, 3, 4, 2, 5, 5 },
+    };
+
+    // The paint the five templates share, byte for byte: pattern, the three swatch rows, their
+    // shade variants, and the nose, tail and wing decals.
+    private static readonly int[] AwardPaint = { 4, 1, 26, 26, 8, 0, 9, 40, 8, 7 };
+
+    /// <summary>The build a granted award flies, out of the original's special-plane template array
+    /// at <c>0x0061a9b8</c>: class-2 204-byte records matched on airframe id, which
+    /// <c>FUN_00405f00</c> copies whole into the profile's new plane slot before naming it. Null
+    /// for an airframe the table does not award. A fresh def per call, so a caller may name and
+    /// store it. The Blue Streak's engine 4 is the nitrous tier a stock Bloodhawk never has.</summary>
+    public static CustomPlaneDef? AwardBuild(int airframe)
+    {
+        foreach (var row in AwardTemplates)
+        {
+            if (row[0] != airframe)
+            {
+                continue;
+            }
+
+            var def = new CustomPlaneDef
+            {
+                Airframe = row[0],
+                Engine = row[1],
+                LeftHardpoints = row[2],
+                RightHardpoints = row[3],
+                ArmourNose = row[4],
+                ArmourTail = row[5],
+                ArmourLeftWing = row[6],
+                ArmourRightWing = row[7],
+                PaintPattern = AwardPaint[0],
+                NoseDecal = AwardPaint[7],
+                TailDecal = AwardPaint[8],
+                WingDecal = AwardPaint[9],
+            };
+            for (int slot = 0; slot < HangarPaintTables.Slots; slot++)
+            {
+                def.PaintColours[slot] = AwardPaint[1 + slot];
+                def.PaintShades[slot] = AwardPaint[4 + slot];
+            }
+
+            for (int slot = 0; slot < def.Guns.Length; slot++)
+            {
+                int id = row[9 + slot];
+                def.Guns[slot] = new GunChoice(id == AwardGunEmpty ? null : id, (row[8] & (1 << slot)) != 0);
+            }
+
+            return def;
+        }
+
+        return null;
+    }
+
+    /// <summary>The build an owned plane flies when the build store holds none under its name: an
+    /// award's own template, since in the original the profile's plane record IS the build and
+    /// there is no second place to look. Null for anything else, which leaves a hangar-built plane
+    /// and the two starter Devastators on the store's own answer.</summary>
+    public static CustomPlaneDef? BuildForOwned(OwnedPlane plane)
+    {
+        ArgumentNullException.ThrowIfNull(plane);
+        if (!plane.Special || AwardBuild(plane.Airframe) is not { } build)
+        {
+            return null;
+        }
+
+        build.Name = plane.Name;
+        return build;
+    }
+
     /// <summary>Records one attempt: its statistics into the mission's record, and, when it
     /// completed the primary objective, the best-of merge, the money, the position raise and any
     /// aircraft award. An attempt that leaves bit 0 clear records statistics and nothing
@@ -59,7 +145,8 @@ public static class CampaignProgression
         bool primary = (attempt.CompletedMask & PrimaryObjectiveMask) != 0;
         if (!primary)
         {
-            return new MissionRecorded(false, false, Array.Empty<int>());
+            return new MissionRecorded(
+                false, false, Array.Empty<int>(), Array.Empty<CustomPlaneDef>());
         }
 
         int maskBefore = result.Best.CompletedMask;
@@ -73,7 +160,7 @@ public static class CampaignProgression
             profile.MissionsCompleted = attempt.Seq + 1;
         }
 
-        return new MissionRecorded(true, advanced, awarded);
+        return new MissionRecorded(true, advanced, awarded.Airframes, awarded.Builds);
     }
 
     /// <summary>The story position Next Mission resolves to: the profile's own progress, clamped to
@@ -150,10 +237,11 @@ public static class CampaignProgression
         best.CompletedMask |= attempt.CompletedMask;
     }
 
-    private static List<int> GrantAwards(
+    private static (List<int> Airframes, List<CustomPlaneDef> Builds) GrantAwards(
         CampaignProfileDef profile, MissionAttempt attempt, int maskBefore)
     {
         var awarded = new List<int>();
+        var builds = new List<CustomPlaneDef>();
         foreach (var award in AircraftAwards)
         {
             int bit = 1 << award.ObjectiveBit;
@@ -173,9 +261,14 @@ public static class CampaignProgression
                 Special = true,
             });
             awarded.Add(award.Airframe);
+            if (AwardBuild(award.Airframe) is { } build)
+            {
+                build.Name = award.Name;
+                builds.Add(build);
+            }
         }
 
-        return awarded;
+        return (awarded, builds);
     }
 
     private static MissionResult ResultFor(CampaignProfileDef profile, int seq)
