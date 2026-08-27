@@ -343,9 +343,19 @@ public sealed class CameraController
     {
         var size = _camera.GetViewport()?.GetVisibleRect().Size ?? new Vector2(16f, 9f);
         float aspect = size.Y > 0f ? size.X / size.Y : 16f / 9f;
-        float horizontalDeg = ViewMode == PilotViewMode.Cockpit ? CockpitHorizontalFovDeg : NoseHorizontalFovDeg;
-        _camera.Fov = HorizontalToVerticalFovDeg(horizontalDeg, aspect);
+        _camera.Fov = FirstPersonFovDeg(ViewMode, aspect);
     }
+
+    // Beside its one caller for the same SA1204 reason as FirstPersonPose above.
+#pragma warning disable SA1204
+    /// <summary>The vertical FOV a first-person view takes at <paramref name="liveAspect"/>: the
+    /// per-mode horizontal base through <see cref="HorizontalToVerticalFovDeg"/>. Public because a
+    /// second camera drawing the same eye must take the same angle from the same table rather than
+    /// a copy of it (<see cref="CockpitOverlay"/>).</summary>
+    public static float FirstPersonFovDeg(PilotViewMode mode, float liveAspect) =>
+        HorizontalToVerticalFovDeg(
+            mode == PilotViewMode.Cockpit ? CockpitHorizontalFovDeg : NoseHorizontalFovDeg, liveAspect);
+#pragma warning restore SA1204
 
     /// <summary>Put the camera back on the vertical FOV it carried at construction — GameSession's
     /// own 62° global. Every non-first-person pose calls this (a held numpad key or look-behind

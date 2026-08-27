@@ -84,7 +84,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 ### Wave C — the panel vibration
 
 20. ☑ Confirm or kill the float-precision hypothesis with a near-origin capture
-21. ☐ Prototype the interior in its own pass with the camera at the origin
+21. ◐ Prototype the interior in its own pass with the camera at the origin
 
 ## Dependency and parallelism notes
 
@@ -397,7 +397,7 @@ passed, engine errors clean; goldens 16 shots hash-identical; hitch stage clean 
 The belt and damage recolour and the horizon ball were then confirmed at the controls in a flown
 Cockpit view.
 
-## C21 ☐ Prototype the interior in its own pass with the camera at the origin
+## C21 ◐ Prototype the interior in its own pass with the camera at the origin
 
 **Reopened.** C20's first reading closed this item as disproven; its re-measurement with a rotated
 attitude confirmed the hypothesis instead (see C20's Result), so this is the fix. The regression
@@ -444,3 +444,74 @@ a render pass.
 **⚠ Traps.** Do not start this before C20 answers. It is the expensive item in the plan and the
 cheap test that justifies it costs an afternoon. If C20 comes back negative, this item closes as
 disproven and the write-up of why is the deliverable, which is a success here and not a failure.
+
+**Result.** Built behind `--cockpit-pass`, default off, so the shipped picture and the goldens are
+untouched. `Flight/CockpitOverlay` takes the built `cockpit1` node out of the plane model and
+re-parents it into a `SubViewport` with its own `World3D`, at zero translation carrying the mount
+basis `PlaneBuilder` gave it (the head-pitch tilt and `InteriorScale`, unchanged). The pass's camera
+sits at that world's origin, aimed by `CameraController.FirstPersonPose` with the plane position and
+the `cockpit_camera` offset both zero, which is exact: those two cancel between the eye and the
+panel in the main world too, so the composed camera-to-interior transform is the same one, computed
+from small numbers. The FOV comes from the camera's own per-mode law, now
+`CameraController.FirstPersonFovDeg`, at the pass viewport's live aspect. Head look is not applied
+to the interior, as it is not today.
+
+The viewport is transparent-backed and sits on `HudLayers.CockpitPass` (−1): 3D draws before any
+canvas layer, so the world still shows under the panel while the cloud whiteout, `ScreenFlash` and
+the HUD keep drawing over it, exactly as they do with the interior in the main world. Lighting is a
+copy of the world's `DirectionalLight3D`, re-aimed by the inverse plane attitude every frame since
+the interior's frame turns with the aircraft in the main world and does not here, plus a duplicate
+of the world environment with its background mode cleared and its `Sky` kept for ambient.
+`CockpitVisibility` is untouched and still owns the show/hide: `Sync` follows the interior node's
+own `Visible`, and parks the viewport's update mode when it is off. `CockpitGauges` binds nodes and
+materials, so re-parenting is invisible to it; the needles, belts, damage recolour and horizon all
+drive on the frames the panel is on the screen, as the captures below show.
+
+Splitscreen is covered by construction: the pass is built per `PlayerRig`, on that rig's own
+`HudParent`, which is the pane's `SubViewport` with two or more players. It has not been flown in
+splitscreen, and the second pass per pane is a real cost that a 4P run should be measured for before
+the flag becomes the default. Deliberately not covered: an airframe swap, which rebuilds the
+interior and leaves the pass holding the old node, where `Sync` hides itself rather than drawing a
+freed one.
+
+Registration over four consecutive `--det --shots` frames, `--fly --chapter=C1 --plane=player_bhawk
+--view=cockpit --pos=20000,300,0 --direction=-0.743,0,-0.669 --frames=240`, worst of the three
+frame pairs per region, in pixels:
+
+| region | flag off | flag on |
+|---|---|---|
+| speedometer | 2.721 | 0.000 |
+| gun_gauge | 1.735 | 0.000 |
+| altimeter | 1.517 | 0.000 |
+| damage_dial | 0.413 | 0.000 |
+| horizon | 0.148 | 0.000 |
+| rockets | 0.108 | 0.000 |
+| shell_dash_top | 0.052 | 0.000 |
+| shell_strut_L | 0.004 | 0.003 |
+| shell_strut_R | 0.004 | 0.006 |
+
+Every dial region falls to zero, below the struts' floor. The strut regions are full crops that
+include the world seen past the strut, which is why they never read zero in either column. With the
+flag on the same capture at the C1 mission spawn (no `--pos`) reads 0.001 px worst over any dial
+region, and on the wall clock (`--no-det --shots=6`) 0.002 px.
+
+A/B at the same pose (`.scratch/bl556/c21_off_00.png` against `.scratch/bl556/c21_on_00.png`):
+the two frames are the same picture. The HUD readouts, the compass strip, the ammo line and the
+reticle all draw over the panel in both, the dash, struts and dials sit at the same screen
+coordinates (registering the two against each other, the shell and dash regions agree within
+0.013 px; the dial regions differ by up to 0.72 px, which is the off path's own rounding error at
+that instant, not a shift). Lighting reads the same: the panel's brightness, the orange wood, the
+green faces and the shadowed side walls all match. One visible difference: the gunsight's
+transparent glass plate reads slightly more opaque with the pass on, because that alpha surface
+blends against the pass's empty buffer rather than against the sky behind it. It is the only region
+of the frame that differs by more than the jitter itself, and it is a compositing question rather
+than a placement one.
+
+The alternative, recorded so it is not re-derived: a Godot build with double-precision world
+coordinates fixes this whole class outright, at the cost of maintaining a custom engine build. For
+one panel it is not worth it, which is why the pass exists.
+
+This stays a prototype until it is judged at the controls, in the condition the report came from.
+The flag is the switch for that judgement.
+
+**Verified.** <pending orchestrator run>

@@ -124,6 +124,7 @@ public static class SuiteCatalog
         "tex-dropin",
         "gltf-export",
         "cockpit-interior",
+        "cockpit-overlay-pass",
         "collision-visibility",
         "nodelab-visibility",
         "trail-world-anchor",
@@ -603,6 +604,8 @@ public static class SuiteCatalog
             "the viewer plane exports to glTF and re-imports with a textured mesh", GltfExport));
         into.Add(new TestHarness.Suite("cockpit-interior",
             "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11)", CockpitInterior));
+        into.Add(new TestHarness.Suite("cockpit-overlay-pass",
+            "--cockpit-pass moves the interior into a world of its own, where it and the camera both sit at the origin and no chapter-scale coordinate reaches the panel's transform (BL-556)", CockpitOverlayPass));
         into.Add(new TestHarness.Suite("collision-visibility",
             "nothing a chapter hides is left solid: no enabled collider under an invisible node", CollisionVisibility));
         into.Add(new TestHarness.Suite("nodelab-visibility",

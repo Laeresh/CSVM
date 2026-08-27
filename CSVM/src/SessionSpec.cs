@@ -225,6 +225,12 @@ public sealed record SessionSpec
     public bool SkyZoneExplicit { get; private set; }
     public bool NoFog { get; private set; }
 
+    /// <summary><c>--cockpit-pass</c>: draw the cockpit interior in a world of its own with the
+    /// camera and the panel at the origin (<see cref="Flight.CockpitOverlay"/>) instead of at
+    /// chapter-scale world coordinates under the plane. A prototype, so it is off by default and
+    /// the shipped picture is unchanged.</summary>
+    public bool CockpitPass { get; private set; }
+
     /// <summary><c>--no-clutter</c>: skip the chapter's ground-clutter build entirely
     /// (<see cref="Mech3.ClutterBuilder"/> — the scattered tree/bush cards and the C2/C5 3D
     /// city-block decorations), so the painted ground they stand on is visible. Does not touch the
@@ -1036,6 +1042,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--sounds=")) { s.Sounds = arg["--sounds=".Length..]; }
             else if (arg.StartsWith("--messages=")) { s.Messages = arg["--messages=".Length..]; }
             else if (arg == "--no-fog") { s.NoFog = true; }
+            else if (arg == "--cockpit-pass") { s.CockpitPass = true; }
             else if (arg == "--no-clutter") { s.NoClutter = true; }
             else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }

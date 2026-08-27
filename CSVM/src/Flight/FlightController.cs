@@ -52,6 +52,15 @@ public partial class FlightController : Node3D
     /// <see cref="Cockpit"/> is.</summary>
     public CockpitGauges? CockpitPanel;
 
+    /// <summary>The <c>cockpit1</c> subtree itself, as the plane builder returned it. Null wherever
+    /// <see cref="Cockpit"/> is.</summary>
+    public Node3D? CockpitInterior;
+
+    /// <summary>The interior's own render pass (<c>--cockpit-pass</c>), which takes
+    /// <see cref="CockpitInterior"/> out of the plane model and draws it at the origin. Null unless
+    /// the flag asked for it, and then the interior renders in the main world as before.</summary>
+    public CockpitOverlay? CockpitPass;
+
     /// <summary>The wobble oscillators and the pivot they roll — the node the assembler hung
     /// <see cref="PlaneModel"/> under. Null when no rig assembly ran (parked lab planes).</summary>
     public PlaneShake? Shake;
@@ -1667,6 +1676,8 @@ public partial class FlightController : Node3D
             Cockpit?.Apply(_cam.ViewMode, firstPersonPose);
             // Same rule, so the panel is driven exactly on the frames it is on the screen.
             _panelShown = CockpitVisibility.Rules(_cam.ViewMode, firstPersonPose).Interior;
+            // After the hide, so the pass shows exactly the frames the interior itself does.
+            CockpitPass?.Sync(_renderPose.Basis, _cam);
             _cam.LogView(view, _model.Position, _model.Attitude);
         }
 

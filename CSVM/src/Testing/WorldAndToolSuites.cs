@@ -161,6 +161,67 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // The interior's own render pass (--cockpit-pass): the panel leaves the plane model for a
+    // world of its own, where both it and the camera sit at the origin, so no chapter-scale
+    // coordinate enters its transform chain. Able to fail: a pass that shares the main World3D, one
+    // that leaves the mount translation on the interior, a camera placed anywhere but the origin,
+    // or an FOV taken from a second copy of the per-mode table instead of the camera's own.
+    internal static void CockpitOverlayPass(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        Node3D? plane = null;
+        Node? host = null;
+        try
+        {
+            var builder = new PlaneBuilder(planesGamez, textures, spinningProps: true,
+                cockpitInterior: true);
+            plane = builder.Build(ctx.PlaneName);
+            if (builder.CockpitInterior is not { } interior)
+            {
+                ctx.Check(false, $"the interior build carries a cockpit1 subtree");
+                return;
+            }
+            var mountBasis = interior.Transform.Basis;
+            host = new Node();
+            var overlay = CockpitOverlay.Build(host, interior, null, null);
+            ctx.Check(overlay != null, $"the pass builds over a rig's HUD parent");
+            if (overlay == null)
+                return;
+
+            ctx.Check(interior.Position == Vector3.Zero,
+                $"the interior sits at the overlay world's origin pos={interior.Position}");
+            ctx.Check(interior.Transform.Basis.IsEqualApprox(mountBasis),
+                $"the head-pitch tilt and the interior scale survive the move");
+            ctx.Check(interior.Scale.IsEqualApprox(Vector3.One * PlaneBuilder.InteriorScale),
+                $"still at the port's interior scale scale={interior.Scale.X:0.###}");
+            ctx.Check(overlay.Camera.Transform.Origin == Vector3.Zero,
+                $"the overlay camera sits at the origin pos={overlay.Camera.Transform.Origin}");
+            var view = interior.GetParent() as SubViewport;
+            ctx.Check(view != null, $"the interior hangs in the pass's own SubViewport");
+            ctx.Check(view != null && view.TransparentBg,
+                $"the pass renders on a transparent background, so the main view shows under it");
+            ctx.Check(view != null && overlay.Camera.GetParent() == view,
+                $"the camera looks at the interior from inside that same viewport");
+            ctx.Check(view?.World3D != null && view.World3D != host.GetWindow()?.World3D,
+                $"the pass owns its World3D rather than sharing the main one");
+            // The same table the pilot's own camera reads, not a copy: 80° horizontal at 16:9.
+            ctx.Check(Mathf.Abs(CameraController.FirstPersonFovDeg(PilotViewMode.Cockpit, 16f / 9f)
+                    - CameraController.HorizontalToVerticalFovDeg(80f, 16f / 9f)) < 0.001f,
+                $"the pass's FOV law is the camera's own per-mode law");
+        }
+        finally
+        {
+            host?.Free();
+            plane?.Free();
+            textures.Dispose();
+        }
+    }
+
     // The authored panel driven off live readings (BL-431): the needles take an absolute angle and
     // the two lamps follow the cluster's own blink state. Able to fail: a needle left at its modeled
     // rest rotation, a lamp still parked while its condition holds, or a drive that moves the panel

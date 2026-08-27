@@ -2000,10 +2000,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   temporal antialiasing, the autohead idle aim, the depth-bias vertex scale (green at the origin
   with the same biases), the bezel-versus-panel draw-order fight (real, fixed by the interior's
   `DepthBiasScale`), and texture shimmer (the registration measures geometry and is green at the
-  origin with the same textures). *Fix shape:* `PLAN-cockpit-panel.md` C21, the interior rendered
-  in its own `SubViewport` with its own `World3D`, camera and interior both at the origin, so no
-  chapter-scale coordinate enters the chain; the alternative, an engine build with
-  double-precision coordinates, fixes the class outright at the cost of a custom Godot build.
+  origin with the same textures). *Fix shape:* built behind `--cockpit-pass`, default off
+  (`PLAN-cockpit-panel.md` C21, `Flight/CockpitOverlay`): the interior rendered in its own
+  `SubViewport` with its own `World3D`, camera and interior both at the origin, so no
+  chapter-scale coordinate enters the chain. Every dial region reads 0.000 px with the flag on;
+  what remains is the judgement at the controls before the flag becomes the default. The
+  alternative, an engine build with double-precision coordinates, fixes the class outright at the
+  cost of a custom Godot build.
   *⚠ Traps:* ⚠ A pinned aircraft at heading 0 cannot show this at any distance, and a
   luminance-weighted centroid moves with shading: the plan's first C20 reading closed the fix
   unbuilt on exactly those two choices. Measure flown, rotated, over consecutive frames, with a

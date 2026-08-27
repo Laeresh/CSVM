@@ -141,6 +141,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, the pilot's selected view mode, the weapon lab's held-airframe orbit. Steers a `Camera3D` it does not own.
 - `src/Flight/HeadLook.cs` — the pilot's head in a first-person view: snap directions, free-look integration, the center key, and the exponential smoothing that carries the shown angles to their targets. Engine-free, so every law unit-tests.
 - `src/Flight/CockpitVisibility.cs` — the per-mode hiding of the pilot's OWN aircraft in a first-person view: interior in and body out for Cockpit, both out plus `markers`/`dontmove` for Nose, everything back for any external pose. `Rules` is pure; `Bind`/`Apply` write it onto one built plane model.
+- `src/Flight/CockpitOverlay.cs` — `--cockpit-pass`: the cockpit interior drawn in a `SubViewport` world of its own, camera and panel at the origin, composited under the HUD. One per player, on that rig's `HudParent`.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, the steering step (turn clamp, speed penalty, `LOCK_ON_LEAD`, the seeker's retarget), tracers, flashes, per-surface impact, damage to destructibles, the beeper's paint.
 - `src/Flight/ProjectileFlyoutAnim.cs` — `ProjectilePool`'s `FLYOUT MODEL_ANIMATION` half: each ordnance round runs its def on the sequence interpreter, the pool as host (trail puffers, the torpedo's launch look and switch, its sounds).
@@ -1735,6 +1736,21 @@ from an external selection, since in first person it drives the head instead of 
 so a pane whose pilot sits in the cockpit hides that plane's body in EVERY pane. Each rig owns its
 own plane model, so the rule is at least per-pilot rather than keyed to player 1; making it
 per-pane needs render layers, which Decision 5 defers.
+
+## src/Flight/CockpitOverlay.cs
+The cockpit interior's own render pass, behind `--cockpit-pass` and off by default. It takes the
+built `cockpit1` node out of the plane model and re-parents it into a `SubViewport` carrying its own
+`World3D`, at zero translation with the mount basis `PlaneBuilder` gave it (the head-pitch tilt and
+`InteriorScale`); the pass's camera sits at that world's origin, aimed by
+`CameraController.FirstPersonPose` with the plane position and the `cockpit_camera` offset both
+zero, since those two cancel between the eye and the panel. The projection is therefore the main
+world's exactly, computed from small numbers instead of chapter-scale ones. The viewport is
+transparent-backed on `HudLayers.CockpitPass`, so the world draws under the panel and the whiteout,
+the screen wash and the HUD still draw over it. Lighting is a copy of the world's sun, re-aimed by
+the inverse plane attitude each frame, plus the world environment duplicated with its background
+cleared. `GameSession.BuildCockpitPasses` builds one per `PlayerRig`, on that rig's own `HudParent`;
+`FlightController._Process` calls `Sync` beside the camera write, and `Sync` follows the interior's
+own `Visible` so `CockpitVisibility` keeps deciding which views show a cockpit.
 
 ## src/Flight/ImpactOutcome.cs
 "What should happen when this weapon hits this surface id" as a value — `EffectName` (the row's
