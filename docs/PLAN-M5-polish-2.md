@@ -123,7 +123,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ❌ CM02's second Peacemaker squad is awake from the start and attacks the Pandora (`BL-499`)
 5. ☑ The campaign wingman ends up high and far behind (`BL-457`)
 6. ☑ Crashing the player's aircraft does not end a campaign mission (`BL-491`, deferral reopened first)
-13. ◐ The mode machine's `avoid crash` pre-empts a joined escort (`BL-509`, minted by A5)
+13. ☑ The mode machine's `avoid crash` pre-empts a joined escort (`BL-509`, minted by A5)
 
 ### Wave B — the intro and the swap
 
@@ -463,7 +463,7 @@ gate means a lost mission writes no world state, so making crashes lose changes 
 from; decide that explicitly rather than discovering it. ⚠ Do not invent a fourth ending and present
 it as decoded.
 
-## A13 ◐ The mode machine's `avoid crash` pre-empts a joined escort
+## A13 ☑ The mode machine's `avoid crash` pre-empts a joined escort
 
 **Goal.** A campaign wingman low over terrain does what the original's escort does when its
 avoid-crash test fires, rather than flying an invented 1000 m climb-out that leaves it 128 m
