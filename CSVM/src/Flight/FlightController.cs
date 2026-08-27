@@ -2556,11 +2556,10 @@ public partial class FlightController : Node3D
         Log.Warn("core", $"--target={InitialTarget}: no match — selectable now: {listed}");
     }
 
-    /// <summary>The view-selection inputs, edge-detected: F8 or D-pad Down cycles the first-person
-    /// pair (Cockpit ↔ Nose, entering Cockpit from Chase — the original's "Cycle Cockpit Views",
-    /// which its binding menu also puts on a joystick button), F6 or the pad's Back/Select selects
-    /// the chase view. The original binds a selector per view rather than one three-stop cycle, so
-    /// the way out of first person is its own input; F6 and Back are this port's choices for it.
+    /// <summary>The view-selection inputs, edge-detected: F8 or D-pad Down advances the original's
+    /// three-stop Cockpit → Nose → Chase cycle; F6 or the pad's Back/Select selects Chase directly.
+    /// The keyboard bindings and pad slots are this port's choices; the original's binding menu
+    /// also places its cycle action on a joystick button.
     /// The pad half makes the views reachable for a pad-only pilot (P2–P4), who has no keyboard.</summary>
     private void PollViewModeKeys()
     {

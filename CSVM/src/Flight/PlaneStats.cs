@@ -328,7 +328,7 @@ public sealed class PlaneStats
 
     /// <summary>The def's <c>turrets</c> block — the host→gunner link the carried half of
     /// <c>ai.zrd</c> is looked up through (empty on the six non-turret airframes). Both viewpoint
-    /// rigs are parsed; CSVM has no cockpit view, so only the <c>thirdp</c> entries are built.</summary>
+    /// rigs are parsed; carried AI gunner construction consumes only the <c>thirdp</c> entries.</summary>
     public List<TurretMount> TurretMounts = new();
 
     /// <summary>The player airframe as flown by a person: every property, including the damage

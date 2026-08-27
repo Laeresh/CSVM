@@ -835,9 +835,9 @@ them.
   list to frame 0 (`FUN_005642a0`) then jumps straight to a specific frame (`FUN_00564410`, index
   from the event's `+0x12`) — i.e. "snap this object's cycling texture to state N", not "start a
   cycle". `docs/architecture.md`'s `Flight/DamageVisuals.cs` entry already records these same defs as
-  deliberately unwired: CSVM has no first-person cockpit to show the indicator on, and
-  `GaugeCluster.OnPartDamage` covers the same information a different way. The decode confirms it is
-  the same mechanism, not a second consumer — nothing changes.
+  deliberately unwired: the live screen-space `GaugeCluster.OnPartDamage` covers the same
+  information, while driving the Cockpit view's authored in-3D indicators belongs to the gauge
+  work tracked separately. The decode confirms it is the same mechanism, not a second consumer.
 - **`ObjectDeleteChild`** (48 events, 40 defs). The handler unconditionally detaches a named child
   from a named parent (`FUN_004cd6d0`, dispatched by the child's own node type) — a pure scene-graph
   reparent, no visibility or transform change of its own. Every shipped use is one of two shapes:

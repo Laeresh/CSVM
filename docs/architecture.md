@@ -1619,8 +1619,8 @@ the pane to a `SpectatorCamera` instead. `Held` is the only remaining orbit sour
 menu shares its keys. Steers a `Camera3D` it does not own, as `UI/OrbitCamera` does for the
 static viewer. Beside the held views it carries the pilot's SELECTED view mode (`ViewMode`,
 `FirstPerson`, `CycleCockpitViews`, `SelectChase`): Chase, Cockpit or Nose, seeded from
-`--view=cockpit`/`=nose` and changed at the controls by F8 (cycle the first-person pair) and F6
-(back to chase). The decisions themselves are `PilotView`'s, not this class's, so they are testable
+`--view=cockpit`/`=nose` and changed at the controls by F8 (Cockpit → Nose → Chase) or F6
+(directly to Chase). The decisions themselves are `PilotView`'s, not this class's, so they are testable
 without an engine; this class holds the state and the camera. ⚠ The modes are deliberately NOT rows
 in `Views`: `BL-150` rebuilds that table later and must be able to replace it without touching them
 (PLAN-cockpit-view, Decision 2). ⚠ Outside first person a held numpad key overrides the mode for as
@@ -3112,7 +3112,7 @@ module privately, feeds it one `FlightHudState` per rendered frame, and forwards
 `VersusHud` and `Scoreboard` stay board-adjacent fields on this node.
 The camera is `CameraController`'s — this node only feeds it
 the pose, the dt and the mixed orbit axes (`OrbitInput`), plus the two view-selection keys
-(`PollViewModeKeys`: F8 cycles Cockpit ↔ Nose, F6 selects chase, both edge-detected on their own
+(`PollViewModeKeys`: F8 cycles Cockpit → Nose → Chase, F6 selects Chase, both edge-detected on their own
 slots like the targeting keys). `PinnedViewMode` seeds the selection from `--view=`; `ViewMode` and
 `FirstPersonView` read it back live, and the session polls the latter for the anim data's
 `PLAYER_1ST_PERSON` condition. `Cockpit` (a `CockpitVisibility`, null on any rig built without an

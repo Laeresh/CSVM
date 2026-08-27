@@ -365,9 +365,9 @@ public sealed class DamageVisuals
     }
 
     // One per-part entry's downward crossing: the torn panel, its healthy twin, the parked
-    // stand-in fire, and the authored stage. The cockpit indicators (*_damage_green/yellow/red)
-    // and got_hit_anim's blink are deliberately unwired — no cockpit, and GaugeCluster
-    // approximates the latter by hand off different data, so do not merge the two.
+    // stand-in fire, and the authored stage. The in-3D cockpit indicators
+    // (*_damage_green/yellow/red) stay unwired while GaugeCluster represents that state from
+    // different data, so do not merge the two mechanisms.
     private void ApplyPartStage(string anim, string partName, float healthFraction)
     {
         if (IsPanelStage(anim))
