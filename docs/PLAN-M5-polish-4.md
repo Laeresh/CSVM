@@ -89,7 +89,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — CM05 and CM06
 
-11. ☐ `BL-517`: the Pandora's broadside fires on a friendly player
+11. ❌ `BL-517`: the Pandora's broadside fires on a friendly player
 12. ☐ `BL-524`: a friendly patrol without a net flies away after its first fight
 13. ☐ `BL-525`: the second Workers' Voyage docking completes without a docking
 14. ☐ `BL-514`: a shot-down carried turret keeps burning where it was
@@ -263,7 +263,7 @@ one: do not lift the sub's launch by borrowing it, and do not add a spawn-height
 
 # Wave B — CM05 and CM06
 
-## B11 ☐ `BL-517`: the Pandora's broadside fires on a friendly player
+## B11 ❌ `BL-517`: the Pandora's broadside fires on a friendly player
 
 **Goal.** A friendly airship whose authored `targets` list names the player does not shoot them;
 the same record on a hostile airship (C3/M03) still does.
@@ -273,21 +273,37 @@ the same record on a hostile airship (C3/M03) still does.
 cannon(s) fire wep_28 at 'player' (range 207 m)` and six `shot hit P1` lines taking the hull from
 100 to 60 in one salvo. `ZeppelinRuntime.Cannons.ResolveTarget`
 (`ZeppelinRuntime.Cannons.cs:289-292`) takes the first live authored name with no hostility
-check. `<TODO: re-verify still-open against the code>`
+check.
 
-**Approach.** Decode the broadside fire routine's gate (`docs/formats/mission-entities.md`
-"Broadside firing" has the arc and the lead solve but no team test): the target's team against the
-airship's live team, or the `targets` list as a candidate set filtered by hostility. Apply it in
-`ResolveTarget` against `LiveZeppelin.Team`. Decode lane: this item is the decode.
+**Re-verified against the code: disproven.** `crimson.exe`'s broadside targeting pipeline carries
+no team or hostility test at any stage. `FUN_004bd8d0` parses a record's `targets` key into
+unresolved name pairs at load; `FUN_004bede0` (run once, after every mission zeppelin is placed)
+resolves each pair's second field via `FUN_004bd430`, a plain name match against the live
+zeppelin roster with no team read; the fire routine `FUN_004bfe00` consumes the resolved list on
+arc (`> 0.707`) and intercept alone. `ResolveTarget` already matches this decoded shape: first
+live authored name wins, no filter to add.
+
+The playtest log itself disproves the "friendly" premise: `'piratezep'` logs `team unauthored` /
+`no authored team` identically in both C3/M03 (the hostile leg) and C3/M04 (the reported leg):
+the record carries no team distinction between the two missions, and the log has no
+`SET_AI_TEAM` line for either. Nothing in the data or the decoded engine marks this zeppelin
+friendly in C3/M04; the fire in both legs is the same decoded, ungated behaviour. Landed no code;
+`docs/formats/mission-entities.md` "Broadside firing" carries the decode.
+
+**Approach (as filed, superseded by the decode above).** Decode the broadside fire routine's gate:
+the target's team against the airship's live team, or the `targets` list as a candidate set
+filtered by hostility. No such gate exists to apply.
 
 **Model recommendation.** medium.
 
-**Verify.** Headless CM05 shows no broadside at the player; headless CM04 (hostile Pandora) still
-does; a `zeppelin-*` suite asserting both.
+**⚠ Traps.** The filed trap ("gate on the airship's live team, which `BL-502`'s `SET_AI_TEAM` can
+flip mid-mission, not on the record name") does not apply here: no `SET_AI_TEAM` directive fires
+for `piratezep` in either leg of this playtest, and `LiveZeppelin.Team` has no setter today — the
+record's authored team is fixed at spawn. If a future mission genuinely needs a zeppelin to hold
+fire on the player, the decoded lever is the record's own `targets` list (omit `player`), not an
+invented engine-side hostility filter.
 
-**⚠ Traps.** Gate on the airship's live team, which `BL-502`'s `SET_AI_TEAM` can flip
-mid-mission, not on the record name. Do not stop the rounds hitting friendlies; stop the cannons
-choosing one.
+**Verified.** <pending orchestrator run>
 
 ## B12 ☐ `BL-524`: a friendly patrol without a net flies away after its first fight
 

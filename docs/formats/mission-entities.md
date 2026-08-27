@@ -116,6 +116,16 @@ binary rather than inferred:
   design document instead describes a rolled hit chance ramping from 20 % at maximum range to
   100 % near 200 m. **Nothing like that roll is in the shipped fire path** — treat the design's
   curve as design-era and do not implement it.
+- ⚠ **The `targets` list carries no team or hostility test, at any stage.** A record's `targets`
+  names are parsed as unresolved pairs at load (`FUN_004bd8d0`), resolved once after every mission
+  zeppelin is placed by matching each name against the live zeppelin roster (`FUN_004bede0` calling
+  `FUN_004bd430`; the first name match wins, and a name matching no zeppelin (`player` is the only
+  one shipped data uses) falls through to a general named-object position lookup instead), and
+  consumed by the fire routine (`FUN_004bfe00`) on arc and intercept alone. No team, side, or ally
+  field is read anywhere in that chain. A record authoring `targets [player]` fires on the player
+  whenever in `cannon_fire_range` and arc, whether or not the record carries a `team` key at all;
+  the remake's `ZeppelinRuntime.Cannons.ResolveTarget` matches this: the first live authored name
+  wins, with no hostility filter to add.
 
 What the remake's implementation (M4 F19, `Flight/ZeppelinBroadside.cs` +
 `Session/ZeppelinRuntime.Cannons.cs`) added to the picture:

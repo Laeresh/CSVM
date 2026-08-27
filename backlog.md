@@ -782,23 +782,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the world build, so do not assume this closes with `BL-506`. *Cross-refs:* `BL-506`, `BL-507`,
   `docs/org/targeting.md`.
 
-- `BL-517` `[Bug]` **CM05 (C3/M04): the Pandora's own broadside fires on the player.** *Evidence:*
-  `playtest/game-20260826-085720.out` (copied from `.scratch/logs`), in the `c3/m04` leg: `zep:
-  'piratezep' broadside wired — 6+6 cannons, wep_28 ... targets [player]`, then `broadside right: 6
-  cannon(s) fire wep_28 at 'player' (range 207 m)` followed by six `shot hit P1` lines that take the
-  hull from 100 to 60 in one salvo. The record's authored `targets` list names `player`, and
-  `ZeppelinRuntime.Cannons.ResolveTarget` (`ZeppelinRuntime.Cannons.cs:289-292`) takes the first
-  live authored name with no hostility check, so a friendly airship whose record lists the player
-  shoots them. The original does not, so the fire routine gates on something our decode does not
-  carry: the target's team against the airship's, or the `targets` list being a candidate set
-  filtered by hostility. *Fix shape:* decode the broadside fire routine's gate (`docs/formats/
-  mission-entities.md` "Broadside firing" has the arc and the lead solve but no team test), then
-  apply it in `ResolveTarget`. *⚠ Traps:* the same `targets [player]` on `piratezep` is right in
-  C3/M03 where the Pandora is hostile, so the gate is the airship's live team (`LiveZeppelin.Team`,
-  which `BL-502`'s `SET_AI_TEAM` can flip mid-mission), not the record name. Do not stop the rounds
-  hitting friendlies; stop the cannons choosing one. *Cross-refs:* `BL-502`,
-  `docs/formats/mission-entities.md`.
-
 ## Flight model & collision physics
 
 
