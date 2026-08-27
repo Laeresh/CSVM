@@ -131,6 +131,12 @@ public sealed partial class CutsceneController : Node
     /// paths read this; nothing clears it but the handoff or a skip.</summary>
     public bool HoldsWorld { get; private set; }
 
+    /// <summary>Does this episode offer the player a skip? Armed by the hold code and disarmed at
+    /// the handoff, which is the original's own active-cutscene slot: a mid-mission definition
+    /// that never raises that code is played out, and the key press belongs to the game.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public bool Skippable { get; private set; }
+
     /// <summary>Whether the chrome is hidden and the view is off the aircraft (code 2).</summary>
     public bool Presenting { get; private set; }
 
@@ -339,10 +345,11 @@ public sealed partial class CutsceneController : Node
 
     /// <summary>The player's skip. Force-stops the definition the way the original's state core
     /// does, then restores the gameplay state the definition's own RESET_STATE asserts, so the
-    /// remaining beats being dropped cannot leave the mission held, hidden or unflyable.</summary>
+    /// remaining beats being dropped cannot leave the mission held, hidden or unflyable.
+    /// Declined, and the key press left to whatever else reads it, while no skip is armed.</summary>
     public bool Skip()
     {
-        if (!Playing)
+        if (!Playing || !Skippable)
         {
             return false;
         }
@@ -459,6 +466,10 @@ public sealed partial class CutsceneController : Node
         {
             case CodeHoldsWorld:
                 HoldsWorld = true;
+                // The original arms its skip HERE and nowhere else, so the two states share a
+                // code and not an implementation: the hold is what a definition asks for, the
+                // skip is what the player is then offered.
+                Skippable = true;
                 WorldHeld?.Invoke(true);
                 break;
             case CodePresentation:
@@ -485,6 +496,7 @@ public sealed partial class CutsceneController : Node
                 break;
             case CodeHandoff:
                 HoldsWorld = false;
+                Skippable = false;
                 WorldHeld?.Invoke(false);
                 Presenting = false;
                 ApplyPresentation(false);

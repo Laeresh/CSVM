@@ -179,6 +179,7 @@ public static class SuiteCatalog
         "landings-hangar-drop-gate",
         "campaign-airframe-swap",
         "campaign-wingwalk-camera",
+        "campaign-cutscene-skip",
         "roster-spawn-names",
         "roster-voice-ratings",
         "mission-radio",
@@ -1000,6 +1001,19 @@ public static class SuiteCatalog
             + "mistaken for a framed one -- and camera1 read once a second against that "
             + "aeroplane's own position",
             WingWalkCameraSuites.WingWalkCamera));
+
+        // The skip key removed the picture from a cutscene the original arms no skip on, handing
+        // the player back an aeroplane mid wing walk.
+        into.Add(new TestHarness.Suite("campaign-cutscene-skip",
+            "which cutscene episodes offer the player a skip, over CM02's BUILT world: the "
+            + "mission's capture definition and its whole call closure author no hold code, "
+            + "which is the code that arms a skip, so playing that capture on a realtime clock "
+            + "with each aircraft stepping itself and pressing the skip key two seconds in is "
+            + "refused -- the episode keeps the session and its picture, and the swap, the hide "
+            + "and the hand-over land at the same second and in the same end state as the run "
+            + "played undisturbed -- while an episode that has raised the hold code takes the "
+            + "same key press and restores on it",
+            CutsceneSkipSuites.CutsceneSkip));
 
         // BL-401: the assembler named every spawn ai{n}_{plane}, which no authored pattern can
         // match, so rating_biases was dead on the campaign path.

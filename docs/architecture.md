@@ -5150,8 +5150,14 @@ reparenting it) and parks it at the origin, which other definitions pose against
 It also owns when player 1's flown airframe reaches the runtime's node table
 (`AircraftStage.StageFlown`), from `BindRigs` and again after a swap, which is what lets a hookup
 definition resolve that aeroplane's own hook, wings and mount offset.
-Skip is any key (not Escape) or pad button: force-stop the definition, then the same restore, so
-dropping the remaining beats cannot leave the mission held, hidden or unflyable.
+Skip is any key (not Escape) or pad button, and is offered only where the original offers it:
+`Skippable` is the original's active-cutscene slot, armed by code 20 and cleared at the handoff, so
+a definition that never holds the world is played out and the key press falls through to the rest of
+the session. Where a skip is armed, it force-stops the definition and runs the same restore, which
+loses nothing: an intro's remaining codes are the chrome ones and its `RESET_STATE` authors exactly
+the four `RestoreCodes` raises. ⚠ The gate is not a convenience: every definition that swaps the
+player's airframe or re-places the pilot is one the original arms no skip on, so a skip can never
+drop one.
 ⚠ `IntroAnims` is the scope, and it is a NAME test: Instant Action's `player_setup` authors the same
 nine codes, so a code test would give every mission a letterbox and a suspended world. Decode:
 `docs/formats/anim-definitions/cutscenes.md`.

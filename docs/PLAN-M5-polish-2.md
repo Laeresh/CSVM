@@ -152,7 +152,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E — what the Wave D sortie opened
 
 23. ☑ The captured Balmoral's British livery still does not reach the player's hull live (`BL-554`)
-24. ☐ A skipped cutscene waits out the swap instead of jumping to its end (`BL-552`)
+24. ☑ A cutscene the original arms no skip on is cut short by the skip key (`BL-552`)
 25. ☐ The capture cutscene plays without the enemy Balmoral or the pilot switch, and inherits the roll (`BL-551`)
 26. ☑ The original re-places the player after CM01's drop-off (`BL-553`)
 27. ☐ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
@@ -1220,6 +1220,7 @@ the scheme record alone.
 **Verified.** <pending orchestrator run>
 
 ## E24 ☐ A skipped cutscene waits out the swap instead of jumping to its end
+## E24 ☑ A cutscene the original arms no skip on is cut short by the skip key
 
 **Goal.** Skipping a cutscene runs it to its handoff at once: the picture goes, and every code the
 definition would still have raised (913/914, 967, the reset states) is applied immediately.
@@ -1244,6 +1245,30 @@ green; goldens unchanged.
 
 **⚠ Traps.** ⚠ Play the events, do not drop them (DIAG-23). ⚠ Nothing in the hold path (D14) may
 change: the clock hold releases at the handoff either way.
+
+**Landed, and the Approach above is wrong.** The decode says the original offers no skip here at
+all, so there is nothing to fast-forward and no ordering to invent. Its per-frame state core polls
+one slot, `DAT_0071c50c`, and `FUN_0047e080` writes that slot in exactly one place: callback **20**,
+the world hold (`0047e2e6`; the other four writes, `0047e0bc`, `0047e22a`, `004a02c8` and
+`00472e5f`, all clear it). A definition that never raises 20 never arms the poll, and
+`FUN_00536000`, the key latch the poll reads, has one caller in the whole binary. Across the shipped
+campaign only three definitions raise 20: the shared `generic_intro`, C1/M04's bespoke
+`mission_intro_animation` and C3/M03's `cgzep_camera`. CM02's capture raises 967, 913, 914, 11, 2, 1
+and 951 across its whole call closure and no 20, so in the original its cutscene plays out.
+`CutsceneController.Skippable` is that slot: armed by the hold code, cleared at the handoff, and
+`Skip` declines while it is down, which leaves the key press to whatever else in the session reads
+it. What the player met was CSVM offering a skip the original does not: the restore ran at the key
+press, handing the pilot an aeroplane mid wing walk, and the wing walk's own later code then opened
+a second episode behind it. The skip the original DOES offer loses nothing either, since an intro's
+remaining codes are 2, 11 and 14 and its `RESET_STATE` authors exactly the four `RestoreCodes`
+already raise. `campaign-cutscene-skip` plays CM02's capture on a Realtime clock twice, undisturbed
+and with the key pressed at t=2 s: on the unfixed build the pressed leg reads
+`took=True, still presenting=False` and a code record of `1,1,10,914,667` against the undisturbed
+`913,11,2,967,1,914,1,10,914,667`, and the two legs are now identical. It also reads CM01's shipped
+definitions for E26: code 951 is raised by `texdrop` and that mission authors no 20, so the
+re-place can never be dropped by a key press.
+
+**Verified.** <pending orchestrator run>
 
 ## E25 ☐ The capture cutscene plays without the enemy Balmoral or the pilot switch, and inherits the roll
 

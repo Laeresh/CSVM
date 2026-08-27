@@ -719,6 +719,28 @@ Two exe paths end a cutscene without a `CALLBACK`, and a cutscene player needs b
   slot against an input poll each frame: while `DAT_0071c50c` is set and `FUN_00536000` reports an
   event, it clears the slot and force-stops the animation through `FUN_004ed480`.
 
+#### ⚠ Only a definition that raises 20 can be skipped, and a skip drops the rest of its codes
+
+`DAT_0071c50c` is written in five places and armed in exactly one: `FUN_0047e080`'s
+`if (param_3 == 0x14) DAT_0071c50c = param_1` at `0047e2e6`, the world-hold code. The other four
+(`0047e0bc` on code 0, `0047e22a` on code 12, `004a02c8` in the poll itself, `00472e5f` on mission
+teardown) all clear it. The key latch the poll reads, `DAT_0075cb60`, is consumed by `FUN_00536000`,
+which has one caller in the whole binary, and none of `FUN_004ed480`'s other fifteen callers reads
+that latch. **A definition that never raises 20 cannot be skipped by the player at all**, and there
+is no second input path to it.
+
+What the stop then runs is the node restore `FUN_004ed090` plus the `RESET_SEQUENCE` record at
+`anim+0xd0`, stepped by ordinary frame `dt` (`LAB_004ed2a0`). The numbered sequences carrying the
+timeline's `CALLBACK` events are never stepped again, so **every code still ahead of the skip is
+dropped**. The `RESET_SEQUENCE` reaches the stepper through the same dispatch table, so a callback
+authored there would still raise; whether any shipped definition authors one is a data question.
+
+Across the shipped campaign three definitions raise 20: the shared `generic_intro`, C1/M04's
+`mission_intro_animation` and C3/M03's `player-cgzep_camera`. Every mid-mission definition that
+changes the player's aeroplane or its place (CM02's `ww_balmoral1` with 967, CM01's `texdrop` with
+951) raises none, which is why dropping the remaining codes costs the original nothing. An intro's own
+remainder past the arm is 2, 11 and 14, and its `RESET_STATE` authors 1, 914, 10 and 667.
+
 ## The intro defs' eight dispatches
 
 `camera1-generic_intro` (shared; 12 of the 13 story missions bootstrap it) authors exactly **eight**

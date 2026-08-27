@@ -2107,18 +2107,8 @@ usual.
   staging like `chuteman`. For the roll, read whether the original's `AT_NODE_XYZ` pose takes the
   vehicle's full basis or its yaw alone (the wing walk is authored level). *⚠ Traps:* ⚠ The
   `campaign-wingwalk-camera` suite passes; it reads the camera, not the figures, so extend it rather
-  than trust it. ⚠ `PoseAtNode`'s composition is shared. *Cross-refs:* `BL-552`;
-  `docs/formats/anim-definitions/cutscenes.md`; `docs/PLAN-M5-polish-2.md` D17 and D21.
-
-- `BL-552` `[Bug]` **Skipping a cutscene should jump to its end at once; the airframe swap still
-  waits for the cutscene's own duration.** Seen at the controls on CM02: pressing the skip key
-  removes the picture, but the 967 swap happens only when the definition's clock would have reached
-  it, so the player sits in a skipped cutscene until then. *Fix shape:* a skip has to run the
-  definition's remaining events to the handoff (the codes, the swap and the reset states) rather
-  than only restoring the view; `CutsceneController`'s skip path and `AnimRuntime`'s advance are the
-  two seams. *⚠ Traps:* ⚠ The events between the skip and the handoff include 913/914 and 967, which
-  have order dependencies (`BL-541`'s closing record); play them, do not drop them.
-  *Cross-refs:* `BL-551`; `docs/PLAN-M5-polish-2.md` D15 and D21.
+  than trust it. ⚠ `PoseAtNode`'s composition is shared.
+  *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md`; `docs/PLAN-M5-polish-2.md` D17 and D21.
 
 
 - `BL-545` `[Bug]` `[Owed-playtest]` **The landing animation plays with no hook, the aeroplane too
