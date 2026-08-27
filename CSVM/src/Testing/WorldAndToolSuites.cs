@@ -221,15 +221,15 @@ internal static class WorldAndToolSuites
                 $"the shake pivot's roll reaches the panel in the pass angle={rolled:0.###} rad");
             ctx.Check(CockpitOverlay.WobbledMount(mountBasis, 0f).IsEqualApprox(mountBasis),
                 $"no wobble leaves the mount basis untouched");
-            // A muzzle flash 11 m right of an eye at (1000, 50, -2000) on a plane yawed 90° left
-            // (its nose along world -X, its right along world -Z) has to land 11 m along the
-            // pass's own +X: a mirror that forgot to take the attitude out leaves it on -Z.
+            // The pass keeps the world's orientation, so a muzzle flash 11 m right of a yawed plane's
+            // eye at (1000, 50, -2000) lands at that same world offset from the pass's origin; a
+            // mirror that kept the eye's coordinates would put it thousands of metres out.
             var yawed = new Basis(Vector3.Up, Mathf.Pi / 2f);
             var eye = new Vector3(1000f, 50f, -2000f);
-            var flash = eye + (yawed * new Vector3(11f, 0f, 0f));
-            var mirrored = CockpitOverlay.ToOverlay(flash, eye, yawed);
-            ctx.Check(mirrored.IsEqualApprox(new Vector3(11f, 0f, 0f)),
-                $"a muzzle flash lands in the pass at its plane-frame offset from the eye got={mirrored}");
+            var offset = yawed * new Vector3(11f, 0f, 0f);
+            var mirrored = CockpitOverlay.ToOverlay(eye + offset, eye);
+            ctx.Check(mirrored.IsEqualApprox(offset) && mirrored.Length() < 12f,
+                $"a muzzle flash lands in the pass at its world offset from the eye got={mirrored}");
         }
         finally
         {

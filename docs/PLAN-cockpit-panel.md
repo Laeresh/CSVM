@@ -472,11 +472,18 @@ The same flight found the muzzle flashes no longer lighting the cockpit: they ar
 pass at its eye-relative offset with the attitude taken out (`ToOverlay`, asserted by the suite),
 so the two big first-person flashes reach the struts as they did. Two reports from that flight
 stay open: the high-speed wobble is too small to see in the Cockpit view at all, which is
-`BL-266` (d) and not the pass's doing; and the upper side of the compass housing turns white in a
-Bloodhawk pitched up into the sky with the pass on. The session sun casts no shadows, so it is not
-a lost fuselage shadow; the pass's environment copy keeps the sky for ambient but clears the
-background, and the interior's frame no longer turns under the sky, so the candidates are the
-ambient or reflection source. It needs a capture pair at the chapter and attitude it was seen in.
+`BL-266` (d) and not the pass's doing; and the surface above the compass housing turns white in a
+Bloodhawk pitched up into the sky with the pass on. That surface is the gunsight glass, and a
+near-vertical climb pair at C1 measured it: the glass pixel read 166 with the pass off and 154 on
+at the same 176 sky, and the gun-gauge face 18,16,6 off against 27,30,18 on. Two causes, both
+fixed. A transparent `SubViewport` writes premultiplied colour and the container composited it as
+straight alpha, so the glass took its alpha twice; the container now blends `PremultAlpha` and the
+glass reads 159. And the pass held the interior un-rotated under a sky-sourced ambient that is
+directional, so the panel was lit for level flight whatever the attitude; the pass now keeps the
+aircraft's rotation and drops only the translation, camera and interior both rotated at the
+origin, so the sun, the sky ambient and the flash positions are the main world's with nothing
+re-aimed, and the dial face reads 16,14,5. A rotation at the origin rounds far below a pixel: the
+20 km registration with the rotation kept is 0.000 px on every dial.
 
 The viewport is transparent-backed and sits on `HudLayers.CockpitPass` (−1): 3D draws before any
 canvas layer, so the world still shows under the panel while the cloud whiteout, `ScreenFlash` and

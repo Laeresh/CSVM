@@ -67,11 +67,10 @@ public sealed partial class CockpitOverlay : CanvasLayer
     public static Basis WobbledMount(Basis mount, float shakeRoll) =>
         new Basis(Vector3.Back, shakeRoll) * mount;
 
-    /// <summary>A main-world point in the pass's frame: the overlay camera sits at the eye with
-    /// the plane's attitude taken out, so a light at <paramref name="world"/> lands at the
-    /// eye-relative offset turned back into the plane's own frame. Public for the suite.</summary>
-    public static Vector3 ToOverlay(Vector3 world, Vector3 eye, Basis attitude) =>
-        attitude.Orthonormalized().Transposed() * (world - eye);
+    /// <summary>A main-world point in the pass's frame: the pass keeps the world's orientation and
+    /// puts the eye at its origin, so a light at <paramref name="world"/> lands at its offset from
+    /// the eye. Public for the suite.</summary>
+    public static Vector3 ToOverlay(Vector3 world, Vector3 eye) => world - eye;
 
     /// <summary>Point the overlay camera where the pilot's head points and re-light the panel for
     /// this frame's attitude, then show or hide the pass to match the interior's own visibility so
@@ -82,7 +81,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
     public void Sync(Basis attitude, CameraController camera, float shakeRoll,
         IEnumerable<(Vector3 Position, float Range, Color Color, float Energy)>? flashes = null)
     {
-        MirrorFlashes(flashes, camera.EyePosition, attitude);
+        MirrorFlashes(flashes, camera.EyePosition);
         bool shown = GodotObject.IsInstanceValid(_interior) && _interior.Visible;
         Visible = shown;
         _view.RenderTargetUpdateMode = shown
@@ -92,8 +91,12 @@ public sealed partial class CockpitOverlay : CanvasLayer
         {
             return;
         }
-        _interior.Transform = new Transform3D(WobbledMount(_mount, shakeRoll), Vector3.Zero);
-        var (_, basis) = CameraController.FirstPersonPose(Vector3.Zero, Basis.Identity, Vector3.Zero,
+        // The attitude stays and only the translation goes: a rotation at the origin rounds far
+        // below a pixel, and keeping it means the sun, the sky ambient and the flashes all sit
+        // where the main world has them, with nothing re-aimed.
+        var attitudeOnly = attitude.Orthonormalized();
+        _interior.Transform = new Transform3D(attitudeOnly * WobbledMount(_mount, shakeRoll), Vector3.Zero);
+        var (_, basis) = CameraController.FirstPersonPose(Vector3.Zero, attitudeOnly, Vector3.Zero,
             camera.Head.Elevation, camera.Head.Azimuth);
         _camera.Transform = new Transform3D(basis, Vector3.Zero);
         var size = _view.GetVisibleRect().Size;
@@ -101,9 +104,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
             size.Y > 0f ? size.X / size.Y : 16f / 9f);
         if (_light != null && _sun != null && GodotObject.IsInstanceValid(_sun))
         {
-            // The interior's frame is the aircraft's in the main world and identity here, so the
-            // shading direction has to lose the attitude the panel no longer carries.
-            _light.Basis = attitude.Orthonormalized().Transposed() * _sun.GlobalBasis;
+            _light.Basis = _sun.GlobalBasis;
         }
     }
 
@@ -158,6 +159,9 @@ public sealed partial class CockpitOverlay : CanvasLayer
             Name = "interior_pane",
             Stretch = true,
             MouseFilter = Control.MouseFilterEnum.Ignore,
+            // A transparent 3D viewport writes premultiplied colour; composited as straight alpha
+            // the gunsight glass takes its alpha twice and reads darker than in the main world.
+            Material = new CanvasItemMaterial { BlendMode = CanvasItemMaterial.BlendModeEnum.PremultAlpha },
         };
         container.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(container);
@@ -176,8 +180,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
     // The muzzle flashes are OmniLight3Ds in the main world, which this world cannot see, so each
     // lit one gets a twin here at the same eye-relative place; twins past the lit count go dark.
     private void MirrorFlashes(
-        IEnumerable<(Vector3 Position, float Range, Color Color, float Energy)>? flashes,
-        Vector3 eye, Basis attitude)
+        IEnumerable<(Vector3 Position, float Range, Color Color, float Energy)>? flashes, Vector3 eye)
     {
         int used = 0;
         if (flashes != null)
@@ -191,7 +194,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
                     _flashes.Add(twin);
                 }
                 var light = _flashes[used++];
-                light.Position = ToOverlay(f.Position, eye, attitude);
+                light.Position = ToOverlay(f.Position, eye);
                 light.OmniRange = f.Range;
                 light.LightColor = f.Color;
                 light.LightEnergy = f.Energy;
