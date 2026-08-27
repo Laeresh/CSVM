@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☐ `BL-526`: the rope ladder never deploys
 22. ❌ `BL-527`: the second patrol's Peacemaker spawns under the ground
 23. ❌ `BL-518`: a stripe-textured surface stands in front of the zeppelin hangar
-24. ☐ `BL-528`: the Blue Streak flies with the stock Bloodhawk fit and no nitro
+24. ☑ `BL-528`: the Blue Streak flies with the stock Bloodhawk fit and no nitro
 25. ☐ `BL-529`: the Pandora porpoises along its route and past its end
 
 ### Wave D — CM09 and the sortie
@@ -599,14 +599,15 @@ play, so nothing here belongs to this item's file scope.
 stripe is not a door mid-animation (`C1/M02`'s two `egen` generators are the plain ground-airfield
 shape, not zeppelin, and author no door state here) before reading it as the moored airship.
 
-## C24 ☐ `BL-528`: the Blue Streak flies with the stock Bloodhawk fit and no nitro
+## C24 ☑ `BL-528`: the Blue Streak flies with the stock Bloodhawk fit and no nitro
 
 **Goal.** CM07's player aircraft is the Blue Streak as authored, its own guns, hardpoints and
 nitro, and the profile's hangar holds it after the mission.
 
 **Evidence (confidence: lead-only).** Reported at the controls. The mission's `aiv.zrd`/roster
 block for `player` is where the fit is authored (roster slot 34 is nitro, `BL-453`); our spawner
-reads the profile's stock def instead. `<TODO: re-verify still-open against the code>`
+reads the profile's stock def instead. Re-verified against the code and the mission data: the
+second clause holds, the first does not (see Outcome).
 
 **Approach.** Read CM07's player block for the Blue Streak's fit; build the player's aircraft from
 it for the mission (the same path `BL-453` needs for AI blocks); then check what
@@ -619,8 +620,32 @@ never as a flag on the airframe. Decode lane: the post-mission profile write, fo
 **Verify.** Headless CM07: the player's guns, hardpoints and `Nitro.Installed` match the block; a
 progression unit test for the grant; D32 confirms the nitro dial and the hangar entry.
 
-**⚠ Traps.** Do not give the stock Bloodhawk nitro. `<TODO: whether the post-mission grant is in
-scope for this item or split out; the backlog entry asks for both halves>`
+**⚠ Traps.** Do not give the stock Bloodhawk nitro.
+
+**Outcome.** The in-mission half is disproved and the post-mission half is where the whole defect
+lives. CM07's `aiv.zrd` `player` block authors no aircraft at all: field 0 (the vehicle def) is
+`-1`, the nitro slot 34 is `0`, and the roster slot vocabulary carries no gun, hardpoint or engine
+field, so there is no fit to read and `CampaignRosterPlan` is right to skip the block. The Blue
+Streak is CM07's *award*, not its aircraft: reward record 7 (ordinal 7 = `seq` 6 = `C1/M02`) grants
+airframe 3, `langui` 514.
+
+The grant was the ownership row alone. `FUN_00405f00` copies a whole 204-byte template out of the
+special-plane array at `0x0061a9b8` and only then writes the name over it, so in the original the
+award IS a build; our `GrantAwards` added an `OwnedPlane` carrying a name and an airframe id and
+nothing else, and the cabin's launch (`CustomPlaneStore.Load(plane.Name)`) then found no file and
+flew the stock Bloodhawk with `Nitro.Installed` false. The user's own profile is the proof: it owns
+`Blue Streak` (airframe 3, special) and flew it in `seq` 8, while `user://Planes/` holds one file
+and it is not that plane.
+
+All five templates are decoded into `docs/org/hangar.md`. Engine 4 on the Blue Streak is the
+nitrous tier (`CustomPlaneBuild.HasNitrous`, ids 3 to 5); the other four take engine 1, so the
+injector rides on that one build and no airframe gained a flag. `CampaignProgression.AwardBuild`
+returns the template, `Record` hands the built defs back, `CampaignDirector` writes them to the
+build store beside the profile save, and `CampaignProgression.BuildForOwned` resolves a reward
+aircraft that was granted before this landed, which is what lets the D32 sortie see it on the
+existing profile.
+
+**Verified.** <pending orchestrator run>
 
 ## C25 ☐ `BL-529`: the Pandora porpoises along its route and past its end
 

@@ -542,12 +542,31 @@ public sealed class CampaignDirector
 
         var recorded = CampaignProgression.Record(_profile, attempt);
         _store?.Save(_profile);
+        SaveAwardedBuilds(recorded);
         Result = new CampaignMissionResult(outcome, attempt, recorded);
         ReturnToCabin = true;
         GD.Print($"campaign: mission {_mission.Ordinal} {outcome} — mask 0x{attempt.CompletedMask:x}, " +
                  $"{attempt.TimeMs / 1000}s, primary={recorded.PrimaryCompleted}, " +
                  $"advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s)");
         MissionEnded?.Invoke(Result.Value);
+    }
+
+    // An award is a whole aircraft in the original, not just an ownership row: its template record
+    // carries the guns, hardpoints, armour, paint and the engine tier that decides the nitrous
+    // injector. The cabin looks a plane's fit up in the build store by name at launch, so the grant
+    // has to land there as well as in the profile, or the aircraft flies as its stock airframe.
+    private void SaveAwardedBuilds(MissionRecorded recorded)
+    {
+        if (recorded.AwardedBuilds.Count == 0)
+        {
+            return;
+        }
+
+        var planes = CustomPlaneStore.UserPlanes();
+        foreach (var build in recorded.AwardedBuilds)
+        {
+            GD.Print($"campaign: award '{build.Name}' saved to {planes.Save(build)}");
+        }
     }
 
     // A directive whose consumer this session has no seam for. Logged once per kind so a mission

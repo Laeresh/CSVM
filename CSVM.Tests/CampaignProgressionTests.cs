@@ -1,4 +1,5 @@
 using System.Linq;
+using CSVM.Flight;
 using CSVM.Session;
 using Xunit;
 
@@ -127,6 +128,78 @@ public class CampaignProgressionTests
         Assert.True(CampaignProgression.Complete(profile));
         Assert.Equal(23, CampaignProgression.NextMissionSeq(profile));
         Assert.False(CampaignProgression.CanFly(profile, 24));
+    }
+
+    /// <summary>An award grants a whole aircraft, not just an ownership row: mission 7 pays the
+    /// Blue Streak, whose template carries engine 4 (the nitrous tier), one hardpoint per wing,
+    /// four armour units in every zone and a twinned forty and thirty calibre.</summary>
+    [Fact]
+    public void TheBlueStreakAwardCarriesItsOwnBuildWithNitrous()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+
+        var recorded = CampaignProgression.Record(profile, Attempt(6, mask: 3, timeMs: 50000));
+
+        var build = Assert.Single(recorded.AwardedBuilds);
+        Assert.Equal("Blue Streak", build.Name);
+        Assert.Equal(3, build.Airframe);
+        Assert.Equal(4, build.Engine);
+        Assert.True(CustomPlaneBuild.HasNitrous(build));
+        Assert.Equal(1, build.LeftHardpoints);
+        Assert.Equal(1, build.RightHardpoints);
+        Assert.Equal(new[] { 4, 4, 4, 4 },
+            new[] { build.ArmourNose, build.ArmourTail, build.ArmourLeftWing, build.ArmourRightWing });
+        Assert.Equal(new GunChoice(1, true), build.Guns[0]);
+        Assert.Equal(new GunChoice(0, true), build.Guns[1]);
+        Assert.True(build.Guns[2].IsEmpty);
+        Assert.True(build.Guns[3].IsEmpty);
+    }
+
+    /// <summary>The nitrous rides on the Blue Streak's own build and on nothing else: the other
+    /// four templates carry engine 1, and an airframe the table does not award has no build at
+    /// all, so a stock Bloodhawk is unaffected by the grant.</summary>
+    [Fact]
+    public void OnlyTheBlueStreakTemplateCarriesNitrous()
+    {
+        foreach (var award in CampaignProgression.AircraftAwards)
+        {
+            var build = CampaignProgression.AwardBuild(award.Airframe);
+            Assert.NotNull(build);
+            Assert.Equal(award.Airframe == 3, CustomPlaneBuild.HasNitrous(build!));
+        }
+
+        Assert.Null(CampaignProgression.AwardBuild(5));
+    }
+
+    /// <summary>A profile granted an award before the build store was written to still flies the
+    /// award's own fit: the ownership row alone resolves the template. A hangar-built plane and the
+    /// two starters resolve nothing here and stay on the store's answer.</summary>
+    [Fact]
+    public void AnOwnedRewardAircraftResolvesItsTemplateWithNoBuildOnFile()
+    {
+        var owned = new OwnedPlane { Name = "Blue Streak", Airframe = 3, Special = true };
+
+        var build = CampaignProgression.BuildForOwned(owned);
+
+        Assert.NotNull(build);
+        Assert.Equal("Blue Streak", build!.Name);
+        Assert.True(CustomPlaneBuild.HasNitrous(build));
+        Assert.Null(CampaignProgression.BuildForOwned(
+            new OwnedPlane { Name = "Gypsy Magic", Airframe = 5 }));
+        Assert.Null(CampaignProgression.BuildForOwned(
+            new OwnedPlane { Name = "Ruthless Saber", Airframe = 3 }));
+    }
+
+    /// <summary>A mission that grants nothing hands back no builds, so a caller writing them to the
+    /// build store has nothing to write on an ordinary mission end.</summary>
+    [Fact]
+    public void AMissionWithNoAwardHandsBackNoBuilds()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+
+        var recorded = CampaignProgression.Record(profile, Attempt(0, mask: 1, timeMs: 45000));
+
+        Assert.Empty(recorded.AwardedBuilds);
     }
 
     private static MissionAttempt Attempt(int seq, int mask, int timeMs) =>

@@ -2380,22 +2380,6 @@ usual.
   *Cross-refs:* `BL-522`, `BL-532`, `BL-457`, `docs/formats/ai-rosters.md`,
   `docs/formats/mission-entities/enemy-generators.md`.
 
-- `BL-528` `[Bug]` **The Blue Streak, CM07 (C1/M02)'s mission Bloodhawk, flies with the stock Bloodhawk fit
-  and no nitro, where the original gives it a special loadout with nitro; and it should be
-  available after the mission.** *Evidence:* reported at the controls. The Blue Streak is not a
-  stock Bloodhawk: the mission hands the player a named aircraft with its own loadout, nitro
-  included (the stock Bloodhawk carries none), so the mission is flying the wrong aircraft record.
-  The mission's `aiv.zrd`/roster block for `player` is where the fit is authored (roster slot 34 is
-  nitro, `BL-453`), and our spawner reads the profile's stock def instead. Campaign progression
-  (`CampaignProgression.cs`) should then leave the Blue Streak in the profile's hangar after the
-  mission. *Fix shape:* read CM07's player block for the Blue Streak's guns, hardpoints and nitro;
-  build the player's aircraft from it for the mission (the same path `BL-453` needs for AI blocks);
-  then check what the progression grants at the mission's end against the original's
-  `CampaignProfileDef` write. *⚠ Traps:* the player's injector is `CustomPlaneBuild.HasNitrous`
-  (`BL-469`); represent the Blue Streak as a custom build carrying nitro, not as a flag on the
-  airframe, or the hangar's economy breaks. Do not "fix" it by giving the stock Bloodhawk nitro.
-  *Cross-refs:* `BL-453` (the spawner drops roster slots), `BL-469`, `docs/org/hangar.md`.
-
 - `BL-529` `[Bug]` **CM08: the Pandora pitches up and down where it should hold steady.**
   *Evidence:* reported at the controls: the airship porpoises along its route. `ZeppelinMotion`
   pitches toward each node's altitude under the record's rate and accel limits and levels off only
