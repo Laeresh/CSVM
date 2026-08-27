@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -68,6 +69,11 @@ public sealed class AnimInstance
     /// `anim+0xd0`/`+0xd4` and steps them outside the walk, so nothing can CALL them.</summary>
     private readonly List<SequenceRunner> _unslotted = new();
 
+    // Every sequence a STOP_SEQUENCE has named on this instance, with the calls refused since.
+    // The original writes such a sequence DONE, and a call starts only from PARKED, so the stop
+    // is a disable for the life of the instance; a fresh instance (a def restart) clears it.
+    private Dictionary<AnimSequence, int>? _stopped;
+
     public AnimInstance(AnimDefinition def, Node3D? anchor)
     {
         Def = def;
@@ -95,6 +101,13 @@ public sealed class AnimInstance
     /// every sequence of it and gated on by <c>START_TIME ANIMATION</c>. Never rewound; a LOOP
     /// rewinds only the sequence's own timers. Decode: docs/org/sequences.md.</summary>
     public float Clock { get; private set; }
+
+    /// <summary>How many CALL_SEQUENCEs this instance refused because the sequence had already
+    /// been stopped. Four shipped definitions reach this (C1's `car_loop1_start`,
+    /// `car_go_home_start`, `hauler1_start` and `truck1_start`: a lap loop re-reaches a call it
+    /// stopped on the previous lap); the `stop-sequence` suite drives one. Observation only.
+    /// Decode: docs/org/sequences.md.</summary>
+    public int RefusedStoppedCalls { get; private set; }
 
     /// <summary>No runner is still executing. ⚠ NOT on its own the test for retiring an instance —
     /// see <c>AnimRuntime.Retirable</c> and <c>MotionSet.OwesBounce</c>, which additionally hold an
@@ -150,17 +163,28 @@ public sealed class AnimInstance
     }
 
     /// <summary>CALL_SEQUENCE: starts this definition's named sequence, but only from the parked
-    /// state — a call into an already-running or non-ON_CALL sequence is a silent no-op.
-    /// ⚠ Returns whether the definition HAS that sequence, never whether anything started; a
-    /// no-op call must still report found. Decode: docs/org/sequences.md.</summary>
+    /// state — a call into an already-running, already-stopped or non-ON_CALL sequence is a
+    /// silent no-op. ⚠ Returns whether the definition HAS that sequence, never whether anything
+    /// started; a no-op call must still report found. Decode: docs/org/sequences.md.</summary>
     public bool CallSequence(string name)
     {
         var seq = Def.Sequences.FirstOrDefault(s =>
             string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
         if (seq == null)
             return false;
-        if (seq.OnCallOnly && !IsRunning(seq))
-            AddRunner(seq);
+        if (!seq.OnCallOnly || IsRunning(seq))
+            return true;
+        if (_stopped != null && _stopped.TryGetValue(seq, out int refused))
+        {
+            RefusedStoppedCalls++;
+            _stopped[seq] = refused + 1;
+            // Logged once per sequence: a lap loop would otherwise repeat the line every lap.
+            if (refused == 0)
+                Log.Info("anim", $"anim: CALL_SEQUENCE '{name}' on '{Def.AnimName ?? Def.Name}' refused, the sequence was stopped earlier in this instance");
+            return true;
+        }
+
+        AddRunner(seq);
         return true;
     }
 
@@ -193,9 +217,9 @@ public sealed class AnimInstance
 
     /// <summary>STOP_SEQUENCE: halts every active runner named <paramref name="name"/>, including
     /// the caller's own, and does nothing else — no start-if-not-running path exists.
-    /// ⚠ Stopping a parked ON_CALL sequence is a DISABLE, un-callable until the definition resets.
-    /// ⚠ CSVM does not persist that DISABLE, unlike the original. ⚠ Returns whether the name
-    /// RESOLVED, never whether anything was halted. Decode: docs/org/sequences.md.</summary>
+    /// ⚠ Stopping an ON_CALL sequence, parked or running, is a DISABLE: it stays un-callable
+    /// until the definition restarts on a fresh instance. ⚠ Returns whether the name RESOLVED,
+    /// never whether anything was halted. Decode: docs/org/sequences.md.</summary>
     public bool StopSequence(string name)
     {
         bool halted = false;
@@ -207,8 +231,16 @@ public sealed class AnimInstance
             halted = true;
         }
 
-        return halted || Def.Sequences.Any(s =>
-            string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+        bool resolved = halted;
+        foreach (var s in Def.Sequences)
+        {
+            if (!string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            (_stopped ??= new Dictionary<AnimSequence, int>()).TryAdd(s, 0);
+            resolved = true;
+        }
+
+        return resolved;
     }
 
     // Slots in index order, then the unslotted. Order matters only to Advance, which walks the

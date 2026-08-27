@@ -1137,9 +1137,17 @@ unnamed sequences), which is why identity is the object. `StopSequence` halts ev
 **and does nothing else** (`004eb610` writes the sequence DONE and has no start-if-not-running
 path): a stop naming a parked ON_CALL sequence therefore runs no teardown at all, which is what 16
 shipped definitions author (`flame_ball_01/02 → stop_p1trail`, every chapter, inside the HE
-explosion's chain). CSVM does not persist the resulting DISABLE, so a later CALL_SEQUENCE can still
-start a stopped sequence where the original would refuse it — 123 definitions name one sequence in
-both a call and a stop, but no def is known to reach the stop first. Both are
+explosion's chain). The stop is also a DISABLE for the life of the instance: `AnimInstance` keeps
+the set of sequences a stop has named, and `CallSequence` refuses a call into one of them, which is
+what `004eb570`'s parked-only start does to a sequence `004eb610` wrote DONE. 123 definitions name
+one sequence in both a call and a stop, and four reach the refusal: C1's `car_loop1_start`,
+`car_go_home_start`, `hauler1_start` and `truck1_start`, whose lap loop calls a dust or exhaust
+sequence, stops it later in the lap and calls it again on the next lap, so the called sequence
+runs on the first lap only (the `stop-sequence` suite drives `car_loop1_start`). The other 119
+(`flame_light_seq` in the destroy defs, `chuteman_drop`/`chuteman_sway`, the `sail_splash*`/
+`yacht_splash*` sets, `warhawk`'s `smokepuff1..3`) stop after their last call, so the refusal
+never fires for them; `RefusedStoppedCalls` is the counter and the `anim: CALL_SEQUENCE … refused`
+log line names any new one. A restart builds a fresh instance and clears the set. Both are
 public so `CSVM.Tests` drives them against a fake host; the host is any `ISequenceHost` (the game's
 real one is `AnimRuntime`, tests pass a recorder). Anchors are opaque `Node3D?` pass-through — the
 interpreter never dereferences them.

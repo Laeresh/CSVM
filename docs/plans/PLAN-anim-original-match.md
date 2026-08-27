@@ -424,7 +424,9 @@ run for this item found **123 definitions** that name one sequence in both a cal
 a control-flow question the static census cannot answer, so persisting the flag would change all 123
 on a divergence none is known to observe. Recorded in the `StopSequence` doc comment, in
 `docs/architecture.md`'s `SequenceRunner` entry and in `anim-definitions.md`, and filed as
-**`BL-334`** with the instrument that would settle it (Decision 6).
+**`BL-334`** with the instrument that would settle it (Decision 6). That instrument has since run:
+four C1 vehicle lap loops reach the refusal, and the per-instance disable is in `AnimInstance`
+(`git log --grep=BL-334`).
 
 **The `p1hit`/`piece1seq` loop did not reproduce.** `ground-contact` passes with the exception
 deleted, which is the expected result — B11 removed the concurrent-runner model the loop depended

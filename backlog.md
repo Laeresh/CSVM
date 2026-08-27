@@ -1312,26 +1312,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Cross-link: `BL-292` (crash-splash orientation, different spawn path; scheduled in
   `docs/plans/PLAN-m3-polish-10.md` A3).
 
-- `BL-334` `[Research]` **A stopped sequence stays callable in CSVM; in the original it is disabled
-  until the definition resets.** `STOP_SEQUENCE` (`004eb610`) writes the sequence *done*, and
-  `CALL_SEQUENCE` (`004eb570`) starts a sequence only from *parked* — so once stopped, a sequence
-  cannot be called again for the life of the instance. CSVM halts the runner but does not persist
-  that disable, so a later call restarts it. **123 definitions name one sequence in both a call and
-  a stop** — mostly `flame_light_seq`, plus `chuteman_drop`/`chuteman_sway`,
-  `sail_splash*`/`yacht_splash*`, and `warhawk`'s `smokepuff1..3`.
-  *Fix shape:* the open question is reachability, and a static census cannot answer it — whether any
-  of the 123 reaches its stop *before* its call is control flow. Instrument the runtime to log a
-  call arriving at a sequence this instance already stopped, then run the 8-chapter `--freecam`
-  sweep plus the effect closure. Zero hits across that surface is a disproof and the divergence
-  stays documented; any hit names the def to reproduce, and the fix is a per-instance stopped-set
-  consulted by `AnimInstance.CallSequence`.
-  ⚠ **Traps:** do not implement the disable on the strength of the decode alone. It would change
-  behaviour in up to 123 definitions to match a rule none is yet known to observe, and a sequence
-  wrongly left disabled fails *silently* — the effect simply never plays again, which is the
-  hardest class of bug to attribute later. The instrument comes first.
-  *Cross-refs:* `docs/formats/anim-definitions.md` (the decoded `CALL_SEQUENCE`/`STOP_SEQUENCE`
-  state rules). The `PLAYER_RANGE` `* 4.0` divergence the same decode opened is closed as a
-  disproof — the `* 4.0` is on `PLAYER_LINED_UP`, not `PLAYER_RANGE` (`git log --grep=BL-333`).
 
 - `BL-419` `[Fidelity]` **The sonic ground burst does not read like the original's: ours is soft cyan
   hoops rising in the air, the original is one flat crisp pale-green ring growing on the terrain.**

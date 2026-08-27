@@ -482,6 +482,38 @@ public class SequenceRunnerTests
         Assert.False(inst.StopSequence("ghost"));
     }
 
+    // ---- 13b. A call after a stop is refused for the life of the instance ----
+
+    [Fact]
+    public void CallingAStoppedSequenceIsRefusedAndCounted()
+    {
+        // Shaped like C1's car_loop1_start: a lap loop calls car_dust1, stops it later in the lap,
+        // and on the next lap calls it again. A stopped sequence is DONE and a call starts only
+        // from PARKED, so the second call is refused; it still reports found.
+        var host = new RecordingHost();
+        var main = Seq("main", Swap("go"));
+        var light = Seq("light", Swap("pulse"));
+        var inst = Instance(new[] { main, light }, main);
+        host.Instance = inst;
+
+        Assert.True(inst.CallSequence("light"));
+        RunSteps(inst, host, 0.25f, 2);
+        Assert.Single(host.Fired.Where(f => f == "pulse"));   // lap 1 ran it
+        Assert.True(inst.StopSequence("light"));
+        Assert.Equal(0, inst.RefusedStoppedCalls);
+
+        Assert.True(inst.CallSequence("light"));
+        Assert.Equal(1, inst.RefusedStoppedCalls);
+        RunSteps(inst, host, 0.25f, 2);
+        Assert.Single(host.Fired.Where(f => f == "pulse"));   // lap 2 could not restart it
+        Assert.True(inst.Finished);
+
+        // A fresh instance of the same definition starts clean.
+        var again = Instance(new[] { main, light }, main);
+        Assert.True(again.CallSequence("light"));
+        Assert.Equal(0, again.RefusedStoppedCalls);
+    }
+
     // ---- 14. STOP_SEQUENCE halts every duplicate runner of the name ----
 
     [Fact]

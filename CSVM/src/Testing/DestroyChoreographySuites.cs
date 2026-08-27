@@ -125,12 +125,14 @@ internal static class DestroyChoreographySuites
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var program = world.Session.Program.Subset(new[] { "large_fireball", "large_30sec_fire" });
+            var program = world.Session.Program.Subset(new[] { "large_fireball", "large_30sec_fire", "car_loop1_start" });
             var fireball = program.ByAnimName("large_fireball");
             var fire30 = program.ByAnimName("large_30sec_fire");
+            var carLoop = program.ByAnimName("car_loop1_start");
             ctx.Check(fireball.Count > 0, $"chapter program has large_fireball defs={fireball.Count}");
             ctx.Check(fire30.Count > 0, $"chapter program has large_30sec_fire defs={fire30.Count}");
-            if (fireball.Count == 0 || fire30.Count == 0)
+            ctx.Check(carLoop.Count > 0, $"chapter program has car_loop1_start defs={carLoop.Count}");
+            if (fireball.Count == 0 || fire30.Count == 0 || carLoop.Count == 0)
             {
                 return;
             }
@@ -204,6 +206,36 @@ internal static class DestroyChoreographySuites
                 ctx.Same(1, stopPuffs, $"stop_fire_n_smoke PUFFER_STATE dispatches");
                 ctx.Check(stop30At >= 29.5f && stop30At <= 30.5f,
                     $"the fire's own puffer-off lands at the authored 30 s t={stop30At:0.0}");
+
+                // The car lap: start_cruisin CALLs car_dust1, STOPs it later in the lap, then LOOPs.
+                // A stopped sequence is DONE and a call starts only from PARKED, so every lap after
+                // the first is refused and car_dust1's own puffer event fires exactly once.
+                runtime.Start(carLoop[0], stage);
+                timeline.Clear();
+                // A lap is about 25 s; 150 s covers five of them.
+                for (int i = 0; i < 1500; i++)
+                {
+                    clock += 0.1f;
+                    runtime.Advance(0.1f);
+                }
+                int dustCalls = 0;
+                int dustRuns = 0;
+                float secondCallAt = -1f;
+                foreach (var e in timeline)
+                {
+                    if (e.Seq == "start_cruisin" && e.Kind == "CallSequence")
+                    {
+                        dustCalls++;
+                        if (dustCalls == 2)
+                            secondCallAt = e.T;
+                    }
+                    else if (e.Seq == "car_dust1")
+                    {
+                        dustRuns++;
+                    }
+                }
+                ctx.Check(dustCalls >= 2, $"the car's lap loop calls car_dust1 on at least two laps calls={dustCalls}");
+                ctx.Same(1, dustRuns, $"car_dust1 runs on the first lap only; the later calls are refused (second call at t={secondCallAt:0.0})");
             }
             finally
             {

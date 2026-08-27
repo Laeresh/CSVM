@@ -126,7 +126,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — the same runtime's correctness, and the two cheap features
 
-7. ☐ A stopped sequence stays callable; instrument before implementing (`BL-334`)
+7. ☑ A stopped sequence stays callable; instrument before implementing (`BL-334`)
 8. ☑ Tighter aircraft collision shapes, convex hulls per clipped region (`BL-300`)
 9. ☑ Fuel burn and the empty-tank lever freeze (`BL-450`)
 10. ☑ The mission spawner does not read roster blocks (`BL-453`)
@@ -465,7 +465,7 @@ the presence of `NUMBER` as what makes a state fully defined.
 
 # Wave C — the same runtime's correctness, and the two cheap features
 
-## C7 ☐ A stopped sequence stays callable; instrument before implementing
+## C7 ☑ A stopped sequence stays callable; instrument before implementing
 
 **Goal.** Either the runtime is shown to reach a call on an already-stopped sequence, and the
 per-instance disable lands, or it is shown not to, and the divergence stays documented as a disproof.
@@ -496,6 +496,22 @@ wrongly left disabled fails *silently*, which is the hardest class of bug to att
 `PLAYER_RANGE` `* 4.0` divergence the same decode opened is closed as a disproof (`BL-333`, the `* 4.0`
 is on `PLAYER_LINED_UP`); do not reopen it. ⚠ `98948b25` already removed the stopper idiom itself, so
 "a stop starts a parked sequence" is fixed and is not this.
+
+**Verified.** <pending orchestrator run>
+
+**Landed.** The instrument ran first, as an `anim: CALL_SEQUENCE … revives` log line on
+`AnimInstance.CallSequence`, over the 8-chapter `--freecam` sweep (900 sim frames each), seven
+`--destroy=` probes (`m_build01`, `ftank01`, `g_tower1`, `bhf_heliumtank1`, `yacht1`, `sailboat1`,
+`unit01`), two `--crash` probes and thirteen effect suites. It hit twice, both in the `damage-hd`
+suite's C1 world: `car_loop1_start` calling `car_dust1` and `car_go_home_start` calling `car_dust`.
+The shape is a lap loop that CALLs the dust sequence, STOPs it later in the lap and LOOPs, so
+every lap after the first calls a DONE sequence; a static census over `extracted/` finds exactly
+four such definitions (those two plus `hauler1_start`/`black_exhaust` and `truck1_start`/
+`truck1_dust`, all C1 `ON_STARTUP` vehicles), and the other 119 of the 123 call-and-stop
+definitions stop after their last call. The disable now lands as a per-instance stopped set in
+`AnimInstance`, consulted by `CallSequence`, with `RefusedStoppedCalls` and a once-per-sequence
+`anim: CALL_SEQUENCE … refused` line as the kept instrument; the `stop-sequence` suite gained a
+`car_loop1_start` arm (five laps, one run of `car_dust1`) and `SequenceRunnerTests` a unit test.
 
 ## C8 ☑ Tighter aircraft collision shapes, convex hulls per clipped region
 
