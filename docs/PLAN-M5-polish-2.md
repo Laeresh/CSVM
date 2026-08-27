@@ -149,6 +149,14 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ The low-terrain break-off, judged once the wingman is there (`BL-509`, A13's open half)
 22. ☑ An `AT_NODE` rotate reads a spelling the compiled data never uses (`BL-549`, minted by D17)
 
+### Wave E — what the Wave D sortie opened
+
+23. ☐ The captured Balmoral's British livery still does not reach the player's hull live (`BL-554`)
+24. ☐ A skipped cutscene waits out the swap instead of jumping to its end (`BL-552`)
+25. ☐ The capture cutscene plays without the enemy Balmoral or the pilot switch, and inherits the roll (`BL-551`)
+26. ☐ The original re-places the player after CM01's drop-off (`BL-553`)
+27. ☐ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
+
 ## Dependency and parallelism notes
 
 A1 runs first and alone; it is a documentation edit and every other item's landing commit touches
@@ -179,6 +187,14 @@ lands before anything is built. `BL-541` was expected to be the same gap and is 
 and D17 both reach the capture definition and `FlightRoster.RunSwap`, so they share one lane after
 D15. D19 and D20 are independent animation reads and can run in parallel worktrees. D21 is judged at
 the controls after D14, and is a stop like C12.
+
+**Wave E ordering.** E23, E24, E25 and E26 run in parallel worktrees with file ownership: E23 owns
+`FlightRoster.RunSwap`/`SwapPlayerAirframe`, `AirframeSwap.cs`, `HumanFlightAdapter`'s rebuild
+and the swap suite; E24 owns `CutsceneController`'s skip path and `AnimRuntime`'s advance; E25
+owns `AnimRuntime`'s name resolution, `AircraftStage`, `RosterMarkers` and `PoseChannel`; E26
+owns `CutsceneController`'s handoff placement, `CampaignDirector` and the objectives reader. E24
+and E26 both reach `CutsceneController`, in different regions; the orchestrator reconciles. E27 is
+a stop like C12 and D21.
 
 ---
 
@@ -1160,3 +1176,122 @@ itself is untouched.
 
 **Verified.** Full `RunTests.ps1` battery on the merged plan tree at `724fb0ae`: build clean, units 2443/2443, engine suites 143/143 with engine errors clean, goldens 16/16 hash-identical
 
+---
+
+# Wave E — what the Wave D sortie opened
+
+## E23 ☐ The captured Balmoral's British livery still does not reach the player's hull live
+
+**Goal.** After CM02's capture the player's Balmoral wears the livery it was captured in.
+
+**Evidence (confidence: traced for the suite, lead for the live gap).** `BL-554`. D16's carry
+passes its suite and fails at the controls: the new hull wears the Fortune Hunters paint. The
+suite's stand-in spawns with an explicit scheme; a real enemy roster spawn is painted through
+`ShippedSkins` (`CampaignRoster.SpawnFor`, team not the player's), so what
+`FlightController.Scheme` records on it is the shipped-skin resolution and the human rebuild draws
+that scheme through the player's own pattern path.
+
+**Approach.** Carry the ShippedSkins reading, not only the scheme, into `AirframeSwapRequest` and
+`HumanFlightAdapter.Assemble`, so the rebuild paints the airframe the way the AI assembler painted
+the captured one. Make the suite's stand-in a real enemy block (`ShippedSkins`) first, so it fails
+the way the flown session does.
+
+**Model recommendation.** medium.
+
+**Verify.** The swap suite failing on the ShippedSkins stand-in before and passing after, with the
+rebuilt rig's paint compared to the captured rig's by the painter's own output, not the scheme
+record alone; `campaign` suites green; goldens unchanged. Judged at the controls in E27.
+
+**⚠ Traps.** ⚠ `wingman_4` keeps the PLAYER's scheme. ⚠ The divergence stays stated in the
+cutscenes page: the executable does not do this.
+
+## E24 ☐ A skipped cutscene waits out the swap instead of jumping to its end
+
+**Goal.** Skipping a cutscene runs it to its handoff at once: the picture goes, and every code the
+definition would still have raised (913/914, 967, the reset states) is applied immediately.
+
+**Evidence (confidence: traced for the symptom, lead for the seam).** `BL-552`, seen at the
+controls on CM02: the skip key removes the picture but the swap happens only when the definition's
+clock reaches it. `CutsceneController`'s skip restores the view; nothing advances the definition.
+
+**Approach.** On skip, fast-forward the owning definition through its remaining events to the
+handoff (the sequence interpreter already advances by dt, so an advance by the remaining run time
+in one step, with the callback host live, is the smallest shape), then restore. Decode what the
+original does on its skip key if cheap (`FUN_0047e080`'s host has a skip path); do not invent an
+ordering the events do not carry.
+
+**Model recommendation.** high. The events between the skip and the handoff have order
+dependencies (`BL-541`'s closing record) and the animation runtime's advance is shared.
+
+**Verify.** A played leg of CM02's capture on a Realtime clock (D15's instrument) skipped at t=2 s,
+asserting the swap, the hide and the hand-over have all happened within one frame of the skip and
+that the same end state matches the unskipped run; `cutscene`, `campaign` and `landings` suites
+green; goldens unchanged.
+
+**⚠ Traps.** ⚠ Play the events, do not drop them (DIAG-23). ⚠ Nothing in the hold path (D14) may
+change: the clock hold releases at the handoff either way.
+
+## E25 ☐ The capture cutscene plays without the enemy Balmoral or the pilot switch, and inherits the roll
+
+**Goal.** CM02's capture shows the Balmoral being boarded, the pilot crossing from one aircraft to
+the other, level as authored.
+
+**Evidence (confidence: traced for the camera, lead for the figures).** `BL-551`. D17 put the
+camera on the aeroplane; at the controls the Balmoral the definition animates and the wing-walk
+figures do not appear, and one capture was rolled about 90 degrees because the Balmoral was rolled
+when the capture fired. The figures (`ww_player`, `ww_ladder`, `ww_zachary`, `body`/`head`/`hatch`)
+resolve inside `britbalmoral_1`'s gamez copy, which the world never places; D17 made the live rig
+answer for the vehicle ROOT only.
+
+**Approach.** Establish which of the figures are chapter nodes under the library root's copy, which
+are cross-archive, and what the definition does to the vehicle itself (its `ObjectActiveState`
+loop and add/delete-child pair resolve to nothing today). Then either let the live rig's subtree
+answer for the copy's child names (bounded to this definition's closure, not globally) or stage
+the figures like `chuteman`. For the roll, read whether the original's `AT_NODE_XYZ` pose takes the
+host's full basis or its yaw alone; the wing walk is authored level.
+
+**Model recommendation.** max. It reaches name resolution, staging and the pose composition at
+once, on a definition only the sortie can judge.
+
+**Verify.** The played leg extended to assert the figures are bound and visible under the frame and
+the frame's roll is zero when the host is rolled; `cutscene`, `campaign`, `landings`,
+`intro-aircraft-stage`, `dropoff-chuteman-stage` green; the 8-chapter `--freecam` regression and
+the goldens unchanged. Judged at the controls in E27.
+
+**⚠ Traps.** ⚠ Do not relax the `AnimRuntime.Targets` name guard globally. ⚠ `PoseAtNode`'s
+composition is shared (B7); a roll rule must be decoded, not tuned. ⚠ Extend
+`campaign-wingwalk-camera` rather than trust it: it reads the camera, not the figures.
+
+## E26 ☐ The original re-places the player after CM01's drop-off
+
+**Goal.** After the drop-off cutscene the player resumes where the original puts them, south of
+the archipelago facing east, whatever heading they flew in on.
+
+**Evidence (confidence: lead-only).** `BL-553`, seen at the controls. The drop-off's handoff or the
+mission script carries a placement (a `WARP_VEHICLE`, a `RESET_STATE` pose, or a spawn record the
+handoff re-applies); the intro's handoff does re-place (`FlightController.StageAt` hands back the
+spawn pose), the drop-off's does not.
+
+**Approach.** Read CM01's `objectives.zrd` around the drop-off objective and the drop-off's closing
+sequence for the placement; if it is `WARP_VEHICLE`, that verb is a named no-op today
+(`docs/architecture.md`, `CampaignDirector`), and landing it is the fix, with the decode of its
+arguments. Confirm the position against the exe if the data alone is ambiguous.
+
+**Model recommendation.** high. A decode with a named no-op as the likely landing site.
+
+**Verify.** A headless arm on CM01's own data asserting the player's pose after the drop-off's
+handoff equals the authored placement; `campaign` and `landings` suites green. Judged at the
+controls in E27.
+
+**⚠ Traps.** ⚠ Do not hard-code the position; the data or the exe carries it. ⚠ The intro's
+`StageAt` hand-back must keep working.
+
+## E27 ☐ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
+
+**Goal.** E23 to E26 judged at the controls, and the manual (non-auto) dock's hook, height and
+wing fold seen once.
+
+**Approach.** ⚠ **A stop, not a task an agent completes.** The brief is written when E23 to E26
+land.
+
+**Verify.** The user's report.
