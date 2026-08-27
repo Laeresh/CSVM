@@ -86,11 +86,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ `BL-516`: CM03's AA turret never fires
 4. ◐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
 5. ◐ `BL-512` + `BL-522`: the Barracuda's drive jumps, its launch faces the wrong way, and its fighters crash at once
-6. ☑ `BL-563`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
+6. ☑ `BL-566`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
 
 ### Wave B — CM05 and CM06
 
-11. ❌ `BL-517`: the Pandora's broadside fires on a friendly player
+11. ❌ `BL-517`: the Pandora's broadside fires on a friendly player (reopened by D32 as `BL-567`)
 12. ❌ `BL-524`: a friendly patrol without a net flies away after its first fight
 13. ◐ `BL-525`: the second Workers' Voyage docking completes without a docking
 14. ❌ `BL-514`: a shot-down carried turret keeps burning where it was
@@ -413,10 +413,11 @@ take-off run) is correct as built.
 2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
 16 shots hash-identical, hitch awareness-only; D32 judges it at the controls.
 
-## A6 ☑ `BL-563`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
+## A6 ☑ `BL-566`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
 
-(Minted as `BL-556` during the run; renumbered because main minted its own `BL-556`, the
-difficulty scale, in parallel. The landing commit's subject still names `BL-556`.)
+(Minted as `BL-556` during the run and renumbered twice, because main minted its own `BL-556`, the
+difficulty scale, and then `BL-563` to `BL-565`, the CM12 `DEDG` items, in parallel. The landing
+commit's subject still names `BL-556`.)
 
 **Goal.** Confirming a cutscene skip or the pause menu's Resume with gamepad A (or F on the
 keyboard) launches nothing; the next fresh pull of the trigger fires as before.
@@ -952,3 +953,36 @@ verdict in the closing commit, close the plan, and mint follow-ups for anything 
 green on the final build.
 
 **⚠ Traps.** Do not retune anything mid-sortie on one impression; file it.
+
+### Sortie verdicts
+
+**CM06 (C3/M03), the mission this plan's items call CM04.** Log:
+`.scratch/logs/menu-20260827-221532.log` of the plan worktree, second C3/M03 run. Seven reports,
+none clean:
+
+1. No start cutscene. `calldestroy_the_cargozep` runs at bootstrap and its `cgzep_camera` call
+   never takes the view; filed as `BL-569`. Not an A1 regression: `generic_intro` is not in M03's
+   start list, so A1's deferred handoff is never entered here.
+2. Buildings still explode at the start. The carrier A4 could not find is the persist-log replay:
+   `CampaignPersistLog.ApplyTo` re-runs the C3/M02 kills through `DamageAt` at mission open
+   (`aagun30..32`, `aagun01/02`, `g_tower1/3`, `u_camp1..3`, `unit10`, `t_truck02`, each with its
+   death sequence). `BL-513` rewritten to that; A4's pool sync stays landed as the architecture fix.
+3. Pandora already in the dry dock while the cargo zeppelin moves out. The zeppelin record seats
+   `piratezep` at the END pose of the `pzep_todrydock` SI script (61.65 s), and the script never
+   owns the pose; filed as `BL-568`, with the D31 snap and the C25 hold named as the first suspects.
+4. Balloons not deactivated. Two leads in the log: the AI gunners engage `b_turret3/4/5` as live
+   turrets on the first frames although the `.gw` switches them OFF, and a `balloon_downa*` call
+   finds no callee because that reader def is compiled only into M02. `BL-521` rewritten.
+5. Barracuda at the wrong position, no surfacing, then in the bay in one step, and facing the wrong
+   way. `BL-512` extended with the verdict; A5's heading disproof is set against the report at the
+   controls and re-judged in the built world on the next pass.
+6. Fighters crash on launch and their wrecks kill the Barracuda. `britpeace_eg0..3` launch on the
+   deck path and the AI ram rule destroys each on the same frame (`sub_doors`, `sub_runway`,
+   `g627`); `BL-522` extended, `BL-515` cross-referenced for the crash damage.
+7. Pandora's broadside fires on the player. Four `wep_28` hits on `P1` in the log; the user's rule
+   is that the original's broadsides engage zeppelins only, and B11's own decode (the resolver
+   matches names against the zeppelin roster) points the same way. `BL-517`'s disproof is reopened
+   as `BL-567`.
+
+A2's kill key is confirmed at the controls: `debug kill (F17): britpeace_2 crashed` and nine more
+in the same log, each followed by the `downed` line.

@@ -445,26 +445,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   spawn-and-kill harness this needs, `git log --grep=BL-291`), `docs/architecture.md`'s
   `ZeppelinDamage.cs` bullet (the survivor-count kill that fires the def).
 
-- `BL-513` `[Bug]` **CM04 (C3/M03) plays a building's destroy animation on a building that is already
-  destroyed.** *Evidence (traced, architecture; CM04's own trigger unfound):* `AnimRuntime.Dispatch`'s
-  `ObjectActiveState` case only ever ran the visual swap (`Pose.HandleActiveState`); nothing synced
-  `DestructibleRegistry`, so ANY healthy/destroyed role swap dispatched outside `DamageAt`'s own kill
-  (a start-state script, an `ON_STARTUP` sequence, or a def's own `RESET_STATE` authored to start
-  destroyed) left the pool `Healthy` at full HP while the node already read destroyed — a later hit
-  found a live pool and replayed the whole death sequence. Fixed generally
-  (`AnimRuntime.SyncDestructiblePool`, plus registering a destructible before dispatching its own
-  `RESET_STATE` in Bootstrap), verified by the `start-state-swap-pool` engine suite against a real
-  shipped def. CM04's own compiled `mis_anim` carries no `ON_STARTUP` building-destroy content and no
-  `PERSIST_LOG` reader def compiles into this mission; the one "starts destroyed" content M03 does
-  ship, `cargozep1`'s scripted `destroy_the_cargozep` cutscene, deactivates named nodes
-  (`tntbox1..4`/`gasbag1`/`gasbag5`) rather than the `healthy`/`destroyed`/`dbase` role convention this
-  fix keys on, so it is not reached. *Fix shape:* find CM04's actual pre-destroyed building content at
-  the controls (nothing in the compiled data matches the report) and confirm whether it is a role-named
-  swap the landed fix already covers, or a `cargozep1`-shaped ad hoc node set that needs its own rule.
-  *⚠ Traps:* do not gate the sequence on the visual state alone; a building destroyed during play and
-  then hit again is the same symptom on a different path, and the fix belongs at the pool. *Cross-refs:*
-  `BL-521` (the balloons in the same mission's start state), `docs/formats/destructibles.md` "Starting
-  destroyed".
+- `BL-513` `[Bug]` **CM04 (C3/M03) opens with the buildings destroyed in the previous mission
+  exploding again: the persist-log replay runs their death choreography at mission open.**
+  *Evidence (traced):* the sortie log of a C3/M03 open shows, on the first frame after bootstrap,
+  `damage: -30 on aagun30 HP 30→0 DESTROYED — death sequence run` and the same for
+  `aagun31`/`aagun32`/`aagun01`/`aagun02`/`g_tower1`/`g_tower3`, `-60` on `u_camp1..3`/`unit10` and
+  `-15` on `t_truck02`, each recycling its `large_fireball`/`sputter_fire_smoke_obj` effect pool, and
+  the player watches the camp blow up as the mission starts. Those are the objects destroyed in
+  C3/M02; `CampaignPersistLog.ApplyTo` replays a chapter's carried destruction through the same
+  `DamageAt` a weapon hit takes, so the damage stages and the death sequence run again, by its own
+  design. The original's carried state is a destroyed pose, not a replayed death: the `PERSIST_LOG`
+  reader defs (`ucamp_dest`/`tower_dest`/…) are the silent destroyed variants a later mission opens
+  with. The earlier reading of this item (a start-state role swap leaving the pool healthy) is a
+  real architecture hole and stays fixed (`AnimRuntime.SyncDestructiblePool`, the
+  `start-state-swap-pool` suite, `docs/formats/destructibles.md` "Starting destroyed"), but it was
+  not this report's trigger. *Fix shape:* give `ApplyTo` a silent path: set the pool to
+  `Destroyed`/HP 0 (or the carried partial HP with its damage stages), apply the destroyed role swap
+  the death sequence ends in, and run no effects, sounds or choreography; `DamageAt` stays the
+  weapon path. A partially damaged carried object (`state.Health` above zero) wants its stage
+  visuals without the stage's puffer bursts. *⚠ Traps:* the replay must still leave the pool
+  `Destroyed` so a later hit is a no-op, which the earlier reading of this item guards; do not fix
+  it by skipping the replay for destroyed objects, and do not gate on the visual state alone.
+  *Cross-refs:* `BL-243` (the persist log), `BL-521` (the same mission's balloons, a different
+  trigger), `docs/formats/saved-games.md`, `docs/formats/destructibles.md`.
 
 - `BL-515` `[Research]` **CM04 (C3/M03): the Barracuda takes damage from every side, and the original may
   only accept hits inside its hangar.** *Evidence:* reported at the controls as a question: the
@@ -874,6 +877,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   assist's relative-velocity solve to match a change here without re-reading both: the three are one
   system and the decode page records the sight and the assist as deliberately disagreeing already.
   *Cross-refs:* `docs/org/aim-assist.md`, `docs/org/ordnanceTypes.md`, `ProjectilePool.Ballistics`.
+
+- `BL-567` `[Bug]` **CM04 (C3/M03): the Pandora's broadside cannons fire on the player; the
+  original's broadsides engage zeppelins only.** *Evidence:* reported at the controls with the
+  original's rule stated: broadside cannons attack enemy zeppelins and never aircraft. The sortie
+  log shows `shot hit P1 (fuselage→nose): wep_28 armor=5.0/25 ...` and three more `wep_28` hits on
+  the player; `wep_28` is the piratezep broadside's weapon (`zep: 'piratezep' broadside wired — 6+6
+  cannons, wep_28`, a `GD.Print` line the file sink does not carry, so its absence from the log is
+  not evidence). `ZeppelinRuntime.Cannons.ResolveTarget` takes the first live authored `targets`
+  name and fires on the player when the record names `player`. The earlier disproof (`BL-517`,
+  closed as "no hostility gate exists in the fire path") read the decoded pipeline as
+  `FUN_004bd8d0` parsing `targets` into name pairs and `FUN_004bede0` resolving each through
+  `FUN_004bd430`, a plain name match against the live zeppelin roster. If that resolver walks the
+  zeppelin roster only, a `player` entry never resolves in the original and a broadside cannot fire
+  on an aircraft, which is the rule reported; the disproof did not settle what a non-zeppelin name
+  resolves to. *Fix shape:* re-read `FUN_004bd430` for the list it walks, and `FUN_004bfe00` for
+  what an unresolved pair does at fire time. If the roster is zeppelins only, `ResolveTarget` drops
+  non-zeppelin names and `docs/formats/mission-entities.md` "Broadside firing" is corrected. If
+  `player` does resolve, record how, since the controls report then stands against the decode and
+  needs a flown original-game check. *⚠ Traps:* do not add a hostility or team gate; the earlier
+  item found none in the engine, and the lever is the resolver's candidate set. *Cross-refs:*
+  `BL-517`'s closing commit (`git log --grep=BL-517`), `docs/formats/mission-entities.md`.
 
 ## Flight model & collision physics
 
@@ -1434,7 +1458,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   run, `BL-522`) is correct as built. *Fix shape:* settle whether `rnd_xz` is a random spread at
   all, or a cached unit direction the original reads back; it is non-zero on far more than this
   def, so the change belongs to `ObjectMotion` as a whole (`docs/org/objectMotion.md`), not to the
-  submarine. *⚠ Traps:* do not special-case the submarine, and do not "fix" the 1.2 m residual,
+  submarine. At the controls, on the landed launch decode, the Barracuda still reads wrong on all
+  three counts: it appears where the bay approach is not, no surfacing is seen near the bay, and it
+  then stands in the bay in one step (the closing absolute `ObjectMotionFromTo` snap after the
+  `rnd_xz` drift), and its hull still faces the wrong way for the bay. The heading disproof above
+  rests on the def carrying no rotation term and the gamez transform being `Initial`; the report at
+  the controls stands over it, so the next pass compares the hull's local -Z against the bay
+  opening and the `bauda_aip*` take-off path direction in the built world, not against the def
+  alone. *⚠ Traps:* do not special-case the submarine, and do not "fix" the 1.2 m residual,
   which is authored. *Cross-refs:* `BL-515`, `BL-522`, `docs/org/objectMotion.md`.
 
 - `BL-546` `[Bug]` **A nitro engage produces none of its visuals: no prop swap, no exhaust smoke.**
@@ -2358,19 +2389,26 @@ usual.
   *Cross-refs:* `BL-256` is the adjacent snapshot work; `docs/PLAN-M5-campaign.md` Decision 3.
 
 - `BL-521` `[Bug]` **CM04 (C3/M03)'s barrage balloons should already be destroyed at mission start.**
-  *Evidence (re-verified against the code, still open):* `support\c3\m03.gw` switches
-  `bont1..6`/`b_turret1..6` fully OFF (`NodeSetActive off`), not to a destroyed variant, so those are
-  not this mission's balloons; M03's own compiled `mis_anim` carries no other pre-destroyed balloon
-  content, and no `PERSIST_LOG` reader def (`ucamp_dest`/`tower_dest`/…) compiles into this mission.
-  `BL-513`'s general architecture fix (`AnimRuntime.SyncDestructiblePool`, `docs/formats/destructibles.md`
-  "Starting destroyed") landed and would apply here too if the balloons' authored trigger is a
-  `healthy`/`destroyed`/`dbase` role swap, but that trigger was not found in the data. *Fix shape:*
-  find the balloons' actual content at the controls (`--debug-anim` over a CM04 flight, watching what
-  the player sees at open) and trace it from there; the landed fix already covers a role-named swap,
-  a `cargozep1`-shaped ad hoc node set needs its own rule. *⚠ Traps:* `PLAN-c3-balloon-kill-chain.md`
-  settled the balloons' kill chain for C3/M02; that is the live kill path and not this mission's start
-  state, so do not reopen it. *Cross-refs:* `BL-513` (the same mission's destroyed buildings, one
-  shared architecture fix, unfound shared trigger), `BL-348`'s plan.
+  *Evidence (two leads from the sortie log, still open):* at the controls the balloons stand at
+  mission open. The log shows the AI gunners engaging them as live turrets on the first frames
+  (`ai gunner: shooter 100 targets MSG_TUR_DEFENSE_BALLOON@b_turret3 at 1027 m`, then `b_turret5`
+  and `b_turret4`), although `support\c3\m03.gw` switches `bont1..6`/`b_turret1..6` fully OFF
+  (`NodeSetActive off`): either that switch does not reach those nodes' turret registration, or it
+  does not reach the nodes at all, and the balloons the report names are these. Later in the run,
+  `anim: WAIT_FOR_COMPLETION on 'balloon_downa*' had nothing to hold — no live callee instance`:
+  something in M03's running world calls the `balloon_downa*` defs, which live in
+  `data\common\zrdr\turrets\balloon_down.zrd`, a reader def compiled only into M02's `mis_anim`
+  (`bont1-balloon_downa1.json` and siblings) and superseded in M03 by the mission's compiled
+  manifest, so the call reaches nothing. *Fix shape:* first confirm which nodes the `.gw` OFF switch
+  reaches (`mission setup: ... 36 node(s) deactivated`) and whether a deactivated `b_turret*` stays
+  in the turret target pool with its balloon visible; then find the caller of `balloon_downa*` in
+  M03 (a chapter-scope reader def or the turret def itself) and settle whether the original resolves
+  that call against the chapter's reader set where CSVM's manifest supersession drops it.
+  `BL-513`'s pool sync applies once the trigger is a role-named swap. *⚠ Traps:*
+  `PLAN-c3-balloon-kill-chain.md` settled the balloons' kill chain for C3/M02; that is the live kill
+  path and not this mission's start state, so do not reopen it. *Cross-refs:* `BL-513` (the same
+  mission's exploding buildings, the persist-log replay), `BL-348`'s plan,
+  `docs/formats/anim-definitions.md` (the `bont*`/`balloon_t*`/`tether*` state events).
 
 - `BL-522` `[Bug]` **A surface generator's launch does not fly the take-off run it is placed on.**
   *Evidence:* the launch pose is decoded and landed (`docs/formats/mission-entities/enemy-generators.md`
@@ -2385,7 +2423,14 @@ usual.
   on the aircraft record and fly the path, releasing to the patrol net at its last point. *⚠ Traps:*
   the zeppelin launch-altitude gate is a decoded rule for airships and not a general one; do not
   lift the launch by borrowing it, and do not add a spawn-height offset beyond the decoded 0.2 m.
-  Do not give the aircraft a starting speed instead: the zero velocity is decoded.
+  Do not give the aircraft a starting speed instead: the zero velocity is decoded. At the controls,
+  on the landed launch pose, the fighters still die at once: `britpeace_eg0..3` launch in turn at
+  `(-12028,8,-11597)` on the `bauda_aip*` path and each is destroyed on the same frame (`AI ram into
+  sub_doors/col — destroyed outright`, then `sub_runway/col` twice and terrain `g627/col`,
+  `CRASH ... spd=75..78 m/s`), so a launch placed at rest on the deck is killed by the AI ram rule
+  before any take-off run could begin, and the wrecks' crash damage is what destroys the Barracuda
+  with almost no fire from the player (`BL-515`). The take-off run is the fix; while it is unbuilt,
+  a launched aircraft standing on its own host's colliders must not count as a ram.
   *Cross-refs:* `BL-512`, `BL-515`, `BL-527` (CM07's second patrol is a launch off `eag31`/`eag32`,
   so it is re-judged against this), `docs/org/flightModel.md`'s scripted-path follower (CM09's
   ground airfields launch off the same take-off paths, `eag31`/`eag32` in C1/M04).
@@ -2571,6 +2616,42 @@ usual.
   code. Removing evasive maneuvers on damage is a large behavioural change to make on one line of a
   decode page, and the steady-hand roll itself is not in question, only what a failed roll does.
   *Cross-refs:* `BL-556`, `BL-557` (the other two TTK causes), `docs/org/aiControlLaw.md`.
+
+- `BL-568` `[Bug]` **CM04 (C3/M03): the Pandora starts moored in the dry dock instead of flying in
+  over the mission's first minute.** *Evidence:* at the controls the Pandora is already in the dry
+  dock while the cargo zeppelin is still moving out. M03's `NEW_GAME_START` list runs
+  `pzep_todrydock` (`extracted/C3/M03/mis_anim/piratezep-pzep_todrydock.json`, `OnCall`, one
+  `ObjectMotionSiScript` on `piratezep`), whose SI script
+  (`data-c3-m03-zrdr-zeps-pzep_todrydock-piratezep.zan.json`, 185 frames, 0 to 61.65 s) carries the
+  airship from `(-11314,554,-13697)` to `(-12401,150,-10355)`. The zeppelin record in
+  `zeppelins.zrd` seats `piratezep` at `(-12400.9,150.3,-10355.2)`, yaw -180, on net `M3PirateZep`,
+  which is the script's END pose. That reads as: the record seats the airship at its destination
+  and the start anim's script owns the pose from its first frame; CSVM spawns the zeppelin at the
+  record position and the script never takes its pose (or the net follower writes over it), so it
+  stands in the dock from the first frame. *Fix shape:* an `ObjectMotionSiScript` on a zeppelin node
+  owns that zeppelin's pose for the script's duration, starting at frame 0's base, with the net
+  follower parked and resuming from the script's last frame. Check `ZeppelinRuntime`'s placement
+  against the scripted-path snap (`BL-531`'s fix) and the dead-end hold (`BL-529`'s fix) first,
+  since both touched placement; neither should apply to a scripted motion. *⚠ Traps:* do not move
+  the record's position to the path start; the record's seat is data and the script is what flies
+  it. *Cross-refs:* `BL-529`, `docs/org/objectMotion.md`, `docs/formats/anim-definitions.md`.
+
+- `BL-569` `[Bug]` **CM04 (C3/M03)'s opening cutscene does not play: `calldestroy_the_cargozep`'s
+  camera never takes the view.** *Evidence:* at the controls the mission opens in the cockpit with
+  no cutscene. `NEW_GAME_START` runs `calldestroy_the_cargozep`, which calls
+  `destroy_the_cargozep` (the cargo zeppelin's scripted destruction, with `snd_IntrosceneHAch4`)
+  and `cgzep_camera` (`player-cgzep_camera.json`, `OnCall`, objects `player`, `cockpit1`,
+  `camera1`: a cutscene camera over the player's aircraft). The sortie log has no cutscene line for
+  this mission, and `one-shot SOUND 'snd_IntrosceneHAch4' positioned by out-of-tree ancestor
+  composition ... (world root not parented at bootstrap)` says the chain fired during bootstrap,
+  before the world was in the tree, rather than as the mission's opening scene. `generic_intro` is
+  not in M03's start list, so the cutscene path `BL-548` and the trigger latch (`BL-566`) exercise
+  is never entered here. *Fix shape:* settle how the original runs a `camera1`-object cutscene
+  called from a start anim (the registration sites `docs/formats/anim-definitions/cutscenes.md`
+  lists) and route `cgzep_camera` through the cutscene runner with the world held, so the player
+  watches the cargo zeppelin go down and the skip works. *⚠ Traps:* the destruction itself already
+  runs (fireballs, `tntbox`/`gasbag` deactivation); do not run it a second time under the camera.
+  *Cross-refs:* `BL-548`, `BL-566`, `docs/formats/anim-definitions/cutscenes.md`.
 
 ## Tooling, platform & docs
 
