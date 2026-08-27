@@ -138,6 +138,7 @@ internal static class PufferSuites
             SpeedCueBands(ctx, speedCueState, speedCue2, speedCue3);
             SpeedCueChapterVariants(ctx);
             PufferStillSputter(ctx, trailState);
+            PufferUnauthoredCadence(ctx);
             PufferStaticBurn(ctx, trailState);
             PufferStopRevive(ctx, trailState);
             PufferTeleportGuard(ctx, trailState);
@@ -1029,6 +1030,52 @@ internal static class PufferSuites
                 $"a still host sputters on the 0.1 s time cadence, ~11 batches in 1 s shown={gpu.Shown}");
             ctx.Check(gpu.LastFrame.All(p => p.Position.DistanceTo(p0) < 3f),
                 $"the sputter stays at the held point");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // A state that authors no interval at all — the compiled shape carries a zero the engine's own
+    // setter refuses — emits at the constructor's 1 s. Reading that zero as a cadence instead puts
+    // the emitter on its 1 ms emission floor, which fills the particle pool and holds it full; the
+    // install's five such events are texture-less stubs that build nothing, so this suite is the
+    // only place it is visible. Count over time, never one frame (verification.md SHOT-19).
+    internal static void PufferUnauthoredCadence(TestContext ctx)
+    {
+        var state = PufferState.FromAnimEvent(new AnimData(new Dictionary<string, object?>
+        {
+            ["name"] = "truck1dust_puffer",
+            ["lifetime_range"] = new Dictionary<string, object?> { ["min"] = 4f, ["max"] = 4f },
+            ["interval_garbage"] = new Dictionary<string, object?>
+            {
+                ["interval_type"] = "Time",
+                ["interval_value"] = 0f,
+                ["has_interval_value"] = false,
+                ["has_interval_type"] = false,
+            },
+        }));
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            var p0 = new Vector3(0f, 500f, 0f);
+            const float dt = 1f / 60f;
+            var series = new List<int>();
+            for (int second = 0; second < 3; second++)
+            {
+                for (int i = 0; i < 60; i++)
+                {
+                    puffer.Emit(p0, Basis.Identity, dt);
+                    puffer._Process(dt);
+                }
+                series.Add(gpu.Shown);
+            }
+            ctx.Note($"unauthored TIME_INTERVAL, live sprites after 1/2/3 s: {string.Join("/", series)}");
+            ctx.Check(series[0] == 1 && series[1] == 2 && series[2] == 3,
+                $"an unauthored state emits once a second, not on the emission floor — {string.Join("/", series)}");
         }
         finally
         {

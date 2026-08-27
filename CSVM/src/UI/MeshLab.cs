@@ -419,29 +419,6 @@ public sealed partial class MeshLab : Node
     private static Color ColorFor(string part) =>
         PartColors.TryGetValue(part, out var c) ? c : new Color(0.7f, 0.7f, 0.7f);
 
-    private static void EmitBox(ImmediateMesh im, Transform3D xf, Vector3 size, Color col)
-    {
-        var h = size * 0.5f;
-        Span<Vector3> corners = stackalloc Vector3[8];
-        for (int i = 0; i < 8; i++)
-            corners[i] = xf * new Vector3(
-                (i & 1) == 0 ? -h.X : h.X,
-                (i & 2) == 0 ? -h.Y : h.Y,
-                (i & 4) == 0 ? -h.Z : h.Z);
-        ReadOnlySpan<int> pairs = stackalloc int[]
-        {
-            0,1, 2,3, 4,5, 6,7,   // x
-            0,2, 1,3, 4,6, 5,7,   // y
-            0,4, 1,5, 2,6, 3,7,   // z
-        };
-        im.SurfaceSetColor(col);
-        for (int i = 0; i < pairs.Length; i += 2)
-        {
-            im.SurfaceAddVertex(corners[pairs[i]]);
-            im.SurfaceAddVertex(corners[pairs[i + 1]]);
-        }
-    }
-
     // ---- render overrides ----------------------------------------------------------------
 
     private static string CullToken(BaseMaterial3D.CullModeEnum cull) => cull switch
@@ -947,28 +924,16 @@ public sealed partial class MeshLab : Node
         im.SurfaceBegin(Mesh.PrimitiveType.Lines);
         foreach (var part in _collider.Parts)
         {
-            var size = part.Shape.Size;
-            var centre = part.Local.Origin;
-            // A wing slab straddling the centreline maps to leftwing OR rightwing depending on
-            // where it is struck, so a single colour would be a lie. Split it at x=0 and draw
-            // each half in its own part colour — the ambiguity becomes visible instead.
-            bool straddles = (part.Name is "wing" or "canard")
-                             && Mathf.Abs(centre.X) < size.X * 0.5f;
-            if (!straddles)
+            // A wing hull straddling the centreline maps to leftwing OR rightwing depending on
+            // where it is struck, so a single colour would be a lie: each edge takes the colour
+            // of the part its own midpoint maps to, and the ambiguity becomes visible instead.
+            foreach (var (a, b) in part.Hull.Edges)
             {
-                var name = PlaneDamage.MapStruckPart(part.Name, centre);
-                EmitBox(im, part.Local, size, ColorFor(name));
-                continue;
-            }
-            for (int side = 0; side < 2; side++)
-            {
-                float lo = side == 0 ? centre.X - size.X * 0.5f : 0f;
-                float hi = side == 0 ? 0f : centre.X + size.X * 0.5f;
-                var half = new Vector3(hi - lo, size.Y, size.Z);
-                var xf = part.Local;
-                xf.Origin = new Vector3((lo + hi) * 0.5f, centre.Y, centre.Z);
-                var probe = new Vector3(side == 0 ? -1f : 1f, centre.Y, centre.Z);
-                EmitBox(im, xf, half, ColorFor(PlaneDamage.MapStruckPart(part.Name, probe)));
+                var pa = part.Local * part.Hull.Points[a];
+                var pb = part.Local * part.Hull.Points[b];
+                im.SurfaceSetColor(ColorFor(PlaneDamage.MapStruckPart(part.Name, (pa + pb) * 0.5f)));
+                im.SurfaceAddVertex(pa);
+                im.SurfaceAddVertex(pb);
             }
         }
         im.SurfaceEnd();

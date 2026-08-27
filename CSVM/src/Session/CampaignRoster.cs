@@ -282,6 +282,55 @@ public sealed class CampaignRosterPlan
             Nitro: plan.Nitro, RosterSkills: plan.Skills, NodeName: plan.Name,
             PilotName: plan.Title);
 
+    /// <summary>The generator parameter blocks of one mission, keyed by the
+    /// <c>vehicle.params</c> label a generator names. Mission data, so a launch resolves its block
+    /// whether or not a campaign profile is flying: without this the generated aircraft falls back
+    /// to a CLI airframe and carries none of the block's fields.</summary>
+    public static Dictionary<string, RosterSpawnPlan> GeneratorTemplates(
+        string missionZrdrPath, VehicleDefs defs, IReadOnlyList<AiNet> nets)
+    {
+        var templates = new Dictionary<string, RosterSpawnPlan>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (parameter, name, fields) in AiSkills.LoadGeneratorRoster(missionZrdrPath))
+        {
+            if (BuildGeneratorTemplate(name, fields, defs, nets) is { } plan)
+            {
+                templates[parameter] = plan;
+            }
+        }
+        return templates;
+    }
+
+    /// <summary>Writes the plan's remaining pilot slots onto a spawned pilot: the volumes
+    /// (slots 8 to 19) under the <paramref name="minAiActiveDist"/> floor, the signature
+    /// maneuvers (slot 32), the gunner's rating biases (slot 33) and its assignment (slot 6).
+    /// Called after the spawn, because the assembler is what arms the machine and the gunner.
+    /// ⚠ An escorting block's <c>primary_target</c> names its leader rather than a target, so the
+    /// gunner keeps its own ranking there and the caller's leader pass wires the escort.</summary>
+    public static void ApplyPlan(AiPilot pilot, RosterSpawnPlan plan, float minAiActiveDist)
+    {
+        ArgumentNullException.ThrowIfNull(pilot);
+        ArgumentNullException.ThrowIfNull(plan);
+        if (pilot.Machine is { } machine)
+        {
+            ApplyVolumes(machine, plan.Volumes, minAiActiveDist);
+            if (plan.SignatureMask != 0)
+            {
+                machine.SignatureManeuvers = Maneuvers.SignatureNames(plan.SignatureMask);
+            }
+        }
+        if (pilot.Gunner is { } gunner)
+        {
+            if (plan.Biases.Count > 0)
+            {
+                gunner.RatingBiases = plan.Biases;
+            }
+            if (!plan.Escorts)
+            {
+                gunner.PrimaryTargetName = plan.LeaderName;
+            }
+        }
+    }
+
     /// <summary>The formation leader a plan's <see cref="RosterSpawnPlan.LeaderName"/> names,
     /// out of the spawned rigs: the literal <c>player</c> is the first human, anything else a
     /// spawned block by name. Null when unset or not spawned (a dead leader is the pilot's own

@@ -114,6 +114,26 @@ public sealed class ClutterKindProps
     /// thing a reader over authored data must never do quietly is skip a key.</summary>
     public IReadOnlyList<string> UnknownKeys { get; init; } = Array.Empty<string>();
 
+    /// <summary>One stamp's fade thresholds as the engine stores them on the placed node:
+    /// <c>(near², far², 1 / (far² − near²))</c>, with both distances lerped between the min and
+    /// max pairs by the ONE draw <paramref name="t"/>. All zero when <c>farMax</c> is 0, the
+    /// engine's never-fades sentinel, and the reciprocal is 0 when the two distances coincide.</summary>
+    public static Vector3 FadeThresholds(Vector2 min, Vector2 max, float t)
+    {
+        if (max.Y == 0f)
+        {
+            return Vector3.Zero;
+        }
+        float near = min.X + ((max.X - min.X) * t);
+        float far = min.Y + ((max.Y - min.Y) * t);
+        float nearSq = near * near, farSq = far * far;
+        float span = farSq - nearSq;
+        return new Vector3(nearSq, farSq, span != 0f ? 1f / span : 0f);
+    }
+
+    /// <inheritdoc cref="FadeThresholds(Vector2, Vector2, float)"/>
+    public Vector3 FadeThresholds(float t) => FadeThresholds(FarFadeMin, FarFadeMax, t);
+
     /// <summary>Whether the block authored this key at all, at any value.</summary>
     public bool Authors(string key)
     {

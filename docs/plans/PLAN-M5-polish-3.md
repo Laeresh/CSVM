@@ -1,10 +1,6 @@
 # Milestone 5 polish, run 3: the frames the effects runtime drops
 
-**ACTIVE PLAN** (written 2026-08-27). It sits in `docs/`, which by this repo's convention makes it a
-live plan. **It is queued behind [`PLAN-M5-polish-2.md`](PLAN-M5-polish-2.md), which is the plan
-PROJECT_CONTEXT.md's "Current status" names and keeps naming until it archives.** Move this file to
-`docs/plans/` with a `COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every
-item lands.
+**COMPLETE.** All eleven items landed. Two pre-warms removed the first-use construction cost from the crash rig and the world-effects stage (`BL-355`, `BL-418`), the authored clutter fade landed with its detail scale and a disproof of the plan's own row 9 (`BL-337`), the puffer interval split (`BL-336`), the stopped-sequence rule landed on the strength of two real hits rather than the decode alone (`BL-334`), convex hulls replaced the collision boxes (`BL-300`), and the two flight-model features (`BL-450`, `BL-453`) plus the pool re-judgement (`BL-231`) and the density verdict (`BL-218`) closed at the controls. The sortie surfaced and fixed the periodic gen1 stall (`BL-536`) and the off-screen perf readout; `BL-535`, `BL-537` and `BL-538` are the items it minted.
 
 This is the third polish run over Milestone 5, weighted **frame-time and hitches first** by user
 decision. The backlog's true hitch cluster is three items (`BL-355`, `BL-418`, `BL-231`), so the run
@@ -76,7 +72,7 @@ a different item first.
 | 6 | The puffer `NUMBER` default is too low, leaving unnumbered emitters thin (`BL-218`). | Withdrawn. The puffer ctor `FUN_00550100` writes `1` to `+0x04` before any authored key applies, so our 1 is the original's. The sibling `large_10sec_fire`'s `NUMBER 3` is that puffer's own authored value and was never evidence about the unauthored case. **Do not raise the fallback.** |
 | 7 | `BL-336` is one constant swapped from `0.1` to `1.0`. | The same `0.1` does double duty at `Puffer.cs:174` as the synthetic still-host sputter cadence handed to every DISTANCE state, which is our own invention for a mode the engine does not have. Moving that one would make every static building's sputter ten times slower. |
 | 8 | A build-time CLI preset can be used to verify a hitch fix. | `docs/verification.md` PERF-14: a preset can never trip `HitchMonitor`. `--crash=300` under `--no-vsync` is the live, scriptable event that does. |
-| 9 | `far_fade_range`'s authored metres are literal distances (`BL-337`). | They are a base scaled by the graphics detail level: `FUN_00440750` writes 1.0/4.0/9.0 to `_DAT_0062d170` for levels 0/1/2, so fade distance scales ×1/×2/×3, before any per-mission script override. |
+| 9 | `far_fade_range`'s authored metres scale UP with the graphics detail level, ×1/×2/×3 (`BL-337`, and this table's own first draft). | Backwards. `FUN_00440750` does write 1.0/4.0/9.0 to `_DAT_0062d170` for levels 0/1/2, but `FUN_0043f6d0`'s word table maps HIGH/MEDIUM/LOW to 0/1/2, and the consumer `FUN_004d5de0` multiplies the scale into the SQUARED CAMERA DISTANCE before comparing it with the node's near²/far². So HIGH leaves the authored metres literal and MEDIUM/LOW cull at 1/2 and 1/3 of them. `detail.zrd` selects HIGH on any CPU over 600 MHz. |
 | 10 | Nothing in CSVM renders a `far_fade_range` (`BL-337`'s "read but not applied"). | Half wrong, and this is the shape to copy rather than a gap to invent: `FogVolumeClutter.cs:263-274` declares a `far_fade` uniform with a `smoothstep` alpha and a `step` cull, fed at `:533` from the fog-volume block. It is the **templates** clutter path that stores the pair (`ClutterTemplates.cs:45,51,282-283`) and ignores it. |
 
 | Confidence | Items | What that means for you |
@@ -114,23 +110,23 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — first-use construction, the named mechanism
 
-1. ☐ Pre-warm the crash and damage-stage emitter keys (`BL-355`)
-2. ☐ Pre-warm the sonic burst's nine puffer keys at stage build (`BL-418`)
-3. ☐ Re-judge `effect_pools.json` against a build with no first-use cost (`BL-231`)
+1. ☑ Pre-warm the crash and damage-stage emitter keys (`BL-355`)
+2. ☑ Pre-warm the sonic burst's nine puffer keys at stage build (`BL-418`)
+3. ☑ Re-judge `effect_pools.json` against a build with no first-use cost (`BL-231`)
 
 ### Wave B — the per-frame cost the data authors and we ignore
 
-4. ☐ Apply `far_fade_range` on the templates clutter path, with its detail scale (`BL-337`)
-5. ☐ An unauthored puffer `TIME_INTERVAL` is `1.0` s, not our `0.1` (`BL-336`)
-6. ☐ Judge puffer density at the controls now the fire's shape is right (`BL-218`)
+4. ☑ Apply `far_fade_range` on the templates clutter path, with its detail scale (`BL-337`)
+5. ☑ An unauthored puffer `TIME_INTERVAL` is `1.0` s, not our `0.1` (`BL-336`)
+6. ☑ Judge puffer density at the controls now the fire's shape is right (`BL-218`)
 
 ### Wave C — the same runtime's correctness, and the two cheap features
 
-7. ☐ A stopped sequence stays callable; instrument before implementing (`BL-334`)
-8. ☐ Tighter aircraft collision shapes, convex hulls per clipped region (`BL-300`)
-9. ☐ Fuel burn and the empty-tank lever freeze (`BL-450`)
-10. ☐ The mission spawner does not read roster blocks (`BL-453`)
-11. ☐ The flown session: the hitch sortie and the two density judgements
+7. ☑ A stopped sequence stays callable; instrument before implementing (`BL-334`)
+8. ☑ Tighter aircraft collision shapes, convex hulls per clipped region (`BL-300`)
+9. ☑ Fuel burn and the empty-tank lever freeze (`BL-450`)
+10. ☑ The mission spawner does not read roster blocks (`BL-453`)
+11. ☑ The flown session: the hitch sortie and the two density judgements
 
 ## Dependency and parallelism notes
 
@@ -161,7 +157,7 @@ controls.
 
 # Wave A — first-use construction, the named mechanism
 
-## A1 ☐ Pre-warm the crash and damage-stage emitter keys
+## A1 ☑ Pre-warm the crash and damage-stage emitter keys
 
 **Goal.** A crash, and a sweep through the `DamageLab` panel, play their effects without building
 emitters or materials in the frame that needs them, so neither trips `HitchMonitor`.
@@ -211,7 +207,25 @@ dropping records under a hitch storm) is already fixed in `73512b47`; do not re-
 
 *Cross-refs:* `PLAN-perf-hitches` G15/G16, `docs/verification.md` PERF-14.
 
-## A2 ☐ Pre-warm the sonic burst's nine puffer keys at stage build
+**Verified.** On the merged plan tree: `RunTests.ps1` PASS, 2437 units, 135 engine suites, 16 goldens hash-identical, engine errors clean, exit 0.
+
+**Landed.** The seam is `AnimRuntime.PrewarmEmitters(params Node3D[] callSiteAnchors)`, called
+once after `Bind` by `WorldEffectsFactory.BuildFlightCrashRuntime` with the plane model and the
+crash root as the anchors its callers play on. It walks the bound program's `PUFFER_STATE 1` events
+and hands `EmitterDirector.Prewarm` one `(name, host, def)` per host: a named `at_node` resolves to
+every node of that name in the runtime's scope (one per pool copy), and an `INPUT_NODE` host to
+every node a `CALL_ANIMATION` targets the def with, the def's own staged copies, and the anchors
+handed in, since the crash's `lgpuffer on piece1` and the tear's `trailpuffer2` on the airframe are
+both that shape. A pre-built emitter is unclaimed until the first `Assert` takes it over, and
+`EmitterDirector.Reset` now keeps emitters across a respawn. The cost was measured before it was
+accepted: 217 emitters on the Bloodhawk took 2.3 s, of which a `Shader` compiled per emitter and an
+atlas baked per emitter were 1.9 s, so `EmitterRenderer.Attach` caches the four shader variants and
+`Puffer.BuildAtlas` caches per archive and frame list; the same pre-warm then takes 44 ms, and every
+remaining live miss is cheaper by the same two terms. A2 calls the same method on the world-effects
+runtime after its `Bind`, with no anchors (its callers place copies, so the staged-copy term covers
+the `INPUT_NODE` hosts). Regression: the `emitter-prewarm` suite.
+
+## A2 ☑ Pre-warm the sonic burst's nine puffer keys at stage build
 
 **Goal.** The first sonic burst finds every emitter it needs already built, so the first plays cost
 what the fifth does.
@@ -248,7 +262,30 @@ finding is that a pooled copy starts from whatever END pose its last run left, a
 what fixes that. Building an emitter is not the same as playing it, and the `effect-pool-reset` suite
 is the guard. ⚠ See ⚠ rows 4 and 5.
 
-## A3 ☐ Re-judge `effect_pools.json` against a build with no first-use cost
+**Verified.** On the merged plan tree: `RunTests.ps1` PASS, 2437 units, 135 engine suites, 16 goldens hash-identical, engine errors clean, exit 0.
+
+**Landed.** `BuildWorldEffectsRuntime` calls `AnimRuntime.PrewarmEmitters()` with no anchors right
+after its `Bind`, recorded under the `emitters` startup phase and logged: 455 emitters in about
+65 ms at one player in C1, cheap enough that restricting the pre-warm below the bound
+`WorldEffectAnimNames` subset would buy nothing. A1's seam needed one correction to reach the
+sonic keys at all. Its named-`at_node` branch filtered candidate hosts through `StagingAdmits` with
+no scope, and that rule rejects precisely the staged copies a placing `CALL_ANIMATION` retargets a
+def into: `sonic_emit1` exists in each pool slot both under `sonic_puff1`'s own copy and under the
+caller `sonic_effect`'s, the pre-warm took only the first, and every burst then built the second.
+The branch now takes every node of the name, since over-counting costs one idle emitter and
+under-counting costs the frame the pre-warm exists to save. The `emitter-prewarm` suite gained the
+world-effects arm that proves it, and that arm fails on the unfixed branch, naming eight of the nine
+puffers. The item's own premise did not survive re-measurement: with A1's shader and atlas caches in
+the tree the weapon-lab probe no longer trips `HitchMonitor` at all, before or after, so the
+130 to 290 ms baseline is gone and the gain here is that the builds no longer happen rather than a
+frame time recovered. Lowering `hitchMonitor.floorMs` to 12 to make the probe able to fail leaves
+two `effect_checkout` trips of 10 to 12 ms, unchanged in count and size across the fix, so ⚠ the
+`effect_checkout` cost this item's trap provisionally claimed is now measured NOT to be emitter
+construction; it belongs with the pool work in A3. Six goldens move on puffer seed order alone
+(`c1-flight`, `c1-destroy-effects`, `c1-crash`, `c1-debris-rest`, `c1-targeting-hud`,
+`c1-ai-wreck`), each the same effect at the same place in a different random phase.
+
+## A3 ☑ Re-judge `effect_pools.json` against a build with no first-use cost
 
 **Goal.** The shipped pool sizes are judged where concurrency is actually highest, on a build where a
 `PoolRecycles` count means overlapping calls rather than unbuilt keys.
@@ -286,11 +323,74 @@ gun-impact roots stay at **1** deliberately, because C8 throttles the gun family
 per name; raising them belongs with removing that throttle, as its own step with its own emitter-count
 check. ⚠ Sizing a root **0** does not disable pooling, it clamps to 1.
 
+**Measured.** All runs are on this branch, so A1's and A2's pre-warms are in the build and a recycle
+means overlapping calls rather than an unbuilt key. The shipped reading is three lines: the
+world-effects build line on stdout, `world effects: pre-warmed N emitter(s) in M ms`, and the
+per-effect wrap line `anim: effect pool for '<anim>' recycled slot N of M`, which is DEBUG and
+therefore lands in `.scratch/logs/<mode>-*.log` rather than on the console. The wrap line names the
+ANIM, so the root it sizes is the first half of that anim's `extracted/C1/cam_anim/<root>-<anim>.json`
+filename: `large_fireball` is `flame_ball_01`, `small_fireball` is `flame_ball_02`,
+`great_balls_of_fire` is `moving_fire_ball_01`, `small_yellow_sparks` is `yellow_spark_01`, and both
+`sputter_*_obj` are `partial_damage_obj`. Only the first wrap per anim is logged, so the instrument
+reports which roots wrap and at what depth, never a per-root total.
+
+Build cost, from the world-effects line and the pre-warm line, at the sizes this item leaves:
+1 player stages **155** templates over **8** slots and pre-warms **459** emitters in **63 to 67 ms**;
+4 players stage **263** over **11** and pre-warm **783** in **104 ms**. Before the one raise below
+those were 151/8/455/67 ms and 259/11/779/107 ms, so the raise costs **4 more template copies at
+1 player and 4 at 4 players**, with the slot depth and the pre-warm time unmoved.
+
+The rocket case does not wrap. `RunProbe.ps1 --chapter=C1 --weapon-lab=wep_06 --weapon-fire
+--infinite-ammo --weapon-target=-5314,162,-6642 --weapon-standoff=70 --screenshot=… --frames=900`
+puts twelve `BOOM` rockets into C1's twelve-crate yard over 15 s and logs no recycle, which is the
+`FIRE_RATE` 1/s against ~2.5 s of trail motion the default's `why` line already claims. The
+4-player case does not wrap on ordnance either: `--fly --chapter=C1 --players=4 --infinite-ammo
+--fire --fire-rockets --screenshot=… --frames=900` fires 48 rockets and four gun groups with no
+recycle, and the per-player term is not what the wraps depend on.
+
+What wraps is a simultaneous multi-object DEATH, reached with `--freecam --chapter=C1
+--destroy=<substring> --screenshot=… --frames=300`, which kills every match in the build frame.
+`--destroy=m_build01` (1 object) and `--destroy=s_build` (2) are clean. `--destroy=pass_plane` (4)
+wraps `flame_ball_01` alone. `--destroy=m_build` (7) wraps `flame_ball_01`, `flame_ball_02` and
+`partial_damage_obj`. `--destroy=crate` (12) wraps `flame_ball_02`. `--destroy=0` (the 64-object
+cap) adds `moving_fire_ball_01` and `yellow_spark_01`. The same list wraps at 4 players against the
+larger pools (`slot 0 of 7`, `slot 0 of 11`), because a cluster kill is one player's event and the
+per-player term does not reach it. A sizing sweep says how deep the demand is: at base 16 on all
+five roots the 4-object case is silent, the 12-object case is silent, but the 7-object case still
+wraps `flame_ball_01` and `flame_ball_02` at `slot 5 of 16`, so seven identical buildings dying in
+one frame want more than `maxSlots` allows and cannot be sized away. Each such death calls
+`large_fireball` about three times, which is why four objects already exhaust four slots.
+
+Landed from that: **`flame_ball_01` raised to base 8, +1 per extra player**, the only root that wraps
+at the smallest case measured. It wraps at 4 and at 6 slots on `--destroy=pass_plane` and is silent
+at 8. Nothing else moved. The three gun roots stay at 1, the default stays at 4 +1, and
+`maxSlots` stays 16.
+
+The sonic burst's residual `effect_checkout` cost is characterised and is **not** a pool-size
+matter. Under `--det` the A2 probe (`--chapter=C1 --weapon-lab=wep_08 --weapon-fire
+--infinite-ammo --weapon-surface=default --weapon-standoff=90 --screenshot=… --frames=600`) fires
+eleven bursts, logs no recycle and trips `HitchMonitor` never. Making the probe able to fail needs
+BOTH `hitchMonitor.floorMs` and `hitchMonitor.medianMultiple` lowered, since the trigger is the
+larger of the floor and median × multiple and the stock multiple of 4 sits at ~33 ms over an 8.3 ms
+baseline; with `floorMs: 10` and `medianMultiple: 1.2` in `CSVM/config.json` and `--no-det
+--no-vsync --seed=1 --no-pads --frames=1200`, the sidecar records one `effect_checkout` sample per
+burst. The first two cost **0.6 ms**; every burst from the third on costs **10.2 to 13.9 ms**, one
+call each, and the step is in the cost of **re-resetting a slot copy that has run before**, not in a
+wrap: it lands on the third burst, while `sonic_ground_effect`'s pool (root `sonic_effect`, 4 slots)
+cannot recycle before the fifth, and raising that root cannot remove a cost every checkout pays.
+`ResetCheckedOutCopies`
+is the work inside that scope, so a ~12 ms recurring per-burst reset is its own item rather than a
+number in this file.
+
+**Verified.** On the merged plan tree: `RunTests.ps1` PASS, 2437 units, 135 engine suites, 16 goldens hash-identical, engine errors clean, exit 0.
+
+**At the controls.** A rocket into the crate yard and the parked `pass_plane` row: every fireball burns out in place, and four at once does not read as too much fire. A strafed row of identical buildings, seven or more dying together: the wrap that remains at the 16 ceiling is not visible under the debris. The ceiling stays at 16. The 4-player splitscreen half is owed as `BL-537`; `BL-231` is closed.
+
 ---
 
 # Wave B — the per-frame cost the data authors and we ignore
 
-## B4 ☐ Apply `far_fade_range` on the templates clutter path, with its detail scale
+## B4 ☑ Apply `far_fade_range` on the templates clutter path, with its detail scale
 
 **Goal.** Distant templates clutter fades and stops drawing at the distance its own block authors,
 scaled by the graphics detail level, instead of being drawn all the way out.
@@ -333,7 +433,34 @@ ignore differences below measured noise and an absolute floor; PERF-9: two uncha
 before the A/B. ⚠ Do not re-derive the fade from `FogVolumes.cs`'s `FarFadeNear`/`FarFade` fields;
 those are the fog-volume blocks' own pair on a different reader.
 
-## B5 ☐ An unauthored puffer `TIME_INTERVAL` is `1.0` s, not our `0.1`
+**Verified.** On the merged plan tree: `RunTests.ps1` PASS, 2437 units, 135 engine suites, 16 goldens hash-identical, engine errors clean, exit 0.
+
+**Landed.** Every templates-clutter stamp now carries its own `(near², far², 1/(far² − near²))` as
+MultiMesh custom data, drawn once per stamp from the source kind's min and max pairs
+(`ClutterKindProps.FadeThresholds`), and both clutter shaders (the sprite card, and a `clutterFade`
+variant of `SceneBuilder`'s bias shader for the solid city blocks) apply the engine's own test:
+`csky_clutter_fade_scale_sq × distance²` against the stored squares, opaque inside near, collapsed
+to a point past far, a ramp linear in squared distance between, dithered in the cutout pass rather
+than alpha-blended. The scale is a global registered once by `Launcher` from the new
+`CSVM.Utils.EffectsLevel` (`graphics.effectsLevel` config key, `high`/`medium`/`low`, default
+`high`, the level `detail.zrd` selects on any CPU over 600 MHz). ⚠ row 9's direction was backwards
+and is corrected in the table: the scale multiplies the distance, so HIGH is literal and lower
+levels shorten the fade. `MapEdgeExtender` mirrors each stamp's thresholds into its extension cells;
+its 5-ring window (5120 m) exceeds the largest authored far (2000 m) at every level, so nothing pops
+at the window edge. The item's frame-time premise did not survive measurement: at the `c5-city`
+perf pose the draw, primitive and node counts are identical before and after (a vertex-stage cull
+changes nothing that is submitted) and `gpu_ms` sits inside PERF-5's floor, so this is a fidelity
+change with no measurable cost either way. The look it produces at HIGH is drastic by construction,
+C5's blocks end 300 to 450 m out under fog that starts at 1500 m, and is owed a check against the
+original's C5 footage (`CAP-22`) at the controls. Eleven goldens moved (every world shot that frames
+clutter) and are re-pinned in the landing commit.
+
+**At the controls.** The dithered ramp reads as the original's fade, so the default stays HIGH with
+the fade on; the `graphics.clutterFarFade` switch (bool, default `true`, resolving the same global
+to a never-fades scale of 0) exists for the user who reads the fade as a 1999 performance measure
+and wants the remake to draw clutter out to the fog.
+
+## B5 ☑ An unauthored puffer `TIME_INTERVAL` is `1.0` s, not our `0.1`
 
 **Goal.** A puffer state that does not author `TIME_INTERVAL` emits once a second, as the original's
 constructor sets it, instead of ten times a second.
@@ -369,7 +496,27 @@ defined reader puffer that reaches the sustained path authors its own `TIME_INTE
 is only reached by states that do not, but those states include the DISTANCE fallback if the split is
 botched.
 
-## B6 ☐ Judge puffer density at the controls now the fire's shape is right
+**Verified.** On the merged plan tree: `RunTests.ps1` PASS, 2437 units, 135 engine suites, 16 goldens hash-identical, engine errors clean, exit 0.
+
+**Landed.** The decode holds and is now named in code: the ctor `FUN_00550100` writes `0x3f800000`
+to `+0x40` and `+0x44`, and the applier `FUN_004e7e40` reaches the interval only under flag mask
+`0x180`, through `FUN_00550460`, which additionally refuses a zero and leaves the ctor's value
+standing. `PufferState` carries the two numbers as separate constants, `TimeIntervalDefault` (1 s,
+the ctor's) and `StillHostSputterInterval` (0.1 s, ours, for a DISTANCE state whose host holds
+still), and each parser picks between them rather than sharing one literal. The split is wider than
+⚠ row 7 said: the reader path's default is reached ONLY by distance states, since all 146 reader
+blocks that omit `TIME_INTERVAL` author `DISTANCE_INTERVAL`, so an unconditional swap there would
+have slowed every static sputter and changed nothing else. On the compiled path "unauthored" is not
+an absent key but a **zero** in the garbage interval field (893 events, 5 of them `ACTIVE_STATE 1`),
+which our fallback never saw, so those states ran at the emitter's 1 ms floor rather than at 0.1 s.
+`AnimDefs.AddPufferState` now carries `DISTANCE_INTERVAL` into the compiled shape as well, which it
+had been dropping; without it a reader-scope trail puffer had no interval at all and would have
+taken the new 1 s default. Live effect on the shipped install: none, because all five zero-interval
+active events are texture-less stubs that build no emitter, and no reader block reaches the ctor
+default. Regression: `PufferTimeIntervalTests` over both parsers and a `puffer-modes` arm that reads
+the live sprite count over 3 s, 1/2/3 against the 1000/2000/3000 the floor produced.
+
+## B6 ☑ Judge puffer density at the controls now the fire's shape is right
 
 **Goal.** The destruction fires, the damage-stage sputters and the wreck smoke read at the right
 density, judged as a moving effect rather than a still.
@@ -398,11 +545,15 @@ over a time series, never from a single `--screenshot`. ⚠ Do not infer the def
 readers: the `NUMBER`-carrying states are a biased sample, because `PufferState.FindInReader` treats
 the presence of `NUMBER` as what makes a state fully defined.
 
+**At the controls.** Flown after B5: the destruction fires, the damage-stage sputters and the wreck smoke read at the right density as moving effects. No sprite problem named, so no new entry; `BL-218` is closed and the `NUMBER` fallback stays at the constructor's 1.
+
+**Verified.** The user's report from the C11 sortie.
+
 ---
 
 # Wave C — the same runtime's correctness, and the two cheap features
 
-## C7 ☐ A stopped sequence stays callable; instrument before implementing
+## C7 ☑ A stopped sequence stays callable; instrument before implementing
 
 **Goal.** Either the runtime is shown to reach a call on an already-stopped sequence, and the
 per-instance disable lands, or it is shown not to, and the divergence stays documented as a disproof.
@@ -434,7 +585,23 @@ wrongly left disabled fails *silently*, which is the hardest class of bug to att
 is on `PLAYER_LINED_UP`); do not reopen it. ⚠ `98948b25` already removed the stopper idiom itself, so
 "a stop starts a parked sequence" is fixed and is not this.
 
-## C8 ☐ Tighter aircraft collision shapes, convex hulls per clipped region
+**Verified.** On the merged plan tree: `RunTests.ps1` PASS, 2437 units, 135 engine suites, 16 goldens hash-identical, engine errors clean, exit 0.
+
+**Landed.** The instrument ran first, as an `anim: CALL_SEQUENCE … revives` log line on
+`AnimInstance.CallSequence`, over the 8-chapter `--freecam` sweep (900 sim frames each), seven
+`--destroy=` probes (`m_build01`, `ftank01`, `g_tower1`, `bhf_heliumtank1`, `yacht1`, `sailboat1`,
+`unit01`), two `--crash` probes and thirteen effect suites. It hit twice, both in the `damage-hd`
+suite's C1 world: `car_loop1_start` calling `car_dust1` and `car_go_home_start` calling `car_dust`.
+The shape is a lap loop that CALLs the dust sequence, STOPs it later in the lap and LOOPs, so
+every lap after the first calls a DONE sequence; a static census over `extracted/` finds exactly
+four such definitions (those two plus `hauler1_start`/`black_exhaust` and `truck1_start`/
+`truck1_dust`, all C1 `ON_STARTUP` vehicles), and the other 119 of the 123 call-and-stop
+definitions stop after their last call. The disable now lands as a per-instance stopped set in
+`AnimInstance`, consulted by `CallSequence`, with `RefusedStoppedCalls` and a once-per-sequence
+`anim: CALL_SEQUENCE … refused` line as the kept instrument; the `stop-sequence` suite gained a
+`car_loop1_start` arm (five laps, one run of `car_dust1`) and `SequenceRunnerTests` a unit test.
+
+## C8 ☑ Tighter aircraft collision shapes, convex hulls per clipped region
 
 **Goal.** An aircraft's collision shape follows its silhouette closely enough that a close stunt pass
 does not read as a terrain crash, and that being shot is fair.
@@ -455,9 +622,13 @@ the result (see its `docs/architecture.md` ⚠), and `MapStruckPart` consumes th
 **Model recommendation.** high. It changes both the terrain sweep and the damage mapping at once, and
 the overlap rule at `:16` means the ordering semantics have to survive the shape change.
 
-**Verify.** <TODO: name the suite arm. The sweep did not settle whether an existing collision or
-damage suite can assert per-part hull coverage headless, or whether this needs a new arm measuring
-overhang against the mesh.> The close-stunt half is judged in C11.
+**Verify.** No existing suite measures the shapes against the mesh (`air-to-air` and
+`graze-bounce` fire through and sweep the shapes, but assert damage and bounce outcomes), so a new
+arm does: `airframe-hull-coverage` builds all eleven player airframes headless and measures
+`PlaneCollider.Layout` against each one's own triangles, per part (hull inside its box, above the
+thickness floor, the part names and order, the silhouette's uncovered triangle area) and writes the
+per-part box and hull volumes to its artifact. `CSVM.Tests/ConvexHullTests.cs` pins the hull itself.
+The close-stunt half is judged in C11.
 
 **⚠ Traps.** ⚠ The overlap is deliberate and order-dependent (`:16`); a hull set that removes the
 overlap changes which part a hit maps to even where the geometry is unchanged. ⚠ Tighter shapes cut
@@ -465,7 +636,7 @@ both ways: the false crash is overhang, but the Bloodhawk's canard tips are curr
 "smaller everywhere" is not the fix. ⚠ Convex hulls are more expensive per contact than boxes, so this
 item can cost frame time rather than save it; measure it rather than assuming, per PERF-9.
 
-## C9 ☐ Fuel burn and the empty-tank lever freeze
+## C9 ☑ Fuel burn and the empty-tank lever freeze
 
 **Goal.** The player's tank burns with throttle, and a dry tank freezes the throttle lever where it
 stands rather than closing it.
@@ -495,7 +666,20 @@ fuel, and the site reads the lever rather than the boost flag; do not "fix" that
 runs a tank dry, so this cannot be verified by flying a mission, and the absence of a visible change
 in play is the expected result.
 
-## C10 ☐ The mission spawner does not read roster blocks
+**Verified.** On the merged plan tree: `RunTests.ps1` PASS, 2437 units, 135 engine suites, 16 goldens hash-identical, engine errors clean, exit 0.
+
+**Landed.** The decode was re-read at the binary and holds: `0x48e5d4` gates on the local player,
+`0x48e5dc` on the crashed flag `[obj+0x384]`, `0x48e5e6`/`0x48e5f7` skip everything to `0x48e6c9` on
+a tank at or below zero, and `0x48e5fd`–`0x48e628` burn `dt · [obj+0x128] · 5` with a clamp at zero.
+The burn reads the live lever, so nitro costs nothing. The sweep the item asked for found the rest
+of the tank: capacity at `[obj+0x130]`, copied from the def's `fuel` key (`0x475ca6` off
+`[def+0x154]`, parsed at `0x47a7d7`), refilled at placement (`0x47f6a7`, `0x47fa56`), compiled
+default 0, and exactly one shipped def authoring it (`player_airplane` at 54926, inherited by every
+`player_*` airframe). `FuelTank` holds the arithmetic and `FlightController.ReadKeyboard` is the only
+caller, which keeps the term off the AI and scripted paths and out of the plant entirely.
+`FlightEnvelopeTests` and `FlightConstantInventoryTests` are untouched and green.
+
+## C10 ☑ The mission spawner does not read roster blocks
 
 **Goal.** An AI spawned by the mission spawner carries the roster block's fields, so an authored nitro
 injector has a live producer.
@@ -515,9 +699,12 @@ census is part of the item, not a follow-up.
 **Model recommendation.** medium. Mechanical threading along a path that already exists for the
 campaign; the judgement is the census of what else is dropped.
 
-**Verify.** <TODO: name the arm. The sweep did not settle whether an existing AI suite can assert a
-mission-spawned AI's `Nitro.Installed` off a roster that authors slot 34; `CampaignRosterSuites`
-covers the campaign producer, not this one.> The census result belongs in the landing commit's
+**Verify.** The `generator-roster-params` suite, a new arm: no existing suite could carry this,
+because `CampaignRosterSuites` covers the campaign producer and nothing anywhere asserted
+`Nitro.Installed` at all. It resolves C5/M04's generator parameter with no campaign profile in the
+run, spawns the block through the light `FlightRoster` harness the `flight-roster-transaction`
+suite uses, and asserts the injector, the block's own node name and the volume floor against a
+parameterless spawn that installs nothing. The census result belongs in the landing commit's
 message whether or not it finds anything.
 
 **⚠ Traps.** ⚠ Do not fold `BL-469` (an escort cannot hold station on a leader using nitro) into this.
@@ -526,7 +713,22 @@ folding it into the wingman work; giving the mission path a live nitro producer 
 to conflate, not harder. ⚠ Three shipped rosters author the slot, so this changes AI behaviour in
 those missions; take the behaviour baseline before landing it.
 
-## C11 ☐ The flown session: the hitch sortie and the two density judgements
+**Verified.** On the merged plan tree: `RunTests.ps1` PASS, 2437 units, 135 engine suites, 16 goldens hash-identical, engine errors clean, exit 0.
+
+**Landed.** The dropped read was the campaign gate on the generator-template map: the parameter
+blocks an enemy generator's `vehicle.params` names were only loaded when a campaign profile was
+flying, so every other run took the `--generators=` airframe fallback and carried no roster field
+at all. `CampaignRosterPlan.GeneratorTemplates` now builds that map from mission data alone and
+`GameSession.SpawnFromGenerator` uses it on any generator session, spawning the matched block
+through `SpawnFor`, applying the rest of its slots through the new shared `ApplyPlan` (which the
+campaign placement now calls too, so the two paths cannot drift) and registering the block's
+accent. Of the three shipped blocks authoring slot 34, two are enabled campaign blocks the
+campaign roster already served; the third, C5/M04's `stihellhound_5_7`, is the `dantezep`
+generator's `Miles` template and is the case this changes. The `generator-roster-params` suite is
+the arm, and the shipped `--ai=` and Instant Action spawn sites stay unthreaded because no roster
+block names them.
+
+## C11 ☑ The flown session: the hitch sortie and the two density judgements
 
 **Goal.** The plan's visible items are judged together at the controls, and the two items that end in
 a human verdict get one.
@@ -553,3 +755,7 @@ against the `--no-vsync` proxy runs A1 and A2 verified with. It answers "does it
 not "by how much". ⚠ The unexplained 79.91 ms trip in A1's original capture may recur; it is not this
 plan's and should be filed rather than chased. ⚠ Do not let a green suite stand in for A3's or B6's
 verdict; both are open precisely because the suites already pass.
+
+**Flown.** One interactive C1 session on the plan build (`.scratch/logs/fly-20260827-090434`), then a second after the stall fix. A1: the DamageLab sweep and a crash left every `effect_pool_miss` sample at 0.2 to 0.6 ms; what still hitched was a periodic 90 to 120 ms gen1 collection every ~190 frames, 35 of the session's 50 trips, traced to the `EXECUTION_BY_RANGE` sweep re-walking 69 anchor subtrees per cell crossing and fixed (`BL-536`, rewritten to its residual). A2: no stutter over repeated sonic bursts; the perf readout sat off the right edge of the viewport, fixed on its own commit. A3: see its section; the 4-player half is `BL-537`. B4: the dither reads as the original's fade; the fade reaches the other buildings in the original too, and the large buildings show a dark band at the range downtown vanishes, filed as `BL-538`; the `graphics.clutterFarFade` opt-out landed on request. B6: density reads right. C8: a close stunt pass feels better and no false crash was reported.
+
+**Verified.** The user's own report.

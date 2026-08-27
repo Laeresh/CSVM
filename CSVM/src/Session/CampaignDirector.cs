@@ -264,27 +264,7 @@ public sealed class CampaignDirector
             // block named and is already in the tree.
             inputs.AttachMarkers?.Invoke(spawn.Name, rig);
 
-            if (pilot.Machine is { } machine)
-            {
-                CampaignRosterPlan.ApplyVolumes(machine, spawn.Volumes, minActive);
-                if (spawn.SignatureMask != 0)
-                {
-                    machine.SignatureManeuvers = Maneuvers.SignatureNames(spawn.SignatureMask);
-                }
-            }
-            if (pilot.Gunner is { } gunner)
-            {
-                if (spawn.Biases.Count > 0)
-                {
-                    gunner.RatingBiases = spawn.Biases;
-                }
-                // On a jet the assignment names who to shoot; on an escort it names the leader,
-                // which the second pass below wires, and the gunner ranks on its own.
-                if (!spawn.Escorts)
-                {
-                    gunner.PrimaryTargetName = spawn.LeaderName;
-                }
-            }
+            CampaignRosterPlan.ApplyPlan(pilot, spawn, minActive);
             inputs.RegisterVoice(rig, spawn.AccentId, spawn.Skills.Talker, spawn.Skills.Constitution);
 
             bool placed = false;

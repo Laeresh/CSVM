@@ -28,6 +28,7 @@
               "NAME", ["probe_puff"],
               "ACTIVE_STATE", ["ACTIVE"],
               "AT_NODE", ["probe_tower_root", 11, 8, -8],
+              "DISTANCE_INTERVAL", [3],
               "SIZE_RANGE", [2, 6],
               "LIFETIME_RANGE", [1.5, 4],
               "GROWTH_FACTOR", [0.25],

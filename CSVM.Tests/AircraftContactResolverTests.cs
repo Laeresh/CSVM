@@ -166,9 +166,9 @@ public class AircraftContactResolverTests
         var effects = new FakeContactEffects();
         var striker = Striker(humanPiloted: true, ledger: OneZone()) with
         {
-            // The fake IWorldQuery below ignores Parts entirely; a real BoxShape3D needs a live
-            // engine to construct at all, and this suite runs with none.
-            Parts = new List<PlaneCollider.Part> { new("center", null!, Transform3D.Identity) },
+            // The fake IWorldQuery below ignores Parts entirely; a real ConvexPolygonShape3D
+            // needs a live engine to construct at all, and this suite runs with none.
+            Parts = new List<PlaneCollider.Part> { new("center", null!, Transform3D.Identity, null!) },
         };
 
         var outcome = resolver.Resolve(HeadOn(struckIsAircraft: false), striker, effects);

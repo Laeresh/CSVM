@@ -1217,7 +1217,11 @@ are not visible from the byte format alone, each measured against this install.
   of this install); the number in `interval_garbage.interval_value` is **seconds** for a Time
   emitter but **meters** for an `interval_type: "Distance"` trail (the crash-debris
   `spurtpuffer`s), and its flag shape is inverted — `has_interval_value` is **false** even when
-  `interval_value` holds the real distance, so key off `interval_type`, never the flag;
+  `interval_value` holds the real distance, so key off `interval_type`, never the flag. An
+  `interval_value` of **0** with both flags clear is the "never authored" shape, which the engine's
+  own setter refuses (`FUN_00550460`), leaving the puffer constructor's 1 s standing; reading that
+  zero as a cadence puts the emitter on its emission floor instead. All 5 such events in the install
+  are texture-less stubs, so nothing shipped is built from one;
   `GROWTH_FACTOR` arrives as a two-entry `growth_factors` array, which is an **`(age, scale)`
   ramp and not a min/max pair** — see the next bullet, which corrects what this one used to
   claim; and an event whose `textures` array is **empty** is an

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using CSVM.Utils;
 using Godot;
 
@@ -92,6 +93,11 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         }
         """;
 
+    // One compiled Shader per code variant (blend × soft), shared by every renderer. A Shader per
+    // emitter cost about 6 ms to compile, paid by every live miss and by each of the couple of
+    // hundred emitters a crash rig builds ahead. The material stays per emitter.
+    private static readonly Dictionary<(bool Mix, bool Soft), Shader> ShaderVariants = new();
+
     private readonly ImageTexture _atlas;
     private readonly int _frameCount;
     private readonly bool _blendMix;
@@ -118,10 +124,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         // absorbed into EmitterDirector's EffectPoolMiss scope; fires alone only when nothing else
         // is already open.
         using var _ = PerfSample.Scope(PerfSite.MaterialCreate);
-        var code = ShaderCode
-            .Replace("BLEND_MODE", _blendMix ? "blend_mix" : "blend_add")
-            .Replace("SOFT_EXPR", _softParticles ? "clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0)" : "1.0");
-        var mat = new ShaderMaterial { Shader = new Shader { Code = code } };
+        var mat = new ShaderMaterial { Shader = ShaderFor(_blendMix, _softParticles) };
         mat.SetShaderParameter("atlas", _atlas);
         mat.SetShaderParameter("frame_count", (float)_frameCount);
 
@@ -169,5 +172,17 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     {
         if (_mm != null)
             _mm.VisibleInstanceCount = liveCount;
+    }
+
+    private static Shader ShaderFor(bool mix, bool soft)
+    {
+        if (!ShaderVariants.TryGetValue((mix, soft), out var shader))
+        {
+            var code = ShaderCode
+                .Replace("BLEND_MODE", mix ? "blend_mix" : "blend_add")
+                .Replace("SOFT_EXPR", soft ? "clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0)" : "1.0");
+            ShaderVariants[(mix, soft)] = shader = new Shader { Code = code };
+        }
+        return shader;
     }
 }

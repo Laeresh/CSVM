@@ -241,6 +241,10 @@ public static class Config
             GetBool("puffer.farCull", true);
             GetBool("puffer.nearCull", true);
             GetFloat("puffer.globalFadeFactor", Effects.Puffer.GlobalFadeFactorDefault);
+            // The graphics EffectsLevel and its fade switch are read once at launch, before this
+            // warmup runs.
+            GetString(EffectsLevel.Key, EffectsLevel.Default);
+            GetBool(EffectsLevel.FadeKey, EffectsLevel.FadeDefault);
             // The race grid is constructed only by a multiplayer stunt race, which the warmup never
             // builds — register its two keys here so --dump-config documents them on any launch.
             GetFloat("raceGrid.slotSpacing", Session.RaceGrid.SlotSpacingDefault);

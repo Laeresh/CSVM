@@ -148,6 +148,11 @@ public sealed class PlaneStats
     public float EnginePower = 1f;       // engines.json factor for the plane's stock engine
     public float FlightCeiling = 2500f;
 
+    // vehicle.json def-level 'fuel', a full tank in burn units (FuelTank.BurnRate per second at a
+    // fully open lever). One def authors it, player_airplane at 54926, and every player_* airframe
+    // inherits that; no AI def does, and the compiled default is 0 (docs/formats/vehicle.md).
+    public float FuelCapacity;
+
     // The AI mode machine's range gates: vehicle.json 'attack' / 'return_range', both
     // authored once on basic_airplane and inherited install-wide (2000 / 1200).
     public float AiAttackRange = 2000f;
@@ -540,6 +545,7 @@ public sealed class PlaneStats
             AiInputLimitPitch = Prop("ai_input_limit_pitch", 1f),
             AiInputLimitYaw = Prop("ai_input_limit_yaw", 1f),
             RudderTol = Prop("rudder_tol", 0.2f),
+            FuelCapacity = Prop("fuel", 0f),
         };
         stats.EngineSound = PropStr("engine_sound", stats.EngineSound);
         stats.CockpitEngineSound = PropStrOpt("cockpit_engine_sound");

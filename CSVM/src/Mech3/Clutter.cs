@@ -84,8 +84,9 @@ public sealed class ClutterBuilder
     /// <param name="scene">The world's SceneBuilder, for the 3D-decoration path. Null leaves only
     /// the sprite path.</param>
     /// <param name="props">The chapter's <c>templates.zrd</c> (docs/formats/templates.md), driving
-    /// <c>substitute</c> and <c>scale_range</c>. Null builds every decoration at its authored model
-    /// and size, so a caller with no reader still gets clutter rather than an exception.</param>
+    /// <c>substitute</c>, <c>scale_range</c> and <c>far_fade_range</c>. Null builds every decoration
+    /// at its authored model and size, never fading, so a caller with no reader still gets clutter
+    /// rather than an exception.</param>
     public ClutterBuilder(GameZ gamez, TextureArchive textures, SceneBuilder? scene = null,
         ClutterTemplateSpec? props = null)
     {
@@ -347,6 +348,7 @@ public sealed class ClutterBuilder
                 Height = kind.Height,
                 CullMargin = CullMarginOf(kind),
                 Placements = kind.Instances,
+                Fades = kind.Fades,
             });
             exportedMesh.Add(kind.MeshIndex);
             if (kind.Solid)
@@ -397,12 +399,12 @@ public sealed class ClutterBuilder
 
     // The original stamper's steps 4, 6 and 7 (docs/org/clutter.md): the UV bounding box floored to
     // an integer lattice, containment tested in UV space, the world position recovered through the
-    // triangle's own affine map. Steps 9 and 10 follow below; step 5 and step 11 are not applied.
+    // triangle's own affine map. Steps 9, 10 and 11 follow below; step 5 is not applied.
     // ⚠ Never introduce a world grid here. Stamping per integer texture repeat is what makes the
     // clutter rotate and stretch with the painted ground, and a fixed grid loses C1 most of its trees.
     private static void PlaceOnTriangle(Template template, Vector3 a, Vector3 b, Vector3 c,
         Vector2 uva, Vector2 uvb, Vector2 uvc, HashSet<(int, int, int)> seen, LatticeStats stats,
-        Random rng)
+        Random rng, Random fadeRng)
     {
         // ⚠ Guard world area and UV area independently. Neither implies the other, and a strip
         // artifact with healthy UVs and no world area plants a row of trees along a line.
@@ -477,6 +479,13 @@ public sealed class ClutterBuilder
                             + ((kind.ScaleRange.Y - kind.ScaleRange.X) * (float)rng.NextDouble());
                         if (scale > target.MaxScale)
                             target.MaxScale = scale;
+
+                        // Step 11: one draw for both distances, from the SOURCE kind's block.
+                        // ⚠ Off its own stream, not `rng`: ours is not the original's anyway,
+                        // and leaving the substitute/scale draws alone keeps a fade A/B fade-only.
+                        var fade = ClutterKindProps.FadeThresholds(
+                            kind.FarFadeMin, kind.FarFadeMax, (float)fadeRng.NextDouble());
+                        target.Fades.Add(new Color(fade.X, fade.Y, fade.Z, 0f));
 
                         // A sprite drops its basis and authored Y, since the shader re-faces it and
                         // its mesh carries the card's extent; a 3D decoration keeps both.
@@ -595,6 +604,33 @@ public sealed class ClutterBuilder
         return name.Length == 0 ? "clutter_kind" : name;
     }
 
+    // The per-kind properties a stamp draws from: the two the placement applies (scale, fade).
+    private static void AdoptBlock(Kind kind, ClutterKindProps block)
+    {
+        kind.ScaleRange = block.ScaleRange;
+        kind.FarFadeMin = block.FarFadeMin;
+        kind.FarFadeMax = block.FarFadeMax;
+    }
+
+    // Every placement of one kind as one MultiMesh, each instance carrying its fade thresholds as
+    // custom data. ⚠ UseCustomData must be set before InstanceCount, or the buffer has no slot.
+    private static MultiMesh InstancedMesh(Kind kind, Mesh mesh)
+    {
+        var mm = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseCustomData = true,
+            Mesh = mesh,
+            InstanceCount = kind.Instances.Count,
+        };
+        for (int i = 0; i < kind.Instances.Count; i++)
+        {
+            mm.SetInstanceTransform(i, kind.Instances[i]);
+            mm.SetInstanceCustomData(i, kind.Fades[i]);
+        }
+        return mm;
+    }
+
     // Upright billboard: the card spins about its planted point's vertical axis toward the camera,
     // because the source decorations are one-sided quads that would vanish edge-on. Fullbright,
     // scissor cutout, and SceneBuilder's cylindrical fog. `lit` and `fogged` are the decoration
@@ -608,14 +644,21 @@ public sealed class ClutterBuilder
         // Single-sourced with SceneBuilder so the fog and the gamma-space modulate cannot drift.
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_srgb.gdshaderinc"
+        #include "res://shaders/csky_clutter_fade.gdshaderinc"
 
         // ⚠ Never declare an instance uniform below this include. Godot indexes them by declaration
         // order and merges the mapping across one GeometryInstance3D's materials, so two shaders
         // that disagree read each other's slots.
         #include "res://shaders/csky_instance_uniforms.gdshaderinc"
 
+        varying flat float v_alpha;
+
         void vertex() {
             vec3 origin = MODEL_MATRIX[3].xyz;
+            // The authored far fade: past it the card collapses to its planted point and costs no
+            // fragments; inside the ramp the fragment stage dithers it out.
+            v_alpha = csky_clutter_fade_alpha(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);
+            float keep = step(0.004, v_alpha);
             vec2 to_cam = CAMERA_POSITION_WORLD.xz - origin.xz;
             float len = length(to_cam);
             vec2 dir = len > 1e-4 ? to_cam / len : vec2(0.0, 1.0);
@@ -623,10 +666,13 @@ public sealed class ClutterBuilder
                 vec3(dir.y, 0.0, -dir.x),
                 vec3(0.0, 1.0, 0.0),
                 vec3(dir.x, 0.0, dir.y));
-            VERTEX = (VIEW_MATRIX * vec4(origin + spin * VERTEX, 1.0)).xyz;
+            VERTEX = (VIEW_MATRIX * vec4(origin + spin * VERTEX * keep, 1.0)).xyz;
         }
 
         void fragment() {
+            if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_alpha)) {
+                discard;
+            }
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
             ALBEDO = col.rgb{{(lit ? " * csky_world_light" : "")}};
         {{(fogged ? FogLines : "")}}{{SceneBuilder.TintLine}}
@@ -765,7 +811,7 @@ public sealed class ClutterBuilder
         // appends to _allKinds and a target minted for one source may be another source's target.
         foreach (var kind in _allKinds)
             if (_props.Find(kind.Model) is { } block)
-                kind.ScaleRange = block.ScaleRange;
+                AdoptBlock(kind, block);
 
         int minted = 0, missing = 0;
         // ⚠ Indexed, and bounded to the sources present now. Minting appends, and a minted kind
@@ -816,7 +862,7 @@ public sealed class ClutterBuilder
             if (MakeKind(meshNode, model) is not { } kind)
                 continue;
             if (_props?.Find(model) is { } block)
-                kind.ScaleRange = block.ScaleRange;
+                AdoptBlock(kind, block);
             _kindsByModel[model] = kind;
             _allKinds.Add(kind);
             minted++;
@@ -880,6 +926,7 @@ public sealed class ClutterBuilder
         // every launch in the original, and the master rerolls the species mix on an unpinned run.
         // This is not the original's stream and cannot be, so do not try to match it.
         var rng = new Random(PlacementSeed);
+        var fadeRng = new Random(PlacementSeed);   // the fade's own stream, see PlaceOnTriangle
 
         void Walk(int nodeIndex, Transform3D xf)
         {
@@ -891,7 +938,7 @@ public sealed class ClutterBuilder
             if (node.Local is { } local)
                 xf *= local;
             if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count)
-                PlaceOnMesh(_gamez.Meshes[node.MeshIndex], xf, templates, seen, rng);
+                PlaceOnMesh(_gamez.Meshes[node.MeshIndex], xf, templates, seen, rng, fadeRng);
             foreach (var c in node.Children)
                 Walk(c, xf);
         }
@@ -903,7 +950,8 @@ public sealed class ClutterBuilder
     }
 
     private void PlaceOnMesh(GameZMesh mesh, Transform3D xf,
-        Dictionary<string, Template> templates, HashSet<(int, int, int)> seen, Random rng)
+        Dictionary<string, Template> templates, HashSet<(int, int, int)> seen, Random rng,
+        Random fadeRng)
     {
         foreach (var poly in mesh.Polygons)
         {
@@ -939,7 +987,7 @@ public sealed class ClutterBuilder
                         xf * mesh.Vertices[poly.VertexIndices[i]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 1]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 2]],
-                        uvs[i], uvs[i + 1], uvs[i + 2], seen, _stats, rng);
+                        uvs[i], uvs[i + 1], uvs[i + 2], seen, _stats, rng, fadeRng);
             }
             else
             {
@@ -948,7 +996,7 @@ public sealed class ClutterBuilder
                         xf * mesh.Vertices[poly.VertexIndices[0]],
                         xf * mesh.Vertices[poly.VertexIndices[i]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 1]],
-                        uvs[0], uvs[i], uvs[i + 1], seen, _stats, rng);
+                        uvs[0], uvs[i], uvs[i + 1], seen, _stats, rng, fadeRng);
             }
         }
     }
@@ -975,14 +1023,7 @@ public sealed class ClutterBuilder
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
 
-        var mm = new MultiMesh
-        {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            Mesh = BuildSpriteMesh(kind.MeshIndex),
-            InstanceCount = kind.Instances.Count,
-        };
-        for (int i = 0; i < kind.Instances.Count; i++)
-            mm.SetInstanceTransform(i, kind.Instances[i]);
+        var mm = InstancedMesh(kind, BuildSpriteMesh(kind.MeshIndex));
 
         return new MultiMeshInstance3D
         {
@@ -1009,17 +1050,12 @@ public sealed class ClutterBuilder
 
     private MultiMeshInstance3D? BuildSolidInstance(Kind kind)
     {
-        var mesh = _scene?.SharedMesh(kind.MeshIndex);
+        // The clutter-fade variant of the world materials: the same surfaces, plus the per-instance
+        // distance fade the sprite shader carries, so a city block fades like the card beside it.
+        var mesh = _scene?.SharedMesh(kind.MeshIndex, clutterFade: true);
         if (mesh == null)
             return null;
-        var mm = new MultiMesh
-        {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            Mesh = mesh,
-            InstanceCount = kind.Instances.Count,
-        };
-        for (int i = 0; i < kind.Instances.Count; i++)
-            mm.SetInstanceTransform(i, kind.Instances[i]);
+        var mm = InstancedMesh(kind, mesh);
 
         var mmi = new MultiMeshInstance3D
         {
@@ -1132,6 +1168,7 @@ public sealed class ClutterBuilder
         public float CullMargin;    // Width grown by the largest scale_range draw these got
         public Shape3D? CollisionShape;
         public IReadOnlyList<Transform3D> Placements = null!;
+        public IReadOnlyList<Color> Fades = null!;   // parallel: each placement's fade custom data
     }
 
     /// <summary>One world triangle as the original's stamper sees it: the integer UV lattice its
@@ -1364,6 +1401,10 @@ public sealed class ClutterBuilder
         public readonly List<Transform3D> CellPlacements = new();
         public readonly List<Transform3D> Instances = new(); // world placements
 
+        // Parallel to Instances: each stamp's (near², far², 1/(far² − near²), 0) as the MultiMesh
+        // custom data the fade shader reads; zero for a stamp that never fades.
+        public readonly List<Color> Fades = new();
+
         public int MeshIndex;
         public int NodeIndex;                    // a representative decoration node (draw order)
         public string Model = "";                // the decoration node's own name, e.g. firtree1.flt
@@ -1375,6 +1416,11 @@ public sealed class ClutterBuilder
         // spec was supplied. ⚠ It is the SOURCE kind's range that scales a substituted stamp —
         // see the roll in PlaceOnTriangle.
         public Vector2 ScaleRange = Vector2.One;
+
+        // templates.zrd's `far_fade_range` bounds for THIS kind's model, (0,0) when it authors none.
+        // ⚠ The SOURCE kind's, like the scale: a substituted stamp fades by the block it was
+        // authored under, not the one it became.
+        public Vector2 FarFadeMin, FarFadeMax;
 
         // `substitute` as a CUMULATIVE table: the running sum of the engine's own normalised
         // shares, paired with the kind each share lands in. A null target is a model the gamez

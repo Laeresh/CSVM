@@ -25,6 +25,7 @@ using static CSVM.Testing.CampaignZeppelinWakeSuites;
 using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
+using static CSVM.Testing.GeneratorRosterSuites;
 using static CSVM.Testing.InstantActionSuites;
 using static CSVM.Testing.IntroAircraftSuites;
 using static CSVM.Testing.LandingApproachSuites;
@@ -129,6 +130,7 @@ public static class SuiteCatalog
         "damage-stage-slots",
         "ai-damage-stages",
         "crash-rig-anchors",
+        "emitter-prewarm",
         "ai-crash-defs",
         "ai-wreck-fall",
         "player-destroy-choreography",
@@ -158,6 +160,7 @@ public static class SuiteCatalog
         "fog-state",
         "campaign-submarine",
         "campaign-roster",
+        "generator-roster-params",
         "campaign-bomber-formation",
         "campaign-loop",
         "campaign-zeppelins",
@@ -180,7 +183,9 @@ public static class SuiteCatalog
         "zeppelin-identity",
         "campaign-briefing-repaint",
         "menu-screenshot-key",
+        "perf-hud-layout",
         "campaign-briefing-note",
+        "airframe-hull-coverage",
     };
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
@@ -541,7 +546,7 @@ public static class SuiteCatalog
         into.Add(new TestHarness.Suite("damage-hd",
             "weapon hits destroy, swap, drop colliders, and survive destroy→reset→destroy", DamageHd));
         into.Add(new TestHarness.Suite("stop-sequence",
-            "authored STOP_SEQUENCE stops run: the fireball's 0.3 s stopper and the 30 s fire's halt", StopSequenceStops));
+            "authored STOP_SEQUENCE stops run: the fireball's 0.3 s stopper, the 30 s fire's halt, and the car lap's stopped car_dust1 refusing every later lap's call", StopSequenceStops));
         into.Add(new TestHarness.Suite("first-person-condition",
             "the PLAYER_1ST_PERSON condition follows the pilot's selected view mode: the bullethole def's else branch runs in Chase and is skipped in Cockpit and Nose (A1)", PlayerFirstPersonCondition));
         into.Add(new TestHarness.Suite("death-slot",
@@ -606,6 +611,8 @@ public static class SuiteCatalog
             "an AI plane spawned through FlightRoster stages end to end: its hull falls through the take-hit path and the rig runtime starts six random_remote_damage instances plus one pfsmoketrail, all anchored inside that aircraft, a repair tears each stage down once, and the Bloodhawk's missing elevator pair is named (BL-385)", AiDamageStages));
         into.Add(new TestHarness.Suite("crash-rig-anchors",
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
+        into.Add(new TestHarness.Suite("emitter-prewarm",
+            "a crash rig's and the world-effects stage's PUFFER_STATE emitters are built at bind, unstarted: a crash, a panel tear, a post-respawn crash and five sonic bursts over a four-slot pool all reach the factory for no emitter, and the claims still count as built", EmitterPrewarm));
         into.Add(new TestHarness.Suite("ai-crash-defs",
             "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default, and the def switches off both the airframe's healthy subtree and the crash root's wreck — while a human rig off the same factory keeps player_crash_* (G21)", AiCrashDefs));
         into.Add(new TestHarness.Suite("ai-wreck-fall",
@@ -814,6 +821,14 @@ public static class SuiteCatalog
             + "floor, and over a two-minute flown run wingman_1 holds the scripted player inside "
             + "the wingman-station leash",
             CampaignRoster));
+        into.Add(new TestHarness.Suite("generator-roster-params",
+            "the mission spawner's roster read (BL-453) over C5/M04: the dantezep generator's "
+            + "vehicle.params label 'Miles' resolves to the disabled block stihellhound_5_7 with "
+            + "no campaign profile in the run, the aircraft it launches carries that block's "
+            + "nitro slot and its own authored name, its volumes reach the machine under the "
+            + "min_ai_active_dist floor, and the CLI-airframe fallback a parameterless generator "
+            + "takes installs no injector",
+            GeneratorRosterParams));
         into.Add(new TestHarness.Suite("campaign-bomber-formation",
             "CM02's three netted bombers (BL-498) spawned from C3/M05's own aiv roster into its "
             + "built world: all three carry net 19, they leave their shared seat node the same way "
@@ -1043,6 +1058,12 @@ public static class SuiteCatalog
             + "campaign board, and each press must leave one more file in the folder the flight "
             + "capture writes to",
             MenuScreenshotKey));
+        into.Add(new TestHarness.Suite("perf-hud-layout",
+            "where the frame-cost readout lands: the real Full tier is driven a frame, then its "
+            + "label and its frame-time strip are both required to keep their right edge 8 px "
+            + "inside the window and their left edge on screen, since a top-right control placed "
+            + "by its LEFT edge walks its own width off the side",
+            PerfHudSuites.PerfHudLayout));
         // BL-490: an objective wrapped to a second line drew over the next one's authored slot,
         // which only shows on a mission whose sentences are longer than the first's.
         into.Add(new TestHarness.Suite("campaign-briefing-note",
@@ -1051,6 +1072,12 @@ public static class SuiteCatalog
             + "no entry allowed to start above the bottom of the one before it or to run past the "
             + "parchment's authored 240 px box",
             CampaignBriefingNote));
+        into.Add(new TestHarness.Suite("airframe-hull-coverage",
+            "every player airframe's collision hulls measured against its own mesh: each hull "
+            + "inside the box it replaces, the whole silhouette's triangle area covered by some hull "
+            + "within the tolerance, the part names and their order the damage mapping relies on, "
+            + "and the per-part box-to-hull volume the sweep no longer bridges",
+            AirframeColliderSuites.AirframeHullCoverage));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

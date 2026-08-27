@@ -277,6 +277,12 @@ public partial class FlightController : Node3D
     /// AI maneuver arm, the tank and the animation edges run from <see cref="SimStep"/>.</summary>
     public NitroSystem Nitro = new();
 
+    /// <summary>The flown tank, burned by <see cref="ReadKeyboard"/> and refilled at every spawn.
+    /// Only the human lever path touches it, which is the original's player-only gate; a pilot-flown
+    /// aircraft leaves it full. Nitro burns nothing here: the burn reads the lever, not the boost
+    /// flag.</summary>
+    public FuelTank Fuel = new();
+
     /// <summary>Where the human pilots are, as one snapshot per call — the seam the flight model's
     /// far-field plant is selected on (<see cref="FlightModel.FarFieldPlant"/>). The session binds
     /// the same snapshot every other "who is nearest" consumer reads. Null (every rig built without
@@ -906,6 +912,9 @@ public partial class FlightController : Node3D
         ApplyPresence();
         _throttle = _spawnThrottle;
         _keyPitch = _keyRoll = _keyYaw = 0f;  // a fresh airframe spawns with the stick centred
+        // The original tops the tank up where it places the aircraft, from the def-derived capacity.
+        Fuel.Capacity = Stats?.FuelCapacity ?? 0f;
+        Fuel.Fill();
         // First setup precedes adapter construction, so the adapter replays startprops after attachment.
         CrashRuntime?.Play("startprops", PlaneModel, applyReset: false);
         // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → the spawn
@@ -2690,6 +2699,32 @@ public partial class FlightController : Node3D
         }
     }
 
+    // Where a target source is DRAWN this frame, as opposed to where the gun solves to. An
+    // aircraft's WorldPosition is the last physics pose; its node sits on _renderPose, the pose
+    // interpolated between sim steps that the chase camera follows too. A marker projected from
+    // the physics pose through that camera stalls between ticks and jumps on each, a shake that
+    // grows with angular rate. Turret and structure positions are node positions already.
+    // False on a freed, out-of-tree or unknown source: the caller keeps its physics snapshot.
+    internal static bool TryRenderPosition(object? source, out Vector3 position)
+    {
+        switch (source)
+        {
+            case FlightController fc when GodotObject.IsInstanceValid(fc) && fc.IsInsideTree():
+                position = fc.GlobalPosition;
+                return true;
+            case TurretController t:
+                position = t.WorldPosition;
+                return true;
+            case DestructibleRegistry.Instance inst when GodotObject.IsInstanceValid(inst.Anchor)
+                && inst.Anchor.IsInsideTree():
+                position = inst.Anchor.GlobalPosition;
+                return true;
+            default:
+                position = Vector3.Zero;
+                return false;
+        }
+    }
+
     // The breadcrumb label for a standing target: "P{n}" for a human-readable aircraft slot, the
     // node/label name (TargetPool.NameOf) for a turret or structure.
     private static string TargetLabel(object? source) =>
@@ -3002,8 +3037,13 @@ public partial class FlightController : Node3D
         if (KeyDown(Key.R))
             Respawn();
 
-        _throttle = Mathf.Clamp(
-            _throttle + (KeyAxis(Key.Shift, Key.Ctrl) + padThrottle) * ThrottleRate * dt, 0f, 1f);
+        // The burn reads the lever as it stands entering this tick, and a dry tank skips the step
+        // below, so the lever freezes rather than closing. A crashed airframe burns nothing and
+        // still moves its lever, which is the arm the original's crashed-flag test takes.
+        bool leverFree = Crashed || Fuel.Step(dt, _throttle);
+        if (leverFree)
+            _throttle = Mathf.Clamp(
+                _throttle + (KeyAxis(Key.Shift, Key.Ctrl) + padThrottle) * ThrottleRate * dt, 0f, 1f);
 
         // pull = S/Down, push = W/Up; bank/yaw left = A/Left/Q
         _keyPitch = StickRamp.Step(
@@ -3150,7 +3190,7 @@ public partial class FlightController : Node3D
     }
 
     // Debug view of the collision test: the swept center ray with a cross at
-    // its tip, plus the airframe boxes drawn at where this frame's sweep stopped.
+    // its tip, plus the airframe hulls drawn at where this frame's sweep stopped.
     // Freezes red at the impact pose while crashed.
     private void DrawProbe(Vector3 from, Vector3 end, Vector3 shapePos, bool hit)
     {
@@ -3170,30 +3210,16 @@ public partial class FlightController : Node3D
         {
             var baseXf = new Transform3D(_model.Attitude, shapePos);
             foreach (var p in Collider.Parts)
-                AddBoxEdges(baseXf * p.Local, p.Shape.Size * 0.5f);
+            {
+                var xf = baseXf * p.Local;
+                foreach (var (a, b) in p.Hull.Edges)
+                {
+                    _probe.SurfaceAddVertex(xf * p.Hull.Points[a]);
+                    _probe.SurfaceAddVertex(xf * p.Hull.Points[b]);
+                }
+            }
         }
         _probe.SurfaceEnd();
-    }
-
-    // Adds the 12 wireframe edges of a box (half-extents h) to the probe mesh.
-    private void AddBoxEdges(Transform3D xf, Vector3 h)
-    {
-        Span<Vector3> c = stackalloc Vector3[8];
-        for (int i = 0; i < 8; i++)
-            c[i] = xf * new Vector3((i & 1) == 0 ? -h.X : h.X,
-                                    (i & 2) == 0 ? -h.Y : h.Y,
-                                    (i & 4) == 0 ? -h.Z : h.Z);
-        ReadOnlySpan<int> edges = stackalloc int[]
-        {
-            0, 1, 2, 3, 4, 5, 6, 7, // along X
-            0, 2, 1, 3, 4, 6, 5, 7, // along Y
-            0, 4, 1, 5, 2, 6, 3, 7, // along Z
-        };
-        for (int i = 0; i < edges.Length; i += 2)
-        {
-            _probe!.SurfaceAddVertex(c[edges[i]]);
-            _probe.SurfaceAddVertex(c[edges[i + 1]]);
-        }
     }
 
     /// <summary>Places the camera at its settled pose immediately (spawn, respawn, the weapon
