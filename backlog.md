@@ -2824,9 +2824,11 @@ usual.
   one-shot `snd_scene1` is `positioned by out-of-tree ancestor composition at (0, 0, 0) (world
   root not parented at bootstrap)`, so at least its sound fires during bootstrap rather than in
   the scene. `pure_panic` is a C1/M02 hangar def the list names and this mission does not
-  compile; whether the original plays it here is part of the question. What "not correctly"
-  covers (camera, timing, the hangar doors, the Pandora's place in it) is not recorded; ask at the
-  next sortie. *Fix shape:* run `--campaign=<CM09>` headless with `--debug-anim` and read
+  compile; whether the original plays it here is part of the question. What the original shows,
+  from the user's recollection: the standard generic intro first, then the player's aircraft and
+  the wingmen flying down out of the sky to the mission's start point, which is what
+  `mission_intro_animation`'s `player` object motion over the `bullet*` path nodes authors; CSVM
+  opens at the start point with neither. *Fix shape:* run `--campaign=<CM09>` headless with `--debug-anim` and read
   `mission_intro_animation`'s event log against the def; `BL-569` (C3/M03's opening scene fired
   at bootstrap with no camera) is the same class and may be the same fix. *⚠ Traps:* `BL-548`'s
   deferred `--pos=` handoff is for `generic_intro`; this mission's intro is its own def.
@@ -2862,16 +2864,46 @@ usual.
   docking (`OBJECTIVE31`, primary 2, `pzhookpoint`) is reached only through `OBJECTIVE30`
   (primary 1, `INACTIVE1 [lkgasbag05, panelleft1]`, the Promised Land destroyed) waking
   `OBJECTIVE42` (`DEDG [1, 0]`, ticking on 40), then 43 (`DEDG [2, 0]`), then 44 (`DEDG [5, 0]`).
-  So a stall after every aircraft is dead is one of: primary 1 not met (the gasbag panel, not
-  the hatches), or a `DEDG` group never reading empty. For the latter `BL-563` (a deactivated
-  member counts as alive) is the first suspect, and the second is the fallback launch of
-  `BL-580`, whose group membership is whatever the fallback plane carries. Objective transitions
-  are not in the file log at all (no `[campaign]` objective line exists in the sink), which is
-  why this cannot be settled from the sortie. *Fix shape:* first route the graph's wake, nap,
-  complete and kill transitions through `Log.Info("campaign", ...)` so a sortie log carries them;
-  then fly CM09 again after `BL-563` lands and read which of 30, 42, 43, 44 never completed.
-  *⚠ Traps:* the Defend marker clearing is correct behaviour (`OBJECTIVE25`), not the bug.
+  The Promised Land was destroyed in both flights, so primary 1 is met and the stall is a `DEDG`
+  group never reading empty, and the flight that stalled is the one where the Paladin Blake
+  squad (`blakebloodhawk_1/2/3/8`, group 1, woken only by `OBJECTIVE20`) never arrived: with
+  four deactivated members, `DEDG [1, 0]` cannot complete (`BL-563` makes a deactivated member
+  count as alive, and even without that the four are alive-but-parked). The squad's two routes
+  differ only in timing: with the tower still up, `OBJECTIVE16` (15 s after 14) kills 15 and 17,
+  wakes 18, and 18 naps 20 for 30 s; with the tower down inside that window, 15 kills 16, naps
+  17 (16 s), 17 naps 19 (3 s), and 19 naps 20 for 90 s. Both 18 and 19 carry
+  `TICK_DEPENDS_ON_OBJ 29`, and `ObjectiveGraph.Ticks` holds such an objective entirely while
+  29 is not `Awake`; 29 is dormant until 28 (`DEDG [2, 2]`, woken by 24) wakes it. So the
+  90 s leg through 19 is where to look: whether a nap timer set on 19 while 29 was still
+  dormant is dropped rather than resumed, or whether 19's own nap of 20 never starts because
+  19 is gated when 17 wakes it. Objective transitions are not in the file log at all (no
+  `[campaign]` objective line exists in the sink), which is why this cannot be settled from the
+  sortie. *Fix shape:* first route the graph's wake, nap, complete and kill transitions through
+  `Log.Info("campaign", ...)` so a sortie log carries them; then reproduce headless: complete 15
+  inside 16's window, then 23/24/28 (a Promised Land hatch down, group 2 to two), and assert 20
+  wakes 90 s after 19; fix `Ticks`' interaction with a nap that lands on a gated objective per
+  the decode (`docs/formats/objectives.md`'s `TICK_DEPENDS_ON_OBJ` row). `BL-563` stays a
+  separate fix. *⚠ Traps:* the Defend marker clearing is correct behaviour (`OBJECTIVE25`), not
+  the bug.
   *Cross-refs:* `BL-563`, `BL-565`, `BL-572`, `BL-580`, `docs/formats/objectives.md`.
+
+- `BL-582` `[Bug]` **A two-element objective target `[parent, child]` is flattened into two bare
+  names, so CM09 (C1/M04) shows two Defend markers: one on the Pandora and one on a ground
+  `rock_zeppelin` near the enemy zeppelin.** *Evidence (traced):* reported at the controls as two
+  markers. `OBJECTIVE23` authors `ADD_OBJECTIVE_TARGET [[piratezep, rock_zeppelin]]` and
+  `SET_HELP_LABEL [[piratezep, rock_zeppelin], MSG_OBJ_DEFEND]`, a node path (the child
+  `rock_zeppelin` under `piratezep`). `ObjectiveScript.ReadNames` flattens a nested list into
+  its strings, so the def's `AddObjectiveTarget` holds `piratezep` and `rock_zeppelin` as two
+  independent names, and `ObjectiveGraph.IsObjectiveTarget(name)` matches any node by bare name:
+  the Pandora's root and every other `rock_zeppelin` in the world (a ground node near the
+  enemy zeppelin) both light up. `REMOVE_OBJECTIVE_TARGET` and `ADD_OTHER_TARGET` read the same
+  way (`ObjectiveSites.Holds`). The same shape is C1C/M01's `[[wv_tailhook, peoplehook]]`.
+  *Fix shape:* read a nested pair as a path (`Parent`/`Child`), resolve it to the one node under
+  that parent (`AnimRuntime.FindNodes` scoped to the parent's subtree), and mark that node only;
+  a bare name keeps today's global match. Add a unit test on `ReadNames` with `[[a, b]]` and an
+  objective-sites test on a world with two `rock_zeppelin` nodes. *⚠ Traps:* the help label
+  applies to the same resolved node, not to the parent. *Cross-refs:* `BL-572` (what the marker
+  says once it is on the right node), `BL-581`, `docs/formats/objectives.md` 173.
 
 ## Tooling, platform & docs
 
