@@ -990,7 +990,7 @@ public partial class FlightController : Node3D
     /// start choreography), so a wave arrives flying rather than parked. Calling this on an
     /// aircraft already in play is simply that teleport-and-reset.</summary>
     public void Activate(Vector3 pos, Vector3 lookAt, Vector3? launchVelocity = null,
-        bool carrierDrop = false)
+        bool carrierDrop = false, float? launchThrottle = null)
     {
         var dir = lookAt - pos;
         _spawnPos = pos;
@@ -1006,12 +1006,15 @@ public partial class FlightController : Node3D
         Respawn();
         if (launchVelocity is { } velocity)
             _model.SetVelocity(velocity);
-        if (carrierDrop)
+        // A launch dictates the lever the aircraft leaves on: a carrier drop nearly closes it,
+        // a take-off run opens it. Written past the smoothing so the first step runs at it.
+        float? lever = carrierDrop ? CarrierDropThrottle : launchThrottle;
+        if (lever is { } opened)
         {
-            _throttle = CarrierDropThrottle;
-            _model.Throttle = CarrierDropThrottle;
+            _throttle = opened;
+            _model.Throttle = opened;
             if (Pilot != null)
-                Pilot.Throttle = CarrierDropThrottle;
+                Pilot.Throttle = opened;
             ThrottleSmoke?.Reset(_throttle);
         }
     }

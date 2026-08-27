@@ -1293,17 +1293,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Where to look:* whether the collapsed clutter cards still write depth or a dark fragment behind the band (the `csky_clutter_fade` cutout keeps a card in the pass until `step(d, far)` culls it, and a card collapsed to zero size should contribute nothing), whether the fog-volume clutter's own `far_fade` and the templates fade overlap at that range, and whether the gamez buildings carry a `far_fade_range` of their own the remake ignores (`FUN_004d5de0` applies the scaled test to every type-5 scene node, not only clutter). A C5 screenshot pair at the band distance with `graphics.clutterFarFade` on and off separates the two.
   *Cross-refs:* `BL-337` (closed; the fade), `docs/org/clutter.md`.
 
-- `BL-512` `[Bug]` **CM04 (C3/M03): the Barracuda jumps while driving into the bay and its launch faces
-  the wrong way.** *Evidence:* reported at the controls: the submarine's `sub_movement` drive into
-  the bay shows a discontinuity (a jump) partway, and at the launch it points away from the bay
-  where the original has it looking into the bay. `barracuda` begins inactive and `sub_movement`
-  activates and moves it over 40 s (`docs/formats/gamez.md`, `docs/HISTORY.md` 13647). A jump on a
-  40 s `ObjectMotionFromTo` points at a keyframe or an activation transform applied twice; a wrong
-  final heading points at the motion's rotation term or at a base transform the activation
-  does not carry. *Fix shape:* `--anim-lab --node=barracuda` on the chapter, play `sub_movement`,
-  and compare the node's transform at each event boundary against the def. *⚠ Traps:* `BL-522`'s
-  crashing fighters may be downstream of this heading (launched into the bay wall), so settle the
-  heading first. *Cross-refs:* `BL-515`, `BL-522`.
+- `BL-512` `[Bug]` **CM04 (C3/M03): the Barracuda jumps while driving into the bay.**
+  *Evidence:* the `sub_movement` def is read out
+  (`extracted/C3/M03/mis_anim/barracuda-sub_movement.json`, main sequence): the drive is an
+  `ObjectMotionFromTo` rise from `(-12032,-38,-13197.5)` to `(-12032,-6,-13197.5)` over 10 s, then
+  three `ObjectMotion` events on `barracuda` (accelerate over 2 s, cruise 40 s, decelerate over
+  2 s), then a second `ObjectMotionFromTo` at the absolute `(-12032,-6,-11516.288)` for the final
+  6 s surfacing. Reading `translation.delta` as acceleration, as `MotionRuntime` does, makes the
+  three speeds continuous and the travel 1680 m, which lands within 1.2 m of that absolute
+  placement, so the authored choreography is smooth and our `delta` semantics are right. The jump
+  is `rnd_xz`: all three events carry `(8.742278e-08, 0, 1.0)`, which is exactly the normalized
+  `initial`/`delta` direction rather than a random amplitude, and `MotionRuntime` adds
+  `RandSym() * rnd_xz` to each event's start velocity. That is +/-1 unit/s drawn independently
+  three times, up to +/-44 m of accumulated travel, and the closing absolute `ObjectMotionFromTo`
+  snaps it away in one frame. The final heading is NOT part of this: no event in the def carries a
+  rotation term, `barracuda`'s gamez transform is `Initial`, and the hull's local -Z (its take-off
+  run, `BL-522`) is correct as built. *Fix shape:* settle whether `rnd_xz` is a random spread at
+  all, or a cached unit direction the original reads back; it is non-zero on far more than this
+  def, so the change belongs to `ObjectMotion` as a whole (`docs/org/objectMotion.md`), not to the
+  submarine. *⚠ Traps:* do not special-case the submarine, and do not "fix" the 1.2 m residual,
+  which is authored. *Cross-refs:* `BL-515`, `BL-522`, `docs/org/objectMotion.md`.
 
 - `BL-546` `[Bug]` **A nitro engage produces none of its visuals: no prop swap, no exhaust smoke.**
   *Evidence:* reported at the controls on a nitrous build whose boost accelerates the aircraft and
@@ -2240,23 +2249,23 @@ usual.
   state, so do not reopen it. *Cross-refs:* `BL-513` (the same mission's destroyed buildings, one
   shared architecture fix, unfound shared trigger), `BL-348`'s plan.
 
-- `BL-522` `[Bug]` **CM04 (C3/M03): fighters launched from the Barracuda crash at once.**
-  *Evidence:* `playtest/game-20260826-085720.out`, `c3/m03` leg: `britpeace_5` and three unnamed
-  successors (`@Node3D@3408` and on) spawn at `pos=(-12032,0,-11516)`, altitude 0, on net
-  `M3BritInt#7`, and each crashes within seconds: `CRASH into sub_runway/col (fuselage) ... spd=73
-  m/s`, `CRASH into g28546/col_water (tail) ... spd=77 m/s`, four times over. The spawn point is
-  the submarine's runway at sea level, so the aircraft is placed on the deck at flying speed with
-  no launch roll and no climb, and the first thing it meets is the runway or the water. The later
-  spawns also carry no roster name (`@Node3D@3408`), which is its own defect in the generator's
-  naming. *Fix shape:* decode the original's launch from a surface host (the moving-spawner shape
-  in `EnemyGenerators.cs`): whether it places the aircraft airborne ahead of the host, or holds it
-  `Inert` on the deck through a takeoff, and what heading it launches on relative to the host
-  (`BL-512`'s wrong heading may be pointing them into the bay). *⚠ Traps:* the zeppelin
-  launch-altitude gate is a decoded rule for airships and not a general one; do not lift the sub's
-  launch by borrowing it, and do not add a spawn-height offset.
-  *Cross-refs:* `BL-512`, `BL-515`, `docs/org/flightModel.md`'s scripted-path follower (CM09's two
-  ground airfields are the same non-zeppelin launch, and each carries the take-off path
-  `FUN_004518d0` builds).
+- `BL-522` `[Bug]` **A surface generator's launch does not fly the take-off run it is placed on.**
+  *Evidence:* the launch pose is decoded and landed (`docs/formats/mission-entities/enemy-generators.md`
+  "Launching from a surface host"): a launch starts on `<base>_aip0` plus 0.2 m, nose on
+  `<base>_aip1`, at zero velocity with the throttle open. The original then keeps the path on the
+  aircraft at `+0xc8` with the flag at `+0xcc` and flies the remaining points as a take-off run,
+  which also suppresses the net-nearest-node snap an ordinary activation makes (`FUN_004b0f40`).
+  CSVM hands the aircraft straight to its patrol net from that pose instead, so an aircraft that
+  starts at rest on a deck or a runway has no authored way to reach flying speed. Affects all three
+  surface hosts: `barracuda` (C3, a 4-point path climbing 2.5 m to 10.8 m over 130 m), `eairg31`
+  and `eairg32` (C1, 5-point flat ground rolls). *Fix shape:* decode the consumer of `+0xc8`/`+0xcc`
+  on the aircraft record and fly the path, releasing to the patrol net at its last point. *⚠ Traps:*
+  the zeppelin launch-altitude gate is a decoded rule for airships and not a general one; do not
+  lift the launch by borrowing it, and do not add a spawn-height offset beyond the decoded 0.2 m.
+  Do not give the aircraft a starting speed instead: the zero velocity is decoded.
+  *Cross-refs:* `BL-512`, `BL-515`, `BL-527` (CM07's second patrol is a launch off `eag31`/`eag32`,
+  so it is re-judged against this), `docs/org/flightModel.md`'s scripted-path follower (CM09's
+  ground airfields launch off the same take-off paths, `eag31`/`eag32` in C1/M04).
 
 - `BL-523` `[Bug]` **The AI's patrol/pursue/lay-off cycle does not match the original: CM05's
   second patrol never pursues, and CM09's enemies fly up to 80 km away.** *Evidence:* two
@@ -2371,16 +2380,18 @@ usual.
   (`docs/formats/ai-rosters.md`'s generator-parameter-template slot), so the second patrol is a
   generator launch, not a roster one, the same class of bug as `BL-522`'s Barracuda fighters. CM07's
   `egen.zrd` runs two live generators (`eairg31`/`eairg32`) whose `vehicle.params` names the
-  disabled AIV block a fresh spawn is configured from (`docs/formats/mission-entities/
-  enemy-generators.md`'s `BarracudaPlanes`/`britpeace_5` case is the direct analogue); CSVM's
-  `--generators` still spawns the placeholder `player_bhawk` there, since that `vehicle.params`
-  chain is unbuilt (`EnemyGenerators.cs`'s `VehicleParams` is parsed and unconsumed). *Fix shape:*
-  belongs with the generator launch pose decode (`BL-522`'s moving-spawner shape in
-  `EnemyGenerators.cs`), extended to resolve `vehicle.params` to its AIV template and to a
-  ground-host launch; not a `CampaignRoster.cs` change. *⚠ Traps:* do not add a blanket spawn lift;
-  `BL-457` shows authored spawns are otherwise exact, and the roster-spawned formation here is one
-  more confirmation of that.
-  *Cross-refs:* `BL-522`, `BL-532`, `BL-457`, `docs/formats/ai-rosters.md`,
+  disabled AIV block a fresh spawn is configured from; that join is built
+  (`CampaignRosterPlan.GeneratorTemplates`, asserted by the `generator-roster-params` suite; both
+  C1/M02 records point at `Eairg31_params`, so both hosts launch `blakepeace_2_5` by the data's own
+  doing), and the `player_bhawk` on the egen load line is the fallback-plane label, not the launch.
+  The launch pose is decoded and landed (`BL-522`): it now sits on `eag31_aip0`/`eag32_aip0` plus
+  0.2 m instead of the host origin, and the generators are gated behind four `WAKEUP_GENERATOR`
+  credits, so no headless run launches there without playing the mission. *Fix shape:* re-judge at
+  the controls against the landed launch pose; if the Peacemaker is still under the ground, the
+  residual is `BL-522`'s take-off run, not a `CampaignRoster.cs` change. *⚠ Traps:* do not add a
+  blanket spawn lift; `BL-457` shows authored spawns are otherwise exact, and the roster-spawned
+  formation here is one more confirmation of that.
+  *Cross-refs:* `BL-522`, `BL-457`, `docs/formats/ai-rosters.md`,
   `docs/formats/mission-entities/enemy-generators.md`.
 
 - `BL-529` `[Bug]` **CM08: the Pandora pitches up and down where it should hold steady.**

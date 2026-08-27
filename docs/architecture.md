@@ -5247,7 +5247,9 @@ Runs a mission's egen generators (M4 B6 + F20, behind `--generators[=plane]`): o
 `GeneratorCycle` per surviving `EnemyGeneratorDef`, host altitude read live off the resolved host
 node, spawns through the handed roster callback at the origin node's LIVE position (it rides
 F17's moving zeppelin) in the authored `rotation` drop attitude, each pilot patrolling the cyclic
-net pick through `AiNetFollower` (`SpawnedNet`). Door transitions play the authored or
+net pick through `AiNetFollower` (`SpawnedNet`). A surface host instead launches off its own
+`<base>_aip<n>` take-off path, whose absence is a third load drop, and `LaunchOrdinal` numbers
+every launch for the decoded `%s_eg%d` instance name. Door transitions play the authored or
 node-name-defaulted `open_anim`/`close_anim` (`EnemyGenerators.DefaultDoorAnim`; an unauthored
 close is the open, as in the loader) through host-scoped hooks (`AnimRuntime.PlayWithin`/
 `StopWithin`); a name resolving no def runs the timing machine log-only. A ground hangar's door is

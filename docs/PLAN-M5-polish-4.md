@@ -85,7 +85,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ `BL-534`: a debug key that kills the player's selected target
 3. ☑ `BL-516`: CM03's AA turret never fires
 4. ◐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
-5. ☐ `BL-512` + `BL-522`: the Barracuda's drive jumps, its launch faces the wrong way, and its fighters crash at once
+5. ◐ `BL-512` + `BL-522`: the Barracuda's drive jumps, its launch faces the wrong way, and its fighters crash at once
 6. ☑ `BL-556`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
 
 ### Wave B — CM05 and CM06
@@ -338,7 +338,7 @@ start state, so do not reopen it. Do not read `cargozep1`'s untouched `AnimHealt
 in the probe log as proof of a live bug on its own; nothing in this playtest damaged it, so the
 condition never had a reason to flip regardless of the pool's state.
 
-## A5 ☐ `BL-512` + `BL-522`: the Barracuda's drive jumps, its launch faces the wrong way, and its fighters crash at once
+## A5 ◐ `BL-512` + `BL-522`: the Barracuda's drive jumps, its launch faces the wrong way, and its fighters crash at once
 
 **Goal.** The Barracuda's `sub_movement` drive into the bay is continuous and ends looking into the
 bay, and the fighters it launches fly rather than crash into its runway or the water.
@@ -372,6 +372,37 @@ with the generator log on shows each launched fighter's first seconds airborne; 
 one: do not lift the sub's launch by borrowing it, and do not add a spawn-height offset. `BL-515`
 (where the Barracuda takes damage) is research and stays in the backlog.
 
+**Outcome (◐).** The launch is decoded and landed; the drive is measured and handed back.
+
+Landed: a surface generator resolves the decoded take-off path `<base>_aip<n>` in its host's
+subtree (`barracuda` → `bauda`, `eairg31` → `eag31`), drops at load when it is shorter than two
+points, and launches on point 0 plus 0.2 m with its nose on point 1, at zero velocity with the
+throttle open. `moving_path`'s meaning is decoded (it keeps the path host-relative so it rides a
+driving hull) and recorded on `EnemyGeneratorDef`. Launch naming is the decoded `%s_eg%d` over a
+mission-global counter (`AiGeneratorRuntime.LaunchOrdinal`), which is what ends the
+`@Node3D@3408` renames: those were Godot resolving a duplicate node name, because every launch
+took the roster block's own name. All of it is in
+`docs/formats/mission-entities/enemy-generators.md`.
+
+**Wiring contract, back to `BL-522`.** The take-off **run** is not built. The original keeps the
+path on the aircraft at `+0xc8` with the flag at `+0xcc` and flies the remaining points, which
+also suppresses the net-nearest-node snap (`FUN_004b0f40`); CSVM hands the aircraft to its patrol
+net from the launch pose instead, so one placed at rest on a deck has no authored way to reach
+flying speed. Decoding the consumer of `+0xc8`/`+0xcc` is what closes it.
+
+**`BL-512` is measured, not fixed, and stays in the backlog.** The drive's discontinuity is not a
+keyframe or a doubled activation transform: `sub_movement` is smooth as authored, and reading
+`translation.delta` as acceleration makes its three motions continuous and its travel land within
+1.2 m of the closing absolute placement. The jump is `rnd_xz`, which on all three events equals
+the normalized direction rather than a random amplitude, while `MotionRuntime` adds
+`RandSym() * rnd_xz` to each start velocity: up to ±44 m of drift, snapped away in one frame by
+the closing `ObjectMotionFromTo`. That field is non-zero across far more than this def, so it
+belongs to `ObjectMotion` as a whole. The "wrong way" half is **disproven**: no event in the def
+carries a rotation term, `barracuda`'s gamez transform is `Initial`, and the hull's local −Z (its
+take-off run) is correct as built.
+
+**Verified.** <pending orchestrator run>
+
 ## A6 ☑ `BL-556`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
 
 **Goal.** Confirming a cutscene skip or the pause menu's Resume with gamepad A (or F on the
@@ -399,14 +430,15 @@ Restart resume by other paths.
 
 **Landed.** A new pure `RocketTriggerLatch` (`src/Flight/RocketTriggerLatch.cs`) sits behind
 `FlightController.RocketFirePressed()`: it arms when `RocketButtonDown()` (F/A) reads true at the
-two re-entry points flight regains input from — the `Inert` setter clearing (a cutscene's skip or
+two re-entry points flight regains input from, the `Inert` setter clearing (a cutscene's skip or
 its own handoff) and `PollPauseAndHalt`'s halt-clearing edge (a pause-menu Resume, Restart, or a
-dismiss, all of which route through the same `PauseState.Halted` transition) — and reads the
+dismiss, all of which route through the same `PauseState.Halted` transition), and reads the
 trigger released until the physical button lets go, at which point it disarms and a fresh pull
 fires normally. `FireControl`'s own edge detector (`_rocketFirePrev`) is untouched; the fix is
 entirely upstream of it, so the gun trigger (B) and the selectors are unaffected. Both
 `Inert=false` sites (`Activate`, the wave/respawn re-entry) and the pause halt clearing are
 covered by the same two hooks, closing the spawn-frame sibling the original comment named as well.
+
 **Verified.** <pending orchestrator run>
 
 # Wave B — CM05 and CM06

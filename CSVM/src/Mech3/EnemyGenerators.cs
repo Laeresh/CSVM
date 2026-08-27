@@ -44,6 +44,32 @@ public static class EnemyGenerators
         return $"{head}_open{tail}";
     }
 
+    /// <summary>The instance name a launch takes: the spawner's
+    /// <c>sprintf("%s_eg%d", base, n)</c> over a launch counter reset when a mission's generators
+    /// load and advanced by every successful launch of any of them
+    /// (docs/formats/mission-entities/enemy-generators.md).</summary>
+    public static string LaunchName(string launchBase, int ordinal) => $"{launchBase}_eg{ordinal}";
+
+    /// <summary>The launch base of a roster block: the block name up to its LAST underscore, so
+    /// <c>britpeace_5</c> launches as <c>britpeace_eg0</c>. A generator with no block uses its
+    /// authored vehicle name whole instead, so that case does not come here.</summary>
+    public static string LaunchBase(string blockName)
+    {
+        int cut = blockName.LastIndexOf('_');
+        return cut > 0 ? blockName[..cut] : blockName;
+    }
+
+    /// <summary>The take-off path node a surface host's launch reads, from the loader's
+    /// <c>sprintf("%.2s%.3s", node, node + len - 3)</c> plus <c>_aip&lt;n&gt;</c>: <c>barracuda</c>
+    /// asks for <c>bauda_aip0</c>, <c>eairg31</c> for <c>eag31_aip0</c>. Public so a suite can
+    /// name the nodes it expects.</summary>
+    public static string LaunchPathNode(string node, int index)
+    {
+        string head = node.Length > 2 ? node[..2] : node;
+        string tail = node.Length > 3 ? node[^3..] : node;
+        return $"{head}{tail}_aip{index}";
+    }
+
     private static EnemyGeneratorDef ParseRecord(int index, List<object?> record)
     {
         var d = ZrdrDict.FromAlternating(record);
@@ -164,6 +190,9 @@ public sealed class EnemyGeneratorDef
     /// <c>subhealthy</c>); zeppelin generators use the host's own destroyed flag instead.</summary>
     public string? HealthyNode { get; init; }
 
-    /// <summary>Bare flag on the submarine record; undecoded beyond its presence.</summary>
+    /// <summary>Bare flag on the submarine record: it makes the take-off path HOST-RELATIVE, so
+    /// the points ride the moving host and are re-read against its live pose at every launch.
+    /// Without it the path is baked to world coordinates once, at load
+    /// (docs/formats/mission-entities/enemy-generators.md).</summary>
     public bool MovingPath { get; init; }
 }

@@ -32,6 +32,15 @@ public sealed partial class AiGeneratorRuntime : Node
     // FUN_00452450 preserves the carrier's world velocity, then adds this vertical component.
     private const float CarrierLaunchDownwardSpeed = 22.352f;
 
+    // A surface launch is placed this far above its first take-off path point, and opens the
+    // throttle where a carrier drop closes it (FUN_00451bf0's multi-point branch).
+    private const float SurfaceLaunchLift = 0.2f;
+    private const float SurfaceLaunchThrottle = 1f;
+
+    // How far along a take-off path the loader will look. The shipped paths run 4 to 6 points;
+    // only the first two place a launch, and the rest are the run the aircraft has yet to fly.
+    private const int MaxLaunchPathPoints = 16;
+
     private readonly List<LiveGenerator> _live = new();
     private readonly string _planeName;
     private readonly Func<EnemyGeneratorDef, Vector3, Vector3, AiPilot, FlightController?> _spawn;
@@ -82,7 +91,17 @@ public sealed partial class AiGeneratorRuntime : Node
             }
             // The zeppelin drop point; a miss falls back to the host node (not a drop condition).
             Node3D? origin = def.Origin != null ? resolveNode!(def.Origin, host) : null;
-            _live.Add(new LiveGenerator(def, new GeneratorCycle(def), host, origin, nets));
+            // Load-drop 3: a surface host launches along a take-off path in its own subtree, and
+            // one shorter than two points rejects the generator (decoded rule).
+            var path = def.IsZeppelin ? null : ResolveLaunchPath(def.Node, host, resolveNode);
+            if (!def.IsZeppelin && path == null)
+            {
+                GD.Print($"egen: generator '{def.Node}' dropped: no take-off path " +
+                         $"'{EnemyGenerators.LaunchPathNode(def.Node, 0)}'/" +
+                         $"'{EnemyGenerators.LaunchPathNode(def.Node, 1)}' under the host");
+                continue;
+            }
+            _live.Add(new LiveGenerator(def, new GeneratorCycle(def), host, origin, nets) { LaunchPath = path });
             string kind = def.IsZeppelin ? "zeppelin launch" : def.MovingPath ? "moving spawner" : "spawner";
             var netNames = new List<string>(nets.Count);
             foreach (var n in nets)
@@ -93,10 +112,17 @@ public sealed partial class AiGeneratorRuntime : Node
                      $"wave {def.WaveSize} every {def.IndPeriod + def.WavePeriod:0.#} s (ind {def.IndPeriod:0.#} + wave {def.WavePeriod:0.#}), " +
                      $"max_active {def.MaxActive}, nets [{string.Join(", ", netNames)}]" +
                      (def.MinAltitude is { } gate ? $", launch gate {gate:0} m" : "") +
+                     (path != null ? $", take-off path {path.Count} point(s)" : "") +
                      (def.OpenAnim != null ? $", doors '{def.OpenAnim}'/'{def.CloseAnim}'"
                          : ", doors unnamed (timing runs log-only)"));
         }
     }
+
+    /// <summary>The launch counter the instance names of this mission's launches run on: it
+    /// starts at 0 with the generators and advances once per successful launch across all of
+    /// them, which is what makes a name unique (docs/formats/mission-entities/enemy-generators.md).
+    /// Read it BEFORE the spawn whose name it forms.</summary>
+    public int LaunchOrdinal { get; private set; }
 
     /// <summary>Generators that survived the load drops.</summary>
     public int LiveCount => _live.Count;
@@ -216,6 +242,27 @@ public sealed partial class AiGeneratorRuntime : Node
         }
     }
 
+    // The path nodes sit in the host's own subtree, so their live global positions already carry
+    // the moving_path transform the original applies by hand against the host's live matrix.
+    private static List<Node3D>? ResolveLaunchPath(string node, Node3D host,
+        Func<string, Node3D?, Node3D?>? resolveNode)
+    {
+        if (resolveNode == null)
+        {
+            return null;
+        }
+        var points = new List<Node3D>();
+        for (int i = 0; i < MaxLaunchPathPoints; i++)
+        {
+            if (resolveNode(EnemyGenerators.LaunchPathNode(node, i), host) is not { } point)
+            {
+                break;
+            }
+            points.Add(point);
+        }
+        return points.Count > 1 ? points : null;
+    }
+
     private void PlayDoor(LiveGenerator gen, bool opening)
     {
         string? anim = opening ? gen.Def.OpenAnim : gen.Def.CloseAnim;
@@ -261,6 +308,22 @@ public sealed partial class AiGeneratorRuntime : Node
             drop = forward.Rotated(forward.Cross(Vector3.Up).Normalized(), pitch).Normalized();
         }
 
+        // A surface host launches off its own take-off path rather than out of the host node: on
+        // the first point, nose on the second, at rest. The path's own climb supplies the pitch,
+        // so no spawn-height offset and no altitude gate belong here.
+        float? launchThrottle = null;
+        if (gen.LaunchPath is { Count: > 1 } path)
+        {
+            pos = path[0].GlobalPosition + Vector3.Up * SurfaceLaunchLift;
+            var run = path[1].GlobalPosition - path[0].GlobalPosition;
+            if (run.LengthSquared() > 1e-6f)
+            {
+                forward = drop = run.Normalized();
+            }
+            launchVelocity = Vector3.Zero;
+            launchThrottle = SurfaceLaunchThrottle;
+        }
+
         // Instant Action's zeppelin arm (F12): release a parked wave member instead of building a
         // new aircraft. No net pick — a released member is a wave enemy carrying its own
         // primary_target, not a generator-authored patroller.
@@ -274,6 +337,7 @@ public sealed partial class AiGeneratorRuntime : Node
                 return;
             }
             gen.SpawnCount++;
+            LaunchOrdinal++;
             released.Downed += (_, _) => gen.Cycle.SpawnRemoved();
             GD.Print($"egen: '{gen.Def.Node}' launch #{gen.SpawnCount}: IA wave member '" +
                      $"{released.Name}' released at ({pos.X:0},{pos.Y:0},{pos.Z:0}), " +
@@ -298,8 +362,10 @@ public sealed partial class AiGeneratorRuntime : Node
             return;
         }
         if (launchVelocity is { } velocity)
-            controller.Activate(pos, pos + drop, velocity, carrierDrop: true);
+            controller.Activate(pos, pos + drop, velocity,
+                carrierDrop: launchThrottle == null, launchThrottle: launchThrottle);
         gen.SpawnCount++;
+        LaunchOrdinal++;
         controller.Downed += (_, _) => gen.Cycle.SpawnRemoved();
         GD.Print($"egen: '{gen.Def.Node}' spawn #{gen.SpawnCount}: '{controller.Name}' dropped at " +
                  $"({pos.X:0},{pos.Y:0},{pos.Z:0}) patrolling net '{net.Name}', " +
@@ -333,6 +399,10 @@ public sealed partial class AiGeneratorRuntime : Node
         public Vector3 HostVelocity { get; set; }
 
         public List<AiNet> Nets { get; }
+
+        /// <summary>A surface host's take-off path, in host subtree order; null on a zeppelin.
+        /// Never shorter than two points, which is a load-drop condition.</summary>
+        public List<Node3D>? LaunchPath { get; init; }
 
         /// <summary>F12's Instant Action launch hook: non-null once
         /// <see cref="AiGeneratorRuntime.UseInstantActionLaunches"/> has claimed this generator,

@@ -108,11 +108,17 @@ internal static class WorldFidelitySuites
                 $"the campaign generator waits for WAKEUP_GENERATOR credit");
             generators.SimStep(10f);
             ctx.Check(launchedDef == null, $"the submarine launches nothing before the patrol phase");
+            // The decoded launch point: the first node of the submarine's own take-off path,
+            // lifted 0.2 m, and riding the live hull because moving_path keeps it host-relative.
+            var runway = First(world.Runtime.FindNodes(
+                EnemyGenerators.LaunchPathNode("barracuda", 0), submarine));
             generators.GrantWaveCapacity("barracuda", 4);
             generators.SimStep(0.01f);
-            ctx.Check(launchedDef?.VehicleParams == "BarracudaPlanes"
-                && launchedAt.DistanceTo(submarine.GlobalPosition) < 0.01f,
-                $"the credited launch identifies its template and uses the live submarine pose");
+            ctx.Check(launchedDef?.VehicleParams == "BarracudaPlanes" && runway != null
+                && launchedAt.DistanceTo(runway.GlobalPosition + Vector3.Up * 0.2f) < 0.01f,
+                $"the credited launch identifies its template and starts on the hull's take-off path");
+            ctx.Check(runway != null && runway.GlobalPosition.DistanceTo(submarine.GlobalPosition) > 1f,
+                $"that path point is the deck ahead of the hull's origin, not the origin itself");
         });
     }
 

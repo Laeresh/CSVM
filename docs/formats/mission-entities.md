@@ -170,7 +170,7 @@ Instant Action's `zeppelin_run` wins on, ahead of the hull's own death byte. See
 the zeppelin module reads the vector, so a mission that is not an Instant Action zeppelin run feels
 engine loss only as the curve above.
 
-See [Enemy generators](mission-entities/enemy-generators.md) for `egen.json`, its launch cycle, capacity rules, and evidence limits.
+See [Enemy generators](mission-entities/enemy-generators.md) for `egen.json`, its launch cycle, the zeppelin drop and the surface hosts' take-off paths, launch naming, capacity rules, and evidence limits.
 
 ## Evidence & limits
 

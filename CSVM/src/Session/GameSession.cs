@@ -2402,15 +2402,20 @@ public partial class GameSession : Node3D
             FlightController? SpawnFromGenerator(EnemyGeneratorDef def, Vector3 pos, Vector3 look,
                 AiPilot pilot)
             {
+                // The decoded launch name: one counter across the mission's generators, so a
+                // second launch off the same template is a distinct node rather than a rename.
+                int ordinal = _generators?.LaunchOrdinal ?? 0;
                 if (def.VehicleParams is not { } parameter
                     || !generatorTemplates.TryGetValue(parameter, out var plan))
                 {
                     // ⚠ shippedSkins: a generated aircraft is the mission's enemy, so it keeps its
                     // own textures rather than the player militia's default.
                     return flightRoster.SpawnAi(new AiSpawn(
-                        _spec.GeneratorsPlane, pos, look, pilot, ShippedSkins: true));
+                        _spec.GeneratorsPlane, pos, look, pilot, ShippedSkins: true,
+                        NodeName: EnemyGenerators.LaunchName(_spec.GeneratorsPlane, ordinal)));
                 }
-                var launched = flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot));
+                var launched = flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot,
+                    EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(plan.Name), ordinal)));
                 CampaignRosterPlan.ApplyPlan(pilot, plan, generatorActiveDist);
                 RegisterAiVoice(launched, plan.AccentId);
                 return launched;
