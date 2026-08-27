@@ -175,6 +175,13 @@ public sealed partial class GaugeCluster : Control
     /// <inheritdoc cref="NitroBoostAngleDeg"/>
     public float NitroChargeAngleDeg => _nitroChargeNeedle.Angle;
 
+    /// <summary>The two weapon-gauge arrows' live sweep angles, clockwise degrees from the belt's
+    /// position 0. NaN before the first sweep, which is a gauge with no loadout bound.</summary>
+    public float GunArrowAngleDeg => _gunArrow.Angle;
+
+    /// <inheritdoc cref="GunArrowAngleDeg"/>
+    public float MissileArrowAngleDeg => _missileArrow.Angle;
+
     private bool DamagePhaseOn => Mathf.PosMod((float)_time, DamageBlinkPeriod) < DamageBlinkPeriod * 0.5f;
 
     /// <summary>Builds the cluster from the plane's 'gauges' subtree in planes.zbd and

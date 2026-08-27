@@ -15,7 +15,8 @@ namespace CSVM.Flight;
 public sealed class CockpitGauges
 {
     private readonly Needle _altHundreds, _altThousands, _speed, _nitroBoost, _nitroCharge;
-    private readonly Node3D? _lowAltLamp, _stallLamp;
+    private readonly Needle _gunArrow, _missileArrow;
+    private readonly Node3D? _lowAltLamp, _stallLamp, _nitroDial;
 
     private CockpitGauges(Node3D gauges)
     {
@@ -24,8 +25,11 @@ public sealed class CockpitGauges
         _speed = Needle.Find(gauges, "speed");
         _nitroBoost = Needle.Find(gauges, "nitro_boost");
         _nitroCharge = Needle.Find(gauges, "nitro_charge");
+        _gunArrow = Needle.Find(gauges, "ggarrow");
+        _missileArrow = Needle.Find(gauges, "mgarrow");
         _lowAltLamp = FindNamed(gauges, "lowalt_on");
         _stallLamp = FindNamed(gauges, "stallwarning_on");
+        _nitroDial = FindNamed(gauges, "nitrogauge");
     }
 
     /// <summary>Finds the panel inside one built interior, or null when there is no interior (an AI
@@ -53,8 +57,24 @@ public sealed class CockpitGauges
         // The nitro pair is already the decoded Euler-z, so these take the angle unnegated.
         _nitroBoost.SetAngleDeg(gauges.NitroBoostAngleDeg);
         _nitroCharge.SetAngleDeg(gauges.NitroChargeAngleDeg);
+        // The belt arrows sweep clockwise like the dial needles. NaN until a loadout binds one,
+        // and an unswept arrow keeps the pose it was authored at.
+        SetIfSwept(_gunArrow, gauges.GunArrowAngleDeg);
+        SetIfSwept(_missileArrow, gauges.MissileArrowAngleDeg);
         Show(_lowAltLamp, gauges.LowAltLampLit);
         Show(_stallLamp, gauges.StallLampLit);
+        // ⚠ Only the Devastator ships nitrogauge active:false, so on every other airframe the dial
+        // is authored present and the injector is what decides. The screen-space cluster draws it
+        // on the same flag; without this the 3D panel shows a nitro dial on a plane with no nitrous.
+        Show(_nitroDial, gauges.NitroInstalled);
+    }
+
+    private static void SetIfSwept(Needle needle, float angleDeg)
+    {
+        if (!float.IsNaN(angleDeg))
+        {
+            needle.SetAngleDeg(-angleDeg);
+        }
     }
 
     private static void Show(Node3D? node, bool visible)
