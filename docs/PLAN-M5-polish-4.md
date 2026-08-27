@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☐ `BL-526`: the rope ladder never deploys
 22. ☐ `BL-527`: the second patrol's Peacemaker spawns under the ground
-23. ☐ `BL-518`: a stripe-textured surface stands in front of the zeppelin hangar
+23. ❌ `BL-518`: a stripe-textured surface stands in front of the zeppelin hangar
 24. ☐ `BL-528`: the Blue Streak flies with the stock Bloodhawk fit and no nitro
 25. ☐ `BL-529`: the Pandora porpoises along its route and past its end
 
@@ -461,25 +461,35 @@ terrain height; D32.
 
 **⚠ Traps.** No blanket spawn lift; `BL-457` shows authored spawns are otherwise exact.
 
-## C23 ☐ `BL-518`: a stripe-textured surface stands in front of the zeppelin hangar
+## C23 ❌ `BL-518`: a stripe-textured surface stands in front of the zeppelin hangar
 
 **Goal.** CM07's zeppelin hangar shows its open mouth, as the original does.
 
 **Evidence (confidence: lead-only).** Reported at the controls. Candidates: an unresolved texture
 on a hangar-door or interior-mask polygon, an alpha-blend sheet drawn opaque, or a node the setup
-script should have deactivated. `<TODO: re-verify still-open against the code>`
+script should have deactivated.
 
-**Approach.** `--freecam --chapter=C1 --debug-names` at the hangar, read the node and texture name
-off the surface, then check the texture's alpha flag (the `trans` name rule, `3e91a282`) and the
-mission script's active state for it. Decode lane: none expected.
+**Disproof.** `--freecam --chapter=C1 --debug-names` at the Passenger Hangar location
+(`extracted/C1/M02/zrdr/location.zrd.json`) shows the reported surface is the moored "Hollywood"
+airship's nose (`rock_zeppelin`/`dliner1`, `dxzepskin.tif`), foreshortened head-on so its gore
+stripes fill the door opening; `--debug-nodelab=node=rock_zeppelin,deps` confirms it is plain
+world geometry (no destructible parent, no anim def anchored on it) with no reference anywhere in
+`C1/M02`'s own compiled scripts (`egen`/`hangar_drop`/`hangar_panic`/`mis_anim`), so nothing in the
+mission's own active-state handling touches it; it is baseline C1 chapter dressing, unconditionally
+visible. `OriginalScreenshots/C1 IA1 Stunt Flying Zeppelin in Hangar.png` shows the same airship
+filling the same doorway from a comparable angle, HUD-labelled `Danger Zone (Fly Through) -
+Passenger Hangar`: the original authors this as a stunt-flying obstacle, not an open mouth, so the
+"open hangar" the report expects never exists in the original either. No unresolved texture, no
+opaque alpha sheet and no missing deactivation: the mission's active-state handling was never in
+play, so nothing here belongs to this item's file scope.
 
 **Model recommendation.** medium, low effort.
 
-**Verify.** A freecam screenshot pair at the hangar before and after; the 8-chapter freecam
-regression unchanged in counts; D32.
+**Verify.** <pending orchestrator run>
 
-**⚠ Traps.** The zeppelin hangar has door animations (`EnemyGenerators.cs:143`); confirm the
-stripe is not a door mid-animation before treating it as a texture defect.
+**⚠ Traps.** The zeppelin hangar has door animations (`EnemyGenerators.cs:143`); confirmed the
+stripe is not a door mid-animation (`C1/M02`'s two `egen` generators are the plain ground-airfield
+shape, not zeppelin, and author no door state here) before reading it as the moored airship.
 
 ## C24 ☐ `BL-528`: the Blue Streak flies with the stock Bloodhawk fit and no nitro
 

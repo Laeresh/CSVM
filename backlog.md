@@ -1138,16 +1138,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   first. *Cross-refs:* `analysis/alpha-classification/FINDINGS.md`, which carries the decode and the
   install-wide census; the coastline commit that filed this (`git log --grep=SoftAlphaCoastline`).
 
-- `BL-518` `[Bug]` **CM07 (C1/M02): a stripe-textured surface stands in front of the zeppelin hangar.**
-  *Evidence:* reported at the controls: a flat surface carrying a striped texture sits in front of
-  the hangar's mouth, where the original shows the open hangar. Candidates are an unresolved
-  texture on a hangar-door or interior-mask polygon, an alpha-blend sheet drawn opaque, or a node
-  the setup script should have deactivated. *Fix shape:* `--freecam --chapter=<CM07's chapter>
-  --debug-names` at the hangar, read the node and texture name off the surface, then check its
-  texture's alpha flag (the `trans` name rule, `3e91a282`) and the mission script's active state for
-  it. *⚠ Traps:* the zeppelin hangar has door animations (`EnemyGenerators.cs:143`); confirm
-  whether the stripe is a door mid-animation before treating it as a texture defect.
-
 ## Effects & animation runtime
 
 - `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
