@@ -293,6 +293,13 @@ The earlier reading of "×1/×2/×3 with detail" had the direction backwards. No
 script issues the command. The remake's global is `csky_clutter_fade_scale_sq`
 (`CSVM.Utils.EffectsLevel`, default HIGH as `detail.zrd` selects on any modern CPU).
 
+The fade is a performance measure in a 1999 engine, so the remake can decline it: the
+`graphics.clutterFarFade` config key (bool, default `true`, the decoded behaviour) resolves the
+same global to 0 when set `false`. Zero is a never-fades scale, not a fade-everything one, because
+the scale multiplies the distance rather than the thresholds: the scaled distance never reaches any
+near², so every stamp keeps full alpha and its full card, exactly the arm the engine itself takes
+for a `farMax` of 0. Clutter then draws out to the map-edge window under the mission's fog.
+
 ## The weight list (`FUN_004deab0`)
 
 The per-key parser, and three of its conversions are traps.

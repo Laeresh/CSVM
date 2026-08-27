@@ -457,6 +457,11 @@ C5's blocks end 300 to 450 m out under fog that starts at 1500 m, and is owed a 
 original's C5 footage (`CAP-22`) at the controls. Eleven goldens moved (every world shot that frames
 clutter) and are re-pinned in the landing commit.
 
+**At the controls.** The dithered ramp reads as the original's fade, so the default stays HIGH with
+the fade on; the `graphics.clutterFarFade` switch (bool, default `true`, resolving the same global
+to a never-fades scale of 0) exists for the user who reads the fade as a 1999 performance measure
+and wants the remake to draw clutter out to the fog.
+
 ## B5 ☑ An unauthored puffer `TIME_INTERVAL` is `1.0` s, not our `0.1`
 
 **Goal.** A puffer state that does not author `TIME_INTERVAL` emits once a second, as the original's

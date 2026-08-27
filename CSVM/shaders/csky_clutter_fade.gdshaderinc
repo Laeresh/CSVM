@@ -7,6 +7,8 @@
 // (1/4/9 for HIGH/MEDIUM/LOW, CSVM.Utils.EffectsLevel), multiplied into the SQUARED camera
 // distance before the compare, so a lower level fades and culls at 1/2 and 1/3 of the authored
 // metres. Decode: docs/formats/templates.md.
+// A scale of 0 is the remake's own "never fades" setting (graphics.clutterFarFade): the scaled
+// distance never reaches any near², so every stamp keeps full alpha and its full card.
 global uniform float csky_clutter_fade_scale_sq = 1.0;
 
 // One instance's opacity: 1 inside near, 0 at or beyond far, a ramp LINEAR IN SQUARED DISTANCE

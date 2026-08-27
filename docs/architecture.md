@@ -283,7 +283,7 @@ The things every subsystem depends on: the clock, the log, the seed. Changing on
 determinism repo-wide — read `docs/verification.md` first.
 
 - `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the in-code `const`.
-- `src/Utils/EffectsLevel.cs`: the original's graphics EffectsLevel option (`graphics.effectsLevel`, default `high`) and the one global it drives, the clutter fade's squared distance scale.
+- `src/Utils/EffectsLevel.cs`: the original's graphics EffectsLevel option (`graphics.effectsLevel`, default `high`) and the one global it drives, the clutter fade's squared distance scale; `graphics.clutterFarFade` (default `true`) switches the authored fade off entirely.
 - `src/Utils/GameClock.cs` — the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt + single-step, time scale.
 - `src/Utils/Log.cs` — the diagnostic log: 9 categories × 4 levels, `--log=` console filter, always-on full-detail `.scratch/logs/` file sink.
 - `src/Utils/ShaderTime.cs` — the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
@@ -608,7 +608,7 @@ Static helpers (`HorizonZonesOf`, `CloudDeckAltitudeOf`, `DomeZonesToBuild`, `De
 Rolling window (`Rings`=5 of 1024 m cells, diffed only on cell crossings) of repeated border tiles +
 clutter (grown from `ClutterBuilder.ExportedKinds`, each copy keeping its source stamp's fade
 thresholds) continuing the world past the map edge, one window per session shared by every player
-camera; the window's 5120 m reach exceeds the largest authored clutter fade at every detail level. `ClassifyGroundMesh`/`IsCompletionStrip`/
+camera; the window's 5120 m reach exceeds the largest authored clutter fade at every detail level, and is unchanged by `graphics.clutterFarFade=false`, which simply leaves the window edge (under the mission's fog) as the extension's visible limit. `ClassifyGroundMesh`/`IsCompletionStrip`/
 `FoldAxis` are pure statics pinned by `MapEdgeTileTests`/`MapEdgeFoldTests`; `--dump-tilegrid` writes
 the per-cell acceptance census `WriteCensus` builds. The original's own continuation behaviour and
 the per-chapter fold measurements: docs/formats/world-structure.md.
@@ -5386,6 +5386,11 @@ templates-clutter fade multiplies into its camera distance (1.0/4.0/9.0), regist
 `Launcher` beside the fog globals and declared in `shaders/csky_clutter_fade.gdshaderinc`. The
 level's meaning and direction: docs/formats/templates.md. Consumed by `ClutterBuilder`'s sprite
 shader and `SceneBuilder`'s `clutterFade` bias-shader variant.
+A second key, `graphics.clutterFarFade` (bool, default `true`), is the remake's own switch rather
+than an engine option: `false` resolves the same global to 0, which is a never-fades scale because
+the shader multiplies it into the squared camera distance, so no stamp reaches its near² and
+clutter draws out to the fog instead of ending at the authored metres. Both keys and the resolved
+scale are on the `[world] clutter fade:` launch line.
 
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on

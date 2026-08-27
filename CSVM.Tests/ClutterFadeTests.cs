@@ -67,4 +67,16 @@ public class ClutterFadeTests
         Assert.False(EffectsLevel.TryClutterFadeScaleSq("ultra", out float scaleSq));
         Assert.Equal(1f, scaleSq);
     }
+
+    [Theory]
+    [InlineData("high")]
+    [InlineData("medium")]
+    [InlineData("low")]
+    public void TheFadeSwitchOffIsScaleZeroAtEveryLevel(string level)
+    {
+        // 0 is the never-fades scale: scale × d² never reaches any near², so the shader's
+        // "inside near" arm always wins, whatever the level word says.
+        Assert.Equal(0f, EffectsLevel.ClutterFadeScaleSq(false, level));
+        Assert.NotEqual(0f, EffectsLevel.ClutterFadeScaleSq(true, level));
+    }
 }

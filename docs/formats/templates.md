@@ -218,6 +218,10 @@ squared camera distance before the compare, so MEDIUM culls at half the authored
 at a third. `detail.zrd` selects HIGH on any CPU over 600 MHz, so HIGH is the remake's default
 (`graphics.effectsLevel` config key). The original alpha-blends the ramp; the remake dithers it in
 the cutout pass, since 139k sprites in the transparent pass is the cost the item exists to avoid.
+The fade is also switchable off, which the original has no option for: `graphics.clutterFarFade`
+(bool, default `true`) resolves the global to 0, and because the scale multiplies the distance the
+compare never fires, so clutter draws out to the fog. That is a deliberate remake departure for a
+machine that does not need the measure the fade is.
 `rotation_range`, `align_normal` and `translate_uv_range` are unauthored
 everywhere in the install (censused under B14/C21) and so need no decision beyond "document,
 don't build" — recorded above. The five unauthored keys are read and, being unauthored, do

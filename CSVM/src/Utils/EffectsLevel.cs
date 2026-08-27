@@ -20,6 +20,14 @@ public static class EffectsLevel
     /// <summary>The shipped default on every machine this remake runs on.</summary>
     public const string Default = "high";
 
+    /// <summary>Whether the authored short-range clutter fade applies at all. The original's fade
+    /// is a performance measure, so this is the opt-out for a machine that would rather draw
+    /// clutter out to the fog; default on, which is the decoded behaviour.</summary>
+    public const string FadeKey = "graphics.clutterFarFade";
+
+    /// <summary>The default for <see cref="FadeKey"/>: the fade the data authors.</summary>
+    public const bool FadeDefault = true;
+
     /// <summary>The global shader uniform the level drives; declared in
     /// <c>csky_clutter_fade.gdshaderinc</c>, registered once by the launcher.</summary>
     public const string ShaderParam = "csky_clutter_fade_scale_sq";
@@ -45,15 +53,33 @@ public static class EffectsLevel
         }
     }
 
-    /// <summary>The configured level's scale, falling back to HIGH (and saying so) for a word
-    /// the original does not know.</summary>
+    /// <summary>Whether the authored fade applies, per <see cref="FadeKey"/>.</summary>
+    public static bool ClutterFarFadeEnabled() => Config.GetBool(FadeKey, FadeDefault);
+
+    /// <summary>The scale a switch state and a level word run at, the whole resolution off Config.
+    /// ⚠ Off is 0, a NEVER-fades scale rather than a fade-everything one: the shader multiplies it
+    /// into the squared camera distance, so nothing ever reaches its near² and every stamp keeps
+    /// full alpha and its full card, the same arm the engine's own far² of 0 takes.</summary>
+    public static float ClutterFadeScaleSq(bool farFade, string level)
+    {
+        if (!farFade)
+        {
+            return 0f;
+        }
+        TryClutterFadeScaleSq(level, out float scaleSq);
+        return scaleSq;
+    }
+
+    /// <summary>The configured scale, saying so when the level word is one the original does not
+    /// know.</summary>
     public static float ResolveClutterFadeScaleSq()
     {
+        bool farFade = ClutterFarFadeEnabled();
         string level = Config.GetString(Key, Default);
-        if (!TryClutterFadeScaleSq(level, out float scaleSq))
+        if (farFade && !TryClutterFadeScaleSq(level, out _))
         {
             Log.Warn("world", $"config {Key}={level} is not high/medium/low; using {Default}");
         }
-        return scaleSq;
+        return ClutterFadeScaleSq(farFade, level);
     }
 }
