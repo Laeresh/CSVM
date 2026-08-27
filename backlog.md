@@ -2014,14 +2014,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   HUD dials drawn over a static 3D panel holding a fixed pose. Two lamp nodes, `lowalt_on` and
   `stallwarning_on` (present on all 11 airframes, shipped `active: true`), are parked hidden by
   `PlaneBuilder.ParkInteriorStates`/`IsInteriorDrivenState` alongside the windshield bullet-hole
-  decals — nothing lights them. Bundled here with a second, related question: whether `GaugeCluster`
-  should reposition per `hud_v2.zrd`'s `POSITION_1ST` layout key when the pilot is in a first-person
-  view — the HUD initializer reads distinct `POSITION_1ST`/`POSITION_3RD` layout keys from the
-  archive and CSVM's `GaugeCluster` consumes neither (`docs/org/cameraViews.md`, "The in-binary
-  strings expose no view-name tokens").
+  decals — nothing lights them.
   *Fix shape:* drive the authored needles and the two lamps off the same telemetry `GaugeCluster`
-  already reads, then decide whether the screen-space cluster retires in first person, moves to the
-  `POSITION_1ST` layout, or keeps doubling up over the 3D panel as it does today.
+  already reads, then decide whether the screen-space cluster retires in first person or keeps
+  doubling up over the 3D panel as it does today.
+  ⚠ *The `POSITION_1ST` half of this item is answered and carries no work.* It was filed asking
+  whether `GaugeCluster` should adopt a first-person layout from `hud_v2.zrd`'s
+  `POSITION_1ST`/`POSITION_3RD` keys; `FUN_00454e70` reads those into a per-section debug text
+  column (`AIR_SPEED`, `ALTIMETER`, `GUNS`, `MISSILES`, `HEALTH`, `NITRO`, one x at 0.02 spacing
+  in y, written only under `DAT_00624df0`), not into dial placement. There is no per-view gauge
+  layout in the original to port, so the retire-or-double-up choice above is CSVM's own call
+  (`docs/formats/hud.md`, "Cockpit gauges").
+  *Decoded, ready to build against* (`docs/formats/hud.md`, "Cockpit gauges", carries the addresses
+  and conditions): the needle laws are 0.36°/ft and 0.036°/ft on world-Y ASL (`00607704`,
+  `00607700`) and 0.7199957°/mph (`006076e8`), all three confirming what `GaugeCluster` already
+  ships. Both lamps differ from what we ship. LOW ALT lights below **60.0 m AGL** (`006076fc`, not
+  our 50 m) and its blink RAMPS, half-period `0.14 + 0.006·agl_m` (`006076f4`, `006076f8`), not our
+  fixed 400 ms. STALL is gated on **available load factor below 2.35 g** (`00608334`, `00608338`),
+  not on a speed fraction, with half-period `0.100375 + 0.1275·n_avail` bounded to (0.100, 0.400] s
+  (`00603538`, `006034ac`), which supersedes the footage-derived 0.30 fd and 2.10 s-per-fraction
+  pair. ⚠ The lamps and the flight model share one dt (copied bit-for-bit at `004897d8`), so these
+  go in without a k = 1.390 conversion. Changing the four `GaugeCluster` constants is part of this
+  item's work; the damage-dial blink (5 s, 0.32 s) is NOT in the gauge cluster and stays undecoded.
   *Residue:* nothing is hidden for this, and nothing needs to be. The instruments were reported
   flickering, and the mechanism turned out to be the mount scale rather than the missing needle
   drive: every depth bias `SceneBuilder` emits is a fraction of VIEW DISTANCE, so mounting the

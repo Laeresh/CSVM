@@ -88,35 +88,75 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   (beveled lance, rimmed hub discs) whose alpha channel is the complete antialiased
   here claimed the shape was applied engine-side; it is simply in the archives the
   engine actually renders from (see `docs/tooling.md` on the tiers).
+- **The needle laws are decoded.** Both needle sets are rotated about the node's third axis by
+  `FUN_004d1a30(node, 0, 0, angle_rad)`, with a negative (clockwise) angle. The altimeter's rates
+  are per METRE of world height: `hundreds` −0.020614125 rad/m (`00607704`) and `thousands`
+  −0.0020614124 rad/m (`00607700`), i.e. **0.36°/ft over 1,000 ft per revolution** and
+  **0.036°/ft over 10,000 ft**. The speedometer's is −0.02811017 rad per m/s (`006076e8`), which
+  with the 2.2369363 mph per m/s factor at `006076e4` is **0.7199957°/mph**, exactly 500 mph per
+  revolution. Both are driven from `FUN_0049f6a0`, the altimeter at `00453c5f`/`00453c84`
+  (`FUN_00453c50`) and the speedometer at `00453a07` (`FUN_004539f0`); the speed input is the
+  plane's speed magnitude with no branch on it.
+  ⚠ **The needles read absolute world Y (ASL) while the LOW ALT lamp beside them reads AGL.** The
+  needle feed is `plane+0x208`, pushed at `0049f7a2`. The `ALTIMETER` debug text readout prints the
+  AGL figure in feet (×3.28084 at `006076f0`), so that string is not evidence about the needles.
 - **Warning overlays** `lowalt_on` / `stallwarning_on` (priority 7 — *under* the
   needles): the lit window quad (`lowalt.tif` / `stall.tif`, 64×32, red) **plus two
   red bezel slashes** (`redhilite.tif` quads at the dial edge, left+right of the
   window's side). The whole node toggles/blinks.
-- **The STALL lamp's blink is a RATE ramp on its own threshold** (`BL-148`, `CAP-06`
-  + the two `CAP-05` stall clips). Three separate facts, each
-  measured across four clips:
-  - **Brightness is binary** — the lit plate reads 211.0 ± 0.2 red and the unlit one
-    41.7 ± 0.2 at *every* speed, and the duty cycle is 0.50 throughout. There is no
-    opacity ramp; the graded-fade reading the item was opened on is disproved.
-  - **The rate ramps with airspeed, not with time since onset**, and with no
-    hysteresis: the blink half-period is **643 ms sim at the 0.30 fd threshold**
-    falling to **296 ms at 0.15 fd**, and it rises again if the aircraft accelerates
-    back. The remake implements it as a half-period **proportional to the fd
-    fraction** (`GaugeCluster.StallBlinkHalfPeriodS`, 2.10 sim s per unit), held flat
-    below 0.15 fd — the capture's own alternative fit (`5.9·V(mph) − 62` ms wall)
-    lands within one game frame of it everywhere and neither form extrapolates below
-    ~43 mph. ⚠ These are **sim** ms; the wall figures are 1/1.390 of them.
-    The original also toggles on integer 33.37 ms game frames — its frame rate showing
-    through the law, not part of it, so the remake runs the law continuously.
-  - **The lamp's threshold is not the stall's.** It lights at a fixed **0.30 fd**
-    (0.2989–0.2996 across four clips); inside the clip that measured it the lamp led
-    the Bloodhawk's break by 2.64 sim s / 14.9 mph. The remake carries the lamp as
-    `FlightModel.StallWarnFrac` over `FlightModel.StallFraction`; the nose-drop itself
-    is no longer a fixed fraction — it is the airframe's own computed
-    `FlightModel.StallSpeed`, the speed at which the aerodynamic lift ceiling can no
-    longer carry that airframe's weight.
-  The LOW ALT cue beside it is a plain fixed 400 ms blink — it has never been
-  measured against the original, and nothing here applies to it.
+- **Both lamps are decoded, and both are player-only.** Each is a plain visibility toggle
+  (`FUN_004cca30` on bit `0x4` of the node's flag word at `+0x24`) driven once per frame from the
+  cockpit update `FUN_0049f6a0`, against an absolute deadline stored beside the lamp. Neither has a
+  second timer, a frame counter or an every-Nth-tick guard, so the observed half-period is the
+  computed one rounded up to the next frame boundary. Both deadlines run on the clock at
+  `DAT_0071c470`, which the world tick `FUN_004897c0` advances by `DAT_009ad744` at `004897d1`.
+  ⚠ **That is the same dt the flight model uses**: the next instruction (`004897d8`) copies
+  `DAT_009ad744` bit-for-bit into `DAT_0071c56c`, which is what the aero block multiplies by at
+  `0x48d11b`. The lamps and the flight model are therefore in ONE time base, and no conversion
+  separates them. Read `GaugeCluster`'s lamp constants in the same units as `FlightModel`'s dt.
+- **STALL is gated on available load factor, not on a speed fraction.** The driver is
+  `s = (plane+0xf4 + 1.35) × 0.425` (`1.35` at `00608338`, `0.425` at `00608334`, applied at
+  `0049f7e6`), where `plane+0xf4` holds `1 − n_avail`: `n_avail` is the instantaneously available
+  load factor, the wing's maximum lift at the current airspeed over weight, capped at 9 g and by
+  the AoA limit. It is written every frame, player-only, at `0048e7dd` in `FUN_0048e580` from the
+  out-parameter `FUN_0048c470` fills, which is the same quantity and the same block as the
+  nose-drop's stall flag (`docs/org/flightModel.md`). So:
+
+      lamp dark    when n_avail >= 2.35            (s <= 0 hides the node outright)
+      half_period  = 0.4 − 0.3·s = 0.100375 + 0.1275·n_avail   seconds
+
+  `0.4` at `00603538` and `0.3` at `006034ac`; the deadline is `now + half_period`, written at
+  `00453a78` in `FUN_004539f0` and recomputed from the current frame's value at each toggle, so it
+  does not catch up. **The half-period is bounded to (0.100, 0.400] s by construction**, since
+  `s` lies in (0, 1]. A separate flag at `plane+0x384` forces the lamp off entirely; what state it
+  represents is not decoded, but it also switches the throttle clamp from `[0, 1]` to `[−5, +5]`.
+  Because lift goes as v², an equivalent speed form is that the lamp lights below `1.533 × v₁g`,
+  but that holds only while the AoA cap is not binding, which is exactly the condition a
+  speed-fraction port drops.
+  ⚠ **The 0.30 fd threshold and the 2.10 s-per-fd-fraction blink are superseded.** They came from
+  four clips (`BL-148`, `CAP-06`, the two `CAP-05` stall clips) and are the wrong quantity: the
+  engine gates on load factor. The measurement's shape survives (dark in cruise, blinking faster
+  with stall depth, no hysteresis, and it lengthens again as the aircraft accelerates back), and so
+  does its finding that **brightness is binary** at a 0.50 duty cycle, the lit plate reading
+  211.0 ± 0.2 red against 41.7 ± 0.2 unlit, with no opacity ramp. What does not survive is the
+  magnitude: the clips' 643 ms and 296 ms half-periods were quoted in sim seconds at k = 1.390,
+  and the binary cannot produce 643 ms at any input. Taken as wall seconds the same two figures are
+  462 ms and 213 ms, against a decoded range of 100 to 400 ms, which is the reading the shared time
+  base above supports.
+- **LOW ALT lights below 60.0 m above ground, and its blink ramps with height.** The gate is the
+  constant at `006076fc`, compared at `00453cb0` in `FUN_00453c50`. The AGL feed is built by the
+  caller at `0049f763`–`0049f78f` as the smallest non-negative `plane_Y − terrain_sample_height`
+  over the terrain query `FUN_004c76e0`; where that query answers nothing the value stays `FLT_MAX`
+  and the lamp cannot light. The blink is **not** a fixed period:
+
+      half_period = 0.14 + 0.006 · agl_metres      (0.14 at 006076f4, 0.006 at 006076f8)
+
+  280 ms full period at ground contact, widening to 1.0 s just under the gate, recomputed at each
+  toggle from the height at that instant so the ramp tracks the aircraft continuously. ⚠ Above the
+  gate the lamp is extinguished only once the pending half-period expires (`00453d00`–`00453d19`),
+  so climbing through 60 m leaves it lit for up to one more half-period rather than snapping off.
+  This supersedes the plain fixed 400 ms blink and the 50 m threshold, neither of which was ever
+  measured against the original.
 - **Damage display**: the dial's face is a single untextured 12-gon (the dark backing
   disc). ⚠ **Where it is parented differs per aircraft** — verified across the whole
   roster: on `player_bhawk` it is the `damageindicator` node's *own* mesh,

@@ -1017,9 +1017,11 @@ External Camera Zoom In/Out** (`Keybinds Views 2.png`): that pair is the CHASE c
 the cockpit lean, so the filed item carries both and must not confuse them; (4) engine-wide FOV
 migration 62°V → 60°H base, carrying the overcast/tracer calibration warning; (5) splitscreen
 cockpit behaviour (per-viewport interior cost, per-pilot engine-sound swap under `MixGain`);
-(6) HUD `POSITION_1ST` layout variant (the original places gauges differently in first person,
-`hud_v2.zrd` keys `POSITION_1ST`/`POSITION_3RD`, `org/cameraViews.md:120-128`) — whether
-`GaugeCluster` should reposition in cockpit views; (7) chase-view look-around — the original runs
+(6) HUD `POSITION_1ST` layout variant (`hud_v2.zrd` keys `POSITION_1ST`/`POSITION_3RD`) — whether
+`GaugeCluster` should reposition in cockpit views; ⚠ **the premise is since disproved.** Those
+keys are a per-section debug text column written under `DAT_00624df0`, not dial placement
+(`docs/formats/hud.md`, "Cockpit gauges"), so there is no first-person layout to port and `BL-431`
+carries only the gauge-drive half; (7) chase-view look-around — the original runs
 the same head-look controller for the chase camera with elevation floor −π/2 (`FUN_0042c7f0` →
 `FUN_0042d010(0xbfc90fdb, 0)`), which CSVM's chase view lacks entirely; (8) the two **look-mode
 selectors**, `K` Access Snap Look Mode and `J` Access Smooth Look Mode (`Keybinds Views 1.png`) —

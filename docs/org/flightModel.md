@@ -565,14 +565,18 @@ switching G-conventions to fit one clip.
 
 ## The two stall cues — a lamp and a nose-drop, on two unrelated thresholds
 
-Both cues are measured on the same margin (`Speed / fd_speed`), and their thresholds are
-**deliberately different numbers**, neither of them a tuning constant:
+The two cues sit on **different quantities**, and neither threshold is a tuning constant:
 
 - **The nose-drop** fires below the airframe's own computed stall speed — the decoded
   `clMax · q · RefArea = Weight` solve above. **Decoded.**
-- **The STALL lamp** lights at a fixed **0.30 × `fd_speed`** — 0.2989–0.2996 across four
-  original-game clips. **Measured off footage**, and deliberately *not* re-derived from the computed
-  stall speed: the split is unrelated to the nose-drop mechanism, so the lamp stays a fraction.
+- **The STALL lamp** lights below an available load factor of **2.35 g**. **Decoded**: the driver is
+  `s = (plane+0xf4 + 1.35) × 0.425` at `0049f7e6`, and `plane+0xf4` holds `1 − n_avail`, written
+  every frame at `0048e7dd` from the same out-parameter the nose-drop block below fills. The lamp is
+  dark while `s ≤ 0`, i.e. while `n_avail ≥ 2.35`. ⚠ The earlier reading of a fixed
+  **0.30 × `fd_speed`** (0.2989–0.2996 across four clips) was **measured off footage and is the
+  wrong quantity**: it fits because lift goes as v², so the gate is equivalent to `1.533 × v₁g`, but
+  only while the AoA cap is not binding. Read the lamp off the load factor, not off a speed
+  fraction. Full decode and addresses in [`../formats/hud.md`](../formats/hud.md), "Cockpit gauges".
 
 In the original's "Stall 0% Thrust no input" clip the lamp led the Bloodhawk's own break by
 **2.64 sim s / 14.9 mph**. `CSVM.Tests/StallWarningTests.cs` asserts the ORDERING (warn leads
@@ -582,19 +586,22 @@ decoded solve is the answer with the clip's figure discarded beside it rather th
 test papers over.
 
 ⚠ **Do not fold the two thresholds together**, and do not move the lamp onto the computed stall
-speed to tidy the split away — they are unrelated by measurement, not by oversight.
+speed to tidy the split away. They are unrelated by mechanism, not by oversight: the lamp is a
+load-factor margin, the nose-drop an airspeed one.
 ⚠ **Do not exercise the split on the executable's fallback aircraft.** The fallback airframe's own
 computed stall (75.5 mph, i.e. ≈0.30 of its own reference speed) sits almost exactly AT the warn
 threshold, which *inverts* the split instead of testing it. The tests fly the Bloodhawk's real
 1900 / 330.
 
-**The lamp's blink is a rate ramp, measured (`CAP-06`).** Half-period **643 ms at 0.30 fd** and
-**296 ms at 0.15 fd**, shortening monotonically with stall depth and **held** below 0.15 rather
-than extrapolated into a strobe. Every figure is in **sim** seconds: the wall→sim conversion is
-**k = 1.390**, so one original game frame (33.37 ms wall) is **46.4 ms sim** — the resolution the
-lamp was measured at, and therefore the tolerance every period assertion gets.
-⚠ **A wall-clock implementation lands ≈39 % short of every dwell.** Same conversion and the same
-trap as the chase camera's throttle transient ([camparam.md](../formats/camparam.md)).
+**The lamp's blink is a rate ramp, decoded.** The half-period is
+`0.4 − 0.3·s`, i.e. **`0.100375 + 0.1275 · n_avail` seconds**, bounded to (0.100, 0.400] by
+construction and recomputed at each toggle, so it shortens with stall depth and lengthens again as
+the aircraft accelerates back. ⚠ **The measured 643 ms / 296 ms half-periods (`CAP-06`) are
+superseded.** They were quoted in sim seconds at k = 1.390, and the binary cannot produce 643 ms at
+any input; taken as wall seconds the same two figures read 462 ms and 213 ms against the decoded
+100–400 ms range. ⚠ **The lamp and the flight model share one dt**, copied bit-for-bit at
+`004897d8`, so no k conversion separates the lamp's constants from the aero block's. Do not apply
+one to these figures.
 
 ### The nose-drop's rate is `stall_mag`, and it is a TORQUE
 

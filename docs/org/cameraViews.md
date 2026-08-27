@@ -130,11 +130,14 @@ already leaves `F7` unbound in the flight scheme for this reason. Filed as `BL-4
 
 Beyond those binding labels, the executable holds **no friendly view-name strings** for the modes
 (`Chase`, `Cockpit`, `Nose`, … used as display text). The HUD initializer `FUN_00454e70` reads only
-two **layout keys** from the HUD data archive (`hud_v2.zrd`): `POSITION_1ST` (`00624f28`) and
-`POSITION_3RD` (`00624f38`), used to place the gauges differently for the first-person and
-third-person HUD variants. So the small per-view display names seen in-game come from the
-HUD/video-menu **data files**, not the ship binary — but the *selection wiring* above pins which
-mode is which player view.
+two keys from the HUD data archive (`hud_v2.zrd`): `POSITION_1ST` (`00624f28`) and
+`POSITION_3RD` (`00624f38`). ⚠ **Despite the names, these are not a per-view gauge layout.**
+`FUN_00454e70` reads them into a text widget built per section (`AIR_SPEED`, `ALTIMETER`, `GUNS`,
+`MISSILES`, `HEALTH`, `NITRO`), the six values share one x at 0.02 spacing in y, and the column is
+written only under `DAT_00624df0`: a debug text readout, not dial placement
+(`docs/formats/hud.md`, "Cockpit gauges"). So the small per-view display names seen in-game come
+from the HUD/video-menu **data files**, not the ship binary — but the *selection wiring* above pins
+which mode is which player view.
 
 ### Modes 6 and 7 are the only first-person views
 
