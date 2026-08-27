@@ -121,7 +121,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the per-frame cost the data authors and we ignore
 
 4. ☑ Apply `far_fade_range` on the templates clutter path, with its detail scale (`BL-337`)
-5. ☐ An unauthored puffer `TIME_INTERVAL` is `1.0` s, not our `0.1` (`BL-336`)
+5. ☑ An unauthored puffer `TIME_INTERVAL` is `1.0` s, not our `0.1` (`BL-336`)
 6. ☐ Judge puffer density at the controls now the fire's shape is right (`BL-218`)
 
 ### Wave C — the same runtime's correctness, and the two cheap features
@@ -396,7 +396,7 @@ C5's blocks end 300 to 450 m out under fog that starts at 1500 m, and is owed a 
 original's C5 footage (`CAP-22`) at the controls. Eleven goldens moved (every world shot that frames
 clutter) and are re-pinned in the landing commit.
 
-## B5 ☐ An unauthored puffer `TIME_INTERVAL` is `1.0` s, not our `0.1`
+## B5 ☑ An unauthored puffer `TIME_INTERVAL` is `1.0` s, not our `0.1`
 
 **Goal.** A puffer state that does not author `TIME_INTERVAL` emits once a second, as the original's
 constructor sets it, instead of ten times a second.
@@ -431,6 +431,26 @@ re-derive it. ⚠ The cost of being wrong here is small in one direction and not
 defined reader puffer that reaches the sustained path authors its own `TIME_INTERVAL`, so the default
 is only reached by states that do not, but those states include the DISTANCE fallback if the split is
 botched.
+
+**Verified.** <pending orchestrator run>
+
+**Landed.** The decode holds and is now named in code: the ctor `FUN_00550100` writes `0x3f800000`
+to `+0x40` and `+0x44`, and the applier `FUN_004e7e40` reaches the interval only under flag mask
+`0x180`, through `FUN_00550460`, which additionally refuses a zero and leaves the ctor's value
+standing. `PufferState` carries the two numbers as separate constants, `TimeIntervalDefault` (1 s,
+the ctor's) and `StillHostSputterInterval` (0.1 s, ours, for a DISTANCE state whose host holds
+still), and each parser picks between them rather than sharing one literal. The split is wider than
+⚠ row 7 said: the reader path's default is reached ONLY by distance states, since all 146 reader
+blocks that omit `TIME_INTERVAL` author `DISTANCE_INTERVAL`, so an unconditional swap there would
+have slowed every static sputter and changed nothing else. On the compiled path "unauthored" is not
+an absent key but a **zero** in the garbage interval field (893 events, 5 of them `ACTIVE_STATE 1`),
+which our fallback never saw, so those states ran at the emitter's 1 ms floor rather than at 0.1 s.
+`AnimDefs.AddPufferState` now carries `DISTANCE_INTERVAL` into the compiled shape as well, which it
+had been dropping; without it a reader-scope trail puffer had no interval at all and would have
+taken the new 1 s default. Live effect on the shipped install: none, because all five zero-interval
+active events are texture-less stubs that build no emitter, and no reader block reaches the ctor
+default. Regression: `PufferTimeIntervalTests` over both parsers and a `puffer-modes` arm that reads
+the live sprite count over 3 s, 1/2/3 against the 1000/2000/3000 the floor produced.
 
 ## B6 ☐ Judge puffer density at the controls now the fire's shape is right
 

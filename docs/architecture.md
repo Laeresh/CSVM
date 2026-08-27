@@ -1526,9 +1526,9 @@ the layer's live pose every step, and the same teardown both end conditions reac
 `SmokeScreenEmitters` is the engine side of that seam, reading `generate_smokescreen`'s
 DISTANCE_INTERVAL `PUFFER_STATE`s out of the world `AnimProgram` (the session wires it once the
 chapter's textures exist) and pooling one `Puffer` per authored state, reused only once its previous
-screen's puffs have decayed. ⚠ Take the definition from the COMPILED archive: `AnimDefs`' reader
-normalizer carries no `DISTANCE_INTERVAL`, so the reader form of the same definition reads as no
-trail at all. The cloud's look is the authored numbers through `Puffer` unchanged (`smokerpuff`:
+screen's puffs have decayed. The compiled archive is where the definition is taken from; the reader
+normalizer now carries `DISTANCE_INTERVAL` too, so the reader form of the same definition is a trail
+rather than the no-trail sustain it used to read as. The cloud's look is the authored numbers through `Puffer` unchanged (`smokerpuff`:
 four puffs per 0.65 m, `SIZE_RANGE` 0.15–0.25 growing 85× over a 2.5–4 s life, `LOCAL_VELOCITY`
 10 m/s astern plus ±17 m/s of random, `NEAR_FADE 30,10` so a camera nearer than 30 m of depth
 sees none of it, the `53,74,37` ramp at alpha 0.8; `smokerpuff2` is the thin 1–1.3 s ribbon at the
@@ -2703,6 +2703,13 @@ all three modes with no atlas, no `TextureArchive` and no GPU. The continuous su
 `Emit(worldPos, worldBasis, dt, staticBurnMps = 0f)` / `Stop()`, plus the one-shot `Burst` and the
 hard-kill `Clear` — the authored state picks burst, trail or sustained mode, callers never do.
 `PufferState.FromAnimEvent` parses the compiled anim payloads; `Parse` reads the reader form.
+**Two different numbers answer "no `TIME_INTERVAL` authored"**, and both parsers keep them apart:
+`TimeIntervalDefault` is the engine constructor's 1 s, and `StillHostSputterInterval` is CSVM's own
+0.1 s cadence for a `DISTANCE_INTERVAL` state whose host holds still (a mode the engine does not
+have at all). A compiled event says "unauthored" with a **zero** interval, which the engine's own
+setter refuses; a reader block says it by omitting the key, and every reader block that omits it is
+a distance block. Merging the two constants moves either every static building's sputter or every
+unauthored state by a factor of ten, so the `puffer-modes` suite asserts both cadences.
 `Create`'s atlas comes from a per-archive cache keyed by the frame list and the sequenced flag
 (`BuildAtlas` over `BakeAtlas`), so a state many emitters share is baked and luminance-measured
 once; the archive is the key, so a chapter change never serves another chapter's frames.
