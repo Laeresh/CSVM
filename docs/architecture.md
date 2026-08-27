@@ -133,6 +133,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/DisablingIntensity.cs` — the decoded `SONIC`/`FLASH` intensity plateau and `FLASH`'s facing test, on squared distances; feeds the player's wash weight and the AI stun's duration.
+- `src/Flight/Difficulty.cs` — the difficulty setting as the engine's 0/1/2, its two naming vocabularies, and the enemy armour/health multiplier it scales spawns by; it reaches nothing else.
 - `src/Flight/TanglerChoke.cs` — the choker's engine-dead duration and the `ENGINE_DEAD` globals it reads; the original's squared-distance-over-raw-radius mismatch, reproduced.
 - `src/Flight/SmokeScreens.cs` — the smoke screen's stun trap: the world's active screens, walked over the roster every sim step to stun AI and wash humans behind the layer; the cone rule, the wash cadence and the three `player.json` tunables beside it.
 - `src/Flight/BeeperTags.cs` — the beeper's paint and the seeker's pick: the world's tag list with its countdown, dead-aircraft slam and five-second tail, the tagging gate, and the per-frame query with the original's inverted-dot, squared-distance selection rule.
@@ -1536,6 +1537,18 @@ returns a square and this path never takes a root. `FLASH` adds the facing test 
 victim, scaled by twice the dot below 0.5); `SONIC` does not, and that is the only behavioural
 difference between the flags. The consumers are the player's screen wash, the AI stun and the smoke
 screen; the module itself knows about none of them.
+
+## src/Flight/Difficulty.cs
+The difficulty setting, as the engine's own 0/1/2, and the single thing it does: multiply an enemy
+vehicle's armour and health maxima at spawn by 0.75 / 1.0 / 1.25 (`FUN_0047c210`, decoded in
+[org/vehicleDamage.md](org/vehicleDamage.md)). `Parse` takes both shipped vocabularies, the campaign
+selector's Normal/Hard/Hardest and Instant Action's novice/veteran/ace, which name the same three
+tiers; `FactorForSpawn` owns the team gate, which is inequality with the player's team and not
+hostility, so a neutral or team-less spawn is scaled too. `PlaneStats.WithEnemyDurability` applies
+the factor, and the per-spawn jitter runs after it, banding around the scaled hull. The setting
+reaches nothing else: in the executable it is readable only through `FUN_00440710`, whose four
+callers are that spawn, the options screen, the settings save pass, and Instant Action's
+save/set/restore around the same spawn. No AI skill, accuracy or aggression is keyed to it.
 
 ## src/Flight/TanglerChoke.cs
 The choker's engine-dead duration (`FUN_004b9bc0`'s `TANGLER` branch, decoded in
