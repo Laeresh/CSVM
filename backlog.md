@@ -2680,7 +2680,8 @@ usual.
   rule. *⚠ Traps:* `trail-world-anchor` settled the opposite case (an emitter that must NOT ride
   its host); keep both. Do not reopen `BL-514`'s `PUFFER_STATE` reading, it is correct for that
   path. *Cross-refs:* `BL-514`'s closing commit (`git log --grep=BL-514`),
-  `docs/formats/anim-definitions.md` (`CALL_ANIMATION` `WithNode`), `docs/org/effects.md`.
+  `docs/formats/anim-definitions.md` (`CALL_ANIMATION` `WithNode`), `docs/formats/effects.md`,
+  `docs/org/puffer.md`.
 
 - `BL-572` `[Fidelity]` **A campaign objective's marker labels the raw node name in the team
   colour (`peoplehook`, `pzhookpoint`, `workersvoyagezep`) instead of the original's objective
@@ -2694,7 +2695,7 @@ usual.
   *Fix shape:* decode the objective marker's label source (`objectives.zrd`'s target lists and the
   message table they index) and its colour, give `TargetRef` an objective display name from it,
   and keep the node name for the debug tag only. *⚠ Traps:* `BL-397` is the marker's bracket
-  range rule and not this. *Cross-refs:* `BL-397`, `docs/org/hud.md`.
+  range rule and not this. *Cross-refs:* `BL-397`, `docs/formats/markers.md`, `docs/org/targeting.md`.
 
 ## Tooling, platform & docs
 
