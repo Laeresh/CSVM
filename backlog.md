@@ -604,10 +604,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   being a two-line change: the flight keymap has no spare paired keys and the pad's D-pad is
   already spent on the two forward steps. `BL-296`'s per-player ActionMap is the natural home for
   the four named actions if it lands first.
-  ⚠ Traps: (a) **The cycle order itself is right and must not be touched** (user, 2026-08-14: ours
-  walks the pylons in the same order the original does). What is missing is the second direction,
-  nothing else, so a reverse step is `NextSelectable` walked backwards over the same sequence, not
-  a re-derivation of the order. (b) The observation is about hardpoints. The gun-group selector is
+  ⚠ Traps: (a) **The cycle sequence is settled and must not be re-derived**: the selector walks the
+  hardpoints in physical mount order (`Loadout.PylonStepOrder`, `FireControl`'s `pylonStepOrder`),
+  which is NOT the order the list is built in (`Loadout.PylonFillOrder`, 1,5,2,6,3,7,4,8, which says
+  only which pylons a fit occupies). Stepping the list itself sent the gauge arrow back and forth
+  across the belt on a full fit. What is missing here is the second direction, nothing else, so a
+  reverse step is `NextSelectable` walked backwards over that same sequence.
+  (b) The observation is about hardpoints. The gun-group selector is
   the analogous case but was not observed, so do not assume it cycles both ways either.
   (c) Empty-slot skipping is not in question and must survive the change: both directions land on
   an armed slot.

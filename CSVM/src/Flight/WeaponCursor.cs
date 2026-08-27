@@ -8,10 +8,10 @@ namespace CSVM.Flight;
 /// (FireControlTests). Slots are addressed by index; <c>ammoAt</c> reports a slot's remaining
 /// rounds and <c>infinite</c> models <c>--infinite-ammo</c> (every slot always counts as armed).
 /// Each slot is its own selectable position regardless of what it carries, so the selector steps
-/// across slots, not ordnance/weapon types. Confirmed against the original 2026-08-14: the player
-/// picks a hardpoint rather than the game draining them in pylon order, and the order stepped
-/// through is the original's. Stepping is forward-only here; the original also steps backward
-/// (<c>BL-357</c>).</summary>
+/// across slots, not ordnance/weapon types: the player picks a hardpoint rather than the game
+/// draining them in pylon order. Positions are the caller's own sequence, not the pylon list's —
+/// <see cref="FireControl"/> walks hardpoints in physical mount order. Stepping is forward-only
+/// here; the original also steps backward (<c>BL-357</c>).</summary>
 internal static class WeaponCursor
 {
     /// <summary>The slot the next round fires from: <paramref name="from"/> itself while it still has

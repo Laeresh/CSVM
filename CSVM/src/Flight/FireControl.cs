@@ -105,6 +105,9 @@ public sealed class FireControl
     private readonly IReadOnlyList<IGunSlot> _guns;
     private readonly IReadOnlyList<IPylonSlot> _pylons;
     private readonly GunState[] _states;      // per gun slot, in _guns order
+    private readonly int[] _pylonStep;        // pylon list positions, in the order the cursor walks
+    private readonly int[] _pylonRank;        // inverse of _pylonStep: list position -> its step place
+    private readonly Func<int, int> _stepAmmo; // step place -> that pylon's ammo, for WeaponCursor
     private readonly FireOutcome _outcome = new();
 
     private bool _firePrev;          // previous tick's gun trigger (immediate first shot on press)
@@ -116,8 +119,14 @@ public sealed class FireControl
     private int _gunSel;             // gun selector: 0-based slot that fires (only ONE at a time)
     private int _selectedPylon;      // the pylon H selects and rockets fire from
 
+    /// <param name="pylonStepOrder">Pylon list positions in the order the hardpoint cursor walks
+    /// them, or null for the list's own order. The caller supplies it because the pylon list is
+    /// built in whatever order the fit was assembled, which need not be the order the mounts sit
+    /// along the wing; stepping the list itself then sends the gauge arrow back and forth across
+    /// the belt instead of along it. Must be a permutation of 0..<c>pylons.Count</c>-1.</param>
     public FireControl(IReadOnlyList<IGunSlot> guns, IReadOnlyList<IPylonSlot> pylons,
-        bool autoFireRockets, bool infiniteAmmo, int initialGunSelect = 0)
+        bool autoFireRockets, bool infiniteAmmo, int initialGunSelect = 0,
+        IReadOnlyList<int>? pylonStepOrder = null)
     {
         _guns = guns;
         _pylons = pylons;
@@ -129,6 +138,14 @@ public sealed class FireControl
             _states[i] = new GunState();
         }
         _gunSel = guns.Count > 0 ? Math.Clamp(initialGunSelect, 0, guns.Count - 1) : 0;
+        _pylonStep = BuildStepOrder(pylons.Count, pylonStepOrder);
+        _pylonRank = new int[pylons.Count];
+        for (int k = 0; k < _pylonStep.Length; k++)
+        {
+            _pylonRank[_pylonStep[k]] = k;
+        }
+        _stepAmmo = k => _pylons[_pylonStep[k]].Ammo;
+        _selectedPylon = FirstPylon();
     }
 
     /// <summary>The firing gun slot — what the trigger fires, the gauge arrow marks and the
@@ -171,8 +188,9 @@ public sealed class FireControl
     }
 
     /// <summary>Full reload (respawn): every owned slot back to capacity, fire clocks and muzzle
-    /// rotations reset, dry warnings re-armed, the pylon cursor back to pylon 0 (it doubles as the
-    /// firing cursor). The gun pick deliberately persists across a respawn.</summary>
+    /// rotations reset, dry warnings re-armed, the pylon cursor back to the first pylon in step
+    /// order (it doubles as the firing cursor). The gun pick deliberately persists across a
+    /// respawn.</summary>
     public void Refill()
     {
         foreach (var g in _guns)
@@ -190,9 +208,44 @@ public sealed class FireControl
             p.Ammo = p.Capacity;
         }
         _rocketCooldown = 0f;
-        _selectedPylon = 0;
+        _selectedPylon = FirstPylon();
         _rocketFirePrev = false;
         _rocketDryWarned = false;
+    }
+
+    // Validates the caller's walk order, or lays down the list's own order when none was given.
+    // A malformed permutation is a loud error: silently falling back would leave the cursor
+    // stepping an order nobody chose, which is the defect this parameter exists to fix.
+    private static int[] BuildStepOrder(int count, IReadOnlyList<int>? order)
+    {
+        var step = new int[count];
+        if (order == null)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                step[i] = i;
+            }
+            return step;
+        }
+        if (order.Count != count)
+        {
+            throw new ArgumentException(
+                $"pylon step order has {order.Count} entries for {count} pylons", nameof(order));
+        }
+        var seen = new bool[count];
+        for (int k = 0; k < count; k++)
+        {
+            int idx = order[k];
+            if (idx < 0 || idx >= count || seen[idx])
+            {
+                throw new ArgumentException(
+                    $"pylon step order is not a permutation of 0..{count - 1} (entry {k} is {idx})",
+                    nameof(order));
+            }
+            seen[idx] = true;
+            step[k] = idx;
+        }
+        return step;
     }
 
     // Advances each weapon selector on the rising edge of its button to the next armed
@@ -211,8 +264,8 @@ public sealed class FireControl
         bool rocketSel = input.RocketSelectHeld;
         if (rocketSel && !_rocketSelPrev && _pylons.Count > 1)
         {
-            _selectedPylon = WeaponCursor.NextSelectable(
-                _pylons.Count, i => _pylons[i].Ammo, _selectedPylon, InfiniteAmmo);
+            _selectedPylon = _pylonStep[WeaponCursor.NextSelectable(
+                _pylonStep.Length, _stepAmmo, _pylonRank[_selectedPylon], InfiniteAmmo)];
         }
         _rocketSelPrev = rocketSel;
     }
@@ -313,8 +366,7 @@ public sealed class FireControl
         }
         // The selected pylon while it still has ordnance, else the next armed pylon scanning from
         // it and wrapping — the cursor self-heals if it was somehow left on a spent pylon.
-        int idx = WeaponCursor.NextArmed(
-            _pylons.Count, i => _pylons[i].Ammo, _selectedPylon, InfiniteAmmo);
+        int idx = NextArmedPylon(_selectedPylon, InfiniteAmmo);
         if (idx < 0)
         {
             if (!_rocketDryWarned)
@@ -338,13 +390,23 @@ public sealed class FireControl
             // Advance the moment the selected pylon empties — not on the next trigger pull — so
             // the gauge arrow leaves the spent pylon straight away; -1 (all empty) leaves it put
             // so the next pull sounds the dry cue.
-            int next = WeaponCursor.NextArmed(_pylons.Count, i => _pylons[i].Ammo, _selectedPylon, false);
+            int next = NextArmedPylon(_selectedPylon, false);
             if (next >= 0)
             {
                 _selectedPylon = next;
             }
         }
         _rocketCooldown = hp.Weapon.FireRate > 0f ? 1f / hp.Weapon.FireRate : 1f;
+    }
+
+    // The pylon the cursor starts and returns to: first in step order, not first in the list.
+    private int FirstPylon() => _pylonStep.Length > 0 ? _pylonStep[0] : 0;
+
+    // NextArmed over the step order, in and out in list positions. -1 when every pylon is spent.
+    private int NextArmedPylon(int from, bool infinite)
+    {
+        int k = WeaponCursor.NextArmed(_pylonStep.Length, _stepAmmo, _pylonRank[from], infinite);
+        return k < 0 ? -1 : _pylonStep[k];
     }
 
     private sealed class GunState
