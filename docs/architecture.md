@@ -4040,6 +4040,13 @@ Fed the same raw `Stopwatch` `frameMs` `HitchMonitor` ticks on (never Godot's `d
 frame, unconditionally — the worst-frame peak has to already be warm the instant F14 is pressed,
 or it would have nothing to say about the hitch that made someone look. Off by default and builds
 nothing until switched on, so the 11 golden screenshots stay byte-identical.
+Both its controls are placed by their **right edge only** (`PlaceTopRight`: `OffsetRight = -8`,
+`OffsetLeft` derived from the width, `GrowHorizontal.Begin`), so the readout's right edge stays
+8 px inside the window at every window size and font scale while the text grows leftward. A
+right-anchored control's `OffsetLeft` is where its box was pinned, not where grow-left ended up
+drawing it, so reading it back (or assigning `Size`, which derives `OffsetRight` from it) walks the
+control a full width off the side of the window; that is what put the frame-time strip off screen,
+and `--run-tests=perf-hud-layout` is the arm that holds it.
 On `HudLayers.PerfReadout` (11), **above `HudLayers.Board`**: the launchscreen's background is a
 full-screen opaque `ColorRect` on `Board`, and this readout has to read there too. Sized off
 `HudMetrics.ReferenceHeight` through the plain window-height ratio, not `HudMetrics.Scale` —

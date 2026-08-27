@@ -177,6 +177,7 @@ public static class SuiteCatalog
         "zeppelin-identity",
         "campaign-briefing-repaint",
         "menu-screenshot-key",
+        "perf-hud-layout",
         "campaign-briefing-note",
         "airframe-hull-coverage",
     };
@@ -1002,6 +1003,12 @@ public static class SuiteCatalog
             + "campaign board, and each press must leave one more file in the folder the flight "
             + "capture writes to",
             MenuScreenshotKey));
+        into.Add(new TestHarness.Suite("perf-hud-layout",
+            "where the frame-cost readout lands: the real Full tier is driven a frame, then its "
+            + "label and its frame-time strip are both required to keep their right edge 8 px "
+            + "inside the window and their left edge on screen, since a top-right control placed "
+            + "by its LEFT edge walks its own width off the side",
+            PerfHudSuites.PerfHudLayout));
         // BL-490: an objective wrapped to a second line drew over the next one's authored slot,
         // which only shows on a mission whose sentences are longer than the first's.
         into.Add(new TestHarness.Suite("campaign-briefing-note",
