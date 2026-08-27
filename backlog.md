@@ -1373,6 +1373,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   decay lockout that `_nitroDecayLeftS` stands in for), `docs/org/flightModel.md` "Nitro",
   `docs/formats/hud.md` "Cockpit gauges" for the dial half, which is settled.
 
+- `BL-555` `[Feature]` `[Divergence]` **A held key fast-forwards a mid-mission cutscene instead of
+  skipping it: the definition plays at a raised rate that spools up while the key is held and
+  spools back down on release, with its sound pitched up to match.** The original arms a skip only
+  on callback 20 (the intros), so CM02's capture and CM01's drop-off play out in full and
+  `CutsceneController.Skippable` now declines the key there. A fast-forward keeps every authored
+  code in order (913/914, 967, 951 and the `Loop{1000}` active-state re-assertions all fire at
+  their authored beats, only sooner) while letting the player through a scene they have seen; the
+  spool is a short ramp on the rate, not a jump. *Fix shape:* a rate multiplier on the cutscene
+  clock (`AnimRuntime`'s advance takes the definition's dt; the held world, `GameClock.SimHeld`,
+  stays held) ramped over a fraction of a second toward a target such as 4x while the skip key or
+  gamepad A is down and back to 1x on release; the definition's own sounds (`SoundNode`,
+  `OBJECT_MOTION` engine notes) take the same multiplier as a pitch scale, as the original does
+  nothing of the kind so the values are a design choice. Advanced: the rate has to reach every
+  channel a definition drives (pose, camera, sound, callbacks, the `RESET_STATE` timeline) or the
+  channels drift apart. *⚠ Traps:* ⚠ A deliberate divergence, so document it on the cutscenes
+  page beside the livery one; do not present it as the original's skip. ⚠ Do not raise the rate
+  on an intro that arms a real skip, where the original's own force-stop is the behaviour. ⚠
+  Realtime flown sessions and the parent-driven probe clock step differently; the multiplier
+  belongs on the definition's dt, not on the session's `PhysicsDt`. *Cross-refs:*
+  `docs/formats/anim-definitions/cutscenes.md` "Handoff and skip"; `docs/PLAN-M5-polish-2.md`
+  E24 (the decode that made the two scenes unskippable).
+
 ## Audio
 
 - `BL-455` `[Feature]` **There is no audio options menu, so the music level is a hard-coded
