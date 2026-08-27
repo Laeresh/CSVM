@@ -153,7 +153,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 23. ☑ The captured Balmoral's British livery still does not reach the player's hull live (`BL-554`)
 24. ☑ A cutscene the original arms no skip on is cut short by the skip key (`BL-552`)
-25. ☐ The capture cutscene plays without the enemy Balmoral or the pilot switch, and inherits the roll (`BL-551`)
+25. ☑ The capture cutscene plays without the enemy Balmoral or the pilot switch, and inherits the roll (`BL-551`)
 26. ☑ The original re-places the player after CM01's drop-off (`BL-553`)
 27. ☐ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
 
@@ -1219,7 +1219,6 @@ the scheme record alone.
 
 **Verified.** <pending orchestrator run>
 
-## E24 ☐ A skipped cutscene waits out the swap instead of jumping to its end
 ## E24 ☑ A cutscene the original arms no skip on is cut short by the skip key
 
 **Goal.** Skipping a cutscene runs it to its handoff at once: the picture goes, and every code the
@@ -1270,7 +1269,7 @@ re-place can never be dropped by a key press.
 
 **Verified.** <pending orchestrator run>
 
-## E25 ☐ The capture cutscene plays without the enemy Balmoral or the pilot switch, and inherits the roll
+## E25 ☑ The capture cutscene plays without the enemy Balmoral or the pilot switch, and inherits the roll
 
 **Goal.** CM02's capture shows the Balmoral being boarded, the pilot crossing from one aircraft to
 the other, level as authored.
@@ -1300,6 +1299,48 @@ the goldens unchanged. Judged at the controls in E27.
 **⚠ Traps.** ⚠ Do not relax the `AnimRuntime.Targets` name guard globally. ⚠ `PoseAtNode`'s
 composition is shared (B7); a roll rule must be decoded, not tuned. ⚠ Extend
 `campaign-wingwalk-camera` rather than trust it: it reads the camera, not the figures.
+
+**Landed.** Three answers, three changes. (1) The cast splits two ways. `body` (C3 1058),
+`head` (1075) and `hatch` (1089) are CHAPTER nodes inside `britbalmoral_1`'s own unplaced copy, and
+the aeroplane the roster spawned carries the same names off the shared `player_balmoral` airframe,
+so `IndexSpawnedVehicle` now keeps that rig's subtree as a scoped alias — read only by a definition
+ANCHORED on that vehicle, never added to the resolver's shared index, since `pilot`/`body`/`healthy`
+are the commonest names in the archive. That is the original's own first resolution tier
+(`docs/org/sequences.md`, the depth-first walk of the definition's root subtree). `rope_ladder`
+(archive 241) and `pickup_cpilot` (2269, fanning to the thirteen `cp_*` limbs) are cross-archive and
+are staged like `chuteman`, under a switched-off holder rather than switched off themselves: nothing
+ever activates the wing-walking pilot, because in the original a library root is simply not reached
+from `world1` until an `OBJECT_ADD_CHILD` moves it into the shot. (2) Past its root the definition
+needs one more thing from the vehicle: its `ObjectActiveState [britbalmoral_1, true]` `Loop{1000}`
+at 0.01 s is what holds the captured aeroplane DRAWN against code 913's AI park, so an active state
+addressed to a spawned vehicle now reaches the aircraft's own drawn state and not only the rig node
+(`AnimRuntime.SetTargetActive`). The add/delete-child pair already resolved through the symbol
+table's index. (3) The roll is decoded, not tuned: `OBJECT_ROTATE_STATE` is slot 9, `004e8b80`, and
+its two `AT_NODE` bits read different sources — `AT_NODE_XYZ` (`0x2`) takes the host's own stored
+euler triple through `Object3d::GetRotation` (`004d1b40`), while `AT_NODE_MATRIX` (`0x4`) takes its
+composed matrix (`004cef20` → `0053df30`). A flying aeroplane's node is placed by the flight model
+as a MATRIX (`FUN_0048e580` → `Object3d::SetMatrix` `004d1f90` at `0048ecca`), which leaves those
+euler fields at the last scripted value, so `AT_NODE_XYZ` off an aeroplane reads the rotation it was
+PLACED at while the translate side (slot 7, `004e8de0` → `004cf490`) stays live off the accumulated
+matrix. `PoseAtNode` gains a `scripted` arm reading `AnimRuntime.PlacedRotationOf`; every other host
+still contributes its live frame, so the rule is shared by every cutscene rather than special-cased.
+The name guard was not relaxed and `PoseAtNode`'s composition is otherwise untouched.
+
+**Verified.** <pending orchestrator run> In the lane: `campaign-wingwalk-camera` extended with five
+checks — the three vehicle parts bound inside the spawned aeroplane, drawn while the shot is
+composed and driven by their authored motions; both figures staged, visible and under the walk
+frame; and the frame level with the host held rolled 90° through the pose. A perturbation of all
+four mechanisms reproduced the reported picture exactly (`body`/`head`/`hatch` `shown=False
+driven=False`, `figures framed: []`) and a perturbation of the roll rule alone read `host rolled 90°
+… frame roll 90°` against `0°` fixed (METHOD-9), with `git diff` proving both restored (METHOD-17).
+The bank has to be applied before `PlayMissionTrigger` and held every step or the measurement is
+blind to the change, which is now `docs/verification.md` INSTR-29. Beside it: all 20 `campaign-*`
+suites, the 2 `cutscene*`, the 6 `landings*`, `intro-aircraft-stage` and `dropoff-chuteman-stage`
+PASS with engine errors clean; `dotnet test` 2443/2443; the 8-chapter `--freecam --chapter=<X>
+--det --screenshot=` regression all exit 0 with C3 unchanged at 5408 gamez nodes / 2368 mesh
+instances; goldens 16/16 hash-identical, no move; `CheckCommentCaps.ps1 -Summary` clean. No
+`--campaign=` capture: reaching the capture still needs two Balmorals shot down plus the approach
+cone, and no cheap route exists, so the picture rides E27.
 
 ## E26 ☑ The original re-places the player after CM01's drop-off
 

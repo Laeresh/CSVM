@@ -2095,21 +2095,6 @@ usual.
   (`docs/verification.md` INSTR-28), so read the handoff off the log rather than a frame count.
   *Cross-refs:* `docs/PLAN-M5-polish-2.md` D18.
 
-- `BL-551` `[Bug]` `[Owed-playtest]` **CM02's capture cutscene plays without the enemy Balmoral or the
-  pilot switch, and inherits the captured aeroplane's roll.** Seen at the controls after the camera
-  was moved onto the aeroplane: the shot is composed correctly but the Balmoral the definition
-  animates and the wing-walk figures (the pilot leaving one aircraft and boarding the other) do not
-  appear, and on one capture the frame was about 90 degrees rolled because the Balmoral was rolled
-  when the capture fired. *Fix shape:* the wing walk's own figures (`ww_player`, `ww_ladder`,
-  `ww_zachary`, `body`/`head`/`hatch`) resolve inside `britbalmoral_1`'s gamez copy, which the world
-  never places; check whether the live rig answering for the vehicle root (`IndexSpawnedVehicle`)
-  also has to answer for those child names, or whether the figures are cross-archive and need
-  staging like `chuteman`. For the roll, read whether the original's `AT_NODE_XYZ` pose takes the
-  vehicle's full basis or its yaw alone (the wing walk is authored level). *⚠ Traps:* ⚠ The
-  `campaign-wingwalk-camera` suite passes; it reads the camera, not the figures, so extend it rather
-  than trust it. ⚠ `PoseAtNode`'s composition is shared.
-  *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md`; `docs/PLAN-M5-polish-2.md` D17 and D21.
-
 
 - `BL-545` `[Bug]` `[Owed-playtest]` **The landing animation plays with no hook, the aeroplane too
   high, and unfolded wings.** Seen at the controls on CM02's auto-land: the landing hook was not

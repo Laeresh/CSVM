@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CSVM.Utils;
 using Godot;
 
@@ -38,6 +39,16 @@ public sealed class AircraftStage
     /// is a prediction rather than a reading.</summary>
     public const int PointerBlock = 2500;
 
+    /// <summary>The aircraft-archive nodes a wing-walk capture adds under its own composition
+    /// frame: the rope ladder (<c>ladder_roll</c> → <c>rung1</c>–<c>rung6</c>, shipped
+    /// <c>INACTIVE</c>, switched on by <c>ww_ladder</c>) and the wing-walking pilot
+    /// (<c>cpilot_parent</c> → <c>cpilot_drop</c> → the <c>cp_*</c> limbs). Both are parentless
+    /// wrappers the chapter's own walk never reaches.</summary>
+    public static readonly string[] FigureNodes = { "rope_ladder", "pickup_cpilot" };
+
+    private readonly Dictionary<string, Node3D> _figures =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private AircraftStage() { }
 
     /// <summary>The bodiless <c>player</c> marker, or null when the archive carries no such node.
@@ -54,6 +65,12 @@ public sealed class AircraftStage
     /// called animation (e.g. C3/M01's <c>tdchute</c>) is what reparents and activates it. Null
     /// when the archive carries no such node.</summary>
     public Node3D? Chuteman { get; private set; }
+
+    /// <summary>The staged <see cref="FigureNodes"/> subtrees, by gamez name. They hang under a
+    /// holder that is switched off, which is what a library root the chapter's walk never reaches
+    /// amounts to: resolvable and indexed, drawn only once a capture's own
+    /// <c>OBJECT_ADD_CHILD</c> moves one into the shot.</summary>
+    public IReadOnlyDictionary<string, Node3D> Figures => _figures;
 
     /// <summary>Mesh instances the prop build added, for the session's build summary.</summary>
     public int MeshInstances { get; private set; }
@@ -116,12 +133,35 @@ public sealed class AircraftStage
             stage.Chuteman = builtChute;
         }
 
+        // ⚠ Under a switched-off holder, not switched off themselves. The wing-walk pilot is never
+        // activated by any definition — it is the reparent into the shot that draws him, which is
+        // exactly what the original gets from a library root its world walk never reaches.
+        var holder = new Node3D { Name = "figures", Visible = false };
+        worldRoot.AddChild(holder);
+        foreach (string figure in FigureNodes)
+        {
+            if (planesGamez.FindByName(figure) is not { } node
+                || scene.BuildSubtree(node, collisionSkip: _ => true) is not { } built)
+            {
+                continue;
+            }
+
+            built.Transform = Transform3D.Identity;
+            built.Visible = node.Active;
+            Rebase(built, pointerBase);
+            holder.AddChild(built);
+            stage._figures[node.Name] = built;
+        }
+
         stage.MeshInstances = scene.MeshInstanceCount;
 
         string marked = stage.PlayerMarker != null ? PlayerNode : $"no {PlayerNode}";
         string staged = stage.Prop != null ? PropNode : $"no {PropNode}";
         string chuted = stage.Chuteman != null ? ChuteNode : $"no {ChuteNode}";
-        Log.Info("world", $"aircraft stage: base {pointerBase} over {chapterNodeCount} chapter node(s), {marked}, {staged}, {chuted}, {stage.MeshInstances} mesh instances");
+        string figures = stage._figures.Count > 0
+            ? string.Join(", ", stage._figures.Keys)
+            : "no figures";
+        Log.Info("world", $"aircraft stage: base {pointerBase} over {chapterNodeCount} chapter node(s), {marked}, {staged}, {chuted}, {figures}, {stage.MeshInstances} mesh instances");
         return stage;
     }
 

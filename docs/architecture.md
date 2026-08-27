@@ -929,7 +929,16 @@ the call's own `AT_NODE` site IS the callee's root node, which names the node to
 asking for a copy. `IndexSpawnedVehicle` is the other half of that resolution: it makes one live
 aircraft answer for the gamez library-root vehicle node its roster block was spawned from, by name
 and compiled index, which is what a cutscene posed `AT_NODE` that vehicle needs
-(`Mech3/RosterMarkers.cs` is the caller). The range
+(`Mech3/RosterMarkers.cs` is the caller). It also keeps three things beside that rig which the
+resolver's shared index must never hold: the rig's own parts by gamez name, so a definition
+ANCHORED on the vehicle reaches the parts a capture animates (`Targets`' second narrow rescue —
+the shared airframe spells them `pilot`, `body`, `healthy`, and indexing those globally would let
+any definition claim them); the rotation the roster placed it at, which is what an `AT_NODE_XYZ`
+rotate reads off an aeroplane (`PlacedRotationOf`, decode in
+`docs/formats/anim-definitions/cutscenes.md`); and the engine-only nodes between the rig root and
+the airframe it draws, so an `OBJECT_ACTIVE_STATE` addressed to the vehicle reaches the aeroplane
+rather than the rig node alone (`SetTargetActive`, which is how a capture holds its subject drawn
+against the cutscene's own AI park). The range
 sweep (`TickDeferredByRange`) runs only when a player crosses an 8 m check cell, and it measures
 each anchor's range origin (`VisualOriginOf`, a mesh-bounds walk) once, carrying it in the anchor's
 own frame (`_rangeOriginLocal`) from then on: at cruise the sweep runs every few frames, and
@@ -1087,10 +1096,12 @@ name over the whole index because it is a root of its own, not something the eve
 contains. It reads the host's frame through `AnimRuntime.WorldTransform`, so a bootstrap-time pose
 (the world root not yet parented) still composes correctly instead of reading Godot's identity
 fallback, and writes the target's LOCAL transform when the target itself is out of tree.
-`HandleRotateState` reads the rotate's host under either spelling of the same field
-(`AtNodeMatrix`, `AnimDefs`' reader-normalized name; `AtNodeXYZ`, the compiled extraction's own),
-both already carrying `state` in radians by the time they reach here. Spellings and census:
-docs/formats/anim-definitions/cutscenes.md.
+`HandleRotateState` reads the rotate's host under either spelling, and the two are different rules
+rather than two names for one: `AtNodeMatrix` takes the host's composed orientation, `AtNodeXYZ`
+the rotation the host was last SCRIPTED to (`PoseAtNode`'s `scripted` arm, off
+`AnimRuntime.PlacedRotationOf`), which is why a wing-walk frame posed off an aeroplane stays level
+however the aeroplane is banking. Both carry `state` in radians by the time they reach here.
+Spellings, addresses and census: docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/Anim/NameResolver.cs
 Name→node resolution as one public module, generic over the node type (`NameResolver<TNode>`): the
@@ -4337,13 +4348,16 @@ CM07's `carney_pickup_parent`). It is built `TopLevel` — see docs/org/objectMo
 intro alone: the archive is opened nowhere else in this build, so no other session pays for it.
 
 ## src/Mech3/AircraftStage.cs
-The three aircraft-archive subtrees a story-mission intro or a chuteman-carrying drop cutscene
-animates, staged into a chapter world before the animation bind: `piratefighter` built from the
-shared aircraft archive as a prop with no pilot and switched off until the intro activates it, a
-bodiless `player` marker the flown aircraft is posed onto, and `chuteman`'s parachutist subtree
-(`chutemanparent` → `pilot`/`stamp`), switched off the same way `piratefighter` is until a
-mid-mission drop's own definition (e.g. C3/M01's `tdchute`) reparents and activates it (`BL-540`).
-All three carry a rebased gamez index (`PointerBaseOf`: the chapter's node count rounded up to the
+The aircraft-archive subtrees a story-mission intro, a chuteman-carrying drop cutscene or a
+wing-walk capture animates, staged into a chapter world before the animation bind: `piratefighter`
+built from the shared aircraft archive as a prop with no pilot and switched off until the intro
+activates it, a bodiless `player` marker the flown aircraft is posed onto, `chuteman`'s parachutist
+subtree (`chutemanparent` → `pilot`/`stamp`), switched off the same way `piratefighter` is until a
+mid-mission drop's own definition (e.g. C3/M01's `tdchute`) reparents and activates it, and
+`FigureNodes` (`rope_ladder`, `pickup_cpilot`) under a switched-off holder rather than switched off
+themselves, because nothing ever activates the wing-walking pilot: it is the capture's own
+`OBJECT_ADD_CHILD` into the shot that draws him, which is what the original gets from a library
+root its `world1` walk never reaches. All carry a rebased gamez index (`PointerBaseOf`: the chapter's node count rounded up to the
 next multiple of 2500), which is what makes a compiled definition's cross-archive symbol table
 bind them instead of claiming a name with no node. Built only for a mission whose start-anims name
 an intro (the same gate as before; a mid-mission drop with no intro of its own is not staged here,

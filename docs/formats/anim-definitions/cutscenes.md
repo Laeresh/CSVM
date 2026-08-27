@@ -16,6 +16,8 @@ compiled shape are on the [landing page](../anim-definitions.md) and in
 - [The `letterbox` node](#the-letterbox-node)
 - [The reparent is how a cutscene is composed](#the-reparent-is-how-a-cutscene-is-composed)
   - [A composition frame is a bodiless gamez node the `world1` walk never reaches](#a-composition-frame-is-a-bodiless-gamez-node-the-world1-walk-never-reaches)
+  - [`AT_NODE_XYZ` takes the host's ROTATION FIELDS, `AT_NODE_MATRIX` its composed matrix](#at_node_xyz-takes-the-hosts-rotation-fields-at_node_matrix-its-composed-matrix)
+  - [The wing walk's cast, and where each figure lives](#the-wing-walks-cast-and-where-each-figure-lives)
 - [`player`, and the two pointer spaces a definition addresses](#player-and-the-two-pointer-spaces-a-definition-addresses)
 - [`CALLBACK`: the dispatch chain](#callback-the-dispatch-chain)
 - [`CALLBACK` code reference](#callback-code-reference)
@@ -186,6 +188,75 @@ CSVM stands such a frame up beside `camera1` and the `letterbox` bars
 mission's roster rig answers for the vehicle's own library-root name so the `AT_NODE` pose has a
 host (`Mech3/RosterMarkers.cs`). ⚠ The frame is placed rather than authored, so its motion must
 launch from where the definition put it: see `docs/org/objectMotion.md`'s re-home rule.
+
+### `AT_NODE_XYZ` takes the host's ROTATION FIELDS, `AT_NODE_MATRIX` its composed matrix
+
+`OBJECT_ROTATE_STATE` is dispatch slot 9, `004e8b80` (the 47-slot table at `DAT_00727de0`, populated
+by `FUN_004ee1a0`; see [org/sequences.md](../../org/sequences.md)). The event's flag word at
+`+0x00` selects the basis, and the two `AT_NODE` bits reach different sources:
+
+| flag | branch | what it reads off the host |
+|---|---|---|
+| `0x2` `AT_NODE_XYZ` | `004e8bdc` | `Object3d::GetRotation` (`004d1b40`, class data `+0x18/+0x1c/+0x20`) or, for a `Camera` host, `Camera::GetRotation` (`004d2680`, `+0x20/+0x24/+0x28`) — the host's own stored euler triple |
+| `0x4` `AT_NODE_MATRIX` | `004e8c76` | `gwNodeBuildNodeToAncestorMatrix` (`004cef20`) then matrix→euler (`0053df30`) — the host's composed world orientation |
+
+Both branches then add the authored `state` triple componentwise and write the result through
+`Object3d::SetRotation` (`004d1a30`), which stores the target's own euler fields. A host that fails
+to resolve leaves the three floats at zero, which is the world-axis fallback.
+
+**The euler fields are not the same thing as the drawn orientation.** `Object3d::SetMatrix`
+(`004d1f90`) writes twelve floats into class data `+0x30` and sets flag bit `0x10`; it leaves
+`+0x18/+0x1c/+0x20` alone, and `GetRotation` does not recompute them. The flight model places a
+vehicle's node exactly that way (`FUN_0048e580` calls `004d1f90` at `0048ecca`), so an
+`AT_NODE_XYZ` rotate off a flying aeroplane reads the rotation it was last SCRIPTED to, never the
+attitude it is banking at. The translate side is the other way round: `OBJECT_TRANSLATE_STATE`
+(slot 7, `004e8de0`) takes the host's position through `004cf490`, which builds the accumulated
+matrix, so it IS live.
+
+That asymmetry is the whole shape of a wing-walk shot. The frame lands on the aeroplane wherever it
+is, and stays level however the aeroplane is banking. CSVM implements it as
+`PoseChannel.PoseAtNode`'s `scripted` arm reading `AnimRuntime.PlacedRotationOf`, the rotation the
+roster placed a spawned vehicle at; every other host contributes its live frame, as `AT_NODE_MATRIX`
+always does.
+
+⚠ All 180 `AT_NODE_XYZ`/`AT_NODE_MATRIX` rotates in this install author a zero `state` triple, so
+the componentwise add is unexercised and whether a non-zero offset composes before or after the
+host's rotation is undecided.
+
+### The wing walk's cast, and where each figure lives
+
+`wingwalk_parent-wingwalk` calls three definitions, and their roots sit in two different archives:
+
+| definition | root | where | reached by |
+|---|---|---|---|
+| `ww_player` | `player` | aircraft archive 1418 (C3 ptr 8918) | `AircraftStage`'s bodiless marker |
+| `ww_ladder` | `rope_ladder` | aircraft archive 241 (C3 ptr 7741) | `AircraftStage.FigureNodes` |
+| `ww_zachary` | `pickup_cpilot` | aircraft archive 2269 (C3 ptr 9769) | `AircraftStage.FigureNodes` |
+
+`rope_ladder` fans to `ladder_roll` → `rung1`–`rung6` (archive 36/27/40/30/29/634/2) and ships
+`INACTIVE`, which is why `ww_ladder` opens by activating it. `pickup_cpilot` fans to
+`cpilot_parent` → `cpilot_drop` → the thirteen `cp_*` limbs (2270–2287) and ships ACTIVE; nothing
+ever activates it, because in the original a parentless library root is simply not reached from
+`world1` until an `OBJECT_ADD_CHILD` moves it into the shot. CSVM reproduces that by hanging both
+under a switched-off holder: indexed and resolvable, drawn only once the reparent happens.
+
+The capture's own definition, `britbalmoral_1-ww_balmoral1`, addresses three more nodes that are
+**chapter** nodes rather than archive ones: `body` (C3 1058, under `britbalmoral_1` → `healthy` →
+`nearest` → `pilot_pos` → `pilot`), `head` (1075) and `hatch` (1089, under `nearest` → `nose` →
+`hatchparent`). They live inside the chapter's own copy of the vehicle, which the world never
+places, so the compiled claim binds nothing; the aeroplane the mission's roster spawned carries the
+same names in its own subtree, off the shared `balmoral`/`player_balmoral` airframe. The original
+finds them because its first resolution tier is a depth-first walk of the definition's own root
+subtree ([org/sequences.md](../../org/sequences.md), "The tier chain"), and that root IS the
+vehicle. CSVM keeps the rig's subtree as a **scoped alias** rather than putting those names in the
+shared index — `pilot`, `body` and `healthy` are the commonest names in the archive, and a global
+index of them would let any definition claim them (`AnimRuntime.IndexSpawnedVehicle`).
+
+One more thing the capture needs from the vehicle beyond its root: its first sequence re-asserts
+`OBJECT_ACTIVE_STATE [britbalmoral_1, true]` inside a `Loop{1000}` at 0.01 s, ten seconds of it.
+That is what keeps the captured aeroplane drawn against code 913's AI park, so the active bit has
+to reach the aircraft's own drawn state and not only the rig node
+(`AnimRuntime.SetTargetActive`).
 
 ## `player`, and the two pointer spaces a definition addresses
 
@@ -822,6 +893,7 @@ beat deactivating it; the smooth phase between them is
   to read both. **The compiled def wins**, so a consumer that reads only the reader spelling sees
   the target teleported to its parent's origin. Install-wide there are 190 non-null `at_node`
   translations; `INPUT_NODE` appears as an `at_node` value and is a sentinel, not a node name.
+  The two rotate spellings are **different rules**, decoded below.
 - **A change to `generic_intro` is verified by what disappears, not by what looks right.** Twelve
   missions share it, and an 8-chapter freecam regression cannot see any of it: no Instant Action or
   multiplayer mission bootstraps an intro, so that regression is inert here by construction

@@ -51,6 +51,20 @@ internal static class WingWalkCameraSuites
     // authored), so once read it should reproduce that heading almost exactly.
     private const float HeadingToleranceDeg = 2f;
 
+    // How far the aeroplane is rolled while the capture fires. An AT_NODE_XYZ rotate reads the
+    // rotation the host was PLACED at, never the one it is banking at, so the walk frame stays
+    // level through this; a frame that composed off the flown basis reads the whole 90 degrees.
+    private const float HostRollDeg = 90f;
+    private const float RollToleranceDeg = 2f;
+
+    // The capture's own cast: the two aeroplane parts its SI scripts drive (the enemy pilot's body
+    // and head, inside the chapter's own copy of the vehicle, which only the spawned rig can
+    // answer for), the canopy its from-to motion opens, and the two aircraft-archive figures the
+    // wing walk adds under the frame.
+    private static readonly string[] VehicleParts = { "body", "head", "hatch" };
+
+    private static readonly string[] Figures = { "rope_ladder", "pickup_cpilot" };
+
     /// <summary>Plays CM02's own capture definition over that mission's built world and reads the
     /// camera it poses: the shot has to sit on the captured aeroplane rather than at the world
     /// origin, which is where a wing-walk frame with no host to hang off lands.</summary>
@@ -130,7 +144,7 @@ internal static class WingWalkCameraSuites
                 world.Runtime, CaptureBlock, captured);
             report.AppendLine($"spawned '{CaptureBlock}' at {captured.WorldPosition}, " +
                 $"{grafted} marker graft(s)");
-            report.AppendLine($"before: {Census(world)}");
+            report.AppendLine($"before: {Census(world, captured)}");
             Play(ctx, world, rig, cutscene, roster, captured, report);
         }
         finally
@@ -172,6 +186,21 @@ internal static class WingWalkCameraSuites
             ctx.Check(camera != null,
                 $"the built world stands up the '{CutsceneController.CameraNode}' node the capture poses");
             var subject = captured.WorldPosition;
+            // ⚠ Held rolled on every step, not set once: the aeroplane flies itself on this leg and
+            // rewrites its own transform each tick, so a one-shot bank is gone by the pose event.
+            var banked = new Basis(captured.GlobalBasis.Z.Normalized(),
+                Mathf.DegToRad(HostRollDeg)).Orthonormalized() * captured.GlobalBasis;
+            var parts = PartsOf(captured);
+            var partsAtStart = new Dictionary<string, Transform3D>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (name, node) in parts)
+            {
+                partsAtStart[name] = node.Transform;
+            }
+
+            world.Runtime.OpenResolutionCensus();
+            // ⚠ Bank BEFORE the trigger. The capture poses its frame inside the start dispatch, so
+            // a bank first applied on the first advance is a frame late and the pose never sees it.
+            captured.GlobalBasis = banked;
             world.Runtime.PlayMissionTrigger(CaptureAnim);
 
             // ⚠ Read only while the shot is COMPOSED, which is while `camera1` hangs under the wing
@@ -184,9 +213,17 @@ internal static class WingWalkCameraSuites
             int samples = 0;
             float frameHeadingDeg = float.NaN;
             float capturedHeadingDeg = float.NaN;
+            float frameRollDeg = float.NaN;
+            float hostRollDeg = float.NaN;
+            var figuresFramed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var partsShown = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < (int)(PlayBudgetS / StepDt); i++)
             {
                 clock.BeginFrame(StepDt);
+                captured.GlobalBasis = banked;
+                // ⚠ Read the bank HERE. The aeroplane's own tick below puts its flown attitude
+                // back, so a read after it reports the flight model, not the pose event's host.
+                float bankNow = RollDegOf(captured.GlobalBasis);
                 world.Runtime.Advance(StepDt);
                 // ⚠ Read the shot BEFORE the host ticks. The handoff parks `camera1` back under
                 // the world root inside that tick, so a read after it takes the park for the shot
@@ -211,6 +248,25 @@ internal static class WingWalkCameraSuites
                     framedAt = frameOff;
                     frameHeadingDeg = FrameHeadingDeg(world);
                     capturedHeadingDeg = AiPilot.HeadingDegOf(captured.NoseDirection);
+                    frameRollDeg = FrameRollDeg(world);
+                    hostRollDeg = bankNow;
+                }
+
+                foreach (string part in VehicleParts)
+                {
+                    if (parts.TryGetValue(part, out var node) && node.IsVisibleInTree())
+                    {
+                        partsShown.Add(part);
+                    }
+                }
+
+                foreach (string figure in Figures)
+                {
+                    if (First(world.Runtime.FindNodes(figure)) is { } node && node.IsVisibleInTree()
+                        && IsUnder(node, WalkFrame))
+                    {
+                        figuresFramed.Add(figure);
+                    }
                 }
 
                 if (off > eye.Length())
@@ -229,7 +285,13 @@ internal static class WingWalkCameraSuites
                     $"frame {FrameOrigin(world)}");
             }
 
-            report.AppendLine($"after: {Census(world)}");
+            foreach (string line in world.Runtime.ResolutionLines())
+            {
+                report.AppendLine($"resolution: {line}");
+            }
+
+            world.Runtime.CloseResolutionCensus();
+            report.AppendLine($"after: {Census(world, captured)}");
             report.AppendLine($"shot composed for {composedTo:0.##} s over {samples} sample(s), " +
                 $"opened {openedAt:0} m off the capture with the walk frame {framedAt:0} m off it, " +
                 $"nearer-the-origin-ever={nearerTheOriginEver}");
@@ -250,6 +312,46 @@ internal static class WingWalkCameraSuites
             ctx.Check(!float.IsNaN(frameHeadingDeg) && !float.IsNaN(capturedHeadingDeg)
                 && Mathf.Abs(Mathf.Wrap(frameHeadingDeg - capturedHeadingDeg, -180f, 180f)) < HeadingToleranceDeg,
                 $"and the wing-walk frame faces the captured aeroplane's own heading, within {HeadingToleranceDeg:0}° of it");
+
+            report.AppendLine($"host rolled {hostRollDeg:0.#}° when the capture fired, " +
+                $"'{WalkFrame}' roll {frameRollDeg:0.#}°");
+            // METHOD-15: the perturbation has to have taken before its absence means anything.
+            ctx.Check(Mathf.Abs(hostRollDeg) > HostRollDeg - 10f,
+                $"the aeroplane really is rolled about {HostRollDeg:0}° at the instant the capture poses its frame");
+            ctx.Check(!float.IsNaN(frameRollDeg) && Mathf.Abs(frameRollDeg) < RollToleranceDeg,
+                $"and the frame stays level anyway, within {RollToleranceDeg:0}° of upright, because an AT_NODE_XYZ rotate reads the rotation the aeroplane was placed at");
+
+            var moved = new List<string>();
+            foreach (var (name, node) in parts)
+            {
+                if (partsAtStart.TryGetValue(name, out var was)
+                    && (!was.Origin.IsEqualApprox(node.Transform.Origin)
+                        || !was.Basis.IsEqualApprox(node.Transform.Basis)))
+                {
+                    moved.Add(name);
+                }
+            }
+
+            var readings = new List<string>();
+            foreach (string part in VehicleParts)
+            {
+                readings.Add($"{part} in-rig={parts.ContainsKey(part)} " +
+                    $"shown={partsShown.Contains(part)} driven={moved.Contains(part)}");
+            }
+
+            report.AppendLine($"vehicle parts ({parts.Count} in the rig): {string.Join(", ", readings)}");
+            foreach (string part in VehicleParts)
+            {
+                ctx.Check(parts.ContainsKey(part) && moved.Contains(part) && partsShown.Contains(part),
+                    $"the capture's '{part}' resolves inside the aeroplane the mission spawned, is drawn while the shot is composed, and its authored motion drives it");
+            }
+
+            report.AppendLine($"figures framed: [{string.Join(", ", figuresFramed)}]");
+            foreach (string figure in Figures)
+            {
+                ctx.Check(figuresFramed.Contains(figure),
+                    $"the wing walk's '{figure}' is staged, visible and under the walk frame while the shot is composed");
+            }
         }
         finally
         {
@@ -306,17 +408,66 @@ internal static class WingWalkCameraSuites
             : float.NaN;
     }
 
+    // The frame's roll about its own nose, NaN when the frame is not in the world yet.
+    private static float FrameRollDeg(TestWorld world)
+    {
+        var found = world.Runtime.FindNodes(WalkFrame);
+        return found.Count > 0 ? RollDegOf(found[0].GlobalTransform.Basis) : float.NaN;
+    }
+
+    private static float RollDegOf(Basis basis) =>
+        Mathf.RadToDeg(basis.Orthonormalized().GetEuler(EulerOrder.Yxz).Z);
+
+    // The aeroplane's own parts by their gamez name — what the capture's `body`/`head`/`hatch`
+    // events have to reach, since the chapter's copy of this vehicle is never placed.
+    private static Dictionary<string, Node3D> PartsOf(Node3D rig)
+    {
+        var map = new Dictionary<string, Node3D>(StringComparer.OrdinalIgnoreCase);
+        void Walk(Node node)
+        {
+            foreach (var child in node.GetChildren())
+            {
+                if (child is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta))
+                {
+                    map.TryAdd(n3d.GetMeta(AnimRuntime.NameMeta).AsString(), n3d);
+                }
+
+                Walk(child);
+            }
+        }
+
+        Walk(rig);
+        return map;
+    }
+
     // What the capture's node table can actually reach: every name the definition addresses, with
-    // how many nodes answer it and where the first one sits.
-    private static string Census(TestWorld world)
+    // how many nodes answer it and where the first one sits. The three vehicle parts are counted
+    // inside the spawned aeroplane, which is the only place they exist.
+    private static string Census(TestWorld world, Node3D rig)
     {
         var parts = new List<string>();
-        foreach (string name in new[] { CaptureBlock, WalkFrame, "camera1", "player", "body", "hatch" })
+        foreach (string name in new[] { CaptureBlock, WalkFrame, "camera1", "player" })
         {
             var found = world.Runtime.FindNodes(name);
             parts.Add(found.Count == 0
                 ? $"'{name}' 0"
-                : $"'{name}' {found.Count} at {found[0].GlobalTransform.Origin}");
+                : $"'{name}' {found.Count} at {found[0].GlobalTransform.Origin} visible={found[0].IsVisibleInTree()}");
+        }
+
+        foreach (string name in Figures)
+        {
+            var found = world.Runtime.FindNodes(name);
+            parts.Add(found.Count == 0
+                ? $"'{name}' 0"
+                : $"'{name}' {found.Count} visible={found[0].IsVisibleInTree()}");
+        }
+
+        var own = PartsOf(rig);
+        foreach (string name in VehicleParts)
+        {
+            parts.Add(own.TryGetValue(name, out var node)
+                ? $"'{name}' in-rig visible={node.IsVisibleInTree()}"
+                : $"'{name}' not in the rig");
         }
 
         return string.Join(", ", parts);

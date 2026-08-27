@@ -586,6 +586,16 @@ loss. What the engine renders was decodable from the authored constants + oscill
   log line (`GD.Print`) over a pixel for a realtime transient, or drive the state through a suite's
   own `_Process` loop (INSTR-26) where the frame IS the unit.
 
+- **INSTR-29** — **A perturbation meant for a definition's own pose events has to be in place
+  BEFORE the call that starts it, and be re-applied every step against whatever else drives the
+  subject.** A definition poses inside its start dispatch, so a state first written on the first
+  advance is a frame late and the event under test never sees it; and a stand-in that flies itself
+  rewrites its own transform each tick, so a one-shot write is gone by the next event and a read
+  taken after that tick reports the flight model rather than the pose's host. Measured on CM02's
+  capture: rolling the captured aeroplane 90° at the top of the play loop left the wing-walk frame
+  reading 0° roll under BOTH the old and the new rule, which reads as "the fix is unnecessary";
+  banking before `PlayMissionTrigger` and holding the bank each step separated them at 90° versus 0°.
+
 ## SRC — sources and documents
 
 - **SRC-1** — **Validate whether bytes are meaningful before numeric sanity checks.**
