@@ -1,8 +1,14 @@
 # Milestone 5 polish, run 4: the CM03 to CM09 reports
 
-**ACTIVE PLAN** (written 2026-08-27). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE.** All sixteen items landed and the closing sortie flew CM03 to CM09. Seven fixes
+(`BL-548`, `BL-534`, `BL-516`, `BL-583`, `BL-528`, `BL-529`, `BL-531`+`BL-532`), three partials
+with their remaining half handed back (`BL-513`+`BL-521`, `BL-512`+`BL-522`, `BL-525`) and six
+disproofs (`BL-517`, `BL-524`, `BL-514`, `BL-526`, `BL-527`, `BL-518`). The sortie held CM03,
+CM04 and the fixes it re-judged (F17, the Blue Streak award, the CM09 Peacemakers), reopened
+three disproofs on what the user saw (`BL-517` as `BL-567`, `BL-514` as `BL-571`, the route half
+of `BL-529` as `BL-576`), found the real trigger behind two partials (`BL-513`'s persist-log
+replay, `BL-521`'s `.gw` switch and reader-def drop), and minted `BL-567` to `BL-582`; every
+verdict is recorded under D32.
 
 This run takes the at-the-controls reports from the CM03 to CM09 playtest (triaged into
 `backlog.md` by commit `7b173cae`, with two later additions from the D18/D21 instrumentation) and
@@ -106,7 +112,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — CM09 and the sortie
 
 31. ☑ `BL-531` + `BL-532`: CM09's first patrol hangs in the air, and no enemy takes off from the ground hangars
-32. ☐ Fly CM03 to CM09 end to end and judge every item where it was reported
+32. ☑ Fly CM03 to CM09 end to end and judge every item where it was reported
 
 ## Dependency and parallelism notes
 
@@ -936,7 +942,7 @@ suite gained two checks on the snap. D32 judges it at the controls.
 spawns it there; the original reads the same record, so that is left alone rather than invented
 around. Flying up to 80 km away is `BL-523` and stays there.
 
-## D32 ☐ Fly CM03 to CM09 end to end and judge every item where it was reported
+## D32 ☑ Fly CM03 to CM09 end to end and judge every item where it was reported
 
 **Goal.** The user flies CM03 through CM09 on the landed build and each item above is judged at
 the place it was reported; anything that still reads wrong is filed, not fixed in the sortie.
@@ -953,6 +959,11 @@ verdict in the closing commit, close the plan, and mint follow-ups for anything 
 green on the final build.
 
 **⚠ Traps.** Do not retune anything mid-sortie on one impression; file it.
+
+**Verified.** Flown by the user across four sessions on the plan build; the verdicts below are
+the record. On the closing tree with main merged in: `RunTests.ps1` build clean, units 2470
+passed / 0 failed, engine 153 suites passed / 0 failed with the error census clean, goldens 16
+shots hash-identical, hitch awareness-only (exit 0, 376 s).
 
 ### Sortie verdicts
 
