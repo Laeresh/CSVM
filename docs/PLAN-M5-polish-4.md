@@ -86,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ `BL-516`: CM03's AA turret never fires
 4. ◐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
 5. ◐ `BL-512` + `BL-522`: the Barracuda's drive jumps, its launch faces the wrong way, and its fighters crash at once
-6. ☑ `BL-556`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
+6. ☑ `BL-563`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
 
 ### Wave B — CM05 and CM06
 
@@ -173,7 +173,9 @@ Read off the log, per the trap above, not a frame count. C3/M05 ("Hawaii mission
 window. A connected pad's phantom button reads as a skip at about 12 s, so the probe needs
 `--no-pads`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with main merged in: `RunTests.ps1` build clean, units
+2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
+16 shots hash-identical, hitch awareness-only; D32 judges it at the controls.
 
 ## A2 ☑ `BL-534`: a debug key that kills the player's selected target
 
@@ -208,7 +210,9 @@ since `DebugForceCrash` and `DamageAt` already carry their own coverage elsewher
 Instant Action dogfight, select an enemy, press F17, and confirm the wrap-up counts the kill; press
 it with no selection and confirm nothing happens; select a turret and confirm nothing happens.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with main merged in: `RunTests.ps1` build clean, units
+2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
+16 shots hash-identical, hitch awareness-only; D32 judges it at the controls.
 
 **⚠ Traps.** Kill through the damage model or objectives never fire — avoided by reusing
 `DebugForceCrash`/`DamageAt` rather than freeing the node. Debug only: no entry in the shipped
@@ -271,7 +275,9 @@ different path; this closes separately from it, kept apart by `TurretController.
 scoped to `TravelersMet`'s group form only; it does not touch the node form, `DEDG`, or any other
 objective directive.
 
-**Verified.** <pending orchestrator run>.
+**Verified.** On the merged plan branch with main merged in: `RunTests.ps1` build clean, units
+2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
+16 shots hash-identical, hitch awareness-only; D32 judges it at the controls..
 
 ## A4 ◐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
 
@@ -329,7 +335,9 @@ confirmed, since their authoring was not found. D32 must judge this item at the 
 kill key or a fresh look, since the closing sortie is the only remaining way to see whether the
 reported symptom still reproduces on the landed build.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with main merged in: `RunTests.ps1` build clean, units
+2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
+16 shots hash-identical, hitch awareness-only; D32 judges it at the controls.
 
 **⚠ Traps.** Do not gate the sequence on the visual state alone; a building destroyed in play and
 hit again is the same symptom on another path, and the fix belongs at the pool.
@@ -401,9 +409,14 @@ belongs to `ObjectMotion` as a whole. The "wrong way" half is **disproven**: no 
 carries a rotation term, `barracuda`'s gamez transform is `Initial`, and the hull's local −Z (its
 take-off run) is correct as built.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with main merged in: `RunTests.ps1` build clean, units
+2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
+16 shots hash-identical, hitch awareness-only; D32 judges it at the controls.
 
-## A6 ☑ `BL-556`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
+## A6 ☑ `BL-563`: the A press that skips a cutscene or resumes from the pause menu fires a rocket
+
+(Minted as `BL-556` during the run; renumbered because main minted its own `BL-556`, the
+difficulty scale, in parallel. The landing commit's subject still names `BL-556`.)
 
 **Goal.** Confirming a cutscene skip or the pause menu's Resume with gamepad A (or F on the
 keyboard) launches nothing; the next fresh pull of the trigger fires as before.
@@ -439,7 +452,9 @@ entirely upstream of it, so the gun trigger (B) and the selectors are unaffected
 `Inert=false` sites (`Activate`, the wave/respawn re-entry) and the pause halt clearing are
 covered by the same two hooks, closing the spawn-frame sibling the original comment named as well.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with main merged in: `RunTests.ps1` build clean, units
+2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
+16 shots hash-identical, hitch awareness-only; D32 judges it at the controls.
 
 # Wave B — CM05 and CM06
 
@@ -483,7 +498,9 @@ record's authored team is fixed at spawn. If a future mission genuinely needs a 
 fire on the player, the decoded lever is the record's own `targets` list (omit `player`), not an
 invented engine-side hostility filter.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with main merged in: `RunTests.ps1` build clean, units
+2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
+16 shots hash-identical, hitch awareness-only; D32 judges it at the controls.
 
 ## B12 ❌ `BL-524`: a friendly patrol without a net flies away after its first fight
 
@@ -508,7 +525,9 @@ first kill stay within the mission area; D32.
 hand-off is itself unsettled). Do not add a leash constant. Anything deeper than the no-net
 lay-off is `BL-523`'s and goes back to the backlog with what was learned.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with main merged in: `RunTests.ps1` build clean, units
+2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
+16 shots hash-identical, hitch awareness-only; D32 judges it at the controls.
 
 **Outcome (disproven; no code landed).** Both halves of the item's stated cause are wrong, and the
 decode lane it names has no rule to give.
@@ -651,7 +670,9 @@ zeppelin's own gun rings are `Site != null` structures exactly like a ground AA 
 already treats their moving platform correctly (`TurretController.PlatformOf`, the differenced
 `PlatformVelocity` estimate).
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with main merged in: `RunTests.ps1` build clean, units
+2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
+16 shots hash-identical, hitch awareness-only; D32 judges it at the controls.
 
 # Wave C — CM07 and CM08
 
@@ -815,7 +836,9 @@ build store beside the profile save, and `CampaignProgression.BuildForOwned` res
 aircraft that was granted before this landed, which is what lets the D32 sortie see it on the
 existing profile.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with main merged in: `RunTests.ps1` build clean, units
+2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
+16 shots hash-identical, hitch awareness-only; D32 judges it at the controls.
 
 ## C25 ☑ `BL-529`: the Pandora porpoises along its route and past its end
 
@@ -848,7 +871,9 @@ engine suite row flies CM08's real Klondike1 net end to end, asserting pitch sta
 record's band throughout and the walk holds for good at the bare far end rather than shuttling
 back.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with main merged in: `RunTests.ps1` build clean, units
+2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
+16 shots hash-identical, hitch awareness-only; D32 judges it at the controls.
 
 **⚠ Traps.** The original's initial-pitch clamp never fires (a unit bug kept verbatim,
 `ZeppelinMotion.cs:35-37`); left untouched, as directed. The unconditional dead-end hold is opt-in
@@ -901,7 +926,9 @@ fire on the runway at y=161, `blakepeace_2_5` climbs out through y=198, both gen
 doors and spawn on the deck at y=160, and the run ends with no engine error. The `scripted-path`
 suite gained two checks on the snap. D32 judges it at the controls.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with main merged in: `RunTests.ps1` build clean, units
+2458 passed / 0 failed, engine 152 suites passed / 0 failed with the error census clean, goldens
+16 shots hash-identical, hitch awareness-only; D32 judges it at the controls.
 
 **⚠ Traps.** The zeppelin launch-altitude gate does not apply to a ground start, and none was added.
 `blakepeace_2_2` is authored at the world origin at y=0 with no net and no path, and our loader
