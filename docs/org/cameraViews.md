@@ -29,8 +29,8 @@ Two findings will not be guessed correctly:
 - **The Nose view and the Cockpit view are the same camera point.** Both place the camera at the
   plane's **`cockpit_camera` marker** — there is **no separate nose camera marker and no per-mode
   camera offset** anywhere. Mode 7 (nose) is the same physical position as mode 6 (cockpit); it
-  differs only in *rendering* (the cockpit interior and some plane nodes are hidden) and in
-  *head-look* (locked straight ahead) — and it runs the narrower 60° FOV.
+  differs in *rendering* (the cockpit interior and some plane nodes are hidden), runs player
+  head-look without the Cockpit-only autohead, and uses the narrower 60° FOV.
 - **The 62° vertical FOV the engine currently assumes does not exist in the binary.** The
   62°-in-radians constant `1.082104` (`63 82 8a 3f`) is absent. The correct base is **60° horizontal
   FOV**, with the single **80°** first-person cockpit exception.
@@ -88,7 +88,7 @@ game start / on the cycle key. So the selectable set is:
 |---|---|
 | `0` | **Chase** (3rd person) |
 | `6` | **Cockpit** (interior, 80°, free-look) |
-| `7` | **Nose** (no interior, 60°, head locked forward) |
+| `7` | **Nose** (no interior, 60°, player head-look with autohead off) |
 
 Modes `1`, `2`, `3`, `4`, `5`, `8`, `9` are **not** reachable as player-selected views — they are
 internal / context camera modes (e.g. other aircraft, cut-scene or context poses), which is why
@@ -130,11 +130,14 @@ already leaves `F7` unbound in the flight scheme for this reason. Filed as `BL-4
 
 Beyond those binding labels, the executable holds **no friendly view-name strings** for the modes
 (`Chase`, `Cockpit`, `Nose`, … used as display text). The HUD initializer `FUN_00454e70` reads only
-two **layout keys** from the HUD data archive (`hud_v2.zrd`): `POSITION_1ST` (`00624f28`) and
-`POSITION_3RD` (`00624f38`), used to place the gauges differently for the first-person and
-third-person HUD variants. So the small per-view display names seen in-game come from the
-HUD/video-menu **data files**, not the ship binary — but the *selection wiring* above pins which
-mode is which player view.
+two keys from the HUD data archive (`hud_v2.zrd`): `POSITION_1ST` (`00624f28`) and
+`POSITION_3RD` (`00624f38`). ⚠ **Despite the names, these are not a per-view gauge layout.**
+`FUN_00454e70` reads them into a text widget built per section (`AIR_SPEED`, `ALTIMETER`, `GUNS`,
+`MISSILES`, `HEALTH`, `NITRO`), the six values share one x at 0.02 spacing in y, and the column is
+written only under `DAT_00624df0`: a debug text readout, not dial placement
+(`docs/formats/hud.md`, "Cockpit gauges"). So the small per-view display names seen in-game come
+from the HUD/video-menu **data files**, not the ship binary — but the *selection wiring* above pins
+which mode is which player view.
 
 ### Modes 6 and 7 are the only first-person views
 

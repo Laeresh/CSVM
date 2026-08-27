@@ -490,19 +490,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   risk:** the pickup entities have not been located, and they may be mission-scripted rather
   than placed in the world data. Locate them before scheduling.
 
-- `BL-226` `[Feature]` `[Blocked: cockpit view]` **The incoming-fire cue set's other two halves are blocked on things that do not exist
-  yet.** The near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,
+- `BL-226` `[Feature]` **The incoming-fire cue set's other two halves are now wireable.** The
+  near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,
   `player.json`'s `bullet_hit_sound`) and `window_hit_sg` (= `snd_windowhit1-3`, non-3D) did not.
   Both sit on the five `player_pfighter-bulletN` canopy-hole defs (the `bullethole_anims` of
   `docs/formats/vehicle.md`, 10 files per chapter × 8), so they are shipped and referenced, not
   orphans. The design's rule is that incoming-fire intensity is how the player reads a shooter's
   distance, calibre and ammo type; the accumulator that rates it is now decoded and running
-  (`WarningShotCue`), so both cues can hang off it once their blockers clear.
+  (`WarningShotCue`), and the Cockpit/Nose modes make the first-person branch live.
   ⚠ **Traps.** (a) **`bullet_hit_sg`'s shooter blocker is GONE (2026-08-13):** since M4 A2+D14 an
   AI gunner fires real rounds at the player (`--ai=… --ai-attack=…`), so this half is wireable
   now — it hangs off the projectile-hit path, not the near-miss accumulator alone.
-  (b) `window_hit_sg` additionally needs a cockpit view —
-  the bullet defs are `PlayerFirstPerson`-gated. (c) **Do not fake either off our collision path**:
+  (b) `window_hit_sg` is `PlayerFirstPerson`-gated through the bullet defs, so dispatch it only
+  while Cockpit or Nose is the effective view. (c) **Do not fake either off our collision path**:
   firing the hit cue on a wall scrape conflates "I was shot" with "I hit something" and would make
   both wrong (the same rule that kept the `player` IMPACT row honest; its closing commit is
   `git log --grep=BL-222`). (d) Only `snd_warningshot1-3` are true orphans (in no `SOUND_GROUPS`
@@ -1331,19 +1331,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Where to look:* whether the collapsed clutter cards still write depth or a dark fragment behind the band (the `csky_clutter_fade` cutout keeps a card in the pass until `step(d, far)` culls it, and a card collapsed to zero size should contribute nothing), whether the fog-volume clutter's own `far_fade` and the templates fade overlap at that range, and whether the gamez buildings carry a `far_fade_range` of their own the remake ignores (`FUN_004d5de0` applies the scaled test to every type-5 scene node, not only clutter). A C5 screenshot pair at the band distance with `graphics.clutterFarFade` on and off separates the two.
   *Cross-refs:* `BL-337` (closed; the fade), `docs/org/clutter.md`.
 
-- `BL-511` `[Bug]` **The HE rocket's explosion debris and fire streaks drift further from the
-  burst centre with every shot.** *Evidence:* reported at the controls: the small debris and fire
-  streaks of the `he_rocket` explosion land a little further out on each successive shot, so a
-  per-instance offset is accumulating instead of being reset between plays. The explosion is a
-  named puffer/debris effect driven by its def, so the likely site is a pooled emitter whose
-  origin, elapsed time, or `translation_range` launch offset is added to the previous value rather
-  than assigned. *Fix shape:* fire ten rockets at one spot under `--det`, log each burst's debris
-  spawn positions relative to the impact, and find the state that survives between plays in the
-  effect pool (`Puffer`, the debris arc's `initial`/`delta` state, or the effect host's transform).
-  *⚠ Traps:* the debris arc itself is decoded and correct (`BL-060`'s notes); the defect is the
-  reset between plays, not the arc, so do not retune launch magnitudes. *Cross-refs:* `BL-060`,
-  `PLAN-object-motion-decode`.
-
 - `BL-512` `[Bug]` **CM04 (C3/M03): the Barracuda jumps while driving into the bay and its launch faces
   the wrong way.** *Evidence:* reported at the controls: the submarine's `sub_movement` drive into
   the bay shows a discontinuity (a jump) partway, and at the launch it points away from the bay
@@ -1700,17 +1687,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   implementation against the four cancellations and the two triples — those are the cases with a
   right answer to check against.
 
-- `BL-255` `[Feature]` **A third main view — "nose view" — exists in the original and we do not have it**
-  (user, 2026-08-04, while handing over `CAP-17`). Alongside cockpit and third-person there is a
-  view with **no cockpit drawn, the camera sitting at the front of the plane, and the same instrument
-  set as third-person** (the free-floating ALT/MPH/GUNS/ROCKETS dials, not the cockpit panel).
-  `CAP-17 C2 south.mp4` is filmed in it throughout and is the reference footage — the dials sit at
-  the third-person positions (altimeter hub ≈ (1092, 412), speedometer ≈ (1092, 2148) at 2560×1440,
-  mirror-symmetric about screen centre) over an otherwise unobstructed forward view.
-  Unknown and not investigated here: which key selects it, where it sits in the cycle, and the exact
-  eye offset along the nose. Distinct from `BL-150`, which is about the *held-numpad* views around
-  the aircraft, not the main view set.
-
 - `BL-260` `[Feature]` `[Blocked: camparam decode]` **The death and flyby cameras stay gated on a decode; two crash-camera fields unwired**
   (partial-close 2026-08-05: the crash camera and look-behind landed — `docs/HISTORY.md`).
   `CamParams.cs` parses all four authored `camparam.zrd.json` blocks; still dormant: the **death
@@ -1786,11 +1762,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   marker); the fire path is the unflagged `fire_bullet` source. And the near-match trap: several
   magnitude candidates coincide with authored constants — wire nothing on one coincidence (the
   caliber law stood because the candidates separated by an order of magnitude each way).
-- `BL-420` `[Research]` **Decode the original's per-view base FOV from `crimson.exe` and record it under `docs/org/` — the engine holds a single 62° assumption that the binary refutes.** The original's camera projection has **exactly two base horizontal FOVs, 60° and 80°, both stored in radians as half-angle constants** (`1.0471976` = `92 0a 86 3f` and `1.3962634`), and **which one applies is gated per-camera-mode** (live mode at `camera+0x14c`, selected in `FUN_0042b660`): mode **6** → 80° (`FUN_006024d9`), every other mode (0–5, 7, 8, 9) → 60° (`FUN_00602508`). Modes 6 and 7 are the only two first-person views (both set the `DAT_009fd17c` first-person flag via `FUN_004e7100`, both route through the first-person placement `FUN_0042d980`, neither uses chase-position math — `FUN_0042dc20`/`FUN_0042c5c0` dispatch). So the three named views resolve definitively: **3rd Person / chase = 60°; Cockpit view = mode 6 = 80°; Nose view = mode 7 = 60°**. The cockpit/nose assignment is pinned by a direct render gate: `FUN_0049fb00` (the per-frame player render, sole caller `FUN_004a0220` = main tick) draws the cockpit interior model `cockpit1` (`DAT_0071c314`) **only when mode == 6**, so mode 6 is the interior cockpit view (80°), and mode 7 is the no-interior forward view (60°). The two first-person views also share the **same camera position** — both place the camera at the plane's `cockpit_camera` marker (`DAT_0071c328/32c/330`), so there is **no separate nose-camera offset**; mode 7 differs only in not drawing the interior/hull, not head-looking (fixed forward), and being 60°. The constants are **horizontal**; `FUN_006024d9`/`FUN_00602508` aspect-correct to stored vertical via `atan(tan(H/2) · (16:9)/(4:3))` → 60°→46.8° vertical, 80°→64.4° vertical. The project's current single **62° vertical assumption does not exist in the binary** — the 62°-in-radians constant `1.082104` (`63 82 8a 3f`) is absent, so the assumed number is unsupported and the correct base is 60°.
+- `BL-420` `[Research]` **Decode the original's per-view base FOV from `crimson.exe` and record it under `docs/org/` — the engine holds a single 62° assumption that the binary refutes.** The original's camera projection has **exactly two base horizontal FOVs, 60° and 80°, both stored in radians as half-angle constants** (`1.0471976` = `92 0a 86 3f` and `1.3962634`), and **which one applies is gated per-camera-mode** (live mode at `camera+0x14c`, selected in `FUN_0042b660`): mode **6** → 80° (`FUN_006024d9`), every other mode (0–5, 7, 8, 9) → 60° (`FUN_00602508`). Modes 6 and 7 are the only two first-person views (both set the `DAT_009fd17c` first-person flag via `FUN_004e7100`, both route through the first-person placement `FUN_0042d980`, neither uses chase-position math — `FUN_0042dc20`/`FUN_0042c5c0` dispatch). So the three named views resolve definitively: **3rd Person / chase = 60°; Cockpit view = mode 6 = 80°; Nose view = mode 7 = 60°**. The cockpit/nose assignment is pinned by a direct render gate: `FUN_0049fb00` (the per-frame player render, sole caller `FUN_004a0220` = main tick) draws the cockpit interior model `cockpit1` (`DAT_0071c314`) **only when mode == 6**, so mode 6 is the interior cockpit view (80°), and mode 7 is the no-interior forward view (60°). The two first-person views also share the **same camera position** — both place the camera at the plane's `cockpit_camera` marker (`DAT_0071c328/32c/330`), so there is **no separate nose-camera offset**; mode 7 differs only in hiding the interior/hull, keeping player head-look without autohead, and using 60°. The constants are **horizontal**; `FUN_006024d9`/`FUN_00602508` aspect-correct to stored vertical via `atan(tan(H/2) · (16:9)/(4:3))` → 60°→46.8° vertical, 80°→64.4° vertical. The project's current single **62° vertical assumption does not exist in the binary** — the 62°-in-radians constant `1.082104` (`63 82 8a 3f`) is absent, so the assumed number is unsupported and the correct base is 60°.
   *Evidence:* ghidra-mcp read of the open `crimson.exe` (`/crimson.exe`): `FUN_0049fb00` (player render; draws `cockpit1` `DAT_0071c314` only when mode==6 via `FUN_004cca30(x,1/0)` around the interior draw), `FUN_0042b660` (mode gate), `FUN_00602508` (60° H-FOV; writes `_DAT_00a1eff0`/`_DAT_00a1eff4`), `FUN_006024d9` (80° H-FOV, mode 6), `FUN_0042b570` (frustum/projection, contains `0.5235987755982` = 30° = 60°/2), plus the 60°/80°/50.0/2.5 constants side-by-side at the data table `0060409c`. FOV is stored in radians (anim loader `FUN_00502da0` converts degrees→radians via `0.017453292`). The `0x3f860a92` 60° literal is also used by `FUN_0049d940` (player aim camera) and `FUN_004a0220`. Camera object is `DAT_0064ef78`. Placing the camera: both first-person modes run the same placement `FUN_0042d980`, which sets the camera to `plane_pos + plane_rot · (DAT_0071c328,32c,330)`, i.e. the plane's `cockpit_camera` marker offset (bound in `FUN_00473480` from the `cockpit_camera` node; default fallback `DAT_0075d1b8/bc/c0` = `(0,0,0)`). Plane-model `cockpit_camera` node translations (decoded from `extracted/C1/... planes/nodes.json`) put the camera on the fuselage centerline a bit above the local origin — default fighter `player_pfighter`: `(0, +0.75, −0.2)` — with +Y up, ±X the wingspan (ailerons at ±63, elevators/tail at −Z ≈ −37), so +Z = nose/forward and the marker is centered, ~0.75 up, marginally aft of the origin. There is **no `nose_camera` node or per-mode offset** — mode 7 reuses the cockpit_camera point. The `cam_anim` ZAN cockpit sequence (`player-gi_1stperson`) carries no FOV (it shows the interior/hides the plane via `cockpit1`/`camera1`), so the base FOV is not authored in `.ani` data.
   *Fix shape:* **the decoded facts landed as [`docs/org/cameraViews.md`](org/cameraViews.md) (2026-08-18), and the mode-6/mode-7 first-person half of the model landed in code** (`PLAN-cockpit-view.md` A3): `CameraController.HorizontalToVerticalFovDeg` renders Cockpit at 80° H and Nose at 60° H, both aspect-corrected off the live viewport, deliberately scoped to those two new modes only (Decision 3, "new modes only") and never touching the engine's 62° global. **What remains is the EXTERNAL half.** `GameSession.cs:475`/`:2624` and `Launcher.cs:490` still write the single 62° vertical global to every chase/fixed-numpad/back/pad-look/crash camera. Migrating those three sites to the decoded 60° horizontal base (with the aspect-corrected 46.8° vertical this page already pins) is the remaining work, and it unsettles two judgements made against the current 62°: `PLAN-overcast-match.md:1463`'s overcast sky match and `docs/org/tracers.md:258`'s tracer calibration. Carry that warning into whichever session does the migration — both need re-judging after the base FOV moves, not just re-measuring against the same footage.
   *⚠ Traps:* (i) **The two `CAMERA_STATE`/`CAMERA_FROM_TO` functions (`FUN_00502da0`, `FUN_00503e70`) are animated/in-script FOV changes only (`.ani` H/V_FOV events) — not the base per-view FOV; do not wire the engine's base FOV to them.** (ii) **The 80° is attached to camera mode 6 specifically, not "first person" generally** — mode 7 is also first-person but is 60°, so gating on "is first person" alone would read the mode-7 number wrong. (iii) The `Virtual Cockpit` string is a HUD/perf/zoning label (`FUN_0059c340`), not a view — ruled out. (iv) ~~Which of cockpit vs nose is mode 6 (80°) vs mode 7 (60°) was not pinned~~ — **resolved**: the `FUN_0049fb00` render gate (`cockpit1` drawn only when mode==6) pins mode 6 = Cockpit (80°) and mode 7 = Nose (60°). The remaining subtlety is that **both modes share the same `cockpit_camera` position** (no separate nose offset exists), so "nose" is a render/head-look/FOV variant of the same camera point, not a physically different marker. (v) "62°" invariants elsewhere are the assumption being corrected, not corroboration.
-  *Cross-refs:* `BL-255` (the nose view that exists in the original — the cockpit/nose FOV split this item decodes feeds that entry), `BL-150` (numpad fixed-view FOV calibration is still missing — a documented 60°/80° base + the aspect conversion is the calibration input it needs), `docs/formats/camparam.md` (chase/tuning only; does not cover FOV), `PLAN-overcast-match.md:1463` and `docs/org/tracers.md:258` (the 62° assumption to correct), `PLAN-cockpit-view.md` A3 (landed the mode-6/7 half of this model).
+  *Cross-refs:* `docs/org/cameraViews.md` (the landed Nose view shares the Cockpit camera point but uses the 60° base), `BL-150` (numpad fixed-view FOV calibration is still missing — a documented 60°/80° base + the aspect conversion is the calibration input it needs), `docs/formats/camparam.md` (chase/tuning only; does not cover FOV), `PLAN-overcast-match.md:1463` and `docs/org/tracers.md:258` (the 62° assumption to correct), `PLAN-cockpit-view.md` A3 (landed the mode-6/7 half of this model).
 
 - `BL-432` `[Feature]` **The original selects head-look behaviour by key; CSVM infers it from which
   device moved — a recorded behavioural difference.** `OriginalScreenshots/Keybinds Views 1.png`
@@ -1941,14 +1917,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   HUD dials drawn over a static 3D panel holding a fixed pose. Two lamp nodes, `lowalt_on` and
   `stallwarning_on` (present on all 11 airframes, shipped `active: true`), are parked hidden by
   `PlaneBuilder.ParkInteriorStates`/`IsInteriorDrivenState` alongside the windshield bullet-hole
-  decals — nothing lights them. Bundled here with a second, related question: whether `GaugeCluster`
-  should reposition per `hud_v2.zrd`'s `POSITION_1ST` layout key when the pilot is in a first-person
-  view — the HUD initializer reads distinct `POSITION_1ST`/`POSITION_3RD` layout keys from the
-  archive and CSVM's `GaugeCluster` consumes neither (`docs/org/cameraViews.md`, "The in-binary
-  strings expose no view-name tokens").
+  decals — nothing lights them.
   *Fix shape:* drive the authored needles and the two lamps off the same telemetry `GaugeCluster`
-  already reads, then decide whether the screen-space cluster retires in first person, moves to the
-  `POSITION_1ST` layout, or keeps doubling up over the 3D panel as it does today.
+  already reads, then decide whether the screen-space cluster retires in first person or keeps
+  doubling up over the 3D panel as it does today.
+  ⚠ *The `POSITION_1ST` half of this item is answered and carries no work.* It was filed asking
+  whether `GaugeCluster` should adopt a first-person layout from `hud_v2.zrd`'s
+  `POSITION_1ST`/`POSITION_3RD` keys; `FUN_00454e70` reads those into a per-section debug text
+  column (`AIR_SPEED`, `ALTIMETER`, `GUNS`, `MISSILES`, `HEALTH`, `NITRO`, one x at 0.02 spacing
+  in y, written only under `DAT_00624df0`), not into dial placement. There is no per-view gauge
+  layout in the original to port, so the retire-or-double-up choice above is CSVM's own call
+  (`docs/formats/hud.md`, "Cockpit gauges").
+  *Decoded, ready to build against* (`docs/formats/hud.md`, "Cockpit gauges", carries the addresses
+  and conditions): the needle laws are 0.36°/ft and 0.036°/ft on world-Y ASL (`00607704`,
+  `00607700`) and 0.7199957°/mph (`006076e8`), all three confirming what `GaugeCluster` already
+  ships. Both lamps differ from what we ship. LOW ALT lights below **60.0 m AGL** (`006076fc`, not
+  our 50 m) and its blink RAMPS, half-period `0.14 + 0.006·agl_m` (`006076f4`, `006076f8`), not our
+  fixed 400 ms. STALL is gated on **available load factor below 2.35 g** (`00608334`, `00608338`),
+  not on a speed fraction, with half-period `0.100375 + 0.1275·n_avail` bounded to (0.100, 0.400] s
+  (`00603538`, `006034ac`), which supersedes the footage-derived 0.30 fd and 2.10 s-per-fraction
+  pair. ⚠ The lamps and the flight model share one dt (copied bit-for-bit at `004897d8`), so these
+  go in without a k = 1.390 conversion. Changing the four `GaugeCluster` constants is part of this
+  item's work; the damage-dial blink (5 s, 0.32 s) is NOT in the gauge cluster and stays undecoded.
   *Residue:* nothing is hidden for this, and nothing needs to be. The instruments were reported
   flickering, and the mechanism turned out to be the mount scale rather than the missing needle
   drive: every depth bias `SceneBuilder` emits is a fraction of VIEW DISTANCE, so mounting the
@@ -2369,6 +2359,36 @@ usual.
   than reusing that answer. Do not add a leash constant; `docs/org/aiPilot.md` records that patrol
   is built on a spawn table, and the return rule has to come from the decode. *Cross-refs:*
   `BL-524`, `BL-531`, `docs/org/aiPilot.md`.
+
+- `BL-550` `[Feature]` **The AI's altitude floor is enforced at one site in CSVM and at three in
+  the original: the manoeuvre veto and the mode-5 global disable are both missing.** *Evidence:*
+  decoded from `crimson.exe` while reading the cockpit lamps for `BL-431`. `AiModeMachine`'s
+  `AltitudeFloorM` (20 m world Y, `DAT_0071c3f0`) and `ProbeCeilingM` (8000 m, `DAT_0071c3f4`) are
+  the right constants and the climb-out that arms below the floor is the right behaviour, but the
+  original reads those two globals at **four** sites, not one. We have the reactive arm
+  (`AiModeMachine.cs:529`) and the goal clamp (`FUN_0041b560` at `0041b5c5`, ours as
+  `AiControlLaw.AimAltitudeFloor`). Missing: (1) the **manoeuvre veto**, `FUN_004201a0` at
+  `00420405`, which rejects a candidate manoeuvre whose PREDICTED end point falls below the floor
+  and takes a separate branch at `0042042d` when it lands above the ceiling, so the original never
+  *starts* a programme that would fly the aircraft into the ground; ours culls only on natural
+  touch and signature weight (`AiModeMachine.PickManeuver`). (2) `FUN_004216e0`, which sets mode 5
+  after writing `DAT_0071c3f0 = -FLT_MAX` at `004216f5` and restoring it at `00421775`. Since the
+  floor is a **global**, that suspends it for every AI aircraft in the mission for the duration,
+  not just the one entering the mode. *Why it matters at the controls:* an AI that commits to a
+  split-S at 60 m flies it into the terrain and is saved only by the reactive climb-out, which
+  abandons the manoeuvre mid-programme. The visible difference is enemies that pick sane
+  manoeuvres near the deck rather than starting doomed ones and yanking out. *Fix shape:* add the
+  predicted-end-point test to `PickManeuver`'s cull, reusing the `Maneuver` programme's own end
+  pose rather than inventing a predictor. The mode-5 disable needs the floor to stop being a
+  per-machine constant, so decide first whether CSVM models it as a session-scoped value or
+  declines the global scope deliberately. *⚠ Traps:* the floor is flat world Y and NOT a terrain
+  follow, so it saves an aircraft over water and does nothing over a ridge; the forward probe is
+  what handles terrain, and neither is a substitute for the other. Do not fold the veto into the
+  reactive arm, which is a different mechanism at a different moment. ⚠ Whether the original's
+  mode 5 is worth reproducing at all is open: a global floor disable reads like a deliberate
+  licence for one scripted manoeuvre, and porting it faithfully means every other AI aircraft
+  loses its floor at the same time. *Cross-refs:* `BL-523` (the same mode machine's
+  patrol/pursue cycle), `docs/org/aiPilot.md`, `BL-431` (the decode session that found this).
 
 - `BL-524` `[Bug]` **CM05 (C3/M04) and CM07 (C1/M02): a friendly patrol without a net flies away after its first fight
   and never returns to escort.** *Evidence:* reported at the controls in two missions: once the

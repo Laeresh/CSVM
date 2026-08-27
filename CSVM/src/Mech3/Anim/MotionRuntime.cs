@@ -324,11 +324,25 @@ internal sealed class MotionRuntime : IAnimMotion
         // A ballistic launch seeds from the node's AUTHORED rest pose, not the live one.
         // ⚠ Three exceptions keep the live pose instead (docs/architecture.md, src/Mech3/Anim/):
         // a placed template root, a contact-landing continuation, a takeover.
-        if (m._hasBallistic && !target.TopLevel && !continuesLanding
-            && !rt.Motions.DrivesTransform(target))
+        bool seedsFromRest = m._hasBallistic && !target.TopLevel && !continuesLanding
+                             && !rt.Motions.DrivesTransform(target);
+        if (seedsFromRest)
         {
             m._heldOrigin = rest.Origin;
             m._heldRot = rest.Basis.Orthonormalized();
+        }
+
+        // Which of the four conditions above decided the seed, and the authored pose a live-pose
+        // seed declined. A pooled copy relaunching from its last flight's END pose is invisible
+        // without this: the drift only reads once the pool wraps onto the same copy (BL-511).
+        if (rt.DebugMotions && m._hasBallistic)
+        {
+            string seed = seedsFromRest ? "rest"
+                : target.TopLevel ? "live:toplevel"
+                : continuesLanding ? "live:landing-resume"
+                : "live:takeover";
+            var host = target.GetParent() as Node3D;
+            Utils.Log.Info("anim", $"anim: launch seed '{target.Name}' {seed} at {m._heldOrigin} (authored {rest.Origin}) under '{host?.Name}' {host?.Transform.Origin} rot {host?.Transform.Basis.GetEuler()} toplevel={target.TopLevel}");
         }
 
         // Nothing to drive → no motion (a bare gravity/bounce stub, handled by the caller).

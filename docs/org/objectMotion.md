@@ -424,9 +424,8 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 ### The re-home rule, and the three nodes exempt from it
 
 A motion normally starts from the node's authored rest pose (`AnimRuntime.RestOf`), so a repeat
-does not compound onto where the last one finished. That is what stops a pooled effect template
-drifting across repeated explosions. Three cases keep the live pose instead, each because
-re-basing them is visibly wrong rather than merely different:
+does not compound onto where the last one finished. Three cases keep the live pose instead, each
+because re-basing them is visibly wrong rather than merely different:
 
 - **A placed template ROOT** (`TopLevel`). The CALL that started the motion has just placed it, so
   its authored rest is wherever it was authored, not where it now stands. Re-basing replays every
@@ -440,6 +439,13 @@ re-basing them is visibly wrong rather than merely different:
   back to the crash point mid-flight.
 - **A TAKEOVER of a node another motion is driving.** `agyrobus` has no placement of its own, so its
   authored rest is the map origin, and re-basing threw the shot-down bus kilometres off-map.
+
+⚠ **This rule is not what keeps a pooled effect template from drifting across repeated explosions.**
+The takeover case above defeats it precisely there: a pool slot handed out again while its last
+play is still flying leaves that motion registered, so the new launch reads a takeover and seeds
+from a MID-FLIGHT pose, further out on every wrap. What keeps a pooled copy honest is the checkout
+returning it to its spawn state before the play starts — `AnimRuntime.ResetCheckedOutCopies` stops
+the incumbent instance and restores the poses, `docs/architecture.md`'s entry for that file.
 
 ## Retired and superseded readings
 
