@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CSVM.Mech3;
 using Godot;
 
@@ -16,10 +17,14 @@ public sealed class CockpitGauges
 {
     private readonly Needle _altHundreds, _altThousands, _speed, _nitroBoost, _nitroCharge;
     private readonly Needle _gunArrow, _missileArrow;
+    private readonly List<Belt> _belts;
+    private readonly List<DamageZoneSkin> _zones;
     private readonly Node3D? _lowAltLamp, _stallLamp, _nitroDial;
 
-    private CockpitGauges(Node3D gauges)
+    private CockpitGauges(Node3D gauges, IReadOnlyDictionary<ulong, string> textureNames)
     {
+        _belts = Belt.FindAll(gauges, textureNames);
+        _zones = DamageZoneSkin.FindAll(gauges, textureNames);
         _altHundreds = Needle.Find(gauges, "hundreds");
         _altThousands = Needle.Find(gauges, "thousands");
         _speed = Needle.Find(gauges, "speed");
@@ -35,13 +40,21 @@ public sealed class CockpitGauges
     /// <summary>Finds the panel inside one built interior, or null when there is no interior (an AI
     /// plane, or any build that did not ask <see cref="PlaneBuilder"/> for one) or no
     /// <c>gauges</c> subtree in it.</summary>
-    public static CockpitGauges? Bind(Node3D? interior)
+    public static CockpitGauges? Bind(Node3D? interior,
+        IReadOnlyList<(ShaderMaterial Material, string TextureName)>? materials = null)
     {
         if (interior == null || FindNamed(interior, "gauges") is not { } gauges)
         {
             return null;
         }
-        return new CockpitGauges(gauges);
+        // Keyed by instance id, not by the wrapper object: Godot hands back a fresh managed wrapper
+        // for the same native material, so reference equality is not dependable here.
+        var names = new Dictionary<ulong, string>();
+        foreach (var (material, texture) in materials ?? Array.Empty<(ShaderMaterial, string)>())
+        {
+            names[material.GetInstanceId()] = texture;
+        }
+        return new CockpitGauges(gauges, names);
     }
 
     /// <summary>Write this frame's readings onto the panel. Called only while the interior is on
@@ -67,7 +80,19 @@ public sealed class CockpitGauges
         // is authored present and the injector is what decides. The screen-space cluster draws it
         // on the same flag; without this the 3D panel shows a nitro dial on a plane with no nitrous.
         Show(_nitroDial, gauges.NitroInstalled);
+        foreach (var belt in _belts)
+        {
+            belt.Apply(gauges);
+        }
+        foreach (var zone in _zones)
+        {
+            zone.Apply(gauges);
+        }
     }
+
+    // The bar beside a light, or a zone's border: the screen-space draw splits on the same word.
+    private static bool IsHilite(string textureName) =>
+        textureName.Contains("hilite", StringComparison.OrdinalIgnoreCase);
 
     private static void SetIfSwept(Needle needle, float angleDeg)
     {
@@ -105,6 +130,10 @@ public sealed class CockpitGauges
         return null;
     }
 
+    /// <summary>The driven surfaces of one authored node, each already given a private copy of its
+    /// material so a write here cannot reach the other nodes sharing the built one. The texture
+    /// NAME each copy started from is what says which colour cycle it belongs to, the same test
+    /// the screen-space draw makes on its polygons.</summary>
     /// <summary>One authored needle and the rest pose it hangs at. The modeled rest ROTATION is
     /// arbitrary and the engine overwrites it outright (docs/formats/hud.md), so only the
     /// translation and scale are kept; an unbound needle is a no-op, which is what the Devastator's
@@ -135,4 +164,168 @@ public sealed class CockpitGauges
             _node.Transform = new Transform3D(basis, _origin);
         }
     }
+
+    private sealed class Skin
+    {
+        private readonly List<(ShaderMaterial Material, string Texture)> _surfaces = new();
+
+        public static Skin? For(Node3D node, IReadOnlyDictionary<ulong, string> textureNames)
+        {
+            var skin = new Skin();
+            Collect(node, textureNames, skin);
+            return skin._surfaces.Count > 0 ? skin : null;
+        }
+
+        /// <summary>Point every surface whose source texture matched <paramref name="match"/> at a
+        /// replacement. A null replacement leaves that surface alone rather than blanking it.</summary>
+        public void Retexture(Func<string, bool> match, Texture2D? replacement)
+        {
+            if (replacement == null)
+            {
+                return;
+            }
+            foreach (var (material, texture) in _surfaces)
+            {
+                if (match(texture))
+                {
+                    material.SetShaderParameter("albedo_tex", replacement);
+                }
+            }
+        }
+
+        private static void Collect(Node3D node, IReadOnlyDictionary<ulong, string> names, Skin into)
+        {
+            if (node is MeshInstance3D mesh && mesh.Mesh != null)
+            {
+                for (int i = 0; i < mesh.Mesh.GetSurfaceCount(); i++)
+                {
+                    if (mesh.Mesh.SurfaceGetMaterial(i) is not ShaderMaterial built
+                        || !names.TryGetValue(built.GetInstanceId(), out string? texture))
+                    {
+                        continue;
+                    }
+                    var own = (ShaderMaterial)built.Duplicate();
+                    mesh.SetSurfaceOverrideMaterial(i, own);
+                    into._surfaces.Add((own, texture));
+                }
+            }
+            foreach (var child in node.GetChildren())
+            {
+                if (child is Node3D n3d)
+                {
+                    Collect(n3d, names, into);
+                }
+            }
+        }
+    }
+
+    /// <summary>One belt position on a weapon gauge: its light and its hilite bar take the colour
+    /// tier the loadout says, which is the same three-way choice the screen-space dial draws.</summary>
+    private sealed class Belt
+    {
+        private Belt(Skin skin, bool isGun, int position)
+        {
+            Skin = skin;
+            IsGun = isGun;
+            Position = position;
+        }
+
+        private Skin Skin { get; }
+
+        private bool IsGun { get; }
+
+        private int Position { get; }
+
+        public static List<Belt> FindAll(Node3D gauges, IReadOnlyDictionary<ulong, string> names)
+        {
+            var found = new List<Belt>();
+            foreach ((string prefix, bool isGun) in new[] { ("ggindicator", true), ("mgindicator", false) })
+            {
+                for (int i = 0; i < GaugeCluster.HardpointRingSize; i++)
+                {
+                    if (FindNamed(gauges, prefix + i) is { } node && Skin.For(node, names) is { } skin)
+                    {
+                        found.Add(new Belt(skin, isGun, i));
+                    }
+                }
+            }
+            return found;
+        }
+
+        public void Apply(GaugeCluster gauges)
+        {
+            int tier = gauges.BeltTier(IsGun, Position);
+            Skin.Retexture(IsHilite, gauges.BeltHiliteTexture(tier));
+            Skin.Retexture(t => !IsHilite(t), gauges.BeltLightTexture(tier));
+        }
+    }
+
+    /// <summary>One zone of the damage display: its border bar and its hatch fill take the zone's
+    /// four-way colour tier, and the post-hit blink hides the pair on its dark half.</summary>
+    private sealed class DamageZoneSkin
+    {
+        private const string ZoneSuffix = "damage";
+
+        private DamageZoneSkin(Skin skin, Node3D node, string part)
+        {
+            Skin = skin;
+            Node = node;
+            Part = part;
+        }
+
+        private Skin Skin { get; }
+
+        private Node3D Node { get; }
+
+        private string Part { get; }
+
+        public static List<DamageZoneSkin> FindAll(Node3D gauges, IReadOnlyDictionary<ulong, string> names)
+        {
+            var found = new List<DamageZoneSkin>();
+            if (FindNamed(gauges, "damageindicator") is { } dial)
+            {
+                Collect(dial, names, found);
+            }
+            return found;
+        }
+
+        public void Apply(GaugeCluster gauges)
+        {
+            int tier = gauges.ZoneTier(Part);
+            // Negative is the blink's dark half, which the screen-space dial draws by skipping the
+            // zone outright — the authored geometry has no dark variant to swap to.
+            Show(Node, tier >= 0);
+            if (tier < 0)
+            {
+                return;
+            }
+            Skin.Retexture(IsHilite, gauges.ZoneHiliteTexture(tier));
+            Skin.Retexture(t => !IsHilite(t), gauges.ZoneHatchTexture(tier));
+        }
+
+        // ⚠ The zone's PART name is the node's minus the suffix (nosedamage → nose), which is the
+        // key the cluster's zones carry. Keying on the node name matches nothing and reads as a
+        // permanently green dial.
+        private static void Collect(Node3D node, IReadOnlyDictionary<ulong, string> names,
+            List<DamageZoneSkin> into)
+        {
+            string name = AnimRuntime.NameOf(node);
+            if (name.EndsWith(ZoneSuffix, StringComparison.OrdinalIgnoreCase)
+                && name.Length > ZoneSuffix.Length
+                && Skin.For(node, names) is { } skin)
+            {
+                into.Add(new DamageZoneSkin(skin, node, name[..^ZoneSuffix.Length]));
+                return;
+            }
+            foreach (var child in node.GetChildren())
+            {
+                if (child is Node3D n3d)
+                {
+                    Collect(n3d, names, into);
+                }
+            }
+        }
+
+    }
+
 }

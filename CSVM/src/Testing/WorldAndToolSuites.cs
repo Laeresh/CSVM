@@ -151,6 +151,7 @@ internal static class WorldAndToolSuites
                 $"a held external view restores the aircraft while Cockpit stays selected");
 
             DrivenPanel(ctx, interior);
+            DrivenBelts(ctx, interior, builder, planesGamez, textures);
         }
         finally
         {
@@ -215,6 +216,97 @@ internal static class WorldAndToolSuites
         {
             cluster.Free();
         }
+    }
+
+    // The belt lights take the loadout's colour tier (BL-431). A pristine plane reads all-green,
+    // which proves nothing, so this drives a spent belt and reads the material back. Able to fail:
+    // a drive that recolours nothing, or one that writes the shared built material and so repaints
+    // every indicator at once instead of the one position.
+    internal static void DrivenBelts(TestContext ctx, Node3D interior, PlaneBuilder builder,
+        GameZ planesGamez, TextureArchive textures)
+    {
+        var cluster = GaugeCluster.Build(planesGamez, ctx.PlaneName, textures, new List<DestroyablePart>());
+        var panel = CockpitGauges.Bind(interior, builder.InteriorMaterials);
+        if (cluster == null || panel == null)
+        {
+            ctx.Check(false, $"a real cluster and panel were built for the belt drive");
+            return;
+        }
+        try
+        {
+            // Position 0 spent, position 1 full: one dial, two tiers, so a shared-material write
+            // cannot pass this.
+            cluster.GunGauge = new GaugeCluster.WeaponGauge { Slots = new[] { 0f, 1f } };
+            panel.Apply(cluster);
+            var names = new Dictionary<ulong, string>();
+            foreach (var (material, texture) in builder.InteriorMaterials)
+                names[material.GetInstanceId()] = texture;
+            // ⚠ An indicator carries TWO driven surfaces on different colour cycles (the light and
+            // its hilite bar), so a check that reads "the first albedo" reads whichever the mesh
+            // happens to order first and proves nothing.
+            var spentLight = AlbedoOf(FindNamed(interior, "ggindicator0"), names, hilite: false);
+            var spentBar = AlbedoOf(FindNamed(interior, "ggindicator0"), names, hilite: true);
+            var fullLight = AlbedoOf(FindNamed(interior, "ggindicator1"), names, hilite: false);
+            ctx.Check(spentLight != null && spentBar != null && fullLight != null,
+                $"the light and the hilite bar were both found on the indicators");
+            ctx.Check(spentLight == cluster.BeltLightTexture(2),
+                $"a spent belt position's light takes the red variant");
+            ctx.Check(spentBar == cluster.BeltHiliteTexture(2),
+                $"and its hilite bar takes the red bar, on its own cycle");
+            ctx.Check(fullLight == cluster.BeltLightTexture(0),
+                $"the position beside it stays green, so the write is per-node");
+
+            // The damage zones read the PART name, which is the node's minus its "damage" suffix.
+            // A wrong key reads as a permanently green dial, so drive one zone to its red band.
+            cluster.PartFraction = part =>
+                part.Equals("nose", System.StringComparison.OrdinalIgnoreCase) ? 0.05f : 1f;
+            panel.Apply(cluster);
+            var hurt = AlbedoOf(FindNamed(interior, "nosedamage"), names, hilite: true);
+            var intact = AlbedoOf(FindNamed(interior, "taildamage"), names, hilite: true);
+            ctx.Check(hurt != null && intact != null, $"the damage dial's zones were found");
+            ctx.Check(hurt == cluster.ZoneHiliteTexture(3),
+                $"a zone at 5% takes the red border");
+            ctx.Check(intact == cluster.ZoneHiliteTexture(0),
+                $"an untouched zone beside it stays green");
+        }
+        finally
+        {
+            cluster.Free();
+        }
+    }
+
+    // The albedo the driven surface of the requested KIND is pointing at right now: the hilite bar
+    // or the light beside it, told apart by the texture each was built from.
+    internal static Texture2D? AlbedoOf(Node3D? node, IReadOnlyDictionary<ulong, string> names, bool hilite)
+    {
+        if (node == null)
+        {
+            return null;
+        }
+        if (node is MeshInstance3D mesh && mesh.Mesh != null)
+        {
+            for (int i = 0; i < mesh.Mesh.GetSurfaceCount(); i++)
+            {
+                if (mesh.Mesh.SurfaceGetMaterial(i) is not ShaderMaterial built
+                    || !names.TryGetValue(built.GetInstanceId(), out string? texture)
+                    || texture.Contains("hilite", System.StringComparison.OrdinalIgnoreCase) != hilite)
+                {
+                    continue;
+                }
+                if (mesh.GetSurfaceOverrideMaterial(i) is ShaderMaterial live)
+                {
+                    return live.GetShaderParameter("albedo_tex").As<Texture2D>();
+                }
+            }
+        }
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node3D n3d && AlbedoOf(n3d, names, hilite) is { } hit)
+            {
+                return hit;
+            }
+        }
+        return null;
     }
 
     // The first mesh at or under this node, for a geometry assertion about it.

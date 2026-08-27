@@ -184,6 +184,7 @@ public sealed partial class GaugeCluster : Control
 
     private bool DamagePhaseOn => Mathf.PosMod((float)_time, DamageBlinkPeriod) < DamageBlinkPeriod * 0.5f;
 
+
     /// <summary>Builds the cluster from the plane's 'gauges' subtree in planes.zbd and
     /// the chapter texture archive. Null when the subtree or its dial textures are
     /// missing (each miss is logged by the archive).</summary>
@@ -332,6 +333,62 @@ public sealed partial class GaugeCluster : Control
     /// tracks the aircraft rather than being latched at onset.</summary>
     public static float LowAltBlinkHalfPeriodS(float aglMetres) =>
         LowAltBlinkBaseS + (LowAltBlinkPerMetreS * Mathf.Max(aglMetres, 0f));
+
+    /// <summary>This frame's colour tier for one belt position, and the two colour-variant
+    /// textures a tier picks. <see cref="CockpitGauges"/> pushes the same choice onto the authored
+    /// 3D indicator's material, which is how one decode drives both instrument sets.</summary>
+    public int BeltTier(bool isGun, int position)
+    {
+        var state = isGun ? GunGauge : MissileGauge;
+        return state == null ? 0 : SlotIndicatorColor(state.Slots, position, isGun);
+    }
+
+    /// <inheritdoc cref="BeltTier"/>
+    public Texture2D? BeltLightTexture(int tier) => _indLight[Mathf.Clamp(tier, 0, 2)];
+
+    /// <inheritdoc cref="BeltTier"/>
+    public Texture2D? BeltHiliteTexture(int tier) => _indHilite[Mathf.Clamp(tier, 0, 2)];
+
+    /// <summary>This frame's colour tier for one damage zone, by the part name the zone carries.
+    /// Negative means the zone is in the dark half of its post-hit blink, which the screen-space
+    /// dial draws by skipping the zone outright.</summary>
+    public int ZoneTier(string part)
+    {
+        foreach (var z in _zones)
+        {
+            if (!z.Part.Equals(part, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (z.BlinkLeft > 0f && !DamagePhaseOn)
+                return -1;
+            return DamageZoneColor(PartFraction?.Invoke(z.Part) ?? 1f, z.YellowAt, z.OrangeAt, z.RedAt);
+        }
+        return 0;
+    }
+
+    /// <inheritdoc cref="ZoneTier"/>
+    public Texture2D? ZoneHiliteTexture(int tier) => _hilite[Mathf.Clamp(tier, 0, 3)];
+
+    /// <inheritdoc cref="ZoneTier"/>
+    public Texture2D? ZoneHatchTexture(int tier) => _hatch[Mathf.Clamp(tier, 0, 3)];
+
+    /// <summary>The glyph atlas entry for one character, or null for a blank cell. The authored
+    /// readouts cycle their per-character texture exactly this way.</summary>
+    public Texture2D? Glyph(char c) => _glyphs.TryGetValue(c, out var g) ? g : null;
+
+    /// <summary>The two readouts' text for this frame, already padded to the cell count the
+    /// authored quads provide. Empty when no loadout feeds that gauge.</summary>
+    public string BeltCountText(bool isGun, int cells)
+    {
+        var state = isGun ? GunGauge : MissileGauge;
+        return state == null ? string.Empty : FormatCount(state.Count, cells);
+    }
+
+    /// <inheritdoc cref="BeltCountText"/>
+    public string BeltTypeText(bool isGun, int cells)
+    {
+        var state = isGun ? GunGauge : MissileGauge;
+        return state == null ? string.Empty : FormatType(state.Type, cells);
+    }
 
     /// <summary>Restarts the warning/blink state (respawn).</summary>
     public void Reset()
