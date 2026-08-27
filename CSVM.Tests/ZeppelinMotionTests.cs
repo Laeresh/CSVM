@@ -218,6 +218,51 @@ public class ZeppelinMotionTests
         Assert.Equal(1, m.Follower.CurrentIndex);
     }
 
+    [Fact]
+    public void AnUnarmedDeadEndHoldsAndLevelsInsteadOfPorpoisingForever()
+    {
+        // CM08's Klondike1 shape: an open route with a mid-route dip and no stop point
+        // at its far, level node. Without the structural dead-end hold, the follower
+        // re-picks its only neighbour and shuttles the dip back and forth forever.
+        var def = Def();
+        var net = new AiNet
+        {
+            Id = 1,
+            Name = "TestNet",
+            Nodes = new[]
+            {
+                new AiNetNode(new Vector3(0f, 400f, 0f), Array.Empty<float>()),
+                new AiNetNode(new Vector3(2000f, 400f, 800f), Array.Empty<float>()),
+                new AiNetNode(new Vector3(4000f, 400f, 0f), Array.Empty<float>()), // unarmed far end
+            },
+            Edges = new[] { (0, 1), (1, 2) },
+        };
+        var m = new ZeppelinMotion(def, new AiNetFollower(net, new Random(1), 250f,
+            observesStopPoints: true));
+
+        int steps = 0;
+        while (!m.Follower.Holding && steps < 60 * 900)
+        {
+            m.Step(Dt);
+            steps++;
+            Assert.True(m.PitchRad <= Mathf.DegToRad(30f) + 1e-3f
+                && m.PitchRad >= -Mathf.DegToRad(30f) - 1e-3f,
+                $"pitch left the record's band at step {steps}: {Mathf.RadToDeg(m.PitchRad):0.#}");
+        }
+        Assert.True(m.Follower.Holding, $"never held in {steps / 60f:0} s");
+        Assert.Equal(2, m.Follower.CurrentIndex); // the far end, not a re-picked node 1
+
+        // Once reached the walk goes no further and the throttle stays cut, whatever the
+        // rate-limited pitch/yaw law is still settling (its own band compliance is
+        // ThePitchBandHoldsOnASteepClimbTarget's).
+        for (int i = 0; i < 60 * 30; i++)
+        {
+            m.Step(Dt);
+            Assert.Equal(2, m.Follower.CurrentIndex); // held, never shuttled back toward node 0
+        }
+        Assert.Equal(0f, m.Speed);
+    }
+
     private static ZeppelinDef Def(float yawDeg = 0f, float pitchDeg = 0f) => new()
     {
         Node = "testzep",

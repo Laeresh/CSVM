@@ -188,6 +188,87 @@ internal static class ZeppelinSuites
         }
     }
 
+    // CM08 (C1B/M03, "the Pandora"): piratezep's own Klondike1 net is an open 13-node
+    // chain with no stop point at all on its far end (node 0) — unlike C1/M04's PirateZep1
+    // above, which happens to author its far end armed under an unaddressable id. Releasing the
+    // two stops the file DOES arm (ids 7 and 8) lets the walk run the whole chain to that bare
+    // end, proving the structural dead-end hold (AiNetFollower) parks it there instead of
+    // re-picking node 1 and shuttling the route's altitude swing (150 to 400 m) forever.
+    internal static void ZeppelinPandoraDeadEndSuite(TestContext ctx)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1B");
+        ctx.RequireData(chapterZrdr, $"C1B zrdr");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1B", "M03");
+        ctx.RequireData(missionZrdr, $"C1B/M03 zrdr");
+
+        var defs = Zeppelins.Load(missionZrdr);
+        ZeppelinDef? def = null;
+        foreach (var d in defs)
+        {
+            if (d.Node.Equals("piratezep", System.StringComparison.OrdinalIgnoreCase))
+                def = d;
+        }
+        ctx.Check(def != null && def.Net == "Klondike1",
+            $"C1B/M03 authors piratezep on Klondike1 net={def?.Net}");
+        if (def == null)
+            return;
+
+        var nets = AiNets.Load(chapterZrdr);
+        var net = AiNets.ByName(nets, def.Net);
+        ctx.Check(net != null, $"'{def.Net}' resolves in C1B's neindex");
+        if (net == null)
+            return;
+        ctx.Check(net.Nodes.Count == 13 && net.Nodes[0].StopPointId == 0,
+            $"the far end (node 0) authors no stop point at all count={net.Nodes.Count} id={net.Nodes[0].StopPointId}");
+
+        Node3D? host = null;
+        ZeppelinRuntime? runtime = null;
+        try
+        {
+            host = new Node3D { Name = "piratezep" };
+            ctx.Host.AddChild(host);
+            var resolvedHost = host;
+            runtime = new ZeppelinRuntime(new[] { def }, name =>
+                name.Equals("piratezep", System.StringComparison.OrdinalIgnoreCase) ? resolvedHost : null, nets);
+            var motion = runtime.MotionFor("piratezep");
+            ctx.Check(motion != null, $"MotionFor finds the live motion");
+            if (motion == null)
+                return;
+
+            // Release the file's own two armed stops so the walk can run the whole chain.
+            ctx.Same(1, runtime.SetStopPoint(def.Net, 7, false), $"stop 7 (node 5) releases");
+            ctx.Same(1, runtime.SetStopPoint(def.Net, 8, false), $"stop 8 (node 7) releases");
+
+            const float dt = 1f / 60f;
+            float maxPitchBand = Mathf.DegToRad(def.MaxPitchDeg);
+            int pitchViolations = 0;
+            int steps = 0, budget = 60 * 1800; // 30 simulated minutes covers the ~9 km chain
+            while (!(motion.Follower.Holding && motion.Follower.CurrentIndex == net.Nodes.Count - 1)
+                   && steps < budget)
+            {
+                runtime.SimStep(dt);
+                if (motion.PitchRad > maxPitchBand + 1e-3f || motion.PitchRad < -maxPitchBand - 1e-3f)
+                    pitchViolations++;
+                steps++;
+            }
+            ctx.Same(0, pitchViolations, $"pitch stayed inside the record's ±{def.MaxPitchDeg:0}° band the whole route");
+            ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == net.Nodes.Count - 1,
+                $"the bare far end (node {net.Nodes.Count - 1}) holds it in {steps / 60f:0} s idx={motion.Follower.CurrentIndex} holding={motion.Follower.Holding}");
+
+            // Held for good: no shuttle back toward node 1, ever.
+            for (int i = 0; i < 60 * 20; i++)
+                runtime.SimStep(dt);
+            ctx.Same(net.Nodes.Count - 1, motion.Follower.CurrentIndex,
+                $"…and stays there — no shuttle back along the altitude swing it just flew");
+            ctx.Check(motion.Speed == 0f, $"…with the throttle cut speed={motion.Speed:0.##}");
+        }
+        finally
+        {
+            runtime?.Free();
+            host?.Free();
+        }
+    }
+
     internal static void ZeppelinLaunch(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

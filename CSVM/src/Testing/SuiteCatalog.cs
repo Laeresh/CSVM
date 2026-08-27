@@ -94,6 +94,7 @@ public static class SuiteCatalog
         "ai-voice",
         "ai-net-follow",
         "zeppelin-motion",
+        "zeppelin-pandora-dead-end",
         "zeppelin-launch",
         "zeppelin-damage",
         "zeppelin-broadside",
@@ -528,6 +529,12 @@ public static class SuiteCatalog
             "far end, armed under the unaddressable id 0, docks it for good; total engine loss " +
             "decelerates it to a stop through the decoded sqrt curve, and a deactivated record " +
             "is placed but held", ZeppelinMotionSuite));
+        into.Add(new TestHarness.Suite("zeppelin-pandora-dead-end",
+            "the structural dead-end hold (BL-529): CM08's piratezep flies its own Klondike1 " +
+            "chain, releasing the two stops the file arms (ids 7 and 8), pitch staying inside " +
+            "the record's band the whole route, until it reaches node 0 — an open end with NO " +
+            "stop point authored at all — and holds there for good rather than re-picking node " +
+            "1 and shuttling the altitude swing back and forth forever", ZeppelinPandoraDeadEndSuite));
         into.Add(new TestHarness.Suite("zeppelin-launch",
             "zeppelin fighter launch (F20): C1/IA1's zeppelin-launch generator authors the " +
             "decoded shape (cargobay origin, −90° drop, mp1 door anims — both shipped as " +

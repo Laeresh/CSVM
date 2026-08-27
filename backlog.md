@@ -2394,21 +2394,6 @@ usual.
   *Cross-refs:* `BL-522`, `BL-457`, `docs/formats/ai-rosters.md`,
   `docs/formats/mission-entities/enemy-generators.md`.
 
-- `BL-529` `[Bug]` **CM08: the Pandora pitches up and down where it should hold steady.**
-  *Evidence:* reported at the controls: the airship porpoises along its route. `ZeppelinMotion`
-  pitches toward each node's altitude under the record's rate and accel limits and levels off only
-  while holding (`ZeppelinMotion.cs:126-131`); a route whose nodes alternate altitude, or a pitch
-  gain that overshoots each node, produces the oscillation. *Fix shape:* log pitch and node
-  altitude per step along CM08's net for the Pandora and compare with the record's limits
-  (`docs/formats/mission-entities.md`); if the nodes are level and the pitch still swings, the
-  turn-rate law is overshooting. The same motion continues past the route's end, where docking
-  on the Pandora becomes very hard: the follower has a `Holding` state that asks for pitch 0
-  (`FUN_004bf500`), so a non-circular net's last node should leave the airship level (stopped, or
-  holding its heading), and a follower that re-targets the last node from past it, or wraps the
-  net, never enters `Holding`. Trace `Follower.Holding` there as part of the same run.
-  *⚠ Traps:* the original's initial-pitch clamp never fires (a unit bug kept verbatim, `:35-37`);
-  do not "fix" it as part of this. *Cross-refs:* `docs/architecture.md`'s `ZeppelinMotion` entry,
-  `docs/formats/ai-nets.md`.
 
 ## Tooling, platform & docs
 

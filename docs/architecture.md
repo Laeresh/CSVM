@@ -2217,6 +2217,14 @@ walk is inside 30 m of it (`StopPointHoldM`, the zeppelin follower's own hold di
 leg's arrival radius) `Holding` goes true. ⚠ Off by default — `observesStopPoints` is set only by
 `ZeppelinRuntime`, because only the zeppelin follower reads the flag; the aircraft one reads a
 node's danger-zone fields instead (`docs/formats/ai-nets.md`).
+`StopsAt`/`Holding` also cover a STRUCTURAL dead end — the current node's only edge is the one just
+flown — for an observing follower: decoded (`FUN_004bf9d0`'s own-node gate calls the level/hold
+routine, `FUN_004bf500`, unconditionally, ahead of and regardless of any armed stop point), this is
+what stops a zeppelin on an open route whose far node authors no stop point at all from re-picking
+its only neighbour and shuttling the route forever (`BL-529`, `docs/formats/mission-entities.md`
+"Route ends and stop points"). The aircraft follower keeps its own decoded turn-back at a dead end
+(`PickOnward`'s degree-1 short-circuit) unchanged; the unconditional hold is opt-in on
+`ObservesStopPoints`.
 Pinned by `AiNetFollowerTests` + the `ai-net-follow` suite.
 
 ## src/Flight/ZeppelinBroadside.cs

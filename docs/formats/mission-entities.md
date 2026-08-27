@@ -92,6 +92,24 @@ with the ±30 every instance ships, the comparison is `|0.52 rad| < 30`, so the 
 This is a unit bug in the original, harmless because no instance authors an out-of-range `pitch`.
 Do not "fix" it into a clamp that actually bites, and do not read the ±30 as radians.
 
+### Route ends and stop points
+
+The `net` a zeppelin flies is a patrol graph ([ai-nets.md](ai-nets.md)) walked by the shared
+`AiNetFollower`; a zeppelin observes its nodes' STOP-POINT flags, which an aircraft on the same
+net type does not. Two routines decode the halted state (`FUN_004bf9d0`'s own-node gate, called
+every step): `FUN_004bf500` levels the airship at an armed stop (commanded pitch 0, heading kept,
+speed 0) and `FUN_004bf360` ramps the throttle down from 250 m out to a full stop inside 30 m.
+**A structural dead end — the current node's only edge is the one just flown — holds the same way,
+unconditionally, ahead of and regardless of any authored stop-point id.** Some nets author their
+far node as an armed stop under an unaddressable id (id 0, which the script side rejects before it
+ever reaches a node lookup) so the existing stop-point mechanism already parks the airship there
+for good; a net that does not author that pattern at its far node (C1B/M03's `Klondike1`, ridden by
+`piratezep`) still holds there, because the dead-end rule is unconditional and does not depend on
+the file authoring anything at that node. Without it a follower reaching an unarmed dead end
+re-picks its only neighbour — the node it just left — and re-flies the route, which for a net whose
+nodes carry real altitude changes reads as the airship porpoising along its route and never
+levelling off at the end (`BL-529`).
+
 ### Broadside firing
 
 Behaviour rather than format, but it is what the cannon keys drive, and it is decoded from the

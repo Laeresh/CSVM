@@ -300,6 +300,33 @@ public class AiNetFollowerTests
     }
 
     [Fact]
+    public void AZeppelinFollowerHoldsAtAnUnarmedDeadEndInsteadOfShuttlingBack()
+    {
+        // Klondike1 (piratezep's mission net): an open path whose far end authors no stop point at all.
+        // The aircraft follower's own rule turns back and re-flies it (next fact); the zeppelin
+        // follower holds there instead (FUN_004bf9d0's own-node no-further-edge gate).
+        var f = new AiNetFollower(Path(), new Random(1), observesStopPoints: true);
+        Walk(f, 2); // 0 -> 1 -> 2, the open end
+        Assert.Equal(2, f.CurrentIndex);
+        Assert.False(f.Update(f.CurrentTarget)); // held, not re-picking node 1
+        Assert.True(f.Holding);
+        Assert.Equal(2, f.CurrentIndex);
+        Assert.False(f.Update(f.CurrentTarget));
+        Assert.Equal(2, f.CurrentIndex); // still — no shuttle back toward node 0
+    }
+
+    [Fact]
+    public void AnAircraftFollowerStillTurnsBackAtTheSameDeadEnd()
+    {
+        // The unconditional hold above is opt-in (ObservesStopPoints); an aircraft follower on
+        // the identical open path keeps its own decoded rule, turning back and re-flying it.
+        var f = new AiNetFollower(Path(), new Random(1));
+        var visited = Walk(f, 3); // 0 -> 1 -> 2 -> back to 1
+        Assert.Equal(new[] { 0, 1, 2, 1 }, visited);
+        Assert.False(f.Holding);
+    }
+
+    [Fact]
     public void StopPointsAreReadableButInertOnAFollowerThatDoesNotObserveThem()
     {
         // Only the zeppelin follower reads the halt flag (FUN_004bf9d0); the aircraft one does not.

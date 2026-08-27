@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ❌ `BL-527`: the second patrol's Peacemaker spawns under the ground
 23. ❌ `BL-518`: a stripe-textured surface stands in front of the zeppelin hangar
 24. ☑ `BL-528`: the Blue Streak flies with the stock Bloodhawk fit and no nitro
-25. ☐ `BL-529`: the Pandora porpoises along its route and past its end
+25. ☑ `BL-529`: the Pandora porpoises along its route and past its end
 
 ### Wave D — CM09 and the sortie
 
@@ -755,29 +755,43 @@ existing profile.
 
 **Verified.** <pending orchestrator run>
 
-## C25 ☐ `BL-529`: the Pandora porpoises along its route and past its end
+## C25 ☑ `BL-529`: the Pandora porpoises along its route and past its end
 
 **Goal.** CM08's Pandora holds steady pitch along its net and sits level at the route's end so
 docking on it is flyable.
 
-**Evidence (confidence: lead-only).** Reported at the controls. `ZeppelinMotion` pitches toward
-each node's altitude under the record's rate and accel limits and levels off only while holding
-(`ZeppelinMotion.cs:126-131`); the follower's `Holding` state asks for pitch 0 (`FUN_004bf500`),
-and a follower that re-targets the last node from past it, or wraps the net, never enters it.
-`<TODO: re-verify still-open against the code>`
+**Evidence (confidence: traced).** Reported at the controls; re-verified against CM08's own data
+(C1B/M03, `piratezep` on net `Klondike1`): a 13-node open chain whose far end (node 0) authors NO
+stop point at all, unlike C1/M04's own `PirateZep1` net, which happens to arm its far end under an
+unaddressable stop-point id. `AiNetFollower.PickOnward`'s degree-1 short-circuit turns a dead end
+INTO a re-pick of the node just left (the aircraft follower's own decoded rule), so a zeppelin
+reaching Klondike1's bare end shuttled back and forth over the whole net's altitude swing (400 to
+93 m) forever instead of stopping there, which reads exactly as "porpoises along its route and past
+its end".
 
-**Approach.** Log pitch and node altitude per step along CM08's net for the Pandora against the
-record's limits (`docs/formats/mission-entities.md`); if the nodes are level and the pitch still
-swings, the turn-rate law overshoots. Trace `Follower.Holding` at the route's end in the same run.
-Decode lane: `FUN_004bf500` and the follower's end-of-net rule.
+**Approach.** Decoded `FUN_004bf9d0` (the zeppelin's per-step law): the current node's own
+no-further-edge flag calls the level/hold routine (`FUN_004bf500`, pitch 0, heading kept, speed 0)
+UNCONDITIONALLY, ahead of and regardless of any armed stop point. `AiNetFollower` now reports this
+same "structural dead end" condition through `StopsAt`/`Holding` for a caller observing stop points
+(`ObservesStopPoints`, zeppelin-only), leaving the aircraft follower's own turn-back untouched.
+Decode citations and the fix's shape: `docs/formats/mission-entities.md` "Route ends and stop
+points", `docs/architecture.md`'s `AiNetFollower` entry.
 
 **Model recommendation.** medium.
 
-**Verify.** A `zeppelin-*` suite row on CM08's net asserting pitch bounds and `Holding` at the end;
-D32.
+**Verify.** `zeppelin-motion`/`ai-net-follow` unit suites plus two new cases
+(`AZeppelinFollowerHoldsAtAnUnarmedDeadEndInsteadOfShuttlingBack`,
+`AnUnarmedDeadEndHoldsAndLevelsInsteadOfPorpoisingForever`); a new `zeppelin-pandora-dead-end`
+engine suite row flies CM08's real Klondike1 net end to end, asserting pitch stays inside the
+record's band throughout and the walk holds for good at the bare far end rather than shuttling
+back.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** The original's initial-pitch clamp never fires (a unit bug kept verbatim,
-`ZeppelinMotion.cs:35-37`); do not "fix" it here.
+`ZeppelinMotion.cs:35-37`); left untouched, as directed. The unconditional dead-end hold is opt-in
+on `ObservesStopPoints`, so the aircraft net follower's own decoded "turns back at a dead end" rule
+(a different, separately-decoded behaviour) is unchanged.
 
 # Wave D — CM09 and the sortie
 
