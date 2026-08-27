@@ -1962,6 +1962,7 @@ public partial class GameSession : Node3D
             scoreboard.PhotoMode = () => EnterPhotoMode(owner);
             _boards.Add(scoreboard);
         }
+        BuildCockpitPasses();
 
         // Damage lab in flight (F5): the panel --viewer hosts, bound to P1's real PlaneDamage
         // rather than visuals alone, so a dialled-in state drives the HUD and can then be flown.
@@ -2844,6 +2845,26 @@ public partial class GameSession : Node3D
         }
         GD.Print($"splitscreen: {count} panes sharing one world " +
                  $"({(count == 2 ? "stacked top/bottom" : "2×2 grid")})");
+    }
+
+    // One interior render pass per rig, on that player's own HUD parent, so splitscreen gets a
+    // pass per pane rather than one for the window (--no-cockpit-pass opts out). Built after the rigs, since
+    // the interior it moves is the plane build's and the sun and environment it copies are the
+    // session's. ⚠ An airframe swap rebuilds the interior and leaves this pass holding the old
+    // node; the prototype hides itself rather than drawing a freed one (CockpitOverlay.Sync).
+    private void BuildCockpitPasses()
+    {
+        if (!_spec.CockpitPass)
+        {
+            return;
+        }
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller is not { CockpitInterior: { } interior } controller)
+                continue;
+            controller.CockpitPass = Flight.CockpitOverlay.Build(rig.HudParent, interior, _sun, _env);
+        }
+        GD.Print($"cockpit: interior drawn in its own pass at the origin for {_rigs.Count} rig(s)");
     }
 
     // Gives every rig a cloudlayer deck to anchor under its own camera: rig 0 takes the world's

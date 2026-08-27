@@ -12,15 +12,26 @@ namespace CSVM.Tests;
 /// </summary>
 public class GaugeColoursTests
 {
+    /// <summary>One decoded state rule serves both gauges. The pylons' "never yellow" reading is a
+    /// consequence of their loadouts, not a second rule: a pylon carrying ONE round can only read
+    /// full or empty, so the low tier is unreachable there rather than absent, and a deeper pylon
+    /// does light it.</summary>
     [Fact]
-    public void HardpointColourIsNeverYellowAndStepsGreenToRed()
+    public void HardpointColourFollowsTheSameRuleAsTheGuns()
     {
         for (float frac = 0f; frac <= 1f; frac += 0.01f)
         {
-            Assert.True(GaugeCluster.HardpointIndicatorColor(frac) != 1, $"hardpoint colour never yellow at frac={frac:0.00}");
+            Assert.Equal(GaugeCluster.GunIndicatorColor(frac), GaugeCluster.HardpointIndicatorColor(frac));
         }
         Assert.Equal(2, GaugeCluster.HardpointIndicatorColor(0f));
         Assert.Equal(0, GaugeCluster.HardpointIndicatorColor(1f));
+
+        // A single-round pylon: the only two fractions it can hold, and neither is the low tier.
+        Assert.Equal(0, GaugeCluster.HardpointIndicatorColor(1f));
+        Assert.Equal(2, GaugeCluster.HardpointIndicatorColor(0f));
+
+        // A four-round pylon down to its last: the tier the original does light.
+        Assert.Equal(1, GaugeCluster.HardpointIndicatorColor(0.25f));
     }
 
     [Fact]

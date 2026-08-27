@@ -128,12 +128,19 @@ public sealed class PlaneBuilder
     /// for one. <see cref="Flight.CockpitVisibility"/> is what shows it, per view mode.</summary>
     public Node3D? CockpitInterior { get; private set; }
 
+    /// <summary>The interior's own textured materials paired with the texture each resolved from,
+    /// the same registry <see cref="Repaint"/> uses. <see cref="Flight.CockpitGauges"/> reads it to
+    /// tell an indicator's light from its hilite bar by NAME rather than by guessing at the
+    /// surface order, then overrides each driven surface with a copy of its own.</summary>
+    public IReadOnlyList<(ShaderMaterial Material, string TextureName)> InteriorMaterials =>
+        _interiorScene?.TexturedMaterials ?? Array.Empty<(ShaderMaterial, string)>();
+
     /// <summary>A <c>cockpit1</c> node whose visibility is a STATE something else drives, so a
-    /// pristine cockpit must show none of it: <c>bulletN</c>, the five windshield bullet-hole
-    /// decal groups (driver: the <c>cockpit_bulletholes</c> defs), and the two warning lamps
-    /// <c>lowalt_on</c>/<c>stallwarning_on</c>, which <see cref="Flight.GaugeCluster"/>'s own
-    /// decode already treats as overlays drawn only while their condition holds. ⚠ Everything else
-    /// on the panel is always-drawn geometry that changes COLOUR, not visibility.</summary>
+    /// pristine cockpit must show none of it: <c>bulletN</c> (the <c>cockpit_bulletholes</c> defs)
+    /// and the two warning lamps, which <see cref="Flight.CockpitGauges"/> lights. Parking them
+    /// still holds: a build with no rig driving it must render pristine, and the labs are such
+    /// builds. ⚠ Everything else on the panel is always-drawn geometry that changes COLOUR, not
+    /// visibility.</summary>
     public static bool IsInteriorDrivenState(string name)
     {
         if (name.EndsWith("_on", StringComparison.OrdinalIgnoreCase))
