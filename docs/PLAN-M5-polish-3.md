@@ -116,7 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Pre-warm the crash and damage-stage emitter keys (`BL-355`)
 2. ☑ Pre-warm the sonic burst's nine puffer keys at stage build (`BL-418`)
-3. ☐ Re-judge `effect_pools.json` against a build with no first-use cost (`BL-231`)
+3. ◐ Re-judge `effect_pools.json` against a build with no first-use cost (`BL-231`)
 
 ### Wave B — the per-frame cost the data authors and we ignore
 
@@ -289,7 +289,7 @@ construction; it belongs with the pool work in A3. Six goldens move on puffer se
 (`c1-flight`, `c1-destroy-effects`, `c1-crash`, `c1-debris-rest`, `c1-targeting-hud`,
 `c1-ai-wreck`), each the same effect at the same place in a different random phase.
 
-## A3 ☐ Re-judge `effect_pools.json` against a build with no first-use cost
+## A3 ◐ Re-judge `effect_pools.json` against a build with no first-use cost
 
 **Goal.** The shipped pool sizes are judged where concurrency is actually highest, on a build where a
 `PoolRecycles` count means overlapping calls rather than unbuilt keys.
@@ -326,6 +326,67 @@ multiplies world-build cost and memory for effects that are mostly not concurren
 gun-impact roots stay at **1** deliberately, because C8 throttles the gun family to one play per 0.1 s
 per name; raising them belongs with removing that throttle, as its own step with its own emitter-count
 check. ⚠ Sizing a root **0** does not disable pooling, it clamps to 1.
+
+**Measured.** All runs are on this branch, so A1's and A2's pre-warms are in the build and a recycle
+means overlapping calls rather than an unbuilt key. The shipped reading is three lines: the
+world-effects build line on stdout, `world effects: pre-warmed N emitter(s) in M ms`, and the
+per-effect wrap line `anim: effect pool for '<anim>' recycled slot N of M`, which is DEBUG and
+therefore lands in `.scratch/logs/<mode>-*.log` rather than on the console. The wrap line names the
+ANIM, so the root it sizes is the first half of that anim's `extracted/C1/cam_anim/<root>-<anim>.json`
+filename: `large_fireball` is `flame_ball_01`, `small_fireball` is `flame_ball_02`,
+`great_balls_of_fire` is `moving_fire_ball_01`, `small_yellow_sparks` is `yellow_spark_01`, and both
+`sputter_*_obj` are `partial_damage_obj`. Only the first wrap per anim is logged, so the instrument
+reports which roots wrap and at what depth, never a per-root total.
+
+Build cost, from the world-effects line and the pre-warm line, at the sizes this item leaves:
+1 player stages **155** templates over **8** slots and pre-warms **459** emitters in **63 to 67 ms**;
+4 players stage **263** over **11** and pre-warm **783** in **104 ms**. Before the one raise below
+those were 151/8/455/67 ms and 259/11/779/107 ms, so the raise costs **4 more template copies at
+1 player and 4 at 4 players**, with the slot depth and the pre-warm time unmoved.
+
+The rocket case does not wrap. `RunProbe.ps1 --chapter=C1 --weapon-lab=wep_06 --weapon-fire
+--infinite-ammo --weapon-target=-5314,162,-6642 --weapon-standoff=70 --screenshot=… --frames=900`
+puts twelve `BOOM` rockets into C1's twelve-crate yard over 15 s and logs no recycle, which is the
+`FIRE_RATE` 1/s against ~2.5 s of trail motion the default's `why` line already claims. The
+4-player case does not wrap on ordnance either: `--fly --chapter=C1 --players=4 --infinite-ammo
+--fire --fire-rockets --screenshot=… --frames=900` fires 48 rockets and four gun groups with no
+recycle, and the per-player term is not what the wraps depend on.
+
+What wraps is a simultaneous multi-object DEATH, reached with `--freecam --chapter=C1
+--destroy=<substring> --screenshot=… --frames=300`, which kills every match in the build frame.
+`--destroy=m_build01` (1 object) and `--destroy=s_build` (2) are clean. `--destroy=pass_plane` (4)
+wraps `flame_ball_01` alone. `--destroy=m_build` (7) wraps `flame_ball_01`, `flame_ball_02` and
+`partial_damage_obj`. `--destroy=crate` (12) wraps `flame_ball_02`. `--destroy=0` (the 64-object
+cap) adds `moving_fire_ball_01` and `yellow_spark_01`. The same list wraps at 4 players against the
+larger pools (`slot 0 of 7`, `slot 0 of 11`), because a cluster kill is one player's event and the
+per-player term does not reach it. A sizing sweep says how deep the demand is: at base 16 on all
+five roots the 4-object case is silent, the 12-object case is silent, but the 7-object case still
+wraps `flame_ball_01` and `flame_ball_02` at `slot 5 of 16`, so seven identical buildings dying in
+one frame want more than `maxSlots` allows and cannot be sized away. Each such death calls
+`large_fireball` about three times, which is why four objects already exhaust four slots.
+
+Landed from that: **`flame_ball_01` raised to base 8, +1 per extra player**, the only root that wraps
+at the smallest case measured. It wraps at 4 and at 6 slots on `--destroy=pass_plane` and is silent
+at 8. Nothing else moved. The three gun roots stay at 1, the default stays at 4 +1, and
+`maxSlots` stays 16.
+
+The sonic burst's residual `effect_checkout` cost is characterised and is **not** a pool-size
+matter. Under `--det` the A2 probe (`--chapter=C1 --weapon-lab=wep_08 --weapon-fire
+--infinite-ammo --weapon-surface=default --weapon-standoff=90 --screenshot=… --frames=600`) fires
+eleven bursts, logs no recycle and trips `HitchMonitor` never. Making the probe able to fail needs
+BOTH `hitchMonitor.floorMs` and `hitchMonitor.medianMultiple` lowered, since the trigger is the
+larger of the floor and median × multiple and the stock multiple of 4 sits at ~33 ms over an 8.3 ms
+baseline; with `floorMs: 10` and `medianMultiple: 1.2` in `CSVM/config.json` and `--no-det
+--no-vsync --seed=1 --no-pads --frames=1200`, the sidecar records one `effect_checkout` sample per
+burst. The first two cost **0.6 ms**; every burst from the third on costs **10.2 to 13.9 ms**, one
+call each, and the step is in the cost of **re-resetting a slot copy that has run before**, not in a
+wrap: it lands on the third burst, while `sonic_ground_effect`'s pool (root `sonic_effect`, 4 slots)
+cannot recycle before the fifth, and raising that root cannot remove a cost every checkout pays.
+`ResetCheckedOutCopies`
+is the work inside that scope, so a ~12 ms recurring per-burst reset is its own item rather than a
+number in this file.
+
+**Verified.** <pending orchestrator run>
 
 ---
 

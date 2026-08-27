@@ -28,6 +28,11 @@
       "perExtraPlayer": 0,
       "why": "As gunhit — the magnesium variants' template root."
     },
+    "flame_ball_01": {
+      "base": 8,
+      "perExtraPlayer": 1,
+      "why": "large_fireball, the death airburst nearly every destructible calls, and each death calls it about three times rather than once. Measured on a build with no first-use construction cost left: four simultaneous kills (--destroy=pass_plane, C1) wrap a 4-slot pool and a 6-slot one, and go quiet at 8. Bigger simultaneous kills cannot be covered inside maxSlots at all: seven (--destroy=m_build) still wrap at 16."
+    },
     "partial_damage_obj": {
       "base": 8,
       "perExtraPlayer": 1,

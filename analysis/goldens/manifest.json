@@ -85,42 +85,42 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "d0c8d1ded0fd9b7205a6cf924930e354",
+      "hash": "1d4d08c44d4857c6052c7f0297d66e96",
       "exercises": "Held pitch-and-roll flight: quaternion physical rates, chase camera, default livery, prop and surface animators, gauges, compass, weapon readout, pipper, exhaust and SpeedCue; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "80edf93f41073eca9185726fe131fd12",
+      "hash": "1f003b16de22133f9ce22d3095f7dbcd",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage, flight-state-dependent SpeedCue and seeded puffer placement; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "b236fb40c5f096d44558ca989cb5d458",
+      "hash": "8fcee916aac15011a13d0bd7418b9926",
       "exercises": "player_crash_default after five flight steps: corrected pre-crash attitude, crash rig and airframe, moving distance puffers, ranged tumble, vector-form pieces, flydirt delta and pooled repeat calls.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-debris-rest",
       "frame": 360,
-      "hash": "78ca99fce5551bb61ea8545317f99cb6",
+      "hash": "a3d3033de10ba5648b985a6766aa399e",
       "exercises": "the column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer as the visible signal.",
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "8e7748384b296971fdfd1bf8602935fe",
+      "hash": "f207f91f46cd23589f9d3f730806c8ea",
       "exercises": "Targeting a live AI in flight: its quaternion-driven pose and its crewed rear turret's barrel feed fixed antialiased in-range brackets, the label below the plane and --debug-markers identity/health text; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "83d90eae262005c09aca3ebf07ed0f58",
+      "hash": "d308d92f7674005fa775c3cc1134984b",
       "exercises": "A shot-down AI three seconds after the kill: quaternion flight state under frozen commands, the auto-selected target's antialiased brackets, second fireball and trail at the handover where randomdestseq inherits the hull's world velocity.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     }
