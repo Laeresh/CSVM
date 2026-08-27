@@ -1352,19 +1352,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Where to look:* whether the collapsed clutter cards still write depth or a dark fragment behind the band (the `csky_clutter_fade` cutout keeps a card in the pass until `step(d, far)` culls it, and a card collapsed to zero size should contribute nothing), whether the fog-volume clutter's own `far_fade` and the templates fade overlap at that range, and whether the gamez buildings carry a `far_fade_range` of their own the remake ignores (`FUN_004d5de0` applies the scaled test to every type-5 scene node, not only clutter). A C5 screenshot pair at the band distance with `graphics.clutterFarFade` on and off separates the two.
   *Cross-refs:* `BL-337` (closed; the fade), `docs/org/clutter.md`.
 
-- `BL-511` `[Bug]` **The HE rocket's explosion debris and fire streaks drift further from the
-  burst centre with every shot.** *Evidence:* reported at the controls: the small debris and fire
-  streaks of the `he_rocket` explosion land a little further out on each successive shot, so a
-  per-instance offset is accumulating instead of being reset between plays. The explosion is a
-  named puffer/debris effect driven by its def, so the likely site is a pooled emitter whose
-  origin, elapsed time, or `translation_range` launch offset is added to the previous value rather
-  than assigned. *Fix shape:* fire ten rockets at one spot under `--det`, log each burst's debris
-  spawn positions relative to the impact, and find the state that survives between plays in the
-  effect pool (`Puffer`, the debris arc's `initial`/`delta` state, or the effect host's transform).
-  *⚠ Traps:* the debris arc itself is decoded and correct (`BL-060`'s notes); the defect is the
-  reset between plays, not the arc, so do not retune launch magnitudes. *Cross-refs:* `BL-060`,
-  `PLAN-object-motion-decode`.
-
 - `BL-512` `[Bug]` **CM04 (C3/M03): the Barracuda jumps while driving into the bay and its launch faces
   the wrong way.** *Evidence:* reported at the controls: the submarine's `sub_movement` drive into
   the bay shows a discontinuity (a jump) partway, and at the launch it points away from the bay

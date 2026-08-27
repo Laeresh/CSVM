@@ -2092,6 +2092,78 @@ internal static class OrdnanceSuites
         });
     }
 
+    // The HE burst's five fly_trail<N> bodies launch from their authored rest pose. The pool hands
+    // a copy out again while its debris is still flying, and a checkout that leaves the previous
+    // play's motions running lets the new launch take over from a MID-FLIGHT pose, so the burst
+    // walks outward on every wrap. Four slots, five OVERLAPPING plays: the fifth takes the first's
+    // live copy, and its debris must start where the first's did.
+    internal static void EffectPoolSpawnPose(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            const int slots = 4;
+            const int plays = slots + 1;
+            const int gapFrames = 30;
+            const string anim = "he_ground_effect";
+            var stage = StageBurstRoots(ctx, world, anim, slots);
+            // A TTL past the whole run, so no instance retires and the wrap lands on a copy the
+            // pool still counts as live. The stock BurstTtl retires each play before play 5.
+            var runtime = AnimRuntime.ForEffects(
+                AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
+                1, new CountingEmitterFactory(), false, 30f,
+                () => ctx.Camera.GlobalPosition);
+            runtime.ManualAdvance = true;
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, world.Session.Program.Subset(anim));
+                var slot0 = stage.GetNode<Node3D>("pool0");
+                var readings = new List<List<(string Node, Vector3 Origin)>>();
+                var handedOut = new List<List<(string Node, Vector3 Origin)>>();
+                for (int play = 1; play <= plays; play++)
+                {
+                    // The state the checkout inherits, read before it runs: on play 5 this is
+                    // play 1's debris in mid-flight, which is what a launch must NOT seed from.
+                    handedOut.Add(DebrisPosesIn(slot0));
+                    ctx.Check(runtime.PlayEffectAt(anim, ctx.Camera.GlobalPosition), $"play {play} started");
+                    // Read BEFORE advancing. translation_range draws its azimuth, elevation and
+                    // speed per play, so one frame of flight already differs legitimately between
+                    // plays; the launch SEED is the only thing two plays owe each other.
+                    readings.Add(DebrisPosesIn(slot0));
+                    // Half a second on, the debris is well out and nowhere near down, so the next
+                    // play's wrap lands on a copy that is still live — the case under test.
+                    for (int i = 0; i < gapFrames; i++)
+                        runtime.Advance(1f / 60f);
+                }
+
+                var first = readings[0];
+                var fifth = readings[plays - 1];
+                // The guard against a vacuous pass: play 5 must have been handed a copy whose
+                // debris was genuinely displaced, or there was nothing for the checkout to undo.
+                var inherited = handedOut[plays - 1];
+                float worst = 0f;
+                for (int i = 0; i < System.Math.Min(first.Count, inherited.Count); i++)
+                    worst = Mathf.Max(worst, first[i].Origin.DistanceTo(inherited[i].Origin));
+                ctx.Check(worst > 1f,
+                    $"play {plays} was handed a copy still in mid-flight ({worst:0.0} m from its spawn pose)");
+                ctx.Check(first.Count > 0, $"the slot's debris bodies were read ({first.Count} body(ies))");
+                ctx.Same(first.Count, fifth.Count, $"the same debris bodies were read on both plays");
+                for (int i = 0; i < System.Math.Min(first.Count, fifth.Count); i++)
+                {
+                    var (a, b) = (first[i], fifth[i]);
+                    ctx.Check(a.Origin.DistanceTo(b.Origin) < 0.01f,
+                        $"{a.Node}: play {plays} launches from play 1's pose ({b.Origin} vs {a.Origin})");
+                }
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
+    }
+
     // A burst's miniature world-effects stage: the def's derived anchor roots (its CALL_ANIMATION
     // closure against the chapter gamez, the production derivation, so an unresolvable anchor
     // throws here naming itself) built once per pool slot, each copy hidden, exactly as
@@ -2238,6 +2310,21 @@ internal static class OrdnanceSuites
                 rows.Add(new RingReading(root.Name, mesh.Name, mesh.IsVisibleInTree(), mesh.Scale,
                     alpha.VariantType == Variant.Type.Nil ? 1f : alpha.AsSingle()));
             }
+        }
+        return rows;
+    }
+
+    // Every fly_trail<N> debris body under the slot, in tree order, with the LOCAL pose a launch
+    // seeds from. Local, not global: the staged root is moved onto the call site on every play, so
+    // a global reading would carry the site's own position and hide the seed.
+    private static List<(string Node, Vector3 Origin)> DebrisPosesIn(Node3D slot)
+    {
+        var rows = new List<(string Node, Vector3 Origin)>();
+        foreach (var node in Descendants(slot).OfType<Node3D>())
+        {
+            var name = node.Name.ToString();
+            if (name.StartsWith("fly_trail", System.StringComparison.Ordinal) && name != "fly_trails")
+                rows.Add((name, node.Transform.Origin));
         }
         return rows;
     }

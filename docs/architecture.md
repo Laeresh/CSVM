@@ -885,17 +885,26 @@ The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON
 startanims, a safety net), then dispatch-table event playback; an unhandled event kind is counted,
 never fatal. Also hosts the destructible-damage entries (`DamageAt`/`CollideDamageAt`/
 `ApplyDamageStages`/`RunDeathSequence`/`ResetDestructible`) and the world-effects runtime
-(`PlayEffectAt` over a hidden template stage). **A pool-slot checkout re-resets its copies**
-(`ResetCheckedOutCopies`, run by `PlayEffectAt` between `TakeNextSlot`/`PlaceOn` and `Start`): the
-RESET_STATE of every def the played anim reaches through CALL_ANIMATION (`AnimProgram.Subset`, memoized
-per anim name) is re-applied on the anchors sitting in the slot(s) the call took. The original
-instances a fresh template copy per call, which always starts from its authored base pose; the pool
-hands the same node tree out again, still in whatever END pose its last run left, so a def whose
-sequences end INACTIVE (the sonic burst's `ring_up1..4`/`ring_down1` on `sonic_ring1..5`) played once
-per slot and drew nothing from the wrap on. `RESET_TIME -1` is "never self-reset while playing", not
-an exemption from this. Scoped to the call's own closure and its slot, never the whole `pool<N>`
-container: another effect live on the same slot number must not be re-posed under its running
-motions. Regression: the `effect-pool-reset` suite. **`PrewarmEmitters(params Node3D[]
+(`PlayEffectAt` over a hidden template stage). **A pool-slot checkout returns its copies to their
+spawn state** (`ResetCheckedOutCopies`, run by `PlayEffectAt` between `TakeNextSlot`/`PlaceOn` and
+`Start`): for every def the played anim reaches through CALL_ANIMATION (`AnimProgram.Subset`, memoized
+per anim name), on the anchors sitting in the slot(s) the call took, it takes the three steps
+`ResetDestructible`'s `ResetCalled` takes — `Stop` the instance, `RestoreRestPoses`, then re-apply the
+RESET_STATE. The original instances a fresh template copy per call, which always starts from its
+authored base pose; the pool hands the same node tree out again, still in whatever END pose its last
+run left and with its last run's motions still driving it. Both halves matter. A def whose sequences
+end INACTIVE (the sonic burst's `ring_up1..4`/`ring_down1` on `sonic_ring1..5`) played once per slot
+and drew nothing from the wrap on without the RESET_STATE; a slot recycled while still live
+re-launched its debris from a MID-FLIGHT pose without the stop and the pose restore, so the HE
+burst's `fly_trail1..5` walked further out on every wrap. ⚠ Stopping is what makes the restore
+stick — the incumbent motions would otherwise overwrite the restored pose the same frame.
+`RESET_TIME -1` is "never self-reset while playing", not an exemption from this. Scoped to the call's
+own closure and its slot, never the whole `pool<N>` container: another effect live on the same slot
+number must not be re-posed under its running motions. The authored pose the restore reads is banked
+for a whole pooled copy at `IndexPooledCopy` (`PrimeRest`), as-built, rather than left to `RestOf`'s
+lazy capture on the first thing that moves a node — on a reused copy that first mover has already
+displaced it. Regressions: the `effect-pool-reset` and `effect-pool-spawn-pose` suites.
+**`PrewarmEmitters(params Node3D[]
 callSiteAnchors)` builds every emitter the bound program's `PUFFER_STATE 1` events can name before
 anything plays**, through `EmitterDirector.Prewarm`: a named `at_node` resolves to every node of that
 name in the runtime's scope, unfiltered, since a play anchors the def inside its CALLER's pool copy
@@ -1095,9 +1104,10 @@ The effect-template stage as one module (`TemplateStage<TNode>`): pool-slot arit
 the pooled-copy staging entry (`IndexPooledCopy`), `Recycles`, and the reveal/retire/sweep ritual
 (`Reveal`, `RetireWhenIdle`, `Sweep`). The stage's own reset pass (`applyResetStates`, wired from
 `AnimRuntime.ApplyResetStatesWithin`) runs once per copy, when it is staged; a copy `TakeNextSlot`
-hands out is re-reset by the runtime on every checkout (`AnimRuntime.ResetCheckedOutCopies`, its
-entry above), because the copy is a reused node tree standing in for the original's fresh instance
-per call. Carries the three template policy flags as sealed
+hands out is returned to its spawn state by the runtime on every checkout
+(`AnimRuntime.ResetCheckedOutCopies`, its entry above), because the copy is a reused node tree
+standing in for the original's fresh instance per call. `IndexPooledCopy` is also where that spawn
+pose is banked, while the copy is still as-built. Carries the three template policy flags as sealed
 constructor state — `Pooled`, `Shown`, `Places` — get-only, no setter anywhere. Generic like
 `NameResolver<TNode>`: engine hooks at construction, the runtime-dependent hooks (`findAll`,
 `anchors`, `isLive`, live instances, …) late-bound via `Wire` at the handover, since the factory

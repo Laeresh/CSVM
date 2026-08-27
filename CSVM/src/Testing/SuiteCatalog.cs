@@ -106,6 +106,7 @@ public static class SuiteCatalog
         "callback-events",
         "ordnance-burst-timeline",
         "effect-pool-reset",
+        "effect-pool-spawn-pose",
         "repeat-call-slots",
         "effects-census",
         "bounce-launch",
@@ -559,6 +560,8 @@ public static class SuiteCatalog
             "the HE, flash and sonic bursts play end to end and every sequence's whole event timeline matches the authored JSON — in order, at the authored time (D31)", OrdnanceBurstTimeline));
         into.Add(new TestHarness.Suite("effect-pool-reset",
             "a pooled effect copy is re-reset on checkout: the sonic burst played five times over a four-slot pool draws its rings on the fifth play exactly as on the first (BL-406)", EffectPoolReset));
+        into.Add(new TestHarness.Suite("effect-pool-spawn-pose",
+            "a pooled effect copy is restored to its SPAWN POSE on checkout: the HE burst played five times over a four-slot pool, overlapping so the fifth play takes the first's still-live copy, launches its debris from the same pose the first did (BL-511)", EffectPoolSpawnPose));
         into.Add(new TestHarness.Suite("repeat-call-slots",
             "a template root CALLED REPEATEDLY from one anchor takes a pooled copy per authored call, not one for the anchor: pdpanel7's four gimmeflakes calls at pdp7 hold four copies, and a second tear reclaims those four rather than wrapping the pool (D21)", RepeatCallSlots));
         into.Add(new TestHarness.Suite("effects-census",
