@@ -483,7 +483,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   voice line is flavour and this closes. *Cross-refs:*
   `BL-512` (the same sub's launch motion), `BL-522` (its launched fighters).
 
-- `BL-562` `[Feature]` **The difficulty setting has no menu row.** *Evidence:* the scale itself is
+- `BL-570` `[Feature]` **The difficulty setting has no menu row.** *Evidence:* the scale itself is
   live (`Flight/Difficulty`, `--difficulty=<normal|hard|hardest>`), but a CLI flag is the only way to
   change it, so a player launching normally always flies the default Normal. The original puts it on
   the game-options screen: `IDS_GO_DIFFICULTY_TITLE` "Difficulty" with
