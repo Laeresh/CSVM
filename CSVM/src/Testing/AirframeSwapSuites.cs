@@ -410,7 +410,7 @@ internal static class AirframeSwapSuites
             $"which leaves the player damaged rather than handing them a pristine airframe and making the ending easier than the original's");
     }
 
-    // BL-543: the rebuilt rig wears the captured aircraft's own livery, not the player's, and the
+    // The rebuilt rig wears the captured aircraft's own livery, not the player's, and the
     // draw is not a coincidence of the two happening to share a pattern (CapturedScheme is 'british'
     // against the player's own Fortune Hunters).
     private static void CheckLivery(TestContext ctx, FlightController before,
