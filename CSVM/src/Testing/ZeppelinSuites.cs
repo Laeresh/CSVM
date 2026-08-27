@@ -220,6 +220,11 @@ internal static class ZeppelinSuites
             return;
         ctx.Check(net.Nodes.Count == 13 && net.Nodes[0].StopPointId == 0,
             $"the far end (node 0) authors no stop point at all count={net.Nodes.Count} id={net.Nodes[0].StopPointId}");
+        // The chain is 3-4-5-6-7-8-9-10-11-12-2-1-0: piratezep's own authored position seats it
+        // on node 3 (the NEAR end, 50 m off in altitude only), so node 0 — not the last-indexed
+        // node 12, which is a degree-2 waypoint mid-chain — is the far end it walks the whole
+        // route to reach.
+        const int farEnd = 0;
 
         Node3D? host = null;
         ZeppelinRuntime? runtime = null;
@@ -242,8 +247,8 @@ internal static class ZeppelinSuites
             const float dt = 1f / 60f;
             float maxPitchBand = Mathf.DegToRad(def.MaxPitchDeg);
             int pitchViolations = 0;
-            int steps = 0, budget = 60 * 1800; // 30 simulated minutes covers the ~9 km chain
-            while (!(motion.Follower.Holding && motion.Follower.CurrentIndex == net.Nodes.Count - 1)
+            int steps = 0, budget = 60 * 900; // the whole ~9 km chain flies in well under 500 s
+            while (!(motion.Follower.Holding && motion.Follower.CurrentIndex == farEnd)
                    && steps < budget)
             {
                 runtime.SimStep(dt);
@@ -252,13 +257,15 @@ internal static class ZeppelinSuites
                 steps++;
             }
             ctx.Same(0, pitchViolations, $"pitch stayed inside the record's ±{def.MaxPitchDeg:0}° band the whole route");
-            ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == net.Nodes.Count - 1,
-                $"the bare far end (node {net.Nodes.Count - 1}) holds it in {steps / 60f:0} s idx={motion.Follower.CurrentIndex} holding={motion.Follower.Holding}");
+            ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == farEnd,
+                $"the bare far end (node {farEnd}) holds it in {steps / 60f:0} s idx={motion.Follower.CurrentIndex} holding={motion.Follower.Holding}");
+            ctx.Check(motion.Follower.Advances == net.Nodes.Count - 1,
+                $"…having walked every edge from the near end, node 3 advances={motion.Follower.Advances}");
 
-            // Held for good: no shuttle back toward node 1, ever.
+            // Held for good: no shuttle back toward node 4, ever.
             for (int i = 0; i < 60 * 20; i++)
                 runtime.SimStep(dt);
-            ctx.Same(net.Nodes.Count - 1, motion.Follower.CurrentIndex,
+            ctx.Same(farEnd, motion.Follower.CurrentIndex,
                 $"…and stays there — no shuttle back along the altitude swing it just flew");
             ctx.Check(motion.Speed == 0f, $"…with the throttle cut speed={motion.Speed:0.##}");
         }
