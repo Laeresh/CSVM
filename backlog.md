@@ -2524,6 +2524,36 @@ usual.
   is built on a spawn table, and the return rule has to come from the decode. *Cross-refs:*
   `BL-524`, `BL-531`, `docs/org/aiPilot.md`.
 
+- `BL-547` `[Feature]` **The AI's altitude floor is enforced at one site in CSVM and at three in
+  the original: the manoeuvre veto and the mode-5 global disable are both missing.** *Evidence:*
+  decoded from `crimson.exe` while reading the cockpit lamps for `BL-431`. `AiModeMachine`'s
+  `AltitudeFloorM` (20 m world Y, `DAT_0071c3f0`) and `ProbeCeilingM` (8000 m, `DAT_0071c3f4`) are
+  the right constants and the climb-out that arms below the floor is the right behaviour, but the
+  original reads those two globals at **four** sites, not one. We have the reactive arm
+  (`AiModeMachine.cs:529`) and the goal clamp (`FUN_0041b560` at `0041b5c5`, ours as
+  `AiControlLaw.AimAltitudeFloor`). Missing: (1) the **manoeuvre veto**, `FUN_004201a0` at
+  `00420405`, which rejects a candidate manoeuvre whose PREDICTED end point falls below the floor
+  and takes a separate branch at `0042042d` when it lands above the ceiling, so the original never
+  *starts* a programme that would fly the aircraft into the ground; ours culls only on natural
+  touch and signature weight (`AiModeMachine.PickManeuver`). (2) `FUN_004216e0`, which sets mode 5
+  after writing `DAT_0071c3f0 = -FLT_MAX` at `004216f5` and restoring it at `00421775`. Since the
+  floor is a **global**, that suspends it for every AI aircraft in the mission for the duration,
+  not just the one entering the mode. *Why it matters at the controls:* an AI that commits to a
+  split-S at 60 m flies it into the terrain and is saved only by the reactive climb-out, which
+  abandons the manoeuvre mid-programme. The visible difference is enemies that pick sane
+  manoeuvres near the deck rather than starting doomed ones and yanking out. *Fix shape:* add the
+  predicted-end-point test to `PickManeuver`'s cull, reusing the `Maneuver` programme's own end
+  pose rather than inventing a predictor. The mode-5 disable needs the floor to stop being a
+  per-machine constant, so decide first whether CSVM models it as a session-scoped value or
+  declines the global scope deliberately. *⚠ Traps:* the floor is flat world Y and NOT a terrain
+  follow, so it saves an aircraft over water and does nothing over a ridge; the forward probe is
+  what handles terrain, and neither is a substitute for the other. Do not fold the veto into the
+  reactive arm, which is a different mechanism at a different moment. ⚠ Whether the original's
+  mode 5 is worth reproducing at all is open: a global floor disable reads like a deliberate
+  licence for one scripted manoeuvre, and porting it faithfully means every other AI aircraft
+  loses its floor at the same time. *Cross-refs:* `BL-523` (the same mode machine's
+  patrol/pursue cycle), `docs/org/aiPilot.md`, `BL-431` (the decode session that found this).
+
 - `BL-524` `[Bug]` **CM05 (C3/M04) and CM07 (C1/M02): a friendly patrol without a net flies away after its first fight
   and never returns to escort.** *Evidence:* reported at the controls in two missions: once the
   first enemy patrol is destroyed, the friendlies on patrol have no net to return to and continue
