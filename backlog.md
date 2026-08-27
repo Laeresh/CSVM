@@ -1982,13 +1982,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/controls.md`), so a resolved string that names the key needs the port's key substituted.
   *Cross-refs:* `docs/PLAN-M5-polish-2.md` C10.
 
-- `BL-544` `[Bug]` `[Owed-playtest]` **The auto-land prompt is not drawn in a flown session.** Seen at
-  the controls on CM02: `F9` started the hookup, so `AutoLandOffered` was true, but the HUD line
-  never appeared. The unit test covers `ComposeTextLines`; what is untested is whether the flown
-  HUD's text block draws at all in the mode the player was in (`DrawsTextBlock`) and whether
-  `GameSession` feeds `AutoLandOffered` to the rig on a realtime clock. *Cross-refs:* `BL-510`
-  (the placeholder string); `docs/PLAN-M5-polish-2.md` C10.
-
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2167,6 +2160,16 @@ usual.
   with the Balmoral damaged. ⚠ The hand-over to `wingman_4` carries the PLAYER's outgoing sums, not
   the capture's; do not read one for the other. *Cross-refs:*
   `docs/formats/anim-definitions/cutscenes.md`; `docs/PLAN-M5-polish-2.md` D15 and D21.
+
+- `BL-548` `[Bug]` **`--pos=` with `--campaign=` stalls the intro cutscene's completion.** Found while
+  instrumenting the auto-land prompt: six trials with `--pos=` set on a `--campaign=` launch ran up
+  to 300 s and 20000 frames without the intro's handoff, against 16 to 40 s without `--pos=`.
+  *Fix shape:* find what `--pos=` overrides that the intro's closing sequence waits on (the player
+  rig's staged pose, the handoff's own restore, or a trigger the definition tests against the
+  authored spawn), and either make the flag a no-op while a definition owns the session or move it
+  after the handoff. *⚠ Traps:* ⚠ A realtime run's frame-to-wall-time ratio is not repeatable
+  (`docs/verification.md` INSTR-28), so read the handoff off the log rather than a frame count.
+  *Cross-refs:* `docs/PLAN-M5-polish-2.md` D18.
 
 - `BL-542` `[Bug]` `[Owed-playtest]` **CM02's capture cutscene camera is misplaced.** Seen at the
   controls: the camera sat directly above the water showing only the player's aeroplane, never the

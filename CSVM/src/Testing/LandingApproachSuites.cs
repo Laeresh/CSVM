@@ -4,6 +4,7 @@ using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -233,6 +234,30 @@ internal static class LandingApproachSuites
             $"'{trigger.LastStarted ?? "(none)"}'");
         ctx.Check(offered, $"flying into '{auto.Node}' lights AutoLandOffered");
         ctx.Check(trigger.LastStarted == null, $"and starts nothing while the button is up");
+
+        // Nothing above this line calls the flown rig's OWN _Process, so a suite this shape never
+        // exercises GameSession's feed or FlightHud's draw (INSTR-26: drive the node's own callback
+        // under a Realtime clock rather than SimStep). Mirror that one feed line, then let it draw.
+        var savedClock = GameClock.Current;
+        GameClock.Current = new GameClock { Mode = GameClock.RunMode.Realtime };
+        try
+        {
+            rig.AutoLandOffered = trigger.AutoLandOffered;
+            for (int i = 0; i < RestartFrames; i++)
+            {
+                rig._Process(StepDt);
+            }
+        }
+        finally
+        {
+            GameClock.Current = savedClock;
+        }
+
+        report.AppendLine($"drawn on a realtime frame: DrawsTextBlock={rig.PilotHud.DrawsTextBlock}, " +
+            $"text='{rig.PilotHud.DrawnText}'");
+        ctx.Check(rig.PilotHud.DrawsTextBlock, $"the flown pane still holds a text block to draw into");
+        ctx.Check(rig.PilotHud.DrawnText is { Length: > 0 } drawn && drawn.Contains("AUTO-LAND"),
+            $"…and a realtime frame actually puts the auto-land prompt on it");
 
         rig.AutoLand = true;
         for (int i = 0; i < RestartFrames && !cutscene.Playing; i++)

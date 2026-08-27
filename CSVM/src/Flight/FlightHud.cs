@@ -458,6 +458,13 @@ public sealed class FlightHud
         return _textLines;
     }
 
+    // Test-only: what a frame actually PUT ON SCREEN, rather than ComposeTextLines' return, which
+    // a caller could compute correctly and never route to this control. Kept beside it rather than
+    // hoisted, the same SA1202 trade FlightController.AutoLandPressed makes.
+#pragma warning disable SA1201, SA1202
+    internal string? DrawnText => _text?.Text;
+#pragma warning restore SA1201, SA1202
+
     // The rocket name the text readout shows: the resolved `MSG_WEAP_*` display name
     // (e.g. "High-explosive rocket") when it resolved, else the short internal handle ("BOOM") — a
     // raw, unresolved `MSG_*` key falls back to the handle rather than being shown verbatim.

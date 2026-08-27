@@ -143,7 +143,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 15. ☑ The captured Balmoral is not hidden by the swap in a flown session (`BL-541`)
 16. ☑ The captured aircraft keeps its British livery after the capture (`BL-543`)
 17. ☐ CM02's capture cutscene camera sits over the water (`BL-542`)
-18. ☐ The auto-land prompt is not drawn in a flown session (`BL-544`)
+18. ☑ The auto-land prompt is not drawn in a flown session (`BL-544`)
 19. ☑ The landing animation: no hook, too high, wings not folded (`BL-545`)
 20. ☑ CM01's drop-off cutscene shows no parachutist (`BL-540`)
 21. ☐ The low-terrain break-off, judged once the wingman is there (`BL-509`, A13's open half)
@@ -939,7 +939,7 @@ staging is the precedent for a node that resolves in the data and not in the tre
 **⚠ Traps.** ⚠ B7's pose path is the one this camera goes through; do not touch `PoseAtNode` for
 one definition.
 
-## D18 ☐ The auto-land prompt is not drawn in a flown session
+## D18 ☑ The auto-land prompt is not drawn in a flown session
 
 **Goal.** The player sees the auto-land prompt whenever the button would do something.
 
@@ -957,6 +957,18 @@ rather than the text block if that is the gap.
 `landings-auto-land-button` green.
 
 **⚠ Traps.** ⚠ The placeholder wording stays until `BL-510` resolves the langui string.
+
+**Outcome: neither candidate.** `DrawsTextBlock` is unconditionally true for every human-piloted
+rig (`Attach` always builds the text block); `GameSession`'s feed line is an unconditional
+`_Process` write, not gated on `ParentDriven`. Re-measured both ways: `landings-auto-land-button`
+now installs a Realtime `GameClock` and drives the flown rig's own `_Process` (INSTR-26), and a
+`--campaign=` session on that same clock confirms the feed runs every frame with the text block
+present throughout. The row simply needs its own arming objective and the intro cutscene's handoff
+to have passed, same as at the controls; nothing in the HUD or the feed was ever the gap. `docs/verification.md` INSTR-28 records the new trap this surfaced: a `--screenshot=` on a
+Realtime clock cannot pick a `--frames=` to land on a transient state reliably, since the run's own
+sim-frame-to-wall-time ratio is not repeatable.
+
+**Verified.** <pending orchestrator run>
 
 ## D19 ☑ The landing animation: no hook, too high, wings not folded
 
@@ -1050,7 +1062,7 @@ its avoid-crash break-off over the island reads as the original.
 inside 150 m through the low pass, and C12 could not judge it because the wingman was 4 km away.
 
 **Approach.** ⚠ **A stop, not a task an agent completes.** After D14, fly CM01 on `player_pfighter`
-with the wingman on the same airframe and watch the first low pass over the island.
+with the wingman on the same airframe and watch the first low pass over the island. Watch the auto-land prompt again on CM02 as well: D18 proved the line draws on a realtime frame, so if it is still not seen, re-mint it with what the screen showed.
 
 **Model recommendation.** medium (the brief and the write-up; the instrument is the user).
 

@@ -577,6 +577,15 @@ loss. What the engine renders was decodable from the authored constants + oscill
   `in-play=False` and passed, and reading `Inert` on the same run read `False` with `Crashed` true.
   INSTR-10's rule at the other end of the assertion.
 
+- **INSTR-28** — **A `--screenshot=` on a Realtime (`--no-det`) clock cannot pick its `--frames=`
+  to land on a transient live state: the same command's sim-frame-to-wall-time ratio varies run to
+  run, so a fixed frame number that caught a state once is not a repeatable target.** Measured on a
+  `--campaign=` run to the auto-land sphere: the intro cutscene's own handoff landed anywhere from
+  t=3.7s to t=40.2s across otherwise-identical launches, and a frame chosen to land inside the
+  following `AutoLandOffered` window caught it on one run in nine and missed on the rest. Prefer a
+  log line (`GD.Print`) over a pixel for a realtime transient, or drive the state through a suite's
+  own `_Process` loop (INSTR-26) where the frame IS the unit.
+
 ## SRC — sources and documents
 
 - **SRC-1** — **Validate whether bytes are meaningful before numeric sanity checks.**

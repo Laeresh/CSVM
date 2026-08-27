@@ -927,9 +927,10 @@ public static class SuiteCatalog
 
         into.Add(new TestHarness.Suite("landings-auto-land-button",
             "the auto-land button over the first story mission's BUILT world: flying the chapter's "
-            + "auto row lights AutoLandOffered but starts nothing while the button is up, pressing "
-            + "it starts the same animation the manual row would, the cutscene host still runs it, "
-            + "and holding the button past the handoff does not re-fire the row",
+            + "auto row lights AutoLandOffered but starts nothing while the button is up, a realtime "
+            + "frame of the flown rig's own _Process actually draws the prompt, pressing the button "
+            + "starts the same animation the manual row would, the cutscene host still runs it, and "
+            + "holding the button past the handoff does not re-fire the row",
             AutoLandButton));
 
         // The hookup plays with no hook, the aeroplane too high and the wings unfolded when the

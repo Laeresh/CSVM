@@ -3108,6 +3108,8 @@ burn it off while nothing is drawn.
 The state-to-readout mapping itself is decoded into static, Control-free pieces `CSVM.Tests`
 (`FlightHudMappingTests`) drives directly: `ComputeStallWarning`, `MphFromSpeedMps`,
 `FeetFromWorldY` and `ComputeAgl` are pure functions of the struct (or a synthetic `IWorldQuery`);
+`DrawnText` (internal, test-only) reads the built `Label` back, so an in-engine suite can assert
+what a realtime frame actually put on screen rather than only what `ComposeTextLines` returned.
 `ComputeGunGauge`/`ComputeMissileGauge` take bare `GunGroup`/`Hardpoint` lists (no bound `Loadout`
 needed) and return a `GunGaugeReadout`/`MissileGaugeReadout`, filling the reused belt-fraction list
 by pylon NUMBER, not list position; `AdvanceDamageFlash` is the wall-time countdown, gated off while
