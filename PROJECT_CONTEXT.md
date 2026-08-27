@@ -217,8 +217,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1 through 5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI (aircraft that patrol, engage, evade and die, turrets, zeppelins, pilot voice), and all four Instant Action mission types plus the 2–4-player splitscreen Dogfight deathmatch are playable and scored. M5 added the single-player campaign: per-profile progression across the cabin, briefing and flight-check screens, and missions that run their authored `objectives.zrd` choreography with intro cutscenes, letterbox and campaign wingmen.
 
-**Active plan:** none; the last completed is [`docs/plans/PLAN-M5-polish-2.md`](docs/plans/PLAN-M5-polish-2.md).
-Next: `PT-84` and the `BL-120`/`PT-53` corner graze are the freshest owed playtests.
+**Active plan:** [`docs/PLAN-M5-polish-4.md`](docs/PLAN-M5-polish-4.md), Wave A not started.
+Next: `A1`, `A2`. `PT-84` and the `BL-120`/`PT-53` corner graze are the freshest owed playtests.
 
 Verify any change with **`.\RunTests.ps1`** (build → units →in-engine suites → golden hashes → one exit code); read[`docs/verification.md`](docs/verification.md) first.
 
