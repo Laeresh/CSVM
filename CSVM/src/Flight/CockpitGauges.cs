@@ -19,12 +19,14 @@ public sealed class CockpitGauges
     private readonly Needle _gunArrow, _missileArrow;
     private readonly List<Belt> _belts;
     private readonly List<DamageZoneSkin> _zones;
+    private readonly List<Readout> _readouts;
     private readonly Node3D? _lowAltLamp, _stallLamp, _nitroDial;
 
     private CockpitGauges(Node3D gauges, IReadOnlyDictionary<ulong, string> textureNames)
     {
         _belts = Belt.FindAll(gauges, textureNames);
         _zones = DamageZoneSkin.FindAll(gauges, textureNames);
+        _readouts = Readout.FindAll(gauges);
         _altHundreds = Needle.Find(gauges, "hundreds");
         _altThousands = Needle.Find(gauges, "thousands");
         _speed = Needle.Find(gauges, "speed");
@@ -88,6 +90,10 @@ public sealed class CockpitGauges
         {
             zone.Apply(gauges);
         }
+        foreach (var readout in _readouts)
+        {
+            readout.Apply(gauges);
+        }
     }
 
     // The bar beside a light, or a zone's border: the screen-space draw splits on the same word.
@@ -108,6 +114,22 @@ public sealed class CockpitGauges
         {
             node.Visible = visible;
         }
+    }
+
+    private static MeshInstance3D? FirstMesh(Node3D root)
+    {
+        if (root is MeshInstance3D mesh)
+        {
+            return mesh;
+        }
+        foreach (var child in root.GetChildren())
+        {
+            if (child is Node3D n3d && FirstMesh(n3d) is { } hit)
+            {
+                return hit;
+            }
+        }
+        return null;
     }
 
     private static Node3D? FindNamed(Node3D root, string name)
@@ -216,6 +238,113 @@ public sealed class CockpitGauges
                     Collect(n3d, names, into);
                 }
             }
+        }
+    }
+
+    /// <summary>One authored character readout (<c>4char_ammo</c>, <c>6char_type</c>). The original
+    /// addresses these per SURFACE: every cell is its own surface carrying its own cycled material,
+    /// and the engine deliberately breaks material batching so each stays addressable. Our builder
+    /// groups surfaces by material index and the shipped cells carry one material each, so the
+    /// split survives the import and a cell is reachable by its surface. Cell 0 is the leftmost.
+    /// </summary>
+    private sealed class Readout
+    {
+        private readonly List<ShaderMaterial> _cells = new();
+        private readonly bool _isGun;
+        private readonly bool _numeric;
+
+        private Readout(bool isGun, bool numeric)
+        {
+            _isGun = isGun;
+            _numeric = numeric;
+        }
+
+        public static List<Readout> FindAll(Node3D gauges)
+        {
+            var found = new List<Readout>();
+            foreach ((string dial, bool isGun) in new[] { ("gungauge", true), ("missilegauge", false) })
+            {
+                if (FindNamed(gauges, dial) is not { } node)
+                {
+                    continue;
+                }
+                foreach ((string cellNode, bool numeric) in new[] { ("4char_ammo", true), ("6char_type", false) })
+                {
+                    if (FindNamed(node, cellNode) is { } cells && Build(cells, isGun, numeric) is { } readout)
+                    {
+                        found.Add(readout);
+                    }
+                }
+            }
+            return found;
+        }
+
+        public void Apply(GaugeCluster gauges)
+        {
+            string text = _numeric
+                ? gauges.BeltCountText(_isGun, _cells.Count)
+                : gauges.BeltTypeText(_isGun, _cells.Count);
+            if (text.Length == 0)
+            {
+                return; // no loadout feeds this gauge; the cells keep what they were built with
+            }
+            for (int i = 0; i < _cells.Count && i < text.Length; i++)
+            {
+                if (gauges.Glyph(text[i]) is { } glyph)
+                {
+                    _cells[i].SetShaderParameter("albedo_tex", glyph);
+                }
+            }
+        }
+
+        // ⚠ Ordered by the cell's own x, not by surface index: the surface order follows the
+        // authored polygon order, which is not promised to run left to right.
+        private static Readout? Build(Node3D node, bool isGun, bool numeric)
+        {
+            // The cells hang off the named node rather than on it, the same shape the rest of the
+            // built subtree takes.
+            if (FirstMesh(node) is not { Mesh: not null } mesh)
+            {
+                return null;
+            }
+            var byX = new List<(float X, ShaderMaterial Material)>();
+            for (int i = 0; i < mesh.Mesh.GetSurfaceCount(); i++)
+            {
+                if (mesh.Mesh.SurfaceGetMaterial(i) is not ShaderMaterial built)
+                {
+                    continue;
+                }
+                var own = (ShaderMaterial)built.Duplicate();
+                mesh.SetSurfaceOverrideMaterial(i, own);
+                byX.Add((CentreX(mesh.Mesh, i), own));
+            }
+            if (byX.Count == 0)
+            {
+                return null;
+            }
+            byX.Sort((a, b) => a.X.CompareTo(b.X));
+            var readout = new Readout(isGun, numeric);
+            foreach (var (_, material) in byX)
+            {
+                readout._cells.Add(material);
+            }
+            return readout;
+        }
+
+        private static float CentreX(Mesh mesh, int surface)
+        {
+            var arrays = mesh.SurfaceGetArrays(surface);
+            if (arrays.Count <= (int)Mesh.ArrayType.Vertex
+                || arrays[(int)Mesh.ArrayType.Vertex].As<Vector3[]>() is not { Length: > 0 } verts)
+            {
+                return 0f;
+            }
+            float sum = 0f;
+            foreach (var v in verts)
+            {
+                sum += v.X;
+            }
+            return sum / verts.Length;
         }
     }
 

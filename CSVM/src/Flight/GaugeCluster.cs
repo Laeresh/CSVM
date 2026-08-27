@@ -16,14 +16,14 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class GaugeCluster : Control
 {
-    // Gun belt indicator colour by remaining fraction: green/yellow/red. Gun-only; hardpoints/
-    // pylons never show this tier. TUNE — see docs/formats/hud.md for the calibration and the
-    // still-owed playtest. ⚠ Do not raise it toward 1/3; that lights the cue at nearly two-thirds full.
-    public const float IndicatorLowFrac = 0.15f;
-    // Weapon-gauge arrow sweep rate, shared by both gauges (measured off original-game footage:
-    // 168.7 ± 1.6 °/sim-s, linear — the ~2-frame ease at each end is within noise and NOT a smoothstep).
-    // Public so CSVM.Tests (GaugeArrowTweenTests) can assert the rate directly.
-    public const float ArrowSweepDegPerSimS = 168.7f;
+    // Belt indicator colour by remaining fraction: the low tier lights at or below a quarter full.
+    // Decoded (0x006034f4, compared at 0x004547de) — one state function serves BOTH gauges, so this
+    // is not gun-only. ⚠ Was a 0.15 TUNE, and the gun-only reading came with it.
+    public const float IndicatorLowFrac = 0.25f;
+    // Weapon-gauge arrow sweep rate, shared by both gauges: 0.8 revolutions per second, constant,
+    // with no easing at either end (FUN_004544b0, step = frame dt x 5.0265484 = 0.8 x 2pi).
+    // ⚠ Supersedes a 168.7 °/s figure measured off footage. Public so CSVM.Tests can assert it.
+    public const float ArrowSweepDegPerSimS = 288f;
     // The two nitro needles' decoded law: each chases its target through the shared exponential
     // (slot = target + (slot − target)·exp(−rate·dt)), full sweep 3.7699 rad = 216°, the boost
     // needle at 3/s and the charge needle at 1.5/s (FUN_004568c0).
@@ -258,14 +258,15 @@ public sealed partial class GaugeCluster : Control
         return cluster;
     }
 
-    // Guns: green > low > empty, indexing the 3 indicator colour variants. The low tier is
-    // gun-only — see IndicatorLowFrac's comment. Public so CSVM.Tests (GaugeColoursTests) can
-    // assert both colour paths directly.
+    // green > low > empty, indexing the 3 indicator colour variants. ONE decoded rule serves both
+    // gauges (FUN_004547a0 takes rounds and capacity from either a gun record or a pylon one).
+    // ⚠ The pylons' "no intermediate colour" reading is not a second rule: a pylon carrying a
+    // single round has a fraction of 1 or 0, so its low tier is unreachable rather than absent, and
+    // a pylon deep enough to sit at a quarter full does light it. Public for CSVM.Tests.
     public static int GunIndicatorColor(float frac) => frac <= 0f ? 2 : frac <= IndicatorLowFrac ? 1 : 0;
 
-    // Hardpoints/pylons: green > empty, no intermediate colour (confirmed against the
-    // original). Never reuse IndicatorLowFrac here.
-    public static int HardpointIndicatorColor(float frac) => frac <= 0f ? 2 : 0;
+    /// <inheritdoc cref="GunIndicatorColor"/>
+    public static int HardpointIndicatorColor(float frac) => GunIndicatorColor(frac);
 
     // The colour of belt indicator i, including positions past the end of the loadout: an unfitted
     // slot reads RED, the same as a fitted-but-spent one. In the original every belt light on the
@@ -790,6 +791,10 @@ public sealed partial class GaugeCluster : Control
         {
             _glyphs[c] = textures.Find(c.ToString());
         }
+        // ⚠ The blank is a real glyph, not the absence of one. The screen-space draw can leave a
+        // cell unpainted, but the authored 3D cell already carries a character and has to be
+        // overwritten with this to clear it.
+        _glyphs[' '] = textures.Find("space");
         string[] hilite = { "greenhilite", "yellowhilite", "redhilite" };
         string[] light = { "greenindicator", "yellowindicator", "redindicator" };
         for (int i = 0; i < 3; i++)
@@ -831,7 +836,10 @@ public sealed partial class GaugeCluster : Control
     {
         for (int i = 0; i < quads.Count && i < text.Length; i++)
         {
-            if (_glyphs.TryGetValue(text[i], out var g) && g != null)
+            // ⚠ The space glyph is deliberately skipped HERE and drawn in the 3D panel. A cell this
+            // draw leaves alone shows the face beneath it, which is already blank; the authored 3D
+            // cell carries a character instead and has to be painted over.
+            if (text[i] != ' ' && _glyphs.TryGetValue(text[i], out var g) && g != null)
                 DrawGaugePoly(quads[i], center, radius, 0f, g);
         }
     }
