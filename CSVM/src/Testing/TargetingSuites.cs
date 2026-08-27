@@ -1006,4 +1006,91 @@ internal static class TargetingSuites
             textures.Dispose();
         }
     }
+
+    // A2/BL-534's routing switch, driven directly against hand-built sources — no live
+    // TargetSelection/AimCandidateSet scan behind it, since DebugForceCrash and AnimRuntime.DamageAt
+    // already carry their own coverage elsewhere (AiSuites, DamageSuites and others). What is NEW
+    // here is only the dispatch: an aircraft source crashes (Downed fires with the given killer), a
+    // destructible source is destroyed through the same DamageAt a rocket uses, and a source with no
+    // decoded kill path (a turret, or anything else) is left alone.
+    internal static void DebugKillTargetRouting(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? victim = null;
+        AnimRuntime? runtime = null;
+        Node3D? gasbagNode = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            victim = new FlightController
+            {
+                PlaneModel = model,
+                Collider = PlaneCollider.Build(model),
+                Damage = new PlaneDamage(stats.DestroyableParts),
+                PlayerIndex = FlightRoster.ShooterIdBase,
+                IsHumanPiloted = false,
+                Pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward),
+                Projectiles = live,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+            };
+            victim.AddChild(model);
+            victim.Setup(new FlightModel(stats), null, new CamParams(), Vector3.Zero, Vector3.Forward);
+            ctx.Host.AddChild(victim);
+
+            // The inert stage (AnimRuntime's own doc: "every plain testing runtime takes" it) — no
+            // chapter world needed, since DamageAt's death swap is a no-op with no ResetState.
+            runtime = new AnimRuntime();
+            ctx.Host.AddChild(runtime);
+            gasbagNode = new Node3D { Name = "gasbag1" };
+            ctx.Host.AddChild(gasbagNode);
+            var gasbagInst = runtime.Destructibles.Register(
+                new AnimDefinition { Name = "gasbag1", AnimName = "zep_zone_gasbag1" }, gasbagNode, 200f);
+
+            var debugKill = new UI.DebugKillTarget(() => null, () => runtime);
+
+            const int Killer = FlightRoster.ShooterIdBase + 1;
+            int? downedKiller = null;
+            victim.Downed += (_, killer) => downedKiller = killer;
+            debugKill.KillSource(victim, "victim", Killer);
+            ctx.Check(victim.Crashed && downedKiller == Killer,
+                $"an aircraft source crashes through the attributed Downed path crashed={victim.Crashed} killer={downedKiller?.ToString() ?? "-"}");
+
+            ctx.Check(gasbagInst.Status != DestructibleRegistry.State.Destroyed,
+                $"the gasbag starts healthy status={gasbagInst.Status}");
+            debugKill.KillSource(gasbagInst, "gasbag1", Killer);
+            ctx.Check(gasbagInst.Status == DestructibleRegistry.State.Destroyed && gasbagInst.Health <= 0f,
+                $"a destructible source is destroyed through DamageAt status={gasbagInst.Status} hp={gasbagInst.Health}");
+
+            // A turret carries no HEALTH key at all (TargetRef.Health's own rule), so its arm is
+            // the same no-op every unrecognised source takes — proven with a plain object stand-in
+            // rather than a built TurretController, which this switch never inspects.
+            debugKill.KillSource(new object(), "unrecognised", Killer);
+
+            // Nothing selected: Kill() itself (not KillSource) must not throw with no pilot.
+            var noPilotKill = new UI.DebugKillTarget(() => null, () => runtime);
+            noPilotKill.Kill();
+        }
+        finally
+        {
+            victim?.Free();
+            runtime?.Free();
+            gasbagNode?.Free();
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
 }

@@ -272,6 +272,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/PhotoModeHud.cs` — photo mode's fading hint line and its Escape/pad-B way out; raises an event, decides nothing.
 - `src/UI/PerfHud.cs` — the frame-cost readout (F14, `--debug-fps=`): fps/current-frame-cost/worst-recent-frame, once for the window, drawn above the launchscreen too.
 - `src/UI/TargetingOverlay.cs` — the targeting overlay (F15, `--debug-targets`): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
+- `src/UI/DebugKillTarget.cs` — the debug kill key (F17): kills P1's `TargetSelection.Current` through its own death path (`DebugForceCrash` for an aircraft, `AnimRuntime.DamageAt` for a zeppelin sub-part); inert on a turret, which has no `HEALTH` key at all.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
 - `src/UI/NodeLab.cs` — the `--freecam`/`--anim-lab` node lab (N, `--debug-nodelab`): lazy `cs_name` tree, search, frame/hide, dependencies, destructibles.
 - `src/UI/WorldDamageLab.cs` — the `--freecam`/`--anim-lab` world damage lab (F5, `--debug-damage`): HP slider + kill/reset on the selection's destructible pool.
@@ -4198,6 +4199,27 @@ in the HUD. Depth test off, since the line into a hull is the one worth seeing. 
 world-space lines draw in every pane on their own (default render layer, in every camera's
 `CullMask`) while the HUD roll-call is drawn once for the window, like `PerfHud`, because it is
 process-wide combat state.
+
+## src/UI/DebugKillTarget.cs
+The debug kill key (F17, `BL-534`): kills P1's currently selected `Flight.TargetSelection`
+target through its own death path, so kill-count and `ObjectiveGraph`/`GroupLiveCount`
+bookkeeping see it exactly as a real shot would, never by freeing the node. Routes on the
+selection's `Candidate.Source` type: a `FlightController` crashes through
+`FlightController.DebugForceCrash(killer)` — the same attributed `Crash`/`Downed` path
+`--debug-scoreboard`'s scripted kill and `--crash` already use; a
+`Mech3.DestructibleRegistry.Instance` (a zeppelin gasbag, cannon or engine) is destroyed through
+`AnimRuntime.DamageAt(inst.Anchor, inst.MaxHealth + 1f)`, the same call a rocket makes and
+`WorldDamageLab`'s own Kill button uses. A `TurretController` selection (world emplacement or
+carried) is left inert: `Flight.TargetRef.Health`'s own decoded rule is that a turret carries no
+`HEALTH` key at all, and nothing in the engine toggles a turret's kill switch
+(`TurretController.Alive`'s healthy-node visibility) today, so routing a kill through it would be
+an invented mechanism, not a decoded one. Nothing selected is inert too. P1-only, the precedent
+F5's `WorldDamageLab` and F51's weapon lab already set for a single-pane debug tool; wired into
+`GameSession` beside the F15 `TargetingOverlay` build, reading P1's own `FlightController` and
+the session's `AnimRuntime` through closures for the same reason `TargetingOverlay` does (both
+outlive the line that builds them: waves activate and turrets die long after). The routing switch
+is exposed as `KillSource` so a suite can drive it against hand-built sources with no live
+`AimCandidateSet` scan behind it.
 
 ## src/UI/TileGridOverlay.cs
 The map-edge tile-grid overlay, flag-only (`--debug-tilegrid`; no key is bound): every ground tile

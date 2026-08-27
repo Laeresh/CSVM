@@ -2544,6 +2544,13 @@ public partial class GameSession : Node3D
             DebugShow = _spec.DebugTargets,
         });
 
+        // F17: kill P1's TargetSelection.Current through its own death path, the playtester's
+        // escape hatch when a stray enemy blocks an objective chain. P1-only, the same precedent
+        // F5/F51 set for a single-pane debug tool.
+        _worldRoot!.AddChild(new UI.DebugKillTarget(
+            () => _rigs.Count > 0 ? _rigs[0].Controller : null,
+            () => _diagRuntime));
+
         // The pause-screen objectives readout and the objective-site feed, both mounted only for a
         // campaign session and both polling _campaign.Graph themselves once Attach (above) has
         // built it. The sites go onto the player's target cycle, which is what marks them.

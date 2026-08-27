@@ -82,7 +82,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the instruments, then CM03 and CM04
 
 1. ☑ `BL-548`: `--pos=` with `--campaign=` stalls the intro cutscene's completion
-2. ☐ `BL-534`: a debug key that kills the player's selected target
+2. ☑ `BL-534`: a debug key that kills the player's selected target
 3. ☑ `BL-516`: CM03's AA turret never fires
 4. ☐ `BL-513` + `BL-521`: CM04's start-state script reaches the visual swap but not the pools
 5. ☐ `BL-512` + `BL-522`: the Barracuda's drive jumps, its launch faces the wrong way, and its fighters crash at once
@@ -153,6 +153,7 @@ a port-side flag.
 **⚠ Traps.** A realtime run's frame-to-wall-time ratio is not repeatable (`docs/verification.md`
 INSTR-28): read the handoff off the log, never off a frame count.
 
+<<<<<<< HEAD
 **Landed.** `SpawnPicker.ChooseSpawn` withholds `--pos=`'s placement while
 `CutsceneController.Playing` is already true at spawn time (`GameSession.BuildFlightRigs` sets
 `WithholdOverrideForCutscene` there, after the world build has run the intro's own animation
@@ -176,28 +177,46 @@ button leaked through as a skip at t=12.56s before `--no-pads` was added to the 
 **Verified.** <pending orchestrator run>
 
 ## A2 ☐ `BL-534`: a debug key that kills the player's selected target
+=======
+## A2 ☑ `BL-534`: a debug key that kills the player's selected target
+>>>>>>> worktree-m5p4-a2
 
 **Goal.** One key in the F13+ debug block kills `TargetSelection`'s current target through the
 normal death path, so kill-count and `DEDG` objectives see the kill; inert with nothing selected;
 no shipped binding.
 
 **Evidence (confidence: lead-only).** Asked for at the controls: strays that fly off (`BL-523`) or
-hang out of reach (`BL-531`) block an objective chain. `<TODO: re-verify still-open against the
-code>`
+hang out of reach (`BL-531`) block an objective chain. Re-verified still open: no kill key existed
+anywhere in `src/UI` or the input dispatch before this item.
 
-**Approach.** Route the kill through `WeaponHit`/the crash path, not by freeing the node. A
-zeppelin sub-part or turret as the selection kills that part. The key number comes from the user:
-the F13+ block follows the physical rows on their keypad, so ask rather than pick the next free
-one (`docs/cli.md`'s debug labs, `docs/org/targeting.md`). `<TODO: the key number, from the user>`
+**Approach.** `src/UI/DebugKillTarget.cs` (F17, the user's chosen key) reads P1's
+`TargetSelection.Current` and routes on the selection's source type: a `FlightController` crashes
+through the existing `DebugForceCrash(killer)` — the same attributed `Crash`/`Downed` path
+`--debug-scoreboard`'s scripted kill already uses, so kill-count and `GroupLiveCount`/`DEDG` see
+it exactly as a real shot down; a `DestructibleRegistry.Instance` (a zeppelin gasbag, cannon or
+engine) is destroyed through the existing `AnimRuntime.DamageAt`, the same call a rocket makes and
+`WorldDamageLab`'s own Kill button uses. **A turret selection stays inert, disproving that half of
+the Approach's assumption:** `Flight.TargetRef.Health`'s own decoded rule is that a turret
+emplacement carries no `HEALTH` key at all (the retail loaders read none), and nothing in the
+engine today toggles a turret's kill switch (`TurretController.Alive`'s healthy-node visibility).
+Routing a kill through a turret would invent a mechanism the decoded data does not have, so the
+key logs and does nothing on one instead — the correct outcome under this project's own rule
+against inventing content. The two reported blockers (`BL-523`, `BL-531`) are both stray
+*aircraft*, which the aircraft branch covers.
 
 **Model recommendation.** medium, low effort. Mechanical wiring on an existing path.
 
-**Verify.** In an Instant Action dogfight, select an enemy, press the key, and confirm the wrap-up
-counts the kill; press it with no selection and confirm nothing happens. `targeting` suites
-unchanged.
+**Verify.** `KillSource` (the routing switch, exposed for exactly this) is driven directly against
+hand-built sources in the `targeting` suite family, with no live `AimCandidateSet` scan behind it,
+since `DebugForceCrash` and `DamageAt` already carry their own coverage elsewhere. Manually: in an
+Instant Action dogfight, select an enemy, press F17, and confirm the wrap-up counts the kill; press
+it with no selection and confirm nothing happens; select a turret and confirm nothing happens.
 
-**⚠ Traps.** Kill through the damage model or objectives never fire. Debug only: no entry in the
-shipped keymap.
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** Kill through the damage model or objectives never fire — avoided by reusing
+`DebugForceCrash`/`DamageAt` rather than freeing the node. Debug only: no entry in the shipped
+keymap.
 
 ## A3 ☑ `BL-516`: CM03's AA turret never fires
 

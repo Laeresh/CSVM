@@ -2426,18 +2426,6 @@ usual.
   fix before removing. Side effect while active: DirectInput-only controllers (non-XInput
   sticks without an SDL HIDAPI driver) are invisible in-game.
 
-- `BL-534` `[Feature]` **A debug key that kills the player's currently selected target.**
-  *Evidence:* asked for at the controls: enemies that fly off (`BL-523`) or hang out of reach
-  (`BL-531`) block a mission's objective chain, and the playtester needs to move on without
-  hunting them. Selecting the stray with the target key and killing it is the shape chosen; no
-  distance rule and no kill-all. *Fix shape:* one key in the F13+ debug block (the block follows
-  the physical rows on the user's keypad; take the user's key number) killing `TargetSelection`'s
-  current target through the normal death path so the objective graph sees the kill; a zeppelin
-  sub-part or turret as the selection kills that part. *⚠ Traps:* kill through `WeaponHit`/the
-  crash path, not by freeing the node, or `DEDG` and kill-count objectives never fire. Debug
-  only: no shipped binding, and the key is inert with nothing selected. *Cross-refs:* `BL-523`,
-  `BL-531`, `docs/cli.md`'s debug labs, `docs/org/targeting.md`.
-
 ## Misc
 
 - `BL-072` `[Feature]` **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`

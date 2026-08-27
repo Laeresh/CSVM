@@ -150,6 +150,7 @@ public static class SuiteCatalog
         "campaign-objectives",
         "campaign-mission-end",
         "targeting-candidates",
+        "debug-kill-target",
         "ranked-pool-carried-turret-dedup",
         "partition-areas",
         "scripted-path",
@@ -731,6 +732,13 @@ public static class SuiteCatalog
             "and the gunner fires real rounds at a zeppelin structure with no aircraft in the scan " +
             "at all",
             TargetingCandidates));
+        into.Add(new TestHarness.Suite("debug-kill-target",
+            "the F17 debug kill key's routing (A2, BL-534): an aircraft source crashes through the " +
+            "attributed DebugForceCrash/Downed path, a destructible source (a zeppelin sub-part) is " +
+            "destroyed through the same AnimRuntime.DamageAt a rocket uses, and a turret or any " +
+            "other source with no decoded HEALTH key is left inert rather than inventing a kill " +
+            "path for it; nothing selected does not throw",
+            DebugKillTargetRouting));
         into.Add(new TestHarness.Suite("ranked-pool-carried-turret-dedup",
             "the AI ranked pool's carried-turret guard (BL-507): a hostile aircraft with a crewed " +
             "rear mount rides the pool as one Vehicle entry, never a second entry for its own " +
