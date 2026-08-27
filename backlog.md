@@ -2056,6 +2056,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/controls.md`), so a resolved string that names the key needs the port's key substituted.
   *Cross-refs:* `docs/PLAN-M5-polish-2.md` C10.
 
+- `BL-544` `[Bug]` `[Owed-playtest]` **The auto-land prompt is not drawn in a flown session.** Seen at
+  the controls on CM02: `F9` started the hookup, so `AutoLandOffered` was true, but the HUD line
+  never appeared. The unit test covers `ComposeTextLines`; what is untested is whether the flown
+  HUD's text block draws at all in the mode the player was in (`DrawsTextBlock`) and whether
+  `GameSession` feeds `AutoLandOffered` to the rig on a realtime clock. *Cross-refs:* `BL-510`
+  (the placeholder string); `docs/PLAN-M5-polish-2.md` C10.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2168,59 +2175,26 @@ usual.
   item's numbers are the symmetric case and are sound; this is a different pairing. Do not "fix" it
   by installing nitro on every wingman, which would contradict the roster data.
 
-- `BL-458` `[Bug]` **`DANGER_ZONES_COMPLETED` can never be satisfied in a flown campaign mission.**
-  *Evidence:* a campaign mission's danger zones are the same `dzpathN` gate geometry `--stunt`
-  reads, authored from a different surface: no `ia.json` `dzones` list, but the mission's own
-  `objectives.zrd` names `dzpathN` directly inside `DANGER_ZONES_COMPLETED` (C3/M01's `OBJECTIVE3`
-  on `dzpath1`, `OBJECTIVE11` on `dzpath4`), narrowed by `dzones.zrd`'s `disable` list.
-  `CampaignDangerZones` (new) reads that surface and calls the existing
-  `CampaignDirector.NotifyDangerZoneCompleted` (`:345`); `Attach`/`Step` wire it off a new
-  `WorldInputs.Gamez` field, which `GameSession`'s own `Attach` call now passes. Proven against real
-  C3/M01 data (`campaign-danger-zones` suite): gate-crossing completes the zone, and
-  `OBJECTIVE3`/`OBJECTIVE11` complete off the real notify path. **Still open** until the secondary
-  is seen to complete in a mission flown at the controls, which is the one thing no suite can show.
-  *⚠ Traps:* ⚠ `ObjectiveGraph.ScanForCompletion` resolves one objective per tick round-robin, so a
-  single step after a notify is not enough to see a completion; step several seconds. ⚠ C3's gate
-  pairs sit close enough that one crossing can legitimately complete both zones, which is correct
-  behaviour rather than a test defect.
-
-- `BL-457` `[Bug]` `[Owed-playtest]` **The campaign wingman ends up high and far behind, so it reads
-  as having spawned in the wrong place.** Seen at the controls: "in the original the wingman spawns
-  beside me. here he spawns above the island flying towards me."
-  *What is fixed.* Two of the three contributors are closed. The decoded 250 mph desired-speed
-  ceiling (`AiControlLaw.SpeedCeiling`, `def+0x1e8`, written by `FUN_00478a00` at `0x478d52`) sits
-  1.24 m/s below the Devastator's own 113 m/s cruise, leaving an escort no closure margin;
-  `AiPilot.FlyEscort` lifts it through `AiControlLaw.StationCeiling`. And the per-spawn dynamics
-  jitter was reaching the wingman: the original runs it for vehicle classes `jet` and `heli` only
-  (`docs/org/flightModel.md`, "The per-spawn jitter"), and the shipped `w*` family authors
-  `mode wingman`, so a campaign wingman flies its authored `fd_speed`. Measured on C3/M01,
-  `wingman_1` spawned at `fd 108.5` against the leader's 113.0 and now spawns at 113.0.
-  *What is left, and what the sortie must judge.* The wingman leaves the escort law rather than
-  never entering it. On C3/M01 with both aircraft on `player_pfighter` it holds 94–98 m for the
-  first nine seconds, then the mode machine enters `avoid crash` at 109 m over the island, and the
-  climb-out (which runs AHEAD of the escort in `AiPilot.Next`'s fork) takes it to 128 m above the
-  player and 302 m behind before the station is recovered over the following ten seconds. Whether
-  that break-off is the original's behaviour is not decided: the fork ORDER is decoded, but the
-  climb-out's own geometry inside the middle altitude band is a named invention
-  (`docs/architecture.md` on `AiModeMachine.cs`). The sortie judges whether the wingman reads as
-  flying with the player over the island, and whether that break-off is what a player sees.
-  *⚠ Traps:* ⚠ **The join gate is not the problem, and must not be re-chased.** On the first frame
-  the wingman is stepped after C3/M01's intro it reads range 117.6 m and speed 53.6 m/s against the
-  `< 700 m` / `> 20.576 m/s` gate, and is in `Station` on the very next frame. ⚠ Nothing runs during
-  the intro either: `GameSession.DriveSimSteps` returns while `CutsceneController.HoldsWorld`, so no
-  separation can open there. ⚠ `wingman-station` cannot see either remaining effect: it builds its
-  pair at 1200 m over a stage with no terrain and never applies the spawn jitter
-  (`docs/verification.md` INSTR-25). ⚠ **Measure on `player_pfighter`,** and check the profile's own
-  airframe: a profile flying a 136 m/s airframe leaves a 113 m/s wingman behind by arithmetic, which
-  is not this defect. ⚠ **Trust the `mean` column, not `worst`** in that suite (`INSTR-22`).
-  ⚠ Nitro is ruled out (`BL-469` is the separate case), an airframe mismatch between pilot and
-  wingman is ruled out, main's deletion of `AiControlLaw`'s far-field branch is ruled out, and the
-  law has no re-entry into `Joining`. ⚠ Do not re-tune the decoded station offsets, the 700 m join
-  gate, or `SpeedCeiling`. ⚠ The far-field plant is not the original's answer to a fast leader and
-  must not be re-derived as one. ⚠ The two SCRIPTED `wingman-station` legs fly a cruise lever, a
-  speed any escort matches, so their leashes are not evidence here; the `[flown]` leg is.
-  *Cross-refs:* `docs/org/aiPilot.md`, `docs/org/aiControlLaw.md`, `docs/org/flightModel.md`;
-  `docs/PLAN-M5-polish-2.md` A5.
+- `BL-457` `[Bug]` `[Owed-playtest]` **The campaign wingman flies away during the intro cutscene, so
+  it is kilometres off when the player gets the controls.** Seen at the controls on CM01: skipping
+  the cutscene leaves the wingman beside the player; letting it play puts it about 4 km away.
+  *Mechanism:* the cutscene's world hold (callback 20) is honoured by `GameSession`'s two step paths
+  (`_PhysicsProcess` and `DriveSimSteps`), but on a realtime clock every aircraft steps itself in
+  `FlightController._PhysicsProcess`, which has no hold check; the player is held out of flight by
+  callback 11 and the AI wingman is not, so it cruises at 113 m/s for the cutscene's 40 s. A probe
+  run uses the parent-driven clock and never enters that path, which is why the traced hand-off read
+  117 m and Station on frame 2 (`docs/architecture.md` on `AiEscort.cs`). *Fix shape:* the hold has
+  to reach the aircraft's own tick (a `GameClock` hold, or the roster holding every AI the way it
+  holds the player), not another per-session guard. *What is already fixed:* the 250 mph desired
+  speed ceiling is lifted through `AiControlLaw.StationCeiling`, and the per-spawn jitter no longer
+  reaches the `mode wingman` class (`docs/org/flightModel.md`, "The per-spawn jitter").
+  *⚠ Traps:* ⚠ Measure in a REALTIME session, not a probe: `--det` and the suites step through
+  `DriveSimSteps`, where the hold works, and cannot show this. ⚠ The join gate, nitro, an airframe
+  mismatch, the far-field branch and the `Joining` re-entry are all ruled out; do not re-chase them.
+  ⚠ `wingman-station` sees none of the campaign's effects (`docs/verification.md` INSTR-25). ⚠ Do
+  not re-tune the decoded station offsets, the 700 m join gate, or `SpeedCeiling`. *Cross-refs:*
+  `BL-509` (the low-terrain break-off, unjudged until this lands); `docs/PLAN-M5-polish-2.md` A5
+  and C12.
 
 - `BL-509` `[Research]` `[Owed-playtest]` **A campaign wingman still leaves its station when
   `avoid crash` arms, and the excursion is now taller rather than wider.** *What is decoded and
@@ -2253,6 +2227,45 @@ usual.
   ⚠ The trace's leader is an aeroplane nobody is flying, at throttle 1.00, descending into the
   sea inside 30 s, so it is a repeatable scenario and not a representative sortie.
   *Cross-refs:* `BL-457`; `docs/org/aiPilot.md`; `docs/PLAN-M5-polish-2.md` A13.
+  *Sortie:* not judged on CM01, because the wingman was kilometres away after the intro (`BL-457`).
+
+- `BL-540` `[Bug]` `[Owed-playtest]` **CM01's drop-off cutscene shows no parachutist.** Seen at the
+  controls: the drop-off plays with the chute man invisible. *Fix shape:* find which node the
+  definition activates for him (the drop-off's own `ObjectActiveState` list) and why it does not
+  resolve or draw; the intro's aircraft needed the same cross-archive staging (`AircraftStage`), so
+  a node from the shared archive is the first suspect. *Cross-refs:* `docs/PLAN-M5-polish-2.md` C12.
+
+- `BL-541` `[Bug]` `[Owed-playtest]` **The captured Balmoral is not hidden by the airframe swap at the
+  controls.** Seen on CM02: after the capture cutscene the captured Balmoral sat in front of the
+  player instead of vanishing; the hand-over to `wingman_4` (Jack flying the old aeroplane) worked.
+  The swap suite passes, so the failure is between the suite's staging and the live session: either
+  `CallbackHost`'s root name does not resolve to the live aircraft (`FlightRoster.AiNamed` returns
+  null and `CarryCapturedDamage` does nothing), or `Inert = true` does not take the model off screen
+  for an aircraft that is stepping itself on a realtime clock. The damage carry-over is untested at
+  the controls (the player took no damage). *⚠ Traps:* ⚠ Reproduce in a realtime session; the suite
+  drives the swap through the parent-driven clock. *Cross-refs:* `BL-457` (the same realtime gap);
+  `docs/formats/anim-definitions/cutscenes.md`; `docs/PLAN-M5-polish-2.md` B9 and C12.
+
+- `BL-542` `[Bug]` `[Owed-playtest]` **CM02's capture cutscene camera is misplaced.** Seen at the
+  controls: the camera sat directly above the water showing only the player's aeroplane, never the
+  Balmoral nor the player leaving one aircraft and boarding the other. *Fix shape:* the capture
+  definition's camera is posed off a node (`AT_NODE`) or an absolute pose; find which, and whether
+  the node it wants is the captured aircraft's own (which the swap now reaches by root name).
+  *Cross-refs:* `BL-541`; `docs/PLAN-M5-polish-2.md` C12.
+
+- `BL-543` `[Bug]` **After the capture the player's Balmoral wears the Fortune Hunters livery; the
+  original keeps the British one.** Seen at the controls on CM02. The swap rebuilds the player's rig
+  on `player_balmoral` with the player's own paint; the original hands over the CAPTURED aircraft's
+  livery. *Fix shape:* `FlightRoster.RunSwap` has the captured rig in hand (`AiNamed(CaptureRoot)`),
+  so its `PaintScheme` can be carried onto the rebuilt rig alongside its damage. *Cross-refs:*
+  `BL-541`; `docs/PLAN-M5-polish-2.md` B9.
+
+- `BL-545` `[Bug]` `[Owed-playtest]` **The landing animation plays with no hook, the aeroplane too
+  high, and unfolded wings.** Seen at the controls on CM02's auto-land: the landing hook was not
+  deployed, the aeroplane sat too high on the trapeze, and a Balmoral folds its wings in the
+  original's landing cutscenes. *Fix shape:* three separate reads of the hookup definition and the
+  airframe's own nodes (the hook and the wing-fold are per-airframe animated parts, the height is
+  the `AT_NODE` pose's offset). *Cross-refs:* `BL-544`; `docs/PLAN-M5-polish-2.md` C10 and C12.
 
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
   controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.

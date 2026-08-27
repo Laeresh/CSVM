@@ -134,7 +134,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 10. ☑ The auto-land the approach table offers has no button (`BL-460`)
 11. ☑ `campaign-objectives-hud` fails on C4 and C5 on its wake-cue check (`BL-483`)
-12. ◐ Fly a campaign mission end to end: the Wave A/B/C sortie, closing `BL-458`
+12. ☑ Fly a campaign mission end to end: the Wave A/B/C sortie, closing `BL-458`
 
 ## Dependency and parallelism notes
 
@@ -740,7 +740,7 @@ surface it chose, to reach a real player. `docs/verification.md` DIAG-22 records
 
 **Verified.** Full `RunTests.ps1` battery on the merged plan tree at `fbe97195`: build clean, units 2406/2406, engine suites 135/135 with engine errors clean, goldens 16/16 hash-identical
 
-## C12 ◐ Fly a campaign mission end to end: the Wave A/B/C sortie, closing `BL-458`
+## C12 ☑ Fly a campaign mission end to end: the Wave A/B/C sortie, closing `BL-458`
 
 **Goal.** One campaign mission is flown to its end at the controls, judging this plan's visible items
 together, and `BL-458`'s secondary is seen to complete.
@@ -763,6 +763,18 @@ inherited damage (B9), the auto-land prompt (C10), pilot chatter varying by rati
 what the sortie reports; findings that are not these items become new `backlog.md` entries with their
 own IDs from `New-ItemId.ps1`.
 **Sortie brief (the stop).** Build: branch `worktree-m5-polish-2` at its head, `dotnet build CSVM/CSVM.sln`, then launch from the menu with a campaign profile flying the Devastator (`selectedPlane` and `wingmanPlane` both on `player_pfighter`, which is what every A5/A13 number was measured on). Mission one: C3/M01 (the campaign's first mission). Watch, in order: (1) the intro stages the prop Devastator beside the airship and your own aeroplane in the launch bay, and the drop launches from it (B8); (2) out of the intro the wingman sits about 95 m off and stays with you over the island, or breaks off into a vertical climb low over terrain and comes back to station (A13, the open question, `BL-509`); (3) the last objective wants TWO crossings, a fly-by and then the drop-off, before the secondary completes (`BL-458`; the user's reading of the original, which outranks the trap below): if one pass completes both `dzpath1` and `dzpath4` at once, that is a finding, not correct behaviour; (4) pilots chatter unevenly by rating (A3), the eight named aces on dead accents stay silent; (5) fly into the sea once: the objectives stop, and the debrief arrives once the wreck is down (A6; `--no-crash-loss` restores the old behaviour); (6) any AI flying into a hillside, since the retired second probe ray applies to every AI (A13). Mission two: C3/M05 (CM02). Watch: (7) the captured Balmoral disappears at the swap, your new hull reads damaged on the DMG line, and your old aeroplane appears about 100 m ahead-right in your livery flying your heading (B9); (8) inside the `auto` approach sphere the HUD line `AUTO-LAND AVAILABLE` appears and `F9` (left-stick click) starts the hookup once (C10); (9) an AI bomber's rear turret is never a second target beside it, while ground emplacements still are (A2). Findings outside these become new `backlog.md` entries with ids from `New-ItemId.ps1`.
+**Flown.** CM01 and CM02 at the controls on the plan branch. Confirmed: the intro stages both
+aircraft (B8); the last objective's secondary completes on the second crossing, fly-by then drop-off
+(`BL-458` closed); pilot chatter varies (A3); being shot down ends the mission (A6); no AI flew into
+terrain after the probe-ray retirement (A13); Jack flies the player's old aeroplane after the swap
+(B9); `F9` starts the auto-land (C10); a bomber's turret is never a second target (A2). Findings:
+the wingman is about 4 km away after the intro because an aircraft's own realtime tick ignores the
+cutscene's world hold (`BL-457` rewritten; `BL-509` unjudged); the drop-off's parachutist is
+invisible (`BL-540`); the captured Balmoral is not hidden (`BL-541`), the capture camera sits over
+the water showing only the player (`BL-542`), and the captured aircraft should keep its British
+livery (`BL-543`); the auto-land prompt is not drawn (`BL-544`); the landing animation lacks the
+hook, sits too high and does not fold a Balmoral's wings (`BL-545`). The damage carry-over went
+untested (no damage taken).
 
 
 **Model recommendation.** medium. The agent's work is preparing the build, the watch-list and the
