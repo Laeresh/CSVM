@@ -94,9 +94,10 @@ public sealed partial class GaugeCluster : Control
     // above the speedometer. Same radius as the other dials.
     private const float MissileRadius = 85f;
     private const float GunCenterFromRight = 420f, GunCenterY = 918f, GunRadius = 85f;
-    // The nitro dial: one dial-pitch above the GUNS dial, the same radius. This port's placement
-    // (no reference shot carries the dial), TUNE.
-    private const float NitroCenterFromRight = 420f, NitroCenterY = 727.5f, NitroRadius = 85f;
+    // The nitro dial: the bottom of the right column, one dial-pitch below the speedometer and the
+    // same radius, so it mirrors the damage dial's row on the left (user-confirmed against the
+    // original). ⚠ Not above the GUNS dial — the column fills downward from ROCKETS/GUNS.
+    private const float NitroCenterFromRight = 420f, NitroCenterY = 1299f, NitroRadius = 85f;
 
     private static readonly Vector2 AltCenter = new(425.5f, 1108.5f);
     private static readonly Vector2 DmgCenter = new(426.5f, 1299f);
@@ -198,11 +199,7 @@ public sealed partial class GaugeCluster : Control
                     cluster.ExtractWeaponGauge(planes, textures, dial, cluster._missileGaugeGeom, "mg");
                     break;
                 case "nitrogauge":
-                    // nitro_backplate and the dial face follow the face rule; the two needles by name.
-                    cluster.ExtractInstrument(planes, textures, dial,
-                        cluster._nitroFace, cluster._nitroWarn,
-                        ("nitro_boost", p => cluster._nitroBoostPoly = p),
-                        ("nitro_charge", p => cluster._nitroChargePoly = p));
+                    cluster.ExtractNitroDial(planes, textures, dial);
                     break;
             }
         }
@@ -379,10 +376,12 @@ public sealed partial class GaugeCluster : Control
             float r = NitroRadius * s;
             foreach (var p in _nitroFace)
                 DrawGaugePoly(p, c, r);
+            // ⚠ Negated: the needle state holds the decoded Euler-z angle, which is
+            // counter-clockwise-positive, while rotDeg here is clockwise-positive.
             if (_nitroChargePoly != null)
-                DrawGaugePoly(_nitroChargePoly, c, r, _nitroChargeNeedle.Angle);
+                DrawGaugePoly(_nitroChargePoly, c, r, -_nitroChargeNeedle.Angle);
             if (_nitroBoostPoly != null)
-                DrawGaugePoly(_nitroBoostPoly, c, r, _nitroBoostNeedle.Angle);
+                DrawGaugePoly(_nitroBoostPoly, c, r, -_nitroBoostNeedle.Angle);
         }
     }
 
@@ -491,6 +490,44 @@ public sealed partial class GaugeCluster : Control
 
     // An altimeter/speedometer node: face polys from any unnamed child mesh
     // (g784 …), warning overlays from *_on children, needles by exact child name.
+    // ⚠ The nitro dial is the one instrument NOT authored in normalized dial coords — never draw
+    // it under the shared radius-1 rule. Its bezel centre and radius are read from the tree here
+    // instead of assumed (docs/formats/hud.md, "Cockpit gauges").
+    private void ExtractNitroDial(GameZ gz, TextureArchive textures, GameZNode dial)
+    {
+        ExtractInstrument(gz, textures, dial, _nitroFace, _nitroWarn,
+            ("nitro_boost", p => _nitroBoostPoly = p),
+            ("nitro_charge", p => _nitroChargePoly = p));
+
+        var centre = Vector2.Zero;
+        foreach (int ci in dial.Children)
+        {
+            var child = gz.Nodes[ci];
+            if (child.Name.Equals("nitro_boost", StringComparison.OrdinalIgnoreCase)
+                && child.Local is { } local)
+            {
+                centre = new Vector2(local.Origin.X, local.Origin.Y);
+                break;
+            }
+        }
+
+        float radius = 0f;
+        foreach (var p in _nitroFace)
+            foreach (var pt in p.Points)
+                radius = Mathf.Max(radius, Mathf.Abs(pt.X - centre.X));
+        if (radius <= 0f)
+            return;
+
+        foreach (var p in _nitroFace)
+            for (int i = 0; i < p.Points.Length; i++)
+                p.Points[i] = (p.Points[i] - centre) / radius;
+        // The needles already sit about their own pivot, so they take the scale alone.
+        foreach (var needle in new[] { _nitroBoostPoly, _nitroChargePoly })
+            if (needle != null)
+                for (int i = 0; i < needle.Points.Length; i++)
+                    needle.Points[i] /= radius;
+    }
+
     private void ExtractInstrument(GameZ gz, TextureArchive textures, GameZNode dial,
         List<GaugePoly> face, List<GaugePoly> warn,
         params (string Name, Action<GaugePoly> Set)[] needles)

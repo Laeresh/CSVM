@@ -163,6 +163,22 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   `comp` compass. The `gungauge` / `missilegauge` are decoded below; `nitrogauge` (face,
   `nitro_backplate`, needles `nitro_boost` / `nitro_charge`) is driven by `GaugeCluster` off the
   nitro decode in `docs/org/flightModel.md`, "Nitro".
+- ⚠ **`nitrogauge` is the one dial not authored in normalized dial coords.** Its
+  `nitro_backplate` mesh spans x ±1.4489 and y −0.1292…3.6746, so the bezel is centred at
+  y ≈ 2.2078 with radius ≈ 1.4489 rather than at the origin with radius 1; the plate carries
+  a stem below the dial, which is the rest of that y span. Both needle nodes carry the bezel
+  centre as their own translation (`0.0017953524, 2.2078001`) and their meshes sit about that
+  pivot, so a needle takes the scale alone while the face takes the recentre as well. Read the
+  centre off the needle node and the radius off the face rather than assuming the shared rule.
+- The gauge's screen placement: the bottom of the right column, one dial-pitch below the
+  speedometer, mirroring the damage dial's row on the left (user-confirmed against the
+  original). It is not above the GUNS dial — the column fills downward.
+- The needles' decoded angles are Euler-z, counter-clockwise-positive, so a screen-space draw
+  whose rotation is clockwise-positive has to negate them.
+- The `hud_v2.zrd` `SW_GAUGES` block's `POSITION_1ST` / `POSITION_3RD` keys are **not** dial
+  placement, despite the name. `FUN_00454e70` reads them into a text widget built per section
+  (`AIR_SPEED`, `ALTIMETER`, `GUNS`, `MISSILES`, `HEALTH`, `NITRO`), and the six values share
+  one x at 0.02 spacing in y — a debug text column, written only under `DAT_00624df0`.
 
 ## Weapon gauges
 

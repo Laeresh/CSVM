@@ -445,6 +445,44 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   spawn-and-kill harness this needs, `git log --grep=BL-291`), `docs/architecture.md`'s
   `ZeppelinDamage.cs` bullet (the survivor-count kill that fires the def).
 
+- `BL-513` `[Bug]` **CM04 (C3/M03) plays a building's destroy animation on a building that is already
+  destroyed.** *Evidence:* reported at the controls in CM04: buildings that start the mission in
+  their destroyed state still run the destruction sequence when hit. The mission's setup script puts
+  a set of the base's buildings into their destroyed state before the player arrives; a hit on one of
+  them should find no healthy pool to kill and no sequence to run. *Fix shape:* find where the setup
+  script's destroyed state is applied and whether it reaches the destructible's HP pool as well as
+  its visual swap. If only the visual swap lands, the pool is still alive and the kill chain is
+  reachable a second time. *⚠ Traps:* do not gate the sequence on the visual state alone; a building
+  destroyed during play and then hit again is the same symptom on a different path, and the fix
+  belongs at the pool. *Cross-refs:* `BL-521` (the balloons in the same mission's start state),
+  `docs/formats/anim-definitions.md`'s `ObjectActiveState` handling.
+
+- `BL-514` `[Bug]` **CM06 (C1C/M01): a Workers' Voyage rocket turret shot down keeps burning in the air where
+  it was.** *Evidence:* reported at the controls: after the turret dies, the fire effect stays lit at
+  the turret's former position while the zeppelin moves on, so a flame hangs in empty sky. The
+  turret's death effects are parented to the world rather than to the turret's node on the moving
+  hull, or the part is removed while its effect emitter is left behind. *Fix shape:* anchor a
+  carried turret's death effect to the sub-part's node (or the hull's), the same `TopLevel` anchor
+  question the trail effects went through (`trail-world-anchor` suite), and stop it when the part is
+  gone. *⚠ Traps:* a ground emplacement's fire anchors correctly to the world, so the fix is on the
+  carried case only; keep the two apart by `TurretController.Site`. *Cross-refs:* `BL-121` (trail
+  anchors), `BL-507` (the same `Site` discriminator).
+
+- `BL-515` `[Research]` **CM04 (C3/M03): the Barracuda takes damage from every side, and the original may
+  only accept hits inside its hangar.** *Evidence:* reported at the controls as a question: the
+  submarine can be damaged from any angle, where the recollection is that the original demands
+  shooting into the open hangar. Not decoded either way. *Fix shape:* read the Barracuda's
+  destructible data in C3 (`barracuda`, activated by `sub_movement`, `docs/formats/gamez.md`): which
+  node carries the HP pool and whether that node is the hull or an interior hangar volume. If the
+  pool sits on an interior node, our hit resolution is landing on the hull's collider instead and
+  that is the bug. If the pool is on the hull, the original behaves as we do and this closes as an
+  answer. The lead is the mission's own voice line, which tells the player to shoot into the
+  Barracuda's hangar; that is a hint about where the weak point is, not proof the hull is immune.
+  *⚠ Traps:* the report is a question prompted by that voice line, not a memory of the original's
+  hit rule; do not build a hangar-only rule from it. If the data shows one pool on the hull, the
+  voice line is flavour and this closes. *Cross-refs:*
+  `BL-512` (the same sub's launch motion), `BL-522` (its launched fighters).
+
 ## Weapons & combat
 
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
@@ -733,6 +771,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Size:* localized, and probably closed as no-change.
   *Cross-refs:* `AiRocketeer` (whose launch direction creates the mismatch), `BL-404` (whether the
   player's rocket gets a direction at all), `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
+
+- `BL-516` `[Bug]` **CM03: the AA turret never fires.** *Evidence:* reported at the controls: the
+  mission's anti-aircraft turret stays silent through the whole mission. Whether it is a world
+  emplacement or a carried mount, and whether it is unbuilt, built on the wrong team, or built with a
+  gunner that never acquires, is not established. *Fix shape:* find the turret in CM03's mission data
+  (`turrets`/targets), confirm it is built into the live `TurretController` set, then check its team
+  and its acquisition against the player. *⚠ Traps:* `BL-506` is the AI-carried case and is a
+  different path (`AiFlightAssembler` never calls `BuildCarried`); a world emplacement goes through
+  the world build, so do not assume this closes with `BL-506`. *Cross-refs:* `BL-506`, `BL-507`,
+  `docs/org/targeting.md`.
+
+- `BL-517` `[Bug]` **CM05 (C3/M04): the Pandora's own broadside fires on the player.** *Evidence:*
+  `playtest/game-20260826-085720.out` (copied from `.scratch/logs`), in the `c3/m04` leg: `zep:
+  'piratezep' broadside wired — 6+6 cannons, wep_28 ... targets [player]`, then `broadside right: 6
+  cannon(s) fire wep_28 at 'player' (range 207 m)` followed by six `shot hit P1` lines that take the
+  hull from 100 to 60 in one salvo. The record's authored `targets` list names `player`, and
+  `ZeppelinRuntime.Cannons.ResolveTarget` (`ZeppelinRuntime.Cannons.cs:289-292`) takes the first
+  live authored name with no hostility check, so a friendly airship whose record lists the player
+  shoots them. The original does not, so the fire routine gates on something our decode does not
+  carry: the target's team against the airship's, or the `targets` list being a candidate set
+  filtered by hostility. *Fix shape:* decode the broadside fire routine's gate (`docs/formats/
+  mission-entities.md` "Broadside firing" has the arc and the lead solve but no team test), then
+  apply it in `ResolveTarget`. *⚠ Traps:* the same `targets [player]` on `piratezep` is right in
+  C3/M03 where the Pandora is hostile, so the gate is the airship's live team (`LiveZeppelin.Team`,
+  which `BL-502`'s `SET_AI_TEAM` can flip mid-mission), not the record name. Do not stop the rounds
+  hitting friendlies; stop the cannons choosing one. *Cross-refs:* `BL-502`,
+  `docs/formats/mission-entities.md`.
 
 ## Flight model & collision physics
 
@@ -1093,6 +1158,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   first. *Cross-refs:* `analysis/alpha-classification/FINDINGS.md`, which carries the decode and the
   install-wide census; the coastline commit that filed this (`git log --grep=SoftAlphaCoastline`).
 
+- `BL-518` `[Bug]` **CM07 (C1/M02): a stripe-textured surface stands in front of the zeppelin hangar.**
+  *Evidence:* reported at the controls: a flat surface carrying a striped texture sits in front of
+  the hangar's mouth, where the original shows the open hangar. Candidates are an unresolved
+  texture on a hangar-door or interior-mask polygon, an alpha-blend sheet drawn opaque, or a node
+  the setup script should have deactivated. *Fix shape:* `--freecam --chapter=<CM07's chapter>
+  --debug-names` at the hangar, read the node and texture name off the surface, then check its
+  texture's alpha flag (the `trans` name rule, `3e91a282`) and the mission script's active state for
+  it. *⚠ Traps:* the zeppelin hangar has door animations (`EnemyGenerators.cs:143`); confirm
+  whether the stripe is a door mid-animation before treating it as a texture defect.
+
 ## Effects & animation runtime
 
 - `BL-484` `[Bug]` **An `AT_NODE` pose run during the animation bootstrap reads and writes global
@@ -1279,6 +1354,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-538` `[Bug]` **A dark band on the large buildings at the distance the templates clutter fades out.** Reported at the controls in C5 with the authored `far_fade_range` applied: in the original the fade reaches the other buildings as well as downtown, and in the remake the larger (gamez) buildings show a dark area at the range where the downtown clutter vanishes, with buildings nearer and farther than that band reading brighter. Not the dither itself, which reads as the original's fade in motion.
   *Where to look:* whether the collapsed clutter cards still write depth or a dark fragment behind the band (the `csky_clutter_fade` cutout keeps a card in the pass until `step(d, far)` culls it, and a card collapsed to zero size should contribute nothing), whether the fog-volume clutter's own `far_fade` and the templates fade overlap at that range, and whether the gamez buildings carry a `far_fade_range` of their own the remake ignores (`FUN_004d5de0` applies the scaled test to every type-5 scene node, not only clutter). A C5 screenshot pair at the band distance with `graphics.clutterFarFade` on and off separates the two.
   *Cross-refs:* `BL-337` (closed; the fade), `docs/org/clutter.md`.
+
+- `BL-511` `[Bug]` **The HE rocket's explosion debris and fire streaks drift further from the
+  burst centre with every shot.** *Evidence:* reported at the controls: the small debris and fire
+  streaks of the `he_rocket` explosion land a little further out on each successive shot, so a
+  per-instance offset is accumulating instead of being reset between plays. The explosion is a
+  named puffer/debris effect driven by its def, so the likely site is a pooled emitter whose
+  origin, elapsed time, or `translation_range` launch offset is added to the previous value rather
+  than assigned. *Fix shape:* fire ten rockets at one spot under `--det`, log each burst's debris
+  spawn positions relative to the impact, and find the state that survives between plays in the
+  effect pool (`Puffer`, the debris arc's `initial`/`delta` state, or the effect host's transform).
+  *⚠ Traps:* the debris arc itself is decoded and correct (`BL-060`'s notes); the defect is the
+  reset between plays, not the arc, so do not retune launch magnitudes. *Cross-refs:* `BL-060`,
+  `PLAN-object-motion-decode`.
+
+- `BL-512` `[Bug]` **CM04 (C3/M03): the Barracuda jumps while driving into the bay and its launch faces
+  the wrong way.** *Evidence:* reported at the controls: the submarine's `sub_movement` drive into
+  the bay shows a discontinuity (a jump) partway, and at the launch it points away from the bay
+  where the original has it looking into the bay. `barracuda` begins inactive and `sub_movement`
+  activates and moves it over 40 s (`docs/formats/gamez.md`, `docs/HISTORY.md` 13647). A jump on a
+  40 s `ObjectMotionFromTo` points at a keyframe or an activation transform applied twice; a wrong
+  final heading points at the motion's rotation term or at a base transform the activation
+  does not carry. *Fix shape:* `--anim-lab --node=barracuda` on the chapter, play `sub_movement`,
+  and compare the node's transform at each event boundary against the def. *⚠ Traps:* `BL-522`'s
+  crashing fighters may be downstream of this heading (launched into the bay wall), so settle the
+  heading first. *Cross-refs:* `BL-515`, `BL-522`.
 
 ## Audio
 
@@ -1927,6 +2027,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
 
+- `BL-520` `[Bug]` **The nitro gauge draws wrong while the injector works.** *Evidence:* reported
+  at the controls: nitro boosts the aircraft as expected, and the dial's display is "completely
+  wrong". The gauge is `GaugeCluster`'s two needles fed by `NitroInstalled`/`NitroBoosting`/
+  `NitroChargeFrac` (`FlightHud.cs:327-329`, `GaugeCluster.cs:306-307`); `NitroGaugeNeedleTests`
+  pins the needle law, so the defect is in the feed, the dial's art placement, or the sweep's zero
+  and direction against the face. What "wrong" means was not recorded (needle direction, needle
+  missing, face art, charge never moving) and is the first thing to establish. *Fix shape:* a
+  screenshot of ours at full, mid-boost and empty beside the original's dial, which is `BL-454`'s
+  owed sweep and now has a reported defect to explain. *Cross-refs:* `BL-454` (fold the screenshot
+  comparison into this), `BL-447`.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2360,6 +2471,145 @@ usual.
   *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md` "The per-frame test"; `BL-427` for the
   string. Split out while the approach trigger landed (`git log --grep=BL-467`).
 
+- `BL-521` `[Bug]` **CM04 (C3/M03)'s barrage balloons should already be destroyed at mission start.**
+  *Evidence:* reported at the controls: the balloons stand intact where the original's mission opens
+  with them already down. The mission's setup script carries the initial states; C3/C4 drive the
+  balloons through `bont*`/`balloon_t*`/`tether*` state events (`docs/formats/anim-definitions.md`
+  116). *Fix shape:* read CM04's interp setup script for the balloons' `ObjectActiveState`/
+  destroyed-state verbs and check whether they run, and whether they reach the destructibles'
+  pools as well as the nodes. *⚠ Traps:* `PLAN-c3-balloon-kill-chain.md` settled the balloons'
+  kill chain for C3/M02; that is the live kill path and not this mission's start state, so do not
+  reopen it. *Cross-refs:* `BL-513` (the same mission's destroyed buildings, likely one cause),
+  `BL-348`'s plan.
+
+- `BL-522` `[Bug]` **CM04 (C3/M03): fighters launched from the Barracuda crash at once.**
+  *Evidence:* `playtest/game-20260826-085720.out`, `c3/m03` leg: `britpeace_5` and three unnamed
+  successors (`@Node3D@3408` and on) spawn at `pos=(-12032,0,-11516)`, altitude 0, on net
+  `M3BritInt#7`, and each crashes within seconds: `CRASH into sub_runway/col (fuselage) ... spd=73
+  m/s`, `CRASH into g28546/col_water (tail) ... spd=77 m/s`, four times over. The spawn point is
+  the submarine's runway at sea level, so the aircraft is placed on the deck at flying speed with
+  no launch roll and no climb, and the first thing it meets is the runway or the water. The later
+  spawns also carry no roster name (`@Node3D@3408`), which is its own defect in the generator's
+  naming. *Fix shape:* decode the original's launch from a surface host (the moving-spawner shape
+  in `EnemyGenerators.cs`): whether it places the aircraft airborne ahead of the host, or holds it
+  `Inert` on the deck through a takeoff, and what heading it launches on relative to the host
+  (`BL-512`'s wrong heading may be pointing them into the bay). *⚠ Traps:* the zeppelin
+  launch-altitude gate is a decoded rule for airships and not a general one; do not lift the sub's
+  launch by borrowing it, and do not add a spawn-height offset.
+  *Cross-refs:* `BL-512`, `BL-515`, `BL-532` (CM09's ground-hangar starts, the same first-seconds
+  question).
+
+- `BL-523` `[Bug]` **The AI's patrol/pursue/lay-off cycle does not match the original: CM05's
+  second patrol never pursues, and CM09's enemies fly up to 80 km away.** *Evidence:* two
+  symptoms of one mode machine, reported at the controls. In CM05 (C3/M04) the second enemy patrol
+  stays on its net around the Pandora with the player in range and never engages; in CM09 enemy
+  aircraft leave the mission area and end up tens of kilometres out. `AiModeMachine` promotes
+  `Patrol` to `Pursue` on its own gates (`AiModeMachine.cs:314`); a patrol that never leaves the
+  mode either never sees the player as a candidate (team, rating bias, range) or has its promotion
+  gated by a net flag. The fly-away is the other end of the cycle: a pursuit that overshoots and
+  never lays off, a lay-off with no net to return to (`BL-524`'s friendly case), or a fly-away on
+  losing its target; the original's AI has a return rule that ours lacks. *Fix shape:* run both
+  missions headless with the AI trace on; for CM05 read the second patrol's mode transitions and
+  candidate scan against the first patrol, which does engage; for CM09 log the far aircraft's mode
+  and target over the run. Then decode the promotion gate and the distance or lost-target rule in
+  `AiModeMachine`'s source functions. *⚠ Traps:* `PLAN-M5-polish.md` 3450 recorded the
+  never-pursues impression for wingmen and it closed on a different cause; check the log rather
+  than reusing that answer. Do not add a leash constant; `docs/org/aiPilot.md` records that patrol
+  is built on a spawn table, and the return rule has to come from the decode. *Cross-refs:*
+  `BL-524`, `BL-531`, `docs/org/aiPilot.md`.
+
+- `BL-524` `[Bug]` **CM05 (C3/M04) and CM07 (C1/M02): a friendly patrol without a net flies away after its first fight
+  and never returns to escort.** *Evidence:* reported at the controls in two missions: once the
+  first enemy patrol is destroyed, the friendlies on patrol have no net to return to and continue
+  on their last heading out of the mission, rather than rejoining the escort. Their `aiv` blocks
+  either author no net and the original's lay-off returns them to a default (the leader, the
+  spawn point, or the mission's escort net set later by `SET_AI_NET`), or the block authors a net
+  our spawner drops (`BL-453` records roster slots the spawner does not read). *Fix shape:* read the
+  two missions' `aiv.zrd` for the friendlies' net and mode fields, and decode what `LayOff` does with
+  no net (`docs/org/aiPilot.md`). *⚠ Traps:* do not give them the player's escort law as a default;
+  `BL-457` shows the escort hand-off is itself unsettled. *Cross-refs:* `BL-453`, `BL-457`,
+  `BL-502` (`SET_AI_NET` reach), `BL-523`.
+
+- `BL-525` `[Bug]` **CM06 (C1C/M01): the second docking at the Workers' Voyage (to collect Dr. Fassenbender)
+  completes without docking.** *Evidence:* reported at the controls: the objective to dock a second
+  time at the airship is marked complete when the player never docked. A docking objective that
+  completes on its own points at the objective's trigger volume being satisfied by the airship's
+  motion or by the first docking's state not being cleared before the second objective arms.
+  *Fix shape:* read CM06's `objectives.zrd` for the two docking objectives and their gates, then
+  trace `ObjectiveGraph` for what completed the second one. *⚠ Traps:* `ObjectiveGraph.
+  ScanForCompletion` resolves one objective per tick round-robin (`BL-458`), so a completion can land
+  frames after its cause. *Cross-refs:* `BL-458`, `BL-514` (the same airship).
+
+- `BL-526` `[Bug]` **CM07 (C1/M02): the rope ladder never deploys.** *Evidence:* reported at the controls:
+  the pickup's rope ladder does not appear, so the pickup step cannot be flown. CM07 arms a pickup
+  gate ahead of its cutscene (`docs/formats/anim-definitions/cutscenes.md` 358, `C1/M02/zrdr/
+  pickups.zrd`), and the ladder is an animated node the pickup script activates. `BL-035` lists the
+  event kinds the runtime still drops (`CALLBACK`, `OBJECT_CYCLE_TEXTURE`, and others); a ladder
+  deploy driven by one of them would be silent. *Fix shape:* find the ladder's def and the event
+  that shows it, then check the runtime's dispatch for that event kind. *Cross-refs:* `BL-035`,
+  the CM07 pickup fix (`2aa7d77d`, the train pickup cutscene).
+
+- `BL-527` `[Bug]` **CM07 (C1/M02): the second patrol, a single Peacemaker, spawns under the ground.**
+  *Evidence:* reported at the controls: the aircraft appears below the terrain. A roster spawn at
+  the authored position is placed exactly where `aiv.zrd` says (`CampaignRoster.cs:191-192`), so
+  either this spawn's authored altitude is below our terrain height at that point, or the spawn is
+  a generator launch whose host transform is wrong. *Fix shape:* log the spawn's position and the
+  terrain height under it; if the authored altitude is below ground, the original must lift it
+  (a ground clamp at spawn) and that rule needs decoding rather than a hand offset. *⚠ Traps:*
+  do not add a blanket spawn lift; `BL-457` shows authored spawns are otherwise exact.
+  *Cross-refs:* `BL-457`, `docs/formats/spawns.md`.
+
+- `BL-528` `[Bug]` **The Blue Streak, CM07 (C1/M02)'s mission Bloodhawk, flies with the stock Bloodhawk fit
+  and no nitro, where the original gives it a special loadout with nitro; and it should be
+  available after the mission.** *Evidence:* reported at the controls. The Blue Streak is not a
+  stock Bloodhawk: the mission hands the player a named aircraft with its own loadout, nitro
+  included (the stock Bloodhawk carries none), so the mission is flying the wrong aircraft record.
+  The mission's `aiv.zrd`/roster block for `player` is where the fit is authored (roster slot 34 is
+  nitro, `BL-453`), and our spawner reads the profile's stock def instead. Campaign progression
+  (`CampaignProgression.cs`) should then leave the Blue Streak in the profile's hangar after the
+  mission. *Fix shape:* read CM07's player block for the Blue Streak's guns, hardpoints and nitro;
+  build the player's aircraft from it for the mission (the same path `BL-453` needs for AI blocks);
+  then check what the progression grants at the mission's end against the original's
+  `CampaignProfileDef` write. *⚠ Traps:* the player's injector is `CustomPlaneBuild.HasNitrous`
+  (`BL-469`); represent the Blue Streak as a custom build carrying nitro, not as a flag on the
+  airframe, or the hangar's economy breaks. Do not "fix" it by giving the stock Bloodhawk nitro.
+  *Cross-refs:* `BL-453` (the spawner drops roster slots), `BL-469`, `docs/org/hangar.md`.
+
+- `BL-529` `[Bug]` **CM08: the Pandora pitches up and down where it should hold steady.**
+  *Evidence:* reported at the controls: the airship porpoises along its route. `ZeppelinMotion`
+  pitches toward each node's altitude under the record's rate and accel limits and levels off only
+  while holding (`ZeppelinMotion.cs:126-131`); a route whose nodes alternate altitude, or a pitch
+  gain that overshoots each node, produces the oscillation. *Fix shape:* log pitch and node
+  altitude per step along CM08's net for the Pandora and compare with the record's limits
+  (`docs/formats/mission-entities.md`); if the nodes are level and the pitch still swings, the
+  turn-rate law is overshooting. The same motion continues past the route's end, where docking
+  on the Pandora becomes very hard: the follower has a `Holding` state that asks for pitch 0
+  (`FUN_004bf500`), so a non-circular net's last node should leave the airship level (stopped, or
+  holding its heading), and a follower that re-targets the last node from past it, or wraps the
+  net, never enters `Holding`. Trace `Follower.Holding` there as part of the same run.
+  *⚠ Traps:* the original's initial-pitch clamp never fires (a unit bug kept verbatim, `:35-37`);
+  do not "fix" it as part of this. *Cross-refs:* `docs/architecture.md`'s `ZeppelinMotion` entry,
+  `docs/formats/ai-nets.md`.
+
+- `BL-531` `[Bug]` **CM09: the first patrol hangs in the air and never flies.** *Evidence:* reported
+  at the controls: the first enemy patrol is stationary in the sky. An aircraft spawned with no net
+  and no target has nothing to fly toward and our patrol mode may leave the stick centred with the
+  throttle closed; the original's idle patrol still flies. *Fix shape:* log the patrol's mode,
+  net and lever on spawn; compare with `PT-56`'s plant test of patrol nets. *Cross-refs:* `BL-523`,
+  `PT-56`.
+
+- `BL-532` `[Bug]` **CM09: no enemies were seen starting from the ground hangars.** *Evidence:*
+  reported at the controls: CM09's enemies should take off from hangars on the ground, and none
+  were seen doing so. These are not zeppelin hangars; the ground generator is one of the other two
+  shapes in `EnemyGenerators.cs` (plain or moving spawner), or the aircraft are roster spawns the
+  mission's setup script releases with a hangar-door animation. Whether the generator triggered,
+  the aircraft spawned inside the hangar geometry and crashed at once (`BL-522`'s sea-level case,
+  `BL-527`'s under-ground case), or they spawned airborne elsewhere is open. *Fix shape:* read
+  CM09's `egen.zrd`/`aiv.zrd` for the hangar aircraft's spawn shape and position, then run the
+  mission headless with the generator log on and follow each spawn's first seconds. *⚠ Traps:* the
+  zeppelin launch-altitude gate does not apply to a ground start; do not read a ground hangar
+  through the zeppelin-launch shape. *Cross-refs:* `BL-522`, `BL-527`.
+
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
@@ -2370,6 +2620,18 @@ usual.
   `thirdparty/sdl/joystick/SDL_joystick.c` `SDL_PrivateJoystickForceRecentering` for the `int i`
   fix before removing. Side effect while active: DirectInput-only controllers (non-XInput
   sticks without an SDL HIDAPI driver) are invisible in-game.
+
+- `BL-534` `[Feature]` **A debug key that kills the player's currently selected target.**
+  *Evidence:* asked for at the controls: enemies that fly off (`BL-523`) or hang out of reach
+  (`BL-531`) block a mission's objective chain, and the playtester needs to move on without
+  hunting them. Selecting the stray with the target key and killing it is the shape chosen; no
+  distance rule and no kill-all. *Fix shape:* one key in the F13+ debug block (the block follows
+  the physical rows on the user's keypad; take the user's key number) killing `TargetSelection`'s
+  current target through the normal death path so the objective graph sees the kill; a zeppelin
+  sub-part or turret as the selection kills that part. *⚠ Traps:* kill through `WeaponHit`/the
+  crash path, not by freeing the node, or `DEDG` and kill-count objectives never fire. Debug
+  only: no shipped binding, and the key is inert with nothing selected. *Cross-refs:* `BL-523`,
+  `BL-531`, `docs/cli.md`'s debug labs, `docs/org/targeting.md`.
 
 ## Misc
 
