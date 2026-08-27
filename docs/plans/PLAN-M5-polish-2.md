@@ -1,8 +1,9 @@
 # Milestone 5 polish, run 2: the campaign flown as a game
 
-**ACTIVE PLAN** (written 2026-08-26). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE.** 27 items across Waves A to E, all landed and judged at the controls in three sorties
+(C12, D21, E27); A4 is a disproof, C11 a disproof re-checked, E24 a disproof that made two
+scenes unskippable as the original has them. Follow-ups live in `backlog.md` (`BL-555`, the
+fast-forward divergence, among them). Index: [`plans.md`](plans.md).
 
 This plan is the second polish run over Milestone 5, and it carries eleven open campaign items out
 of `backlog.md`, chosen playable-first: the defects a human meets while flying a campaign mission
@@ -155,7 +156,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 24. ☑ A cutscene the original arms no skip on is cut short by the skip key (`BL-552`)
 25. ☑ The capture cutscene plays without the enemy Balmoral or the pilot switch, and inherits the roll (`BL-551`)
 26. ☑ The original re-places the player after CM01's drop-off (`BL-553`)
-27. ◐ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
+27. ☑ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
 
 ## Dependency and parallelism notes
 
@@ -1400,7 +1401,7 @@ emptied (METHOD-9): `released at (0, 0, 0), 9731.45 m off the placement, facing 
 2443/2443 with the suite-count assertion moved 144 → 145; `CheckCommentCaps.ps1 -Summary` clean.
 Judged at the controls in E27.
 
-## E27 ◐ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
+## E27 ☑ Fly CM01 and CM02 again: the Wave E sortie, plus the manual dock
 
 **Goal.** E23 to E26 judged at the controls, and the manual (non-auto) dock's hook, height and
 wing fold seen once.
@@ -1425,3 +1426,10 @@ yourself): the hook deploys, the height reads right and the wings fold, as D19 s
 auto-land. If the unskippable capture or drop-off is unwanted, say so: a fast-forward is a
 deliberate divergence and a new item. Findings outside these become new `backlog.md` entries
 with ids from `New-ItemId.ps1`.
+**Flown.** CM01 and CM02 at the controls on the plan branch, every point confirmed: the drop-off
+re-places the pilot south of the archipelago facing east (E26) and its skip key does nothing
+(E24); the capture shows the enemy Balmoral and the pilot crossing, with the frame level (E25);
+the capture's skip key does nothing and the swap lands at its authored time (E24); the new hull
+wears the bare British skin (E23); and the manual dock deploys the hook at the right height with
+the wings folding (D19's open row). No findings. The fast-forward is wanted as a divergence and
+is `BL-555`.

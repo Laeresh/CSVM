@@ -1392,7 +1392,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   on an intro that arms a real skip, where the original's own force-stop is the behaviour. ⚠
   Realtime flown sessions and the parent-driven probe clock step differently; the multiplier
   belongs on the definition's dt, not on the session's `PhysicsDt`. *Cross-refs:*
-  `docs/formats/anim-definitions/cutscenes.md` "Handoff and skip"; `docs/PLAN-M5-polish-2.md`
+  `docs/formats/anim-definitions/cutscenes.md` "Handoff and skip"; `docs/plans/PLAN-M5-polish-2.md`
   E24 (the decode that made the two scenes unskippable).
 
 ## Audio
@@ -1992,7 +1992,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   through `UiStrings`. *⚠ Traps:* ⚠ Do not guess the wording; the placeholder stays until the
   mapping is decoded. ⚠ The binding is `F9` / left-stick click, not the original's `A`
   (`docs/controls.md`), so a resolved string that names the key needs the port's key substituted.
-  *Cross-refs:* `docs/PLAN-M5-polish-2.md` C10.
+  *Cross-refs:* `docs/plans/PLAN-M5-polish-2.md` C10.
 
 ## Splitscreen
 
@@ -2115,7 +2115,7 @@ usual.
   authored spawn), and either make the flag a no-op while a definition owns the session or move it
   after the handoff. *⚠ Traps:* ⚠ A realtime run's frame-to-wall-time ratio is not repeatable
   (`docs/verification.md` INSTR-28), so read the handoff off the log rather than a frame count.
-  *Cross-refs:* `docs/PLAN-M5-polish-2.md` D18.
+  *Cross-refs:* `docs/plans/PLAN-M5-polish-2.md` D18.
 
 
 - `BL-545` `[Bug]` `[Owed-playtest]` **The landing animation plays with no hook, the aeroplane too
@@ -2123,7 +2123,7 @@ usual.
   deployed, the aeroplane sat too high on the trapeze, and a Balmoral folds its wings in the
   original's landing cutscenes. *Fix shape:* three separate reads of the hookup definition and the
   airframe's own nodes (the hook and the wing-fold are per-airframe animated parts, the height is
-  the `AT_NODE` pose's offset). *Cross-refs:* `BL-544`; `docs/PLAN-M5-polish-2.md` C10 and C12.
+  the `AT_NODE` pose's offset). *Cross-refs:* `BL-544`; `docs/plans/PLAN-M5-polish-2.md` C10 and C12.
 
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
   controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.

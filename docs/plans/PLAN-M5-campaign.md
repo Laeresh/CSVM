@@ -1,6 +1,6 @@
 # Milestone 5 — the Campaign
 
-**COMPLETE.** 42 items landed across Waves A to E; E41 (the whole loop, walked and carried across processes) and E42 (the at-the-controls verdict) are proven by the sortie recorded in [`PLAN-M5-polish-2.md`](../PLAN-M5-polish-2.md) C12. Its follow-ups live in `backlog.md` and in that plan's Wave D.
+**COMPLETE.** 42 items landed across Waves A to E; E41 (the whole loop, walked and carried across processes) and E42 (the at-the-controls verdict) are proven by the sortie recorded in [`PLAN-M5-polish-2.md`](PLAN-M5-polish-2.md) C12. Its follow-ups live in `backlog.md` and in that plan's Wave D.
 
 This plan delivers the playable single-player campaign: the out-of-mission flow (player profile,
 campaign cabin, mission briefing, flight check with ammunition selection) and the in-mission
