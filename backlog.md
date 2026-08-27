@@ -2101,26 +2101,27 @@ usual.
   item's numbers are the symmetric case and are sound; this is a different pairing. Do not "fix" it
   by installing nitro on every wingman, which would contradict the roster data.
 
-- `BL-457` `[Bug]` `[Owed-playtest]` **The campaign wingman flies away during the intro cutscene, so
-  it is kilometres off when the player gets the controls.** Seen at the controls on CM01: skipping
-  the cutscene leaves the wingman beside the player; letting it play puts it about 4 km away.
-  *Mechanism:* the cutscene's world hold (callback 20) is honoured by `GameSession`'s two step paths
-  (`_PhysicsProcess` and `DriveSimSteps`), but on a realtime clock every aircraft steps itself in
-  `FlightController._PhysicsProcess`, which has no hold check; the player is held out of flight by
-  callback 11 and the AI wingman is not, so it cruises at 113 m/s for the cutscene's 40 s. A probe
-  run uses the parent-driven clock and never enters that path, which is why the traced hand-off read
-  117 m and Station on frame 2 (`docs/architecture.md` on `AiEscort.cs`). *Fix shape:* the hold has
-  to reach the aircraft's own tick (a `GameClock` hold, or the roster holding every AI the way it
-  holds the player), not another per-session guard. *What is already fixed:* the 250 mph desired
-  speed ceiling is lifted through `AiControlLaw.StationCeiling`, and the per-spawn jitter no longer
-  reaches the `mode wingman` class (`docs/org/flightModel.md`, "The per-spawn jitter").
+- `BL-457` `[Bug]` `[Owed-playtest]` **The campaign wingman's station out of the intro cutscene,
+  judged at the controls.** *What landed.* The cutscene's world hold now reaches every self-stepping
+  node through the session clock: `GameClock.SimHeld` makes `PhysicsDt` answer zero while a
+  definition owns the session, so an aircraft, projectile, zeppelin or turret pacing itself from
+  Godot's physics tick returns exactly as it does on a parent-driven frame. `FrameDt` is untouched,
+  which keeps the animation runtime playing the movie. Measured on a realtime `--campaign=` run of
+  C3/M01 with `player_pfighter` on both seats: `wingman_1` is 3742.3 m from the player at the handoff
+  before, 117.3 m after, which is the separation A5's parent-driven trace already read. The 250 mph
+  desired-speed ceiling was lifted through `AiControlLaw.StationCeiling` earlier, and the per-spawn
+  jitter no longer reaches the `mode wingman` class (`docs/org/flightModel.md`, "The per-spawn
+  jitter"). *What the sortie must judge.* Whether the wingman reads as flying with the player over
+  the whole of CM01, not only at the handoff: 117 m is the authored spawn separation, so the
+  measurement says the intro no longer moves it and says nothing about the minutes after.
   *⚠ Traps:* ⚠ Measure in a REALTIME session, not a probe: `--det` and the suites step through
-  `DriveSimSteps`, where the hold works, and cannot show this. ⚠ The join gate, nitro, an airframe
+  `DriveSimSteps`, where the hold has always worked. `wingman-station` now carries one leg that
+  paces an aircraft through its own `_PhysicsProcess` (`docs/verification.md` INSTR-26), which
+  covers the hold and nothing else about the sortie (INSTR-25). ⚠ The join gate, nitro, an airframe
   mismatch, the far-field branch and the `Joining` re-entry are all ruled out; do not re-chase them.
-  ⚠ `wingman-station` sees none of the campaign's effects (`docs/verification.md` INSTR-25). ⚠ Do
-  not re-tune the decoded station offsets, the 700 m join gate, or `SpeedCeiling`. *Cross-refs:*
-  `BL-509` (the low-terrain break-off, unjudged until this lands); `docs/PLAN-M5-polish-2.md` A5
-  and C12.
+  ⚠ Do not re-tune the decoded station offsets, the 700 m join gate, or `SpeedCeiling`.
+  *Cross-refs:* `BL-509` (the low-terrain break-off, judged on the same sortie);
+  `docs/PLAN-M5-polish-2.md` A5, C12 and D14.
 
 - `BL-509` `[Research]` `[Owed-playtest]` **A campaign wingman still leaves its station when
   `avoid crash` arms, and the excursion is now taller rather than wider.** *What is decoded and

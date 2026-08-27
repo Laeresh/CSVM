@@ -545,6 +545,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
   and ends 128 m above the player and 302 m behind. A green `wingman-station` is a statement about
   the law, never about the sortie.
 
+- **INSTR-26** — **A suite CAN model the realtime path: install a Realtime `GameClock` as
+  `GameClock.Current` and drive the node's own `_PhysicsProcess`, rather than the `SimStep` every
+  other leg calls.** INSTR-14 says the automated checks all run parent-driven, which is how they are
+  written, not a limit on what they can do; a defect that lives in the self-stepping path is
+  reachable from a suite as soon as one leg paces a node the way Godot's tick does. Measured with
+  the cutscene clock hold removed: `wingman-station`'s hold leg reads 4809.9 m of drift over a 40 s
+  hold and goes red, while every `SimStep`-driven leg beside it stays green.
+
 ## SRC — sources and documents
 
 - **SRC-1** — **Validate whether bytes are meaningful before numeric sanity checks.**

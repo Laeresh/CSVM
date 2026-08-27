@@ -4341,6 +4341,8 @@ and disposes only the non-node resources this orchestrator owns.
 The session's simulation clock: `BeginFrame(wallDelta)` (first thing in `GameSession._Process`)
 sets `Steps` + `Dt`; consumers read `FrameDt`, or loop `Steps` times on `Dt`. Modes: Realtime,
 FixedAccum (interactive anim lab), FixedStep (scripted runs / `--det`); `Halted` is orthogonal.
+`SimHeld` freezes the `PhysicsDt` consumers alone, which is how a cutscene's world hold reaches an
+aircraft stepping itself on a realtime tick; `FrameDt` is untouched, so animation keeps playing.
 Published as `GameClock.Current` (session-scoped, nulled on teardown; null = raw frame delta).
 
 ## src/Utils/Log.cs
@@ -5076,7 +5078,8 @@ The host a story mission's intro definition raises its `CALLBACK` codes to, and 
 those codes describe. A `Node` only so it can tick LAST in the frame (`ProcessPriority` 1000): the
 rig cameras take the pose that frame's animation advance put `camera1` in, so the bars, posed inside
 that advance, never sit against a camera one frame behind them. Hosted: 20 world+objectives hold
-(`GameSession`'s drive paths and `CampaignDirector.HoldForCutscene` read it), 2 chrome off and the
+(`GameSession`'s drive paths, the session clock's `SimHeld`, which is what stops a node stepping
+itself on a realtime tick, and `CampaignDirector.HoldForCutscene` read it), 2 chrome off and the
 view off the aircraft (`FlightController.CameraOwned`, which also stops the cockpit rules being
 re-asserted), 11 the player out of flight (`Held` + `Inert` + engine audio paused, and the airframe posed on the
 staged `player` marker through `FlightController.StageAt` while that state holds), 913/914 park and

@@ -93,6 +93,10 @@ internal static class WingmanSuites
     // the wingman's own gun cone all the way in.
     private const float EngageBanditAbeamM = 80f;
 
+    // How long the cutscene-hold leg holds the clock, and then flies it: C3/M01's intro runs about
+    // 40 s, and an unheld wingman covers kilometres in that time.
+    private const float CutsceneHoldS = 40f;
+
     // CM02, whose wingman_4 authors the rating_biases the engagement question is asked against.
     private const string EngageChapter = "C3";
     private const string EngageMission = "M05";
@@ -119,6 +123,7 @@ internal static class WingmanSuites
             FlyFlownLeaderLeg(ctx, planesGamez, textures, ctx.PlaneName);
             var behindPlayer = FlyLeg(ctx, planesGamez, textures, stats, playerLeader: true);
             var withAi = FlyLeg(ctx, planesGamez, textures, stats, playerLeader: false);
+            CutsceneHoldLeg(ctx, planesGamez, textures, stats);
 
             // The A/B the two decoded stations predict: commanded 18 m astern of a player against
             // 8 m ahead of an AI. ⚠ Off the COMMANDED point, never the flown one: the two legs
@@ -689,6 +694,61 @@ internal static class WingmanSuites
             wing?.Free();
             leader?.Free();
             pool?.Free();
+        }
+    }
+
+    // The realtime half of a cutscene's world hold, driven through the aircraft's OWN
+    // _PhysicsProcess rather than SimStep: that is the path an interactive session takes and the
+    // only one the hold used to miss (INSTR-14's shape). A held clock must stop the aeroplane dead
+    // while still reporting sim time for the frame, because the movie is animation.
+    private static void CutsceneHoldLeg(TestContext ctx, GameZ planesGamez, TextureArchive textures,
+        PlaneStats stats)
+    {
+        var saved = Utils.GameClock.Current;
+        ProjectilePool? pool = null;
+        FlightController? wing = null;
+        try
+        {
+            var clock = new Utils.GameClock { Mode = Utils.GameClock.RunMode.Realtime };
+            Utils.GameClock.Current = clock;
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var pos = new Vector3(0f, FlownLeaderAltitudeM, 0f);
+            var pilot = AiPilot.HoldingCourse(pos, pos + Vector3.Forward);
+            pilot.Machine = new AiModeMachine(new System.Random(7));
+            wing = Rig(ctx, planesGamez, textures, stats, live, pos, false, pilot,
+                FlightRoster.ShooterIdBase + 1, null, null, out _, FlownPlaneNode);
+
+            clock.SimHeld = true;
+            clock.BeginFrame(StepDt);
+            ctx.Check(clock.FrameDt > 0f && clock.Steps == 1,
+                $"a held clock still reports the frame's sim time, so the animation runtime keeps playing the movie: {clock.FrameDt:0.####} s over {clock.Steps} step(s)");
+            var start = wing.WorldPosition;
+            for (int i = 0; i < (int)(CutsceneHoldS / StepDt); i++)
+            {
+                wing._PhysicsProcess(StepDt);
+            }
+
+            float drift = wing.WorldPosition.DistanceTo(start);
+            ctx.Check(drift == 0f,
+                $"the wingman does not move on its own realtime tick while the cutscene holds the world: {drift:0.###} m over {CutsceneHoldS:0} s");
+
+            clock.SimHeld = false;
+            for (int i = 0; i < (int)(CutsceneHoldS / StepDt); i++)
+            {
+                wing._PhysicsProcess(StepDt);
+            }
+
+            ctx.Check(wing.WorldPosition.DistanceTo(start) > CutsceneHoldS * LeaderSpeedMps * 0.5f,
+                $"and flies again once the hold lifts: {wing.WorldPosition.DistanceTo(start):0} m");
+        }
+        finally
+        {
+            wing?.Free();
+            pool?.Free();
+            Utils.GameClock.Current = saved;
         }
     }
 

@@ -33,6 +33,13 @@ public sealed class GameClock
     /// <summary>Time-scale multiplier (the animation lab's 0.1×–4× transport). 1 = real speed.</summary>
     public float Scale = 1f;
 
+    /// <summary>The physics-stepped sim frozen while a cutscene definition owns the session:
+    /// <see cref="PhysicsDt"/> answers zero, so every self-stepping node returns the way it does on
+    /// a parent-driven frame. ⚠ Do not fold this into <see cref="Halted"/> or make it touch
+    /// <see cref="Steps"/>: the animation runtime and the other per-frame consumers read
+    /// <see cref="FrameDt"/> and must keep advancing, because the movie is animation.</summary>
+    public bool SimHeld;
+
     // A hitch must not unwind as a burst of catch-up steps: a quarter second (15 steps) keeps
     // slow frames honest without turning a debugger breakpoint stall into fast-forward.
     private const float MaxAccum = 0.25f;
@@ -74,8 +81,9 @@ public sealed class GameClock
     /// sim pose exactly", so a scripted FixedStep frame stays byte-identical.</summary>
     public float StepFraction => Mode == RunMode.FixedAccum ? Mathf.Clamp(_accum / FixedDt, 0f, 1f) : 1f;
 
-    /// <summary>True when <see cref="PhysicsDt"/> returns 0 for everyone, i.e. the session must
-    /// drive the physics-stepped consumers itself, <see cref="Steps"/> times, in tree order.</summary>
+    /// <summary>True when the session must drive the physics-stepped consumers itself,
+    /// <see cref="Steps"/> times, in tree order, because Godot's physics tick is not the sim clock
+    /// this frame. <see cref="SimHeld"/> zeroes <see cref="PhysicsDt"/> without setting this.</summary>
     public bool ParentDriven => Halted || Mode != RunMode.Realtime;
 
     /// <summary>Queue exactly one step through a halt (the <c>.</c> transport key).</summary>
@@ -125,7 +133,8 @@ public sealed class GameClock
 
     /// <summary>The sim dt for a <c>_PhysicsProcess</c> consumer. Zero means "return without
     /// stepping": Godot's physics tick is not the sim clock in any non-realtime mode, so the
-    /// session steps those consumers from its own frame instead, preserving their tree order.</summary>
+    /// session steps those consumers from its own frame instead, preserving their tree order, and
+    /// under <see cref="SimHeld"/> nothing steps them at all.</summary>
     public float PhysicsDt(double godotPhysicsDelta) =>
-        ParentDriven ? 0f : (float)godotPhysicsDelta;
+        ParentDriven || SimHeld ? 0f : (float)godotPhysicsDelta;
 }

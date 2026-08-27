@@ -138,7 +138,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — what the sortie opened
 
-14. ☐ The cutscene's world hold does not reach an aircraft's own realtime tick (`BL-457`, minted by C12)
+14. ☑ The cutscene's world hold does not reach an aircraft's own realtime tick (`BL-457`, minted by C12)
 15. ☐ The captured Balmoral is not hidden by the swap in a flown session (`BL-541`)
 16. ☐ The captured aircraft keeps its British livery after the capture (`BL-543`)
 17. ☐ CM02's capture cutscene camera sits over the water (`BL-542`)
@@ -811,7 +811,7 @@ passes and that is exactly why the item is still open.
 
 # Wave D — what the sortie opened
 
-## D14 ☐ The cutscene's world hold does not reach an aircraft's own realtime tick
+## D14 ☑ The cutscene's world hold does not reach an aircraft's own realtime tick
 
 **Goal.** During a cutscene that holds the world, no aircraft moves, on a realtime clock as well as
 on the parent-driven one, so the campaign wingman is beside the player when the intro ends.
@@ -835,6 +835,18 @@ battery. ⚠ A `--det` or suite run cannot show this (INSTR-25 and `BL-457`'s tr
 
 **⚠ Traps.** ⚠ The animation runtime must stay OUTSIDE the hold: the movie is animation. ⚠ Measure in
 a realtime session. ⚠ `BL-457`'s retired leads stay retired.
+
+**Landed.** `GameClock.SimHeld` makes `PhysicsDt` answer zero while a definition owns the session,
+set from the seam `CutsceneController.WorldHeld` already reported callback 20 through; `FrameDt` and
+`Steps` are untouched, so `AnimRuntime` keeps playing the movie. Every self-stepping consumer
+(aircraft, projectiles, incoming fire, zeppelins, turret emplacements, generators, the voice runtime)
+reads that one seam, and each was already held on the parent-driven path below `DriveSimSteps`'
+return, so the two paths now agree. Realtime `--campaign=` on C3/M01, `player_pfighter` on both
+seats: `wingman_1` 3742.3 m from the player at the handoff before, 117.3 m after. `wingman-station`
+carries a leg that paces one aircraft through its own `_PhysicsProcess` (INSTR-26); with the clock
+hold removed it reads 4809.9 m of drift and goes red.
+
+**Verified.** <pending orchestrator run>
 
 ## D15 ☐ The captured Balmoral is not hidden by the swap in a flown session
 

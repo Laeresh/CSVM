@@ -463,7 +463,18 @@ public partial class GameSession : Node3D
         _cutscene = _spec.Fly && _spec.WorldMode ? new CutsceneController() : null;
         if (_cutscene != null)
         {
-            _cutscene.WorldHeld = held => _campaign?.HoldForCutscene(held);
+            // ⚠ The hold reaches a self-stepping node through the clock, never a per-class guard:
+            // on a realtime tick each aircraft, projectile, zeppelin and turret paces itself from
+            // GameClock.PhysicsDt, and only that seam stops all of them together.
+            _cutscene.WorldHeld = held =>
+            {
+                if (_clock != null)
+                {
+                    _clock.SimHeld = held;
+                }
+
+                _campaign?.HoldForCutscene(held);
+            };
             AddChild(_cutscene);
             // The mid-mission cutscene trigger, hosted by the same controller. ⚠ Story missions
             // only: C3/IA1 carries hooked_to_klondike with its approach armed, so an Instant

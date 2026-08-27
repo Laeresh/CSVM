@@ -746,7 +746,9 @@ public static class SuiteCatalog
             "target station, the 80 m separation push, the 700 m and 20.576 m/s join gates) and " +
             "then flown against a scripted leader, a live wingman joining from 1200 m abeam, " +
             "staying with the leader for the rest of the run, and riding the aft station behind " +
-            "a player leader where it rides the forward one behind an AI leader",
+            "a player leader where it rides the forward one behind an AI leader; a last leg drives " +
+            "one wingman through its OWN realtime _PhysicsProcess to check a cutscene's world hold " +
+            "stops it there too, while the clock still reports the frame's sim time for the movie",
             WingmanStation));
         into.Add(new TestHarness.Suite("wingman-engage",
             "what a campaign wingman does about a hostile (BL-505): every escorting block CM02 " +
