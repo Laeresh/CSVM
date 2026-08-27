@@ -190,6 +190,8 @@ internal static class WorldAndToolSuites
         }
 
         var faceRest = face.Transform;
+        var horizon = FindNamed(interior, "pfhorizon");
+        var horizonRest = horizon?.Transform;
         var cluster = new GaugeCluster { SpeedMph = 200f, AltitudeFt = 500f };
         try
         {
@@ -211,6 +213,29 @@ internal static class WorldAndToolSuites
             panel.Apply(cluster);
             ctx.Check(Mathf.Abs(Mathf.AngleDifference(speed.Transform.Basis.GetEuler().Z, wantSpeed)) < 0.01f,
                 $"a second frame writes the same absolute angle rather than turning again");
+
+            // The horizon (BL-431 B12): N = Rz(-roll) . Rx(pitch), no gain/offset/clamp. A zero
+            // attitude first, since that has to equal the authored rest basis exactly.
+            ctx.Check(horizon != null && horizonRest != null, $"the interior carries pfhorizon");
+            if (horizon != null && horizonRest != null)
+            {
+                cluster.HorizonPitchRad = 0f;
+                cluster.HorizonRollRad = 0f;
+                panel.Apply(cluster);
+                ctx.Check(horizon.Transform.Basis.IsEqualApprox(horizonRest.Value.Basis),
+                    $"a zero attitude leaves pfhorizon at its authored basis");
+
+                float pitch = Mathf.DegToRad(12f);
+                float roll = Mathf.DegToRad(-25f);
+                cluster.HorizonPitchRad = pitch;
+                cluster.HorizonRollRad = roll;
+                panel.Apply(cluster);
+                var want = new Basis(Vector3.Back, -roll) * new Basis(Vector3.Right, pitch);
+                ctx.Check(horizon.Transform.Basis.IsEqualApprox(want),
+                    $"pfhorizon takes Rz(-roll).Rx(pitch) pitch={pitch:0.000} roll={roll:0.000} rad");
+                ctx.Check(horizon.Transform.Origin.IsEqualApprox(horizonRest.Value.Origin),
+                    $"pfhorizon's authored translation is untouched");
+            }
         }
         finally
         {

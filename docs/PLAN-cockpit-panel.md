@@ -78,8 +78,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 ### Wave B — the artificial horizon
 
-11. ☐ Decode the horizon's drive law out of `crimson.exe`
-12. ☐ Drive `horizn` from the decoded law
+11. ☑ Decode the horizon's drive law out of `crimson.exe`
+12. ☑ Drive `horizn` from the decoded law
 
 ### Wave C — the panel vibration
 
@@ -177,7 +177,7 @@ texture; `greenindicator` is the unambiguous marker for the belt light.
 
 # Wave B — the artificial horizon
 
-## B11 ☐ Decode the horizon's drive law out of `crimson.exe`
+## B11 ☑ Decode the horizon's drive law out of `crimson.exe`
 
 **Goal.** A written rule, with addresses, for what `horizn` is posed by: which attitude angles feed
 it, in what order, about which axes, and whether the original clamps or wraps at extremes.
@@ -217,7 +217,17 @@ is a real possible answer, and `hud.md` should then record it as decoded-and-ine
 staying an open lead that gets re-chased. Do not fall back on measuring the instrument off footage
 if the MCP is unreachable; an unrun decode is an open question, not a licence to guess.
 
-## B12 ☐ Drive `horizn` from the decoded law
+**Result.** The law is a node rotation, on the ball mesh named `pfhorizon` (not `horizn`, which is
+only the dial-face name on 5 of 11 player airframes; `pfhorizon` ships on all 11). Neither `horizn`,
+the `horiz` face name the other 6 airframes use, nor `comp` ever appears in `crimson.exe` — the
+binary's own strings are `pfhorizon` and `compass`. Each frame (`FUN_0049f6a0`, player-only) the
+original decomposes the aircraft's own orientation basis into pitch and roll with `FUN_0053df30`
+(`0049f8e0`-`0049f98f`): pitch = `asin(-m[7])`, roll = `atan2(m[1], m[4])`, gimbal branch (`|m[7]|
+>= 1`) pitch = `-copysign(pi/2, m[7])`, roll = 0; heading is discarded. The node's rotation is set
+to `N = Rz(-roll) . Rx(pitch)` and written straight into the node's Euler fields — no gain, offset,
+clamp or smoothing. Full decode in `docs/formats/hud.md`, "Cockpit gauges".
+
+## B12 ☑ Drive `horizn` from the decoded law
 
 **Goal.** The horizon reads the aircraft's attitude in a flown Cockpit view.
 
@@ -244,6 +254,32 @@ goldens must be hash-identical since no golden flies the pilot's own cockpit.
 clockwise-positive while a node rotation about +Z is counter-clockwise-positive, which is why
 `Apply` negates the altimeter, speedometer and belt arrows and does not negate the nitro pair. Decide
 the horizon's convention from the decode rather than by flipping signs until it looks right.
+
+**Result.** `CockpitGauges` finds `pfhorizon` by name under `gauges` (never `horizn`) and gained a
+`Horizon` node type shaped like `Needle`: only the authored translation and scale survive, the
+rotation is fully overwritten each frame. `GaugeCluster.HorizonAngles(Basis)` runs the decoded
+asin/atan2 decomposition (with its gimbal branch) and is fed `FlightController.Attitude`
+(`FlightModel`'s own orientation, threaded through a new `FlightHudState.Attitude` field) — the
+camera never enters. `CockpitGauges.Apply` composes `new Basis(Vector3.Back, -roll) * new
+Basis(Vector3.Right, pitch)`: the importer builds every other node rotation with
+`Basis.FromEuler(v, EulerOrder.Yxz)` = `Ry . Rx . Rz`, the same convention the decode's own Euler
+re-extraction uses, and `Vector3.Back`/`Vector3.Right` are the Z/X axes the needles and the
+interior's own head-pitch mount already rotate about, so composing Rz then Rx with Godot's `Basis`
+multiplication reproduces the engine's basis directly, with no axis remap and no extra sign.
+
+Two Cockpit captures on `player_bhawk` (`.scratch/b12/climb.png`, a held pitch-up; `.scratch/b12/
+bank.png`, a held roll) confirm the sense at the controls: the ball's fixed-aircraft symbol sits
+over a sky/ground disc that, in the climb shot, shows mostly sky (the horizon line pushed down, as
+pulling the nose up should read) and, in the bank shot, splits on a line tilted the same way the
+terrain tilts through the windscreen in the same frame (ground upper-left, sky lower-right in both).
+Neither inverted nor mirrored.
+
+**⚠ Where the dial actually sits.** `pfhorizon`'s container shares its screen position with
+`gungauge`/`missilegauge` (same authored y/z in the interior's local space, `pfhorizon` centred
+between them), not with `altimeter`/`damageindicator`/`speedometer`'s row — a reader expecting it
+beside the altimeter will look in the wrong place on the dash.
+
+**Verified.** <pending orchestrator run>
 
 # Wave C — the panel vibration
 

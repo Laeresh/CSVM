@@ -61,9 +61,12 @@ The compass ships as two small textures in **every chapter's `texture.zbd`** (no
 ## Cockpit gauges
 
 **The gauge dials are 3D models inside each player plane's tree in planes.zbd** — a
-`gauges` subtree under the (otherwise skipped) cockpit, one per plane, with the same
-child names everywhere: `altimeter`, `speedometer`, `damageindicator`, plus `comp`,
-`horizn`, `gungauge`, `missilegauge`, `nitrogauge`. All dial meshes are flat polygons
+`gauges` subtree under the (otherwise skipped) cockpit, one per plane, with mostly the
+same child names everywhere: `altimeter`, `speedometer`, `damageindicator`, plus `comp`,
+`horizn`, `gungauge`, `missilegauge`, `nitrogauge`. ⚠ `comp` and `horizn` are the DATA's own
+node names, and neither is what `crimson.exe` looks up by: the binary's strings are `compass` and
+`pfhorizon` (see below), and `horizn` itself is only the dial-face name on 5 of the 11 player
+airframes, `horiz` on the other 6. All dial meshes are flat polygons
 in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the interp
 `support\cockpit.gw` boot script wires their dynamic behavior via `FindSubNode` +
 `CycleTextureSet` texture swaps. Texture pixels live in **every chapter's
@@ -204,10 +207,25 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   (426.5, 1299), speedometer mirrored ≈ 420 px from the right edge, same height as
   the altimeter. (The two reference screenshots place the cluster slightly
   differently — HUD.png is the canonical one, matching the compass metrics.)
-- Also in the subtree, still unwired in the remake: the artificial-horizon `horizn` and drum
-  `comp` compass. The `gungauge` / `missilegauge` are decoded below; `nitrogauge` (face,
-  `nitro_backplate`, needles `nitro_boost` / `nitro_charge`) is driven by `GaugeCluster` off the
-  nitro decode in `docs/org/flightModel.md`, "Nitro".
+- **The artificial horizon is decoded and driven as a node rotation, on the ball mesh named
+  `pfhorizon` — never `horizn`.** Neither `horizn`, the plain `horiz` some airframes use instead,
+  nor `comp` ever appears in `crimson.exe`; the binary's own names are `pfhorizon` (the ball) and
+  `compass` (the drum). `pfhorizon` sits under a mesh-less container (named `horiz` on 10 of the 11
+  player airframes, `g1167` on the eleventh) that is itself the child of a dial-face node named
+  `horizn` on 5 airframes and `horiz` on the other 6; `CockpitGauges` finds it by searching for the
+  name `pfhorizon` anywhere under `gauges`, never by its parents' names, since those vary. Each
+  frame (`FUN_0049f6a0`, player aircraft only) the original decomposes the aircraft's own
+  orientation basis into pitch and roll with `FUN_0053df30` (`0049f8e0`-`0049f98f`): pitch =
+  `asin(-m[7])`, roll = `atan2(m[1], m[4])`, with a gimbal branch (`|m[7]| >= 1`) of pitch =
+  `-copysign(pi/2, m[7])`, roll = 0. Heading is discarded for this dial. The node's rotation is set
+  to `N = Rz(-roll) . Rx(pitch)` (quaternions built at `0049f92e`/`0049f93d`, multiplied at
+  `0049f951`) and written straight into the node's Euler fields under its own `R = Ry . Rx . Rz`
+  convention — no gain, offset, clamp or smoothing anywhere in the law. The camera's own pitch
+  offset and any look-around never enter: the source is the aircraft's attitude alone. The
+  `gungauge` / `missilegauge` are decoded below; `nitrogauge` (face, `nitro_backplate`, needles
+  `nitro_boost` / `nitro_charge`) is driven by `GaugeCluster` off the nitro decode in
+  `docs/org/flightModel.md`, "Nitro". The `compass` drum (`FUN_004d1a30(node, 0, -heading, 0)` at
+  `0049f8fe`) is decoded but stays unwired in the remake.
 - ⚠ **`nitrogauge` is the one dial not authored in normalized dial coords.** Its
   `nitro_backplate` mesh spans x ±1.4489 and y −0.1292…3.6746, so the bezel is centred at
   y ≈ 2.2078 with radius ≈ 1.4489 rather than at the origin with radius 1; the plate carries

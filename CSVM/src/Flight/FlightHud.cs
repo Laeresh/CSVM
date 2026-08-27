@@ -90,6 +90,11 @@ public struct FlightHudState
 
     /// <summary>The aircraft's own velocity, which a fired round inherits.</summary>
     public Vector3 InheritedVelocity;
+
+    /// <summary>The aircraft's own orientation (<c>FlightModel.Attitude</c>), never the camera's:
+    /// the artificial horizon reads this, not <c>CameraController.HeadPitchOffsetRad</c> or any
+    /// look-around the pilot has applied.</summary>
+    public Basis Attitude;
 }
 
 /// <summary>Everything one pane draws for its pilot: the heading tape, the cockpit dials and their
@@ -336,6 +341,7 @@ public sealed class FlightHud
             Gauges.NitroInstalled = state.NitroInstalled;
             Gauges.NitroBoosting = state.NitroBoosting;
             Gauges.NitroChargeFrac = state.NitroChargeFrac;
+            (Gauges.HorizonPitchRad, Gauges.HorizonRollRad) = GaugeCluster.HorizonAngles(state.Attitude);
         }
         // Feeds the weapon gauges (if built) and the text readout (if built) — both draw from the
         // live loadout, so this runs whenever there is one, independent of the dial cluster.

@@ -1945,6 +1945,7 @@ public partial class FlightController : Node3D
             ReticleOrigin = reticleOrigin,
             ReticleNose = reticleNose,
             InheritedVelocity = inheritedVelocity,
+            Attitude = Attitude,
         };
     }
 

@@ -64,6 +64,15 @@ public sealed partial class GaugeCluster : Control
     public bool NitroBoosting;
     public float NitroChargeFrac = 1f;
 
+    /// <summary>The artificial horizon's decoded pitch and roll (radians), from
+    /// <see cref="HorizonAngles"/> off the aircraft's own attitude — never the camera's. Computed
+    /// here so the 3D panel (<see cref="CockpitGauges"/>) and any future flat draw read the same
+    /// two numbers. Zero at spawn, matching an identity attitude.</summary>
+    public float HorizonPitchRad;
+
+    /// <inheritdoc cref="HorizonPitchRad"/>
+    public float HorizonRollRad;
+
     // ---- tuning ----
     // The hardpoint dial's belt-light ring is 8 positions on every airframe regardless of the
     // loadout's pylon count (user-confirmed against the original; markers.md) —
@@ -315,6 +324,20 @@ public sealed partial class GaugeCluster : Control
     /// 500 mph, and the engine puts no wrap or clamp on it beyond the speed itself.</summary>
     public static float SpeedAngleDeg(float speedMph) =>
         Mathf.Max(0f, speedMph) * SpeedDegPerMph;
+
+    /// <summary>The artificial horizon's pitch and roll, decoded off the aircraft's own attitude
+    /// (FUN_0053df30; docs/formats/hud.md, "Cockpit gauges"). No axis remap: the original's
+    /// row-major body axes are exactly <paramref name="attitude"/>'s columns X/Y/Z. Heading is
+    /// discarded, as the original discards it here. Public for CSVM.Tests.</summary>
+    public static (float PitchRad, float RollRad) HorizonAngles(Basis attitude)
+    {
+        float m7 = attitude.Z.Y;
+        if (Mathf.Abs(m7) >= 1f)
+        {
+            return (-Mathf.Sign(m7) * Mathf.Pi / 2f, 0f);
+        }
+        return (Mathf.Asin(-m7), Mathf.Atan2(attitude.X.Y, attitude.Y.Y));
+    }
 
     /// <summary>The engine's single STALL scalar: positive exactly where the lamp shows, and the
     /// term its blink rate is built from. Public so CSVM.Tests can assert the gate and the rate

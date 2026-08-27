@@ -19,6 +19,7 @@ public sealed class CockpitGauges
 {
     private readonly Needle _altHundreds, _altThousands, _speed, _nitroBoost, _nitroCharge;
     private readonly Needle _gunArrow, _missileArrow;
+    private readonly Horizon _horizon;
     private readonly List<Belt> _belts;
     private readonly List<DamageZoneSkin> _zones;
     private readonly List<Readout> _readouts;
@@ -36,6 +37,10 @@ public sealed class CockpitGauges
         _nitroCharge = Needle.Find(gauges, "nitro_charge");
         _gunArrow = Needle.Find(gauges, "ggarrow");
         _missileArrow = Needle.Find(gauges, "mgarrow");
+        // Found by NAME anywhere under gauges, never by "horizn": that name is the dial FACE on
+        // 5 of 11 airframes and the ball's own container on the other 6, while "pfhorizon" is the
+        // ball mesh on all 11 (docs/formats/hud.md). Null on any build that ships none.
+        _horizon = Horizon.Find(gauges, "pfhorizon");
         _lowAltLamp = FindNamed(gauges, "lowalt_on");
         _stallLamp = FindNamed(gauges, "stallwarning_on");
         _nitroDial = FindNamed(gauges, "nitrogauge");
@@ -43,7 +48,7 @@ public sealed class CockpitGauges
         // that used to be silent; this line is what makes it visible again.
         int needles = new[]
             { _altHundreds, _altThousands, _speed, _nitroBoost, _nitroCharge, _gunArrow, _missileArrow }
-            .Count(n => n.IsBound);
+            .Count(n => n.IsBound) + (_horizon.IsBound ? 1 : 0);
         int lamps = new[] { _lowAltLamp, _stallLamp, _nitroDial }.Count(n => n != null);
         Log.Debug("flight", $"cockpit gauges bound needles={needles} lamps={lamps} readouts={_readouts.Count} belts={_belts.Count} zones={_zones.Count}");
     }
@@ -101,6 +106,7 @@ public sealed class CockpitGauges
         // and an unswept arrow keeps the pose it was authored at.
         SetIfSwept(_gunArrow, gauges.GunArrowAngleDeg);
         SetIfSwept(_missileArrow, gauges.MissileArrowAngleDeg);
+        _horizon.SetAttitude(gauges.HorizonPitchRad, gauges.HorizonRollRad);
         Show(_lowAltLamp, gauges.LowAltLampLit);
         Show(_stallLamp, gauges.StallLampLit);
         // ⚠ Only the Devastator ships nitrogauge active:false, so on every other airframe the dial
@@ -210,6 +216,47 @@ public sealed class CockpitGauges
                 return;
             }
             var basis = new Basis(Vector3.Back, Mathf.DegToRad(degrees)).Scaled(_scale);
+            _node.Transform = new Transform3D(basis, _origin);
+        }
+    }
+
+    /// <summary>The artificial-horizon ball, node <c>pfhorizon</c>. Posed the same way a
+    /// <see cref="Needle"/> is: the authored rotation is arbitrary and fully overwritten, only the
+    /// translation and scale survive. The decode (docs/formats/hud.md) writes the engine's own
+    /// basis N = Rz(-roll) . Rx(pitch) straight into the node's rotation fields with no gain,
+    /// offset, clamp or smoothing. <c>Vector3.Back</c> is the node's Z axis and <c>Vector3.Right</c>
+    /// its X axis, the same axes <see cref="Needle"/> and the interior's head-pitch mount
+    /// (<c>PlaneBuilder.MountCockpitInterior</c>) already rotate about; the importer builds every
+    /// other node rotation with <c>Basis.FromEuler(v, EulerOrder.Yxz)</c> = Ry . Rx . Rz, the exact
+    /// convention the decode's own Euler re-extraction uses, so composing Rz then Rx here with
+    /// Godot's own <c>Basis</c> multiplication reproduces the engine's basis with no remap and no
+    /// extra sign: unlike the needles, nothing here is expressed as a screen-space clockwise
+    /// angle first.</summary>
+    private readonly struct Horizon
+    {
+        private readonly Node3D? _node;
+        private readonly Vector3 _origin;
+        private readonly Vector3 _scale;
+
+        private Horizon(Node3D node)
+        {
+            _node = node;
+            _origin = node.Transform.Origin;
+            _scale = node.Transform.Basis.Scale;
+        }
+
+        public bool IsBound => _node != null;
+
+        public static Horizon Find(Node3D gauges, string name) =>
+            FindNamed(gauges, name) is { } node ? new Horizon(node) : default;
+
+        public void SetAttitude(float pitchRad, float rollRad)
+        {
+            if (_node == null)
+            {
+                return;
+            }
+            var basis = (new Basis(Vector3.Back, -rollRad) * new Basis(Vector3.Right, pitchRad)).Scaled(_scale);
             _node.Transform = new Transform3D(basis, _origin);
         }
     }
