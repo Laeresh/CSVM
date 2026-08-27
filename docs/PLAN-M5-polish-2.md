@@ -147,7 +147,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 19. ☑ The landing animation: no hook, too high, wings not folded (`BL-545`)
 20. ☑ CM01's drop-off cutscene shows no parachutist (`BL-540`)
 21. ☐ The low-terrain break-off, judged once the wingman is there (`BL-509`, A13's open half)
-22. ☐ An `AT_NODE` rotate reads a spelling the compiled data never uses (`BL-549`, minted by D17)
+22. ☑ An `AT_NODE` rotate reads a spelling the compiled data never uses (`BL-549`, minted by D17)
 
 ## Dependency and parallelism notes
 
@@ -1109,7 +1109,7 @@ with the wingman on the same airframe and watch the first low pass over the isla
 
 **⚠ Traps.** ⚠ Everything `BL-457` and `BL-509` retire stays retired.
 
-## D22 ☐ An `AT_NODE` rotate reads a spelling the compiled data never uses
+## D22 ☑ An `AT_NODE` rotate reads a spelling the compiled data never uses
 
 **Goal.** An authored `OBJECT_ROTATE_STATE` with an `AT_NODE` basis takes the host node's axes,
 so CM02's wing-walk frame faces the captured aeroplane's heading rather than the world's.
@@ -1135,4 +1135,15 @@ letterbox or a camera in a golden pose is the thing to look at, not to suppress.
 
 **⚠ Traps.** ⚠ Judge against the suites and a `--campaign=` shot, never against a count. ⚠ B7's
 detached-target branch must keep writing the local transform.
+
+**Landed.** `HandleRotateState` now reads `basis.AtNodeMatrix` first and falls back to
+`basis.AtNodeXYZ`, so a compiled rotate resolves its host under either spelling. Both already carry
+`state` in radians by the time they reach the handler (the reader path converts at parse time in
+`AnimDefs.AddAtNode`; compiled data is native radians), so the fallback needed no unit conversion of
+its own; the offset triple that accompanies every `AT_NODE`/`AT_NODE_MATRIX` rotate in this install
+is zero at all 180 sites (172 `AtNodeXYZ` plus 8 `AtNodeMatrix`, the eight chapters' letterbox), so
+the unit question does not move any authored pose today, only a future non-zero one. `PoseAtNode`
+itself is untouched.
+
+**Verified.** <pending orchestrator run>
 

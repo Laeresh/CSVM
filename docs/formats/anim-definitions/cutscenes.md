@@ -739,15 +739,18 @@ beat deactivating it; the smooth phase between them is
   `flags.lighting`/`flags.fog` both true; at 7.5 m the fog contribution is negligible, and the def
   pins the node's full orientation to `camera1` every tick regardless of the facade mode, so a
   builder should copy the transform and not rely on billboarding to keep the bars square.
-- **`AT_NODE` on a pose event is spelled differently in each front-end.** The reader writes
-  `OBJECT_TRANSLATE_STATE … AT_NODE [camera1]` and `OBJECT_ROTATE_STATE … AT_NODE_MATRIX
-  [camera1, 0, 0, 0]`; the compiled twin writes a flat `at_node: "camera1"` on the translation and a
-  nested `basis: { AtNodeMatrix: "camera1" }` on the rotation, with `state` carrying the offset
-  inside that frame (zero for the bars) rather than an absolute pose. **The compiled def wins**, so
-  a consumer that reads only the reader spelling sees the target teleported to its parent's origin.
-  Install-wide there are 190 non-null `at_node` translations and 8 `AtNodeMatrix` rotations (the
-  eight chapters' letterbox); `INPUT_NODE` appears as an `at_node` value and is a sentinel, not a
-  node name.
+- **`AT_NODE` on a pose event is spelled differently in each front-end, and the compiled rotate
+  itself has two spellings.** The reader writes `OBJECT_TRANSLATE_STATE … AT_NODE [camera1]` and
+  `OBJECT_ROTATE_STATE … AT_NODE_MATRIX [camera1, 0, 0, 0]`; the compiled twin writes a flat
+  `at_node: "camera1"` on the translation, with `state` carrying the offset inside that frame
+  (zero for the bars) rather than an absolute pose. On the rotation the compiled field is nested
+  under `basis`, but its key is `AtNodeMatrix` on the eight chapters' letterbox (8 sites) and
+  `AtNodeXYZ` everywhere else in the install (172 sites, `britbalmoral_1-ww_balmoral1`'s wing-walk
+  frame among them) — the reader-normalizing front-end (`AnimDefs.AddAtNode`) only ever emits the
+  first spelling, so the second reached no compiled extraction until the rotate handler was taught
+  to read both. **The compiled def wins**, so a consumer that reads only the reader spelling sees
+  the target teleported to its parent's origin. Install-wide there are 190 non-null `at_node`
+  translations; `INPUT_NODE` appears as an `at_node` value and is a sentinel, not a node name.
 - **A change to `generic_intro` is verified by what disappears, not by what looks right.** Twelve
   missions share it, and an 8-chapter freecam regression cannot see any of it: no Instant Action or
   multiplayer mission bootstraps an intro, so that regression is inert here by construction

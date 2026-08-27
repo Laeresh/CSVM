@@ -47,6 +47,10 @@ internal static class WingWalkCameraSuites
     private const float WalkRunTimeS = 19.25f;
     private const float RunTimeToleranceS = 1f;
 
+    // The frame's rotate is an AT_NODE pose onto the captured aeroplane's own basis (no offset
+    // authored), so once read it should reproduce that heading almost exactly.
+    private const float HeadingToleranceDeg = 2f;
+
     /// <summary>Plays CM02's own capture definition over that mission's built world and reads the
     /// camera it poses: the shot has to sit on the captured aeroplane rather than at the world
     /// origin, which is where a wing-walk frame with no host to hang off lands.</summary>
@@ -109,7 +113,11 @@ internal static class WingWalkCameraSuites
         {
             roster = BuildRoster(ctx, world, chapter, textures, pool, rigs, plan.Position);
             roster.BuildPlayers(rigs);
-            var aim = plan.Position + Vector3.Forward;
+            // Off world-zero on purpose: the mission authors this block at yaw 0, which a rotate
+            // that fell through to an absolute zero-euler pose would satisfy by accident, so the
+            // heading check below needs a facing that fallback would not land on.
+            var aimDir = new Basis(Vector3.Up, Mathf.DegToRad(37f)) * Vector3.Forward;
+            var aim = plan.Position + aimDir;
             var captured = roster.SpawnAi(CampaignRosterPlan.SpawnFor(plan, plan.Position, aim,
                 AiPilot.HoldingCourse(plan.Position, aim)));
             if (captured == null)
@@ -174,6 +182,8 @@ internal static class WingWalkCameraSuites
             float composedTo = 0f;
             bool nearerTheOriginEver = false;
             int samples = 0;
+            float frameHeadingDeg = float.NaN;
+            float capturedHeadingDeg = float.NaN;
             for (int i = 0; i < (int)(PlayBudgetS / StepDt); i++)
             {
                 clock.BeginFrame(StepDt);
@@ -199,6 +209,8 @@ internal static class WingWalkCameraSuites
                 {
                     openedAt = off;
                     framedAt = frameOff;
+                    frameHeadingDeg = FrameHeadingDeg(world);
+                    capturedHeadingDeg = AiPilot.HeadingDegOf(captured.NoseDirection);
                 }
 
                 if (off > eye.Length())
@@ -221,6 +233,8 @@ internal static class WingWalkCameraSuites
             report.AppendLine($"shot composed for {composedTo:0.##} s over {samples} sample(s), " +
                 $"opened {openedAt:0} m off the capture with the walk frame {framedAt:0} m off it, " +
                 $"nearer-the-origin-ever={nearerTheOriginEver}");
+            report.AppendLine($"'{WalkFrame}' heading {frameHeadingDeg:0.#}° versus '{CaptureBlock}' " +
+                $"heading {capturedHeadingDeg:0.#}°");
             ctx.Check(samples > 0, $"the played capture composes its shot inside the wing walk's own frame");
             ctx.Check(Mathf.Abs(composedTo - WalkRunTimeS) < RunTimeToleranceS,
                 $"and holds it for the walk's own {WalkRunTimeS:0.##} s rather than completing in the frame it started (read {composedTo:0.##} s)");
@@ -230,6 +244,12 @@ internal static class WingWalkCameraSuites
                 $"so the shot opens within {OpeningRangeM:0} m of that aeroplane rather than at the world origin");
             ctx.Check(!nearerTheOriginEver,
                 $"and never sits nearer the world origin than the aeroplane it is filming, which is the water the capture was seen over");
+            // An AT_NODE rotate that fell through to an absolute world-axis zero would read a
+            // constant heading regardless of the aeroplane's own, so this only passes once the
+            // handler reaches the compiled spelling too.
+            ctx.Check(!float.IsNaN(frameHeadingDeg) && !float.IsNaN(capturedHeadingDeg)
+                && Mathf.Abs(Mathf.Wrap(frameHeadingDeg - capturedHeadingDeg, -180f, 180f)) < HeadingToleranceDeg,
+                $"and the wing-walk frame faces the captured aeroplane's own heading, within {HeadingToleranceDeg:0}° of it");
         }
         finally
         {
@@ -274,6 +294,16 @@ internal static class WingWalkCameraSuites
     {
         var found = world.Runtime.FindNodes(WalkFrame);
         return found.Count > 0 ? found[0].GlobalTransform.Origin.DistanceTo(subject) : -1f;
+    }
+
+    // The frame's own facing (nose -Z, this project's convention), NaN when the frame is not in
+    // the world yet.
+    private static float FrameHeadingDeg(TestWorld world)
+    {
+        var found = world.Runtime.FindNodes(WalkFrame);
+        return found.Count > 0
+            ? AiPilot.HeadingDegOf(-found[0].GlobalTransform.Basis.Z)
+            : float.NaN;
     }
 
     // What the capture's node table can actually reach: every name the definition addresses, with

@@ -1077,8 +1077,11 @@ frame with `state` as an offset inside it, rather than an absolute pose; the hos
 name over the whole index because it is a root of its own, not something the event's anchor
 contains. It reads the host's frame through `AnimRuntime.WorldTransform`, so a bootstrap-time pose
 (the world root not yet parented) still composes correctly instead of reading Godot's identity
-fallback, and writes the target's LOCAL transform when the target itself is out of tree. Spellings
-and census: docs/formats/anim-definitions/cutscenes.md.
+fallback, and writes the target's LOCAL transform when the target itself is out of tree.
+`HandleRotateState` reads the rotate's host under either spelling of the same field
+(`AtNodeMatrix`, `AnimDefs`' reader-normalized name; `AtNodeXYZ`, the compiled extraction's own),
+both already carrying `state` in radians by the time they reach here. Spellings and census:
+docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/Anim/NameResolver.cs
 Name→node resolution as one public module, generic over the node type (`NameResolver<TNode>`): the
