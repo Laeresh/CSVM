@@ -3425,7 +3425,9 @@ HudMetrics.Scale; Build returns null if a texture is missing; _Process re-anchor
 The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, plus
 the gun + missile weapon gauges and the nitro dial (`nitrogauge`, drawn only with the injector
 installed; its two needles chase the decoded targets through `NitroNeedle`'s exponential at 3/s
-and 1.5/s over a 216° sweep, and its screen placement above the GUNS dial is this port's), all
+and 1.5/s over a 216° sweep, negated at the draw site because the decoded angles are
+counter-clockwise-positive; it sits at the bottom of the right column, below the speedometer, and
+is the one dial whose bezel centre and radius are read from the tree rather than assumed), all
 geometry extracted from the plane's own gauges subtree
 (structure/scales/quirks: docs/formats/hud.md); polys draw by data priority, rest rotations
 ignored; PartFraction binds flight or the lab; dial centres are bottom-anchored (FromBottom) so
