@@ -85,6 +85,15 @@ rejections: a generator whose `node` cannot be resolved is **dropped**, and so i
 of its `vehicle.nets` names resolve — a generator with no valid net does not load inert, it does not
 load at all.
 
+**A non-zeppelin generator also needs a take-off path, and is dropped without one.** `FUN_004518d0`
+names it from the host node with `sprintf("%.2s%.3s")`, the first two characters and the last three,
+so `eairg31` asks for the host-relative subtree `eag31_aipath` and `barracuda` for `bauda_aipath`;
+fewer than two waypoints under it, or a host name shorter than five characters, and the generator
+does not load. The launch then places the aircraft on waypoint 0 (+0.2 m Y), faces it down the leg
+into waypoint 1, gives it zero velocity and a full throttle lever, and drives it along the path.
+This is the same movement law the roster's `taxiPath` uses, entered from a second site
+([org/flightModel.md](../../org/flightModel.md), "The scripted-path follower").
+
 Smaller loader findings: `open_anim`/`close_anim` **default from the node name** when unauthored.
 The loader (`FUN_00452850`) formats `sprintf("%.5s_open%.2s", node, node + len - 2)`, the first
 five characters, `_open`, the last two, so `eairg31` asks for `eairg_open31`; it then formats

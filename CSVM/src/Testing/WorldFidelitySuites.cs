@@ -188,11 +188,21 @@ internal static class WorldFidelitySuites
             ctx.Note($"{PathName}: {path.Waypoints.Count} waypoint(s), first {path.Waypoints[0]}, last {path.Waypoints[^1]}");
             var body = new Node3D { Name = "taxi_body" };
             world.Stage.AddChild(body);
-            body.GlobalPosition = path.Waypoints[0];
+            // Off the apron and 200 m up, which is where the roster blocks that author a path put
+            // their aeroplane: the placement has to snap it onto waypoint 0, not fly the path from
+            // the spawn pose.
+            body.GlobalPosition = path.Waypoints[0] + new Vector3(700f, 200f, -400f);
             var registry = new ScriptedPathVehicles(name => world.Runtime.FindNodes(name));
             float handoffSpeed = -1f;
             ctx.Check(registry.Place(PathVehicle, PathName, body, s => handoffSpeed = s),
                 $"'{PathVehicle}' is placed on its authored path");
+            ctx.Check(body.GlobalPosition.IsEqualApprox(path.Waypoints[0]),
+                $"'{PathVehicle}' is snapped onto waypoint 0, not left at its roster pose");
+            var firstLeg = path.Waypoints[1] - path.Waypoints[0];
+            ctx.Check(Mathf.Abs(Mathf.Wrap(
+                    body.GlobalRotation.Y - Mathf.Atan2(-firstLeg.X, -firstLeg.Z),
+                    -Mathf.Pi, Mathf.Pi)) < 0.01f,
+                $"'{PathVehicle}' faces down the first leg");
 
             // Placed and waiting: the spawner's freeze holds it on the first waypoint until a
             // mission goal releases it, however long the mission steps.

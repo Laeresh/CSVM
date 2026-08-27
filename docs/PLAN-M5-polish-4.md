@@ -105,7 +105,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — CM09 and the sortie
 
-31. ☐ `BL-531` + `BL-532`: CM09's first patrol hangs in the air, and no enemy takes off from the ground hangars
+31. ☑ `BL-531` + `BL-532`: CM09's first patrol hangs in the air, and no enemy takes off from the ground hangars
 32. ☐ Fly CM03 to CM09 end to end and judge every item where it was reported
 
 ## Dependency and parallelism notes
@@ -749,33 +749,56 @@ D32.
 
 # Wave D — CM09 and the sortie
 
-## D31 ☐ `BL-531` + `BL-532`: CM09's first patrol hangs in the air, and no enemy takes off from the ground hangars
+## D31 ☑ `BL-531` + `BL-532`: CM09's first patrol hangs in the air, and no enemy takes off from the ground hangars
 
 **Goal.** CM09's first patrol flies, and its hangar enemies take off from the ground and reach the
 fight.
 
-**Evidence (confidence: lead-only).** Two controls reports. An aircraft spawned with no net and no
-target may leave the stick centred with the throttle closed where the original's idle patrol still
-flies. The hangar enemies are either a plain or moving spawner in `EnemyGenerators.cs` or roster
-spawns released by a hangar-door animation; whether the generator triggered, the aircraft spawned
-inside the geometry and crashed, or they spawned airborne elsewhere is open. `<TODO: re-verify
-still-open against the code>`
+**Evidence (re-verified against the code and the data; both reports are one cause).** CM09 is
+C1/M04, whose `aiv` roster carries four `blakepeace_2_3`…`_6` Peacemakers authoring the taxi paths
+`pp1`…`pp4`. Their authored coordinates are 300 and 400 m up, while every `ppN_aipN` waypoint of the
+airfield sits at y=160, and `ScriptedPathVehicles.Place` seeded its follower from the body's spawn
+pose. So the four hung motionless 140 to 240 m above the strip and hundreds of metres off it until
+the mission's `START_TAXI` chain fired, and then taxied through the air: the stationary enemy patrol
+of `BL-531` and the missing ground start of `BL-532` are the same four aeroplanes. The idle-patrol
+theory was wrong; `AiPilot.FlyPatrol`'s netless branch flies the standing orders and was not
+involved, and nothing in `AiModeMachine` was touched.
 
-**Approach.** Log the first patrol's mode, net and lever on spawn and compare with `PT-56`'s plant
-test of patrol nets. Read CM09's `egen.zrd`/`aiv.zrd` for the hangar aircraft's spawn shape and
-position, run the mission headless with the generator log on and follow each spawn's first
-seconds. Decode lane: the idle-patrol behaviour with no net, and the ground-start launch shape.
+**Decode.** The original never uses the spawn record's own position for a path vehicle. Both entries
+(`FUN_0047c210` at `0x0047c3a5`, the roster spawner, and `FUN_004940d0` at `0x004940f9`, the goal
+that attaches a path later) read waypoint 0, add the vehicle type's ride height at `type+0x218` to
+its Y, and take the attitude from the normalised leg into waypoint 1; the record's coordinates and
+yaw are the branch taken only when no path resolves. Recorded in `docs/org/flightModel.md`.
 
-**Model recommendation.** high. Two questions on the mode machine and the generators, after B12
-and A5 have narrowed both.
+**Landed.** `ScriptedPathVehicles.Place` now snaps the body onto waypoint 0 facing down the first
+leg and writes that pose immediately, through one shared pose writer so the placement and the
+per-tick step cannot disagree about which channel a body takes.
 
-**Verify.** Headless CM09 with the AI trace and generator log on: the first patrol's speed above
-its stall floor within seconds of spawn, and each hangar spawn airborne and alive after its first
-minute; D32.
+**Wiring contract handed to A5 (`BL-522`).** The generators themselves are a second, separate entry
+into the same law and are NOT fixed here. `FUN_004518d0` names a non-zeppelin generator's own
+take-off path from the host node with `sprintf("%.2s%.3s")` (first two characters, last three), so
+`eairg31` resolves the host-relative `eag31_aipath` and `barracuda` resolves `bauda_aipath`; the
+path is kept on the generator at `+0x24`, and a non-zeppelin generator with fewer than two waypoints
+under it does not load at all. `FUN_00451bf0` then places the launch on waypoint 0 (+0.2 m Y at
+`0x00451fa1`), faces it down the first leg, gives it zero velocity and a 1.0 throttle lever
+(`+0x124`/`+0x128`), and sets `+0xcc = 1` leaving `+0xd4` clear, so it runs the strip at once
+instead of waiting for a goal. C1/M04's two airfields each author a five-point run about 260 m long.
+Until that lands, `AiGeneratorRuntime.Spawn` drops a ground launch at the host node with no run: in
+the verification run below `eairg31`'s spawn flew and fought, `eairg32`'s flew into the airstrip
+(`CRASH into a3/col ... surface=8/airstrip`) 120 m from its hangar.
 
-**⚠ Traps.** The zeppelin launch-altitude gate does not apply to a ground start. An idle rule has
-to come from the decode, not from a fallback net. Flying up to 80 km away is `BL-523` and stays
-there.
+**Verify.** Headless C1/M04 (`--campaign=<profile>:8 --debug-objective=8 --debug-spectate
+--no-crash-loss`, 12000 sim frames): all four `START_TAXI` releases land, `blakepeace_2_4` takes
+fire on the runway at y=161, `blakepeace_2_5` climbs out through y=198, both generators open their
+doors and spawn on the deck at y=160, and the run ends with no engine error. The `scripted-path`
+suite gained two checks on the snap. D32 judges it at the controls.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** The zeppelin launch-altitude gate does not apply to a ground start, and none was added.
+`blakepeace_2_2` is authored at the world origin at y=0 with no net and no path, and our loader
+spawns it there; the original reads the same record, so that is left alone rather than invented
+around. Flying up to 80 km away is `BL-523` and stays there.
 
 ## D32 ☐ Fly CM03 to CM09 end to end and judge every item where it was reported
 

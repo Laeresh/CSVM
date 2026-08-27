@@ -2254,8 +2254,9 @@ usual.
   (`BL-512`'s wrong heading may be pointing them into the bay). *⚠ Traps:* the zeppelin
   launch-altitude gate is a decoded rule for airships and not a general one; do not lift the sub's
   launch by borrowing it, and do not add a spawn-height offset.
-  *Cross-refs:* `BL-512`, `BL-515`, `BL-532` (CM09's ground-hangar starts, the same first-seconds
-  question).
+  *Cross-refs:* `BL-512`, `BL-515`, `docs/org/flightModel.md`'s scripted-path follower (CM09's two
+  ground airfields are the same non-zeppelin launch, and each carries the take-off path
+  `FUN_004518d0` builds).
 
 - `BL-523` `[Bug]` **The AI's patrol/pursue/lay-off cycle does not match the original: CM05's
   second patrol never pursues, and CM09's enemies fly up to 80 km away.** *Evidence:* two
@@ -2282,7 +2283,7 @@ usual.
   `AiPilot.FlyPatrol`'s netless arm reading `TargetHeadingDeg` and `TargetAltitude` after
   `FlyPursuit` has overwritten them, so a pilot with no net and no leader holds the last bearing to
   a dead target.
-  *Cross-refs:* `BL-524`, `BL-531`, `docs/org/aiPilot.md`.
+  *Cross-refs:* `BL-524`, `docs/org/aiPilot.md`.
 
 - `BL-550` `[Feature]` **The AI's altitude floor is enforced at one site in CSVM and at three in
   the original: the manoeuvre veto and the mode-5 global disable are both missing.** *Evidence:*
@@ -2397,25 +2398,6 @@ usual.
   *⚠ Traps:* the original's initial-pitch clamp never fires (a unit bug kept verbatim, `:35-37`);
   do not "fix" it as part of this. *Cross-refs:* `docs/architecture.md`'s `ZeppelinMotion` entry,
   `docs/formats/ai-nets.md`.
-
-- `BL-531` `[Bug]` **CM09: the first patrol hangs in the air and never flies.** *Evidence:* reported
-  at the controls: the first enemy patrol is stationary in the sky. An aircraft spawned with no net
-  and no target has nothing to fly toward and our patrol mode may leave the stick centred with the
-  throttle closed; the original's idle patrol still flies. *Fix shape:* log the patrol's mode,
-  net and lever on spawn; compare with `PT-56`'s plant test of patrol nets. *Cross-refs:* `BL-523`,
-  `PT-56`.
-
-- `BL-532` `[Bug]` **CM09: no enemies were seen starting from the ground hangars.** *Evidence:*
-  reported at the controls: CM09's enemies should take off from hangars on the ground, and none
-  were seen doing so. These are not zeppelin hangars; the ground generator is one of the other two
-  shapes in `EnemyGenerators.cs` (plain or moving spawner), or the aircraft are roster spawns the
-  mission's setup script releases with a hangar-door animation. Whether the generator triggered,
-  the aircraft spawned inside the hangar geometry and crashed at once (`BL-522`'s sea-level case,
-  `BL-527`'s under-ground case), or they spawned airborne elsewhere is open. *Fix shape:* read
-  CM09's `egen.zrd`/`aiv.zrd` for the hangar aircraft's spawn shape and position, then run the
-  mission headless with the generator log on and follow each spawn's first seconds. *⚠ Traps:* the
-  zeppelin launch-altitude gate does not apply to a ground start; do not read a ground hangar
-  through the zeppelin-launch shape. *Cross-refs:* `BL-522`, `BL-527`.
 
 ## Tooling, platform & docs
 

@@ -341,7 +341,7 @@ clusters they delegate to.
 - `src/Session/InstantActionDirector.cs` — the engine-side sequencing of one Instant Action mission: construction, the actor build phases, the zeppelin switch and wave arm, the sequencer tick and the end-condition/wrap-up wiring, called by `GameSession` at its pinned build and drive points.
 - `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll), and F12's objective-zeppelin selection.
 - `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry, pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
-- `src/Session/ScriptedPathVehicles.cs` — one mission's scripted-path vehicles: placement, the freeze, `START_TAXI`'s release, and the handoff back to the flight model.
+- `src/Session/ScriptedPathVehicles.cs` — one mission's scripted-path vehicles: the snap onto waypoint 0, the freeze, `START_TAXI`'s release, and the handoff back to the flight model.
 - `src/Session/CampaignRoster.cs` — the engine-free plan of a campaign mission's `aiv` roster: each block resolved to an airframe, its authored net or the decoded netless-wingman escort (never both), the merged volumes and the leader lookup; `CampaignDirector.BuildRoster` places it.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in and F12's wave-credit budget that switches it back off.
 - `src/Session/NetTrailerTargets.cs` — resolves a patrol net's trailer name (`player`, a zeppelin, a train) to a live position, so an anchored net rides its target (`BL-377`).
@@ -5163,7 +5163,9 @@ is the `campaign-roster` suite, the generator half the `generator-roster-params`
 
 ## src/Session/ScriptedPathVehicles.cs
 One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored
-`ScriptedPath` frozen at its own pose, `Release` is what `START_TAXI` calls, and `Step` drives each
+`ScriptedPath`, snapping it onto waypoint 0 facing down the first leg and freezing it there
+(`FUN_004940d0`, the same placement the non-zeppelin generator launch uses), `Release` is what
+`START_TAXI` calls, and `Step` drives each
 follower and writes its pose onto the body, or hands it to the caller's `setPose` for a body whose
 pose a simulation of its own owns (a held `FlightController`). A finished vehicle raises its handoff
 callback with the speed the path left it at and leaves the registry, so nothing keeps overwriting

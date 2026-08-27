@@ -2650,6 +2650,14 @@ at its first waypoint until a mission goal releases it (`FUN_0046a2b0`, `0x0046a
 the goal-action runtime `FUN_0046a490`). That same runtime can attach a path at any time with
 `FUN_004940d0` (`0x0049427c`), which sets `+0xcc = 1` and `+0xd4 = 0` so the vehicle starts moving at
 once. Only `FUN_0048a110` clears `+0xcc` (`0x0048a863`), and only on the final leg.
+
+**The placement is the path's, not the spawn record's.** Both entries overwrite the vehicle's
+position and facing before they set the path flag: the spawner at `0x0047c3a5` and `FUN_004940d0` at
+`0x004940f9` read waypoint 0, add the vehicle type's ride height at `type+0x218` to its Y, and take
+the attitude from the normalised leg into waypoint 1 (`FUN_0053de20`). The spawn record's own
+coordinates and yaw are used only on the branch where no path resolves. A roster block that authors
+a path is therefore free to author coordinates nowhere near the apron, and C1/M04's four do: their
+`aiv` positions sit 140 to 240 m above an airfield whose `pp1`–`pp4` waypoints are all at y=160.
 ⚠ **The freeze flag `+0xd4` is a separate flag from the path flag `+0xcc`.** A design folding the two
 into one boolean cannot express "placed and waiting", which is the state most authored path vehicles
 spend most of a mission in.
@@ -2697,12 +2705,24 @@ so the 300 m point steers and does not also delay the handoff.
 so it is the one every shipped path vehicle needs, and `vehicle.json` has no field traced to
 `type+0x218`. The port leaves it at zero and says so rather than reusing the 0.2 m the other classes
 take.
-⚠ **Nothing spawns the `aiv` roster yet**, so no session places a vehicle on a path and the registry
-is empty at run time; `START_TAXI` reports itself unconsumed until a roster spawner calls
-`ScriptedPathVehicles.Place`. Ground blow's own emitter test reads `+0xcc`, so a spawned vehicle put
-on a path would stop repelling the player the moment it completes the path; ground blow shipped
+The roster spawner calls `ScriptedPathVehicles.Place`, so C1/M04 really does put four aeroplanes on
+`pp1`–`pp4` and its `START_TAXI` chain really does release them.
+⚠ Ground blow's own emitter test reads `+0xcc`, so a spawned vehicle put
+on a path stops repelling the player the moment it completes the path; ground blow shipped
 without the registry filter (its player probe simply excludes aircraft), so whether a path-driven
-vehicle needs to become an emitter in this build is open, and only becomes answerable once one exists.
+vehicle needs to become an emitter in this build is open.
+
+**A non-zeppelin enemy generator launches down a path of its own**, which is the same law from a
+second entry. `FUN_004518d0` derives the path name from the host node with `sprintf("%.2s%.3s")` at
+`0x0045197c`, the first two characters and the last three, so `eairg31` asks for `eag31` and resolves
+the host-relative subtree `eag31_aipath`; the result is kept on the generator at `+0x24`, and a
+non-zeppelin generator whose path is missing or holds fewer than two waypoints does not load at all.
+The launch `FUN_00451bf0` then takes the same waypoint-0 placement as the roster spawner (a flat
+0.2 m added to Y at `0x00451fa1` rather than the type's ride height), a zero velocity, a full 1.0
+throttle lever at `+0x124`/`+0x128`, and sets `+0xcc = 1` with `+0xd4` untouched, so the aeroplane
+runs the strip immediately instead of waiting for a goal. C1/M04's two airfields each author a
+five-point run about 260 m long. CSVM does not port this entry yet: `AiGeneratorRuntime.Spawn` drops
+a non-zeppelin launch at the host node with no run, which is what `BL-522` is about.
 
 ## Collision response and `bounce_factor` (`FUN_0048d7f0`)
 
