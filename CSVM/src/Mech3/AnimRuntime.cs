@@ -1405,7 +1405,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// the map holds only the first claimant and a second copy's events would resolve onto the
     /// first copy's nodes. Anchor-scoped name resolution has no such collision, which is why a copy
     /// resolves against itself as long as it is passed as the anchor.</summary>
-    internal void IndexPooledCopy(Node3D subtree) => _templateStage.IndexPooledCopy(subtree);
+    internal void IndexPooledCopy(Node3D subtree)
+    {
+        _templateStage.IndexPooledCopy(subtree);
+        PrimeRest(subtree);
+    }
 
     /// <summary>Starts a definition on one anchor (null resolves its node names globally), running
     /// every sequence that is not ACTIVATION ON_CALL. Starting a def already live on the same
@@ -2009,11 +2013,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             _checkoutClosure[animName] = closure = _program.Subset(animName).Defs.ToList();
         foreach (var def in closure)
         {
-            if (def.ResetState == null)
-                continue;
             foreach (var a in Anchors(def))
-                if (a != null && IsInstanceValid(a) && slots.Contains(_templateStage.SlotOf(a)))
+            {
+                if (a == null || !IsInstanceValid(a) || !slots.Contains(_templateStage.SlotOf(a)))
+                    continue;
+                // The respawn's three steps (ResetCalled), for its reason: a copy handed out again
+                // must match the fresh one the original instances per call. ⚠ RESET_STATE alone
+                // leaves the last play's motions driving these nodes, mid-flight, into the new one.
+                Stop(def.AnimName, a);
+                RestoreRestPoses(def, a);
+                if (def.ResetState != null)
                     ApplyInstant(def.ResetState.Events, def, a);
+            }
         }
     }
 
@@ -2810,6 +2821,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // not cover reads a fixed value.
     private float HealthOf(AnimDefinition def, Node3D? anchor) =>
         _destructibles.Get(def, anchor)?.Health ?? def.Health;
+
+    // Records a whole pooled copy's authored pose while it is still as-built. RestOf captures a
+    // node the first time something MOVES it, which on a reused copy is a play that already
+    // displaced it, so the pool's restore needs the spawn pose banked before anything runs.
+    private void PrimeRest(Node3D node)
+    {
+        if (!_rest.ContainsKey(node))
+            _rest[node] = node.Transform;
+        foreach (var child in node.GetChildren())
+            if (child is Node3D c)
+                PrimeRest(c);
+    }
 
     // Restores every node a def's events touched to its authored rest pose (_rest, recorded the
     // first time a motion disturbed it). The membership check confines this to nodes that actually
