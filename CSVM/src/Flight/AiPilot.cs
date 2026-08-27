@@ -82,8 +82,9 @@ public sealed class AiPilot
     // The original's own avoid-crash aim point: straight up from the aircraft by this much.
     private const float ClimbOutAimM = 1000f;
 
-    // INVENTED: how far right of its own ground track the climb-out is displaced, making the
-    // 1000 m pull-up a 45° break to the right rather than a vertical one. See ClimbOutAim.
+    // INVENTED: how far right of its own ground track a NETTED pilot's climb-out is displaced,
+    // making the 1000 m pull-up a 45° break to the right rather than a vertical one. An escort
+    // flies the decoded vertical climb instead. See ClimbOutAim.
     private const float ClimbOutBreakM = 1000f;
 
     // The patrol aim's two decoded constants (FUN_0041d1f0 case 0, the aim built at 0x0041d30b-
@@ -155,6 +156,13 @@ public sealed class AiPilot
         float cos = toQuarry.Normalized().Dot(quarryNose.Normalized());
         return Mathf.Abs(cos) > Mathf.Cos(Mathf.DegToRad(quickDrawAngleDeg));
     }
+
+    /// <summary>The decoded avoid-crash aim point, both laws' own: the aeroplane's position with
+    /// <see cref="ClimbOutAimM"/> added to Y and its X and Z untouched (the escort law
+    /// <c>FUN_0041e760</c> at <c>0x0041e7c8</c>, the net follower <c>FUN_0041d1f0</c> at
+    /// <c>0x0041d2b4</c>; docs/org/aiPilot.md). What an escort flies, since its measured lateral
+    /// break below was never taken on one.</summary>
+    public static Vector3 ClimbOutAim(Vector3 pos) => pos + (Vector3.Up * ClimbOutAimM);
 
     /// <summary>Avoid crash's aim point. ⚠ Invented: the original climbs out at its own position
     /// plus 1000 m of altitude and nothing else. This adds a <see cref="ClimbOutBreakM"/>
@@ -352,16 +360,22 @@ public sealed class AiPilot
         return Fly(model, dt, aim, aimVelocity, AiLawParams.Engaged, engaged: true, gunLead: onAxis);
     }
 
-    // The climb-out both laws share: 1000 m above the aeroplane itself, on the emergency arm. The
-    // reported order and the flown aim are the same climb; ClimbOutAim only adds the invented
-    // break to the right, which is lateral. An escorting pilot flies it on the wingman table,
-    // which is the one the escort law passes where the net follower passes its own.
+    // The climb-out both laws share: 1000 m above the aeroplane itself, on the emergency arm, with
+    // no aim velocity. An escorting pilot flies the DECODED vertical climb on the wingman table,
+    // which is the pair the escort law passes where the net follower passes its own; every other
+    // pilot keeps the invented lateral break, whose merge measurement was taken on netted aircraft.
+    // The heading order only follows an aim that has a horizontal leg, so a vertical one holds it.
     private FlightInput FlyClimbOut(FlightModel model, float dt, AiModeMachine machine)
     {
-        var climbOut = ClimbOutAim(model.Position, model.VelocityDir * model.Speed);
-        TargetHeadingDeg = HeadingDegOf(climbOut - model.Position);
+        bool escorting = Escort is { Leader.InPlay: true };
+        var climbOut = escorting
+            ? ClimbOutAim(model.Position)
+            : ClimbOutAim(model.Position, model.VelocityDir * model.Speed);
+        var toClimbOut = climbOut - model.Position;
+        if (new Vector2(toClimbOut.X, toClimbOut.Z).LengthSquared() > 1f)
+            TargetHeadingDeg = HeadingDegOf(toClimbOut);
         TargetAltitude = machine.ClimbOutAltitude;
-        var table = Escort is { Leader.InPlay: true } ? AiLawParams.Wingman : AiLawParams.AvoidCrash;
+        var table = escorting ? AiLawParams.Wingman : AiLawParams.AvoidCrash;
         return Fly(model, dt, climbOut, Vector3.Zero, table, emergency: true);
     }
 

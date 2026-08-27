@@ -233,6 +233,53 @@ public class ObjectiveGraphTests
         Assert.Equal("MSG_OBJ_DESTROY", graph.HelpLabels["ftank01"]);
     }
 
+    [Fact]
+    public void A_lost_player_stops_the_tick_and_the_countdown_without_ending_anything()
+    {
+        var (graph, world) = Build(
+            "\"MISSION_TIMER\",[10.0],"
+            + "\"OBJECTIVE1\",[\"BEGIN_DORMANT\",[1.0],\"WAKEUP_SOUND_GROUP\",[\"snd_start\"],"
+            + "\"INACTIVE1\",[\"never\"]]");
+        Assert.True(graph.NotifyPlayerLost());
+        Assert.False(graph.NotifyPlayerLost());
+        Run(graph, 30f);
+        Assert.False(graph.Ended);
+        Assert.False(graph.Ending);
+        Assert.Equal(0f, graph.Elapsed);
+        Assert.Equal(ObjectiveState.Dormant, graph.StateOf(1));
+        Assert.Empty(world.SoundGroups);
+    }
+
+    [Fact]
+    public void The_lost_players_wreck_landing_ends_the_mission_lost_and_only_once()
+    {
+        var (graph, _) = Build("\"OBJECTIVE1\",[\"INACTIVE1\",[\"never\"]]");
+        var outcomes = new List<MissionOutcome>();
+        graph.MissionEnded += outcome => outcomes.Add(outcome);
+        Assert.False(graph.EndAfterPlayerLost());
+        graph.NotifyPlayerLost();
+        Assert.True(graph.EndAfterPlayerLost());
+        Assert.False(graph.EndAfterPlayerLost());
+        Assert.Equal(new[] { MissionOutcome.Lost }, outcomes);
+        Assert.Equal(MissionOutcome.Lost, graph.Outcome);
+    }
+
+    [Fact]
+    public void A_mission_already_won_when_the_player_died_stays_won()
+    {
+        // The debrief reads the won flag alone, so an INSTANTWIN that fired before the death
+        // survives it; the death only stops the wrap-up that would have delivered it.
+        // A step shorter than INSTANTWIN's own 0.1 s wrap-up, so the win is decided but undelivered.
+        var (graph, _) = Build("\"OBJECTIVE1\",[\"INSTANTWIN\"]");
+        graph.Step(0.01f);
+        Assert.True(graph.Ending);
+        graph.NotifyPlayerLost();
+        Run(graph, 5f);
+        Assert.False(graph.Ended);
+        Assert.True(graph.EndAfterPlayerLost());
+        Assert.Equal(MissionOutcome.Won, graph.Outcome);
+    }
+
     [ExtractedDataFact]
     public void The_shipped_C1_M02_script_parses_to_its_censused_shape()
     {

@@ -29,6 +29,12 @@ public sealed partial class CutsceneController : Node
     /// world.</summary>
     public const int CodeHoldsWorld = 20;
 
+    /// <summary>The code that takes the player out of flight, and with them the pose half: the
+    /// flown airframe rides the staged <c>player</c> marker while it holds. Public because a suite
+    /// driving an intro over a world built before any rig existed has to re-raise it, the way
+    /// <see cref="BindRigs"/> re-applies the state for a session.</summary>
+    public const int CodeOutOfFlight = 11;
+
     /// <summary>How far the card is made to overhang the pane it covers. The unmargined fit is an
     /// equality wherever the width term binds (every ratio at or above 1.64211, the 1280x720
     /// default included), so the card's outer edge lands on the frame edge and the world shows
@@ -47,11 +53,12 @@ public sealed partial class CutsceneController : Node
     /// director alongside its own per-step world update (code 20 stops both).</summary>
     public Action<bool>? WorldHeld;
 
-    /// <summary>Puts the player into the named <c>planes.zbd</c> airframe, codes 965 to 967. The
-    /// session fills this in with its roster's own swap; unbound, the three codes are hosted and
-    /// counted rather than reaching an aircraft, which is what a session with no rigs wants.
-    /// Returning false says no aircraft changed.</summary>
-    public Func<string, bool>? SwapAirframe;
+    /// <summary>Puts the player into the airframe codes 965 to 967 name, and carries out whatever
+    /// else the raised code asks of the mission (<see cref="AirframeHandover"/>). The session fills
+    /// this in with its roster's own swap; unbound, the three codes are hosted and counted rather
+    /// than reaching an aircraft, which is what a session with no rigs wants. A result reporting no
+    /// swap says no aircraft changed.</summary>
+    public Func<AirframeSwapOrder, AirframeSwapResult>? SwapAirframe;
 
     // The rest of the mission-script host's codes the intro definitions author. Each is the whole
     // message: the definition it sits in never qualifies it
@@ -59,11 +66,11 @@ public sealed partial class CutsceneController : Node
     private const int CodeHandoff = 1;
     private const int CodePresentation = 2;
     private const int CodeRestoreSystems = 10;
-    private const int CodeOutOfFlight = 11;
     private const int CodeCamParamsFree = 666;
     private const int CodeCamParamsRestore = 667;
     private const int CodeParkAi = 913;
     private const int CodeRevealAi = 914;
+    private const int CodeReplacePlayer = 951;
 
     // ANIM_STATE's RUNNING, the value AnimRuntime.AnimStateOf reports while an instance is live.
     private const int AnimRunning = 2;
@@ -86,9 +93,16 @@ public sealed partial class CutsceneController : Node
     private IReadOnlyList<PlayerRig> _rigs = Array.Empty<PlayerRig>();
     private Func<IReadOnlyList<FlightController>>? _aiPlanes;
     private Node3D? _cutsceneCamera;
+    // The node the code being dispatched was raised from, which is the aircraft a capture
+    // definition belongs to. Set per dispatch, not per episode: a called definition raises its own
+    // codes off its own root.
+    private string? _codeRoot;
     // The world root `camera1` belongs under, so Restore can undo a definition's own reparent.
     private Node3D? _cameraHome;
     private Node3D? _bars;
+    // The staged `player` marker an intro poses, or null in a session with no aircraft stage.
+    private Node3D? _playerMarker;
+    private AircraftStage? _aircraft;
     private Node3D? _card;
     private Aabb _cardBox;
     // The bars node's authored scale, read alongside the card measurement and for the same reason:
@@ -116,6 +130,12 @@ public sealed partial class CutsceneController : Node
     /// <summary>Whether the world and the objectives update are held (code 20). The session's drive
     /// paths read this; nothing clears it but the handoff or a skip.</summary>
     public bool HoldsWorld { get; private set; }
+
+    /// <summary>Does this episode offer the player a skip? Armed by the hold code and disarmed at
+    /// the handoff, which is the original's own active-cutscene slot: a mid-mission definition
+    /// that never raises that code is played out, and the key press belongs to the game.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public bool Skippable { get; private set; }
 
     /// <summary>Whether the chrome is hidden and the view is off the aircraft (code 2).</summary>
     public bool Presenting { get; private set; }
@@ -189,9 +209,11 @@ public sealed partial class CutsceneController : Node
     /// once the world is built, before any rig exists: the intro definitions start during the
     /// animation bootstrap, so their codes are hosted before there is anything to apply them to.
     /// </summary>
-    public void BindWorld(AnimRuntime? runtime)
+    public void BindWorld(AnimRuntime? runtime, AircraftStage? aircraft = null)
     {
         _runtime = runtime;
+        _aircraft = aircraft;
+        _playerMarker = aircraft?.PlayerMarker;
         if (runtime == null)
         {
             return;
@@ -222,6 +244,7 @@ public sealed partial class CutsceneController : Node
     {
         _rigs = rigs;
         _aiPlanes = aiPlanes;
+        StageFlownAirframe();
         if (!Playing)
         {
             return;
@@ -237,8 +260,10 @@ public sealed partial class CutsceneController : Node
 
     /// <summary>The <c>CALLBACK</c> host itself: answers one authored code, returning whether this
     /// host acted on it. A code outside the cutscene vocabulary is declined, so the runtime's own
-    /// two vehicle-death codes and every unknown one keep the answer they had.</summary>
-    public bool Host(int code, string? animName)
+    /// two vehicle-death codes and every unknown one keep the answer they had.
+    /// <paramref name="rootName"/> is the raising definition's root node, which the airframe swap
+    /// resolves the capture's own aircraft by.</summary>
+    public bool Host(int code, string? animName, string? rootName = null)
     {
         if (!Hosts(animName) && !(Playing && animName == Anim))
         {
@@ -256,6 +281,7 @@ public sealed partial class CutsceneController : Node
             case CodeCamParamsRestore:
             case CodeHandoff:
             case CodeRestoreSystems:
+            case CodeReplacePlayer:
                 break;
             default:
                 if (AirframeSwapCodes.For(code) != null)
@@ -288,6 +314,7 @@ public sealed partial class CutsceneController : Node
             GD.Print($"cutscene: '{animName}' has the session");
         }
 
+        _codeRoot = rootName;
         Act(code);
         return true;
     }
@@ -306,6 +333,7 @@ public sealed partial class CutsceneController : Node
         }
 
         MirrorCamera();
+        StagePlayerAircraft();
         PinBars();
         FrameBars();
         WatchBars();
@@ -317,10 +345,11 @@ public sealed partial class CutsceneController : Node
 
     /// <summary>The player's skip. Force-stops the definition the way the original's state core
     /// does, then restores the gameplay state the definition's own RESET_STATE asserts, so the
-    /// remaining beats being dropped cannot leave the mission held, hidden or unflyable.</summary>
+    /// remaining beats being dropped cannot leave the mission held, hidden or unflyable.
+    /// Declined, and the key press left to whatever else reads it, while no skip is armed.</summary>
     public bool Skip()
     {
-        if (!Playing)
+        if (!Playing || !Skippable)
         {
             return false;
         }
@@ -400,6 +429,9 @@ public sealed partial class CutsceneController : Node
             Act(code);
         }
 
+        // After the restore codes, so OutOfFlight is already down and this hands every aircraft
+        // back the pose it held before the intro staged it.
+        StagePlayerAircraft();
         if (_bars != null)
         {
             AnimRuntime.SetSubtreeActive(_bars, false);
@@ -434,6 +466,10 @@ public sealed partial class CutsceneController : Node
         {
             case CodeHoldsWorld:
                 HoldsWorld = true;
+                // The original arms its skip HERE and nowhere else, so the two states share a
+                // code and not an implementation: the hold is what a definition asks for, the
+                // skip is what the player is then offered.
+                Skippable = true;
                 WorldHeld?.Invoke(true);
                 break;
             case CodePresentation:
@@ -460,11 +496,15 @@ public sealed partial class CutsceneController : Node
                 break;
             case CodeHandoff:
                 HoldsWorld = false;
+                Skippable = false;
                 WorldHeld?.Invoke(false);
                 Presenting = false;
                 ApplyPresentation(false);
                 OutOfFlight = false;
                 ApplyOutOfFlight(false);
+                break;
+            case CodeReplacePlayer:
+                ReplacePlayer();
                 break;
             case CodeRestoreSystems:
                 foreach (var pilot in Pilots())
@@ -498,17 +538,38 @@ public sealed partial class CutsceneController : Node
     // does, which is how the player gets flight back in the new airframe.
     private void Swap(AirframeSwapCode airframe)
     {
-        if (SwapAirframe == null || !SwapAirframe(airframe.PlaneNode))
+        var swapped = SwapAirframe?.Invoke(new AirframeSwapOrder(airframe, _codeRoot)) ?? default;
+        if (!swapped.Swapped)
         {
             GD.Print($"cutscene: callback {airframe.Code} names '{airframe.PlaneNode}' " +
                      "but no aircraft was there to swap");
             return;
         }
 
+        // ⚠ Drop the capture's aircraft from the parked list, or 914 reveals it again. CM02's
+        // capture is called from the wing walk, whose 913 parks that aircraft BEFORE 967 hides it,
+        // and the swap's hide is the mission's to keep rather than this episode's to undo.
+        if (swapped.Hidden is { } hidden)
+        {
+            _parked.Remove(hidden);
+        }
+
+        StageFlownAirframe();
         OutOfFlight = true;
         ApplyOutOfFlight(true);
         Presenting = true;
         ApplyPresentation(true);
+    }
+
+    // Player 1's airframe subtree into the runtime's node table, the same restriction the swap
+    // keeps: the original has one player vehicle and the hookup definition names it. Run wherever
+    // that aircraft can have been replaced, since the definition resolves it by name and index.
+    private void StageFlownAirframe()
+    {
+        if (_runtime is { } runtime && _aircraft is { } aircraft && _rigs.Count > 0)
+        {
+            aircraft.StageFlown(runtime, _rigs[0].Controller?.PlaneModel);
+        }
     }
 
     // The chrome and the view target: CameraOwned is what silences the whole per-frame camera arm,
@@ -546,6 +607,10 @@ public sealed partial class CutsceneController : Node
             pilot.Inert = on;
             pilot.Audio?.SetPaused(on);
         }
+
+        // ⚠ In the same instant, not on the next tick: the definition raising this code goes on
+        // posing the aircraft in the same dispatch, so the pose it reads must be this one.
+        StagePlayerAircraft();
     }
 
     private void ParkAi()
@@ -575,6 +640,49 @@ public sealed partial class CutsceneController : Node
         }
 
         _parked.Clear();
+    }
+
+    // The pose half of the original's `player` node: an intro activates it, reparents it under the
+    // airship and flies it on an SI script, and the aeroplane that follows it is whichever airframe
+    // the pilot flies. Re-asserted every tick rather than latched, so a respawn cannot take the
+    // model back off the screen mid-cutscene. Cleared at the handoff, which hands the aeroplane back
+    // the pose it held before the staging unless the definition re-placed it (ReplacePlayer).
+    private void StagePlayerAircraft()
+    {
+        if (_playerMarker == null)
+        {
+            return;
+        }
+
+        var pose = OutOfFlight && _playerMarker.Visible
+            ? AnimRuntime.WorldTransform(_playerMarker, out _)
+            : (Transform3D?)null;
+        foreach (var pilot in Pilots())
+        {
+            pilot.StageAt(pose);
+        }
+    }
+
+    // Where the pilot flies out of: the `player` node's world pose, read the moment the definition
+    // asks for it. The original writes that pose straight into the vehicle's own position, rotation
+    // and velocity, so this reads the marker whether or not it is drawn, and the aeroplane's own
+    // hand-back target moves with it (docs/formats/anim-definitions/cutscenes.md).
+    private void ReplacePlayer()
+    {
+        if (_playerMarker == null)
+        {
+            GD.Print($"cutscene: callback {CodeReplacePlayer} re-places the pilot, but this session " +
+                     $"staged no '{AircraftStage.PlayerNode}' to read a pose off");
+            return;
+        }
+
+        var pose = AnimRuntime.WorldTransform(_playerMarker, out _);
+        foreach (var pilot in Pilots())
+        {
+            pilot.ResumeAt(pose);
+        }
+
+        GD.Print($"cutscene: '{Anim}' re-places the pilot at {pose.Origin}");
     }
 
     private void MirrorCamera()

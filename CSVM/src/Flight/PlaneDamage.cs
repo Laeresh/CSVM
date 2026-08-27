@@ -146,6 +146,37 @@ public sealed class PlaneDamage
     /// armor and health ranges (player.json's 'crash' block).</summary>
     public PartState? Apply(string partName, float damage) => Apply(partName, damage, damage);
 
+    /// <summary>Scales every zone's CURRENT pools and recomputes the whole pair off them: the
+    /// airframe swap's damage carry-over, where the fractions come from the aircraft the capture
+    /// animation belongs to (FUN_0047bf70, per section). The maxima are untouched, so the new
+    /// airframe keeps its own and only what is left of them moves.</summary>
+    public void ScalePools(float armorFraction, float healthFraction)
+    {
+        if (_order.Count == 0)
+        {
+            _wholeArmor = Mathf.Clamp(_wholeArmor * armorFraction, 0f, WholeArmorMax);
+            _wholeHealth = Mathf.Clamp(_wholeHealth * healthFraction, 0f, WholeHealthMax);
+            return;
+        }
+
+        foreach (var p in _order)
+        {
+            p.Armor = Mathf.Clamp(p.Armor * armorFraction, 0f, p.Def.MaxArmor);
+            p.Hp = Mathf.Clamp(p.Hp * healthFraction, 0f, p.Def.MaxHp);
+        }
+
+        RecomputeWhole();
+    }
+
+    /// <summary>Writes the whole-vehicle pools directly and leaves the zones alone: what the
+    /// airframe swap hands the outgoing aeroplane's new pilot, which the original writes as the
+    /// two sums it measured off the hull the player is leaving.</summary>
+    public void SetWholePools(float armor, float health)
+    {
+        _wholeArmor = Mathf.Clamp(armor, 0f, WholeArmorMax);
+        _wholeHealth = Mathf.Clamp(health, 0f, WholeHealthMax);
+    }
+
     /// <summary>"hull a81% h90% · nose a0% h85% · …" — the whole-vehicle pair first (the pool
     /// the kill reads, kept visible in flight), then parts below full, armor pool then health
     /// pool; "" when pristine.</summary>

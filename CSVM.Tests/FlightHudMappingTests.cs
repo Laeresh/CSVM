@@ -263,6 +263,24 @@ public class FlightHudMappingTests
     }
 
     [Fact]
+    public void AutoLandOfferedAppendsThePromptUnlessHeldCrashedOrHalted()
+    {
+        var hud = new FlightHud();
+        var offered = new FlightHudState { AutoLandOffered = true };
+        Assert.Contains("AUTO-LAND AVAILABLE — PRESS F9 (GAMEPAD L3) TO LAND",
+            hud.ComposeTextLines(in offered, mph: 0f, ft: 0f, wide: false));
+
+        var held = new FlightHudState { AutoLandOffered = true, Held = true };
+        var crashed = new FlightHudState { AutoLandOffered = true, Crashed = true };
+        var halted = new FlightHudState { AutoLandOffered = true, Halted = true };
+        foreach (var state in new[] { held, crashed, halted })
+        {
+            Assert.DoesNotContain("AUTO-LAND AVAILABLE — PRESS F9 (GAMEPAD L3) TO LAND",
+                hud.ComposeTextLines(in state, mph: 0f, ft: 0f, wide: false));
+        }
+    }
+
+    [Fact]
     public void ADamageSummaryAppendsItsOwnDmgLine()
     {
         var hud = new FlightHud();

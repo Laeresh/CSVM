@@ -207,6 +207,11 @@ public sealed record SessionSpec
     /// <summary>The <c>:&lt;seq&gt;</c> half of <c>--campaign=</c>; null when it was omitted or
     /// unparseable, in which case a warning is recorded and only the profile name is kept.</summary>
     public int? CampaignMissionSeq { get; private set; }
+    /// <summary><c>--no-crash-loss</c>: losing the aircraft leaves the campaign mission running,
+    /// so a session being debugged can fly on past a crash. The game default is the original's
+    /// rule, which ends the mission lost (<c>docs/formats/objectives.md</c>, "Win and loss").
+    /// Read by <c>GameSession</c> alone; nothing else here derives from it.</summary>
+    public bool NoCrashLoss { get; private set; }
     /// <summary>Set only by <see cref="FromMenu"/>: the launchscreen wizard's own built
     /// <c>InstantActionDef</c>, null on every CLI launch since <c>--ia=</c> carries a path
     /// instead. Only ever carried onto the record here, never loaded or built — the same
@@ -762,6 +767,7 @@ public sealed record SessionSpec
             else if (arg == "--debug-anim-ui") { s.DebugAnimUi = true; s.HasContentArg = true; }
             else if (arg == "--debug-anim") { s.DebugAnim = true; }
             else if (arg == "--no-pads") { s.NoPads = true; }
+            else if (arg == "--no-crash-loss") { s.NoCrashLoss = true; }
             else if (arg == "--det") { s._detArg = true; }
             else if (arg == "--no-det") { s.NoDet = true; }
             else if (arg == "--perf") { s.Perf = true; }

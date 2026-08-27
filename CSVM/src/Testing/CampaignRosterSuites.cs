@@ -63,6 +63,15 @@ internal static class CampaignRosterSuites
     private const float FarRingM = 1500f;
     private const float ScanRangeM = 3000f;
 
+    // BL-497: the one block in the extracted install that authors both talker and constitution
+    // (7, 8) and carries an accent, so its resolved voice chances can be told apart from the
+    // session's flat rating-5 fallback.
+    private const string VoiceChapter = "C5";
+    private const string VoiceMission = "M01";
+    private const string VoiceBlock = "autogyro_1";
+    private const int VoiceBlockTalker = 7;
+    private const int VoiceBlockConstitution = 8;
+
     private static readonly string[] BomberBlocks =
     {
         "britbalmoral_1", "britbalmoral_2", "britbalmoral_3",
@@ -396,6 +405,136 @@ internal static class CampaignRosterSuites
 
         ctx.WriteArtifact($"test-roster-spawn-names-{BiasChapter}-{BiasMission}.txt", report.ToString());
         ctx.Note($"{BiasChapter}/{BiasMission}'s authored rating_biases reach their spawns and move the pick");
+    }
+
+    /// <summary>BL-497: a campaign spawn's authored <c>talker</c>/<c>constitution</c> ratings reach
+    /// <see cref="AiVoiceRuntime"/> through <see cref="CampaignDirector.BuildRoster"/>'s own voice
+    /// hand-off, not the session's flat rating-5 default. No chapter world is built: the roster
+    /// phase alone is under test, over <c>Spawner</c>'s lightweight rig factory.</summary>
+    internal static void RosterVoiceRatings(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, VoiceChapter, VoiceMission);
+        ctx.RequireData(missionZrdr, $"{VoiceChapter}/{VoiceMission} zrdr");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, VoiceChapter);
+        ctx.RequireData(texturesPath, $"{VoiceChapter} textures");
+
+        CampaignMission? found = null;
+        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        {
+            if (m.ChapterFolder.Equals(VoiceChapter, StringComparison.OrdinalIgnoreCase)
+                && m.MissionFolder.Equals(VoiceMission, StringComparison.OrdinalIgnoreCase))
+            {
+                found = m;
+            }
+        }
+        if (found is not { } mission)
+        {
+            throw new SuiteSkippedException($"{VoiceChapter}/{VoiceMission} is not in cm_sequence");
+        }
+
+        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var script = ObjectiveScript.Load(missionZrdr);
+        var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var voice = new CombatVoice(soundDefs, soundGroups, CombatVoice.LoadAccents(ctx.ZrdrPath));
+
+        var textures = new TextureArchive(texturesPath);
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        WorldSounds? sounds = null;
+        AiVoiceRuntime? runtime = null;
+        FlightRoster? roster = null;
+        ProjectilePool? pool = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            roster = Spawner(ctx, planesGamez, textures, live);
+
+            sounds = new WorldSounds(soundDefs, soundGroups)
+            {
+                Loader = (d, warn) => archive.Find(d.WavName, d.Looped, warn),
+            };
+            ctx.Host.AddChild(sounds);
+            sounds.Prewarm(voice.PrewarmNames(new[] { 32 }));
+            sounds.Loader = null;
+
+            runtime = new AiVoiceRuntime(voice, sounds, new System.Random(5));
+            ctx.Host.AddChild(runtime);
+
+            // The exact conversion GameSession.RegisterAiVoice applies in production: a null
+            // override falls back to rating 5, otherwise each chance is read at its OWN rating.
+            // What is under test is the two overrides CampaignDirector passes in, not this.
+            void RegisterVoice(FlightController? ai, int? accentId, int? talkerOverride, int? constitutionOverride)
+            {
+                if (ai == null || accentId is not { } acc)
+                {
+                    return;
+                }
+                int talkerRating = talkerOverride ?? 5;
+                int constitutionRating = constitutionOverride ?? 5;
+                runtime!.RegisterAi(ai, acc, skills.At("talker_chance", talkerRating),
+                    skills.At("constitution_chance", constitutionRating));
+            }
+
+            director.BuildRoster(new CampaignDirector.RosterInputs
+            {
+                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, VoiceChapter),
+                MissionZrdrPath = missionZrdr,
+                ZrdrPath = ctx.ZrdrPath,
+                MinAiActiveDist = skills.MinAiActiveDist,
+                NetTrailers = new NetTrailerTargets(() => null, _ => null),
+                Spawn = (plan, pos, look, pilot) =>
+                    roster!.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot)),
+                RegisterVoice = RegisterVoice,
+                Rng = new System.Random(1),
+            });
+
+            if (!director.Roster.TryGetValue(VoiceBlock, out var rig))
+            {
+                throw new SuiteSkippedException($"{VoiceChapter}/{VoiceMission} does not plan '{VoiceBlock}'");
+            }
+            var speaker = runtime.Dispatcher.Find(rig.PlayerIndex);
+            ctx.Check(speaker != null, $"'{VoiceBlock}' registers as a voice speaker");
+            if (speaker == null)
+            {
+                return;
+            }
+
+            float fallbackTalker = skills.At("talker_chance", 5);
+            float fallbackConstitution = skills.At("constitution_chance", 5);
+            float expectedTalker = skills.At("talker_chance", VoiceBlockTalker);
+            float expectedConstitution = skills.At("constitution_chance", VoiceBlockConstitution);
+
+            ctx.Check(Mathf.IsEqualApprox(speaker.TalkerChance, expectedTalker),
+                $"'{VoiceBlock}' talker chance reads its own authored rating ({VoiceBlockTalker}), not the session fallback (5): {speaker.TalkerChance:0.000} vs {expectedTalker:0.000} (fallback {fallbackTalker:0.000})");
+            ctx.Check(Mathf.IsEqualApprox(speaker.ConstitutionChance, expectedConstitution),
+                $"'{VoiceBlock}' constitution chance reads its own authored rating ({VoiceBlockConstitution}), on a curve independent of the talker rating above: {speaker.ConstitutionChance:0.000} vs {expectedConstitution:0.000} (fallback {fallbackConstitution:0.000})");
+            ctx.Check(!Mathf.IsEqualApprox(speaker.TalkerChance, speaker.ConstitutionChance),
+                $"…and the two chances differ from each other, since the two authored ratings (7, 8) differ: talker {speaker.TalkerChance:0.000} vs constitution {speaker.ConstitutionChance:0.000}");
+            ctx.Note($"{VoiceChapter}/{VoiceMission}'s '{VoiceBlock}' authors talker={VoiceBlockTalker} constitution={VoiceBlockConstitution}, each rating reaching the voice runtime on its own curve");
+        }
+        finally
+        {
+            var members = new List<FlightController>(roster?.AiAircraft ?? Array.Empty<FlightController>());
+            roster?.ClearMembership();
+            foreach (var rig in members)
+            {
+                rig.Free();
+            }
+            pool?.Free();
+            if (sounds != null)
+            {
+                sounds.FlushOneShots();
+                sounds.Free();
+            }
+            textures.Dispose();
+        }
     }
 
     /// <summary>The session's own AI spawner with no world effects: <c>CrashProgram</c> and

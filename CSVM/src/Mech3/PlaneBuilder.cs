@@ -42,6 +42,7 @@ public sealed class PlaneBuilder
     private readonly bool _spinningProps;
     private readonly bool _withDamagePanels;
     private readonly bool _withCockpitInterior;
+    private readonly bool _withDockingHook;
     private readonly List<Node3D> _wingFlares = new();
     private readonly List<Node3D> _damagePanels = new();
     private readonly List<Node3D> _cockpitDamagePanels = new();
@@ -53,13 +54,13 @@ public sealed class PlaneBuilder
 
     /// <param name="spinningProps">Spins the blur layers instead of the static disc; implies damage panels.</param>
     /// <param name="damagePanels">Builds exterior pdpN panels hidden, for the --damage lab.</param>
-    /// <param name="scheme">Paint livery (<see cref="PlanePainter"/>); null keeps shipped skins,
-    /// per builder so two players can differ.</param>
+    /// <param name="scheme">Paint livery (<see cref="PlanePainter"/>); null keeps shipped skins, per builder so two players can differ.</param>
     /// <param name="patterns"><see cref="PatternLibrary"/>'s region masks; empty paints nothing.</param>
     /// <param name="cockpitInterior">Builds <see cref="CockpitInterior"/>; a human rig only, so an AI plane never pays for a cockpit nobody sits in.</param>
+    /// <param name="dockingHook">Builds the airframe's <c>*_hook</c> group, parked at its archive-authored inactive bit; a human rig only.</param>
     public PlaneBuilder(GameZ gamez, TextureArchive textures, bool spinningProps = false,
         bool damagePanels = false, PaintScheme? scheme = null, PatternLibrary? patterns = null,
-        bool cockpitInterior = false)
+        bool cockpitInterior = false, bool dockingHook = false)
     {
         _gamez = gamez;
         _textures = textures;
@@ -82,6 +83,7 @@ public sealed class PlaneBuilder
         _spinningProps = spinningProps;
         _withDamagePanels = spinningProps || damagePanels;
         _withCockpitInterior = cockpitInterior;
+        _withDockingHook = dockingHook;
     }
 
     /// <summary>The paint applied to this build, once <see cref="Build"/> has resolved the
@@ -151,6 +153,12 @@ public sealed class PlaneBuilder
                 return false;
         return true;
     }
+
+    /// <summary>The airframe's skyhook group node (<c>bal_hook</c>, <c>blood_hook</c>, …), the
+    /// subtree a zeppelin hookup cutscene extends through that airframe's own
+    /// <c>&lt;x&gt;_hook_extend</c> definition.</summary>
+    public static bool IsDockingHook(string name) =>
+        name.EndsWith("_hook", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk").</summary>
     public Node3D Build(string rootName)
@@ -295,6 +303,12 @@ public sealed class PlaneBuilder
             {
                 _damagePanels.Add(n3d);
             }
+            else if (IsDockingHook(AnimRuntime.NameOf(n3d)))
+            {
+                // Retracted until the hookup cutscene calls <x>_hook_extend, whose own first
+                // sequence is what activates the group. The archive ships the bit that way.
+                n3d.Visible = ActiveInGameZ(n3d);
+            }
         }
         foreach (var child in node.GetChildren())
             CollectWingFlares(child);
@@ -395,10 +409,9 @@ public sealed class PlaneBuilder
         if (IsDamagePanel(node.Name, out bool cockpit)
             && (cockpit ? !_withCockpitInterior : !_withDamagePanels))
             return true;
-        // Skyhook arms (zeppelin docking): every plane has a *_hook subtree (blood_hook,
-        // kest_hook, gyro_hook, …) whose *_hook.json anim RESET_STATE deactivates the
-        // group + its arm/door nodes — retracted by default, extended only on call.
-        if (node.Name.EndsWith("_hook", StringComparison.OrdinalIgnoreCase))
+        // Skyhook arms: built only where a docking cutscene can call the airframe's own
+        // <x>_hook_extend, since that definition ACTIVATES the group rather than creating it.
+        if (!_withDockingHook && IsDockingHook(node.Name))
             return true;
         var kind = PropParts.Classify(node.Name);
         // Exterior shows only the static disc.

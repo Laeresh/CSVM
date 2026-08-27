@@ -546,13 +546,48 @@ at all. The net follower's avoid-crash case does the same 1000 m climb-out with 
 block, so **avoid crash is "aim 1000 m above yourself" in both laws**. The escort law flies its own
 climb-out on `DAT_0061fb28`, the wingman table, where the net follower uses `DAT_0061fb48`.
 
+### What the escort's climb-out is, exactly
+
+The arm is `0x0041e7bd`–`0x0041e814`, read out instruction by instruction because CSVM's escort was
+flying an invented displacement here:
+
+| what | where | value |
+|---|---|---|
+| aim point | `0x0041e7c8`–`0x0041e7d3` reads `+0x204` (own x, y, z) | own position, **X and Z untouched** |
+| the climb | `0x0041e7e0` adds `DAT_00603464` to the Y term | `0x447a0000` = **1000.0** |
+| aim velocity | `0x0041e7ee` pushes `0x0075d1b8` | the engine's zero vector |
+| parameter table | `0x0041e7e6` pushes `0x0061fb28` | the **wingman** table, 0.4/1.5 |
+| `emergency` | `0x0041e7d8` pushes 1 | set |
+| `gunLead` | `0x0041e7d6` pushes 0 | clear |
+
+The net follower's case 3 is the same six values at `0x0041d2b4`–`0x0041d301`, differing in the
+table alone (`0x0061fb48`, 0.6/1.3). So **there is no lateral term in either law**: the climb-out
+is a wings-level pull-up, and what separates a wingman's from a netted aeroplane's is the throttle
+band, nothing else.
+
+**Duration and exit.** The arm `return`s at `0x0041e814` without reading or writing the escort
+state at `+0xd8`, and no other site writes that byte outside `FUN_0041e760` (six sites, all listed
+above). So the climb-out ends exactly when `FUN_0041f810` stops setting `+0x358` to 3, which is the
+first clear ray, and the wingman resumes the formation state it already held. **It returns to
+station; it does not re-join**, and state 3 (`Rejoining`) stays unreachable.
+
+⚠ **A wingman's own ray sees the leader it is formating on**, and this is the original's behaviour
+rather than a port defect. The ray excludes only the caster, the station sits astern of a player
+leader, and the separation push makes the hold a weave along the leader-to-wingman line, so a
+wingman trailing inside 4.5 seconds of travel is looking straight at its leader. Measured on
+C3/M01: the campaign wingman sits 94.5 m dead astern and arms on `player1/airframe` at a 511 m
+reach nine seconds after the intro.
+
 ### What CSVM ports of this (D34)
 
 `src/Flight/AiEscort.cs` is the law: the five-state machine, both station offsets, the ramp, the
 break-off test and the separation push, pure over a leader/target snapshot. `AiPilot.Escort` holds
 it and, when its leader is in play, dispatches to it INSTEAD of pursue, lay off, patrol, evade and
 a running maneuver, keeping only stunned and avoid crash ahead of it, which is the original's own
-fork order. The station is flown through `AiControlLaw` on `AiLawParams.Wingman`.
+fork order. The station is flown through `AiControlLaw` on `AiLawParams.Wingman`, and so is the
+climb-out: `AiPilot.ClimbOutAim(pos)` is the decoded vertical aim above, `AiPilot.FlyClimbOut`
+picks it for an escorting pilot and the invented lateral break for every other one, and the escort
+state is untouched across the whole episode so the wingman resumes its station on release.
 
 Not ported: the radio call the join plays (`DAT_0071c3b0`) and the re-acquire sweep state 2 runs
 when its target is lost (`FUN_0041f9c0` again, with its own 3600 m test and second cue,
@@ -697,10 +732,22 @@ mutual detection can still merge. Head-ons in the original are rare, not impossi
 CSVM's probe is `FlightController.AvoidCrashBlocksLine`, masking `CollisionLayers.WorldAndAircraft`
 with the caster's own body excluded, which is this rule. `AiModeMachine` carries the rest of the
 band structure: `ProbeLookaheadS` 4.5 s, `ProbeIntervalMinS`/`ProbeIntervalMaxS` 0.5…1.0 s drawn
-per plane from its seeded rng, `AltitudeFloorM` 20, `ProbeCeilingM` 8000, `ClimbOutM` 1000, and
-release on the first clear ray. What remains invented there is the probe geometry inside the middle
-band (a second, deck-slanted ray, `ProbeDeckM`) and `ProbeMinLookaheadM`, both marked as such, plus
-`AiPilot.ClimbOutBreakM` below.
+per plane from its seeded rng, `AltitudeFloorM` 20, `ProbeCeilingM` 8000, `ClimbOutM` 1000, one ray
+along the aeroplane's own velocity, and release on the first clear ray. What remains invented there
+is `ProbeMinLookaheadM`, marked as such, plus `AiPilot.ClimbOutBreakM` below, which a netted pilot
+flies and an escorting one does not.
+
+### Retired: a second, deck-slanted probe ray
+
+An invented `ProbeDeckM` cast a second ray 40 m below the lookahead point so that "shallow terrain
+under a level flight path still registers". The original casts one ray and no more, and the second
+one arms where the decoded ray is clear: on C3/M01 it broke the campaign wingman off its station
+twice on a low pass over water, at 90 m and again at 80 m, each time on a `col_water` the primary
+ray missed. Removing it leaves that pass with no break-off at all and turns the wingman's recovery
+monotonic (separation 294.6 m falling to 236.4 m, altitude difference 174.8 m to 50.5 m, where with
+the deck ray it bottomed at 244 m / 55 m and climbed back to 305 m / 132 m). The tail of the
+detection argument above applies: detection frequency is measurably not what produces CSVM's
+mid-airs, so a probe that fires less often is not a collision risk on that evidence.
 
 ### Measured: the third bound is the binding one
 

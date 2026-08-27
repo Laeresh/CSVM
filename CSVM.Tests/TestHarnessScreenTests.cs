@@ -13,7 +13,6 @@ namespace CSVM.Tests;
 public class TestHarnessScreenTests
 {
     private const string KnownDet = "ERROR: Condition \"det == 0\" is true.";
-    private const string KnownTree = "ERROR: Condition \"!is_inside_tree()\" is true. Returning: Transform3D()";
 
     [Fact]
     public void PlainOutputScreensClean()
@@ -31,13 +30,13 @@ public class TestHarnessScreenTests
     [Fact]
     public void KnownEngineErrorsAreAllowedAndCounted()
     {
-        var screen = TestHarness.Screen(new[] { KnownDet, "   at: invert (core/math/basis.cpp:47)", KnownTree });
-        Assert.Equal(2, screen.Total);
-        Assert.Equal(2, screen.Allowed);
+        var screen = TestHarness.Screen(new[] { KnownDet, "   at: invert (core/math/basis.cpp:47)" });
+        Assert.Equal(1, screen.Total);
+        Assert.Equal(1, screen.Allowed);
         Assert.Empty(screen.Unexpected);
         Assert.True(screen.Ok);
         // The counts are what makes an allowance auditable rather than a blind pass.
-        Assert.Equal(2, screen.AllowedCounts.Values.Sum());
+        Assert.Equal(1, screen.AllowedCounts.Values.Sum());
     }
 
     [Fact]

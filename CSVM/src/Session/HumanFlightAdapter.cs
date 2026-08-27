@@ -8,6 +8,11 @@ using Godot;
 
 namespace CSVM.Session;
 
+/// <summary>The airframe and paint one human rig is flying, as its own assembly resolved them.
+/// Read by the mission-script airframe hand-over, which gives the aeroplane the player is leaving
+/// to another pilot and needs both to build it again.</summary>
+public readonly record struct FlyingAirframe(string PlaneNode, PaintScheme? Scheme);
+
 /// <summary>Assembles one player's flight rig: the painted plane model, the
 /// <see cref="FlightController"/> and everything hung on it — loadout/ordnance, compass, gauges,
 /// HUD readout/reticle, damage visuals, audio, this player's stunt run, the spawn placement, and
@@ -28,6 +33,10 @@ internal sealed class HumanFlightAdapter
     private readonly AircraftAssemblyResources _aircraft;
     private readonly FlightWorldBindings _world;
     private readonly HumanRosterBindings _human;
+
+    // What each rig is flying now, by rig index: a swap replaces the entry. The mission-script
+    // hand-over gives wingman_4 the aeroplane the player is LEAVING, and nothing else records it.
+    private readonly Dictionary<int, FlyingAirframe> _flying = new();
 
     // Every player's start, resolved in one call (see Assemble).
     private IReadOnlyList<FlightStart>? _starts;
@@ -75,6 +84,11 @@ internal sealed class HumanFlightAdapter
             cockpitPanels: planeBuilder.CockpitDamagePanels);
     }
 
+    /// <summary>What rig <paramref name="rigIndex"/> is flying, or null before its first assembly.
+    /// </summary>
+    public FlyingAirframe? Flying(int rigIndex) =>
+        _flying.TryGetValue(rigIndex, out var flying) ? flying : null;
+
     /// <summary>Builds player <paramref name="pi"/>'s aircraft into <paramref name="rig"/> and
     /// adds it to the session world. Call once per rig in ascending player order (see the class
     /// note on the shared rng streams). <paramref name="swap"/> is a mid-mission airframe swap
@@ -114,17 +128,21 @@ internal sealed class HumanFlightAdapter
         }
 
         // Every player flies the Fortune Hunters livery unless --paint says otherwise, as the
-        // original's stock planes do; a custom plane wears the paint it was built with instead,
-        // through the same substitution path the livery lab drives. --paint still wins over both.
+        // original's stock planes do; a custom plane wears the paint it was built with instead.
+        // A swap's ShippedSkins reading wins over all three, null included (below).
         long mark = StartupProfile.Mark();
         // cockpitInterior: a human rig is the only one whose pilot can look out of a cockpit
         // (PLAN-cockpit-view, B11) — FlightRoster's AI builder deliberately does not ask for one.
+        var scheme = swap is { ShippedSkins: true } capturedSwap
+            ? capturedSwap.Scheme
+            : swap?.Scheme
+                ?? (custom != null && !_liveries.PaintRequested
+                    ? Flight.CustomPlaneBuild.PaintFor(custom, UI.HangarPaintPage.PatternName(custom.PaintPattern))
+                    : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
+                        _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)));
+        _flying[pi] = new FlyingAirframe(planeName, scheme);
         var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
-            scheme: custom != null && !_liveries.PaintRequested
-                ? Flight.CustomPlaneBuild.PaintFor(custom, UI.HangarPaintPage.PatternName(custom.PaintPattern))
-                : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
-                    _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)),
-            patterns: _liveries.Patterns, cockpitInterior: true);
+            scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true);
         var planeModel = planeBuilder.Build(planeName);
         StartupProfile.Record("plane", mark);
         MeshInstances += planeBuilder.MeshInstanceCount;
@@ -138,6 +156,8 @@ internal sealed class HumanFlightAdapter
             // Null when the airframe ships no cockpit1 — the rig then hides nothing, as before B11.
             Cockpit = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior),
             CockpitPanel = CockpitGauges.Bind(planeBuilder.CockpitInterior),
+            Scheme = scheme,
+            Painter = planeBuilder.Painter,
         };
         if (verbose && controller.Cockpit != null)
             GD.Print($"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");

@@ -312,7 +312,7 @@ internal static class AiSuites
             ctx.Check(Mathf.IsEqualApprox(Combined(subject), inertBefore),
                 $"…and its damage pools are untouched: {Combined(subject):0.##} vs {inertBefore:0.##}");
             ctx.Check(!StepMoves(subject), $"a sim step does not move the inert aircraft");
-            ctx.Check(!subject.PlaneModel!.Visible, $"the inert aircraft is not drawn");
+            ctx.Check(!subject.PlaneModel!.IsVisibleInTree(), $"the inert aircraft is not drawn");
 
             // Trap: inert is NOT "left off the pool's roster". The plane reached RegisterAircraft like any
             // other, so the fuse and blast passes that walk that roster can see it, which is why InPlay is read
@@ -332,7 +332,9 @@ internal static class AiSuites
             ctx.Check(ScanFinds(subject), $"the activated aircraft is returned by an aim-assist scan");
             ctx.Check(RoundBites(subject), $"a round fired through the activated aircraft costs it HP");
             ctx.Check(StepMoves(subject), $"a sim step moves the activated aircraft");
-            ctx.Check(subject.PlaneModel.Visible, $"the activated aircraft is drawn");
+            // In the tree, not the model's own bit: presence is written on the pivot above it, and
+            // the model's bit is the airframe's archive ACTIVE state (FlightController.ApplyPresence).
+            ctx.Check(subject.PlaneModel.IsVisibleInTree(), $"the activated aircraft is drawn");
 
             // Activation's other half: it re-homes the aircraft at the pose it is given, which is
             // how E11's wave teleport will arrive. Read off the flight model (WorldPosition is the

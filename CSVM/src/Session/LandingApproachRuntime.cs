@@ -42,8 +42,8 @@ public sealed partial class LandingApproachRuntime : Node
     public int Armed => _bound.Count;
 
     /// <summary>Whether an <c>auto</c> row passes right now: the original lights its auto-land
-    /// prompt off exactly this, and never starts the animation on that row. Nothing draws the
-    /// prompt or reads a key off it.</summary>
+    /// prompt off exactly this, and never starts the animation on that row by itself. The HUD draws
+    /// the prompt off this flag, and the auto-land button starts the row's animation while it holds.</summary>
     public bool AutoLandOffered { get; private set; }
 
     /// <summary>The animation the last row to pass started, for a suite and the log.</summary>
@@ -122,6 +122,13 @@ public sealed partial class LandingApproachRuntime : Node
             if (bound.Approach.Auto)
             {
                 AutoLandOffered = true;
+                // The same latch the manual row uses: a press starts it once per entry into the
+                // sphere, and the cutscene guard above already gates this whole method.
+                if (plane.AutoLandPressed() && _latched.Add(bound.Id))
+                {
+                    Start(bound.Approach);
+                    return;
+                }
                 continue;
             }
 

@@ -80,6 +80,20 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **DIAG-21** — **A puffer's particle spread is unseeded RNG, not the pinned run seed.** Two
   captures at the same step can differ in particle placement alone; do not read that difference as
   a behaviour change (the anim lab's own determinism boundary).
+- **DIAG-22** — **A suite that asserts over a directive the data may not author fails vacuously,
+  not correctly.** Loop over the authored candidates, then branch on the count: an empty candidate
+  set is a coverage gap to name, and only a non-empty one may fail. Measured: the
+  `campaign-objectives-hud` wake cue asserted "at least one `WAKEUP_SOUND_GROUP` started a
+  one-shot" with no candidate in hand, and `c4/m01` and `c5/m01` author none, so both chapters read
+  as a sound defect while their objective audio rides `COMPLETED_SOUND_GROUP` and plays. The
+  authored-count line the check now prints is what separates the two readings.
+
+- **DIAG-23** — **Dispatching a callback directly tests what the code does, never what the codes
+  around it undo — play the definition that raises it.** A direct raise has no neighbours, so an
+  effect a later code reverses reads as a clean success. Measured on CM02's capture: driving 967
+  alone left the captured Balmoral hidden and the suite green, while playing the mission's own
+  `ww_balmoral1` showed the wing walk's `913`/`914` pair bracketing it and putting that aeroplane
+  back **19.25 s** later, which is the defect a player sees.
 
 ## SHOT — screenshots and pixel evidence
 
@@ -357,6 +371,16 @@ loss. What the engine renders was decodable from the authored constants + oscill
   read `rot (0.7, -92.2, -9.3)` while its wreck read `(39.5, 19.6, -118.3)`, two frames that only
   looked comparable.
 
+- **LOG-19** — **`RunProbe.ps1`'s hidden desktop is shared by every worktree on the machine, so a
+  SIBLING agent's probe finishing mid-run kills your viewport and fills your census with errors your
+  change did not cause.** The signature is a repeating per-frame quartet — a C# `NullReferenceException`,
+  a `global_shader_parameter_set` condition, and two `viewport is null` render-time lines — after
+  every suite has already reported PASS, with `errors=UNEXPECTED` as the only failure. Measured:
+  four consecutive `campaign-airframe-swap` runs failed that way, `cutscene` failed identically
+  though nothing in it had changed, and the same command came back `0 line(s)` the moment the other
+  worktree's `--campaign=` probe had exited. LOG-13 across processes: count the Godot processes whose
+  command line names another worktree before believing an error census.
+
 ## WORLD — world data and runtime traps
 
 - **WORLD-8** — **Resolve objects by source identity, not normalized node names.**
@@ -527,6 +551,50 @@ loss. What the engine renders was decodable from the authored constants + oscill
   placing C3/M01's `cargozep1` at its authored pose and immediately casting 180 rays at
   `hydrogentank1` returned 108 clean misses through 140 live collider bodies, which reads exactly
   like an airship with no collision at all.
+
+- **INSTR-25** — **`wingman-station` builds its own pair by hand at 1200 m over a stage with no
+  terrain, so two of the campaign's biggest station-keeping effects cannot reach it: measure those
+  in a `--campaign=` run.** The suite calls `PlaneStats.Load`/`LoadForAi` directly and never
+  `WithAiSpawnJitter`, so a per-spawn dynamics difference between leader and wingman is invisible to
+  it; and with no ground under either aircraft the mode machine's `avoid crash` never arms, so the
+  climb-out that pre-empts the escort law never runs. Measured on C3/M01: the flown leg reads
+  mean 270 m while the same pair over Hawaii at 150 m breaks off into `avoid crash` nine seconds in
+  and ends 128 m above the player and 302 m behind. A green `wingman-station` is a statement about
+  the law, never about the sortie.
+
+- **INSTR-26** — **A suite CAN model the realtime path: install a Realtime `GameClock` as
+  `GameClock.Current` and drive the node's own `_PhysicsProcess`, rather than the `SimStep` every
+  other leg calls.** INSTR-14 says the automated checks all run parent-driven, which is how they are
+  written, not a limit on what they can do; a defect that lives in the self-stepping path is
+  reachable from a suite as soon as one leg paces a node the way Godot's tick does. Measured with
+  the cutscene clock hold removed: `wingman-station`'s hold leg reads 4809.9 m of drift over a 40 s
+  hold and goes red, while every `SimStep`-driven leg beside it stays green.
+
+- **INSTR-27** — **On a realtime leg a stand-in flies, so read the STATE under test, never a
+  presence flag that its flying can also answer.** `FlightController.InPlay` folds `Inert` together
+  with `Crashed`, so a stand-in released on a realtime clock and flown into the sea reports "out of
+  the world" exactly as a correct hide does. Measured on CM02's capture: the un-fixed build read
+  `in-play=False` and passed, and reading `Inert` on the same run read `False` with `Crashed` true.
+  INSTR-10's rule at the other end of the assertion.
+
+- **INSTR-28** — **A `--screenshot=` on a Realtime (`--no-det`) clock cannot pick its `--frames=`
+  to land on a transient live state: the same command's sim-frame-to-wall-time ratio varies run to
+  run, so a fixed frame number that caught a state once is not a repeatable target.** Measured on a
+  `--campaign=` run to the auto-land sphere: the intro cutscene's own handoff landed anywhere from
+  t=3.7s to t=40.2s across otherwise-identical launches, and a frame chosen to land inside the
+  following `AutoLandOffered` window caught it on one run in nine and missed on the rest. Prefer a
+  log line (`GD.Print`) over a pixel for a realtime transient, or drive the state through a suite's
+  own `_Process` loop (INSTR-26) where the frame IS the unit.
+
+- **INSTR-29** — **A perturbation meant for a definition's own pose events has to be in place
+  BEFORE the call that starts it, and be re-applied every step against whatever else drives the
+  subject.** A definition poses inside its start dispatch, so a state first written on the first
+  advance is a frame late and the event under test never sees it; and a stand-in that flies itself
+  rewrites its own transform each tick, so a one-shot write is gone by the next event and a read
+  taken after that tick reports the flight model rather than the pose's host. Measured on CM02's
+  capture: rolling the captured aeroplane 90° at the top of the play loop left the wing-walk frame
+  reading 0° roll under BOTH the old and the new rule, which reads as "the fix is unnecessary";
+  banking before `PlayMissionTrigger` and holding the bank each step separated them at 90° versus 0°.
 
 ## SRC — sources and documents
 

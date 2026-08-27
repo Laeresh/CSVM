@@ -78,8 +78,9 @@ internal static class CampaignHudSuites
 
             if (sounds != null)
             {
-                DriveWakeCue(ctx, script, graph, sounds, report);
-                DriveCompletionCue(ctx, world, script, graph, hud, sounds, report);
+                bool wokeACue = DriveWakeCue(ctx, script, graph, sounds, report);
+                bool completedACue = DriveCompletionCue(ctx, world, script, graph, hud, sounds, report);
+                CheckCueReachedAPlayer(ctx, script, wokeACue, completedACue, report);
             }
 
             hud.QueueFree();
@@ -284,10 +285,13 @@ internal static class CampaignHudSuites
     }
 
     // Wakes every WAKEUP_SOUND_GROUP-authoring objective in turn until one of them actually starts
-    // a real one-shot player, and asserts that at least one did.
-    private static void DriveWakeCue(
+    // a real one-shot player, and asserts that at least one did. Returns whether one did.
+    // ⚠ Assert nothing when the mission authors no such directive; that is the mission's choice of
+    // cue surface, not a defect, and CheckCueReachedAPlayer is what covers it.
+    private static bool DriveWakeCue(
         TestContext ctx, ObjectiveScript script, ObjectiveGraph graph, WorldSounds sounds, StringBuilder report)
     {
+        int authored = 0;
         foreach (var def in script.Objectives)
         {
             if (def.WakeSoundGroup is not { } group)
@@ -295,6 +299,7 @@ internal static class CampaignHudSuites
                 continue;
             }
 
+            authored++;
             int before = sounds.OneShotsStarted;
             graph.Wake(def.Number);
             int after = sounds.OneShotsStarted;
@@ -302,11 +307,22 @@ internal static class CampaignHudSuites
             {
                 report.AppendLine($"OBJECTIVE{def.Number} WAKEUP_SOUND_GROUP '{group}' started a one-shot ({before} -> {after})");
                 ctx.Check(true, $"a WAKEUP_SOUND_GROUP cue started a real one-shot player (OBJECTIVE{def.Number} '{group}')");
-                return;
+                return true;
             }
+
+            report.AppendLine($"OBJECTIVE{def.Number} WAKEUP_SOUND_GROUP '{group}' started no one-shot");
         }
 
-        ctx.Check(false, $"at least one WAKEUP_SOUND_GROUP this mission authors started a real one-shot player");
+        if (authored > 0)
+        {
+            ctx.Check(false,
+                $"at least one WAKEUP_SOUND_GROUP this mission authors started a real one-shot player (drove {authored})");
+            return false;
+        }
+
+        report.AppendLine("this mission's objectives author no WAKEUP_SOUND_GROUP, so its objective "
+            + "audio rides the COMPLETED_SOUND_GROUP surface alone");
+        return false;
     }
 
     // Drives every IDENTITY objective this suite can force to completion with nobody at the
@@ -314,7 +330,7 @@ internal static class CampaignHudSuites
     // marks its row (the row-marking proof) and separately the first whose COMPLETED_SOUND_GROUP
     // also starts a one-shot: a completing objective's group can be a VO dialogue chain
     // (docs/formats/sounds.md), which nothing here plays yet (a named gap, not a suite defect).
-    private static void DriveCompletionCue(
+    private static bool DriveCompletionCue(
         TestContext ctx, TestWorld world, ObjectiveScript script, ObjectiveGraph graph,
         ObjectivesHud hud, WorldSounds sounds, StringBuilder report)
     {
@@ -371,14 +387,42 @@ internal static class CampaignHudSuites
         if (soundObjective != null)
         {
             ctx.Check(true, $"a COMPLETED_SOUND_GROUP cue started a real one-shot player (OBJECTIVE{soundObjective})");
+            return true;
         }
-        else
+
+        report.AppendLine(
+            "no completing objective's COMPLETED_SOUND_GROUP started a one-shot here: every one " +
+            "authored in this mission is a VO dialogue chain, which no player exists for yet " +
+            "(docs/formats/sounds.md)");
+        return false;
+    }
+
+    // The cue assertion that holds on every chapter, whichever directive the mission chose to carry
+    // its objective audio: one of the sound groups it authors must reach a real player. C4/M01 and
+    // C5/M01 author not one WAKEUP_SOUND_GROUP, so the wake half alone leaves them unasserted.
+    private static void CheckCueReachedAPlayer(
+        TestContext ctx, ObjectiveScript script, bool wokeACue, bool completedACue, StringBuilder report)
+    {
+        int wake = 0, completed = 0;
+        foreach (var def in script.Objectives)
         {
-            report.AppendLine(
-                "no completing objective's COMPLETED_SOUND_GROUP started a one-shot here: every one " +
-                "authored in this mission is a VO dialogue chain, which no player exists for yet " +
-                "(docs/formats/sounds.md)");
+            wake += def.WakeSoundGroup != null ? 1 : 0;
+            completed += def.CompletedSoundGroup != null ? 1 : 0;
         }
+
+        report.AppendLine($"cue surfaces: {wake} WAKEUP_SOUND_GROUP (fired={wokeACue}), "
+            + $"{completed} COMPLETED_SOUND_GROUP (fired={completedACue})");
+        if (wake + completed == 0)
+        {
+            const string Gap = "The objective cue path is unproven on this chapter, which is a gap "
+                + "in coverage and not a pass";
+            report.AppendLine("SKIPPED the cue check: this mission authors no objective sound group at all");
+            ctx.Note($"SKIPPED the cue check: this mission authors no objective sound group at all. {Gap}");
+            return;
+        }
+
+        ctx.Check(wokeACue || completedACue,
+            $"an objective sound group this mission authors started a real one-shot player (wake {wake}, completed {completed})");
     }
 
     // The one assertion this half exists for. It is only allowed not to run when the mission

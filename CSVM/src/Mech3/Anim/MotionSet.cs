@@ -79,6 +79,15 @@ internal sealed class MotionSet
         List<Landing>? landed = null;
         for (int i = _motions.Count - 1; i >= 0; i--)
         {
+            // ⚠ A motion outlives the node it drives: an aircraft freed mid-animation (an airframe
+            // swap, a rig torn down) leaves one here, and writing a transform to a disposed object
+            // throws out of the whole runtime advance rather than losing one motion.
+            if (!GodotObject.IsInstanceValid(_motions[i].Target))
+            {
+                _motions.RemoveAt(i);
+                continue;
+            }
+
             _motions[i].Tick(dt);
             if (!_motions[i].Finished)
                 continue;

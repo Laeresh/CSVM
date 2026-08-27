@@ -29,6 +29,7 @@ the reference below; the shipped-but-dead directives are listed under
   - [Chaining directives](#chaining-directives)
   - [IDENTITY and the objectives display](#identity-and-the-objectives-display)
   - [Win and loss](#win-and-loss)
+    - [The fourth ending: the player's own death](#the-fourth-ending-the-players-own-death)
 - [Keywords the parser accepts that no mission authors](#keywords-the-parser-accepts-that-no-mission-authors)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases)
 - [Data anomalies](#data-anomalies)
@@ -223,7 +224,50 @@ matches (`FUN_004ad240`). Consequences, all decoded:
 - The mission countdown expiring is a third ending (see `MISSION_TIMER`).
 
 Every shipped campaign mission ends through `INSTANTWIN`/`INSTANTLOSS` objectives; the
-`WON`/`LOST` aggregate rule and the timer are unexercised by the data.
+`WON`/`LOST` aggregate rule and the timer are unexercised by the data. **Four of the 21 campaign
+missions author no loss at all** (`C3/M01`, `C3/M02`, `C4/M02`, `C5/M03`: zero `INSTANTLOSS`, zero
+`LOST`), which is the shape of the fourth ending below: those missions are losable only by dying.
+
+#### The fourth ending: the player's own death
+
+The player losing the aircraft is a mission ending, and it is **not** any of the three above. It
+never reaches this module: it closes a gate that stops the module instead, and drives the debrief
+from the crash animation.
+
+- **The gate.** `FUN_004a0220` (the state core) tests `byte [player+0x91d]` twice. The second test,
+  at `0x004a09b6`, skips the whole objectives tick `FUN_0046a490` while the player is dead. In
+  single player (`FUN_00440ad0() == 0`) nothing in this module runs after that: no completion scan,
+  no countdown (`FUN_0046c5f0`'s only two callers are inside the gated tick and a network-only
+  branch), no cue drain (`FUN_0046cdf0`), no delayed cues (`FUN_0046c870`), no target-list
+  executors. The first test, at `0x004a0281`, guards the wrap-up countdown at `+0xc40`, which is
+  never armed because `FUN_00463c30` is never called.
+- **What closes it.** `+0x91d` is set by `FUN_004b82d0` (whole-vehicle health at or below zero,
+  which also sets the wreck-falling flag `+0x91f` for mode classes 0 and 4) and by `FUN_0048b920`
+  (terrain or water impact, setting `+0x91d` at `0x0048ba35` and CLEARING `+0x91f`). A healthy
+  aircraft flown into a hill therefore closes the same gate as being shot down. `FUN_0048b920` also
+  stops the mission clock directly (`FUN_0046c5c0`).
+- **What ends the mission.** The player's destroy-or-crash animation being RESET while `+0x91d` is
+  set and `+0x91f` is clear: `Callback 12`, the last event of the top-level `reset_state` list of
+  `player-player` and the three `player_crash_*` defs. It reaches `LAB_00480710`'s tail at
+  `0x004807f6` (player only), `FUN_0047e080` case `0xc` behind the guard at
+  `0x0047e1fa`/`0x0047e208`, then `FUN_00443090` and the debrief `FUN_004194e0`. No argument and no
+  enum: the four endings converge on `FUN_00443090` and the outcome is read there from the won flag
+  `+0xc58` alone (`FUN_00463be0`). The lost flag `+0xc5c` only ever picks a sound and a wrap-up
+  delay inside the gated tick, so **a mission already won when the player dies is still won**, and a
+  death plays no `MISSION_LOST_SOUND` or `OBJECTIVES_LOST_SOUND` at all. What does play is the
+  `langui` 0xa9 kill message with combat-voice triggers 20/21 forced on the victim
+  (`FUN_004b82d0`), and `langui` 0xa2 on impact (`FUN_0048b920`); both flush the radio queue through
+  `FUN_00591f40(1)`.
+- **Delay.** There is no countdown on this path. The gap between the kill and the debrief is the
+  wreck's own fall to the ground plus whatever performs the animation reset. The only hard-coded
+  wait is a 1000 ms `Sleep` in `FUN_004a0af0`, the freeze-frame capture reached from case `0xc`.
+- **Limits.** Which native call performs the reset on the ordinary single-player path is not
+  identified (`../org/vehicleDamage.md`), so the exact instant of the ending is bounded by the guard
+  rather than read off the trigger. Multiplayer respawn (`FUN_00480480`) clears both flags before
+  resetting the anim, which is why its own `Callback 12` is swallowed.
+- **Persistence.** `Status.dat` is written on every ending (`FUN_0046b240`, unconditional);
+  `Mission.NNN`/`Persist.NNN` are written only when `+0xc58` is set (`FUN_0046b450`). A death writes
+  no world state (see [saved-games.md](saved-games.md)).
 
 ## Keywords the parser accepts that no mission authors
 

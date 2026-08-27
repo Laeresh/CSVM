@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -152,6 +153,131 @@ internal static class TargetingCandidateSuites
             pool?.Free();
             ai?.Free();
             gasbagNode?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // AddRankedNonAircraft walked every turret with no discriminator on TurretController.Site, so
+    // a carried gunner rode the ranked pool as a second entry beside its own aircraft's Vehicle
+    // entry, one silhouette read as two candidates. Mirrors the guard TargetPool.Offer already
+    // applies for the player (TargetPool.IsEmplacement), now shared by both pools.
+    internal static void RankedPoolCarriedTurretDedup(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+
+        // The Kestrel: one thirdp rear mount (see the carried-turrets suite for the decoded arc).
+        const string HostPlane = "player_kestrel";
+        var hostStats = PlaneStats.Load(ctx.ZrdrPath, HostPlane);
+        var aiStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? carrier = null;
+        FlightController? ai = null;
+        Node3D? siteNode = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            FlightController BuildRig(string plane, PlaneStats st, int playerIndex, Vector3 pos)
+            {
+                var model = new PlaneBuilder(planesGamez, textures).Build(plane);
+                var rig = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(st.DestroyableParts),
+                    PlayerIndex = playerIndex,
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    AllowPause = false,
+                };
+                rig.AddChild(model);
+                rig.Setup(new FlightModel(st), ctx.Camera, new CamParams(), pos, pos + Vector3.Forward);
+                ctx.Host.AddChild(rig);
+                rig.PlaceHeld(pos, pos + Vector3.Forward);
+                return rig;
+            }
+
+            var carrierPos = new Vector3(0f, 500f, 0f);
+            carrier = BuildRig(HostPlane, hostStats, 0, carrierPos);
+            carrier.IsHumanPiloted = false;
+            carrier.Team = TurretDef.DefaultTeamId;
+            carrier.Turrets = TurretController.BuildCarried(
+                turretDefs, hostStats, carrier.PlaneModel!, weapons, carrier, live);
+            ctx.Check(carrier.Turrets.Length == 1,
+                $"the carrier's crewed mount resolves turrets={carrier.Turrets.Length}");
+            if (carrier.Turrets.Length != 1)
+                return;
+            var carriedTurret = carrier.Turrets[0];
+
+            // A hand-placed emplacement: an authored standalone entry, its NODES/PARTS chain
+            // repointed at nodes built here rather than a real chapter's placement, since this
+            // suite proves the discriminator, not the census (world-turrets' own job).
+            siteNode = new Node3D { Name = "test_emplacement", Position = new Vector3(400f, 500f, 0f) };
+            ctx.Host.AddChild(siteNode);
+            var pitchNode = new Node3D();
+            pitchNode.SetMeta(AnimRuntime.NameMeta, "pitch");
+            siteNode.AddChild(pitchNode);
+            var muzzleNode = new Node3D();
+            muzzleNode.SetMeta(AnimRuntime.NameMeta, "muzzle");
+            siteNode.AddChild(muzzleNode);
+            var emplacementDef = turretDefs.All.First(d => !d.Carried);
+            emplacementDef.YawNode = null;
+            emplacementDef.PitchNode = "pitch";
+            emplacementDef.Firepoints = new[] { "muzzle" };
+            emplacementDef.WeaponName = carriedTurret.Def.WeaponName;
+            emplacementDef.HealthyNode = null;
+            emplacementDef.Team = null; // TurretDefs.DefaultTeamId, the same enemy default the carrier took
+            emplacementDef.NodePatterns = new List<IReadOnlyList<string>>
+            {
+                new List<string> { "test_emplacement" },
+            };
+            var emplacements = TurretController.BuildEmplacements(turretDefs, weapons,
+                (name, _) => name == "test_emplacement"
+                    ? new[] { siteNode }
+                    : System.Array.Empty<Node3D>(),
+                live);
+            ctx.Check(emplacements.Length == 1 && emplacements[0].Site != null,
+                $"the hand-placed emplacement resolves turrets={emplacements.Length}");
+            if (emplacements.Length != 1)
+                return;
+            live.RegisterWorldTurrets(emplacements);
+            var emplacementTurret = emplacements[0];
+
+            // The assessing AI: hostile to both, never itself a candidate.
+            var aiPos = carrierPos + new Vector3(0f, 0f, 400f);
+            ai = BuildRig(ctx.PlaneName, aiStats, FlightRoster.ShooterIdBase, aiPos);
+            ai.IsHumanPiloted = false;
+            ai.Team = AimAssist.PlayerTeam;
+            var gunner = new AiGunner(new RandomNumberGenerator { Seed = 20260826 });
+
+            var sources = ai.RankedPoolSourcesForTest(gunner);
+            int carrierEntries = sources.Count(s => ReferenceEquals(s, carrier));
+            int carriedTurretEntries = sources.Count(s => ReferenceEquals(s, carriedTurret));
+            int emplacementEntries = sources.Count(s => ReferenceEquals(s, emplacementTurret));
+            ctx.Check(carrierEntries == 1,
+                $"the carrier's own aircraft rides the ranked pool as a Vehicle entry entries={carrierEntries}");
+            ctx.Check(carriedTurretEntries == 0,
+                $"a carried turret is not offered as a second entry beside its own aircraft entries={carriedTurretEntries}");
+            ctx.Check(emplacementEntries == 1,
+                $"a world emplacement still reaches the ranked pool entries={emplacementEntries}");
+        }
+        finally
+        {
+            pool?.Free();
+            carrier?.Free();
+            ai?.Free();
+            siteNode?.Free();
             textures.Dispose();
         }
     }

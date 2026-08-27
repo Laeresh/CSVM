@@ -453,6 +453,9 @@ public partial class GameSession : Node3D
             // session's cue to hand the player back to the cabin.
             campaign.Music = _music;
             campaign.MissionEnded += OnCampaignMissionEnded;
+            // Losing the aircraft loses the mission; --no-crash-loss keeps the debugging
+            // convenience of flying on past a crash.
+            campaign.EndsOnPlayerDeath = !_spec.NoCrashLoss;
         }
 
         // The cutscene host, before the world build hands it to the animation runtime. Its world
@@ -460,7 +463,18 @@ public partial class GameSession : Node3D
         _cutscene = _spec.Fly && _spec.WorldMode ? new CutsceneController() : null;
         if (_cutscene != null)
         {
-            _cutscene.WorldHeld = held => _campaign?.HoldForCutscene(held);
+            // ⚠ The hold reaches a self-stepping node through the clock, never a per-class guard:
+            // on a realtime tick each aircraft, projectile, zeppelin and turret paces itself from
+            // GameClock.PhysicsDt, and only that seam stops all of them together.
+            _cutscene.WorldHeld = held =>
+            {
+                if (_clock != null)
+                {
+                    _clock.SimHeld = held;
+                }
+
+                _campaign?.HoldForCutscene(held);
+            };
             AddChild(_cutscene);
             // The mid-mission cutscene trigger, hosted by the same controller. ⚠ Story missions
             // only: C3/IA1 carries hooked_to_klondike with its approach armed, so an Instant
@@ -675,6 +689,14 @@ public partial class GameSession : Node3D
             foreach (var rig in _rigs)
                 _focusPoints.Add(rig.Camera.Position);
             _edgeExtender.Update(_focusPoints);
+        }
+
+        // One frame behind: LandingApproachRuntime ticks after this node (ProcessPriority), so this
+        // reads last frame's verdict. The HUD prompt is not a fast-twitch readout, so the lag is
+        // fine, and Bind() already flies only _rigs[0] against the trigger.
+        if (_landings != null && _rigs.Count > 0 && _rigs[0].Controller is { } flown)
+        {
+            flown.AutoLandOffered = _landings.AutoLandOffered;
         }
     }
 
@@ -966,6 +988,7 @@ public partial class GameSession : Node3D
                 // its codes the instant startanims starts it, long before a rig exists.
                 CutsceneRoots = _cutscene != null,
                 LandingTriggers = _landings != null,
+                PlanesGamezPath = state.PlanesGamezPath,
                 CallbackHost = _cutscene != null ? _cutscene.Host : null,
                 // The weather rig is built after the world, and the intro's fog fires inside the
                 // bootstrap, so the event is held until the rig has applied its zone.
@@ -991,7 +1014,8 @@ public partial class GameSession : Node3D
         state.WorldRuntime = session.Runtime;
         // After the bootstrap: an intro definition has already raised its codes, and this is where
         // the host picks up the two nodes it drives.
-        _cutscene?.BindWorld(session.Runtime);
+        _cutscene?.BindWorld(session.Runtime, session.Aircraft);
+        state.StagedAircraftMeshes = session.Aircraft?.MeshInstances ?? 0;
         state.Landings = session.Landings;
         state.Pickups = session.Pickups;
         if (_cutscene != null && _landings != null)
@@ -1284,7 +1308,7 @@ public partial class GameSession : Node3D
         // chapter data decides whether anything is built.
         _lensFlareRig = new LensFlareRig(_spec);
         _lensFlareRig.Build(_rigs, state.Textures, _interpPath, _spec.Chapter);
-        state.MeshInstances = builder.MeshInstanceCount;
+        state.MeshInstances = builder.MeshInstanceCount + state.StagedAircraftMeshes;
         state.Colliders = builder.ColliderCount;
         // Read after the domes, since C1's daytime sky layer is a horizon child.
         if (builder.ScrollingModelCount > 0)
@@ -2170,6 +2194,7 @@ public partial class GameSession : Node3D
                 ZrdrPath = state.ZrdrPath,
                 MinAiActiveDist = MinAiActiveDist(),
                 Player = () => _rigs.Count > 0 ? _rigs[0].Controller : null,
+                PlayerAirframe = flightRoster.FlyingAirframeOf(0),
                 NetTrailers = netTrailers,
                 FindNodes = worldBindings.WorldRuntime is { } rosterWorld
                     ? name => rosterWorld.FindNodes(name)
@@ -2937,22 +2962,22 @@ public partial class GameSession : Node3D
     // original has one player vehicle and the codes name it, so a splitscreen pane cannot be given
     // an answer the data does not carry. A failed swap is reported rather than thrown: the player
     // keeps the aircraft the exception left them without, and the mission goes on.
-    private bool SwapPlayerAirframe(string planeNode)
+    private AirframeSwapResult SwapPlayerAirframe(AirframeSwapOrder order)
     {
-        if (_flightRoster == null || _rigs.Count == 0 || _rigs[0].Controller == null)
+        if (_flightRoster == null || _rigs.Count == 0)
         {
-            return false;
+            return default;
         }
 
         try
         {
-            _flightRoster.SwapPlayerAirframe(_rigs[0], planeNode);
-            return true;
+            return _flightRoster.RunSwap(_rigs[0], order,
+                AirframeHandover.Resolves(_spec.Chapter, _spec.Mission));
         }
         catch (Exception e)
         {
-            GD.PushWarning($"airframe swap to '{planeNode}' failed: {e.Message}");
-            return false;
+            GD.PushWarning($"airframe swap to '{order.Airframe.PlaneNode}' failed: {e.Message}");
+            return default;
         }
     }
 
@@ -3312,10 +3337,12 @@ public partial class GameSession : Node3D
         }
     }
 
-    // Gives a spawned AI aircraft its voice: the talker and constitution chances come from
-    // ai_skill_parameters at ratingOverride when given, else the session's skill rating. A missing
-    // accent, voice runtime or skills table means a silent pilot, never an error.
-    private void RegisterAiVoice(FlightController? ai, int? accentId, int? ratingOverride = null)
+    // Gives a spawned AI aircraft its voice: each chance comes from ai_skill_parameters at its
+    // own override when given, else the session's skill rating, so talker and constitution read
+    // two independent curves. A missing accent, voice runtime or skills table means a silent
+    // pilot, never an error.
+    private void RegisterAiVoice(FlightController? ai, int? accentId, int? talkerOverride = null,
+        int? constitutionOverride = null)
     {
         if (ai == null || accentId is not { } accent || _aiVoice == null)
         {
@@ -3328,9 +3355,10 @@ public partial class GameSession : Node3D
         _aiSkills ??= _flightRoster?.AiSkills;
         if (_aiSkills == null)
             return;
-        int rating = ratingOverride ?? _spec.AiAttackSkill ?? 5;
-        _aiVoice.RegisterAi(ai, accent,
-            _aiSkills.At("talker_chance", rating), _aiSkills.At("constitution_chance", rating));
+        int talkerRating = talkerOverride ?? _spec.AiAttackSkill ?? 5;
+        int constitutionRating = constitutionOverride ?? _spec.AiAttackSkill ?? 5;
+        _aiVoice.RegisterAi(ai, accent, _aiSkills.At("talker_chance", talkerRating),
+            _aiSkills.At("constitution_chance", constitutionRating));
     }
 
     // Per-build state threaded through StartSession's phase methods: the archives, world-build
@@ -3363,6 +3391,9 @@ public partial class GameSession : Node3D
         public Aabb? NodeAabb;
 
         public int MeshInstances;
+        // The intro's staged prop aircraft, counted apart because the world builder never saw it:
+        // it comes off the aircraft archive on its own SceneBuilder (Mech3/AircraftStage.cs).
+        public int StagedAircraftMeshes;
         public int Colliders;
         public string What = "";
 

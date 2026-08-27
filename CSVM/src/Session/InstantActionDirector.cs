@@ -74,7 +74,8 @@ public sealed class InstantActionDirector
         bool inert, bool shippedSkins, Flight.LoadoutChoice? fit);
 
     /// <summary>GameSession.RegisterAiVoice: the voice runtime serves non-mission spawns too.</summary>
-    internal delegate void RegisterAiVoice(FlightController? ai, int? accentId, int? ratingOverride);
+    internal delegate void RegisterAiVoice(FlightController? ai, int? accentId, int? talkerOverride,
+        int? constitutionOverride);
 
     /// <summary>The engine-free mission runtime: the loaded def, the objective bookkeeping and
     /// the decoded actor rules. Never null on a built director.</summary>
@@ -181,7 +182,7 @@ public sealed class InstantActionDirector
                 var ace = inputs.Spawn(aceNode, sp.Position, sp.Position + fwd, pilot,
                     ia.Def.AceLivery, InstantActionRuntime.EnemyTeam,
                     rating, inert: false, shippedSkins: true, fit: null);
-                inputs.RegisterVoice(ace, ia.Def.AceAccentId, rating);
+                inputs.RegisterVoice(ace, ia.Def.AceAccentId, rating, rating);
                 _ace = ace;
                 InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
                 if (ace != null)
@@ -261,7 +262,7 @@ public sealed class InstantActionDirector
                     // An Instant Action actor's volumes are all authored far wider than the airframe
                     // defaults the roster spawn arms (docs/formats/instant-action.md).
                     InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
-                    inputs.RegisterVoice(wingman, slot.AccentId, null);
+                    inputs.RegisterVoice(wingman, slot.AccentId, null, null);
                 }
                 int wmSpawned = wingmen.Count(w => w != null);
                 if (wmSpawned > 0)
@@ -323,7 +324,7 @@ public sealed class InstantActionDirector
                         InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
                         int accentId = InstantActionRuntime.ResolveWaveAccentId(
                             wave.EnemyAccentId, Rng.Stream(Rng.Ai).Randi());
-                        inputs.RegisterVoice(enemy, accentId, rating);
+                        inputs.RegisterVoice(enemy, accentId, rating, rating);
                         roster.Add(enemy);
                     }
                 }

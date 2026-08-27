@@ -52,6 +52,11 @@ public sealed class WorldSession
     public IReadOnlyList<LandingApproach> Landings { get; private set; } =
         Array.Empty<LandingApproach>();
 
+    /// <summary>The aircraft an intro definition animates, staged into this world's node table.
+    /// Null unless the mission bootstraps a story-mission intro; see <see cref="AircraftStage"/>.
+    /// </summary>
+    public AircraftStage? Aircraft { get; private set; }
+
     /// <summary>The mission's pickup proximity sensors, empty outside the four missions that
     /// carry <c>pickups.zrd</c>.</summary>
     public IReadOnlyList<PickupSpec> Pickups { get; private set; } = Array.Empty<PickupSpec>();
@@ -278,9 +283,18 @@ public sealed class WorldSession
                 }
             }
         }
-        if (o.CutsceneRoots && (BootstrapsCutscene(animProgram) || s.Landings.Count > 0))
+        bool intro = BootstrapsCutscene(animProgram);
+        if (o.CutsceneRoots && (intro || s.Landings.Count > 0))
         {
-            BuildCutsceneRoots(root, gamez, builder);
+            BuildCutsceneRoots(root, gamez, builder, animProgram);
+        }
+
+        // The two aircraft an intro animates live in the shared archive, not the chapter gamez, so
+        // only a mission that bootstraps one pays for them. Before the bind, like the cutscene
+        // roots: an intro starts inside the animation bootstrap.
+        if (o.CutsceneRoots && intro && o.PlanesGamezPath is { Length: > 0 } planesPath)
+        {
+            s.Aircraft = AircraftStage.Build(root, gamez.Nodes.Count, GameZ.Load(planesPath), textures);
         }
         // The emitter pool has to be in the tree before the bootstrap builds into it.
         if (animRuntime.Sounds is { } worldSounds)
@@ -429,8 +443,10 @@ public sealed class WorldSession
     // the bind anchors both and the shared letterbox definition's own base state switches the bars
     // off. Standing them up before the bind is what makes the bars data rather than an overlay
     // (docs/formats/anim-definitions/cutscenes.md).
-    private static void BuildCutsceneRoots(Node3D root, GameZ gamez, WorldBuilder builder)
+    private static void BuildCutsceneRoots(Node3D root, GameZ gamez, WorldBuilder builder,
+        AnimProgram program)
     {
+        BuildCompositionFrames(root, gamez, program);
         var camera = new Node3D { Name = Session.CutsceneController.CameraNode };
         // ⚠ Stamp the gamez index a scene-built node would carry. Every compiled cutscene binds
         // `camera1` through its symbol table, and a claimed index with no node behind it makes
@@ -455,6 +471,62 @@ public sealed class WorldSession
         built.Transform = Transform3D.Identity;
         AnimRuntime.SetSubtreeActive(built, false);
         root.AddChild(built);
+    }
+
+    // The composition frames this program reparents into: a bodiless, childless gamez library root
+    // the world1 walk never reaches, named as an OBJECT_ADD_CHILD parent. A cutscene writes its
+    // keyframes in such a frame's space and moves the camera under it, so a frame with no node
+    // behind it leaves the whole shot in world space at the gamez origin. Two exist in this
+    // install, CM02's `wingwalk_parent` and CM07's `carney_pickup_parent`
+    // (docs/formats/anim-definitions/cutscenes.md).
+    private static void BuildCompositionFrames(Node3D root, GameZ gamez, AnimProgram program)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var def in program.Defs)
+        {
+            foreach (var sequence in Blocks(def))
+            {
+                foreach (var ev in sequence.Events)
+                {
+                    if (!string.Equals(ev.Kind, "ObjectAddChild", StringComparison.Ordinal)
+                        || ev.Data.Str("parent") is not { } parent
+                        || !seen.Add(parent)
+                        || gamez.FindByName(parent) is not { } node
+                        || node.Children.Count > 0 || node.MeshIndex >= 0
+                        || !gamez.IsLibraryRoot(node))
+                    {
+                        continue;
+                    }
+
+                    // ⚠ Stamp name and gamez index, the way `camera1` above is stamped: a compiled
+                    // definition binds this node through its symbol table, and a claimed index
+                    // with no node behind it is dropped rather than name-matched.
+                    var frame = new Node3D { Name = node.Name };
+                    frame.SetMeta(AnimRuntime.NameMeta, node.Name);
+                    frame.SetMeta(AnimRuntime.IndexMeta, node.Index);
+                    root.AddChild(frame);
+                    frame.Transform = node.Local ?? Transform3D.Identity;
+                    // ⚠ Keep this: a placed root, and its motion must launch from where the
+                    // definition put it rather than re-home to its authored rest at the map
+                    // origin (docs/org/objectMotion.md, "The re-home rule").
+                    frame.TopLevel = true;
+                    Log.Info("anim", $"anim: composition frame '{node.Name}' (gamez {node.Index}) stood up for a cutscene reparent");
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<AnimSequence> Blocks(AnimDefinition def)
+    {
+        if (def.ResetState is { } reset)
+        {
+            yield return reset;
+        }
+
+        foreach (var sequence in def.Sequences)
+        {
+            yield return sequence;
+        }
     }
 
     // Stamps SceneBuilder.ClutterColor onto every clutter draw under
@@ -491,6 +563,11 @@ public sealed class WorldSession
         public required string ZrdrPath { get; init; }
         public required string InterpPath { get; init; }
         public required string MissionZrdrPath { get; init; }
+
+        /// <summary>The shared aircraft archive, for <see cref="AircraftStage"/>. Read only when
+        /// this mission bootstraps an intro; every other session leaves it unopened, so its node
+        /// census is exactly what it was.</summary>
+        public string? PlanesGamezPath { get; init; }
 
         /// <summary>Parent for the effect siblings the bootstrap builds — the world's ambient
         /// SOUND_NODE emitters and every PUFFER_STATE emitter. In the viewer this is the session
@@ -615,7 +692,7 @@ public sealed class WorldSession
         /// <summary>The <c>CALLBACK</c> host installed on the world runtime before the bootstrap
         /// starts anything, since an intro definition raises its codes the instant it starts. Null
         /// leaves every code to the runtime's own two seams and its census.</summary>
-        public Func<int, string?, bool>? CallbackHost { get; init; }
+        public Func<int, string?, string?, bool>? CallbackHost { get; init; }
 
         /// <summary>Where a <c>FOG_STATE</c> event goes, installed before the bootstrap for the
         /// same reason as <see cref="CallbackHost"/>: the one shipped use is in an intro

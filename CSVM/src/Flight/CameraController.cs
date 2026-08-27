@@ -356,8 +356,8 @@ public sealed class CameraController
     /// <summary>The authored crash camera (<c>crash_horiz</c>/<c>crash_y</c>): on a fatal crash
     /// the original hard-cuts to a static elevated vantage looking down at the impact point.
     /// Framing decoded off the original's crash footage — see docs/formats/camparam.md.
-    /// ⚠ <c>crash_elev</c> and <c>crash_chord_y</c> are NOT wired and are capture-gated
-    /// (<c>BL-260</c>); do not guess them into the pose.</summary>
+    /// ⚠ The decoded shared world clearance (<c>crash_elev</c>/<c>crash_chord_y</c>) is not
+    /// wired here; keep it out until crash, death, and flyby share one implementation.</summary>
     public void CrashView(Vector3 impact, Vector3 travelDir)
     {
         RestoreExternalFov(); // the crash cut is always an external framing, whatever view was selected

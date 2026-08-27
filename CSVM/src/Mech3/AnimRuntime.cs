@@ -165,11 +165,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public Action<Color, Color, float, Vector3, float>? ScreenFlash;
 
     /// <summary>The mission-script host a <c>CALLBACK</c> code is offered to first, with the
-    /// raising definition's animation name: the cutscene vocabulary (presentation, world hold, AI
-    /// park, handoff) belongs to the session, not to this runtime. Returning false leaves the code
-    /// to the two vehicle-death seams below and to the census, which is what every runtime with no
-    /// host wired reports. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
-    public Func<int, string?, bool>? CallbackHost;
+    /// raising definition's animation name and its ROOT node name: the cutscene vocabulary belongs
+    /// to the session, and the root name is how the airframe swap reaches the vehicle its
+    /// definition belongs to. Returning false leaves the code to the two vehicle-death seams below
+    /// and to the census, which is what every runtime with no host wired reports.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public Func<int, string?, string?, bool>? CallbackHost;
 
     /// <summary>Animation names whose <c>EXECUTION_BY_RANGE</c> is an ARMING gate, not a LOD one:
     /// a <c>CALL_ANIMATION</c> only arms them and the player reaching the band is what runs them.
@@ -474,6 +475,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // 69 world subtrees on every cell crossing allocated tens of MB/s of finalizable Godot
     // wrappers; the local offset only moves when the anchor does, so it is remeasured never.
     private readonly Dictionary<Node3D, Vector3> _rangeOriginLocal = new();
+
+    // Per roster-spawned rig that answers for a chapter library-root vehicle node: its own parts by
+    // gamez name, and the rotation it was spawned at. ⚠ These names stay OUT of the resolver's
+    // index — the shared airframe spells them `pilot`, `body`, `healthy`, and an unrelated
+    // definition would claim them. Only a definition anchored on that rig reads them, which is the
+    // original's own first resolution tier (docs/org/sequences.md).
+    private readonly Dictionary<ulong, Dictionary<string, Node3D>> _vehicleParts = new();
+
+    // Each of those rigs' rotation as the roster placed it, which is what an AT_NODE_XYZ rotate
+    // reads off an aeroplane: see PlacedRotationOf.
+    private readonly Dictionary<ulong, Basis> _vehiclePlaced = new();
+
+    // The engine-only nodes between each rig root and the airframe it draws (the shake pivot),
+    // which carry the aircraft's presence rather than any gamez node's active bit: see
+    // SetTargetActive.
+    private readonly Dictionary<ulong, List<Node3D>> _vehicleShell = new();
 
     private Node3D _root = null!;
 
@@ -1057,6 +1074,80 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         IndexWorld(subtree);   // appends the subtree's nodes to the resolver (name + gamez index)
         _resolver.ClearFindCache();    // drop stale "resolves to nothing" results cached during bootstrap
         ApplyResetStatesWithin(subtree);
+    }
+
+    /// <summary>Indexes a subtree built from ANOTHER archive: its stamped node indices are shifted
+    /// by <paramref name="indexOffset"/> into this chapter's cross-archive block, so a compiled
+    /// symbol table binds them (<see cref="AircraftStage.PointerBaseOf"/>). No RESET_STATE pass
+    /// runs over it, unlike <see cref="IndexStage"/>: the subtree is a live aircraft its own
+    /// builder already parked, and a chapter definition that happens to anchor on one of its
+    /// generic node names must not re-pose it.</summary>
+    public void IndexRebasedStage(Node3D subtree, int indexOffset)
+    {
+        IndexWorld(subtree, indexOffset: indexOffset);
+        _resolver.ClearFindCache();
+    }
+
+    /// <summary>Makes one live aircraft answer for the gamez LIBRARY-ROOT vehicle node it was
+    /// spawned from, by that node's name and compiled index. A chapter's own copy of a vehicle is
+    /// never placed, so a definition written against it addresses a name with nothing behind it.
+    /// ⚠ The rig root ALONE reaches the resolver's index: the model carries the shared airframe's
+    /// own node names, and indexing those globally would let an unrelated definition claim them.
+    /// The subtree is kept beside it as a scoped alias instead. Additive.</summary>
+    public void IndexSpawnedVehicle(Node3D rig, string libraryRootName, int gamezIndex)
+    {
+        _resolver.Add(rig, libraryRootName, rig.GetParent() as Node3D, gamezIndex);
+        _resolver.ClearFindCache();
+        var parts = new Dictionary<string, Node3D>(StringComparer.OrdinalIgnoreCase);
+        CollectNamed(rig, parts);
+        _vehicleParts[rig.GetInstanceId()] = parts;
+        _vehiclePlaced[rig.GetInstanceId()] = rig.Basis.Orthonormalized();
+        _vehicleShell[rig.GetInstanceId()] = ShellOf(rig, parts);
+    }
+
+    /// <summary>Writes an <c>OBJECT_ACTIVE_STATE</c> on one target. For a spawned vehicle rig an
+    /// activation also clears the engine-only shell between the rig root and the airframe it
+    /// draws: the aircraft's own presence lives there, and a capture that re-asserts its vehicle
+    /// ACTIVE against the cutscene's AI park means the aeroplane, not the rig node.</summary>
+    public void SetTargetActive(Node3D target, bool active)
+    {
+        SetSubtreeActive(target, active);
+        if (!active || !_vehicleShell.TryGetValue(target.GetInstanceId(), out var shell))
+        {
+            return;
+        }
+
+        foreach (var node in shell)
+        {
+            if (IsInstanceValid(node))
+            {
+                node.Visible = true;
+            }
+        }
+    }
+
+    /// <summary>The rotation a spawned vehicle rig was placed at, or null for any other node. The
+    /// original stores a node's rotation as a euler triple that only a scripted rotate writes,
+    /// while a flying aeroplane's pose goes in as a matrix and leaves that triple alone, so an
+    /// <c>AT_NODE_XYZ</c> rotate off an aeroplane reads the attitude it was PLACED at, never the
+    /// one it is banking at. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public Basis? PlacedRotationOf(Node3D node) =>
+        _vehiclePlaced.TryGetValue(node.GetInstanceId(), out var placed) ? placed : null;
+
+    /// <summary>Opens a resolution census outside <see cref="Bind"/>, so a leg that PLAYS a
+    /// definition can report the names it could not reach the way the bind does
+    /// (<see cref="ResolutionLines"/>). Read the lines before <see cref="CloseResolutionCensus"/>.
+    /// </summary>
+    public void OpenResolutionCensus()
+    {
+        _resolver.ReportResolution = true;
+        _resolver.OpenCensus();
+    }
+
+    public void CloseResolutionCensus()
+    {
+        _resolver.CloseCensus();
+        _resolver.ReportResolution = ReportResolution;
     }
 
     // ---- ISequenceHost: the sequence interpreter's 3-point view of this runtime, satisfied by
@@ -2032,12 +2123,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // only ever hold one winner per index — see that method's remark for why skipping it is
     // correct, not a loss (Targets' own symbol-miss rescue is anchor-scoped by name instead). The
     // resolver applies the flag, together with its own NameResolveFallback refusal, inside Add.
-    private void IndexWorld(Node3D worldRoot, bool indexByPointer = true)
+    private void IndexWorld(Node3D worldRoot, bool indexByPointer = true, int indexOffset = 0)
     {
         void Walk(Node3D n, Node3D? parent)
         {
             var srcName = n.HasMeta(NameMeta) ? n.GetMeta(NameMeta).AsString() : n.Name.ToString();
-            int? gamezIndex = n.HasMeta(IndexMeta) ? (int)n.GetMeta(IndexMeta) : null;
+            int? gamezIndex = n.HasMeta(IndexMeta) ? (int)n.GetMeta(IndexMeta) + indexOffset : null;
             _resolver.Add(n, srcName, parent, gamezIndex, indexByPointer);
             foreach (var child in n.GetChildren())
                 if (child is Node3D c)
@@ -2348,10 +2439,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                     || _missionCallDepth > 0)
                                 && !operandRedirect && ResolveLibraryRoot != null)
                             {
-                                libraryCopy = ResolveLibraryRoot(
-                                    string.IsNullOrEmpty(target.Name) ? target.RootName ?? "" : target.Name,
-                                    callAnchor);
-                                relocate = libraryCopy != null;
+                                string rootName = string.IsNullOrEmpty(target.Name)
+                                    ? target.RootName ?? "" : target.Name;
+                                // ⚠ A call whose AT_NODE site IS the callee's own root node names
+                                // the node to run on; a pooled copy beside it would drive one node
+                                // while the shot composed in the other hangs off it.
+                                if (!string.Equals(NameOf(callAnchor), rootName,
+                                        StringComparison.OrdinalIgnoreCase))
+                                {
+                                    libraryCopy = ResolveLibraryRoot(rootName, callAnchor);
+                                    relocate = libraryCopy != null;
+                                }
                             }
                         }
                         // A relocating call outside the pool claims its sticky slot before the
@@ -2535,7 +2633,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         int code = (int)(ev.Data.Num("value") ?? -1f);
         // The mission-script host first: its vocabulary is the session's, and it declines every
         // code it does not own, so the two seams below keep the codes they always had.
-        if (CallbackHost != null && CallbackHost(code, def.AnimName))
+        if (CallbackHost != null && CallbackHost(code, def.AnimName, RootNodeNameOf(def)))
         {
             _opsApplied++;
             return;
@@ -2567,6 +2665,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return;
         }
     }
+
+    // The node a definition is rooted on, for the mission-script host. ANIMATION_ROOT_NAME first
+    // and the anchoring NAME behind it: CM02's capture defs author the same aircraft in both, and
+    // a def with no root at all still names the object it belongs to in its NAME.
+    private string? RootNodeNameOf(AnimDefinition def) =>
+        def.RootName is { Length: > 0 } root ? root
+        : def.Name.Length > 0 ? def.Name
+        : null;
 
     // How far from its anchor a definition's own `If PlayerRange` gate admits its wash, in metres
     // SQUARED (the compiled convention both sources normalise to), and 0 for a def that gates on
@@ -3276,6 +3382,63 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return string.IsNullOrEmpty(name) || def.NodeRefs.Count == 0 || def.NodeRefs.ContainsKey(name);
     }
 
+    // Every named node under a subtree, first spelling wins — the same NameMeta stamp the world
+    // build puts on each node, since Godot's own Name is sanitized and de-duplicated.
+    private void CollectNamed(Node node, Dictionary<string, Node3D> into)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node3D n3d && n3d.HasMeta(NameMeta))
+            {
+                into.TryAdd(n3d.GetMeta(NameMeta).AsString(), n3d);
+            }
+
+            CollectNamed(child, into);
+        }
+    }
+
+    // The unnamed Node3Ds a rig hangs between its own root and the airframe's nodes. They carry no
+    // gamez identity, so an activation addressed to the vehicle has to reach through them.
+    private List<Node3D> ShellOf(Node3D rig, Dictionary<string, Node3D> parts)
+    {
+        var shell = new List<Node3D>();
+        var seen = new HashSet<ulong>();
+        foreach (var part in parts.Values)
+        {
+            for (var p = part.GetParent() as Node3D; p != null && p != rig; p = p.GetParent() as Node3D)
+            {
+                if (!p.HasMeta(NameMeta) && seen.Add(p.GetInstanceId()))
+                {
+                    shell.Add(p);
+                }
+            }
+        }
+
+        return shell;
+    }
+
+    // The part named `name` inside the spawned vehicle this event's anchor belongs to. Walks up
+    // from the anchor, so a definition anchored on the rig root (or on anything staged under it)
+    // sees the aeroplane's own parts and nothing else's.
+    private Node3D? VehiclePart(Node3D? anchor, string name)
+    {
+        if (_vehicleParts.Count == 0)
+        {
+            return null;
+        }
+
+        for (Node? at = anchor; at != null; at = at.GetParent())
+        {
+            if (at is Node3D n3d && _vehicleParts.TryGetValue(n3d.GetInstanceId(), out var parts)
+                && parts.TryGetValue(name, out var part) && IsInstanceValid(part))
+            {
+                return part;
+            }
+        }
+
+        return null;
+    }
+
     // Whether a NAME pattern resolves to this exact node, by instance id — Node3D's inherited
     // equality is unreliable across proxies of one native node (see Node3DIdentity).
     private bool IsNamed(string? pattern, Node3D node)
@@ -3332,6 +3495,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // anchor's subtree, never globally.
                 if (anchor != null && FindAll(refName, anchor) is { Count: > 0 } scoped)
                     return scoped;
+                // ⚠ The other narrow rescue, scoped to the anchor's own vehicle and never the
+                // index: a chapter's unplaced copy of a vehicle carries the parts a capture
+                // animates, and the rig the mission spawned carries the same names.
+                if (VehiclePart(anchor, refName) is { } part)
+                    return new List<Node3D> { part };
                 _opsUnresolved++;
                 _resolver.RecordMissingTarget(def, refName, "index-not-built");
                 return new List<Node3D>();

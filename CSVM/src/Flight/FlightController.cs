@@ -93,6 +93,23 @@ public partial class FlightController : Node3D
     /// part and the plane flies on; null means any hit crashes.</summary>
     public PlaneDamage? Damage;
 
+    /// <summary>The livery this aircraft's model was painted with, set once by whichever assembler
+    /// built it. Read back by an airframe swap that needs to carry a captured rig's own scheme
+    /// onto the rig it rebuilds (docs/formats/anim-definitions/cutscenes.md).</summary>
+    public PaintScheme? Scheme;
+
+    /// <summary>Whether <see cref="Scheme"/> came from the ShippedSkins reading (a roster spawn on
+    /// a team other than the player's, which draws no default pattern of its own). A swap has to
+    /// carry this alongside <see cref="Scheme"/>: a captured rig resolved this way and painted
+    /// nothing is not "no scheme carried", so the rebuild must not fall back to this pilot's own
+    /// default livery either.</summary>
+    public bool ShippedSkins;
+
+    /// <summary>The painter that composited <see cref="Scheme"/> onto this aircraft's skins, null
+    /// when it flies the bare shipped textures. Exposed so a swap suite can read the actual
+    /// painted output a rebuild carries, rather than comparing the scheme record alone.</summary>
+    public PlanePainter? Painter;
+
     /// <summary>Applies a plane collision's health damage to the struck world node, returning true
     /// iff it was a <c>WeaponOrCollideHit</c> destructible (the 44 facades/windows/agyrobus), in
     /// which case the object breaks and the plane flies THROUGH it. EVERY destructible takes the
@@ -153,6 +170,14 @@ public partial class FlightController : Node3D
     /// <summary>--fire-rockets: hold the rocket trigger down (scripted screenshot / soak runs).
     /// Unlike a human pull (one rocket per press), this auto-repeats at the launch cooldown.</summary>
     public bool AutoFireRockets;
+
+    /// <summary>Forces <see cref="AutoLandPressed"/> true, the way <see cref="AutoFire"/> forces the
+    /// gun trigger: a suite's twin for the auto-land button, with no live key or pad to press.</summary>
+    public bool AutoLand;
+
+    /// <summary>Whether <see cref="LandingApproachRuntime"/>'s auto row currently passes for this
+    /// aircraft, fed once a frame by the session that owns the trigger. Drives the HUD prompt.</summary>
+    public bool AutoLandOffered;
 
     /// <summary>--gun-select=N: the gun selector's initial firable group (0-based; 0 = the first
     /// group, the default). Only one gun group fires at a time. A headless testing hook so a scripted
@@ -351,6 +376,11 @@ public partial class FlightController : Node3D
     private const float FallbackSpawnThrottle = 0.5f;
     private const float FallbackSpawnSpeed = 53.6f;
     private const float CarrierDropThrottle = 0.1f;
+
+    // The speed a cutscene's re-placement flies out at, along the placed nose. The original writes
+    // it straight into the vehicle's velocity at the re-placing callback, as the placed rotation's
+    // own forward axis times this literal (docs/formats/anim-definitions/cutscenes.md).
+    private const float ReplacedSpeed = 53.6448f;
     private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
     // The nitro_decay def's authored opacity fade (RUN_TIME 1.0), which is how long a re-engage
@@ -474,6 +504,11 @@ public partial class FlightController : Node3D
     private Transform3D _simPrev = Transform3D.Identity;
     private Transform3D _simCurr = Transform3D.Identity;
     private Transform3D _renderPose = Transform3D.Identity; // the pose actually drawn this frame
+    // Where the aircraft stood when a cutscene began staging it (StageAt), and the flag that it is
+    // being staged at all. ResumeAt replaces the pose with the one the cutscene re-places the pilot
+    // at, and raises the flag below so the hand-back moves the flight model too.
+    private Transform3D? _stagedFrom;
+    private bool _resumePlaced;
 
     /// <summary>Raised once per crash, at <see cref="Crash"/>: (victim <see cref="PlayerIndex"/>,
     /// killer shooter id). Null for terrain, mid-air, an unowned round or any other crash cause. A
@@ -999,6 +1034,64 @@ public partial class FlightController : Node3D
         GlobalTransform = _simCurr;
         if (_cam != null && IsInsideTree())
             SnapCamera();
+    }
+
+    /// <summary>An intro cutscene's own aircraft motion: draw this airframe at
+    /// <paramref name="pose"/> while it is out of flight, or null to hand it back the pose it held
+    /// when the staging began. The animation runtime owns the pose, so this writes it rather than
+    /// deriving one; <see cref="Inert"/> keeps the aircraft out of play throughout, and the model's
+    /// visibility is re-asserted on every call because a respawn resets it.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public void StageAt(Transform3D? pose)
+    {
+        if (pose is { } staged)
+        {
+            _stagedFrom ??= GlobalTransform;
+            GlobalTransform = staged;
+            if (ShakePivot != null)
+            {
+                ShakePivot.Visible = true;
+            }
+
+            if (PlaneModel != null)
+            {
+                PlaneModel.Visible = true;
+            }
+
+            return;
+        }
+
+        if (_stagedFrom is not { } home)
+        {
+            return;
+        }
+
+        _stagedFrom = null;
+        GlobalTransform = home;
+        _simPrev = _simCurr = _renderPose = home;
+        // A re-placement moves the flight model as well as the drawn pose: the pin the held steps
+        // re-assert is what the aeroplane flies out of once the hold clears.
+        if (_resumePlaced)
+        {
+            _resumePlaced = false;
+            _heldPos = home.Origin;
+            _heldAttitude = home.Basis;
+            _heldPinned = true;
+            _model.Reset(_heldPos, _heldAttitude, ReplacedSpeed, _model.Throttle);
+        }
+
+        ApplyPresence();
+    }
+
+    /// <summary>The re-placement a cutscene's own callback authors: the aeroplane flies out of
+    /// <paramref name="pose"/> rather than out of where <see cref="StageAt"/> found it, at the
+    /// original's own release speed along the placed nose. Applied at the hand-back, because the
+    /// hold zeroes the model's speed on every step it runs.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public void ResumeAt(Transform3D pose)
+    {
+        _stagedFrom = pose.Orthonormalized();
+        _resumePlaced = true;
     }
 
     /// <summary>Weapon lab: point the gun selector at a firable gun group (0-based, clamped) —
@@ -1795,6 +1888,13 @@ public partial class FlightController : Node3D
     // … → 1). Only ONE group fires at a time; the gun trigger fires the selected one. Caller edge-detects.
     private bool GunSelectPressed() => KeyDown(Key.G) || PadPressed(JoyButton.DpadLeft);
 
+    // F9 / gamepad left-stick click, the auto-land button, read live by
+    // LandingApproachRuntime.Tick() so a press lands in the same frame it happens. Kept beside the
+    // other button reads rather than hoisted for SA1202's sake, the same trade made elsewhere here.
+#pragma warning disable SA1202
+    internal bool AutoLandPressed() => AutoLand || KeyDown(Key.F9) || PadPressed(JoyButton.LeftStick);
+#pragma warning restore SA1202
+
     // H / gamepad D-pad Right — moves the hardpoint selector to the next pylon that still
     // carries ordnance (each pylon is its own selectable slot, whatever it loads — even a plane with
     // one uniform ordnance type). The rocket trigger then launches from the selected pylon. Caller
@@ -1830,6 +1930,7 @@ public partial class FlightController : Node3D
             StallWarned = _model.IsStallWarned(),
             AvailableLoadFactor = _model.AvailableLoadFactor,
             Stalled = _model.isStalled(),
+            AutoLandOffered = AutoLandOffered,
             WallDt = wallDt,
             SimDt = simDt,
             DamageSummary = _pilotHud.DrawsTextBlock ? Damage?.Summary() : null,
@@ -1854,8 +1955,15 @@ public partial class FlightController : Node3D
     // carry the state come (back) into existence.
     private void ApplyPresence()
     {
-        if (PlaneModel != null)
-            PlaneModel.Visible = InPlay;
+        // ⚠ Hide the pivot, never the model root: that root is the airframe's own archive node and
+        // its visibility is the ACTIVE bit a hookup definition reads.
+        // Decode: docs/formats/anim-definitions/cutscenes.md.
+        if (ShakePivot != null)
+            ShakePivot.Visible = InPlay;
+        // The crash paths hide the airframe itself, which is a death state rather than presence;
+        // coming back into play is what undoes it.
+        if (PlaneModel != null && InPlay)
+            PlaneModel.Visible = true;
         Body?.SetHittable(InPlay);
     }
 
@@ -2943,6 +3051,10 @@ public partial class FlightController : Node3D
             if (c.Team == AimAssist.NeutralTeam || ownTeam == AimAssist.NeutralTeam
                 || c.Team == ownTeam)
                 continue;
+            // A carried turret's host is already ranked as a vehicle above; offering it again
+            // here would put two entries on one silhouette. Mirrors TargetPool.Offer's guard.
+            if (isTurret && !TargetPool.IsEmplacement(c.Source))
+                continue;
 
             int attackers = 0;
             foreach (var a in _gunnerScan.Vehicles)
@@ -2967,10 +3079,19 @@ public partial class FlightController : Node3D
         }
     }
 
+#pragma warning disable SA1202
+    // Internal rather than private: the carried-turret dedup suite asserts on the ranked pool's
+    // shape directly (one entry per silhouette) rather than inferring it from which one thing
+    // ranking picks, which a same-position duplicate could still pass by accident.
+    internal IReadOnlyList<object?> RankedPoolSourcesForTest(AiGunner gunner)
+    {
+        SelectRankedTarget(gunner, out _, out _);
+        return _rankSources;
+    }
+
     // Internal rather than private: PilotInputSource/KeyboardInputSource (IFlightInputSource.cs)
     // call this and its sibling above to keep each body exactly where it always lived among the
     // other sim-step helpers, rather than hoisting it for SA1202's sake.
-#pragma warning disable SA1202
     internal FlightInput ReadKeyboard(float dt)
     {
         // this player's gamepad(s) fly the plane (see PadPressed/PadAxis);

@@ -1,4 +1,4 @@
-# Chase-camera tuning - `camparam.json`
+# Camera tuning - `camparam.json`
 
 Part of the [format documentation](README.md). This shared zrdr reader defines chase distance,
 catch-up rates, third-person eye height and pitch, and look-behind, death, crash, and flyby camera
@@ -9,6 +9,7 @@ geometry.
 - [Shape](#shape)
 - [Per-plane overrides](#per-plane-overrides)
 - [Default block](#default-block)
+- [Static death, crash, and flyby cameras](#static-death-crash-and-flyby-cameras)
 - [Known limits](#known-limits)
 - [Throttle transient](#throttle-transient)
 - [Engine-read fields](#engine-read-fields)
@@ -65,15 +66,62 @@ two-turret aircraft — the largest.
 | `thirdp_height` | 0.138 | Third-person eye height. Units unknown (not metres at this magnitude). |
 | `thirdp_pitch` | 0.29 | Third-person pitch. As radians this is 16.6°. |
 | `back_dist_min` / `_max` | 15.5 / 55.0 | The look-behind view's distance bounds. Ships with no base-distance sibling, so the engine reads it as bounds on the shared chase radius: the min bites for the smallest airframes (a Kestrel's 15.0 m dynamic radius is lifted to 15.5), the max never in practice. A reading from the data's shape, not a capture-verified decode — no look-behind footage exists. |
-| `death_interval` | 2.0 | Seconds between death-camera re-frames. |
-| `death_z` / `death_x` / `death_alt` / `death_min_alt` | 0 / 80 / 5 / 15.1 | Death-camera placement. |
+| `death_interval` | 2.0 | Seconds of velocity projection in the death-camera placement: `speed · death_interval` becomes the third local offset component. It is not a re-frame timer. |
+| `death_z` / `death_x` | 0 / 80 | Longitudinal addition / radius of the random local-plane offset used for the death camera. |
+| `death_alt` / `death_min_alt` | 5 / 15.1 | World-Y addition / absolute world-Y floor applied after the local death-camera offset is transformed through the aircraft basis. |
 | `crash_horiz` / `crash_y` | 30 / 45 | Crash-camera offset, metres: on a fatal crash the camera hard-cuts to `crash_horiz` m behind the impact (along the flight path's horizontal component) and `crash_y` m up, looking at the impact, then holds still. `C1 IA1 Crash.mp4` / `C1 IA1 Crash 2.mp4` show: instant cut, static elevated look-down (the implied 56° matches both clips), HUD hidden, and the near-vertical dive clip's overhead view is what the horizontal-component rule degenerates to in a dive. |
-| `crash_chord_y` / `crash_elev` | 1000 / 40 | ⚠ Undecoded, deliberately unwired. `crash_elev` duplicates the vertical role `crash_y` fills and the footage cannot separate 45 from 40 (56° vs 53° of look-down); `chord_y`'s meaning is unknown. Capture-gated on `BL-260`. |
-| `flyby_min_watch_time` / `_max_` | 3.8 / 4.3 | Seconds the flyby camera watches before moving. |
+| `crash_chord_y` / `crash_elev` | 1000 / 40 | Shared static-camera world-collision probe: ray-start height above the candidate / clearance above the highest hit. The retail executable names the second key `crash_min_elev`; the extracted reader exposes it as `crash_elev`. Applies to crash, death, and flyby placement. |
+| `flyby_min_watch_time` / `_max_` | 3.8 / 4.3 | Random seconds the flyby camera must watch before distance may request a re-site. |
 | `flyby_min_radius` / `_max_` | 5.5 / 7.0 | How close the flyby camera sits to the flight path. |
-| `flyby_min_interval` / `_max_` | 1.9 / 2.3 | Seconds between flyby re-sites. |
-| `flyby_min_switch_dist` / `_max_` | 70 / 85 | Distance at which the flyby camera hands over. |
+| `flyby_min_interval` / `_max_` | 1.9 / 2.3 | Random seconds of velocity projection in the flyby placement: `speed · interval` becomes longitudinal distance. It is not time between re-sites. |
+| `flyby_min_switch_dist` / `_max_` | 70 / 85 | Random distance threshold tested after the watch deadline; exceeding it requests a re-site on the next frame. |
 | `flyby_z` / `flyby_y` / `flyby_min_alt` | 0 / 0.1 / 0.1 | Flyby placement offsets. |
+
+## Static death, crash, and flyby cameras
+
+All three cameras first calculate a candidate world position and then pass its Y coordinate through
+one shared world-collision clearance rule. `crash_chord_y` raises the start of a vertical ray above the
+candidate; the ray ends 1000 m below the candidate. When it hits terrain, the candidate rises to at
+least `highest_hit_y + crash_elev`. The executable calls the latter field `crash_min_elev`, which
+describes its role; `crash_elev` is the extracted reader's spelling. The rule is `FUN_0042c390`,
+called through `FUN_0042c580` by crash (`0042e041`–`0042e04e`), death
+(`0042e1d7`–`0042e1e4`), and flyby (`0042e387`–`0042e394`).
+
+The death camera is mode 8. On entry it chooses one fixed world point:
+
+1. Draw an angle uniformly around the aircraft and form the local offset
+   `(death_x·cos θ, death_x·sin θ, −(speed·death_interval + death_z))`.
+2. Transform that offset through the aircraft basis and add the aircraft world position.
+3. Add `death_alt` to world Y, clamp Y to `death_min_alt`, then apply the shared clearance.
+
+`FUN_0042e0b0` performs the placement (`0042e0c3`–`0042e1e4`). The camera holds the resulting
+world point and re-aims at the aircraft every frame; it has no timer-driven re-frame. Mode 8 is
+entered for the destroyed player when callback event `0x0f` consumes the armed death-camera flag
+(`00470912`–`0047093c` and `0048072a`–`00480794`). Reset/respawn leaves it for mode 6.
+
+The flyby camera is mode 9. Each re-site (`FUN_0042e1f0`, `0042e1f0`–`0042e3f6`):
+
+1. Draws a local angle outside the ±15° forward/back exclusion wedges and a radius uniformly from
+   `flyby_min_radius..flyby_max_radius`.
+2. Draws `interval` uniformly from `flyby_min_interval..flyby_max_interval` and uses
+   `−(speed·interval + flyby_z)` as the longitudinal offset.
+3. Transforms the offset through the aircraft basis, adds `flyby_y` to world Y, clamps to
+   `flyby_min_alt`, and applies the shared clearance.
+4. Draws a watch duration and switch distance independently from their authored min/max pairs.
+
+`FUN_0042db40` holds that world point and re-aims at the moving aircraft each frame. After the watch
+deadline, distance beyond the chosen switch threshold requests a re-site; because the re-site check
+precedes the distance check, the move occurs on the next frame. Every re-site redraws all four
+random choices. Mode 9 has no internal exit; another camera-mode transition ends it.
+
+`FUN_0042f700` maps the raw floats without conversion: death fields occupy table offsets
+`+0x30..+0x40`, crash placement/clearance `+0x44..+0x50`, and flyby `+0x54..+0x7c`. Position fields
+are metres. The two `*_interval` values are seconds because they multiply speed to produce metres;
+only `flyby_*_watch_time` is a dwell.
+
+The vector-component formulas and basis transform are exact. Calling the third local component
+fore/aft is an interpretation of the resulting camera behaviour; the executable does not expose a
+friendly name for that basis axis.
 
 ## Known limits
 
@@ -141,17 +189,11 @@ is 1.54× it.
 - `back_dist_min` / `back_dist_max` — the look-behind view's distance bounds (`BackView`,
   numpad 0 / `--view=back`).
 
-The death and flyby cameras stay **capture-gated dormant**: their triggers exist to decode
-(`death_z`/`death_x`/`death_alt`/`death_min_alt` are placement magnitudes with unknown axes,
-and the flyby's 12 fields describe a re-siting roadside pass) but no death or flyby footage is
-on disk — `BL-260` owes those captures. Everything else is carried deliberately dormant behind
-the warnings above.
-
-⚡ Update: a live run of the original confirmed the flyby is **player-reachable** — pressing the
-"Access Chase View" key (F7) drops the camera to a fixed world position that re-aims as the plane
-flies through, then re-sites, exactly as the `flyby_*` fields above read. It is not a passive/dormant
-path; the binary ties it to mode `9` of the camera dispatch (see `docs/org/cameraViews.md`). The
-`death_*` fields remain capture-gated.
+The death and flyby cameras are decoded but remain dormant in CSVM. The original's F7 "Access Chase
+View" enters flyby mode 9; destroyed-player callback event `0x0f` enters death mode 8. Captures are
+useful after implementation to judge their presentation, but they do not supply any field meaning
+or placement constant. See [`docs/org/cameraViews.md`](../org/cameraViews.md) for the camera-state
+dispatch and lifecycle.
 
 ## Evidence & limits
 
