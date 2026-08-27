@@ -54,6 +54,8 @@ public sealed class CampaignDirector
     // that finds one.
     private float _scanClock;
     private bool _damageWired;
+    private bool _deathWired;
+    private bool _playerLost;
 
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
@@ -86,6 +88,11 @@ public sealed class CampaignDirector
     /// <summary>The wingman aircraft's ammunition and ordnance picks off the profile, or null when
     /// this mission has no wingman.</summary>
     public LoadoutChoice? WingmanFit { get; private set; }
+
+    /// <summary>Whether losing the player's aircraft ends the mission, which is the original's rule
+    /// and the default here. <c>--no-crash-loss</c> clears it so a session being debugged can fly
+    /// on past a crash; <c>GameSession</c> is the only writer.</summary>
+    public bool EndsOnPlayerDeath { get; set; } = true;
 
     /// <summary>The mission's parsed choreography script.</summary>
     public ObjectiveScript Script { get; }
@@ -204,8 +211,13 @@ public sealed class CampaignDirector
         _netTrailers = inputs.NetTrailers;
         _minAiActiveDist = inputs.MinAiActiveDist;
 
+        // wingman_4 flies the player's own aeroplane in the two missions the swap hands it over in,
+        // and its own def's everywhere else.
+        var handover = AirframeHandover.Resolves(_mission.ChapterFolder, _mission.MissionFolder)
+            ? inputs.PlayerAirframe
+            : null;
         var plan = CampaignRosterPlan.Build(blocks, defs, nets, WingmanNode, WingmanFit,
-            netDraw: count => inputs.Rng.Next(count));
+            netDraw: count => inputs.Rng.Next(count), handover: handover);
         foreach (var (name, why) in plan.Skipped)
         {
             if (!name.Equals(CampaignRosterPlan.PlayerBlock, StringComparison.OrdinalIgnoreCase))
@@ -253,7 +265,7 @@ public sealed class CampaignDirector
             inputs.AttachMarkers?.Invoke(spawn.Name, rig);
 
             CampaignRosterPlan.ApplyPlan(pilot, spawn, minActive);
-            inputs.RegisterVoice(rig, spawn.AccentId, null);
+            inputs.RegisterVoice(rig, spawn.AccentId, spawn.Skills.Talker, spawn.Skills.Constitution);
 
             bool placed = false;
             if (spawn.TaxiPath is { } taxi && _paths != null)
@@ -335,11 +347,13 @@ public sealed class CampaignDirector
     /// cutscene hold nothing advances, which is callback 20's objectives half.</summary>
     internal void Step(float dt)
     {
+        WirePlayerDeath();
         if (_cutsceneHold)
         {
             return;
         }
 
+        StepPlayerLost();
         Graph?.Step(dt);
         if (_dangerZones != null && _world?.Player() is { } player)
         {
@@ -369,6 +383,48 @@ public sealed class CampaignDirector
         }
 
         return null;
+    }
+
+    // The player's own death, subscribed on the first step that finds an aircraft: the player rig
+    // is built after Attach has run, the same reason the music channel's damage ping waits.
+    private void WirePlayerDeath()
+    {
+        if (_deathWired || _world?.Player() is not { } player)
+        {
+            return;
+        }
+
+        _deathWired = true;
+        player.Downed += (_, _) => OnPlayerDown();
+    }
+
+    // Losing the aircraft loses the mission, in the original's two stages: the death stops the
+    // objectives, and the wreck reaching the ground reaches the debrief. ⚠ Read the aircraft's own
+    // Downed report, which is raised once per real death; the under-map backstop teleports without
+    // one, so an altitude test here would end missions nobody lost (docs/verification.md INSTR-22).
+    private void OnPlayerDown()
+    {
+        if (!EndsOnPlayerDeath || Graph is not { } graph || !graph.NotifyPlayerLost())
+        {
+            return;
+        }
+
+        _playerLost = true;
+        GD.Print("campaign: the player's aircraft is lost — the objectives stop, and the mission ends where the wreck does");
+    }
+
+    // The second stage: a hull that is still falling has not landed yet, which is the whole of the
+    // delay between the kill and the debrief.
+    private void StepPlayerLost()
+    {
+        if (!_playerLost || Graph is not { } graph
+            || _world?.Player() is { WreckFalling: true })
+        {
+            return;
+        }
+
+        _playerLost = false;
+        graph.EndAfterPlayerLost();
     }
 
     // A path-driven aircraft: held (no flight integration) and re-pinned to the follower's pose
@@ -516,6 +572,10 @@ public sealed class CampaignDirector
         /// radius.</summary>
         public float MinAiActiveDist = 2000f;
 
+        /// <summary>What player 1 is flying, for the airframe hand-over's own roster block. Null
+        /// leaves that block on its own def, which is what every other mission wants.</summary>
+        public FlyingAirframe? PlayerAirframe;
+
         public Func<FlightController?> Player = () => null;
         public NetTrailerTargets? NetTrailers;
         public Func<string, IReadOnlyList<Node3D>>? FindNodes;
@@ -526,7 +586,7 @@ public sealed class CampaignDirector
         /// chapter's additions to a vehicle unreachable exactly as they were before.</summary>
         public Action<string, Node3D>? AttachMarkers;
 
-        public Action<FlightController?, int?, int?> RegisterVoice = (_, _, _) => { };
+        public Action<FlightController?, int?, int?, int?> RegisterVoice = (_, _, _, _) => { };
         public Random Rng = new();
     }
 

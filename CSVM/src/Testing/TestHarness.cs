@@ -42,11 +42,6 @@ public static class TestHarness
         // Cap set just above the worst measured chapter (C2 4) so a new source still trips it.
         new ErrorAllowance(@"Condition ""det == 0"" is true\.", 8,
             "pre-existing singular-basis guard in the destructible death path (backlog: det == 0 invert error)"),
-        // An AT_NODE pose run during the animation bootstrap, before the world root is parented,
-        // which Godot's guard answers with identity for both transforms (BL-484). Measured at 4
-        // per CutsceneRoots world and three suites build one, so a fourth still trips this cap.
-        new ErrorAllowance(@"Condition ""!is_inside_tree\(\)"" is true", 16,
-            "pre-existing bootstrap AT_NODE pose on an out-of-tree node (backlog: BL-484)"),
     };
 
     // The engine's own error format (print_error): "ERROR: …", "SCRIPT ERROR: …", "USER ERROR: …".
@@ -624,6 +619,7 @@ public sealed class TestContext
                 ExtraPrewarmNames = ExtraPrewarmSoundNames,
                 CutsceneRoots = CutsceneRoots,
                 LandingTriggers = CutsceneRoots,
+                PlanesGamezPath = PlanesGamezPath,
                 TexturesOutliveBuild = archives.TexturesOutliveBuild,
                 SoundsOutliveBuild = archives.SoundsOutliveBuild,
             },

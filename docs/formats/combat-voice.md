@@ -231,9 +231,11 @@ Stand-ins and inventions, named:
 - **Pilot identity**: an `--ai=` spawn takes an optional `accent=<id>` segment
   ([cli.md](../cli.md)); its accents join the mission roster's prewarm set. A spawn without one
   is voiceless. A campaign roster spawn carries its own slot 65 (`CampaignDirector` hands
-  `AiSpawn.AccentId` to `RegisterVoice`), but ⚠ **its talker and constitution ratings still do
-  not**: the third argument is passed null and the session's `--ai-attack=` skill (default 5)
-  stands in, so an ace rated 9 on `talker` is no chattier here than a mook rated 1.
+  `AiSpawn.AccentId` to `RegisterVoice`), and its talker and constitution slots reach the runtime
+  the same way: `RegisterVoice` takes one override per stat, and `GameSession.RegisterAiVoice`
+  looks up `talker_chance` at the block's own talker rating and `constitution_chance` at its own
+  constitution rating, each on its own curve. A rating a block does not author falls back to the
+  session's skill rating, same as before.
 - The gate's "must not already be talking" is a hook (`AiVoiceDispatcher.IsTalking`), unwired:
   the remake's one-shots carry no per-speaker playing state yet.
 - **Force bypasses only the aliveness check**, as decoded — a forced death cry still respects

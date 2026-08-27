@@ -11,7 +11,7 @@ follow-ups filed when `PLAN-flight-model-parity` closed (`BL-444`, `BL-446`, `BL
 `BL-458`), four bounded research or fidelity items from the same batch (`BL-449`, `BL-451`,
 `BL-457`) plus the at-the-controls audio bug `BL-442`, and the perf-test flake `BL-417`. Selection
 criteria: newest IDs first, open and unblocked, no item scheduled by
-[`PLAN-M5-campaign.md`](../PLAN-M5-campaign.md), and each landable in one session.
+[`PLAN-M5-campaign.md`](PLAN-M5-campaign.md), and each landable in one session.
 
 Every item was re-verified still-open in this session against the record: `git log --all --grep`
 for each ID returns only the filing commits (`8c4cd4f3`, `471f887c` for the `BL-44x`/`BL-45x`

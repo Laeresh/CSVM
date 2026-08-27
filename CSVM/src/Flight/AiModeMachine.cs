@@ -91,10 +91,6 @@ public sealed class AiModeMachine
     /// <summary>Invented: minimum probe length, metres (a slow plane still looks ahead).</summary>
     public const float ProbeMinLookaheadM = 120f;
 
-    /// <summary>Invented: the second probe slants this far below the lookahead point, so shallow
-    /// terrain under a level flight path still registers.</summary>
-    public const float ProbeDeckM = 40f;
-
     /// <summary>The avoid-crash climb-out altitude gain, metres — decoded: the original's climb-out
     /// aim is the aeroplane's own position with Y + 1000 (<c>FUN_0041d1f0</c> case 3), which is the
     /// same 1000 m <see cref="AiPilot.ClimbOutAim"/> flies. Was an invented 250.</summary>
@@ -518,11 +514,11 @@ public sealed class AiModeMachine
     }
 
     // The obstacle-closure override, in the original's three altitude bands (FUN_0041f810): below
-    // AltitudeFloorM the climb-out arms outright, above ProbeCeilingM nothing is cast and a running
-    // one is released, and between them a due probe decides. The probe geometry inside that middle
-    // band is ours (two rays, marked invented above); what it sees is decoded, the caster alone
-    // being excluded. Blocked → avoid crash, dropping a running maneuver, which is the original's
-    // precedence (FUN_004897c0 runs the check in states 0-3 and starts a maneuver only from 0-1).
+    // AltitudeFloorM it arms outright, above ProbeCeilingM nothing is cast and a running one is
+    // released, and between them a due probe decides. ⚠ Do not add a second, deck-slanted ray:
+    // the original casts one along its own velocity, and the extra one broke a campaign wingman
+    // off its station over water the decoded ray was clear of (docs/org/aiPilot.md). Blocked →
+    // avoid crash, dropping a running maneuver, the original's own precedence (FUN_004897c0).
     private void UpdateAvoidCrash(Vector3 pos, Vector3 velocity, float dt)
     {
         // Stunned never reaches here (Update returns above), matching the caller's state < 4 gate.
@@ -553,7 +549,7 @@ public sealed class AiModeMachine
         var dir = speed > 1e-3f ? velocity / speed : Vector3.Forward;
         float reach = Mathf.Max(speed * ProbeLookaheadS, ProbeMinLookaheadM);
         var ahead = pos + dir * reach;
-        string? struck = probe(pos, ahead) ?? probe(pos, ahead + Vector3.Down * ProbeDeckM);
+        string? struck = probe(pos, ahead);
 
         if (struck is null)
         {

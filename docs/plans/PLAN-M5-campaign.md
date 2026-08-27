@@ -1,9 +1,6 @@
 # Milestone 5 — the Campaign
 
-**ACTIVE PLAN** (written 2026-08-24). It sits in `docs/`, which by this repo's convention makes it
-a live plan. `PROJECT_CONTEXT.md`'s "Current status" currently names `PLAN-flight-model-parity.md`
-as the active plan; this plan starts when that pointer swaps to it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE.** 42 items landed across Waves A to E; E41 (the whole loop, walked and carried across processes) and E42 (the at-the-controls verdict) are proven by the sortie recorded in [`PLAN-M5-polish-2.md`](PLAN-M5-polish-2.md) C12. Its follow-ups live in `backlog.md` and in that plan's Wave D.
 
 This plan delivers the playable single-player campaign: the out-of-mission flow (player profile,
 campaign cabin, mission briefing, flight check with ammunition selection) and the in-mission
@@ -14,10 +11,7 @@ Ammo Selection). It absorbs the open campaign-scoped backlog items: `BL-134` (cu
 `BL-243` (cross-mission persistence), `BL-350` (hangar door `WAKE_ANIM`), `BL-361` (scripted-path
 vehicles), `BL-362` (campaign wingman station-keeping, the open half), `BL-363` (non-aircraft AI
 targeting candidates), `BL-364` (campaign patrol-net plumbing), `BL-037`
-(`WorldPartitionSetActive`), `BL-038` (`FogState`). Each of these was confirmed present and open in
-`backlog.md` on 2026-08-24; none has yet been re-verified against `git log --grep` and the code.
-<TODO: re-verify each absorbed BL still-open against git log --grep + the code before starting its
-item.>
+(`WorldPartitionSetActive`), `BL-038` (`FogState`). Each was re-verified against `git log --grep` and the code by the item that absorbed it.
 
 Deliberately out of scope: MPG movie playback (the between-chapter cinemas in
 `GOSDATA\ASSETS\GRAPHICS\MPG\` and `FINALCINEMA.SCRIPT`), the memento/scrapbook system
@@ -106,11 +100,11 @@ Everything below was located on disk in this planning session (2026-08-24 survey
   `AutoSave.sav` (11,136 B, embedded absolute path string), `Persist.NNN` (~320–472 B, one per
   mission id, ASCII tag `zSaveHeader`), `Mission.NNN` (24–148 KB), `Snap_*.png` scrapbook shots.
   Decoded to the structural depth A2 asked for:
-  [`docs/formats/saved-games.md`](formats/saved-games.md).
+  [`docs/formats/saved-games.md`](../formats/saved-games.md).
 - **Mission order** — `extracted\zrdr\cm_sequence.zrd.json`, a flat 24-entry list binding each story
   position to a `ZBD\` world folder and `M0n` subfolder. The folders are sparse because an act's
   missions are split across terrain folders (`C1`/`C1B`/`C1C` are all act 2), not because the
-  campaign branches. Decoded in A3, see [`docs/formats/campaign-sequence.md`](formats/campaign-sequence.md).
+  campaign branches. Decoded in A3, see [`docs/formats/campaign-sequence.md`](../formats/campaign-sequence.md).
 - **UI art** — `extracted\rimage\` (255 PNGs, e.g. `brief_button1.png`) extracted but consumed by
   nothing; `.BM` paint masks and `ui_strings.json` come from `ExtractRof.ps1`.
 - **Strings** — `docs/formats/strings.md`: ids 700–799 purchase/sell prompts, 1200–1219
@@ -141,7 +135,7 @@ Everything below was located on disk in this planning session (2026-08-24 survey
   `prebattle1–6`, `battle1–6`, `battlesuccess1–6`, `missionsuccess1–6`, `primaryobj1–2`,
   `secondaryobj1–2`, `tertiaryobj1–2` (objective-completion stingers), `splash`, `instantaction`,
   `spicyairtales`. The data is fully extracted and the selection/transition logic is decoded in
-  D37 ([`docs/org/music.md`](org/music.md)): the numbered variant is the sound group's own weighted
+  D37 ([`docs/org/music.md`](../org/music.md)): the numbered variant is the sound group's own weighted
   random pick, the prebattle → battle transition is a 20-second battle timer pinged by a proximity
   scan and by player damage, and `instantaction`/`spicyairtales` are cued by nothing at all.
 
@@ -206,8 +200,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — end to end and sign-off
 
-41. ☐ The full loop on C1: profile → cabin → briefing → flight check → mission → cabin, state persisted
-42. ☐ At-the-controls verdict pass against the original (C1 story missions + all five screens)
+41. ☑ The full loop on C1: profile → cabin → briefing → flight check → mission → cabin, state persisted
+42. ☑ At-the-controls verdict pass against the original (C1 story missions + all five screens)
 
 ## Dependency and parallelism notes
 
@@ -270,13 +264,13 @@ persists, and what `Persist.NNN` carries per mission (the `BL-243` state log). N
 decode and no writer.
 
 **Evidence (confidence: decoded, traced to the save/load callbacks in `crimson.exe`).** The answers
-are in [`docs/formats/saved-games.md`](formats/saved-games.md). Every file in `SavedGames\` is one
+are in [`docs/formats/saved-games.md`](../formats/saved-games.md). Every file in `SavedGames\` is one
 named-section container (payloads, then a 148-byte-per-entry directory, then a count); which
 sections a file holds is decided by a category mask in its 12-byte `zSaveHeader`.
 
 - **The profile is `Status.dat`.** Its `UIData` section (10,820 B) is a verbatim image of the
   global at `0x0064b340` and holds funds (`+0x448`), the 26-slot 204-byte plane array (`+0x44c`,
-  the same record [`docs/formats/paint.md`](formats/paint.md) already documents), the pilot name,
+  the same record [`docs/formats/paint.md`](../formats/paint.md) already documents), the pilot name,
   the selected plane, the memento image, and a 24-entry mission-result array (`+0x1868`, 168 B per
   record, best-of merge on completion: objective mask, time, shots/hits, money, plane flown).
   Campaign position is `+0x338`, the count of completed missions. Its sibling `PilotStatus`
@@ -316,7 +310,7 @@ populated mission records instead.
 ## A3 ☑ Decode the campaign mission order and unlocks → `docs/formats/campaign-sequence.md`
 
 **Goal.** The full mission order, what unlocks Next Mission, and each mission's id ↔ chapter folder
-↔ display-name string id. **Delivered** as [`docs/formats/campaign-sequence.md`](formats/campaign-sequence.md).
+↔ display-name string id. **Delivered** as [`docs/formats/campaign-sequence.md`](../formats/campaign-sequence.md).
 
 **Evidence (confidence: traced to an exact mechanism, with the data that proves it).** The order is
 `extracted\zrdr\cm_sequence.zrd.json`: 24 flat entries, `seq` 0…23, each carrying `campaign`
@@ -335,7 +329,7 @@ B12 and C22 should model a single integer position, not a graph.
 `IDS_MISSIONLONGNAME` 3450–3473 and `IDS_MISSIONSHORTNAME` 3480–3503, both indexed by `seq`; act
 names are `IDS_MISSIONAREA` 1220–1224. Ids 3500–3599 hold the tail of the short-name block and
 3600–3699 are Instant Action content, not act titles and mission names.
-[`docs/formats/strings.md`](formats/strings.md)'s ID map is corrected.
+[`docs/formats/strings.md`](../formats/strings.md)'s ID map is corrected.
 
 **Also delivered.** A4's open folder-to-briefing-state question: the state key is
 `"brief_c" + campaign + mission`, formatted from the two `cm_sequence` fields. The narration wav is
@@ -362,7 +356,7 @@ positions, buttons, `MSG_BRF_*` linkage) and for how a mission's briefing is ass
 places the map, the red flags, and the step-by-step reveal the original animates, and which
 narration wav belongs to which mission.
 
-**Evidence (confidence: traced).** Landed as [`docs/formats/briefing.md`](formats/briefing.md).
+**Evidence (confidence: traced).** Landed as [`docs/formats/briefing.md`](../formats/briefing.md).
 `Briefing.zrd.json` (20,470 lines) holds `BRIEFINGDIALOG` with fixed `PRIMITIVES`/`BUTTONS` chrome
 plus 25 named `STATES` (`default` and 24 `brief_cNN` mission states), each carrying its own
 background map art and, for every mission state, a `SCRIPT`: an ordered opcode list
@@ -466,7 +460,7 @@ wiring, mailbox/callback flow, screen transitions, and which engine calls they m
 `docs/formats/instant-action.md` reached for `INSTANTACTION.SCRIPT`.
 
 **Evidence (confidence: traced to code).** Landed as
-[`docs/formats/campaign-screens.md`](formats/campaign-screens.md). Every widget, list fill,
+[`docs/formats/campaign-screens.md`](../formats/campaign-screens.md). Every widget, list fill,
 transition and engine call of the five scripts is traced to either the script text, its
 `LAYOUT.CSV` row, or a `crimson.exe` handler, and checked against the five reference PNGs.
 
@@ -516,7 +510,7 @@ activates it, what it draws, when it retracts) and what the 8 unanchored `CALLBA
 the intro defs mean, written into the anim-definitions docs.
 
 **Evidence (confidence: traced to an exact mechanism, with the data that proves it).** Landed in
-[`docs/formats/anim-definitions/cutscenes.md`](formats/anim-definitions/cutscenes.md).
+[`docs/formats/anim-definitions/cutscenes.md`](../formats/anim-definitions/cutscenes.md).
 
 - **Letterbox is entirely data.** The string `letterbox` occurs nowhere in `crimson.exe`. The node
   is a parentless library root carrying one model of two opaque black quads (material 0, `Colored`
@@ -549,7 +543,7 @@ original's draw traversal reaches a parentless active root was not traced; CSVM 
 bars to the camera itself.
 
 **⚠ Traps.** The user's ruling, now recorded in
-[`cutscenes.md`](formats/anim-definitions/cutscenes.md): the M0x intro defs must play, never be
+[`cutscenes.md`](../formats/anim-definitions/cutscenes.md): the M0x intro defs must play, never be
 suppressed. Any interim change that silences them regresses that ruling.
 
 ## A8 ☑ Mint and file the owed captures
@@ -1974,8 +1968,8 @@ and plays the right track for the game state: `splash` on the main menu, the cab
 end; Instant Action gets `instantaction`.
 
 **Evidence (confidence: traced to an exact mechanism, with the data that proves it).** The decode
-landed as [`docs/org/music.md`](org/music.md), with a "The music channel" section on
-[`docs/formats/sounds.md`](formats/sounds.md) as its data-side landing. Every selection rule below
+landed as [`docs/org/music.md`](../org/music.md), with a "The music channel" section on
+[`docs/formats/sounds.md`](../formats/sounds.md) as its data-side landing. Every selection rule below
 has an address on that page.
 
 - **The music channel is a routing flag, not a subsystem the data asks for.** `FUN_00593590` sends
@@ -2180,7 +2174,7 @@ cabin reading `missionsCompleted=1` with Next Mission on seq 1. `dotnet build CS
 third consecutive run: build clean, units 2334/2334, engine suites 109/109 with errors clean, all
 16 golden shots hash-identical, `campaign-loop` again carrying state in from the run before it.
 
-## E42 ☐ At-the-controls verdict pass
+## E42 ☑ At-the-controls verdict pass
 
 **Goal.** The user plays the C1 campaign start to finish against the A8 captures and the five
 reference PNGs and signs off screen fidelity, briefing flow, cutscenes, objectives and wingmen,

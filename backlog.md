@@ -1167,27 +1167,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
-- `BL-484` `[Bug]` **An `AT_NODE` pose run during the animation bootstrap reads and writes global
-  transforms on out-of-tree nodes, so Godot returns identity and the pose lands at the world
-  origin.** *Evidence:* `PoseChannel.PoseAtNode` (`PoseChannel.cs:383,386,391`) takes the host's
-  `GlobalTransform` and assigns the target's `GlobalBasis`/`GlobalPosition`. During the bootstrap the
-  world root is not yet parented, which `AnimRuntime.WorldTransform`'s own comment already records
-  as a known condition and works around for sound positions. The pose path has no such fallback, so
-  Godot's `!is_inside_tree()` guard fires and both reads return `Transform3D()`. Reached through
-  `AnimRuntime.Start` into `SequenceRunner.Advance` into `HandleTranslateState`, and measured at
-  exactly **4 per world built with `CutsceneRoots`**, from `landings-approach-trigger` and
-  `cutscene-letterbox`. ⚠ The harness allowlist previously attributed these lines to a sound bind,
-  which is wrong; the entry and its cap are corrected to name this and to carry the per-world rate.
-  *Fix shape:* give `PoseAtNode` the composition `AnimRuntime.WorldTransform` already implements,
-  and write the target's LOCAL transform when it is out of tree, so a bootstrap pose lands where the
-  same pose lands a frame later. *⚠ Traps:* the letterbox bars and `camera1` are both world roots
-  posed through this path, so a change here moves cutscene framing and must be judged against
-  `cutscene-letterbox` and a `--campaign=` shot rather than against the error count alone. Do not
-  raise the allowlist cap again instead of fixing this: the cap is the rate times the number of
-  suites, so a third such suite is meant to trip it. *Cross-refs:*
-  `CSVM/src/Testing/TestHarness.cs`'s `ErrorAllowlist`; `PLAN-M5-polish.md` A5, whose second world
-  build is what made the count visible.
-
 - `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
   flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
   traced the same day and **fully decoded 2026-08-13**. The decode is
@@ -1393,6 +1372,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-447` (the AI's `medium_aishake` and `snd_nitro` blip on an engage, and the
   decay lockout that `_nitroDecayLeftS` stands in for), `docs/org/flightModel.md` "Nitro",
   `docs/formats/hud.md` "Cockpit gauges" for the dial half, which is settled.
+
+- `BL-555` `[Feature]` `[Divergence]` **A held key fast-forwards a mid-mission cutscene instead of
+  skipping it: the definition plays at a raised rate that spools up while the key is held and
+  spools back down on release, with its sound pitched up to match.** The original arms a skip only
+  on callback 20 (the intros), so CM02's capture and CM01's drop-off play out in full and
+  `CutsceneController.Skippable` now declines the key there. A fast-forward keeps every authored
+  code in order (913/914, 967, 951 and the `Loop{1000}` active-state re-assertions all fire at
+  their authored beats, only sooner) while letting the player through a scene they have seen; the
+  spool is a short ramp on the rate, not a jump. *Fix shape:* a rate multiplier on the cutscene
+  clock (`AnimRuntime`'s advance takes the definition's dt; the held world, `GameClock.SimHeld`,
+  stays held) ramped over a fraction of a second toward a target such as 4x while the skip key or
+  gamepad A is down and back to 1x on release; the definition's own sounds (`SoundNode`,
+  `OBJECT_MOTION` engine notes) take the same multiplier as a pitch scale, as the original does
+  nothing of the kind so the values are a design choice. Advanced: the rate has to reach every
+  channel a definition drives (pose, camera, sound, callbacks, the `RESET_STATE` timeline) or the
+  channels drift apart. *⚠ Traps:* ⚠ A deliberate divergence, so document it on the cutscenes
+  page beside the livery one; do not present it as the original's skip. ⚠ Do not raise the rate
+  on an intro that arms a real skip, where the original's own force-stop is the behaviour. ⚠
+  Realtime flown sessions and the parent-driven probe clock step differently; the multiplier
+  belongs on the definition's dt, not on the session's `PhysicsDt`. *Cross-refs:*
+  `docs/formats/anim-definitions/cutscenes.md` "Handoff and skip"; `docs/plans/PLAN-M5-polish-2.md`
+  E24 (the decode that made the two scenes unskippable).
 
 ## Audio
 
@@ -1877,26 +1878,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-503` `[Feature]` **An airframe swap leaves the captured aircraft flying, and never hands the
-  outgoing one over.** *Evidence:* found by G76, which wired the swap itself and reported this
-  rather than folding it in. The original's 967 case does two more things than the swap. It hides
-  the aircraft the capture animation belongs to and scales the new airframe's four hull sections by
-  that aircraft's own armour and structure fractions, so a Balmoral shot half to pieces is the one
-  the player inherits. And it hands the aircraft the player just left to `wingman_4`: the exe
-  resolves that name only in `c3`/`m05` and `c4`/`m04`, gives a record of that name the player's own
-  aircraft type and livery, places it 100 m off the nose at 45° with the outgoing airframe's armour
-  and structure sums, and reveals it. In CM02 that is the wingman flying off in your old plane while
-  you fly the Balmoral. *Fix shape:* the anim's root vehicle has to be reachable from the callback,
-  which needs the definition's root node name plumbed through `CallbackHost`; it passes only the
-  anim name today, and that is the whole of what blocks the first half. *⚠ Traps:* neither behaviour
-  is asked for by anything in the data. Both are keyed on chapter and mission strings inside the
-  exe, so nothing in the shipped files will tell a reader they should happen, and a search of the
-  data for a trigger will come back empty. Do not read that emptiness as the behaviour not existing.
-  The captured aircraft's damage carries into the player's hull, so wiring the handover without the
-  scaling gives the player a pristine Balmoral and makes the ending easier than the original's.
-  *Cross-refs:* `PLAN-M5-polish.md` G76, which landed the swap; `BL-495`'s marker graft, which is
-  what makes the capture that raises this fire at all.
-
 - `BL-496` `[Feature]` **The aiv `ace` flag reaches the entity and nothing is known about what it
   does there.** *Evidence:* found by G75 while binding the pilot name. Slot 67 `ace` is read by the
   block reader into `CCEVeh+0xa4` and carried by the spawn path into entity `+0x988`. That field has
@@ -1908,50 +1889,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is only the input. *⚠ Traps:* the flag is narrower than a complete skill vector (26 blocks against
   29), so the two are not interchangeable and neither is a proxy for the other. Do not give aces a
   blanket rating bonus on the strength of the flag alone; the branch may scale an interpolation
-  rather than add to it. *Cross-refs:* `BL-497` (the other rating that does not reach the runtime),
-  `PLAN-M5-polish.md` G75.
-
-- `BL-497` `[Bug]` **A campaign spawn's talker and constitution ratings never reach
-  `AiVoiceRuntime`.** *Evidence:* found by G75. `CampaignDirector` passes null where the ratings
-  would go, so every campaign pilot is equally talkative regardless of what its block authors: an ace
-  rated 9 on `talker` says no more than a mook rated 1. The ratings are parsed and carried as far as
-  the plan. *Fix shape:* thread the spawn's ratings through to the voice runtime the way the roster
-  now threads the pilot name. *⚠ Traps:* `docs/formats/combat-voice.md` carried a stale note claiming
-  this already worked, corrected by G75, so check the doc's current claim rather than an older
-  reading. A pilot whose accent resolves to a VO id with no WAVs stays silent whatever its `talker`
-  rating is, so a fix here will not be visible on those eight named aces. *Cross-refs:* `BL-496`,
-  `PLAN-M5-polish.md` G75.
-
-- `BL-491` `[Bug]` `[Deferred: useful while debugging]` **Crashing the player's aircraft does not end
-  a campaign mission.** *Evidence:* reported at the controls. A campaign mission ends through
-  `ObjectiveGraph.End`, and the three endings it has are the authored end, an `INSTANTLOSS`
-  objective, and the countdown expiring (`ObjectiveGraph.cs:354`); none of them is the player dying,
-  and nothing in `CampaignDirector` watches the player's own crash state. `GameSession` subscribes to
-  the graph's `MissionEnded` alone. ⚠ **Deferred by the player's own decision, not blocked**: flying
-  on after a crash is convenient while the campaign is still being built, so the current behaviour
-  stays for now. Re-open it when the campaign is being judged as a game rather than debugged. ⚠ That
-  reason decays, so read it as a decision with a date in `git log --grep=BL-491` rather than as a
-  rule. *Fix shape:* whatever ends the mission on a player death has to name which of the original's
-  endings it is, since the graph's own three are all authored and a fourth is not yet decoded.
-  *⚠ Traps:* `FlightController.UnderMapY` teleports an aircraft that goes below the map WITHOUT
-  setting a crash flag and without logging (`docs/verification.md` INSTR-22 records what that cost
-  once), so "the player crashed" is not a state that can be read casually. `BL-486`'s persist-log
-  gate means a lost mission writes no world state, so making crashes lose changes what a retry
-  starts from. *Cross-refs:* `PLAN-M5-polish.md` A6 and G66.
-
-
-- `BL-483` `[Bug]` **`campaign-objectives-hud` fails on C4 and C5, on its wake-cue check rather than
-  its readout check.** *Evidence:* found while fixing the same suite's completion driver, which now
-  passes on C1, C2 and C3. What fails on C4 and C5 is `DriveWakeCue`'s assertion that at least one
-  `WAKEUP_SOUND_GROUP` the mission authors started a real one-shot player; the row-marking half of
-  the suite passes on both. **Confirmed pre-existing rather than caused by the driver work**
-  (METHOD-8): `CampaignHudSuites.cs` was reverted to its committed state, rebuilt, and both failures
-  reproduced identically. *Fix shape:* unknown until the wake cue is traced on those two chapters;
-  the question is whether the mission authors a group our wake path never reaches, or whether the
-  one-shot is started somewhere the suite does not look. *⚠ Traps:* do not weaken the wake-cue
-  assertion to make two chapters green, which is the same move `BL-481` forbade for the readout
-  check. C6 and beyond have no extracted data, so a chapter sweep stops at C5. *Cross-refs:*
-  `BL-481`, closed by the work that filed this; `docs/verification.md` METHOD-8 and DIAG-15.
+  rather than add to it. *Cross-refs:* `PLAN-M5-polish.md` G75.
 
 - `BL-113` `[Tuning]` `[Owed-playtest]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
@@ -2048,6 +1986,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
 
+- `BL-510` `[Feature]` **The auto-land prompt shows a placeholder line instead of the original's
+  `langui` string.** *Evidence:* the original lights message `0xb5` (or `0xb6` for a pad binding)
+  when the approach table's `auto` row passes (`FUN_0045e120`). `ExtractRof.ps1` already produces
+  `extracted/rof/ui_strings.json` from `langui.dll`'s STRINGTABLE (1247 rows), but ids `181` and
+  `182` are not present under that table's numbering, so `FlightHud.AutoLandPrompt` ships a
+  plain-English stand-in marked as such. *Fix shape:* find how the exe maps a message id onto the
+  STRINGTABLE (an offset or a second table), resolve `0xb5`/`0xb6`, and draw the resolved string
+  through `UiStrings`. *⚠ Traps:* ⚠ Do not guess the wording; the placeholder stays until the
+  mapping is decoded. ⚠ The binding is `F9` / left-stick click, not the original's `A`
+  (`docs/controls.md`), so a resolved string that names the key needs the port's key substituted.
+  *Cross-refs:* `docs/plans/PLAN-M5-polish-2.md` C10.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2118,36 +2068,6 @@ usual.
 
 ## Missions, modes & campaign
 
-- `BL-482` `[Feature]` **The intro cutscene stages no aircraft: the two it animates live in the
-  aircraft archive, which the world build never puts in the animation node table.** ⚠ **Decoded, so
-  this is scoped work and no longer an open question.** *Evidence:* a definition's symbol table
-  addresses two node tables. A chapter node's `ptr` is its position in that chapter's `nodes.json`; a
-  node from the shared aircraft archive is its position in `planes/nodes.json` plus a base, and that
-  base is the chapter's own node count rounded up to the next multiple of 2500 (holds for all eight
-  chapters: C2/C2B 5000, C1/C1B/C1C/C3 7500, C4 10000, C5 12500, and for all nine cross-archive
-  pointers in C3's intro). So `camera1-generic_intro.json`'s ptr 8918 is aircraft-archive node 1418,
-  named `player`, a parentless `Object3d` whose one child `player_pfighter` the airframe name table at
-  `0x00620cc0` identifies as the Devastator's player-model node. **`player` is the flown aircraft**,
-  established by decode rather than by the name: `FUN_004d0280(7, "player")` resolves it by string
-  comparison over node table 7, `FUN_0042e5e0` switches it off around a render pass, and mission setup
-  passes the same literal with the player's loadout record (`FUN_004136e0` into `FUN_00414f40`). The
-  node ships wrapping a Devastator because that is what sat in the slot when the archive was built,
-  not because the intro is about one. *Fix shape:* the intro stages two aircraft, `piratefighter`
-  (activated, `wing_lights_blink` and `spinprops`, reparented under `piratezep`, flown by
-  `gi_pfighter1`/`gi_pfighter2`) and `player` (activated with `healthy` on and `cockpit1` off, flown
-  by `gi_player1`, launched by `gi_playerdrop`/`gi_player2` with `snd_droplaunch`). Building it needs
-  aircraft-archive subtrees in the animation runtime's node table at the bootstrap, before the world
-  root is in the scene; needs the flown `FlightController`'s model posed by the runtime while it is
-  `Held`/`Inert`, which is the state callback 11 puts it in; and needs a second Devastator staged as an
-  AI-less prop. *⚠ Traps:* that reaches the world build, the flight roster and the anim runtime at
-  once, and a wrong reading of which airframe fills the slot puts a wrong aircraft in every chapter's
-  intro. Do not relax `AnimRuntime.cs:2954-2966`: `player` drops because the node is missing, not
-  because the guard refuses to name-match, and relaxing it would bind `player` to any unrelated node
-  sharing the name. Two limits are stated rather than closed: `FUN_0041a320`'s use of the pair was not
-  read, and no exe site computing the 2500 rounding was traced. *Cross-refs:*
-  `docs/formats/anim-definitions/cutscenes.md` ("`player`, and the two pointer spaces a definition
-  addresses"), which carries the decode; `BL-470` and `BL-471`, closed by the work that filed this.
-
 - `BL-501` `[Feature]` **Nothing exercises avoid-crash probing between aircraft flying one net in
   formation.** *Evidence:* flagged by G77, which fixed the branch draw that split CM02's three
   bombers and then measured them holding 82 m to 219 m apart on one route. That suite builds its
@@ -2159,38 +2079,6 @@ usual.
   a formation that holds only because its members are far apart is not the one the original flies.
   *Cross-refs:* `PLAN-M5-polish.md` G77, whose `campaign-bomber-formation` suite is the harness to
   extend.
-
-- `BL-507` `[Bug]` **An AI pilot sees an enemy aircraft's own turret as a target beside the
-  aircraft.** *Evidence:* found by G83. `FlightController.AddRankedNonAircraft` walks the gunner
-  scan's turrets and files them into the AI's ranked pool with no discriminator on
-  `TurretController.Site`, so a carried turret is offered as a target in its own right and one
-  silhouette carries two entries. The player's own `TargetPool.Rebuild` guards exactly this, which
-  the `carried-turrets` suite pins, so the rule is known and the AI path simply does not apply it.
-  ⚠ **This predates G83**, since the player's own mounts were always in that pool, but every AI
-  aircraft now carrying mounts multiplies how often it happens. *Fix shape:* give the AI path the
-  same site discriminator the player's pool uses, so a carried turret is not a candidate while a
-  world emplacement still is. *⚠ Traps:* the two kinds share one controller and only `Site` tells
-  them apart, so a fix that drops all turrets from the AI pool would stop AI aircraft attacking
-  ground emplacements, which is a different behaviour and not this. *Cross-refs:*
-  `PLAN-M5-polish.md` G83, which surfaced it.
-
-- `BL-506` `[Bug]` **An AI aircraft's defensive turrets are never built, so a bomber shoots back at
-  nothing.** *Evidence:* reported at the controls, that CM02's Balmorals should have turrets firing
-  on the Fortune Hunters. The data agrees and so does the code. `britbalmoral` authors
-  `turrets = [thirdp, [...]]` with two mounts, and sixteen vehicle defs across the install author a
-  `thirdp` turret block: the five player Kestrel/Avenger/Brigand/Firebrand/Balmoral rigs, their five
-  AI counterparts, the five `r`-prefixed variants and `britbalmoral`. `TurretController.BuildCarried`
-  has exactly two callers, `HumanFlightAdapter` and the `carried-turrets` suite;
-  `AiFlightAssembler` never calls it. So the machinery exists and works, and no AI aircraft is ever
-  given any of it. *Fix shape:* build the host's `thirdp` mounts in the AI assembler the way the
-  human adapter does, which is a call and its wiring rather than new turret code. *⚠ Traps:* hits
-  must land under the HOST's shooter id and never on the host's own airframe, which is what the
-  existing suite pins; keep that arm honest for an AI host. A turret is a separate gunner from the
-  pilot, so an aircraft whose net gates hold its PILOT out of combat can still shoot back, and that
-  is the case CM02's bomb-run Balmorals are (`PLAN-M5-polish.md` G81): do not gate the turret on the
-  pilot's attack range. The turrets go quiet with a crashed host, already covered. Sixteen defs
-  means this is not a Balmoral fix, and a per-airframe special case would be the wrong shape.
-  *Cross-refs:* `PLAN-M5-polish.md` G81, G82 and G83.
 
 - `BL-502` `[Feature]` **`SET_AI_NET` and `SET_AI_TEAM` reach no zeppelin.** *Evidence:* found by
   G80, which wired both clauses for roster-spawned aircraft and could not carry the same lookup to
@@ -2207,27 +2095,6 @@ usual.
   its guns, so a script-side team write has to fan the same way or half the hull keeps the old side.
   *Cross-refs:* `PLAN-M5-polish.md` G80, which landed the aircraft arm.
 
-- `BL-499` `[Bug]` **CM02's second Peacemaker squad is present from the start and attacks the
-  Pandora rather than the player.** *Evidence:* reported at the controls against the original, where
-  the squad carrying the ace appears partway through and comes for the player. Both halves are
-  authored. `OBJECTIVE8` is dormant and carries `WAKEUP_ENEMIES [britpeace_7, britpeace_8,
-  britpeace_9]`, so the squad is asleep at mission start; completing it also wakes `OBJECTIVE9` (the
-  `snd_HA5Wave2` Winthrop chain), `OBJECTIVE10` (the SECONDARY that kills the ace) and `OBJECTIVE68`
-  (`SET_AI_NET M5Escort` on the same three, two seconds later). The gate is `OBJECTIVE5`'s
-  `DEDG [1, 0]`, and group 1 is `britpeace_1/2/3`, the FIRST Peacemaker squad; on completion it naps
-  `OBJECTIVE8` awake after 15 s. Targeting is authored too: `britpeace_8` and `britpeace_9` carry
-  `rating_biases [piratezep, -0.8] [player, 1.0]`, and `britpeace_7` carries `[player, 1.0]` alone.
-  *Fix shape:* two questions in order. Whether `WAKEUP_ENEMIES` reaches an aircraft roster block at
-  all, since a squad that spawns at mission start has had its dormancy dropped rather than its
-  targeting broken. Then whether those biases reach the pick for a woken spawn, which
-  `roster-spawn-names` proves they do for a spawn present from the start. *⚠ Traps:* ⚠ the user's
-  recollection is "after 2 Balmoral kills" and the authored gate is the first Peacemaker squad being
-  wiped out; both may be true of one playthrough, so treat the recollection as the lead and the
-  `DEDG` as the specification. Group 5 down to one IS a real gate in this mission (`OBJECTIVE20`,
-  `55`, `63`), which is what makes the two easy to conflate. Do not hand the squad a hardcoded player
-  target: the bias table is what expresses this and it already ships. *Cross-refs:* `BL-493`'s ace
-  decode, `BL-498`, `PLAN-M5-polish.md` G78.
-
 - `BL-469` `[Feature]` **An escort cannot hold station on a leader using nitro, and nothing measures
   the case.** *Evidence:* the two injectors are independent switches, so the asymmetry is reachable
   in a real game: a wingman gets one only when its own `aiv` block authors `nitro` slot 34
@@ -2243,81 +2110,24 @@ usual.
   item's numbers are the symmetric case and are sound; this is a different pairing. Do not "fix" it
   by installing nitro on every wingman, which would contradict the roster data.
 
-- `BL-458` `[Bug]` **`DANGER_ZONES_COMPLETED` can never be satisfied in a flown campaign mission.**
-  *Evidence:* a campaign mission's danger zones are the same `dzpathN` gate geometry `--stunt`
-  reads, authored from a different surface: no `ia.json` `dzones` list, but the mission's own
-  `objectives.zrd` names `dzpathN` directly inside `DANGER_ZONES_COMPLETED` (C3/M01's `OBJECTIVE3`
-  on `dzpath1`, `OBJECTIVE11` on `dzpath4`), narrowed by `dzones.zrd`'s `disable` list.
-  `CampaignDangerZones` (new) reads that surface and calls the existing
-  `CampaignDirector.NotifyDangerZoneCompleted` (`:345`); `Attach`/`Step` wire it off a new
-  `WorldInputs.Gamez` field, which `GameSession`'s own `Attach` call now passes. Proven against real
-  C3/M01 data (`campaign-danger-zones` suite): gate-crossing completes the zone, and
-  `OBJECTIVE3`/`OBJECTIVE11` complete off the real notify path. **Still open** until the secondary
-  is seen to complete in a mission flown at the controls, which is the one thing no suite can show.
-  *⚠ Traps:* ⚠ `ObjectiveGraph.ScanForCompletion` resolves one objective per tick round-robin, so a
-  single step after a notify is not enough to see a completion; step several seconds. ⚠ C3's gate
-  pairs sit close enough that one crossing can legitimately complete both zones, which is correct
-  behaviour rather than a test defect.
 
-- `BL-457` `[Bug]` **The campaign wingman ends up high and far behind, so it reads as having spawned
-  in the wrong place.** Seen at the controls: "in the original the wingman spawns beside me. here he
-  spawns above the island flying towards me."
-  ⚠ **Merging main's flight model made this materially WORSE, and `wingman-station` is red on the
-  merged tree.** Same suite file, byte-identical, same seed, `player_pfighter`, leader on a plain
-  full-throttle human stick: our own plant read mean 296 m / worst 702 m without the ceiling lift
-  and 256 m / 590 m with it; main's plant reads **mean 1096 m without the lift and 415 m with it**.
-  The `player_bhawk` arm moves the same way (1023 m to 267 m). Three of the suite's gates now fail.
-  Two conclusions. The `StationCeiling` lift is doing MORE work under main's plant, not less: it cuts
-  the mean by roughly two thirds and collapses the escort's time on the far-field plant from 26.8 %
-  of steps to 3.0 %, so the open question of whether to keep it resolves toward keeping it. And the
-  remaining defect now has a second, larger contributor in `FlightModel` itself.
-  *⚠ Traps:* ⚠ **Nitro is ruled out and must not be re-chased.** A runtime probe on both rigs reads
-  `leader installed=False everBoosted=False, wingman installed=False`, and the suite file is
-  unchanged across the merge, so the harness is not the variable. ⚠ The `1.50` lever in the trace is
-  the WINGMAN's, capped by `AiLawParams.Wingman`'s own `SpeedCap`, not the leader's; the leader peaks
-  at lever 1.00 and its 127 m/s against `fd_speed` 113.0 is an ordinary shallow dive, not a boost.
-  ⚠ Main's deletion of `AiControlLaw`'s far-field branch is not the cause either: that branch keyed
-  off `AiPilot.PlayerPosition`, which this suite never assigned, so it was already dead here.
-  ⚠ **Trust the `mean` column, not `worst`.** The sampled trace never exceeds 470 m over a 120 s run
-  while `worst` reads 3797 m, so that excursion is a between-samples transient and possibly a
-  position discontinuity (`INSTR-18`'s altitude-cap teleport is a candidate); it needs a finer trace
-  before anyone tunes against it. *Evidence:* **the spawn is correct and this is not a
-  placement bug.** `C3/M01`'s `aiv.zrd` authors `player` at `[-1426, 150, -1813]` yaw 40 and
-  `wingman_1` at `[-1378, 150, -1706]` yaw 40, 117 m apart at the same altitude and heading, and the
-  spawner puts it exactly there (`CampaignRoster.cs:191-192`, confirmed in a live run). Traced from
-  the intro's end, separation runs 117 m, 95 m, 102 m, 133 m at t=0/1/3/5 s, then 289 m at 10 s,
-  597 m at 20 s and 838 m at 26 s, ending 130 m above the player. **One contributing cause is fixed
-  and does not account for that magnitude:** the decoded 250 mph desired-speed ceiling
-  (`AiControlLaw.SpeedCeiling`, `def+0x1e8`, written by `FUN_00478a00` at `0x478d52`) sits 1.24 m/s
-  below the Devastator's own 113 m/s cruise, so an escort holds no closure margin and never regains
-  ground lost in a turn; `AiPilot.FlyEscort` now lifts it through `AiControlLaw.StationCeiling`, and
-  on `player_pfighter` that moves a flown hold from mean 296 m / worst 702 m to mean 256 m /
-  worst 590 m. *What is still unexplained:* the 838 m at 26 s and the 130 m of altitude. *Fix shape:*
-  look at the HANDOFF at the intro's end, not the cruise. The escort law never leaves the formation
-  state once joined (decode: "nothing inside it leaves state 1"; `AiEscort.cs:233-235`, and a joined
-  escort 5 km out still reads `Station` in the `wingman-station` suite), so the 200 m overfly the
-  report describes belongs to a wingman that NEVER joined. The join gate is a range AND a speed,
-  `< 700 m` and `> 20.576 m/s`, so establish what the wingman's speed and range actually are on the
-  first frame it is stepped after the cutscene.
-  *Two leads, one already retired:* an airframe mismatch between the pilot and the wingman is NOT
-  in play, so do not chase it: the reporting profile carries `selectedPlane 0` and `wingmanPlane 1`
-  and both are airframe 5, the Devastator, which matches the report ("i did not fly a bloodhawk but
-  a devastator same as my wingmen") and the campaign's own two-Devastator start. A probe that flew
-  the pilot on a Bloodhawk against a Devastator wingman was a test-rig artefact. Still untested:
-  `WithAiSpawnJitter` scales a spawned wingman's `fd_speed` by up to 5 % (`PlaneStats.cs:95`,
-  applied at `FlightRoster.cs:63`), worth up to 5.6 m/s on the same airframe, which the suite legs
-  do not apply. *⚠ Traps:* ⚠ **measure on `player_pfighter`.** The
-  Devastator is 113 m/s against the ceiling's 111.76; the Bloodhawk is 135 m/s, which overstates the
-  ceiling's share about eighteenfold, and a number quoted off it is not a statement about the
-  campaign. ⚠ `BL-457`'s earlier line that the escort "re-enters `Joining`" past 700 m is WRONG: the
-  law has no such transition. ⚠ The far-field plant is not the original's answer to a fast leader and
-  must not be re-derived as one: its target is `fd_speed · lever + 5` off the lever at `[obj+0x128]`
-  (`0x48c593`-`0x48c5ae`), which slews toward the ceiling-clamped `[obj+0x124]`, so the cap reaches
-  both plants; measured, an escort is far-field for 54.3 % of a flown run and holds 114.0 m/s there.
-  ⚠ The two SCRIPTED `wingman-station` legs fly a cruise lever, a speed any escort matches, so their
-  leashes are not evidence here; the `[flown]` leg is. ⚠ Do not re-tune the decoded station offsets,
-  the 700 m join gate, or `SpeedCeiling`. *Cross-refs:* `docs/org/aiPilot.md`,
-  `docs/org/aiControlLaw.md`; `docs/PLAN-M5-polish.md` A3.
+- `BL-548` `[Bug]` **`--pos=` with `--campaign=` stalls the intro cutscene's completion.** Found while
+  instrumenting the auto-land prompt: six trials with `--pos=` set on a `--campaign=` launch ran up
+  to 300 s and 20000 frames without the intro's handoff, against 16 to 40 s without `--pos=`.
+  *Fix shape:* find what `--pos=` overrides that the intro's closing sequence waits on (the player
+  rig's staged pose, the handoff's own restore, or a trigger the definition tests against the
+  authored spawn), and either make the flag a no-op while a definition owns the session or move it
+  after the handoff. *⚠ Traps:* ⚠ A realtime run's frame-to-wall-time ratio is not repeatable
+  (`docs/verification.md` INSTR-28), so read the handoff off the log rather than a frame count.
+  *Cross-refs:* `docs/plans/PLAN-M5-polish-2.md` D18.
+
+
+- `BL-545` `[Bug]` `[Owed-playtest]` **The landing animation plays with no hook, the aeroplane too
+  high, and unfolded wings.** Seen at the controls on CM02's auto-land: the landing hook was not
+  deployed, the aeroplane sat too high on the trapeze, and a Balmoral folds its wings in the
+  original's landing cutscenes. *Fix shape:* three separate reads of the hookup definition and the
+  airframe's own nodes (the hook and the wing-fold are per-airframe animated parts, the height is
+  the `AT_NODE` pose's offset). *Cross-refs:* `BL-544`; `docs/plans/PLAN-M5-polish-2.md` C10 and C12.
 
 - `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
   controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.
@@ -2464,23 +2274,6 @@ usual.
   snapshot flow, so the cabin's other rows shipped without it rather than waiting.
   *Cross-refs:* `BL-256` is the adjacent snapshot work; `docs/PLAN-M5-campaign.md` Decision 3.
 
-- `BL-460` `[Feature]` **The auto-land the approach table offers has no button.** *Evidence:* every
-  chapter's `landings.zrd` carries one `auto` row, a 500 m sphere around `pz_auto_land` with no
-  attitude cone and no speed band. The original does not start the animation on it: `FUN_0045df60`
-  raises `DAT_00719109`, and `FUN_0045e120` turns that into an on-screen prompt (message `0xb5`, or
-  `0xb6` when the binding is a pad button, over key binding `0x6a`) that the player then presses to
-  start the same hookup the manual row starts. CSVM decodes and ticks the row
-  (`LandingApproachRuntime.AutoLandOffered` goes true exactly when the original lights the prompt),
-  but nothing draws the prompt or reads a key off it, so the row is observable and inert.
-  *Fix shape:* a HUD line off `AutoLandOffered` plus a binding that calls `Play` on the row's
-  animation, which is the same call the manual row already makes.
-  *⚠ Traps:* ⚠ The manual and auto rows name the SAME animation, so a session that starts it from
-  both would double-fire; the trigger already returns after the first row that passes, and a button
-  path has to respect the cutscene guard the same way. ⚠ The prompt's own message ids are `langui`
-  ids, which `BL-427` has not extracted, so the text is not in `extracted/messages.json`.
-  *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md` "The per-frame test"; `BL-427` for the
-  string. Split out while the approach trigger landed (`git log --grep=BL-467`).
-
 - `BL-521` `[Bug]` **CM04 (C3/M03)'s barrage balloons should already be destroyed at mission start.**
   *Evidence:* reported at the controls: the balloons stand intact where the original's mission opens
   with them already down. The mission's setup script carries the initial states; C3/C4 drive the
@@ -2528,7 +2321,7 @@ usual.
   is built on a spawn table, and the return rule has to come from the decode. *Cross-refs:*
   `BL-524`, `BL-531`, `docs/org/aiPilot.md`.
 
-- `BL-547` `[Feature]` **The AI's altitude floor is enforced at one site in CSVM and at three in
+- `BL-550` `[Feature]` **The AI's altitude floor is enforced at one site in CSVM and at three in
   the original: the manoeuvre veto and the mode-5 global disable are both missing.** *Evidence:*
   decoded from `crimson.exe` while reading the cockpit lamps for `BL-431`. `AiModeMachine`'s
   `AltitudeFloorM` (20 m world Y, `DAT_0071c3f0`) and `ProbeCeilingM` (8000 m, `DAT_0071c3f4`) are

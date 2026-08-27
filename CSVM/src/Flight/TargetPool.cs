@@ -139,8 +139,10 @@ public sealed class TargetPool
     /// <summary>Whether a turret candidate stands in the world rather than being carried by an
     /// aircraft. Only emplacements are selectable: a carried gunner's host is already a target in
     /// its own right, and offering both would put two entries on one silhouette. An emplacement is
-    /// the one with a placement <see cref="TurretController.Site"/>.</summary>
-    private static bool IsEmplacement(object? source) =>
+    /// the one with a placement <see cref="TurretController.Site"/>. Internal rather than private:
+    /// <see cref="FlightController.AddRankedNonAircraft"/> shares this same guard for the AI's
+    /// ranked pool, rather than growing a second carried/emplacement check.</summary>
+    internal static bool IsEmplacement(object? source) =>
         source is TurretController { Site: not null };
 
     /// <summary>Wraps one classed candidate as a <see cref="TargetRef"/>. The KIND picks the shape

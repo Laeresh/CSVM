@@ -25,8 +25,11 @@ using static CSVM.Testing.CampaignZeppelinWakeSuites;
 using static CSVM.Testing.CombatSuites;
 using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
+using static CSVM.Testing.DropoffChutemanSuites;
+using static CSVM.Testing.DropoffPlacementSuites;
 using static CSVM.Testing.GeneratorRosterSuites;
 using static CSVM.Testing.InstantActionSuites;
+using static CSVM.Testing.IntroAircraftSuites;
 using static CSVM.Testing.LandingApproachSuites;
 using static CSVM.Testing.MenuCaptureSuites;
 using static CSVM.Testing.MusicSuites;
@@ -147,6 +150,7 @@ public static class SuiteCatalog
         "campaign-objectives",
         "campaign-mission-end",
         "targeting-candidates",
+        "ranked-pool-carried-turret-dedup",
         "partition-areas",
         "scripted-path",
         "wingman-station",
@@ -154,6 +158,9 @@ public static class SuiteCatalog
         "campaign-objectives-hud",
         "campaign-cutscene",
         "cutscene-letterbox",
+        "intro-aircraft-stage",
+        "dropoff-chuteman-stage",
+        "dropoff-placement",
         "hangar-door-wake",
         "fog-state",
         "campaign-submarine",
@@ -167,13 +174,19 @@ public static class SuiteCatalog
         "landings-approach-trigger",
         "landings-wingwalk-gate",
         "landings-train-pickup-gate",
+        "landings-auto-land-button",
+        "landings-hookup-airframe",
         "landings-hangar-drop-gate",
         "campaign-airframe-swap",
+        "campaign-wingwalk-camera",
+        "campaign-cutscene-skip",
         "roster-spawn-names",
+        "roster-voice-ratings",
         "mission-radio",
         "campaign-zeppelin-wakeup",
         "campaign-squad-wakeup",
         "campaign-set-ai-net",
+        "campaign-player-death",
         "alpha-cutout-ray-census",
         "zeppelin-identity",
         "campaign-briefing-repaint",
@@ -718,6 +731,11 @@ public static class SuiteCatalog
             "and the gunner fires real rounds at a zeppelin structure with no aircraft in the scan " +
             "at all",
             TargetingCandidates));
+        into.Add(new TestHarness.Suite("ranked-pool-carried-turret-dedup",
+            "the AI ranked pool's carried-turret guard (BL-507): a hostile aircraft with a crewed " +
+            "rear mount rides the pool as one Vehicle entry, never a second entry for its own " +
+            "turret, while a world emplacement in the same scene still reaches the pool",
+            RankedPoolCarriedTurretDedup));
         into.Add(new TestHarness.Suite("partition-areas",
             "the area-selected node toggle (BL-037) over C3's own three story rectangles: each " +
             "resolves through the partition grid to real world content, the half-open cell rule " +
@@ -738,7 +756,9 @@ public static class SuiteCatalog
             "target station, the 80 m separation push, the 700 m and 20.576 m/s join gates) and " +
             "then flown against a scripted leader, a live wingman joining from 1200 m abeam, " +
             "staying with the leader for the rest of the run, and riding the aft station behind " +
-            "a player leader where it rides the forward one behind an AI leader",
+            "a player leader where it rides the forward one behind an AI leader; a last leg drives " +
+            "one wingman through its OWN realtime _PhysicsProcess to check a cutscene's world hold " +
+            "stops it there too, while the clock still reports the frame's sim time for the movie",
             WingmanStation));
         into.Add(new TestHarness.Suite("wingman-engage",
             "what a campaign wingman does about a hostile (BL-505): every escorting block CM02 " +
@@ -753,9 +773,10 @@ public static class SuiteCatalog
             "IDENTITY objective completing off whichever condition the chapter's own mission " +
             "authors (an INACTIVEn node list, a danger zone, or no condition at all) marks its " +
             "own readout line " +
-            "(not only the graph's), and both a WAKEUP_SOUND_GROUP and a COMPLETED_SOUND_GROUP " +
-            "the mission authors start a real AudioStreamPlayer3D through WorldSounds (D31's " +
-            "existing routing, counted rather than duplicated)",
+            "(not only the graph's), a WAKEUP_SOUND_GROUP the mission authors starts a real " +
+            "AudioStreamPlayer3D through WorldSounds (D31's existing routing, counted rather than " +
+            "duplicated), and whichever cue surface the mission chose, WAKEUP_SOUND_GROUP or " +
+            "COMPLETED_SOUND_GROUP, one of its groups reaches a real player (BL-483)",
             CampaignObjectivesHud));
         into.Add(new TestHarness.Suite("campaign-cutscene",
             "the cutscene host over C1/M04's shipped intro definition (D32): its authored callback "
@@ -770,6 +791,40 @@ public static class SuiteCatalog
             + "reveal, and the AT_NODE re-assert copies the cutscene camera's whole frame onto it "
             + "every tick",
             CutsceneLetterbox));
+
+        // BL-482: the world build put no aircraft-archive node in the runtime's node table, so both
+        // names an intro animates claimed a symbol with a null binding and the camera moved over an
+        // empty sky.
+        into.Add(new TestHarness.Suite("intro-aircraft-stage",
+            "the two aircraft a story-mission intro animates, over the first story mission's BUILT "
+            + "world: the aircraft archive's 'player' and 'piratefighter' answer the compiled "
+            + "intro's own cross-archive pointers in the runtime's node table, the intro's scripts "
+            + "fly both away from the world origin, its OBJECT_ADD_CHILD puts the prop under the "
+            + "airship, the flown airframe is drawn on the 'player' marker while callback 11 holds "
+            + "the pilot out of flight, and the drop's launch cue fires",
+            IntroAircraftStage));
+
+        // BL-540: the aircraft archive's 'chuteman' subtree never joined the world build, so a
+        // mid-mission drop-off's own definition claimed a symbol with a null binding, the same
+        // staging gap B8 fixed for the intro's two aircraft.
+        into.Add(new TestHarness.Suite("dropoff-chuteman-stage",
+            "the parachutist a mid-mission drop-off animates, over C3/M01's BUILT world: the "
+            + "aircraft archive's 'chuteman'/'chutemanparent'/'pilot'/'stamp' answer the compiled "
+            + "drop's own cross-archive pointers in the runtime's node table, the subtree ships "
+            + "switched off as the shared def's own base state, and calling the drop's definition "
+            + "directly (never the approach cone) switches it visible",
+            DropoffChutemanStage));
+
+        // BL-553: the drop-off's handoff put the pilot back where the cutscene found them, so the
+        // pose its own definition parks the 'player' node at, and the callback that reads it, both
+        // went nowhere.
+        into.Add(new TestHarness.Suite("dropoff-placement",
+            "where a mid-mission cutscene leaves the pilot, over C3/M01's BUILT world: the mission's "
+            + "own cutscenes directory carries the definition raising the re-placement callback, and "
+            + "driving it directly (never the approach cone) flies the aeroplane out of the world "
+            + "pose that definition parked its 'player' node at, on that node's heading and at the "
+            + "original's release speed, rather than out of where the pilot flew in",
+            DropoffPlacement));
         into.Add(new TestHarness.Suite("hangar-door-wake",
             "hangar doors over C1/M04's real world (BL-350): OBJECTIVE1's WAKE_ANIM reaches "
             + "'hangar3_doors' through the director at its authored 2 s dormancy and its four "
@@ -888,6 +943,25 @@ public static class SuiteCatalog
             + "and clears the primary pickup objective",
             TrainPickupGate));
 
+        into.Add(new TestHarness.Suite("landings-auto-land-button",
+            "the auto-land button over the first story mission's BUILT world: flying the chapter's "
+            + "auto row lights AutoLandOffered but starts nothing while the button is up, a realtime "
+            + "frame of the flown rig's own _Process actually draws the prompt, pressing the button "
+            + "starts the same animation the manual row would, the cutscene host still runs it, and "
+            + "holding the button past the handoff does not re-fire the row",
+            AutoLandButton));
+
+        // The hookup plays with no hook, the aeroplane too high and the wings unfolded when the
+        // flown airframe's own subtree is not in the runtime's node table.
+        into.Add(new TestHarness.Suite("landings-hookup-airframe",
+            "the zeppelin hookup on two airframes over the first story mission's BUILT world, "
+            + "every value read from the aircraft archive's own definitions: the flown aircraft is "
+            + "in the animation runtime's node table so the hookup's per-airframe branches can read "
+            + "its active bit, it carries its own docking-hook group built retracted, and the "
+            + "episode ends with that hook extended, the airframe hung at the mount offset the "
+            + "extend-hook definition authors for it, and its wings turned to the angles its own "
+            + "fold definition authors where the airframe has one",
+            HookupAirframe));
         into.Add(new TestHarness.Suite("landings-hangar-drop-gate",
             "CM07's zeppelin-hangar drop over its BUILT world, every name read from the mission's "
             + "own data: the one cutscene definition it range-gates, the ambient definition that "
@@ -908,8 +982,38 @@ public static class SuiteCatalog
             + "own armour pools and damage zones rather than the airframe it replaced, the "
             + "outgoing aircraft out of the world with no registration of its own left in the "
             + "projectile pool, and the cutscene flags the code sets landing on the aircraft the "
-            + "swap built",
+            + "swap built; plus the two things 967 does past that rebuild, on the same data: the "
+            + "capture definition's own aircraft hidden with what is left of its hull carried onto "
+            + "the player's, and the outgoing aeroplane handed to wingman_4 -- authored "
+            + "deactivated, flying the player's own airframe in this mission and its own def's "
+            + "everywhere else, revealed 100 m off the old nose at -45 degrees on the player's own "
+            + "heading with the sums measured off the hull it was given",
             AirframeSwapSuites.AirframeSwap));
+
+        // BL-542: the capture cutscene's camera rides the wing walk's moving frame, and that frame
+        // is posed onto the aeroplane the capture belongs to.
+        into.Add(new TestHarness.Suite("campaign-wingwalk-camera",
+            "CM02's capture cutscene framing over that mission's BUILT world: the mission's own "
+            + "capture definition started through the mission-trigger seam its approach table "
+            + "starts it with, played on a realtime clock with each aircraft stepping itself, "
+            + "with the captured aeroplane spawned from its own roster block at the position the "
+            + "mission authors it -- far from the world origin, so a shot posed off nothing is not "
+            + "mistaken for a framed one -- and camera1 read once a second against that "
+            + "aeroplane's own position",
+            WingWalkCameraSuites.WingWalkCamera));
+
+        // The skip key removed the picture from a cutscene the original arms no skip on, handing
+        // the player back an aeroplane mid wing walk.
+        into.Add(new TestHarness.Suite("campaign-cutscene-skip",
+            "which cutscene episodes offer the player a skip, over CM02's BUILT world: the "
+            + "mission's capture definition and its whole call closure author no hold code, "
+            + "which is the code that arms a skip, so playing that capture on a realtime clock "
+            + "with each aircraft stepping itself and pressing the skip key two seconds in is "
+            + "refused -- the episode keeps the session and its picture, and the swap, the hide "
+            + "and the hand-over land at the same second and in the same end state as the run "
+            + "played undisturbed -- while an episode that has raised the hold code takes the "
+            + "same key press and restores on it",
+            CutsceneSkipSuites.CutsceneSkip));
 
         // BL-401: the assembler named every spawn ai{n}_{plane}, which no authored pattern can
         // match, so rating_biases was dead on the campaign path.
@@ -920,6 +1024,14 @@ public static class SuiteCatalog
             + "and moves the live pick off it, and bloodhawk_2's always-target on the 'player' "
             + "role takes the human rig over a nearer aircraft",
             RosterSpawnNames));
+
+        // BL-497: CampaignDirector passed null where a spawn's own talker/constitution ratings
+        // would go, so every campaign pilot chattered at the session's flat rating-5 default.
+        into.Add(new TestHarness.Suite("roster-voice-ratings",
+            "BL-497's voice hand-off over C5/M01's shipped roster: autogyro_1 authors both talker "
+            + "and constitution (7, 8) and an accent, and its resolved chances each read their own "
+            + "authored rating on their own curve rather than the session's rating-5 fallback",
+            RosterVoiceRatings));
 
         // BL-465/BL-461: mission callouts played from a point in the world, and a cue naming a VO
         // dialogue chain played nothing at all.
@@ -969,6 +1081,18 @@ public static class SuiteCatalog
             + "stays out of combat, taking nothing on its own airframe and going quiet when it is "
             + "downed",
             CampaignSetAiSuites.CampaignSetAiNet));
+
+        // BL-491: a campaign mission had three endings and none of them was the player dying, so
+        // the aircraft could be lost and the mission flew on.
+        into.Add(new TestHarness.Suite("campaign-player-death",
+            "losing the player's aircraft over C3/M01's own BUILT world and shipped script, the "
+            + "mission being one of the four that author no loss at all, so a Lost outcome there "
+            + "can only be the death: a crash driven through the production death path ends the "
+            + "mission lost where the wreck lands rather than on either wrap-up delay, hands the "
+            + "player back to the cabin, and commits nothing to the persist log; --no-crash-loss "
+            + "leaves the same crash flying, a mission nobody crashes in runs on, and an aircraft "
+            + "the under-map backstop teleported ends nothing at all",
+            CampaignPlayerDeathSuites.CampaignPlayerDeath));
 
         // BL-477: what stops a shot at the cargo zeppelin's slung tanks was inferred from the
         // geometry; this measures it. The original's own ray test reads no texture at all

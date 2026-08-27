@@ -77,7 +77,7 @@ internal sealed class PoseChannel
         foreach (var t in _targets(ev, def, anchor))
         {
             bool active = ev.Data.Bool("state");
-            AnimRuntime.SetSubtreeActive(t, active);
+            _rt.SetTargetActive(t, active);
             if (!active)
             {
                 // A played deactivation spares an emitter started in this same
@@ -104,10 +104,16 @@ internal sealed class PoseChannel
     internal int HandleRotateState(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
         int applied = 0;
-        var host = AtNode(ev.Data.Obj("basis")?.Str("AtNodeMatrix"));
+        // The two AT_NODE spellings are different rules, not two names for one: MATRIX takes the
+        // host's composed orientation, XYZ takes the rotation the host was last SCRIPTED to. State
+        // is radians on both paths already. Decode: docs/formats/anim-definitions/cutscenes.md.
+        var basis = ev.Data.Obj("basis");
+        var matrixHost = AtNode(basis?.Str("AtNodeMatrix"));
+        var xyzHost = matrixHost == null ? AtNode(basis?.Str("AtNodeXYZ")) : null;
+        var host = matrixHost ?? xyzHost;
         foreach (var t in _targets(ev, def, anchor))
             applied += host != null
-                ? PoseAtNode(t, host, ev.Data.Vec3("state"), rotate: true)
+                ? PoseAtNode(t, host, ev.Data.Vec3("state"), rotate: true, scripted: xyzHost != null)
                 : PoseRotate(t, ev.Data.Vec3("state"));
         return applied;
     }
@@ -377,21 +383,42 @@ internal sealed class PoseChannel
         return 1;
     }
 
-    // The AT_NODE form of the two pose events: the target takes another node's world frame, plus
-    // an authored offset in that frame. Written globally because the host is a root of its own and
-    // the target need not share its parent: the letterbox bars and camera1 are both world roots.
-    internal int PoseAtNode(Node3D target, Node3D host, Vector3 offset, bool rotate)
+    // The AT_NODE form of the two pose events: the target takes another node's world frame, plus an
+    // authored offset in that frame. Written globally because the host is a root of its own and the
+    // target need not share its parent. `scripted` is the AT_NODE_XYZ rule: the host contributes the
+    // rotation it was placed at rather than the one it is flying at (AnimRuntime.PlacedRotationOf).
+    // ⚠ Read the host's frame through AnimRuntime.WorldTransform, not GlobalTransform: during the
+    // bootstrap the world root is not parented and a bare global read answers identity.
+    internal int PoseAtNode(Node3D target, Node3D host, Vector3 offset, bool rotate,
+        bool scripted = false)
     {
         var rest = _rt.RestOf(target);
-        var frame = host.GlobalTransform.Orthonormalized();
-        if (rotate)
+        var frame = AnimRuntime.WorldTransform(host, out _).Orthonormalized();
+        if (scripted && _rt.PlacedRotationOf(host) is { } placed)
         {
-            target.GlobalBasis = (frame.Basis * Basis.FromEuler(offset, EulerOrder.Yxz))
-                .Scaled(rest.Basis.Scale);
+            frame = new Transform3D(frame.Basis * host.Basis.Orthonormalized().Inverse() * placed,
+                frame.Origin);
+        }
+
+        var current = AnimRuntime.WorldTransform(target, out bool detached);
+        var desired = rotate
+            ? new Transform3D((frame.Basis * Basis.FromEuler(offset, EulerOrder.Yxz)).Scaled(rest.Basis.Scale), current.Origin)
+            : new Transform3D(current.Basis, frame.Origin + (frame.Basis * offset));
+
+        if (detached)
+        {
+            var parentWorld = target.GetParent() is Node3D parent
+                ? AnimRuntime.WorldTransform(parent, out _)
+                : Transform3D.Identity;
+            target.Transform = parentWorld.AffineInverse() * desired;
+        }
+        else if (rotate)
+        {
+            target.GlobalBasis = desired.Basis;
         }
         else
         {
-            target.GlobalPosition = frame.Origin + (frame.Basis * offset);
+            target.GlobalPosition = desired.Origin;
         }
 
         return 1;

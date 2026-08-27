@@ -15,9 +15,13 @@ compiled shape are on the [landing page](../anim-definitions.md) and in
 - [Conceptual model](#conceptual-model)
 - [The `letterbox` node](#the-letterbox-node)
 - [The reparent is how a cutscene is composed](#the-reparent-is-how-a-cutscene-is-composed)
+  - [A composition frame is a bodiless gamez node the `world1` walk never reaches](#a-composition-frame-is-a-bodiless-gamez-node-the-world1-walk-never-reaches)
+  - [`AT_NODE_XYZ` takes the host's ROTATION FIELDS, `AT_NODE_MATRIX` its composed matrix](#at_node_xyz-takes-the-hosts-rotation-fields-at_node_matrix-its-composed-matrix)
+  - [The wing walk's cast, and where each figure lives](#the-wing-walks-cast-and-where-each-figure-lives)
 - [`player`, and the two pointer spaces a definition addresses](#player-and-the-two-pointer-spaces-a-definition-addresses)
 - [`CALLBACK`: the dispatch chain](#callback-the-dispatch-chain)
 - [`CALLBACK` code reference](#callback-code-reference)
+  - [The re-placement code 951](#the-re-placement-code-951)
 - [The intro defs' eight dispatches](#the-intro-defs-eight-dispatches)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases)
 - [Evidence and limits](#evidence-and-limits)
@@ -159,6 +163,101 @@ inside a node at y = 500, and in world space it is 62 m under the sea.
 consumer that applies it during a bootstrap pass moves shipped nodes off a parent no definition
 has changed yet.
 
+### A composition frame is a bodiless gamez node the `world1` walk never reaches
+
+`piratezep` and `do_direction` are placed world content, so a consumer that walks `world1` has them
+in hand. Two shots instead compose inside a node that is nowhere in that walk: a **parentless,
+childless, model-less `Object3d`** whose only job is to be the frame a shot is written in. C3's
+`wingwalk_parent` (node 661) and C5's `carney_pickup_parent` (node 5633) are the whole set in this
+install, and both are addressed the same way — named as an `OBJECT_ADD_CHILD` parent by their
+mission's own definitions, and posed onto the vehicle the scene is about before anything plays.
+
+`britbalmoral_1-ww_balmoral1` is the worked example. Its second sequence poses `wingwalk_parent`
+`AT_NODE britbalmoral_1` (translate and `AT_NODE_XYZ` rotate), moves `britbalmoral_1` under it and
+zeroes that node's local translation, then calls `wingwalk` `AT_NODE wingwalk_parent` and its own
+`ww_balmoral` SI script before raising 967. `wingwalk_parent-wingwalk` calls `ww_player`,
+`ww_ladder` and `ww_zachary` and drives its own node 30 m/s forward for **19.25 s** between codes
+913 and 914; `player-ww_player` adds both `player` and `camera1` under `wingwalk_parent` and runs
+SI scripts `ww_cam1`–`ww_cam4` on `camera1`. So the entire shot — the camera, the player's
+aeroplane, the wing-walk figures — is written in the frame of one node whose authored transform is
+the map origin, and every one of those keyframes reads as a position over the water unless that
+node is standing in the world and has been posed onto the captured aeroplane.
+
+CSVM stands such a frame up beside `camera1` and the `letterbox` bars
+(`WorldSession.BuildCompositionFrames`), found off the bound program rather than by name, and the
+mission's roster rig answers for the vehicle's own library-root name so the `AT_NODE` pose has a
+host (`Mech3/RosterMarkers.cs`). ⚠ The frame is placed rather than authored, so its motion must
+launch from where the definition put it: see `docs/org/objectMotion.md`'s re-home rule.
+
+### `AT_NODE_XYZ` takes the host's ROTATION FIELDS, `AT_NODE_MATRIX` its composed matrix
+
+`OBJECT_ROTATE_STATE` is dispatch slot 9, `004e8b80` (the 47-slot table at `DAT_00727de0`, populated
+by `FUN_004ee1a0`; see [org/sequences.md](../../org/sequences.md)). The event's flag word at
+`+0x00` selects the basis, and the two `AT_NODE` bits reach different sources:
+
+| flag | branch | what it reads off the host |
+|---|---|---|
+| `0x2` `AT_NODE_XYZ` | `004e8bdc` | `Object3d::GetRotation` (`004d1b40`, class data `+0x18/+0x1c/+0x20`) or, for a `Camera` host, `Camera::GetRotation` (`004d2680`, `+0x20/+0x24/+0x28`) — the host's own stored euler triple |
+| `0x4` `AT_NODE_MATRIX` | `004e8c76` | `gwNodeBuildNodeToAncestorMatrix` (`004cef20`) then matrix→euler (`0053df30`) — the host's composed world orientation |
+
+Both branches then add the authored `state` triple componentwise and write the result through
+`Object3d::SetRotation` (`004d1a30`), which stores the target's own euler fields. A host that fails
+to resolve leaves the three floats at zero, which is the world-axis fallback.
+
+**The euler fields are not the same thing as the drawn orientation.** `Object3d::SetMatrix`
+(`004d1f90`) writes twelve floats into class data `+0x30` and sets flag bit `0x10`; it leaves
+`+0x18/+0x1c/+0x20` alone, and `GetRotation` does not recompute them. The flight model places a
+vehicle's node exactly that way (`FUN_0048e580` calls `004d1f90` at `0048ecca`), so an
+`AT_NODE_XYZ` rotate off a flying aeroplane reads the rotation it was last SCRIPTED to, never the
+attitude it is banking at. The translate side is the other way round: `OBJECT_TRANSLATE_STATE`
+(slot 7, `004e8de0`) takes the host's position through `004cf490`, which builds the accumulated
+matrix, so it IS live.
+
+That asymmetry is the whole shape of a wing-walk shot. The frame lands on the aeroplane wherever it
+is, and stays level however the aeroplane is banking. CSVM implements it as
+`PoseChannel.PoseAtNode`'s `scripted` arm reading `AnimRuntime.PlacedRotationOf`, the rotation the
+roster placed a spawned vehicle at; every other host contributes its live frame, as `AT_NODE_MATRIX`
+always does.
+
+⚠ All 180 `AT_NODE_XYZ`/`AT_NODE_MATRIX` rotates in this install author a zero `state` triple, so
+the componentwise add is unexercised and whether a non-zero offset composes before or after the
+host's rotation is undecided.
+
+### The wing walk's cast, and where each figure lives
+
+`wingwalk_parent-wingwalk` calls three definitions, and their roots sit in two different archives:
+
+| definition | root | where | reached by |
+|---|---|---|---|
+| `ww_player` | `player` | aircraft archive 1418 (C3 ptr 8918) | `AircraftStage`'s bodiless marker |
+| `ww_ladder` | `rope_ladder` | aircraft archive 241 (C3 ptr 7741) | `AircraftStage.FigureNodes` |
+| `ww_zachary` | `pickup_cpilot` | aircraft archive 2269 (C3 ptr 9769) | `AircraftStage.FigureNodes` |
+
+`rope_ladder` fans to `ladder_roll` → `rung1`–`rung6` (archive 36/27/40/30/29/634/2) and ships
+`INACTIVE`, which is why `ww_ladder` opens by activating it. `pickup_cpilot` fans to
+`cpilot_parent` → `cpilot_drop` → the thirteen `cp_*` limbs (2270–2287) and ships ACTIVE; nothing
+ever activates it, because in the original a parentless library root is simply not reached from
+`world1` until an `OBJECT_ADD_CHILD` moves it into the shot. CSVM reproduces that by hanging both
+under a switched-off holder: indexed and resolvable, drawn only once the reparent happens.
+
+The capture's own definition, `britbalmoral_1-ww_balmoral1`, addresses three more nodes that are
+**chapter** nodes rather than archive ones: `body` (C3 1058, under `britbalmoral_1` → `healthy` →
+`nearest` → `pilot_pos` → `pilot`), `head` (1075) and `hatch` (1089, under `nearest` → `nose` →
+`hatchparent`). They live inside the chapter's own copy of the vehicle, which the world never
+places, so the compiled claim binds nothing; the aeroplane the mission's roster spawned carries the
+same names in its own subtree, off the shared `balmoral`/`player_balmoral` airframe. The original
+finds them because its first resolution tier is a depth-first walk of the definition's own root
+subtree ([org/sequences.md](../../org/sequences.md), "The tier chain"), and that root IS the
+vehicle. CSVM keeps the rig's subtree as a **scoped alias** rather than putting those names in the
+shared index — `pilot`, `body` and `healthy` are the commonest names in the archive, and a global
+index of them would let any definition claim them (`AnimRuntime.IndexSpawnedVehicle`).
+
+One more thing the capture needs from the vehicle beyond its root: its first sequence re-asserts
+`OBJECT_ACTIVE_STATE [britbalmoral_1, true]` inside a `Loop{1000}` at 0.01 s, ten seconds of it.
+That is what keeps the captured aeroplane drawn against code 913's AI park, so the active bit has
+to reach the aircraft's own drawn state and not only the rig node
+(`AnimRuntime.SetTargetActive`).
+
 ## `player`, and the two pointer spaces a definition addresses
 
 ### A cross-archive `ptr` is the aircraft archive's index plus a per-chapter base
@@ -198,6 +297,12 @@ The base always clears the chapter's own table, so the two spaces cannot overlap
 cross-archive `ptr` against the chapter's table is what makes `player` look like a name with no
 node behind it, and it is why the same name carries a different number in every chapter while the
 aircraft archive it points into is one shared file.
+
+⚠ The rule is measured over these eight chapters and nothing else. No site in `crimson.exe`
+computing the rounding has been traced, so a ninth chapter's base would be a prediction. CSVM
+implements it as `(count / 2500 + 1) * 2500` (`AircraftStage.PointerBaseOf`), which reproduces all
+eight; a count that is already an exact multiple of 2500 does not occur in this install, so which
+way the rounding breaks there is undecided.
 
 ### `player` is the player's own aircraft
 
@@ -242,11 +347,43 @@ Two aircraft, both from the aircraft archive rather than the chapter's gamez.
   `wing_lights_blink` addressed to `player_pfighter` **by name**, the one place the authored data
   reaches past the slot to the Devastator's model directly.
 
-⚠ CSVM stages neither. The world build puts no aircraft-archive node into the animation runtime's
-node table, so both names claim a symbol with a null binding and every event that poses them drops
-(`BL-482`). The camera move plays over an empty stage; what CSVM does instead of
-`OBJECT_ACTIVE_STATE [player, false]` is callback 11's own out-of-flight state, which holds the
-flown airframe undrawn for the whole cutscene rather than posing it.
+CSVM stages both, from the aircraft archive, only for a mission that bootstraps an intro
+(`Mech3/AircraftStage.cs`). `piratefighter` is built as a prop with no pilot and no flight model,
+switched off until `gi_pfighter1` activates it; `player` is a bodiless marker, since the aeroplane
+it stands for is the one the pilot flies and that model belongs to the flown `FlightController`.
+Every staged node's compiled pointer is rebased onto the chapter's own base, so the definition's
+symbol table binds the names it addresses. `OBJECT_ACTIVE_STATE [player, false]` stays callback 11's
+out-of-flight state, and the pose half is the marker: while that state holds, the flown airframe is
+drawn on the marker's world pose and put back where the mission spawned it at the handoff. The
+drop's own end pose is not what a CSVM session starts flying from.
+
+⚠ The cross-archive names below `player` — `healthy`, `cockpit1`, `shadow`, `destroyed` — are the
+DEVASTATOR's copies, since that is the airframe the archive's `player` wrapper holds. A pilot flying
+anything else leaves those four events unresolved, which is correct: the states they assert are the
+model's own base states, and the flown airframe already carries them.
+
+### A mid-mission drop's `chuteman` is the same staging gap
+
+The intro is not the only definition that addresses a name below the aircraft archive's base.
+C3/M01's drop-off (`tex_drop.zrd`) plays `do_approachN` → `player-texdrop`, whose `CALL_ANIMATION
+[tdchute]` starts the `chuteman`-named definition compiled as `chuteman-tdchute.json`: it deletes
+`chuteman` from `world1`, adds it under `do_direction`, switches it `ACTIVE`, and runs an SI script
+over `chutemanparent`, `pilot` and `stamp` in turn (`snd_chuteopen` follows). `chuteman` is
+aircraft-archive node **2288** (a parentless `Object3d`, model-less, one child `chutemanparent` at
+2289, which fans to `pilot` at 2290, the parachutist's own mesh, and `stamp`, the parachute canopy,
+at 2291) — the same archive `player`/`piratefighter` come from, addressed the same way: C3's base
+7500 makes the compiled def's symbol table read `chuteman` 9788, `chutemanparent` 9789, `pilot`
+9790, `stamp` 9791, each exactly `2288..2291 + 7500`. The shared `chuteman.zrd` reader ships the
+node `INACTIVE` as its own `RESET_STATE`, the same base state `piratefighter` ships in.
+
+Before `BL-540`, `AircraftStage` staged `player`/`piratefighter` alone, so `chuteman`'s subtree
+never joined the runtime's node table: the drop's own definition claimed a symbol with a null
+binding and the parachutist was invisible, seen at the controls with no error (the resolver's
+"claimed-but-unbuilt index" guard is deliberately silent, `AnimRuntime.Targets`). CSVM now stages
+`chuteman` beside the other two, under the same gate (a mission whose start-anims name an intro —
+C3/M01 has one), switched off until the drop's own `CALL_ANIMATION` reparents and activates it. A
+mid-mission drop in a mission with no intro of its own is not staged by this path; see
+`docs/architecture.md`'s `AircraftStage` entry.
 
 ## `CALLBACK`: the dispatch chain
 
@@ -362,6 +499,56 @@ the mission's `pickup_timing` definition. Its authored sequence opens
 `agent_approach_cone/land_on` 13.46 seconds later, synchronised with the ladder pickup window;
 the ordinary `landings.zrd` test then owns the final approach and cutscene start.
 
+#### The hookup poses the flown airframe's own parts
+
+A zeppelin hookup is one definition for eleven aeroplanes, and everything that differs between them
+is authored as a branch on which `player_<airframe>` node is ACTIVE. C3's `hooked_to_klondike`
+(`player` root, started by both `pz_manual_land` and `pz_auto_land`) is the worked example:
+
+| what the shot shows | where it is authored |
+|---|---|
+| the docking hook coming out | `CALL_ANIMATION [player_extend_hook]` in the opening sequence |
+| how high the aeroplane hangs | the `OBJECT_TRANSLATE_STATE` inside that def's own airframe branch |
+| a Balmoral folding its wings | `IF NODE_ACTIVE[8]` → `CALL_ANIMATION [bal_wing_foldup]` in `move_player` |
+
+`player_extend_hook` is a single `test_player` sequence of eleven `IF NODE_ACTIVE[n]` arms over its
+own eleven-name node list, each arm setting an absolute `OBJECT_TRANSLATE_STATE` on that airframe's
+node and then calling that airframe's hook definition before stopping the sequence:
+
+| airframe | mount offset | hook def |
+|---|---|---|
+| `player_balmoral` | `(0, −2.172, −0.4)` | `bal_hook_extend` |
+| `player_autogyro` | `(0, −0.948, −0.305)` | `gyro_hook_extend` |
+| `player_avenger` | `(0, −0.07, 0.5)` | `avenger_hook_extend` |
+| `player_bhawk` | `(0, 0, 0.8)` | `blood_hook_extend` |
+| `player_brigand` | `(0, −0.105, −0.37)` | `brig_hook_extend` |
+| `player_fbrand` | `(0, −0.4, 1.0)` | `fire_hook_extend` |
+| `player_fury` | `(0, −0.105, −0.37)` | `fury_hook_extend` |
+| `player_kestrel` | `(0, 0.27, 0.5)` | `kest_hook_extend` |
+| `player_peacemaker` | `(0, −0.377, −0.6)` | `peace_hook_extend` |
+| `player_pfighter` | `(0, 0, 0.5)` | `pirate_hook_extend` |
+| `player_warhawk` | `(0, −1.5, 0.2)` | `war_hook_extend` |
+
+The offset is the airframe's local transform inside the `player` wrapper, and `player_retract_hook`
+is the same eleven arms writing `(0, 0, 0)` back. **This is the height the aeroplane hangs at on
+the trapeze**: `player` is reparented under `pzhookpoint` and flown there by an SI script, and the
+airframe's own offset is the last term of that composition. It is authored, not a scale.
+
+Each `<x>_hook_extend` is rooted on that airframe's `<x>_hook` group node, which the shared archive
+ships INACTIVE with its arms and door already modelled; the definition's first sequence activates
+the group and the rest tweens the arms out. The wing fold is the same shape: `bal_wing_foldup` is
+rooted on `player_balmoral` and turns `rwingbend` and `lwingbend` ±1.9198622 rad over two seconds.
+`move_player` gives the Balmoral and Warhawk branches their own two-second wait and then `all_done`,
+so those two airframes end the episode sooner than the rest.
+
+**All three therefore need the flown aeroplane's own subtree in the animation runtime's node
+table.** CSVM indexes it there when the flight rigs are built, and again after an airframe swap,
+rebased onto the chapter's cross-archive base the same way the staged intro aircraft are
+(`AircraftStage.StageFlown`); the docking-hook group is built for a human rig and parked at its
+archive-authored inactive bit (`Mech3/PlaneBuilder.cs`). ⚠ The airframe node's own visibility is
+that ACTIVE bit, so the flight rig writes its presence one node higher, on the shake pivot: an
+aircraft a cutscene holds `Inert` while posing it must not read as "no airframe at all".
+
 #### Limits and readings
 
 - **Undecoded: whether the host reaches a called definition.** `FUN_004ee160` writes the host on the
@@ -433,7 +620,7 @@ install; the compiled archives carry the same events.
 | 800–803 | 1 each | mission-specific: damage `cargozep1`, and three "is any of this wing still alive" sweeps over `bhatwarhawk*`/`bhatbrigand*`/`bhatgyro*`. |
 | 913 | 7 | `FUN_0041f250` parks every AI vehicle that is not the player and not itself in a cutscene: sets its hold flag, pushes its next-think time far out, and deactivates its scene node. Plus `FUN_004a95f0` (detaches the wave director's node update), `FUN_004516e0(0)` and `FUN_00453660(0)`. **Clears the world of AI aircraft for the duration of the movie.** |
 | 914 | 8 | the exact inverse (`FUN_0041f2e0`, `FUN_004a9610`, `FUN_004516e0(1)`, `FUN_00453660(1)`), reactivating each AI vehicle with a randomised next-think. Skipped in multiplayer. |
-| 950, 951 | 14 for 951 | 951 teleports the player to the current camera pose and rebuilds its motion state; 950 is a lookup form. |
+| 950, 951 | 14 for 951 | 951 puts the player's aeroplane on its own `player` node's world pose and rebuilds its motion state from there. **The re-placement.** Decoded in full [below](#the-re-placement-code-951). 950 resolves the raising node to a vehicle (`FUN_00523990`) and hands it to `FUN_00422a70`; not decoded further, and authored nowhere in this install. |
 | 965, 966, 967 | 1, 1, 3 | swap the player onto a specific airframe (`pbloodhawk`/`player_bhawk`, `pwarhawk`/`player_warhawk`, `pbalmoral`/`player_balmoral`) with its armour and hardpoint table, and set the cutscene flags. The data-side counterpart of the intro defs' `check_balmoral`/`check_warhawk` branches. Decoded in full [below](#the-airframe-swap-codes-965-966-and-967). |
 | 968 | 1 | tests `bswingman_1`. |
 
@@ -453,11 +640,12 @@ walk.
 
 Each case does the same five things, in this order.
 
-1. **Measure the outgoing airframe.** `FUN_0047bcd0(name, &armour, &structure)` reads one hull
-   section's CURRENT pair off the vehicle's section array (at `veh+0x9c`, stride `0x58`, name at
-   `+4`, armour max/current at `+0x24`/`+0x28` and structure max/current at `+0x2c`/`+0x30`),
-   answering −1/−1 for a section the airframe has none of. The four sections are the body, the tail
-   and the two wings, and the two sums are kept for step 5. 965 skips this step.
+1. **Measure the outgoing airframe.** `FUN_0047bcd0(name, &armour, &structure)` is a `__thiscall`
+   on the player vehicle (`DAT_0071c298`) that reads one hull section's CURRENT pair off the
+   section array (at `veh+0x9c`, stride `0x58`, name at `+4`, armour max/current at `+0x24`/`+0x28`
+   and structure max/current at `+0x2c`/`+0x30`), answering −1/−1 for a section the airframe has
+   none of. The four sections are `nose`, `tail`, `leftwing` and `rightwing` (`0x00628640` in the
+   967 case), and the two sums are kept for step 5. 965 skips this step.
 2. **Rebuild the vehicle.** `FUN_0047fd50(<def>, <planes.zbd node>)` returns immediately if the
    player is already in that def. Otherwise it saves the attitude quaternion (`+0x54`), the velocity
    (`+0x81`) and two further fields, tears the old vehicle body down (`FUN_0047bab0`), builds the
@@ -483,20 +671,113 @@ Each case does the same five things, in this order.
    ending does, through the ordinary handoff. 965 additionally sets `player+0x946`, the nitrous
    injector bit.
 5. **Hand the outgoing airframe to `wingman_4`** (966 and 967 only). `DAT_0071c4f0` is resolved once
-   at mission start by `FUN_004735b0`, which looks `wingman_4` up in the live vehicle list in
-   `c3`/`m05` and `c4`/`m04` and holds 0 everywhere else. The same function gives a record named
-   `wingman_4` **the player's own aircraft type and livery** in those two missions. The case places
-   it 100 m from the player at 45° off the nose, gives it the section sums measured in step 1 and
-   reveals it (`FUN_004b0f40`). 967 also hides the aircraft the capture animation belongs to, and
-   scales the new airframe's four sections by that aircraft's own armour and structure fractions,
-   so the captured plane's damage carries onto the one the player is now flying.
+   at mission start by `FUN_004735b0`, which at `0x00475018` compares each roster name against
+   `wingman_4` (`0x00627b34`) and then the chapter/mission pair against `c3`/`m05` and `c4`/`m04`
+   (`0x00627b40`–`0x00627b4c`), holding nothing everywhere else. Only inside that arm does it give
+   the record **the player's own aircraft type and livery** (`DAT_0071daec`, with airframe id 0xb
+   substituted by 5, and the paint pair at `DAT_0071daf0`/`DAT_0071daf4`). Both cases then give it
+   the section sums measured in step 1 (`+0x2c8` armour, `+0x2d0` structure) and reveal it
+   (`FUN_004b0f40(0)`, which clears the hidden bit `+0x945` and the three cutscene flags and
+   reactivates the scene node). **Only 967 places it**: 100 m along the bearing `yaw − 45°` with its
+   own nose left on the player's `yaw`, so the two are flying alongside rather than converging.
+   967 alone also resolves the raising animation's own vehicle (`FUN_00523990(anim)` reads the root
+   node at `anim+0x48`, `FUN_004afee0` finds the vehicle whose `+0xc` is that node), hides it with
+   `FUN_004b0f40(1)`, and scales the new airframe's four sections by that vehicle's WHOLE armour
+   and structure fractions (`+0x2c8/+0x2c4` and `+0x2d0/+0x2cc`) through `FUN_0047bf70`, so the
+   captured plane's damage carries onto the one the player is now flying. It also copies the
+   captured vehicle's `+0x388` onto the player, the field `FUN_0047c210` writes at build and the
+   wave and targeting code reads as the vehicle's cohort.
 
-⚠ **CSVM implements steps 2, 3 and 4 and not steps 1 and 5.** The rig is rebuilt through the flight
-roster's own assembler on the named airframe, at the pose, heading, throttle and speed the outgoing
-aircraft held, with that airframe's stock fit at full ammunition and its own armour pools; the
-cutscene flags land on the aircraft the swap built. The `wingman_4` handover and the damage
-carry-over are per-mission exe behaviour keyed on the chapter and mission strings, and nothing in
-the data asks for them.
+**CSVM implements all five steps.** The rig is rebuilt through the flight roster's own assembler on
+the named airframe, at the pose, heading, throttle and speed the outgoing aircraft held, with that
+airframe's stock fit at full ammunition and its own armour pools; the cutscene flags land on the
+aircraft the swap built. `Session/AirframeSwap.cs`'s `AirframeHandover` carries the mission gate,
+the 100 m / −45° placement and the capture test; `FlightRoster.RunSwap` runs the whole order, and
+the definition's root node reaches it through `AnimRuntime.CallbackHost`. Four divergences, each
+deliberate:
+
+- **The airframe and livery are decided at the roster spawn, not at the swap.** The original writes
+  them at mission start and so does CSVM (`CampaignRosterPlan.Build`'s `handover` argument), which
+  is why `wingman_4` is a Devastator in `player_fortune` paint everywhere else and the player's own
+  aeroplane in these two missions.
+- **The handed-over sums are capped at the receiving aircraft's own maxima.** The original needs no
+  cap: its `wingman_4` flies the player's airframe, so the sums cannot exceed its pools. CSVM reads
+  one airframe's pools as a zone sum on a human rig and as the AI def's authored pair on an AI one
+  (`docs/org/vehicleDamage.md`), so an undamaged hand-over lands at the receiver's full pools rather
+  than at the player's larger number.
+- **`+0x388` is not copied.** CSVM's `wingman_4` is already on the player's team.
+- **967's rebuild carries the captured aircraft's own `PaintScheme` onto the player's new hull**
+  (`BL-543`, `BL-554`). This is NOT in the executable: case 967 (`FUN_0047e080`, `0x3c7`) rebuilds
+  through `FUN_0047fd50(s_pbalmoral, s_player_balmoral)`, which reads no paint field off the
+  captured vehicle, and `DAT_0071daf0`/`DAT_0071daf4` (the paint pair step 5 writes) are touched
+  only in `FUN_004735b0` at mission start, giving `wingman_4` the PLAYER's own scheme, the opposite
+  direction. The original keeps the Fortune Hunters Balmoral seen at the controls; CSVM's carry is
+  the user's own at-the-controls reading, taken over that trace by this project's standing rule
+  that a human's seen result outranks an instrument. `FlightController.Scheme`/`ShippedSkins`
+  record what painted a rig, so `FlightRoster.RunSwap` can read the captured rig's back even when a
+  real enemy roster spawn's `ShippedSkins` reading resolved it to no scheme at all: that null has to
+  carry too, or the rebuild falls back to the player's own default livery.
+
+⚠ **967's hide has to outlive the reveal of code 914.** In `C3/M05` the capture definition raises
+967 from the same sequence that calls `wingwalk`, and `wingwalk_parent-wingwalk` brackets its own
+19.25 s motion with **913 then 914**: the captured aircraft is parked by 913, hidden by 967 while it
+is already parked, and then handed back by 914 at the end of the wing walk. The original keeps the
+two apart, since 913/914 drive the vehicle's hold flag and scene node while 967's
+`FUN_004b0f40(1)` sets the vehicle's own hidden bit `+0x945`; CSVM carries both on one `Inert` flag,
+so `CutsceneController` drops whatever the swap hid out of its parked list instead. Measured on
+CM02's own definition, played through the runtime: without that drop the Balmoral comes back
+**19.25 s** after the swap, which is the aeroplane sitting in front of the player at the cut back to
+flight.
+
+⚠ Neither the hand-over nor the damage carry-over is asked for by anything in the shipped data.
+Both are keyed on the chapter and mission strings above, so a search of the data for a trigger comes
+back empty and **that emptiness is not evidence they do not exist.**
+
+### The re-placement code 951
+
+A cutscene that flies the pilot somewhere ends by leaving them there, and 951 is how. Case `0x3b7`
+of `FUN_0047e080` reads the player vehicle's own scene node (`DAT_0071c298+0xc`, which IS the
+`player` node the definition has been animating) and writes that node's world pose back into the
+vehicle's physics state:
+
+1. `FUN_004cf200(node, &pos)` and `FUN_004cf380(node, &rot)` read the node's WORLD position and
+   rotation, off its world matrix (`+0x84` and `+0x60`) or, for a node the walk has to resolve, off
+   a rebuilt one. Visibility does not enter it.
+2. `pos` goes to the vehicle's position `+0x204`, its previous position `+0x1a4`, and into every
+   entry of the trail list at `+0x6a4`..`+0x6a8` (stride `0x24`, offset `+0x18`), so no smoothing
+   drags the aeroplane back from where it was put.
+3. `rot` builds a quaternion at `+0x150` (`FUN_0053f610`) which `FUN_0053fa40` expands into the 3×3
+   basis at `+0x180`.
+4. The velocity `+0x924` is that basis's third axis (`+0x198`) times **-53.6448**, with `+0x930` and
+   `+0x934` its square and its length. The axis is unit length, so the aeroplane is released at
+   53.6448 units/s along its own nose. The same figure, rounded, is CSVM's fallback spawn speed.
+5. `FUN_004d1d50`/`FUN_004d1a30` write the pose back onto the node as a LOCAL transform, which is
+   what re-seats it after the definition's `OBJECT_ADD_CHILD` has put it back under `world1`.
+
+**Where the placement is authored: in the definition, not in the mission script.** `C3/M01`'s
+`player-texdrop` is the worked example. Its player sequence reparents `player` from `world1` under
+the chapter node `do_direction`, flies it there on SI script `td_player1` (local coordinates, ending
+about 123 m out), reparents it back under `world1`, and flies it on `td_player2`, whose keyframe
+bases are absolute world coordinates and which ends at **(-8469.09, 170.02, -4790.26)** on a fixed
+quaternion. Only then does it raise 951. The pose the pilot resumes at is therefore the last SI keyframe of the
+last script the definition runs in `world1`'s frame, and it is independent of the heading the pilot
+flew in on. `objectives.zrd` carries nothing about it; `WARP_VEHICLE` is a different verb on a
+different subject ([objectives.md](../objectives.md)).
+
+The 14 occurrences are one per mission's `piratezep-pzep_launch_player` (12 missions) plus every
+mid-mission definition that moves the pilot: the drops, the hookups and unhooks, the pickups, the
+wing walk and the trailer. `pzep_launch_player` never puts `player` back under `world1`, so its 951
+lands the pilot on `pzhookpoint`; **no mission in this install calls it**, and `generic_intro` raises
+no 951 at all, which is why the intro's own handoff is a hand-back to the authored spawn rather than
+a re-placement.
+
+**CSVM.** `CutsceneController.ReplacePlayer` reads the staged `player` marker's world transform and
+hands it to `FlightController.ResumeAt`, which moves the staging's hand-back target. The move is
+applied at the hand-back rather than at the callback, because the out-of-flight hold re-asserts its
+pin at zero speed on every step it runs and would wipe a speed written earlier. A session that
+staged no `player` marker (a mid-mission drop in a mission with no intro of its own, the limit named
+under [the `chuteman` staging gap](#a-mid-mission-drops-chuteman-is-the-same-staging-gap)) logs the
+callback and re-places nothing.
 
 ### Handoff and skip
 
@@ -508,6 +789,28 @@ Two exe paths end a cutscene without a `CALLBACK`, and a cutscene player needs b
 - **Skip.** The per-frame state core `FUN_004a0220` (`StateCore.cpp`) checks the active-cutscene
   slot against an input poll each frame: while `DAT_0071c50c` is set and `FUN_00536000` reports an
   event, it clears the slot and force-stops the animation through `FUN_004ed480`.
+
+#### ⚠ Only a definition that raises 20 can be skipped, and a skip drops the rest of its codes
+
+`DAT_0071c50c` is written in five places and armed in exactly one: `FUN_0047e080`'s
+`if (param_3 == 0x14) DAT_0071c50c = param_1` at `0047e2e6`, the world-hold code. The other four
+(`0047e0bc` on code 0, `0047e22a` on code 12, `004a02c8` in the poll itself, `00472e5f` on mission
+teardown) all clear it. The key latch the poll reads, `DAT_0075cb60`, is consumed by `FUN_00536000`,
+which has one caller in the whole binary, and none of `FUN_004ed480`'s other fifteen callers reads
+that latch. **A definition that never raises 20 cannot be skipped by the player at all**, and there
+is no second input path to it.
+
+What the stop then runs is the node restore `FUN_004ed090` plus the `RESET_SEQUENCE` record at
+`anim+0xd0`, stepped by ordinary frame `dt` (`LAB_004ed2a0`). The numbered sequences carrying the
+timeline's `CALLBACK` events are never stepped again, so **every code still ahead of the skip is
+dropped**. The `RESET_SEQUENCE` reaches the stepper through the same dispatch table, so a callback
+authored there would still raise; whether any shipped definition authors one is a data question.
+
+Across the shipped campaign three definitions raise 20: the shared `generic_intro`, C1/M04's
+`mission_intro_animation` and C3/M03's `player-cgzep_camera`. Every mid-mission definition that
+changes the player's aeroplane or its place (CM02's `ww_balmoral1` with 967, CM01's `texdrop` with
+951) raises none, which is why dropping the remaining codes costs the original nothing. An intro's own
+remainder past the arm is 2, 11 and 14, and its `RESET_STATE` authors 1, 914, 10 and 667.
 
 ## The intro defs' eight dispatches
 
@@ -578,15 +881,19 @@ beat deactivating it; the smooth phase between them is
   `flags.lighting`/`flags.fog` both true; at 7.5 m the fog contribution is negligible, and the def
   pins the node's full orientation to `camera1` every tick regardless of the facade mode, so a
   builder should copy the transform and not rely on billboarding to keep the bars square.
-- **`AT_NODE` on a pose event is spelled differently in each front-end.** The reader writes
-  `OBJECT_TRANSLATE_STATE … AT_NODE [camera1]` and `OBJECT_ROTATE_STATE … AT_NODE_MATRIX
-  [camera1, 0, 0, 0]`; the compiled twin writes a flat `at_node: "camera1"` on the translation and a
-  nested `basis: { AtNodeMatrix: "camera1" }` on the rotation, with `state` carrying the offset
-  inside that frame (zero for the bars) rather than an absolute pose. **The compiled def wins**, so
-  a consumer that reads only the reader spelling sees the target teleported to its parent's origin.
-  Install-wide there are 190 non-null `at_node` translations and 8 `AtNodeMatrix` rotations (the
-  eight chapters' letterbox); `INPUT_NODE` appears as an `at_node` value and is a sentinel, not a
-  node name.
+- **`AT_NODE` on a pose event is spelled differently in each front-end, and the compiled rotate
+  itself has two spellings.** The reader writes `OBJECT_TRANSLATE_STATE … AT_NODE [camera1]` and
+  `OBJECT_ROTATE_STATE … AT_NODE_MATRIX [camera1, 0, 0, 0]`; the compiled twin writes a flat
+  `at_node: "camera1"` on the translation, with `state` carrying the offset inside that frame
+  (zero for the bars) rather than an absolute pose. On the rotation the compiled field is nested
+  under `basis`, but its key is `AtNodeMatrix` on the eight chapters' letterbox (8 sites) and
+  `AtNodeXYZ` everywhere else in the install (172 sites, `britbalmoral_1-ww_balmoral1`'s wing-walk
+  frame among them) — the reader-normalizing front-end (`AnimDefs.AddAtNode`) only ever emits the
+  first spelling, so the second reached no compiled extraction until the rotate handler was taught
+  to read both. **The compiled def wins**, so a consumer that reads only the reader spelling sees
+  the target teleported to its parent's origin. Install-wide there are 190 non-null `at_node`
+  translations; `INPUT_NODE` appears as an `at_node` value and is a sentinel, not a node name.
+  The two rotate spellings are **different rules**, decoded below.
 - **A change to `generic_intro` is verified by what disappears, not by what looks right.** Twelve
   missions share it, and an 8-chapter freecam regression cannot see any of it: no Instant Action or
   multiplayer mission bootstraps an intro, so that regression is inert here by construction

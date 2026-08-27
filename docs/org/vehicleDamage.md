@@ -857,9 +857,18 @@ airframes and a real spawn.
   as the normal-play path. The mode `FUN_00450550` enters was not identified. If it is instead 1 in
   ordinary flight, the **player** takes neither the destroy anim nor the callback registration; the
   AI behaviour is unchanged either way.
-- **Callback value 12**, authored eight times each by the three `player_crash_*` defs.
-  `LAB_00480710` handles 0, 15 and 16 only and falls through on 12, so either a second callback is
-  registered on that instance or the value is inert. Not traced.
+- **What resets the player's destroy-or-crash anim in ordinary single-player death.** Callback 12,
+  the mission-over trigger, is the last event of the top-level `reset_state` list of four defs
+  (`player-player` and the three `player_crash_*`), once each, right after
+  `CallAnimation player_destruction_reset`; the eight occurrences per def in `cam_anim/player-*.json`
+  are the eight chapter copies of the same authoring, not eight events. It fires when that anim is
+  RESET while the death flag `+0x91d` is set and
+  the wreck-falling flag `+0x91f` is clear (the guard at `0x0047e1fa`/`0x0047e208`); the multiplayer
+  respawn path `FUN_00480480` clears both flags first, at `0x0048049e`..`0x004804b3`, which is why
+  its own reset is swallowed. Which native call performs the reset on the single-player path was not
+  identified; the candidates are `FUN_004ed480`'s callers and the `FUN_004ebbb0` teardown reached
+  from `FUN_0048b920`. The ending itself is decoded in
+  [`../formats/objectives.md`](../formats/objectives.md), "Win and loss".
 - **Whether a dead, hidden vehicle is still ticked.** `FUN_004b82d0` calls `FUN_004cd2a0(node, 0)`,
   the crash sequence deactivates the nodes, and `FUN_0048c470` has a `crashed` early-out, but the
   per-frame consumers were not enumerated, so the standing cost of an accumulated wreck is unknown.
