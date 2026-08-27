@@ -146,7 +146,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 18. ☑ The auto-land prompt is not drawn in a flown session (`BL-544`)
 19. ☑ The landing animation: no hook, too high, wings not folded (`BL-545`)
 20. ☑ CM01's drop-off cutscene shows no parachutist (`BL-540`)
-21. ◐ The low-terrain break-off, judged once the wingman is there (`BL-509`, A13's open half)
+21. ☑ The low-terrain break-off, judged once the wingman is there (`BL-509`, A13's open half)
 22. ☑ An `AT_NODE` rotate reads a spelling the compiled data never uses (`BL-549`, minted by D17)
 
 ## Dependency and parallelism notes
@@ -1092,7 +1092,7 @@ unlike the intro's B8 capture, which needed no such chain. Left for the orchestr
 flown check, matching the plan's existing practice for other at-the-controls confirmations
 (C12, D21).
 
-## D21 ◐ The low-terrain break-off, judged once the wingman is there
+## D21 ☑ The low-terrain break-off, judged once the wingman is there
 
 **Goal.** With the wingman beside the player out of the intro (D14), decide at the controls whether
 its avoid-crash break-off over the island reads as the original.
@@ -1109,6 +1109,18 @@ with the wingman on the same airframe and watch the first low pass over the isla
 
 **⚠ Traps.** ⚠ Everything `BL-457` and `BL-509` retire stays retired.
 **Sortie brief (the stop).** Build: branch `worktree-m5-polish-2` at its head, `dotnet build CSVM/CSVM.sln`, launch from the menu on a profile COPY with `selectedPlane 0` and `wingmanPlane 1` (both Devastators; the Wave A and D numbers were measured on that pairing). CM01 (C3/M01), watch in order: (1) after the intro the wingman is beside you, about 100 m, not kilometres away (D14; if it is far, the realtime hold missed something); (2) over the island's first low pass, whether it breaks off into a vertical climb and comes back to station, and whether that reads as the original (D21's own question, `BL-509`); (3) the drop-off cutscene shows the parachutist (D20). CM02 (C3/M05), with a Balmoral shot down to a readable fraction BEFORE the wing walk: (4) the capture cutscene shows the Balmoral and you crossing to it, framed on the aeroplane (D17, D22); (5) after the cut back to flight the captured Balmoral is gone from the sky (D15), your new hull reads damaged on the DMG line (`BL-547`), and it wears the British livery (D16); (6) on the auto-land, the hook deploys, the aeroplane sits at the trapeze, and the Balmoral's wings fold (D19); (7) the `AUTO-LAND AVAILABLE` line on the HUD inside the sphere (D18 proved it draws on a realtime frame; if it is still not seen, re-mint with what the screen showed). Findings outside these become new `backlog.md` entries with ids from `New-ItemId.ps1`.
+**Flown.** CM01 and CM02 at the controls on the plan branch. Confirmed: the wingman is beside the
+player after the intro (D14, `BL-457` closed), the low pass over the island reads as the original
+(`BL-509` closed), the parachutist shows (D20), the capture camera sits on the aeroplane (D17), the
+captured Balmoral is gone after the cut (D15), the DMG line reads the carried damage (`BL-547`
+closed), the hook deploys, the height is right and the wings fold on the auto-land (D19; the manual
+row is untested at the controls), and the `AUTO-LAND AVAILABLE` line shows (D18). Findings: the
+capture cutscene plays without the enemy Balmoral or the pilot switch and inherits the aeroplane's
+roll (`BL-551`); a skipped cutscene should jump to its end rather than wait out the swap
+(`BL-552`); the original re-places the player south of the archipelago facing east after the
+drop-off (`BL-553`); the British livery still does not reach the player's hull live, so D16's carry
+is open again as `BL-554` (the flown enemy is painted through `ShippedSkins`, which the suite's
+stand-in never was).
 
 ## D22 ☑ An `AT_NODE` rotate reads a spelling the compiled data never uses
 

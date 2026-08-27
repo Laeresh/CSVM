@@ -2084,72 +2084,6 @@ usual.
   item's numbers are the symmetric case and are sound; this is a different pairing. Do not "fix" it
   by installing nitro on every wingman, which would contradict the roster data.
 
-- `BL-457` `[Bug]` `[Owed-playtest]` **The campaign wingman's station out of the intro cutscene,
-  judged at the controls.** *What landed.* The cutscene's world hold now reaches every self-stepping
-  node through the session clock: `GameClock.SimHeld` makes `PhysicsDt` answer zero while a
-  definition owns the session, so an aircraft, projectile, zeppelin or turret pacing itself from
-  Godot's physics tick returns exactly as it does on a parent-driven frame. `FrameDt` is untouched,
-  which keeps the animation runtime playing the movie. Measured on a realtime `--campaign=` run of
-  C3/M01 with `player_pfighter` on both seats: `wingman_1` is 3742.3 m from the player at the handoff
-  before, 117.3 m after, which is the separation A5's parent-driven trace already read. The 250 mph
-  desired-speed ceiling was lifted through `AiControlLaw.StationCeiling` earlier, and the per-spawn
-  jitter no longer reaches the `mode wingman` class (`docs/org/flightModel.md`, "The per-spawn
-  jitter"). *What the sortie must judge.* Whether the wingman reads as flying with the player over
-  the whole of CM01, not only at the handoff: 117 m is the authored spawn separation, so the
-  measurement says the intro no longer moves it and says nothing about the minutes after.
-  *⚠ Traps:* ⚠ Measure in a REALTIME session, not a probe: `--det` and the suites step through
-  `DriveSimSteps`, where the hold has always worked. `wingman-station` now carries one leg that
-  paces an aircraft through its own `_PhysicsProcess` (`docs/verification.md` INSTR-26), which
-  covers the hold and nothing else about the sortie (INSTR-25). ⚠ The join gate, nitro, an airframe
-  mismatch, the far-field branch and the `Joining` re-entry are all ruled out; do not re-chase them.
-  ⚠ Do not re-tune the decoded station offsets, the 700 m join gate, or `SpeedCeiling`.
-  *Cross-refs:* `BL-509` (the low-terrain break-off, judged on the same sortie);
-  `docs/PLAN-M5-polish-2.md` A5, C12 and D14.
-
-- `BL-509` `[Research]` `[Owed-playtest]` **A campaign wingman still leaves its station when
-  `avoid crash` arms, and the excursion is now taller rather than wider.** *What is decoded and
-  landed.* The original's escort climb-out is read out instruction by instruction
-  (`FUN_0041e760` at `0x0041e7c8`–`0x0041e814`, `docs/org/aiPilot.md`): own position with 1000 m
-  added to Y and X and Z untouched, a zero aim velocity, the wingman parameter table
-  `DAT_0061fb28`, `emergency` set, and a `return` that never touches the escort state, so the
-  wingman resumes its station on the first clear ray and never re-joins. **There is no lateral
-  term in either law.** CSVM's escort was flying `AiPilot.ClimbOutBreakM`, a 1000 m displacement
-  right of its own ground track whose merge measurement was taken on netted aircraft in a
-  ten-plane furball and never on an escort; an escorting pilot now flies the decoded vertical
-  climb and every other pilot keeps the break. The invented second, deck-slanted probe ray
-  (`ProbeDeckM`) is retired with it: the original casts one ray, and the extra one armed twice
-  more on a low pass over water the decoded ray was clear of. *What is left, and what the sortie
-  must judge.* Measured on C3/M01, `player_pfighter`, both break-offs before and after: the
-  wingman still leaves. Before, separation peaked 303 m and altitude difference 128 m, then a
-  second break-off took it back to 305 m / 132 m. After, one break-off, peak 294.6 m / 174.8 m,
-  then a monotonic recovery to 236.4 m / 50.5 m still closing when the trace ends. So the
-  ALTITUDE excursion grew (the decoded climb puts all of the pull into Y where the break spent
-  some of it sideways) and the recovery became clean. Whether that reads better at the controls
-  is not decidable from the trace. *⚠ Traps:* ⚠ Do not suppress `avoid crash` for an escort; the
-  short-circuit is the original's. ⚠ **The arming is decoded, not a defect.** The ray excludes
-  only the caster and the station sits astern of a player leader, so a wingman inside 4.5 s of
-  travel is looking straight at its leader: the measured break-off arms on `player1/airframe` at
-  511 m with the wingman 94.5 m dead astern. ⚠ Do not re-derive the lateral break for an escort;
-  it is retired on the decode, not on the numbers, and the numbers are worse for it.
-  ⚠ `wingman-station` cannot see this (`docs/verification.md` INSTR-25, no terrain under its
-  pair); measure in a `--campaign=` run on `player_pfighter`. ⚠ **A `--campaign=<profile>:N` run
-  WRITES BACK to that profile's `latest` mission record** — copy the profile and run the copy.
-  ⚠ The trace's leader is an aeroplane nobody is flying, at throttle 1.00, descending into the
-  sea inside 30 s, so it is a repeatable scenario and not a representative sortie.
-  *Cross-refs:* `BL-457`; `docs/org/aiPilot.md`; `docs/PLAN-M5-polish-2.md` A13.
-  *Sortie:* not judged on CM01, because the wingman was kilometres away after the intro (`BL-457`).
-
-- `BL-547` `[Bug]` `[Owed-playtest]` **The Balmoral the capture hands the player is untested at the
-  controls for the damage it carries.** The swap scales the new hull by what is left of the captured
-  aircraft's own armour and structure, so a Balmoral shot half to pieces is the one the player
-  inherits; the sortie that found the hide defect took no damage on the way in, so the carry-over
-  has only ever been read in a suite. *Fix shape:* nothing to build; fly CM02, shoot a Balmoral
-  down to a readable fraction before the wing walk, and check the HUD's DMG line after the cut back
-  to flight reads roughly what that aeroplane had left rather than a full hull. *⚠ Traps:* ⚠ An
-  undamaged capture reads identically whether the scaling ran or not, so the sortie has to arrive
-  with the Balmoral damaged. ⚠ The hand-over to `wingman_4` carries the PLAYER's outgoing sums, not
-  the capture's; do not read one for the other. *Cross-refs:*
-  `docs/formats/anim-definitions/cutscenes.md`; `docs/PLAN-M5-polish-2.md` D15 and D21.
 
 - `BL-548` `[Bug]` **`--pos=` with `--campaign=` stalls the intro cutscene's completion.** Found while
   instrumenting the auto-land prompt: six trials with `--pos=` set on a `--campaign=` launch ran up
@@ -2160,6 +2094,54 @@ usual.
   after the handoff. *⚠ Traps:* ⚠ A realtime run's frame-to-wall-time ratio is not repeatable
   (`docs/verification.md` INSTR-28), so read the handoff off the log rather than a frame count.
   *Cross-refs:* `docs/PLAN-M5-polish-2.md` D18.
+
+- `BL-551` `[Bug]` `[Owed-playtest]` **CM02's capture cutscene plays without the enemy Balmoral or the
+  pilot switch, and inherits the captured aeroplane's roll.** Seen at the controls after the camera
+  was moved onto the aeroplane: the shot is composed correctly but the Balmoral the definition
+  animates and the wing-walk figures (the pilot leaving one aircraft and boarding the other) do not
+  appear, and on one capture the frame was about 90 degrees rolled because the Balmoral was rolled
+  when the capture fired. *Fix shape:* the wing walk's own figures (`ww_player`, `ww_ladder`,
+  `ww_zachary`, `body`/`head`/`hatch`) resolve inside `britbalmoral_1`'s gamez copy, which the world
+  never places; check whether the live rig answering for the vehicle root (`IndexSpawnedVehicle`)
+  also has to answer for those child names, or whether the figures are cross-archive and need
+  staging like `chuteman`. For the roll, read whether the original's `AT_NODE_XYZ` pose takes the
+  vehicle's full basis or its yaw alone (the wing walk is authored level). *⚠ Traps:* ⚠ The
+  `campaign-wingwalk-camera` suite passes; it reads the camera, not the figures, so extend it rather
+  than trust it. ⚠ `PoseAtNode`'s composition is shared. *Cross-refs:* `BL-552`;
+  `docs/formats/anim-definitions/cutscenes.md`; `docs/PLAN-M5-polish-2.md` D17 and D21.
+
+- `BL-552` `[Bug]` **Skipping a cutscene should jump to its end at once; the airframe swap still
+  waits for the cutscene's own duration.** Seen at the controls on CM02: pressing the skip key
+  removes the picture, but the 967 swap happens only when the definition's clock would have reached
+  it, so the player sits in a skipped cutscene until then. *Fix shape:* a skip has to run the
+  definition's remaining events to the handoff (the codes, the swap and the reset states) rather
+  than only restoring the view; `CutsceneController`'s skip path and `AnimRuntime`'s advance are the
+  two seams. *⚠ Traps:* ⚠ The events between the skip and the handoff include 913/914 and 967, which
+  have order dependencies (`BL-541`'s closing record); play them, do not drop them.
+  *Cross-refs:* `BL-551`; `docs/PLAN-M5-polish-2.md` D15 and D21.
+
+- `BL-553` `[Fidelity]` **After CM01's drop-off cutscene the original re-places the player south of the
+  archipelago facing east; CSVM resumes where the cutscene left the aeroplane.** Seen at the
+  controls; the placement looked independent of the player's heading going in. *Fix shape:* the
+  drop-off definition's handoff or the mission script carries a placement (a `WARP_VEHICLE`, a
+  `RESET_STATE` pose, or a spawn record the handoff re-applies); read CM01's `objectives.zrd` and
+  the drop-off's closing sequence for it, and compare with the intro's handoff, which does re-place
+  (`FlightController.StageAt` hands back the spawn pose). *Cross-refs:* `docs/formats/objectives.md`;
+  `docs/PLAN-M5-polish-2.md` D20 and D21.
+
+- `BL-554` `[Bug]` `[Owed-playtest]` **The captured Balmoral's British livery still does not reach the
+  player's hull in a flown session.** Seen at the controls on CM02 with the livery carry landed:
+  the new hull wears the Fortune Hunters paint. The swap suite passes because its stand-in spawns
+  with an explicit scheme; a real enemy roster spawn is painted through `ShippedSkins`
+  (`CampaignRoster.SpawnFor`, team not the player's), so what `FlightController.Scheme` records on
+  it is the shipped-skin resolution, and the human rebuild draws that scheme through the player's
+  own pattern path. *Fix shape:* carry the ShippedSkins reading, not only the scheme, into
+  `AirframeSwapRequest` and `HumanFlightAdapter.Assemble`, so the rebuild paints the airframe the
+  way the AI assembler painted the captured one; extend the suite's stand-in to spawn as a real
+  enemy block (`ShippedSkins`) so it fails the way the flown session does. *⚠ Traps:* ⚠ The
+  hand-over to `wingman_4` keeps the PLAYER's scheme; do not read one for the other. *Cross-refs:*
+  `docs/formats/anim-definitions/cutscenes.md` (the livery divergence); `docs/PLAN-M5-polish-2.md`
+  D16 and D21.
 
 - `BL-545` `[Bug]` `[Owed-playtest]` **The landing animation plays with no hook, the aeroplane too
   high, and unfolded wings.** Seen at the controls on CM02's auto-land: the landing hook was not
