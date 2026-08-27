@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — CM07 and CM08
 
 21. ☐ `BL-526`: the rope ladder never deploys
-22. ☐ `BL-527`: the second patrol's Peacemaker spawns under the ground
+22. ❌ `BL-527`: the second patrol's Peacemaker spawns under the ground
 23. ❌ `BL-518`: a stripe-textured surface stands in front of the zeppelin hangar
 24. ☐ `BL-528`: the Blue Streak flies with the stock Bloodhawk fit and no nitro
 25. ☐ `BL-529`: the Pandora porpoises along its route and past its end
@@ -538,25 +538,36 @@ for that event kind. Decode lane: the dropped event kind's handler in the origin
 strike it from `BL-035`, not as a special case for the ladder. The train pickup cutscene fix
 (`2aa7d77d`) is adjacent history.
 
-## C22 ☐ `BL-527`: the second patrol's Peacemaker spawns under the ground
+## C22 ❌ `BL-527`: the second patrol's Peacemaker spawns under the ground
 
 **Goal.** CM07's single-Peacemaker second patrol appears above the terrain.
 
-**Evidence (confidence: lead-only).** Reported at the controls. A roster spawn is placed exactly
-where `aiv.zrd` says (`CampaignRoster.cs:191-192`), so either the authored altitude is below our
-terrain there, or the spawn is a generator launch whose host transform is wrong. `<TODO: re-verify
-still-open against the code>`
+**Evidence (confidence: traced).** Re-verified against the code: not a roster-placement bug.
+`CampaignDirector.BuildRoster`'s spawn log (extended with a terrain probe, the same
+`CollisionLayers.World` downward ray the flight model's ground-blow probe uses) shows all four
+enabled `blakepeace_2_1`..`_4` roster blocks landing ~122 m above the measured terrain, so the
+initial-roster formation is placed correctly. CM07's only other Peacemaker-def AIV blocks,
+`blakepeace_2_5`/`_2_6`, are both authored `enabled 0`: a generator-parameter template, not a
+roster spawn (`docs/formats/ai-rosters.md`). CM07's `egen.zrd` runs two live generators
+(`eairg31`/`eairg32`) whose `vehicle.params` names the disabled AIV block a fresh spawn configures
+from, the same shape as `BL-522`'s `BarracudaPlanes`/`britpeace_5` case
+(`docs/formats/mission-entities/enemy-generators.md`); CSVM's `--generators` still spawns the
+placeholder `player_bhawk` there, since that `vehicle.params` chain is unbuilt. The second patrol
+is therefore a generator launch, A5's domain (`BL-522`'s moving-spawner shape in
+`EnemyGenerators.cs`), not `CampaignRoster.cs`'s.
 
-**Approach.** Log the spawn's position and the terrain height under it. If the authored altitude
-is below ground, the original must lift it and that rule needs decoding. Decode lane: the spawn
-ground clamp in `crimson.exe`, which is the only acceptable source of a lift.
+**Approach.** No fix landed here. The spawn log's terrain probe is kept as a general instrument
+(useful to any future roster-placement question); `BL-527` itself is redirected in `backlog.md` to
+the generator launch pose decode, which needs a `vehicle.params` -> AIV template resolution plus
+the ground-host launch shape `BL-522` already covers.
 
 **Model recommendation.** medium.
 
-**Verify.** Headless CM07 with the spawn log on: the Peacemaker's spawn altitude against the
-terrain height; D32.
+**Verify.** Headless CM07 with the extended spawn log: all four `blakepeace_2_1`..`_4` land clear
+of terrain (confirmed); D32.
 
-**⚠ Traps.** No blanket spawn lift; `BL-457` shows authored spawns are otherwise exact.
+**⚠ Traps.** No blanket spawn lift; `BL-457` shows authored spawns are otherwise exact, and the
+roster formation here confirms it again.
 
 ## C23 ❌ `BL-518`: a stripe-textured surface stands in front of the zeppelin hangar
 

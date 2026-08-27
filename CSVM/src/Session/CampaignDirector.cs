@@ -277,6 +277,14 @@ public sealed class CampaignDirector
                 }
             }
 
+            // A downward probe against the built terrain collision, at the placed position: names
+            // whether a roster spawn actually lands above ground (an under-ground spawn report is
+            // settled off this line), sharing the World mask the flight model's ground-blow probe uses.
+            string groundNote = new GodotWorldQuery(rig).Ray(pos + Vector3.Up * 3000f,
+                pos - Vector3.Up * 3000f, CollisionLayers.World, null, out var groundHit)
+                ? $" terrain={groundHit.Position.Y:0} ({pos.Y - groundHit.Position.Y:+0;-0} above it)"
+                : " terrain=(no hit)";
+
             GD.Print($"campaign: roster '{spawn.Name}' ({spawn.Def} as {spawn.PlaneNode}, {spawn.Mode}) " +
                      $"team={spawn.Team?.ToString() ?? "-"} group={spawn.Group} " +
                      (spawn.Net is { } n ? $"net='{n.Name}#{n.Id}'"
@@ -285,7 +293,8 @@ public sealed class CampaignDirector
                          : "no net") +
                      (spawn.Inert ? " DEACTIVATED" : "") +
                      (placed ? $" on path '{spawn.TaxiPath}'" : "") +
-                     (spawn.Volumes.IsAuthored ? $" volumes act={spawn.Volumes.Activation.Radius:0} att={spawn.Volumes.Attack.Radius:0} ret={spawn.Volumes.Return.Radius:0}" : ""));
+                     (spawn.Volumes.IsAuthored ? $" volumes act={spawn.Volumes.Activation.Radius:0} att={spawn.Volumes.Attack.Radius:0} ret={spawn.Volumes.Return.Radius:0}" : "") +
+                     $" spawn=({pos.X:0},{pos.Y:0},{pos.Z:0}){groundNote}");
         }
 
         // The leader pass, once every rig exists: primary_target names a block that may be

@@ -2360,14 +2360,25 @@ usual.
   the CM07 pickup fix (`2aa7d77d`, the train pickup cutscene).
 
 - `BL-527` `[Bug]` **CM07 (C1/M02): the second patrol, a single Peacemaker, spawns under the ground.**
-  *Evidence:* reported at the controls: the aircraft appears below the terrain. A roster spawn at
-  the authored position is placed exactly where `aiv.zrd` says (`CampaignRoster.cs:191-192`), so
-  either this spawn's authored altitude is below our terrain height at that point, or the spawn is
-  a generator launch whose host transform is wrong. *Fix shape:* log the spawn's position and the
-  terrain height under it; if the authored altitude is below ground, the original must lift it
-  (a ground clamp at spawn) and that rule needs decoding rather than a hand offset. *⚠ Traps:*
-  do not add a blanket spawn lift; `BL-457` shows authored spawns are otherwise exact.
-  *Cross-refs:* `BL-457`, `docs/formats/spawns.md`.
+  *Evidence:* reported at the controls: the aircraft appears below the terrain. Not a roster
+  placement: `aiv.zrd`'s four enabled `blakepeace_2_1`..`_4` blocks are the whole formation-roster
+  spawn, and a headless run (spawn log now on `CampaignDirector.BuildRoster`'s `campaign: roster`
+  line) places all four ~122 m above the measured terrain height, so that path is clean. The
+  mission's only other Peacemaker-def blocks are `blakepeace_2_5`/`_2_6`, both authored `enabled 0`
+  (`docs/formats/ai-rosters.md`'s generator-parameter-template slot), so the second patrol is a
+  generator launch, not a roster one, the same class of bug as `BL-522`'s Barracuda fighters. CM07's
+  `egen.zrd` runs two live generators (`eairg31`/`eairg32`) whose `vehicle.params` names the
+  disabled AIV block a fresh spawn is configured from (`docs/formats/mission-entities/
+  enemy-generators.md`'s `BarracudaPlanes`/`britpeace_5` case is the direct analogue); CSVM's
+  `--generators` still spawns the placeholder `player_bhawk` there, since that `vehicle.params`
+  chain is unbuilt (`EnemyGenerators.cs`'s `VehicleParams` is parsed and unconsumed). *Fix shape:*
+  belongs with the generator launch pose decode (`BL-522`'s moving-spawner shape in
+  `EnemyGenerators.cs`), extended to resolve `vehicle.params` to its AIV template and to a
+  ground-host launch; not a `CampaignRoster.cs` change. *⚠ Traps:* do not add a blanket spawn lift;
+  `BL-457` shows authored spawns are otherwise exact, and the roster-spawned formation here is one
+  more confirmation of that.
+  *Cross-refs:* `BL-522`, `BL-532`, `BL-457`, `docs/formats/ai-rosters.md`,
+  `docs/formats/mission-entities/enemy-generators.md`.
 
 - `BL-528` `[Bug]` **The Blue Streak, CM07 (C1/M02)'s mission Bloodhawk, flies with the stock Bloodhawk fit
   and no nitro, where the original gives it a special loadout with nitro; and it should be
