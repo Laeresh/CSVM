@@ -4,7 +4,7 @@
 and unreachable; `BL-479`: the 26 `GRAPHICS/*.JPG` already draw as board pictures; `BL-477`'s
 scaffolding-read question: ours reproduces the original).
 
-This plan finishes what [`PLAN-M5-campaign.md`](../PLAN-M5-campaign.md) started. It carries two kinds
+This plan finishes what [`PLAN-M5-campaign.md`](PLAN-M5-campaign.md) started. It carries two kinds
 of item: the corrective items from that plan's E42 at-the-controls pass, and the gaps the milestone
 deliberately named rather than built. The loop is walkable and the `campaign-loop` suite pins it
 headless, but the pass found that a mission cannot in fact be flown to its end at the controls, so
