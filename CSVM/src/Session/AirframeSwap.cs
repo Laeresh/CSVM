@@ -27,8 +27,12 @@ public readonly record struct AirframeSwapResult(bool Swapped, Flight.FlightCont
 /// ⚠ Three things a swap deliberately does NOT rebuild. A custom plane, whose bought armour and
 /// pylon counts belong to the airframe the pilot bought rather than to the one a mission handed
 /// them. A stunt run, which belongs to the pilot. And the spawn list, since the aircraft being left
-/// is where the replacement begins. <c>Scheme</c> is null outside a 967 whose capture root resolved.</summary>
-internal sealed record AirframeSwapRequest(string PlaneNode, FlightStart Start, Mech3.PaintScheme? Scheme = null);
+/// is where the replacement begins. <c>Scheme</c> is null outside a 967 whose capture root resolved,
+/// and also null INSIDE one when the captured rig's own <c>ShippedSkins</c> resolution painted
+/// nothing: <c>ShippedSkins</c> carries that reading so the rebuild draws the captured rig's own
+/// result rather than falling back to this pilot's default livery.</summary>
+internal sealed record AirframeSwapRequest(
+    string PlaneNode, FlightStart Start, Mech3.PaintScheme? Scheme = null, bool ShippedSkins = false);
 
 /// <summary>
 /// The three <c>CALLBACK</c> codes that hand the player a different airframe in mid mission, and

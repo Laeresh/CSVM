@@ -93,7 +93,12 @@ internal sealed class AiFlightAssembler
                 scheme: scheme, patterns: _liveries.Patterns);
             planeModel = planeBuilder.Build(spawn.PlaneName);
 
-            controller = new FlightController { Scheme = scheme };
+            controller = new FlightController
+            {
+                Scheme = scheme,
+                ShippedSkins = spawn.ShippedSkins,
+                Painter = planeBuilder.Painter,
+            };
             controller.Bind(new FlightControllerBuild
             {
                 PlayerIndex = FlightRoster.ShooterIdBase + index,

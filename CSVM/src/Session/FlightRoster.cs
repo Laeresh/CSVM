@@ -127,12 +127,13 @@ public sealed class FlightRoster
     }
 
     /// <summary>Puts one player into a different airframe without ending the mission: the rig's
-    /// aircraft is rebuilt from <paramref name="planeNode"/>'s own record, in the pose, attitude,
-    /// throttle and speed the aircraft was flying, carrying the NEW airframe's fit and armour.
-    /// <paramref name="scheme"/> carries a captured rig's own livery onto the rebuild (967); null
-    /// draws the ordinary player paint. ⚠ Rounds already in the air ride the shared pool under
-    /// this pilot's unchanged shooter id. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
-    public FlightController SwapPlayerAirframe(PlayerRig rig, string planeNode, PaintScheme? scheme = null)
+    /// aircraft is rebuilt from <paramref name="planeNode"/>'s own record, at the pose it was flying.
+    /// <paramref name="scheme"/> carries a captured rig's own livery onto the rebuild (967);
+    /// <paramref name="shippedSkins"/> says a null <paramref name="scheme"/> is that rig's own
+    /// reading, not "draw the ordinary player paint". ⚠ Rounds already airborne ride the shared pool
+    /// under this pilot's unchanged shooter id. Decode: cutscenes.md.</summary>
+    public FlightController SwapPlayerAirframe(PlayerRig rig, string planeNode, PaintScheme? scheme = null,
+        bool shippedSkins = false)
     {
         ArgumentNullException.ThrowIfNull(rig);
         if (_players == null)
@@ -158,7 +159,8 @@ public sealed class FlightRoster
         rig.Controller = null;
         try
         {
-            _players.Assemble(rig.Index, rig, _ => { }, new AirframeSwapRequest(planeNode, start, scheme));
+            _players.Assemble(rig.Index, rig, _ => { },
+                new AirframeSwapRequest(planeNode, start, scheme, shippedSkins));
         }
         finally
         {
@@ -307,9 +309,10 @@ public sealed class FlightRoster
         var captured = AirframeHandover.CarriesCapturedDamage(order.Airframe)
             ? AiNamed(order.CaptureRoot)
             : null;
-        // The captured rig's own scheme rides the rebuild: undecoded in the executable,
-        // whose case never touches a paint field, so this is the user's own controls reading.
-        SwapPlayerAirframe(rig, order.Airframe.PlaneNode, captured?.Scheme);
+        // The captured rig's own scheme rides the rebuild (undecoded in the executable, so this is
+        // the user's own controls reading), and its ShippedSkins reading rides with it: a real
+        // enemy roster spawn resolves that to no scheme at all, and null must still beat default.
+        SwapPlayerAirframe(rig, order.Airframe.PlaneNode, captured?.Scheme, captured?.ShippedSkins ?? false);
         var hidden = CarryCapturedDamage(captured, rig.Controller?.Damage);
         if (handsOver)
         {

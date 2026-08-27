@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -39,20 +40,6 @@ internal static class AirframeSwapSuites
     // what the capture's called definition raises its reveal behind.
     private const float StepDt = 1f / 60f;
     private const float PlayBudgetS = 30f;
-
-    // The livery the capture stand-in wears: the shipped 'british' pattern the real captured
-    // Balmoral carries, distinct from the player's own Fortune Hunters paint so the two cannot be
-    // mistaken for one another in CheckLivery.
-    private static readonly PaintScheme CapturedScheme = new()
-    {
-        Pattern = "british",
-        Color1 = PaintScheme.FromBytes(177, 130, 66),
-        Color2 = PaintScheme.FromBytes(48, 47, 39),
-        Color3 = PaintScheme.FromBytes(255, 255, 255),
-        NoseDecal = 21,
-        TailDecal = 4,
-        WingDecal = 4,
-    };
 
     /// <summary>Drives the swap CM02 authors against CM02's own built world: the code comes out of
     /// the mission's compiled definitions, the rig off the session's roster, and the replacement is
@@ -158,16 +145,33 @@ internal static class AirframeSwapSuites
         ctx.Check(string.Equals(wanted.PlaneNode, "player_balmoral", StringComparison.Ordinal),
             $"and the airframe it names is the Balmoral the mission's capture hands the player");
 
-        WithStagedCapture(ctx, world, chapter, wanted, authored[0],
+        WithStagedCapture(ctx, world, chapter, folder, wanted, authored[0],
             staged => RunSwap(ctx, world, staged, wanted, authored[0], report));
-        WithStagedCapture(ctx, world, chapter, wanted, authored[0],
+        WithStagedCapture(ctx, world, chapter, folder, wanted, authored[0],
             staged => PlayTheCapture(ctx, world, staged, authored[0], report));
+    }
+
+    // The team CM02's own roster block authors for the capture, so the stand-in resolves its paint
+    // exactly the way a real enemy spawn does (CampaignRoster.SpawnFor's ShippedSkins fork), rather
+    // than through a scheme this suite would otherwise have to invent.
+    private static int CapturedTeamFor(TestContext ctx, string chapter, string folder, string blockName)
+    {
+        var blocks = AiSkills.LoadRoster(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder));
+        foreach (var (name, fields) in blocks)
+        {
+            if (string.Equals(name, blockName, StringComparison.OrdinalIgnoreCase))
+            {
+                return AiSkills.RosterTeam(fields) ?? AimAssist.PlayerTeam + 1;
+            }
+        }
+
+        return AimAssist.PlayerTeam + 1;
     }
 
     // One staged capture: the mission's own world, a flown human rig off the session's roster, the
     // capture animation's aircraft and the hand-over block, then the leg. Two legs share it because
     // a swap replaces the rig it ran on, so neither can read the other's world back.
-    private static void WithStagedCapture(TestContext ctx, TestWorld world, string chapter,
+    private static void WithStagedCapture(TestContext ctx, TestWorld world, string chapter, string folder,
         AirframeSwapCode wanted, (string Anim, int Code, string Root) call, Action<Staged> leg)
     {
         var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
@@ -185,8 +189,12 @@ internal static class AirframeSwapSuites
             roster = BuildRoster(ctx, world, chapter, textures, pool, rigs);
             roster.BuildPlayers(rigs);
             var before = rig.Controller ?? throw new InvalidOperationException("no rig was built");
+            // A real enemy roster spawn, not an override: team != the player's own, so the AI
+            // assembler resolves its paint through ShippedSkins exactly as a real capture would.
+            int capturedTeam = CapturedTeamFor(ctx, chapter, folder, call.Root);
             var captured = StageAi(roster, call.Root, wanted.PlaneNode,
-                before.WorldPosition + (before.NoseDirection * 300f), inert: false, CapturedScheme);
+                before.WorldPosition + (before.NoseDirection * 300f), inert: false,
+                team: capturedTeam, shippedSkins: true);
             var wingman = StageAi(roster, AirframeHandover.WingmanName, StartPlane,
                 before.WorldPosition + new Vector3(0f, 0f, 5000f), inert: true);
             Damage(wingman, 0.10f);
@@ -365,19 +373,43 @@ internal static class AirframeSwapSuites
     // on the player's own heading with full pools passes the placement and pool checks without the
     // hand-over having run at all (INSTR-10).
     private static FlightController StageAi(FlightRoster roster, string name, string planeNode,
-        Vector3 at, bool inert, PaintScheme? scheme = null)
+        Vector3 at, bool inert, PaintScheme? scheme = null, int team = AimAssist.PlayerTeam,
+        bool shippedSkins = false)
     {
         var aim = at - Vector3.Forward;
         return roster.SpawnAi(new AiSpawn(planeNode, at, aim, AiPilot.HoldingCourse(at, aim),
-            Scheme: scheme, Team: AimAssist.PlayerTeam, Inert: inert, NodeName: name));
+            Scheme: scheme, Team: team, Inert: inert, ShippedSkins: shippedSkins, NodeName: name));
     }
 
-    // Field-wise, since PaintScheme is a mutable reference type with no Equals override.
-    private static bool SchemeEquals(PaintScheme? a, PaintScheme? b) =>
-        a != null && b != null
-        && string.Equals(a.Pattern, b.Pattern, StringComparison.OrdinalIgnoreCase)
-        && a.Color1 == b.Color1 && a.Color2 == b.Color2 && a.Color3 == b.Color3
-        && a.NoseDecal == b.NoseDecal && a.TailDecal == b.TailDecal && a.WingDecal == b.WingDecal;
+    // Whether two rigs' painted output actually matches, read off the painter rather than the
+    // scheme record alone (the rebuild's paint is what a player sees, and a record could match by
+    // field while the model it built stayed unpainted or vice versa). Neither having a painter is
+    // itself a match: a ShippedSkins reading can legitimately resolve to no paint at all, and that
+    // null has to carry as faithfully as a real scheme would.
+    private static bool PaintMatches(FlightController a, FlightController b)
+    {
+        bool aPainted = a.Painter != null;
+        bool bPainted = b.Painter != null;
+        if (aPainted != bPainted)
+            return false;
+        if (!aPainted)
+            return true;
+        // The tail decal placeholder every Balmoral ships (docs/formats/paint.md) is the fixed
+        // point both painters are asked to resolve, so the comparison is real composited pixels.
+        return ImagesEqual(a.Painter!.Substitute("bal_taillogo", null),
+            b.Painter!.Substitute("bal_taillogo", null));
+    }
+
+    private static bool ImagesEqual(ImageTexture? a, ImageTexture? b)
+    {
+        if (a == null || b == null)
+            return ReferenceEquals(a, b);
+        var ia = a.GetImage();
+        var ib = b.GetImage();
+        if (ia == null || ib == null || ia.GetWidth() != ib.GetWidth() || ia.GetHeight() != ib.GetHeight())
+            return false;
+        return ia.GetData().SequenceEqual(ib.GetData());
+    }
 
     // Shoots the stand-in down and answers what is left. Two hits, not one: armour still standing
     // against a hit that carries no armour damage nulls the health damage outright, so structure
@@ -410,18 +442,22 @@ internal static class AirframeSwapSuites
             $"which leaves the player damaged rather than handing them a pristine airframe and making the ending easier than the original's");
     }
 
-    // The rebuilt rig wears the captured aircraft's own livery, not the player's, and the
-    // draw is not a coincidence of the two happening to share a pattern (CapturedScheme is 'british'
-    // against the player's own Fortune Hunters).
+    // The rebuilt rig's actual painted output matches the captured aircraft's, read off the
+    // painter rather than the scheme record alone, and the match is not a coincidence of the two
+    // happening to share a pattern: the captured stand-in is a real enemy roster spawn (team != the
+    // player's own), so its ShippedSkins reading is what CampaignRoster.SpawnFor gives every
+    // campaign enemy, distinct from the player's own default Fortune Hunters paint.
     private static void CheckLivery(TestContext ctx, FlightController before,
         FlightController captured, FlightController after, StringBuilder report)
     {
-        report.AppendLine($"livery: was '{before.Scheme?.Label ?? "-"}', captured '{captured.Scheme?.Label ?? "-"}', " +
-            $"rebuilt '{after.Scheme?.Label ?? "-"}'");
-        ctx.Check(!SchemeEquals(before.Scheme, captured.Scheme),
-            $"the capture stand-in's livery is not the player's own, so a match below cannot be coincidence");
-        ctx.Check(SchemeEquals(after.Scheme, captured.Scheme),
-            $"the rebuilt rig wears the captured aircraft's own livery, as the original reads at the controls");
+        report.AppendLine($"livery: was '{before.Scheme?.Label ?? "-"}' (painted={before.Painter != null}), " +
+            $"captured '{captured.Scheme?.Label ?? "-"}' (shipped-skins={captured.ShippedSkins}, " +
+            $"painted={captured.Painter != null}), rebuilt '{after.Scheme?.Label ?? "-"}' " +
+            $"(painted={after.Painter != null})");
+        ctx.Check(!PaintMatches(before, captured),
+            $"the capture stand-in's own paint is not the player's own, so a match below cannot be coincidence");
+        ctx.Check(PaintMatches(after, captured),
+            $"the rebuilt rig's actual painted output matches the captured aircraft's, as the original reads at the controls");
     }
 
     // Step 5: the aeroplane the player just left, in the hands of wingman_4 and visible.

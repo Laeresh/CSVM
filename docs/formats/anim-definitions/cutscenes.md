@@ -636,14 +636,16 @@ deliberate:
   than at the player's larger number.
 - **`+0x388` is not copied.** CSVM's `wingman_4` is already on the player's team.
 - **967's rebuild carries the captured aircraft's own `PaintScheme` onto the player's new hull**
-  (`BL-543`). This is NOT in the executable: case 967 (`FUN_0047e080`, `0x3c7`) rebuilds through
-  `FUN_0047fd50(s_pbalmoral, s_player_balmoral)`, which reads no paint field off the captured
-  vehicle, and `DAT_0071daf0`/`DAT_0071daf4` (the paint pair step 5 writes) are touched only in
-  `FUN_004735b0` at mission start, giving `wingman_4` the PLAYER's own scheme, the opposite
+  (`BL-543`, `BL-554`). This is NOT in the executable: case 967 (`FUN_0047e080`, `0x3c7`) rebuilds
+  through `FUN_0047fd50(s_pbalmoral, s_player_balmoral)`, which reads no paint field off the
+  captured vehicle, and `DAT_0071daf0`/`DAT_0071daf4` (the paint pair step 5 writes) are touched
+  only in `FUN_004735b0` at mission start, giving `wingman_4` the PLAYER's own scheme, the opposite
   direction. The original keeps the Fortune Hunters Balmoral seen at the controls; CSVM's carry is
   the user's own at-the-controls reading, taken over that trace by this project's standing rule
-  that a human's seen result outranks an instrument. `FlightController.Scheme` records what painted
-  a rig so `FlightRoster.RunSwap` can read the captured rig's back.
+  that a human's seen result outranks an instrument. `FlightController.Scheme`/`ShippedSkins`
+  record what painted a rig, so `FlightRoster.RunSwap` can read the captured rig's back even when a
+  real enemy roster spawn's `ShippedSkins` reading resolved it to no scheme at all: that null has to
+  carry too, or the rebuild falls back to the player's own default livery.
 
 ⚠ **967's hide has to outlive the reveal of code 914.** In `C3/M05` the capture definition raises
 967 from the same sequence that calls `wingwalk`, and `wingwalk_parent-wingwalk` brackets its own

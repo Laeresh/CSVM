@@ -2120,19 +2120,6 @@ usual.
   have order dependencies (`BL-541`'s closing record); play them, do not drop them.
   *Cross-refs:* `BL-551`; `docs/PLAN-M5-polish-2.md` D15 and D21.
 
-- `BL-554` `[Bug]` `[Owed-playtest]` **The captured Balmoral's British livery still does not reach the
-  player's hull in a flown session.** Seen at the controls on CM02 with the livery carry landed:
-  the new hull wears the Fortune Hunters paint. The swap suite passes because its stand-in spawns
-  with an explicit scheme; a real enemy roster spawn is painted through `ShippedSkins`
-  (`CampaignRoster.SpawnFor`, team not the player's), so what `FlightController.Scheme` records on
-  it is the shipped-skin resolution, and the human rebuild draws that scheme through the player's
-  own pattern path. *Fix shape:* carry the ShippedSkins reading, not only the scheme, into
-  `AirframeSwapRequest` and `HumanFlightAdapter.Assemble`, so the rebuild paints the airframe the
-  way the AI assembler painted the captured one; extend the suite's stand-in to spawn as a real
-  enemy block (`ShippedSkins`) so it fails the way the flown session does. *⚠ Traps:* ⚠ The
-  hand-over to `wingman_4` keeps the PLAYER's scheme; do not read one for the other. *Cross-refs:*
-  `docs/formats/anim-definitions/cutscenes.md` (the livery divergence); `docs/PLAN-M5-polish-2.md`
-  D16 and D21.
 
 - `BL-545` `[Bug]` `[Owed-playtest]` **The landing animation plays with no hook, the aeroplane too
   high, and unfolded wings.** Seen at the controls on CM02's auto-land: the landing hook was not

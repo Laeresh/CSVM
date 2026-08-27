@@ -93,6 +93,18 @@ public partial class FlightController : Node3D
     /// onto the rig it rebuilds (docs/formats/anim-definitions/cutscenes.md).</summary>
     public PaintScheme? Scheme;
 
+    /// <summary>Whether <see cref="Scheme"/> came from the ShippedSkins reading (a roster spawn on
+    /// a team other than the player's, which draws no default pattern of its own). A swap has to
+    /// carry this alongside <see cref="Scheme"/>: a captured rig resolved this way and painted
+    /// nothing is not "no scheme carried", so the rebuild must not fall back to this pilot's own
+    /// default livery either.</summary>
+    public bool ShippedSkins;
+
+    /// <summary>The painter that composited <see cref="Scheme"/> onto this aircraft's skins, null
+    /// when it flies the bare shipped textures. Exposed so a swap suite can read the actual
+    /// painted output a rebuild carries, rather than comparing the scheme record alone.</summary>
+    public PlanePainter? Painter;
+
     /// <summary>Applies a plane collision's health damage to the struck world node, returning true
     /// iff it was a <c>WeaponOrCollideHit</c> destructible (the 44 facades/windows/agyrobus), in
     /// which case the object breaks and the plane flies THROUGH it. EVERY destructible takes the

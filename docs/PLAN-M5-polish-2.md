@@ -151,7 +151,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — what the Wave D sortie opened
 
-23. ☐ The captured Balmoral's British livery still does not reach the player's hull live (`BL-554`)
+23. ☑ The captured Balmoral's British livery still does not reach the player's hull live (`BL-554`)
 24. ☐ A skipped cutscene waits out the swap instead of jumping to its end (`BL-552`)
 25. ☐ The capture cutscene plays without the enemy Balmoral or the pilot switch, and inherits the roll (`BL-551`)
 26. ☑ The original re-places the player after CM01's drop-off (`BL-553`)
@@ -1180,7 +1180,7 @@ itself is untouched.
 
 # Wave E — what the Wave D sortie opened
 
-## E23 ☐ The captured Balmoral's British livery still does not reach the player's hull live
+## E23 ☑ The captured Balmoral's British livery still does not reach the player's hull live
 
 **Goal.** After CM02's capture the player's Balmoral wears the livery it was captured in.
 
@@ -1204,6 +1204,20 @@ record alone; `campaign` suites green; goldens unchanged. Judged at the controls
 
 **⚠ Traps.** ⚠ `wingman_4` keeps the PLAYER's scheme. ⚠ The divergence stays stated in the
 cutscenes page: the executable does not do this.
+
+**Landed.** The suite's capture stand-in now spawns as a real enemy roster block (team resolved off
+CM02's own `britbalmoral_1` block, the one its capture definition authors 967 against;
+`ShippedSkins: true`; no scheme override), which reproduced the live gap: `captured.Scheme` resolves
+null (a campaign enemy's `ShippedSkins` reading, unpainted, per `BL-394`'s still-open militia-paint
+gap) while the unfixed rebuild fell to the player's own `player_fortune` default. `FlightController`
+gained `ShippedSkins` and `Painter` (both assemblers set them alongside `Scheme`); `AirframeSwapRequest`
+and `SwapPlayerAirframe`/`RunSwap` carry `ShippedSkins` beside `Scheme`; `HumanFlightAdapter.Assemble`
+now takes a `swap.ShippedSkins` scheme as-is, null included, instead of falling through to the
+default/custom paint. The suite's `CheckLivery` compares the two rigs' actual painted output
+(`PlanePainter.Substitute("bal_taillogo", …)` pixel bytes, or both painters being null) rather than
+the scheme record alone.
+
+**Verified.** <pending orchestrator run>
 
 ## E24 ☐ A skipped cutscene waits out the swap instead of jumping to its end
 

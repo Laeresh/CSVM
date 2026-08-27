@@ -5320,11 +5320,12 @@ wave is painted, and a swap builds no stunt run, scoreboard or custom-plane fit:
 the pilot, and a bought plane's armour and pylon counts belong to the airframe they were bought
 for. `RunSwap` is the whole order a callback raises: that rebuild, then 967's capture half (the
 definition's root node resolved through `AiNamed`, hidden, and what is left of its hull AND its own
-`PaintScheme` carried onto the new one, the livery read off `FlightController.Scheme`) and the
-hand-over of the outgoing aeroplane to `wingman_4` where the mission resolves that name. It answers
-an `AirframeSwapResult` naming the aircraft it hid, because the cutscene that raised the code may be
-holding that aircraft too. The livery carry is undecoded in the executable; decode and the three
-deliberate divergences: `docs/formats/anim-definitions/cutscenes.md`.
+`PaintScheme`/`ShippedSkins` reading carried onto the new one, off `FlightController.Scheme`/
+`ShippedSkins` (a null scheme that reading produced still carries, rather than falling back to the
+player's own default paint) and the hand-over of the outgoing aeroplane to `wingman_4` where the
+mission resolves that name. It answers an `AirframeSwapResult` naming the aircraft it hid, because
+the cutscene that raised the code may be holding that aircraft too. The livery carry is undecoded in
+the executable; decode and the four deliberate divergences: `docs/formats/anim-definitions/cutscenes.md`.
 
 ## src/Session/FlightRosterInputs.cs
 The grouped construction facts accepted by `FlightRoster`: copied `FlightRosterPolicy`, immutable
@@ -5337,18 +5338,23 @@ The roster's private AI assembly path. It prepares authored/fallback pilot skill
 builds the model, controller, livery, loadout/ordnance, damage visuals and optional crash runtime,
 then places the finished node. It also resolves the def's authored `title` into
 `PlaneStats.AiTitle` (the militia name the targeting readout prints), because this is where the
-loaded def and the session's string table meet. The assembler owns the one AI skills cache; `FlightRoster` lends
-that already-loaded table to the session's voice adapter without reopening the archive.
+loaded def and the session's string table meet. `FlightController.Scheme`/`ShippedSkins`/`Painter`
+record this build's paint resolution and its own painter, read back by an airframe swap carrying a
+captured rig's livery onto the player's rebuild. The assembler owns the one AI skills cache;
+`FlightRoster` lends that already-loaded table to the session's voice adapter without reopening
+the archive.
 
 ## src/Session/HumanFlightAdapter.cs
-The roster's private human-aircraft implementation. One `Assemble(pi, rig)` builds the painted
+The roster's private human-aircraft implementation. One `Assemble(pi, rig, swap)` builds the painted
 model, `FlightController`, loadout/ordnance, carried turrets, HUD/instruments, damage visuals,
 audio, stunt/match bindings, target selection, authored start placement and crash runtime.
 It reads only the roster's copied policy plus grouped aircraft, world and human-session contracts;
 it never receives `SessionSpec` or publishes a partially configured controller to the caller.
-Player order remains load-bearing for the shared paint and spawn streams. `BuildDamageVisuals` is
-also the common first phase for AI damage; `WorldEffectsFactory.BuildFlightCrashRuntime` supplies
-the optional second phase once a controller is in the tree.
+Player order remains load-bearing for the shared paint and spawn streams. A `swap.ShippedSkins`
+scheme (an airframe hand-over's captured rig) is drawn as-is, null included, ahead of the default/
+custom paint fallback, so a captured rig with no scheme is not silently repainted the pilot's own.
+`BuildDamageVisuals` is also the common first phase for AI damage; `WorldEffectsFactory.BuildFlightCrashRuntime`
+supplies the optional second phase once a controller is in the tree.
 ## src/Session/EffectCatalogue.cs
 The record of which authored anims are playable effects, and what their defs need staged: the name
 tables every effect producer must stay inside, static and engine-free. Owns `EffectAnimNames`, the
