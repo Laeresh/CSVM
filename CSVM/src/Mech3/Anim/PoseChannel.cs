@@ -104,10 +104,9 @@ internal sealed class PoseChannel
     internal int HandleRotateState(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
         int applied = 0;
-        // AtNodeMatrix is AnimDefs.AddAtNode's reader-normalized spelling; compiled extraction
-        // spells the same field AtNodeXYZ (172 of the 180 sites install-wide; the letterbox's 8 carry
-        // AtNodeMatrix). Both already
-        // carry "state" in radians here, so no extra unit handling either spelling needs it.
+        // Read both spellings: the reader writes AtNodeMatrix, compiled extraction AtNodeXYZ for the
+        // same field, and state is radians on both paths already (the census is in
+        // docs/formats/anim-definitions/cutscenes.md).
         var basis = ev.Data.Obj("basis");
         var host = AtNode(basis?.Str("AtNodeMatrix") ?? basis?.Str("AtNodeXYZ"));
         foreach (var t in _targets(ev, def, anchor))
