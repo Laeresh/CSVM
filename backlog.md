@@ -485,7 +485,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-556` `[Bug]` **Enemy armour and health are not scaled by the difficulty setting.** *Evidence:*
   the roster spawn `FUN_0047c210` multiplies the armour and health maxima of any vehicle whose team
-  differs from the player's by **0.875 / 1.0 / 1.25** on difficulty 0 / 1 / 2
+  differs from the player's by **0.75 / 1.0 / 1.25** on difficulty 0 / 1 / 2
   ([`docs/org/vehicleDamage.md`](docs/org/vehicleDamage.md), "Where the numbers come from at spawn",
   which records the scale as a decoded constant to apply, not a TUNE). In Instant Action the wave's
   Novice/Veteran/Ace skill *is* that multiplier and nothing else: it stands in as the global
@@ -499,9 +499,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ids 109-111 are `IDS_DIFFICULTY` = **Normal / Hard / Hardest** in that order, under
   `IDS_GO_DIFFICULTY_DESC` "Select the difficulty level for a solo campaign", a separate vocabulary
   from Instant Action's `IDS_IA_DIFFICULTY` novice/veteran/ace. Campaign Normal is therefore
-  difficulty 0 and takes the **0.875** multiplier, so CSVM's hostiles carry **14.3 % more armour and
-  health than the original does on the setting the campaign is normally played at**, in every
-  mission. On Hard the omission is invisible and on Hardest CSVM is easier.
+  difficulty 0 and takes the **0.75** multiplier, so CSVM's hostiles carry **a third more armour and
+  health than the original does on the setting the campaign is normally played at** (1 / 0.75), in
+  every mission. On Hard the omission is invisible and on Hardest CSVM is easier.
+  ⚠ The factor is `1 + k * 0.125` with `k` of **-2 / 0 / +2**, not -1 / 0 / +2: `MOV EDI,0xfffffffe`
+  at `0x0047cb3b` and `CMP EAX,0x2` / `MOV EDI,EAX` at `0x0047cb47`, raw bytes
+  `bf feffffff eb0c e8c93bfcff 83f802 7505 8bf8`. The spread is a symmetric two eighths either side
+  of 1.0. `docs/org/vehicleDamage.md` and `docs/org/hangar.md` gave the low tier as 0.875 and the
+  high as 1.125 and were corrected against the disassembly, along with the arithmetic they fed
+  (a patrol boat is 30/40/50, not 35/40/50).
   *Fix shape:* carry the resolved difficulty to the spawn (the Instant Action wave's own skill for
   that spawn, the session difficulty elsewhere) and apply the multiplier to the armour and health
   maxima before the jitter, in the same place the jitter is applied.
