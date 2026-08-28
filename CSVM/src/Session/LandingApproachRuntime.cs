@@ -17,8 +17,6 @@ public sealed partial class LandingApproachRuntime : Node
     private readonly List<Bound> _bound = new();
     private readonly List<LandingApproach> _approaches = new();
     private readonly HashSet<int> _boundIds = new();
-    private readonly List<PickupSpec> _pickups = new();
-    private readonly HashSet<string> _startedPickups = new(StringComparer.OrdinalIgnoreCase);
     // Rows that have fired and whose condition has not stopped passing since. A cutscene ends with
     // the aircraft parked where the definition left it, which is still inside the volume that
     // started it, so without this the row re-fires on the frame after the handoff.
@@ -55,8 +53,7 @@ public sealed partial class LandingApproachRuntime : Node
         AnimRuntime runtime,
         IReadOnlyList<LandingApproach> approaches,
         CutsceneController cutscene,
-        Func<FlightController?> player,
-        IReadOnlyList<PickupSpec>? pickups = null)
+        Func<FlightController?> player)
     {
         _runtime = runtime;
         _cutscene = cutscene;
@@ -65,12 +62,6 @@ public sealed partial class LandingApproachRuntime : Node
         _approaches.Clear();
         _approaches.AddRange(approaches);
         _boundIds.Clear();
-        _pickups.Clear();
-        if (pickups != null)
-        {
-            _pickups.AddRange(pickups);
-        }
-        _startedPickups.Clear();
         _latched.Clear();
         RefreshBindings();
 
@@ -107,8 +98,6 @@ public sealed partial class LandingApproachRuntime : Node
             return;
         }
 
-        StartPickupTiming(plane.WorldPosition);
-
         float speed = plane.WorldVelocity.Length();
         for (int i = 0; i < _bound.Count; i++)
         {
@@ -139,28 +128,6 @@ public sealed partial class LandingApproachRuntime : Node
 
             Start(bound.Approach);
             return;
-        }
-    }
-
-    private void StartPickupTiming(Vector3 playerPosition)
-    {
-        foreach (var pickup in _pickups)
-        {
-            if (_startedPickups.Contains(pickup.Node))
-            {
-                continue;
-            }
-            var sensors = _runtime!.FindNodes(pickup.Node);
-            if (sensors.Count == 0 || !sensors[0].Visible
-                || sensors[0].GlobalPosition.DistanceSquaredTo(playerPosition)
-                    > pickup.Radius * pickup.Radius)
-            {
-                continue;
-            }
-            if (_runtime.Play(Pickups.TimingAnim).Count > 0)
-            {
-                _startedPickups.Add(pickup.Node);
-            }
         }
     }
 

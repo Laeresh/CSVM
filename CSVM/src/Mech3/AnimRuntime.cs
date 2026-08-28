@@ -47,7 +47,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         "ObjectActiveState", "ObjectTranslateState", "ObjectRotateState", "ObjectScaleState",
         "ObjectMotionFromTo", "ObjectOpacityState", "ObjectOpacityFromTo", "ObjectMotion",
-        "ObjectMotionSiScript", "Loop", "If", "Elseif", "Else", "Endif", "CallSequence",
+        "ObjectMotionSiScript", AnimDefinition.AllNamesKind, "Loop", "If", "Elseif", "Else", "Endif", "CallSequence",
         "StopSequence", "CallAnimation", "StopAnimation", "InvalidateAnimation", "ResetAnimation",
         "PufferState",
         "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild", "ObjectDeleteChild",
@@ -410,6 +410,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // Same, for a flagged call that reached no live callee instance and so held nothing.
     private readonly HashSet<string> _inertWaitsNamed = new(StringComparer.OrdinalIgnoreCase);
+
+    // The roots of every library copy IndexPooledCopy took in, read by InStagedCopy.
+    private readonly HashSet<Node3D> _stagedCopies = new();
 
     private readonly DestructibleRegistry _destructibles = new();
 
@@ -1646,6 +1649,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         _templateStage.IndexPooledCopy(subtree);
         PrimeRest(subtree);
+        _stagedCopies.Add(subtree);
     }
 
     /// <summary>Starts a definition on one anchor (null resolves its node names globally), running
@@ -2463,6 +2467,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 _opsApplied += Pose.HandleMotionSiScript(ev, def, anchor, instant, out duration);
                 return true;
 
+            case AnimDefinition.AllNamesKind:
+                _opsApplied += Pose.HandleMotionSiScriptAllNames(ev, def, anchor, instant, out duration);
+                return true;
+
             // Control flow is the runner's business, not the table's.
             case "Loop":
             case "If":
@@ -2938,6 +2946,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // every keyframe in world space, which is the whole reason the intro camera flies under the sea.
     private bool HandleReparent(AnimEvent ev, AnimDefinition def, Node3D? anchor, bool adopt)
     {
+        // Inside a library copy this runtime staged: a staged actor's own choreography runs on
+        // ordinary ticks long after the ranged call that staged it (the passenger's wave loop is
+        // re-entered from a poll), and its add-child of a further root (the flare) must build it.
+        bool InStagedCopy(Node3D? at)
+        {
+            for (Node? n = at; n != null; n = n.GetParent())
+                if (n is Node3D node && _stagedCopies.Contains(node))
+                    return true;
+            return false;
+        }
+
         if (ev.Data.Str("child") is not { } childName || ev.Data.Str("parent") is not { } parentName)
             return false;
         var named = Resolve(parentName, def, anchor);
@@ -2945,7 +2964,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return false;
         var child = Resolve(childName, def, anchor);
         if (child == null && adopt && ResolveLibraryRoot != null
-            && (_deathCallDepth > 0 || _rangeCallDepth > 0 || _missionCallDepth > 0))
+            && (_deathCallDepth > 0 || _rangeCallDepth > 0 || _missionCallDepth > 0
+                || InStagedCopy(anchor)))
             child = ResolveLibraryRoot(childName, named);
         if (child == null)
             return false;
@@ -2960,6 +2980,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             Reparent(child, parent);
             _opsApplied++;
+        }
+        // ⚠ A staged copy is TopLevel from its placement (PlaceNodeAt), which pins it to the
+        // world: adopted under a moving parent it would hang where the call site was. The original
+        // instances it as an ordinary child at its authored pose, so the adoption does the same.
+        if (adopt && child.TopLevel)
+        {
+            child.TopLevel = false;
+            child.Transform = RestOf(child);
         }
 
         return true;

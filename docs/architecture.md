@@ -46,7 +46,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
 - `src/Mech3/LandingApproaches.cs` — a chapter's `landings.zrd` approach table resolved against the gamez: each row's condition volume (the `cone`/`half_cone`/`sphere` child's single authored triangle, expressed in the approach node's own frame), its attitude cone and its speed band, plus the geodesic attitude test. Engine-free geometry; `LandingApproachRuntime` flies a player against it. Decode: `docs/formats/anim-definitions/cutscenes.md`.
-- `src/Mech3/Pickups.cs` — a mission's compact `pickups.zrd` sensor/radius table. `LandingApproachRuntime` uses it to start the shared pickup timing choreography when the player reaches an active sensor. Decode: `docs/formats/anim-definitions/cutscenes.md`.
+- `src/Mech3/Pickups.cs` — a mission's compact `pickups.zrd` sensor/radius table, the spheres `LadderSwitchRuntime` tests the player against. Nothing starts the pickup timing off it: the train's own `train_on_track` definition calls `pickup_timing` at mission load. Decode: `docs/formats/anim-definitions/cutscenes.md`.
 - `src/Mech3/MissionCutscenes.cs` — which of a mission's `mis_anim.zrd` `ANIMATION_DEFINITION_FILE` entries sit under its own `cutscenes\` directory, and the `ANIMATION_NAME`s they define. That directory is the authored classifier for mid-mission choreography (nine story missions ship one); `WorldSession` hands the names to the cutscene host and to `AnimRuntime.RangeGatedCalls`. Decode: `docs/formats/anim-definitions/cutscenes.md`.
 - `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer and the net's own three volumes included.
 - `src/Mech3/AiVolumes.cs` — `AiVolume`/`AiVolumeSet`: the activation/attack/return volumes as a roster block (slots 8–19) and a net record (elements 2–10) author them, with the engine's non-zero overlay.
@@ -362,7 +362,7 @@ clusters they delegate to.
 - `src/Session/ObjectiveSites.cs` — the flown campaign mission's objective sites as targeting candidates, which is what tells the player where to go: the set is `targets.zrd`'s own `objective` entries edited by `objectives.zrd`'s `ADD_`/`REMOVE_OBJECTIVE_TARGET`, offered to each player's `TargetPool` with the mission's objective flag so they head the Enemy cycle and the ordinary selection draws one at a time. Rebuilt from its live source every frame, so a site under a moving node moves with it. A site the mission names by a bare `TRAVELERS` point sits at that point, not at the world node of the same name.
 - `src/Session/CampaignDirector.cs` — the engine side of a campaign mission and the sibling of `InstantActionDirector`: resolves a `--campaign=<profile>:<seq>` launch to its chapter/mission, arms the graph against the built world's runtimes, and at mission end records the attempt through `CampaignProgression`, folds the destruction log into the profile and raises the return-to-cabin exit the session layer acts on. It also owns the mission's two music duties: routing a `mu*` sound group to the process music channel instead of a positional emitter, and running the decoded proximity scan and player-damage ping that put the score into battle. The wingman's aircraft and fit are resolved here too, from the profile it already has open; nothing spawns that aircraft yet. A cutscene hold (callback 20) stops its whole step.
 - `src/Session/CutsceneController.cs` — the host a cutscene definition raises its `CALLBACK` codes to: the letterbox bars and the cutscene camera the definition itself drives, the world/objectives hold, the player out of flight with the chrome off, the AI parked, then one hard cut back to gameplay on the definition's end or on a skip. It answers for the two story-mission intros always, and for whatever `HostDefinitions` registers (the landings trigger's own rows and their `CALL_ANIMATION` closure). Scoping is by definition name, never by authored code.
-- `src/Session/LandingApproachRuntime.cs` — the mid-mission cutscene trigger: ticks a story mission's resolved `LandingApproaches` against the flown aircraft (arming gate, speed band, attitude cone, condition volume) and starts the row as an explicit mission trigger, so its call closure can stage library-root actors and satisfy animation-state or node-state objectives; it hands the row's definition to `CutsceneController.Own` first, so the episode belongs to the row however deep the callee raising its first code sits. A row fires once per entry into its volume: the handoff leaves the aircraft where the cutscene parked it, still inside the volume that started it. An `auto` row lights `AutoLandOffered` (the HUD's prompt line) rather than starting anything by itself; the auto-land button (`FlightController.AutoLandPressed`) starts the row's own animation, latched the same way the manual row is. Story missions only, for the reason `WorldSession.Options.LandingTriggers` gives. Rows whose approach nodes are staged later are retained and bound when those nodes appear: CM02 grafts its three Balmoral cones with the roster, while CM07 summons its train-pickup cone and opens it through the mission's pickup sensor/timing.
+- `src/Session/LandingApproachRuntime.cs` — the mid-mission cutscene trigger: ticks a story mission's resolved `LandingApproaches` against the flown aircraft (arming gate, speed band, attitude cone, condition volume) and starts the row as an explicit mission trigger, so its call closure can stage library-root actors and satisfy animation-state or node-state objectives; it hands the row's definition to `CutsceneController.Own` first, so the episode belongs to the row however deep the callee raising its first code sits. A row fires once per entry into its volume: the handoff leaves the aircraft where the cutscene parked it, still inside the volume that started it. An `auto` row lights `AutoLandOffered` (the HUD's prompt line) rather than starting anything by itself; the auto-land button (`FlightController.AutoLandPressed`) starts the row's own animation, latched the same way the manual row is. Story missions only, for the reason `WorldSession.Options.LandingTriggers` gives. Rows whose approach nodes are staged later are retained and bound when those nodes appear: CM02 grafts its three Balmoral cones with the roster, while CM07 summons its train-pickup cone, which the train's own `pickup_timing` opens and closes in step with the track loop. The trigger starts nothing off the pickup sensor; restarting the timing on entry re-phased the switch the passenger's wave-or-drop fork reads.
 - `src/Session/LadderSwitch.cs` — the original's rope-ladder switch as an engine-free rule and state machine: the ladder is wanted when the aircraft's own up axis is within 45 degrees of world up and the player is inside an active `pickups.zrd` sensor, and the switch starts `drop_ladder` or `retract_ladder` to match, one transition at a time, holding a transient state until the definition's own `CALLBACK 123` settles it. A mission that authors neither definition flips the state silently, so no per-mission table exists. Decode: `docs/org/ladderSwitch.md`.
 - `src/Session/LadderSwitchRuntime.cs` — `LadderSwitch` flown against the built world: every frame outside a cutscene, with the player flying, it reads the flown aircraft's attitude and position against the mission's pickup sensors and starts the ladder definitions as mission triggers, so the drop's `OBJECT_ADD_CHILD` can materialize the library rope ladder. It takes the runtime's `CALLBACK` host slot and chains to the cutscene host behind it, which is where the original registers the switch on each definition. Bound with the landings trigger, story missions only.
 
@@ -964,7 +964,13 @@ instances by anim name, the latter two scoped to one subtree (a NAME can repeat 
 e.g. C1's three `hangerdoors`). `OBJECT_ADD_CHILD`/`OBJECT_DELETE_CHILD` take their node-reparent
 form here (`Reparent`, keeping the LOCAL transform) once the sound-emitter form has declined,
 which is how a cutscene composes its camera inside the node it frames; the decode is
-`docs/formats/anim-definitions/cutscenes.md`. A ranged startanim with an unplaced immediate callee is
+`docs/formats/anim-definitions/cutscenes.md`. An adopted child that is a staged library copy
+(TopLevel from `PlaceNodeAt`) is un-pinned and set back to its authored rest pose in the parent's
+frame, so CM07's passenger rides the caboose instead of hanging where the call site was; and an
+add-child dispatched from inside a staged copy (`_stagedCopies`, filled by `IndexPooledCopy`) may
+lazily build its library-root child the way a ranged or mission call may, since a staged actor's
+own choreography (the passenger's wave loop, and the flare it puts in its hand) runs on ordinary
+ticks long after the call that staged it. Regression: the `landings-train-pickup-ride` suite. A ranged startanim with an unplaced immediate callee is
 deferred until range; range-triggered and explicit mission-trigger calls (`PlayMissionTrigger`: the
 `landings.zrd` rows and the objective script's `WAKE_ANIM`) may then lazily build their
 library-root callees, and an add-child may do the same for an explicitly named child — except where
@@ -1149,7 +1155,9 @@ that to its census counter, the same return-value shape `LightChannel` uses; mul
 tallies go through an `Action<string>` count dependency instead, since one return value cannot name
 them. A mission-triggered SI script retains its authored duration when its named cross-archive actor
 is absent, so the rest of that cutscene cannot collapse to time zero; ordinary ambient misses remain
-zero-duration. The channel's constructor takes `AnimRuntime` itself as one dependency — the motion value
+zero-duration. The `ROOT`/`ALL_NAMES` form (`HandleMotionSiScriptAllNames`, the skeletal person and
+ladder scripts) plays the `motions` list `AnimDefinition.Parse` decoded off the raw payload as that
+many single-node scripts started together, and reports the longest as the event's run time. The channel's constructor takes `AnimRuntime` itself as one dependency — the motion value
 types already declare it as their host argument, and the pose helpers reach the `_rest` table
 through the same `RestOf` seam the builders use — plus the `Targets` resolver, the `MotionSet`,
 and closures over `Emitters` and the program's `ScriptFor` (both late-bound). `_rest` itself stays
@@ -1180,7 +1188,11 @@ match → symbol narrowing → root lift, policy inputs `NameResolveFallback`/`S
 is constructor-supplied (`IEqualityComparer<TNode>`; the engine keys on `GetInstanceId()`), never
 the node type's inherited `Equals`. Nothing removes a row, so `FindAll` and the by-index map both
 skip a node the caller's liveness test rejects and the map gives that index up to the next `Add`:
-an airframe swap frees the aircraft it staged and re-stages the same cross-archive block. `AnimRuntime`'s `Resolve`/`ResolveScoped`/`FindAll`/`Anchors`
+an airframe swap frees the aircraft it staged and re-stages the same cross-archive block. A claimed
+index the build never created is answered by `SoleStagedCopy`: the one live pooled copy carrying
+that gamez index, and only when exactly one does, so a multi-copy effect pool stays anchor-scoped
+while a mission's single staged actor (CM07's pickup switch, sensor and passenger) is reachable by
+the definitions that toggle it through their symbol table alone (`pickup_timing`). `AnimRuntime`'s `Resolve`/`ResolveScoped`/`FindAll`/`Anchors`
 are one-line forwards; the engine-free instantiation over a plain token type is `CSVM.Tests`' suite.
 
 **Every tier is filtered by `AdmissibleStaging`, and the template pool is why.** The original
@@ -1230,7 +1242,10 @@ the owning `AnimInstance.Clock` that a `START_TIME ANIMATION` gates against (the
 `anim+0xb0`, one per definition instance and shared by all its sequences). The two differ for every
 sequence a later CALL_SEQUENCE starts, which 191 shipped events read; a null `start` encodes as
 `Animation + 0.0` but must stay on the relative path, and `SetDue`'s comment says why.
-Its scope is per-event START_TIME gating, LOOP with
+A runner is done only when its cursor is past the last event AND that event's run time has elapsed
+(`_base`), the original's "still running until the run time is up": a sequence ending on an SI
+script keeps its instance live for the script's length, which is what a caller's
+`WAIT_FOR_COMPLETION` on CM07's `caboosepickup` holds on. Its scope is per-event START_TIME gating, LOOP with
 authored-count-0 = infinite, and IF/ELSEIF/ELSE/ENDIF via a `_branchTaken` stack + a deliberately
 **non**-nesting-aware `Scan` — the original counts no depth, and 48 shipped `gunhit` sequences
 observe the difference; the constraint and its one residual live in `Scan`'s own comment).

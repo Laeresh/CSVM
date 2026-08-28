@@ -1063,7 +1063,7 @@ public partial class GameSession : Node3D
         {
             _cutscene.HostDefinitions(session.LandingCutsceneAnims);
             _landings.Bind(session.Runtime, session.Landings, _cutscene,
-                () => _rigs.Count > 0 ? _rigs[0].Controller : null, session.Pickups);
+                () => _rigs.Count > 0 ? _rigs[0].Controller : null);
             _ladder?.Bind(session.Runtime, _cutscene,
                 () => _rigs.Count > 0 ? _rigs[0].Controller : null, session.Pickups);
         }
@@ -2269,7 +2269,7 @@ public partial class GameSession : Node3D
                 && state.WorldRuntime is { } landingWorld && state.Landings is { } landingRows)
             {
                 _landings.Bind(landingWorld, landingRows, _cutscene,
-                    () => _rigs.Count > 0 ? _rigs[0].Controller : null, state.Pickups);
+                    () => _rigs.Count > 0 ? _rigs[0].Controller : null);
                 _ladder?.Bind(landingWorld, _cutscene,
                     () => _rigs.Count > 0 ? _rigs[0].Controller : null, state.Pickups);
             }

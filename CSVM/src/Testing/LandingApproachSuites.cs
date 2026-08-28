@@ -105,10 +105,23 @@ internal static class LandingApproachSuites
         DriveMission(ctx, WingWalkSeq, "test-wingwalk-gate", DriveWingWalk);
 
     /// <summary>Drives CM07's caboose pickup through its range-triggered start animation: the
-    /// passenger's library-root rig appears on the train, its 100 m pickup timing opens the late
-    /// approach cone, and flying that cone starts the pickup cutscene and clears its objective.</summary>
+    /// passenger's library-root rig appears on the train, the train's own pickup timing opens the
+    /// late approach cone, and flying that cone starts the pickup cutscene and clears its objective.</summary>
     internal static void TrainPickupGate(TestContext ctx) =>
         DriveMission(ctx, TrainPickupSeq, "test-train-pickup-gate", DriveTrainPickup);
+
+    /// <summary>Drives CM07's caboose pickup the way the original runs it: the staged passenger
+    /// rides the moving train as its child, waves with the lit flare once the pickup timing opens
+    /// the switch, the rope ladder drops on a level approach inside the sensor, and the pickup
+    /// cutscene's call to <c>caboosepickup</c> holds a live instance for the person's climb.</summary>
+    internal static void TrainPickupRide(TestContext ctx)
+    {
+        // The harness retires the world's puffer factory with the build's texture archive, where a
+        // game session keeps it (WorldSession.Options.TexturesOutliveBuild), so the flare trail
+        // asserted on the passenger's hand at run time is counted by a fake instead of dropped.
+        ctx.EmitterFactory = new CountingEmitterFactory();
+        DriveMission(ctx, TrainPickupSeq, "test-train-pickup-ride", DriveTrainPickupRide);
+    }
 
     /// <summary>Drives CM11's trailer pickup through the objective script's own <c>WAKE_ANIM</c>:
     /// the dock objective's definition stages the approach cone from its library root under the
@@ -874,7 +887,6 @@ internal static class LandingApproachSuites
         IReadOnlyList<LandingApproach> armed,
         Action<LandingApproachRuntime, CutsceneController, FlightController, ObjectiveGraph> body,
         Action<ProjectilePool>? beforeBind = null,
-        IReadOnlyList<PickupSpec>? pickups = null,
         string planeNode = PlaneNode,
         AircraftStage? aircraft = null)
     {
@@ -913,7 +925,7 @@ internal static class LandingApproachSuites
             // roster spawn is only there to bind once that spawn has happened, which is the whole
             // ordering the session repeats when it re-binds after its roster build.
             beforeBind?.Invoke(pool);
-            trigger.Bind(world.Runtime, armed, cutscene, () => craft, pickups);
+            trigger.Bind(world.Runtime, armed, cutscene, () => craft);
             director.Attach(new CampaignDirector.WorldInputs
             {
                 Runtime = world.Runtime,
@@ -1039,6 +1051,8 @@ internal static class LandingApproachSuites
                 return;
             }
 
+            // The train's own definition started pickup_timing at the world build; its first
+            // open phase runs 12.36 s to 16.45 s into the run.
             var arm = world.Runtime.FindNodes(LandingApproaches.ArmNode, approaches[0]);
             for (float t = 0f; t < 14f; t += StepDt)
             {
@@ -1046,7 +1060,7 @@ internal static class LandingApproachSuites
                 trigger.Tick();
             }
             ctx.Check(arm.Count > 0 && arm[0].Visible,
-                $"entering the 100 m pickup sensor runs pickup_timing and opens land_on");
+                $"the train's pickup_timing opens land_on in its first flyable phase");
             ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, pickup, report),
                 $"flying CM07's staged train approach starts '{pickup.Anim}'");
             ctx.Check(cutscene.Playing,
@@ -1098,7 +1112,220 @@ internal static class LandingApproachSuites
                 $"the authored pickup camera episode runs to its handoff");
             ctx.Check(graph.CompletedOf(gated.Number),
                 $"finishing the train pickup clears OBJECTIVE{gated.Number}");
-        }, pickups: Pickups.Load(missionZrdr));
+        });
+    }
+
+    // CM07's pickup as the passenger, the flare and the ladder see it. The train is the mission's
+    // own moving consist, so "rides the train" is measured as a constant offset from the caboose
+    // while the caboose itself moves; the ladder switch is the session's own runtime, bound here
+    // the way GameSession binds it, and driven by the rig's attitude and position.
+    private static void DriveTrainPickupRide(TestContext ctx, TestWorld world, CampaignDirector director,
+        ObjectiveScript script, string missionZrdr, StringBuilder report)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        var rows = LandingApproaches.Resolve(
+            chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
+        var pickup = RowFor(rows, "lookat_copilotpkup")
+            ?? throw new InvalidOperationException("CM07 carries no copilot pickup approach row");
+        // The consist's caboose is the one caboosewave's own symbol table binds (the chapter also
+        // carries an unrelated caboose.flt in the rail yard, which name matching would reach).
+        Node3D? caboose = null;
+        foreach (var def in world.Session.Program.ByAnimName("caboosewave"))
+        {
+            if (def.NodeRefs.TryGetValue("caboose", out int index))
+            {
+                caboose = world.Runtime.FindNodeByIndex(index);
+                break;
+            }
+        }
+        ctx.Check(caboose != null, $"caboosewave's symbol table binds the consist's caboose");
+        if (caboose == null)
+        {
+            return;
+        }
+
+        var pickups = Pickups.Load(missionZrdr);
+        WithTrigger(ctx, world, director, rows, (trigger, cutscene, rig, graph) =>
+        {
+            var ladder = new LadderSwitchRuntime();
+            ctx.Host.AddChild(ladder);
+            try
+            {
+                ladder.Bind(world.Runtime, cutscene, () => rig, pickups);
+                world.Runtime.PlayerPositions = () => new[] { caboose.GlobalPosition };
+                rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null,
+                    new CamParams(), caboose.GlobalPosition, caboose.GlobalPosition + Vector3.Forward,
+                    0f, 0f);
+                world.Runtime.Advance(StepDt);
+                trigger.Tick();
+
+                var agents = world.Runtime.FindNodes("pickup_agent");
+                ctx.Same(1, agents.Count, $"trigger_copilot stages the passenger on the caboose");
+                if (agents.Count == 0)
+                {
+                    return;
+                }
+
+                var agent = agents[0];
+                report.AppendLine($"passenger chain: {ChainOf(agent)}; caboose chain: {ChainOf(caboose)}; " +
+                    $"top-level={agent.TopLevel} states: caboosewave={world.Runtime.AnimStateOf("caboosewave")} " +
+                    $"train_on_track={world.Runtime.AnimStateOf("train_on_track")} " +
+                    $"pickup_timing={world.Runtime.AnimStateOf("pickup_timing")} " +
+                    $"unhandled add-child={(world.Runtime.UnhandledEventCounts.TryGetValue("ObjectAddChild", out int addChild) ? addChild : 0)}");
+                ctx.Check(IsUnder(agent, caboose),
+                    $"the passenger is a child of the caboose, not a free node beside it");
+                ctx.Check(agent.Visible, $"and the passenger is active");
+                var cabooseBefore = caboose.GlobalPosition;
+                var offsetBefore = caboose.GlobalTransform.AffineInverse() * agent.GlobalPosition;
+                for (float t = 0f; t < 3f; t += StepDt)
+                {
+                    world.Runtime.Advance(StepDt);
+                    trigger.Tick();
+                }
+                float travelled = caboose.GlobalPosition.DistanceTo(cabooseBefore);
+                var offsetAfter = caboose.GlobalTransform.AffineInverse() * agent.GlobalPosition;
+                report.AppendLine($"caboose travelled {travelled:0.#} m in 3 s; passenger offset " +
+                    $"{offsetBefore.DistanceTo(offsetAfter):0.###} m from where it stood");
+                ctx.Check(travelled > 1f, $"the train is moving on its track");
+                ctx.Check(offsetBefore.DistanceTo(offsetAfter) < 0.5f,
+                    $"the passenger rides the caboose instead of staying where it spawned");
+
+                // The pickup timing, started by the train's own definition, opens the switch in
+                // the phases of the track loop where the pickup is flyable; the wave and its flare
+                // are what the switch being active selects, and the passenger lies flat otherwise.
+                float waited = 0f;
+                for (; waited < 60f && world.Runtime.AnimStateOf("waveloop") != 2; waited += StepDt)
+                {
+                    world.Runtime.Advance(StepDt);
+                    trigger.Tick();
+                }
+                report.AppendLine($"waveloop live after {waited:0.#} s more");
+                var switches = world.Runtime.FindNodes("copilot_pickup_switch");
+                var sensors = world.Runtime.FindNodes("ladder_pickup_sensor");
+                var cones = world.Runtime.FindNodes("agent_approach_cone");
+                report.AppendLine($"switch chain: {(switches.Count > 0 ? ChainOf(switches[0]) : "-")} " +
+                    $"top-level={(switches.Count > 0 ? switches[0].TopLevel.ToString() : "-")}; sensor chain: " +
+                    $"{(sensors.Count > 0 ? ChainOf(sensors[0]) : "-")} top-level=" +
+                    $"{(sensors.Count > 0 ? sensors[0].TopLevel.ToString() : "-")} caboose-distance=" +
+                    $"{(sensors.Count > 0 ? sensors[0].GlobalPosition.DistanceTo(caboose.GlobalPosition) : -1f):0.#}; " +
+                    $"cone chain: {(cones.Count > 0 ? ChainOf(cones[0]) : "-")} caboose-distance=" +
+                    $"{(cones.Count > 0 ? cones[0].GlobalPosition.DistanceTo(caboose.GlobalPosition) : -1f):0.#}");
+                report.AppendLine($"then: switch={switches.Count} visible=" +
+                    $"{(switches.Count > 0 ? switches[0].Visible.ToString() : "-")} sensor={sensors.Count} visible=" +
+                    $"{(sensors.Count > 0 ? sensors[0].Visible.ToString() : "-")} " +
+                    $"states: caboosewave={world.Runtime.AnimStateOf("caboosewave")} waveloop={world.Runtime.AnimStateOf("waveloop")} " +
+                    $"hit_the_deck={world.Runtime.AnimStateOf("hit_the_deck")} get_up={world.Runtime.AnimStateOf("get_up")} " +
+                    $"pickup_timing={world.Runtime.AnimStateOf("pickup_timing")}; rig inplay={rig.InPlay} held={rig.Held} " +
+                    $"level={LadderSwitch.IsLevel(rig.Attitude)} sensor-distance=" +
+                    $"{(sensors.Count > 0 ? sensors[0].GlobalPosition.DistanceTo(rig.WorldPosition) : -1f):0.#}");
+                ctx.Same(2, world.Runtime.AnimStateOf("waveloop"),
+                    $"with the pickup switch open the passenger waves (waveloop live)");
+                ctx.Same(2, world.Runtime.AnimStateOf("pickup_flare"),
+                    $"and holds the lit flare (pickup_flare live)");
+                var flares = world.Runtime.FindNodes("ballflare.flt");
+                var flare = flares.Count > 0 ? flares[0] : null;
+                var trails = world.Runtime.Emitters.Census.Where(r =>
+                    string.Equals(r.Name, "flaretrail", StringComparison.OrdinalIgnoreCase)).ToList();
+                report.AppendLine($"flare={flares.Count} under passenger=" +
+                    $"{(flare != null && IsUnder(flare, agent))} visible={flare?.Visible} " +
+                    $"trail={(trails.Count == 0 ? "absent" : trails[0].Emitting ? "emitting" : "built")}" +
+                    $"{(trails.Count > 0 ? $" on '{trails[0].Host}'" : "")}; pickup_flare=" +
+                    $"{world.Runtime.AnimStateOf("pickup_flare")} unhandled: " + string.Join(", ",
+                        world.Runtime.UnhandledEventCounts
+                            .Where(kv => kv.Key.StartsWith("PufferState", StringComparison.Ordinal)
+                                || kv.Key.StartsWith("ObjectAddChild", StringComparison.Ordinal))
+                            .Select(kv => $"{kv.Key}={kv.Value}")));
+                ctx.Check(flare != null && IsUnder(flare, agent) && flare.Visible,
+                    $"the flare disc hangs from the passenger's hand and is drawn");
+                ctx.Check(trails.Count > 0,
+                    $"the flare's smoke trail emitter is asserted on the passenger's hand");
+
+                // The ladder: level inside the sensor drops it, the settle callback lands it. The
+                // train has travelled on since the rig was parked, so the rig is re-parked level
+                // beside the sensor as it stands now.
+                if (sensors.Count > 0)
+                {
+                    var beside = sensors[0].GlobalPosition + Vector3.Up * 10f;
+                    rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null,
+                        new CamParams(), beside, beside + Vector3.Forward, 0f, 0f);
+                }
+                ladder.Tick();
+                report.AppendLine($"ladder after a level tick inside the sensor: " +
+                    $"{ladder.LastStarted ?? "-"} ({ladder.State})");
+                ctx.Check(string.Equals(ladder.LastStarted, LadderSwitch.DropAnim, StringComparison.Ordinal),
+                    $"a level aircraft inside the pickup sensor starts drop_ladder");
+                ctx.Same(2, world.Runtime.AnimStateOf(LadderSwitch.DropAnim),
+                    $"drop_ladder has a live instance");
+                for (float t = 0f; t < 3f && ladder.State != LadderState.Deployed; t += StepDt)
+                {
+                    world.Runtime.Advance(StepDt);
+                    ladder.Tick();
+                }
+                var ladders = world.Runtime.FindNodes("rope_ladder");
+                report.AppendLine($"ladder settled: {ladder.State}; rope_ladder nodes={ladders.Count} " +
+                    $"visible={(ladders.Count > 0 ? ladders[0].Visible.ToString() : "-")} " +
+                    $"ladder_pos nodes={world.Runtime.FindNodes("ladder_pos").Count} (the harness rig " +
+                    $"carries no airframe-stage ladder_pos, so the rungs are the session's to show)");
+                ctx.Check(ladder.State == LadderState.Deployed,
+                    $"the drop's own CALLBACK 123 settles the switch deployed");
+
+                // The docking cone, then the cutscene's own call chain.
+                int waitsBefore = world.Runtime.WaitsInstalled;
+                ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, pickup, report),
+                    $"flying CM07's staged train approach starts '{pickup.Anim}'");
+                ctx.Same(2, world.Runtime.AnimStateOf("caboosepickup"),
+                    $"'{pickup.Anim}' calls caboosepickup and it has a live instance");
+                ctx.Same(waitsBefore + 1, world.Runtime.WaitsInstalled,
+                    $"so the WAIT_FOR_COMPLETION on it holds instead of finding nothing");
+                ctx.Check(IsUnder(agent, caboose),
+                    $"the passenger is still the caboose's child through the pickup");
+
+                float played = 0f;
+                float climb = 0f;
+                for (float t = 0f; t < PlayBudgetS && cutscene.Playing; t += StepDt)
+                {
+                    world.Runtime.Advance(StepDt);
+                    cutscene.Tick();
+                    director.Step(StepDt);
+                    played += StepDt;
+                    if (world.Runtime.AnimStateOf("caboosepickup") == 2)
+                    {
+                        climb += StepDt;
+                    }
+                }
+                report.AppendLine($"pickup episode ran {played:0.##} s, caboosepickup live for " +
+                    $"{climb:0.##} s of it");
+                ctx.Check(!cutscene.Playing && played > 2f,
+                    $"the authored pickup camera episode runs to its handoff");
+                ctx.Check(climb > 1f, $"the person's climb plays for its scripted length");
+            }
+            finally
+            {
+                ladder.Free();
+            }
+        });
+    }
+
+    private static string ChainOf(Node node)
+    {
+        var names = new List<string>();
+        for (Node? at = node; at != null && names.Count < 8; at = at.GetParent())
+        {
+            names.Add(at.Name);
+        }
+        return string.Join(" < ", names);
+    }
+
+    private static bool IsUnder(Node node, Node ancestor)
+    {
+        for (var at = node.GetParent(); at != null; at = at.GetParent())
+        {
+            if (at == ancestor)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // CM11's trailer pickup: unlike CM07's, the cone is staged by an objective's WAKE_ANIM rather
@@ -1191,7 +1418,7 @@ internal static class LandingApproachSuites
                 $"the authored pickup episode runs to its handoff");
             ctx.Check(graph.CompletedOf(wakes.Number),
                 $"finishing the trailer pickup clears OBJECTIVE{wakes.Number}, the dock");
-        }, pickups: Pickups.Load(missionZrdr));
+        });
     }
 
     // CM07's hangar drop, every name read out of the mission's own data: the one cutscene

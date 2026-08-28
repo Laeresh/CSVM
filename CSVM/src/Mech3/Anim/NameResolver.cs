@@ -77,6 +77,10 @@ public sealed class NameResolver<TNode>
     // Add for the two population rules (never on a fallback runtime, never for a pooled copy).
     private readonly Dictionary<int, TNode> _byIndex = new();
 
+    // SoleStagedCopy's memo: a claimed-but-unbuilt index -> the one pooled copy carrying it, or
+    // null when none or several do. Dropped whenever Add grows the index.
+    private readonly Dictionary<int, TNode?> _soleCopyCache = new();
+
     // ---- the bind-time resolution census (see ResolutionLines) ----
     private readonly HashSet<(string Name, string Anim)> _censusSeen = new();
 
@@ -136,6 +140,10 @@ public sealed class NameResolver<TNode>
     {
         _index.Add(new IndexRow(node, srcName, gamezIndex));
         _parentOf[node] = parent;
+        if (gamezIndex is { } grown)
+        {
+            _soleCopyCache.Remove(grown);
+        }
         if (indexByPointer && !NameResolveFallback && gamezIndex is { } gi
             && (!_byIndex.TryGetValue(gi, out var held) || !_isLive(held)))
         {
@@ -263,7 +271,7 @@ public sealed class NameResolver<TNode>
         {
             return false;
         }
-        node = BoundNode(idx);
+        node = BoundNode(idx) ?? (NameResolveFallback ? null : SoleStagedCopy(idx));
         return true;
     }
 
@@ -345,6 +353,37 @@ public sealed class NameResolver<TNode>
 
     private static string Sample(List<string> shown, int total) =>
         string.Join(", ", shown) + (total > shown.Count ? $", … (+{total - shown.Count} more)" : "");
+
+    // A claimed index the world build never created, answered by the one pooled copy carrying it.
+    // ⚠ Only when exactly one live copy exists: a multi-copy effect pool keeps its copies apart by
+    // anchor scope, and binding the first would steal every later copy's events (see Add). The
+    // single-copy case is a mission's staged library actor (CM07's pickup switch, sensor and
+    // passenger), which the definitions that toggle it reach only through their symbol table.
+    private TNode? SoleStagedCopy(int index)
+    {
+        if (_soleCopyCache.TryGetValue(index, out var cached))
+        {
+            return cached != null && _isLive(cached) ? cached : Rescan();
+        }
+        return Rescan();
+
+        TNode? Rescan()
+        {
+            TNode? sole = null;
+            int seen = 0;
+            foreach (var row in _index)
+            {
+                if (row.GamezIndex == index && _isLive(row.Node))
+                {
+                    sole = row.Node;
+                    seen++;
+                }
+            }
+            var answer = seen == 1 ? sole : null;
+            _soleCopyCache[index] = answer;
+            return answer;
+        }
+    }
 
     // The by-index map's one reader. A freed claimant answers null and gives the slot up, so the
     // next Add for that index takes it: see Add's own remark.

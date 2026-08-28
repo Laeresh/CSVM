@@ -492,19 +492,33 @@ from mission load. `OBJECTIVE21`'s `WAKE_ANIM [enable_dropoff]` sets them `ACTIV
 klondike hookup is armed the same way, by `OBJECTIVE14`'s `WAKE_ANIM [pzhomebase]`. **The approach
 table is the mechanism; the objective script decides when each row is live.**
 
-CM07 adds a pickup gate in front of that arming step. `C1/M02/zrdr/pickups.zrd` is the compact
-table `[[["ladder_pickup_sensor", 100.0]]]`: sensor node plus radius in metres. Once
-`trigger_copilot` has staged that sensor on the caboose, entering its active 100 m sphere starts
-the mission's `pickup_timing` definition. Its authored sequence opens
-`agent_approach_cone/land_on` 13.46 seconds later, synchronised with the ladder pickup window;
-the ordinary `landings.zrd` test then owns the final approach and cutscene start.
+CM07 adds a pickup gate in front of that arming step, and it runs on the train's own clock. The
+chapter's `train.zrd` definition `train_on_track` (a `NEW_GAME_START` anim) opens with
+`CALL_ANIMATION [pickup_timing]` before it starts the consist's `tr_*.zan` track loops, so the
+mission's `pickup_timing` definition runs from mission load in step with the train. Its authored
+sequence toggles `copilot_pickup_switch`, `ladder_pickup_sensor` and `agent_approach_cone/land_on`
+together through the loop (open at 12.36 s, 28.9 s, 61.36 s, 105.5 s, 216 s, 259.3 s and 291.73 s
+of the run, closed between), which is the set of track phases where the pickup is flyable. Nothing
+starts the timing off the player: `C1/M02/zrdr/pickups.zrd`, the compact table
+`[[["ladder_pickup_sensor", 100.0]]]` (sensor node plus radius in metres), feeds only the rope
+ladder's switch. Once `trigger_copilot` has staged the sensor and the passenger on the caboose,
+the ordinary `landings.zrd` test owns the final approach and cutscene start.
 
 The same sensor is the rope ladder's gate. The exe's own reader of `pickups.zrd`
 (`FUN_00471830`) builds the sensor list the native ladder switch tests every frame, and nothing
 else in the image reads that list; the switch, its attitude gate and the `CALLBACK 123` both
 ladder definitions raise to settle it are decoded in [`../../org/ladderSwitch.md`](../../org/ladderSwitch.md).
-Starting `pickup_timing` off the sensor is the port's reconstruction; the original's own starter
-for that definition is not traced.
+
+The passenger's own choreography is what the switch selects. `caboosewave` (called by
+`trigger_copilot`) parents `pickup_agent` and the switch under the caboose and runs its
+`wave_or_drop` fork: switch active is `waveloop`, which calls `pickup_flare` (`ballflare.flt` added
+under the passenger's `cp_lh` hand) and asserts the `flaretrail` puffer on that hand; switch
+inactive is `hit_the_deck`, which polls the switch every 0.5 s and stands the passenger back up
+through `get_up` into `waveloop`. All of these move the person through the `ROOT`/`ALL_NAMES` form
+of `OBJECT_MOTION_SI_SCRIPT`, one record per body part
+([`compiled-archives.md`](compiled-archives.md)). The pickup itself, `lookat_copilotpkup`, calls
+`cabpkup_ladder`, `cabpkup_player` and then `caboosepickup` with `WAIT_FOR_COMPLETION`, and the
+person's climb is that last definition's one sequence, so the hold spans the whole climb.
 
 #### The hookup poses the flown airframe's own parts
 

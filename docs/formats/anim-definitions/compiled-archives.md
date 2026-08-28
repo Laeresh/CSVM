@@ -91,7 +91,12 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   (176 B, the volume/frequency/pan fade-series op — `hdplayer*` defs; payload not yet
   field-decoded); **e47 = OBJECT_MOTION_SI_SCRIPT in its `ROOT`/`ALL_NAMES` form** (multi-
   node skeletal person animations — `caboosewave`, ladder climbs; payload = count u32 +
-  count × 76-byte records, not yet field-decoded). **CS event quirks** (all preserved by
+  count × 76-byte records, each one embedded e12 event: the 12-byte header `{type 12,
+  start_offset 1, pad, size 76, start_time 0}` then `{0, node_index, script_index, 52 zero
+  bytes}`, where `node_index` is 1-based into the def's `nodes` list and `script_index` a slot in
+  its script-id list; `caboosepickup`'s 15 records map `pickup_agent`, `cp_rt` … `cp_torso` onto
+  `cabpickup-<part>.zan` in order. The extraction keeps the payload raw; `AnimDefinition.Parse`
+  decodes it). **CS event quirks** (all preserved by
   the fork): `IF`/`ELSEIF` conditions add **NODE_BELOW_ALT 0x100** (node + altitude),
   **ANIM_HEALTH 0x800** (float), **ANIM_HEALTH two-value form 0x1000** (min/max — uses the
   dword PM asserts zero; `locklear_zep_nacelles` `ANIM_HEALTH [20, 32]`), and

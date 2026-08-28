@@ -172,6 +172,10 @@ public sealed record AnimNodePrereq(IReadOnlyList<string> Path, bool Active, boo
 /// </summary>
 public sealed class AnimDefinition
 {
+    /// <summary>The event kind of OBJECT_MOTION_SI_SCRIPT's multi-node <c>ROOT</c>/<c>ALL_NAMES</c>
+    /// form, carried as a decoded <c>motions</c> list after <see cref="Parse"/>.</summary>
+    public const string AllNamesKind = "ObjectMotionSiScriptAllNames";
+
     public readonly List<AnimSequence> Sequences = new();
 
     /// <summary>This definition's symbol table: the node name each event refers to → that node's
@@ -249,6 +253,9 @@ public sealed class AnimDefinition
     /// outside the compiled archives).</summary>
     public AnimArchive? Archive;
 
+    private const int AllNamesRecordSize = 76;
+    private const int AllNamesHeaderSize = 12;
+
     public bool OnStartup => Activation.Equals("OnStartup", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Any def carrying HEALTH &gt; 0 is a destructible world object — this is the whole
@@ -314,6 +321,9 @@ public sealed class AnimDefinition
             def.ResetState = AnimSequence.Parse(reset);
         foreach (var seq in d.Objects("sequences"))
             def.Sequences.Add(AnimSequence.Parse(seq));
+        foreach (var seq in def.Sequences)
+            foreach (var ev in seq.Events)
+                ExpandAllNamesScript(ev, def.NodeList);
         // The slot's authored name is empty; give the debugger timeline a recognizable lane.
         if (d.Obj("unknown_seq") is { } slot
             && AnimSequence.Parse(slot) is { Events.Count: > 0 } death)
@@ -322,6 +332,51 @@ public sealed class AnimDefinition
             def.DeathSlot = death;
         }
         return def;
+    }
+
+    // The ROOT/ALL_NAMES form of OBJECT_MOTION_SI_SCRIPT (the skeletal person and ladder
+    // cutscenes), left raw by the extraction: a count, then one 76-byte record per animated node,
+    // each an e12 event (12-byte header, then {0, node_index, script_index}) with a 1-based node
+    // index into the def's node list and a slot in SiScriptIds, the single-node form's pair
+    // (docs/formats/anim-definitions/compiled-archives.md). Written back onto the event as
+    // `motions`, one {name, index} per record, played as that many single-node scripts at once.
+    private static void ExpandAllNamesScript(AnimEvent ev, List<string> nodeList)
+    {
+        if (ev.Kind != AllNamesKind || ev.Data.Str("data") is not { } raw)
+            return;
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(raw);
+        }
+        catch (FormatException)
+        {
+            return;
+        }
+        if (bytes.Length < 4)
+            return;
+        int count = BitConverter.ToInt32(bytes, 0);
+        var motions = new List<object?>();
+        for (int i = 0; i < count; i++)
+        {
+            int at = 4 + i * AllNamesRecordSize + AllNamesHeaderSize;
+            if (at + 12 > bytes.Length)
+                break;
+            int nodeIndex = BitConverter.ToInt32(bytes, at + 4);
+            int scriptIndex = BitConverter.ToInt32(bytes, at + 8);
+            if (nodeIndex < 1 || nodeIndex > nodeList.Count)
+                continue;
+            motions.Add(new Dictionary<string, object?>
+            {
+                ["name"] = nodeList[nodeIndex - 1],
+                ["index"] = scriptIndex,
+            });
+        }
+        ev.Data = new AnimData(new Dictionary<string, object?>
+        {
+            ["motions"] = motions,
+            ["data"] = raw,
+        });
     }
 }
 

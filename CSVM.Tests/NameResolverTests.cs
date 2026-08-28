@@ -385,6 +385,27 @@ public class NameResolverTests
         Assert.Contains(trail, resolver.FindAll("fly_trail1", null));         // names still resolve
     }
 
+    [Fact]
+    public void AClaimedUnbuiltIndexResolvesToTheOnePooledCopyCarryingIt()
+    {
+        var resolver = new NameResolver<TestNode>();
+        var pool = Node("pool");
+        var copy = Node("copilot_pickup_switch");
+        resolver.Add(pool, "pool", null);
+        resolver.Add(copy, "copilot_pickup_switch", pool, gamezIndex: 2703, indexByPointer: false);
+        var def = Def("pickup_timing");
+        def.NodeRefs["copilot_pickup_switch"] = 2703;
+
+        Assert.True(resolver.SymbolClaims(def, "copilot_pickup_switch", out var bound));
+        Assert.Same(copy, bound); // the staged actor answers for the index the build never created
+
+        // A second copy on the same index is an effect pool, which stays anchor-scoped.
+        var second = Node("copilot_pickup_switch");
+        resolver.Add(second, "copilot_pickup_switch", pool, gamezIndex: 2703, indexByPointer: false);
+        Assert.True(resolver.SymbolClaims(def, "copilot_pickup_switch", out var ambiguous));
+        Assert.Null(ambiguous);
+    }
+
     // ---- multi-target NAME1 defs anchor through their authored paths (M4 F18) ----
 
     [Fact]

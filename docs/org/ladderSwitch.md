@@ -150,10 +150,11 @@ In C1/M02 the node is authored inside the `rope_ladder` actor
 record `+0x22` when the record carries `ladder_pickup` (`0x006296b0`). Its reader is not traced
 in this pass; it is not part of the switch above.
 
-**What starts `pickup_timing`.** The port starts the mission's `pickup_timing` definition when
-the player enters the same sensor (`LandingApproachRuntime`). The exe's reader of `pickups.zrd`
-feeds only the ladder switch, so the original's own starter for that definition is not this
-list; it is not traced here.
+**What starts `pickup_timing`.** Not this list, and not the player: the chapter's `train.zrd`
+definition `train_on_track`, a `NEW_GAME_START` anim, opens with `CALL_ANIMATION [pickup_timing]`
+before its track loops, so the timing runs from mission load on the train's own clock
+([`../formats/anim-definitions/cutscenes.md`](../formats/anim-definitions/cutscenes.md)). The port
+runs it the same way and starts nothing off the sensor.
 
 ## Function reference
 

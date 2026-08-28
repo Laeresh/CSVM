@@ -193,6 +193,7 @@ public static class SuiteCatalog
         "landings-approach-trigger",
         "landings-wingwalk-gate",
         "landings-train-pickup-gate",
+        "landings-train-pickup-ride",
         "landings-trailer-pickup-gate",
         "landings-auto-land-button",
         "landings-hookup-airframe",
@@ -1073,11 +1074,21 @@ public static class SuiteCatalog
         into.Add(new TestHarness.Suite("landings-train-pickup-gate",
             "CM07's caboose pickup through its real range-triggered mission path: approaching the "
             + "train stages the passenger and flare rig, ladder sensor and docking cone from their "
-            + "library root, entering the authored 100 m pickup sensor runs the timing that opens "
-            + "land_on, the landing trigger discovers that late-created cone, and flying it starts "
+            + "library root, the train's own pickup_timing opens land_on in its first flyable "
+            + "phase, the landing trigger discovers that late-created cone, and flying it starts "
             + "the hosted pickup cutscene beside the caboose, faces the passenger, runs to handoff "
             + "and clears the primary pickup objective",
             TrainPickupGate));
+
+        into.Add(new TestHarness.Suite("landings-train-pickup-ride",
+            "CM07's caboose pickup as the original runs it, over the mission's real moving train: "
+            + "the staged passenger is the caboose's child and keeps its offset while the caboose "
+            + "travels, the pickup timing opening the switch selects the wave with the lit flare "
+            + "and its smoke trail on the passenger's hand, a level aircraft inside the 100 m sensor "
+            + "drops the rope ladder and the drop's own callback settles it deployed, and the "
+            + "pickup cutscene's call to caboosepickup holds a live instance for the person's climb "
+            + "through the whole episode",
+            TrainPickupRide));
 
         into.Add(new TestHarness.Suite("landings-trailer-pickup-gate",
             "CM11's trailer pickup through the objective script's own WAKE_ANIM: the dock "
