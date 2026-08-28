@@ -2348,7 +2348,10 @@ public partial class GameSession : Node3D
             var zepNets = AiNets.Load(worldBindings.ChapterZrdrPath);
             _zeppelins = new ZeppelinRuntime(zepDefs,
                 name => worldBindings.WorldRuntime?.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null,
-                zepNets, netTrailers.For);
+                zepNets, netTrailers.For,
+                // The bootstrap has already run the start anims: a hull an SI script owns from
+                // its first frame must not be placed at the record seat on top of it.
+                host => worldBindings.WorldRuntime?.Motions.DrivesTransform(host) ?? false);
             _worldRoot!.AddChild(_zeppelins);
             // F18: the multi-zone damage half — per-part pools over the world registry, the
             // survivor-count kill, and the DAMAGES_ZEPPELIN gate on the shared pool.

@@ -5513,6 +5513,20 @@ Runs a mission's zeppelins (M4 F17 motion + F18 damage + F19 broadside, behind
 (arrival radius widened per record to clear the turning circle, and the only follower that
 observes stop points), is placed at its authored
 position/yaw/pitch, and the NODE is flown kinematically — no FlightController.
+One writer per transform channel: a hull an animation motion drives (`MotionSet.DrivesTransform`,
+handed in by `GameSession` at construction and adopted from the runtime in `WireDamage`) is
+neither placed nor stepped, since the ScriptPlayback and the follower would otherwise both write
+the node every frame and the render shows whichever ran last (on the realtime clock the zeppelin
+runtime's `_PhysicsProcess`, which is why CM04's Pandora stood in the dock while `pzep_todrydock`
+flew it; on a parent-driven clock the anim runtime's `_Process`, which is why no `--det` probe
+showed it). The follower parks (`Park`, a `zep:` line) and, on the first step after the motion
+ends, `Resume` rebuilds the `ZeppelinMotion` seated at the hull's live pose (`SeatedAt`, the
+record with its start pose replaced, since the law keeps its pose private) with the engines as
+they stand, re-seats the follower and logs the hand-back. The record's seat stays data: C3/M03's
+`piratezep` record is the script's END pose, node 0 of `M3PirateZep`, an armed stop point, so the
+resumed follower holds the dock there. Neither the scripted-path snap nor the dead-end hold runs
+while the hull is scripted, since both live in the step that is skipped. Pinned by the
+`zeppelin-scripted-pose` suite over C3/M03's built world.
 `SetStopPoint(net, id, halts)` is the whole of `COMPLETED_STOPPOINT`: it arms or releases one stop
 point on every follower flying that net, so an airship spawned on an armed node sits docked until
 the objective that owns it completes. ⚠ The original keeps the flag on the shared net record rather

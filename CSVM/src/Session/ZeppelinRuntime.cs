@@ -10,30 +10,35 @@ namespace CSVM.Session;
 /// <summary>Runs a mission's zeppelins (M4 F17 motion + F18 damage, behind <c>--zeppelins</c>):
 /// each <see cref="ZeppelinDef"/> whose world node and net resolve gets a
 /// <see cref="ZeppelinMotion"/> on B5's <see cref="AiNetFollower"/>, placed at its authored pose,
-/// and the node is flown kinematically — no <c>FlightController</c>. Every place/skip/hold and
-/// node capture prints a <c>zep:</c> line.
-/// <see cref="WireDamage"/> builds F18's per-part scalar pools from the record where authored,
-/// else the compiled def; a zone with neither is not damageable and says so.
+/// and the node is flown kinematically — no <c>FlightController</c>. A hull an animation motion
+/// owns (a start anim's SI script) is neither placed nor flown until that motion ends; the
+/// follower then resumes from the pose the script left. Every place/skip/hold/park and node
+/// capture prints a <c>zep:</c> line. <see cref="WireDamage"/> builds F18's per-part scalar pools
+/// from the record where authored, else the compiled def; a zone with neither is not damageable.
 /// <see cref="ZeppelinDamage"/> owns the kill and drives <see cref="ZeppelinEnginesDisabled"/>,
 /// Instant Action's own <c>zeppelin_run</c> win; <see cref="GateWeaponDamage"/> gates
-/// <c>DAMAGES_ZEPPELIN</c> on gasbag zones only.
-/// ⚠ Deliberately unwired knowledge is named at its own site — see this module's entry in
-/// docs/architecture.md.</summary>
+/// <c>DAMAGES_ZEPPELIN</c> on gasbag zones only. ⚠ Deliberately unwired knowledge is named at
+/// its own site (this module's docs/architecture.md entry).</summary>
 public sealed partial class ZeppelinRuntime : Node
 {
     private readonly List<LiveZeppelin> _live = new();
     private AnimRuntime? _runtime;
+    private Func<Node3D, bool>? _transformDriven;
     private float _sinceLog;
     private int _gateLogged;
 
-    /// <param name="trailerTarget">Where an anchored net's trailer target is, per
-    /// net; null flies every route at its authored coordinates.
-    /// ⚠ Wired because it is the decoded behaviour; unobservable in this install's shipped data —
-    /// see this module's entry in docs/architecture.md.</param>
+    /// <param name="trailerTarget">Where an anchored net's trailer target is, per net; null flies
+    /// every route at its authored coordinates. ⚠ Wired because it is the decoded behaviour;
+    /// unobservable in this install's shipped data (this module's docs/architecture.md entry).</param>
+    /// <param name="transformDriven">Whether an animation motion owns a node's transform channel
+    /// right now (<c>MotionSet.DrivesTransform</c>). Null until <see cref="WireDamage"/> adopts
+    /// the runtime's own, which is one bootstrap late for a start anim's SI script.</param>
     public ZeppelinRuntime(IReadOnlyList<ZeppelinDef> defs, Func<string, Node3D?> resolveNode,
-        IReadOnlyList<AiNet> chapterNets, Func<AiNet, Func<Vector3?>?>? trailerTarget = null)
+        IReadOnlyList<AiNet> chapterNets, Func<AiNet, Func<Vector3?>?>? trailerTarget = null,
+        Func<Node3D, bool>? transformDriven = null)
     {
         Name = "zeppelins";
+        _transformDriven = transformDriven;
         foreach (var def in defs)
         {
             var host = resolveNode(def.Node);
@@ -47,7 +52,8 @@ public sealed partial class ZeppelinRuntime : Node
             {
                 // Still placed: the authored pose is real even without a route (and B6's
                 // generator altitude gate reads the node's live Y).
-                Place(host, def.Position, Mathf.DegToRad(def.YawDeg), Mathf.DegToRad(def.PitchDeg));
+                if (!Driven(host))
+                    Place(host, def.Position, Mathf.DegToRad(def.YawDeg), Mathf.DegToRad(def.PitchDeg));
                 GD.Print($"zep: '{def.Node}' placed but held: net '{def.Net}' not in neindex");
                 continue;
             }
@@ -59,8 +65,14 @@ public sealed partial class ZeppelinRuntime : Node
             var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai), arrival,
                 trailerTarget?.Invoke(net), observesStopPoints: true);
             var motion = new ZeppelinMotion(def, follower);
-            Place(host, motion.Position, motion.YawRad, motion.PitchRad);
-            _live.Add(new LiveZeppelin(def, motion, host));
+            var zep = new LiveZeppelin(def, motion, host);
+            // A start anim's SI script already owns the hull's pose at bootstrap: the follower
+            // parks and the record seat is where the script ends, not where the hull starts.
+            if (Driven(host))
+                Park(zep);
+            else
+                Place(host, motion.Position, motion.YawRad, motion.PitchRad);
+            _live.Add(zep);
             GD.Print($"zep: '{def.Node}' placed at ({def.Position.X:0},{def.Position.Y:0}," +
                      $"{def.Position.Z:0}) on net '{net.Name}' ({net.Nodes.Count} nodes), " +
                      $"max_speed {def.MaxSpeed:0.#} m/s, engines {motion.TotalEngines}, " +
@@ -237,10 +249,13 @@ public sealed partial class ZeppelinRuntime : Node
             return;
         }
         _runtime = runtime;
+        _transformDriven ??= runtime.Motions.DrivesTransform;
         // The gasbag exemption on the collision path, on the shared sink so every rig inherits it.
         runtime.CollideDamageGate = GateCollisionDamage;
         foreach (var zep in _live)
         {
+            if (!zep.Scripted && Driven(zep.Host))
+                Park(zep);
             WireZones(zep, runtime);
             if (zep.Dormant)
             {
@@ -330,8 +345,23 @@ public sealed partial class ZeppelinRuntime : Node
                 // builder (F12, see Hold).
                 continue;
             }
-            if (!zep.Dead)
+            if (!zep.Dead && Driven(zep.Host))
             {
+                // One writer per transform channel: while an ObjectMotion (an SI script above
+                // all) drives the hull, the follower neither steps nor writes.
+                if (!zep.Scripted)
+                    Park(zep);
+                if (log)
+                {
+                    var p = zep.Host.GlobalPosition;
+                    GD.Print($"zep: '{zep.Def.Node}' at ({p.X:0},{p.Y:0},{p.Z:0}) under a " +
+                             $"scripted motion, follower parked");
+                }
+            }
+            else if (!zep.Dead)
+            {
+                if (zep.Scripted)
+                    Resume(zep);
                 int before = zep.Motion.Follower.CurrentIndex;
                 zep.Motion.Step(dt);
                 Place(zep.Host, zep.Motion.Position, zep.Motion.YawRad, zep.Motion.PitchRad);
@@ -364,6 +394,69 @@ public sealed partial class ZeppelinRuntime : Node
     {
         host.GlobalTransform = new Transform3D(
             Basis.FromEuler(new Vector3(pitchRad, yawRad, 0f)), position);
+    }
+
+    // The record re-seated where a script left the hull: the same limits, zones and cannons, the
+    // start pose replaced. What lets the motion resume from the script's last frame rather than
+    // from the record, whose seat is data the script may or may not end on.
+    private static ZeppelinDef SeatedAt(ZeppelinDef def, Vector3 position, float yawDeg, float pitchDeg) =>
+        new()
+        {
+            Node = def.Node,
+            Position = position,
+            YawDeg = yawDeg,
+            PitchDeg = pitchDeg,
+            MaxSpeed = def.MaxSpeed,
+            MaxAccel = def.MaxAccel,
+            AccelPitchDeg = def.AccelPitchDeg,
+            AccelYawDeg = def.AccelYawDeg,
+            MaxRateYawDeg = def.MaxRateYawDeg,
+            MaxRatePitchDeg = def.MaxRatePitchDeg,
+            MinPitchDeg = def.MinPitchDeg,
+            MaxPitchDeg = def.MaxPitchDeg,
+            Net = def.Net,
+            Targets = def.Targets,
+            Healthy = def.Healthy,
+            NumHealthyRequired = def.NumHealthyRequired,
+            Engines = def.Engines,
+            Gasbags = def.Gasbags,
+            CannonFireDelay = def.CannonFireDelay,
+            CannonFireRange = def.CannonFireRange,
+            LeftCannons = def.LeftCannons,
+            RightCannons = def.RightCannons,
+            CannonHealth = def.CannonHealth,
+            CannonInaccuracyDeg = def.CannonInaccuracyDeg,
+            Team = def.Team,
+            TeamId = def.TeamId,
+            Deactivated = def.Deactivated,
+        };
+
+    // The follower's park: from here until the motion ends, the hull's pose is the script's.
+    private static void Park(LiveZeppelin zep)
+    {
+        zep.Scripted = true;
+        var p = zep.Host.GlobalPosition;
+        GD.Print($"zep: '{zep.Def.Node}' pose owned by a scripted motion from ({p.X:0},{p.Y:0}," +
+                 $"{p.Z:0}), net follower parked");
+    }
+
+    // The follower's first write after the script: the motion restarts from the hull's live pose
+    // (the script's last frame) and re-seats on the nearest net node from there, engines as they
+    // stand. ⚠ Never from the record's seat: the hull is wherever the script left it.
+    private static void Resume(LiveZeppelin zep)
+    {
+        zep.Scripted = false;
+        var xform = zep.Host.GlobalTransform;
+        var euler = xform.Basis.Orthonormalized().GetEuler();
+        float yawDeg = Mathf.RadToDeg(euler.Y);
+        float pitchDeg = Mathf.RadToDeg(euler.X);
+        var seated = SeatedAt(zep.Def, xform.Origin, yawDeg, pitchDeg);
+        var follower = zep.Motion.Follower;
+        follower.Reseat();
+        zep.Motion = new ZeppelinMotion(seated, follower) { AliveEngines = zep.Motion.AliveEngines };
+        GD.Print($"zep: '{zep.Def.Node}' scripted motion ended, follower resumes from " +
+                 $"({xform.Origin.X:0},{xform.Origin.Y:0},{xform.Origin.Z:0}) yaw {yawDeg:0.#}° " +
+                 $"pitch {pitchDeg:0.#}°, re-seating on '{follower.Net.Name}'");
     }
 
     // The zone-pool seeding rule: an authored record hp re-seeds an existing def pool or
@@ -480,6 +573,8 @@ public sealed partial class ZeppelinRuntime : Node
             yield return cannon.Instance;
         }
     }
+
+    private bool Driven(Node3D host) => _transformDriven?.Invoke(host) ?? false;
 
     private LiveZeppelin? Find(string node)
     {
@@ -716,9 +811,15 @@ public sealed partial class ZeppelinRuntime : Node
         /// <summary>The record's authored team, or null on a record authoring none.</summary>
         public int? Team { get; }
 
-        public ZeppelinMotion Motion { get; }
+        /// <summary>Replaced, not mutated, when a scripted motion hands the hull back: the law
+        /// keeps its start pose private, so the resume is a fresh motion seated there.</summary>
+        public ZeppelinMotion Motion { get; set; }
 
         public Node3D Host { get; }
+
+        /// <summary>An animation motion owns the hull's transform channel: the follower is
+        /// parked and writes nothing until the motion ends (see <c>Resume</c>).</summary>
+        public bool Scripted { get; set; }
 
         public ZeppelinDamage? Damage { get; set; }
 

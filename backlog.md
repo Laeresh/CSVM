@@ -2553,25 +2553,6 @@ usual.
   primary 3 completed), so this is not an objective bug. *Cross-refs:* `docs/org/aiPilot.md` (the
   activation primitive and `FUN_00432010`).
 
-- `BL-568` `[Bug]` **CM04 (C3/M03): the Pandora starts moored in the dry dock instead of flying in
-  over the mission's first minute.** *Evidence:* at the controls the Pandora is already in the dry
-  dock while the cargo zeppelin is still moving out. M03's `NEW_GAME_START` list runs
-  `pzep_todrydock` (`extracted/C3/M03/mis_anim/piratezep-pzep_todrydock.json`, `OnCall`, one
-  `ObjectMotionSiScript` on `piratezep`), whose SI script
-  (`data-c3-m03-zrdr-zeps-pzep_todrydock-piratezep.zan.json`, 185 frames, 0 to 61.65 s) carries the
-  airship from `(-11314,554,-13697)` to `(-12401,150,-10355)`. The zeppelin record in
-  `zeppelins.zrd` seats `piratezep` at `(-12400.9,150.3,-10355.2)`, yaw -180, on net `M3PirateZep`,
-  which is the script's END pose. That reads as: the record seats the airship at its destination
-  and the start anim's script owns the pose from its first frame; CSVM spawns the zeppelin at the
-  record position and the script never takes its pose (or the net follower writes over it), so it
-  stands in the dock from the first frame. *Fix shape:* an `ObjectMotionSiScript` on a zeppelin node
-  owns that zeppelin's pose for the script's duration, starting at frame 0's base, with the net
-  follower parked and resuming from the script's last frame. Check `ZeppelinRuntime`'s placement
-  against the scripted-path snap (`BL-531`'s fix) and the dead-end hold (`BL-529`'s fix) first,
-  since both touched placement; neither should apply to a scripted motion. *⚠ Traps:* do not move
-  the record's position to the path start; the record's seat is data and the script is what flies
-  it. *Cross-refs:* `BL-529`, `docs/org/objectMotion.md`, `docs/formats/anim-definitions.md`.
-
 - `BL-576` `[Bug]` **CM08 (C1B/M03): the Pandora pitches steeply up and down along the Klondike
   net, following every altitude step of the route at full pitch.** *Evidence (seen at the
   controls, mechanism lead-only):* the screenshot

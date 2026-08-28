@@ -276,6 +276,39 @@ internal static class ZeppelinSuites
         }
     }
 
+    // CM04 (C3/M03): NEW_GAME_START runs pzep_todrydock, one ObjectMotionSiScript on piratezep
+    // whose 185-frame script flies the Pandora from (-11314,554,-13697) to the record's own seat,
+    // node 0 of M3PirateZep. The record is where the script ENDS: the script owns the pose from
+    // its first frame, the follower parks under it and resumes from its last frame.
+    internal static void ZeppelinScriptedPoseSuite(TestContext ctx)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C3");
+        ctx.RequireData(chapterZrdr, $"C3 zrdr");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03");
+        ctx.RequireData(missionZrdr, $"C3/M03 zrdr");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, "C3"), $"C3 textures");
+
+        ZeppelinDef? def = null;
+        foreach (var d in Zeppelins.Load(missionZrdr))
+        {
+            if (d.Node.Equals("piratezep", System.StringComparison.OrdinalIgnoreCase))
+                def = d;
+        }
+        ctx.Check(def != null && def.Net == "M3PirateZep",
+            $"C3/M03 authors piratezep on M3PirateZep net={def?.Net}");
+        if (def == null)
+            return;
+        var nets = AiNets.Load(chapterZrdr);
+        var net = AiNets.ByName(nets, def.Net);
+        ctx.Check(net != null && net.Nodes[0].Position.DistanceTo(def.Position) < 1f && net.Nodes[0].StopsHere,
+            $"the record seats on node 0, an armed stop point: the dock the script ends at");
+        if (net == null)
+            return;
+
+        ctx.WithWorld("C3", collision: false, "M03", world => DriveScriptedPose(ctx, world, def, nets));
+        ctx.Note($"C3/M03: pzep_todrydock owns piratezep's pose for 61.65 s from its frame 0, the follower parks under it and resumes at the record seat");
+    }
+
     internal static void ZeppelinLaunch(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -940,5 +973,92 @@ internal static class ZeppelinSuites
             CannonFireRange = 500f,
             Deactivated = deactivated,
         };
+    }
+
+    private static void DriveScriptedPose(TestContext ctx, TestWorld world, ZeppelinDef def,
+        IReadOnlyList<AiNet> nets)
+    {
+        var host = world.Runtime.FindNodes("piratezep", null) is { Count: > 0 } hits ? hits[0] : null;
+        ctx.Check(host != null, $"the built world carries the piratezep node");
+        if (host == null)
+            return;
+        ctx.Check(world.Runtime.Motions.DrivesTransform(host),
+            $"the bootstrap's pzep_todrydock owns piratezep's transform channel before any zeppelin runtime exists");
+        var frame0 = new Vector3(-11313.7f, 553.7f, -13696.8f);
+        var scriptStart = host.GlobalPosition;
+        ctx.Check(scriptStart.DistanceTo(frame0) < 2f,
+            $"…and has posed it at the script's frame 0 base, off by {scriptStart.DistanceTo(frame0):0.##} m");
+
+        ZeppelinRuntime? zeps = null;
+        try
+        {
+            var resolvedHost = host;
+            zeps = new ZeppelinRuntime(new[] { def }, _ => resolvedHost, nets, null,
+                world.Runtime.Motions.DrivesTransform);
+            ctx.Host.AddChild(zeps);
+            zeps.WireDamage(world.Runtime);
+            ctx.Check(host.GlobalPosition.DistanceTo(scriptStart) < 0.01f,
+                $"placement writes nothing over the script's frame 0 pos={host.GlobalPosition}");
+            var motion = zeps.MotionFor("piratezep");
+            ctx.Check(motion != null, $"MotionFor finds the parked motion");
+            if (motion == null)
+                return;
+
+            const float dt = 1f / 60f;
+            const float scriptEnd = 61.65f;
+            float t = 0f, nearestSeat = float.MaxValue, longestStep = 0f;
+            // The approach: the script's last ten seconds settle onto the seat, so the flight
+            // proper is judged before them. A frame moves the hull about a metre at its cruise.
+            while (t < scriptEnd - 10f)
+            {
+                var before = host.GlobalPosition;
+                world.Runtime.Advance(dt);
+                zeps.SimStep(dt);
+                t += dt;
+                nearestSeat = Mathf.Min(nearestSeat, host.GlobalPosition.DistanceTo(def.Position));
+                longestStep = Mathf.Max(longestStep, before.DistanceTo(host.GlobalPosition));
+            }
+            ctx.Check(nearestSeat > 50f,
+                $"the first {scriptEnd - 10f:0} s never put the hull at the record seat, closest {nearestSeat:0} m");
+            ctx.Check(longestStep < 5f,
+                $"…and no frame of them jumped, longest step {longestStep:0.##} m");
+            ctx.Check(ReferenceEquals(zeps.MotionFor("piratezep"), motion)
+                && motion.Position.DistanceTo(def.Position) < 0.01f && motion.Speed == 0f,
+                $"the follower's motion never stepped under the script: still seated on the record, speed {motion.Speed:0.##}");
+
+            while (t < scriptEnd + (2f * dt))
+            {
+                world.Runtime.Advance(dt);
+                zeps.SimStep(dt);
+                t += dt;
+            }
+            var handback = host.GlobalPosition;
+            ctx.Check(!world.Runtime.Motions.DrivesTransform(host),
+                $"the script has ended at {t:0.00} s and released the channel");
+            ctx.Check(handback.DistanceTo(def.Position) < 2f,
+                $"the script's last frame IS the record seat, off by {handback.DistanceTo(def.Position):0.##} m");
+            var resumed = zeps.MotionFor("piratezep");
+            ctx.Check(resumed != null && !ReferenceEquals(resumed, motion)
+                && resumed.Position.DistanceTo(handback) < 0.5f,
+                $"the follower resumed from the script's last frame, not from the record pos={resumed?.Position}");
+            if (resumed == null)
+                return;
+            float yawErr = Mathf.Abs(Mathf.AngleDifference(resumed.YawRad, Mathf.DegToRad(def.YawDeg)));
+            ctx.Check(yawErr < Mathf.DegToRad(3f) && Mathf.Abs(resumed.PitchRad) < Mathf.DegToRad(3f),
+                $"…carrying the script's end attitude, which is the record's yaw {def.YawDeg:0} pitch 0: yaw off {Mathf.RadToDeg(yawErr):0.#}° pitch {Mathf.RadToDeg(resumed.PitchRad):0.#}°");
+
+            for (int i = 0; i < 60 * 5; i++)
+            {
+                world.Runtime.Advance(dt);
+                zeps.SimStep(dt);
+            }
+            ctx.Check(resumed.Follower.Holding && resumed.Follower.CurrentIndex == 0
+                && host.GlobalPosition.DistanceTo(handback) < 1f,
+                $"…and holds the dock, node 0's armed stop point, moved {host.GlobalPosition.DistanceTo(handback):0.##} m in 5 s idx={resumed.Follower.CurrentIndex} holding={resumed.Follower.Holding}");
+        }
+        finally
+        {
+            zeps?.Free();
+        }
     }
 }

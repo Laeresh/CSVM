@@ -98,6 +98,7 @@ public static class SuiteCatalog
         "ai-net-follow",
         "zeppelin-motion",
         "zeppelin-pandora-dead-end",
+        "zeppelin-scripted-pose",
         "zeppelin-launch",
         "zeppelin-damage",
         "zeppelin-broadside",
@@ -582,6 +583,13 @@ public static class SuiteCatalog
             "the record's band the whole route, until it reaches node 0 — an open end with NO " +
             "stop point authored at all — and holds there for good rather than re-picking node " +
             "1 and shuttling the altitude swing back and forth forever", ZeppelinPandoraDeadEndSuite));
+        into.Add(new TestHarness.Suite("zeppelin-scripted-pose",
+            "a zeppelin under an ObjectMotionSiScript: CM04's pzep_todrydock owns piratezep's " +
+            "pose from its frame 0 over C3/M03's built world, the zeppelin runtime places " +
+            "nothing over it and its follower parks (never stepped, no frame jumps, never at the " +
+            "record seat) until the script ends 61.65 s later ON the record seat, where the " +
+            "follower resumes from the script's last frame and holds node 0's armed stop point",
+            ZeppelinScriptedPoseSuite));
         into.Add(new TestHarness.Suite("zeppelin-launch",
             "zeppelin fighter launch (F20): C1/IA1's zeppelin-launch generator authors the " +
             "decoded shape (cargobay origin, −90° drop, mp1 door anims — both shipped as " +

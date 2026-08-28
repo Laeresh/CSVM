@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ `BL-513`: the persist-log replay runs the previous mission's death choreography at mission open
 2. ☑ `BL-521`: the barrage balloons stand at mission start
 3. ☑ `BL-567`: the Pandora's broadside cannons fire on the player (decode: `player` resolves; the report stands against it, flown original check owed)
-4. ☐ `BL-568`: the Pandora starts moored in the dry dock instead of flying in
+4. ☑ `BL-568`: the Pandora starts moored in the dry dock instead of flying in
 5. ☑ `BL-512` + `BL-578`: `ObjectMotion`'s `rnd_xz` makes the Barracuda and the CM08 tanker jump
 6. ☑ `BL-522` + `BL-527`: a surface generator's launch does not fly its take-off run, so the fighters die on the deck
 7. ☑ `BL-569` + `BL-579`: a cutscene called from a start anim fires at bootstrap with no camera (CM04 and CM09)
@@ -357,7 +357,7 @@ check the item first proposed (no `wep_28` hit on P1) would fail by design and i
 decode found none either. The user's report is not answered by this decode: only the original
 game flown into the Pandora's broadside arc in C3/M03 can rank it, and that capture is owed.
 
-## A4 ☐ `BL-568`: the Pandora starts moored in the dry dock instead of flying in
+## A4 ☑ `BL-568`: the Pandora starts moored in the dry dock instead of flying in
 
 **Goal.** Over CM04's first minute the Pandora flies from `(-11314,554,-13697)` to the dry dock
 along `pzep_todrydock`'s SI script, then holds its record seat on net `M3PirateZep`.
@@ -368,7 +368,16 @@ along `pzep_todrydock`'s SI script, then holds its record seat on net `M3PirateZ
 (`data-c3-m03-zrdr-zeps-pzep_todrydock-piratezep.zan.json`, 185 frames, 0 to 61.65 s) ends at the
 record's seat `(-12400.9,150.3,-10355.2)`, yaw -180. CSVM spawns the zeppelin at the record
 position and the script never takes its pose, or the net follower writes over it.
-`<TODO: re-verify still-open against the code>`
+Re-verified against the code: both. The bootstrap registered the script's `ScriptPlayback` on
+`piratezep` and posed frame 0; `ZeppelinRuntime`'s constructor then wrote the record seat over
+it, and every step after that `SimStep` wrote the follower's pose (`Place`, a `GlobalTransform`
+write) while `MotionSet.Tick` wrote the script's. Which write the frame showed was tree order: on
+the realtime clock both run in `_PhysicsProcess` and the zeppelin runtime, added after the world
+root, wrote last, so the hull stood in the dock (the report); on a parent-driven `--det` clock
+the anim runtime advances in `_Process`, after `DriveSimSteps`, so the script's pose won and the
+`--debug-anim` pose log showed the fly-in. Neither the scripted-path snap (`BL-531`) nor the
+dead-end hold (`BL-529`) was involved: both sit in the follower's step, which had no business
+running at all.
 
 **Approach.** An `ObjectMotionSiScript` on a zeppelin node owns that zeppelin's pose for the
 script's duration, starting at frame 0's base, with the net follower parked and resuming from the
@@ -376,11 +385,40 @@ script's last frame. Check `ZeppelinRuntime`'s placement against the scripted-pa
 fix) and the dead-end hold (`BL-529`'s fix) first; neither should apply to a scripted motion.
 Decode lane: `docs/org/objectMotion.md` for who owns a node's transform while an SI script runs.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** The channel rule A5 stated, applied to the one non-animation writer of
+a zeppelin node: `ZeppelinRuntime` asks `MotionSet.DrivesTransform(host)` (handed in by
+`GameSession` at construction, since the bootstrap has already run the start anims by then, and
+adopted from the runtime in `WireDamage` for every other caller) and, while it answers yes,
+neither places nor steps the hull (`Park`, logged). On the first step after the motion ends
+`Resume` rebuilds the `ZeppelinMotion` seated at the hull's live pose, engines as they stand, and
+re-seats the follower from there (logged as the follower's first write). `ZeppelinMotion` keeps
+its start pose private and is C21's file, so the resume goes through `SeatedAt`, the record with
+its start pose replaced; a `ZeppelinMotion.ResumeAt(position, yaw, pitch)` would replace that
+copy once C21 has landed. The record's seat is untouched: it is the script's end pose, node 0 of
+`M3PirateZep` (stop point 1, armed), so the resumed follower holds the dock there.
 
 **Verify.** `--anim-lab --node=piratezep` on C3/M03 playing `pzep_todrydock`: the pose at t=0 is
 the script's frame 0, at 61.65 s the record seat, and the net follower's first write comes after
-the script ends (log it). `<TODO: the suite to extend>`
+the script ends (log it). Measured: `--anim-lab --chapter=C3 --mission=M03 --node=piratezep
+--play-anim=pzep_todrydock --debug-anim --frames=3720` logs the first pose as frame 0's base
+`(-11316.0, 553.1, -13694.9)` rot `(-10.3, 130.7, 0)` and the last as `(-12400.9, 150.3, -10351.5)`
+rot `(0, 179.9, 0)`, the record seat within the script's own end-of-path settle. `--fly
+--chapter=C3 --mission=M03 --zeppelins --det --debug-anim --frames=3900` logs `zep: 'piratezep'
+pose owned by a scripted motion from (-11314,554,-13697), net follower parked` at bootstrap, then
+`zep: 'piratezep' scripted motion ended, follower resumes from (-12401,150,-10355) yaw 179.9°
+pitch -0°, re-seating on 'M3PirateZep'` as the follower's first write, and `holding on its stop
+point` at node 0 after it. The new `zeppelin-scripted-pose` suite drives the same over C3/M03's
+built world: the bootstrap's script owns the channel and has posed frame 0 before any zeppelin
+runtime exists, the runtime's placement writes nothing over it, the follower's motion never steps
+(closest approach to the record seat over 50 m through the first 51 s, no frame over 5 m), the
+script releases the channel at 61.65 s on the record seat, the resumed motion sits at the
+hand-back pose with the record's yaw, and five seconds later the follower holds node 0 with the
+hull unmoved. The eleven zeppelin and net suites (`zeppelin-motion`, `zeppelin-pandora-dead-end`,
+`zeppelin-scripted-pose`, `zeppelin-launch`, `zeppelin-damage`, `zeppelin-broadside`,
+`campaign-zeppelins`, `campaign-zeppelin-wakeup`, `zeppelin-identity`, `instant-action-zeppelin`,
+`ai-net-follow`) pass 11/11 in the foreground, engine errors clean.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not move the record's position to the path start; the record's seat is data and
 the script is what flies it.
