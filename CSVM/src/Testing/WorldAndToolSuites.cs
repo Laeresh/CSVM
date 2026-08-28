@@ -230,6 +230,15 @@ internal static class WorldAndToolSuites
             var mirrored = CockpitOverlay.ToOverlay(eye + offset, eye);
             ctx.Check(mirrored.IsEqualApprox(offset) && mirrored.Length() < 12f,
                 $"a muzzle flash lands in the pass at its world offset from the eye got={mirrored}");
+            // The crash cut's exit from first person, whose whole point is that it works with the
+            // interior node untouched: hiding the airframe cannot reach a panel that lives outside
+            // the plane model, and no Sync follows the cut to notice a hidden one.
+            interior.Visible = true;
+            overlay.Deactivate();
+            ctx.Check(!overlay.Visible && interior.Visible,
+                $"Deactivate takes the pass off the screen without touching the interior node");
+            ctx.Check(view is { RenderTargetUpdateMode: SubViewport.UpdateMode.Disabled },
+                $"and stops the viewport re-rendering it");
         }
         finally
         {
