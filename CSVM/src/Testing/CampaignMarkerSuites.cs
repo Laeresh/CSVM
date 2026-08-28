@@ -25,8 +25,21 @@ internal static class CampaignMarkerSuites
     private const string PathKey = "piratezep/rock_zeppelin";
     private const string PathLabel = "MSG_OBJ_DEFEND";
 
+    // The story position whose objective labels are pinned (C1C/M01): the one mission with no
+    // targets.zrd of its own, labelled by the chapter's through the reader search path.
+    private const int LabelSeq = 5;
+
     // How far a site's world node is moved to prove the candidate follows it.
     private static readonly Vector3 Shove = new(600f, 0f, -400f);
+
+    // C1C/M01's three flown objective targets as the script authors them, with the label lines
+    // the chapter's targets.zrd and messages.json give each, and whether the action draws red.
+    private static readonly (string Key, string Line1, string Line2, bool Red)[] LabelCases =
+    {
+        ("workersvoyagezep", "Zeppelin [Disable] -", "Worker's Voyage", true),
+        ("wv_tailhook/peoplehook", "[Dock] -", "Worker's Voyage Docking Hook", false),
+        ("pzhookpoint", "[Dock] -", "Pandora Docking Hook", false),
+    };
 
     /// <summary>Drives the campaign's first mission against its BUILT world: the objective sites
     /// its <c>targets.zrd</c> flags reach the player's Enemy cycle carrying the mission's objective
@@ -45,7 +58,7 @@ internal static class CampaignMarkerSuites
         ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
 
         var script = ObjectiveScript.Load(missionZrdr);
-        var targets = MissionTargets.Load(missionZrdr);
+        var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
         var messages = Messages.Load(ctx.MessagesPath);
         var report = new StringBuilder();
         report.AppendLine($"seq {FirstSeq} -> {chapter}/{folder}: " +
@@ -95,7 +108,7 @@ internal static class CampaignMarkerSuites
                 },
             },
         });
-        var targets = MissionTargets.Load(missionZrdr);
+        var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
         var messages = Messages.Load(ctx.MessagesPath);
         var report = new StringBuilder();
         var profile = CampaignProfileDef.NewProfile("Zachary");
@@ -105,6 +118,94 @@ internal static class CampaignMarkerSuites
 
         ctx.WriteArtifact($"test-campaign-objective-target-path-{chapter}.txt", report.ToString());
         ctx.Note($"{chapter}/{folder}: [{PathParent}, {PathChild}] marks the hull's own child alone");
+    }
+
+    /// <summary>The marker labels over C1C/M01's BUILT world: the mission's three flown objective
+    /// targets, added as the script adds them, each reach the Enemy cycle with the original's
+    /// category line and proper name (the chapter's <c>targets.zrd</c>, since the mission ships
+    /// none) and the colour its action earns, with the node name kept as the identity alone.
+    /// The mission's own table would label nothing, which is the raw-node-name marker.</summary>
+    internal static void CampaignObjectiveLabels(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), LabelSeq)
+            ?? throw new SuiteSkippedException($"cm_sequence carries no story position {LabelSeq}");
+        string chapter = mission.ChapterFolder.ToUpperInvariant();
+        string folder = mission.MissionFolder.ToUpperInvariant();
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
+        ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
+        ctx.RequireData(chapterZrdr, $"{chapter} zrdr");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+
+        var missionOnly = MissionTargets.Load(missionZrdr);
+        var targets = MissionTargets.Load(missionZrdr, chapterZrdr);
+        var report = new StringBuilder();
+        report.AppendLine($"seq {LabelSeq} -> {chapter}/{folder}: mission table {missionOnly.Count} " +
+            $"entries, with the chapter's {targets.Count}");
+        ctx.Same(0, missionOnly.Count, $"{chapter}/{folder} ships no targets.zrd of its own");
+        ctx.Check(targets.Count > 0, $"and the chapter's table labels it through the reader search path");
+
+        var adds = new List<object?>();
+        foreach (var (key, _, _, _) in LabelCases)
+        {
+            var target = ObjectiveTarget.Parse(key);
+            adds.Add(target.Scoped ? new List<object?>(target.Path) : target.Node);
+        }
+
+        var script = ObjectiveScript.Parse(new List<object?>
+        {
+            new List<object?> { "OBJECTIVE1", new List<object?> { "ADD_OBJECTIVE_TARGET", adds } },
+        });
+        var messages = Messages.Load(ctx.MessagesPath);
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        var director = CampaignDirector.Create(script, mission, profile, null);
+        ctx.WithWorld(chapter, collision: false, folder, world =>
+            DriveLabels(ctx, world, director, targets, messages, report));
+
+        ctx.WriteArtifact($"test-campaign-objective-labels-{chapter}.txt", report.ToString());
+        ctx.Note($"{chapter}/{folder}: the three objective markers read the original's verb and proper name");
+    }
+
+    private static void DriveLabels(TestContext ctx, TestWorld world, CampaignDirector director,
+        MissionTargets targets, Messages messages, StringBuilder report)
+    {
+        var listener = ctx.Camera.GlobalPosition;
+        director.Attach(new CampaignDirector.WorldInputs
+        {
+            Runtime = world.Runtime,
+            Sounds = world.Runtime.Sounds,
+            ListenerPosition = () => listener,
+            Rng = new Random(1),
+        });
+        director.Graph!.Step(0.1f);
+
+        var pilot = new Pilot(new ObjectiveSites(director, messages, targets, world.Runtime));
+        pilot.Fly(listener);
+        // The destructive colour, read off the decoded rule itself rather than a palette constant.
+        var hudRed = TargetHud.MarkerColor(TargetRef.ForStructure(
+            new AimCandidate { Team = AimAssist.PlayerTeam, Live = true, Source = new object() },
+            TargetClass.Enemy, "destroy", "Zeppelin", "Destroy", objective: true), AimAssist.PlayerTeam);
+        var lines = new List<string>();
+        foreach (var (key, line1, line2, red) in LabelCases)
+        {
+            if (Find(pilot.Selection.Pool.Enemy, key) is not { } target)
+            {
+                ctx.Check(false, $"'{key}' is offered on the Enemy cycle");
+                continue;
+            }
+
+            lines.Clear();
+            TargetHud.LabelLines(target, null, lines);
+            var colour = TargetHud.MarkerColor(target, AimAssist.PlayerTeam);
+            report.AppendLine($"'{key}': \"{string.Join("\" / \"", lines)}\" colour {colour}");
+            ctx.Check(lines.Count == 2 && lines[0] == line1 && lines[1] == line2,
+                $"'{key}' labels \"{line1}\" over \"{line2}\", not its node name (\"{string.Join("\" / \"", lines)}\")");
+            ctx.Check(colour == (red ? hudRed : MarkerDraw.HudBlue),
+                $"'{key}' draws {(red ? "red, a destructive action" : "blue, a non-destructive action")}, whatever team the node is on");
+            ctx.Check(target.Name == key,
+                $"'{key}' keeps the node key as its identity for --target= ('{target.Name}')");
+        }
     }
 
     private static void DrivePath(TestContext ctx, TestWorld world, CampaignDirector director,

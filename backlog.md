@@ -2659,29 +2659,6 @@ usual.
   the record's position to the path start; the record's seat is data and the script is what flies
   it. *Cross-refs:* `BL-529`, `docs/org/objectMotion.md`, `docs/formats/anim-definitions.md`.
 
-- `BL-572` `[Fidelity]` **A campaign objective's marker labels the raw node name in the team
-  colour (`peoplehook`, `pzhookpoint`, `workersvoyagezep`) instead of the original's objective
-  marker.** *Evidence (lead-only):* reported at the controls in CM06 (C1C/M01): objective markers
-  read as green node names. The log's `targeting hud: P1 brackets on peoplehook at 999 m` /
-  `pzhookpoint` / `workersvoyagezep` lines show `TargetRef.DisplayName` carrying the node name for
-  an objective target, `TargetHud.LabelLines` drawing it as the second label line, and the colour
-  rule (`HudGreen` for a non-hostile team) applying as to any friendly vehicle. The original's
-  marker, from the user's recollection of this mission: a red `Zeppelin [Disable] Worker's
-  Voyage` for the first objective, then a blue `[Dock] Worker's Voyage Docking Hook` for the hook,
-  so a category, an action verb in brackets, the target's proper name, and a colour by the
-  action rather than the team. The strings exist in `extracted/messages.json`: `MSG_OBJ_DOCK`
-  (8003, "Dock"), `MSG_OBJ_DISABLE` (8006, "Disable"), `MSG_OBJ_DISABLEENG` ("Disable Engines"),
-  `MSG_OBJ_WVOYAGE` (8025, "Worker's Voyage"), `MSG_OBJ_WVOYAGEHOOK` (8027, "Worker's Voyage
-  Docking Hook"), `MSG_OBJ_KLONDIKEHOOK` (8017, "Pandora Docking Hook"). `objectives.zrd` only
-  names the node (`ADD_OBJECTIVE_TARGET [workersvoyagezep]`, `[pzhookpoint]`,
-  `[[wv_tailhook, peoplehook]]`, `docs/formats/objectives.md` 173), so the node-to-name and the
-  node-to-verb maps live elsewhere (a vehicle or zeppelin record field, or a table `crimson.exe`
-  indexes by node name) and are the decode. *Fix shape:* decode where the objective marker's verb
-  and proper name come from for a target node and what sets the marker colour, give `TargetRef`
-  an objective display line built from those message ids, and keep the node name for the debug
-  tag only. *⚠ Traps:* `BL-397` is the marker's bracket
-  range rule and not this. *Cross-refs:* `BL-397`, `docs/formats/markers.md`, `docs/org/targeting.md`.
-
 - `BL-574` `[Bug]` **CM07 (C1/M02): the hangar hand-over gives the player a stock Bloodhawk in the
   ordinary player paint and without nitro, where the original hands over the Blue Streak in Blake
   Aviation livery.** *Evidence (traced to the swap, lead-only on the livery):* at the controls the
@@ -2777,7 +2754,7 @@ usual.
   Land's `destroy_hkzep_*broad*` anims goes `INVALID`, adds `[piratezep, rock_zeppelin]` as the
   objective target with help label `MSG_OBJ_DEFEND` ("Defend"), naps `OBJECTIVE24` (25 s, wakes
   `blakebloodhawk_9..13`), and `OBJECTIVE25` (`DEDG [2, 0]`) removes that target once group 2 is
-  dead; the node name in the label is `BL-572`. The radio tower is `OBJECTIVE15`/`33`
+  dead. The radio tower is `OBJECTIVE15`/`33`
   (`INACTIVE1 rtwr_healthy`); destroyed in time it kills `OBJECTIVE16` and routes through 17 to
   19 (90 s) to `OBJECTIVE20`, otherwise 16 routes through 18 (30 s) to the same 20, which wakes
   `blakebloodhawk_1/2/3/8`: the squad arrives either way, only later with the tower down. The
@@ -2805,7 +2782,7 @@ usual.
   the decode (`docs/formats/objectives.md`'s `TICK_DEPENDS_ON_OBJ` row). `BL-563` stays a
   separate fix. *⚠ Traps:* the Defend marker clearing is correct behaviour (`OBJECTIVE25`), not
   the bug.
-  *Cross-refs:* `BL-563`, `BL-565`, `BL-572`, `docs/formats/objectives.md`.
+  *Cross-refs:* `BL-563`, `BL-565`, `docs/formats/objectives.md`.
 
 ## Tooling, platform & docs
 

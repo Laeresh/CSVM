@@ -12,5 +12,10 @@
   ],
   [
     ["description", "MSG_PROBE_NODELESS"]
+  ],
+  [
+    ["description", "MSG_PROBE_HOOK"],
+    ["nodes", [["probe_tail", "probe_hook"]]],
+    ["help_label", "MSG_PROBE_DOCK"]
   ]
 ]

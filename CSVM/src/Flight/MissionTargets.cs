@@ -19,12 +19,14 @@ public readonly record struct MissionTarget(string? Description, string? Categor
     string? HelpLabel, bool Objective = false, bool OtherTarget = false);
 
 /// <summary>
-/// Loads a mission's <c>targets.json</c> — the map from a world node NAME to its objective
-/// display strings. The file is a list of target entries, each a list of <c>[key, value]</c>
-/// pairs (NOT the flat-alternating reader form): <c>description</c>, a <c>nodes</c> list of
-/// the node name(s) the entry labels, an optional <c>category_label</c>, and a
-/// <c>help_label</c>. Generic across mission types — the stunt mode reads the <c>dzN</c>
-/// entries, but dogfight/zeppelin targets parse identically.
+/// Loads a mission's <c>targets.json</c> — the map from a target KEY to its objective display
+/// strings. The file is a list of target entries, each a list of <c>[key, value]</c> pairs (NOT
+/// the flat-alternating reader form): <c>description</c>, a <c>nodes</c> list of the target(s)
+/// the entry labels, an optional <c>category_label</c>, and a <c>help_label</c>. A target is a
+/// bare node name or a nested <c>[parent, child, ...]</c> path, keyed <c>parent/child</c> the
+/// way <c>objectives.zrd</c>'s target directives are, so the two tables meet on one key.
+/// Generic across mission types — the stunt mode reads the <c>dzN</c> entries, but
+/// dogfight/zeppelin targets parse identically.
 /// </summary>
 public sealed class MissionTargets
 {
@@ -32,25 +34,41 @@ public sealed class MissionTargets
 
     public int Count => _byNode.Count;
 
-    /// <summary>Every entry, node name to its display keys — what a marker HUD walks to find the
-    /// nodes the mission flags <c>objective</c> before its script has edited anything.</summary>
+    /// <summary>Every entry, target key to its display keys — what a marker HUD walks to find the
+    /// targets the mission flags <c>objective</c> before its script has edited anything.</summary>
     public IReadOnlyDictionary<string, MissionTarget> ByNode => _byNode;
 
     /// <summary>Loads targets.json from a mission's zrdr (zip or unpacked dir). Missing file
     /// → an empty set (a mission may have none); malformed entries are skipped.</summary>
-    public static MissionTargets Load(string missionZrdrPath)
+    public static MissionTargets Load(string missionZrdrPath) =>
+        TryLoad(missionZrdrPath) ?? new MissionTargets();
+
+    /// <summary>The original's reader search path: the mission's own zrdr first, then the
+    /// chapter's, one file wins whole (<c>init.gw</c>'s <c>RdrAddPath</c> chain, read by the
+    /// reader opener the targets loader calls).
+    /// ⚠ Do not read the mission scope alone. C1C/M01 ships no targets.zrd of its own and takes
+    /// the chapter's, which is where every one of its objective labels lives.</summary>
+    public static MissionTargets Load(string missionZrdrPath, string chapterZrdrPath) =>
+        TryLoad(missionZrdrPath) ?? TryLoad(chapterZrdrPath) ?? new MissionTargets();
+
+    /// <summary>The display keys for a target key, or an all-null <see cref="MissionTarget"/>
+    /// if the key has no targets.json entry.</summary>
+    public MissionTarget For(string nodeName) =>
+        _byNode.TryGetValue(nodeName, out var t) ? t : default;
+
+    private static MissionTargets? TryLoad(string zrdrPath)
     {
-        var targets = new MissionTargets();
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFile(missionZrdrPath, "targets.json");
+            root = Zrdr.LoadFile(zrdrPath, "targets.json");
         }
         catch (IOException)
         {
-            return targets; // no targets.json for this mission
+            return null; // no targets.json in this scope
         }
 
+        var targets = new MissionTargets();
         foreach (var entryObj in root)
         {
             if (entryObj is not List<object?> entry)
@@ -76,16 +94,28 @@ public sealed class MissionTargets
                 continue;
             var info = new MissionTarget(description, category, help, objective, other);
             foreach (var n in nodes)
-                if (n is string nodeName)
-                    targets._byNode[nodeName] = info;
+                if (KeyOf(n) is { } targetKey)
+                    targets._byNode[targetKey] = info;
         }
         return targets;
     }
 
-    /// <summary>The display keys for a world node, or an all-null <see cref="MissionTarget"/>
-    /// if the node has no targets.json entry.</summary>
-    public MissionTarget For(string nodeName) =>
-        _byNode.TryGetValue(nodeName, out var t) ? t : default;
+    // A nested list is one path, outer name first; anything but strings in it is no target.
+    private static string? KeyOf(object? node)
+    {
+        if (node is string name)
+            return name;
+        if (node is not List<object?> { Count: > 0 } path)
+            return null;
+        var names = new string[path.Count];
+        for (int i = 0; i < path.Count; i++)
+        {
+            if (path[i] is not string segment)
+                return null;
+            names[i] = segment;
+        }
+        return string.Join("/", names);
+    }
 
     private static string? Value(List<object?> pair) => pair.Count > 1 ? pair[1] as string : null;
 }

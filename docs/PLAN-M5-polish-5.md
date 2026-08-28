@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — CM06 (C1C/M01) and CM07 (C1/M02)
 
 11. ☑ `BL-571`: a carried turret's death fire, and the turret, stay where the turret died
-12. ☐ `BL-572`: an objective marker labels the raw node name instead of the original's verb and proper name
+12. ☑ `BL-572`: an objective marker labels the raw node name instead of the original's verb and proper name
 13. ☑ `BL-573`: the AA guns damage themselves firing at a barrier
 14. ☐ `BL-574` + `BL-575`: the hangar hand-over gives a stock Bloodhawk and plays no animation
 15. ☑ `BL-526`: the rope ladder never deploys (a native per-mission switch to decode)
@@ -519,29 +519,50 @@ zeppelin suites around it stay green; the 16 goldens are hash-identical.
 **⚠ Traps.** `trail-world-anchor` settled the opposite case (an emitter that must NOT ride its
 host); keep both. Do not reopen `BL-514`'s `PUFFER_STATE` reading.
 
-## B12 ☐ `BL-572`: an objective marker labels the raw node name instead of the original's verb and proper name
+## B12 ☑ `BL-572`: an objective marker labels the raw node name instead of the original's verb and proper name
 
 **Goal.** An objective marker reads as the original's: a category, an action verb in brackets, the
 target's proper name, coloured by the action (`Zeppelin [Disable] Worker's Voyage` in red, `[Dock]
 Worker's Voyage Docking Hook` in blue), with the node name kept for the debug tag only.
 
-**Evidence (confidence: lead-only on the format, traced on the strings).** The log's `targeting
-hud: P1 brackets on peoplehook at 999 m` lines show `TargetRef.DisplayName` carrying the node name,
+**Evidence (confidence: traced to the data and the reader path).** The log's `targeting hud: P1
+brackets on peoplehook at 999 m` lines show `TargetRef.DisplayName` carrying the node name,
 `TargetHud.LabelLines` drawing it, and `HudGreen` applying as to any friendly. The strings exist in
 `extracted/messages.json` (`MSG_OBJ_DOCK` 8003, `MSG_OBJ_DISABLE` 8006, `MSG_OBJ_WVOYAGE` 8025,
-`MSG_OBJ_WVOYAGEHOOK` 8027, `MSG_OBJ_KLONDIKEHOOK` 8017). `objectives.zrd` only names the node, so
-the node-to-name and node-to-verb maps live elsewhere. The marker format rests on the user's
-recollection. `<TODO: re-verify still-open against the code>`
+`MSG_OBJ_WVOYAGEHOOK` 8027, `MSG_OBJ_KLONDIKEHOOK` 8017). Re-verified against the code: the maps
+are not in any record or binary table; they are `targets.zrd`, and C1C/M01 is the one mission of
+53 that ships none of its own. `MissionTargets.Load(state.MissionZrdrPath)` read the mission scope
+alone, found nothing, and every site fell back to its node name with no category, which is the
+team-colour rule. `C1C/zrdr/targets.zrd` (chapter scope, the only such copy) carries all three:
+`workersvoyagezep` → `MSG_OBJ_WVOYAGE` / `MSG_OBJ_ZEPPELIN` / `MSG_OBJ_DISABLE`,
+`[wv_tailhook, peoplehook]` → `MSG_OBJ_WVOYAGEHOOK` / `MSG_OBJ_DOCK`, `pzhookpoint` →
+`MSG_OBJ_KLONDIKEHOOK` / `MSG_OBJ_DOCK`. A second defect sat under it: `MissionTargets` skipped a
+nested `nodes` entry (`[[wv_tailhook, peoplehook]]`) outright, so the hook would have stayed a
+node name even from the right file.
 
-**Approach.** Decode where the objective marker's verb and proper name come from for a target node
-(a vehicle or zeppelin record field, or a table `crimson.exe` indexes by node name) and what sets
-the marker colour; give `TargetRef` an objective display line built from those message ids. Lands
-after C24 so it labels the resolved node.
+**Approach.** Decoded rather than a new display line: `targets.zrd` is opened through the reader
+search path (`FUN_004a2be0` → `FUN_00579c60` → `FUN_00579710`), which `init.gw` sets as
+`common\zrdr`, `<chapter>\zrdr`, `<chapter>\zrdr\nets`, `<chapter>\<mission>\zrdr`
+(`RdrSetPath`/`RdrAddPath`), one file whole. `MissionTargets.Load(mission, chapter)` is that path
+(mission, else chapter), a nested `nodes` entry keys `parent/child` like `ObjectiveTarget.Key`,
+`ObjectiveSites.SiteFor` looks the whole key up first and the last node second, and `GameSession`
+passes the chapter zrdr. The marker colour was already `Target::GetColor`'s decoded rule in
+`TargetHud.MarkerColor` (Disable red, Dock blue); it only ever saw a null category. `TargetRef`
+and `TargetHud.LabelLines` needed no change: the format is the original's three format strings
+already ported (`Zeppelin [Disable] -` over `Worker's Voyage`), the recollection's missing ` -`
+being the original's own trailing dash.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** Fix what the decode names and nothing else: the reader search path is a
+data-location rule, so it lives in `MissionTargets` beside the file it opens, not in
+`ObjectiveSites`, which keeps reading one table.
 
-**Verify.** `<TODO: the targeting suite asserting the label lines for CM06's three objective
-targets, plus the flown check in D31>`
+**Verify.** `campaign-objective-labels` (new, C1C/M01's built world): the mission table loads 0
+entries, the chapter's 5; the three targets label `Zeppelin [Disable] -` / `Worker's Voyage` red,
+`[Dock] -` / `Worker's Voyage Docking Hook` blue, `[Dock] -` / `Pandora Docking Hook` blue, each
+keeping its key as `--target=` identity. `MissionTargetsTests` pins the nested key and the
+mission-else-chapter load. Plus the flown check in D31.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** `BL-397` is the marker's bracket range rule and not this. The format is a
 recollection until decoded; do not build the exact layout from it.

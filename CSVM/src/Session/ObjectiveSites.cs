@@ -19,7 +19,7 @@ public sealed class ObjectiveSite
     public string Node { get; init; } = "";
 
     /// <summary>The target itself: <see cref="ObjectiveTarget.Node"/> is the name of the world
-    /// node the site stands on, which is what a label about that node reads.</summary>
+    /// node the site stands on, the fallback a label is looked up by.</summary>
     public ObjectiveTarget Target { get; init; }
 
     /// <summary>The site's own resolved name, the marker's second line.</summary>
@@ -245,8 +245,14 @@ public sealed class ObjectiveSites
             _sites[key] = site;
         }
 
-        // targets.zrd is keyed by the node the site stands on, the help label by the whole key.
-        var info = _targets.For(site.Target.Node);
+        // targets.zrd keys a path-authored entry by the same parent/child key the script uses,
+        // and a bare one by the node; a path added by the script over a bare entry reads the node.
+        var info = _targets.For(key);
+        if (info == default)
+        {
+            info = _targets.For(site.Target.Node);
+        }
+
         string name = Text(info.Description);
         string typeLabel = Text(info.CategoryLabel);
         string category = Text(graph.HelpLabels.TryGetValue(key, out var written)

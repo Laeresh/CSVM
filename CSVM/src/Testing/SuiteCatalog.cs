@@ -182,6 +182,7 @@ public static class SuiteCatalog
         "campaign-danger-zones",
         "campaign-objective-markers",
         "campaign-objective-target-path",
+        "campaign-objective-labels",
         "landings-approach-trigger",
         "landings-wingwalk-gate",
         "landings-train-pickup-gate",
@@ -991,6 +992,13 @@ public static class SuiteCatalog
             + "offers one site standing on the hull's own child rather than the ground node, and "
             + "carries the SET_HELP_LABEL written against the same path",
             CampaignObjectiveTargetPath));
+
+        into.Add(new TestHarness.Suite("campaign-objective-labels",
+            "the objective marker's text over C1C/M01's BUILT world, the one mission with no "
+            + "targets.zrd of its own: its three flown targets take the chapter's table through the "
+            + "reader search path and label 'Zeppelin [Disable] -' over 'Worker's Voyage' in red and "
+            + "'[Dock] -' over each docking hook's proper name in blue, the node key kept as identity",
+            CampaignObjectiveLabels));
 
         // BL-467: nothing read landings.zrd, so no mission could ever play the cutscene an
         // ANIM_STATE objective waits on.

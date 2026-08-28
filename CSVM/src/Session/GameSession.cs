@@ -2582,7 +2582,9 @@ public partial class GameSession : Node3D
             var objectiveMessages = Messages.Load(state.MessagesPath);
             _worldRoot!.AddChild(UI.ObjectivesHud.Build(campaign, objectiveMessages, _pauseState!));
             var sites = new ObjectiveSites(campaign, objectiveMessages,
-                MissionTargets.Load(state.MissionZrdrPath), state.WorldRuntime);
+                MissionTargets.Load(state.MissionZrdrPath,
+                    SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter)),
+                state.WorldRuntime);
             flightRoster.SetTargetObjectives(into => sites.Collect(into));
             // Verification breadcrumb: how many sites the mission starts with. A zero here and a
             // populated objectives readout means the target table, not the graph, is the problem.

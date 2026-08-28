@@ -2544,11 +2544,17 @@ only IA1 folders have one, the original picks one at random per launch) and `Loa
 (story objectives.json `PLAYER_INIT`, position + yaw). Schema: docs/formats/spawns.md.
 
 ## src/Flight/MissionTargets.cs
-Loads a mission's targets.json: world-node NAME → objective display keys
+Loads a mission's targets.json: target KEY → objective display keys
 (`description`/`category_label`/`help_label`), resolved through `Messages`, plus the valueless
-`objective`/`other_target` marker flags a mission starts with. Generic across mission types; a
-missing file yields an empty set. `ByNode` exposes the whole table for a consumer that needs the
-starting flags rather than one node's keys. Schema: docs/formats/missions.md.
+`objective`/`other_target` marker flags a mission starts with. A bare node name keys itself and a
+nested `[parent, child]` entry keys `parent/child`, the same key `ObjectiveTarget` gives the
+script's target directives, so the two tables meet on one string. `Load(mission, chapter)` is the
+original's reader search path (`init.gw`'s `RdrAddPath` chain): the mission's own file, else the
+chapter's, one file whole and never a merge. ⚠ Read both scopes for a campaign mission: C1C/M01
+ships no targets.zrd and every one of its objective labels sits in `C1C/zrdr/targets.zrd`.
+Generic across mission types; no file in either scope yields an empty set. `ByNode` exposes the
+whole table for a consumer that needs the starting flags rather than one key's labels. Schema:
+docs/formats/missions.md.
 
 ## src/Flight/MarkerDraw.cs
 The world marker's drawing primitives, shared by `MarkerHud` and `TargetHud`: the
@@ -5221,9 +5227,14 @@ the bare `TRAVELERS` point of the objective that edits a target over the world n
 name, because C3/M01's village node stands at the world origin. A site is keyed by
 `ObjectiveTarget.Key`, and `ResolveTarget` walks a path one name at a time with `FindNodes` scoped
 to the node before, so `piratezep/rock_zeppelin` is the hull's own child and a bare name is the
-first global match; `targets.zrd` is looked up by the path's last node, the help label by the
-whole key. `GameSession` binds it through `FlightRoster.SetTargetObjectives`. Pinned by
-`campaign-objective-markers` and `campaign-objective-target-path`.
+first global match; `targets.zrd` is looked up by the whole key first (a path-authored entry
+keys `parent/child` there too) and by the path's last node as the fallback, the help label by the
+whole key. The marker's verb, proper name and colour all come off that table through `Messages`
+(`Zeppelin [Disable] -` over `Worker's Voyage` in red, `[Dock] -` over `Worker's Voyage Docking
+Hook` in blue), and a site whose key finds no entry falls back to its node name, which is what a
+table loaded from the wrong scope looks like. `GameSession` binds it through
+`FlightRoster.SetTargetObjectives`. Pinned by `campaign-objective-markers`,
+`campaign-objective-target-path` and `campaign-objective-labels`.
 
 ## src/Session/ObjectiveGraph.cs
 The objectives runtime over a parsed script, pure state over `Step` calls in the shape of
