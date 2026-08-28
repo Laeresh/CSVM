@@ -2392,6 +2392,18 @@ public partial class FlightController : Node3D
             _cam?.CrashView(at, _model.VelocityDir);
         if (_hudCanvas != null)
             _hudCanvas.Visible = false;
+        LeaveFirstPerson();
+    }
+
+    // The crash camera is an external vantage, so the first-person hiding comes off with the cut.
+    // ⚠ Not something _Process can do for us: it writes nothing to the camera while crashed, so
+    // the last flying frame's state would stand for the whole crash. The interior lives OUTSIDE
+    // PlaneModel under the overlay pass, which is why hiding the airframe does not take it with it.
+    private void LeaveFirstPerson()
+    {
+        Cockpit?.Apply(_cam?.ViewMode ?? PilotViewMode.Chase, firstPerson: false);
+        CockpitPass?.Deactivate();
+        _panelShown = false;
     }
 
     // The dead hull flying itself, on the same model it flew alive: the original gates nothing in
