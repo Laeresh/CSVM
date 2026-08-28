@@ -119,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Damage share and target class
 
-31. ☐ `BL-586`: one burst deals a world destructible one splash share per collider body it carries
+31. ☑ `BL-586`: one burst deals a world destructible one splash share per collider body it carries
 32. ☑ `BL-598`: CM08's patrol boats take hits but cannot be targeted or aim-assisted
 
 ## Dependency and parallelism notes
@@ -506,7 +506,53 @@ C21 and C22 need this test to catch. A test that passes because it now measures 
 
 # Wave D — Damage share and target class
 
-## D31 ☐ `BL-586`: one burst deals a world destructible one splash share per collider body it carries
+## D31 ☑ `BL-586`: one burst deals a world destructible one splash share per collider body it carries
+
+**Landed.** A burst deals one share per world OBJECT, where the object is the node a collider body
+belongs to, not the resolved destructible and not the body. `WorldCollision.OwnerOf` names it:
+`SceneBuilder.AttachCollision` carves one mesh node's collision into one `StaticBody3D` per surface
+class and stamps each with `SurfaceIdMeta`, so those siblings answer their shared parent while every
+other body (a clutter region, a plane hull, a suite's bare plate) answers itself.
+`ProjectilePool.ApplyDamage` walks its nearest-first candidate list keeping the first body of each
+group, seeded with the struck node's group since it already took the full unscaled figure. The
+32-target cap now counts objects, as the original's buffer does.
+
+**The decode overturned the plan's fix shape, and no `DamageSink` change was made.** `FUN_004cb420`
+walks the spatial grid and hands each object to `FUN_004cb950`, which recurses: a node with
+`node+0x24` bit `0x40` clear is a group contributing nothing itself and passing the walk to its
+children, while a node carrying `0x40` and `0x100` is a leaf writing exactly one entry keyed on its
+own pointer at entry `+0x28`. Neither the gather nor `FUN_005acac0` dedupes further. So the buffer
+holds one entry per collidable LEAF, not one per top-level object, and a model of several leaves
+takes several shares against one HP pool. Collapsing per resolved destructible would therefore have
+been a second fidelity bug in the opposite direction, and it would have merged C3/M01's four
+`hydrogentank` bodies, which are genuinely separate parts. The pool needs no destructible key
+because the grouping is Godot scene structure it already holds.
+
+Nearest-first is derived, not chosen: the sibling bodies being collapsed stood for ONE original leaf,
+whose single entry records the distance to that whole node's bounding-sphere surface, so the nearest
+of the group is the share the original would have recorded.
+
+**Measured.** In `turret-self-fire`, a neighbour's flak dropped into `aagun36`'s pit dealt
+`-10@g20/col_buildings -9.98@g20/col -9.88@g6/col_buildings -9.78@g6/col`: four shares from two
+nodes, each doubled by the surface-class carve. After the change, `-10@g20/col_buildings
+-9.88@g6/col_buildings`, one share per node with the nearest magnitude of each pair unchanged. The
+suite now asserts the share count equals the distinct struck-parent count, an invariant that holds
+whatever the geometry, rather than a pinned literal. The item's original `-8.18/-8.04/-8/-7.36`
+trace is no longer reachable from the gun's own burst, which `BL-573`'s owner-body gate now refuses.
+
+**Suites checked** (the plan's open TODO): `turret-self-fire` is the one whose numbers move.
+`blast-curve-cover-cap` was the real risk, since its forty lab plates and its `exactly 32 damaged`
+and `three targets and nothing else` assertions count bodies that resolve to no destructible at all;
+they survive because a body `SceneBuilder` did not build keys on itself. `alpha-cutout-ray-census`
+reads `BlastCoverCensus`, which is deliberately left per-body. `blast-neighbor-shape`,
+`zeppelin-damage` and `zeppelin-cannon-burnout` (both pick a blast-less weapon on purpose),
+`world-turrets`, `mission-off-turrets` and `damage-hd` (all drive `DamageAt` directly) do not move.
+`air-to-air` is the canary that the dedupe did not leak into the aircraft branch, which is keyed
+per plane already.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** One burst deals a world destructible one splash share, whatever number of collider bodies
 the destructible carries, matching the original's hit buffer of one entry per node.
@@ -515,7 +561,6 @@ the destructible carries, matching the original's hit buffer of one entry per no
 over its own pit dealt `-8.18`, `-8.04`, `-8` and `-7.36`, one share per body, in the
 `turret-self-fire` trace. The original's hit buffer holds one entry per node (`FUN_004cb420`).
 Filed at the close of `BL-573` (`git log --grep=BL-573`).
-<TODO: re-verify still-open against the code.>
 
 **Approach.** Dedupe `ProjectilePool.ApplyDamage`'s world candidates per resolved destructible,
 keeping the nearest body's share. This needs a `DamageSink`-side key, because the pool cannot
@@ -527,8 +572,7 @@ consumer sees, so the blast radius is wider than the fix.
 
 **Verify.** The `turret-self-fire` trace showing one share on the C1 aagun where it showed four,
 with the share's magnitude unchanged. Then the full gate, reading the destructible and weapon
-suites for any consumer whose expected damage moved. <TODO: name the suites that assert splash
-damage totals against multi-body destructibles.>
+suites for any consumer whose expected damage moved.
 
 **⚠ Traps.** Keeping the nearest body's share is a decision, not a derivation: if the original's
 buffer keeps the first entry rather than the nearest, the totals differ on an off-centre burst, so

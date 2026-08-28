@@ -359,6 +359,9 @@ public sealed partial class ProjectilePool : Node3D
     // nothing here.
     private readonly PhysicsRayQueryParameters3D _coverRay = new() { CollisionMask = CollisionLayers.World };
     private readonly List<BlastCandidate> _blastCandidates = new();
+    // The world objects one burst has already dealt a share to, by instance id (Godot object
+    // identity is a native pointer, so the id is the safe key). Reset per burst.
+    private readonly HashSet<ulong> _blastGroups = new();
     // Local bounds per collision shape (BlastCentre), read once off the physics server: a chapter
     // trimesh's face array is large and shared across every instance of its mesh.
     private readonly Dictionary<Rid, Aabb> _shapeBounds = new();
@@ -2411,6 +2414,13 @@ public sealed partial class ProjectilePool : Node3D
             GatherWorldCandidates(space, point, radius, struck, owner);
         _blastCandidates.Sort(ByDistance);
 
+        // One share per world OBJECT, not per collider body: the original's hit buffer holds one
+        // entry per node and SceneBuilder splits a node into a body per surface class. The struck
+        // node took the full figure already, so its siblings are spent with it.
+        _blastGroups.Clear();
+        if (struck != null)
+            _blastGroups.Add(Mech3.WorldCollision.OwnerOf(struck).GetInstanceId());
+
         int accepted = 0;
         for (int i = 0; i < _blastCandidates.Count; i++)
         {
@@ -2423,6 +2433,11 @@ public sealed partial class ProjectilePool : Node3D
                 break;
             }
             var c = _blastCandidates[i];
+            // Nearest-first order makes the kept share the nearest body's, and the object is
+            // decided here: a covered nearest body drops it rather than deferring to a sibling.
+            if (c.Plane == null && c.Body != null
+                && !_blastGroups.Add(Mech3.WorldCollision.OwnerOf(c.Body).GetInstanceId()))
+                continue;
             if (space != null && BlastCovered(space, point, normal, c))
                 continue;
             float share = BlastFalloff(c.DistanceSq, radiusSq);

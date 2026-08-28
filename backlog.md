@@ -855,15 +855,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fires. *Cross-refs:* `ZeppelinMotion`, `docs/formats/mission-entities.md` "Steering",
   `zeppelin-pandora-dead-end`.
 
-- `BL-586` `[Bug]` **One burst deals a world destructible one splash share per collider body it
-  carries.** *Evidence (traced):* the C1 aagun carries ten collider bodies, and one flak bursting
-  over its own pit dealt `-8.18/-8.04/-8/-7.36`, one share per body (the `turret-self-fire`
-  trace), where the original's hit buffer holds one entry per node (`FUN_004cb420`). *Fix
-  shape:* dedupe `ProjectilePool.ApplyDamage`'s world candidates per resolved destructible,
-  keeping the nearest body's share; needs a `DamageSink`-side key, since the pool cannot resolve
-  destructibles itself. *Cross-refs:* `docs/org/ordnanceTypes.md`, `turret-self-fire`,
-  `BL-573`'s closing commit (`git log --grep=BL-573`).
-
 - `BL-605` `[Bug]` **A surface vehicle's aim-assist candidate carries zero velocity, so the lead
   solver never leads a moving boat.** *Evidence (traced):*
   `SurfaceVehicleRuntime.CollectVehicles` adds each hull with `Vector3.Zero` for velocity, where
