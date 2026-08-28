@@ -524,9 +524,9 @@ internal static class AnimationAndEffectsSuites
     // FORWARD_ROTATION turns a launched body about the horizontal PERPENDICULAR of its own launch
     // direction, at the authored rate and scaled by that direction's horizontal length, so one authored
     // number tumbles a flat throw fast and a steep one slowly. Every case is arithmetic on a synthetic
-    // body, with min = max ranges and the pose read back as geometry rather than as the euler triple
-    // the implementation writes. ⚠ A body launched by the vector translation form must hold its
-    // orientation exactly; that is the case that fails if the axis is ever "fixed" to a mesh axis.
+    // body, with min = max ranges and the pose read back as geometry, not as the euler triple written.
+    // ⚠ A vector-translation body turns about its COMPILED direction (`rnd_xz`) and holds exactly
+    // when that is zero; both cases fail if the axis is ever "fixed" to a mesh axis.
     internal static void ForwardRotation(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -562,15 +562,16 @@ internal static class AnimationAndEffectsSuites
                     ["run_time"] = runTime,
                 });
 
-            // The same tumble on the VECTOR launch form — the shape the crash pieces author.
-            static AnimData Vector(float rate) =>
+            // The same tumble on the VECTOR launch form — the shape the crash pieces author. `dir` is
+            // the compiled direction cache the extractor names `rnd_xz`.
+            static AnimData Vector(float rate, Vector3 dir) =>
                 new(new Dictionary<string, object?>
                 {
                     ["translation"] = new Dictionary<string, object?>
                     {
-                        ["initial"] = Vec(10f, 0f, 0f),
+                        ["initial"] = Vec(10f * dir.X, 10f * dir.Y, 10f * dir.Z),
                         ["delta"] = Vec(0f, 0f, 0f),
-                        ["rnd_xz"] = Vec(0f, 0f, 0f),
+                        ["rnd_xz"] = Vec(dir.X, dir.Y, dir.Z),
                     },
                     ["forward_rotation"] = new Dictionary<string, object?>
                     {
@@ -636,13 +637,84 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(Mathf.Abs(rampedAngle - 1f) < 1e-3f,
                 $"forward_rotation.delta accelerates the rate angle={rampedAngle:0.000} rad expected=1.000");
 
-            // 5 — the report from the controls. The vector launch form never fills the direction
-            // cache the tumble multiplies through, and the parser zeroes the event struct before
-            // reading it, so these bodies hold their orientation however large the authored rate is.
-            var vec = Pose(Vector(15.708f), 1f);
+            // 5 — the vector launch form turns about the direction the PARSER compiled into its
+            // third triple, the same cache the ranged form draws: a +Z launch pitches over +Z.
+            var vecZ = Pose(Vector(Mathf.Pi / 2f, Vector3.Back), 1f);
+            ctx.Check(vecZ.Y.IsEqualApprox(Vector3.Back),
+                $"a vector-translation launch tumbles about its compiled direction up={vecZ.Y}");
+
+            // 6 — and with that triple zero (a vertical launch, or a hand-built shape) there is no
+            // axis to turn about, so the body holds its orientation however large the authored rate.
+            var vec = Pose(Vector(15.708f, Vector3.Zero), 1f);
             ctx.Check(vec.IsEqualApprox(Basis.Identity),
-                $"a vector-translation launch does not tumble at all basis={vec}");
-            ctx.Note($"flat 1 rad/s = {-slow.GetEuler(EulerOrder.Yxz).Z:0.000} rad/s, the same launch at 60° = {steepAngle:0.000} rad/s, vector form = 0");
+                $"a vector-translation launch with a zero direction does not tumble basis={vec}");
+            ctx.Note($"flat 1 rad/s = {-slow.GetEuler(EulerOrder.Yxz).Z:0.000} rad/s, the same launch at 60° = {steepAngle:0.000} rad/s, vector form along +Z up={vecZ.Y}, zero direction = 0");
+        });
+    }
+
+    // ---- the vector launch form's third triple: a compiled direction, not a spread --------------
+
+    // The parser compiles `TRANSLATION az elev speed delta` into `initial` (direction × speed),
+    // `delta` (direction × acceleration) and the direction cache the tumble reads back, which the
+    // extractor names `rnd_xz`. Nothing on the vector form is random, so two bodies must fly the
+    // identical path and end exactly where `initial` puts them. ⚠ Read as a spread, the third triple
+    // walked the Barracuda's 40 s cruise up to 44 m per draw, snapped away by the next placement.
+    internal static void LaunchDirectionCache(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var runtime = world.Runtime;
+            var root = world.Session.Root;
+
+            static Dictionary<string, object?> Vec(Vector3 v) =>
+                new() { ["x"] = v.X, ["y"] = v.Y, ["z"] = v.Z };
+
+            // The Barracuda's cruise event as authored: 40 m/s along +Z for 40 s, no acceleration,
+            // the third triple its unit +Z direction (`cache` lets a case vary that triple alone).
+            static AnimData Cruise(Vector3 dir, Vector3? cache = null) =>
+                new(new Dictionary<string, object?>
+                {
+                    ["translation"] = new Dictionary<string, object?>
+                    {
+                        ["initial"] = Vec(dir * 40f),
+                        ["delta"] = Vec(Vector3.Zero),
+                        ["rnd_xz"] = Vec(cache ?? dir),
+                    },
+                    ["run_time"] = 40f,
+                });
+
+            Vector3 Fly(AnimData data, float t)
+            {
+                var node = new Node3D { Name = "launch-direction-probe" };
+                root.AddChild(node);
+                try
+                {
+                    var motion = MotionRuntime.Create(runtime, node, data, data.Num("run_time") ?? 0f);
+                    motion?.Seek(t);
+                    return node.Transform.Origin;
+                }
+                finally
+                {
+                    node.QueueFree();
+                }
+            }
+
+            // Two bodies built one after the other share nothing but the data; under the spread
+            // reading each drew its own three numbers off the runtime's RNG and the two diverged.
+            var first = Fly(Cruise(Vector3.Back), 40f);
+            var second = Fly(Cruise(Vector3.Back), 40f);
+            var expected = new Vector3(0f, 0f, 1600f);
+            ctx.Check(first.IsEqualApprox(expected),
+                $"the cruise ends exactly where initial × run_time puts it end={first} expected={expected}");
+            ctx.Check(first.IsEqualApprox(second),
+                $"a second body flies the identical path first={first} second={second}");
+
+            // The third triple is a direction, not an amplitude: scaling it changes nothing about
+            // where the body goes, only (through the tumble) how it turns.
+            var scaled = Fly(Cruise(Vector3.Back, cache: Vector3.Back * 2f), 40f);
+            ctx.Check(scaled.IsEqualApprox(expected),
+                $"a longer third triple moves the body not one metre further end={scaled}");
+            ctx.Note($"cruise end {first} against the authored placement 1600 m along +Z");
         });
     }
 

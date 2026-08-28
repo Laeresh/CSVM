@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ `BL-521`: the barrage balloons stand at mission start
 3. ☑ `BL-567`: the Pandora's broadside cannons fire on the player (decode: `player` resolves; the report stands against it, flown original check owed)
 4. ☐ `BL-568`: the Pandora starts moored in the dry dock instead of flying in
-5. ☐ `BL-512` + `BL-578`: `ObjectMotion`'s `rnd_xz` makes the Barracuda and the CM08 tanker jump
+5. ☑ `BL-512` + `BL-578`: `ObjectMotion`'s `rnd_xz` makes the Barracuda and the CM08 tanker jump
 6. ☐ `BL-522` + `BL-527`: a surface generator's launch does not fly its take-off run, so the fighters die on the deck
 7. ☑ `BL-569` + `BL-579`: a cutscene called from a start anim fires at bootstrap with no camera (CM04 and CM09)
 
@@ -385,7 +385,7 @@ the script ends (log it). `<TODO: the suite to extend>`
 **⚠ Traps.** Do not move the record's position to the path start; the record's seat is data and
 the script is what flies it.
 
-## A5 ☐ `BL-512` + `BL-578`: `ObjectMotion`'s `rnd_xz` makes the Barracuda and the CM08 tanker jump
+## A5 ☑ `BL-512` + `BL-578`: `ObjectMotion`'s `rnd_xz` makes the Barracuda and the CM08 tanker jump
 
 **Goal.** The Barracuda drives smoothly into the bay with no single-frame snap and stands facing
 the bay opening; the CM08 tanker sits where its `ObjectMotion` puts it, with no jump.
@@ -400,7 +400,14 @@ carries no rotation term and the gamez transform is `Initial`, so the heading di
 the def alone and the report stands over it. The tanker (`freighter-freighterwavemotion.json`, two
 looped `ObjectMotion` events, and `Russian`'s net trailer at `tanker@node8`) shows the same jump;
 `rnd_xz` or a follower write (`BL-531`'s waypoint-0 snap) are the two leads.
-`<TODO: re-verify still-open against the code>`
+Re-verified against the code: `MotionRuntime.Create`'s `translation` branch added
+`RandSym() * rnd_xz` per axis, and the anim lab (`--anim-lab --chapter=C3 --mission=M03
+--play-anim=sub_movement --debug-anim`, seed 1) logged the drive ending at z = -11480.0 before the
+closing `ObjectMotionFromTo` snapped it to -11516.3, a 36 m jump. The tanker half is not what the
+entry says: `freighterwavemotion` authors two `ObjectMotionFromTo` loops (a ±1 m bob and a ±0.5°
+roll, both in sequences named `roughsea`), `freightercruise` drives the parent `freighter` by SI
+script, and no `ObjectMotion` event in C1B/M03 names `tanker` or `freighter` at all; the mission
+census's `ObjectMotion×1` is elsewhere.
 
 **Approach.** Settle in `docs/org/objectMotion.md`'s routine whether `rnd_xz` is a random spread
 or a cached unit direction the original reads back; the change belongs to `ObjectMotion` as a
@@ -410,11 +417,39 @@ the `bauda_aip*` path direction in the built world, not the def. For the tanker,
 each event boundary; if the discontinuity is `rnd_xz` it is the same fix, if a follower writes the
 pose, exclude a node an `ObjectMotion` owns from the follower.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Decode.** `rnd_xz` is not a spread. The parser's `TRANSLATION` block (`FUN_00508590`, the
+`00508d27` flag set) reads `azimuth elevation speed delta` and compiles the launch exactly as the
+ranged branch does: the direction (float `cos 90°`, 0, `sin 90°` on the Barracuda) goes to the
+event's `+0x70`/`+0x74`/`+0x78` direction cache, `direction × speed` to `+0x40`…`+0x48` and
+`direction × delta` to `+0x4c`…`+0x54`. The update's flag-`0x4` branch (`FUN_004e8fa0`) copies
+those six floats into the live slots and calls no random source; the only reader of the cache is
+the tumble. mech3ax's `ObjectMotionNgC` places `trans_rnd_xz` at struct offset 100, which is the
+event's `+0x70`, so the extractor's `rnd_xz` IS the direction cache. Two consequences landed in
+`MotionRuntime`: the vector form draws nothing, and its tumble turns about `rnd_xz` (the 495
+vector-form tumbles were read as inert because the cache was thought unfilled). Ownership: an
+`ObjectMotion` owns its target's transform channel from creation to its run time, and a second
+motion on the same node's channel evicts it (`MotionSet.Add`); nothing outside `MotionSet` writes a
+node an `ObjectMotion` drives. The tanker never has one.
 
-**Verify.** The anim lab pose log for both nodes shows no discontinuity above the authored 1.2 m
-residual at any event boundary; the Barracuda's -Z is within the bay opening's bearing at the end
-of the drive. `<TODO: the suite asserting MotionRuntime's rnd_xz reading>`
+**Model recommendation.** The heading half of `BL-512` is not settled by this decode and stays with
+the sortie: in the built world the hull's node carries a 180° yaw (its nose is world +Z), the drive
+runs +Z 1680 m and the `bauda_aip*` take-off path runs local -Z, i.e. world +Z over the bow, so
+the data is self-consistent and the top-down shot at the end of the drive shows the hull mid-channel
+pointing along it. What "the bay opening" is on this map was not identified from the node table
+(no named bay or dock node within 800 m of the placement), so the sortie judges it.
+
+**Verify.** `launch-direction-cache` (new) asserts two consecutive vector-form bodies fly the
+identical path and end exactly at `initial × run_time`, and that a longer third triple moves the
+body not one metre; `forward-rotation` now asserts the vector form tumbles about its compiled
+direction and holds when that is zero. The anim lab drive log (seed 1) ends the cruise at the
+authored 1.2 m residual after the fix. The tanker was measured on the campaign path
+(`--campaign=<copy>:7 --debug-anim`, 190 s of sim covering the cruise and the aground hand-over):
+1,868 one-second samples of the tanker's world position with no step above 15 m, and the `tanker`
+node's own pose holding y = 0 under its ±0.5° roll. The bob never plays because the roll's
+`ObjectMotionFromTo` evicts it on the same channel each loop, which is a separate, smaller finding
+and not a jump.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not special-case the submarine or the tanker; do not "fix" the 1.2 m residual,
 which is authored. The cargo-crane choreography between the Pandora and the tanker is untested

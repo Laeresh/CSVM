@@ -182,9 +182,12 @@ seeded from its **authored rest** pose for a launch and from its live pose other
 shared effect template's children are never re-homed between calls, so seeding a launch from the
 live pose walked every repeat explosion's debris further from the blast than the one before):
 
-- `TRANSLATION.initial` is the launch **velocity** (a crash piece leaves at y=10 m/s); `rnd_xz` a
-  per-axis random spread added to it (through the runtime's **seedable** `_rng`, so a lab replay
-  is deterministic); `delta` a constant **acceleration** along the launch, in m/s² — **not** a ramp
+- `TRANSLATION.initial` is the launch **velocity** (a crash piece leaves at y=10 m/s); `rnd_xz` is
+  the compiled launch **direction**, the cache the tumble reads back, and **not a random spread**:
+  the source spells `TRANSLATION azimuth elevation speed delta` and the parser compiles it through
+  the same polar construction as `TRANSLATION_RANGE`, so `initial = direction × speed` and nothing
+  on the vector form is drawn at runtime (the name is mech3ax's, [`../org/objectMotion.md`](../org/objectMotion.md));
+  `delta` a constant **acceleration** along the launch, in m/s² — **not** a ramp
   divided by `RUN_TIME`, which is how it was once read (non-zero on 92 of the 757
   vector-form events).
 - `TRANSLATION_RANGE` is a ballistic launch in **polar form** — **`xz` is an AZIMUTH and `y` an

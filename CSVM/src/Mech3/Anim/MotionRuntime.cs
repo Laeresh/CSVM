@@ -78,7 +78,8 @@ internal sealed class MotionRuntime : IAnimMotion
     private bool _hasScale;
 
     // forward_rotation: a live rate about the launch's own perpendicular. angle(t) = rate·t +
-    // ½·accel·t², turned about `_tumbleAxis` — zero for a body that never drew a launch direction.
+    // ½·accel·t², turned about `_tumbleAxis` — zero for a body whose launch direction is vertical
+    // or absent.
     private float _tumbleRate, _tumbleAccel;
 
     private Vector3 _tumbleAxis;
@@ -154,9 +155,8 @@ internal sealed class MotionRuntime : IAnimMotion
     /// <see cref="TryContact"/> instead, from the surface it strikes.</summary>
     public string? PendingBounce { get; private set; }
 
-    // Whether this body turns at all: an authored rate AND an axis to turn it about. A
-    // vector-translation launch has the rate and no axis (see TumbleAxis) — arithmetic, not a
-    // guard against it.
+    // Whether this body turns at all: an authored rate AND an axis to turn it about. A vertical
+    // launch has the rate and no axis (see TumbleAxis) — arithmetic, not a guard against it.
     private bool Tumbles => (_tumbleRate != 0f || _tumbleAccel != 0f) && _tumbleAxis != Vector3.Zero;
 
     public static MotionRuntime? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime)
@@ -177,7 +177,6 @@ internal sealed class MotionRuntime : IAnimMotion
             _runTime = rtSafe,
         };
 
-        float RandSym() => (float)(rt._rng.NextDouble() * 2.0 - 1.0); // [-1, 1] via the seedable RNG
         float Rand(float a, float b) => a + (float)rt._rng.NextDouble() * (b - a);
 
         var gravityBlock = data.Obj("gravity");
@@ -240,12 +239,13 @@ internal sealed class MotionRuntime : IAnimMotion
 
         if (data.Obj("translation") is { } tr)
         {
-            var v0 = tr.Vec3("initial");
-            var rnd = tr.Vec3("rnd_xz");
-            v0 += new Vector3(RandSym() * rnd.X, RandSym() * rnd.Y, RandSym() * rnd.Z);
+            // `rnd_xz` is the compiled launch DIRECTION, the cache the tumble reads back; the
+            // parser built `initial` and `delta` from it and nothing here draws a random number
+            // (docs/org/objectMotion.md). ⚠ Read as a spread it walked the Barracuda ±44 m.
+            m._tumbleAxis = TumbleAxis(tr.Vec3("rnd_xz"));
             // `delta` folds straight into acceleration, never divided by run_time
             // (docs/org/objectMotion.md). InheritedLocal adds the whole inherited velocity or none.
-            m._v0 = v0 + InheritedLocal();
+            m._v0 = tr.Vec3("initial") + InheritedLocal();
             m._accel = GravityAccel() + tr.Vec3("delta");
             m._hasBallistic = true;
         }
@@ -424,11 +424,11 @@ internal sealed class MotionRuntime : IAnimMotion
     }
 
     /// <summary>The axis one <c>forward_rotation</c> tumble turns about: the horizontal
-    /// perpendicular of the launch direction <see cref="RangeLaunchDirection"/> just drew.
-    /// ⚠ Deliberately NOT unit length, same reason as the launch direction (docs/org/objectMotion.md):
-    /// a steep throw tumbles slowly off the same authored rate. Shared with <c>ProjectilePool</c>'s
-    /// casing ejection; do not spell this twice. ⚠ A zero vector in means no tumble — a DECODE, not
-    /// a guard, since the vector <c>translation</c> form never writes the direction cache.</summary>
+    /// perpendicular of the launch direction, drawn by <see cref="RangeLaunchDirection"/> or read
+    /// from the vector form's compiled <c>rnd_xz</c> (docs/org/objectMotion.md).
+    /// ⚠ Deliberately NOT unit length, same reason as the launch direction: a steep throw tumbles
+    /// slowly off the same authored rate. Shared with <c>ProjectilePool</c>'s casing ejection; do
+    /// not spell this twice. A zero or vertical direction in means no tumble, by arithmetic.</summary>
     internal static Vector3 TumbleAxis(Vector3 launchDir) => new(launchDir.Z, 0f, -launchDir.X);
 
     /// <summary>How far a tumble has turned at <paramref name="t"/>: the closed-form integral of a

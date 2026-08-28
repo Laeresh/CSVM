@@ -95,7 +95,7 @@ Enough of the layout to follow the rest of the page:
 | `+0x4c`…`+0x54` | authored `delta` |
 | `+0x58`…`+0x60` | **live** velocity |
 | `+0x64`…`+0x6c` | **live** acceleration |
-| `+0x70` / `+0x74` / `+0x78` | the launch **direction cache** — x, y, z |
+| `+0x70` / `+0x74` / `+0x78` | the launch **direction cache** — x, y, z; the extractor's `translation.rnd_xz` |
 | `+0x80` / `+0x84` | tumble `delta`, and the **live** tumble rate |
 | `+0x148` | `RUN_TIME`, or — with no `RUN_TIME` authored — the watchdog accumulator reusing the same slot |
 
@@ -115,8 +115,18 @@ and dips to **0.707 at 45°**; across a 60–70° band it runs **0.745–0.81**.
 that vector times the drawn speed, so the elevation reading directly scales how fast a piece leaves.
 The direction is cached at `+0x70`/`+0x74`/`+0x78` and read again by the tumble.
 
-The vector `TRANSLATION` form (flag `0x4`) copies the authored velocity and `delta` into the live
-slots unchanged. It is unaffected by any of the above — **and it never writes the direction cache**.
+**The vector `TRANSLATION` form (flag `0x4`) is the same polar launch, compiled at parse time.**
+The parser's `TRANSLATION` block (`00508d27`…) reads four values, `azimuth elevation speed
+delta`, and runs the identical construction (the azimuth through the sincos at `FUN_0053c6c0`,
+`elevation × 0.011111111`, the L1 remainder on the horizontal), then stores the direction at
+`+0x70`/`+0x74`/`+0x78`, `direction × speed` at `+0x40`…`+0x48` and `direction × delta` at
+`+0x4c`…`+0x54`. The update copies those authored slots into the live ones unchanged and **draws
+nothing**: there is no random source on this path at all. ⚠ **The extractor's `translation.rnd_xz`
+is that direction cache, not a spread.** The name is mech3ax's guess at an unread field; the value
+is exactly the normalised `initial`/`delta` direction on every vector-form event in the install
+(the Barracuda's three drive events carry `(8.742278e-08, 0, 1)`, float `cos 90°`, `sin 90°`),
+and its length is the ranged form's own `1 − |elevation|/90`, unit only for a flat or vertical
+launch. The only reader of the cache is the tumble.
 
 ## `delta` is an acceleration
 
@@ -332,10 +342,12 @@ That is a rotation about the horizontal axis **perpendicular to the launch direc
 unnormalised — so its length is the launch's own `h = 1 − |elevation|/90`, and **a steep throw
 tumbles slowly while a flat one tumbles fast off the same authored number**.
 
-⚠ **A body launched by the vector `TRANSLATION` form does not tumble at all.** The direction cache
-is filled only by the `translation_range` branch and the parser zeroed the struct, so the multiply
-is by zero. That is **495 of the install's 1,399** authored tumbles, including all four
-`player_crash_dirt` pieces — which carry the largest authored numbers in the install.
+**A body launched by the vector `TRANSLATION` form tumbles about the direction the parser
+compiled** into `+0x70`/`+0x78` (the extractor's `rnd_xz`, above), exactly as a ranged body does
+about the direction the update drew. That is **495 of the install's 1,399** authored tumbles,
+including all four `player_crash_dirt` pieces, which carry the largest authored numbers in the
+install. A vertical launch (`rnd_xz = (0, ±1, 0)`) has no horizontal perpendicular and holds its
+attitude, by the same arithmetic.
 
 `FORWARD_ROTATION DISTANCE` (flag `0x40`) is the same shape driven by the step rather than by `dt`,
 i.e. a turn per metre travelled. **All 1,399 tumbles in the install author `Time` and none authors
@@ -450,6 +462,17 @@ the incumbent instance and restores the poses, `docs/architecture.md`'s entry fo
 ## Retired and superseded readings
 
 Kept because in each case a reading *died*, and the next reader must not re-derive it.
+
+### ⚠ `translation.rnd_xz` as a per-axis random spread on the launch velocity — RETIRED (2026-08-28)
+
+The runtime added `RandSym() × rnd_xz` to every vector-form start velocity, ±1 m/s per axis on
+the Barracuda's three drive events, up to 44 m of drift over the 40 s cruise that the closing
+absolute `OBJECT_MOTION_FROM_TO` snapped away in one frame. The field is the launch direction cache
+the parser fills for the vector form (`00508d27`…), read back by nothing but the tumble; the
+update's flag-`0x4` branch copies `+0x40`…`+0x54` and calls no random source. Its companion,
+"the vector form never writes the direction cache, so those 495 tumbles are inert", died with it:
+the cache is filled at parse time, not by the update's ranged branch alone. ⚠ The name is the
+extractor's, not the binary's; do not read a mechanism out of it again.
 
 ### ⚠ `translation_range.y` as a spherical elevation — RETIRED (2026-08-11)
 

@@ -458,7 +458,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps:* the report is a question prompted by that voice line, not a memory of the original's
   hit rule; do not build a hangar-only rule from it. If the data shows one pool on the hull, the
   voice line is flavour and this closes. *Cross-refs:*
-  `BL-512` (the same sub's launch motion), `BL-522` (its launched fighters).
+  BL-522 (its launched fighters).
 
 - `BL-570` `[Feature]` **The difficulty setting has no menu row.** *Evidence:* the scale itself is
   live (`Flight/Difficulty`, `--difficulty=<normal|hard|hardest>`), but a CLI flag is the only way to
@@ -1408,34 +1408,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-538` `[Bug]` **A dark band on the large buildings at the distance the templates clutter fades out.** Reported at the controls in C5 with the authored `far_fade_range` applied: in the original the fade reaches the other buildings as well as downtown, and in the remake the larger (gamez) buildings show a dark area at the range where the downtown clutter vanishes, with buildings nearer and farther than that band reading brighter. Not the dither itself, which reads as the original's fade in motion.
   *Where to look:* whether the collapsed clutter cards still write depth or a dark fragment behind the band (the `csky_clutter_fade` cutout keeps a card in the pass until `step(d, far)` culls it, and a card collapsed to zero size should contribute nothing), whether the fog-volume clutter's own `far_fade` and the templates fade overlap at that range, and whether the gamez buildings carry a `far_fade_range` of their own the remake ignores (`FUN_004d5de0` applies the scaled test to every type-5 scene node, not only clutter). A C5 screenshot pair at the band distance with `graphics.clutterFarFade` on and off separates the two.
   *Cross-refs:* `BL-337` (closed; the fade), `docs/org/clutter.md`.
-
-- `BL-512` `[Bug]` **CM04 (C3/M03): the Barracuda jumps while driving into the bay.**
-  *Evidence:* the `sub_movement` def is read out
-  (`extracted/C3/M03/mis_anim/barracuda-sub_movement.json`, main sequence): the drive is an
-  `ObjectMotionFromTo` rise from `(-12032,-38,-13197.5)` to `(-12032,-6,-13197.5)` over 10 s, then
-  three `ObjectMotion` events on `barracuda` (accelerate over 2 s, cruise 40 s, decelerate over
-  2 s), then a second `ObjectMotionFromTo` at the absolute `(-12032,-6,-11516.288)` for the final
-  6 s surfacing. Reading `translation.delta` as acceleration, as `MotionRuntime` does, makes the
-  three speeds continuous and the travel 1680 m, which lands within 1.2 m of that absolute
-  placement, so the authored choreography is smooth and our `delta` semantics are right. The jump
-  is `rnd_xz`: all three events carry `(8.742278e-08, 0, 1.0)`, which is exactly the normalized
-  `initial`/`delta` direction rather than a random amplitude, and `MotionRuntime` adds
-  `RandSym() * rnd_xz` to each event's start velocity. That is +/-1 unit/s drawn independently
-  three times, up to +/-44 m of accumulated travel, and the closing absolute `ObjectMotionFromTo`
-  snaps it away in one frame. The final heading is NOT part of this: no event in the def carries a
-  rotation term, `barracuda`'s gamez transform is `Initial`, and the hull's local -Z (its take-off
-  run, `BL-522`) is correct as built. *Fix shape:* settle whether `rnd_xz` is a random spread at
-  all, or a cached unit direction the original reads back; it is non-zero on far more than this
-  def, so the change belongs to `ObjectMotion` as a whole (`docs/org/objectMotion.md`), not to the
-  submarine. At the controls, on the landed launch decode, the Barracuda still reads wrong on all
-  three counts: it appears where the bay approach is not, no surfacing is seen near the bay, and it
-  then stands in the bay in one step (the closing absolute `ObjectMotionFromTo` snap after the
-  `rnd_xz` drift), and its hull still faces the wrong way for the bay. The heading disproof above
-  rests on the def carrying no rotation term and the gamez transform being `Initial`; the report at
-  the controls stands over it, so the next pass compares the hull's local -Z against the bay
-  opening and the `bauda_aip*` take-off path direction in the built world, not against the def
-  alone. *⚠ Traps:* do not special-case the submarine, and do not "fix" the 1.2 m residual,
-  which is authored. *Cross-refs:* `BL-515`, `BL-522`, `docs/org/objectMotion.md`.
 
 - `BL-546` `[Bug]` **A nitro engage produces none of its visuals: no prop swap, no exhaust smoke.**
   *Evidence:* reported at the controls on a nitrous build whose boost accelerates the aircraft and
@@ -2393,7 +2365,7 @@ usual.
   before any take-off run could begin, and the wrecks' crash damage is what destroys the Barracuda
   with almost no fire from the player (`BL-515`). The take-off run is the fix; while it is unbuilt,
   a launched aircraft standing on its own host's colliders must not count as a ram.
-  *Cross-refs:* `BL-512`, `BL-515`, `BL-527` (CM07's second patrol is a launch off `eag31`/`eag32`,
+  *Cross-refs:* `BL-515`, `BL-527` (CM07's second patrol is a launch off `eag31`/`eag32`,
   so it is re-judged against this), `docs/org/flightModel.md`'s scripted-path follower (CM09's
   ground airfields launch off the same take-off paths, `eag31`/`eag32` in C1/M04).
 
@@ -2718,25 +2690,6 @@ usual.
   `emit_ptsplash*`) expect; then the generator case in `BL-564` is the same runtime launched.
   *⚠ Traps:* do not spawn a boat as an aircraft with a low ceiling. *Cross-refs:* `BL-564`,
   `BL-531` (the scripted-path follower), `docs/formats/ai-rosters.md`.
-
-- `BL-578` `[Bug]` **CM08 (C1B/M03): the tanker jumps and sits at the wrong position.**
-  *Evidence (lead-only):* reported at the controls: the tanker makes a jump and is not where it
-  should be. Its motion is authored as `ObjectMotion`: `freighter-freightercruise.json` drives
-  `freighter` (with its wakes, hold and hold doors), and `freighter-freighterwavemotion.json`
-  loops two `ObjectMotion` events on `tanker`, both in M03's `NEW_GAME_START` list, and the
-  mission's anim census reports `ObjectMotion×1` not yet acted on. Two leads: the `rnd_xz` start
-  velocity drift that `BL-512` traced on the Barracuda (a normalized direction read as a random
-  amplitude, snapped away at the next absolute placement) applies to every `ObjectMotion`, so a
-  jump on the tanker is the same defect; and the tanker is `Russian`'s net trailer
-  (`ai nets: #28 'Russian' nodes=9 edges=8 trailer=tanker@node8`), so a net or scripted-path
-  placement (`BL-531`'s waypoint-0 snap) may be writing its pose against the motion. Whether the
-  Pandora and the tanker play the cargo-crane choreography is untested and belongs to this item's
-  check. *Fix shape:* `--anim-lab --node=tanker` on C1B, play `freightercruise`/`freighterwavemotion`
-  and log the pose at each event boundary; if the discontinuity is `rnd_xz`, fold it into `BL-512`'s
-  `ObjectMotion` fix; if a follower writes the pose, exclude a node an `ObjectMotion` owns.
-  *⚠ Traps:* do not special-case the tanker; the `ObjectMotion` semantics are shared with the
-  Barracuda and the airships. *Cross-refs:* `BL-512`, `BL-531`, `BL-568` (the Pandora's own
-  scripted motion), `docs/org/objectMotion.md`.
 
 ## Tooling, platform & docs
 

@@ -121,6 +121,7 @@ public static class SuiteCatalog
         "bounce-launch",
         "ground-contact",
         "forward-rotation",
+        "launch-direction-cache",
         "self-ref-launch",
         "nulled-launch",
         "destructible-census",
@@ -642,7 +643,9 @@ public static class SuiteCatalog
         into.Add(new TestHarness.Suite("ground-contact",
             "a gravity-bearing OBJECT_MOTION is cut short by real geometry through the right tier (default column, do_intersections sweep, no_altitude neither), rests on the surface and picks its BOUNCE_SEQUENCE branch from what it struck, and does none of it without a mask", GroundContact));
         into.Add(new TestHarness.Suite("forward-rotation",
-            "an OBJECT_MOTION tumble turns at the authored RATE about its own launch direction's horizontal perpendicular, scaled by that direction's length — and a vector-translation launch does not turn at all", ForwardRotation));
+            "an OBJECT_MOTION tumble turns at the authored RATE about its own launch direction's horizontal perpendicular, scaled by that direction's length — a vector-translation launch about its compiled direction, and not at all when that is zero", ForwardRotation));
+        into.Add(new TestHarness.Suite("launch-direction-cache",
+            "a vector-form OBJECT_MOTION's third triple is the compiled launch DIRECTION the tumble reads back, not a random spread: two bodies fly the identical path and end exactly where initial × run_time puts them", LaunchDirectionCache));
         into.Add(new TestHarness.Suite("self-ref-launch",
             "an OBJECT_MOTION naming the MAIN_ROOT_NODE sentinel launches the node its def was invoked on, taking that node over from whatever was driving it", SelfRefLaunch));
         into.Add(new TestHarness.Suite("nulled-launch",
