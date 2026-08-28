@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — CM04 (C3/M03)
 
 1. ☑ `BL-513`: the persist-log replay runs the previous mission's death choreography at mission open
-2. ☐ `BL-521`: the barrage balloons stand at mission start
+2. ☑ `BL-521`: the barrage balloons stand at mission start
 3. ☑ `BL-567`: the Pandora's broadside cannons fire on the player (decode: `player` resolves; the report stands against it, flown original check owed)
 4. ☐ `BL-568`: the Pandora starts moored in the dry dock instead of flying in
 5. ☐ `BL-512` + `BL-578`: `ObjectMotion`'s `rnd_xz` makes the Barracuda and the CM08 tanker jump
@@ -233,7 +233,7 @@ fix it by skipping the replay for destroyed objects, and do not gate on the visu
 Absence of a log line is not evidence unless the sink carries that line (`GD.Print` lines do not
 reach the file sink).
 
-## A2 ☐ `BL-521`: the barrage balloons stand at mission start
+## A2 ☑ `BL-521`: the barrage balloons stand at mission start
 
 **Goal.** CM04's barrage balloons (`bont1..6`/`b_turret1..6`) are down at mission open and are
 not in the AI gunners' target pool.
@@ -245,24 +245,66 @@ at 1027 m`, then `b_turret5`, `b_turret4`) although `support\c3\m03.gw` switches
 no live callee instance`: something in M03 calls the `balloon_downa*` defs, which live in
 `data\common\zrdr\turrets\balloon_down.zrd`, compiled only into M02's `mis_anim` and superseded in
 M03 by the mission's compiled manifest, so the call reaches nothing.
-`<TODO: re-verify still-open against the code>`
 
-**Approach.** First confirm which nodes the `.gw` OFF switch reaches (`mission setup: ... 36
-node(s) deactivated`) and whether a deactivated `b_turret*` stays in the turret target pool with
-its balloon visible; then find the caller of `balloon_downa*` in M03 (a chapter-scope reader def or
-the turret def itself) and settle whether the original resolves that call against the chapter's
-reader set where CSVM's manifest supersession drops it. A1's pool sync applies once the trigger is
-a role-named swap. Decode lane: the original's reader-def lookup order when a mission manifest
-supersedes a chapter def.
+**Re-verified against the code: both leads were real, and the second lead's reading was
+inverted.** The `.gw` switch does reach the nodes (`b_turret1..6` and `bont1..6` are all
+`NodeSetActive off` in `support\c3\m03.gw`), and CSVM applied it, but two things undid it. First,
+`TurretController.Alive` read the `HEALTHY_NODE`'s own `Visible` flag, and a subtree switch
+hides only its root, so every balloon turret stayed alive, ticked and sat live in every gunner's
+scan. Second, the balloon defs were not dropped by the manifest, they were loaded where they must
+not be: `balloon_down.zrd` and its four siblings sit in the shared `zrdr` scope, which
+`AnimProgram` loaded unconditionally into every mission, and `balloon_down`'s `RESET_STATE`
+(`bont* ACTIVE`) ran in bootstrap pass 1 over the pass-0 switch, which is why the balloons stood
+visible at the controls, with six `ball_kaboom*` HP pools on canopies that were not in play. The
+data's own rule is the `ANIMATION_DEFINITION_FILE` lists: M02's `mis_anim.zrd` lists the five
+`balloon_*.zrd` files and M03's does not, and a census over every chapter's `cam_anim.zrd` and
+every mission's `mis_anim.zrd` splits the 190 shared files into 88 reachable from the shared
+`anim.zrd` index (every mission), 96 listed by individual missions only (zeppelin sets, balloons,
+patrol boats) and 6 listed nowhere. The `balloon_downa*` wait line is a consequence of the first
+two: a gunner killed a balloon that was not in play and its death choreography ran. Nothing in the
+data resolves a chapter def against a superseding manifest; the original never loads what its
+lists do not name.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Landed.** `TurretController.Alive` reads the healthy node's visibility in the tree;
+`AimCandidateSet.AddStructures` skips a hidden anchor by the same rule; `AnimProgram.Load` gates
+the shared scope by the listed files (`ListedSharedFiles`, the `-N` duplicate-name suffix folded
+back to its listed stem so `player-1.zrd.json` stays) when a compiled manifest is present, and
+reports the skipped files on the bootstrap log. The `destructible-census` goldens move with it
+(C1 214→186, C1B 29→28, C2 200→192, C3 228→210, C5 176→166; C4 unchanged): the pools that leave
+belong to unlisted shared files (a zeppelin set the mission does not field, the army trucks, the
+AA car). `world-turrets` now shows its aagun32 and the piratezep before expecting fire, because
+`support\c1\ia1.gw` switches both off. The chapter scope is left ungated and handed back (see
+below). Docs: `docs/formats/anim-definitions.md` "Shared-scope files are listed per mission
+too", `docs/formats/turrets.md` gate 1, the three architecture entries.
 
-**Verify.** Headless C3/M03 open: no `ai gunner ... @b_turret*` line, no `WAIT_FOR_COMPLETION on
-'balloon_downa*' had nothing to hold`, and the balloon nodes inactive in the node census; a
-`--freecam --chapter=C3` regression with unchanged counts. `<TODO: the suite to extend>`
+**Model recommendation.** medium.
+
+**Verify.** The new `mission-off-turrets` suite: C3/M03 places the six balloon turrets, all six
+`b_turret*`/`bont*` roots hidden, `Alive=false`, `Gate=Dead` once woken, listed dead in the
+gunner scan, no `bont*` HP pool and no `balloon_downa*`/`ball_kaboom*` def in the program; C3/M02
+as the control with everything standing, plus a by-hand root switch on `b_turret1`/`bont1`
+proving both gates directly. Affected suites re-run green in the foreground: `world-turrets`,
+`carried-turrets`, `target-pool`, `targeting-candidates`, `start-state-swap-pool`,
+`wait-for-completion`, `effects-census`, `destructible-census`, `instant-action`,
+`instant-action-zeppelin`, `zeppelin-damage`, `damage-hd`, `death-slot`, `campaign-submarine`,
+`campaign-zeppelins`, `campaign-cutscene`, `campaign-persistence`. The golden stage alone moves
+five hashes (`c3-island`, `c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`,
+`c1-targeting-hud`) by 2 to 3027 pixels of 921,600 at a channel delta of at most 15, invisible
+against main's renders (the anim dice draw in a different order with fewer instances); the
+manifest is re-pinned on the merged tree, not here.
+
+**Handed back (needs an id).** The chapter scope wants the same gate: C1's `clouds`, `lightning`,
+`spotlights` and `train_smoke`, C2's `game_targets`/`police_*`/`security_destroy` (M01/M02 list
+two) and C5's `steinmann` (M01 lists it) are chapter reader files no list names, so the original
+never runs them; but C1's `cloudparent#` 0.6 opacity comes from `clouds.zrd` and the overcast
+match was judged with it in place, so that half needs the user's eyes on the C1 goldens.
 
 **⚠ Traps.** `PLAN-c3-balloon-kill-chain.md` settled the balloons' kill chain for C3/M02; that is
-the live kill path, not this mission's start state, so do not reopen it.
+the live kill path, not this mission's start state, so do not reopen it. M02 still registers
+twelve `bont*` pools for six balloons (the listed reader templates beside their compiled
+expansions); that duplication is that plan's, not this item's.
+
+**Verified.** <pending orchestrator run>
 
 ## A3 ☑ `BL-567`: the Pandora's broadside cannons fire on the player
 

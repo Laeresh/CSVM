@@ -2359,27 +2359,6 @@ usual.
   snapshot flow, so the cabin's other rows shipped without it rather than waiting.
   *Cross-refs:* `BL-256` is the adjacent snapshot work; `docs/PLAN-M5-campaign.md` Decision 3.
 
-- `BL-521` `[Bug]` **CM04 (C3/M03)'s barrage balloons should already be destroyed at mission start.**
-  *Evidence (two leads from the sortie log, still open):* at the controls the balloons stand at
-  mission open. The log shows the AI gunners engaging them as live turrets on the first frames
-  (`ai gunner: shooter 100 targets MSG_TUR_DEFENSE_BALLOON@b_turret3 at 1027 m`, then `b_turret5`
-  and `b_turret4`), although `support\c3\m03.gw` switches `bont1..6`/`b_turret1..6` fully OFF
-  (`NodeSetActive off`): either that switch does not reach those nodes' turret registration, or it
-  does not reach the nodes at all, and the balloons the report names are these. Later in the run,
-  `anim: WAIT_FOR_COMPLETION on 'balloon_downa*' had nothing to hold — no live callee instance`:
-  something in M03's running world calls the `balloon_downa*` defs, which live in
-  `data\common\zrdr\turrets\balloon_down.zrd`, a reader def compiled only into M02's `mis_anim`
-  (`bont1-balloon_downa1.json` and siblings) and superseded in M03 by the mission's compiled
-  manifest, so the call reaches nothing. *Fix shape:* first confirm which nodes the `.gw` OFF switch
-  reaches (`mission setup: ... 36 node(s) deactivated`) and whether a deactivated `b_turret*` stays
-  in the turret target pool with its balloon visible; then find the caller of `balloon_downa*` in
-  M03 (a chapter-scope reader def or the turret def itself) and settle whether the original resolves
-  that call against the chapter's reader set where CSVM's manifest supersession drops it.
-  `AnimRuntime.SyncDestructiblePool` applies once the trigger is a role-named swap. *⚠ Traps:*
-  `PLAN-c3-balloon-kill-chain.md` settled the balloons' kill chain for C3/M02; that is the live kill
-  path and not this mission's start state, so do not reopen it. *Cross-refs:* `BL-348`'s plan,
-  `docs/formats/anim-definitions.md` (the `bont*`/`balloon_t*`/`tether*` state events).
-
 - `BL-522` `[Bug]` **A surface generator's launch does not fly the take-off run it is placed on.**
   *Evidence:* the launch pose is decoded and landed (`docs/formats/mission-entities/enemy-generators.md`
   "Launching from a surface host"): a launch starts on `<base>_aip0` plus 0.2 m, nose on
@@ -2688,11 +2667,10 @@ usual.
   swap, and `4 call(s) retargeted onto a named node`, but no line for the hangar's own motion
   (doors, lift, the aircraft's drop) and no cutscene hold. Not traced: which defs `hangar_drop`
   calls, whether they are among the `431 reader def(s) superseded by this mission's compiled
-  manifest` (the same drop `BL-521`'s `balloon_downa*` shows) or run on nodes the cutscene
-  reparents. *Fix shape:* read `hangar_drop`'s call list from `extracted/C1/M02/mis_anim`, run
+  manifest` or run on nodes the cutscene reparents. *Fix shape:* read `hangar_drop`'s call list from `extracted/C1/M02/mis_anim`, run
   the mission headless with `--debug-anim` to the hangar, and trace the first callee that does not
   start. *⚠ Traps:* the swap itself works and must stay; the missing part is the choreography
-  around it. *Cross-refs:* `BL-574`, `BL-521`, `docs/formats/anim-definitions/cutscenes.md`.
+  around it. *Cross-refs:* `BL-574`, `docs/formats/anim-definitions/cutscenes.md`.
 
 - `BL-576` `[Bug]` **CM08 (C1B/M03): the Pandora pitches steeply up and down along the Klondike
   net, following every altitude step of the route at full pitch.** *Evidence (seen at the

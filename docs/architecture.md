@@ -826,8 +826,13 @@ tokens (→ numbers) — see docs/formats/anim-definitions.md.
 ## src/Mech3/AnimProgram.cs
 Merges the compiled + reader front-ends for one mission — load both, prefer compiled on collision,
 keep the remainder — plus `StartAnims`; `ScriptFor` resolves an event slot to its archive SI script.
-The mission-scope gate against the compiled manifest (a library, not a full roster) is decode
-knowledge: docs/formats/anim-definitions.md. Which world ENTITIES a mission shows is MissionSetup
+The mission-scope gate against the compiled manifest (a library, not a full roster) and the
+shared-scope FILE gate (`ListedSharedFiles`: a shared reader file loads only when the shared
+`anim.zrd` index closure, the chapter's `cam_anim.zrd` or the mission's `mis_anim.zrd` names it,
+reported as `SharedFilesSkipped`) are decode knowledge: docs/formats/anim-definitions.md "Mission
+library scope". Both gates apply only with a compiled mission manifest present, so a reader-only
+extraction is untouched. Pinned by the `mission-off-turrets` suite (C3/M03 loads no balloon def,
+C3/M02 does). Which world ENTITIES a mission shows is MissionSetup
 plus the interp boot script, not this file. `Defs`, `StartAnims` and `MissionLibrarySkipped` are
 `IReadOnlyList` over private backing lists: one program is already shared by every runtime `Subset`
 binds from it, and may be shared by several world builds (`DecodeCache`).
@@ -1533,7 +1538,10 @@ record's own team over the guns standing on that hull),
 `AimAssist.TryIntercept` lead (no solution ⇒ track, hold fire),
 wrap-aware directed yaw clamp + pitch clamp, bounded slew (3.0/s), pose written onto the PARTS
 nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution cone, cached
-1–2 s world-only line of sight, `FIRE_RATE` redraw. `PlatformOf`/`PlatformColliderRids` are what
+1–2 s world-only line of sight, `FIRE_RATE` redraw. `Alive` reads the `HEALTHY_NODE` visible IN
+THE TREE, not its own flag: a mission `.gw` switches a site off at its root (C3/M03's
+`b_turret1..6`), and a gunner under it is dead to its tick and to every gunner's scan
+(`mission-off-turrets` suite). `PlatformOf`/`PlatformColliderRids` are what
 keep an emplacement's own mounting section out of its line-of-sight ray, and the same set rides
 each of its rounds as the pool's `ownerBodies`, so the flak neither strikes nor splashes the gun
 that fired it while a neighbouring gun's burst still lands (`turret-self-fire`).
@@ -5543,7 +5551,8 @@ realtime clock or from `GameSession.DriveSimSteps` on a parent-driven one — ad
 the zeppelin runtime, so a slung mount reads its ride's moved pose under either. Built
 unconditionally with a chapter flight — the original's world placement pass is unconditional too.
 Observability: the `turrets: N world emplacement(s) placed…` census line plus per-turret
-`woken`/`engaging` breadcrumbs. Pinned by the `world-turrets` suite (C1 census 74, C4 census 92).
+`woken`/`engaging` breadcrumbs. Pinned by the `world-turrets` suite (C1 census 74, C4 census 92)
+and `mission-off-turrets` (a site the mission's `.gw` switched off places, and stays dead).
 `SetActivatedUnder` is the Instant Action builder's own subtree write (the objective hull's 14
 rings come up armed, a switched-off hull's go quiet); `SetTeamUnder` is the same walk for the team
 a zeppelin record fans across its whole airship; `WakeAll` is the `--wake-turrets` stand-in.

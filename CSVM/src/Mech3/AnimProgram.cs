@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -11,15 +12,20 @@ namespace CSVM.Mech3;
 /// says which run at mission start. Compiled data wins on collision (typed events, resolved node
 /// names, the SI motion scripts); readers fill in what was never compiled. Full decode, including
 /// why the mission zrdr scope is a library rather than a manifest: docs/formats/anim-definitions.md.
-/// ⚠ A mission-scope reader def applies only when the mission's compiled archive contains it. The
-/// shared and chapter scopes stay unconditional; they are the world's own furniture, not a
-/// per-mission roster.
-/// </summary>
+/// ⚠ A mission-scope reader def applies only when the mission's compiled archive contains it, and
+/// a shared-scope reader FILE only when an <c>ANIMATION_DEFINITION_FILE</c> list the mission
+/// sees names it (the shared <c>anim.zrd</c> closure, the chapter's <c>cam_anim.zrd</c>, the
+/// mission's <c>mis_anim.zrd</c>): the shared archive holds per-mission content too, and loading
+/// it everywhere re-activates objects a mission's <c>.gw</c> switched off. The chapter scope is
+/// unconditional (docs/formats/anim-definitions.md "Mission library scope").</summary>
 public sealed class AnimProgram
 {
+    private const string SharedIndex = "anim";
+
     private readonly List<AnimDefinition> _defs = new();
     private readonly List<string> _startAnims = new();
     private readonly List<string> _missionLibrarySkipped = new();
+    private readonly SortedSet<string> _sharedFilesSkipped = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, List<AnimDefinition>> _byAnimName =
         new(StringComparer.OrdinalIgnoreCase);
@@ -42,6 +48,11 @@ public sealed class AnimProgram
     /// NAME1 multi-target defs the compiler expands per instance instead. They load, anchor and
     /// register only on a reader-only extraction, where no compiled form exists.</summary>
     public IReadOnlyList<string> MissionLibrarySkipped => _missionLibrarySkipped;
+
+    /// <summary>Shared-scope reader files no <c>ANIMATION_DEFINITION_FILE</c> list this mission
+    /// sees names, so none of their defs loaded (diagnostics, by file stem). Empty on a
+    /// reader-only extraction and when the shared <c>anim.zrd</c> index is missing.</summary>
+    public IReadOnlyCollection<string> SharedFilesSkipped => _sharedFilesSkipped;
 
     public int CompiledCount { get; private set; }
     public int ReaderCount { get; private set; }
@@ -78,10 +89,20 @@ public sealed class AnimProgram
         // The readers fill in what was never compiled. Shared/chapter are unconditional; the
         // mission scope is gated by the compiled manifest when one loaded (docs/formats/
         // anim-definitions.md), else this degrades to reader-only behaviour.
+        var listedShared = haveMissionManifest
+            ? ListedSharedFiles(sharedZrdr, chapterZrdr, missionZrdr)
+            : null;
         foreach (var zrdr in new[] { sharedZrdr, chapterZrdr })
         {
             foreach (var def in AnimDefs.LoadArchive(zrdr))
             {
+                if (listedShared != null && zrdr == sharedZrdr
+                    && !listedShared.Contains(StemOf(def.SourceFile)))
+                {
+                    program._sharedFilesSkipped.Add(StemOf(def.SourceFile));
+                    continue;
+                }
+
                 // NAME1 multi-target defs are per-mission content the compiler expands into
                 // mis_anim (see MissionLibrarySkipped); with a manifest present the reader
                 // form must not anchor zeppelin sub-parts the loaded mission never authors.
@@ -193,6 +214,66 @@ public sealed class AnimProgram
         if (def.Archive == null || slot < 0 || slot >= def.SiScriptIds.Length)
             return null;
         return def.Archive.Script(def.SiScriptIds[slot]);
+    }
+
+    /// <summary>The shared-scope reader files a mission sees, by stem: the closure of the shared
+    /// <c>anim.zrd</c> index plus the shared entries of the chapter's <c>cam_anim.zrd</c> and the
+    /// mission's <c>mis_anim.zrd</c>. Null when the index is absent, which leaves the scope
+    /// ungated rather than empty.</summary>
+    private static HashSet<string>? ListedSharedFiles(string sharedZrdr, string chapterZrdr,
+        string missionZrdr)
+    {
+        var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var queue = new Queue<string>();
+        queue.Enqueue(SharedIndex);
+        while (queue.Count > 0)
+        {
+            var stem = queue.Dequeue();
+            if (!listed.Add(stem))
+                continue;
+            foreach (var path in ListedPaths(sharedZrdr, stem))
+                if (IsSharedPath(path))
+                    queue.Enqueue(StemOf(path));
+        }
+        if (listed.Count == 1)
+            return null;
+        foreach (var (zrdr, index) in new[] { (chapterZrdr, "cam_anim"), (missionZrdr, "mis_anim") })
+            foreach (var path in ListedPaths(zrdr, index))
+                if (IsSharedPath(path))
+                    listed.Add(StemOf(path));
+        return listed;
+    }
+
+    private static IEnumerable<string> ListedPaths(string zrdr, string stem)
+    {
+        List<object?> root;
+        try
+        {
+            root = Zrdr.LoadFileOrEmpty(zrdr, $"{stem}.zrd.json");
+        }
+        catch (Exception e) when (e is IOException or System.Text.Json.JsonException)
+        {
+            return Array.Empty<string>();
+        }
+        return MissionCutscenes.ListedPaths(root);
+    }
+
+    private static bool IsSharedPath(string path) =>
+        path.Replace('/', '\\').Contains("\\common\\zrdr\\", StringComparison.OrdinalIgnoreCase);
+
+    // A reader file's stem as the ANIMATION_DEFINITION_FILE lists name it: the leaf without
+    // ".zrd"/".json", and without the "-N" suffix the extraction appends to a duplicate name
+    // (planes\player.zrd is extracted as player-1.zrd.json beside an unrelated player.zrd.json).
+    private static string StemOf(string pathOrFile)
+    {
+        var leaf = Path.GetFileName(pathOrFile.Replace('/', '\\'));
+        while (leaf.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            || leaf.EndsWith(".zrd", StringComparison.OrdinalIgnoreCase))
+            leaf = Path.GetFileNameWithoutExtension(leaf);
+        int dash = leaf.LastIndexOf('-');
+        if (dash > 0 && dash < leaf.Length - 1 && leaf.AsSpan(dash + 1).ToString().All(char.IsDigit))
+            leaf = leaf[..dash];
+        return leaf;
     }
 
     // Definition identity: (anchor name, animation name) — exactly how the compiled

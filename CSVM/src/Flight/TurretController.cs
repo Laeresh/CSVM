@@ -166,13 +166,15 @@ public sealed class TurretController
     public Vector3 TargetPosition { get; private set; }
 
     /// <summary>Carried: alive while the host is <see cref="FlightController.InPlay"/>. Emplacement:
-    /// alive while its <c>HEALTHY_NODE</c> (default <c>healthy</c>) is visible (docs/formats/turrets.md
-    /// "Being alive, and being awake").
+    /// alive while its <c>HEALTHY_NODE</c> (default <c>healthy</c>) is visible IN THE TREE
+    /// (docs/formats/turrets.md "Being alive, and being awake"): a mission's <c>.gw</c> switches a
+    /// site off at its root, and the node's own flag would read that turret as alive.
     /// ⚠ Not <c>Crashed</c>: a gunner carried by an inert airframe must not fire, be fired at, or
     /// join the aim assist's turret candidate list.</summary>
     public bool Alive => _host != null
         ? _host.InPlay
-        : _healthyNode == null || (GodotObject.IsInstanceValid(_healthyNode) && _healthyNode.Visible);
+        : _healthyNode == null || (GodotObject.IsInstanceValid(_healthyNode)
+            && (_healthyNode.IsInsideTree() ? _healthyNode.IsVisibleInTree() : _healthyNode.Visible));
 
     /// <summary>Where the turret is, for the aim assist's candidate list and the detection gate.</summary>
     public Vector3 WorldPosition => (YawNode ?? PitchNode).GlobalPosition;

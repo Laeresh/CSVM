@@ -854,6 +854,94 @@ internal static class AiSuites
         });
     }
 
+    // An emplacement standing on a subtree the mission's own .gw script switched OFF is out of
+    // the world: dead to its own tick and unranked by every gunner. C3/M03 switches the six
+    // barrage balloons and their turrets off by name; C3/M02 leaves them up and is the control.
+    internal static void MissionOffTurrets(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C3");
+        ctx.RequireData(texturesPath, $"C3 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        const string Balloon = "MSG_TUR_DEFENSE_BALLOON@b_turret";
+
+        foreach (var (mission, standing) in new[] { ("M02", true), ("M03", false) })
+        {
+            ctx.WithWorld("C3", collision: false, mission, world =>
+            {
+                var textures = new TextureArchive(texturesPath);
+                ProjectilePool? live = null;
+                Session.TurretEmplacementRuntime? emplacements = null;
+                try
+                {
+                    live = new ProjectilePool(textures, null, null) { DamageSink = world.Runtime.DamageAt };
+                    ctx.Host.AddChild(live);
+                    emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                        (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
+                        world.Runtime.WorldRoot);
+                    ctx.Host.AddChild(emplacements);
+                    var balloons = emplacements.Emplacements.Where(t => t.Label.StartsWith(Balloon)).ToList();
+                    ctx.Same(6, balloons.Count, $"C3/{mission} places the six balloon turrets");
+                    var sites = world.Runtime.FindNodes("b_turret*");
+                    var canopies = world.Runtime.FindNodes("bont*");
+                    ctx.Check(sites.Count == 6 && sites.All(n => n.Visible == standing)
+                              && canopies.Count == 6 && canopies.All(n => n.Visible == standing),
+                        $"C3/{mission}'s .gw leaves b_turret*/bont* {(standing ? "on" : "off")}: sites={sites.Count} canopies={canopies.Count} on={sites.Count(n => n.Visible)}/{canopies.Count(n => n.Visible)}");
+                    ctx.Check(balloons.All(t => t.Alive == standing),
+                        $"a balloon turret under a switched-{(standing ? "on" : "off")} site reads Alive={standing}: {string.Join(", ", balloons.Select(t => $"{t.Label}={t.Alive}"))}");
+                    var scan = new AimCandidateSet();
+                    live.CollectTurrets(scan);
+                    var listed = scan.Turrets.Where(c => c.Source is TurretController t && t.Label.StartsWith(Balloon)).ToList();
+                    ctx.Check(listed.Count == 6 && listed.All(c => c.Live == standing),
+                        $"the gunner scan lists them live={standing}: {listed.Count(c => c.Live)} of {listed.Count} live");
+                    foreach (var t in balloons)
+                    {
+                        t.SetActivated(true);
+                    }
+                    emplacements.SimStep(0.1f);
+                    var gates = balloons.Select(t => t.Gate).Distinct().ToList();
+                    ctx.Check(standing ? gates.All(g => g != TurretGate.Dead && g != TurretGate.Asleep)
+                                       : gates.All(g => g == TurretGate.Dead),
+                        $"an awake balloon turret ticks {(standing ? "past the alive gate" : "to Dead")}: gates={string.Join("/", gates)}");
+                    var registered = world.Runtime.Destructibles.All
+                        .Where(i => i.Anchor.Name.ToString().StartsWith("bont")).ToList();
+                    ctx.Note($"C3/{mission} destructible pools on bont*: {registered.Count}; defs named balloon_downa*: {world.Session.Program.ByAnimName("balloon_downa*").Count}, ball_kaboom*: {world.Session.Program.ByAnimName("ball_kaboom*").Count}");
+                    var structures = new AimCandidateSet();
+                    structures.AddStructures(world.Runtime.Destructibles);
+                    int bontListed = structures.Structures.Count(c => c.Source is DestructibleRegistry.Instance i && i.Anchor.Name.ToString().StartsWith("bont"));
+                    ctx.Check(standing || bontListed == 0,
+                        $"a switched-off balloon is no structure candidate either: listed={bontListed} of {registered.Count}");
+                    if (!standing || sites.Count == 0 || canopies.Count == 0)
+                    {
+                        return;
+                    }
+
+                    // The control mission also proves the two gates directly: the same root
+                    // switch the .gw applies, made by hand on one site and one canopy.
+                    var site1 = sites.First(n => n.Name.ToString().EndsWith('1'));
+                    var canopy1 = canopies.First(n => n.Name.ToString().EndsWith('1'));
+                    world.Runtime.SetTargetActive(site1, false);
+                    world.Runtime.SetTargetActive(canopy1, false);
+                    var turret1 = balloons.First(t => t.Label.EndsWith("@" + site1.Name));
+                    structures.Clear();
+                    structures.AddStructures(world.Runtime.Destructibles);
+                    int canopy1Listed = structures.Structures.Count(c => c.Source is DestructibleRegistry.Instance i && i.Anchor == canopy1);
+                    ctx.Check(!turret1.Alive && canopy1Listed == 0,
+                        $"switching {site1.Name} and {canopy1.Name} off by their roots kills the turret (alive={turret1.Alive}) and delists the canopy (listed={canopy1Listed})");
+                    world.Runtime.SetTargetActive(site1, true);
+                    world.Runtime.SetTargetActive(canopy1, true);
+                }
+                finally
+                {
+                    emplacements?.Free();
+                    live?.Free();
+                    textures.Dispose();
+                }
+            });
+        }
+    }
+
     // The C1 fort's AA guns firing past their own structures: every aagun woken ALONE, a hostile
     // plane parked low on eight bearings so the line of fire crosses the fort, and every DamageAt on
     // an aagun node attributed to the only rounds in flight, the gun's own. The trace behind the

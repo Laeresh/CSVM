@@ -45,6 +45,30 @@ public static class MissionCutscenes
         return names;
     }
 
+    /// <summary>Every <c>ANIMATION_DEFINITION_FILE</c> value in a reader tree, wherever the
+    /// nesting puts it, as authored (install-relative source paths). Shared with
+    /// <see cref="AnimProgram"/>'s shared-scope file gate, which reads the same lists.</summary>
+    internal static IEnumerable<string> ListedPaths(List<object?> node)
+    {
+        for (int i = 0; i < node.Count; i++)
+        {
+            if (node[i] is string key && key.Equals(FileKey, StringComparison.OrdinalIgnoreCase)
+                && i + 1 < node.Count && node[i + 1] is List<object?> { Count: > 0 } value
+                && value[0] is string path)
+            {
+                yield return path;
+            }
+
+            if (node[i] is List<object?> inner)
+            {
+                foreach (var found in ListedPaths(inner))
+                {
+                    yield return found;
+                }
+            }
+        }
+    }
+
     // The cutscenes\*.zrd entries of the ANIMATION_DEFINITION_FILE list, as the names the
     // extraction stores them under: the authored path is the game's own install-relative one and
     // the extraction flattens a mission's readers into one directory, so only the leaf survives.
@@ -61,7 +85,7 @@ public static class MissionCutscenes
             return files;
         }
 
-        foreach (var path in Paths(root))
+        foreach (var path in ListedPaths(root))
         {
             var normalized = path.Replace('/', '\\');
             if (normalized.IndexOf($"\\{Directory}\\", StringComparison.OrdinalIgnoreCase) < 0)
@@ -77,27 +101,5 @@ public static class MissionCutscenes
         }
 
         return files;
-    }
-
-    // Every ANIMATION_DEFINITION_FILE value in the reader tree, wherever the nesting puts it.
-    private static IEnumerable<string> Paths(List<object?> node)
-    {
-        for (int i = 0; i < node.Count; i++)
-        {
-            if (node[i] is string key && key.Equals(FileKey, StringComparison.OrdinalIgnoreCase)
-                && i + 1 < node.Count && node[i + 1] is List<object?> { Count: > 0 } value
-                && value[0] is string path)
-            {
-                yield return path;
-            }
-
-            if (node[i] is List<object?> inner)
-            {
-                foreach (var found in Paths(inner))
-                {
-                    yield return found;
-                }
-            }
-        }
     }
 }

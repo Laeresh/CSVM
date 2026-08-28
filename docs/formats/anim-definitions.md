@@ -943,6 +943,32 @@ mission that compiles `tethertower`.
 which was generalised from C1/IA1. It is compiled into the missions that use it; being
 uncompiled is exactly the signal that the mission does not instantiate it.
 
+### Shared-scope files are listed per mission too
+
+The shared `zrdr.zbd` is not one runtime-global set. Its 190 `ANIMATION_DEFINITIONS` files
+split three ways by the `ANIMATION_DEFINITION_FILE` lists (every chapter's `cam_anim.zrd`
+lists `..\data\common\zrdr\anim.zrd`, the shared index, plus its own chapter files; every
+mission's `mis_anim.zrd` lists what it adds):
+
+| Shared files | How they reach a mission |
+|---|---|
+| 88 | the `anim.zrd` index closure (effects, splashes, the plane and generic building sets): every mission |
+| 96 | listed by individual `mis_anim.zrd`/`cam_anim.zrd` files only: the zeppelin sets (`pzep_*`, `cg1_*`, `multi1_*`, …), the balloons (`balloon_*`, C3/M02 and C4's `cam_anim.zrd`), the patrol boats, `spruce_destroy*`, `zepskinfire`/`partial_damage` |
+| 6 | listed nowhere (`aa_car`, `armytruck_destruct`, `fire`, `mp2_fighter_release`, `player-1`, `wingman`); `player-1.zrd.json` is the extraction's duplicate-name copy of the listed `planes\player.zrd` and is kept by that stem |
+
+A shared file outside a mission's lists is not part of that mission: its compiled `mis_anim`
+carries none of its defs, and the reader form is compiler input, not a runtime library. The
+barrage balloons are the worked case. `support\c3\m03.gw` switches `bont1..6`/`b_turret1..6`
+off, and M03 lists no `balloon_*.zrd`; loading them anyway ran `balloon_down`'s `RESET_STATE`
+(`bont* ACTIVE`) over the switch, registered six `ball_kaboom*` HP pools on canopies that are
+not in play, and made the AI gunners engage the balloon turrets. `AnimProgram.ListedSharedFiles`
+applies this rule to the shared scope when a compiled mission manifest is present; the log line
+`N shared reader file(s) no ANIMATION_DEFINITION_FILE list of this mission names, not loaded`
+is the census. The chapter scope is not gated yet: C1's `clouds`, `lightning`, `spotlights` and
+`train_smoke`, C2's `game_targets`/`police_*`/`security_destroy` (M01/M02 list two) and C5's
+`steinmann` (M01 lists it) are chapter files no list names, and C1's `cloudparent#` 0.6
+opacity is one a judged overcast match rests on, so that half is a separate item.
+
 ### Mission-spawned entities
 
 Scenery props are hidden by compiled `zepstate` defs as above. *Entities* — the zeppelins,

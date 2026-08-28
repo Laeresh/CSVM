@@ -193,7 +193,10 @@ axis whose limits are equal is left unrotated.
 
 Three gates, in order:
 
-1. The **`HEALTHY_NODE`** must be alive. If it dies the turret goes permanently quiet.
+1. The **`HEALTHY_NODE`** must be alive. If it dies the turret goes permanently quiet. A node
+   under a site the mission's `.gw` switched off (`NodeSetActive off b_turret1`, C3/M03) is out
+   of the world with its subtree, so the gate reads the node's visibility in the tree, never its
+   own flag alone; CSVM's `TurretController.Alive` does the same (`mission-off-turrets` suite).
 2. The **`DEACTIVATE`** node, if the entry names one, must *also* be alive — destroying it
    disables the turret without destroying it. (Unauthored in retail; the mechanism exists.)
 3. **`ACTIVATED`** must be set. **22 entries ship `ACTIVATED 0`** and are inert until something

@@ -85,6 +85,7 @@ public static class SuiteCatalog
         "inert-aircraft",
         "world-turrets",
         "turret-self-fire",
+        "mission-off-turrets",
         "carried-turrets",
         "graze-bounce",
         "ai-spawn-jitter",
@@ -489,6 +490,11 @@ public static class SuiteCatalog
             "eight bearings so the line of fire crosses the fort's own structures: no gun ever " +
             "takes damage from its own rounds, whether by a muzzle-side strike on its own mount " +
             "or by its burst's splash, while a neighbour's burst still reaches it", TurretSelfFire));
+        into.Add(new TestHarness.Suite("mission-off-turrets",
+            "an emplacement whose site the mission's .gw switched OFF is out of the world: C3/M03's " +
+            "six balloon turrets read dead, tick to Dead once woken, and are listed dead in the gunner " +
+            "scan with no structure candidate on their canopies, while C3/M02 leaves the same six " +
+            "standing and alive", MissionOffTurrets));
         into.Add(new TestHarness.Suite("carried-turrets",
             "a carried turret gunner (C9a) builds from ai.zrd + the vehicle def's thirdp mount, " +
             "poses at its arc centre, tracks and fires on a hostile plane inside DETECTION_RANGE " +
