@@ -48,6 +48,7 @@ public sealed class CampaignDirector
     private NetTrailerTargets? _netTrailers;
     private float _minAiActiveDist = 2000f;
     private CampaignDangerZones? _dangerZones;
+    private DangerZoneRibbons? _ribbons;
     private bool _cutsceneHold;
 
     // The proximity scan's accumulator and whether the player's damage event is subscribed yet:
@@ -345,6 +346,16 @@ public sealed class CampaignDirector
         _dangerZones = inputs.Gamez is { } gamez
             ? CampaignDangerZones.Load(Script, gamez, _missionZrdrPath)
             : null;
+        // The AI's ribbons are every dzpath of the world, not the mission's objective names: a
+        // net node may send a pilot through a zone the script never scores.
+        _ribbons = inputs.Gamez is { } ribbonGamez
+            ? DangerZoneRibbons.Load(ribbonGamez, CampaignDangerZones.ReadDisabled(_missionZrdrPath))
+            : null;
+        foreach (var rig in _roster.Values)
+        {
+            if (rig.Pilot is { } pilot)
+                pilot.DangerZones = _ribbons;
+        }
         int chapter = _mission.Campaign;
         int applied = inputs.Runtime != null ? _profile.PersistLog.ApplyTo(inputs.Runtime, chapter) : 0;
         GD.Print($"campaign: {Graph.Count} objective(s) armed, {Graph.Rows.Count} display row(s), " +

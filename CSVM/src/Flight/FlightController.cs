@@ -1448,7 +1448,12 @@ public partial class FlightController : Node3D
             // one. Every contact it resolves spends the pair; nothing else gates the spend.
             bool onSweepStep = _sweep.Advance(entered, out var prev);
             _lifecycle.TickTimers(dt);
-            _model.Step(input, dt);
+            // A danger-zone run writes the pose off its ribbon in place of the physics, the
+            // original's state-5 bypass (FUN_004897c0); the sweep below still runs, as its does.
+            if (!IsHumanPiloted && Pilot is { RailPose: { } rail } onRails)
+                _model.Reset(rail.Origin, rail.Basis, onRails.RailSpeed, _throttle);
+            else
+                _model.Step(input, dt);
 
             // The airframe boxes sweep along the carried motion; the center ray stays as an
             // anti-tunnelling backstop. Only the shapeless fallback keeps a nose margin on it.

@@ -6,7 +6,9 @@ AI-consuming reader family. Engine reader: `CSVM/src/Mech3/AiNets.cs`; the
 `--debug-ainets` overlay (F13) renders them, and `CSVM/src/Flight/AiNetFollower.cs`
 flies them as a patrol behaviour (`--ai=<plane>:<net>`), traversal along the edge list, an anchored
 trailer ridden (`BL-377`), stop points held and released. `CSVM/src/Session/ZeppelinRuntime.cs`
-is the `COMPLETED_STOPPOINT` consumer; a node's danger-zone fields are preserved unacted-on.
+is the `COMPLETED_STOPPOINT` consumer; a reached node's danger-zone fields send an aircraft down
+the named `dzpathN` ribbon on rails (`Flight/DangerZoneRibbon.cs`,
+[`org/aiPilot.md`](../org/aiPilot.md) "The danger-zone run").
 
 ## Archive locations
 
@@ -132,7 +134,7 @@ record):
 | 3 | `+0x0c` int, default 0 | **stop-point id**; 0 means "no stop point" |
 | 4 | `+0x10` bool, default false | **halt flag** — a zeppelin arriving here stops |
 | 5 | `+0x11` bool, default false | **danger-zone flag** — reaching here starts a `dzpath` run |
-| 6 | `+0x14` int, default −1 | the `dzpathN` index that run uses |
+| 6 | `+0x14` int, default −1 | the N of the `dzpathN` that run flies; negative takes the nearest end of any active zone |
 
 The two widths shipped are therefore fields 3–4 (a zeppelin stop point) and fields 3–6 with 3–4
 zeroed (a danger-zone entry). Nothing ships a node authoring both.
@@ -158,7 +160,11 @@ Only the **zeppelin** follower reads it (`FUN_004bf9d0`), and it reads two nodes
 
 The aircraft follower (`FUN_0041d1f0`) never looks at the halt flag. It reads fields 5 and 6
 instead: on arriving at a node whose danger-zone flag is set it starts `dzpath%d` from field 6, or
-the unnumbered run when field 6 is negative.
+the nearest end of any active zone when field 6 is negative. The run is flown on rails, the pose
+written from the ribbon's spline, and ends with the walk re-seated on the net's nearest node
+([`org/aiPilot.md`](../org/aiPilot.md) "The danger-zone run"). ⚠ The tag is the ONLY way a
+patrolling aircraft enters a zone: the roster's `daredevil_chance` is rolled by a hit pilot in
+pursuit alone, so a tagged net decides which zones its fliers take and which they skip.
 
 **The lookup takes the FIRST node carrying the id**, which is why a run of nodes may share one:
 `C2B`'s `PirateZep1` puts id 5 on eight consecutive nodes, and `COMPLETED_STOPPOINT
@@ -171,12 +177,18 @@ the file authored**; the three that restate it (`C1B/M03`'s `Vostok1` id 1 and `
 `flag = 1` 4 times, so releasing a docked airship is the common case and arming a fresh stop
 mid-route is the rare one.
 
-The tagged population, and why it is a zeppelin feature: **40 nets of 222 carry tagged nodes** — 36
-with stop points and 4 with danger-zone entries, on disjoint nets. All 36 are zeppelin routes by
-name; 31 are directly referenced by a `zeppelins.json` `net`, and the remaining five are
-unreferenced alternates beside referenced twins (`M1Cargo` beside `M1CargoAlt`, `SwanZep2` beside
-`SwanZep1`, plus `Gemini1`, `M5Bombrun`, `M4PZRetreat`). Nothing a fighter flies carries one. Of
-the 81 tagged nodes, **27 carry id 0 and 54 a real id; 49 ship armed and 32 clear**.
+The tagged population: **40 nets of 222 carry tagged nodes** — 36 with stop points and 4 with
+danger-zone entries, on disjoint nets. All 36 stop-point nets are zeppelin routes by name; 31 are
+directly referenced by a `zeppelins.json` `net`, and the remaining five are unreferenced alternates
+beside referenced twins (`M1Cargo` beside `M1CargoAlt`, `SwanZep2` beside `SwanZep1`, plus
+`Gemini1`, `M5Bombrun`, `M4PZRetreat`). No fighter flies a stop point. Of the 81 tagged nodes,
+**27 carry id 0 and 54 a real id; 49 ship armed and 32 clear**.
+
+The four danger-zone nets are all AIRCRAFT nets: C2's `M3StuntCourse` #16 (C2/M03's six
+`hafury` racers, team 0; seven tagged nodes naming `dzpath1, 2, 3, 10, 6, 7, 9` in walk order,
+out of the mission's thirteen zones) and `M1FilmShot` #31 (C2/M02's `secfury_5/6`; `dzpath8, 2,
+3`), C5's `M1Cabbie` #5 (`autogyro_1`; `dzpath33`) and `M4MilesRun` #41 (a generator's net;
+`dzpath34`). Every tag carries a number; nothing ships the negative form.
 
 **Ids are allocated per CHAPTER across files, not per net**, so they collide between nets and are
 meaningful only together with the net name the clause carries. C5's three cargo routes show the
@@ -244,9 +256,9 @@ lobe and about a kilometre away through the other.
   quantised by mission type (8/48/80), payloads shared across missions, coordinates
   sometimes outside the mission world. Shape says *spawn table*, not route. Undecoded —
   do not build patrol behaviour on it.
-- The stunt/danger-zone route ribbons (`dzpathN` gamez meshes, [missions.md](missions.md))
-  are guide *geometry*, not AI nets — a separate system with its own `--debug-dzpaths`
-  overlay.
+- The danger-zone route ribbons (`dzpathN` gamez meshes, [missions.md](missions.md)) are not
+  nets: a net node's tag hands the flier to one, which it then flies as a spline on rails
+  ([`org/aiPilot.md`](../org/aiPilot.md) "The danger-zone run"), and `--debug-dzpaths` draws it.
 
 ## Evidence & limits
 

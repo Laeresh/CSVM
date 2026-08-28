@@ -12,7 +12,8 @@ namespace CSVM.Flight;
 /// docs/architecture.md entry; the anchored-trailer ride is docs/formats/ai-nets.md.
 /// Arrival is the decoded along-leg test (<see cref="ArrivalRadius"/>). A node's stop point
 /// (<see cref="AiNetNode.StopPointId"/>) is live state here, armed and disarmed by
-/// <see cref="SetStopPoint"/>; <see cref="AiNetNode.EntersDangerZone"/> is preserved unacted-on.
+/// <see cref="SetStopPoint"/>; a reached node's <see cref="AiNetNode.EntersDangerZone"/> is
+/// reported through <see cref="ArrivedNode"/> for the aircraft pilot to act on.
 /// A caller observing stop points (<see cref="ObservesStopPoints"/>) also holds unconditionally at
 /// a structural dead end instead of turning back (<see cref="Update"/>, `FUN_004bf9d0`).</summary>
 public sealed class AiNetFollower
@@ -107,6 +108,12 @@ public sealed class AiNetFollower
     /// <summary>How many node captures have advanced the target so far.</summary>
     public int Advances { get; private set; }
 
+    /// <summary>The node the last <see cref="Update"/> arrived at and stepped past, or null when
+    /// that call advanced nothing. The aircraft follower's danger-zone report: the original reads
+    /// the reached node's <c>+0x11</c>/<c>+0x14</c> right after the step (<c>FUN_0041d1f0</c>),
+    /// so <see cref="AiPilot"/> starts a run off this and never off the node it flies toward.</summary>
+    public AiNetNode? ArrivedNode { get; private set; }
+
     /// <summary>Whether an armed stop point halts this walk at all (the constructor's
     /// <c>observesStopPoints</c>). The flags are still readable and writable when it is false.
     /// </summary>
@@ -179,6 +186,7 @@ public sealed class AiNetFollower
         _previousIndex = -1;
         _legOrigin = null;
         Holding = false;
+        ArrivedNode = null;
     }
 
     /// <summary>Whether node <paramref name="index"/> currently halts whoever reaches it: an
@@ -238,6 +246,7 @@ public sealed class AiNetFollower
     // flows past its node instead of orbiting it forever.
     public bool Update(Vector3 position, Vector3 heading = default)
     {
+        ArrivedNode = null;
         if (CurrentIndex < 0)
         {
             int seat = NearestNode(position);
@@ -273,6 +282,7 @@ public sealed class AiNetFollower
         if (_neighbors[CurrentIndex].Length == 0)
             return false; // an isolated node is held, not escaped by inventing an edge
         int next = PickOnward(CurrentIndex, _previousIndex, heading);
+        ArrivedNode = Net.Nodes[CurrentIndex];
         _previousIndex = CurrentIndex;
         _legOrigin = null;
         CurrentIndex = next;

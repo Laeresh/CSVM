@@ -127,7 +127,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — CM13 (C2/M03), the blocker
 
-41. ☐ `BL-585`: AI planes never lock onto a `dzpath` and fly it on rails, so the CM13 racers skip the danger zones
+41. ☑ `BL-585`: AI planes never lock onto a `dzpath` and fly it on rails, so the CM13 racers skip the danger zones
 
 ## Dependency and parallelism notes
 
@@ -1063,7 +1063,7 @@ worktree is open before minting. `<TODO: the per-mission launch commands>`
 
 # Wave E — CM13 (C2/M03), the blocker
 
-## E41 ☐ `BL-585`: AI planes never lock onto a `dzpath` and fly it on rails, so the CM13 racers skip the danger zones
+## E41 ☑ `BL-585`: AI planes never lock onto a `dzpath` and fly it on rails, so the CM13 racers skip the danger zones
 
 **Goal.** An AI aircraft that reaches a net node carrying the danger-zone flag, or comes near a
 `dzpathN` ribbon under whatever proximity rule the original uses, locks onto that ribbon and flies
@@ -1084,8 +1084,13 @@ danger-zone entries. The remake parses those tags (`AiNetNode.EntersDangerZone`,
 `NavigatingDangerZone` as enum-only with a standing "do not invent an entry condition", and the
 ribbon geometry is built only under `--debug-dzpaths` (`WorldBuilder.BuildDzPaths`). The roster
 field `daredevil_chance` (`docs/formats/ai-rosters.md`) is the per-pilot probability of taking an
-available run. `<TODO: which net CM13's racers fly, and whether it is one of the 4 tagged nets;
-if it is not, the lock-on must come from proximity to the ribbon rather than from a node tag>`
+available run. Settled: CM13's six `hafury` racers (team 0) fly C2's `M3StuntCourse` #16, which
+IS one of the 4 tagged nets, with seven tagged nodes naming `dzpath1, 2, 3, 10, 6, 7, 9` in walk
+order out of the mission's thirteen zones. The lock-on is the node tag; the proximity roll
+(`daredevil_chance`, 500 m, a free lane, `natural_touch` against the zone's difficulty) runs from
+the pursue arm alone and only while the pilot carries the failed-steady-hand hit flag, so a
+targetless racer never rolls it. In the original the racers fly those seven zones and skip the
+other six; the report's "near a ribbon" lock-on is a hit pilot's evasion, not a racer's.
 
 **Approach.** Decode first, in `crimson.exe`: (1) `FUN_0041d1f0`'s `dzpath_%d` branch, which
 resolves the ribbon by name and hands the pilot to mode 2; (2) the mode-2 approach law (how the
@@ -1103,13 +1108,33 @@ condition), and the run reads the ribbon's route polyline classified by material
 `StuntMission.TryReadGates` already does. The ribbon geometry needs a loader independent of
 `--debug-dzpaths`.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** Decode-heavy (eight functions of `dzpath.cpp` and the AI update,
+plus a data census across all eight chapters) with a moderate port behind it; a Claude Fable 5
+session did it in one run.
 
-**Verify.** A unit test driving a tagged net node into the two modes and out again on a fixture
-polyline; a headless CM13 run whose log shows every racer entering mode 5 once per zone in course
-order (the mode machine logs no transitions today, so that `Log.Info` line is part of the item);
-then the user flies CM13 and judges whether the racers fly the zones and
-the race is winnable, with their eyes outranking the log.
+**Landed.** The decode is `docs/org/aiPilot.md` "The danger-zone run" (`FUN_00445ef0` the spline
+build, `FUN_00421500`/`FUN_004210e0` the two entries, `FUN_004216e0` mode 2, `FUN_00490590` mode
+5, and the unread `+0x10`/`+0x20` arm, which is a goal-node routing table no shipped net carries).
+Port: `Flight/DangerZoneRibbon.cs` (spline, run cursor, rail integrator), `Flight/DangerZoneRibbons.cs`
+(the loader off the gamez, `dzones.zrd` `disable` applied), `AiNetFollower.ArrivedNode`,
+`AiPilot`'s entry/approach/rail/exit, `AiModeMachine`'s two modes with the crash check and stun
+handing back to the approach, `FlightController.SimStep` applying `RailPose`, and
+`CampaignDirector.Attach` handing the ribbons to every roster pilot. Not ported: the proximity
+roll (needs the hit flag), the target release at the lock, the approach solve's floor bypass.
+
+**Verify.** `DangerZoneRibbonTests` (8 facts: spline through the vertices in metres, both run
+directions, lanes, the rail closing its offset and banking, the pilot's tag entry through
+approach, lock, run and back to a re-seated patrol, the negative tag's nearest-end pick, the
+interrupted run resuming as an approach) plus the existing `AiModeMachineTests`,
+`AiNetFollowerTests`, `AiPilotTests`; `dotnet test` 2530/2530. Engine suites `ai-modes`,
+`ai-net-follow`, `campaign-danger-zones`, `campaign-roster` all PASS. Headless CM13
+(`--campaign=<profile copy>:12 --frames=9000`, the copy deleted after): all six racers log
+`patrol -> approaching danger zone ('dzpath1' …) -> navigating danger zone (locked at 104-105 m)
+-> patrol ('dzpath1' flown, back to the net)` and then the same for `dzpath2`, in course order,
+inside 150 s of sim. Still owed: the user flies CM13 and judges whether the racers fly the zones
+and the race is winnable, with their eyes outranking the log.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not invent the entry condition (the prohibition on `AiModeMachine` stands until
 the decode replaces it). Do not use polygon index to find the route ribbon; classify by

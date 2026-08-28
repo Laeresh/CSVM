@@ -38,10 +38,14 @@ public enum AiMode
     /// everything else waits.</summary>
     AvoidCrash,
 
-    /// <summary>Danger-zone approach. Never entered yet — see <see cref="AiModeMachine"/>.</summary>
+    /// <summary>Flying at a <c>dzpathN</c> ribbon's entry point on the emergency table: the
+    /// original's state 2, entered by <see cref="AiPilot"/> off a reached net node's danger-zone
+    /// tag, and left for <see cref="NavigatingDangerZone"/> inside 105 m of that point.</summary>
     ApproachingDangerZone,
 
-    /// <summary>Danger-zone run. Never entered yet — see <see cref="AiModeMachine"/>.</summary>
+    /// <summary>On rails along the ribbon: the pose is written off <see cref="DangerZoneRail"/>
+    /// in place of the flight model (state 5) until the cursor leaves the far end, then patrol
+    /// re-seats on the net. Nothing in this machine runs while it holds.</summary>
     NavigatingDangerZone,
 }
 
@@ -55,8 +59,8 @@ public enum AiMode
 /// stream, so a fixed-seed run transitions identically. The obstacle probe is an injected
 /// delegate and target state arrives as a snapshot, so the transition table unit-tests without
 /// a scene tree (<c>AiModeMachineTests</c>).
-/// ⚠ The two danger-zone modes are enum-only and never entered. Do not invent an entry
-/// condition for them.</summary>
+/// The danger-zone modes are entered by <see cref="AiPilot"/> alone, off a reached net node's
+/// tag (docs/org/aiPilot.md "The danger-zone run"). ⚠ Do not add a second entry here.</summary>
 public sealed class AiModeMachine
 {
     /// <summary>Invented: how long a plain (maneuver-less) evade runs before returning.</summary>
@@ -303,6 +307,11 @@ public sealed class AiModeMachine
         if (Mode == AiMode.Stunned)
             return Mode; // the roll above just stunned us; timers start next tick
 
+        // State 5 suppresses the crash check (FUN_004897c0 gates it on state < 4) and the pose is
+        // written off the ribbon, so nothing below could steer; the pilot ends the run.
+        if (Mode == AiMode.NavigatingDangerZone)
+            return Mode;
+
         UpdateAvoidCrash(pos, velocity, dt);
 
         switch (Mode)
@@ -357,6 +366,11 @@ public sealed class AiModeMachine
                     ReturnFromReaction(pos, targetPos);
                 }
                 break;
+
+            case AiMode.ApproachingDangerZone:
+                // The run record outranks a target: the lock drops the standing target
+                // (FUN_00421500 nulls +0x948), so no activation into pursue from here.
+                break;
         }
         return Mode;
     }
@@ -369,16 +383,15 @@ public sealed class AiModeMachine
     /// modelled on this roll — nothing decoded supports one.</summary>
     public void NotifyDamage(float absorbed, Vector3 threatDir)
     {
-        if (Mode is AiMode.Stunned or AiMode.AvoidCrash)
-            return; // no controls / emergency override — nothing to break off
+        if (Mode is AiMode.Stunned or AiMode.AvoidCrash or AiMode.NavigatingDangerZone)
+            return; // no controls / emergency override / on rails — nothing to break off
         bool failed = _rng.NextDouble() < SteadyHandChance;
         RollLogged?.Invoke(FormattableString.Invariant(
             $"absorbed {absorbed:0.0} damage; steady hand test ")
             + (failed ? "failed. Evading." : "passed. Not evading."));
         if (!failed)
             return;
-        if (Mode is AiMode.Pursue or AiMode.LayOff or AiMode.Patrol)
-            _returnMode = Mode;
+        RememberReturnMode();
         if (Mode == AiMode.EvasiveManeuver)
             return; // already flying one out; let it finish
         if (PickManeuver() is { } maneuver)
@@ -419,10 +432,22 @@ public sealed class AiModeMachine
     {
         if (seconds <= 0f)
             return;
-        if (Mode is AiMode.Pursue or AiMode.LayOff or AiMode.Patrol)
-            _returnMode = Mode;
+        RememberReturnMode();
         _stunRemaining = seconds;
         Transition(AiMode.Stunned, reason);
+    }
+
+    // Where an interruption hands back to. A run in progress resumes as an approach to the
+    // cursor's current point: the original keeps the run record (+0x9bc) through a stun or a
+    // climb-out and re-arms state 2 off it every frame (FUN_004897c0).
+    private void RememberReturnMode()
+    {
+        _returnMode = Mode switch
+        {
+            AiMode.Pursue or AiMode.LayOff or AiMode.Patrol => Mode,
+            AiMode.ApproachingDangerZone or AiMode.NavigatingDangerZone => AiMode.ApproachingDangerZone,
+            _ => _returnMode,
+        };
     }
 
     // Evade needs an initial course even when entered externally: away from the
@@ -449,6 +474,7 @@ public sealed class AiModeMachine
         bool targetInRange = targetPos is { } t && pos.DistanceTo(t) <= ActivationRange;
         var back = _returnMode is AiMode.Pursue or AiMode.LayOff && targetInRange
             ? _returnMode
+            : _returnMode == AiMode.ApproachingDangerZone ? _returnMode
             : AiMode.Patrol;
         if (back == AiMode.Pursue || back == AiMode.LayOff)
             _pursuitAnchor = pos;
@@ -565,8 +591,7 @@ public sealed class AiModeMachine
 
     private void EnterAvoidCrash(Vector3 pos, string reason)
     {
-        if (Mode is AiMode.Pursue or AiMode.LayOff or AiMode.Patrol)
-            _returnMode = Mode;
+        RememberReturnMode();
         Executor = null; // a running maneuver is abandoned to the override
         ClimbOutAltitude = pos.Y + ClimbOutM;
         Transition(AiMode.AvoidCrash, reason);

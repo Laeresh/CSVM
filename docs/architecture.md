@@ -2312,6 +2312,26 @@ its only neighbour and shuttling the route forever (`BL-529`, `docs/formats/miss
 (`PickOnward`'s degree-1 short-circuit) unchanged; the unconditional hold is opt-in on
 `ObservesStopPoints`.
 Pinned by `AiNetFollowerTests` + the `ai-net-follow` suite.
+`ArrivedNode` is the danger-zone report: the node the last `Update` reached and stepped past,
+which `AiPilot` reads for its tag, never the node being flown toward.
+
+## src/Flight/DangerZoneRibbon.cs
+The decoded danger-zone run (`docs/org/aiPilot.md` "The danger-zone run"), engine-free:
+`DangerZoneRibbon` is one `dzpathN` route as the original builds it, the polygon's vertices joined
+by cubics parameterised in metres plus the lane table (the zero lane and one per child node);
+`DangerZoneRun` is a pilot's cursor on it (entered from the nearer end, walking the segments either
+way, `Done` past the exit); `DangerZoneRail` is the state-5 integrator that writes the pose off the
+ribbon in place of the flight model, closing the aeroplane's residual offset, banking the wings into
+the bend and settling on the 155 mph cruise. Every constant is read out of the image and named at
+its declaration. Pinned by `DangerZoneRibbonTests`.
+
+## src/Flight/DangerZoneRibbons.cs
+A mission's ribbon set read straight off the chapter gamez, independent of `--debug-dzpaths`: every
+`dzpathN` node's route polygon by the route-versus-gate-pair material rule (`docs/formats/missions.md`,
+never polygon index), its children as lanes, and `dzones.zrd`'s `disable` list as the inactive
+flag. `ByIndex` serves a numbered net tag, `NearestEnd` the negative one. One instance per session,
+shared through `AiPilot.DangerZones`, because lanes are occupancy-counted across pilots;
+`CampaignDirector.Attach` builds it and hands it to every roster pilot.
 
 ## src/Flight/ZeppelinBroadside.cs
 The pure zeppelin broadside law (M4 F19), engine-free: the decoded 90° arc
@@ -2352,7 +2372,9 @@ The non-player `FlightModel` driver: standing orders in (heading in the mission-
 `SpawnPoint.HeadingDeg` convention, altitude, throttle, optional `Patrol` net follower, optional
 `Gunner` whose live target is chased at the decoded lead offset ahead of it, optional `Machine` —
 D11's nine-mode state machine, which when set is stepped first and picks this step's AIM POINT and
-parameter table: patrol/danger-zone fly the net node itself, pursue leads the gunner's target on
+parameter table: patrol flies the net node, a reached node's danger-zone tag starts a
+`DangerZoneRun` (approach on the emergency table, then `RailPose` published for the host to apply
+in place of the model step, then the net re-seated), pursue leads the gunner's target on
 the engaged table (or aims at it outright for the head-on firing solution), lay off holds its
 entry course and then walks the throttle toward `sixth_sense_factor` × the pursuer's speed so the
 human catches up, evade flies the machine's orders, avoid crash aims 1000 m up on the emergency
@@ -2424,8 +2446,9 @@ cast every 0.5–1.0 s per plane, decides, releasing on the first clear ray (doc
 Engine-free; pinned by
 `AiModeMachineTests` + the `ai-modes` suite. Named inventions (evade's scramble run, the probe's
 minimum reach, lay off's entry/exit cones) are marked at
-their own declaration; the danger-zone gate data is the undecoded net-tag system
-(docs/formats/ai-nets.md).
+their own declaration. The two danger-zone modes are entered only by `AiPilot`, off a reached net
+node's tag; `approaching` still runs the crash check and hands back to itself, `navigating` runs
+nothing (the pose is the ribbon's), and a stun or climb-out out of either returns to the approach.
 
 ## src/Flight/ManeuverExecutor.cs
 Plays one library maneuver's timed step program as `FlightInput` values — `Next(model,
@@ -3265,7 +3288,8 @@ returns the text block's lines as a list rather than one concatenated string. `D
 `Update*` helpers stay the thin writers pushing those return values onto the seven Controls.
 
 ## src/Flight/FlightController.cs
-The flying-aircraft node: input → FlightModel → transform, weapon fire as
+The flying-aircraft node: input → FlightModel → transform (or, for an AI pilot publishing a
+`RailPose`, the danger-zone ribbon's pose in place of the model step, the sweep still run), weapon fire as
 `FireControl`'s engine adapter (polls the held triggers, `Step`s the machine each sim tick,
 performs the `FireOutcome`: muzzle-transform spawns, gun-loop start/stop, dry cues, breadcrumb
 logs), crash and respawn. The pilot HUD is `FlightHud`'s (see that entry): this node holds the
@@ -5294,7 +5318,8 @@ the sibling of `InstantActionDirector`: a plain sealed class that builds no node
 `SessionSpec.WithCampaignMission` points the rest of the build at an ordinary chapter/mission.
 `TryCreate` loads the profile and the script on the same "a failure warns and flies without a
 mission" contract `InstantActionDirector.TryCreate` has. `Attach(WorldInputs)` arms the graph once
-every runtime a directive can touch is up and applies the chapter's persist log; `Step(dt)` is
+every runtime a directive can touch is up, applies the chapter's persist log and hands the world's
+`DangerZoneRibbons` to every roster pilot; `Step(dt)` is
 called from BOTH of `GameSession`'s drive paths. Every graph transition is one
 `[campaign] objective N woke|napped|completed|killed|slept|expired [by M] [for Ns] at Ts` line
 through `Log.Info`, so the file sink carries the chain a sortie report is about. Mission end records the attempt through

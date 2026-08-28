@@ -61,6 +61,12 @@ public sealed class AiPilot
     /// done, and stunned holds the controls neutral. Mutable like every other order.</summary>
     public AiModeMachine? Machine;
 
+    /// <summary>The mission's <c>dzpathN</c> ribbons, or null for a session with none: with a
+    /// <see cref="Machine"/> and a <see cref="Patrol"/>, reaching a net node carrying the
+    /// danger-zone tag starts a run on the ribbon the node names (docs/org/aiPilot.md "The
+    /// danger-zone run"). Shared across pilots, since lanes are occupancy-counted.</summary>
+    public DangerZoneRibbons? DangerZones;
+
     /// <summary>Ordered altitude, metres (world Y).</summary>
     public float TargetAltitude = 400f;
 
@@ -107,6 +113,21 @@ public sealed class AiPilot
     // The stun countdown of a pilot WITHOUT a mode machine, seconds; a pilot with one keeps its
     // stun in the machine's Stunned mode instead (one timer per pilot, never two).
     private float _bareStunRemainingS;
+
+    // The rail integrator of the run in progress, built at the lock and dropped at the exit.
+    private DangerZoneRail? _rail;
+
+    /// <summary>The danger-zone run in progress, from the approach through the rail to the exit;
+    /// null between runs.</summary>
+    public DangerZoneRun? ZoneRun { get; private set; }
+
+    /// <summary>The pose the last <see cref="Next"/> wrote off the ribbon while
+    /// <see cref="AiMode.NavigatingDangerZone"/> held, or null when the flight model flies. The
+    /// host applies it in place of the model step, the original's physics bypass for state 5.</summary>
+    public Transform3D? RailPose { get; private set; }
+
+    /// <summary>The speed along the nose that goes with <see cref="RailPose"/>.</summary>
+    public float RailSpeed { get; private set; }
 
     /// <summary>Whether the LAST <see cref="Next"/> actually steered to <see cref="Patrol"/>'s
     /// node, as opposed to pursuing, evading or holding the bare orders. Reported rather than
@@ -260,6 +281,7 @@ public sealed class AiPilot
     {
         var quarry = Gunner is { Target: { InPlay: true } t } ? t : null;
         SteeringPatrol = false;   // SteerPatrol sets it when it actually flies the net
+        RailPose = null;          // set again below only while the rail writes the pose
 
         // The mode machine, when present, decides which input source flies this step;
         // without one the bare priority stands (gunner target, then patrol, then orders).
@@ -281,6 +303,17 @@ public sealed class AiPilot
 
             switch (mode)
             {
+                case AiMode.ApproachingDangerZone when ZoneRun != null:
+                    return FlyDangerZoneApproach(model, dt, machine);
+
+                case AiMode.NavigatingDangerZone when _rail != null:
+                    return FlyRail(model, dt, machine);
+
+                case AiMode.ApproachingDangerZone:
+                case AiMode.NavigatingDangerZone:
+                    machine.Enter(AiMode.Patrol, "no danger-zone run to fly");
+                    return FlyPatrol(model, dt);
+
                 case AiMode.EvasiveManeuver when machine.Executor is { } executor:
                     return executor.Next(model, dt);
 
@@ -295,8 +328,11 @@ public sealed class AiPilot
                 case AiMode.LayOff when quarry != null:
                     return FlyLayOff(model, dt, machine, quarry);
 
-                default: // patrol, the danger-zone modes, and any mode whose quarry went away
-                    return FlyPatrol(model, dt);
+                default: // patrol, and any mode whose quarry went away
+                    var input = FlyPatrol(model, dt);
+                    if (mode == AiMode.Patrol && Patrol is { ArrivedNode: { EntersDangerZone: true } node })
+                        TryStartDangerZone(node.DangerZonePath, model, machine);
+                    return input;
             }
         }
 
@@ -455,6 +491,80 @@ public sealed class AiPilot
             ? PatrolAim(model.Position, legStart, node)
             : node;
         return Fly(model, dt, aim, Vector3.Zero, AiLawParams.Cruise);
+    }
+
+    // The node-tag entry (FUN_0041d1f0 after the walk step): a numbered tag resolves dzpath<N>
+    // and the run enters from whichever end is nearer; a negative one takes the nearest end of
+    // any active ribbon. No roll, no range and no difficulty test on this arm.
+    private void TryStartDangerZone(int pathIndex, FlightModel model, AiModeMachine machine)
+    {
+        if (DangerZones is not { } zones)
+            return;
+        DangerZoneRibbon ribbon;
+        bool farEnd;
+        var pos = model.Position;
+        if (pathIndex >= 0)
+        {
+            if (zones.ByIndex(pathIndex) is not { Active: true } named)
+                return;
+            ribbon = named;
+            farEnd = pos.DistanceTo(ribbon.End(true)) < pos.DistanceTo(ribbon.End(false));
+        }
+        else if (zones.NearestEnd(pos) is { } nearest)
+        {
+            (ribbon, farEnd) = nearest;
+        }
+        else
+        {
+            return;
+        }
+        ZoneRun = new DangerZoneRun(ribbon, farEnd);
+        _rail = null;
+        machine.Enter(AiMode.ApproachingDangerZone,
+            $"'{ribbon.Name}' from its {(farEnd ? "far" : "near")} end, {pos.DistanceTo(ZoneRun.Point):0} m out");
+    }
+
+    // The approach (FUN_004216e0): the run's current point on the emergency table, no aim
+    // velocity, and inside LockRangeM of it the rail takes the pose.
+    private FlightInput FlyDangerZoneApproach(FlightModel model, float dt, AiModeMachine machine)
+    {
+        var run = ZoneRun!;
+        var aim = run.Point;
+        var toAim = aim - model.Position;
+        if (new Vector2(toAim.X, toAim.Z).LengthSquared() > 1f)
+            TargetHeadingDeg = HeadingDegOf(toAim);
+        TargetAltitude = aim.Y;
+        var input = Fly(model, dt, aim, Vector3.Zero, AiLawParams.AvoidCrash);
+        float range = toAim.Length();
+        if (range < DangerZoneRibbon.LockRangeM)
+        {
+            _rail = new DangerZoneRail(run, model.Position, model.Attitude,
+                model.VelocityDir * model.Speed, model.Speed);
+            machine.Enter(AiMode.NavigatingDangerZone, $"'{run.Ribbon.Name}' locked at {range:0} m");
+        }
+        return input;
+    }
+
+    // The rail (FUN_00490590): the pose comes off the integrator and the controls sit neutral;
+    // running off the ribbon hands the walk back to the net, re-seated where the run left it.
+    private FlightInput FlyRail(FlightModel model, float dt, AiModeMachine machine)
+    {
+        var rail = _rail!;
+        bool flying = rail.Step(dt);
+        RailPose = new Transform3D(rail.Attitude, rail.Position);
+        RailSpeed = rail.Speed;
+        TargetHeadingDeg = HeadingDegOf(-rail.Attitude.Z);
+        TargetAltitude = rail.Position.Y;
+        if (!flying)
+        {
+            string name = rail.Run.Ribbon.Name;
+            rail.Run.Release();
+            ZoneRun = null;
+            _rail = null;
+            Patrol?.Reseat();
+            machine.Enter(AiMode.Patrol, $"'{name}' flown, back to the net");
+        }
+        return new FlightInput { Throttle = Mathf.Clamp(Throttle, 0f, 1f) };
     }
 
     // The aim point a bare heading/altitude order becomes (see
