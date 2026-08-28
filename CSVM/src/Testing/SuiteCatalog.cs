@@ -207,8 +207,6 @@ public static class SuiteCatalog
     // The suites `--run-tests=tier:quick` runs: one representative per failure surface, checked in
     // here rather than inferred from a diff, every name also in Names. The selection rule is in
     // docs/tooling.md; the tier is partial and the full catalog stays the landing gate.
-    // ⚠ Keep emitter-lifetime out. It installs the fake emitter factory the shared C1 world would
-    // then be cached with, and the collision rebuild undoing that sits far down the registry.
     public static readonly IReadOnlyList<string> QuickTier = new[]
     {
         "puffer-modes",
@@ -233,9 +231,8 @@ public static class SuiteCatalog
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
     {
-        // ⚠ Keep this registered first. It is the only suite installing a fake IEmitterFactory, and
-        // WithWorld caches one world per chapter, so it must build the shared C1 world while the fake is
-        // in effect; damage-hd's collision:true immediately after forces the real rebuild for everyone.
+        // Registration order is presentation only: no suite here depends on running after another,
+        // which is what lets any subset of this registry run in a process of its own.
         into.Add(new TestHarness.Suite("emitter-lifetime",
             "a destructible's death starts a PUFFER_STATE emitter and BL-236's own retirement rule stops it", EmitterLifetime));
         into.Add(new TestHarness.Suite("puffer-modes",

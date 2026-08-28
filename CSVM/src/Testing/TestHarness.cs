@@ -34,9 +34,10 @@ public static class TestHarness
 {
     /// <summary>The <c>test-report.json</c> schema, bumped when a field's meaning changes or one is
     /// removed; a reader keys off this before a field name, the same rule the golden manifest's
-    /// own <c>schema</c> follows. 1 was the unversioned shape; 2 adds the phase-attribution
-    /// block and the per-suite phase fields below.</summary>
-    public const int ReportSchema = 2;
+    /// own <c>schema</c> follows. 1 was the unversioned shape; 2 adds the phase-attribution block;
+    /// 3 adds the <c>shard</c> block and per-suite <c>index</c>, and moves a sharded run's report
+    /// out of <c>.scratch/</c> into the shard's own subdirectory.</summary>
+    public const int ReportSchema = 3;
 
     /// <summary>The engine errors this project currently emits that are not the harness's to fix.
     /// Every entry names the open item that owns it; when that item lands, the entry is deleted and
@@ -57,15 +58,21 @@ public static class TestHarness
 
     private static readonly List<Suite> Registry = new();
 
+    /// <summary>The registry, built on first use. ⚠ Keep the lock: the engine reaches this from one
+    /// thread, but xUnit runs test classes in parallel, and two concurrent first uses left the list
+    /// holding null entries.</summary>
     public static IReadOnlyList<Suite> All
     {
         get
         {
-            if (Registry.Count == 0)
+            lock (Registry)
             {
-                SuiteCatalog.RegisterAll(Registry);
+                if (Registry.Count == 0)
+                {
+                    SuiteCatalog.RegisterAll(Registry);
+                }
+                return Registry;
             }
-            return Registry;
         }
     }
 
@@ -78,7 +85,13 @@ public static class TestHarness
         // Numbers in a committed report must read the same on every machine.
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
-        var selected = Select(All, filter, out var unmatched);
+        var shard = SuiteShards.Parse(filter, out string terms, out string? shardError);
+        if (shardError != null)
+        {
+            Log.Error("test", $"run-tests {shardError}");
+            return 1;
+        }
+        var selected = Select(All, terms, out var unmatched);
         var results = new List<SuiteResult>();
         Log.Info("test", $"run-tests suites={selected.Count}/{All.Count} filter='{filter}' chapter={ctx.Chapter} mission={ctx.Mission}");
         if (unmatched.Count > 0)
@@ -92,6 +105,15 @@ public static class TestHarness
             return 1;
         }
 
+        // Sharding narrows an already-valid selection, so it runs AFTER the miss checks above: an
+        // empty shard is a legitimate division of a small set, an empty selector is a typo.
+        var plan = PlanShard(ctx, shard, ref selected);
+        var order = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < All.Count; i++)
+        {
+            order[All[i].Name] = i;
+        }
+
         var totals = new PhaseAttribution.Categorized();
         double totalBuildSeconds = 0, totalDisposalSeconds = 0, totalRestSeconds = 0, totalOverrunSeconds = 0;
         int totalWorldsBuilt = 0;
@@ -100,7 +122,7 @@ public static class TestHarness
             ctx.Failures.Clear();
             ctx.Notes.Clear();
             ctx.Counts.Clear();
-            ctx.ResetPhaseAttribution();
+            ctx.ResetForSuite();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             SuiteStatus status;
             string detail = suite.What;
@@ -130,6 +152,7 @@ public static class TestHarness
             results.Add(new SuiteResult
             {
                 Name = suite.Name,
+                Index = order[suite.Name],
                 Status = status,
                 Seconds = wallSeconds,
                 Detail = detail,
@@ -187,7 +210,7 @@ public static class TestHarness
         var phaseTotals = new PhaseTotals(totals, totalBuildSeconds, totalDisposalSeconds,
             finalDisposalSeconds, totalRestSeconds, totalOverrunSeconds, totalWorldsBuilt, totalWallSeconds);
         Log.Raw(FormatTable(results, screen, logPath));
-        WriteReport(ctx, results, screen, logPath, phaseTotals, filter);
+        WriteReport(ctx, results, screen, logPath, phaseTotals, filter, plan);
         string errors = screen == null ? "unscreened" : screen.Ok ? "clean" : "UNEXPECTED";
         Log.Info("test", $"run-tests pass={pass} fail={fail} skip={skip} errors={errors}");
         return fail > 0 || screenFailed ? 1 : 0;
@@ -280,6 +303,28 @@ public static class TestHarness
             OverCap = overCap,
             AllowedCounts = counts,
         };
+    }
+
+    // Narrows an already-valid selection to one shard and tags the context, so every artifact this
+    // process writes lands under .scratch/<tag>/ instead of over a sibling shard's.
+    private static ShardPlan PlanShard(TestContext ctx, ShardSpec? shard, ref IReadOnlyList<Suite> selected)
+    {
+        int total = selected.Count;
+        if (shard is not { } s || s.Count < 2)
+        {
+            return new ShardPlan(1, 1, total, "", Array.Empty<string>());
+        }
+        var weights = SuiteShards.Load(Path.Combine(ctx.RepoRoot, "analysis", "engine-suite-weights.json"));
+        var unweighted = SuiteShards.Unweighted(selected.Select(x => x.Name), weights);
+        selected = SuiteShards.Plan(selected, x => x.Name, weights, s.Count)[s.Index - 1];
+        // Beside this shard's own engine log, which the launcher already made unique per run: that
+        // is what keeps two concurrent RunTests.ps1 invocations from writing one another's reports.
+        string root = Path.GetDirectoryName(EngineLogPath() ?? "") ?? "";
+        ctx.ShardScratch = Path.Combine(
+            root.Length > 0 ? root : Path.Combine(ctx.RepoRoot, ".scratch"),
+            $"shard{s.Index}of{s.Count}");
+        Log.Info("test", $"run-tests shard={s.Index}/{s.Count} suites={selected.Count}/{total} unweighted={unweighted.Count} weights='{weights.Source}' scratch={ctx.ScratchDir}");
+        return new ShardPlan(s.Index, s.Count, total, weights.Source, unweighted);
     }
 
     private static List<Suite> MatchTerm(IReadOnlyList<Suite> suites, string term)
@@ -436,13 +481,16 @@ public static class TestHarness
     };
 
     private static void WriteReport(TestContext ctx, List<SuiteResult> results,
-        StderrScreen? screen, string? logPath, PhaseTotals phases, string selector)
+        StderrScreen? screen, string? logPath, PhaseTotals phases, string selector, ShardPlan plan)
     {
         var json = new StringBuilder();
         json.AppendLine("{");
         json.AppendLine($"  \"schema\": {ReportSchema},");
         json.AppendLine($"  \"binary\": {{\"path\": {Quote(BinaryPath(ctx))}, \"md5\": {Quote(BinaryMd5(ctx))}}},");
         json.AppendLine($"  \"selector\": {Quote(selector)},");
+        json.AppendLine($"  \"shard\": {{\"index\": {plan.Index}, \"count\": {plan.Count}, "
+                        + $"\"selectedTotal\": {plan.SelectedTotal}, \"weights\": {Quote(plan.WeightsSource)}, "
+                        + $"\"unweighted\": [{string.Join(", ", plan.Unweighted.Select(Quote))}]}},");
         json.AppendLine($"  \"chapter\": {Quote(ctx.Chapter)},");
         json.AppendLine($"  \"mission\": {Quote(ctx.Mission)},");
         json.AppendLine($"  \"dataRoot\": {Quote(ctx.DataRoot)},");
@@ -470,6 +518,7 @@ public static class TestHarness
             var r = results[i];
             json.AppendLine("    {");
             json.AppendLine($"      \"name\": {Quote(r.Name)},");
+            json.AppendLine($"      \"index\": {r.Index},");
             json.AppendLine($"      \"status\": {Quote(r.Status.ToString().ToLowerInvariant())},");
             json.AppendLine($"      \"seconds\": {Sec(r.Seconds)},");
             json.AppendLine($"      \"worldsBuilt\": {r.WorldsBuilt},");
@@ -574,6 +623,12 @@ public static class TestHarness
     /// <summary>The run-wide sums <see cref="WriteReport"/> needs, computed once in <see cref="Run"/>
     /// rather than re-derived from <c>results</c> there (<see cref="SuiteResult"/> already holds the
     /// per-suite figures these are sums of).</summary>
+    /// <summary>Which shard this process ran, of how many, out of how big a selection — written
+    /// into the report so an aggregator can prove the shards cover the selection exactly once
+    /// rather than assuming they did.</summary>
+    private readonly record struct ShardPlan(int Index, int Count, int SelectedTotal,
+        string WeightsSource, IReadOnlyList<string> Unweighted);
+
     private readonly record struct PhaseTotals(
         PhaseAttribution.Categorized Build, double BuildSeconds, double DisposalSeconds,
         double FinalDisposalSeconds, double RestSeconds, double OverrunSeconds, int WorldsBuilt,
@@ -634,6 +689,10 @@ public sealed class TestContext
     internal double DisposalSeconds;
     internal int WorldsBuilt;
 
+    // Set by TestHarness.Run once the shard term is parsed, before any suite starts. Null on a
+    // serial run, which keeps writing straight into .scratch/ as it always has.
+    internal string? ShardScratch;
+
     private readonly Dictionary<string, TestWorld> _worlds = new();
 
     // One run builds the same chapter and the same chapter+mission many times, so the two
@@ -687,8 +746,10 @@ public sealed class TestContext
     /// exactly as an interactive session's do.</summary>
     public required Camera3D Camera { get; init; }
 
-    /// <summary>The scratch directory every artifact this run writes must stay inside.</summary>
-    public string ScratchDir => Path.Combine(RepoRoot, ".scratch");
+    /// <summary>The scratch directory every artifact this run writes must stay inside. A sharded
+    /// run gets a directory of its own beside its engine log, so neither a sibling shard nor a
+    /// concurrent run can overwrite its report or its per-suite artifacts.</summary>
+    public string ScratchDir => ShardScratch ?? Path.Combine(RepoRoot, ".scratch");
 
     /// <summary>How the decode store answered this run: reported so a warm-cache A/B shows the
     /// hits happened rather than only that the wall time moved.</summary>
@@ -755,6 +816,23 @@ public sealed class TestContext
     public void WithWorld(string chapter, bool collision, Action<TestWorld> body) =>
         WithWorld(chapter, collision, mission: null, body);
 
+    /// <summary>Builds a world nothing else will ever see and frees it when <paramref name="body"/>
+    /// returns: never read from the shared cache, never written to it. What a suite whose build
+    /// options differ from every other suite's needs, so its choices cannot ride into a later
+    /// suite's world — an installed <see cref="EmitterFactory"/> above all.</summary>
+    public void WithPrivateWorld(string chapter, bool collision, Action<TestWorld> body)
+    {
+        var world = BuildWorld(chapter, collision, Mission);
+        try
+        {
+            body(world);
+        }
+        finally
+        {
+            DisposalSeconds += TimeDestroy(world);
+        }
+    }
+
     /// <summary>The mission-override form: builds the chapter at a mission other than the
     /// run's own (the zeppelin damage suite wants C1 at M04, where <c>piratezep</c> is live).
     /// An overridden-mission world is never cached — the cache is keyed by chapter alone, so
@@ -789,11 +867,16 @@ public sealed class TestContext
         }
     }
 
-    /// <summary>Resets the current suite's world-build/disposal attribution. Called once per suite
-    /// in <see cref="TestHarness.Run"/>, the same lifetime <see cref="Failures"/>/<see cref="Notes"/>/
-    /// <see cref="Counts"/> already have — a suite never sees another's numbers.</summary>
-    internal void ResetPhaseAttribution()
+    /// <summary>Clears everything a suite may leave behind on this context: the build knobs and the
+    /// world-build/disposal attribution. Called once per suite in <see cref="TestHarness.Run"/>, the
+    /// same lifetime <see cref="Failures"/>/<see cref="Notes"/>/<see cref="Counts"/> already have.
+    /// ⚠ Keep the knob resets: they are what makes a suite's verdict independent of which suite ran
+    /// before it, and therefore of which shard it landed in.</summary>
+    internal void ResetForSuite()
     {
+        EmitterFactory = null;
+        ExtraPrewarmSoundNames = null;
+        CutsceneRoots = false;
         WorldBuildPhases = default;
         WorldBuildSeconds = 0;
         DisposalSeconds = 0;
@@ -898,6 +981,11 @@ public sealed class TestContext
 public sealed class SuiteResult
 {
     public required string Name { get; init; }
+
+    /// <summary>This suite's position in the registry. Carried into the report so shard reports
+    /// merge back into registry order without the merger holding a copy of the catalog.</summary>
+    public int Index { get; init; }
+
     public required SuiteStatus Status { get; init; }
     public required double Seconds { get; init; }
     public string Detail { get; init; } = "";

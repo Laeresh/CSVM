@@ -149,14 +149,14 @@ Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 |---|---|
 | `build` | `dotnet build CSVM/CSVM.sln`. A failure stops the run — nothing downstream can say anything about a tree that does not compile |
 | `units` | `dotnet test CSVM/CSVM.sln` (the `CSVM.Tests` xUnit project), `--no-build` since the build stage just produced the binaries. Counts are read from a TRX log in `.scratch/testresults/`, never scraped from the localized console summary. A FAILED units stage does not stop the run — only a failed `build` does — so `engine`, `goldens` and `hitch` still launch and are scored from their own reports; the summary row for `units` still reads `FAIL` |
-| `engine` | Godot with `--run-tests` — windowed (never `--headless`: no shaders compile there, so a clean error screen would prove nothing — LOG-8) and with `--log-file .scratch/run-tests-engine.log`, which is what lets the harness screen native engine `ERROR:` lines. `--run-tests` implies `--det` by itself. The launch has a five-minute watchdog: a timeout kills Godot, fails the stage with exit 124, and leaves the partial log. Otherwise the verdict comes from the process exit code; counts and failing suite names come from `.scratch/test-report.json`, which is deleted before the run so a dead run cannot be scored from the last one's numbers |
+| `engine` | Godot with `--run-tests` — windowed (never `--headless`: no shaders compile there, so a clean error screen would prove nothing — LOG-8) and with `--log-file`, which is what lets the harness screen native engine `ERROR:` lines. `--run-tests` implies `--det` by itself. The full catalog runs in `-Shards` concurrent processes (below); each launch has its own five-minute watchdog, and a timeout kills that launch, fails the stage with exit 124 and leaves the partial log while the other shards still report. Counts and failing suite names come from the shard reports, each deleted before the run so a dead run cannot be scored from the last one's numbers |
 | `goldens` | The golden-image tripwire: one Godot per shot in `analysis/goldens/manifest.json`, each a pinned `--det` capture with `--screenshot=` and `--log-file=` appended, compared as **md5 of the raw pixel buffer** the engine prints on its `[core] shot pixmd5=… size=… gpu=…` line (never the PNG's encoded bytes — SHOT-6). ~53 s for 11 shots |
 | `hitch` | Two scripted Godot launches reporting `HitchMonitor`/`HitchSidecar` health: a clean `--frames=180` run should stay silent, and `--hitch-inject=50@300 --frames=310` should trip once on frame 300 with a full 120-entry ring and matching sidecar record. Results are awareness-only and never fail the run |
 | `perf` | `-Perf` only: every scenario in `analysis/perf/scenarios.json` under `--det --perf --no-vsync --mute`, medians appended to the git-ignored `perf-history.jsonl`. ~88 s for 5 scenarios. It measures and records; it never judges (below) |
 
 Switches: **`-Suite <name>[,<name>]`** (exact in-engine suite names), **`-Filter <substring>`**
 (engine suite names only — `-Filter weapons` runs `weapons-defs` + `weapons-fire`),
-**`-UnitFilter <expr>`** (straight into `dotnet test --filter`), **`-Quick`**, **`-SkipUnits`**,
+**`-UnitFilter <expr>`** (straight into `dotnet test --filter`), **`-Shards <n>`**, **`-Quick`**, **`-SkipUnits`**,
 **`-SkipEngine`**, **`-SkipGoldens`**, **`-RegenGoldens`**, **`-SkipHitch`**, **`-Perf`**
 (+ `-PerfLabel`, `-PerfCompare`, `-PerfFilter`, `-PerfIterations`, `-PerfFrames`).
 
@@ -175,20 +175,54 @@ quick engine tier (`--run-tests=tier:quick`), no goldens and no hitch. Measured 
 development machine against a ≤60 s budget. Membership of both tiers is checked in — the
 `[Trait("Tier", "Quick")]` classes in `CSVM.Tests` and `SuiteCatalog.QuickTier` — and chosen by the
 failure surface each representative can catch, never inferred from a diff or from elapsed time.
-`emitter-lifetime` is deliberately outside the engine tier: it installs the fake emitter factory the
-shared C1 world would then be cached with, and the collision rebuild that undoes that is far down
-the registry. An explicit `-Suite`/`-Filter` is unioned with the engine tier, so "the quick lane
+`emitter-lifetime` is outside the engine tier because `puffer-modes` covers the emitter runtime end
+to end for a fraction of its wall time. An explicit `-Suite`/`-Filter` is unioned with the engine tier, so "the quick lane
 plus the suite I am editing" is one command; an explicit `-UnitFilter` replaces the unit tier,
 since the VSTest grammar can express a union itself. Quick prints its declared scope before
 it starts and a `not checked:` line for every omitted surface; it is partial by construction and
 never satisfies the landing rule, which stays the complete run.
 
-**`test-report.json`'s schema is versioned** (`"schema"`, currently 2 — bumped when a field's
+**The engine stage runs the full catalog in concurrent Godot processes.** `-Shards <n>` sets how
+many; the default is 4 for a full run and 1 whenever `-Suite`/`-Filter`/`-Quick` names a selection,
+which is faster started once than started N times. `-Shards 1` is the serial reference path and
+stays selectable. Membership comes from the harness's own `shard:<index>/<count>` term over the
+measured per-suite weights checked in at `analysis/engine-suite-weights.json` (longest unit first
+onto the lightest shard, ties broken on registry position), so the same tree divides the same way
+every run and no membership list has to be maintained by hand. The two seven-world censuses are
+pinned into one shard by that file's `groups`, because whichever runs second reads its eight
+chapters out of the process `DecodeCache` instead of decoding them again. A suite the file does not
+name is charged the default weight and printed as a `not checked:` line, so an unmeasured suite
+skews the balance visibly rather than silently. Regenerate the file from a warm `-Shards 1` run's
+`test-report.json`.
+
+Each shard is isolated by construction: its own `--log-file`, its own `.out`/`.err`, and its own
+report and per-suite artifacts in a `shard<i>of<n>` directory beside that log, all under
+`.scratch/engine/owner-<pid>/`. The owner pid in that path is also the stray-Godot rule: a
+`--run-tests` Godot whose owning PowerShell is gone is a leftover and is killed, while one whose
+owner is alive belongs to another run and is reported and left alone (SHELL-2), so a shard can
+never kill a sibling. **The stage's verdict is the merge of every shard's report**, in registry
+order via each suite's own `index`: counts sum, failed names sort back into registry order, the
+error allowlist's caps are re-checked against the SUMMED counts (N processes each under the cap can
+still sum past it), every shard must report the same `CSVM.dll` hash, and the shards' suite counts
+must add up to the selection each of them reports. **A shard exiting 0 with no report FAILS the
+stage** — a process that ran nothing must never read as a green one.
+
+**Two concurrent `RunTests.ps1` invocations isolate everything except a suite's own `user://`
+store.** Measured with `-SkipUnits -SkipGoldens -SkipHitch`: logs, reports, artifacts and the
+stray-Godot sweep all held, and the second run failed exactly one suite, `campaign-loop`, which
+proves persistence ACROSS processes and therefore keeps its profile under `user://Testing/` where
+`.scratch/` isolation cannot reach it. The goldens, hitch and perf stages still identify their
+strays by output path alone, so they are not concurrency-safe either.
+
+**`test-report.json`'s schema is versioned** (`"schema"`, currently 3 — bumped when a field's
 meaning changes or one is removed, the same rule `analysis/goldens/manifest.json`'s own `schema`
 follows). Besides the per-suite PASS/FAIL/SKIP rows, it carries a `binary` block (the loaded
-`CSVM.dll`'s own path and MD5, the same `$PerfDll` identity `RunTests.ps1`'s perf stage records) and
-the run's own `selector`, so a report can be matched to the exact build and suite set that produced
-it. A `phaseTotals` block and a matching set of per-suite fields (`worldsBuilt`, `buildSeconds`,
+`CSVM.dll`'s own path and MD5, the same `$PerfDll` identity `RunTests.ps1`'s perf stage records),
+the run's own `selector`, and a `shard` block (this shard's index and count, the whole selection's
+size before the division, and any suite the weights file did not name), so a report can be matched
+to the exact build and suite set that produced it and a merger can prove the shards covered the
+selection exactly once. Each suite row carries its registry `index`, which is what merges the shard
+reports back into registry order. A `phaseTotals` block and a matching set of per-suite fields (`worldsBuilt`, `buildSeconds`,
 `archiveDecodeSeconds`, `soundPrepSeconds`, `runtimeConstructionSeconds`, `otherBuildSeconds`,
 `disposalSeconds`, `restSeconds`, `overrunSeconds`) split every suite's wall time into world-build
 (further split into the three phase categories `PLAN-fast-verification.md`'s B11 needs), disposing a

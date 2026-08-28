@@ -17,7 +17,9 @@
       engine   Godot with --run-tests, the in-engine assertion suites. Windowed (never
                --headless: no shaders compile there, so a clean error screen would prove
                nothing) and with --log-file, which is what lets the harness screen native
-               engine ERROR lines. --run-tests implies --det by itself.
+               engine ERROR lines. --run-tests implies --det by itself. The full catalog runs
+               in several concurrent processes (-Shards), each with its own log, report and
+               scratch subdirectory; the stage's verdict is the merge of their reports.
       goldens  The golden-image tripwire: one Godot per shot in analysis/goldens/manifest.json,
                each a pinned --det capture, compared as md5 of the RAW pixel buffer (the engine
                prints it; a PNG's encoded bytes are not the picture). Runs as its own scripted
@@ -68,6 +70,15 @@
     Passed to dotnet test --filter, so the whole VSTest grammar is available: a
     FullyQualifiedName~Name for one test or class, or Tier=Quick for the checked-in quick unit
     tier. A filter matching no test FAILS the units stage rather than reporting a green zero.
+
+.PARAMETER Shards
+    How many Godot processes the engine stage divides the catalog over. 0 (the default) means the
+    measured default for a full run and 1 for an explicit -Suite/-Filter/-Quick selection, which is
+    faster started once than started N times. 1 is the serial reference path and stays selectable.
+    Membership comes from analysis/engine-suite-weights.json through the harness's own
+    shard:<index>/<count> term, so it is deterministic: the same tree divides the same way every
+    run. Each shard gets its own engine log, report, scratch subdirectory and watchdog; the stage's
+    verdict is the merge of every shard's report, and a shard exiting 0 without one FAILS the stage.
 
 .PARAMETER Quick
     The broad partial confidence gate: build, the quick unit tier (Tier=Quick), the quick engine
@@ -136,6 +147,10 @@
     Build, then that one suite exactly -- the targeted engine loop.
 
 .EXAMPLE
+    .\RunTests.ps1 -Shards 1
+    The same run with the engine stage serial -- the reference path an A/B compares against.
+
+.EXAMPLE
     .\RunTests.ps1 -Quick
     The broad partial gate: build, the quick unit tier, the quick engine tier, and a summary
     naming every surface it did not check.
@@ -155,6 +170,7 @@ param(
     [string]$Filter = "",
     [string]$Suite = "",
     [string]$UnitFilter = "",
+    [int]$Shards = 0,
     [switch]$Quick,
     [switch]$SkipUnits,
     [switch]$SkipEngine,
@@ -201,6 +217,10 @@ $Sln        = Join-Path $ProjectDir "CSVM.sln"
 $ScratchDir = Join-Path $RepoRoot ".scratch"
 $Inv        = [System.Globalization.CultureInfo]::InvariantCulture
 $EngineTimeoutSec = 300
+# Shards for the FULL catalog when -Shards is not given. Measured on the development machine; the
+# sweep behind the number is in docs/PLAN-fast-verification.md's B13. The watchdog above is per
+# launch, so it is not a budget the shard count may be tuned against.
+$DefaultEngineShards = 4
 
 # tools/ is git-ignored, so a git worktree checkout has no Godot. Fall back to the primary
 # tree named by CSVM_DATA_ROOT -- the same env var the engine and the unit tests read for
@@ -263,6 +283,16 @@ function Invoke-Godot {
         [Parameter(Mandatory=$true)][string[]]$Arguments,
         [int]$TimeoutSec = 0
     )
+    return Wait-Godot -Launch (Start-Godot -Arguments $Arguments) -TimeoutSec $TimeoutSec
+}
+
+# The non-blocking half of Invoke-Godot, so the engine stage can have several shards in flight.
+# Returns a launch object Wait-Godot consumes exactly once; the two paths (hidden desktop, plain
+# ProcessStartInfo) are distinguished by its Kind, because only the second has streams to drain.
+function Start-Godot {
+    param(
+        [Parameter(Mandatory=$true)][string[]]$Arguments
+    )
     $quoted = @()
     foreach ($a in $Arguments) {
         if ($a -match '\s' -and $a -notmatch '^".*"$') {
@@ -285,10 +315,10 @@ function Invoke-Godot {
     if ($HiddenDesktop) {
         # CreateProcess takes ONE command line and it must carry argv[0] itself.
         $cmdLine = ('"{0}" {1}' -f $GodotExe, ($quoted -join " "))
-        return Invoke-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
-                                      -WorkingDirectory $RepoRoot `
-                                      -StdOut "$streamBase.out" -StdErr "$streamBase.err" `
-                                      -TimeoutSec $TimeoutSec
+        $handle = Start-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
+                                        -WorkingDirectory $RepoRoot `
+                                        -StdOut "$streamBase.out" -StdErr "$streamBase.err"
+        return [pscustomobject]@{ Kind = "desktop"; Handle = $handle }
     }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName               = $GodotExe
@@ -298,8 +328,23 @@ function Invoke-Godot {
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
     $p = [System.Diagnostics.Process]::Start($psi)
-    $outRead = $p.StandardOutput.ReadToEndAsync()
-    $errRead = $p.StandardError.ReadToEndAsync()
+    return [pscustomobject]@{
+        Kind = "process"; Process = $p; StreamBase = $streamBase
+        OutRead = $p.StandardOutput.ReadToEndAsync()
+        ErrRead = $p.StandardError.ReadToEndAsync()
+    }
+}
+
+# Waits for one Start-Godot launch and returns its exit code (124 on timeout).
+function Wait-Godot {
+    param(
+        [Parameter(Mandatory=$true)]$Launch,
+        [int]$TimeoutSec = 0
+    )
+    if ($Launch.Kind -eq "desktop") {
+        return Wait-OnHiddenDesktop -Process $Launch.Handle -TimeoutSec $TimeoutSec
+    }
+    $p = $Launch.Process
     if ($TimeoutSec -gt 0 -and -not $p.WaitForExit($TimeoutSec * 1000)) {
         $p.Kill()
         $p.WaitForExit()
@@ -307,8 +352,8 @@ function Invoke-Godot {
     } else {
         $code = $p.ExitCode
     }
-    [System.IO.File]::WriteAllText("$streamBase.out", $outRead.Result)
-    [System.IO.File]::WriteAllText("$streamBase.err", $errRead.Result)
+    [System.IO.File]::WriteAllText("$($Launch.StreamBase).out", $Launch.OutRead.Result)
+    [System.IO.File]::WriteAllText("$($Launch.StreamBase).err", $Launch.ErrRead.Result)
     return $code
 }
 
@@ -362,7 +407,7 @@ function Get-StatusColor {
 # gets killed; any other Godot on this tree is only reported. A live playtest or another agent's
 # session is not ours to kill, and "everything launched against this tree" catches both.
 function Stop-StrayGodots {
-    param([string]$Marker)
+    param([string]$Marker, [switch]$OwnerScoped)
     $killed = 0
     $mine = @()
     $others = @()
@@ -370,11 +415,25 @@ function Stop-StrayGodots {
         $_.CommandLine -and $_.CommandLine.IndexOf($ProjectDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
     })
     foreach ($godot in $godots) {
-        if ($godot.CommandLine.IndexOf($Marker, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-            $mine += $godot
-        } else {
+        if ($godot.CommandLine.IndexOf($Marker, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
             $others += $godot
+            continue
         }
+        # An engine-stage launch names the PowerShell that started it (owner-<pid>, in its
+        # --log-file path). A live owner means another RunTests.ps1 is mid-run, whose shards are no
+        # more ours to kill than a playtest is; only an orphan is a stray.
+        if ($OwnerScoped -and $godot.CommandLine -match 'owner-(\d+)') {
+            $owner = [int]$Matches[1]
+            $ownerAlive = $false
+            if ($owner -ne $PID) {
+                try { $ownerAlive = $null -ne (Get-Process -Id $owner -ErrorAction Stop) } catch { $ownerAlive = $false }
+            }
+            if ($ownerAlive) {
+                $others += $godot
+                continue
+            }
+        }
+        $mine += $godot
     }
     foreach ($stray in $mine) {
         try {
@@ -387,6 +446,136 @@ function Stop-StrayGodots {
     Write-Host "stray Godots killed: $killed" -ForegroundColor DarkGray
     foreach ($other in $others) {
         Write-Host "  another Godot is live on this tree, left alone: pid $($other.ProcessId) $($other.CommandLine)" -ForegroundColor Yellow
+    }
+}
+
+# Folds the shard reports into one engine verdict. Every rule here exists because concurrency can
+# manufacture a false pass: a shard exiting 0 without a report ran nothing, two shards claiming
+# different CSVM.dll hashes did not measure one build, and shard suite counts that do not add up to
+# the selection mean the plan lost or duplicated a suite. Allowlist caps are re-checked against the
+# SUMMED counts, because each process only ever sees its own share of an allowed error.
+function Merge-EngineShards {
+    param([object[]]$Shards, [int]$TimeoutSec)
+
+    $passed = 0; $failed = 0; $skipped = 0
+    $problems = @(); $failedRows = @(); $seenNames = @{}
+    $unexpected = @(); $overCap = @(); $screenedAll = $true; $anyScreen = $false
+    $binaries = @{}; $allowSeen = @{}; $allowMax = @{}; $allowWhy = @{}
+    $totals = @{}; $unweighted = @(); $slowest = 0.0; $reports = 0
+
+    foreach ($shard in $Shards) {
+        if ($shard.ExitCode -eq 124) {
+            $problems += "$($shard.Label): timed out after ${TimeoutSec}s (exit 124); partial log at $($shard.Log)"
+        }
+        if (-not (Test-Path $shard.Report)) {
+            # A selector term that matched nothing ends the harness before any suite runs, so there
+            # is no report to score. Say which term missed rather than only naming the missing file.
+            $missed = @()
+            if (Test-Path $shard.Log) {
+                $missed = @(Get-Content -Path $shard.Log | Where-Object { $_ -match 'selector matched nothing' })
+            }
+            if ($missed.Count -gt 0 -and $missed[0] -match 'selector matched nothing: ([^;]+)') {
+                $problems += "$($shard.Label): selector matched nothing: $($Matches[1].Trim())"
+            } elseif ($shard.ExitCode -ne 124) {
+                $problems += "$($shard.Label): Godot exited $($shard.ExitCode) with no report at $($shard.Report); log at $($shard.Log)"
+            }
+            continue
+        }
+        $json = $null
+        try {
+            # SHELL-7: .NET's reader, not Get-Content, for a BOM-less UTF-8 file.
+            $json = [System.IO.File]::ReadAllText($shard.Report) | ConvertFrom-Json
+        } catch {
+            $problems += "$($shard.Label): could not read $($shard.Report): $($_.Exception.Message)"
+            continue
+        }
+        $reports++
+        $passed  += [int]$json.passed
+        $failed  += [int]$json.failed
+        $skipped += [int]$json.skipped
+        if ($shard.ExitCode -ne 0 -and $shard.ExitCode -ne 1) {
+            $problems += "$($shard.Label): Godot exited $($shard.ExitCode) though it wrote a report; log at $($shard.Log)"
+        }
+        $slowest = [math]::Max($slowest, [double]$json.phaseTotals.wallSeconds)
+        $binaries[[string]$json.binary.md5] = 1
+        $totals[[string][int]$json.shard.selectedTotal] = 1
+        foreach ($name in @($json.shard.unweighted)) {
+            if ($name) { $unweighted += $name }
+        }
+        foreach ($suite in @($json.suites)) {
+            if ($seenNames.ContainsKey($suite.name)) {
+                $problems += "suite '$($suite.name)' ran in more than one shard"
+            }
+            $seenNames[$suite.name] = 1
+            if ($suite.status -eq "fail") {
+                $failedRows += [pscustomobject]@{ Index = [int]$suite.index; Name = $suite.name }
+            }
+        }
+        if (-not $json.engineErrors.screened) {
+            $screenedAll = $false
+        } else {
+            $anyScreen = $true
+        }
+        $unexpected += @($json.engineErrors.unexpected)
+        foreach ($a in @($json.engineErrors.allowlist)) {
+            $allowSeen[$a.pattern] = [int]$allowSeen[$a.pattern] + [int]$a.seen
+            $allowMax[$a.pattern]  = [int]$a.max
+            $allowWhy[$a.pattern]  = [string]$a.why
+        }
+    }
+
+    # Run-wide caps, not per-process ones: N shards each under the cap can still sum past it.
+    foreach ($pattern in $allowSeen.Keys) {
+        if ($allowSeen[$pattern] -gt $allowMax[$pattern]) {
+            $overCap += "$pattern seen $($allowSeen[$pattern])x across the run, allowed $($allowMax[$pattern])x -- $($allowWhy[$pattern])"
+        }
+    }
+    if ($binaries.Keys.Count -gt 1) {
+        $problems += "shards report different CSVM.dll hashes ($($binaries.Keys -join ', ')): they did not measure one build (METHOD-6)"
+    }
+    if ($totals.Keys.Count -gt 1) {
+        $problems += "shards disagree on the selection size ($($totals.Keys -join ', '))"
+    } elseif ($totals.Keys.Count -eq 1) {
+        $expected = [int]@($totals.Keys)[0]
+        $covered = $passed + $failed + $skipped
+        if ($covered -ne $expected) {
+            $problems += "the shards covered $covered suite(s) of the selection's $expected"
+        }
+    }
+    if ($reports -ne $Shards.Count) {
+        $problems += "$($Shards.Count - $reports) of $($Shards.Count) shard(s) wrote no readable report"
+    }
+
+    $errorNote = if (-not $anyScreen) { "engine errors UNSCREENED" }
+                 elseif (-not $screenedAll) { "engine errors PARTLY UNSCREENED" }
+                 elseif ($unexpected.Count -gt 0 -or $overCap.Count -gt 0) { "engine errors UNEXPECTED" }
+                 else { "engine errors clean" }
+    foreach ($u in $unexpected) { $problems += "engine error: $u" }
+    foreach ($o in $overCap) { $problems += "over cap: $o" }
+
+    if ($reports -eq 0) {
+        # With nothing to count, the summary row carries the first reason instead -- most often the
+        # selector term that matched nothing, which is what a reader needs to see there.
+        $detail = if ($problems.Count -gt 0) { ($problems[0] -replace '^engine: ', '') } else { "no shard wrote a report" }
+    } else {
+        $names = @($failedRows | Sort-Object Index | ForEach-Object { $_.Name })
+        $detail = "$passed passed, $failed failed, $skipped skipped; $errorNote"
+        if ($names.Count -gt 0) {
+            $detail = "$detail [$($names -join ', ')]"
+        }
+    }
+    # No report means no suite ran, whatever the exit code says. Treating that as a pass would let a
+    # run that never started read as a green one -- the same trap the SKIP rows exist to avoid.
+    $ok = ($reports -gt 0 -and $failed -eq 0 -and $problems.Count -eq 0 -and
+           ($Shards | Where-Object { $_.ExitCode -ne 0 }).Count -eq 0)
+    return [pscustomobject]@{
+        Status = $(if ($ok) { "PASS" } else { "FAIL" })
+        Detail = $detail
+        Passed = $passed; Failed = $failed; Skipped = $skipped
+        ErrorNote = $errorNote
+        Problems = @($problems)
+        Unweighted = @($unweighted | Sort-Object -Unique)
+        SlowestShard = (Format-Seconds $slowest) + "s"
     }
 }
 
@@ -502,7 +691,9 @@ if ($SkipEngine) {
     Add-Unchecked "the in-engine suites did not run: no Godot at $GodotExe (in a worktree, set `$env:CSVM_DATA_ROOT to the primary tree)"
 } else {
     Write-Stage-Banner "engine (--run-tests)"
-    Stop-StrayGodots -Marker "--run-tests"
+    # SHELL-2, owner-scoped: every launch here carries owner-<pid> in its --log-file path, so a
+    # leftover from a dead run is killed while a live sibling run's shards are reported and spared.
+    Stop-StrayGodots -Marker "\.scratch\engine\owner-" -OwnerScoped
 
     # Freeze workaround, as in RunGame.ps1/RunDev.ps1: the bundled SDL hangs the main thread
     # when a >255-button DirectInput device disconnects. Real pads still work via XInput.
@@ -510,26 +701,63 @@ if ($SkipEngine) {
         $env:SDL_JOYSTICK_DIRECTINPUT = "0"
     }
 
-    # Stale outputs go first: a run that dies before writing its report must not be scored
-    # from the previous run's numbers.
-    $report    = Join-Path $ScratchDir "test-report.json"
-    $engineLog = Join-Path $ScratchDir "run-tests-engine.log"
-    if (Test-Path $report) {
-        Remove-Item -Path $report -Force
-    }
-    if (Test-Path $engineLog) {
-        Remove-Item -Path $engineLog -Force
+    # An explicit selection stays in one process: the shard grammar divides by measured weight, and
+    # a handful of named suites is faster started once than started N times.
+    $shardCount = $Shards
+    if ($shardCount -le 0) {
+        $shardCount = if ($EngineSelector) { 1 } else { $DefaultEngineShards }
     }
 
-    $testArg = "--run-tests"
-    if ($EngineSelector) {
-        $testArg = "--run-tests=$EngineSelector"
+    # Per-run launch directory. The owner pid in the path is what makes a stray distinguishable from
+    # a sibling's live shard, and it keeps a timed-out shard's evidence from being overwritten.
+    $engineRunDir = Join-Path $ScratchDir "engine\owner-$PID"
+    if (Test-Path $engineRunDir) {
+        Remove-Item -Path $engineRunDir -Recurse -Force
     }
+    $null = New-Item -ItemType Directory -Path $engineRunDir -Force
+
+    # Stale outputs go first: a run that dies before writing its report must not be scored
+    # from the previous run's numbers.
+    $shardRuns = @()
+    for ($k = 1; $k -le $shardCount; $k++) {
+        if ($shardCount -eq 1) {
+            $terms  = $EngineSelector
+            $report = Join-Path $ScratchDir "test-report.json"
+            $log    = Join-Path $engineRunDir "engine.log"
+            $label  = "engine"
+        } else {
+            # The harness writes its report and its per-suite artifacts beside this log, in a
+            # directory named for the shard -- so the launch directory decides both.
+            $terms  = (@($EngineSelector, "shard:$k/$shardCount") | Where-Object { $_ }) -join ","
+            $report = Join-Path $engineRunDir "shard${k}of${shardCount}\test-report.json"
+            $log    = Join-Path $engineRunDir "shard${k}of${shardCount}.log"
+            $label  = "s$k"
+        }
+        foreach ($stale in @($report, $log, "$log.out", "$log.err")) {
+            if (Test-Path $stale) {
+                Remove-Item -Path $stale -Force
+            }
+        }
+        $shardRuns += [pscustomobject]@{
+            Index = $k; Label = $label; Terms = $terms; Report = $report; Log = $log
+            Launch = $null; ExitCode = -1
+        }
+    }
+    if ($shardCount -gt 1) {
+        Write-Host "  $shardCount shards, weighted by analysis\engine-suite-weights.json" -ForegroundColor DarkGray
+    }
+
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $ErrorActionPreference = "Continue"
-    $engineCode = Invoke-Godot -Arguments @("--path", $ProjectDir, "--log-file", $engineLog,
-                                             "res://scenes/Main.tscn", "--", $testArg) `
-                               -TimeoutSec $EngineTimeoutSec
+    foreach ($shard in $shardRuns) {
+        $testArg = if ($shard.Terms) { "--run-tests=$($shard.Terms)" } else { "--run-tests" }
+        $shard.Launch = Start-Godot -Arguments @("--path", $ProjectDir, "--log-file", $shard.Log,
+                                                 "res://scenes/Main.tscn", "--", $testArg)
+    }
+    # Each shard's own watchdog, so one hung shard fails itself and the others still report.
+    foreach ($shard in $shardRuns) {
+        $shard.ExitCode = Wait-Godot -Launch $shard.Launch -TimeoutSec $EngineTimeoutSec
+    }
     $ErrorActionPreference = "Stop"
     $watch.Stop()
 
@@ -537,77 +765,41 @@ if ($SkipEngine) {
     # used to appear live is replayed from the log. Only the harness's own lines -- the per-suite
     # verdicts and the summary block -- not the whole world-build chatter, which stays in the log
     # for a post-mortem.
-    if (Test-Path $engineLog) {
-        foreach ($line in (Get-Content -Path $engineLog)) {
+    foreach ($shard in $shardRuns) {
+        if (-not (Test-Path $shard.Log)) {
+            continue
+        }
+        $prefix = if ($shardCount -eq 1) { "  " } else { "  $($shard.Label) " }
+        foreach ($line in (Get-Content -Path $shard.Log)) {
             if ($line -match '^\s*\[test\]|^\s*(PASS|FAIL|SKIP)\s') {
-                Write-Host "  $line"
+                Write-Host "$prefix$line"
             }
         }
     }
 
-    $ePassed = -1; $eFailed = -1; $eSkipped = -1
-    $failedNames = @()
-    $errorNote = ""
-    if (Test-Path $report) {
-        try {
-            $json     = Get-Content -Path $report -Raw | ConvertFrom-Json
-            $ePassed  = [int]$json.passed
-            $eFailed  = [int]$json.failed
-            $eSkipped = [int]$json.skipped
-            $failedNames = @($json.suites | Where-Object { $_.status -eq "fail" } | ForEach-Object { $_.name })
-            if (-not $json.engineErrors.screened) {
-                $errorNote = "engine errors UNSCREENED"
-            } elseif (@($json.engineErrors.unexpected).Count -gt 0 -or @($json.engineErrors.overCap).Count -gt 0) {
-                $errorNote = "engine errors UNEXPECTED"
-            } else {
-                $errorNote = "engine errors clean"
-            }
-        } catch {
-            Write-Host "  could not read $report : $($_.Exception.Message)" -ForegroundColor Yellow
-        }
-    }
-    if ($engineCode -eq 124) {
-        $detail = "Godot timed out after ${EngineTimeoutSec}s (exit 124); partial log at $engineLog"
-    } elseif ($ePassed -ge 0) {
-        $detail = "$ePassed passed, $eFailed failed, $eSkipped skipped; $errorNote"
-        if ($failedNames.Count -gt 0) {
-            $detail = "$detail [$($failedNames -join ', ')]"
-        }
-    } else {
-        # A selector term that matched nothing ends the harness before any suite runs, so there is
-        # no report to score. Say which term missed rather than reporting only the missing file.
-        $missed = @()
-        if (Test-Path $engineLog) {
-            $missed = @(Get-Content -Path $engineLog | Where-Object { $_ -match 'selector matched nothing' })
-        }
-        # The log line names the missed terms first and every registered suite after the semicolon;
-        # only the terms belong in a summary row.
-        if ($missed.Count -gt 0 -and $missed[0] -match 'selector matched nothing: ([^;]+)') {
-            $detail = "selector matched nothing: $($Matches[1].Trim())"
-        } else {
-            $detail = "Godot exited $engineCode with no report at $report"
-        }
-    }
+    $merged = Merge-EngineShards -Shards $shardRuns -TimeoutSec $EngineTimeoutSec
+    $detail = $merged.Detail
     if ($EngineSelector) {
         $detail = "$detail; selector '$EngineSelector'"
     }
-    # No report means no suite ran, whatever the exit code says. Treating that as a pass would let a
-    # run that never started read as a green one -- the same trap the SKIP rows exist to avoid.
-    if ($ePassed -lt 0) {
-        Add-Stage -Name "engine" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
-    } elseif ($engineCode -eq 0) {
-        Add-Stage -Name "engine" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
-    } else {
-        Add-Stage -Name "engine" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
+    if ($shardCount -gt 1) {
+        $detail = "$detail; $shardCount shards, slowest $($merged.SlowestShard)"
     }
-    if ($eSkipped -gt 0) {
-        Add-Unchecked "$eSkipped in-engine suite(s) SKIPPED, normally for missing extracted game data"
+    Add-Stage -Name "engine" -Status $merged.Status -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
+    foreach ($problem in $merged.Problems) {
+        Write-Host "  !! $problem" -ForegroundColor Red
+    }
+    if ($merged.Skipped -gt 0) {
+        Add-Unchecked "$($merged.Skipped) in-engine suite(s) SKIPPED, normally for missing extracted game data"
     }
     if ($EngineSelector) {
         Add-Unchecked "the in-engine suites outside the selector '$EngineSelector' did not run"
     }
-    if ($errorNote -eq "engine errors UNSCREENED") {
+    if ($merged.ErrorNote -eq "engine errors UNSCREENED") {
         Add-Unchecked "native engine ERROR lines were not screened (no readable engine log)"
+    }
+    if ($merged.Unweighted.Count -gt 0) {
+        Add-Unchecked "$($merged.Unweighted.Count) suite(s) carry no measured weight and were balanced at the file's default: $($merged.Unweighted -join ', ') -- regenerate analysis\engine-suite-weights.json"
     }
 }
 

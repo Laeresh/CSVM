@@ -27,8 +27,7 @@ public sealed class SuiteCatalogTests
         Assert.NotEmpty(SuiteCatalog.QuickTier);
         Assert.All(SuiteCatalog.QuickTier, name => Assert.Contains(name, names));
         Assert.Equal(SuiteCatalog.QuickTier.Count, SuiteCatalog.QuickTier.Distinct().Count());
-        // The fake emitter factory it installs would be cached into the shared C1 world, and the
-        // collision rebuild that undoes that is not in this tier.
+        // puffer-modes covers the emitter runtime end to end for a fraction of the wall time.
         Assert.DoesNotContain("emitter-lifetime", SuiteCatalog.QuickTier);
         Assert.Null(SuiteCatalog.Tier("nosuchtier"));
     }

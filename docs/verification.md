@@ -355,7 +355,12 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **LOG-10** — **Error allowlists need narrow patterns, caps, and actual counts.**
 - **LOG-11** — **Capture native engine errors outside C#.**
 - **LOG-12** — **Automated instruments must return their verdict in the exit code.**
-- **LOG-13** — **Do not overlap engine probes.**
+- **LOG-13** — **Do not overlap engine probes.** The one exception is `RunTests.ps1`'s own engine
+  shards, which overlap by design: each carries its own `--log-file`, report, scratch directory and
+  watchdog, and the stray-Godot sweep is scoped to the launching process. What still does not
+  isolate is a suite whose store is deliberately outside `.scratch/` — two concurrent
+  `RunTests.ps1` invocations fail `campaign-loop`, which reads a `user://` profile an earlier
+  process wrote.
 - **LOG-14** — **Read every field in a multi-metric row.**
 - **LOG-15** — **When an error lacks identity, log candidate state at the failure boundary.**
 - **LOG-16** — **A census printed at the end of setup cannot report a runtime miss** 

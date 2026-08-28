@@ -109,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Attribute world-build time at its internal boundaries
 12. ☑ Cache immutable decoded world inputs where the profile earns it
-13. ☐ Isolate engine suites and run balanced shards
+13. ☑ Isolate engine suites and run balanced shards
 
 ### Wave C — Remaining stages and final contract
 
@@ -529,7 +529,7 @@ shared C1 world is cached, unchanged by this item.
 **Verified.** The same full battery as B11's: engine 235.4 s against 253.1 s on the Wave A
 tree, decode 5.4 s over 58 worlds, everything green, exit 0.
 
-## B13 ☐ Isolate engine suites and run balanced shards
+## B13 ☑ Isolate engine suites and run balanced shards
 
 **Goal.** The full engine catalog runs in multiple Godot processes with deterministic aggregation,
 unique artifacts, and no suite-order dependency; practical engine wall time is 90–120 seconds.
@@ -552,6 +552,128 @@ Stress concurrent runs and prove no report or profile is overwritten.
 
 **⚠ Traps.** A process exiting zero with a missing report is a failure. Do not let one shard kill
 another through stray-Godot cleanup, and do not use wall-time-sensitive hitch checks as shard work.
+
+**Order-dependency audit.** The catalog carried exactly one encoded order dependency and it is now
+gone. `emitter-lifetime` had to be registered first because it installed a fake `IEmitterFactory`
+and then built the shared C1 world through `WithWorld`, so the fake rode into every later
+same-chapter suite until `damage-hd`'s `collision:true` rebuild undid it far down the registry. It
+now calls `TestContext.WithPrivateWorld`, which never reads the shared cache and never writes to it
+and frees the world when the body returns, so the fake cannot leave the suite. Registration order is
+presentation only from here; `SuiteCatalog`'s and `docs/architecture.md`'s notes say so.
+
+The audit for anything else a suite leaves in the shared host ran from both sides. By inspection,
+the three mutable build knobs on `TestContext` are the only shared-state seam a suite writes:
+`EmitterFactory` (one setter, now on a private world), `ExtraPrewarmSoundNames` (five setters, none
+of which reset it) and `CutsceneRoots` (eight setters, each resetting in a `finally`). Every one of
+those knob-setting suites builds through the four-argument `WithWorld(chapter, collision, mission,
+body)`, whose mission override is never cached, so none of them could put a knob-shaped world into
+the shared cache; the residue was `ExtraPrewarmSoundNames` reaching whatever world was built next.
+That whole class is closed rather than argued about: `TestContext.ResetForSuite` now clears all
+three knobs alongside the phase attribution, once per suite in `Run`, so a suite's inputs no longer
+depend on which suite preceded it. By measurement, ten full-catalog runs over five different
+partitions (serial, 2, 3, 4 and 6 shards, twice each) produced byte-identical 153-row name-and-
+verdict sets, which is the check that would catch a leaked named node making a later same-named
+spawn come out renamed. An eleventh partition, 8 shards, agreed too.
+
+The one cost is that `emitter-lifetime`'s C1 world is no longer the shared one, so the first later
+C1 suite in each process pays a world build it used to inherit (one ~1.5–2.5 s build per process).
+
+**Isolation, per artifact.** Every engine launch writes under `.scratch/engine/owner-<pid>/`,
+which is what makes a run's outputs unmistakable for another run's:
+
+| Artifact | How it is isolated |
+|---|---|
+| engine log | `--log-file .scratch/engine/owner-<pid>/shard<i>of<n>.log`, per run and per shard |
+| stdout / stderr | `Invoke-Godot` already derives `.out`/`.err` from the `--log-file` path |
+| `test-report.json` | the harness writes it into `TestContext.ScratchDir`, which a sharded run points at `shard<i>of<n>/` **beside its own engine log** — so neither a sibling shard nor a concurrent run can reach it |
+| per-suite artifacts (`WriteArtifact`) | the same `ScratchDir`, so they move with the report |
+| stray-Godot cleanup | `Stop-StrayGodots` is owner-scoped: a `--run-tests` Godot whose owning PowerShell is gone is a stray and is killed, one whose owner is alive belongs to another run and is reported and spared (SHELL-2). A shard cannot kill a sibling, and a live sibling run cannot be killed by a starting one |
+| watchdog | per launch, not per stage: one shard timing out fails itself with its evidence kept and the others still report |
+| hidden desktop | `HiddenDesktop.ps1` gained `Start`/`Wait` beside `Run`, so several launches are in flight on the one desktop at once. Measured with 2, 3, 4, 6 and 8 concurrent Godots, all green: a desktop is a namespace for windows, not a serializing resource |
+| testing profile / user data | **not isolated, deliberately.** `campaign-loop` keeps its store under `user://Testing/campaign-loop/Profiles` precisely because it proves persistence ACROSS processes, which `.scratch/` isolation would defeat. Only one shard runs it, so a single run is safe; two concurrent runs are not (below) |
+
+**Membership.** `--run-tests=`'s value gained one term that divides rather than selects:
+`shard:<index>/<count>`, parsed out by `SuiteShards.Parse` and applied by `SuiteShards.Plan` after
+the selector's own miss checks, so an empty shard is a legitimate division of a small selection
+while an empty selector is still a typo. The weights are checked in at
+`analysis/engine-suite-weights.json`, written from a warm serial report; `Plan` is longest-unit-
+first onto the lightest shard with ties broken on registry position, so one tree divides the same
+way every run. The censuses-together constraint lives in that file's `groups`
+(`collision-visibility` + `destructible-census`), worth about 3 s of decode. A suite the file does
+not name is charged the default weight and printed as a `not checked:` line rather than silently
+skewing the balance. Shard count is `-Shards <n>`; 0 (the default) means the measured default for a
+full run and 1 whenever `-Suite`/`-Filter`/`-Quick` names a selection.
+
+**Aggregation.** `Merge-EngineShards` in `RunTests.ps1` folds the shard reports into one verdict.
+Counts sum; failed names sort back into registry order through each suite row's new `index` field;
+the error allowlist's caps are re-checked against the **summed** counts, since N processes each
+under the cap can still sum past it; every shard must report the same `CSVM.dll` MD5; and the
+shards' suite counts must add up to the `selectedTotal` each of them reports, with a name appearing
+in two shards its own failure. A shard exiting 0 with no report FAILS the stage. `ReportSchema` is
+bumped to 3: the `shard` block and the per-suite `index` are new, and a sharded run's report is no
+longer at `.scratch/test-report.json`.
+
+**Measured** (`$env:CSVM_DATA_ROOT="Z:\CSVM"`, warm, `.\RunTests.ps1 -Shards N -SkipUnits
+-SkipGoldens -SkipHitch`, one binary throughout: `d2e099fe0975c993bff005da5efa84f8`, two runs per
+row, nothing else on the test desktop):
+
+| Shards | Engine stage A | B | Max shard A/B | % of the arithmetic floor | Suite set equal | Verdicts equal |
+|---:|---:|---:|---:|---:|---|---|
+| 1 (serial) | 224.6 s | 224.2 s | — | — | reference | reference |
+| 2 | 120.4 s | 120.3 s | 117.2 / 117.1 s | 93 % | yes | yes |
+| 3 | 86.7 s | 86.3 s | 83.5 / 83.0 s | 87 % | yes | yes |
+| 4 | 66.4 s | 66.3 s | 63.1 / 63.2 s | 87 % | yes | yes |
+| 6 | 49.8 s | 50.0 s | 47.0 / 47.2 s | 77 % | yes | yes |
+
+Same-build spread is ≤ 0.2 % at every row, against B11's ~1 % figure, so the differences between
+rows are the shard count and nothing else. The floor column is the measured 218.6 s of suite wall
+divided by the shard count, against the slowest shard actually measured. A single 8-shard run on
+the preceding binary read 45.0 s with a 42.3 s slowest shard, 65 % of its floor: past 6 the balance
+is bounded by individual suites rather than by the division. "Suite set equal" and "verdicts equal"
+are machine-checked, not eyeballed: all ten runs above produced byte-identical sorted
+`index name status` sets of 153 rows against the serial reference, and every run reported errors
+clean and the same binary hash. At the chosen default the four shards measured 63.95 / 62.54 /
+62.93 / 61.53 s of suite wall, a 3.8 % spread.
+
+**Chosen default: 4.** It meets the item's 90–120 s goal with margin (66 s, 3.4x serial) at 87 % of
+its arithmetic floor, while the marginal 16.5 s from 4 to 6 costs ten points of balance efficiency
+and the next step costs twelve more. It leaves half of this machine's 16 logical processors free,
+which matters because C21 may yet want concurrent golden launches. Each shard's ~63 s also sits
+about five times under the per-launch 300 s watchdog, so a slower machine has room before a shard
+starts timing out. 6 measured green twice and is one flag away (`-Shards 6`) for anyone who wants
+the extra 16 s; serial stays selectable as `-Shards 1`, which is what C23's A/B compares against.
+
+**Injected failures.** A temporary `ctx.Check(false, …)` was placed in one suite of each of the
+four shards (reverted afterward, confirmed by `git diff` and a grep for the marker). Every shard
+reported exactly its own suite and nothing else — `warning-shot` (index 10) in shard 1,
+`engine-note` (25) in shard 2, `launch-velocity-decay` (13) in shard 3, `motor-acceleration` (19) in
+shard 4 — and the stage row named all four in registry order, `149 passed, 4 failed`, exit 1.
+
+**The two able-to-fail controls on the merge.** Pointing one shard's expected report path at a
+directory that does not exist, so the shard exits 0 having written its report elsewhere, failed the
+stage three ways at once: `s2: Godot exited 0 with no report`, `the shards covered 1 suite(s) of the
+selection's 5`, and `1 of 2 shard(s) wrote no readable report`, exit 1. Temporarily dropping
+`$EngineTimeoutSec` to 9 s with `collision-visibility` in one shard failed that shard alone
+(`s1: timed out after 9s (exit 124); partial log at …`) while the other completed and reported both
+its suites, exit 1. Both edits were restored and the restore confirmed by `git diff`.
+
+**⚠ Two concurrent `RunTests.ps1` invocations isolate everything except a suite's own `user://`
+store.** Two `-Shards 4 -SkipUnits -SkipGoldens -SkipHitch` runs started three seconds apart: the
+first passed 153/153, the second failed exactly one suite, `campaign-loop`, on `an earlier
+process's flown mission is still recorded in the profile file expected=1 actual=0`. Nothing else
+collided — logs, reports and artifacts stayed apart, and the second run's stray sweep printed the
+first run's four shards as `another Godot is live on this tree, left alone` instead of killing
+them. The remaining collision is the one artifact deliberately outside `.scratch/`, so it is a
+property of that suite's subject rather than a gap in the sharding. The goldens, hitch and perf
+stages still identify their strays by output path alone and are not concurrency-safe either; this
+is recorded on `docs/verification.md`'s LOG-13.
+
+**Kept working.** `-Suite warning-shot` 1.4 s, `-Filter puffer` 3.9 s (5 suites), a selector miss
+still fails the stage naming the term, and `-Quick` 30.5 s (219 unit tests, 13 engine suites). All
+three stay single-process, which is faster for a handful of suites than paying N process startups.
+The hitch stage is untouched and never runs as shard work.
+
+**Verified.** <pending orchestrator run>
 
 ---
 

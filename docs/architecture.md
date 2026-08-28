@@ -308,6 +308,7 @@ instead.
 - `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a verdict, shared with the suites.
 - `src/Testing/EnvelopeMargins.cs` — one flight scenario's distance from every term that could bound it, plus which decoded branches it drove; the parity ledger's coverage half.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
+- `src/Testing/SuiteShards.cs` — the `shard:<index>/<count>` term and the deterministic weighted division behind it, over the measured weights in `analysis/engine-suite-weights.json`.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
 - `src/Testing/SuiteCatalog.cs` — the ordered registry of the in-engine suites; domain scenario bodies live in `*Suites.cs` modules, while `SuiteConstants` holds their shared golden inputs. Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
@@ -4627,13 +4628,18 @@ scene-tree host, and `WithWorld` — the chapter-world builder over `WorldSessio
 mission-override form `WithWorld(chapter, collision, mission, body)` builds a chapter at another
 mission and never caches it, since the cache is keyed by chapter alone — `zeppelin-damage` wants
 C1 at M04), the
-PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code. `Select` is the pure
-selector over the flag's value — comma-separated terms, `suite:` exact, `tier:` a `SuiteCatalog`
-tier, anything else a substring — returning registry order and reporting every term that matched
-nothing, which `Run` refuses before any suite starts. `TestContext.
+PASS/FAIL/SKIP table, `test-report.json` in `TestContext.ScratchDir`, and the process exit code.
+`Select` is the pure selector over the flag's value — comma-separated terms, `suite:` exact, `tier:`
+a `SuiteCatalog` tier, anything else a substring — returning registry order and reporting every term
+that matched nothing, which `Run` refuses before any suite starts. `SuiteShards` handles the one
+term that divides rather than selects; `Run` applies it AFTER the miss checks, so an empty shard is
+a legitimate division and an empty selector is still a typo. A sharded run's `ScratchDir` moves
+beside its `--log-file`, which is what keeps concurrent shards (and concurrent runs) off each
+other's report and artifacts. `TestContext.
 EmitterFactory` (mutable, default null) forwards straight into `WorldSession.Options.EmitterFactory`
-for the next `WithWorld` build — a suite sets it, on a chapter other than `Chapter` so a cached
-default-chapter world built before the set is never reused in its place. `BuildWorld` opens its
+for the next `WithWorld` build. `WithPrivateWorld` is what a suite installing one uses: never read
+from the shared cache and never written to it, freed when the body returns, so no build option a
+suite chose can ride into a later suite's world. `BuildWorld` opens its
 archives through `SessionArchives.OpenFor(ArchiveIntent.Suite, …)`, then `using`s the returned
 `Textures`/`Sounds` itself — `OpenFor` states the (both-false) lifetime flags, it does not own the
 disposal. One `DecodeCache` per run rides both that call and `WorldSession.Options.Decode`, so the
@@ -4653,7 +4659,8 @@ startup` line reads — land on it with no second instrumentation invented for t
 runtime/world construction against the *outer* wall-clock stopwatch `BuildWorld` keeps of its own
 (not the profile's internal clock), so the four figures it returns always sum to exactly what
 `TestContext.WorldBuildSeconds` attributes to the suite — no second clock to drift against the
-first. `TestContext.ResetPhaseAttribution` clears the accumulator once per suite in `Run`, the same
+first. `TestContext.ResetForSuite` clears that accumulator, and the three build knobs
+(`EmitterFactory`, `ExtraPrewarmSoundNames`, `CutsceneRoots`), once per suite in `Run`, the same
 lifetime `Failures`/`Notes`/`Counts` already have; disposing a world a suite built (not the shared
 cache's own end-of-run teardown, reported only as the run's `finalDisposalSeconds`) is timed the
 same way. What is left of a suite's wall time once build and disposal are subtracted is `rest`:
@@ -4665,6 +4672,17 @@ and the loaded `CSVM.dll`'s own path/MD5 (`binary`, read from the fixed
 `<repo>/CSVM/.godot/mono/temp/bin/Debug/CSVM.dll` `RunTests.ps1`'s own perf stage hashes as
 `$PerfDll` — not `Assembly.GetExecutingAssembly().Location`, which Godot's Mono host returns empty),
 so a report can be matched to the exact build and suite set that produced it.
+
+## src/Testing/SuiteShards.cs
+Godot-free and pure (`CSVM.Tests` proves it without the engine): the `shard:<index>/<count>` term
+and the division behind it. `Parse` lifts that term out of a `--run-tests=` value and hands the rest
+back as the selector, treating a malformed or out-of-range one as an error rather than as a full
+run. `Plan` divides an already-selected list longest-unit-first onto the lightest shard, ties broken
+on the item's own position, and returns each shard in the input's order, so one tree always divides
+the same way. `SuiteWeights` is `analysis/engine-suite-weights.json`: per-suite measured seconds, a
+default for a suite the file does not name (`Unweighted` reports those), and `Groups`, the sets a
+shard may not split. A missing or unreadable file weighs every suite the same, because an even
+division is still a correct one.
 
 ## src/Testing/PhaseAttribution.cs
 Godot-free and pure (`CSVM.Tests` proves it without the engine): buckets a `StartupProfile`'s raw
@@ -4695,11 +4713,11 @@ emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/SuiteCatalog.cs
 The ordered registry of the in-engine assertion suites. Scenario bodies are grouped by domain in
-the `*Suites.cs` modules; `Names` is the registry-order test surface and the count's one home. It preserves the original
-suite order, including `emitter-lifetime` first, because that suite installs the shared C1 world's
-fake emitter factory. `QuickTier` is the checked-in membership of `--run-tests=tier:quick`, resolved
-through `Tier(name)`, and holds one representative per failure surface rather than the cheapest
-rows; `emitter-lifetime` is out of it for the same fake-factory reason. The suites cover plane/loadout bindings (stock and, since M3 B4,
+the `*Suites.cs` modules; `Names` is the registry-order test surface and the count's one home.
+Registration order is presentation only: no suite depends on running after another, which is what
+lets any subset of this registry run in a process of its own. `QuickTier` is the checked-in
+membership of `--run-tests=tier:quick`, resolved through `Tier(name)`, and holds one representative
+per failure surface rather than the cheapest rows. The suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
 build from ai.zrd + the thirdp mount, arc-centre rest pose, track/fire/hit under the host's
 shooter id, bored-window fire suppression with live tracking, the nearer-end-stop park, YAW [0,0]
