@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -44,6 +45,10 @@ internal static class LandingApproachSuites
     private const float ApproachSpeedMps = 45f;
     private const float ApproachThrottle = 0.5f;
     private const float ApproachBudgetS = 6f;
+
+    // How long the parked rig waits at CM11's trailer for its range-armed definition to run the
+    // authored hatch time and raise the actor the pickup requires, before the cone is flown.
+    private const float TrailerApproachS = 4f;
 
     // How long the graph is stepped for a nap chain to run out, and how long a started cutscene
     // definition is given to reach EXECUTED.
@@ -624,6 +629,10 @@ internal static class LandingApproachSuites
         {
             rig = BuildRig(ctx, world, pool, planeNode);
             var craft = rig;
+            // The session's nearest-human seam: without it the EXECUTION_BY_RANGE poll reads the
+            // test camera kilometres off, and a range-armed definition on the flown approach
+            // never fires under the rig. A drive wanting the player elsewhere overrides it.
+            world.Runtime.PlayerPositions = () => new[] { craft.WorldPosition };
             cutscene.BindRigs(new[]
             {
                 new PlayerRig
@@ -661,6 +670,7 @@ internal static class LandingApproachSuites
                 spawned.Free();
             }
 
+            world.Runtime.PlayerPositions = null;
             rig?.Free();
             pool.Free();
             textures.Dispose();
@@ -876,6 +886,22 @@ internal static class LandingApproachSuites
             var arm = world.Runtime.FindNodes(LandingApproaches.ArmNode, approaches[0]);
             ctx.Check(arm.Count > 0 && arm[0].Visible,
                 $"the staged cone's land_on is open, this mission authoring no pickup timing in front of it");
+            // The approach the original flies: closing on the trailer fires its range-armed
+            // definition, whose authored hatch time runs before it raises the actor the pickup's
+            // prerequisite requires. The parked wait is the one the train drive gives its timing.
+            var site = approaches[0].GlobalPosition;
+            rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null,
+                new CamParams(), site, site + Vector3.Forward, 0f, 0f);
+            for (float t = 0f; t < TrailerApproachS; t += StepDt)
+            {
+                world.Runtime.Advance(StepDt);
+            }
+
+            var prereqs = PrerequisitesOf(world, pickup.Anim);
+            report.AppendLine($"'{pickup.Anim}' requires " + string.Join(", ",
+                prereqs.Select(p => $"{p.Node}={(p.Active ? "active" : "inactive")} (reads {p.Met})")));
+            ctx.Check(prereqs.Count > 0 && prereqs.All(p => p.Met),
+                $"closing on the trailer meets '{pickup.Anim}'s own node-state prerequisite");
             ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, pickup, report),
                 $"flying CM11's staged trailer approach starts '{pickup.Anim}'");
             ctx.Check(cutscene.Playing,
@@ -1851,6 +1877,30 @@ internal static class LandingApproachSuites
 
     private static Vector3 Lerp(LandingApproach approach, float fraction) =>
         approach.Apex + ((approach.BaseCentre - approach.Apex) * fraction);
+
+    // The REQUIRED node-state prerequisites of every definition under an animation name, each with
+    // whether the built world reads it met now. The node is the path's leaf, resolved globally.
+    private static List<(string Node, bool Active, bool Met)> PrerequisitesOf(TestWorld world, string anim)
+    {
+        var found = new List<(string, bool, bool)>();
+        foreach (var def in world.Session.Program.ByAnimName(anim))
+        {
+            foreach (var prereq in def.PrereqNodes)
+            {
+                if (!prereq.Required)
+                {
+                    continue;
+                }
+
+                string leaf = prereq.Path[prereq.Path.Count - 1];
+                var nodes = world.Runtime.FindNodes(leaf);
+                bool met = nodes.Count > 0 && nodes.All(n => n.Visible == prereq.Active);
+                found.Add((leaf, prereq.Active, met));
+            }
+        }
+
+        return found;
+    }
 
     private static IReadOnlyList<string> ClosureOf(
         TestWorld world, IReadOnlyList<LandingApproach> armed)
