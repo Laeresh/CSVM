@@ -673,7 +673,10 @@ still fails the stage naming the term, and `-Quick` 30.5 s (219 unit tests, 13 e
 three stay single-process, which is faster for a handful of suites than paying N process startups.
 The hitch stage is untouched and never runs as shard work.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` at the default four shards with nothing else on the test
+desktop: units 2506/2506 in 17.2 s, engine 153/153 in 66.5 s (slowest shard 63.7 s, errors
+clean), goldens 16/16 hash-identical in 87.2 s, hitch clean, 193.5 s total against 383.3 s at
+the start of the plan, exit 0.
 
 ---
 
