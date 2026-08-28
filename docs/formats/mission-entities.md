@@ -23,7 +23,7 @@ instances; the rest are conditional.
 | `max_rate_yaw`, `max_rate_pitch` | °/s | turn-rate limits |
 | `min_pitch` / `max_pitch` | ° | ±30 throughout |
 | `net` | name | the AI "net" (roster/behaviour group) it belongs to |
-| `targets` | node names | who it shoots at — `player`, or another zeppelin (`piratezep`, `dantezep`, …). ⚠ The 8 IA1 files author `targets, null` — key present, no list — so the "47" key census is 39 name lists + 8 nulls |
+| `targets` | node names | who it shoots at once the script engages the cannons — `player`, or another zeppelin (`piratezep`, `dantezep`, …); inert without `COMPLETED_ZEPCANNONS` (see [Broadside firing](#broadside-firing)). ⚠ The 8 IA1 files author `targets, null` — key present, no list — so the "47" key census is 39 name lists + 8 nulls |
 | `healthy` | `[[zoneNode, "panels"], …]` | the **critical** zones; second field is `"panels"` on all 316 entries |
 | `num_healthy_required` | 2–5 | how many of those must **survive**; drop below and the zeppelin dies. Confirmed against the engine — see [below](#the-kill-threshold-counts-survivors). Defaults to **1** when a `healthy` list is present, and is clamped at load to the length of that list |
 | `engines` | node names | the engine nacelles (12 or 14: `leng11`…`reng42`) |
@@ -170,7 +170,24 @@ binary rather than inferred:
   design document instead describes a rolled hit chance ramping from 20 % at maximum range to
   100 % near 200 m. **Nothing like that roll is in the shipped fire path** — treat the design's
   curve as design-era and do not implement it.
-- ⚠ **The `targets` list is a world-node list, and `player` is one of its nodes.** At load,
+- ⚠ **A broadside is inert until the objective script engages it.** The zeppelin object's byte
+  `+0xc` is zeroed by the constructor (`FUN_004bd460`, `0x004bd46x`), never touched by the record
+  parser `FUN_004bd8d0`, and written by exactly one routine: `FUN_0046a0b0`, the
+  `COMPLETED_ZEPCANNONS` completion action ([objectives.md](objectives.md)). The per-frame
+  zeppelin update `FUN_004bf9d0` branches on it at `0x004bfa2x`: non-zero runs `FUN_004c0250`,
+  the pass that walks the cannon vector (`+0x5c..+0x60`) and calls the fire routine
+  `FUN_004bfe00` on every live cannon (that routine is also where a stowed cannon is told to
+  deploy, `FUN_004455e0`, so the hatch never opens without the flag either); zero runs
+  `FUN_004c03a0`, which only retracts any cannon still in its ready state (`FUN_004c0230` →
+  `FUN_00445620`). Three shipped missions author the directive, all zeppelin-versus-zeppelin:
+  C2B/M04 (`piratezep` ↔ `geminizep`), C4/M05 (`blackhatzep` → `cargozep2`) and C5/M04
+  (`dantezep` ↔ `piratezep`/`blackswanzep`). Every record authoring `targets [player]` (18 of
+  the 47 cannon-bearing records, C3/M03's Pandora among them) sits in a mission whose script
+  never runs it, so no shipped broadside fires on the player's aircraft, which is what the
+  original shows at the controls in C3/M03. The remake keeps the flag on
+  `ZeppelinBroadside.CannonsEngaged` (off at construction) and `CampaignDirector` writes it from
+  the directive through `ZeppelinRuntime.SetCannonsEngaged`.
+- **The `targets` list is a world-node list, and `player` resolves like any node.** At load,
   `FUN_004bd8d0` resolves each `targets` name through the general node-by-name lookup
   `FUN_004d0280(7, name)` (node table 7, the same table the cutscene code resolves `player` in,
   see `anim-definitions/cutscenes.md` "The name is what resolves") and stores the node pointer
@@ -180,15 +197,12 @@ binary rather than inferred:
   the roster's pointer vector comparing each entry's own node (`+0x1c`) against the pair's node
   and returns the first match or 0. The fire routine `FUN_004bfe00` then walks the pairs in
   authored order: a pair with a zeppelin takes the gasbag branch below; a pair whose zeppelin is
-  0 (the `player` case, the only one shipped data authors) reads the node's world position
-  through `FUN_004cf2c0` and runs the same intercept solve and `> 0.707` arc test against it
-  directly. No team, side or ally field is read anywhere in that chain. A record authoring
-  `targets [player]` therefore fires on the player's aircraft whenever it is in
-  `cannon_fire_range` and arc, whether or not the record carries a `team` key at all; the
+  0 (the `player` case) reads the node's world position through `FUN_004cf2c0` and runs the same
+  intercept solve and `> 0.707` arc test against it directly. No team, side or ally field is read
+  anywhere in that chain: the engage flag above is the whole of the gate, and a modified script
+  running `COMPLETED_ZEPCANNONS` on a `targets [player]` record would fire on the aircraft. The
   remake's `ZeppelinRuntime.Cannons.ResolveTarget` (through `ZeppelinBroadside.FirstLiveTarget`)
-  matches this: the first live authored name wins, `player` included, with no hostility filter
-  to add. ⚠ The controls report that the original's broadsides never engage the player stands
-  against this decode and is owed a flown original-game check (`backlog.md` `BL-567`).
+  keeps that walk unfiltered for the same reason.
 
 What the remake's implementation (M4 F19, `Flight/ZeppelinBroadside.cs` +
 `Session/ZeppelinRuntime.Cannons.cs`) added to the picture:
@@ -201,10 +215,11 @@ What the remake's implementation (M4 F19, `Flight/ZeppelinBroadside.cs` +
 - **Side alternation is geometric.** The two 45°-half-angle cones sit on opposite normals, so
   at most one side ever bears; the volley changes sides only when the target crosses the hull
   axis. No alternation schedule exists to decode.
-- **Zeppelin-vs-zeppelin is live data.** Both records of a mutually-targeting pair are active
-  in C1B/M03 (`vostokzep` ↔ `piratezep`, range 500) and in every chapter's MP3
-  (`multiplayer1zep` ↔ `multiplayer2zep`, range 15000 — in range from spawn), so the
-  gasbag-pick arm is exercisable in a shipped session, not only in tests.
+- **Zeppelin-vs-zeppelin is live data in three missions.** The gasbag-pick arm runs where a
+  script engages a record whose target is another zeppelin: C2B/M04, C4/M05 and C5/M04. The
+  other mutually-targeting pairs (C1B/M03's `vostokzep` ↔ `piratezep`, every chapter's MP3
+  `multiplayer1zep` ↔ `multiplayer2zep`) author the lists but no `COMPLETED_ZEPCANNONS`, so
+  they never fire in a shipped session.
 
 ### Engine loss
 

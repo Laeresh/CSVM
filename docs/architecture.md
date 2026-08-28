@@ -2341,9 +2341,12 @@ invented), the per-cannon stowed→deploy→ready→fire machine (`Step` emits d
 ready lists; deploy/retract durations come from the authored anim defs) with its own re-fire
 timer (`cannon_fire_delay`, armed by `Fired` per cannon), `TryAim` (the intercept solve,
 `AimAssist.TryIntercept` consumed), `PickGasbag` (the zeppelin-vs-zeppelin rand() pick over
-the target's in-arc live gasbags) and `FirstLiveTarget` (the decoded candidate walk over the
-record's `targets` in authored order, `player` a candidate like any zeppelin node, no team or
-hostility read; `formats/mission-entities.md` "Broadside firing" has the chain).
+the target's in-arc live gasbags), `FirstLiveTarget` (the decoded candidate walk over the
+record's `targets` in authored order, `player` resolving like any zeppelin node, no team or
+hostility read) and `CannonsEngaged` (the decoded zeppelin byte `+0xc`: off at construction,
+written only by the script's `COMPLETED_ZEPCANNONS`; while clear `Step` deploys nothing and
+retracts any ready cannon outright, which is why no shipped broadside ever fires on the player;
+`formats/mission-entities.md` "Broadside firing" has the chain).
 `Session/ZeppelinRuntime.Cannons.cs` wires it. Pinned by
 `ZeppelinBroadsideTests` + the `zeppelin-broadside` suite.
 
@@ -5363,8 +5366,9 @@ its spawn pose, or a dormant `ZeppelinRuntime` record put into the world.
 `SET_AI_NET` / `SET_AI_TEAM` / `SET_AI_ATTACK_RADIUS` share one lookup by roster block name
 (`Commanded`) and write the follower, the team and the attack range over the spawned roster; their
 zeppelin arm has no seam here, so an unmatched name is always reported.
-The rest (`WARP_VEHICLE`) and the
-untraced `COMPLETED_ZEPCANNONS` reader are NAMED no-ops, each logged once per kind. ⚠ Never turn one of those into an invented
+`COMPLETED_ZEPCANNONS` writes each named zeppelin's broadside engage flag
+(`ZeppelinRuntime.SetCannonsEngaged`), the one thing that lets a hatch open and a volley leave.
+The rest (`WARP_VEHICLE`) is a NAMED no-op, logged once per kind. ⚠ Never turn one of those into an invented
 behaviour: the missing consumer is the finding.
 `BuildRoster(RosterInputs)` is the roster phase, called by `GameSession` right after
 `InstantActionDirector.BuildActors` at the point where the human rigs exist: it plans the mission's
@@ -5649,7 +5653,8 @@ half is the `ZeppelinRuntime.Cannons.cs` partial: `WireCannons(pool, weapons)` r
 HARDCODED `wep_28` and each cannon's node + F18 pool (a destroyed cannon thins the volley; the
 lateral sign is re-derived from the built cannon positions), and per step it resolves the
 record's `targets` ('player' = nearest human aircraft; any other name = a mission zeppelin,
-aimed at a rand()-picked in-arc gasbag), gates on `cannon_fire_range` + the arc, plays the
+aimed at a rand()-picked in-arc gasbag) once `SetCannonsEngaged` (the `COMPLETED_ZEPCANNONS`
+seam, off until a script runs it) has armed the broadside, gates on `cannon_fire_range` + the arc, plays the
 authored deploy/retract anims scoped to the hull, and spawns unowned rounds
 (`ProjectilePool.NoShooter`, C9b's convention) scattered by `cannon_inaccuracy`. Pinned by
 `zeppelin-motion` + `zeppelin-damage` + `zeppelin-broadside` suites. Zeppelins ride an anchored net

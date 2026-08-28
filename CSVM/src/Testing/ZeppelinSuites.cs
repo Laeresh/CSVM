@@ -682,16 +682,17 @@ internal static class ZeppelinSuites
         });
     }
 
-    // The broadside chain on C1/M04's piratezep in its own mission world: arc-gated deploy, a real
-    // volley at a player stand-in, hold-fire-and-retract out of arc, the thinning, scatter on a
-    // cannon_inaccuracy clone, and the zeppelin-versus-zeppelin gasbag pick on constructed geometry.
-    // The stand-in is repositioned through its flight model each step to hold the tested bearing.
+    // The broadside chain: C3/M03's Pandora as shipped (never engaged, so nothing opens or fires
+    // on a player abeam), then C1/M04's piratezep engaged as COMPLETED_ZEPCANNONS would: deploy,
+    // a volley at a player stand-in (repositioned through its flight model each step to hold the
+    // bearing), hold-and-retract out of arc, thinning, scatter, and the gasbag pick.
     // ⚠ Assert rounds at the spawn seam, count and direction, never as hits: a moved body never
     // re-enters the one-frame space queries (INSTR-13).
     internal static void ZeppelinBroadsideSuite(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
         ctx.RequireData(missionZrdr, $"C1/M04 zrdr");
+        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03"), $"C3/M03 zrdr");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var wep28 = weapons.Get(ZeppelinRuntime.BroadsideWeaponId);
@@ -699,6 +700,9 @@ internal static class ZeppelinSuites
             $"the hardcoded {ZeppelinRuntime.BroadsideWeaponId} resolves in weapons.zrd v={wep28?.Velocity ?? 0f:0}");
         if (wep28 == null)
             return;
+
+        ctx.WithWorld("C3", collision: false, mission: "M03", world =>
+            DisengagedPandora(ctx, world, weapons));
 
         ctx.WithWorld("C1", collision: true, mission: "M04", world =>
         {
@@ -740,6 +744,10 @@ internal static class ZeppelinSuites
                     $"the broadside wires 6+6 cannons count={bs?.Cannons.Count ?? 0}");
                 if (bs == null)
                     return;
+                // C1/M04's script never runs COMPLETED_ZEPCANNONS either; the suite stands in
+                // for it so the arm past the gate is exercised on shipped geometry.
+                ctx.Check(!bs.CannonsEngaged && zeps.SetCannonsEngaged("piratezep", true),
+                    $"the broadside wires disengaged and the script's flag engages it");
                 ctx.Check(bs.Cannons.All(c => Mathf.IsEqualApprox(c.DeploySeconds, 4f)),
                     $"deploy durations are read from the authored anim defs (4 s run_time) first={bs.Cannons[0].DeploySeconds:0.##}");
 
@@ -840,6 +848,7 @@ internal static class ZeppelinSuites
                 scatterZeps = new ZeppelinRuntime(new[] { scatterDef },
                     name => runtime.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null, nets);
                 scatterZeps.WireCannons(live, weapons);
+                scatterZeps.SetCannonsEngaged("piratezep", true);
                 var sMotion = scatterZeps.MotionFor("piratezep")!;
                 var sBs = scatterZeps.BroadsideOf("piratezep")!;
                 Vector3 SPort() => host.GlobalPosition + ZeppelinBroadside.SideNormal(
@@ -880,6 +889,7 @@ internal static class ZeppelinSuites
                 zvz = new ZeppelinRuntime(new[] { attacker, target }, name =>
                     name == "attackzep" ? resolvedAtt : name == "targetzep" ? resolvedTgt : null, nets);
                 zvz.WireCannons(live, weapons);
+                zvz.SetCannonsEngaged("attackzep", true);
                 for (int i = 0; i < (int)(6f / dt) && zvz.BroadsideShotsOf("attackzep") == 0; i++)
                 {
                     zvz.SimStep(dt);
@@ -911,6 +921,111 @@ internal static class ZeppelinSuites
                 textures?.Dispose();
             }
         });
+    }
+
+    // CM04 (C3/M03) as shipped: the Pandora authors targets [player] and 500 m of range, and its
+    // objectives never run COMPLETED_ZEPCANNONS, so with the player abeam inside range through a
+    // full deploy plus the 20 s fire delay no hatch opens and no round leaves. The same hull
+    // engaged is the positive control: the gate, not the geometry, is what holds fire.
+    internal static void DisengagedPandora(TestContext ctx, TestWorld world, WeaponDefs weapons)
+    {
+        var runtime = world.Session.Runtime;
+        var defs = Zeppelins.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03"));
+        var def = defs.FirstOrDefault(d => d.Node.Equals("piratezep", System.StringComparison.OrdinalIgnoreCase));
+        var host = runtime.FindNodes("piratezep").FirstOrDefault();
+        ctx.Check(def != null && host != null && def.Targets.Count == 1
+                  && ZeppelinBroadside.IsPlayerTarget(def.Targets[0]) && def.CannonFireRange == 500f,
+            $"C3/M03 authors piratezep with targets [player], range 500 m, and its node resolves");
+        var objectives = ObjectiveScript.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03")).Objectives;
+        ctx.Check(objectives.Count > 0 && objectives.All(o => o.CompletedZepcannons.Count == 0),
+            $"no C3/M03 objective runs COMPLETED_ZEPCANNONS over {objectives.Count} objectives");
+        if (def == null || host == null)
+            return;
+
+        var nets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C3"));
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        TextureArchive? textures = null;
+        ProjectilePool? pool = null;
+        ZeppelinRuntime? zeps = null;
+        FlightController? player = null;
+        var started = new List<string>();
+        try
+        {
+            textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C3"));
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            runtime.OnInstanceStarted = (d, _) => { if (d.AnimName != null) started.Add(d.AnimName); };
+
+            var resolvedHost = host;
+            zeps = new ZeppelinRuntime(new[] { def }, _ => resolvedHost, nets, null,
+                runtime.Motions.DrivesTransform);
+            ctx.Host.AddChild(zeps);
+            zeps.WireDamage(runtime);
+            zeps.WireCannons(live, weapons);
+            var bs = zeps.BroadsideOf("piratezep");
+            ctx.Check(bs is { Cannons.Count: 12, CannonsEngaged: false },
+                $"the Pandora's 12 cannons wire disengaged count={bs?.Cannons.Count ?? 0}");
+            if (bs == null)
+                return;
+
+            var fm = new FlightModel(stats);
+            var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            player = new FlightController
+            {
+                PlaneModel = model,
+                Collider = PlaneCollider.Build(model),
+                PlayerIndex = 0,
+                Projectiles = live,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+            };
+            player.AddChild(model);
+            player.Setup(fm, null, new CamParams(), host.GlobalPosition + Vector3.Right * 300f,
+                host.GlobalPosition);
+            ctx.Host.AddChild(player);
+
+            var motion = zeps.MotionFor("piratezep")!;
+            const float dt = 1f / 60f;
+            Vector3 PortAbeam() => host.GlobalPosition + ZeppelinBroadside.SideNormal(
+                motion.YawRad, motion.PitchRad, BroadsideSide.Left, bs.RightSign) * 300f;
+            void Hold(float seconds)
+            {
+                for (int i = 0; i < (int)(seconds / dt); i++)
+                {
+                    fm.Position = PortAbeam();
+                    zeps.SimStep(dt);
+                    live.SimStep(dt);
+                }
+            }
+
+            // Abeam at 300 m of 500, through the 4 s deploy, the 20 s fire delay and a margin.
+            Hold(30f);
+            ctx.Check(!started.Any(a => a.Contains("broad")),
+                $"30 s abeam the shipped Pandora opens no hatch anims=[{string.Join(",", started.Where(a => a.Contains("broad")))}]");
+            ctx.Same(0, zeps.BroadsideShotsOf("piratezep"),
+                $"...and fires no {ZeppelinRuntime.BroadsideWeaponId} at the player");
+            ctx.Check(bs.Cannons.All(c => c.State == ZeppelinCannonState.Stowed),
+                $"every cannon is still stowed");
+
+            // Positive control: the same hull with the script's flag set opens up on the player.
+            zeps.SetCannonsEngaged("piratezep", true);
+            Hold(5f);
+            ctx.Check(started.Count(a => a.StartsWith("deploy_pzep_lbroad")) == 6,
+                $"engaged, the port six deploy anims=[{string.Join(",", started)}]");
+            ctx.Check(zeps.BroadsideShotsOf("piratezep") > 0,
+                $"...and the readied side fires shots={zeps.BroadsideShotsOf("piratezep")}");
+        }
+        finally
+        {
+            runtime.OnInstanceStarted = null;
+            pool?.Free();
+            zeps?.Free();
+            player?.Free();
+            textures?.Dispose();
+        }
     }
 
     // A copy of a shipped record with `cannon_inaccuracy` authored — the scatter

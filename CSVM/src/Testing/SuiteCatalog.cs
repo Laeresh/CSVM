@@ -610,7 +610,9 @@ public static class SuiteCatalog
             "polarity — dead at survivors 3 < required 4, NOT at the design's destroy count — " +
             "playing the authored all_pzep_gasbags death and stopping the motion", ZeppelinDamageSuite));
         into.Add(new TestHarness.Suite("zeppelin-broadside",
-            "broadside cannons (F19) on C1/M04's flying piratezep: a player inside the port " +
+            "broadside cannons (F19): C3/M03's Pandora as shipped (no COMPLETED_ZEPCANNONS) " +
+            "neither deploys nor fires on a player abeam inside range for 30 s and does both " +
+            "once engaged; then on C1/M04's engaged, flying piratezep a player inside the port " +
             "arc triggers the authored deploy anims (durations read from the defs, 4 s), the " +
             "readied side volleys real unowned wep_28 rounds lead-solved at the player while " +
             "the far side stays stowed, out-of-arc holds fire and retracts after the invented " +

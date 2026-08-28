@@ -172,7 +172,7 @@ Then, in order:
 | `SET_AI_TEAM` | `[[name, team], ...]` up to 10 | Sets the vehicle's team through its vtable (dropping its current target) or the zeppelin's team fields +0xdc/+0xe0 with a turret-side refresh (`FUN_00469e20`, log string `SET_AI_TEAM: setting vehicle %s to team %d`). |
 | `SET_AI_NET` | `[[name, net], ...]` up to 10 | Reassigns the vehicle (`FUN_00475f30`) or zeppelin (`FUN_004bd7a0`) to the named patrol net ([ai-nets.md](ai-nets.md)). This is how C2/M01 walks its patrol boats through successive nets. |
 | `SET_AI_ATTACK_RADIUS` | `[[name, r], ...]` | Parsed and executable (`FUN_00469f70` writes the vehicle's radius-squared / ±band volume at +0x328), authored nowhere. |
-| `COMPLETED_ZEPCANNONS` | `[[zep, flag], ...]` up to 10 | Writes `flag` to zeppelin record byte +0xc (`FUN_0046a0b0`). The write is proven; **which behaviour reads +0xc is untraced**, a named gap. |
+| `COMPLETED_ZEPCANNONS` | `[[zep, flag], ...]` up to 10 | Writes `flag` to zeppelin record byte +0xc (`FUN_0046a0b0`), the broadside engage flag: the zeppelin update `FUN_004bf9d0` runs the cannon fire pass only while it is set and retracts ready cannons while it is clear ([mission-entities.md](mission-entities.md) "Broadside firing"). Authored in C2B/M04, C4/M05 and C5/M04 only. |
 | `COMPLETED_STOPPOINT` | `[[net, stop, flag], ...]` up to 10 | Looks the name up in the patrol-net table, requires `stop > 0`, finds the FIRST node carrying that stop-point id (`FUN_004319a0`) and writes `flag` onto that node's halt byte (`FUN_0046a0d0` / `FUN_004319d0`). `flag = 0` releases a docked zeppelin, `flag = 1` arms a fresh stop mid-route; the file's own flag is only the starting state. All 23 shipped clauses resolve to a node ([ai-nets.md](ai-nets.md) stop points). |
 | `ADD_OTHER_TARGET` / `REMOVE_OTHER_TARGET` | targets: a bare name, or a `[parent, child, ...]` path | Sets/clears byte +0x4c on the named vehicle, turret, or object (`FUN_0046a1b0`/`FUN_0046a1f0`): the `other_target` display flag `targets.zrd` also sets at load ([missions.md](missions.md)). |
 | `ADD_OBJECTIVE_TARGET` / `REMOVE_OBJECTIVE_TARGET` | targets: a bare name, or a `[parent, child, ...]` path | Sets/clears byte +0x4d, the mission-objective target flag (the byte [instant-action.md](instant-action.md) documents on the IA objective zeppelin). A nested list is ONE target, a node path walked from the outer name inward, the shape `INACTIVEn` uses: every shipped nesting is a path (`[piratezep, rock_zeppelin]`, `[zcrane1, healthy]`, `[cargozep2, ctur1]`, C5/M01's three-deep `[rfspt4, healthy, spprt]`), and a bare name beside one (`[[player_bmhook, bm_hook], bhf_hangar]`) is a second target. Read as independent names, `[piratezep, rock_zeppelin]` flags the hull root and every ground `rock_zeppelin` too. The read is from the data's shape; the binary's walk of the list is not traced. |
@@ -396,7 +396,7 @@ display readers `FUN_004acc20` / `FUN_004ad240` / `FUN_004a2350`, and the danger
 `extracted\` tree.
 
 Named gaps, each marked at its point of use: the consumers of `PLAYER_INIT`'s first, fourth
-and fifth values; the reader of zeppelin byte +0xc (`COMPLETED_ZEPCANNONS`); `WIN_ANIM` /
+and fifth values; `WIN_ANIM` /
 `LOSS_ANIM`'s consumer; and the radio queue's internal mode/delay parameters
 (`FUN_0046caf0`), whose pre/in/won-battle special routing is decoded but whose exact fade
 behaviour is not.

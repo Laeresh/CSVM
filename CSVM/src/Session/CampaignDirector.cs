@@ -1133,11 +1133,27 @@ public sealed class CampaignDirector
             Report("SET_AI_ATTACK_RADIUS", set, entries.Count, unmatched);
         }
 
+        /// <summary>Writes each named zeppelin's broadside engage flag (<c>FUN_0046a0b0</c>,
+        /// zeppelin byte <c>+0xc</c>): the only thing that lets a broadside deploy and fire.</summary>
         public void CompletedZepcannons(IReadOnlyList<(string Zeppelin, int Flag)> entries)
         {
-            if (entries.Count > 0)
+            if (entries.Count == 0)
             {
-                _owner.Gap("COMPLETED_ZEPCANNONS", "which behaviour reads zeppelin byte +0xc is untraced");
+                return;
+            }
+
+            if (_in.Zeppelins is not { } zeppelins)
+            {
+                _owner.Gap("COMPLETED_ZEPCANNONS", "no zeppelin runtime in this session");
+                return;
+            }
+
+            foreach (var (name, flag) in entries)
+            {
+                if (!zeppelins.SetCannonsEngaged(name, flag != 0))
+                {
+                    _owner.Gap("COMPLETED_ZEPCANNONS", $"'{name}' is no cannon-bearing zeppelin here");
+                }
             }
         }
 
