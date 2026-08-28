@@ -835,6 +835,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   system and the decode page records the sight and the assist as deliberately disagreeing already.
   *Cross-refs:* `docs/org/aim-assist.md`, `docs/org/ordnanceTypes.md`, `ProjectilePool.Ballistics`.
 
+- `BL-603` `[Bug]` **The human rig sweeps the mesh hull where the original sweeps its def's six
+  `collision` probes.** *Evidence:* decoded for `BL-601` (`git log --grep=BL-601`): `FUN_0048d7f0`
+  carries the def's `collision` list as rays from the previous pose, six points on the `p*` player
+  defs; `FlightController.SweepProbes` does that for an AI rig and keeps the mesh-derived hull sweep
+  for the human rig, which is wider than the six points. *Fix shape:* fly a slot the six points
+  clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
+  sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
+
 - `BL-597` `[Bug]` **CM08 (C1B/M03): the Pandora does not halt exactly over the tanker and plays no
   hangar animation there.** *Evidence:* reported at the controls against the original: the Pandora
   holds level along Klondike1 now, but its armed stop lands short of or past the tanker, and the

@@ -140,7 +140,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 50. ☑ `BL-600`: CM09's intro shows no wingman on the launch and the dive; the piratefighter prop keeps the archive's shipped state
 51. ☑ `BL-599`: the Promised Land no longer burns out (regression from B14); the compiled prerequisite state is bit 0 of active_raw
 52. ☑ `BL-602`: CM13's first zone marker sits at the world origin; an origin-standing group site anchors on its built meshes, the race chain pinned
-53. ☐ `BL-601`: CM13's racers ram the hangar on dzpath2 (`<TODO: agent in flight>`)
+53. ☑ `BL-601`: CM13's racers ram the hangar on dzpath2; an AI rig sweeps its def's one collision probe, as the original does
 
 ## Dependency and parallelism notes
 
@@ -1579,8 +1579,19 @@ it; the flown path is where that state is exercised (`campaign-airframe-swap`).
 **Verified.** <pending orchestrator run>
 
 **⚠ Traps.** The unrestricted version of the anchor rule moved the rock_zeppelin site 22 m and failed `campaign-objective-target-path`; the origin restriction is what scopes it.
-## F53 
-☐
- `BL-601`: CM13's racers ram the hangar on dzpath2
 
-`<TODO: agent in flight; the section is written on its landing>`
+## F53 ☑ `BL-601`: CM13's racers ram the hangar on dzpath2
+
+**Goal.** The racers thread the dbase arch on dzpath2 and fly the rest of the course, so the race is winnable.
+
+**Evidence (confidence: traced).** The rail carries the racers at y 19 to 21 m through the dbase arch, a 9.7 m slot at rail height with the centreline 3.7 m from the left post; the pfury wing probes are 10.4 m apart, so no roll short of 90 degrees clears it, and the rail's roll (`FUN_00490590`, the second derivative's lateral part normalised) is no knife-edge in the original either. The original's contact test (`FUN_0048d7f0`) sweeps the def's `collision` probe list as rays from the previous pose; vehicle.zrd authors six probes only on the p* player defs, basic_airplane carries one probe at the origin and no AI def overrides it, so every AI aeroplane collides as a single centre point and its wings pass through the posts. The rail pose does not bypass collision, and the 105 m lock is the decoded 11025 m^2 test. The remake swept the mesh-derived hull for AI too.
+
+**Approach.** `PlaneStats.CollisionProbes` (nearest def in the damage chain); `FlightController.SweepProbes` sweeps those probes as rays for an AI rig, the human rig keeps the hull sweep and the centre-ray backstop stands. `TestHarness.WithWorld` evicts cached collidable worlds before a collidable build.
+
+**Model recommendation.** A single session; the decode was the rail step, the probe sweep and the def parser.
+
+**Verify.** Suite `campaign-racers` (C2/M03's roster in its collidable world with the propane tanks in dzpath1's second gate blown: all six lock dzpath1 and dzpath2, leave each at the far end, nobody rams); 18 AI, wingman and campaign suites; `collision-visibility` and `alpha-cutout-ray-census`.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** The human rig still sweeps the mesh hull where the original sweeps its six probes; a player stunt through a slot the six points clear and the hull does not would differ (`BL-603`). C1's cached scenery stood inside C2/M03's airspace when `ai-wreck-fall` ran first in the shard; the harness eviction is what keeps `campaign-racers` order-independent.
