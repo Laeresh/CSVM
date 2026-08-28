@@ -1421,7 +1421,7 @@ mission lost at 0.02 s. `AirframeSwapTests` (2 facts) pins the group carry to 96
 `campaign-surface-vehicles`, `campaign-capture-group` all PASS, engine errors clean. Still owed:
 the user flies CM02 and captures the last bomber.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2554 unit tests, 174 engine suites in four shards with the error census clean, 16 goldens with `c1-destroy-effects` re-pinned (769 pixels, the radio tower's fireball riding its death site, F46). Two cross-item interactions the per-agent suites could not see were fixed on the merged tree before this run: the flare's symbol claim against F48's parked figure (F49's companion commit) and the climb-out suite's leaked second launch taking `roster-spawn-names`' spawn name (F47's suite).
 
 **⚠ Traps.** Count the human rig by `Crashed`, never `Inert` or `InPlay`: the rig is inert under
 the capture cutscene and a walk that dropped it there would complete `DEDG [5, 0]` on the frame
@@ -1441,7 +1441,7 @@ it; the flown path is where that state is exercised (`campaign-airframe-swap`).
 
 **Verify.** Suite `barracuda-drive` (largest step 1.33 m, end (-12032, 0, -11516.288), yaw -180); `MotionChainTests` (3 facts); headless CM04 seeds at z -13197.5, -13157.5, -11557.5, each leg from the previous end.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2554 unit tests, 174 engine suites in four shards with the error census clean, 16 goldens with `c1-destroy-effects` re-pinned (769 pixels, the radio tower's fireball riding its death site, F46). Two cross-item interactions the per-agent suites could not see were fixed on the merged tree before this run: the flare's symbol claim against F48's parked figure (F49's companion commit) and the climb-out suite's leaked second launch taking `roster-spawn-names`' spawn name (F47's suite).
 
 **⚠ Traps.** The rest re-home was added for `BL-511` (a pooled copy relaunching from its last end pose); `effect-pool-reset` and `effect-pool-spawn-pose` stay green because the pool re-resets the copy on checkout. `ground-contact` relied on the re-home and now re-places its node per launch.
 ## F44 ☑ `BL-591`: the Pandora fires on the player in CM04
@@ -1456,7 +1456,7 @@ it; the flown path is where that state is exercised (`campaign-airframe-swap`).
 
 **Verify.** `zeppelin-broadside` opens on the real C3/M03 world: the player 300 m abeam for 30 s, no hatch, no `wep_28`, then the same hull engaged deploys the port six and fires; the zeppelin-vs-zeppelin legs unchanged.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2554 unit tests, 174 engine suites in four shards with the error census clean, 16 goldens with `c1-destroy-effects` re-pinned (769 pixels, the radio tower's fireball riding its death site, F46). Two cross-item interactions the per-agent suites could not see were fixed on the merged tree before this run: the flare's symbol claim against F48's parked figure (F49's companion commit) and the climb-out suite's leaked second launch taking `roster-spawn-names`' spawn name (F47's suite).
 
 **⚠ Traps.** The engage flag is per zeppelin record; CM09's Promised Land is not a record (F51) and its doors are opened by anims, so the disengaged retract never touches it. `cannon_fire_range` (+0x14) has no reader on the decoded fire path while the remake still gates on it (objectives.md gap list).
 ## F45 ☑ `BL-592`: CM06's docking cutscene hands flight back early and teleports the player at its end
@@ -1471,7 +1471,7 @@ it; the flown path is where that state is exercised (`campaign-airframe-swap`).
 
 **Verify.** Suite `landings-docking-hold` (released at 9.95 s on the handoff code, 0 m off the marker, biggest step 1.52 m); 15 cutscene and landing suites.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2554 unit tests, 174 engine suites in four shards with the error census clean, 16 goldens with `c1-destroy-effects` re-pinned (769 pixels, the radio tower's fireball riding its death site, F46). Two cross-item interactions the per-agent suites could not see were fixed on the merged tree before this run: the flare's symbol claim against F48's parked figure (F49's companion commit) and the climb-out suite's leaked second launch taking `roster-spawn-names`' spawn name (F47's suite).
 
 **⚠ Traps.** CM06's hookup never activates the player marker, so the aeroplane is undrawn until 951 (the `BL-482` limit); a 951 raised into an episode whose row already ended is still booked as a fresh episode, which no shipped data now reaches.
 ## F46 ☑ `BL-593`: a gun ring's death fireballs and debris stand still while the hull sails on
@@ -1486,7 +1486,7 @@ it; the flown path is where that state is exercised (`campaign-airframe-swap`).
 
 **Verify.** Suite `ring-death-effects-follow-hull` (hull moved 500 m and 35 degrees: the fireball's fed position, the debris root and part1 all move by the ring's displacement; red on exactly those three checks with the follows off); 16 effect and zeppelin suites. Golden `c1-destroy-effects` moves and is re-pinned in the verification commit.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2554 unit tests, 174 engine suites in four shards with the error census clean, 16 goldens with `c1-destroy-effects` re-pinned (769 pixels, the radio tower's fireball riding its death site, F46). Two cross-item interactions the per-agent suites could not see were fixed on the merged tree before this run: the flare's symbol claim against F48's parked figure (F49's companion commit) and the climb-out suite's leaked second launch taking `roster-spawn-names`' spawn name (F47's suite).
 
 **⚠ Traps.** Damage-stage panel tears and other relocating calls are unchanged: only a death call in flight follows. The AT_NODE/WITH_NODE bit mapping stays open in `docs/org/sequences.md`.
 ## F47 ☑ `BL-594`: CM07's launched Peacemakers strike the strip two seconds after hand-off
@@ -1501,7 +1501,7 @@ it; the flown path is where that state is exercised (`campaign-airframe-swap`).
 
 **Verify.** Suite `generator-launch-climb-out` (30 s flown after release: lowest y 213.5, slowest 53.8 m/s, mode Patrol); headless CM07 with --wake-generators over 3600 frames: no AI ram, no _eg downed.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2554 unit tests, 174 engine suites in four shards with the error census clean, 16 goldens with `c1-destroy-effects` re-pinned (769 pixels, the radio tower's fireball riding its death site, F46). Two cross-item interactions the per-agent suites could not see were fixed on the merged tree before this run: the flare's symbol claim against F48's parked figure (F49's companion commit) and the climb-out suite's leaked second launch taking `roster-spawn-names`' spawn name (F47's suite).
 
 **⚠ Traps.** The ram rule (`local_11`) was reading correctly and killing a real ground strike; do not soften it. `BL-523`'s first-turn paragraph about eg0/eg1/eg3 is superseded and removed.
 ## F48 ☑ `BL-596`: the hangar hand-over plays without the aeroplane; the Blue Streak's livery
@@ -1516,7 +1516,7 @@ it; the flown path is where that state is exercised (`campaign-airframe-swap`).
 
 **Verify.** `campaign-hangar-handover` extended (rig drawn on the marker within 0.5 m with the gear under it over the 56 m lift, both props off at the handoff, Scheme and Painter null, the surfaces sample blo_wing/blo_fin/blo_fusalagetop); 14 cutscene suites.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2554 unit tests, 174 engine suites in four shards with the error census clean, 16 goldens with `c1-destroy-effects` re-pinned (769 pixels, the radio tower's fireball riding its death site, F46). Two cross-item interactions the per-agent suites could not see were fixed on the merged tree before this run: the flare's symbol claim against F48's parked figure (F49's companion commit) and the climb-out suite's leaked second launch taking `roster-spawn-names`' spawn name (F47's suite).
 
 **⚠ Traps.** CSVM does not run a definition's RESET_STATE at its end on RESET_TIME 0 (1651 defs carry it); the `BindRigs` re-assert covers the `player` node only and the general schedule stays undecoded.
 ## F49 ☑ `BL-595`: no rope ladder, the passenger hangs in the air, no flare
@@ -1531,7 +1531,7 @@ it; the flown path is where that state is exercised (`campaign-airframe-swap`).
 
 **Verify.** Suite `landings-train-pickup-ride` (passenger under caboose, 94.2 m travelled with 0 m offset, waveloop live in the 12.36 s phase, ballflare visible with flaretrail emitting, drop_ladder Deployed by callback 123, caboosepickup live for the 2.2 s climb with the WAIT held); 27 anim, effect and cutscene suites.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2554 unit tests, 174 engine suites in four shards with the error census clean, 16 goldens with `c1-destroy-effects` re-pinned (769 pixels, the radio tower's fireball riding its death site, F46). Two cross-item interactions the per-agent suites could not see were fixed on the merged tree before this run: the flare's symbol claim against F48's parked figure (F49's companion commit) and the climb-out suite's leaked second launch taking `roster-spawn-names`' spawn name (F47's suite).
 
 **⚠ Traps.** The `SequenceRunner` hold lengthens every instance whose last event is timed; the effect census suites are the guard. The rope-ladder rungs hang off the airframe's `ladder_pos`, which the harness rig lacks, so the suite cannot see them; that stays with the controls.
 ## F50 ☑ `BL-600`: CM09's intro shows no wingman on the launch and the dive
@@ -1546,7 +1546,7 @@ it; the flown path is where that state is exercised (`campaign-airframe-swap`).
 
 **Verify.** Suite `intro-wingmen` (playerdrop: drawn, posed and framed on 118 of 118 frames, moved 85.1 m; playerthruclouds: 631 of 631, moved 1172.3 m, best angle 8 degrees off camera1); 5 cutscene and roster suites.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2554 unit tests, 174 engine suites in four shards with the error census clean, 16 goldens with `c1-destroy-effects` re-pinned (769 pixels, the radio tower's fireball riding its death site, F46). Two cross-item interactions the per-agent suites could not see were fixed on the merged tree before this run: the flare's symbol claim against F48's parked figure (F49's companion commit) and the climb-out suite's leaked second launch taking `roster-spawn-names`' spawn name (F47's suite).
 
 **⚠ Traps.** It is one wingman, since the data animates one prop; the three roster Devastators appear at the handoff as before.
 ## F51 ☑ `BL-599`: the Promised Land no longer burns out and sinks (regression from B14)
@@ -1561,7 +1561,7 @@ it; the flown path is where that state is exercised (`campaign-airframe-swap`).
 
 **Verify.** Suite `zeppelin-cannon-burnout` over C1/M04's real world (hatches at -2.356 rad by 5 s, lbroad4 destroyed by 30 real rounds, every burn and finisher started, the hull dropped 42.8 m, OBJECTIVE30 at 42.2 s; red at the three finishers before the fix); `CompiledPrereqTests` over raw 0/1/2/3; 17 zeppelin, turret and objective suites.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2554 unit tests, 174 engine suites in four shards with the error census clean, 16 goldens with `c1-destroy-effects` re-pinned (769 pixels, the radio tower's fireball riding its death site, F46). Two cross-item interactions the per-agent suites could not see were fixed on the merged tree before this run: the flare's symbol claim against F48's parked figure (F49's companion commit) and the climb-out suite's leaked second launch taking `roster-spawn-names`' spawn name (F47's suite).
 
 **⚠ Traps.** B14's gate itself stands; only the leaf read changed. Reproduce headless rather than reading the damage sink for a late kill.
 ## F52 ☑ `BL-602`: CM13's first zone marker sits at the world origin; zone 3 does not count
@@ -1576,7 +1576,7 @@ it; the flown path is where that state is exercised (`campaign-airframe-swap`).
 
 **Verify.** Suite `campaign-race-chain` (sghangar's anchor within 150 m of dz1 and the offered site marked there; over the real graph dzpath1..3 complete 17, 18, 19 in order with none of 28..33 firing, then group 3 dead fires 28); 6 objective suites.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2554 unit tests, 174 engine suites in four shards with the error census clean, 16 goldens with `c1-destroy-effects` re-pinned (769 pixels, the radio tower's fireball riding its death site, F46). Two cross-item interactions the per-agent suites could not see were fixed on the merged tree before this run: the flare's symbol claim against F48's parked figure (F49's companion commit) and the climb-out suite's leaked second launch taking `roster-spawn-names`' spawn name (F47's suite).
 
 **⚠ Traps.** The unrestricted version of the anchor rule moved the rock_zeppelin site 22 m and failed `campaign-objective-target-path`; the origin restriction is what scopes it.
 
@@ -1592,6 +1592,6 @@ it; the flown path is where that state is exercised (`campaign-airframe-swap`).
 
 **Verify.** Suite `campaign-racers` (C2/M03's roster in its collidable world with the propane tanks in dzpath1's second gate blown: all six lock dzpath1 and dzpath2, leave each at the far end, nobody rams); 18 AI, wingman and campaign suites; `collision-visibility` and `alpha-cutout-ray-census`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2554 unit tests, 174 engine suites in four shards with the error census clean, 16 goldens with `c1-destroy-effects` re-pinned (769 pixels, the radio tower's fireball riding its death site, F46). Two cross-item interactions the per-agent suites could not see were fixed on the merged tree before this run: the flare's symbol claim against F48's parked figure (F49's companion commit) and the climb-out suite's leaked second launch taking `roster-spawn-names`' spawn name (F47's suite).
 
 **⚠ Traps.** The human rig still sweeps the mesh hull where the original sweeps its six probes; a player stunt through a slot the six points clear and the hull does not would differ (`BL-603`). C1's cached scenery stood inside C2/M03's airspace when `ai-wreck-fall` ran first in the shard; the harness eviction is what keeps `campaign-racers` order-independent.

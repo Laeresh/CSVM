@@ -92,8 +92,8 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "f492e110e98c8660015d6a6f7ca519ae",
-      "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage, flight-state-dependent SpeedCue and seeded puffer placement; frame-sensitive.",
+      "hash": "9a03c3ce8b07343705f7023ddbdadc27",
+      "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, flight-state-dependent SpeedCue and seeded puffer placement; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
