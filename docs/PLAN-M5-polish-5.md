@@ -1609,6 +1609,6 @@ on the flown path.
 
 **Verify.** `campaign-capture-group` now plays `ww_balmoral1` through the cutscene host from the approach row's trigger (`Own` and `PlayMissionTrigger`, realtime clock, marker grafts) and samples group 5 every step to 20 s past the handoff: parked 19.22 s, min 1 throughout and while parked, `OBJECTIVE22` incomplete, `OBJECTIVE25` dormant, swap at 19.22 s, handoff 19.25 s, death ends Lost; with the old `Inert` read the same suite fails (min 0, mission ended). `AircraftLifecycleTests` (4 facts). Foreground: build clean, `dotnet test` 2558, eight campaign and landing suites PASS.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2558 unit tests, 174 engine suites in four shards with the error census clean (engine stage 104 s against its 100 s budget, awareness only), 16 goldens hash-identical.
 
 **⚠ Traps.** `Inert` is presence; `Deactivated` is the mission's dead byte. Any new objective or tally walk reads `Deactivated`. The park is set before `Inert` so an `InertChanged` listener reads a consistent pair. The hidden captured aircraft leaves both the parked list and `Parked`, or the player and the bomber count twice.
