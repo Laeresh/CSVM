@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Effects;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session;
@@ -11,7 +12,8 @@ namespace CSVM.Testing;
 internal static class EffectStageSuiteHelper
 {
     internal static void WithEffectStage(TestContext ctx, TestWorld world, string animName,
-        IEnumerable<string> rootNames, Action<Node3D, AnimRuntime, Vector3> body)
+        IEnumerable<string> rootNames, Action<Node3D, AnimRuntime, Vector3> body,
+        IEmitterFactory? factory = null)
     {
         var stage = new Node3D { Name = $"EffectStage_{animName}" };
         var pool = new Node3D { Name = "pool0" };
@@ -25,7 +27,7 @@ internal static class EffectStageSuiteHelper
 
         var runtime = AnimRuntime.ForEffects(
             AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
-            1, new CountingEmitterFactory(), false, 32f, () => ctx.Camera.GlobalPosition);
+            1, factory ?? new CountingEmitterFactory(), false, 32f, () => ctx.Camera.GlobalPosition);
         runtime.ManualAdvance = true;
         ctx.Host.AddChild(stage);
         ctx.Host.AddChild(runtime);

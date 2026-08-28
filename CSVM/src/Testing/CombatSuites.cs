@@ -906,6 +906,82 @@ internal static class CombatSuites
         }
     }
 
+    // The ROUTED half of a carried turret's death, which turret-death-effect-world-anchor does not
+    // reach: the ring's destroy def calls large_30sec_fire WITH_NODE doublecannon4, and in play that
+    // call leaves the world runtime through ExternalEffect for a staged fire_here copy the effects
+    // runtime TopLevel-places. A real C1/M04 piratezep ring is killed with the hand-off wired to a
+    // real effects stage, the hull is moved as ZeppelinRuntime.Place moves it, and the emitter's fed
+    // position is read against the ring's live pose: the fire must move by the ring's displacement.
+    internal static void TurretDeathFireFollowsHull(TestContext ctx)
+    {
+        ctx.WithWorld("C1", collision: false, mission: "M04", world =>
+        {
+            var runtime = world.Runtime;
+            var host = runtime.FindNodes("piratezep").FirstOrDefault();
+            var ring = host == null ? null : runtime.FindNodes("doublecannon4", host).FirstOrDefault();
+            ctx.Check(host != null && ring != null, $"piratezep and its doublecannon4 ring resolve in the M04 world");
+            if (host == null || ring == null)
+            {
+                return;
+            }
+            // The def anchors on the ring's own subtree; take whichever node the registry knows.
+            var registry = runtime.Destructibles;
+            var inst = registry.Resolve(ring)
+                       ?? registry.Resolve(runtime.FindNodes("healthy", ring).FirstOrDefault());
+            ctx.Check(inst != null, $"the ring carries its compiled destroy def pool hp={inst?.MaxHealth ?? 0f:0}");
+            if (inst == null)
+            {
+                return;
+            }
+            var factory = new CountingEmitterFactory();
+            EffectStageSuiteHelper.WithEffectStage(ctx, world, "large_30sec_fire", new[] { "fire_here" },
+                (stage, effects, _) =>
+                {
+                    var previous = runtime.ExternalEffect;
+                    runtime.ExternalEffect = (name, pt, node, follow) =>
+                        effects.Handles(name) && effects.PlayEffectAt(name, pt, node, follow: follow);
+                    try
+                    {
+                        Vector3 SiteNow() => AnimRuntime.VisualOriginOf(ring) + ring.GlobalTransform.Basis * new Vector3(0f, 2f, 0f);
+                        runtime.DamageAt(inst.Anchor, inst.MaxHealth + 1f);
+                        ctx.Check(inst.Status == DestructibleRegistry.State.Destroyed, $"the ring dies status={inst.Status}");
+                        effects.Advance(1f / 60f);
+                        var fire = factory.Built.FirstOrDefault(e => e.Key == "fire_n_smoke");
+                        ctx.Check(fire is { Sustaining: true },
+                            $"the death routed large_30sec_fire to the effects stage and its fire_n_smoke puffer emits built=[{string.Join(",", factory.Built.Select(e => e.Key))}]");
+                        if (fire == null)
+                        {
+                            return;
+                        }
+                        var fedA = fire.LastPos;
+                        var siteA = SiteNow();
+                        ctx.Check(fedA.DistanceTo(siteA) < 5f,
+                            $"the fire starts at the ring plus the authored (0,2,0) fed=({fedA.X:0},{fedA.Y:0},{fedA.Z:0}) site=({siteA.X:0},{siteA.Y:0},{siteA.Z:0})");
+
+                        // The zeppelin flies on and yaws: one GlobalTransform write on the hull
+                        // root, exactly ZeppelinRuntime.Place's shape.
+                        var xf = host.GlobalTransform;
+                        xf.Basis = new Basis(Vector3.Up, Mathf.DegToRad(35f)) * xf.Basis;
+                        xf.Origin += new Vector3(400f, 0f, -300f);
+                        host.GlobalTransform = xf;
+                        effects.Advance(1f / 60f);
+                        var fedB = fire.LastPos;
+                        var siteB = SiteNow();
+                        ctx.Check(siteB.DistanceTo(siteA) > 100f,
+                            $"the ring actually moved with the hull (test sanity) by {siteB.DistanceTo(siteA):0} m");
+                        ctx.Check((fedB - siteB).DistanceTo(fedA - siteA) < 0.5f,
+                            $"the fire rides the hull: fed moved ({(fedB - fedA).X:0},{(fedB - fedA).Y:0},{(fedB - fedA).Z:0}) against the ring's ({(siteB - siteA).X:0},{(siteB - siteA).Y:0},{(siteB - siteA).Z:0})");
+                        ctx.Check(stage.GetChildren().OfType<Node3D>().Any(),
+                            $"the placed copy is still the stage's own pooled root (nothing was reparented)");
+                    }
+                    finally
+                    {
+                        runtime.ExternalEffect = previous;
+                    }
+                }, factory);
+        });
+    }
+
     // The incoming-fire near-miss cue's wiring, with its able-to-fail baseline: a real round from
     // another pilot flying past registers a pass, the same round fired by the target's own identity
     // registers none, and a round a hundred metres wide of the aircraft registers none either, so a

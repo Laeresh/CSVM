@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — CM06 (C1C/M01) and CM07 (C1/M02)
 
-11. ☐ `BL-571`: a carried turret's death fire, and the turret, stay where the turret died
+11. ☑ `BL-571`: a carried turret's death fire, and the turret, stay where the turret died
 12. ☐ `BL-572`: an objective marker labels the raw node name instead of the original's verb and proper name
 13. ☐ `BL-573`: the AA guns damage themselves firing at a barrier
 14. ☐ `BL-574` + `BL-575`: the hangar hand-over gives a stock Bloodhawk and plays no animation
@@ -446,29 +446,46 @@ is for `generic_intro`; these intros are their own defs.
 
 # Wave B — CM06 (C1C/M01) and CM07 (C1/M02)
 
-## B11 ☐ `BL-571`: a carried turret's death fire, and the turret, stay where the turret died
+## B11 ☑ `BL-571`: a carried turret's death fire, and the turret, stay where the turret died
 
 **Goal.** A gun ring shot off the Workers' Voyage burns and stays on the hull as it flies on.
 
-**Evidence (confidence: traced for the fire, lead-only for the turret).** The ring's destroy def
+**Evidence (confidence: traced for the fire, decoded for the turret).** The ring's destroy def
 calls `large_30sec_fire` `WithNode doublecannon4 (0, 2, 0)`. `AnimRuntime`'s `CallAnimation` hands
 a death's effect call to the world-effects runtime through `ExternalEffect` with a world POSITION
 snapshot (`VisualOriginOf(callAnchor) + basis * offset`), and `PlayEffectAt` stages the template
 root at that point with `TopLevel = true`; the site node rides along only as the callee's
 `INPUT_NODE`. The log's `WAIT_FOR_COMPLETION on 'large_30sec_fire' not held — the callee is routed
 to the world-effects runtime` is that hand-off. `BL-514`'s disproof examined the `PUFFER_STATE`
-path, which does re-read the host; the death-call path is this one. Whether the turret model is
-held back the same way is not traced. `<TODO: re-verify still-open against the code>`
+path, which does re-read the host; the death-call path is this one. Re-verified open against the
+code: the fire's emitter host is the placed `fire_here` copy's own root, and nothing moved that
+root after placement. The turret half is the same def read to its end: `destroy_dbl_cannon`
+switches `healthy`, `bs_canup4`, `bs_cbase4` and `bs_candown4` OFF at t=0 and switches no
+destroyed role on, so no turret model is placed anywhere. What stands at the death point is
+`dblcannon_flying_parts` (`AT_NODE doublecannon4`, a library-root copy of `zep_can_dstry1.flt`
+whose eight parts fly 0.4 to 4 s and hide, the `nulled-launch` suite) plus the `AT_NODE`
+fireballs and smokeball, all authored as a snapshot at the point of death.
 
-**Approach.** An effect called `WithNode` on a node that moves must follow it: parent the staged
-template root under the site node, or feed `EmitterDirector` the site's live transform each tick,
-keeping `TopLevel` placement for world-fixed sites. Then read how the ring's destroyed pose is
-placed and give it the same rule.
+**Approach.** The data's two spellings settle the rule (`docs/org/sequences.md`: `WITH_NODE`
+delivers the live node, `AT_NODE` a position taken once). `CallTargetSite` now reports the
+spelling, `ExternalEffect` carries it, and `PlayEffectAt` places a `WITH_NODE` copy through
+`TemplateStage.PlaceFollowing`, which re-places the root each frame at the site's live pose plus
+the offset in the site's own frame (`FollowSites`, from `Advance` before `EmitterDirector.Tick`).
+`AT_NODE` keeps `PlaceOn`; a world-fixed site reads identically under both. No reparenting: the
+pooled copy stays the stage's own root and `TopLevel`, so the pool, prewarm keys and the reveal
+ritual are untouched; a re-placement, a hide or a freed site ends the follow.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** medium.
 
-**Verify.** `<TODO: a WorldDamageLab or headless CM06 check that the fire's position tracks
-doublecannon4's world position over the 30 s while the airship moves; the golden set unchanged>`
+**Verify.** `turret-death-fire-follows-hull`: a real C1/M04 piratezep `doublecannon4` ring killed
+through `DamageAt` with `ExternalEffect` wired to a real `fire_here` effects stage over a
+`CountingEmitterFactory`, the hull moved 500 m and yawed 35° by one `GlobalTransform` write
+(`ZeppelinRuntime.Place`'s shape), the `fire_n_smoke` emitter's fed position asserted to move by
+the ring's displacement. Seen FAILING with the follow flag forced off and PASSING with it on.
+`TemplateStageTests` pin `PlaceFollowing`/`FollowSites` off-engine. The twelve effect and
+zeppelin suites around it stay green; the 16 goldens are hash-identical.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** `trail-world-anchor` settled the opposite case (an emitter that must NOT ride its
 host); keep both. Do not reopen `BL-514`'s `PUFFER_STATE` reading.

@@ -92,6 +92,7 @@
     "nodelab-visibility": 1.083,
     "trail-world-anchor": 0.011,
     "turret-death-effect-world-anchor": 0.003,
+    "turret-death-fire-follows-hull": 1.5,
     "damage-template-pool": 0.005,
     "damage-staging-pool": 0.417,
     "cockpit-panel-staging": 0.615,

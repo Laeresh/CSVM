@@ -133,6 +133,7 @@ public static class SuiteCatalog
         "nodelab-visibility",
         "trail-world-anchor",
         "turret-death-effect-world-anchor",
+        "turret-death-fire-follows-hull",
         "damage-template-pool",
         "damage-staging-pool",
         "cockpit-panel-staging",
@@ -657,6 +658,8 @@ public static class SuiteCatalog
             "a trail emitter under a rotated carrier anchors at world identity and drops puffs where it is fed", TrailWorldAnchor));
         into.Add(new TestHarness.Suite("turret-death-effect-world-anchor",
             "a carried turret's death fire, anchored on TurretController.Site under a moving/rotating hull, follows the hull between ticks rather than freezing at the pose it started at (BL-514)", TurretDeathEffectWorldAnchor));
+        into.Add(new TestHarness.Suite("turret-death-fire-follows-hull",
+            "a zeppelin gun ring's death fire, routed WITH_NODE to the world-effects stage, moves with the ring as the hull flies on instead of holding the point it was placed at", TurretDeathFireFollowsHull));
         into.Add(new TestHarness.Suite("damage-template-pool",
             "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)", DamageTemplatePool));
         into.Add(new TestHarness.Suite("damage-staging-pool",

@@ -2667,32 +2667,6 @@ usual.
   runs (fireballs, `tntbox`/`gasbag` deactivation); do not run it a second time under the camera.
   *Cross-refs:* `BL-548`, `BL-583`, `docs/formats/anim-definitions/cutscenes.md`.
 
-- `BL-571` `[Bug]` **A carried turret's death fire, and the turret itself, stay in the air where
-  the turret died while the zeppelin moves on.** *Evidence (traced for the fire, lead-only for the
-  turret):* reported at the controls in CM06 (C1C/M01) after a Workers' Voyage gun ring died: a
-  persistent flame hangs at the death position, and the turret is seen stuck there too. The fire
-  is `large_30sec_fire`, which the ring's destroy def (`doublecannon4-*doublecannon4-healthy.json`)
-  calls with `WithNode doublecannon4 (0, 2, 0)`. `AnimRuntime`'s `CallAnimation` case hands a
-  death's effect call to the world-effects runtime through `ExternalEffect` with a world POSITION
-  snapshot (`VisualOriginOf(callAnchor) + basis * offset`), and `PlayEffectAt` stages the template
-  root at that point with `TopLevel = true`; the site node rides along only as the callee's
-  `INPUT_NODE` for its condition gate, not as its parent. So the flame is world-anchored at the
-  death position for its authored 30 s while the hull flies away (the log's `WAIT_FOR_COMPLETION
-  on 'large_30sec_fire' not held — the callee is routed to the world-effects runtime` is that
-  hand-off). The earlier disproof (`BL-514`, closed as "the fire rides the hull") examined the
-  `PUFFER_STATE` path on the world runtime, which does re-read the host each frame; the
-  death-call path is this one. Whether the turret model itself is held back the same way (a
-  destroyed-role template placed through the same `PlayEffectAt`) or by something else is not
-  traced. *Fix shape:* an effect called `WithNode` on a node that moves (a carried site, any
-  vehicle sub-part) must follow that node: parent the staged template root under the site node,
-  or feed `EmitterDirector` the site's live transform each tick, keeping the `TopLevel` placement
-  for world-fixed sites. Then read how the ring's destroyed pose is placed and give it the same
-  rule. *⚠ Traps:* `trail-world-anchor` settled the opposite case (an emitter that must NOT ride
-  its host); keep both. Do not reopen `BL-514`'s `PUFFER_STATE` reading, it is correct for that
-  path. *Cross-refs:* `BL-514`'s closing commit (`git log --grep=BL-514`),
-  `docs/formats/anim-definitions.md` (`CALL_ANIMATION` `WithNode`), `docs/formats/effects.md`,
-  `docs/org/puffer.md`.
-
 - `BL-572` `[Fidelity]` **A campaign objective's marker labels the raw node name in the team
   colour (`peoplehook`, `pzhookpoint`, `workersvoyagezep`) instead of the original's objective
   marker.** *Evidence (lead-only):* reported at the controls in CM06 (C1C/M01): objective markers

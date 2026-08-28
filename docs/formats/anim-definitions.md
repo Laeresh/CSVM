@@ -488,6 +488,15 @@ globally to whichever one is first, so eight engines share one prop angle. Honou
 engine gets its own. The same mechanism is what places effect templates:
 `CALL_ANIMATION [NAME [huge_30sec_fire], WITH_NODE [rc*_dbase1]]` burns one ship section.
 
+The two node spellings differ in what the callee receives, not in where it resolves: `WITH_NODE`
+hands over the live node, `AT_NODE` a position taken at the call (the handler's flag bits and the
+conversion, [org/sequences.md](../org/sequences.md)). A carried site shows the difference. A
+zeppelin's gun ring dies with `large_30sec_fire WITH_NODE doublecannon4 (0, 2, 0)` and
+`large_fireball`/`dblcannon_flying_parts AT_NODE doublecannon4`: the fire burns on the ring for
+its 30 s as the hull flies on, the fireball and the debris launch from where the ring was. The
+runtime keeps that split on the routed effect path (`TemplateStage.PlaceFollowing` against
+`PlaceOn`, docs/architecture.md); a site that never moves reads the same either way.
+
 Two implementation notes. Instance identity is `(definition, anchor)`, so retargeting is also
 what lets one definition run concurrently on many sites — the `IsLive` check must use the
 **resolved** anchor, not the caller's, or the second site is swallowed as a duplicate. And an
