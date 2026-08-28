@@ -6,32 +6,38 @@ using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
 using CSVM.UI;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
 
 /// <summary>CM02's capture as the objectives see it: the player takes the last live bomber of
 /// group 5 through the 967 wing-walk swap, so the group must go on reading one live member (the
-/// player now flies it) and the <c>DEDG [5, 0]</c> objective that naps the instant loss must stay
-/// incomplete. Driven over C3/M05's own roster through the session's <see cref="FlightRoster"/>
-/// and its own objective graph, with the swap run the way the mission-script host runs it. The
-/// same swap re-points the wingman escorting the player onto the rebuilt rig and keeps the
-/// director's death hook on it, so both are read here as well.</summary>
+/// bomber while the cutscene parks it, the player once flying it) and the <c>DEDG [5, 0]</c>
+/// objective that naps the instant loss must stay incomplete. Driven over C3/M05's own roster
+/// through the session's <see cref="FlightRoster"/> and its own objective graph, with the
+/// mission's capture definition played through the cutscene host the way the approach row starts
+/// it, so the 913 park, the 967 swap and the 914 reveal land in their authored order. The same
+/// swap re-points the wingman escorting the player onto the rebuilt rig and keeps the director's
+/// death hook on it, so both are read here as well.</summary>
 internal static class CaptureGroupSuites
 {
     private const string Chapter = "C3";
     private const string Mission = "M05";
 
-    // The bomber the capture animation is rooted on, and the group its three blocks author.
+    // The bomber the capture animation is rooted on, the group its three blocks author, and the
+    // definition the approach row on that bomber starts.
     private const string CaptureRoot = "britbalmoral_1";
     private const int BomberGroup = 5;
-    private const int CaptureCode = 967;
+    private const string CaptureAnim = "ww_balmoral1";
 
     private const float StepDt = 1f / 60f;
 
-    // Long enough past the swap to show the group holding at one, and short of the 20 s nap the
-    // completed DEDG would raise the instant loss on.
-    private const float HoldSeconds = 5f;
+    // The whole episode (the wing walk's 19.25 s motion) and the nap the wiped-out DEDG would put
+    // on the instant loss, held past its full length so a completion anywhere in the episode has
+    // had its 20 s to end the mission. The budget bounds a definition that never hands off.
+    private const float HoldSeconds = 20f;
+    private const float EpisodeBudgetS = 30f;
 
     // The player's death is a crash already on the ground, so the lost ending is due at once.
     private const float DeathWindowSeconds = 2f;
@@ -66,11 +72,21 @@ internal static class CaptureGroupSuites
         var chain = CheckAuthored(ctx, script, report);
         var skills = AiSkills.Load(ctx.ZrdrPath);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
-        ctx.WithWorld(Chapter, collision: false, Mission, world =>
-            Drive(ctx, world, director, chain, skills, missionZrdr, chapterZrdr, texturesPath, report));
+        // The capture's wing walk stages aircraft-archive figures, which only a world built with
+        // its cutscene library roots can answer for.
+        ctx.CutsceneRoots = true;
+        try
+        {
+            ctx.WithWorld(Chapter, collision: false, Mission, world =>
+                Drive(ctx, world, director, chain, skills, missionZrdr, chapterZrdr, texturesPath, report));
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+        }
 
         ctx.WriteArtifact($"test-campaign-capture-group-{Chapter}-{Mission}.txt", report.ToString());
-        ctx.Note($"{Chapter}/{Mission}: the captured bomber's group reads one with the player flying it, so the instant loss stays asleep");
+        ctx.Note($"{Chapter}/{Mission}: the captured bomber's group reads one through the whole capture and after it, so the instant loss stays asleep");
     }
 
     // The chain as the mission authors it: a DEDG over group 5 at most one, a DEDG at zero, and
@@ -104,8 +120,8 @@ internal static class CaptureGroupSuites
         var lossDef = instantLoss >= 1 && instantLoss <= script.Objectives.Count ? script.Objectives[instantLoss - 1] : null;
         ctx.Check(lossDef is { InstantLoss: true },
             $"and the wiped-out one naps an INSTANTLOSS objective (OBJECTIVE{instantLoss}), which is the loss the swap has to keep asleep");
-        ctx.Check(napSeconds > HoldSeconds,
-            $"whose nap ({napSeconds:0} s) outlasts the {HoldSeconds:0} s this suite holds the swapped state for");
+        ctx.Check(napSeconds > 0f && napSeconds <= HoldSeconds,
+            $"whose nap ({napSeconds:0} s) fits inside the {HoldSeconds:0} s this suite holds past the handoff, so a completion anywhere in the episode would have ended the mission");
         return new Chain(shootTwo, wipedOut, instantLoss);
     }
 
@@ -121,6 +137,8 @@ internal static class CaptureGroupSuites
         var rig = new PlayerRig { Index = 0, Camera = ctx.Camera, HudParent = pane, Viewport = pane };
         var rigs = new[] { rig };
         FlightRoster? roster = null;
+        var cutscene = new CutsceneController();
+        ctx.Host.AddChild(cutscene);
         try
         {
             roster = BuildRoster(ctx, planesGamez, textures, pool, rigs);
@@ -128,6 +146,9 @@ internal static class CaptureGroupSuites
             var before = rig.Controller ?? throw new InvalidOperationException("no rig was built");
             var flightRoster = roster;
 
+            // The marker graft is what puts the capture's own scaffolding (the wing-walk frame's
+            // host) onto the spawned bomber, the same way the session's roster build does.
+            int grafted = 0;
             string what = director.BuildRoster(new CampaignDirector.RosterInputs
             {
                 ChapterZrdrPath = chapterZrdr,
@@ -142,9 +163,11 @@ internal static class CaptureGroupSuites
                 FindNodes = name => world.Runtime.FindNodes(name),
                 Spawn = (plan, pos, look, pilot) => flightRoster.SpawnAi(
                     CampaignRosterPlan.SpawnFor(plan, pos, look, pilot)),
+                AttachMarkers = (block, node) => grafted += RosterMarkers.Attach(
+                    world.Gamez, world.Session.Builder.Scene, world.Runtime, block, node),
                 Rng = new Random(1),
             });
-            report.AppendLine($"build summary suffix: '{what}'");
+            report.AppendLine($"build summary suffix: '{what}', {grafted} marker graft(s)");
 
             director.Attach(new CampaignDirector.WorldInputs
             {
@@ -169,13 +192,13 @@ internal static class CaptureGroupSuites
             }
 
             ShootTwo(ctx, director, chain, bombers, report);
-            var after = Capture(ctx, director, roster, rig, before, wingman, report);
+            var after = Capture(ctx, world, cutscene, director, chain, roster, rig, before,
+                bombers[CaptureRoot], wingman, report);
             if (after == null)
             {
                 return;
             }
 
-            Hold(ctx, director, chain, rig, wingman, report);
             Die(ctx, director, rig, report);
         }
         finally
@@ -189,6 +212,7 @@ internal static class CaptureGroupSuites
                 ai.Free();
             }
 
+            cutscene.Free();
             pane.Free();
             pool.Free();
             textures.Dispose();
@@ -241,68 +265,145 @@ internal static class CaptureGroupSuites
             $"while OBJECTIVE{chain.WipedOut} (wiped out) does not");
     }
 
-    // The swap itself, the whole order the host raises for 967, rooted on the last bomber.
-    private static FlightController? Capture(TestContext ctx, CampaignDirector director, FlightRoster roster,
-        PlayerRig rig, FlightController before, FlightController wingman, StringBuilder report)
+    // The capture as the flown session runs it: the mission's definition started through the
+    // trigger seam the approach row starts it with and hosted by the cutscene controller, on a
+    // realtime clock with each aircraft stepping itself and the director stepping beside them
+    // (INSTR-26). The group is read every step from the start to 20 s past the handoff, since a
+    // walk that drops the parked bomber reads zero only while the park holds.
+    private static FlightController? Capture(TestContext ctx, TestWorld world, CutsceneController cutscene,
+        CampaignDirector director, Chain chain, FlightRoster roster, PlayerRig rig, FlightController before,
+        FlightController captured, FlightController wingman, StringBuilder report)
     {
-        var order = new AirframeSwapOrder(AirframeSwapCodes.For(CaptureCode)!.Value, CaptureRoot);
-        var result = roster.RunSwap(rig, order, handsOver: true);
+        var savedClock = GameClock.Current;
+        var savedHost = world.Runtime.CallbackHost;
+        int minLive = int.MaxValue, minLiveParked = int.MaxValue;
+        float swappedAt = -1f, handoffAt = -1f, parkedFor = 0f, elapsed = 0f;
+        bool parkedCounted = false;
+        Exception? thrown = null;
+        try
+        {
+            var clock = new GameClock { Mode = GameClock.RunMode.Realtime };
+            GameClock.Current = clock;
+            cutscene.BindWorld(world.Runtime);
+            cutscene.HostDefinitions(ClosureOf(world, CaptureAnim));
+            cutscene.BindRigs(new[] { rig }, () => roster.AiAircraft);
+            cutscene.SwapAirframe = order => roster.RunSwap(rig, order, handsOver: true);
+            cutscene.WorldHeld += held => director.HoldForCutscene(held);
+            world.Runtime.CallbackHost = cutscene.Host;
+            cutscene.Own(CaptureAnim);
+            int started = world.Runtime.PlayMissionTrigger(CaptureAnim).Count;
+            ctx.Check(started > 0 && cutscene.Playing,
+                $"the approach row's trigger starts '{CaptureAnim}' and the cutscene host owns the episode");
+
+            int budget = (int)((EpisodeBudgetS + HoldSeconds) / StepDt);
+            for (int i = 0; i < budget && thrown == null; i++)
+            {
+                elapsed = i * StepDt;
+                if (handoffAt >= 0f && elapsed - handoffAt >= HoldSeconds)
+                {
+                    break;
+                }
+
+                try
+                {
+                    clock.BeginFrame(StepDt);
+                    world.Runtime.Advance(StepDt);
+                    cutscene.Tick();
+                    rig.Controller?._PhysicsProcess(StepDt);
+                    captured._PhysicsProcess(StepDt);
+                    wingman._PhysicsProcess(StepDt);
+                    director.Step(StepDt);
+                }
+                catch (Exception e)
+                {
+                    thrown = e;
+                    break;
+                }
+
+                int live = director.GroupLiveCount(BomberGroup) ?? -1;
+                minLive = Math.Min(minLive, live);
+                if (captured.Parked)
+                {
+                    parkedFor += StepDt;
+                    parkedCounted = true;
+                    minLiveParked = Math.Min(minLiveParked, live);
+                }
+
+                if (swappedAt < 0f && !ReferenceEquals(rig.Controller, before))
+                {
+                    swappedAt = elapsed;
+                    report.AppendLine($"t={elapsed:0.00} s swapped: group {BomberGroup} counts {live}, " +
+                        $"'{CaptureRoot}' inert={captured.Inert} parked={captured.Parked}");
+                }
+
+                if (handoffAt < 0f && swappedAt >= 0f && !cutscene.Playing)
+                {
+                    handoffAt = elapsed;
+                    report.AppendLine($"t={elapsed:0.00} s handoff: group {BomberGroup} counts {live}, " +
+                        $"OBJECTIVE{chain.WipedOut} complete={director.Graph?.CompletedOf(chain.WipedOut)}");
+                }
+            }
+        }
+        finally
+        {
+            world.Runtime.CallbackHost = savedHost;
+            GameClock.Current = savedClock;
+        }
+
         var after = rig.Controller;
-        ctx.Check(result.Swapped && after != null && !ReferenceEquals(after, before),
-            $"the capture swap rebuilds the player's rig");
-        if (after == null)
+        int? liveAtEnd = director.GroupLiveCount(BomberGroup);
+        report.AppendLine($"episode: swap at {swappedAt:0.00} s, handoff at {handoffAt:0.00} s, stepped to {elapsed:0.00} s, " +
+            $"exception={(thrown == null ? "none" : thrown.GetType().Name)}, '{CaptureRoot}' parked for {parkedFor:0.00} s, " +
+            $"group {BomberGroup} min {minLive} (min while parked {(parkedCounted ? minLiveParked.ToString() : "-")}), at end {liveAtEnd?.ToString() ?? "-"}, " +
+            $"OBJECTIVE{chain.WipedOut} complete={director.Graph?.CompletedOf(chain.WipedOut)}, " +
+            $"OBJECTIVE{chain.InstantLoss} state={director.Graph?.StateOf(chain.InstantLoss)}, ended={director.Result != null}");
+        ctx.Check(thrown == null,
+            $"the episode, the aircraft and the director step through the capture and {HoldSeconds:0} s past it with no exception ({thrown?.GetType().Name ?? "none"}: {thrown?.Message ?? ""})");
+        ctx.Check(swappedAt >= 0f && after != null && !ReferenceEquals(after, before),
+            $"the hosted capture swaps the player's rig at {swappedAt:0.00} s");
+        ctx.Check(handoffAt > swappedAt,
+            $"and the episode hands off after the swap, at {handoffAt:0.00} s");
+        if (after == null || handoffAt < 0f)
         {
             return null;
         }
 
-        ctx.Check(result.Hidden != null && result.Hidden.Inert,
-            $"and hides '{CaptureRoot}', the aircraft the player took");
-        int? live = director.GroupLiveCount(BomberGroup);
-        report.AppendLine($"swapped: player group={after.Group?.ToString() ?? "-"}, group {BomberGroup} counts {live?.ToString() ?? "-"}, " +
-            $"wingman leader={(wingman.Pilot?.Escort?.Leader is { } l ? (ReferenceEquals(l, after) ? "new rig" : ReferenceEquals(l, before) ? "OLD rig" : "other") : "none")}");
+        ctx.Check(parkedCounted && parkedFor > 1f,
+            $"the wing walk's 913 parks '{CaptureRoot}' for a measurable stretch ({parkedFor:0.00} s) before the swap hides it");
+        ctx.Same(1, parkedCounted ? minLiveParked : -1,
+            $"and group {BomberGroup} counts the parked bomber the whole time, the way the original's DEDG walk reads a held vehicle");
+        ctx.Check(captured.Inert && !captured.Parked,
+            $"'{CaptureRoot}', the aircraft the player took, ends hidden and no longer parked, so the reveal did not put it back");
         ctx.Same(BomberGroup, after.Group ?? -1,
             $"the rebuilt rig carries group {BomberGroup}, the captured bomber's own (the +0x388 copy)");
-        ctx.Same(1, live ?? -1,
-            $"so group {BomberGroup} still counts one: the hidden bomber is gone and the player stands in for it");
+        ctx.Same(1, minLive,
+            $"group {BomberGroup} never reads below one from the trigger to {HoldSeconds:0} s past the handoff");
+        ctx.Same(1, liveAtEnd ?? -1,
+            $"and counts one at the end: the hidden bomber is gone and the player stands in for it");
         ctx.Check(wingman.Pilot?.Escort is { } escort && ReferenceEquals(escort.Leader, after),
-            $"'{AirframeHandover.WingmanName}' now escorts the rebuilt rig rather than the freed one");
+            $"'{AirframeHandover.WingmanName}' escorts the rebuilt rig rather than the freed one");
+        ctx.Check(wingman.InPlay,
+            $"and is in play, flying the aeroplane the player left");
+        ctx.Check(director.Graph?.CompletedOf(chain.WipedOut) == false,
+            $"OBJECTIVE{chain.WipedOut} stays incomplete from the trigger to {HoldSeconds:0} s past the handoff, so no instant loss is napped awake");
+        ctx.Check(director.Result == null, $"and the mission is still running");
         return after;
     }
 
-    // Five seconds of the swapped state: the wingman flies its escort on the new leader with no
-    // exception, the group holds at one, and the wiped-out objective stays incomplete, so the
-    // instant loss it would nap awake never wakes.
-    private static void Hold(TestContext ctx, CampaignDirector director, Chain chain, PlayerRig rig,
-        FlightController wingman, StringBuilder report)
+    // Every definition the capture can reach, its own plus the CALL_ANIMATION closure: what the
+    // session's own host answers for, and the only way the called wing walk's codes are hosted.
+    private static IReadOnlyList<string> ClosureOf(TestWorld world, string anim)
     {
-        Exception? thrown = null;
-        int steps = (int)(HoldSeconds / StepDt);
-        for (int i = 0; i < steps && thrown == null; i++)
+        var names = new List<string>();
+        foreach (var def in world.Session.Program.Subset(new[] { anim }).Defs)
         {
-            try
+            if (def.AnimName is { } name && !names.Contains(name))
             {
-                rig.Controller?.SimStep(StepDt);
-                wingman.SimStep(StepDt);
-                director.Step(StepDt);
-            }
-            catch (Exception e)
-            {
-                thrown = e;
+                names.Add(name);
             }
         }
 
-        int? live = director.GroupLiveCount(BomberGroup);
-        report.AppendLine($"held {HoldSeconds:0} s: exception={(thrown == null ? "none" : thrown.GetType().Name)}, " +
-            $"group {BomberGroup} counts {live?.ToString() ?? "-"}, OBJECTIVE{chain.WipedOut} complete={director.Graph?.CompletedOf(chain.WipedOut)}, " +
-            $"OBJECTIVE{chain.InstantLoss} state={director.Graph?.StateOf(chain.InstantLoss)}, ended={director.Result != null}");
-        ctx.Check(thrown == null,
-            $"the wingman and the director step {HoldSeconds:0} s past the swap with no exception ({thrown?.GetType().Name ?? "none"}: {thrown?.Message ?? ""})");
-        ctx.Check(wingman.InPlay,
-            $"'{AirframeHandover.WingmanName}' is in play, flying the aeroplane the player left");
-        ctx.Same(1, live ?? -1, $"group {BomberGroup} still counts one after {HoldSeconds:0} s");
-        ctx.Check(director.Graph?.CompletedOf(chain.WipedOut) == false,
-            $"OBJECTIVE{chain.WipedOut} stays incomplete, so the {HoldSeconds:0} s window raises no instant loss");
-        ctx.Check(director.Result == null, $"and the mission is still running");
+        return names;
     }
 
     // The player's death in the new rig still reaches the director: the hook moved with the swap.

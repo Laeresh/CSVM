@@ -800,8 +800,10 @@ and napping the instant loss once the player is flying the last bomber. `Session
 19.25 s motion with **913 then 914**: the captured aircraft is parked by 913, hidden by 967 while it
 is already parked, and then handed back by 914 at the end of the wing walk. The original keeps the
 two apart, since 913/914 drive the vehicle's hold flag and scene node while 967's
-`FUN_004b0f40(1)` sets the vehicle's own hidden bit `+0x945`; CSVM carries both on one `Inert` flag,
-so `CutsceneController` drops whatever the swap hid out of its parked list instead. Measured on
+`FUN_004b0f40(1)` sets the vehicle's own hidden bit `+0x945` and its dead byte `+0x91d`; CSVM
+carries the presence half of both on one `Inert` flag, with `Parked` beside it for the hold flag
+(`+0x354`, which `FUN_0041f250` sets and the DEDG walk never reads), so `CutsceneController` drops
+whatever the swap hid out of its parked list and clears its `Parked` instead. Measured on
 CM02's own definition, played through the runtime: without that drop the Balmoral comes back
 **19.25 s** after the swap, which is the aeroplane sitting in front of the player at the cut back to
 flight.

@@ -141,6 +141,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 51. ☑ `BL-599`: the Promised Land no longer burns out (regression from B14); the compiled prerequisite state is bit 0 of active_raw
 52. ☑ `BL-602`: CM13's first zone marker sits at the world origin; an origin-standing group site anchors on its built meshes, the race chain pinned
 53. ☑ `BL-601`: CM13's racers ram the hangar on dzpath2; an AI rig sweeps its def's one collision probe, as the original does
+54. ☑ `BL-604`: CM02 is still lost during the capture, before the swap: the wing walk's 913 park counted as a deactivation for DEDG
 
 ## Dependency and parallelism notes
 
@@ -1425,9 +1426,9 @@ the user flies CM02 and captures the last bomber.
 
 **⚠ Traps.** Count the human rig by `Crashed`, never `Inert` or `InPlay`: the rig is inert under
 the capture cutscene and a walk that dropped it there would complete `DEDG [5, 0]` on the frame
-the hold lifts. The group carry is 967's alone; 966 reads no captured vehicle. The suite runs
-`RunSwap` directly rather than through the cutscene host, so the player is never held inert in
-it; the flown path is where that state is exercised (`campaign-airframe-swap`).
+the hold lifts. The group carry is 967's alone; 966 reads no captured vehicle. The suite now runs
+the capture through the cutscene host (F54), so the held state is exercised headless as well as
+on the flown path.
 
 ## F43 ☑ `BL-590`: the Barracuda teleports between its surfacing and its drive
 
@@ -1595,3 +1596,19 @@ it; the flown path is where that state is exercised (`campaign-airframe-swap`).
 **Verified.** On the merged plan tree, the full gate: build clean, 2554 unit tests, 174 engine suites in four shards with the error census clean, 16 goldens with `c1-destroy-effects` re-pinned (769 pixels, the radio tower's fireball riding its death site, F46). Two cross-item interactions the per-agent suites could not see were fixed on the merged tree before this run: the flare's symbol claim against F48's parked figure (F49's companion commit) and the climb-out suite's leaked second launch taking `roster-spawn-names`' spawn name (F47's suite).
 
 **⚠ Traps.** The human rig still sweeps the mesh hull where the original sweeps its six probes; a player stunt through a slot the six points clear and the hull does not would differ (`BL-603`). C1's cached scenery stood inside C2/M03's airspace when `ai-wreck-fall` ran first in the shard; the harness eviction is what keeps `campaign-racers` order-independent.
+
+## F54 ☑ `BL-604`: CM02 is still lost during the capture, before the swap
+
+**Goal.** The last bomber of group 5 keeps counting for `DEDG [5, 0]` while the capture cutscene parks it, so `OBJECTIVE22` never completes and `OBJECTIVE25` (INSTANTLOSS) is never napped awake.
+
+**Evidence (confidence: decoded).** At the controls after F42, CM02 still aborts: the sortie log shows `objective 22 completed` and `objective 25 napped by 22 for 20s` about 19 s before the `airframe swap` lines, during the wing walk, with `britbalmoral_1` alive. The walk's code 913 sets `Inert` on every AI aircraft and `GroupLiveCount` excluded inert roster rigs. Decode: `FUN_00465850` counts a vehicle iff `+0x91d == 0` and `+0x388 == group`; `FUN_004b0f40(1)` (deactivate, and 967's hide) sets `+0x91d`; code 913's `FUN_0041f250` sets the hold flag `+0x354` and deactivates the scene node but never touches `+0x91d`, and `FUN_0041f2e0` (914) is its inverse, so the original counts a parked vehicle and not a deactivated one.
+
+**Approach.** `AircraftLifecycle.Parked` beside `Inert`, and `Deactivated => Inert && !Parked` (the dead byte). `CutsceneController.ParkAi`/`RevealAi` set and clear `Parked`; `Swap` clears it on the aircraft 967 hid. `CampaignDirector.GroupLiveCount` and the TRAVELERS group form read `Deactivated`, never `Inert`.
+
+**Model recommendation.** A single session; the decode was three functions.
+
+**Verify.** `campaign-capture-group` now plays `ww_balmoral1` through the cutscene host from the approach row's trigger (`Own` and `PlayMissionTrigger`, realtime clock, marker grafts) and samples group 5 every step to 20 s past the handoff: parked 19.22 s, min 1 throughout and while parked, `OBJECTIVE22` incomplete, `OBJECTIVE25` dormant, swap at 19.22 s, handoff 19.25 s, death ends Lost; with the old `Inert` read the same suite fails (min 0, mission ended). `AircraftLifecycleTests` (4 facts). Foreground: build clean, `dotnet test` 2558, eight campaign and landing suites PASS.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** `Inert` is presence; `Deactivated` is the mission's dead byte. Any new objective or tally walk reads `Deactivated`. The park is set before `Inert` so an `InertChanged` listener reads a consistent pair. The hidden captured aircraft leaves both the parked list and `Parked`, or the player and the bomber count twice.

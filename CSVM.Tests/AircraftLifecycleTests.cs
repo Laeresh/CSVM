@@ -261,6 +261,53 @@ public class AircraftLifecycleTests
         Assert.False(life.InPlay);
     }
 
+    // ---- Parked: inert under a cutscene, still in the mission ----------------------------------
+
+    [Fact]
+    public void InertWithoutAParkIsDeactivated()
+    {
+        var life = new AircraftLifecycle();
+        life.SetInert(true);
+
+        Assert.True(life.Deactivated);
+        Assert.False(life.Parked);
+    }
+
+    [Fact]
+    public void ParkedInertIsOutOfPlayButNotDeactivated()
+    {
+        var life = new AircraftLifecycle();
+        life.SetParked(true);
+        life.SetInert(true);
+
+        Assert.True(life.Inert);
+        Assert.False(life.InPlay);
+        Assert.True(life.Parked);
+        Assert.False(life.Deactivated);
+    }
+
+    [Fact]
+    public void ClearingTheParkWhileStillInertDeactivates()
+    {
+        var life = new AircraftLifecycle();
+        life.SetParked(true);
+        life.SetInert(true);
+
+        life.SetParked(false);
+
+        Assert.True(life.Inert);
+        Assert.True(life.Deactivated);
+    }
+
+    [Fact]
+    public void ALiveAircraftIsNeverDeactivated()
+    {
+        var life = new AircraftLifecycle();
+
+        Assert.False(life.Deactivated);
+        Assert.True(life.InPlay);
+    }
+
     // ---- Spawn-timer arm, including the carrier-drop variant ------------------------------------
 
     [Fact]

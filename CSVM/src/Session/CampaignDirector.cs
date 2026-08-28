@@ -766,8 +766,8 @@ public sealed class CampaignDirector
         public int? GroupLiveCount(int group, string? generator)
         {
             // Null while no roster is spawned keeps every DEDG false rather than reading an empty
-            // world as "the group is wiped out", which would win a mission on its first tick. A
-            // deactivated member is dead to DEDG (docs/formats/objectives.md, the DEDG row).
+            // world as "the group is wiped out", which would win a mission on its first tick.
+            // Deactivated, never Inert: a cutscene-parked member still counts (the DEDG row).
             if (_owner._roster.Count == 0 && _owner._vessels.Count == 0)
             {
                 _owner.Gap("DEDG", $"group {group} has no spawned aiv roster to count");
@@ -780,7 +780,7 @@ public sealed class CampaignDirector
                 {
                     continue;
                 }
-                if (_owner._roster.TryGetValue(name, out var rig) && !rig.Crashed && !rig.Inert)
+                if (_owner._roster.TryGetValue(name, out var rig) && !rig.Crashed && !rig.Deactivated)
                 {
                     alive++;
                 }
@@ -814,9 +814,9 @@ public sealed class CampaignDirector
                 return null;
             }
 
-            // The group form: count live, non-inert members of the named aiv roster group inside
-            // the radius, the same roster walk GroupLiveCount uses for DEDG. Null (not yet
-            // decidable) while no roster is spawned, so an empty world never wins the tally early.
+            // The group form: count the named aiv roster group's non-deactivated members (a parked
+            // one counts) inside the radius, the roster walk GroupLiveCount uses for DEDG. Null
+            // (not yet decidable) while no roster is spawned, so an empty world never wins early.
             if (spec.Group is { } group)
             {
                 if (_owner._rosterPlans.Count == 0)
@@ -833,7 +833,7 @@ public sealed class CampaignDirector
                         continue;
                     }
                     Vector3 where;
-                    if (_owner._roster.TryGetValue(name, out var rig) && !rig.Inert)
+                    if (_owner._roster.TryGetValue(name, out var rig) && !rig.Deactivated)
                     {
                         where = rig.WorldPosition;
                     }

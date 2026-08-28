@@ -5416,7 +5416,9 @@ members of the named group inside or outside the radius against `spec.Count`, th
 `WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
 (`AiGeneratorRuntime.GrantWaveCapacity`), `DEDG` over the spawned roster plus the human rig when
 its `FlightController.Group` is the counted group (a 967 capture swap stamps it; a crashed rig
-drops out, an inert one does not, since a human rig is inert under a cutscene), `WAKE_ANIM` (`AnimRuntime.PlayMissionTrigger`, so the
+drops out, an inert one does not, since a human rig is inert under a cutscene; a roster rig counts
+unless `FlightController.Deactivated`, which is inert with no cutscene park behind it, so the
+wing walk's 913 park keeps the captured bomber counted until 967 hides it), `WAKE_ANIM` (`AnimRuntime.PlayMissionTrigger`, so the
 woken definition may stage library roots), both sound-group directives through
 `MissionRadio`, falling through to `WorldSounds.PlayOneShot` for a cue the radio does not own,
 `STOP_QUEUED_SOUNDS` through `MissionRadio.Cancel`, `START_TAXI` through the director's own
@@ -5561,7 +5563,8 @@ re-asserted), 11 the player out of flight (`Held` + `Inert` + engine audio pause
 staged `player` marker through `FlightController.StageAt` while that state holds, asserted in that
 same instant rather than on the next tick, because the definition raising the code goes on posing
 the aircraft in the same dispatch), 913/914 park and
-reveal the AI (only what this controller parked comes back), 666/667 the camera-parameter gate
+reveal the AI (`Inert` plus `Parked`, the hold flag the original sets instead of its dead byte, so
+an objective walk still counts a parked aircraft; only what this controller parked comes back), 666/667 the camera-parameter gate
 (tracked, not acted on — this engine applies that profile once per rig and never on a view change),
 1/10 the handoff and the in-flight systems; 951 the re-placement, which reads the staged `player`
 marker's world pose and moves the hand-back target through `FlightController.ResumeAt`, so a

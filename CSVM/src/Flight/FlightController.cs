@@ -673,6 +673,20 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>Inert under a cutscene's AI park (code 913) rather than deactivated: the aircraft is
+    /// still in the mission, so an objective walk counts it. The cutscene host sets it beside
+    /// <see cref="Inert"/> and clears it at the reveal, or when a swap hides the aircraft.</summary>
+    public bool Parked
+    {
+        get => _lifecycle.Parked;
+        set => _lifecycle.SetParked(value);
+    }
+
+    /// <summary>Out of the mission the way the original's dead byte reads: inert with no cutscene
+    /// park behind it. ⚠ DEDG and TRAVELERS count by this, never by <see cref="Inert"/>, or the
+    /// wing-walk capture wipes the parked bomber's group out mid-cutscene.</summary>
+    public bool Deactivated => _lifecycle.Deactivated;
+
     /// <summary>Whether this aircraft is present in the session as a real object: neither crashed
     /// nor <see cref="Inert"/>. The single "is it there" test every roster reads — the aim assist's
     /// vehicle/turret candidate lists, the projectile pool's proximity fuse and blast pass, the D12

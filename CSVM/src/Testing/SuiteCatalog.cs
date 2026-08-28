@@ -1379,14 +1379,17 @@ public static class SuiteCatalog
             + "no entry allowed to start above the bottom of the one before it or to run past the "
             + "parchment's authored 240 px box",
             CampaignBriefingNote));
-        // The CM02 capture lost the mission 20 s after the swap: the taken bomber went inert, its
-        // group read empty, and the wiped-out DEDG napped the instant loss awake.
+        // The CM02 capture lost the mission 20 s into the wing walk: the cutscene's 913 parked the
+        // last bomber inert, its group read empty, and the wiped-out DEDG napped the instant loss
+        // awake. The original's park sets a hold flag, never the dead byte DEDG reads.
         into.Add(new TestHarness.Suite("campaign-capture-group",
-            "CM02's 967 capture over C3/M05's own roster and objective graph: two bombers down "
-            + "through the debug kill complete the at-most-one DEDG and not the at-zero one, the "
-            + "swap on britbalmoral_1 hides that bomber, stamps its group on the rebuilt rig and "
-            + "re-points wingman_4's escort onto it, the group still counts one and the at-zero "
-            + "DEDG stays incomplete over 5 s of stepping with no exception, and the rebuilt rig's "
+            "CM02's capture over C3/M05's own roster and objective graph, played through the "
+            + "cutscene host from the approach row's trigger: two bombers down through the debug "
+            + "kill complete the at-most-one DEDG and not the at-zero one, the wing walk's 913 "
+            + "parks britbalmoral_1 and the group goes on counting it, the 967 swap hides that "
+            + "bomber, stamps its group on the rebuilt rig and re-points wingman_4's escort onto "
+            + "it, the group never reads below one from the trigger to 20 s past the handoff with "
+            + "the at-zero DEDG incomplete throughout and no exception, and the rebuilt rig's "
             + "death still ends the mission lost",
             CaptureGroupSuites.CaptureGroup));
         into.Add(new TestHarness.Suite("airframe-hull-coverage",

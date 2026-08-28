@@ -636,6 +636,9 @@ public sealed partial class CutsceneController : Node
         if (swapped.Hidden is { } hidden)
         {
             _parked.Remove(hidden);
+            // The hide is the original's deactivate (its dead byte set), so the park no longer
+            // stands behind the inert flag: the player now counts for that aircraft's group.
+            hidden.Parked = false;
         }
 
         StageFlownAirframe();
@@ -708,6 +711,10 @@ public sealed partial class CutsceneController : Node
         {
             if (!ai.Inert)
             {
+                // Parked before inert, so a listener on the inert flip already reads the park:
+                // the original's 913 sets the hold flag and never the dead byte, and the DEDG
+                // walk keeps counting a parked vehicle (docs/formats/objectives.md).
+                ai.Parked = true;
                 ai.Inert = true;
                 _parked.Add(ai);
             }
@@ -721,6 +728,7 @@ public sealed partial class CutsceneController : Node
         foreach (var ai in _parked)
         {
             ai.Inert = false;
+            ai.Parked = false;
         }
 
         _parked.Clear();
