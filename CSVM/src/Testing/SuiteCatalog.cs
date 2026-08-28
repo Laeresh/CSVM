@@ -212,6 +212,7 @@ public static class SuiteCatalog
         "menu-screenshot-key",
         "perf-hud-layout",
         "campaign-briefing-note",
+        "campaign-capture-group",
         "airframe-hull-coverage",
     };
 
@@ -1296,6 +1297,16 @@ public static class SuiteCatalog
             + "no entry allowed to start above the bottom of the one before it or to run past the "
             + "parchment's authored 240 px box",
             CampaignBriefingNote));
+        // The CM02 capture lost the mission 20 s after the swap: the taken bomber went inert, its
+        // group read empty, and the wiped-out DEDG napped the instant loss awake.
+        into.Add(new TestHarness.Suite("campaign-capture-group",
+            "CM02's 967 capture over C3/M05's own roster and objective graph: two bombers down "
+            + "through the debug kill complete the at-most-one DEDG and not the at-zero one, the "
+            + "swap on britbalmoral_1 hides that bomber, stamps its group on the rebuilt rig and "
+            + "re-points wingman_4's escort onto it, the group still counts one and the at-zero "
+            + "DEDG stays incomplete over 5 s of stepping with no exception, and the rebuilt rig's "
+            + "death still ends the mission lost",
+            CaptureGroupSuites.CaptureGroup));
         into.Add(new TestHarness.Suite("airframe-hull-coverage",
             "every player airframe's collision hulls measured against its own mesh: each hull "
             + "inside the box it replaces, the whole silhouette's triangle area covered by some hull "

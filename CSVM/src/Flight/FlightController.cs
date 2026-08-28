@@ -550,6 +550,13 @@ public partial class FlightController : Node3D
         set => _team = value;
     }
 
+    /// <summary>The roster cohort this aircraft is counted in (the <c>aiv</c> block's <c>group</c>,
+    /// the original's vehicle <c>+0x388</c>), or null for an aircraft no group counts: a free-flight
+    /// or wave spawn, and a human rig until a 967 capture swap hands it the captured aircraft's.
+    /// A mission's <c>DEDG</c> walk reads it off the human rig alone; the AI members are counted
+    /// off their roster plans.</summary>
+    public int? Group { get; set; }
+
     /// <summary>The weapon lab's hold: the airframe holds its pose while everything else in the
     /// session keeps running (props, guns, rounds, world sim). ⚠ NOT the P halt
     /// (<see cref="GameClock.Halted"/>), which stops the whole clock. Clearing it un-pins the

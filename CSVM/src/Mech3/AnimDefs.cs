@@ -139,12 +139,15 @@ public static class AnimDefs
                                     def.PrereqMinToSatisfy = (int)(FirstNumber(v) ?? 0f);
                                 else if (k.Equals("ANIMATION_LIST", StringComparison.OrdinalIgnoreCase)
                                     && v != null)
+                                {
                                     foreach (var entry in v)
                                         if (entry is string anim)
                                             def.PrereqAnims.Add(anim);
+                                }
                                 else if (v != null
                                     && (k.Equals("OBJECT_ACTIVE_LIST", StringComparison.OrdinalIgnoreCase)
                                         || k.Equals("OBJECT_INACTIVE_LIST", StringComparison.OrdinalIgnoreCase)))
+                                {
                                     foreach (var listed in v)
                                         if (listed is List<object?> pathList)
                                         {
@@ -157,6 +160,7 @@ public static class AnimDefs
                                                     k.Equals("OBJECT_ACTIVE_LIST", StringComparison.OrdinalIgnoreCase),
                                                     required));
                                         }
+                                }
                             }
                         }
                     break;

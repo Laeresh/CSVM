@@ -3302,6 +3302,9 @@ returns the text block's lines as a list rather than one concatenated string. `D
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input → FlightModel → transform (or, for an AI pilot publishing a
 `RailPose`, the danger-zone ribbon's pose in place of the model step, the sweep still run), weapon fire as
+`FireControl`'s engine adapter. `Group` is the roster cohort (the `aiv` block's `group`, the
+original's `+0x388`), null outside a campaign roster spawn until a 967 capture swap stamps the
+captured aircraft's on the human rig; `CampaignDirector`'s `DEDG` walk reads it. Weapon fire as
 `FireControl`'s engine adapter (polls the held triggers, `Step`s the machine each sim tick,
 performs the `FireOutcome`: muzzle-transform spawns, gun-loop start/stop, dry cues, breadcrumb
 logs), crash and respawn. The pilot HUD is `FlightHud`'s (see that entry): this node holds the
@@ -5345,7 +5348,9 @@ Which directives reach the engine today: `INACTIVEn` (node visibility, the decod
 members of the named group inside or outside the radius against `spec.Count`, the decoded
 `FUN_00465b40` shape `docs/formats/objectives.md` already carried), `WAKEUP_TURRETS` /
 `WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
-(`AiGeneratorRuntime.GrantWaveCapacity`), `WAKE_ANIM` (`AnimRuntime.PlayMissionTrigger`, so the
+(`AiGeneratorRuntime.GrantWaveCapacity`), `DEDG` over the spawned roster plus the human rig when
+its `FlightController.Group` is the counted group (a 967 capture swap stamps it; a crashed rig
+drops out, an inert one does not, since a human rig is inert under a cutscene), `WAKE_ANIM` (`AnimRuntime.PlayMissionTrigger`, so the
 woken definition may stage library roots), both sound-group directives through
 `MissionRadio`, falling through to `WorldSounds.PlayOneShot` for a cue the radio does not own,
 `STOP_QUEUED_SOUNDS` through `MissionRadio.Cancel`, `START_TAXI` through the director's own
@@ -5382,6 +5387,10 @@ generator's launch (`CommandedVessel`, through the runtime), and `DEDG` and the 
 `TRAVELERS` count a woken, undestroyed hull as a live member of its group.
 `HoldForCutscene(bool)` is callback 20's objectives half: a held director advances no dormancy
 timer or reminder fuse while a cutscene owns the session (`Session/CutsceneController.cs`).
+The player's `Downed` (the lost ending) and `DamageApplied` (the music ping) hooks are subscribed
+on the aircraft `WorldInputs.PlayerAircraft` answers and re-subscribed whenever it answers a
+different one: an airframe swap rebuilds the rig, and a death in the new one has to end the
+mission too. `BuildRoster` also stamps each spawned rig's `FlightController.Group` from its plan.
 The player's own death is the graph's fourth ending, in the original's two stages: the aircraft's
 `Downed` report closes the graph's gate, and the wreck no longer falling ends the mission.
 `EndsOnPlayerDeath` (false under `--no-crash-loss`) is the only switch; `GameSession` is its writer.
@@ -5733,6 +5742,12 @@ the cutscene that raised the code may be holding that aircraft too. A code carry
 the stock fit, so the injector and the template's guns, pylons and armour land on the replacement,
 and one carrying a `LiveryDef` wears that def's authored scheme. The livery carry is undecoded in
 the executable; decode and the deliberate divergences: `docs/formats/anim-definitions/cutscenes.md`.
+Two more things `RunSwap` does, both the original's: every AI pilot holding the outgoing aircraft
+as its escort leader or its standing quarry is re-pointed onto the replacement (`RepointHolders`,
+the rebuild's `TargetVehicle` walk; the outgoing node is freed, so a holder left on it steers on
+a disposed object), and a 967 whose capture root resolved stamps the captured aircraft's
+`FlightController.Group` on the replacement (`AirframeHandover.CarriesCapturedGroup`, the
+`+0x388` copy), so `CampaignDirector`'s `DEDG` walk counts the player as the bomber they took.
 
 ## src/Session/FlightRosterInputs.cs
 The grouped construction facts accepted by `FlightRoster`: copied `FlightRosterPolicy`, immutable

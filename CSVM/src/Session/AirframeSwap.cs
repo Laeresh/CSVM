@@ -88,9 +88,9 @@ public static class AirframeSwapCodes
 }
 
 /// <summary>
-/// The two things codes 966 and 967 do past rebuilding the player's rig: the capture animation's
-/// own aircraft hands its damage to the new hull (967 alone), and the aeroplane the player just
-/// left goes to <c>wingman_4</c>.
+/// The things codes 966 and 967 do past rebuilding the player's rig: the capture animation's
+/// own aircraft hands its damage and its roster group to the new hull (967 alone), and the
+/// aeroplane the player just left goes to <c>wingman_4</c>.
 /// ⚠ Neither behaviour is asked for by anything in the shipped data. Both are keyed on chapter
 /// and mission strings inside the executable, so a search of the data for a trigger comes back
 /// empty and that emptiness is NOT evidence they do not exist. Decode:
@@ -141,6 +141,13 @@ public static class AirframeHandover
     /// <summary>Whether this code carries the captured aircraft's damage into the new hull and
     /// hides that aircraft.</summary>
     public static bool CarriesCapturedDamage(AirframeSwapCode airframe) =>
+        airframe.Code == CaptureCode;
+
+    /// <summary>Whether this code also makes the player a member of the captured aircraft's
+    /// roster group (the <c>+0x388</c> copy, 967 alone: 966 has no captured vehicle to read). The
+    /// player then stands in for the aircraft they took, so a <c>DEDG</c> over that group counts
+    /// one live member for as long as the player flies it.</summary>
+    public static bool CarriesCapturedGroup(AirframeSwapCode airframe) =>
         airframe.Code == CaptureCode;
 
     /// <summary>Where the outgoing aeroplane is put, and the point its nose is put on: 100 m along

@@ -712,10 +712,17 @@ Each case does the same five things, in this order.
 **CSVM implements all five steps.** The rig is rebuilt through the flight roster's own assembler on
 the named airframe, at the pose, heading, throttle and speed the outgoing aircraft held, with that
 airframe's stock fit at full ammunition and its own armour pools; the cutscene flags land on the
-aircraft the swap built. `Session/AirframeSwap.cs`'s `AirframeHandover` carries the mission gate,
-the 100 m / −45° placement and the capture test; `FlightRoster.RunSwap` runs the whole order, and
-the definition's root node reaches it through `AnimRuntime.CallbackHost`. Four divergences, each
-deliberate:
+aircraft the swap built. Step 2's re-point walk is `FlightRoster.RepointHolders`: every AI pilot
+whose escort leader or standing quarry was the outgoing aircraft holds the replacement (CSVM has
+no global target list; those two fields are where an AI holds a vehicle), and the campaign
+director re-subscribes its death and damage hooks on the rebuilt rig. 967's `+0x388` copy is
+`FlightController.Group`, stamped from the captured aircraft's roster plan onto the replacement
+(`AirframeHandover.CarriesCapturedGroup`), and the `DEDG` walk counts a human rig carrying the
+counted group as one live member, which is what keeps `C3/M05`'s `DEDG [5, 0]` from completing
+and napping the instant loss once the player is flying the last bomber. `Session/AirframeSwap.cs`'s
+`AirframeHandover` carries the mission gate, the 100 m / −45° placement and the capture test;
+`FlightRoster.RunSwap` runs the whole order, and the definition's root node reaches it through
+`AnimRuntime.CallbackHost`. Three divergences, each deliberate:
 
 - **The airframe and livery are decided at the roster spawn, not at the swap.** The original writes
   them at mission start and so does CSVM (`CampaignRosterPlan.Build`'s `handover` argument), which
@@ -726,7 +733,6 @@ deliberate:
   one airframe's pools as a zone sum on a human rig and as the AI def's authored pair on an AI one
   (`docs/org/vehicleDamage.md`), so an undamaged hand-over lands at the receiver's full pools rather
   than at the player's larger number.
-- **`+0x388` is not copied.** CSVM's `wingman_4` is already on the player's team.
 - **967's rebuild carries the captured aircraft's own `PaintScheme` onto the player's new hull**
   (`BL-543`, `BL-554`). This is NOT in the executable: case 967 (`FUN_0047e080`, `0x3c7`) rebuilds
   through `FUN_0047fd50(s_pbalmoral, s_player_balmoral)`, which reads no paint field off the

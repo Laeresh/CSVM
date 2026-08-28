@@ -127,6 +127,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 41. ☑ `BL-585`: AI planes never lock onto a `dzpath` and fly it on rails, so the CM13 racers skip the danger zones
 
+### Wave F — the CM02 capture (found on D31's way in)
+
+42. ☑ `BL-588`: CM02 is lost 20 s after the player captures the last bomber, because the swap leaves group 5 empty and every holder of the old rig dangling
+
 ## Dependency and parallelism notes
 
 A5 is upstream of A4, A6 and C21 in one respect only: it settles what `rnd_xz` and `ObjectMotion`
@@ -1354,3 +1358,60 @@ the decode replaces it). Do not use polygon index to find the route ribbon; clas
 material (`docs/formats/missions.md`). The splitscreen race countdown `BL-314` is a different
 "on rails" and stays separate. `BL-523` (the patrol/pursue cycle) is out of this plan and must
 not be pulled in through the shared mode machine.
+
+# Wave F — the CM02 capture (found on D31's way in)
+
+## F42 ☑ `BL-588`: CM02 is lost 20 s after the player captures the last bomber
+
+**Goal.** Capturing the last live bomber of group 5 through the 967 wing-walk swap leaves the
+mission running: the player now flies that bomber and counts for it, the wingman escorting the
+player follows the rebuilt rig, and a death in the rebuilt rig still ends the mission.
+
+**Evidence (confidence: traced).** At the controls (main and the plan branch alike) CM02 (C3/M05)
+is lost about 20 s after the capture. The chain: `OBJECTIVE20` (`DEDG [5, 1]`, the dormant
+primary; `OBJECTIVE63` reads the same awake) then the capture;
+`FlightRoster.CarryCapturedDamage` sets the captured `britbalmoral_1` `Inert`; `GroupLiveCount`
+walks the roster alone and excludes inert and crashed rigs, so group 5 reads 0; `OBJECTIVE22`
+(`DEDG [5, 0]`) completes and naps `OBJECTIVE25` (INSTANTLOSS) 20 s. The decode
+(`cutscenes.md`, "The airframe swap codes 965, 966 and 967"): case `0x3c7` of `FUN_0047e080`
+copies the captured vehicle's `+0x388` (the roster group) onto the player after the hull
+scaling, and `FUN_0047fd50` walks the global target list (`DAT_0071dabc`) after the rebuild and
+re-points every `TargetVehicle` in the `+0x948` and `+0x2fc` slots that held the old player
+object onto the new one. Case `0x3c6` (966) does neither the copy nor the hide. CSVM did neither:
+the player's rig carried no group, and after the swap `wingman_4` (`escorts 'player'`) kept its
+`AiEscort.Leader` on the freed controller (`ObjectDisposedException` in `AiPilot.FlyEscort` every
+physics frame) while `CampaignDirector.WirePlayerDeath` kept its `Downed` hook on the old rig.
+
+**Approach.** `FlightController.Group` (the cohort, null outside a roster spawn);
+`CampaignDirector.BuildRoster` stamps it from the plan; `FlightRoster.RunSwap` stamps the captured
+rig's group on the replacement for a code where `AirframeHandover.CarriesCapturedGroup` holds
+(967 alone) and runs `RepointHolders` over every AI pilot's `Escort.Leader` and `Gunner.Target`;
+`GroupLiveCount` counts the human rig carrying the group while it is not crashed (inert is a
+cutscene state on a human rig, not a deactivation); the director's death and damage hooks are
+subscribed by controller identity and re-subscribed when `PlayerAircraft` answers a different
+one. Other holders checked: `TargetHud._hostile` and `TargetSelection` belong to the human HUD
+freed with the old rig, `InstantActionDirector._ace` is never the player, `CutsceneController`
+reads `rig.Controller` fresh, and the aim-assist candidate lists are rebuilt each frame.
+
+**Model recommendation.** A single session: the decode was two functions, the port four files.
+
+**Verify.** Suite `campaign-capture-group` over C3/M05's own roster and graph: two bombers down
+through the debug kill, group 5 reads 1 and the awake `OBJECTIVE63` completes with `OBJECTIVE22`
+incomplete;
+the swap on `britbalmoral_1` hides it, the rebuilt rig carries group 5 and `wingman_4` escorts
+it; 5 s of stepping the wingman, the rig and the director throws nothing, group 5 still reads 1,
+`OBJECTIVE22` stays incomplete and `OBJECTIVE25` dormant; the rebuilt rig's death ends the
+mission lost at 0.02 s. `AirframeSwapTests` (2 facts) pins the group carry to 967. Foreground:
+`dotnet test` 2543/2543; `campaign-airframe-swap`, `landings-hookup-airframe`,
+`campaign-wingwalk-camera`, `landings-wingwalk-gate`, `campaign-hangar-handover`,
+`campaign-objectives`, `campaign-roster`, `campaign-player-death`, `campaign-squad-wakeup`,
+`campaign-surface-vehicles`, `campaign-capture-group` all PASS, engine errors clean. Still owed:
+the user flies CM02 and captures the last bomber.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** Count the human rig by `Crashed`, never `Inert` or `InPlay`: the rig is inert under
+the capture cutscene and a walk that dropped it there would complete `DEDG [5, 0]` on the frame
+the hold lifts. The group carry is 967's alone; 966 reads no captured vehicle. The suite runs
+`RunSwap` directly rather than through the cutscene host, so the player is never held inert in
+it; the flown path is where that state is exercised (`campaign-airframe-swap`).

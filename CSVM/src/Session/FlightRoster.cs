@@ -323,9 +323,15 @@ public sealed class FlightRoster
         var build = order.Airframe.AwardAirframe is { } awardAirframe
             ? CampaignProgression.AwardBuild(awardAirframe)
             : null;
-        SwapPlayerAirframe(rig, order.Airframe.PlaneNode, captured?.Scheme ?? livery,
+        var replacement = SwapPlayerAirframe(rig, order.Airframe.PlaneNode, captured?.Scheme ?? livery,
             captured?.ShippedSkins ?? false, build);
+        RepointHolders(outgoing, replacement);
         var hidden = CarryCapturedDamage(captured, rig.Controller?.Damage);
+        if (captured != null && AirframeHandover.CarriesCapturedGroup(order.Airframe))
+        {
+            replacement.Group = captured.Group;
+        }
+
         if (handsOver)
         {
             HandOverOutgoing(leaving, wasAt, wasNose, armorLeft, healthLeft);
@@ -350,6 +356,38 @@ public sealed class FlightRoster
         fresh.ScalePools(armor, health);
         Log.Info("flight", $"airframe swap: '{captured.Name}' hidden, its hull (armour {armor * 100f:0}%, structure {health * 100f:0}%) carried onto the player's");
         return captured;
+    }
+
+    // Step 2's re-point walk: every AI pilot holding the aircraft the player just left, as its
+    // escort leader or its standing quarry, holds the replacement instead. The outgoing node is
+    // freed by the rebuild, so a holder left on it steers on a disposed object every frame.
+    private void RepointHolders(FlightController outgoing, FlightController replacement)
+    {
+        int repointed = 0;
+        foreach (var ai in _ai)
+        {
+            if (ai.Pilot is not { } pilot)
+            {
+                continue;
+            }
+
+            if (pilot.Escort is { } escort && ReferenceEquals(escort.Leader, outgoing))
+            {
+                escort.Leader = replacement;
+                repointed++;
+            }
+
+            if (pilot.Gunner is { } gunner && ReferenceEquals(gunner.Target, outgoing))
+            {
+                gunner.Target = replacement;
+                repointed++;
+            }
+        }
+
+        if (repointed > 0)
+        {
+            Log.Info("flight", $"airframe swap: {repointed} AI reference(s) to the outgoing aircraft re-pointed onto the replacement");
+        }
     }
 
     // The session-wide sinks a human controller takes after assembly rather than during it. One

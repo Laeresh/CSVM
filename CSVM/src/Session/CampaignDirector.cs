@@ -52,12 +52,13 @@ public sealed class CampaignDirector
     private DangerZoneRibbons? _ribbons;
     private bool _cutsceneHold;
 
-    // The proximity scan's accumulator and whether the player's damage event is subscribed yet:
-    // the player's aircraft is built after Attach runs, so the hookup is made on the first step
-    // that finds one.
+    // The proximity scan's accumulator and the player aircraft the damage and death events are
+    // subscribed on: the player's aircraft is built after Attach runs, so the hookup is made on
+    // the first step that finds one, and an airframe swap rebuilds the rig, so a later step that
+    // finds a different aircraft hooks that one (the old node is freed with its subscriptions).
     private float _scanClock;
-    private bool _damageWired;
-    private bool _deathWired;
+    private FlightController? _damageWiredTo;
+    private FlightController? _deathWiredTo;
     private bool _playerLost;
 
     private CampaignDirector(
@@ -272,6 +273,7 @@ public sealed class CampaignDirector
             }
             _roster[spawn.Name] = rig;
             _rosterPlans[spawn.Name] = spawn;
+            rig.Group = spawn.Group;
             // The chapter's own copy of this vehicle is never placed, so anything it authors past
             // the shared airframe is grafted onto the rig here, while the rig is the plane the
             // block named and is already in the tree.
@@ -426,15 +428,17 @@ public sealed class CampaignDirector
     }
 
     // The player's own death, subscribed on the first step that finds an aircraft: the player rig
-    // is built after Attach has run, the same reason the music channel's damage ping waits.
+    // is built after Attach has run, the same reason the music channel's damage ping waits. Read
+    // by identity, not by a flag: a 967 swap rebuilds the rig and a death in the new one has to
+    // end the mission too.
     private void WirePlayerDeath()
     {
-        if (_deathWired || _world?.Player() is not { } player)
+        if (_world?.Player() is not { } player || ReferenceEquals(player, _deathWiredTo))
         {
             return;
         }
 
-        _deathWired = true;
+        _deathWiredTo = player;
         player.Downed += (_, _) => OnPlayerDown();
     }
 
@@ -554,9 +558,9 @@ public sealed class CampaignDirector
             return;
         }
 
-        if (!_damageWired && _world.Player() is { } player)
+        if (_world.Player() is { } player && !ReferenceEquals(player, _damageWiredTo))
         {
-            _damageWired = true;
+            _damageWiredTo = player;
             player.DamageApplied += _ => Music?.NoteCombat();
         }
 
@@ -784,6 +788,14 @@ public sealed class CampaignDirector
                 {
                     alive++;
                 }
+            }
+
+            // The human rig after a 967 capture carries the captured aircraft's group and stands
+            // in for it, or CM02's wiped-out DEDG would nap the instant loss. Crashed alone, not
+            // Inert: a human rig is inert under a cutscene, which is not a deactivation.
+            if (Player() is { Group: { } playerGroup } player && playerGroup == group && !player.Crashed)
+            {
+                alive++;
             }
             if (generator != null)
             {
