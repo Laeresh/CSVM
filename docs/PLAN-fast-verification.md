@@ -370,7 +370,10 @@ overrunning case). No numeric tolerance was needed: the identity is exact by con
 `rest` is `wall − build − disposal` measured from the same suite-wall stopwatch `TestHarness.Run`
 already keeps, not a second independently-collected figure.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the B11+B12 tree with nothing else on the test desktop:
+units 2490/2490 in 17.2 s, engine 153/153 in 235.4 s with errors clean and the totals line
+reading build 89.2 s (decode 5.4 s, sound 16.0 s, rt 63.6 s, other 4.1 s) over 58 worlds,
+goldens 16/16 hash-identical in 87.8 s, hitch clean, 364.0 s total, exit 0.
 
 ## B12 ☑ Cache immutable decoded world inputs where the profile earns it
 
@@ -523,7 +526,8 @@ now rewards: whichever runs second pays 0.04 s of decode instead of 3.44 s. Putt
 shard is worth about 3 s; splitting them costs it. `emitter-lifetime` must still run before the
 shared C1 world is cached, unchanged by this item.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The same full battery as B11's: engine 235.4 s against 253.1 s on the Wave A
+tree, decode 5.4 s over 58 worlds, everything green, exit 0.
 
 ## B13 ☐ Isolate engine suites and run balanced shards
 
