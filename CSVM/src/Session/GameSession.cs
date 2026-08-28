@@ -103,8 +103,8 @@ public partial class GameSession : Node3D
     private readonly bool _menuDriven;
     // The boards' Exit item, routed by the Launcher (launchscreen or quit).
     private readonly Action _exitSession;
-    // The boards' Restart item on an Instant Action mission: the Launcher frees this session and
-    // builds a fresh one. Nothing here can put a mission's opposition back on its own.
+    // The boards' Restart item on an Instant Action or campaign mission: the Launcher frees this
+    // session and builds a fresh one. Nothing here can put a mission's opposition back on its own.
     private readonly Action _restartSession;
     // A campaign mission's end: the Launcher frees this session and reopens the launchscreen on
     // the named profile's cabin. Null outside a menu-driven process (a --campaign= run from the
@@ -2955,12 +2955,13 @@ public partial class GameSession : Node3D
         return playerIndex >= 0 && playerIndex < inputs.Length ? inputs[playerIndex] : inputs[0];
     }
 
-    // A board menu's Restart item. An Instant Action mission is REBUILT by the Launcher, because
-    // its opposition lives in the world and nothing here can put it back; every other mode reruns
-    // in place, the race and the match through their own bookkeeping and anything else per-plane.
+    // A board menu's Restart item. An Instant Action or campaign mission is REBUILT by the
+    // Launcher, because its opposition and objective state live in the world and nothing here can
+    // put them back; every other mode reruns in place, the race and the match through their own
+    // bookkeeping and anything else per-plane.
     private void Rerun()
     {
-        if (_iaDirector != null)
+        if (_iaDirector != null || _campaign != null)
         {
             _restartSession();
             return;
