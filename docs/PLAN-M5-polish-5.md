@@ -1261,7 +1261,7 @@ its wave, and record the verdicts in this plan under D31. Reopen with a new id m
 - CM13 (C2/M03): the enemy racers turn into `dzpath1` and `dzpath2` and fly them on rails (the
   tagged zones are 1, 2, 3, 10, 6, 7 and 9 of 13), and the race is winnable (E41).
 
-**âš  Traps.** A live symptom is evidence about the build that was running: confirm no testing
+**⚠ Traps.** A live symptom is evidence about the build that was running: confirm no testing
 worktree is open before minting. Launch from the launchscreen on a COPY of the profile positioned
 at CM04 (a campaign run writes mission results back). Headless equivalents for a re-check:
 `.\RunProbe.ps1 --campaign=<copy>:3` (CM04), `:5` (CM06), `:6` (CM07), `:7` (CM08), `:8` (CM09),
