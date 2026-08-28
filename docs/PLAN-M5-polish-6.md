@@ -473,7 +473,68 @@ touches the same per-sim-step ray casts, so if C21 lands first, re-baseline befo
 anything here, and if it has not, do not attribute this step's cost to allocation without the GC
 capture that would show it.
 
-## C23 ☐ `BL-584`: `PerfSampleTests.AScopeAllocatesNothing` is not same-build stable in the parallel unit stage
+## C23 ❌ `BL-584`: `PerfSampleTests.AScopeAllocatesNothing` is not same-build stable in the parallel unit stage
+
+**Disproven — as stated.** Re-verified against the code first: `PerfSampleTests` is still the only
+class touching `PerfSample`'s ambient statics (`Z:\CSVM\.claude\worktrees\m5p6-c23\CSVM.Tests`
+carries no other `PerfSample.Scope`/`EndFrame`/`Reset` call, and the class's own doc comment already
+states the invariant); the eight production call sites
+(`Launcher.cs`, `AiFlightAssembler.cs`, `WorldSounds.cs`, `TextureArchive.cs`, `AnimRuntime.cs`,
+`EmitterDirector.cs`, `FlightController.cs`, `EmitterRenderer.cs`) are all reached only from Godot
+runtime code the `dotnet test` unit stage never loads, so no other unit test class can be charging
+allocation to `PerfSample.Scope` in-process either. That already rules out the backlog's first
+candidate mechanism by construction, not just by absence of a repro.
+
+Both candidate mechanisms were then tested directly rather than assumed:
+
+- **Cross-thread contamination** (another class's work landing on the same thread-pool thread).
+  `GC.GetAllocatedBytesForCurrentThread` is documented as a per-thread reading; an in-process
+  experiment held sixteen background tasks continuously allocating and forcing gen-0 collections
+  for the full width of the measured window, on the same process, while the measured loop ran on
+  the test thread. Eight of eight trials read exactly zero bytes. The full unit stage was also run
+  repeatedly (2,558/2,558 each time) while sixteen external processes independently saturated every
+  logical core, to maximize scheduler contention beyond the stage's own fourteen classes; six of six
+  runs stayed green, with per-run wall time roughly doubling under that load, confirming the
+  contention was real without ever perturbing the assertion.
+- **A tiered-JIT recompile landing mid-scope.** The existing 10,000-iteration warm-up loop
+  (`PerfSampleTests.AScopeAllocatesNothing`, added for `BL-379`) exists to pay off exactly this. An
+  isolated experiment removed it entirely (0, 1, 5, 50, 500 warm-up iterations against the same
+  10,000-iteration measured loop) so any tier-up or on-stack-replacement transition the warm-up
+  would normally absorb had to land inside the measured window instead. Every warm-up size read
+  zero bytes across repeated trials, including zero warm-up, the case most likely to force a
+  mid-loop recompile.
+
+Across every attempt to force the contended condition described in the backlog (in-process
+cross-thread allocation and GC pressure, external whole-machine CPU saturation, and a JIT warm-up
+starved to nothing), the assertion never read anything but zero. Neither mechanism is demonstrated;
+both are now actively contradicted by the same instrument the item asks to make reproducible. No
+code changes to `PerfSample.cs` or `PerfSampleTests.cs` land: the hard rule against a plausible fix
+for an unexplained flake applies precisely because no explanation survived testing, and the
+assertion's own contract (exactly zero, PERF-15) stays untouched.
+
+The single historical `Actual: 3984` reading is not explained by this investigation and is not
+reproduced by it either; it remains a seen-once anomaly on this test's own confidence ladder, now
+with its two named causes tested out rather than assumed.
+
+`BL-584` therefore stays in `backlog.md` rather than being deleted with this item, rewritten as a
+`[Research]` entry that records the two ruled-out mechanisms and names what to capture on a
+recurrence (the failing build's binary hash and the concurrent-class list from the TRX). The plan
+item is ❌ because this run does not fix it, not because the symptom is settled: a disproof of a
+mechanism is not a disproof of the event, and the entry exists so nobody repeats these forty
+trials.
+
+**Verify — what would prove a recurrence fixed, if one is ever seen again.** Treat runs as
+independent Bernoulli trials at the originally observed rate of about one failure in ten. By the
+rule of three, zero failures in `n` clean runs bounds the true failure rate at roughly `3/n` with
+95% confidence; at the observed ~10% rate, `P(no failure in n runs) = 0.9^n`. Thirty consecutive
+clean full-unit-stage runs give about 95% confidence the true rate is no longer near 10% (`0.9^30 ≈
+4%`); forty-four give about 99% (`0.9^44 ≈ 1%`). Below that count, "it passed N times" is not
+evidence of a fix at this base rate, which is why this item does not close on a handful of green
+runs alone — a future recurrence should log the failing build's binary hash and the concurrent
+class list from the TRX, since neither was captured the one time this fired, and either would turn
+"lead-only" into a traced mechanism on the next occurrence.
+
+**Original approach (kept for reference).**
 
 **Goal.** The assertion holds on every run of the full unit stage, for the reason it is asserting
 rather than by luck of scheduling.
@@ -497,6 +558,8 @@ ordinary; the judgement is only in not widening the contract.
 **Verify.** <TODO: decide what proves a once-seen flake fixed. Repeated full unit-stage runs are the
 obvious instrument, but the failure has been seen once in ten runs, so name a run count that would
 mean something, or make the failure reproducible first by forcing the contended condition.>
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not widen the assertion to a tolerance: zero allocations is the contract
 `PerfSample` makes, and a tolerance would hide a real regression, which is exactly the regression

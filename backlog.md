@@ -2559,18 +2559,27 @@ usual.
   separate landed fix; the graph needs no change. *Cross-refs:* `BL-563`, `BL-565`,
   `docs/formats/objectives.md`, the closing commit of the graph half (`git log --grep=BL-581`).
 
-- `BL-584` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` is not same-build stable inside the
-  parallel unit stage.** *Evidence (seen once, mechanism lead-only):* the full `RunTests.ps1` unit
-  stage reported it red once (`Expected: 0, Actual: 3984` bytes) on a tree whose only difference
-  from six green runs was PowerShell and documentation edits; it then passed three times alone and
-  on every later complete run. An allocation assertion measured with `GC.GetAllocatedBytesForCurrentThread`
-  or similar shares a process with fourteen concurrent test classes, so another class's work on
-  the same thread pool thread, or a tiered-JIT recompile landing mid-scope, can charge bytes to
-  it. *Fix shape:* pin the measurement to the current thread and warm the scope once before the
-  asserted call, or move the test to a non-parallel collection and say why. *⚠ Traps:* do not
-  widen the assertion to a tolerance; zero allocations is the contract `PerfSample` makes, and a
-  tolerance would hide a real regression. *Cross-refs:* `docs/verification.md` PERF rules,
-  `docs/plans/PLAN-fast-verification.md` C23.
+- `BL-584` `[Research]` **`PerfSampleTests.AScopeAllocatesNothing` went red once and neither named
+  mechanism reproduces.** *Evidence:* the full `RunTests.ps1` unit stage reported it red once
+  (`Expected: 0, Actual: 3984` bytes) on a tree whose only difference from six green runs was
+  PowerShell and documentation edits; it has passed on every run since. **Both mechanisms this
+  entry used to name are ruled out, so do not re-chase them.** Cross-class interference on a shared
+  thread-pool thread cannot charge this assertion: `GC.GetAllocatedBytesForCurrentThread` is
+  per-thread by construction, confirmed empirically with sixteen background tasks allocating and
+  forcing gen-0 collections across the whole measured window (8 of 8 trials read exactly 0 bytes),
+  and `PerfSampleTests` is the only class in `CSVM.Tests` touching `PerfSample`'s ambient statics
+  at all, since every production call site is reachable only through Godot runtime code the unit
+  stage never loads. A tiered-JIT recompile landing mid-scope is ruled out the same way: warm-up
+  counts of 0, 1, 5, 50 and 500 against the 10,000-iteration measured loop all read 0 bytes.
+  Roughly forty forced-contention trials produced no failure. *Fix shape:* none until the cause is
+  known; the one reading remains unexplained rather than explained-and-fixed. **On recurrence,
+  capture the binary hash and the concurrent-class list from the TRX**, neither of which was
+  captured the one time this fired, and reopen from there. *⚠ Traps:* do not widen the assertion
+  to a tolerance; zero allocations is the contract `PerfSample` makes, and `BL-536`/`BL-562` need
+  this test able to catch a real regression. A handful of green runs is not evidence at the
+  observed rate: at a 1-in-10 base rate, 30 consecutive clean unit stages give about 95%
+  confidence the rate has moved and 44 give about 99%. *Cross-refs:* `docs/verification.md` PERF
+  rules, `docs/plans/PLAN-fast-verification.md` C23.
 
 ## Misc
 
