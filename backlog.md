@@ -2530,24 +2530,6 @@ usual.
   primary 3 completed), so this is not an objective bug. *Cross-refs:* `docs/org/aiPilot.md` (the
   activation primitive and `FUN_00432010`).
 
-- `BL-576` `[Bug]` **CM08 (C1B/M03): the Pandora pitches steeply up and down along the Klondike
-  net, following every altitude step of the route at full pitch.** *Evidence (seen at the
-  controls, mechanism lead-only):* the screenshot
-  `Screenshots/crimsonskies_2026-08-27_23-47-46-050.png` (plan worktree) shows `piratezep` nose
-  down about 30 degrees, diving along the green `Klondike1` segment toward a lower node with the
-  ai-nets overlay on. `Klondike1` is a 13-node open chain whose nodes swing between about 400 m
-  and 93 m, and the record's pitch band is -30 to 30 degrees at `max_rate_pitch` 5. The dead-end
-  shuttle `BL-529` fixed was one cause of the porpoising report and the hold at the far end is
-  confirmed; the up-and-down along the route itself is still there and was the report's first
-  half. *Fix shape:* read `FUN_004bf9d0`'s pitch term against `ZeppelinMotion`: whether the
-  original steers pitch at the node's altitude difference directly, clamps it under a smaller
-  authored limit for route following, or eases altitude over the edge length, and whether the
-  net's node altitudes are the airship's targets at all (a zeppelin net may carry its own altitude
-  field). Then match. *⚠ Traps:* the initial-pitch clamp that never fires (`ZeppelinMotion.cs`)
-  is decoded verbatim and stays; do not "fix" it as part of this. Do not flatten the net.
-  *Cross-refs:* `BL-529`'s closing commit (`git log --grep=BL-529`), `docs/org/flightModel.md`,
-  `docs/formats/mission-entities.md` "Route ends and stop points".
-
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in

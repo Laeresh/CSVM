@@ -375,6 +375,7 @@ public sealed partial class ZeppelinRuntime : Node
                     var p = zep.Motion.Position;
                     GD.Print($"zep: '{zep.Def.Node}' at ({p.X:0},{p.Y:0},{p.Z:0}) " +
                              $"speed {zep.Motion.Speed:0.#}/{zep.Motion.EffectiveMaxSpeed:0.#} m/s " +
+                             $"pitch {Mathf.RadToDeg(zep.Motion.PitchRad):0.#}° " +
                              $"toward node {zep.Motion.Follower.CurrentIndex}" +
                              (zep.Motion.Follower.Holding ? " — holding on its stop point" : ""));
                 }
@@ -396,41 +397,6 @@ public sealed partial class ZeppelinRuntime : Node
             Basis.FromEuler(new Vector3(pitchRad, yawRad, 0f)), position);
     }
 
-    // The record re-seated where a script left the hull: the same limits, zones and cannons, the
-    // start pose replaced. What lets the motion resume from the script's last frame rather than
-    // from the record, whose seat is data the script may or may not end on.
-    private static ZeppelinDef SeatedAt(ZeppelinDef def, Vector3 position, float yawDeg, float pitchDeg) =>
-        new()
-        {
-            Node = def.Node,
-            Position = position,
-            YawDeg = yawDeg,
-            PitchDeg = pitchDeg,
-            MaxSpeed = def.MaxSpeed,
-            MaxAccel = def.MaxAccel,
-            AccelPitchDeg = def.AccelPitchDeg,
-            AccelYawDeg = def.AccelYawDeg,
-            MaxRateYawDeg = def.MaxRateYawDeg,
-            MaxRatePitchDeg = def.MaxRatePitchDeg,
-            MinPitchDeg = def.MinPitchDeg,
-            MaxPitchDeg = def.MaxPitchDeg,
-            Net = def.Net,
-            Targets = def.Targets,
-            Healthy = def.Healthy,
-            NumHealthyRequired = def.NumHealthyRequired,
-            Engines = def.Engines,
-            Gasbags = def.Gasbags,
-            CannonFireDelay = def.CannonFireDelay,
-            CannonFireRange = def.CannonFireRange,
-            LeftCannons = def.LeftCannons,
-            RightCannons = def.RightCannons,
-            CannonHealth = def.CannonHealth,
-            CannonInaccuracyDeg = def.CannonInaccuracyDeg,
-            Team = def.Team,
-            TeamId = def.TeamId,
-            Deactivated = def.Deactivated,
-        };
-
     // The follower's park: from here until the motion ends, the hull's pose is the script's.
     private static void Park(LiveZeppelin zep)
     {
@@ -448,15 +414,13 @@ public sealed partial class ZeppelinRuntime : Node
         zep.Scripted = false;
         var xform = zep.Host.GlobalTransform;
         var euler = xform.Basis.Orthonormalized().GetEuler();
-        float yawDeg = Mathf.RadToDeg(euler.Y);
-        float pitchDeg = Mathf.RadToDeg(euler.X);
-        var seated = SeatedAt(zep.Def, xform.Origin, yawDeg, pitchDeg);
         var follower = zep.Motion.Follower;
         follower.Reseat();
-        zep.Motion = new ZeppelinMotion(seated, follower) { AliveEngines = zep.Motion.AliveEngines };
+        zep.Motion.ResumeAt(xform.Origin, euler.Y, euler.X);
         GD.Print($"zep: '{zep.Def.Node}' scripted motion ended, follower resumes from " +
-                 $"({xform.Origin.X:0},{xform.Origin.Y:0},{xform.Origin.Z:0}) yaw {yawDeg:0.#}° " +
-                 $"pitch {pitchDeg:0.#}°, re-seating on '{follower.Net.Name}'");
+                 $"({xform.Origin.X:0},{xform.Origin.Y:0},{xform.Origin.Z:0}) yaw " +
+                 $"{Mathf.RadToDeg(euler.Y):0.#}° pitch {Mathf.RadToDeg(euler.X):0.#}°, " +
+                 $"re-seating on '{follower.Net.Name}'");
     }
 
     // The zone-pool seeding rule: an authored record hp re-seeds an existing def pool or
@@ -811,9 +775,9 @@ public sealed partial class ZeppelinRuntime : Node
         /// <summary>The record's authored team, or null on a record authoring none.</summary>
         public int? Team { get; }
 
-        /// <summary>Replaced, not mutated, when a scripted motion hands the hull back: the law
-        /// keeps its start pose private, so the resume is a fresh motion seated there.</summary>
-        public ZeppelinMotion Motion { get; set; }
+        /// <summary>One motion for the zeppelin's life; a scripted hand-back re-seats it in
+        /// place (<see cref="ZeppelinMotion.ResumeAt"/>), engines and limits as they stand.</summary>
+        public ZeppelinMotion Motion { get; }
 
         public Node3D Host { get; }
 

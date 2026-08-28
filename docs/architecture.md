@@ -2358,14 +2358,26 @@ semantics: every crossed threshold fires, once). The zone pools live in `Destruc
 
 ## src/Flight/ZeppelinMotion.cs
 The kinematic zeppelin motion law (M4 F17): flies a `ZeppelinDef` along its net through
-`AiNetFollower`, forward-only along the facing (the design's "require forward motion to turn,
-never bank"), yaw/pitch rate-limited by the record's `max_rate_*` with `accel_*` ramp-in, speed
-by `max_accel` toward `max_speed`, commanded pitch clamped to the record's ±30° band. Pure
-state — no Node, no flight model; `ZeppelinRuntime` writes the pose onto the world node.
-The stop-point half is the decoded approach: full speed until the along-facing range to an armed
-node falls under 250 m, then linearly down to zero, and once the follower is `Holding` a level
-station-keep (pitch 0, heading kept, speed 0). Pinned
-by `ZeppelinMotionTests` + the `zeppelin-motion` suite.
+`AiNetFollower`, forward-only along the facing, speed by `max_accel` toward `max_speed`, yaw and
+pitch through the decoded steer law (`Steer`, `FUN_004bf530`/`FUN_004bf620`, one routine per
+axis): the target is the bearing and the raw slope from the hull to the current node, the rate
+asked for is the record's `max_rate_*` eased to `max_rate · (error/25°)²` inside 25° of error
+(`EaseRad`), the live rate moves toward it at `accel_*`, and the angle advances by that rate
+scaled by `speed / max_speed` (the authored one), so a stopped hull cannot turn. No per-step
+pitch band: the record's ±30 is a degree-valued pair the original compares against radians, so
+it neither clamps the initial pitch nor the drawn pose (`FUN_004bf950`), and the law here has no
+clamp either (`docs/formats/mission-entities.md` "Steering"). ⚠ The bang-bang rate this
+replaced (ask for `error/dt`, reach it at `accel_*`) rang up under `accel_pitch` 0.5°/s² into a
+standing ±30° swing on level legs, which read at the controls as the Pandora diving along its
+route; the ease is what damps it. Pure state — no Node, no flight model; `ZeppelinRuntime` writes
+the pose onto the world node, and `ResumeAt` re-seats it in place after a scripted motion.
+The stop-point half is the decoded approach (`FUN_004bf360`): full speed until the along-facing
+range to a halting node falls under 250 m, then linearly down to zero; inside the follower's
+30 m (`Dock`) the throttle is cut, the pitch holds, and the hull and heading decay onto the node
+and the leg's bearing at e^(−0.2·dt), which is what closes the last metre onto the hold sphere.
+Once the follower is `Holding`, a station-keep: pitch commanded to 0 and heading kept, both
+frozen by the speed factor at speed 0. Pinned by `ZeppelinMotionTests` + the `zeppelin-motion`
+and `zeppelin-pandora-dead-end` suites.
 
 ## src/Flight/AiPilot.cs
 The non-player `FlightModel` driver: standing orders in (heading in the mission-data
@@ -5598,9 +5610,9 @@ the node every frame and the render shows whichever ran last (on the realtime cl
 runtime's `_PhysicsProcess`, which is why CM04's Pandora stood in the dock while `pzep_todrydock`
 flew it; on a parent-driven clock the anim runtime's `_Process`, which is why no `--det` probe
 showed it). The follower parks (`Park`, a `zep:` line) and, on the first step after the motion
-ends, `Resume` rebuilds the `ZeppelinMotion` seated at the hull's live pose (`SeatedAt`, the
-record with its start pose replaced, since the law keeps its pose private) with the engines as
-they stand, re-seats the follower and logs the hand-back. The record's seat stays data: C3/M03's
+ends, `Resume` re-seats the same `ZeppelinMotion` at the hull's live pose
+(`ZeppelinMotion.ResumeAt`: pose replaced, speed and turn rates zeroed, engines and limits as
+they stand), re-seats the follower and logs the hand-back. The record's seat stays data: C3/M03's
 `piratezep` record is the script's END pose, node 0 of `M3PirateZep`, an armed stop point, so the
 resumed follower holds the dock there. Neither the scripted-path snap nor the dead-end hold runs
 while the hull is scripted, since both live in the step that is skipped. Pinned by the

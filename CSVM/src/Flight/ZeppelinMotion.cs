@@ -12,17 +12,23 @@ namespace CSVM.Flight;
 /// aggregator drives, re-scaling the live limits through <see cref="EngineFactor"/>.</summary>
 public sealed class ZeppelinMotion
 {
+    /// <summary>The steer law's ease band (FUN_004bf530/FUN_004bf620): inside 25° of error the
+    /// commanded rate is <c>max_rate · (error / 25°)²</c>, so a turn eases out toward its
+    /// target instead of arriving at full rate and overshooting.</summary>
+    public const float EaseRad = 0.43633232f;
+
     // The stop-point approach ramp (FUN_004bf360): full speed until the along-forward range to an
     // armed stop point falls under 250 m, then linearly down to zero, and a hold inside the
     // follower's 30 m. Only the zeppelin follower reads a node's halt flag at all.
     private const float StopApproachM = 250f;
 
+    // The dock glide's decay rate (FUN_004bf360 inside 30 m: pose ← node + (pose − node)·e^(−0.2·dt)).
+    private const float DockDecayPerS = 0.2f;
+
     private readonly float _maxRateYaw;      // rad/s
     private readonly float _maxRatePitch;    // rad/s
     private readonly float _accelYaw;        // rad/s²
     private readonly float _accelPitch;      // rad/s²
-    private readonly float _minPitch;        // rad
-    private readonly float _maxPitch;        // rad
     private float _yawRate;
     private float _pitchRate;
 
@@ -33,14 +39,13 @@ public sealed class ZeppelinMotion
         Position = def.Position;
         YawRad = Mathf.DegToRad(def.YawDeg);
         // Verbatim: the original's own initial-pitch clamp never fires (unit bug — it compares
-        // the already-radian pitch against still-degree bounds, docs/formats/mission-entities.md).
+        // the already-radian pitch against still-degree bounds), and that same degree-valued band
+        // bounds the drawn pose only, so no step below clamps the pitch (mission-entities.md).
         PitchRad = Mathf.DegToRad(def.PitchDeg);
         _maxRateYaw = Mathf.DegToRad(def.MaxRateYawDeg);
         _maxRatePitch = Mathf.DegToRad(def.MaxRatePitchDeg);
         _accelYaw = Mathf.DegToRad(def.AccelYawDeg);
         _accelPitch = Mathf.DegToRad(def.AccelPitchDeg);
-        _minPitch = Mathf.DegToRad(def.MinPitchDeg);
-        _maxPitch = Mathf.DegToRad(def.MaxPitchDeg);
         TotalEngines = Math.Max(1, def.Engines.Count);
         AliveEngines = TotalEngines;
     }
@@ -98,9 +103,38 @@ public sealed class ZeppelinMotion
         return Mathf.Sqrt(Math.Clamp(alive, 0, total) / (float)total);
     }
 
-    /// <summary>One sim step: walk the net, turn toward the current node under the yaw/pitch
-    /// rate and rate-acceleration limits, accelerate toward the (engine-scaled) max speed, and
-    /// move forward along the facing.</summary>
+    /// <summary>The decoded steer law, one axis (FUN_004bf530 for pitch, FUN_004bf620 for yaw,
+    /// the same code): the rate the error asks for is the full rate limit, eased quadratically
+    /// inside <see cref="EaseRad"/> of the target, and the live rate moves toward it through the
+    /// rate-acceleration limit. Ramps in, and settles without the overshoot a bang-bang rate
+    /// under a small <c>accel_*</c> turns into a standing ±30° oscillation.</summary>
+    public static float Steer(float rate, float error, float dt, float maxRate, float accel)
+    {
+        float desired = error < 0f ? -maxRate : maxRate;
+        if (Mathf.Abs(error) < EaseRad)
+        {
+            float ease = error / EaseRad;
+            desired *= ease * ease;
+        }
+        return Mathf.MoveToward(rate, desired, accel * dt);
+    }
+
+    /// <summary>Re-seats the law where a scripted motion left the hull: pose replaced, speed and
+    /// both turn rates zeroed, limits and engines as they stand. The follower's own re-seat is
+    /// the caller's.</summary>
+    public void ResumeAt(Vector3 position, float yawRad, float pitchRad)
+    {
+        Position = position;
+        YawRad = Mathf.Wrap(yawRad, -Mathf.Pi, Mathf.Pi);
+        PitchRad = pitchRad;
+        Speed = 0f;
+        _yawRate = 0f;
+        _pitchRate = 0f;
+    }
+
+    /// <summary>One sim step: walk the net, steer yaw and pitch at the current node through the
+    /// decoded steer law (<see cref="Steer"/>), accelerate toward the (engine-scaled) max speed,
+    /// and move forward along the facing.</summary>
     public void Step(float dt)
     {
         if (dt <= 0f)
@@ -111,37 +145,59 @@ public sealed class ZeppelinMotion
         // zeppelin is not a vehicle in the original at all. It keeps the nearest-node seat.
         Follower.Update(Position);
         var to = Follower.CurrentTarget - Position;
-
-        // Yaw toward the node. Inside the capture radius the bearing swings wildly, so hold
-        // the heading there and let the follower advance.
         var flat = new Vector2(to.X, to.Z);
+        if (!Follower.Holding && Follower.StopsAt(Follower.CurrentIndex)
+            && to.Dot(Forward) < AiNetFollower.StopPointHoldM)
+        {
+            Dock(to, dt);
+            return;
+        }
+
+        // Turning needs way on: the original scales both rates by speed over the AUTHORED
+        // max_speed (not the engine-scaled one), so a docked or engine-dead hull holds its pose.
+        float way = Def.MaxSpeed > 0f ? Speed / Def.MaxSpeed : 0f;
+
+        // Yaw at the node. Inside a metre the bearing is noise, so the heading holds there.
         if (flat.LengthSquared() > 1f)
         {
             float desiredYaw = Mathf.Atan2(-to.X, -to.Z);
-            _yawRate = TurnRate(_yawRate, Mathf.AngleDifference(YawRad, desiredYaw), dt,
+            _yawRate = Steer(_yawRate, Mathf.AngleDifference(YawRad, desiredYaw), dt,
                 _maxRateYaw, _accelYaw);
-            YawRad = Mathf.Wrap(YawRad + (_yawRate * dt), -Mathf.Pi, Mathf.Pi);
+            YawRad = Mathf.Wrap(YawRad + (way * _yawRate * dt), -Mathf.Pi, Mathf.Pi);
         }
 
-        // Pitch toward the node's altitude, inside the record's flight band — but a zeppelin
-        // holding on its stop point levels off instead (FUN_004bf500 asks for pitch 0 and keeps
-        // the heading it arrived on).
-        float desiredPitch = Follower.Holding ? Mathf.Clamp(0f, _minPitch, _maxPitch)
-            : Mathf.Clamp(Mathf.Atan2(to.Y, Mathf.Max(flat.Length(), 1f)), _minPitch, _maxPitch);
-        _pitchRate = TurnRate(_pitchRate, desiredPitch - PitchRad, dt, _maxRatePitch, _accelPitch);
-        PitchRad = Mathf.Clamp(PitchRad + (_pitchRate * dt), _minPitch, _maxPitch);
+        // Pitch at the node's altitude, the raw slope from here to it: the record's ±30 band
+        // never bounds it (constructor). A zeppelin holding on its stop point levels off
+        // instead (FUN_004bf500 asks for pitch 0 and keeps the heading it arrived on).
+        float desiredPitch = Follower.Holding ? 0f : Mathf.Atan2(to.Y, flat.Length());
+        _pitchRate = Steer(_pitchRate, Mathf.AngleDifference(PitchRad, desiredPitch), dt,
+            _maxRatePitch, _accelPitch);
+        PitchRad = Mathf.Wrap(PitchRad + (way * _pitchRate * dt), -Mathf.Pi, Mathf.Pi);
 
         // Speed toward the engine-scaled maximum, at the engine-scaled acceleration.
         Speed = Mathf.MoveToward(Speed, TargetSpeed(to), EffectiveMaxAccel * dt);
         Position += Forward * (Speed * dt);
     }
 
-    // The rate the error asks for this step, reached through the rate-acceleration limit and
-    // capped at the rate limit — so a turn ramps in, holds the cap, and ramps out.
-    private static float TurnRate(float rate, float error, float dt, float maxRate, float accel)
+    // FUN_004bf360's inside-30 m branch: within the hold distance of a halting node ahead the
+    // throttle is cut, the pitch holds, and the hull and its heading decay onto the node and the
+    // leg's own bearing at DockDecayPerS. What carries a hull that arrives a metre outside the
+    // follower's hold sphere the rest of the way, rather than leaving it stopped just short.
+    private void Dock(Vector3 toNode, float dt)
     {
-        float desired = Mathf.Clamp(error / Mathf.Max(dt, 1e-4f), -maxRate, maxRate);
-        return Mathf.MoveToward(rate, desired, Mathf.Max(accel, 1e-4f) * dt);
+        float keep = Mathf.Exp(-DockDecayPerS * dt);
+        var leg = Follower.CurrentTarget - (Follower.LegStart ?? Position);
+        if (new Vector2(leg.X, leg.Z).LengthSquared() > 1f)
+        {
+            float bearing = Mathf.Atan2(-leg.X, -leg.Z);
+            YawRad = Mathf.Wrap(bearing + (Mathf.AngleDifference(bearing, YawRad) * keep),
+                -Mathf.Pi, Mathf.Pi);
+        }
+        Position = Follower.CurrentTarget - (toNode * keep);
+        _yawRate = 0f;
+        _pitchRate = 0f;
+        Speed = Mathf.MoveToward(Speed, 0f, EffectiveMaxAccel * dt);
+        Position += Forward * (Speed * dt);
     }
 
     // What the throttle asks for this step: the engine-scaled maximum, or the stop-point ramp

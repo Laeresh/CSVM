@@ -11,7 +11,8 @@ namespace CSVM.Tests;
 /// <summary>
 /// The F17 zeppelin motion law, engine-free: the decoded sqrt engine-loss curve (never the
 /// design's 10/40/50 bands), the record's rate/speed/pitch limits enforced per step, the
-/// verbatim (unclamped) initial pitch, and a net flown with every hop on the edge list.
+/// verbatim (unclamped) initial pitch, the decoded steer law (quadratic ease inside 25°, way
+/// on to turn, no per-step band), and a net flown with every hop on the edge list.
 /// </summary>
 public class ZeppelinMotionTests
 {
@@ -105,20 +106,105 @@ public class ZeppelinMotionTests
     }
 
     [Fact]
-    public void ThePitchBandHoldsOnASteepClimbTarget()
+    public void ThePitchFollowsTheLegSlopeUnboundedByTheRecordsBand()
     {
-        // A climb of 2000 m over 2000 m horizontal asks for ~45° of pitch; the band caps the
-        // command at +30° (and the bounce back down at −30°).
+        // A climb of 2000 m over 2000 m horizontal asks for 45° of pitch. The record's ±30 band
+        // never bounds it (the original's is in degrees and clamps only the drawn pose), so the
+        // law settles ON the slope, from below, without overshooting it.
         var net = Net(new Vector3(0f, 400f, 0f), new Vector3(0f, 2400f, -2000f));
         var m = NewMotion(Def(), net);
-        float maxPitch = Mathf.DegToRad(30f);
+        float slope = Mathf.DegToRad(45f);
+        float peak = 0f;
         for (int i = 0; i < 60 * 120; i++)
         {
             m.Step(Dt);
-            Assert.True(m.PitchRad <= maxPitch + 1e-4f, $"pitch over band at step {i}");
-            Assert.True(m.PitchRad >= -maxPitch - 1e-4f, $"pitch under band at step {i}");
+            peak = Mathf.Max(peak, m.PitchRad);
+            Assert.True(m.PitchRad <= slope + Mathf.DegToRad(1f), $"pitch overshot the slope at step {i}");
         }
+        Assert.True(peak > Mathf.DegToRad(35f), $"never pitched past the old band: {Mathf.RadToDeg(peak):0.#}°");
         Assert.True(m.Position.Y > 500f, $"never climbed: y={m.Position.Y}");
+    }
+
+    [Theory]
+    [InlineData(25f, 5f)]
+    [InlineData(90f, 5f)]
+    [InlineData(12.5f, 1.25f)]
+    [InlineData(-12.5f, -1.25f)]
+    [InlineData(5f, 0.2f)]
+    public void TheSteerLawEasesQuadraticallyInsideTwentyFiveDegrees(float errorDeg, float rateDeg)
+    {
+        // The decoded rate command: the full max_rate at 25° of error and beyond, and
+        // max_rate·(error/25°)² inside it, sign kept — with the accel limit out of the way.
+        float rate = ZeppelinMotion.Steer(0f, Mathf.DegToRad(errorDeg), Dt, Mathf.DegToRad(5f), 1e6f);
+        Assert.Equal(rateDeg, Mathf.RadToDeg(rate), 3);
+    }
+
+    [Fact]
+    public void TheRateCommandIsReachedThroughTheAccelLimit()
+    {
+        float rate = ZeppelinMotion.Steer(0f, Mathf.Pi, Dt, Mathf.DegToRad(5f), Mathf.DegToRad(0.5f));
+        Assert.Equal(0.5f * Dt, Mathf.RadToDeg(rate), 4);
+    }
+
+    [Fact]
+    public void TurningNeedsWayOnSoAStoppedHullHoldsItsPose()
+    {
+        // Both rates scale by speed over the authored max_speed: with no engines there is no
+        // speed, and a 180° heading error moves the nose not at all.
+        var m = NewMotion(Def(yawDeg: 180f), SquareNet());
+        m.AliveEngines = 0;
+        for (int i = 0; i < 60 * 30; i++)
+        {
+            m.Step(Dt);
+        }
+        Assert.Equal(0f, m.Speed);
+        Assert.Equal(Mathf.DegToRad(180f), Mathf.Abs(m.YawRad), 4);
+    }
+
+    [Fact]
+    public void ALevelRouteSeatedAboveItsNodesNeverPorpoises()
+    {
+        // The CM08 shape: level legs with gentle steps, the record seated 50 m above its first
+        // node. The old bang-bang rate under accel_pitch 0.5°/s² rang up into a standing ±30°
+        // oscillation here; the decoded ease keeps the pitch within the steepest leg's slope.
+        var net = Net(
+            new Vector3(0f, 150f, 0f), new Vector3(-1400f, 150f, 200f),
+            new Vector3(-1700f, 150f, 900f), new Vector3(-1800f, 100f, 2100f),
+            new Vector3(-1800f, 150f, 2700f), new Vector3(-1700f, 200f, 3300f),
+            new Vector3(-1200f, 260f, 3700f), new Vector3(-300f, 330f, 3800f));
+        var def = Def(yawDeg: 80f, position: new Vector3(0f, 200f, 0f));
+        var follower = new AiNetFollower(net, new Random(1), 500f, observesStopPoints: true);
+        var m = new ZeppelinMotion(def, follower);
+        float worst = 0f;
+        for (int i = 0; i < 60 * 600; i++)
+        {
+            m.Step(Dt);
+            worst = Mathf.Max(worst, Mathf.Abs(m.PitchRad));
+        }
+        Assert.True(worst < Mathf.DegToRad(8f), $"pitch reached {Mathf.RadToDeg(worst):0.#}° on a route whose steepest leg is 6.3°");
+        Assert.True(follower.Advances >= 6, $"only {follower.Advances} captures");
+    }
+
+    [Fact]
+    public void ResumeAtReseatsThePoseAndZeroesTheRatesAndSpeed()
+    {
+        var m = NewMotion(Def(), SquareNet());
+        for (int i = 0; i < 60 * 30; i++)
+        {
+            m.Step(Dt);
+        }
+        Assert.True(m.Speed > 10f);
+        m.AliveEngines = 2;
+        m.ResumeAt(new Vector3(50f, 620f, -80f), Mathf.DegToRad(135f), Mathf.DegToRad(-4f));
+        Assert.Equal(new Vector3(50f, 620f, -80f), m.Position);
+        Assert.Equal(Mathf.DegToRad(135f), m.YawRad, 4);
+        Assert.Equal(Mathf.DegToRad(-4f), m.PitchRad, 4);
+        Assert.Equal(0f, m.Speed);
+        Assert.Equal(2, m.AliveEngines);   // engines as they stand, never re-read from the record
+        // No rate survives the re-seat: the first step from rest turns not at all.
+        m.Step(Dt);
+        Assert.Equal(Mathf.DegToRad(135f), m.YawRad, 4);
+        Assert.Equal(Mathf.DegToRad(-4f), m.PitchRad, 4);
     }
 
     [Fact]
@@ -245,9 +331,9 @@ public class ZeppelinMotionTests
         {
             m.Step(Dt);
             steps++;
-            Assert.True(m.PitchRad <= Mathf.DegToRad(30f) + 1e-3f
-                && m.PitchRad >= -Mathf.DegToRad(30f) - 1e-3f,
-                $"pitch left the record's band at step {steps}: {Mathf.RadToDeg(m.PitchRad):0.#}");
+            // A level route: the pitch never leaves the few degrees the seat offset asks for.
+            Assert.True(Mathf.Abs(m.PitchRad) <= Mathf.DegToRad(8f),
+                $"pitch rang up at step {steps}: {Mathf.RadToDeg(m.PitchRad):0.#}");
         }
         Assert.True(m.Follower.Holding, $"never held in {steps / 60f:0} s");
         Assert.Equal(2, m.Follower.CurrentIndex); // the far end, not a re-picked node 1
@@ -263,10 +349,10 @@ public class ZeppelinMotionTests
         Assert.Equal(0f, m.Speed);
     }
 
-    private static ZeppelinDef Def(float yawDeg = 0f, float pitchDeg = 0f) => new()
+    private static ZeppelinDef Def(float yawDeg = 0f, float pitchDeg = 0f, Vector3? position = null) => new()
     {
         Node = "testzep",
-        Position = new Vector3(0f, 400f, 300f),
+        Position = position ?? new Vector3(0f, 400f, 300f),
         YawDeg = yawDeg,
         PitchDeg = pitchDeg,
         MaxSpeed = 15f,

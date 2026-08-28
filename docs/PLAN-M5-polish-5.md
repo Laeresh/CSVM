@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — CM08 (C1B/M03) and CM09 (C1/M04)
 
-21. ☐ `BL-576`: the Pandora pitches steeply up and down along the Klondike net
+21. ☑ `BL-576`: the Pandora pitches steeply up and down along the Klondike net
 22. ☑ `BL-577` + `BL-564`: no runtime for a roster or generator surface vehicle, so the patrol boats never spawn
 23. ☑ `BL-580`: `eairg32`'s launch falls back to a `player_bhawk` on a misspelt parameter block
 24. ☑ `BL-582`: a `[parent, child]` objective target is flattened into two bare names
@@ -861,30 +861,50 @@ first.
 
 # Wave C — CM08 (C1B/M03) and CM09 (C1/M04)
 
-## C21 ☐ `BL-576`: the Pandora pitches steeply up and down along the Klondike net
+## C21 ☑ `BL-576`: the Pandora pitches steeply up and down along the Klondike net
 
 **Goal.** The Pandora follows `Klondike1`'s altitude steps the way the original steers pitch for
 route following, not at 30° nose-down toward every lower node.
 
-**Evidence (confidence: seen at the controls, mechanism lead-only).** The screenshot
+**Evidence (confidence: decoded and reproduced).** The screenshot
 `Screenshots/crimsonskies_2026-08-27_23-47-46-050.png` (run-4 worktree) shows `piratezep` nose down
-about 30° along the green `Klondike1` segment. `Klondike1` is a 13-node open chain swinging between
-about 400 m and 93 m; the record's pitch band is -30 to 30 at `max_rate_pitch` 5. `BL-529` fixed
-the dead-end shuttle; the up-and-down along the route was the report's first half.
-`<TODO: re-verify still-open against the code>`
+about 30° along the green `Klondike1` segment. Still open against the code, and the net was never
+the cause: `Klondike1`'s legs are level or at most 6.3° (the altitude swing is 400 to 93 m over
+seven legs of 550 to 1200 m). A `ZeppelinMotion` trace along the real net reproduced the report
+exactly: the pre-fix turn law asked for `error/dt` as its rate and reached it through
+`accel_pitch` 0.5°/s², an undamped second-order system that rang up within 60 s into a standing
+±30° pitch swing (period about 40 s) on the level legs, pinned at the band's edges, and kept
+swinging at speed 0 on the dead-end hold.
 
-**Approach.** Read `FUN_004bf9d0`'s pitch term against `ZeppelinMotion`: whether the original
-steers pitch at the node's altitude difference directly, clamps it under a smaller authored limit
-for route following, eases altitude over the edge length, or whether a zeppelin net carries its
-own altitude field. Then match.
+**Approach.** Decoded `FUN_004bf9d0`'s pitch term: the original steers pitch at the node's
+altitude difference directly (`atan2(dy, horizontal)` from the hull to the current node), with no
+smaller authored limit, no easing over the edge length and no altitude field on the net. The
+difference is the steer routine (`FUN_004bf530`, yaw's `FUN_004bf620` is the same code): the rate
+asked for is `max_rate` eased to `max_rate·(error/25°)²` inside 25° of error, reached at
+`accel_*`, and the angle advances by that rate times `speed/max_speed`. The record's ±30 band is
+a degree-valued pair compared against radians, so it bites nowhere (load clamp, pose write
+`FUN_004bf950`, repick `FUN_004c0b50`), and the per-step clamp the remake carried was its own
+invention. `ZeppelinMotion.Steer` is now the decoded routine for both axes, the band clamp is
+gone, and `FUN_004bf360`'s inside-30 m dock glide (pose and heading decay onto the node at
+`e^(−0.2·dt)`) is `Dock`, which closes the last metre onto the follower's hold sphere the dive
+used to close by accident. `ZeppelinMotion.ResumeAt` replaces A4's `SeatedAt` copy.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** The decoded steer law verbatim, including the way-on factor and the
+absence of a pitch band; a zeppelin's only pitch limit is the slope of its route.
 
-**Verify.** `<TODO: a headless CM08 pitch trace along Klondike1 against the decoded law; the
-zeppelin motion suites unchanged where the law is unchanged>`
+**Verify.** Headless CM08 on a profile copy (`--campaign=<copy>:7 --debug-ainets=Klondike1
+--screenshot= --frames=7200`): the Pandora's ten-second `zep:` lines read pitch −0.2° to −1.5°
+across the two legs to the armed stop at node 5 and −1.9° in the ramp-down, against the pre-fix
+±30° swing. The whole released chain in `ZeppelinMotion` alone reads −2.1° to +6.1° over 400 s
+(the steepest leg is 6.3°) and holds node 0 at −1.4°. `ZeppelinMotionTests` pins the ease curve,
+the accel ramp, the way-on freeze, the 45° slope followed without overshoot or band, a
+Klondike-shaped level route staying under 8°, and `ResumeAt`; `zeppelin-pandora-dead-end` now
+asserts the pitch never exceeds the steepest leg's slope over the real net.
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** The initial-pitch clamp that never fires (`ZeppelinMotion.cs`) is decoded verbatim
-and stays. Do not flatten the net.
+and stays. Do not flatten the net. Do not reintroduce a per-step pitch band as a safety net: the
+original has none, and the ease is what keeps the pitch on the slope.
 
 ## C22 ☑ `BL-577` + `BL-564`: no runtime for a roster or generator surface vehicle, so the patrol boats never spawn
 

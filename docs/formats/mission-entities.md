@@ -92,6 +92,42 @@ with the ±30 every instance ships, the comparison is `|0.52 rad| < 30`, so the 
 This is a unit bug in the original, harmless because no instance authors an out-of-range `pitch`.
 Do not "fix" it into a clamp that actually bites, and do not read the ±30 as radians.
 
+The same degree-valued pair is read in two more places, and bites in neither: the pose write
+(`FUN_004bf950`, every step) clamps the pitch it hands the world matrix against them, and the
+node-capture repick (`FUN_004c0b50`) clamps the pitch it builds the nose direction from. The pitch
+state itself is never clamped anywhere. **A zeppelin therefore has no working pitch band at all**,
+and the remake's law carries none.
+
+### Steering
+
+The per-step law (`FUN_004bf9d0` → `FUN_004bf2c0` on a plain leg, `FUN_004bf360` on the approach
+to a halting node) steers at the current node directly: desired yaw `atan2(-dx, -dz)`, desired
+pitch `atan2(dy, sqrt(dx² + dz²))`, the raw slope from the hull to the node. There is no
+altitude easing over the edge and no altitude field on the net; the node's own position is the
+target. Yaw (`FUN_004bf620`) and pitch (`FUN_004bf530`) then go through one routine each, the same
+code, per tick with `dt` = `DAT_009ad744`:
+
+```
+error   = wrap(desired − angle)
+cap     = ±max_rate (sign of error)
+if |error| < 0.43633 rad (25°):  cap = cap · (error / 0.43633)²
+rate    = rate moved toward cap by accel · dt          (rate is state, +0xc8 pitch, +0xcc yaw)
+angle  += (speed / max_speed) · rate · dt              (max_speed the authored one, +0x9c)
+```
+
+So a turn ramps in at `accel_*`, holds `max_rate_*` while the error is over 25°, and eases out
+quadratically inside it, and the whole thing scales with way on: a docked or engine-dead hull
+(speed 0) holds its pose. The remake's `ZeppelinMotion.Steer` is this routine verbatim. ⚠ It
+matters: with `accel_pitch` 0.5°/s² a rate that asks for the full error each step and reaches it
+through that acceleration is an undamped oscillator, and rang up into a standing ±30° pitch swing
+on C1B/M03's level `Klondike1` legs (steepest leg 6.3°), which is what read at the controls as
+the Pandora diving along its route.
+
+Inside 30 m along-facing of a halting node ahead (`FUN_004bf360`'s near branch) the throttle is
+cut and the pitch is left alone; the position decays onto the node and the heading onto the leg's
+own bearing, both by `x ← target + (x − target) · e^(−0.2·dt)` (`FUN_00460700`, `FUN_00460490`
+over `FUN_00460410` = `exp(−x)`). The remake's `Dock` is that branch.
+
 ### Route ends and stop points
 
 The `net` a zeppelin flies is a patrol graph ([ai-nets.md](ai-nets.md)) walked by the shared

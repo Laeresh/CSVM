@@ -138,6 +138,9 @@ internal static class ZeppelinSuites
             motion.AliveEngines = motion.TotalEngines;
             for (int i = 0; i < 60 * 600 && !motion.Follower.Holding; i++)
                 runtime.SimStep(dt);
+            // The hold engages while the last of the way bleeds off at max_accel; give it that.
+            for (int i = 0; i < 60 * 5; i++)
+                runtime.SimStep(dt);
             ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == net.Nodes.Count - 1
                 && motion.Speed == 0f,
                 $"the far end holds it for good node={motion.Follower.CurrentIndex} id={net.Nodes[^1].StopPointId} speed={motion.Speed:0.##}");
@@ -244,19 +247,27 @@ internal static class ZeppelinSuites
             ctx.Same(1, runtime.SetStopPoint(def.Net, 7, false), $"stop 7 (node 5) releases");
             ctx.Same(1, runtime.SetStopPoint(def.Net, 8, false), $"stop 8 (node 7) releases");
 
+            // The steepest leg of the chain: the decoded steer law pitches AT the slope from
+            // here to the node and eases onto it, so the hull never pitches past it. The old
+            // bang-bang rate rang up into a standing ±30° swing on the same route.
+            float steepest = 0f;
+            foreach (var (a, b) in net.Edges)
+            {
+                var d = net.Nodes[b].Position - net.Nodes[a].Position;
+                steepest = Mathf.Max(steepest, Mathf.Abs(Mathf.Atan2(d.Y, new Vector2(d.X, d.Z).Length())));
+            }
             const float dt = 1f / 60f;
-            float maxPitchBand = Mathf.DegToRad(def.MaxPitchDeg);
-            int pitchViolations = 0;
+            float worstPitch = 0f;
             int steps = 0, budget = 60 * 900; // the whole ~9 km chain flies in well under 500 s
             while (!(motion.Follower.Holding && motion.Follower.CurrentIndex == farEnd)
                    && steps < budget)
             {
                 runtime.SimStep(dt);
-                if (motion.PitchRad > maxPitchBand + 1e-3f || motion.PitchRad < -maxPitchBand - 1e-3f)
-                    pitchViolations++;
+                worstPitch = Mathf.Max(worstPitch, Mathf.Abs(motion.PitchRad));
                 steps++;
             }
-            ctx.Same(0, pitchViolations, $"pitch stayed inside the record's ±{def.MaxPitchDeg:0}° band the whole route");
+            ctx.Check(worstPitch <= steepest + Mathf.DegToRad(1f),
+                $"pitch never exceeded the steepest leg's {Mathf.RadToDeg(steepest):0.#}° the whole route, worst {Mathf.RadToDeg(worstPitch):0.#}°");
             ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == farEnd,
                 $"the bare far end (node {farEnd}) holds it in {steps / 60f:0} s idx={motion.Follower.CurrentIndex} holding={motion.Follower.Holding}");
             ctx.Check(motion.Follower.Advances == net.Nodes.Count - 1,
@@ -1038,9 +1049,9 @@ internal static class ZeppelinSuites
             ctx.Check(handback.DistanceTo(def.Position) < 2f,
                 $"the script's last frame IS the record seat, off by {handback.DistanceTo(def.Position):0.##} m");
             var resumed = zeps.MotionFor("piratezep");
-            ctx.Check(resumed != null && !ReferenceEquals(resumed, motion)
+            ctx.Check(resumed != null && ReferenceEquals(resumed, motion)
                 && resumed.Position.DistanceTo(handback) < 0.5f,
-                $"the follower resumed from the script's last frame, not from the record pos={resumed?.Position}");
+                $"the same motion resumed in place from the script's last frame, not from the record pos={resumed?.Position}");
             if (resumed == null)
                 return;
             float yawErr = Mathf.Abs(Mathf.AngleDifference(resumed.YawRad, Mathf.DegToRad(def.YawDeg)));

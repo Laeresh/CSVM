@@ -580,8 +580,8 @@ public static class SuiteCatalog
             "is placed but held", ZeppelinMotionSuite));
         into.Add(new TestHarness.Suite("zeppelin-pandora-dead-end",
             "the structural dead-end hold (BL-529): CM08's piratezep flies its own Klondike1 " +
-            "chain, releasing the two stops the file arms (ids 7 and 8), pitch staying inside " +
-            "the record's band the whole route, until it reaches node 0 — an open end with NO " +
+            "chain, releasing the two stops the file arms (ids 7 and 8), pitch never past the " +
+            "steepest leg's slope the whole route, until it reaches node 0 — an open end with NO " +
             "stop point authored at all — and holds there for good rather than re-picking node " +
             "1 and shuttling the altitude swing back and forth forever", ZeppelinPandoraDeadEndSuite));
         into.Add(new TestHarness.Suite("zeppelin-scripted-pose",
