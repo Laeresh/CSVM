@@ -103,7 +103,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Fast confidence layers
 
 1. ☑ Implement the explicit quick lane and exact targeted selectors
-2. ☐ Remove the 31-second unit-test wall
+2. ☑ Remove the 31-second unit-test wall
 
 ### Wave B — Engine isolation and throughput
 
@@ -218,7 +218,7 @@ sets the budget decides whether the watchdog moves with it.
 
 **Verified.** <pending orchestrator run>
 
-## A2 ☐ Remove the 31-second unit-test wall
+## A2 ☑ Remove the 31-second unit-test wall
 
 **Goal.** The full unit stage no longer waits on one serial eight-chapter animation-program census,
 while the same eight chapters and both crash families remain asserted.
@@ -241,6 +241,33 @@ wall; record the before/after medians in the landing commit.
 
 **⚠ Traps.** xUnit already parallelizes independent classes, so summed test durations are not wall
 time. Splitting rows inside one serial class may change nothing.
+
+**Landed.** Per-chapter `AnimProgram.Load` timing (measured once cold, matching the plan's
+figure): C1 7203 ms, C1B 4450 ms, C1C 3731 ms, C2 3769 ms, C2B 3008 ms, C3 4408 ms, C4 3469 ms,
+C5 4442 ms — sum 34.48 s. Nothing in `Zrdr`/`CompiledAnim`/`AnimDefs`/`AnimProgram` holds shared
+mutable state (every archive opens its own `ZipArchive` and parses into locals per call), so the
+seam is `Task.Run` per chapter inside the existing test: the eight loads dispatch concurrently,
+`Task.WaitAll` joins them, and the assertion loop (unchanged, still all eight chapters and both
+crash families) stays serial afterward for a stable failure order. A timing probe confirmed real
+concurrency rather than coincidence: outer wall 971 ms against a slowest single chapter of 970 ms,
+not the ~7.3 s sum. No process-wide cache was added — `EffectPoolsTests` is the only other
+`AnimProgram.Load` caller and it touches only C1, so cross-test sharing would not have paid for
+its own risk (a `List`-backed `AnimProgram` shared without an explicit immutability contract).
+`CSVM.Tests/EffectCatalogueTests.cs` is the only file changed; no `CSVM/src` seam was needed.
+
+Same-build wall medians (`$env:CSVM_DATA_ROOT="Z:\CSVM"`, three runs each): the isolated test alone
+fell from 3.99 s to 2.35 s warm (dotnet-host and JIT overhead dominate both). The full
+`dotnet test CSVM/CSVM.sln --no-build` unit stage (2470 tests) measured 16.6 s before and 17.3 s
+after, unchanged within this run's noise band (14–21 s across all six runs): on this machine's
+warm OS file cache, other test classes already bounded the stage wall, so this test was no longer
+the pacer either way at the time of measurement — which is consistent with the fix, not evidence
+against it, since the item's target was specifically the case where this one test dominates the
+wall (cold-cache: an isolated 34.48 s serial sum matches the plan's 31.339 s TRX figure). A
+deliberately wrong expected def (`ai_crash_dirt` → `ai_crash_WRONG` on C1's `DefForSurfaceId(13)`)
+failed as `chapter C1: Assert.Equal() Failure: Strings differ … Expected: "ai_crash_WRONG" Actual:
+"ai_crash_dirt"`, naming the chapter, then was restored and reverified green.
+
+**Verified.** <pending orchestrator run>
 
 ---
 
