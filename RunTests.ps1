@@ -61,6 +61,14 @@
     summary names what went unchecked: "the data was not there" must never read as "the
     check held".
 
+    Wall-time budgets: each stage row and the total print the measured budget for the lane the run
+    is in (the complete gate, or -Quick), from analysis\verification-budgets.json -- which is where
+    the numbers and the rule that set them live, so this help names the file rather than figures
+    that would drift out of it. A stage over its budget prints "over budget" and is listed after
+    the summary. These are AWARENESS thresholds and NEVER change the exit code: this is a
+    workstation, and load the script cannot see must not turn a correct tree red. A skipped stage
+    is compared against nothing, and the total is compared only when the lane's own stages all ran.
+
     Extracted game data is found through CSVM_DATA_ROOT by the engine and the unit tests
     alike, so this runs from a git worktree -- which has no extracted/, no tools/ and no
     CrimsonSkiesGame/ -- with that one variable pointed at the primary tree. Godot is
@@ -1815,6 +1823,41 @@ if (-not $RunHitchNow) {
 
 # ---- summary -----------------------------------------------------------------------------
 
+# Wall-time budgets, checked in at analysis\verification-budgets.json rather than written here so
+# the help above can name the file instead of figures that would drift out of it. They are
+# awareness thresholds and never touch $failedStages: this is a workstation, and load the script
+# cannot see must not turn a correct tree red. A stage the file does not name prints no budget.
+$BudgetFile = Join-Path $RepoRoot "analysis\verification-budgets.json"
+$Budgets = $null
+if (Test-Path $BudgetFile) {
+    try {
+        # SHELL-7: .NET's reader, not Get-Content, for a BOM-less UTF-8 file.
+        $Budgets = [System.IO.File]::ReadAllText($BudgetFile) | ConvertFrom-Json
+    } catch {
+        Write-Host "  could not read $BudgetFile : $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
+$BudgetLane = if ($Quick) { "quick" } else { "full" }
+$LaneBudget = $null
+if ($Budgets -and $Budgets.lanes -and $Budgets.lanes.PSObject.Properties[$BudgetLane]) {
+    $LaneBudget = $Budgets.lanes.$BudgetLane
+}
+if ($LaneBudget -eq $null) {
+    Add-Unchecked "stage wall times were not compared against a budget (no '$BudgetLane' lane readable in $BudgetFile): a verification-time regression would not be named here"
+}
+
+function Get-StageBudget {
+    param([string]$Name)
+    if ($LaneBudget -eq $null -or $LaneBudget.stages -eq $null) {
+        return 0.0
+    }
+    $prop = $LaneBudget.stages.PSObject.Properties[$Name]
+    if ($prop -eq $null) {
+        return 0.0
+    }
+    return [double]$prop.Value
+}
+
 $nameWidth = 4
 foreach ($stage in $Stages) {
     if ($stage.Name.Length -gt $nameWidth) {
@@ -1827,14 +1870,62 @@ foreach ($stage in $Stages) {
     $totalSeconds += $stage.Seconds
 }
 
+# A skipped stage is compared against nothing, and the total only against the lane whose work it
+# actually did: a run that skipped goldens is not a slow full run, it is a different run.
+$OverBudget = @()
+$stageBudgetText = @{}
+foreach ($stage in $Stages) {
+    $budget = Get-StageBudget $stage.Name
+    if ($budget -le 0 -or $stage.Status -eq "SKIP") {
+        $stageBudgetText[$stage.Name] = ""
+        continue
+    }
+    if ($stage.Seconds -gt $budget) {
+        $stageBudgetText[$stage.Name] = "[over budget $(Format-Seconds $budget)s]"
+        $OverBudget += "$($stage.Name) took $(Format-Seconds $stage.Seconds)s against a $(Format-Seconds $budget)s budget"
+    } else {
+        $stageBudgetText[$stage.Name] = "[budget $(Format-Seconds $budget)s]"
+    }
+}
+$ranStages = @{}
+foreach ($stage in $Stages) {
+    if ($stage.Status -ne "SKIP") {
+        $ranStages[$stage.Name] = 1
+    }
+}
+$laneComplete = ($LaneBudget -ne $null)
+if ($laneComplete) {
+    foreach ($needed in @($LaneBudget.requires)) {
+        if (-not $ranStages.ContainsKey($needed)) {
+            $laneComplete = $false
+        }
+    }
+}
+$totalBudgetText = ""
+if ($laneComplete -and [double]$LaneBudget.total -gt 0) {
+    $totalBudget = [double]$LaneBudget.total
+    if ($totalSeconds -gt $totalBudget) {
+        $totalBudgetText = " [over budget $(Format-Seconds $totalBudget)s]"
+        $OverBudget += "the whole $BudgetLane run took $(Format-Seconds $totalSeconds)s against a $(Format-Seconds $totalBudget)s budget"
+    } else {
+        $totalBudgetText = " [budget $(Format-Seconds $totalBudget)s]"
+    }
+}
+
 Write-Host ""
 Write-Host "--- RunTests ------------------------------------------------------------"
 foreach ($stage in $Stages) {
-    $line = "  {0}  {1}  {2,6}s  {3}" -f $stage.Status, $stage.Name.PadRight($nameWidth), (Format-Seconds $stage.Seconds), $stage.Detail
+    $line = "  {0}  {1}  {2,6}s  {3,-20}{4}" -f $stage.Status, $stage.Name.PadRight($nameWidth), (Format-Seconds $stage.Seconds), $stageBudgetText[$stage.Name], $stage.Detail
     Write-Host $line -ForegroundColor (Get-StatusColor $stage.Status)
 }
 foreach ($what in $Unchecked) {
     Write-Host "   .  not checked: $what" -ForegroundColor Yellow
+}
+if ($OverBudget.Count -gt 0) {
+    Write-Host "   .  over budget, awareness only -- the exit code is unchanged (analysis\verification-budgets.json):" -ForegroundColor Yellow
+    foreach ($over in $OverBudget) {
+        Write-Host "        $over" -ForegroundColor Yellow
+    }
 }
 $dataRootLine = "  data root: "
 if ($env:CSVM_DATA_ROOT) {
@@ -1852,9 +1943,9 @@ if ($HiddenDesktop) {
 }
 Close-HiddenDesktop
 if ($failedStages.Count -gt 0) {
-    Write-Host ("  result: FAIL in {0} -- {1}s total, exit 1" -f ($failedStages -join ", "), (Format-Seconds $totalSeconds)) -ForegroundColor Red
+    Write-Host ("  result: FAIL in {0} -- {1}s total{2}, exit 1" -f ($failedStages -join ", "), (Format-Seconds $totalSeconds), $totalBudgetText) -ForegroundColor Red
 } else {
-    Write-Host ("  result: PASS -- {0}s total, exit 0" -f (Format-Seconds $totalSeconds)) -ForegroundColor Green
+    Write-Host ("  result: PASS -- {0}s total{1}, exit 0" -f (Format-Seconds $totalSeconds), $totalBudgetText) -ForegroundColor Green
 }
 Write-Host "-------------------------------------------------------------------------"
 

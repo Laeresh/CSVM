@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Prove or reject parallel golden rendering
 22. ☑ Set the hitch check's isolated cadence
-23. ☐ Ratchet the full verification budget and documentation
+23. ☑ Ratchet the full verification budget and documentation
 
 ## Dependency and parallelism notes
 
@@ -823,7 +823,7 @@ the run, exactly as the awareness contract requires.
 
 **Verified.** <pending orchestrator run>
 
-## C23 ☐ Ratchet the full verification budget and documentation
+## C23 ☑ Ratchet the full verification budget and documentation
 
 **Goal.** The optimized full gate has a measured budget, preserves its complete verdict contract,
 and leaves one authoritative workflow in tooling, verification, project context, and agent files.
@@ -834,8 +834,8 @@ available savings, but the final full-wall target depends on B13 and C21's measu
 **Approach.** Run same-build variation, set stage and total warning budgets above the observed warm
 distribution, and record timings in the summary without making workstation noise a correctness
 failure. Reconcile `docs/tooling.md`, `docs/verification.md`, `PROJECT_CONTEXT.md`, `AGENTS.md`,
-`AGENTS.override.md`, and `CLAUDE.md`; remove transitional A1 wording. <TODO: set the full-run wall
-budget from the landed serial/sharded distribution rather than choosing it now.>
+`AGENTS.override.md`, and `CLAUDE.md`; remove transitional A1 wording. The full-run wall budget is
+set from the landed sharded distribution measured below rather than chosen in advance.
 
 **Model recommendation.** high, because this closes the plan's verification and documentation
 contract across every agent entry point.
@@ -846,3 +846,98 @@ documented commands exactly match `Get-Help .\RunTests.ps1 -Detailed`.
 
 **⚠ Traps.** Timing budgets are awareness thresholds, not correctness verdicts. Do not make a busy
 workstation fail otherwise-correct code or allow a quick run to satisfy the full landing rule.
+
+**Measured same-build distribution** (`$env:CSVM_DATA_ROOT="Z:\CSVM"`, warm, foreground, nothing
+else on the machine, engine at the default 4 shards and goldens at the default 4 workers, one
+binary throughout, three back-to-back runs of each command):
+
+| Command | build | units | engine | goldens | hitch | total |
+|---|---:|---:|---:|---:|---:|---:|
+| `.\RunTests.ps1` run 1 | 6.1 s | 16.3 s | 66.3 s | 30.7 s | skipped | 119.3 s |
+| run 2 | 0.8 s | 15.8 s | 66.3 s | 29.1 s | skipped | 112.0 s |
+| run 3 | 0.7 s | 16.7 s | 66.4 s | 29.3 s | skipped | 113.2 s |
+| `.\RunTests.ps1 -Quick` run 1 | 0.7 s | 1.9 s | 27.9 s | skipped | skipped | 30.6 s |
+| run 2 | 0.7 s | 1.9 s | 27.9 s | skipped | skipped | 30.5 s |
+| run 3 | 0.7 s | 1.9 s | 27.8 s | skipped | skipped | 30.4 s |
+
+Spread on the same build is 0.2 % for the engine stage, 5.7 % for units, 5.5 % for goldens and
+0.7 % for `-Quick`'s total. The one wide column is `build`: 6.1 s on the first invocation of a
+session against 0.7-0.8 s afterwards, which is MSBuild node startup and a cold file cache rather
+than compilation, so the budget has to clear the cold case. `-Hitch` was measured separately at
+16.4 / 16.5 / 16.5 s, taking a complete `-Hitch` run to 128.0 and 129.7 s.
+
+**Decision: budgets in `analysis/verification-budgets.json`, not in `RunTests.ps1`.** The task was
+to keep the script's help accurate, and a help block that names a file cannot go stale while one
+quoting figures can. The file carries the numbers, the rule, the measured distribution above and
+the reasons for the two deliberate omissions, so the script's help says only where to look and what
+a budget may never do.
+
+**The rule.** Each budget is the slowest of the three warm runs above, plus 50 %, rounded up to the
+next 5 seconds, with a 10-second floor so a sub-second stage is not tripped by ordinary process
+startup. Two lanes, because a quick engine stage and a full one are different amounts of work:
+full is build 10 s, units 30 s, engine 100 s, goldens 50 s, hitch 30 s and 180 s total; quick is
+build 10 s, units 10 s, engine 45 s and 50 s total. `perf` deliberately carries none, since it
+records rather than judges and a committed wall-time threshold for it is what METHOD-3 and PERF-5
+rule out. The engine stage's 300 s per-launch watchdog stays where it is and is not a budget: it
+kills a hung launch and fails the stage, so it was not moved with these numbers (A1's ⚠ note left
+that open; the sharded stage's slowest shard is 63.8 s, about five times under it).
+
+**What it prints.** Every stage row carries `[budget Ns]`, or `[over budget Ns]` with a yellow list
+under the summary naming each overrun; the result line carries the total the same way. Nothing here
+reaches `$failedStages`, so a busy workstation cannot fail correct code. A SKIP row is compared
+against nothing, and the total only when the lane's own `requires` stages all ran, so a targeted
+run prints its total unbudgeted rather than against one describing a different amount of work.
+
+**Contract checks from a clean tree.** The targeted engine loop
+(`-Suite weapons-fire -SkipUnits -SkipGoldens`) ran 1/1 in 2.8 s total, the targeted unit loop
+(`-UnitFilter "FullyQualifiedName~DecodeCacheTests" -SkipEngine -SkipGoldens`) 5/5 in 2.9 s, and
+`-Quick` 219 units and 13 suites in 30.5 s; each named every omitted surface in `not checked:`
+lines, and neither targeted run printed a total budget. The complete `.\RunTests.ps1 -Hitch` is
+green end to end: build 0.7 s, units 2506/2506 in 16.5 s, engine 153/153 in 66.6 s (slowest shard
+63.8 s, errors clean), goldens 16/16 hash-identical in 29.4 s (`manifest.json` unmodified in
+content, GOLD-9), hitch clean/inject as expected in 16.5 s, 129.7 s total against a 180 s budget,
+exit 0.
+
+**Perturbations**, one at a time, each reverted with the Edit tool and the revert confirmed by
+`git diff` before the next was applied:
+
+| Stage | The check perturbed | What the run reported | Exit |
+|---|---|---|---|
+| units | `DecodeCacheTests`'s `Assert.Equal(1, cache.Hits)` to 99 | `FAIL units 2505 passed, 1 failed of 2506`; engine, goldens still ran and passed, since only a failed build stops the run | 1 |
+| engine | `CombatSuites.WeaponsFire`'s `ctx.Same(0, result.Errors, ...)` to 1 | `FAIL engine 152 passed, 1 failed ... [weapons-fire]`, the failing name sorted back into registry order out of its shard | 1 |
+| goldens | `viewer-bhawk`'s manifest hash to all zeros | `MOVED viewer-bhawk: 000... -> 0f50dc5b...`, `1 moved, 0 broken of 16 [viewer-bhawk]`, the other 15 `ok` | 1 |
+| hitch | `RunTests.ps1`'s `$line.Frame -ne 300` to `-ne 999`, under `-Hitch` | `!! hitch awareness: inject: hitch fired on frame 300, expected 300` and `TODO hitch ... 1 awareness item(s)` | **0** |
+
+The hitch row is the contract, not a gap: the stage is awareness-only and never changes the exit
+code, so its perturbation has to stay visible while the run still passes. The other three each
+reached the one exit code from a different stage.
+
+**⚠ `PerfSampleTests.AScopeAllocatesNothing` is not same-build stable inside the parallel unit
+stage.** It went red once (`Expected: 0, Actual: 3984` bytes) in a run whose only tree difference
+from six green ones was this item's PowerShell and documentation edits, then passed three times
+in a row when run alone and in the next complete run. An allocation assertion measures the process
+it happens to share with fourteen other test classes running concurrently, so it is a flake rather
+than a regression; it is recorded here because a rare red in the landing gate is exactly what
+teaches a reader to re-run until green.
+
+**Documentation reconciled.** `docs/tooling.md` (targeted loops lose the now-redundant
+`-SkipHitch`, `-Quick`'s measured band updated from 36-40 s to 30.4-30.6 s, a new budgets
+paragraph that names the file rather than repeating its per-stage figures), `docs/verification.md`
+(new PERF-18: a verification-time budget may print, it may not change an exit code),
+`PROJECT_CONTEXT.md` (the development-loop bullets, both targeted loops spelled out, a budget
+bullet, `RunTests.ps1`'s repo-layout one-liner given its shard/worker/hitch defaults, and the two
+`analysis/` JSON files indexed), `AGENTS.md`, `AGENTS.override.md` and `CLAUDE.md` (the same loop
+and the same budget sentence in each). Every command in all six files matches
+`Get-Help .\RunTests.ps1 -Detailed`: the script's 18 parameters are exactly the switch list
+`docs/tooling.md` prints, and the defaults it documents (`-Shards` 0 meaning 4 for a full run and
+1 for a named selection, `-GoldenWorkers` 4, `-PerfLabel` "run") are the parameter block's own.
+
+**⚠ One mismatch found, and it was not in the script.** `PROJECT_CONTEXT.md` said the Godot parser
+accepts 133 flags while `docs/cli.md`, which is the description of record and keeps its own
+index-versus-parser reconciliation per flag, says 138. Nothing in this plan touched the flag set
+(A1's grammar rides inside `--run-tests=`'s existing value), so the index file was simply behind
+`cli.md` and now reads 138. The other two counts re-checked: `SuiteCatalogTests` asserts 153
+registrations and the engine stage reports 153/153, and no live document states a unit-test count,
+so the stage's own 2506 has nothing to drift against.
+
+**Verified.** <pending orchestrator run>

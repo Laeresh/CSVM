@@ -341,6 +341,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **PERF-17** — **`StartupProfile`'s `rest` term is `build − Σ(phases)`, real uninstrumented work
   — on a probe run it also holds whatever the probe itself did before the build closed, not only
   build overhead.**
+- **PERF-18** — **A verification-time budget is an awareness threshold, never a verdict: it may
+  print, it may not change an exit code.** METHOD-3 and PERF-5 already say a committed wall-time
+  number lies as the machine drifts, so a budget that gated would fail correct code on a busy
+  workstation and, worse, teach the reader to re-run until it passes. `RunTests.ps1`'s budgets
+  (`analysis/verification-budgets.json`) are set at the slowest of three back-to-back warm runs plus
+  50 %, and a stage past one prints `over budget` beside a summary whose exit code is unchanged. The
+  budget's job is to make a verification-time regression visible in the run that caused it; deciding
+  whether it is one is still a paired A/B against a freshly measured same-build band.
 
 ## LOG — logs, error censuses, and exit codes
 

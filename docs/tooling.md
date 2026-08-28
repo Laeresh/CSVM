@@ -160,19 +160,35 @@ Switches: **`-Suite <name>[,<name>]`** (exact in-engine suite names), **`-Filter
 **`-SkipEngine`**, **`-SkipGoldens`**, **`-RegenGoldens`**, **`-GoldenWorkers <n>`**, **`-Hitch`**,
 **`-SkipHitch`**, **`-Perf`** (+ `-PerfLabel`, `-PerfCompare`, `-PerfFilter`, `-PerfIterations`, `-PerfFrames`).
 
+**Every stage prints its wall time against a budget, and a budget never fails a run.** The numbers
+live in `analysis/verification-budgets.json`, one lane for the complete gate and one for `-Quick`,
+beside the measured distribution they came from; the per-stage figures are not repeated here or in
+the script's help, so they cannot drift out of the file. Each budget is the slowest of three
+back-to-back warm runs plus 50 %, rounded up to the next 5 seconds, with a 10 second floor so a
+sub-second stage is not tripped by ordinary process startup. The full run measured 112.0 / 113.2 /
+119.3 s against a 180 s total, `-Quick` 30.4 / 30.5 / 30.6 s against 50 s. A stage past its budget
+prints `over budget` and is listed under the summary block, and the exit code is untouched: this is
+a workstation, and load the script cannot see must not turn a correct tree red. A skipped stage is
+compared against nothing and the total only when the lane's own stages all ran, so a targeted run
+prints its total without a budget rather than against one describing a different amount of work.
+The perf stage carries no budget on purpose, because it records rather than judges and its verdict
+comes from a paired A/B against a freshly measured same-build band (`docs/verification.md` PERF-18).
+The engine stage's 300 s per-launch watchdog is a different mechanism and not a budget: it kills a
+hung launch and fails the stage, where these numbers only print.
+
 **Selection is exact or substring, and a miss is a failure.** `-Suite` and `-Filter` compose into
 the harness's own term grammar on `--run-tests=` (`suite:<name>` exact, `tier:<name>` a checked-in
 tier, anything else a substring; terms are comma separated and unioned, and the run keeps registry
 order). A term that selects no suite ends the harness before anything runs and fails the stage,
 naming the term — an empty selection is never an empty pass. `-UnitFilter` holds the same rule from
 the other side: a filter matching zero tests fails the units stage rather than reporting a green
-zero. The targeted loops are `.\RunTests.ps1 -Suite <name> -SkipUnits -SkipGoldens -SkipHitch`
-(measured ~4 s warm) and `.\RunTests.ps1 -UnitFilter "FullyQualifiedName~<test>" -SkipEngine
--SkipGoldens -SkipHitch` (~2 s).
+zero. The targeted loops are `.\RunTests.ps1 -Suite <name> -SkipUnits -SkipGoldens` and
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~<test>" -SkipEngine -SkipGoldens`, each about 3 s
+warm end to end. Neither needs `-SkipHitch`: the hitch stage is opt-in, so it is already out.
 
 **`-Quick` is the broad partial gate**: build, the quick unit tier (`--filter Tier=Quick`), the
-quick engine tier (`--run-tests=tier:quick`), no goldens and no hitch. Measured 36–40 s warm on the
-development machine against a ≤60 s budget. Membership of both tiers is checked in — the
+quick engine tier (`--run-tests=tier:quick`), no goldens and no hitch. Measured 30.4–30.6 s warm on
+the development machine against a ≤60 s milestone target. Membership of both tiers is checked in — the
 `[Trait("Tier", "Quick")]` classes in `CSVM.Tests` and `SuiteCatalog.QuickTier` — and chosen by the
 failure surface each representative can catch, never inferred from a diff or from elapsed time.
 `emitter-lifetime` is outside the engine tier because `puffer-modes` covers the emitter runtime end

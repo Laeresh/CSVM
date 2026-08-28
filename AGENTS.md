@@ -6,9 +6,12 @@ the "Current status" pointer. This file holds only what's specific to agent tool
 Claude Code (see [`CLAUDE.md`](CLAUDE.md) for that).
 
 Follow PROJECT_CONTEXT.md's **Development verification loop**: run the exact affected suite or unit
-while editing, use `.\RunTests.ps1 -Quick` for broad development confidence, and run the complete
-`.\RunTests.ps1` before landing a change under `CSVM/`.
+while editing (`.\RunTests.ps1 -Suite <suite> -SkipUnits -SkipGoldens`, or `-UnitFilter <expr>
+-SkipEngine -SkipGoldens`), use `.\RunTests.ps1 -Quick` for broad development confidence, and run
+the complete `.\RunTests.ps1` before landing a change under `CSVM/`.
 Quick and targeted runs never satisfy that landing gate; `CSVM.Tests/`-only changes do not require it.
+Stage times print against `analysis/verification-budgets.json`; `over budget` is awareness only and
+never changes the exit code.
 
 ## Agent tooling specifics
 
