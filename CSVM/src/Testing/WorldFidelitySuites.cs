@@ -748,7 +748,11 @@ internal static class WorldFidelitySuites
             var textures = new TextureArchive(texturesPath);
             var pool = new ProjectilePool(textures, null, null);
             ctx.Host.AddChild(pool);
+            // Every launch, not the last: a body that flies long enough sees the generator's next
+            // credit launch a second aircraft, and a rig left on the shared host keeps its `ai1_`
+            // name from the next suite's spawn.
             FlightController? launched = null;
+            var spawned = new List<FlightController>();
             try
             {
                 var spec = SessionSpec.Parse(Array.Empty<string>());
@@ -773,7 +777,12 @@ internal static class WorldFidelitySuites
                     (name, scope) => world.Runtime.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
                     nets, ctx.PlaneName,
                     (EnemyGeneratorDef d, Vector3 pos, Vector3 look, AiPilot pilot) =>
-                        launched = roster.SpawnAi(new AiSpawn(ctx.PlaneName, pos, look, pilot, ShippedSkins: true)));
+                    {
+                        var rig = roster.SpawnAi(new AiSpawn(ctx.PlaneName, pos, look, pilot, ShippedSkins: true));
+                        spawned.Add(rig);
+                        launched ??= rig;
+                        return rig;
+                    });
                 ctx.Same(1, generators.LiveCount, $"'{RunGenerator}' is live with its take-off path");
 
                 // The uncredited cycle launches on its own period, stepped at the sim rate so the
@@ -798,7 +807,10 @@ internal static class WorldFidelitySuites
             }
             finally
             {
-                launched?.Free();
+                foreach (var rig in spawned)
+                {
+                    rig.Free();
+                }
                 pool.Free();
                 textures.Dispose();
             }
