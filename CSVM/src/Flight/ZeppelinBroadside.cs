@@ -54,6 +54,12 @@ public sealed class ZeppelinBroadside
     /// 10/15/20 s).</summary>
     public const float FallbackFireDelaySeconds = 20f;
 
+    /// <summary>The one <c>targets</c> name that is not a zeppelin record: the human aircraft.
+    /// The original resolves every <c>targets</c> name through the same world-node table at
+    /// parse, so <c>player</c> is a candidate exactly like a zeppelin's node, and a name naming
+    /// no node is dropped there.</summary>
+    public const string PlayerTarget = "player";
+
     public ZeppelinBroadside(ZeppelinDef def,
         Func<ZeppelinCannon, float>? deploySeconds = null,
         Func<ZeppelinCannon, float>? retractSeconds = null)
@@ -138,6 +144,26 @@ public sealed class ZeppelinBroadside
         Vector3 targetVel, Vector3 platformVel, out Vector3 aimDir) =>
         AimAssist.TryIntercept(muzzlePos, roundSpeed, targetPos, targetVel - platformVel,
             out aimDir, out _);
+
+    public static bool IsPlayerTarget(string name) =>
+        name.Equals(PlayerTarget, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The decoded candidate walk: the authored <c>targets</c> list in authored order,
+    /// the first name whose <paramref name="resolve"/> yields a live target wins, a name that
+    /// yields none is skipped. No team, side or hostility read exists in the original's chain,
+    /// so none is applied here; the record's own list is the only lever.</summary>
+    public static T? FirstLiveTarget<T>(IReadOnlyList<string> targets, Func<string, T?> resolve)
+        where T : struct
+    {
+        foreach (var name in targets)
+        {
+            if (resolve(name) is { } hit)
+            {
+                return hit;
+            }
+        }
+        return null;
+    }
 
     /// <summary>The zeppelin-vs-zeppelin pick: one index into the already-filtered list of the
     /// TARGET zeppelin's in-arc live gasbags, drawn from the seeded rng (the engine's

@@ -134,16 +134,25 @@ binary rather than inferred:
   design document instead describes a rolled hit chance ramping from 20 % at maximum range to
   100 % near 200 m. **Nothing like that roll is in the shipped fire path** — treat the design's
   curve as design-era and do not implement it.
-- ⚠ **The `targets` list carries no team or hostility test, at any stage.** A record's `targets`
-  names are parsed as unresolved pairs at load (`FUN_004bd8d0`), resolved once after every mission
-  zeppelin is placed by matching each name against the live zeppelin roster (`FUN_004bede0` calling
-  `FUN_004bd430`; the first name match wins, and a name matching no zeppelin (`player` is the only
-  one shipped data uses) falls through to a general named-object position lookup instead), and
-  consumed by the fire routine (`FUN_004bfe00`) on arc and intercept alone. No team, side, or ally
-  field is read anywhere in that chain. A record authoring `targets [player]` fires on the player
-  whenever in `cannon_fire_range` and arc, whether or not the record carries a `team` key at all;
-  the remake's `ZeppelinRuntime.Cannons.ResolveTarget` matches this: the first live authored name
-  wins, with no hostility filter to add.
+- ⚠ **The `targets` list is a world-node list, and `player` is one of its nodes.** At load,
+  `FUN_004bd8d0` resolves each `targets` name through the general node-by-name lookup
+  `FUN_004d0280(7, name)` (node table 7, the same table the cutscene code resolves `player` in,
+  see `anim-definitions/cutscenes.md` "The name is what resolves") and stores the node pointer
+  as the first half of a `(node, zeppelin)` pair; a name naming no node is dropped there and
+  never reaches the fire path. After every mission zeppelin is placed, `FUN_004bede0` fills the
+  second half by calling `FUN_004bd430` on the global zeppelin roster (`0x71df80`), which walks
+  the roster's pointer vector comparing each entry's own node (`+0x1c`) against the pair's node
+  and returns the first match or 0. The fire routine `FUN_004bfe00` then walks the pairs in
+  authored order: a pair with a zeppelin takes the gasbag branch below; a pair whose zeppelin is
+  0 (the `player` case, the only one shipped data authors) reads the node's world position
+  through `FUN_004cf2c0` and runs the same intercept solve and `> 0.707` arc test against it
+  directly. No team, side or ally field is read anywhere in that chain. A record authoring
+  `targets [player]` therefore fires on the player's aircraft whenever it is in
+  `cannon_fire_range` and arc, whether or not the record carries a `team` key at all; the
+  remake's `ZeppelinRuntime.Cannons.ResolveTarget` (through `ZeppelinBroadside.FirstLiveTarget`)
+  matches this: the first live authored name wins, `player` included, with no hostility filter
+  to add. ⚠ The controls report that the original's broadsides never engage the player stands
+  against this decode and is owed a flown original-game check (`backlog.md` `BL-567`).
 
 What the remake's implementation (M4 F19, `Flight/ZeppelinBroadside.cs` +
 `Session/ZeppelinRuntime.Cannons.cs`) added to the picture:

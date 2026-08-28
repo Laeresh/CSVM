@@ -2279,8 +2279,11 @@ The pure zeppelin broadside law (M4 F19), engine-free: the decoded 90° arc
 invented), the per-cannon stowed→deploy→ready→fire machine (`Step` emits deploy/retract/
 ready lists; deploy/retract durations come from the authored anim defs) with its own re-fire
 timer (`cannon_fire_delay`, armed by `Fired` per cannon), `TryAim` (the intercept solve,
-`AimAssist.TryIntercept` consumed) and `PickGasbag` (the zeppelin-vs-zeppelin rand() pick over
-the target's in-arc live gasbags). `Session/ZeppelinRuntime.Cannons.cs` wires it. Pinned by
+`AimAssist.TryIntercept` consumed), `PickGasbag` (the zeppelin-vs-zeppelin rand() pick over
+the target's in-arc live gasbags) and `FirstLiveTarget` (the decoded candidate walk over the
+record's `targets` in authored order, `player` a candidate like any zeppelin node, no team or
+hostility read; `formats/mission-entities.md` "Broadside firing" has the chain).
+`Session/ZeppelinRuntime.Cannons.cs` wires it. Pinned by
 `ZeppelinBroadsideTests` + the `zeppelin-broadside` suite.
 
 ## src/Flight/ZeppelinDamage.cs

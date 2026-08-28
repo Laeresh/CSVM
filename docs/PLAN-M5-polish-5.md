@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `BL-513`: the persist-log replay runs the previous mission's death choreography at mission open
 2. ☐ `BL-521`: the barrage balloons stand at mission start
-3. ☐ `BL-567`: the Pandora's broadside cannons fire on the player
+3. ☑ `BL-567`: the Pandora's broadside cannons fire on the player (decode: `player` resolves; the report stands against it, flown original check owed)
 4. ☐ `BL-568`: the Pandora starts moored in the dry dock instead of flying in
 5. ☐ `BL-512` + `BL-578`: `ObjectMotion`'s `rnd_xz` makes the Barracuda and the CM08 tanker jump
 6. ☐ `BL-522` + `BL-527`: a surface generator's launch does not fly its take-off run, so the fighters die on the deck
@@ -264,7 +264,7 @@ supersedes a chapter def.
 **⚠ Traps.** `PLAN-c3-balloon-kill-chain.md` settled the balloons' kill chain for C3/M02; that is
 the live kill path, not this mission's start state, so do not reopen it.
 
-## A3 ☐ `BL-567`: the Pandora's broadside cannons fire on the player
+## A3 ☑ `BL-567`: the Pandora's broadside cannons fire on the player
 
 **Goal.** The Pandora's broadsides engage zeppelins only, never the player's aircraft, as the
 original's rule states; or, if the decode shows `player` resolves, the report is recorded as
@@ -277,20 +277,43 @@ three more `wep_28` hits; `wep_28` is the piratezep broadside's weapon.
 the player when the record names `player`. `BL-517`'s disproof read `FUN_004bd8d0` parsing
 `targets` into name pairs and `FUN_004bede0` resolving each through `FUN_004bd430`, a name match
 against the live zeppelin roster; it did not settle what a non-zeppelin name resolves to.
-`<TODO: re-verify still-open against the code>`
+Re-verified against the code: `ResolveTarget` still fires on `player`, and the decode below
+says the original does too.
 
-**Approach.** Re-read `FUN_004bd430` for the list it walks, and `FUN_004bfe00` for what an
-unresolved pair does at fire time. If the roster is zeppelins only, `ResolveTarget` drops
-non-zeppelin names and `docs/formats/mission-entities.md` "Broadside firing" is corrected. If
-`player` does resolve, record how.
+**Decode (settled).** `player` resolves, and not through the zeppelin roster. `FUN_004bd8d0`'s
+`targets` parse resolves every name through `FUN_004d0280(7, name)`, the general node table 7
+lookup (the same call the cutscene code uses to find the player's node, `cutscenes.md` "The name
+is what resolves"), and stores the node pointer as the first half of a `(node, zeppelin)` pair;
+a name naming no node is dropped at parse. `FUN_004bede0` then calls `FUN_004bd430` with `ecx =
+0x71df80`, the global zeppelin roster, which walks the roster's pointer vector comparing each
+entry's node (`+0x1c`) with the pair's node and returns the first match or 0. `FUN_004bfe00`
+walks the pairs in authored order: `pair.zeppelin != 0` takes the gasbag branch, `pair.zeppelin
+== 0` reads the node's world position through `FUN_004cf2c0(node)` and runs the same intercept
+solve and `> 0.707` arc test against it, then fires. The roster is zeppelins only, but an
+unresolved pair is not skipped: it is fired on at its node's position. So a record authoring
+`targets [player]` fires on the player in the original, and the remake's resolver is correct.
+The controls report stands against the decode and is handed to a flown original-game check
+(kept in `backlog.md` under `BL-567`, rewritten to say so).
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Approach (as landed).** No candidate-set change. The resolver's walk moved into the pure
+`ZeppelinBroadside.FirstLiveTarget` (`IsPlayerTarget` names the one non-zeppelin candidate),
+`ZeppelinRuntime.Cannons.ResolveTarget` consumes it, and `ZeppelinBroadsideTests` pins the walk:
+`player` is a candidate like any zeppelin node, authored order, an unresolved name is skipped,
+no name resolving gives no target. `docs/formats/mission-entities.md` "Broadside firing" carries
+the corrected chain.
 
-**Verify.** `<TODO: a headless CM04 run with the player inside broadside range shows no wep_28 hit
-on P1; name the suite or the log check>`
+**Model recommendation.** medium.
 
-**⚠ Traps.** Do not add a hostility or team gate; `BL-517` found none in the engine, and the
-lever is the resolver's candidate set.
+**Verify.** `ZeppelinBroadsideTests` (the four `FirstLiveTarget` facts) and the
+`zeppelin-broadside` suite, whose C1/M04 leg already asserts the readied side volleys `wep_28` at
+the player; that assertion is now the decoded behaviour, not a placeholder. The headless CM04
+check the item first proposed (no `wep_28` hit on P1) would fail by design and is not the gate.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** Do not add a hostility or team gate; `BL-517` found none in the engine, and this
+decode found none either. The user's report is not answered by this decode: only the original
+game flown into the Pandora's broadside arc in C3/M03 can rank it, and that capture is owed.
 
 ## A4 ☐ `BL-568`: the Pandora starts moored in the dry dock instead of flying in
 

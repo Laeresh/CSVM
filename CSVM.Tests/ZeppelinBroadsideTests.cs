@@ -206,6 +206,43 @@ public class ZeppelinBroadsideTests
             Assert.Equal(ZeppelinBroadside.FallbackDeploySeconds, c.DeploySeconds));
     }
 
+    // The decoded candidate walk: the original resolves every targets name through the world
+    // node table, so 'player' is a candidate like a zeppelin's node and no team gate exists.
+    [Fact]
+    public void PlayerIsACandidateLikeAnyZeppelinNode()
+    {
+        Assert.True(ZeppelinBroadside.IsPlayerTarget("player"));
+        Assert.True(ZeppelinBroadside.IsPlayerTarget("Player"));
+        Assert.False(ZeppelinBroadside.IsPlayerTarget("piratezep"));
+        int? hit = ZeppelinBroadside.FirstLiveTarget(new[] { "player" },
+            name => ZeppelinBroadside.IsPlayerTarget(name) ? 1 : (int?)null);
+        Assert.Equal(1, hit);
+    }
+
+    [Fact]
+    public void FirstLiveTargetWalksAuthoredOrder()
+    {
+        var live = new Dictionary<string, int> { ["dantezep"] = 7, ["player"] = 1 };
+        int? Resolve(string name) => live.TryGetValue(name, out var v) ? v : null;
+        Assert.Equal(7, ZeppelinBroadside.FirstLiveTarget(new[] { "dantezep", "player" }, Resolve));
+        Assert.Equal(1, ZeppelinBroadside.FirstLiveTarget(new[] { "player", "dantezep" }, Resolve));
+    }
+
+    [Fact]
+    public void FirstLiveTargetSkipsAnUnresolvedName()
+    {
+        var live = new Dictionary<string, int> { ["player"] = 1 };
+        int? Resolve(string name) => live.TryGetValue(name, out var v) ? v : null;
+        Assert.Equal(1, ZeppelinBroadside.FirstLiveTarget(new[] { "deadzep", "player" }, Resolve));
+    }
+
+    [Fact]
+    public void FirstLiveTargetIsNullWhenNothingResolves()
+    {
+        Assert.Null(ZeppelinBroadside.FirstLiveTarget(new[] { "deadzep" }, _ => (int?)null));
+        Assert.Null(ZeppelinBroadside.FirstLiveTarget(Array.Empty<string>(), _ => (int?)1));
+    }
+
     private static ZeppelinDef Def(float? delay = 20f) => new()
     {
         Node = "testzep",

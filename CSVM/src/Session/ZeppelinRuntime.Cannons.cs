@@ -288,31 +288,31 @@ public sealed partial class ZeppelinRuntime
 
     // The record's authored targets, first live one wins (authored order — only C5/M04's
     // dantezep authors two, and the decoded routine's ordering across several is not pinned).
-    // 'player' is the human aircraft; any other name is another zeppelin of this mission.
+    // 'player' is the human aircraft: the original fires at the player's world node the same
+    // way (docs/formats/mission-entities.md "Broadside firing"), so it is not filtered out here.
     private (Vector3 Pos, Vector3 Vel, string Name, LiveZeppelin? Zep)? ResolveTarget(
-        LiveZeppelin zep)
+        LiveZeppelin zep) =>
+        ZeppelinBroadside.FirstLiveTarget(zep.Def.Targets, name => ResolveOne(zep, name));
+
+    private (Vector3 Pos, Vector3 Vel, string Name, LiveZeppelin? Zep)? ResolveOne(
+        LiveZeppelin zep, string name)
     {
-        foreach (var name in zep.Def.Targets)
+        if (ZeppelinBroadside.IsPlayerTarget(name))
         {
-            if (name.Equals("player", StringComparison.OrdinalIgnoreCase))
-            {
-                if (NearestHumanAircraft(zep.Host.GlobalPosition) is { } plane)
-                {
-                    return (plane.Pos, plane.Vel, name, null);
-                }
-                continue;
-            }
-            if (Find(name) is { Dead: false } other)
-            {
-                var vel = other.Dormant
-                    ? Vector3.Zero
-                    : other.Motion.Forward * other.Motion.Speed;
-                return (other.Host.GlobalPosition, vel, name, other);
-            }
-            if (_warnedTargets.Add($"{zep.Def.Node}:{name}"))
-            {
-                GD.Print($"zep: '{zep.Def.Node}' target '{name}' unresolved — skipped");
-            }
+            return NearestHumanAircraft(zep.Host.GlobalPosition) is { } plane
+                ? (plane.Pos, plane.Vel, name, null)
+                : null;
+        }
+        if (Find(name) is { Dead: false } other)
+        {
+            var vel = other.Dormant
+                ? Vector3.Zero
+                : other.Motion.Forward * other.Motion.Speed;
+            return (other.Host.GlobalPosition, vel, name, other);
+        }
+        if (_warnedTargets.Add($"{zep.Def.Node}:{name}"))
+        {
+            GD.Print($"zep: '{zep.Def.Node}' target '{name}' unresolved — skipped");
         }
         return null;
     }

@@ -841,22 +841,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   original's broadsides engage zeppelins only.** *Evidence:* reported at the controls with the
   original's rule stated: broadside cannons attack enemy zeppelins and never aircraft. The sortie
   log shows `shot hit P1 (fuselage→nose): wep_28 armor=5.0/25 ...` and three more `wep_28` hits on
-  the player; `wep_28` is the piratezep broadside's weapon (`zep: 'piratezep' broadside wired — 6+6
-  cannons, wep_28`, a `GD.Print` line the file sink does not carry, so its absence from the log is
-  not evidence). `ZeppelinRuntime.Cannons.ResolveTarget` takes the first live authored `targets`
-  name and fires on the player when the record names `player`. The earlier disproof (`BL-517`,
-  closed as "no hostility gate exists in the fire path") read the decoded pipeline as
-  `FUN_004bd8d0` parsing `targets` into name pairs and `FUN_004bede0` resolving each through
-  `FUN_004bd430`, a plain name match against the live zeppelin roster. If that resolver walks the
-  zeppelin roster only, a `player` entry never resolves in the original and a broadside cannot fire
-  on an aircraft, which is the rule reported; the disproof did not settle what a non-zeppelin name
-  resolves to. *Fix shape:* re-read `FUN_004bd430` for the list it walks, and `FUN_004bfe00` for
-  what an unresolved pair does at fire time. If the roster is zeppelins only, `ResolveTarget` drops
-  non-zeppelin names and `docs/formats/mission-entities.md` "Broadside firing" is corrected. If
-  `player` does resolve, record how, since the controls report then stands against the decode and
-  needs a flown original-game check. *⚠ Traps:* do not add a hostility or team gate; the earlier
-  item found none in the engine, and the lever is the resolver's candidate set. *Cross-refs:*
-  `BL-517`'s closing commit (`git log --grep=BL-517`), `docs/formats/mission-entities.md`.
+  the player; `wep_28` is the piratezep broadside's weapon. **The report stands against the
+  decode.** `crimson.exe` resolves every `targets` name through the general node table
+  (`FUN_004bd8d0` calling `FUN_004d0280(7, name)`, the lookup that finds the player's own node),
+  matches the node against the zeppelin roster (`FUN_004bede0` via `FUN_004bd430` on the roster
+  at `0x71df80`), and at fire time (`FUN_004bfe00`) fires on a node that matched no zeppelin at
+  the node's own position (`FUN_004cf2c0`): the `player` node is a target like any zeppelin, no
+  team or hostility field is read, and the remake's `ZeppelinRuntime.Cannons.ResolveTarget` (via
+  `ZeppelinBroadside.FirstLiveTarget`) matches it. The chain is in
+  `docs/formats/mission-entities.md` "Broadside firing". *What remains:* a flown original-game
+  check. Fly C3/M03 in the original into the Pandora's broadside arc (inside `cannon_fire_range`,
+  abeam the hull, long enough for the deploy and a volley) and record whether the broadsides open
+  on the aircraft; if they hold fire, the gate the decode did not find is somewhere the static
+  read did not reach (a range or altitude term in `FUN_0053e56d`'s solve, or the node's
+  `FUN_004cf2c0` position read failing for a vehicle node), and that is what to decode next.
+  *⚠ Traps:* do not add a hostility or team gate on the strength of the report alone; two decodes
+  found none, and only the flown check outranks them. *Cross-refs:* `BL-517`'s closing commit
+  (`git log --grep=BL-517`), `docs/formats/mission-entities.md`,
+  `docs/formats/anim-definitions/cutscenes.md` "The name is what resolves". *Playtest after fix:* `CAP-46`.
 
 ## Flight model & collision physics
 
