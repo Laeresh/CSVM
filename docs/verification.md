@@ -360,7 +360,10 @@ loss. What the engine renders was decodable from the authored constants + oscill
   watchdog, and the stray-Godot sweep is scoped to the launching process. What still does not
   isolate is a suite whose store is deliberately outside `.scratch/` — two concurrent
   `RunTests.ps1` invocations fail `campaign-loop`, which reads a `user://` profile an earlier
-  process wrote.
+  process wrote. `RunTests.ps1`'s hitch stage (`-Hitch`) applies the same rule to itself: it is the
+  LAST stage in a run, launched only after every engine, golden and perf Godot process in that
+  invocation has already exited, so the frame-time evidence `HitchMonitor`/`HitchSidecar` report
+  is never taken beside contaminating load (PERF-12/13/14).
 - **LOG-14** — **Read every field in a multi-metric row.**
 - **LOG-15** — **When an error lacks identity, log candidate state at the failure boundary.**
 - **LOG-16** — **A census printed at the end of setup cannot report a runtime miss** 

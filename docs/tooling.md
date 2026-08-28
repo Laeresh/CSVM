@@ -151,13 +151,13 @@ Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 | `units` | `dotnet test CSVM/CSVM.sln` (the `CSVM.Tests` xUnit project), `--no-build` since the build stage just produced the binaries. Counts are read from a TRX log in `.scratch/testresults/`, never scraped from the localized console summary. A FAILED units stage does not stop the run — only a failed `build` does — so `engine`, `goldens` and `hitch` still launch and are scored from their own reports; the summary row for `units` still reads `FAIL` |
 | `engine` | Godot with `--run-tests` — windowed (never `--headless`: no shaders compile there, so a clean error screen would prove nothing — LOG-8) and with `--log-file`, which is what lets the harness screen native engine `ERROR:` lines. `--run-tests` implies `--det` by itself. The full catalog runs in `-Shards` concurrent processes (below); each launch has its own five-minute watchdog, and a timeout kills that launch, fails the stage with exit 124 and leaves the partial log while the other shards still report. Counts and failing suite names come from the shard reports, each deleted before the run so a dead run cannot be scored from the last one's numbers |
 | `goldens` | The golden-image tripwire: one Godot per shot in `analysis/goldens/manifest.json`, each a pinned `--det` capture with `--screenshot=` and `--log-file=` appended, compared as **md5 of the raw pixel buffer** the engine prints on its `[core] shot pixmd5=… size=… gpu=…` line (never the PNG's encoded bytes — SHOT-6). ~53 s for 11 shots |
-| `hitch` | Two scripted Godot launches reporting `HitchMonitor`/`HitchSidecar` health: a clean `--frames=180` run should stay silent, and `--hitch-inject=50@300 --frames=310` should trip once on frame 300 with a full 120-entry ring and matching sidecar record. Results are awareness-only and never fail the run |
 | `perf` | `-Perf` only: every scenario in `analysis/perf/scenarios.json` under `--det --perf --no-vsync --mute`, medians appended to the git-ignored `perf-history.jsonl`. ~88 s for 5 scenarios. It measures and records; it never judges (below) |
+| `hitch` | `-Hitch` only, and always last: two scripted Godot launches reporting `HitchMonitor`/`HitchSidecar` health — a clean `--frames=180` run should stay silent, and `--hitch-inject=50@300 --frames=310` should trip once on frame 300 with a full 120-entry ring and matching sidecar record. Results are awareness-only and never fail the run; off by default even in a full run, and a run without `-Hitch` names its cadence in `not checked:` |
 
 Switches: **`-Suite <name>[,<name>]`** (exact in-engine suite names), **`-Filter <substring>`**
 (engine suite names only — `-Filter weapons` runs `weapons-defs` + `weapons-fire`),
 **`-UnitFilter <expr>`** (straight into `dotnet test --filter`), **`-Shards <n>`**, **`-Quick`**, **`-SkipUnits`**,
-**`-SkipEngine`**, **`-SkipGoldens`**, **`-RegenGoldens`**, **`-SkipHitch`**, **`-Perf`**
+**`-SkipEngine`**, **`-SkipGoldens`**, **`-RegenGoldens`**, **`-Hitch`**, **`-SkipHitch`**, **`-Perf`**
 (+ `-PerfLabel`, `-PerfCompare`, `-PerfFilter`, `-PerfIterations`, `-PerfFrames`).
 
 **Selection is exact or substring, and a miss is a failure.** `-Suite` and `-Filter` compose into
@@ -243,7 +243,18 @@ byte-identically, so the diff is exactly the hash lines that moved. Regeneration
 never automatic — see `docs/verification.md` GOLD-1 for when it is the right answer and when it is
 covering up a defect, and `analysis/goldens/README.md` for the shot set.
 
-**The hitch stage is a scripted measurement for the same structural reason the golden stage is one**:
+**The hitch stage is opt-in (`-Hitch`), not part of the retained landing gate.** The milestone that
+shortened this run names what the full gate retains — build, units, all engine suites, goldens —
+and hitch is not on that list, because it never changes the exit code and its own subject changes
+rarely: `HitchMonitor.cs`/`HitchSidecar.cs` landed once and have taken exactly one substantive
+change since, a queue-size tune found by a controls capture rather than by this stage. Run it
+explicitly with `-Hitch` when landing a change that touches `HitchMonitor.cs`, `HitchSidecar.cs`,
+or the hitch tick in `Launcher.cs`, or periodically otherwise; a run without `-Hitch` skips the
+stage and the summary names that same cadence in its `not checked:` lines. `-Quick` never runs it.
+`-SkipHitch` forces it off even when `-Hitch` is given, for a caller that always passes `-Hitch`
+and needs to suppress it for one run.
+
+It stays a scripted measurement for the same structural reason the golden stage is one:
 `HitchMonitor` only trips on a real rendered frame measured over wall time (ticked from
 `Launcher._Process`), and `--run-tests` runs every suite to completion inside one `_Ready` call
 without ever yielding a frame, which is not a new exception. Each launch's sidecar path is recovered
@@ -254,7 +265,9 @@ and never changes the verifier's exit code: workstation contention makes frame-t
 variable to gate unrelated work. The injected record's C8 attribution is checked as
 an identity — `attributed_ms + unattributed_ms` must close over `frame_ms`, with no scope violations
 — rather than as "no samples": the injected stall is deliberately unscoped, and C9 seeding a
-site that fires during this launch must not turn the check red.
+site that fires during this launch must not turn the check red. It is always the LAST stage in a
+run, after perf, so its wall-time evidence is never taken beside engine, golden, or perf load
+(`docs/verification.md` LOG-13, PERF-12/13/14).
 
 ### The perf stage (`-Perf`)
 
@@ -313,9 +326,10 @@ vsync-on scenario at least leaves the mode visible in both records being read si
 **Exit-code contract: 1 if any stage FAILED, 0 otherwise — and a skip is not a failure.** No game
 data, no Godot, `-SkipUnits`/`-SkipEngine` all report `SKIP` and keep the run at 0, but every one of
 them prints a `not checked:` line and the summary names what went unmeasured: "the data was not
-there" must never read as "the check held". The `TODO` row does the same for the unwritten perf
-stage, and `-RegenGoldens` reports its stage as `REGEN` — never `PASS` — with a `not checked:` line
-saying the goldens were rewritten rather than verified.
+there" must never read as "the check held". The `TODO` row does the same for the hitch stage, which
+never resolves to `PASS`/`FAIL` because it is awareness-only, and `-RegenGoldens` reports its stage
+as `REGEN` — never `PASS` — with a `not checked:` line saying the goldens were rewritten rather than
+verified.
 
 **Worktrees.** Extracted data is found through `CSVM_DATA_ROOT` by the engine and the unit tests
 alike, and Godot is resolved this tree first then `CSVM_DATA_ROOT` (as `RunGame.ps1` does), so

@@ -29,13 +29,6 @@
                .scratch/goldens/. Each shot is launched under a per-shot timeout
                ($EngineTimeoutSec); a shot that exceeds it is killed, reported as FAIL, and has its
                evidence preserved -- it never silently hangs the suite (BL-320).
-      hitch    Two scripted Godot launches -- a clean one and one carrying --hitch-inject=50@300
-               -- that report whether the frame-hitch detector (HitchMonitor/HitchSidecar) still
-               fires on a known stall and stays silent without one. Awareness-only for the same reason
-               goldens is one: the detector only trips on a REAL rendered frame over wall time,
-               which --run-tests's single, frame-free _Ready call cannot produce. Reads the
-               printed "[perf] hitch ..." line and the .hitches.jsonl sidecar it names, and
-               checks the record's C8 attribution closes over its own frame cost.
       perf     -Perf only. Every scenario in analysis/perf/scenarios.json, run under
                --det --perf --no-vsync for a fixed number of SIM frames (never wall seconds --
                the fixed clock advances one sim step per rendered frame, so a frame count is an
@@ -45,6 +38,20 @@
                git-ignored perf-history.jsonl at the repo root. The stage records; it does not
                judge. A verdict needs -PerfCompare, which pairs this run against an earlier
                labelled one and prints the ratios.
+      hitch    -Hitch only. Two scripted Godot launches -- a clean one and one carrying
+               --hitch-inject=50@300 -- that report whether the frame-hitch detector
+               (HitchMonitor/HitchSidecar) still fires on a known stall and stays silent without
+               one. Awareness-only for the same reason goldens is one: the detector only trips on
+               a REAL rendered frame over wall time, which --run-tests's single, frame-free _Ready
+               call cannot produce. Reads the printed "[perf] hitch ..." line and the
+               .hitches.jsonl sidecar it names, and checks the record's C8 attribution closes over
+               its own frame cost. Off by default, even in a full run: it is not part of the
+               retained landing gate (build, units, engine, goldens), since it never changes the
+               exit code and its own subject changes rarely. Run it with -Hitch when landing a
+               change that touches HitchMonitor.cs, HitchSidecar.cs, or the hitch tick in
+               Launcher.cs, or periodically otherwise; a run without -Hitch prints it unchecked
+               with that same cadence. Always the LAST stage, after perf, so its wall-time
+               evidence is never taken beside engine, golden, or perf load.
 
     Exit code: 1 if any stage FAILED, 0 otherwise. A stage that skipped -- no game data, no
     Godot, -SkipUnits / -SkipEngine -- is NOT a failure, but it is printed as a skip and the
@@ -104,8 +111,20 @@
     Deliberately a separate switch and never automatic: the rewritten file is the review artifact,
     so a moved hash has to be explained in the commit that moves it.
 
+.PARAMETER Hitch
+    Run the hitch-detector check (two scripted Godot launches probing HitchMonitor/HitchSidecar).
+    Off by default, even in a full run: the check is awareness-only, never changes the exit code,
+    and its own subject changes rarely, so it is not part of the retained landing gate (build,
+    units, engine, goldens). Run it explicitly when landing a change that touches
+    HitchMonitor.cs, HitchSidecar.cs, or the hitch tick in Launcher.cs, or periodically otherwise;
+    a run without -Hitch names it in the summary's "not checked:" lines with that same cadence.
+    Ignored under -Quick, which never runs it. Always the last stage to launch Godot, so its
+    wall-time evidence is never taken beside engine, golden, or perf load (LOG-13, PERF-12/13/14).
+
 .PARAMETER SkipHitch
-    Skip the hitch-detector check (two scripted Godot launches).
+    Force the hitch-detector check off even if -Hitch is also given. The check is opt-in by
+    default (see -Hitch), so this exists for a caller that always passes -Hitch and still needs to
+    suppress it for one run.
 
 .PARAMETER Perf
     Also run the perf stage: every scenario in analysis/perf/scenarios.json under
@@ -143,8 +162,14 @@
     Build, then only the in-engine suites whose name contains "weapons".
 
 .EXAMPLE
-    .\RunTests.ps1 -Suite weapons-fire -SkipUnits -SkipGoldens -SkipHitch
-    Build, then that one suite exactly -- the targeted engine loop.
+    .\RunTests.ps1 -Suite weapons-fire -SkipUnits -SkipGoldens
+    Build, then that one suite exactly -- the targeted engine loop. Hitch is already off by
+    default, so nothing extra is needed to keep it out of this loop.
+
+.EXAMPLE
+    .\RunTests.ps1 -Hitch -SkipUnits -SkipEngine -SkipGoldens
+    Build, then only the hitch-detector check -- the isolated loop for a change to
+    HitchMonitor.cs, HitchSidecar.cs, or the hitch tick in Launcher.cs.
 
 .EXAMPLE
     .\RunTests.ps1 -Shards 1
@@ -176,6 +201,7 @@ param(
     [switch]$SkipEngine,
     [switch]$SkipGoldens,
     [switch]$RegenGoldens,
+    [switch]$Hitch,
     [switch]$SkipHitch,
     [switch]$Perf,
     [string]$PerfLabel = "run",
@@ -209,7 +235,8 @@ if ($Quick -and -not $UnitFilter) {
     $UnitFilter = "Tier=Quick"
 }
 $SkipGoldensNow = ($SkipGoldens -or $Quick)
-$SkipHitchNow   = ($SkipHitch -or $Quick)
+# The hitch stage's own opt-in gate ($RunHitchNow) is computed where the stage runs, after perf --
+# it is the one stage whose default is off rather than on, so it is not part of this shared block.
 
 $RepoRoot   = $PSScriptRoot
 $ProjectDir = Join-Path $RepoRoot "CSVM"
@@ -1100,199 +1127,6 @@ if ($SkipGoldensNow) {
     }
 }
 
-# ---- hitch ---------------------------------------------------------------------------------
-
-# HitchMonitor only trips on a real rendered frame measured over wall time
-# (Launcher._Process), so this cannot be a --run-tests suite: that harness runs every suite to
-# completion inside one _Ready call and never yields a frame (same reason goldens is a scripted
-# pass, above). Two launches instead, mirroring the goldens/perf shape: one clean, one carrying a
-# known --hitch-inject= stall, each read back through its own engine --log-file plus the
-# .hitches.jsonl sidecar HitchSidecar writes beside the PROJECT's own log (Log.SinkPath) -- not
-# Godot's --log-file, which is a different file; the sidecar's path is recovered from the
-# "[core] log file=..." line every session prints once at Log.Open.
-if ($SkipHitchNow) {
-    $why = if ($SkipHitch) { "-SkipHitch" } else { "-Quick" }
-    Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail $why
-    Add-Unchecked "the hitch-detector check did not run ($why)"
-} elseif (-not $buildOk) {
-    Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "build failed"
-    Add-Unchecked "the hitch-detector check did not run (the build failed)"
-} elseif (-not (Test-Path $GodotExe)) {
-    Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
-    Add-Unchecked "the hitch-detector check did not run: no Godot at $GodotExe"
-} else {
-    Write-Stage-Banner "hitch (--hitch-inject=)"
-    Stop-StrayGodots -Marker "\.scratch\hitchcheck\"
-    if (-not $env:SDL_JOYSTICK_DIRECTINPUT) {
-        $env:SDL_JOYSTICK_DIRECTINPUT = "0"
-    }
-
-    $HitchDir = Join-Path $ScratchDir "hitchcheck"
-    if (-not (Test-Path $HitchDir)) {
-        $null = New-Item -ItemType Directory -Path $HitchDir
-    }
-
-    # Runs one launch, then reads back its engine log for the sidecar path (the "[core] log
-    # file=..." line -- Log.Info reaches GD.Print, so it lands in Godot's own --log-file exactly
-    # like every "[perf] window ..." line the perf stage below already parses the same way) and
-    # every "[perf] hitch ..." summary line HitchSidecar.WriteLogLine emits.
-    #
-    # --screenshot= is not optional here: --frames=N alone never quits the process -- the only
-    # quit is CaptureDirector's, gated on a pending shot (CaptureDirector.cs:126) -- so a launch
-    # with --frames= and no --screenshot= just runs forever. This is exactly what goldens/perf
-    # already do; it was the one thing dropped when this stage first landed, and it hung the
-    # whole RunTests.ps1 run for as long as nobody killed the orphaned Godot by hand.
-    function Read-HitchRun {
-        param([string]$RunName, [string[]]$RunArgs, [int]$ExpectFrame)
-        $log = Join-Path $HitchDir "$RunName.log"
-        $png = Join-Path $HitchDir "$RunName.png"
-        foreach ($stale in @($log, "$log.out", "$log.err", $png)) {
-            if (Test-Path $stale) {
-                Remove-Item -Path $stale -Force
-            }
-        }
-        $fullArgs = $RunArgs + @("--frames=$ExpectFrame", "--screenshot=$png")
-        $ErrorActionPreference = "Continue"
-        $code = Invoke-Godot (@("--path", $ProjectDir, "--log-file", $log,
-                                "res://scenes/Main.tscn", "--") + $fullArgs)
-        $ErrorActionPreference = "Stop"
-        $sinkPath = $null
-        $hitchLines = @()
-        $simFrame = -1
-        if (Test-Path $log) {
-            foreach ($line in (Get-Content -Path $log)) {
-                if ($line -match '\[core\] log file=(\S+) mode=') {
-                    $sinkPath = $Matches[1]
-                }
-                if ($line -match '\[perf\] hitch frame=(\d+) frame_ms=([\d.]+)') {
-                    $hitchLines += [pscustomobject]@{ Frame = [int]$Matches[1]; FrameMs = [double]$Matches[2] }
-                }
-                if ($line -match 'screenshot saved: .* sim_frame=(\d+)') {
-                    $simFrame = [int]$Matches[1]
-                }
-            }
-        }
-        return [pscustomobject]@{
-            Name = $RunName; ExitCode = $code; Log = $log; SinkPath = $sinkPath
-            HitchLines = $hitchLines; SimFrame = $simFrame; ExpectFrame = $ExpectFrame
-        }
-    }
-
-    $watch = [System.Diagnostics.Stopwatch]::StartNew()
-    $problems = @()
-
-    # Clean run: no injected stall, well clear of the grace window (--frames=180 was measured
-    # landing B6 to write nothing but the sidecar's own BOM). Decision 13 says a clean run must
-    # stay silent -- a detector that fires on nothing would read as a monitor that fires on
-    # everything, and this is the only check here that would catch that.
-    $clean = Read-HitchRun -RunName "clean" -RunArgs @("--det", "--no-vsync", "--mute") -ExpectFrame 180
-    if ($clean.SimFrame -ne $clean.ExpectFrame) {
-        $problems += "clean: ran to sim_frame=$($clean.SimFrame), asked for $($clean.ExpectFrame) -- see $($clean.Log)"
-    } elseif ($clean.SinkPath -eq $null) {
-        $problems += "clean: no '[core] log file=' line -- see $($clean.Log)"
-    } elseif ($clean.HitchLines.Count -ne 0) {
-        $problems += "clean: expected 0 hitch lines, saw $($clean.HitchLines.Count) -- see $($clean.Log)"
-    } else {
-        # ChangeExtension($path, $null) matches HitchSidecar.cs's own derivation in C# -- but
-        # PowerShell coerces $null to an empty string on the way into a [string] parameter, which
-        # ChangeExtension treats as "replace with a bare dot", leaving a double dot before
-        # "hitches" (SinkPath.ext -> SinkPath..hitches.jsonl). Passing the compound extension
-        # directly sidesteps the coercion instead of fighting it.
-        $cleanSidecar = [System.IO.Path]::ChangeExtension($clean.SinkPath, "hitches.jsonl")
-        if (-not (Test-Path $cleanSidecar)) {
-            $problems += "clean: no sidecar at $cleanSidecar"
-        } else {
-            $cleanBytes = (Get-Item $cleanSidecar).Length
-            if ($cleanBytes -gt 8) {
-                $problems += "clean: sidecar $cleanSidecar is $cleanBytes bytes, expected the UTF-8 BOM alone (0 records)"
-            }
-        }
-    }
-
-    # Injected run: --hitch-inject=50@300 is the verified-safe pair (@120 sits inside the
-    # grace window on the dev machine and is not portable).
-    # Must trip exactly once, with a full ring and a sidecar record matching the printed line.
-    $inject = Read-HitchRun -RunName "inject" -RunArgs @("--det", "--no-vsync", "--mute",
-        "--hitch-inject=50@300") -ExpectFrame 310
-    if ($inject.SimFrame -ne $inject.ExpectFrame) {
-        $problems += "inject: ran to sim_frame=$($inject.SimFrame), asked for $($inject.ExpectFrame) -- see $($inject.Log)"
-    } elseif ($inject.SinkPath -eq $null) {
-        $problems += "inject: no '[core] log file=' line -- see $($inject.Log)"
-    } elseif ($inject.HitchLines.Count -ne 1) {
-        $problems += "inject: expected exactly 1 hitch line, saw $($inject.HitchLines.Count) -- see $($inject.Log)"
-    } else {
-        $line = $inject.HitchLines[0]
-        if ($line.Frame -ne 300) {
-            $problems += "inject: hitch fired on frame $($line.Frame), expected 300"
-        }
-        # 50 ms injected plus a normal frame's own cost; the upper bound is a sanity ceiling, not
-        # a tight one -- a slower CI machine's baseline frame is not what this check is proving.
-        if ($line.FrameMs -lt 45.0 -or $line.FrameMs -gt 150.0) {
-            $problems += "inject: frame_ms=$($line.FrameMs) outside the expected ~50 ms+overhead band [45, 150]"
-        }
-        $injectSidecar = [System.IO.Path]::ChangeExtension($inject.SinkPath, "hitches.jsonl")
-        if (-not (Test-Path $injectSidecar)) {
-            $problems += "inject: no sidecar at $injectSidecar"
-        } else {
-            # .NET's reader, not Get-Content: PS 5.1 decodes a BOM-less line as the ANSI codepage.
-            # Every field here is numeric so it cannot actually mojibake, but this stays the one
-            # reading convention the whole script uses for a file HitchSidecar writes.
-            $sidecarLines = @([System.IO.File]::ReadAllLines($injectSidecar) | Where-Object { $_.Trim().Length -gt 0 })
-            if ($sidecarLines.Count -ne 1) {
-                $problems += "inject: sidecar has $($sidecarLines.Count) record(s), expected 1 -- $injectSidecar"
-            } else {
-                $record = $null
-                try {
-                    $record = $sidecarLines[0] | ConvertFrom-Json
-                } catch {
-                    $problems += "inject: sidecar record did not parse as JSON -- $($_.Exception.Message)"
-                }
-                if ($record -ne $null) {
-                    if ([int]$record.frame -ne $line.Frame) {
-                        $problems += "inject: sidecar frame=$($record.frame), log line said $($line.Frame)"
-                    }
-                    if ([math]::Abs([double]$record.frame_ms - $line.FrameMs) -gt 0.05) {
-                        $problems += "inject: sidecar frame_ms=$($record.frame_ms) does not match the log line's $($line.FrameMs)"
-                    }
-                    # RingFramesDefault (hitchMonitor.ringFrames): populated to depth is B7's own
-                    # requirement, not just present -- a ring stuck at partial depth would still
-                    # read as "a ring exists" without this count.
-                    $ringCount = @($record.ring).Count
-                    if ($ringCount -ne 120) {
-                        $problems += "inject: sidecar ring has $ringCount entries, expected 120 (hitchMonitor.ringFrames default)"
-                    }
-                    # C8: what the frame could NAME plus what nothing claimed is the frame's cost,
-                    # by construction. Asserted as the identity rather than as "no samples": the
-                    # injected stall is deliberately not wrapped in a scope (B5's rule -- an
-                    # injected fault must read as unattributed time), and C9 may well seed a site
-                    # that does fire during this launch, but neither can break the sum.
-                    $attributed = [double]$record.attributed_ms
-                    $unattributed = [double]$record.unattributed_ms
-                    if ([math]::Abs(($attributed + $unattributed) - [double]$record.frame_ms) -gt 0.005) {
-                        $problems += "inject: attributed_ms=$attributed + unattributed_ms=$unattributed does not close over frame_ms=$($record.frame_ms)"
-                    }
-                    if ([int]$record.sample_violations -ne 0) {
-                        $problems += "inject: sample_violations=$($record.sample_violations) -- a nested or unclosed PerfSample scope"
-                    }
-                }
-            }
-        }
-    }
-    $watch.Stop()
-
-    $detail = "clean: $($clean.HitchLines.Count) hitch line(s); inject: $($inject.HitchLines.Count) hitch line(s), " +
-        "$(if ($inject.HitchLines.Count -gt 0) { "frame_ms=$($inject.HitchLines[0].FrameMs)" } else { "n/a" })"
-    if ($problems.Count -eq 0) {
-        Add-Stage -Name "hitch" -Status "TODO" -Seconds $watch.Elapsed.TotalSeconds -Detail "$detail; awareness only"
-    } else {
-        Add-Stage -Name "hitch" -Status "TODO" -Seconds $watch.Elapsed.TotalSeconds -Detail "$detail; $($problems.Count) awareness item(s)"
-        foreach ($p in $problems) {
-            Write-Host "  !! hitch awareness: $p" -ForegroundColor Yellow
-        }
-    }
-    Add-Unchecked "the hitch stage reports detector health but does not gate this workstation's verification"
-}
-
 # ---- perf --------------------------------------------------------------------------------
 
 $PerfManifest = Join-Path $RepoRoot "analysis\perf\scenarios.json"
@@ -1711,6 +1545,208 @@ if (-not $Perf) {
         Add-Stage -Name "perf" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
     }
     Add-Unchecked "the perf stage measured and recorded, it did not judge: no threshold here can fail a build, and a history trend is awareness. A regression verdict needs a paired A/B (-PerfCompare) read against a freshly measured same-build noise band"
+}
+
+# ---- hitch ---------------------------------------------------------------------------------
+
+# HitchMonitor only trips on a real rendered frame measured over wall time
+# (Launcher._Process), so this cannot be a --run-tests suite: that harness runs every suite to
+# completion inside one _Ready call and never yields a frame (same reason goldens is a scripted
+# pass, above). Two launches instead, mirroring the goldens/perf shape: one clean, one carrying a
+# known --hitch-inject= stall, each read back through its own engine --log-file plus the
+# .hitches.jsonl sidecar HitchSidecar writes beside the PROJECT's own log (Log.SinkPath) -- not
+# Godot's --log-file, which is a different file; the sidecar's path is recovered from the
+# "[core] log file=..." line every session prints once at Log.Open.
+#
+# Opt-in (-Hitch) and placed last, after perf: HitchMonitor/HitchSidecar landed once and have
+# taken exactly one substantive change since (a queue-size tune found by a controls capture, not
+# by this stage), the check never changes the exit code, and it is a self-test of the detector's
+# own plumbing, not a gameplay regression net -- it is not part of the retained landing gate (build,
+# units, engine, goldens). Running it last, after every other Godot launch in this invocation has
+# already completed, keeps workstation contention from a sibling stage out of its wall-time
+# evidence (LOG-13, PERF-12/13/14).
+$RunHitchNow = ($Hitch -and -not $SkipHitch -and -not $Quick)
+if (-not $RunHitchNow) {
+    $why = if ($SkipHitch) { "-SkipHitch" } elseif ($Quick) { "-Quick" } else { "opt-in, pass -Hitch" }
+    Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail $why
+    Add-Unchecked "the hitch-detector check did not run ($why): its cadence is explicit, not automatic -- run it with -Hitch when landing a change to HitchMonitor.cs, HitchSidecar.cs or the hitch tick in Launcher.cs, or periodically otherwise"
+} elseif (-not $buildOk) {
+    Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "build failed"
+    Add-Unchecked "the hitch-detector check did not run (the build failed)"
+} elseif (-not (Test-Path $GodotExe)) {
+    Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
+    Add-Unchecked "the hitch-detector check did not run: no Godot at $GodotExe"
+} else {
+    Write-Stage-Banner "hitch (--hitch-inject=)"
+    Stop-StrayGodots -Marker "\.scratch\hitchcheck\"
+    if (-not $env:SDL_JOYSTICK_DIRECTINPUT) {
+        $env:SDL_JOYSTICK_DIRECTINPUT = "0"
+    }
+
+    $HitchDir = Join-Path $ScratchDir "hitchcheck"
+    if (-not (Test-Path $HitchDir)) {
+        $null = New-Item -ItemType Directory -Path $HitchDir
+    }
+
+    # Runs one launch, then reads back its engine log for the sidecar path (the "[core] log
+    # file=..." line -- Log.Info reaches GD.Print, so it lands in Godot's own --log-file exactly
+    # like every "[perf] window ..." line the perf stage above already parses the same way) and
+    # every "[perf] hitch ..." summary line HitchSidecar.WriteLogLine emits.
+    #
+    # --screenshot= is not optional here: --frames=N alone never quits the process -- the only
+    # quit is CaptureDirector's, gated on a pending shot (CaptureDirector.cs:126) -- so a launch
+    # with --frames= and no --screenshot= just runs forever. This is exactly what goldens/perf
+    # already do; it was the one thing dropped when this stage first landed, and it hung the
+    # whole RunTests.ps1 run for as long as nobody killed the orphaned Godot by hand.
+    function Read-HitchRun {
+        param([string]$RunName, [string[]]$RunArgs, [int]$ExpectFrame)
+        $log = Join-Path $HitchDir "$RunName.log"
+        $png = Join-Path $HitchDir "$RunName.png"
+        foreach ($stale in @($log, "$log.out", "$log.err", $png)) {
+            if (Test-Path $stale) {
+                Remove-Item -Path $stale -Force
+            }
+        }
+        $fullArgs = $RunArgs + @("--frames=$ExpectFrame", "--screenshot=$png")
+        $ErrorActionPreference = "Continue"
+        $code = Invoke-Godot (@("--path", $ProjectDir, "--log-file", $log,
+                                "res://scenes/Main.tscn", "--") + $fullArgs)
+        $ErrorActionPreference = "Stop"
+        $sinkPath = $null
+        $hitchLines = @()
+        $simFrame = -1
+        if (Test-Path $log) {
+            foreach ($line in (Get-Content -Path $log)) {
+                if ($line -match '\[core\] log file=(\S+) mode=') {
+                    $sinkPath = $Matches[1]
+                }
+                if ($line -match '\[perf\] hitch frame=(\d+) frame_ms=([\d.]+)') {
+                    $hitchLines += [pscustomobject]@{ Frame = [int]$Matches[1]; FrameMs = [double]$Matches[2] }
+                }
+                if ($line -match 'screenshot saved: .* sim_frame=(\d+)') {
+                    $simFrame = [int]$Matches[1]
+                }
+            }
+        }
+        return [pscustomobject]@{
+            Name = $RunName; ExitCode = $code; Log = $log; SinkPath = $sinkPath
+            HitchLines = $hitchLines; SimFrame = $simFrame; ExpectFrame = $ExpectFrame
+        }
+    }
+
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $problems = @()
+
+    # Clean run: no injected stall, well clear of the grace window (--frames=180 was measured
+    # landing B6 to write nothing but the sidecar's own BOM). Decision 13 says a clean run must
+    # stay silent -- a detector that fires on nothing would read as a monitor that fires on
+    # everything, and this is the only check here that would catch that.
+    $clean = Read-HitchRun -RunName "clean" -RunArgs @("--det", "--no-vsync", "--mute") -ExpectFrame 180
+    if ($clean.SimFrame -ne $clean.ExpectFrame) {
+        $problems += "clean: ran to sim_frame=$($clean.SimFrame), asked for $($clean.ExpectFrame) -- see $($clean.Log)"
+    } elseif ($clean.SinkPath -eq $null) {
+        $problems += "clean: no '[core] log file=' line -- see $($clean.Log)"
+    } elseif ($clean.HitchLines.Count -ne 0) {
+        $problems += "clean: expected 0 hitch lines, saw $($clean.HitchLines.Count) -- see $($clean.Log)"
+    } else {
+        # ChangeExtension($path, $null) matches HitchSidecar.cs's own derivation in C# -- but
+        # PowerShell coerces $null to an empty string on the way into a [string] parameter, which
+        # ChangeExtension treats as "replace with a bare dot", leaving a double dot before
+        # "hitches" (SinkPath.ext -> SinkPath..hitches.jsonl). Passing the compound extension
+        # directly sidesteps the coercion instead of fighting it.
+        $cleanSidecar = [System.IO.Path]::ChangeExtension($clean.SinkPath, "hitches.jsonl")
+        if (-not (Test-Path $cleanSidecar)) {
+            $problems += "clean: no sidecar at $cleanSidecar"
+        } else {
+            $cleanBytes = (Get-Item $cleanSidecar).Length
+            if ($cleanBytes -gt 8) {
+                $problems += "clean: sidecar $cleanSidecar is $cleanBytes bytes, expected the UTF-8 BOM alone (0 records)"
+            }
+        }
+    }
+
+    # Injected run: --hitch-inject=50@300 is the verified-safe pair (@120 sits inside the
+    # grace window on the dev machine and is not portable).
+    # Must trip exactly once, with a full ring and a sidecar record matching the printed line.
+    $inject = Read-HitchRun -RunName "inject" -RunArgs @("--det", "--no-vsync", "--mute",
+        "--hitch-inject=50@300") -ExpectFrame 310
+    if ($inject.SimFrame -ne $inject.ExpectFrame) {
+        $problems += "inject: ran to sim_frame=$($inject.SimFrame), asked for $($inject.ExpectFrame) -- see $($inject.Log)"
+    } elseif ($inject.SinkPath -eq $null) {
+        $problems += "inject: no '[core] log file=' line -- see $($inject.Log)"
+    } elseif ($inject.HitchLines.Count -ne 1) {
+        $problems += "inject: expected exactly 1 hitch line, saw $($inject.HitchLines.Count) -- see $($inject.Log)"
+    } else {
+        $line = $inject.HitchLines[0]
+        if ($line.Frame -ne 300) {
+            $problems += "inject: hitch fired on frame $($line.Frame), expected 300"
+        }
+        # 50 ms injected plus a normal frame's own cost; the upper bound is a sanity ceiling, not
+        # a tight one -- a slower CI machine's baseline frame is not what this check is proving.
+        if ($line.FrameMs -lt 45.0 -or $line.FrameMs -gt 150.0) {
+            $problems += "inject: frame_ms=$($line.FrameMs) outside the expected ~50 ms+overhead band [45, 150]"
+        }
+        $injectSidecar = [System.IO.Path]::ChangeExtension($inject.SinkPath, "hitches.jsonl")
+        if (-not (Test-Path $injectSidecar)) {
+            $problems += "inject: no sidecar at $injectSidecar"
+        } else {
+            # .NET's reader, not Get-Content: PS 5.1 decodes a BOM-less line as the ANSI codepage.
+            # Every field here is numeric so it cannot actually mojibake, but this stays the one
+            # reading convention the whole script uses for a file HitchSidecar writes.
+            $sidecarLines = @([System.IO.File]::ReadAllLines($injectSidecar) | Where-Object { $_.Trim().Length -gt 0 })
+            if ($sidecarLines.Count -ne 1) {
+                $problems += "inject: sidecar has $($sidecarLines.Count) record(s), expected 1 -- $injectSidecar"
+            } else {
+                $record = $null
+                try {
+                    $record = $sidecarLines[0] | ConvertFrom-Json
+                } catch {
+                    $problems += "inject: sidecar record did not parse as JSON -- $($_.Exception.Message)"
+                }
+                if ($record -ne $null) {
+                    if ([int]$record.frame -ne $line.Frame) {
+                        $problems += "inject: sidecar frame=$($record.frame), log line said $($line.Frame)"
+                    }
+                    if ([math]::Abs([double]$record.frame_ms - $line.FrameMs) -gt 0.05) {
+                        $problems += "inject: sidecar frame_ms=$($record.frame_ms) does not match the log line's $($line.FrameMs)"
+                    }
+                    # RingFramesDefault (hitchMonitor.ringFrames): populated to depth is B7's own
+                    # requirement, not just present -- a ring stuck at partial depth would still
+                    # read as "a ring exists" without this count.
+                    $ringCount = @($record.ring).Count
+                    if ($ringCount -ne 120) {
+                        $problems += "inject: sidecar ring has $ringCount entries, expected 120 (hitchMonitor.ringFrames default)"
+                    }
+                    # C8: what the frame could NAME plus what nothing claimed is the frame's cost,
+                    # by construction. Asserted as the identity rather than as "no samples": the
+                    # injected stall is deliberately not wrapped in a scope (B5's rule -- an
+                    # injected fault must read as unattributed time), and C9 may well seed a site
+                    # that does fire during this launch, but neither can break the sum.
+                    $attributed = [double]$record.attributed_ms
+                    $unattributed = [double]$record.unattributed_ms
+                    if ([math]::Abs(($attributed + $unattributed) - [double]$record.frame_ms) -gt 0.005) {
+                        $problems += "inject: attributed_ms=$attributed + unattributed_ms=$unattributed does not close over frame_ms=$($record.frame_ms)"
+                    }
+                    if ([int]$record.sample_violations -ne 0) {
+                        $problems += "inject: sample_violations=$($record.sample_violations) -- a nested or unclosed PerfSample scope"
+                    }
+                }
+            }
+        }
+    }
+    $watch.Stop()
+
+    $detail = "clean: $($clean.HitchLines.Count) hitch line(s); inject: $($inject.HitchLines.Count) hitch line(s), " +
+        "$(if ($inject.HitchLines.Count -gt 0) { "frame_ms=$($inject.HitchLines[0].FrameMs)" } else { "n/a" })"
+    if ($problems.Count -eq 0) {
+        Add-Stage -Name "hitch" -Status "TODO" -Seconds $watch.Elapsed.TotalSeconds -Detail "$detail; awareness only"
+    } else {
+        Add-Stage -Name "hitch" -Status "TODO" -Seconds $watch.Elapsed.TotalSeconds -Detail "$detail; $($problems.Count) awareness item(s)"
+        foreach ($p in $problems) {
+            Write-Host "  !! hitch awareness: $p" -ForegroundColor Yellow
+        }
+    }
+    Add-Unchecked "the hitch stage reports detector health but does not gate this workstation's verification"
 }
 
 # ---- summary -----------------------------------------------------------------------------

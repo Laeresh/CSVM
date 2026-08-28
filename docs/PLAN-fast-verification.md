@@ -114,7 +114,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Remaining stages and final contract
 
 21. ☐ Prove or reject parallel golden rendering
-22. ☐ Set the hitch check's isolated cadence
+22. ☑ Set the hitch check's isolated cadence
 23. ☐ Ratchet the full verification budget and documentation
 
 ## Dependency and parallelism notes
@@ -703,7 +703,7 @@ sizes, adapters, exit codes, and total wall. Inject one moved hash, one missing 
 **⚠ Traps.** Deterministic simulation does not guarantee deterministic concurrent driver behavior.
 A faster run with flaky hashes is a disproof, not a tuning problem.
 
-## C22 ☐ Set the hitch check's isolated cadence
+## C22 ☑ Set the hitch check's isolated cadence
 
 **Goal.** The 17.4-second awareness-only hitch detector check runs at an explicit useful cadence
 without taxing every edit loop or overlapping work that invalidates its wall-time evidence.
@@ -725,6 +725,51 @@ unchecked status, and deliberately break detector output so the awareness item r
 
 **⚠ Traps.** Parallel load creates the symptom under test. Saving 17 seconds by overlapping the
 stage would make its result uninterpretable.
+
+**Decision: opt-in (`-Hitch`), off by default even in the full run.** The milestone goal's own
+list of what the full landing gate retains names build, units, all engine suites and goldens; hitch
+is not on that list. `git log` on `HitchMonitor.cs`/`HitchSidecar.cs` shows why it earns that
+carve-out rather than a permanent seat: both files landed together and have taken exactly one
+substantive change since (`BL-356`, a queue-size tune), against 45+ commits touching `Launcher.cs`
+for unrelated feature work over the same span, and only six of those touch the hitch wiring at all.
+That one real bug was found by a controls capture during manual play, not by this stage: the check's
+own clean/inject pair is a self-test of the detector's plumbing (does it stay silent, does it fire
+on a known synthetic stall, does its sidecar record close over its own frame cost), never a
+gameplay-regression net, and its row has been `TODO` with the exit code untouched since it landed.
+Its own cost (16.4-17.4 s of a 193 s gate, roughly 8.5%) buys real coverage per run only if that
+plumbing itself has just been touched; on every other landing it buys nothing a rare-changing
+subject and an already-silent history do not already cover. Weighed against `-Quick`'s and B13's
+work to keep the loop fast, an awareness-only check with this change frequency belongs on an
+explicit cadence, not in every invocation.
+
+**Landed.** `RunTests.ps1` gained `-Hitch` (off by default) and keeps `-SkipHitch` as a forced
+override for a caller that always passes `-Hitch`. The stage itself moved to run last, after `perf`,
+so it is never beside any other stage's Godot launches even when `-Perf` is also given — before this
+item it ran before `perf`, which the goal's "never beside ... perf" line ruled out. A run without
+`-Hitch` reports `SKIP` naming the reason (`opt-in, pass -Hitch`, `-SkipHitch`, or `-Quick`) and adds
+a `not checked:` line naming the same explicit cadence: run it with `-Hitch` when landing a change
+that touches `HitchMonitor.cs`, `HitchSidecar.cs`, or the hitch tick in `Launcher.cs`, or
+periodically otherwise. `-Quick` is unaffected, since hitch was already outside it.
+`docs/tooling.md`'s stage table and its RunTests prose, and `docs/verification.md`'s LOG-13, now
+say the same thing the script does. No `CSVM/src` or `CSVM.Tests` file changed; the item is
+entirely `RunTests.ps1` plus documentation.
+
+**Measured** (`$env:CSVM_DATA_ROOT="Z:\CSVM"`). `.\RunTests.ps1 -Hitch -SkipUnits -SkipEngine
+-SkipGoldens` (the isolated loop) ran clean in 16.6 s: `TODO hitch 16.6s clean: 0 hitch line(s);
+inject: 1 hitch line(s), frame_ms=63.01; awareness only`, exit 0. `.\RunTests.ps1 -SkipUnits
+-SkipEngine -SkipGoldens` (the default, no `-Hitch`) reported `SKIP hitch 0.0s opt-in, pass -Hitch`
+and the line `not checked: the hitch-detector check did not run (opt-in, pass -Hitch): its cadence
+is explicit, not automatic -- run it with -Hitch when landing a change to HitchMonitor.cs,
+HitchSidecar.cs or the hitch tick in Launcher.cs, or periodically otherwise`, exit 0 in 0.8 s.
+`.\RunTests.ps1 -Quick -Suite warning-shot` ran 14/14 engine suites and 219 unit tests in 30.7 s
+with `SKIP hitch 0.0s -Quick` and the same cadence line, confirming quick never runs it. The
+deliberately broken-detector case (`$line.Frame -ne 300` temporarily changed to `-ne 999` in the
+inject-run check, reverted afterward and confirmed absent by `git diff`) surfaced as `!! hitch
+awareness: inject: hitch fired on frame 300, expected 300` and the stage row read `TODO hitch
+16.5s ...; 1 awareness item(s)`, still exit 0 -- a broken detector stays visible without gating
+the run, exactly as the awareness contract requires.
+
+**Verified.** <pending orchestrator run>
 
 ## C23 ☐ Ratchet the full verification budget and documentation
 
