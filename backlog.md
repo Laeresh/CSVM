@@ -850,7 +850,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-598` `[Bug]` **CM08 (C1B/M03): the patrol boats take hits but cannot be targeted.** *Evidence:*
   reported at the controls: the four boats C22's surface launch wakes at 181 s drive their nets and
   rounds hit them, but the targeting HUD never brackets one and the aim assist never snaps to one.
-  *Fix shape:* `SurfaceVehicleRuntime' s hull is neither an aircraft rig nor a world turret, so
+  *Fix shape:* `SurfaceVehicleRuntime`'s hull is neither an aircraft rig nor a world turret, so
   `TargetSelection` and `AimAssist`'s candidate lists (vehicles, turrets, structures) do not see it;
   decide which list the original puts a surface vehicle in (its targets record and the HUD class)
   and register the hull there. *Cross-refs:* `SurfaceVehicle`, `TargetHud`, `AimAssist.AddStructures`,
