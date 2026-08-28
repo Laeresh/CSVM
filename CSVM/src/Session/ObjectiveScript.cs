@@ -39,6 +39,46 @@ public readonly record struct AnimStateEntry(string Name, int State);
 /// <see cref="PointName"/> is set) the named point the vehicle is warped to instead.</summary>
 public readonly record struct WarpPoint(float X, float Y, float Z, float Heading, string? PointName);
 
+/// <summary>One argument of a target directive (<c>ADD_/REMOVE_OBJECTIVE_TARGET</c>,
+/// <c>ADD_/REMOVE_OTHER_TARGET</c>, <c>SET_HELP_LABEL</c>): a bare name, matched anywhere in the
+/// world, or an authored <c>[parent, child, ...]</c> path whose every later name is found under
+/// the node before it. <see cref="Key"/> is the identity string every store and every site is
+/// keyed by, the segments joined with <c>/</c>, so a bare name's key is the name itself.
+/// ⚠ A path is ONE target. C1/M04's <c>[[piratezep, rock_zeppelin]]</c> names the hull's own
+/// <c>rock_zeppelin</c>; read as two names it lights the hull's root and a ground node of the
+/// same name as well.</summary>
+public readonly struct ObjectiveTarget
+{
+    /// <summary>Builds a target over a non-empty path.</summary>
+    public ObjectiveTarget(IReadOnlyList<string> path)
+    {
+        Path = path;
+        Key = string.Join("/", path);
+    }
+
+    /// <summary>The authored names, outermost first; one entry for a bare name.</summary>
+    public IReadOnlyList<string> Path { get; }
+
+    /// <summary>The identity string: the path joined with <c>/</c>.</summary>
+    public string Key { get; }
+
+    /// <summary>The name of the node the target lands on, the last segment. What
+    /// <c>targets.zrd</c> is looked up by.</summary>
+    public string Node => Path[^1];
+
+    /// <summary>Whether the target is a path rather than a bare name.</summary>
+    public bool Scoped => Path.Count > 1;
+
+    /// <summary>The target a key denotes, inverse of <see cref="Key"/>.</summary>
+    public static ObjectiveTarget Parse(string key) => new(key.Split('/'));
+
+    /// <summary>Whether this target's key is the given one, case-insensitively.</summary>
+    public bool Is(string key) => string.Equals(Key, key, StringComparison.OrdinalIgnoreCase);
+
+    /// <inheritdoc/>
+    public override string ToString() => Key;
+}
+
 /// <summary>A parsed <c>TRAVELERS</c> proximity condition. <see cref="Who"/> is a node name or, when
 /// <see cref="Group"/> is set, an AI group; the reference is a node name or a literal point.
 /// <see cref="Count"/> is the tally the group form must reach, 1 by default.</summary>
@@ -166,17 +206,17 @@ public sealed class ObjectiveDef
     /// <summary>`COMPLETED_STOPPOINT` triples.</summary>
     public List<(string Net, int Stop, int Flag)> CompletedStoppoint = new();
 
-    /// <summary>`ADD_OTHER_TARGET` names.</summary>
-    public List<string> AddOtherTarget = new();
+    /// <summary>`ADD_OTHER_TARGET` targets.</summary>
+    public List<ObjectiveTarget> AddOtherTarget = new();
 
-    /// <summary>`REMOVE_OTHER_TARGET` names.</summary>
-    public List<string> RemoveOtherTarget = new();
+    /// <summary>`REMOVE_OTHER_TARGET` targets.</summary>
+    public List<ObjectiveTarget> RemoveOtherTarget = new();
 
-    /// <summary>`ADD_OBJECTIVE_TARGET` names.</summary>
-    public List<string> AddObjectiveTarget = new();
+    /// <summary>`ADD_OBJECTIVE_TARGET` targets.</summary>
+    public List<ObjectiveTarget> AddObjectiveTarget = new();
 
-    /// <summary>`REMOVE_OBJECTIVE_TARGET` names.</summary>
-    public List<string> RemoveObjectiveTarget = new();
+    /// <summary>`REMOVE_OBJECTIVE_TARGET` targets.</summary>
+    public List<ObjectiveTarget> RemoveObjectiveTarget = new();
 
     /// <summary>`START_TAXI` names.</summary>
     public List<string> StartTaxi = new();
@@ -185,7 +225,7 @@ public sealed class ObjectiveDef
     public List<string> StopQueuedSounds = new();
 
     /// <summary>`SET_HELP_LABEL`: the targets and the message key their help label becomes.</summary>
-    public (List<string> Names, string MessageKey)? HelpLabel;
+    public (List<ObjectiveTarget> Names, string MessageKey)? HelpLabel;
 
     /// <summary>`WARP_VEHICLE`: the vehicle and the waypoints one is drawn from at random.</summary>
     public (string Vehicle, List<WarpPoint> Points)? Warp;
@@ -481,6 +521,33 @@ public sealed class ObjectiveScript
         }
     }
 
+    // Targets: a string is a bare name, a nested list is one [parent, child, ...] path. The
+    // shipped data authors paths three deep (C5/M01's [rfspt4, healthy, spprt]).
+    private static void ReadTargets(List<object?>? list, List<ObjectiveTarget> into)
+    {
+        if (list == null)
+        {
+            return;
+        }
+
+        foreach (var item in list)
+        {
+            if (item is string s)
+            {
+                into.Add(new ObjectiveTarget(new[] { s }));
+            }
+            else if (item is List<object?> inner)
+            {
+                var path = new List<string>();
+                ReadNames(inner, path);
+                if (path.Count > 0)
+                {
+                    into.Add(new ObjectiveTarget(path));
+                }
+            }
+        }
+    }
+
     private static void ReadInts(List<object?>? list, List<int> into)
     {
         if (list == null)
@@ -652,10 +719,10 @@ public sealed class ObjectiveScript
     private static void ReadCompletionActions(ObjectiveDef def, List<(string Key, List<object?> Value)> pairs)
     {
         def.CompletedSoundGroup = StrAt(ValueOf(pairs, "COMPLETED_SOUND_GROUP"), 0);
-        ReadNames(ValueOf(pairs, "ADD_OTHER_TARGET"), def.AddOtherTarget);
-        ReadNames(ValueOf(pairs, "REMOVE_OTHER_TARGET"), def.RemoveOtherTarget);
-        ReadNames(ValueOf(pairs, "ADD_OBJECTIVE_TARGET"), def.AddObjectiveTarget);
-        ReadNames(ValueOf(pairs, "REMOVE_OBJECTIVE_TARGET"), def.RemoveObjectiveTarget);
+        ReadTargets(ValueOf(pairs, "ADD_OTHER_TARGET"), def.AddOtherTarget);
+        ReadTargets(ValueOf(pairs, "REMOVE_OTHER_TARGET"), def.RemoveOtherTarget);
+        ReadTargets(ValueOf(pairs, "ADD_OBJECTIVE_TARGET"), def.AddObjectiveTarget);
+        ReadTargets(ValueOf(pairs, "REMOVE_OBJECTIVE_TARGET"), def.RemoveObjectiveTarget);
         ReadNames(ValueOf(pairs, "START_TAXI"), def.StartTaxi);
         ReadNames(ValueOf(pairs, "STOP_QUEUED_SOUNDS"), def.StopQueuedSounds);
         foreach (var (name, value) in ReadPairEntries(ValueOf(pairs, "SET_AI_TEAM")))
@@ -730,8 +797,10 @@ public sealed class ObjectiveScript
             return;
         }
 
-        var names = new List<string>();
-        ReadNames(new List<object?> { list[0] }, names);
+        // The first argument is one target: a bare name, or a path in its own list. Only the last
+        // argument is the message key, so [[parent, child], key] and [name, key] both read.
+        var names = new List<ObjectiveTarget>();
+        ReadTargets(new List<object?> { list[0] }, names);
         if (names.Count > 0 && Str(list[^1]) is { } key)
         {
             def.HelpLabel = (names, key);

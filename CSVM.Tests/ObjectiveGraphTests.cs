@@ -235,6 +235,33 @@ public class ObjectiveGraphTests
     }
 
     [Fact]
+    public void A_nested_target_list_reads_as_one_path_and_a_bare_name_stays_bare()
+    {
+        var script = Script(
+            "\"OBJECTIVE1\",[\"ADD_OBJECTIVE_TARGET\",[[\"a\",\"b\"],\"c\"],"
+            + "\"REMOVE_OTHER_TARGET\",[[\"d\",\"e\",\"f\"]],"
+            + "\"SET_HELP_LABEL\",[[\"a\",\"b\"],\"MSG_OBJ_DEFEND\"]]");
+        var def = script.Objectives[0];
+        Assert.Equal(new[] { "a/b", "c" }, def.AddObjectiveTarget.ConvertAll(t => t.Key));
+        Assert.Equal(new[] { "a", "b" }, def.AddObjectiveTarget[0].Path);
+        Assert.Equal("b", def.AddObjectiveTarget[0].Node);
+        Assert.True(def.AddObjectiveTarget[0].Scoped);
+        Assert.False(def.AddObjectiveTarget[1].Scoped);
+        Assert.Equal("d/e/f", def.RemoveOtherTarget[0].Key);
+        Assert.Equal("a/b", def.HelpLabel!.Value.Names[0].Key);
+        Assert.Equal(new[] { "a", "b" }, ObjectiveTarget.Parse("a/b").Path);
+
+        var (graph, _) = Build(
+            "\"OBJECTIVE1\",[\"ADD_OBJECTIVE_TARGET\",[[\"a\",\"b\"]],"
+            + "\"SET_HELP_LABEL\",[[\"a\",\"b\"],\"MSG_OBJ_DEFEND\"]]");
+        graph.Step(0.1f);
+        Assert.True(graph.IsObjectiveTarget("a/b"));
+        Assert.False(graph.IsObjectiveTarget("a"));
+        Assert.False(graph.IsObjectiveTarget("b"));
+        Assert.Equal("MSG_OBJ_DEFEND", graph.HelpLabels["a/b"]);
+    }
+
+    [Fact]
     public void A_lost_player_stops_the_tick_and_the_countdown_without_ending_anything()
     {
         var (graph, world) = Build(

@@ -17,6 +17,14 @@ internal static class CampaignMarkerSuites
     // cm_sequence and that mission's own data, so nothing here names a shipped world node.
     private const int FirstSeq = 0;
 
+    // The story position whose report this is (C1/M04): the hull's own child and a ground node
+    // share the child's name, which is what a path has to tell apart.
+    private const int PathSeq = 8;
+    private const string PathParent = "piratezep";
+    private const string PathChild = "rock_zeppelin";
+    private const string PathKey = "piratezep/rock_zeppelin";
+    private const string PathLabel = "MSG_OBJ_DEFEND";
+
     // How far a site's world node is moved to prove the candidate follows it.
     private static readonly Vector3 Shove = new(600f, 0f, -400f);
 
@@ -53,6 +61,115 @@ internal static class CampaignMarkerSuites
 
         ctx.WriteArtifact($"test-campaign-objective-markers-{chapter}.txt", report.ToString());
         ctx.Note($"drove {chapter}/{folder}'s objective sites through the target cycle");
+    }
+
+    /// <summary>A path-authored site over the mission whose report this is: with two
+    /// <c>rock_zeppelin</c> nodes in the world, <c>ADD_OBJECTIVE_TARGET [[piratezep,
+    /// rock_zeppelin]]</c> offers ONE site, standing on the hull's own child, with the
+    /// <c>SET_HELP_LABEL</c> written against the same path on it; the hull's root and the ground
+    /// node stay unmarked.</summary>
+    internal static void CampaignObjectiveTargetPath(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), PathSeq)
+            ?? throw new SuiteSkippedException($"cm_sequence carries no story position {PathSeq}");
+        string chapter = mission.ChapterFolder.ToUpperInvariant();
+        string folder = mission.MissionFolder.ToUpperInvariant();
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+
+        var shipped = ObjectiveScript.Load(missionZrdr);
+        ctx.Check(AuthorsPath(shipped), $"{chapter}/{folder} authors ADD_OBJECTIVE_TARGET [[{PathParent}, {PathChild}]]");
+
+        // The same directives the shipped objective carries, on a conditionless objective so
+        // they run on the first tick instead of after the hatch animations it waits on.
+        var script = ObjectiveScript.Parse(new List<object?>
+        {
+            new List<object?>
+            {
+                "OBJECTIVE1", new List<object?>
+                {
+                    "ADD_OBJECTIVE_TARGET", new List<object?> { new List<object?> { PathParent, PathChild } },
+                    "SET_HELP_LABEL", new List<object?> { new List<object?> { PathParent, PathChild }, PathLabel },
+                },
+            },
+        });
+        var targets = MissionTargets.Load(missionZrdr);
+        var messages = Messages.Load(ctx.MessagesPath);
+        var report = new StringBuilder();
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        var director = CampaignDirector.Create(script, mission, profile, null);
+        ctx.WithWorld(chapter, collision: false, folder, world =>
+            DrivePath(ctx, world, director, targets, messages, report));
+
+        ctx.WriteArtifact($"test-campaign-objective-target-path-{chapter}.txt", report.ToString());
+        ctx.Note($"{chapter}/{folder}: [{PathParent}, {PathChild}] marks the hull's own child alone");
+    }
+
+    private static void DrivePath(TestContext ctx, TestWorld world, CampaignDirector director,
+        MissionTargets targets, Messages messages, StringBuilder report)
+    {
+        var listener = ctx.Camera.GlobalPosition;
+        director.Attach(new CampaignDirector.WorldInputs
+        {
+            Runtime = world.Runtime,
+            Sounds = world.Runtime.Sounds,
+            ListenerPosition = () => listener,
+            Rng = new Random(1),
+        });
+        var graph = director.Graph!;
+        graph.Step(0.1f);
+        ctx.Check(graph.IsObjectiveTarget(PathKey), $"the graph holds the path as one key '{PathKey}'");
+        ctx.Check(!graph.IsObjectiveTarget(PathParent) && !graph.IsObjectiveTarget(PathChild),
+            $"and neither bare name on its own");
+
+        var all = world.Runtime.FindNodes(PathChild, null);
+        var hull = ObjectiveSites.ResolveTarget(world.Runtime, new ObjectiveTarget(new[] { PathParent }));
+        var child = ObjectiveSites.ResolveTarget(world.Runtime, ObjectiveTarget.Parse(PathKey));
+        report.AppendLine($"{all.Count} '{PathChild}' nodes; hull {hull?.GlobalPosition.ToString() ?? "-"}, " +
+            $"its child {child?.GlobalPosition.ToString() ?? "-"}");
+        ctx.Check(all.Count >= 2, $"the world carries more than one '{PathChild}' ({all.Count})");
+        ctx.Check(hull != null && child != null && hull.IsAncestorOf(child),
+            $"'{PathKey}' resolves to the node inside '{PathParent}'");
+
+        var sites = new ObjectiveSites(director, messages, targets, world.Runtime);
+        var offered = new List<AimCandidate>();
+        sites.Collect(offered);
+        var marked = new List<ObjectiveSite>();
+        foreach (var candidate in offered)
+        {
+            if (candidate.Source is ObjectiveSite site
+                && site.Target.Node.Equals(PathChild, StringComparison.OrdinalIgnoreCase))
+            {
+                marked.Add(site);
+                report.AppendLine($"site '{site.Node}' at {site.Position} category '{site.Category}'");
+            }
+        }
+
+        ctx.Same(1, marked.Count, $"exactly one '{PathChild}' site is offered");
+        ctx.Check(marked.Count == 1 && marked[0].Node == PathKey,
+            $"and it is the path's own key, not a bare name");
+        ctx.Check(marked.Count == 1 && child != null && marked[0].Position.IsEqualApprox(child.GlobalPosition),
+            $"standing on the hull's child, not on a ground '{PathChild}'");
+        ctx.Check(marked.Count == 1 && marked[0].Category == messages.Get(PathLabel).Trim(),
+            $"with the help label written against the same path ('{marked[0].Category}')");
+    }
+
+    private static bool AuthorsPath(ObjectiveScript script)
+    {
+        foreach (var def in script.Objectives)
+        {
+            foreach (var target in def.AddObjectiveTarget)
+            {
+                if (target.Is(PathKey))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
@@ -148,12 +265,12 @@ internal static class CampaignMarkerSuites
                 continue;
             }
 
-            var found = world.Runtime.FindNodes(target.Name, null);
+            var found = ObjectiveSites.ResolveTarget(world.Runtime, ObjectiveTarget.Parse(target.Name));
             report.AppendLine($"'{target.Name}' point {point} vs node " +
-                $"{(found.Count > 0 ? found[0].GlobalPosition.ToString() : "unresolved")}");
+                $"{(found != null ? found.GlobalPosition.ToString() : "unresolved")}");
             ctx.Check(target.Position.IsEqualApprox(point),
                 $"'{target.Name}' sits at the point its objective tests, not at its node");
-            ctx.Check(found.Count == 0 || !found[0].GlobalPosition.IsEqualApprox(point),
+            ctx.Check(found == null || !found.GlobalPosition.IsEqualApprox(point),
                 $"and that point is somewhere the node itself is not, so the choice matters");
             return;
         }
@@ -227,7 +344,7 @@ internal static class CampaignMarkerSuites
             {
                 if (target.Objective && def.Travelers is { } spec
                     && string.Equals(spec.WhereNode, target.Name, StringComparison.OrdinalIgnoreCase)
-                    && Names(def.RemoveObjectiveTarget, target.Name))
+                    && Removes(def, target.Name))
                 {
                     return target;
                 }
@@ -250,14 +367,14 @@ internal static class CampaignMarkerSuites
                 continue;
             }
 
-            var found = world.Runtime.FindNodes(target.Name, null);
-            if (found.Count == 0 || !found[0].IsInsideTree())
+            var found = ObjectiveSites.ResolveTarget(world.Runtime, ObjectiveTarget.Parse(target.Name));
+            if (found == null || !found.IsInsideTree())
             {
                 continue;
             }
 
-            var parent = found[0].GetParent() as Node3D;
-            return (target, parent?.GetParent() is Node3D ? parent : found[0]);
+            var parent = found.GetParent() as Node3D;
+            return (target, parent?.GetParent() is Node3D ? parent : found);
         }
 
         return null;
@@ -306,6 +423,19 @@ internal static class CampaignMarkerSuites
         }
 
         return found;
+    }
+
+    private static bool Removes(ObjectiveDef def, string key)
+    {
+        foreach (var target in def.RemoveObjectiveTarget)
+        {
+            if (target.Is(key))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool Names(IReadOnlyList<string> names, string node)

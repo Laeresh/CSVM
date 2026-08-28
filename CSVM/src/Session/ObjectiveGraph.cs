@@ -202,13 +202,15 @@ public sealed class ObjectiveGraph
     /// <c>IDENTITY</c> priority, in ascending priority order.</summary>
     public IReadOnlyList<ObjectiveRow> Rows => _rows;
 
-    /// <summary>The nodes currently flagged as objective targets (`ADD_OBJECTIVE_TARGET`).</summary>
+    /// <summary>The targets currently flagged as objective targets (`ADD_OBJECTIVE_TARGET`), by
+    /// <see cref="ObjectiveTarget.Key"/>: a bare name, or <c>parent/child</c> for an authored
+    /// path.</summary>
     public IReadOnlyCollection<string> ObjectiveTargets => _objectiveTargets;
 
-    /// <summary>The nodes currently flagged as other targets (`ADD_OTHER_TARGET`).</summary>
+    /// <summary>The targets currently flagged as other targets (`ADD_OTHER_TARGET`), by key.</summary>
     public IReadOnlyCollection<string> OtherTargets => _otherTargets;
 
-    /// <summary>The help labels `SET_HELP_LABEL` has written, node name to message key.</summary>
+    /// <summary>The help labels `SET_HELP_LABEL` has written, target key to message key.</summary>
     public IReadOnlyDictionary<string, string> HelpLabels => _helpLabels;
 
     /// <summary>The completed-objective bitmask a mission attempt records. Bit n is display row n,
@@ -231,11 +233,11 @@ public sealed class ObjectiveGraph
         }
     }
 
-    /// <summary>Whether a node carries the objective-target display flag right now.</summary>
-    public bool IsObjectiveTarget(string name) => _objectiveTargets.Contains(name);
+    /// <summary>Whether a target key carries the objective-target display flag right now.</summary>
+    public bool IsObjectiveTarget(string key) => _objectiveTargets.Contains(key);
 
-    /// <summary>Whether a node carries the other-target display flag right now.</summary>
-    public bool IsOtherTarget(string name) => _otherTargets.Contains(name);
+    /// <summary>Whether a target key carries the other-target display flag right now.</summary>
+    public bool IsOtherTarget(string key) => _otherTargets.Contains(key);
 
     /// <summary>One objective's current state, by 1-based number.</summary>
     public ObjectiveState StateOf(int number) =>
@@ -593,9 +595,9 @@ public sealed class ObjectiveGraph
         _world.StartTaxi(def.StartTaxi);
         if (def.HelpLabel is { } label)
         {
-            foreach (var name in label.Names)
+            foreach (var target in label.Names)
             {
-                _helpLabels[name] = label.MessageKey;
+                _helpLabels[target.Key] = label.MessageKey;
             }
 
             TargetsChanged?.Invoke();
@@ -608,24 +610,24 @@ public sealed class ObjectiveGraph
     private void EditTargets(ObjectiveDef def)
     {
         int before = _objectiveTargets.Count + _otherTargets.Count;
-        foreach (var name in def.AddOtherTarget)
+        foreach (var target in def.AddOtherTarget)
         {
-            _otherTargets.Add(name);
+            _otherTargets.Add(target.Key);
         }
 
-        foreach (var name in def.RemoveOtherTarget)
+        foreach (var target in def.RemoveOtherTarget)
         {
-            _otherTargets.Remove(name);
+            _otherTargets.Remove(target.Key);
         }
 
-        foreach (var name in def.AddObjectiveTarget)
+        foreach (var target in def.AddObjectiveTarget)
         {
-            _objectiveTargets.Add(name);
+            _objectiveTargets.Add(target.Key);
         }
 
-        foreach (var name in def.RemoveObjectiveTarget)
+        foreach (var target in def.RemoveObjectiveTarget)
         {
-            _objectiveTargets.Remove(name);
+            _objectiveTargets.Remove(target.Key);
         }
 
         if (before != _objectiveTargets.Count + _otherTargets.Count)

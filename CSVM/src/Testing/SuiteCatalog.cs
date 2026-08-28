@@ -178,6 +178,7 @@ public static class SuiteCatalog
         "campaign-zeppelins",
         "campaign-danger-zones",
         "campaign-objective-markers",
+        "campaign-objective-target-path",
         "landings-approach-trigger",
         "landings-wingwalk-gate",
         "landings-train-pickup-gate",
@@ -969,6 +970,13 @@ public static class SuiteCatalog
             + "the site name, in the decoded blue, sitting on the world node the mission named, "
             + "and flying one site's own TRAVELERS approach retires that marker alone",
             CampaignObjectiveMarkers));
+
+        into.Add(new TestHarness.Suite("campaign-objective-target-path",
+            "a path-authored objective target over C1/M04's BUILT world: with two rock_zeppelin "
+            + "nodes present, ADD_OBJECTIVE_TARGET [[piratezep, rock_zeppelin]] is held as one key, "
+            + "offers one site standing on the hull's own child rather than the ground node, and "
+            + "carries the SET_HELP_LABEL written against the same path",
+            CampaignObjectiveTargetPath));
 
         // BL-467: nothing read landings.zrd, so no mission could ever play the cutscene an
         // ANIM_STATE objective waits on.

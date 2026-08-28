@@ -2920,24 +2920,6 @@ usual.
   the bug.
   *Cross-refs:* `BL-563`, `BL-565`, `BL-572`, `docs/formats/objectives.md`.
 
-- `BL-582` `[Bug]` **A two-element objective target `[parent, child]` is flattened into two bare
-  names, so CM09 (C1/M04) shows two Defend markers: one on the Pandora and one on a ground
-  `rock_zeppelin` near the enemy zeppelin.** *Evidence (traced):* reported at the controls as two
-  markers. `OBJECTIVE23` authors `ADD_OBJECTIVE_TARGET [[piratezep, rock_zeppelin]]` and
-  `SET_HELP_LABEL [[piratezep, rock_zeppelin], MSG_OBJ_DEFEND]`, a node path (the child
-  `rock_zeppelin` under `piratezep`). `ObjectiveScript.ReadNames` flattens a nested list into
-  its strings, so the def's `AddObjectiveTarget` holds `piratezep` and `rock_zeppelin` as two
-  independent names, and `ObjectiveGraph.IsObjectiveTarget(name)` matches any node by bare name:
-  the Pandora's root and every other `rock_zeppelin` in the world (a ground node near the
-  enemy zeppelin) both light up. `REMOVE_OBJECTIVE_TARGET` and `ADD_OTHER_TARGET` read the same
-  way (`ObjectiveSites.Holds`). The same shape is C1C/M01's `[[wv_tailhook, peoplehook]]`.
-  *Fix shape:* read a nested pair as a path (`Parent`/`Child`), resolve it to the one node under
-  that parent (`AnimRuntime.FindNodes` scoped to the parent's subtree), and mark that node only;
-  a bare name keeps today's global match. Add a unit test on `ReadNames` with `[[a, b]]` and an
-  objective-sites test on a world with two `rock_zeppelin` nodes. *⚠ Traps:* the help label
-  applies to the same resolved node, not to the parent. *Cross-refs:* `BL-572` (what the marker
-  says once it is on the right node), `BL-581`, `docs/formats/objectives.md` 173.
-
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in

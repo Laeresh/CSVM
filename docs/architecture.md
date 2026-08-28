@@ -5157,7 +5157,11 @@ so `WAKEUP_OBJECTIVE_WHEN_I_COMPLETE` and the truncated `SET_AI_` land in no fie
 without anything special-casing them. The lookup stays at the top level rather than recursing into
 nested lists as the original does: no shipped file exercises the recursion, so the answer is the
 same on all 53 files and no data string can false-match a keyword. A `null` block parses to a
-directive-free objective, which starts awake and completes as a no-op.
+directive-free objective, which starts awake and completes as a no-op. The four target directives
+and `SET_HELP_LABEL` read `ObjectiveTarget`s, not names: a string is a bare name and a nested list is
+ONE `[parent, child, ...]` path, keyed as `parent/child` (`ObjectiveTarget.Key`) everywhere a
+target is stored or compared. ⚠ Flattening the nesting into names is how C1/M04's
+`[[piratezep, rock_zeppelin]]` lit the hull root and a ground `rock_zeppelin` as two markers.
 `SoundGroupNames()` (D33) collects every sound-group name the script's directives can hand to
 `PlaySoundGroup`, a vocabulary the mission's anim program never sees, so nothing else prewarms it;
 a session hands this to `WorldSession.Options.ExtraPrewarmNames`.
@@ -5173,8 +5177,12 @@ a mission that only ever REMOVES its sites would offer nothing. One `ObjectiveSi
 as long as the mission flags it, since the selection is held by source identity; its position and
 labels are re-read every frame, which is what tracks a site under a moving node. `PointFor` prefers
 the bare `TRAVELERS` point of the objective that edits a target over the world node of the same
-name, because C3/M01's village node stands at the world origin. `GameSession` binds it through
-`FlightRoster.SetTargetObjectives`. Pinned by `campaign-objective-markers`.
+name, because C3/M01's village node stands at the world origin. A site is keyed by
+`ObjectiveTarget.Key`, and `ResolveTarget` walks a path one name at a time with `FindNodes` scoped
+to the node before, so `piratezep/rock_zeppelin` is the hull's own child and a bare name is the
+first global match; `targets.zrd` is looked up by the path's last node, the help label by the
+whole key. `GameSession` binds it through `FlightRoster.SetTargetObjectives`. Pinned by
+`campaign-objective-markers` and `campaign-objective-target-path`.
 
 ## src/Session/ObjectiveGraph.cs
 The objectives runtime over a parsed script, pure state over `Step` calls in the shape of

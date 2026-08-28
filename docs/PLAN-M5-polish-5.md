@@ -17,6 +17,12 @@ Research-only items, `[Owed-playtest]` items, anything `[Blocked: ...]`, the pla
 user-deferred items (`BL-150`, `BL-446`, `BL-463`, `BL-256`) and the AI mode machine
 (`BL-523`, `BL-550`, `BL-558`, `BL-565`, `BL-566`) are out.
 
+One item sits outside that walk: `BL-585` (Wave E), a blocker reported at the controls in CM13
+(C2/M03, the air race). The enemy racers follow their net instead of locking onto the mission's
+`dzpath` ribbons the way the original's AI does, so they finish the course well ahead of the
+player and the mission fails around the halfway mark. It is a decode-first feature, not a
+follow-up of D32, and it is judged at CM13, not by the D31 sortie.
+
 Every item was re-verified still-open against the record in this session: `git log --grep` on
 each id finds only its filing, a cross-reference or a partial (`BL-583`, the one D32 filing that
 landed, is already gone from `backlog.md`; `BL-563` closed on main). The two live worktree
@@ -111,12 +117,16 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☐ `BL-576`: the Pandora pitches steeply up and down along the Klondike net
 22. ☐ `BL-577` + `BL-564`: no runtime for a roster or generator surface vehicle, so the patrol boats never spawn
 23. ☑ `BL-580`: `eairg32`'s launch falls back to a `player_bhawk` on a misspelt parameter block
-24. ☐ `BL-582`: a `[parent, child]` objective target is flattened into two bare names
+24. ☑ `BL-582`: a `[parent, child]` objective target is flattened into two bare names
 25. ☐ `BL-581`: the docking objective is never reached after the radio tower goes down
 
 ### Wave D — the sortie
 
 31. ☐ Fly CM04 to CM09 end to end and judge every item where it was reported
+
+### Wave E — CM13 (C2/M03), the blocker
+
+41. ☐ `BL-585`: AI planes never lock onto a `dzpath` and fly it on rails, so the CM13 racers skip the danger zones
 
 ## Dependency and parallelism notes
 
@@ -143,7 +153,13 @@ scripted-path follower; it owns `CampaignRoster.cs`'s `Skipped` path and a new r
 its generator half meets A6/C23 in `SpawnFromGenerator`, so it runs after both. C25 first adds
 the `campaign` objective log lines and then fixes `ObjectiveGraph.Ticks`; nothing else touches
 the graph's tick, but C24 edits the same `ObjectiveGraph` file, so sequence them. D31 waits for
-everything.
+everything in Waves A to C.
+
+E41 is the one item in the AI pilot proper: it owns `AiNetFollower`, the danger-zone arm of
+`AiPilot.FlyPatrol` and the two enum-only modes of `AiModeMachine`. Nothing else in this plan
+touches those files, so it may run in its own worktree in parallel with any wave, but its decode
+half (`FUN_0041d1f0`'s `dzpath_%d` branch) comes before any code, and its verification is a CM13
+flight by the user, separate from D31.
 
 ---
 
@@ -609,7 +625,7 @@ no longer reachable with a label present; the sortie (D31) judges the airfield.
 **⚠ Traps.** Do not "fix" the data spelling; the shipped file is the reference and the original
 ran with it.
 
-## C24 ☐ `BL-582`: a `[parent, child]` objective target is flattened into two bare names
+## C24 ☑ `BL-582`: a `[parent, child]` objective target is flattened into two bare names
 
 **Goal.** `ADD_OBJECTIVE_TARGET [[piratezep, rock_zeppelin]]` marks the one `rock_zeppelin` under
 `piratezep`, so CM09 shows one Defend marker; a bare name keeps today's global match.
@@ -619,17 +635,34 @@ strings, so `AddObjectiveTarget` holds `piratezep` and `rock_zeppelin` as two na
 `ObjectiveGraph.IsObjectiveTarget(name)` matches any node by bare name: the Pandora's root and a
 ground `rock_zeppelin` near the enemy zeppelin both light up. `REMOVE_OBJECTIVE_TARGET` and
 `ADD_OTHER_TARGET` read the same way (`ObjectiveSites.Holds`); C1C/M01's `[[wv_tailhook,
-peoplehook]]` is the same shape. `<TODO: re-verify still-open against the code>`
+peoplehook]]` is the same shape. Re-verified against the code: still open as described. A census
+of every nested target argument across the 53 shipped `objectives.zrd` files finds only paths
+(`[zcrane1, healthy]`, `[cargozep2, ctur1]`, `[tiedown01, healthy]`, C5/M01's three-deep
+`[rfspt4, healthy, spprt]`), so `docs/formats/objectives.md`'s former "a list argument is a list
+of independent names, not a node path" was wrong on the data and is rewritten. The binary's walk
+of the list is not traced (the Ghidra decompile tool was not reachable from this lane).
 
-**Approach.** Read a nested pair as a path (`Parent`/`Child`), resolve it to the one node under
-that parent (`AnimRuntime.FindNodes` scoped to the parent's subtree), and mark that node only.
+**Approach.** `ObjectiveTarget` (in `ObjectiveScript.cs`): a string argument is a bare name, a
+nested list is ONE path, any depth; `Key` joins the path with `/` and is what
+`ObjectiveGraph.ObjectiveTargets`/`OtherTargets`/`HelpLabels`, `IsObjectiveTarget`, and every
+`ObjectiveSite.Node` are keyed by, so a bare name's key is unchanged. `ObjectiveSites.ResolveTarget`
+walks a path with `FindNodes` scoped to the node before; `targets.zrd` is looked up by the last
+node, the help label by the whole key. `SET_HELP_LABEL` reads its first argument as the same
+target. The C1/M04 world carries six `rock_zeppelin` nodes; the path picks the hull's own.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** Sonnet-sized: a parser shape change with every consumer in three files.
 
-**Verify.** A unit test on `ReadNames` with `[[a, b]]`, and an objective-sites test on a world
-with two `rock_zeppelin` nodes marking only the child of `piratezep`.
+**Verify.** `ObjectiveGraphTests.A_nested_target_list_reads_as_one_path_and_a_bare_name_stays_bare`
+(the `[[a, b]]` read, a three-deep path, the help-label target, and the graph holding `a/b` and
+neither bare name), and the engine suite `campaign-objective-target-path` over C1/M04's built
+world: `[[piratezep, rock_zeppelin]]` is held as one key, exactly one `rock_zeppelin` site is
+offered, it stands on the node inside `piratezep`, and its category is the `MSG_OBJ_DEFEND` text.
 
-**⚠ Traps.** The help label applies to the same resolved node, not to the parent.
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** The help label applies to the same resolved node, not to the parent. A site's
+identity string (`TargetRef.Name`, what `--target=` matches) is now the key, so a path-authored
+site is addressed as `piratezep/rock_zeppelin`.
 
 ## C25 ☐ `BL-581`: the docking objective is never reached after the radio tower goes down
 
@@ -684,3 +717,58 @@ its wave, and record the verdicts in this plan under D31. Reopen with a new id m
 
 **⚠ Traps.** A live symptom is evidence about the build that was running: confirm no testing
 worktree is open before minting. `<TODO: the per-mission launch commands>`
+
+# Wave E — CM13 (C2/M03), the blocker
+
+## E41 ☐ `BL-585`: AI planes never lock onto a `dzpath` and fly it on rails, so the CM13 racers skip the danger zones
+
+**Goal.** An AI aircraft that reaches a net node carrying the danger-zone flag, or comes near a
+`dzpathN` ribbon under whatever proximity rule the original uses, locks onto that ribbon and flies
+it on rails through the zone's gate pair, then returns to its net. In CM13 the enemy racers fly
+every danger zone of the course, so the race is winnable at the controls.
+
+**Evidence (confidence: lead-only for the symptom, traced for the data).** Reported at the
+controls in CM13: the enemy planes follow their net and skip the danger zones, finishing far
+ahead; the mission failed with the player about halfway round. The same mechanic is missing in
+the original's terms as well: the AI mode enum carries `2 approaching danger zone` and
+`5 navigating danger zone` (`docs/org/aiPilot.md`, the `+0x358` mode list), the aircraft net
+follower `FUN_0041d1f0` reads node fields 5 and 6 (`+0x11` flag, `+0x14` `dzpathN` index) and
+starts `dzpath%d`, or the unnumbered run when the index is negative
+(`docs/formats/ai-nets.md`, "The aircraft follower"), and 4 of the 222 shipped nets carry
+danger-zone entries. The remake parses those tags (`AiNetNode.EntersDangerZone`,
+`AiNetNode.DangerZonePath`, pinned by `AiNetFollowerTests`) and leaves them unacted-on
+(`AiNetFollower.cs`), `AiModeMachine` declares `ApproachingDangerZone` and
+`NavigatingDangerZone` as enum-only with a standing "do not invent an entry condition", and the
+ribbon geometry is built only under `--debug-dzpaths` (`WorldBuilder.BuildDzPaths`). The roster
+field `daredevil_chance` (`docs/formats/ai-rosters.md`) is the per-pilot probability of taking an
+available run. `<TODO: which net CM13's racers fly, and whether it is one of the 4 tagged nets;
+if it is not, the lock-on must come from proximity to the ribbon rather than from a node tag>`
+
+**Approach.** Decode first, in `crimson.exe`: (1) `FUN_0041d1f0`'s `dzpath_%d` branch, which
+resolves the ribbon by name and hands the pilot to mode 2; (2) the mode-2 approach law (how the
+pilot reaches the ribbon's first vertex, and from which end); (3) the mode-5 run (whether the
+pilot is steered along the polyline by the control law or its pose is written from the ribbon,
+which is what "on rails" would mean, and what the speed rule is); (4) the exit back to mode 0
+and the net node it resumes at; (5) the `daredevil_chance` roll and any proximity trigger that
+is independent of node tags, since the user's report describes a plane "near" a ribbon locking
+on. The unread `+0x10`/`+0x20` arm of the net-assignment routine (`docs/org/aiPilot.md`, the
+"one arm ahead" note) is on the same path. Land the decode as a `docs/org/aiPilot.md` section
+and an `ai-nets.md` update, then implement: `AiNetFollower` reports the tag on arrival,
+`AiPilot` enters `ApproachingDangerZone` and `NavigatingDangerZone` through `AiModeMachine`
+under the decoded rule (replacing the "never entered" prohibition with the decoded entry
+condition), and the run reads the ribbon's route polyline classified by material as
+`StuntMission.TryReadGates` already does. The ribbon geometry needs a loader independent of
+`--debug-dzpaths`.
+
+**Model recommendation.** `<TODO: not settled this session>`
+
+**Verify.** A unit test driving a tagged net node into the two modes and out again on a fixture
+polyline; a headless CM13 run whose `[ai]` mode lines show every racer entering mode 5 once per
+zone in course order; then the user flies CM13 and judges whether the racers fly the zones and
+the race is winnable, with their eyes outranking the log.
+
+**⚠ Traps.** Do not invent the entry condition (the prohibition on `AiModeMachine` stands until
+the decode replaces it). Do not use polygon index to find the route ribbon; classify by
+material (`docs/formats/missions.md`). The splitscreen race countdown `BL-314` is a different
+"on rails" and stays separate. `BL-523` (the patrol/pursue cycle) is out of this plan and must
+not be pulled in through the shared mode machine.
