@@ -737,7 +737,8 @@ public static class SuiteCatalog
             + "AimCandidateSet.Structures is, an ordnance entry with the admission byte clear is "
             + "refused (the TARGETABLE half is the shootable-flyout suite's), and a zeppelin "
             + "contributes one entry per gasbag/engine/cannon with its hull's velocity; plus C1's "
-            + "real emplacements landing on the Non-Aircraft cycle", TargetPoolModel));
+            + "real emplacements, every site dead as ia1.gw leaves it and the five aaguns landing "
+            + "on the Non-Aircraft cycle once their sites are switched on", TargetPoolModel));
         into.Add(new TestHarness.Suite("target-selection",
             "the sticky selection, tree-free: the decoded cycle order in one assertion "
             + "(objectives, then ahead/behind/left/right with distance inside a sector), the "

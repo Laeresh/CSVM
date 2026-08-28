@@ -576,7 +576,10 @@ internal static class AiSuites
                   && !AimAssist.Hostile(AimAssist.PlayerTeam, AimAssist.PlayerTeam),
             $"team 0 never shoots and is never shot, and no side is hostile to itself");
 
-        ctx.WithWorld("C1", collision: true, world =>
+        // A private world: this suite shows multiplayer1zep, aagun32 and the piratezep that ia1.gw
+        // switched off, and kills aagun32 through its destructible, which no finally can undo. A
+        // shared cache would hand every later C1 suite that changed census.
+        ctx.WithPrivateWorld("C1", collision: true, world =>
         {
             var textures = new TextureArchive(texturesPath);
             ProjectilePool? pool = null;
@@ -627,6 +630,15 @@ internal static class AiSuites
                 ctx.Check(!aagun.Activated && AimAssist.Hostile(aagun.Team, AimAssist.PlayerTeam),
                     $"aagun32 is dormant and hostile to the player by default team={aagun.Team}");
                 aagun.Def.InaccuracyDeg = 0f; // determinism: the scatter cone is the assist suite's
+                // ia1.gw switches aagun32's site off at its root, and a switched-off emplacement
+                // is dead before it is dormant. The .gw's own switch, reversed, stands it up so
+                // the ACTIVATED gate is what the checks below read.
+                ctx.Check(!aagun.Alive && aagun.Site != null,
+                    $"aagun32 reads dead as ia1.gw leaves it, site={aagun.Site?.Name}");
+                if (aagun.Site == null)
+                    return;
+                world.Runtime.SetTargetActive(aagun.Site, true);
+                ctx.Check(aagun.Alive, $"…and alive once its site is switched on");
 
                 FlightController BuildRig(string plane, int playerIndex, Vector3 pos, Vector3 look)
                 {
@@ -752,17 +764,7 @@ internal static class AiSuites
                         $"the same call with the flag cleared stows them again (the b=0 arm)");
                 }
 
-                // The stand-in wakes it — explicit, counted, logged — and it engages once its site is
-                // shown: support\c1\ia1.gw switches aagun32 and piratezep off, and a switched-off site
-                // is out of the world however awake its gunner is (SetTargetActive is the mission's on).
-                Step(120);
-                ctx.Check(!aagun.Alive && aagun.ShotsFired == 0,
-                    $"an awake gun on a site the .gw switched off stays dead and silent alive={aagun.Alive} shots={aagun.ShotsFired}");
-                world.Runtime.SetTargetActive(aagun.Site!, true);
-                foreach (var hull in world.Runtime.FindNodes("piratezep"))
-                {
-                    world.Runtime.SetTargetActive(hull, true);
-                }
+                // The stand-in wakes it — explicit, counted, logged — and it engages.
                 int woken = runtime.WakeAll();
                 ctx.Same(runtime.Count - 15, woken, $"--wake-turrets stand-in wakes every dormant emplacement");
                 float before = Combined(target);
@@ -781,6 +783,13 @@ internal static class AiSuites
                 var allied = runtime.Emplacements
                     .Where(t => t.Team == AimAssist.PlayerTeam).ToList();
                 ctx.Check(allied.Count > 0, $"the piratezep's allied rings exist count={allied.Count}");
+                // The same .gw switch on the piratezep: its rings are dead under a hidden hull.
+                foreach (var hull in world.Runtime.FindNodes("piratezep"))
+                {
+                    world.Runtime.SetTargetActive(hull, true);
+                }
+                ctx.Check(allied.All(t => t.Alive),
+                    $"the piratezep's rings are alive once the hull is switched on alive={allied.Count(t => t.Alive)} of {allied.Count}");
                 if (allied.Count > 0)
                 {
                     int AlliedShots() => allied.Sum(t => t.ShotsFired);
