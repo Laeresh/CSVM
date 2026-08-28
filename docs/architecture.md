@@ -3470,7 +3470,10 @@ decides no rule, exactly as it holds none for `--vs`.
 `FlightModel.Reset(pos, attitude, 0, 0)` instead — everything from the pose commit down (weapon
 selectors, guns, rockets, ordnance, gauges, telemetry) runs exactly as in free flight, which is what
 makes the lab fire through the real path. `PlaceHeld(pos, lookAt)` moves the pin (C6/C7's re-park)
-through the same `Reset` + `SnapCamera` pair `Respawn` uses; `SelectGunGroup`/`SelectPylon` are the
+through the same `Reset` + `SnapCamera` pair `Respawn` uses; `ReleaseHeld(velocity, throttle)` is
+the scripted-path follower's handoff, un-holding in place at that velocity and lever with the net
+reseated and NO respawn or spawn grace (the original clears the path flag and nothing else, so the
+sweep and ground blow run from the first flown step); `SelectGunGroup`/`SelectPylon` are the
 programmatic twins of G/H for the lab panel. A held airframe also takes the ORBIT camera rather than
 the chase — `halted || Held`, since both mean "the plane is standing still and the view should swing
 around it" — and `CameraOwned` makes this node write nothing to the camera at all while the lab
@@ -5458,7 +5461,16 @@ Runs a mission's egen generators (M4 B6 + F20, behind `--generators[=plane]`): o
 node, spawns through the handed roster callback at the origin node's LIVE position (it rides
 F17's moving zeppelin) in the authored `rotation` drop attitude, each pilot patrolling the cyclic
 net pick through `AiNetFollower` (`SpawnedNet`). A surface host instead launches off its own
-`<base>_aip<n>` take-off path, whose absence is a third load drop, and `LaunchOrdinal` numbers
+`<base>_aip<n>` take-off path, whose absence is a third load drop, and then FLIES that path: the
+launched aircraft is held (`FlightController.Held`, no flight integration and no collision, so a
+launch standing on its own deck is never a ram) and driven by a `PathFollower` over the path
+nodes' live positions (`LiveWaypoints`, so a run off a still-driving hull stays on it), nose down
+the current leg with the leg's own climb as pitch, until the last point, where `Activate` drops it
+into the flight model at the speed the run reached with the decoded 1.0 lever and its patrol net
+reseated where it arrived (`StepRuns`, the same shape as `CampaignDirector.PlaceOnPath`'s roster
+taxi; `RunningCount` counts the runs in flight). Runs step BEFORE the cycles each `SimStep`, so a
+launch this step first moves on the next. Pinned by the `generator-takeoff-run` suite over
+C1/M02's `eairg31`; the launch pose alone by `campaign-submarine`. `LaunchOrdinal` numbers
 every launch for the decoded `%s_eg%d` instance name. Door transitions play the authored or
 node-name-defaulted `open_anim`/`close_anim` (`EnemyGenerators.DefaultDoorAnim`; an unauthored
 close is the open, as in the loader) through host-scoped hooks (`AnimRuntime.PlayWithin`/
@@ -5468,7 +5480,8 @@ line, which is the flag's observability. `NotifyHostDied(node)`: the zeppelin de
 (`ZeppelinRuntime.ZeppelinKilled`, F18) calls it and the matching cycles disable permanently.
 Pinned by the `zeppelin-launch` suite. For campaign missions, `RequireWakeupCredits(hostNode)`
 starts cycles named by a script's `WAKEUP_GENERATOR` empty, and
-`GrantWaveCapacity(hostNode, n)` is its top-up; the spawn
+`GrantWaveCapacity(hostNode, n)` is its top-up (`--wake-generators` grants the script's whole
+credit at build, the logged headless stand-in for playing up to the objective); the spawn
 callback receives the whole `EnemyGeneratorDef`, allowing `vehicle.params` to select its AIV
 template while position is still read from the live host. That selection is the mission spawner's
 roster read and runs on any generator session: `GameSession.SpawnFromGenerator` spawns the matched

@@ -102,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ `BL-567`: the Pandora's broadside cannons fire on the player (decode: `player` resolves; the report stands against it, flown original check owed)
 4. ☐ `BL-568`: the Pandora starts moored in the dry dock instead of flying in
 5. ☑ `BL-512` + `BL-578`: `ObjectMotion`'s `rnd_xz` makes the Barracuda and the CM08 tanker jump
-6. ☐ `BL-522` + `BL-527`: a surface generator's launch does not fly its take-off run, so the fighters die on the deck
+6. ☑ `BL-522` + `BL-527`: a surface generator's launch does not fly its take-off run, so the fighters die on the deck
 7. ☑ `BL-569` + `BL-579`: a cutscene called from a start anim fires at bootstrap with no camera (CM04 and CM09)
 
 ### Wave B — CM06 (C1C/M01) and CM07 (C1/M02)
@@ -455,7 +455,7 @@ and not a jump.
 which is authored. The cargo-crane choreography between the Pandora and the tanker is untested
 and belongs to this item's check.
 
-## A6 ☐ `BL-522` + `BL-527`: a surface generator's launch does not fly its take-off run, so the fighters die on the deck
+## A6 ☑ `BL-522` + `BL-527`: a surface generator's launch does not fly its take-off run, so the fighters die on the deck
 
 **Goal.** An aircraft launched from a surface host (`barracuda`, `eairg31`, `eairg32`, and CM09's
 `eag31`/`eag32`) flies its `<base>_aip*` path as a take-off run from rest and joins its patrol net
@@ -469,19 +469,55 @@ straight to its patrol net. The sortie log: `britpeace_eg0..3` each destroyed on
 (`AI ram into sub_doors/col — destroyed outright`, `sub_runway/col`, terrain `g627/col`), and in
 CM07 `blakepeace_2_eg1..eg4` each `AI ram into a5/col` at about `(-5940,165,-4164)`, `spd=104
 m/s`, a structure beside `eag31`'s path. The wrecks' crash damage is what destroys the Barracuda
-(`BL-515`). `<TODO: re-verify still-open against the code>`
+(`BL-515`). Re-verified against the code: `AiGeneratorRuntime.Spawn` activated the launch at the
+pose and handed it straight to the net, and the AI ram rule killed it on the deck on the launch
+frame, as reported.
 
 **Approach.** Decode the consumer of `+0xc8`/`+0xcc` on the aircraft record and fly the path,
 releasing to the patrol net at its last point. While the run is unbuilt, a launched aircraft
 standing on its own host's colliders must not count as a ram; that interim rule is the fallback
 if the decode does not fit this run. This is the fix for `BL-527`; no `CampaignRoster.cs` change.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Decode.** The consumer is the scripted-path follower already ported for the roster taxi:
+`FUN_00489ea0` reads the launch's `+0xcc` and runs `FUN_0048a110` over the generator's path at
+`+0xc8` from the leg index `+0xd0` (the same fields the roster spawner fills, only with the
+generator's `+0x24` path and no freeze), and `FUN_004b0f40` skips its net-nearest-node snap while
+`+0xcc` is set. Two details the roster port had not needed: on reaching the last waypoint of an
+aircraft-class run the follower adds 1.0 m/s to the velocity's Y before clearing the flag, and it
+clears the flag and nothing else, so the aircraft drops into the flight model where it is, with
+no re-activation and therefore no spawn grace. The decode fits this run; the interim ram exemption
+was not needed.
 
-**Verify.** Headless CM04 and CM07 runs with the generators woken: every `*_eg*` launch reaches
-flying speed with no `AI ram` line on its host's colliders and joins its net; the launch-pose
-suite unchanged. `<TODO: how to wake the generators headless without playing the mission
-(WAKEUP_GENERATOR credits)>`
+**Landed.** `AiGeneratorRuntime.Spawn` starts a `TakeOffRun` after the launch pose: the aircraft
+is held (`FlightController.Held`, no flight integration and no collision, so standing on its own
+host's colliders is never a ram) and driven by `PathFollower` over the path nodes' live positions,
+nose down the current leg with the leg's climb as pitch; at the last point
+`FlightController.ReleaseHeld` (new) hands it to the flight model at the run's speed plus the
+decoded 1 m/s upward, lever at the decoded 1.0, net reseated where it stands. Runs step before the
+cycles so a launch first moves on the next step. `--wake-generators` (new, `docs/cli.md`) is the
+headless wake: a `--campaign=` mission's script-gated generators receive the sum of the script's
+`WAKEUP_GENERATOR` credits at build, logged, so a `--screenshot= --frames=3600` run launches on
+the generator's own period. New `generator-takeoff-run` suite over C1/M02's `eairg31`; the
+launch-pose suite (`campaign-submarine`) unchanged.
+
+**Model recommendation.** None needed: the run is the decoded follower and its constants.
+
+**Verify.** Headless CM07 (`--campaign=<copy>:6 --wake-generators --screenshot= --frames=3600`):
+five launches, every one flies its run and completes it (`egen: ... completes its take-off run at
+(-5805,161,-4130), 27.2 m/s` off `eairg31`, `(-5849,161,-4014), 27.1 m/s` off `eairg32`), and no
+`AI ram` names a host collider. What remains is after the hand-off and is the AI mode machine's:
+`eg2` joins its net and pursues (`patrol -> pursue (target at 1817 m)`), `eg1` likewise before it
+dies, while `eg0`, `eg1` and `eg3` end within two seconds of the hand-off with a wing into the
+apron (`AI ram into a5/col` / `a3/col`, `surface=8/airstrip`, `pos` 2 to 3 m above the strip,
+100 m/s), the first turn toward the net node flown at ground level. That is `BL-523`'s machine
+(the patrol law banks at once, the flight model reaches 100 m/s inside 170 m) and is handed
+there; see this item's report. Headless CM04 (`:3`) is not a fair judge: with the generators
+woken at build the Barracuda has not driven into the bay (`sub_movement` is the patrol phase's),
+so the four launches run their deck path 35 m under the sea surface and dive on release; the run
+itself completes on every launch (`completes its take-off run at (-12032,-31,-13080), 22.9 m/s`)
+and no launch rams `sub_doors`/`sub_runway`. Judge CM04 at the controls (D31).
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** The zeppelin launch-altitude gate is an airship rule, not a general one; do not lift
 the launch by borrowing it, do not add a spawn-height offset beyond the decoded 0.2 m, and do not

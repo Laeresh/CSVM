@@ -9,14 +9,13 @@ namespace CSVM.Session;
 
 /// <summary>Runs a mission's enemy generators (M4 B6 + F20): each loaded
 /// <see cref="EnemyGeneratorDef"/> gets a <see cref="GeneratorCycle"/> and spawns AI aircraft
-/// through the handed roster callback as its waves come due, dropping at the origin
-/// node's live position in the authored drop attitude and patrolling the cyclic net pick through
-/// <see cref="AiNetFollower"/>. A generator whose host or whole nets list fails to resolve is
+/// through the handed roster callback as its waves come due, dropping at the origin node's live
+/// position in the authored drop attitude and patrolling the cyclic net pick through
+/// <see cref="AiNetFollower"/>; a surface host's launch first flies its take-off path under
+/// <see cref="PathFollower"/>. A generator whose host or whole nets list fails to resolve is
 /// dropped at load, never loaded inert (docs/formats/mission-entities.md). Every load drop, door
-/// transition and spawn prints an <c>egen:</c> line.
-/// <see cref="GeneratorCycle.DoorOpen"/> drives the authored door anims; unauthored doors run the
-/// timing machine log-only. <see cref="NotifyHostDied"/> is F18's seam: the dead host's
-/// generators disable permanently.
+/// transition and spawn prints an <c>egen:</c> line. <see cref="GeneratorCycle.DoorOpen"/>
+/// drives the authored door anims; <see cref="NotifyHostDied"/> is F18's seam.
 /// ⚠ <see cref="UseInstantActionLaunches"/>/<see cref="GrantWaveCapacity"/> are F12's seam — see
 /// this module's entry in docs/architecture.md before touching either.</summary>
 public sealed partial class AiGeneratorRuntime : Node
@@ -37,11 +36,16 @@ public sealed partial class AiGeneratorRuntime : Node
     private const float SurfaceLaunchLift = 0.2f;
     private const float SurfaceLaunchThrottle = 1f;
 
+    // FUN_0048a110 adds this to the velocity's Y on reaching the last waypoint of an aircraft-class
+    // run, the one kick the handoff gives the flight model.
+    private const float HandoffUpwardSpeed = 1f;
+
     // How far along a take-off path the loader will look. The shipped paths run 4 to 6 points;
     // only the first two place a launch, and the rest are the run the aircraft has yet to fly.
     private const int MaxLaunchPathPoints = 16;
 
     private readonly List<LiveGenerator> _live = new();
+    private readonly List<TakeOffRun> _runs = new();
     private readonly string _planeName;
     private readonly Func<EnemyGeneratorDef, Vector3, Vector3, AiPilot, FlightController?> _spawn;
     private readonly Func<string, Node3D, int>? _playAnim;
@@ -126,6 +130,9 @@ public sealed partial class AiGeneratorRuntime : Node
 
     /// <summary>Generators that survived the load drops.</summary>
     public int LiveCount => _live.Count;
+
+    /// <summary>Launches still flying their host's take-off run, not yet handed to their net.</summary>
+    public int RunningCount => _runs.Count;
 
     /// <summary>Puts generators hosted on <paramref name="hostNode"/> behind their mission-authored
     /// <c>WAKEUP_GENERATOR</c> credit. Returns the number armed.</summary>
@@ -222,6 +229,8 @@ public sealed partial class AiGeneratorRuntime : Node
     /// reason the pool's is: a fixed or halted clock has the session drive it.</summary>
     public void SimStep(float dt)
     {
+        // Runs first, so a launch this step first moves on the next, as the original's does.
+        StepRuns(dt);
         foreach (var gen in _live)
         {
             var hostPosition = gen.Host.GlobalPosition;
@@ -261,6 +270,37 @@ public sealed partial class AiGeneratorRuntime : Node
             points.Add(point);
         }
         return points.Count > 1 ? points : null;
+    }
+
+    // The take-off run is the second movement law from its generator entry: the launched aircraft
+    // is a puppet of the path follower (held, no flight integration, no collision) until the last
+    // waypoint, where it drops into the flight model at the speed the run left it, lever open,
+    // and its patrol net reseats where it arrived. A launch killed on the run leaves it here.
+    private void StepRuns(float dt)
+    {
+        for (int i = _runs.Count - 1; i >= 0; i--)
+        {
+            var run = _runs[i];
+            if (run.Ended || !GodotObject.IsInstanceValid(run.Rig) || !run.Rig.InPlay)
+            {
+                _runs.RemoveAt(i);
+                continue;
+            }
+            run.Follower.Step(dt);
+            var nose = run.Nose;
+            if (run.Follower.Following)
+            {
+                run.Rig.PlaceHeld(run.Follower.Position, run.Follower.Position + nose);
+                continue;
+            }
+            // The decoded handoff: the run's velocity plus one metre per second upward, the
+            // lever left open, and no re-activation (so no spawn grace to fly blind through).
+            run.Rig.ReleaseHeld(nose * run.Follower.Speed + Vector3.Up * HandoffUpwardSpeed,
+                SurfaceLaunchThrottle);
+            var at = run.Follower.Position;
+            Log.Info("flight", $"egen: '{run.Generator}' launch '{run.Rig.Name}' completes its take-off run at ({at.X:0},{at.Y:0},{at.Z:0}), {run.Follower.Speed:0.#} m/s, released to net '{run.Net}'");
+            _runs.RemoveAt(i);
+        }
     }
 
     private void PlayDoor(LiveGenerator gen, bool opening)
@@ -377,10 +417,96 @@ public sealed partial class AiGeneratorRuntime : Node
         gen.SpawnCount++;
         LaunchOrdinal++;
         controller.Downed += (_, _) => gen.Cycle.SpawnRemoved();
+        if (gen.LaunchPath is { } runPoints)
+        {
+            StartTakeOffRun(gen, controller, runPoints, pos, forward, net.Name);
+        }
         GD.Print($"egen: '{gen.Def.Node}' spawn #{gen.SpawnCount}: '{controller.Name}' dropped at " +
                  $"({pos.X:0},{pos.Y:0},{pos.Z:0}) patrolling net '{net.Name}', " +
                  $"active {gen.Cycle.Active}/{gen.Def.MaxActive}" +
                  (gen.Def.VehicleParams != null ? $", params '{gen.Def.VehicleParams}'" : ""));
+    }
+
+    // The launch pose is the run's first pose: waypoint 0 lifted the decoded 0.2 m, nose down the
+    // first leg. The path is read live so a run off a still-driving hull stays on its deck.
+    private void StartTakeOffRun(LiveGenerator gen, FlightController rig, List<Node3D> points,
+        Vector3 pos, Vector3 forward, string net)
+    {
+        var waypoints = new LiveWaypoints(points);
+        float heading = Mathf.Atan2(-forward.X, -forward.Z);
+        var follower = new PathFollower(waypoints, pos, heading) { Frozen = false };
+        var run = new TakeOffRun(gen.Def.Node, rig, follower, waypoints, net);
+        rig.Downed += (_, _) => run.Ended = true;
+        rig.Held = true;
+        rig.PlaceHeld(pos, pos + run.Nose);
+        _runs.Add(run);
+    }
+
+    // The path nodes' live positions, so a follower over them rides the host's live matrix the
+    // way the original re-transforms a moving_path record at every read.
+    private sealed class LiveWaypoints : IReadOnlyList<Vector3>
+    {
+        private readonly List<Node3D> _points;
+
+        public LiveWaypoints(List<Node3D> points)
+        {
+            _points = points;
+        }
+
+        public int Count => _points.Count;
+
+        public Vector3 this[int index] => _points[index].GlobalPosition;
+
+        public IEnumerator<Vector3> GetEnumerator()
+        {
+            foreach (var point in _points)
+            {
+                yield return point.GlobalPosition;
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class TakeOffRun
+    {
+        private readonly LiveWaypoints _waypoints;
+
+        public TakeOffRun(string generator, FlightController rig, PathFollower follower,
+            LiveWaypoints waypoints, string net)
+        {
+            Generator = generator;
+            Rig = rig;
+            Follower = follower;
+            Net = net;
+            _waypoints = waypoints;
+        }
+
+        public string Generator { get; }
+
+        public FlightController Rig { get; }
+
+        public PathFollower Follower { get; }
+
+        public string Net { get; }
+
+        public bool Ended { get; set; }
+
+        /// <summary>The follower's yaw with the current leg's own climb as pitch: the follower
+        /// keeps a heading only, and a deck run that climbs authors its pitch in the points.</summary>
+        public Vector3 Nose
+        {
+            get
+            {
+                int leg = Mathf.Clamp(Follower.Leg, 1, _waypoints.Count - 1);
+                var along = _waypoints[leg] - _waypoints[leg - 1];
+                float flat = new Vector2(along.X, along.Z).Length();
+                float pitch = flat > 1e-6f ? Mathf.Atan2(along.Y, flat) : 0f;
+                float heading = Follower.Heading;
+                return new Vector3(-Mathf.Sin(heading) * Mathf.Cos(pitch), Mathf.Sin(pitch),
+                    -Mathf.Cos(heading) * Mathf.Cos(pitch));
+            }
+        }
     }
 
     private sealed class LiveGenerator

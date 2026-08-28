@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -47,6 +48,13 @@ internal static class WorldFidelitySuites
     private const string PathName = "pp1";
 
     private const string PathVehicle = "blakepeace_2_3";
+
+    // The mission and generator whose surface launch flies a ground-roll take-off run.
+    private const string RunChapter = "C1";
+
+    private const string RunMission = "M02";
+
+    private const string RunGenerator = "eairg31";
 
     private static readonly string[] DoorPanels = { "h3_dr1", "h3_dr2", "h3_dr3", "h3_dr4" };
 
@@ -249,6 +257,156 @@ internal static class WorldFidelitySuites
             ctx.Check(topY > path.Waypoints[0].Y,
                 $"the final leg's climb term lifts '{PathVehicle}' off the strip");
             body.QueueFree();
+        });
+    }
+
+    // A surface generator's launch, from the decoded pose down the whole authored run and into
+    // the flight model at the last point: C1/M02's eairg31 over its five-point eag31 ground roll.
+    internal static void GeneratorTakeOffRun(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, RunChapter);
+        ctx.RequireData(texturesPath, $"{RunChapter} textures");
+        ctx.WithWorld(RunChapter, collision: false, RunMission, world =>
+        {
+            string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RunChapter, RunMission);
+            string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, RunChapter);
+            var nets = AiNets.Load(chapterZrdr);
+            EnemyGeneratorDef? def = null;
+            foreach (var d in EnemyGenerators.Load(missionZrdr))
+            {
+                if (d.Node.Equals(RunGenerator, StringComparison.OrdinalIgnoreCase))
+                {
+                    def = d;
+                }
+            }
+            ctx.Check(def != null, $"{RunChapter}/{RunMission} authors the generator '{RunGenerator}'");
+            if (def == null)
+            {
+                return;
+            }
+
+            var host = First(world.Runtime.FindNodes(RunGenerator));
+            var points = new List<Vector3>();
+            for (int i = 0; host != null && i < 16; i++)
+            {
+                if (First(world.Runtime.FindNodes(EnemyGenerators.LaunchPathNode(RunGenerator, i), host)) is not { } point)
+                {
+                    break;
+                }
+                points.Add(point.GlobalPosition);
+            }
+            ctx.Same(5, points.Count, $"points on '{RunGenerator}'s take-off run");
+            if (points.Count < 2)
+            {
+                return;
+            }
+
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(texturesPath);
+            var pool = new ProjectilePool(textures, null, null);
+            ctx.Host.AddChild(pool);
+            FlightController? launched = null;
+            try
+            {
+                var spec = SessionSpec.Parse(Array.Empty<string>());
+                var resources = new AircraftAssemblyResources
+                {
+                    PlanesGamez = planesGamez,
+                    StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                    PaintRng = new RandomNumberGenerator(),
+                    ZrdrPath = ctx.ZrdrPath,
+                    StockLoadouts = StockLoadouts.Load(),
+                    WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                    Textures = textures,
+                    Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                };
+                var roster = new FlightRoster(FlightRosterPolicy.From(spec),
+                    new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                    null, ctx.Host, resources,
+                    new FlightWorldBindings { Projectiles = pool, Gamez = planesGamez, ChapterZrdrPath = chapterZrdr },
+                    new HumanRosterBindings());
+                var generators = new AiGeneratorRuntime(new[] { def },
+                    (name, scope) => world.Runtime.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
+                    nets, ctx.PlaneName,
+                    (EnemyGeneratorDef d, Vector3 pos, Vector3 look, AiPilot pilot) =>
+                        launched = roster.SpawnAi(new AiSpawn(ctx.PlaneName, pos, look, pilot, ShippedSkins: true)));
+                ctx.Same(1, generators.LiveCount, $"'{RunGenerator}' is live with its take-off path");
+
+                // The uncredited cycle launches on its own period, stepped at the sim rate so the
+                // launch frame is an ordinary one.
+                const float dt = 1f / 60f;
+                for (int i = 0; launched == null && i * dt < def.IndPeriod + def.WavePeriod + 1f; i++)
+                {
+                    generators.SimStep(dt);
+                }
+                ctx.Check(launched != null, $"the generator launches an aircraft");
+                if (launched == null)
+                {
+                    return;
+                }
+                var rig = launched;
+                ctx.Same(1, generators.RunningCount, $"launches on their take-off run");
+                ctx.Check(rig.Held, $"the launch is held on the run, not flight-integrated on the strip");
+                ctx.Check(rig.WorldPosition.DistanceTo(points[0] + Vector3.Up * 0.2f) < 0.05f,
+                    $"…from the decoded launch pose: {rig.WorldPosition} vs {points[0]}");
+
+                // Each point in order, judged horizontally against the follower's own 5 m advance.
+                var nearest = new float[points.Count];
+                Array.Fill(nearest, float.MaxValue);
+                int reachedInOrder = 0;
+                // Judged the instant the hold releases, before the flight model and the pilot
+                // move anything: the generator goes on launching behind it on its own period.
+                float peak = 0f, held = 0f;
+                for (int i = 0; i < 60 * 120 && rig.Held; i++)
+                {
+                    var was = rig.WorldPosition;
+                    generators.SimStep(dt);
+                    if (!rig.Held)
+                    {
+                        break;
+                    }
+                    rig.SimStep(dt);
+                    var now = rig.WorldPosition;
+                    peak = Mathf.Max(peak, was.DistanceTo(now) / dt);
+                    held += dt;
+                    for (int p = 0; p < points.Count; p++)
+                    {
+                        float flat = new Vector2(now.X - points[p].X, now.Z - points[p].Z).Length();
+                        nearest[p] = Mathf.Min(nearest[p], flat);
+                    }
+                    if (reachedInOrder < points.Count
+                        && new Vector2(now.X - points[reachedInOrder].X, now.Z - points[reachedInOrder].Z).Length()
+                            <= PathFollower.LegAdvanceDistance + 1f)
+                    {
+                        reachedInOrder++;
+                    }
+                }
+
+                ctx.Note($"run: {held:0.0} s held, peak {peak:0.0} m/s, nearest per point [{string.Join(", ", Array.ConvertAll(nearest, n => n.ToString("0.0")))}] m, points in order {reachedInOrder}/{points.Count}");
+                ctx.Check(held > 5f && held < 60f, $"the run takes a taxi's while: {held:0.0} s");
+                ctx.Same(points.Count, reachedInOrder, $"run points passed in authored order");
+                ctx.Check(peak <= PathFollower.TaxiSpeed * 3f,
+                    $"the run never exceeds a plausible final-leg speed: peak {peak:0.0} m/s");
+                ctx.Check(!rig.Held && rig.InPlay, $"the last point hands the aircraft to the flight model");
+                ctx.Check(rig.WorldVelocity.Length() > PathFollower.TaxiSpeed,
+                    $"…above the taxi speed: {rig.WorldVelocity.Length():0.0} m/s");
+                ctx.Check(Mathf.IsEqualApprox(rig.Throttle, 1f),
+                    $"…with the decoded open lever: {rig.Throttle:0.##}");
+                ctx.Check(rig.Pilot?.Patrol is { CurrentIndex: -1 },
+                    $"…and its patrol net reseated at the release point");
+                ctx.Check(rig.NoseDirection.Dot((points[^1] - points[^2]).Normalized()) > 0.9f,
+                    $"…nose along the final leg");
+                roster.ClearMembership();
+            }
+            finally
+            {
+                launched?.Free();
+                pool.Free();
+                textures.Dispose();
+            }
         });
     }
 

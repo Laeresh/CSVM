@@ -175,9 +175,12 @@ work.
   climb supplies the pitch;
 - velocity: **zero**, against the zeppelin drop's inherited carrier velocity;
 - throttle: the field pair at `+0x124`/`+0x128` set to **1.0**, where the drop sets them to 0.1;
-- the path is kept on the aircraft at `+0xc8` with the flag at `+0xcc`, which is the take-off run
-  it then flies, and which also suppresses the net-nearest-node snap an ordinary activation makes
-  (`FUN_004b0f40`).
+- the path is kept on the aircraft at `+0xc8` with the flag at `+0xcc` and the leg index zeroed
+  at `+0xd0`, which is the take-off run it then flies under the scripted-path follower
+  (`FUN_0048a110`, docs/org/flightModel.md "The scripted-path follower": 40 mph along the run,
+  accelerating and climbing out on the final leg, the flag cleared at the last point), and which
+  also suppresses the net-nearest-node snap an ordinary activation makes (`FUN_004b0f40`), so the
+  run places the aircraft and the net takes over where the run ends.
 
 There is no altitude gate and no spawn-height offset on this path. `min_altitude` is a zeppelin
 key and does not appear on a surface record.

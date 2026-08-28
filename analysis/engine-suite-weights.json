@@ -123,6 +123,7 @@
     "ranked-pool-carried-turret-dedup": 0.610,
     "partition-areas": 1.156,
     "scripted-path": 1.440,
+    "generator-takeoff-run": 2.907,
     "wingman-station": 5.289,
     "wingman-engage": 1.161,
     "campaign-objectives-hud": 2.126,

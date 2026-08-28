@@ -2450,12 +2450,28 @@ public partial class GameSession : Node3D
             _worldRoot!.AddChild(_generators);
             if (_campaign is { } campaignGenerators)
             {
-                var wakeupHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var wakeupCredits = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 foreach (var objective in campaignGenerators.Script.Objectives)
                 {
-                    if (objective.WakeupGenerator is { } wakeup && wakeupHosts.Add(wakeup.Name))
+                    if (objective.WakeupGenerator is { } wakeup)
                     {
-                        _generators.RequireWakeupCredits(wakeup.Name);
+                        if (!wakeupCredits.ContainsKey(wakeup.Name))
+                        {
+                            wakeupCredits[wakeup.Name] = 0;
+                            _generators.RequireWakeupCredits(wakeup.Name);
+                        }
+                        wakeupCredits[wakeup.Name] += wakeup.Count;
+                    }
+                }
+                // --wake-generators: the script's whole credit granted at build, the headless
+                // stand-in for playing up to each WAKEUP_GENERATOR objective.
+                if (_spec.WakeGenerators)
+                {
+                    foreach (var (host, credit) in wakeupCredits)
+                    {
+                        int fed = _generators.GrantWaveCapacity(host, credit);
+                        GD.Print($"egen: '{host}' woken by --wake-generators: +{credit} credit " +
+                                 $"(granted {fed}, stand-in for the script's WAKEUP_GENERATOR)");
                     }
                 }
             }

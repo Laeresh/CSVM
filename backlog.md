@@ -458,8 +458,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps:* the report is a question prompted by that voice line, not a memory of the original's
   hit rule; do not build a hangar-only rule from it. If the data shows one pool on the hull, the
   voice line is flavour and this closes. *Cross-refs:*
-  BL-522 (its launched fighters).
-
 - `BL-570` `[Feature]` **The difficulty setting has no menu row.** *Evidence:* the scale itself is
   live (`Flight/Difficulty`, `--difficulty=<normal|hard|hardest>`), but a CLI flag is the only way to
   change it, so a player launching normally always flies the default Normal. The original puts it on
@@ -2344,31 +2342,6 @@ usual.
   snapshot flow, so the cabin's other rows shipped without it rather than waiting.
   *Cross-refs:* `BL-256` is the adjacent snapshot work; `docs/PLAN-M5-campaign.md` Decision 3.
 
-- `BL-522` `[Bug]` **A surface generator's launch does not fly the take-off run it is placed on.**
-  *Evidence:* the launch pose is decoded and landed (`docs/formats/mission-entities/enemy-generators.md`
-  "Launching from a surface host"): a launch starts on `<base>_aip0` plus 0.2 m, nose on
-  `<base>_aip1`, at zero velocity with the throttle open. The original then keeps the path on the
-  aircraft at `+0xc8` with the flag at `+0xcc` and flies the remaining points as a take-off run,
-  which also suppresses the net-nearest-node snap an ordinary activation makes (`FUN_004b0f40`).
-  CSVM hands the aircraft straight to its patrol net from that pose instead, so an aircraft that
-  starts at rest on a deck or a runway has no authored way to reach flying speed. Affects all three
-  surface hosts: `barracuda` (C3, a 4-point path climbing 2.5 m to 10.8 m over 130 m), `eairg31`
-  and `eairg32` (C1, 5-point flat ground rolls). *Fix shape:* decode the consumer of `+0xc8`/`+0xcc`
-  on the aircraft record and fly the path, releasing to the patrol net at its last point. *⚠ Traps:*
-  the zeppelin launch-altitude gate is a decoded rule for airships and not a general one; do not
-  lift the launch by borrowing it, and do not add a spawn-height offset beyond the decoded 0.2 m.
-  Do not give the aircraft a starting speed instead: the zero velocity is decoded. At the controls,
-  on the landed launch pose, the fighters still die at once: `britpeace_eg0..3` launch in turn at
-  `(-12028,8,-11597)` on the `bauda_aip*` path and each is destroyed on the same frame (`AI ram into
-  sub_doors/col — destroyed outright`, then `sub_runway/col` twice and terrain `g627/col`,
-  `CRASH ... spd=75..78 m/s`), so a launch placed at rest on the deck is killed by the AI ram rule
-  before any take-off run could begin, and the wrecks' crash damage is what destroys the Barracuda
-  with almost no fire from the player (`BL-515`). The take-off run is the fix; while it is unbuilt,
-  a launched aircraft standing on its own host's colliders must not count as a ram.
-  *Cross-refs:* `BL-515`, `BL-527` (CM07's second patrol is a launch off `eag31`/`eag32`,
-  so it is re-judged against this), `docs/org/flightModel.md`'s scripted-path follower (CM09's
-  ground airfields launch off the same take-off paths, `eag31`/`eag32` in C1/M04).
-
 - `BL-523` `[Bug]` **The AI's patrol/pursue/lay-off cycle does not match the original: CM05's
   second patrol never pursues, and CM09's enemies fly up to 80 km away.** *Evidence:* two
   symptoms of one mode machine, reported at the controls. In CM05 (C3/M04) the second enemy patrol
@@ -2491,35 +2464,6 @@ usual.
   `AnimRuntime`: the prerequisite is data-authored and general, and a docking-only patch would leave
   the gasbag/cargo/chute defs carrying the same shape unfixed. *Cross-refs:* `BL-458`.
 
-- `BL-527` `[Bug]` **CM07 (C1/M02): the second patrol, a single Peacemaker, spawns under the ground.**
-  *Evidence:* reported at the controls: the aircraft appears below the terrain. Not a roster
-  placement: `aiv.zrd`'s four enabled `blakepeace_2_1`..`_4` blocks are the whole formation-roster
-  spawn, and a headless run (spawn log now on `CampaignDirector.BuildRoster`'s `campaign: roster`
-  line) places all four ~122 m above the measured terrain height, so that path is clean. The
-  mission's only other Peacemaker-def blocks are `blakepeace_2_5`/`_2_6`, both authored `enabled 0`
-  (`docs/formats/ai-rosters.md`'s generator-parameter-template slot), so the second patrol is a
-  generator launch, not a roster one, the same class of bug as `BL-522`'s Barracuda fighters. CM07's
-  `egen.zrd` runs two live generators (`eairg31`/`eairg32`) whose `vehicle.params` names the
-  disabled AIV block a fresh spawn is configured from; that join is built
-  (`CampaignRosterPlan.GeneratorTemplates`, asserted by the `generator-roster-params` suite; both
-  C1/M02 records point at `Eairg31_params`, so both hosts launch `blakepeace_2_5` by the data's own
-  doing), and the `player_bhawk` on the egen load line is the fallback-plane label, not the launch.
-  The launch pose is decoded and landed (`BL-522`): it now sits on `eag31_aip0`/`eag32_aip0` plus
-  0.2 m instead of the host origin, and the generators are gated behind four `WAKEUP_GENERATOR`
-  credits, so no headless run launches there without playing the mission. Re-judged at the
-  controls on the landed launch pose: the launches now come out of the hangar in the air but crash
-  at once. The sortie log shows `blakepeace_2_eg0..eg4` launching in turn and `eg1`, `eg2`, `eg3`
-  and `eg4` each ending on `AI ram into a5/col — destroyed outright` at about `(-5940,165,-4164)`,
-  `spd=104 m/s`; `eg0` survived long enough to pursue. So the residual is `BL-522`'s take-off run:
-  handed to the patrol net from the launch pose, the aircraft flies through `a5` (a structure
-  beside `eag31`'s path) instead of along the authored run that clears it. *Fix shape:* `BL-522`,
-  not a `CampaignRoster.cs` change. *⚠ Traps:* do not add a
-  blanket spawn lift; `BL-457` shows authored spawns are otherwise exact, and the roster-spawned
-  formation here is one more confirmation of that.
-  *Cross-refs:* `BL-522`, `BL-457`, `docs/formats/ai-rosters.md`,
-  `docs/formats/mission-entities/enemy-generators.md`.
-
-
 - `BL-558` `[Research]` **A damaged AI flies a full evasive maneuver where the original may only set a
   flag.** *Evidence:* [`docs/org/aiControlLaw.md`](docs/org/aiControlLaw.md) records `obj+0xBA` as an
   **evade flag**, set to 1 by the damage handler `FUN_004b9bc0` when the steady-hand test fails
@@ -2559,8 +2503,8 @@ usual.
   refuse the fallback airframe for a surface def so a boat generator launches nothing rather than
   fighters. *⚠ Traps:* the three Bloodhawks are group 3 and never count toward "Destroy all
   enemy fighters" (`DEDG [1, 0]`); killing them is not progress. Do not "fix" (1) by handing the
-  generator a fighter def. *Cross-refs:* `BL-522` (launch placement from a surface host),
-  `BL-527`, `docs/formats/mission-entities/enemy-generators.md`.
+  generator a fighter def. *Cross-refs:* `docs/formats/mission-entities/enemy-generators.md`
+  (launch placement and the take-off run from a surface host).
 
 - `BL-565` `[Fidelity]` **`DEDG`'s decoded side effect, widening every counted member's engagement
   volume to 9,000 m, is not applied.** *Evidence:* `docs/formats/objectives.md`'s `DEDG` row and
@@ -2595,14 +2539,13 @@ usual.
   pursuing a low player, which would mean the terrain contact test misses a steep fast crossing;
   (2) why a plane under a tile flies on: terrain colliders are single-sided so a crossing from
   below is silent, and the ram rule only fires on the way back up. *Fix shape:* answer (1) first;
-  if the spawn is under ground it is BL-527's question again (a decoded ground rule at spawn, or
-  none), and if it is a crossing, the contact test at the crossing is the bug, not the floor.
+  if the spawn is under ground it is the spawn-placement question again (a decoded ground rule at
+  spawn, or none; `BL-457` says authored spawns are exact), and if it is a crossing, the contact test at the crossing is the bug, not the floor.
   *⚠ Traps:* do not replace the absolute 20 m floor with an AGL floor; it is decoded
   (`DAT_0071c3f0`) and the original has no AGL floor either. Do not add a spawn lift. The ace did
   count for "Destroy all enemy fighters" in the end (its ram death dropped group 2 to zero and
-  primary 3 completed), so this is not an objective bug. *Cross-refs:* `BL-527` (CM07's Peacemaker
-  under the ground), `docs/org/aiPilot.md` (the activation primitive and
-  `FUN_00432010`).
+  primary 3 completed), so this is not an objective bug. *Cross-refs:* `docs/org/aiPilot.md` (the
+  activation primitive and `FUN_00432010`).
 
 - `BL-568` `[Bug]` **CM04 (C3/M03): the Pandora starts moored in the dry dock instead of flying in
   over the mission's first minute.** *Evidence:* at the controls the Pandora is already in the dry

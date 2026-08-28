@@ -1034,6 +1034,24 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>Hands a held aircraft back to the flight model where it stands, moving at
+    /// <paramref name="velocity"/> with the lever at <paramref name="throttle"/>: the
+    /// scripted-path follower's handoff, which the original makes by clearing the path flag and
+    /// nothing else (<c>FUN_0048a110</c>), so no respawn and no spawn grace, and the collision
+    /// sweep and ground blow run from the first flown step. The patrol net reseats where the
+    /// aircraft is, since the run placed it and not the net.</summary>
+    public void ReleaseHeld(Vector3 velocity, float throttle)
+    {
+        Held = false;
+        _model.SetVelocity(velocity);
+        _throttle = throttle;
+        _model.Throttle = throttle;
+        if (Pilot != null)
+            Pilot.Throttle = throttle;
+        ThrottleSmoke?.Reset(_throttle);
+        Pilot?.Patrol?.Reseat();
+    }
+
     /// <summary>Weapon lab: pin the held airframe at <paramref name="pos"/> with its nose on
     /// <paramref name="lookAt"/>, at zero speed — click-to-place and <c>--weapon-target=</c>. Goes
     /// through the same <see cref="FlightModel.Reset"/> + <see cref="SnapCamera"/> pair

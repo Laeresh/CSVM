@@ -164,6 +164,7 @@ public static class SuiteCatalog
         "ranked-pool-carried-turret-dedup",
         "partition-areas",
         "scripted-path",
+        "generator-takeoff-run",
         "wingman-station",
         "wingman-engage",
         "campaign-objectives-hud",
@@ -824,6 +825,13 @@ public static class SuiteCatalog
             "it off the strip, and reaching the last waypoint hands it back at the speed it " +
             "reached",
             ScriptedPathTaxi));
+        into.Add(new TestHarness.Suite("generator-takeoff-run",
+            "a surface generator's launch flies its take-off run (BL-522) over C1/M02's eairg31: " +
+            "the launched aircraft is held on the run from the decoded launch pose, passes every " +
+            "eag31_aip point in order at the taxi law's speeds, and at the last point is released " +
+            "into the flight model above the taxi speed with the lever open, its patrol net " +
+            "reseated where it arrived",
+            GeneratorTakeOffRun));
         into.Add(new TestHarness.Suite("wingman-station",
             "the D34 campaign wingman (BL-362): the decoded netless mode-wingman escort law as " +
             "geometry (both body-frame stations, the rolled-leader frame, the 106.68/259.08 m " +
