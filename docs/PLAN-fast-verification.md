@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Engine isolation and throughput
 
-11. ☐ Attribute world-build time at its internal boundaries
+11. ☑ Attribute world-build time at its internal boundaries
 12. ☐ Cache immutable decoded world inputs where the profile earns it
 13. ☐ Isolate engine suites and run balanced shards
 
@@ -277,7 +277,7 @@ measured 35.4 s, everything else green, exit 0.
 
 # Wave B — Engine isolation and throughput
 
-## B11 ☐ Attribute world-build time at its internal boundaries
+## B11 ☑ Attribute world-build time at its internal boundaries
 
 **Goal.** Every full engine report distinguishes archive/decode, sound preparation, runtime/world
 construction, manual simulation, assertion work, and disposal well enough to select the next
@@ -301,6 +301,76 @@ prove a deliberate delay appears in the intended phase.
 
 **⚠ Traps.** Logging every operation can create the result. Aggregate stopwatches at stable
 boundaries and keep per-object chatter out of the timing path.
+
+**Landed.** `TestContext.BuildWorld` installs a private `StartupProfile` as `Current` for the span
+of one build, so `WorldSession.Build`'s and `SessionArchives.OpenFor`'s own `Mark`/`Record` calls —
+the same boundaries a real session's `[perf] startup` line reads, never a second set invented for
+the harness — land on it. `PhaseAttribution.Categorize` (Godot-free, unit-tested without the engine
+in `CSVM.Tests/PhaseAttributionTests.cs`) buckets those phases into archive/decode (`gamez`,
+`textures`, `anim`, `zrdr`), sound preparation (`sounds`, `prewarm`) and runtime/world construction
+(`world`, `clutter`, `bind`) against `BuildWorld`'s own outer wall-clock stopwatch, so the four
+figures always sum to exactly what is attributed to the suite — no second clock to drift against the
+first. Disposing a world a suite built is timed the same way; the shared cache's own end-of-run
+teardown is reported once, in the run's totals, never against one suite. What is left of a suite's
+wall time once build and disposal are subtracted is `rest` (manual simulation plus assertion work),
+floored at zero, with any stopwatch overrun reported separately (`overrunSeconds`) rather than folded
+into a falsely healthy zero. The console stays one line per suite (a no-world suite prints no phase
+suffix) plus one totals line; `test-report.json` (schema bumped to 2) carries the same figures per
+suite and as totals, plus the run's `selector` and the executing assembly's own path/MD5.
+
+**Measured** (`$env:CSVM_DATA_ROOT="Z:\CSVM"`, warm, same tree as A1/A2's own verified numbers).
+Same-build spread, two runs each of the two seven-world censuses in isolation:
+
+| Suite | Run 1 | Run 2 | Spread |
+|---|---:|---:|---:|
+| `collision-visibility` | 14.34s (build 13.67s) | 14.48s (build 13.82s) | ~1% |
+| `destructible-census` | 12.20s (build 11.84s) | 12.12s (build 11.76s) | <1% |
+
+The full engine catalog (`.\RunTests.ps1 -SkipUnits -SkipGoldens -SkipHitch`, one run, 153/153
+passed in 252.9s, matching A1's own 253.1s verified figure) attributed every suite's wall time:
+
+| Phase | Seconds | % of engine wall (247.84s suite total) |
+|---|---:|---:|
+| Archive/decode (`gamez`+`textures`+`anim`+`zrdr`) | 23.39 | 9.4% |
+| Sound preparation (`sounds`+`prewarm`) | 16.15 | 6.5% |
+| Runtime/world construction (`world`+`clutter`+`bind`) | 63.19 | 25.5% |
+| Unattributed build overhead | 5.95 | 2.4% |
+| **Total inside `BuildWorld`** | **108.68** | **43.9%** |
+| Disposing a suite-built world | 2.79 | 1.1% |
+| Shared-cache teardown (once, end of run) | 0.05 | 0.02% |
+| Manual simulation + assertion work (`rest`) | 136.37 | 55.0% |
+
+45 suites made 58 world builds (both figures machine-checked against the report, matching the
+plan's own count). Top suites by build time: `collision-visibility` 10.58s (7 worlds — one fewer
+than standalone, since C1 was already cached), `destructible-census` 9.10s (7 worlds, same reason),
+`campaign-persistence` 3.79s (2 worlds), `cutscene-letterbox` 2.68s, `self-ref-launch` 2.56s,
+`emitter-lifetime` 2.36s, `zeppelin-identity` 2.36s, `campaign-cutscene` 2.27s, `fog-state` 2.26s,
+`mission-radio` 2.26s — the remaining 35 single-world suites each spend 1.3–2.2s inside `BuildWorld`.
+
+**⚠ dead claim 1 revised, not the same shape.** `PLAN-fast-verification.md`'s own dead-claim table
+already showed "a few pathological suites" was wrong; this data shows the ⚠ table's 203.7-second
+figure was itself a suite-wall-time proxy for world-build cost, not a measurement of `BuildWorld`
+itself — the actual time inside `BuildWorld` across all 58 builds is 108.68 seconds (43.9% of the
+suite wall those 45 suites consume), and more than half of what was attributed to "world build" is
+manual simulation and assertion work running against an already-built world. A cache that reused
+every immutable decode input has a ceiling of 23.39 seconds across the whole catalog (9.4% of engine
+wall), not 73%: this is the number B12 measures its own win against, not the earlier estimate.
+
+**Injected-delay check.** A temporary `Thread.Sleep(500)` placed inside `SessionArchives.OpenFor`'s
+`textures` phase (restored afterward, confirmed by `git diff`, rebuild forced) moved `damage-hd`'s
+`archiveDecodeSeconds` from 0.84s to 1.38s (+0.54s, matching the injected span) while `soundPrep`,
+`runtimeConstruction` and disposal stayed within their own run-to-run noise band — the delay landed
+in the intended category and nowhere else.
+
+**Closure.** `phaseTotals.overrunSeconds` was 0.00s on the full 153-suite run: `buildSeconds +
+disposalSeconds` never exceeded the summed suite wall time on any suite, so the four phase totals
+plus the run's totals close over the measured wall time exactly (`PhaseAttribution.Rest`/`Overrun`,
+proved in `CSVM.Tests/PhaseAttributionTests.cs` with synthetic inputs including a deliberately
+overrunning case). No numeric tolerance was needed: the identity is exact by construction, since
+`rest` is `wall − build − disposal` measured from the same suite-wall stopwatch `TestHarness.Run`
+already keeps, not a second independently-collected figure.
+
+**Verified.** <pending orchestrator run>
 
 ## B12 ☐ Cache immutable decoded world inputs where the profile earns it
 

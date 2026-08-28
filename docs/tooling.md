@@ -183,6 +183,20 @@ since the VSTest grammar can express a union itself. Quick prints its declared s
 it starts and a `not checked:` line for every omitted surface; it is partial by construction and
 never satisfies the landing rule, which stays the complete run.
 
+**`test-report.json`'s schema is versioned** (`"schema"`, currently 2 — bumped when a field's
+meaning changes or one is removed, the same rule `analysis/goldens/manifest.json`'s own `schema`
+follows). Besides the per-suite PASS/FAIL/SKIP rows, it carries a `binary` block (the loaded
+`CSVM.dll`'s own path and MD5, the same `$PerfDll` identity `RunTests.ps1`'s perf stage records) and
+the run's own `selector`, so a report can be matched to the exact build and suite set that produced
+it. A `phaseTotals` block and a matching set of per-suite fields (`worldsBuilt`, `buildSeconds`,
+`archiveDecodeSeconds`, `soundPrepSeconds`, `runtimeConstructionSeconds`, `otherBuildSeconds`,
+`disposalSeconds`, `restSeconds`, `overrunSeconds`) split every suite's wall time into world-build
+(further split into the three phase categories `PLAN-fast-verification.md`'s B11 needs), disposing a
+built world, and what is left over (manual simulation plus assertion work) — `docs/architecture.md`'s
+`src/Testing/TestHarness.cs` entry has the boundary detail. `overrunSeconds` is nonzero only on a
+measurement anomaly (the independent stopwatches summing past the suite's own wall clock); it is
+never a correctness verdict.
+
 **The golden stage is a scripted pass, not an in-engine suite, and that is structural**: the
 `--run-tests` harness runs every suite to completion inside one `_Ready` call and never yields a
 frame, so no suite there can photograph anything. Driving it from the script also makes each shot's

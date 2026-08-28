@@ -4501,7 +4501,11 @@ shader this project generates reads it instead of Godot's `TIME`.
 The always-on startup timing report: one `[perf] startup mode=… <subject> total=… boot=… <phases…>
 rest=… first_frame=…` line per session build. `Mark()`/`Record(phase, mark)` are ambient statics over
 `Current`, so the shared build code (`WorldSession`, which the test harness also drives) records blind.
-Reading pitfalls for `boot`/`rest`: verification.md PERF-16/17.
+Reading pitfalls for `boot`/`rest`: verification.md PERF-16/17. `Phases` is a read-only view of the
+same accumulator for a caller that wants to aggregate the recorded spans without emitting the line
+(`TestContext.BuildWorld` installs its own private instance as `Current` for exactly this — never the
+one a real session would install, so a suite's phases and a session's `[perf] startup` line can never
+mix) — see `src/Testing/PhaseAttribution.cs` below.
 
 ## src/Utils/HitchMonitor.cs
 The always-on frame-hitch detector, ticked from `Launcher._Process` in every
@@ -4617,6 +4621,39 @@ disposal. `TestWorld` also carries the parsed `Gamez` past the build (not dispos
 texture archive) so a suite can build real geometry of its own from it — the effect-template stage
 `effect-template-mesh` needs. Engine-error allowlisting and pass/fail policy: `ErrorAllowlist`,
 in code. Windowed-run rule: verification.md LOG-8.
+
+**B11's phase attribution** (`test-report.json` schema 2). `BuildWorld` installs a private
+`StartupProfile` as `Current` for the span of one build (restored in a `finally`, so a thrown build
+cannot leak it onto a later suite or a real session), so `WorldSession.Build`'s and
+`SessionArchives.OpenFor`'s own `Mark`/`Record` calls — the same ones a real session's `[perf]
+startup` line reads — land on it with no second instrumentation invented for the harness.
+`PhaseAttribution.Categorize` buckets those phases into archive/decode, sound preparation and
+runtime/world construction against the *outer* wall-clock stopwatch `BuildWorld` keeps of its own
+(not the profile's internal clock), so the four figures it returns always sum to exactly what
+`TestContext.WorldBuildSeconds` attributes to the suite — no second clock to drift against the
+first. `TestContext.ResetPhaseAttribution` clears the accumulator once per suite in `Run`, the same
+lifetime `Failures`/`Notes`/`Counts` already have; disposing a world a suite built (not the shared
+cache's own end-of-run teardown, reported only as the run's `finalDisposalSeconds`) is timed the
+same way. What is left of a suite's wall time once build and disposal are subtracted is `rest`:
+manual simulation plus assertion work, floored at zero, with any stopwatch overrun reported
+separately rather than folded silently into a healthy-looking zero. The console line stays one line
+per suite (a no-world suite prints no phase suffix at all) plus one totals line after the loop;
+`test-report.json` carries the same figures per suite and as run totals, plus the run's `selector`
+and the loaded `CSVM.dll`'s own path/MD5 (`binary`, read from the fixed
+`<repo>/CSVM/.godot/mono/temp/bin/Debug/CSVM.dll` `RunTests.ps1`'s own perf stage hashes as
+`$PerfDll` — not `Assembly.GetExecutingAssembly().Location`, which Godot's Mono host returns empty),
+so a report can be matched to the exact build and suite set that produced it.
+
+## src/Testing/PhaseAttribution.cs
+Godot-free and pure (`CSVM.Tests` proves it without the engine): buckets a `StartupProfile`'s raw
+phase names — `gamez`/`textures`/`anim`/`zrdr` as archive/decode, `sounds`/`prewarm` as sound
+preparation, `world`/`clutter`/`bind` as runtime/world construction — into `Categorized`, with
+whatever a build's own wall-clock time does not cover landing in `OtherMs` rather than vanishing.
+`Rest`/`Overrun` do the suite-level arithmetic: `wall − build − disposal`, clamped at zero, with the
+clamped shortfall reported by `Overrun` instead of a falsely healthy zero. Both `zrdr` phases (a
+mission's `MissionSetup.Load` inside `WorldSession.Build`, and the sound-def/group load inside
+`SessionArchives.OpenFor`) share one name by `StartupProfile`'s own same-name-accumulates rule; both
+are decode, so the shared archive/decode bucket is correct either way.
 
 ## src/Testing/CountingEmitterFactory.cs
 `IEmitterFactory` for a suite: `Create` always succeeds and hands back a `CountingEmitter` — no
