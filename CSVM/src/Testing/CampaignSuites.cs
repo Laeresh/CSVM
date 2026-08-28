@@ -143,15 +143,39 @@ internal static class CampaignSuites
             }
 
             ctx.Check(present > 0, $"the later mission carries at least one of the destroyed objects");
-            int applied = reloaded!.PersistLog.ApplyTo(world.Runtime, chapter);
-            report.AppendLine($"applied {applied} of {reloaded.PersistLog.For(chapter).Count} in {later.MissionFolder}");
+            // The original opens on the destroyed pose, so the replay must start no instance: no
+            // fireball, debris or sound, and a later hit must not replay the death either. A
+            // death's first start is synchronous, so the watch brackets only the calls.
+            var started = new List<string>();
+            var before = world.Runtime.OnInstanceStarted;
+            world.Runtime.OnInstanceStarted = (def, anchor) => started.Add($"{def.AnimName}@{anchor?.Name}");
+            int applied;
+            try
+            {
+                applied = reloaded!.PersistLog.ApplyTo(world.Runtime, chapter);
+                foreach (int node in carried)
+                {
+                    if (nodes.TryGetValue(node, out var anchor) && Live(registry, anchor) is { } live)
+                    {
+                        world.Runtime.DamageAt(anchor, live.MaxHealth + 1f);
+                    }
+                }
+            }
+            finally
+            {
+                world.Runtime.OnInstanceStarted = before;
+            }
+
+            report.AppendLine($"applied {applied} of {reloaded!.PersistLog.For(chapter).Count} in {later.MissionFolder}, started=[{string.Join(", ", started)}]");
             ctx.Same(present, applied, $"every carried object present in the later mission is applied");
+            ctx.Check(started.Count == 0,
+                $"the replay and a later hit on each carried object start no instance (started=[{string.Join(", ", started)}])");
 
             foreach (int node in carried)
             {
                 if (nodes.TryGetValue(node, out var anchor) && Live(registry, anchor) is { } live)
                 {
-                    ctx.Check(live.Status == DestructibleRegistry.State.Destroyed,
+                    ctx.Check(live.Status == DestructibleRegistry.State.Destroyed && live.Health <= 0f,
                         $"it starts the later mission destroyed node={node}");
                 }
             }

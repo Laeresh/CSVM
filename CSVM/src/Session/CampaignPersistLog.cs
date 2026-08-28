@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -126,11 +127,11 @@ public sealed class CampaignPersistLog
     }
 
     /// <summary>Applies a chapter's log to a freshly built world of that chapter, after its
-    /// bootstrap: each recorded object is damaged down to the state it was left in, through the
-    /// same <see cref="AnimRuntime.DamageAt"/> a weapon hit takes, so its damage stages and death
-    /// sequence run exactly as they did the first time. Returns how many objects it acted on.
-    /// Objects the world does not carry are skipped, which is what a chapter built at another
-    /// mission does with scenery that mission never places.</summary>
+    /// bootstrap: each recorded object is put into the state it was left in, silently, through
+    /// <see cref="AnimRuntime.CarryState"/>. The original opens a later mission on the destroyed
+    /// pose, not on a replayed death, so no effect, sound or choreography runs here; a later hit
+    /// finds the pool destroyed and is a no-op. Returns how many objects it acted on. Objects the
+    /// world does not carry are skipped, as with scenery a mission never places.</summary>
     public int ApplyTo(AnimRuntime runtime, int chapter)
     {
         var registry = runtime.Destructibles;
@@ -148,22 +149,19 @@ public sealed class CampaignPersistLog
         foreach (var state in For(chapter))
         {
             if (!byIndex.TryGetValue(state.Node, out var anchor)
-                || registry.Resolve(anchor) is not { } live
-                || live.Status == DestructibleRegistry.State.Destroyed)
+                || registry.Resolve(anchor) is not { } live)
             {
                 continue;
             }
 
-            float damage = state.Destroyed ? live.Health : live.Health - state.Health;
-            if (damage <= 0f)
+            // ⚠ Never DamageAt here; it replays the death choreography at mission open.
+            if (runtime.CarryState(live, state.Destroyed, state.Health))
             {
-                continue;
+                applied++;
             }
-
-            runtime.DamageAt(anchor, damage);
-            applied++;
         }
 
+        Log.Info("campaign", $"persist log: {applied} of {For(chapter).Count} carried object(s) restored silently in chapter {chapter}");
         return applied;
     }
 

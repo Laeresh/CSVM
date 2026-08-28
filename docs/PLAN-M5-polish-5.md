@@ -97,7 +97,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — CM04 (C3/M03)
 
-1. ☐ `BL-513`: the persist-log replay runs the previous mission's death choreography at mission open
+1. ☑ `BL-513`: the persist-log replay runs the previous mission's death choreography at mission open
 2. ☐ `BL-521`: the barrage balloons stand at mission start
 3. ☐ `BL-567`: the Pandora's broadside cannons fire on the player
 4. ☐ `BL-568`: the Pandora starts moored in the dry dock instead of flying in
@@ -166,7 +166,7 @@ flight by the user, separate from D31.
 
 # Wave A — CM04 (C3/M03)
 
-## A1 ☐ `BL-513`: the persist-log replay runs the previous mission's death choreography at mission open
+## A1 ☑ `BL-513`: the persist-log replay runs the previous mission's death choreography at mission open
 
 **Goal.** CM04 opens with the objects destroyed in CM03 already in their destroyed pose, silent:
 no fireballs, no sounds, no death sequence, and a later hit on them is a no-op.
@@ -180,7 +180,16 @@ weapon hit takes, by its own design. The original's carried state is a destroyed
 replayed death: the `PERSIST_LOG` reader defs (`ucamp_dest`/`tower_dest`/…) are the silent
 destroyed variants a later mission opens with. Run 4's A4 (`AnimRuntime.SyncDestructiblePool`,
 the `start-state-swap-pool` suite) is a real hole and stays fixed, but was not this report's
-trigger. `<TODO: re-verify still-open against the code>`
+trigger. Re-verified open against the code: `ApplyTo` computed `live.Health - state.Health` and
+called `runtime.DamageAt(anchor, damage)`, which runs `ApplyDamageStages` and `RunDeathSequence`
+(the def's Initial sequences plus its compiled destruction slot) exactly as a weapon kill does.
+The shipped death shape confirms what a silent path must reproduce: `aagun30`'s swap lives in
+its destruction slot (`hit_me_now`: healthy off, destroyed on, dbase on, then `genx12`), `u_camp1`'s
+in its Initial sequences (`explode_house` fades and hides `healthy`, the next sequence shows
+`destroyed` and hides `shadow`, then fireballs, debris motion and sound), `g_tower1` and
+`t_truck02` switch debris pieces on, fly them and hide them. Every compiled `DAMAGE_SEQUENCE`
+in the install carries only `CallAnimation` puffer calls (4,134) and three `StopAnimation`s, so
+a carried partial HP has no node visual to restore, only its stage counter.
 
 **Approach.** Give `ApplyTo` a silent path: set the pool to `Destroyed`/HP 0 (or the carried
 partial HP with its damage stages), apply the destroyed role swap the death sequence ends in, and
@@ -189,12 +198,35 @@ carried object (`state.Health` above zero) wants its stage visuals without the s
 bursts. Decode lane: how the original's `PERSIST_LOG` reader applies a carried state
 (`docs/formats/saved-games.md`, `docs/formats/destructibles.md` "Starting destroyed").
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** `AnimRuntime.CarryState(inst, destroyed, health)` is the one silent
+entry, and `CampaignPersistLog.ApplyTo` calls nothing else. It writes the pool first (`Health`,
+`Status`, `DamageStage` from the `DAMAGE_SEQUENCE` thresholds) and for a kill runs
+`ApplyDeathPose`: it walks the sequences `RunDeathSequence` would play (the def's Initial
+sequences, its destruction slot, a chained swap target's sequences) and applies only the
+`OBJECT_ACTIVE_STATE` events that switch a node off or switch a destroyed/`dbase` role node on.
+A non-role piece switched on mid-death is debris that flies and is hidden, so it stays off
+rather than parking at its rest pose. A def whose death sequences hold no role swap takes the
+RESET-derived `ApplyDeathSwap`, withheld when the def authors its own visible death, the same
+rule the live kill applies. `DamageAt` is untouched and stays the weapon path;
+`SyncDestructiblePool` is untouched (it is the dispatch-side mirror for a scripted swap, and the
+silent path never dispatches). The log line is `campaign: persist log: N of M carried object(s)
+restored silently in chapter C`, on the file sink.
 
-**Verify.** A headless C3/M03 open on a profile that finished C3/M02 with those objects destroyed:
-no `damage:` line and no effect-pool recycle for any carried object on the first frames; the pool
-reads `Destroyed` so a later `DamageAt` on `aagun30` is a no-op (assert it in the
-`start-state-swap-pool` suite family). `<TODO: name the exact suite and the profile fixture>`
+**Verify.** The `carried-state-silent` suite (`DestroyChoreographySuites.CarriedStateIsSilent`,
+beside `start-state-swap-pool`): on the chapter world, a `CampaignPersistLog` holding one kill
+and one half-HP state for two shipped `PERSIST_LOG` destructibles is applied, with
+`OnInstanceStarted` watched across the call; it asserts no instance started, the killed pool at
+`Destroyed`/HP 0 with its `healthy` nodes hidden and a `destroyed` node shown, the worn pool at
+`Damaged` with the carried HP and `ApplyDamageStages` finding no stage owed, and a later
+`DamageAt` on the killed object resolving, leaving it `Destroyed` and starting nothing. The
+`campaign-persistence` suite (its profile fixture: three `PERSIST_LOG` kills in the chapter's
+second-to-last mission, saved and reloaded through `CampaignProfileStore`, applied at the last
+mission) now watches `ApplyTo` and a follow-up `DamageAt` on each carried object the same way,
+and asserts HP 0. The watch brackets only the calls, since a death's first start is synchronous;
+the frames between are advanced unwatched because the world's own ambient loops (the zeppelin
+prop defs) restart there. The C3/M03 open itself is judged in D31.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** The replay must still leave the pool `Destroyed` so a later hit is a no-op; do not
 fix it by skipping the replay for destroyed objects, and do not gate on the visual state alone.

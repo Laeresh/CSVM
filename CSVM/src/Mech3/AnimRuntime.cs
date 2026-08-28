@@ -1423,6 +1423,32 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return true;
     }
 
+    /// <summary>Puts a destructible into the state an earlier mission left it in, silently: the
+    /// pool reads destroyed at HP 0 (or the carried HP at its damage stage) and its nodes take the
+    /// pose the death ends in, with no effects, sounds or choreography. Returns false when there is
+    /// nothing to carry. ⚠ Never route a carried state through <see cref="DamageAt"/>; that
+    /// replays the death at mission open (docs/formats/destructibles.md "Starting destroyed").</summary>
+    public bool CarryState(DestructibleRegistry.Instance inst, bool destroyed, float health)
+    {
+        if (inst.Status == DestructibleRegistry.State.Destroyed)
+            return false;
+        if (!destroyed && health >= inst.Health)
+            return false;
+        inst.Health = destroyed ? 0f : Math.Max(0f, health);
+        var stages = inst.Def.Sequences.FirstOrDefault(s =>
+            string.Equals(s.Name, DamageSequenceName, StringComparison.OrdinalIgnoreCase));
+        if (stages != null)
+            inst.DamageStage = Math.Max(inst.DamageStage, DamageStageFor(stages, inst.Health));
+        if (!destroyed)
+        {
+            inst.Status = DestructibleRegistry.State.Damaged;
+            return true;
+        }
+        inst.Status = DestructibleRegistry.State.Destroyed;
+        ApplyDeathPose(inst);
+        return true;
+    }
+
     /// <summary>A plane collision with a world node. EVERY destructible takes the damage, through
     /// <see cref="DamageAt"/>, so the death is identical to a weapon kill; the return value says
     /// only what happens to the PLANE, true for a <c>WeaponOrCollideHit</c> object it flies
@@ -3215,6 +3241,52 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             foreach (var node in Targets(ev, inst.Def, inst.Anchor))
                 SetSubtreeActive(node, state);
         }
+    }
+
+    // The pose a death ends in, read off the sequences RunDeathSequence would play: every
+    // OBJECT_ACTIVE_STATE switching a node off, and the destroyed/dbase role nodes switched on.
+    // ⚠ Leave a non-role piece switched on mid-death off; it flies and is hidden, so switching it
+    // on parks debris at its rest pose. A def with no role swap of its own takes the RESET-derived
+    // one, under the same visible-death withholding RunDeathSequence applies.
+    private void ApplyDeathPose(DestructibleRegistry.Instance inst)
+    {
+        bool swapped = false;
+        foreach (var (def, seq) in DeathSequencesOf(inst.Def))
+        {
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Kind != "ObjectActiveState")
+                    continue;
+                var name = RoleName(ev);
+                bool active = ev.Data.Bool("state");
+                bool destroyedRole = name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("dbase", StringComparison.OrdinalIgnoreCase);
+                bool healthyRole = name.Contains("healthy", StringComparison.OrdinalIgnoreCase);
+                if (active && !destroyedRole)
+                    continue;
+                foreach (var node in Targets(ev, def, inst.Anchor))
+                {
+                    SetTargetActive(node, active);
+                    swapped |= destroyedRole || healthyRole;
+                }
+            }
+        }
+        if (!swapped && !AuthorsVisibleDeath(inst.Def))
+            ApplyDeathSwap(inst);
+    }
+
+    // The sequences a death plays, with the def each resolves its targets through: the def's own
+    // Initial sequences, its compiled destruction slot, and every sequence of a chained swap
+    // target (AuthorsSwap accepts its swap in an ON_CALL sequence too).
+    private IEnumerable<(AnimDefinition Def, AnimSequence Seq)> DeathSequencesOf(AnimDefinition def)
+    {
+        foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
+            yield return (def, seq);
+        if (def.DeathSlot is { } slot)
+            yield return (def, slot);
+        if (ChainedSwapTarget(def) is { } chained)
+            foreach (var seq in chained.Sequences)
+                yield return (chained, seq);
     }
 
     // Keeps a destructible's HP pool in step with a healthy/destroyed OBJECT_ACTIVE_STATE swap

@@ -445,30 +445,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   spawn-and-kill harness this needs, `git log --grep=BL-291`), `docs/architecture.md`'s
   `ZeppelinDamage.cs` bullet (the survivor-count kill that fires the def).
 
-- `BL-513` `[Bug]` **CM04 (C3/M03) opens with the buildings destroyed in the previous mission
-  exploding again: the persist-log replay runs their death choreography at mission open.**
-  *Evidence (traced):* the sortie log of a C3/M03 open shows, on the first frame after bootstrap,
-  `damage: -30 on aagun30 HP 30→0 DESTROYED — death sequence run` and the same for
-  `aagun31`/`aagun32`/`aagun01`/`aagun02`/`g_tower1`/`g_tower3`, `-60` on `u_camp1..3`/`unit10` and
-  `-15` on `t_truck02`, each recycling its `large_fireball`/`sputter_fire_smoke_obj` effect pool, and
-  the player watches the camp blow up as the mission starts. Those are the objects destroyed in
-  C3/M02; `CampaignPersistLog.ApplyTo` replays a chapter's carried destruction through the same
-  `DamageAt` a weapon hit takes, so the damage stages and the death sequence run again, by its own
-  design. The original's carried state is a destroyed pose, not a replayed death: the `PERSIST_LOG`
-  reader defs (`ucamp_dest`/`tower_dest`/…) are the silent destroyed variants a later mission opens
-  with. The earlier reading of this item (a start-state role swap leaving the pool healthy) is a
-  real architecture hole and stays fixed (`AnimRuntime.SyncDestructiblePool`, the
-  `start-state-swap-pool` suite, `docs/formats/destructibles.md` "Starting destroyed"), but it was
-  not this report's trigger. *Fix shape:* give `ApplyTo` a silent path: set the pool to
-  `Destroyed`/HP 0 (or the carried partial HP with its damage stages), apply the destroyed role swap
-  the death sequence ends in, and run no effects, sounds or choreography; `DamageAt` stays the
-  weapon path. A partially damaged carried object (`state.Health` above zero) wants its stage
-  visuals without the stage's puffer bursts. *⚠ Traps:* the replay must still leave the pool
-  `Destroyed` so a later hit is a no-op, which the earlier reading of this item guards; do not fix
-  it by skipping the replay for destroyed objects, and do not gate on the visual state alone.
-  *Cross-refs:* `BL-243` (the persist log), `BL-521` (the same mission's balloons, a different
-  trigger), `docs/formats/saved-games.md`, `docs/formats/destructibles.md`.
-
 - `BL-515` `[Research]` **CM04 (C3/M03): the Barracuda takes damage from every side, and the original may
   only accept hits inside its hangar.** *Evidence:* reported at the controls as a question: the
   submarine can be damaged from any angle, where the recollection is that the original demands
@@ -2388,10 +2364,9 @@ usual.
   in the turret target pool with its balloon visible; then find the caller of `balloon_downa*` in
   M03 (a chapter-scope reader def or the turret def itself) and settle whether the original resolves
   that call against the chapter's reader set where CSVM's manifest supersession drops it.
-  `BL-513`'s pool sync applies once the trigger is a role-named swap. *⚠ Traps:*
+  `AnimRuntime.SyncDestructiblePool` applies once the trigger is a role-named swap. *⚠ Traps:*
   `PLAN-c3-balloon-kill-chain.md` settled the balloons' kill chain for C3/M02; that is the live kill
-  path and not this mission's start state, so do not reopen it. *Cross-refs:* `BL-513` (the same
-  mission's exploding buildings, the persist-log replay), `BL-348`'s plan,
+  path and not this mission's start state, so do not reopen it. *Cross-refs:* `BL-348`'s plan,
   `docs/formats/anim-definitions.md` (the `bont*`/`balloon_t*`/`tether*` state events).
 
 - `BL-522` `[Bug]` **A surface generator's launch does not fly the take-off run it is placed on.**
