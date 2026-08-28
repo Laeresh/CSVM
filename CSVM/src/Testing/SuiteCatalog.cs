@@ -195,6 +195,7 @@ public static class SuiteCatalog
         "landings-auto-land-button",
         "landings-hookup-airframe",
         "landings-hangar-drop-gate",
+        "landings-docking-hold",
         "campaign-airframe-swap",
         "campaign-hangar-handover",
         "campaign-wingwalk-camera",
@@ -1102,6 +1103,20 @@ public static class SuiteCatalog
             + "hangar runs it and hands it to the cutscene host, and the reset block at the handoff "
             + "clears that node, which is what completes the fly-through objective",
             HangarDropGate));
+
+        // The docking cutscene handed the player flight back when its first callee ended and
+        // teleported them when the row's definition ran out, because the episode was booked to
+        // whichever definition raised the first code.
+        into.Add(new TestHarness.Suite("landings-docking-hold",
+            "CM06's docking onto the Workers' Voyage over its BUILT world, the one shipped row "
+            + "whose definition raises no code of its own: the episode belongs to the row the "
+            + "trigger started rather than the hookup callee that raised the first code, the "
+            + "player is held out of flight from the hookup through the drop to the unhook's own "
+            + "handoff code although the row's definition ends before it on a trailing wait, the "
+            + "host hands the session back on that code, the released aeroplane flies out of the "
+            + "player marker's pose where the re-placement code read it, and no frame after the "
+            + "release teleports it",
+            DockingHold));
 
         // BL-494: callback codes 965 to 967, which put the player in a different airframe mid
         // mission and reached nothing until the roster grew a swap.

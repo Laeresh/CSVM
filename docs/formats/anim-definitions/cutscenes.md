@@ -566,6 +566,18 @@ aircraft a cutscene holds `Inert` while posing it must not read as "no airframe 
   the **reading** that the host answers for a started row's definition *and* its `CALL_ANIMATION`
   closure, because the drop is a letterboxed movie that has to hide the chrome and take the player
   out of flight, and no other mechanism does that.
+- **The slot holds the row's definition, and the player's flags are the codes'.** C1C/M01's
+  `wv_initiate_hookup` is the one shipped row whose definition authors no `CALLBACK`: it calls
+  `wv_hookup_player` (2 and 11 at t=0, a 7.3 s SI script on `player`), then the drop, the hook
+  state and `wv_unhook_player` with a trailing `WAIT_FOR_COMPLETION`, and that callee raises 1 and
+  951 after its own SI script, 2.6 s later. A trailing wait holds no runner open
+  ([`org/sequences.md`](../../org/sequences.md)), so the row's instance ends before the unhook
+  does. In the original nothing about that matters: `+0x91d` is set by 11 and cleared by 1, and
+  no definition ending touches it. CSVM's episode therefore belongs to the started row
+  (`CutsceneController.Own`, written by the trigger before the start) and its end-of-definition
+  handoff waits until every code-authoring definition in the row's call closure has ended as
+  well; booking the episode to the first raiser handed the player flight at 7.3 s with the
+  aeroplane still hung, and the unhook's 951 then re-placed them when it ran out.
 - **Undecoded: when the landings slot clears.** `DAT_0071b1dc` holds the running instance and is
   cleared only by `SceneAnimCallback_0045e0f0` seeing callback **0**, which nothing authors. Read
   literally, one landings cutscene per mission load would lock out the rest, which C3/M01 (drop,

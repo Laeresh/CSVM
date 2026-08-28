@@ -1137,6 +1137,13 @@ public partial class FlightController : Node3D
     {
         _stagedFrom = pose.Orthonormalized();
         _resumePlaced = true;
+        // A definition that raises its handoff BEFORE this code (CM06's unhook) has already had
+        // the aeroplane handed back, so there is no later hand-back to defer to: place it now, the
+        // way the original writes the pose the instant the code lands.
+        if (!Held)
+        {
+            StageAt(null);
+        }
     }
 
     /// <summary>Weapon lab: point the gun selector at a firable gun group (0-based, clamped) —

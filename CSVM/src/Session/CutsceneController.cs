@@ -88,6 +88,12 @@ public sealed partial class CutsceneController : Node
         { CodeHandoff, CodeRestoreSystems, CodeRevealAi, CodeCamParamsRestore };
 
     private readonly HashSet<string> _hosted = new(StringComparer.Ordinal);
+    // Every definition of the current episode that authors a code, or has raised one. The
+    // original's player flags are written by the codes alone (11 takes flight away, 1 gives it
+    // back) and never by a definition ending, so the end-of-definition handoff below waits for
+    // these to finish as well: CM06's docking row ends with its unhook, whose handoff code comes
+    // at its own end, still playing.
+    private readonly HashSet<string> _raisers = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<int> _codes = new();
     private readonly List<FlightController> _parked = new();
     private readonly HashSet<int> _gapsLogged = new();
@@ -100,6 +106,9 @@ public sealed partial class CutsceneController : Node
     // definition belongs to. Set per dispatch, not per episode: a called definition raises its own
     // codes off its own root.
     private string? _codeRoot;
+    // The landings slot: the row definition the trigger has just started, owning the next episode
+    // whichever callee raises its first code. Null once that episode has taken it.
+    private string? _owner;
     // The world root `camera1` belongs under, so Restore can undo a definition's own reparent.
     private Node3D? _cameraHome;
     private Node3D? _bars;
@@ -159,7 +168,10 @@ public sealed partial class CutsceneController : Node
     /// which is what a suite asserts the shape of the cutscene by.</summary>
     public IReadOnlyList<int> Codes => _codes;
 
-    /// <summary>The animation name that raised the first code, and whose end hands off.</summary>
+    /// <summary>The definition the episode belongs to, whose end hands off: the one the landings
+    /// trigger started (<see cref="Own"/>), or else the one that raised the first code. ⚠ Not
+    /// always the raiser: CM06's docking row raises no code itself and calls the definitions that
+    /// do, and the first of those ends with the aeroplane still on the hook.</summary>
     public string? Anim { get; private set; }
 
     /// <summary>The letterbox card's extent as <see cref="BindWorld"/> measured it, in the bars
@@ -208,6 +220,19 @@ public sealed partial class CutsceneController : Node
     /// keep the answer they had.</summary>
     public bool Hosts(string? animName) =>
         animName != null && (IsIntro(animName) || _hosted.Contains(animName));
+
+    /// <summary>Puts <paramref name="animName"/> in the landings slot: the next episode belongs to
+    /// it and ends when it does, however deep the callee that raises its first code sits. This is
+    /// the original's own slot, which holds the instance the trigger started. Call it before
+    /// starting the definition, since the first code can land inside that start.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public void Own(string animName)
+    {
+        if (!Playing)
+        {
+            _owner = animName;
+        }
+    }
 
     /// <summary>The world's animation runtime and the two nodes a cutscene definition drives. Run
     /// once the world is built, before any rig exists: the intro definitions start during the
@@ -306,16 +331,27 @@ public sealed partial class CutsceneController : Node
         if (!Playing)
         {
             _codes.Clear();
+            _raisers.Clear();
         }
 
         _codes.Add(code);
+        if (animName != null)
+        {
+            _raisers.Add(animName);
+        }
         if (!Playing)
         {
             Playing = true;
-            Anim = animName;
+            // The slot beats the raiser only while its definition is live: a stale slot from a
+            // row whose definition ended raising nothing must not outlast that definition.
+            Anim = _owner != null && _runtime?.AnimStateOf(_owner) == AnimRunning ? _owner : animName;
+            _owner = null;
+            SeedRaisers();
             _barsFlipsThisEpisode = 0;
             _lastBarsVisible = _bars?.Visible ?? false;
-            GD.Print($"cutscene: '{animName}' has the session");
+            GD.Print(Anim == animName
+                ? $"cutscene: '{animName}' has the session"
+                : $"cutscene: '{Anim}' has the session, its callee '{animName}' raising the first code");
         }
 
         _codeRoot = rootName;
@@ -341,7 +377,8 @@ public sealed partial class CutsceneController : Node
         PinBars();
         FrameBars();
         WatchBars();
-        if (_runtime != null && Anim != null && _runtime.AnimStateOf(Anim) != AnimRunning)
+        if (_runtime != null && Anim != null && _runtime.AnimStateOf(Anim) != AnimRunning
+            && !AnyRaiserRunning())
         {
             Restore("its definition ended");
         }
@@ -365,6 +402,22 @@ public sealed partial class CutsceneController : Node
 
         Restore("skipped");
         return true;
+    }
+
+    private static bool AuthorsCode(AnimDefinition def)
+    {
+        foreach (var seq in def.Sequences)
+        {
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Kind == "Callback")
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static Node3D? First(IReadOnlyList<Node3D> found) => found.Count > 0 ? found[0] : null;
@@ -755,5 +808,40 @@ public sealed partial class CutsceneController : Node
                 yield return pilot;
             }
         }
+    }
+
+    // The episode's code-authoring definitions, read off the owning definition's call closure at
+    // the start: a callee that has not raised anything yet (CM06's unhook, whose two codes sit at
+    // its end) is as much the episode's as one that has.
+    private void SeedRaisers()
+    {
+        if (_runtime == null || Anim == null)
+        {
+            return;
+        }
+
+        foreach (var def in _runtime.CallClosureOf(Anim))
+        {
+            if (def.AnimName is { Length: > 0 } name && AuthorsCode(def))
+            {
+                _raisers.Add(name);
+            }
+        }
+    }
+
+    // A trailing WAIT_FOR_COMPLETION never holds a runner open (docs/org/sequences.md), so a row
+    // definition can end while the callee it called last is still posing the player: the
+    // definitions that author or raised this episode's codes are what the handoff waits for.
+    private bool AnyRaiserRunning()
+    {
+        foreach (string raiser in _raisers)
+        {
+            if (raiser != Anim && _runtime!.AnimStateOf(raiser) == AnimRunning)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

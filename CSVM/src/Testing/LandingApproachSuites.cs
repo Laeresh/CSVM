@@ -19,6 +19,7 @@ internal static class LandingApproachSuites
     // mission's own data, so nothing here names a shipped world node by hand.
     private const int FirstSeq = 0;
     private const int WingWalkSeq = 1;
+    private const int DockingSeq = 5;
     private const int TrainPickupSeq = 6;
     private const int TrailerPickupSeq = 10;
     private const float StepDt = 1f / 60f;
@@ -61,6 +62,18 @@ internal static class LandingApproachSuites
 
     // How long the trigger is ticked after a handoff to catch the row re-firing.
     private const int RestartFrames = 30;
+
+    // The docking episode: how long the row's definition is given to play out through its whole
+    // call chain (hookup, drop, hook state, unhook), how far past the handoff the aeroplane is
+    // watched, the largest single-frame move a flying aeroplane can make against a teleport, and
+    // how far the released aeroplane may sit from the marker its re-placement code read.
+    private const float DockBudgetS = 150f;
+    private const float AfterReleaseS = 2f;
+    private const float TeleportM = 20f;
+    private const float PlacedToleranceM = 2f;
+
+    // The mission-script host's handoff code, the one that gives the player flight back.
+    private const int HandoffCode = 1;
 
     // How far outside its band the hangar drop is called from. Anything past the authored 75 m
     // does; this is far enough that no bounds reading of the hangar could land inside it.
@@ -118,6 +131,14 @@ internal static class LandingApproachSuites
     /// </summary>
     internal static void HookupAirframe(TestContext ctx) =>
         DriveMission(ctx, FirstSeq, "test-hookup-airframe", DriveHookupAirframe);
+
+    /// <summary>Drives CM06's docking onto the Workers' Voyage, the one shipped row whose
+    /// definition raises no code of its own and calls the ones that do: the episode belongs to the
+    /// row's definition rather than the callee that raised the first code, control stays locked
+    /// from the hookup to the authored handoff, and the aeroplane is left where the re-placement
+    /// code put it rather than teleported when the definition runs out.</summary>
+    internal static void DockingHold(TestContext ctx) =>
+        DriveMission(ctx, DockingSeq, "test-docking-hold", DriveDockingHold);
 
     /// <summary>Drives CM07's zeppelin-hangar drop, the mission's other cutscene: the depot chain
     /// reaction's <c>CALL_ANIMATION</c> only ARMS it, because the definition is range-gated;
@@ -457,6 +478,250 @@ internal static class LandingApproachSuites
         }
 
         report.AppendLine($"episode ran {played:0.##} s, playing={cutscene.Playing}");
+    }
+
+    // CM06's docking, a shape no other shipped row has: the row's own definition authors no
+    // CALLBACK and calls the hookup, the drop, the hook state and the unhook in turn, waiting on the
+    // first and the last. The hookup raises the first code and ends with the aeroplane still on the
+    // hook; the unhook raises the handoff and the re-placement at its own end.
+    private static void DriveDockingHold(TestContext ctx, TestWorld world, CampaignDirector director,
+        ObjectiveScript script, string missionZrdr, StringBuilder report)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        var rows = LandingApproaches.Resolve(
+            chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
+        var dock = SilentRowOf(world, rows);
+        report.AppendLine($"silent row: '{dock?.Anim ?? "-"}' on '{dock?.Node ?? "-"}'");
+        ctx.Check(dock != null,
+            $"the chapter's landings.zrd carries a manual row whose own definition raises no code while its call closure does");
+        var stage = world.Session.Aircraft;
+        ctx.Check(stage?.PlayerMarker != null,
+            $"the mission stages the aircraft archive's '{AircraftStage.PlayerNode}' marker, the pose the docking flies");
+        if (dock == null || stage?.PlayerMarker is not { } marker)
+        {
+            return;
+        }
+
+        WithTrigger(ctx, world, director, rows, (trigger, cutscene, rig, graph) =>
+            RunTheDocking(ctx, world, graph, script, trigger, cutscene, rig, dock, marker, report),
+            aircraft: stage);
+    }
+
+    private static void RunTheDocking(
+        TestContext ctx, TestWorld world, ObjectiveGraph graph, ObjectiveScript script,
+        LandingApproachRuntime trigger, CutsceneController cutscene, FlightController rig,
+        LandingApproach dock, Node3D marker, StringBuilder report)
+    {
+        for (float t = 0f; t < IntroSettleS; t += StepDt)
+        {
+            world.Runtime.Advance(StepDt);
+            cutscene.Tick();
+        }
+
+        report.AppendLine($"intro settled after {IntroSettleS:0}s, playing={cutscene.Playing}");
+        ArmRow(ctx, world, graph, script, dock, report);
+
+        float now = 0f;
+        var started = new List<string>();
+        void Record(AnimDefinition def, Node3D? anchor)
+        {
+            if (def.AnimName is { Length: > 0 } name && !started.Contains(name))
+            {
+                started.Add(name);
+                report.AppendLine($"  t={now,6:0.00} started '{name}'");
+            }
+        }
+
+        // The handoff code as the runtime raises it, read in front of the host so the moment is
+        // known whichever episode the host books it to.
+        float handoffAt = -1f;
+        string? handoffRaiser = null;
+        string? firstRaiser = null;
+        world.Runtime.CallbackHost = (code, anim, root) =>
+        {
+            firstRaiser ??= anim;
+            report.AppendLine($"  t={now,6:0.00} code {code} from '{anim}'");
+            if (code == HandoffCode && handoffAt < 0f)
+            {
+                handoffAt = now;
+                handoffRaiser = anim;
+            }
+
+            return cutscene.Host(code, anim, root);
+        };
+        void Finished(AnimDefinition def, Node3D? anchor) =>
+            report.AppendLine($"  t={now,6:0.00} finished '{def.AnimName}'");
+        world.Runtime.OnInstanceStarted += Record;
+        world.Runtime.OnInstanceFinished += Finished;
+        world.Runtime.OpenResolutionCensus();
+        try
+        {
+            ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, dock, report),
+                $"flying '{dock.Node}' starts '{dock.Anim}'");
+            report.AppendLine($"episode: playing={cutscene.Playing} anim='{cutscene.Anim}' " +
+                $"first code from '{firstRaiser}' codes=[{string.Join(", ", cutscene.Codes)}]");
+            ctx.Check(cutscene.Playing, $"and the cutscene host takes the session on it");
+            ctx.Check(firstRaiser != null && firstRaiser != dock.Anim,
+                $"the first code is raised by a callee, not by '{dock.Anim}' itself");
+            ctx.Check(string.Equals(cutscene.Anim, dock.Anim, StringComparison.OrdinalIgnoreCase),
+                $"yet the episode belongs to '{dock.Anim}', the row the trigger started, which is the original's landings slot (read '{cutscene.Anim ?? "-"}')");
+            WatchTheDocking(ctx, world, graph, trigger, cutscene, rig, dock, marker, report,
+                () => now, dt => now += dt, () => handoffAt, () => handoffRaiser);
+        }
+        finally
+        {
+            foreach (string line in world.Runtime.ResolutionLines())
+            {
+                report.AppendLine($"resolution: {line}");
+            }
+
+            world.Runtime.CloseResolutionCensus();
+            world.Runtime.OnInstanceStarted -= Record;
+            world.Runtime.OnInstanceFinished -= Finished;
+            world.Runtime.CallbackHost = cutscene.Host;
+            foreach (string anim in started)
+            {
+                world.Runtime.Stop(anim);
+            }
+        }
+    }
+
+    // The played leg, watched frame by frame: control locked until the handoff code, the handoff
+    // at the row definition's own end, and no teleport once the aeroplane is flying again.
+    private static void WatchTheDocking(
+        TestContext ctx, TestWorld world, ObjectiveGraph graph, LandingApproachRuntime trigger,
+        CutsceneController cutscene, FlightController rig, LandingApproach dock, Node3D marker,
+        StringBuilder report, Func<float> now, Action<float> tick, Func<float> handoffAt,
+        Func<string?> handoffRaiser)
+    {
+        float releasedAt = -1f;
+        float endedAt = -1f;
+        float handedBackAt = -1f;
+        float unlockedBeforeHandoffAt = -1f;
+        float biggestStepM = 0f;
+        float biggestStepAt = -1f;
+        float placedOffM = -1f;
+        var prev = rig.WorldPosition;
+        int frame = 0;
+        while (now() < DockBudgetS && (releasedAt < 0f || now() < releasedAt + AfterReleaseS))
+        {
+            rig.SimStep(StepDt);
+            world.Runtime.Advance(StepDt);
+            trigger.Tick();
+            cutscene.Tick();
+            graph.Step(StepDt);
+            tick(StepDt);
+            frame++;
+            bool locked = rig.Held && rig.Inert;
+            var markerPose = AnimRuntime.WorldTransform(marker, out _);
+            if (!locked && releasedAt < 0f)
+            {
+                releasedAt = now();
+                placedOffM = rig.WorldPosition.DistanceTo(markerPose.Origin);
+                report.AppendLine($"  t={now(),6:0.00} released: {placedOffM:0.#} m off the '{AircraftStage.PlayerNode}' marker, " +
+                    $"handoff code {(handoffAt() < 0f ? "not raised" : $"raised at t={handoffAt():0.00}")}");
+                if (handoffAt() < 0f)
+                {
+                    unlockedBeforeHandoffAt = now();
+                }
+            }
+
+            if (releasedAt >= 0f && now() > releasedAt)
+            {
+                float step = rig.WorldPosition.DistanceTo(prev);
+                if (step > biggestStepM)
+                {
+                    biggestStepM = step;
+                    biggestStepAt = now();
+                }
+            }
+
+            prev = rig.WorldPosition;
+            if (endedAt < 0f && world.Runtime.AnimStateOf(dock.Anim) != 2)
+            {
+                endedAt = now();
+                report.AppendLine($"  t={now(),6:0.00} '{dock.Anim}' ended, playing={cutscene.Playing}");
+            }
+
+            if (handedBackAt < 0f && !cutscene.Playing)
+            {
+                handedBackAt = now();
+                report.AppendLine($"  t={now(),6:0.00} the host handed the session back");
+            }
+
+            if (frame % (int)(1f / StepDt) == 0)
+            {
+                report.AppendLine($"t={now(),6:0.0} held={rig.Held} inert={rig.Inert} " +
+                    $"playing={cutscene.Playing} anim='{cutscene.Anim ?? "-"}' " +
+                    $"rig {rig.WorldPosition} marker {markerPose.Origin}");
+            }
+        }
+
+        report.AppendLine($"released at t={releasedAt:0.00}, handoff code at t={handoffAt():0.00} " +
+            $"from '{handoffRaiser() ?? "-"}', '{dock.Anim}' ended at t={endedAt:0.00}, " +
+            $"session handed back at t={handedBackAt:0.00}, " +
+            $"biggest step after release {biggestStepM:0.##} m at t={biggestStepAt:0.00}");
+        ctx.Check(handoffAt() >= 0f, $"the docking raises its handoff code within {DockBudgetS:0} s");
+        ctx.Check(handoffRaiser() != null && handoffRaiser() != dock.Anim,
+            $"from a callee of '{dock.Anim}', the unhook, rather than from the row's own definition");
+        // The row's trailing WAIT_FOR_COMPLETION holds no runner open (docs/org/sequences.md), so
+        // its definition ends before the unhook does: the episode has to outlive it.
+        ctx.Check(endedAt >= 0f && handoffAt() >= 0f && endedAt < handoffAt(),
+            $"'{dock.Anim}' itself ends before the handoff, its last call being a trailing wait");
+        ctx.Check(handedBackAt < 0f || handoffAt() < 0f || handedBackAt >= handoffAt() - StepDt,
+            $"and the host keeps the session past that end, until the code (handed back at t={handedBackAt:0.00})");
+        ctx.Check(unlockedBeforeHandoffAt < 0f,
+            $"the player is held out of flight from the hookup until that code, not released when the first callee ends (unlocked at t={unlockedBeforeHandoffAt:0.00})");
+        ctx.Check(releasedAt >= 0f && handoffAt() >= 0f && releasedAt >= handoffAt() - StepDt,
+            $"and gets flight back the frame the code lands");
+        ctx.Check(handedBackAt >= 0f && handoffAt() >= 0f && handedBackAt - handoffAt() < AfterReleaseS,
+            $"and the host hands the session back within {AfterReleaseS:0} s of it, the unhook being the last code-authoring definition");
+        ctx.Check(placedOffM >= 0f && placedOffM < PlacedToleranceM,
+            $"the released aeroplane flies out of the '{AircraftStage.PlayerNode}' marker's pose, where the re-placement code read it, within {PlacedToleranceM:0} m");
+        ctx.Check(biggestStepM < TeleportM,
+            $"and is never teleported after the release: no frame moves it {TeleportM:0} m or more, the end of the definition included");
+    }
+
+    // The manual row whose own definition raises no CALLBACK while something in its call closure
+    // does, which is the docking's shape and the case the landings slot exists for.
+    private static LandingApproach? SilentRowOf(TestWorld world, IReadOnlyList<LandingApproach> rows)
+    {
+        foreach (var row in rows)
+        {
+            if (row.Auto || RaisesCode(world, row.Anim))
+            {
+                continue;
+            }
+
+            foreach (string callee in ClosureOf(world, row.Anim))
+            {
+                if (callee != row.Anim && RaisesCode(world, callee))
+                {
+                    return row;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static bool RaisesCode(TestWorld world, string anim)
+    {
+        foreach (var def in world.Runtime.DefsFor(anim))
+        {
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind == "Callback")
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     // The wing fold's own two movers, checked against the rotations the fold definition authors.

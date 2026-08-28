@@ -1321,6 +1321,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// a record's destroy anim as a destructible pool (M4 F18).</summary>
     public IReadOnlyList<AnimDefinition> DefsFor(string animName) => _program.ByAnimName(animName);
 
+    /// <summary>Every definition reachable from <paramref name="animName"/> through
+    /// <c>CALL_ANIMATION</c>, itself included: the cutscene host reads which of them author a
+    /// <c>CALLBACK</c>, since a row definition can end before the callee carrying its handoff.</summary>
+    public IReadOnlyList<AnimDefinition> CallClosureOf(string animName) =>
+        _program.Subset(animName).Defs;
+
     /// <summary>Stages the named effect at a world point: relocates each matching template root
     /// onto it (<paramref name="orient"/> as the basis when given) and starts the definition.
     /// <paramref name="inputNode"/> is the callee's INPUT_NODE (a damage sputter emits on the damaged

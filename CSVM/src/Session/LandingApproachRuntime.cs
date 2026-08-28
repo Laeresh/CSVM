@@ -207,6 +207,9 @@ public sealed partial class LandingApproachRuntime : Node
     // lands (CutsceneController.HostDefinitions).
     private void Start(LandingApproach approach)
     {
+        // The slot is written BEFORE the start: a callee raising the first code inside this very
+        // dispatch would otherwise become the episode, and end it with the aeroplane still hung.
+        _cutscene!.Own(approach.Anim);
         int started = _runtime!.PlayMissionTrigger(approach.Anim).Count;
         LastStarted = approach.Anim;
         GD.Print($"landings: '{approach.Node}' flown, started '{approach.Anim}' " +

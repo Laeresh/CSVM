@@ -835,29 +835,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   system and the decode page records the sight and the assist as deliberately disagreeing already.
   *Cross-refs:* `docs/org/aim-assist.md`, `docs/org/ordnanceTypes.md`, `ProjectilePool.Ballistics`.
 
-- `BL-567` `[Bug]` **CM04 (C3/M03): the Pandora's broadside cannons fire on the player; the
-  original's broadsides engage zeppelins only.** *Evidence:* reported at the controls with the
-  original's rule stated: broadside cannons attack enemy zeppelins and never aircraft. The sortie
-  log shows `shot hit P1 (fuselage→nose): wep_28 armor=5.0/25 ...` and three more `wep_28` hits on
-  the player; `wep_28` is the piratezep broadside's weapon. **The report stands against the
-  decode.** `crimson.exe` resolves every `targets` name through the general node table
-  (`FUN_004bd8d0` calling `FUN_004d0280(7, name)`, the lookup that finds the player's own node),
-  matches the node against the zeppelin roster (`FUN_004bede0` via `FUN_004bd430` on the roster
-  at `0x71df80`), and at fire time (`FUN_004bfe00`) fires on a node that matched no zeppelin at
-  the node's own position (`FUN_004cf2c0`): the `player` node is a target like any zeppelin, no
-  team or hostility field is read, and the remake's `ZeppelinRuntime.Cannons.ResolveTarget` (via
-  `ZeppelinBroadside.FirstLiveTarget`) matches it. The chain is in
-  `docs/formats/mission-entities.md` "Broadside firing". *What remains:* a flown original-game
-  check. Fly C3/M03 in the original into the Pandora's broadside arc (inside `cannon_fire_range`,
-  abeam the hull, long enough for the deploy and a volley) and record whether the broadsides open
-  on the aircraft; if they hold fire, the gate the decode did not find is somewhere the static
-  read did not reach (a range or altitude term in `FUN_0053e56d`'s solve, or the node's
-  `FUN_004cf2c0` position read failing for a vehicle node), and that is what to decode next.
-  *⚠ Traps:* do not add a hostility or team gate on the strength of the report alone; two decodes
-  found none, and only the flown check outranks them. *Cross-refs:* `BL-517`'s closing commit
-  (`git log --grep=BL-517`), `docs/formats/mission-entities.md`,
-  `docs/formats/anim-definitions/cutscenes.md` "The name is what resolves". *Playtest after fix:* `CAP-46`.
-
 - `BL-586` `[Bug]` **One burst deals a world destructible one splash share per collider body it
   carries.** *Evidence (traced):* the C1 aagun carries ten collider bodies, and one flak bursting
   over its own pit dealt `-8.18/-8.04/-8/-7.36`, one share per body (the `turret-self-fire`
